@@ -197,7 +197,24 @@ Prévu (collections T2+, non créées en T1) : `menuImports` (pipeline IA photo�
 
 Jamais de déploiement jeudi→dimanche (règle maison — les restos vivent le week-end).
 
-## 9 · Contraintes légales
+## 9 · Persistance polyglotte (décision CTO, 2026-08-18)
+
+Deux contextes métier, deux moteurs — directive fondateur « la meilleure base pour chaque usage » :
+
+| Contexte | Moteur | Contenu | Pourquoi |
+|---|---|---|---|
+| **Commerce** | MongoDB | tenants, menus, commandes, staff, avis, promos | documents flexibles (menus hétérogènes), écriture offline idempotente |
+| **Supply** | PostgreSQL (Drizzle) | ingrédients (registre canonique SM + fork par resto), allergènes INCO (14 UE), marques, recettes par produit **et variante**, nomenclature des options, fournisseurs + historique de prix, mouvements de stock, bons de commande, factures | relationnel profond (M-N, FK, historiques), intégrité financière |
+
+Ponts inter-contextes (via la couche service API, ids croisés en texte) :
+- **Cascade de rupture** : ingrédient `is_out` → produits dont la recette l'exige passent `outOfStock` (source `ingredient`), et reviennent quand l'ingrédient revient.
+- **Coût matière & marge** : recette (+ options) × coût unitaire → marge affichée par produit dans le back-office.
+- **Allergènes** : rollup recette ∪ options → affichage légal côté client.
+- **Déplétion théorique** : chaque vente décrémente le stock théorique (mouvements `sale`) — écarts d'inventaire = démarque.
+
+Inspirations produit assumées : MarketMan / Apicbase (stocks & fournisseurs), MarginEdge (food cost), + audit de l'ERP interne `optimus-halal-supply-chain-erp` (traçabilité halal, lots, DLC) pour les briques à venir.
+
+## 10 · Contraintes légales
 
 - **NF525 / loi anti-fraude TVA** : bloquant avant le premier client facturé qui encaisse via la caisse. Le socle est posé dès T1 (`auditLog` append-only, `statusHistory`, numérotation séquentielle) ; la certification/attestation elle-même est un chantier dédié avant mise en production de l'encaissement.
 - **RGPD** : hébergement Railway région UE (`europe-west4`), minimisation (commande en ligne sans compte), export CSV complet par le gérant (« sans engagement veut dire sans otage »).

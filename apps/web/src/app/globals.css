@@ -1,55 +1,158 @@
 @import "tailwindcss";
 
 /*
- * Tokens SM Dark — valeurs extraites des maquettes (docs/specs/design-system.md).
- * Marque grise : SEUL --sm-accent / --sm-on-accent change par tenant (injecté au
- * runtime). Les couleurs fonctionnelles sont fixes sur tous les comptes :
- * vert = prêt, rouge = nouveau/alerte, ambre = en attente/prépa.
+ * Tokens EFFECTIFS « SM Dark » — valeurs littérales des maquettes
+ * (docs/specs/design-system.md §2, docs/specs/backoffice-restaurant.md §2).
+ *
+ * Marque grise : SEUL --cf-accent (+ --cf-on-accent) change par tenant — il est
+ * injecté au runtime par le layout admin (fetch /tenants/me → style sur <html>).
+ * Les couleurs FONCTIONNELLES sont fixes sur tous les comptes :
+ *   vert #3fae4a = prêt/positif · rouge #c94b3f = urgent/alerte · ambre #e0973f = attente.
  */
 :root {
-  --sm-bg: #000;
-  --sm-surface: #0b0b0c;
-  --sm-surface-2: #141416;
-  --sm-text: #fff;
-  --sm-text-2: rgba(255, 255, 255, 0.62);
-  --sm-line: rgba(255, 255, 255, 0.1);
-  --sm-accent: #c9a15a;
-  --sm-accent-hover: #e0b96f;
-  --sm-on-accent: #111;
-  --sm-green: #3fae4a;
-  --sm-red: #c94b3f;
-  --sm-amber: #e0973f;
+  /* ── Neutres (fixes) ── */
+  --cf-bg: #000;
+  --cf-surface: #111;
+  --cf-surface-2: #1a1a1a;
+  --cf-text: #fff;
+  --cf-mut: #999;
+  --cf-line: rgba(255, 255, 255, 0.1);
+  --cf-line-2: rgba(255, 255, 255, 0.06);
+  --cf-fill: #1a1a1a;
+  --cf-on-fill: #fff;
+  --cf-btn-dark: #262626;
+  --cf-surface-3: rgba(255, 255, 255, 0.03);
+  --cf-surface-6: rgba(255, 255, 255, 0.06);
+  --cf-white-50: rgba(255, 255, 255, 0.5);
+
+  /* ── Accent tenant (VARIABLE — remplacé au runtime par le layout admin) ── */
+  --cf-accent: #c9a15a;
+  --cf-accent-hover: #e0b96f;
+  --cf-on-accent: #fff;
+
+  /* ── Fonctionnelles (FIXES tous comptes — jamais l'accent) ── */
+  --cf-gold: #c9a15a;
+  --cf-green: #3fae4a;
+  --cf-red: #c94b3f;
+  --cf-amber: #e0973f;
+  /* Teintes texte des tags de statut (dérivées, codées en dur dans la maquette) */
+  --cf-green-t: #6ecf78;
+  --cf-red-t: #e77b70;
+  --cf-amber-t: #eab06a;
+
+  /* ── Surfaces composées ── */
+  --cf-card-gradient: linear-gradient(180deg, rgba(17, 17, 17, 0.9) 0%, rgb(17, 17, 17) 100%);
+
+  /* ── Ombres ── */
+  --cf-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.38);
+  --cf-shadow-2: 0 2px 0 rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.45);
+  --cf-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.4);
+  --cf-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 10px 26px rgba(0, 0, 0, 0.32);
+  --cf-shadow-accent: 0 0 0 1px var(--cf-accent);
+
+  /* ── Rayons : 8 / 10 / 12 / 16 / 20 / pilule ── */
+  --cf-r-xs: 8px;
+  --cf-r-sm: 10px;
+  --cf-r-md: 12px;
+  --cf-r: 16px;
+  --cf-r-lg: 20px;
+  --cf-r-pill: 999px;
+
+  /* ── Motion ── */
+  --sm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sm-t-fast: 0.2s;
+  --sm-t-med: 0.45s;
+  --sm-t-slow: 0.6s;
 }
 
 @theme inline {
-  --color-bg: var(--sm-bg);
-  --color-surface: var(--sm-surface);
-  --color-surface2: var(--sm-surface-2);
-  --color-ink: var(--sm-text);
-  --color-ink2: var(--sm-text-2);
-  --color-line: var(--sm-line);
-  --color-accent: var(--sm-accent);
-  --color-accenthover: var(--sm-accent-hover);
-  --color-onaccent: var(--sm-on-accent);
-  --color-ok: var(--sm-green);
-  --color-alert: var(--sm-red);
-  --color-prep: var(--sm-amber);
+  /* Couleurs — mêmes noms que les utilitaires déjà en usage (bg-surface, text-ink2…) */
+  --color-bg: var(--cf-bg);
+  --color-surface: var(--cf-surface);
+  --color-surface2: var(--cf-surface-2);
+  --color-ink: var(--cf-text);
+  --color-ink2: var(--cf-mut);
+  --color-mut: var(--cf-mut);
+  --color-line: var(--cf-line);
+  --color-line2: var(--cf-line-2);
+  --color-fill: var(--cf-fill);
+  --color-onfill: var(--cf-on-fill);
+  --color-btndark: var(--cf-btn-dark);
+  --color-accent: var(--cf-accent);
+  --color-accenthover: var(--cf-accent-hover);
+  --color-onaccent: var(--cf-on-accent);
+  --color-gold: var(--cf-gold);
+  --color-ok: var(--cf-green);
+  --color-alert: var(--cf-red);
+  --color-prep: var(--cf-amber);
+  --color-okt: var(--cf-green-t);
+  --color-alertt: var(--cf-red-t);
+  --color-prept: var(--cf-amber-t);
+
   --font-sans: var(--font-inter), system-ui, sans-serif;
-  --radius-ctrl: 8px;
-  --radius-card: 12px;
-  --radius-panel: 16px;
+
+  /* Rayons (rounded-xs / -ctrl / -card / -panel / -wide / -pill) */
+  --radius-xs: var(--cf-r-xs);
+  --radius-ctrl: var(--cf-r-sm);
+  --radius-card: var(--cf-r-md);
+  --radius-panel: var(--cf-r);
+  --radius-wide: var(--cf-r-lg);
+  --radius-pill: var(--cf-r-pill);
+
+  /* Ombres (shadow-card / shadow-soft / shadow-deep) */
+  --shadow-card: var(--cf-shadow-card);
+  --shadow-soft: var(--cf-shadow-soft);
+  --shadow-deep: var(--cf-shadow-2);
+
+  /* Motion (ease-sm, animate-pop) */
+  --ease-sm: var(--sm-ease);
+  --animate-pop: cf-pop 0.18s ease both;
 }
 
-::selection {
-  background: var(--sm-accent);
-  color: #000;
+@keyframes cf-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Polish global (spec design-system §7.4) ── */
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--sm-bg);
-  color: var(--sm-text);
+  background: var(--cf-bg);
+  color: var(--cf-text);
 }
 
+::selection {
+  background: var(--cf-accent);
+  color: var(--cf-on-accent);
+}
+
+input,
+textarea {
+  caret-color: var(--cf-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cf-accent-hover);
+  outline-offset: 2px;
+}
+
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbars globales (10px) */
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -64,11 +167,37 @@ body {
   background-clip: content-box;
 }
 
+/* Scrollbar fine des zones de contenu (spec backoffice §3.4) */
+.cf-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.cf-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cf-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: none;
+  background-clip: border-box;
+}
+
+/* Select : chevron gris intégré (spec design-system §6.7) */
+.cf-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

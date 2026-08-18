@@ -162,7 +162,8 @@ const OptionGroupSub = new Schema(
 export const ProductSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
-    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true, index: true },
+    // null = « Non rattaché » (produit orphelin après suppression de catégorie)
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null, index: true },
     name: { type: String, required: true },
     description: { type: String, default: '' }, // liste d'ingrédients affichée
     price: { type: Number, default: 0 }, // centimes — ignoré si variants non vide
@@ -172,6 +173,8 @@ export const ProductSchema = new Schema(
     tags: { type: [String], default: [] },
     isNew: { type: Boolean, default: false },
     outOfStock: { type: Boolean, default: false }, // rupture 1-tap
+    // 'manual' = coupé à la main · 'ingredient' = cascade rupture ingrédient (contexte supply)
+    outOfStockSource: { type: String, enum: ['manual', 'ingredient', null], default: null },
     photoUrl: { type: String, default: null },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
@@ -222,21 +225,35 @@ export const OrderSchema = new Schema(
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
     type: { type: String, enum: ['surplace', 'emporter', 'pickup'], required: true },
     lines: { type: [OrderLineSub], required: true },
+    // Sous-schémas explicites + required : sans cela, Mongoose 8.24 infère les
+    // objets imbriqués comme optionnels et tout accès devient nullable côté TS.
     totals: {
-      subtotal: { type: Number, required: true },
-      discount: {
-        type: new Schema(
-          { amount: Number, reason: String, staffId: Schema.Types.ObjectId },
-          { _id: false },
-        ),
-        default: null,
-      },
-      total: { type: Number, required: true },
+      type: new Schema(
+        {
+          subtotal: { type: Number, required: true },
+          discount: {
+            type: new Schema(
+              { amount: Number, reason: String, staffId: Schema.Types.ObjectId },
+              { _id: false },
+            ),
+            default: null,
+          },
+          total: { type: Number, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
     },
     payment: {
-      method: { type: String, enum: ['online', 'counter'], required: true },
-      status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
-      stripePaymentIntentId: { type: String, default: null },
+      type: new Schema(
+        {
+          method: { type: String, enum: ['online', 'counter'], required: true },
+          status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
+          stripePaymentIntentId: { type: String, default: null },
+        },
+        { _id: false },
+      ),
+      required: true,
     },
     status: {
       type: String,
@@ -262,6 +279,8 @@ export const OrderSchema = new Schema(
     },
     note: { type: String, default: null },
     virtualBrandId: { type: Schema.Types.ObjectId, default: null }, // marques virtuelles T4
+    // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
+    meta: { type: Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
@@ -332,6 +351,50 @@ export const LeadSchema = new Schema(
 export type Lead = InferSchemaType<typeof LeadSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// reviews — avis clients
+// ─────────────────────────────────────────────────────────────
+
+export const ReviewSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    orderId: { type: Schema.Types.ObjectId, default: null },
+    author: { type: String, required: true },
+    rating: { type: Number, min: 1, max: 5, required: true },
+    text: { type: String, default: '' },
+    source: { type: String, enum: ['online', 'google', 'manual'], default: 'online' },
+    reply: {
+      type: new Schema({ text: String, at: Date, by: String }, { _id: false }),
+      default: null,
+    },
+  },
+  { timestamps: true },
+);
+ReviewSchema.index({ tenantId: 1, createdAt: -1 });
+export type Review = InferSchemaType<typeof ReviewSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// promotions
+// ─────────────────────────────────────────────────────────────
+
+export const PromotionSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    name: { type: String, required: true },
+    description: { type: String, default: '' },
+    kind: { type: String, enum: ['percent', 'amount', 'offered_item'], required: true },
+    value: { type: Number, default: 0 }, // % ou centimes selon kind
+    code: { type: String, default: null },
+    channels: { type: [String], default: ['online', 'pos'] },
+    startsAt: { type: Date, default: null },
+    endsAt: { type: Date, default: null },
+    active: { type: Boolean, default: true },
+    usageCount: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+export type Promotion = InferSchemaType<typeof PromotionSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Registre des modèles (consommé par l'API Nest et le seed)
 // ─────────────────────────────────────────────────────────────
 
@@ -346,4 +409,6 @@ export const MODELS = {
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
+  Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
+  Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
 } as const;

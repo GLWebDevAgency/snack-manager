@@ -11,6 +11,11 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { SupplyDbModule } from './supply-db.module';
+import { SupplyModule } from './modules/supply/supply.module';
+import { StatsModule } from './modules/stats/stats.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { EngageModule } from './modules/engage/engage.module';
 
 @Module({
   imports: [
@@ -33,6 +38,11 @@ import { OrdersModule } from './modules/orders/orders.module';
     TenantsModule,
     MenuModule,
     OrdersModule,
+    SupplyDbModule,
+    SupplyModule,
+    StatsModule,
+    StaffModule,
+    EngageModule,
   ],
   controllers: [HealthController],
 })

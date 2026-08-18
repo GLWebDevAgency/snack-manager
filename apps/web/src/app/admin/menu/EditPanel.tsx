@@ -1,0 +1,486 @@
+"use client";
+
+/**
+ * Panneau d'édition inline (spec backoffice-restaurant §7.3) enrichi de la
+ * section « Recette & marge » (contexte supply) : coût matière, marge %,
+ * allergènes, éditeur de lignes de recette (GET/PUT /supply/products/:ref/bom).
+ * Sauvegarde bufferisée : « Enregistrer » → PATCH produit (+ PUT bom si la
+ * recette a changé) ; « Fermer » abandonne les modifications.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ALLERGENS,
+  ALLERGEN_LABELS,
+  MEASURE_UNITS,
+  type Allergen,
+  type BomResponse,
+  type CostEntry,
+  type MeasureUnit,
+  type SupplyIngredient,
+} from "@sm/contracts";
+import { api } from "@/lib/api";
+import { cx } from "@/lib/cx";
+import { fmtEuro } from "@/lib/format";
+import { Btn, Field, Icon, Input, Pill, Select, Skeleton } from "@/components/ui";
+import { effectivePrice, type Category, type Product } from "./types";
+
+type LineDraft = { ingredientId: string; qty: string; unit: MeasureUnit };
+
+type Props = {
+  mode: "edit" | "create";
+  /** Produit édité (mode edit). */
+  product?: Product;
+  /** Catégorie de rattachement présélectionnée (mode create). */
+  createCategoryId?: string;
+  categories: Category[];
+  /** Coût/marge du lot GET /supply/costs — affiché en attendant le BOM. */
+  initialCost?: CostEntry;
+  /** Liste d'ingrédients supply (mise en cache au niveau page). */
+  loadIngredients: () => Promise<SupplyIngredient[]>;
+  onClose: () => void;
+  /** Sauvegarde réussie — le parent toaste, ferme et recharge. */
+  onSaved: (message: string) => void;
+};
+
+/** g/ml → millièmes d'unité de base (kg/l) — miroir de lineCostCents (@sm/supply). */
+const toBaseUnit = (qty: number, unit: MeasureUnit) =>
+  unit === "g" || unit === "ml" ? qty / 1000 : qty;
+
+const lineCostCents = (qty: number, unit: MeasureUnit, costPerUnitCents: number) =>
+  Math.round(toBaseUnit(qty, unit) * costPerUnitCents);
+
+const parseQty = (raw: string): number =>
+  Number.parseFloat(raw.replace(",", "."));
+
+const serializeLines = (lines: LineDraft[]) =>
+  JSON.stringify(lines.map((l) => [l.ingredientId, parseQty(l.qty) || 0, l.unit]));
+
+export function EditPanel({
+  mode,
+  product,
+  createCategoryId,
+  categories,
+  initialCost,
+  loadIngredients,
+  onClose,
+  onSaved,
+}: Props) {
+  const [name, setName] = useState(product?.name ?? "");
+  const [catId, setCatId] = useState(
+    mode === "create" ? (createCategoryId ?? "") : (product?.categoryId ?? ""),
+  );
+  const [desc, setDesc] = useState(product?.description ?? "");
+
+  // ─── Recette (mode edit uniquement — le produit doit exister pour un BOM) ───
+  const [bomState, setBomState] = useState<"loading" | "ready" | "error">("loading");
+  const [lines, setLines] = useState<LineDraft[]>([]);
+  const [origSerialized, setOrigSerialized] = useState("[]");
+  const [optionAllergens, setOptionAllergens] = useState<Allergen[]>([]);
+  const [optionCostNote, setOptionCostNote] = useState(false);
+  const [ingredients, setIngredients] = useState<SupplyIngredient[]>([]);
+  /** Noms des ingrédients de la recette absents de la liste (inactifs…). */
+  const [fallbackNames, setFallbackNames] = useState<Record<string, string>>({});
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadBom = useCallback(async () => {
+    if (mode !== "edit" || !product) return;
+    setBomState("loading");
+    try {
+      const [bom, ings] = await Promise.all([
+        api.get<BomResponse>(`/supply/products/${product._id}/bom`),
+        loadIngredients(),
+      ]);
+      const base = bom.recipes.find((r) => r.variantKey === null || r.variantKey === "base");
+      const drafts: LineDraft[] = (base?.lines ?? []).map((l) => ({
+        ingredientId: l.ingredientId,
+        qty: String(l.qty).replace(".", ","),
+        unit: l.unit,
+      }));
+      const known = new Set(ings.map((i) => i.id));
+      const fallbacks: Record<string, string> = {};
+      for (const l of base?.lines ?? []) {
+        if (!known.has(l.ingredientId)) fallbacks[l.ingredientId] = l.name;
+      }
+      setIngredients(ings);
+      setFallbackNames(fallbacks);
+      setLines(drafts);
+      setOrigSerialized(serializeLines(drafts));
+      const optAll = new Set<Allergen>();
+      for (const o of bom.options) for (const a of o.allergens) optAll.add(a);
+      setOptionAllergens([...optAll]);
+      setOptionCostNote(bom.options.length > 0 || bom.recipes.some((r) => r.variantKey));
+      setBomState("ready");
+    } catch {
+      setBomState("error");
+    }
+  }, [mode, product, loadIngredients]);
+
+  useEffect(() => {
+    void loadBom();
+  }, [loadBom]);
+
+  const ingredientById = useMemo(
+    () => new Map(ingredients.map((i) => [i.id, i])),
+    [ingredients],
+  );
+
+  // ─── Recalcul live : coût matière, marge, allergènes ───
+  const liveCostCents = useMemo(() => {
+    let sum = 0;
+    for (const l of lines) {
+      const ing = ingredientById.get(l.ingredientId);
+      const qty = parseQty(l.qty);
+      if (!ing || !Number.isFinite(qty) || qty <= 0) continue;
+      sum += lineCostCents(qty, l.unit, ing.costPerUnitCents);
+    }
+    return sum;
+  }, [lines, ingredientById]);
+
+  const priceCents = product ? effectivePrice(product) : 0;
+  const showBatchFigures = bomState !== "ready" && initialCost !== undefined;
+  const costCents = showBatchFigures ? initialCost.costCents : liveCostCents;
+  const marginPct = showBatchFigures
+    ? initialCost.marginPct
+    : priceCents > 0
+      ? Math.round(((priceCents - costCents) / priceCents) * 1000) / 10
+      : null;
+
+  const allergens = useMemo(() => {
+    const set = new Set<Allergen>(optionAllergens);
+    for (const l of lines) {
+      const ing = ingredientById.get(l.ingredientId);
+      if (ing) for (const a of ing.allergens) set.add(a);
+    }
+    return ALLERGENS.filter((a) => set.has(a));
+  }, [lines, ingredientById, optionAllergens]);
+
+  // ─── Sauvegarde ───
+  async function save() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Le nom est requis.");
+      return;
+    }
+
+    // Lignes de recette : validation avant PUT
+    let recipeLines: { ingredientId: string; qty: number; unit: MeasureUnit }[] | null = null;
+    if (mode === "edit" && bomState === "ready") {
+      const kept = lines.filter((l) => l.ingredientId || l.qty.trim());
+      for (const l of kept) {
+        const qty = parseQty(l.qty);
+        if (!l.ingredientId || !Number.isFinite(qty) || qty <= 0) {
+          setError("Complète chaque ligne de recette (ingrédient + quantité > 0).");
+          return;
+        }
+      }
+      if (new Set(kept.map((l) => l.ingredientId)).size !== kept.length) {
+        setError("Un même ingrédient apparaît deux fois dans la recette.");
+        return;
+      }
+      recipeLines = kept.map((l) => ({
+        ingredientId: l.ingredientId,
+        qty: parseQty(l.qty),
+        unit: l.unit,
+      }));
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      if (mode === "create") {
+        await api.post("/products", {
+          categoryId: catId,
+          name: trimmed,
+          description: desc.trim(),
+        });
+        onSaved("Produit créé");
+        return;
+      }
+      if (!product) return;
+
+      const patch: Record<string, unknown> = {};
+      if (trimmed !== product.name) patch.name = trimmed;
+      if (desc.trim() !== product.description) patch.description = desc.trim();
+      if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
+      if (Object.keys(patch).length > 0) {
+        await api.patch(`/products/${product._id}`, patch);
+      }
+
+      const keptSerialized = recipeLines
+        ? JSON.stringify(recipeLines.map((l) => [l.ingredientId, l.qty, l.unit]))
+        : null;
+      if (recipeLines && keptSerialized !== origSerialized) {
+        await api.put(`/supply/products/${product._id}/bom`, {
+          variantKey: null,
+          lines: recipeLines,
+        });
+      }
+      onSaved("Produit enregistré");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur d'enregistrement");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const detachDisabled = mode === "edit" && product?.categoryId != null;
+
+  return (
+    <div className="bg-surface2 px-[18px] pb-3.5 pt-2.5">
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="Nom" htmlFor={`edit-name-${product?._id ?? "new"}`}>
+          <Input
+            id={`edit-name-${product?._id ?? "new"}`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="py-2"
+          />
+        </Field>
+        <Field label="Rattachement (catégorie)" htmlFor={`edit-cat-${product?._id ?? "new"}`}>
+          <Select
+            id={`edit-cat-${product?._id ?? "new"}`}
+            value={catId}
+            onChange={(e) => setCatId(e.target.value)}
+            className="py-2"
+          >
+            {mode === "edit" && (
+              <option
+                value=""
+                disabled={detachDisabled}
+                title={
+                  detachDisabled
+                    ? "Détachement possible uniquement via la suppression de sa catégorie"
+                    : undefined
+                }
+              >
+                Non rattaché
+              </option>
+            )}
+            {categories.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          label="Composition / ingrédients"
+          htmlFor={`edit-desc-${product?._id ?? "new"}`}
+          className="col-span-2"
+        >
+          <Input
+            id={`edit-desc-${product?._id ?? "new"}`}
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            placeholder="Ex : escalope de poulet, jambon, œuf, tomate grillée"
+            className="py-2"
+          />
+        </Field>
+      </div>
+
+      {/* ─── Recette & marge (supply) ─── */}
+      {mode === "create" ? (
+        <p className="mt-3 border-t border-line pt-3 text-xs text-mut">
+          Enregistre d&apos;abord le produit — tu pourras définir sa recette et sa
+          marge juste après, via ✎.
+        </p>
+      ) : (
+        <div className="mt-3 border-t border-line pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-mut">
+              Recette &amp; marge
+            </span>
+            {optionCostNote && (
+              <span className="text-[11px] text-mut">
+                Recette de base — variantes &amp; options gérées côté Ingrédients
+              </span>
+            )}
+          </div>
+
+          {bomState === "loading" && (
+            <div className="mt-2.5 flex flex-col gap-2">
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+          )}
+
+          {bomState === "error" && (
+            <div className="mt-2.5 flex items-center gap-3">
+              <p className="text-xs text-alertt">
+                Impossible de charger la recette (contexte supply).
+              </p>
+              <Btn variant="ghost" size="sm" onClick={() => void loadBom()}>
+                Réessayer
+              </Btn>
+            </div>
+          )}
+
+          {bomState !== "error" && (
+            <>
+              <div className="mt-2.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+                <span className="text-mut">
+                  Coût matière{" "}
+                  <b className="tabular-nums text-ink">{fmtEuro(costCents)}</b>
+                </span>
+                <span className="text-mut">
+                  Marge{" "}
+                  <b
+                    className={cx(
+                      "tabular-nums",
+                      marginPct == null
+                        ? "text-ink"
+                        : marginPct >= 0
+                          ? "text-okt"
+                          : "text-alertt",
+                    )}
+                  >
+                    {marginPct == null
+                      ? "—"
+                      : `${marginPct.toLocaleString("fr-FR")} %`}
+                  </b>
+                </span>
+                <span className="text-xs text-mut">
+                  sur prix de vente {fmtEuro(priceCents)}
+                </span>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {allergens.length === 0 ? (
+                  <span className="text-xs text-mut">Aucun allergène déclaré</span>
+                ) : (
+                  allergens.map((a) => (
+                    <Pill key={a} variant="out">
+                      {ALLERGEN_LABELS[a]}
+                    </Pill>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
+          {bomState === "ready" && (
+            <div className="mt-3 flex flex-col gap-2">
+              {lines.map((l, i) => {
+                const ing = ingredientById.get(l.ingredientId);
+                const qty = parseQty(l.qty);
+                const cost =
+                  ing && Number.isFinite(qty) && qty > 0
+                    ? lineCostCents(qty, l.unit, ing.costPerUnitCents)
+                    : null;
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <Select
+                      value={l.ingredientId}
+                      onChange={(e) =>
+                        setLines((ls) =>
+                          ls.map((x, j) =>
+                            j === i ? { ...x, ingredientId: e.target.value } : x,
+                          ),
+                        )
+                      }
+                      aria-label={`Ingrédient de la ligne ${i + 1}`}
+                      className="min-w-0 flex-1 py-2 text-[13px]"
+                    >
+                      <option value="">Choisir un ingrédient…</option>
+                      {l.ingredientId && fallbackNames[l.ingredientId] && (
+                        <option value={l.ingredientId}>
+                          {fallbackNames[l.ingredientId]} — indisponible
+                        </option>
+                      )}
+                      {ingredients.map((ing2) => (
+                        <option key={ing2.id} value={ing2.id}>
+                          {ing2.name}
+                          {ing2.isOut ? " — rupture" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      value={l.qty}
+                      onChange={(e) =>
+                        setLines((ls) =>
+                          ls.map((x, j) =>
+                            j === i
+                              ? { ...x, qty: e.target.value.replace(/[^0-9.,]/g, "") }
+                              : x,
+                          ),
+                        )
+                      }
+                      inputMode="decimal"
+                      placeholder="Qté"
+                      aria-label={`Quantité de la ligne ${i + 1}`}
+                      className="w-[76px] py-2 text-right text-[13px] tabular-nums"
+                    />
+                    <Select
+                      value={l.unit}
+                      onChange={(e) =>
+                        setLines((ls) =>
+                          ls.map((x, j) =>
+                            j === i ? { ...x, unit: e.target.value as MeasureUnit } : x,
+                          ),
+                        )
+                      }
+                      aria-label={`Unité de la ligne ${i + 1}`}
+                      className="w-[76px] py-2 text-[13px]"
+                    >
+                      {MEASURE_UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </Select>
+                    <span
+                      className="w-[64px] shrink-0 text-right text-xs tabular-nums text-mut"
+                      aria-label="Coût de la ligne"
+                    >
+                      {cost == null ? "—" : fmtEuro(cost)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
+                      aria-label={`Retirer la ligne ${i + 1}`}
+                      title="Retirer la ligne"
+                      className="shrink-0 text-mut transition-colors duration-150 hover:text-alertt"
+                    >
+                      <Icon name="close" size={14} />
+                    </button>
+                  </div>
+                );
+              })}
+              <div>
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  icon="plus"
+                  onClick={() =>
+                    setLines((ls) => [...ls, { ingredientId: "", qty: "", unit: "g" }])
+                  }
+                >
+                  Ingrédient
+                </Btn>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-2.5 text-xs text-alertt">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-3.5 flex items-center justify-end gap-2">
+        <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+          Fermer
+        </Btn>
+        <Btn size="sm" icon="check" onClick={() => void save()} disabled={busy}>
+          {busy ? "Enregistrement…" : "Enregistrer"}
+        </Btn>
+      </div>
+    </div>
+  );
+}

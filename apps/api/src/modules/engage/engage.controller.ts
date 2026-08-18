@@ -1,0 +1,78 @@
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import type { JwtPayload } from '@sm/contracts';
+import { zod } from '../../common/zod.pipe';
+import { CurrentUser, Roles, TenantId } from '../../common/auth';
+import {
+  PromotionCreateSchema,
+  PromotionUpdateSchema,
+  ReviewReplySchema,
+  type PromotionCreate,
+  type PromotionUpdate,
+  type ReviewReply,
+} from './engage.dto';
+import { EngageService } from './engage.service';
+
+@Controller()
+export class EngageController {
+  constructor(private readonly engage: EngageService) {}
+
+  // ─── Promotions (gérant) ───
+
+  @Get('promotions')
+  listPromotions(@TenantId() tenantId: string) {
+    return this.engage.listPromotions(tenantId);
+  }
+
+  @Roles('owner', 'gerant')
+  @Post('promotions')
+  createPromotion(@TenantId() tenantId: string, @Body(zod(PromotionCreateSchema)) body: unknown) {
+    return this.engage.createPromotion(tenantId, body as PromotionCreate);
+  }
+
+  @Roles('owner', 'gerant')
+  @Patch('promotions/:id')
+  updatePromotion(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body(zod(PromotionUpdateSchema)) body: unknown,
+  ) {
+    return this.engage.updatePromotion(tenantId, id, body as PromotionUpdate);
+  }
+
+  /** Bascule actif/inactif (toggle de la carte promo). */
+  @Roles('owner', 'gerant')
+  @Post('promotions/:id/toggle')
+  togglePromotion(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.engage.togglePromotion(tenantId, id);
+  }
+
+  @Roles('owner', 'gerant')
+  @Delete('promotions/:id')
+  deletePromotion(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.engage.deletePromotion(tenantId, id);
+  }
+
+  // ─── Avis clients ───
+
+  /** `?filter=pending` = avis sans réponse ; défaut : tous. */
+  @Get('reviews')
+  listReviews(@TenantId() tenantId: string, @Query('filter') filter?: string) {
+    return this.engage.listReviews(tenantId, filter === 'pending' ? 'pending' : 'all');
+  }
+
+  @Get('reviews/summary')
+  reviewsSummary(@TenantId() tenantId: string) {
+    return this.engage.reviewsSummary(tenantId);
+  }
+
+  @Roles('owner', 'gerant')
+  @Post('reviews/:id/reply')
+  replyToReview(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body(zod(ReviewReplySchema)) body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.engage.replyToReview(tenantId, id, (body as ReviewReply).text, user.sub);
+  }
+}

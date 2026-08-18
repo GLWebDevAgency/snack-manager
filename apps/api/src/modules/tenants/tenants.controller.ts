@@ -17,6 +17,15 @@ export class TenantsController {
     return this.tenants.updateSettings(tenantId, body);
   }
 
+  @Roles('owner', 'gerant')
+  @Patch('tenants/me/hours')
+  updateHours(
+    @TenantId() tenantId: string,
+    @Body() body: { hours: unknown[]; closures?: unknown[] },
+  ) {
+    return this.tenants.updateHours(tenantId, body.hours, body.closures);
+  }
+
   @Public()
   @Get('public/tenants/:slug')
   publicInfo(@Param('slug') slug: string) {

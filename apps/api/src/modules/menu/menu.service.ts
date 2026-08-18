@@ -32,6 +32,8 @@ export class MenuService {
         ...c,
         products: prods.filter((p) => String(p.categoryId) === String(c._id)),
       })),
+      // Produits « Non rattachés » (orphelins après suppression de catégorie)
+      uncategorized: prods.filter((p) => !p.categoryId),
     };
   }
 
@@ -74,8 +76,8 @@ export class MenuService {
 
   /**
    * Suppression protégée : refuse (409 + nombre d'items) si des produits sont
-   * rattachés, sauf confirmation explicite `force` — les produits sont alors
-   * supprimés avec la catégorie.
+   * rattachés, sauf confirmation explicite `force` — les produits passent alors
+   * en « Non rattachés » (categoryId null), jamais supprimés (spec maquette §7.4).
    */
   async deleteCategory(tenantId: string, id: string, force: boolean) {
     const cat = await this.categories.findOne({ _id: id, tenantId });
@@ -87,10 +89,10 @@ export class MenuService {
         attached,
       });
     }
-    await this.products.deleteMany({ tenantId, categoryId: id });
+    await this.products.updateMany({ tenantId, categoryId: id }, { $set: { categoryId: null } });
     await cat.deleteOne();
     this.publishMenuUpdated(tenantId, { scope: 'category', id, deleted: true });
-    return { deleted: true, productsDeleted: attached };
+    return { deleted: true, detached: attached };
   }
 
   /** Drag & drop : réordonne selon la liste complète d'ids reçue. */

@@ -1,0 +1,572 @@
+"use client";
+
+/**
+ * Modale « Importer la carte (CSV / XML) » (spec backoffice-restaurant §7.5).
+ * Trois étapes RÉELLES :
+ *   1. dépôt — vrai `input[type=file]` + drag & drop (.csv/.xml, 5 Mo max),
+ *      modèle CSV téléchargeable (BOM UTF-8, séparateur « ; » — Excel FR) ;
+ *   2. aperçu — parsing local (séparateur ; ou , détecté, BOM géré, guillemets
+ *      échappés « "" »), mini-table et catégories à créer signalées ;
+ *   3. succès — récap chiffré, avec rapport d'erreur partielle le cas échéant.
+ *
+ * Import : POST /categories pour chaque catégorie inconnue (on récupère son
+ * `_id`), puis POST /products en série — une ligne en échec n'interrompt pas
+ * les suivantes (rapport « N créés, M en erreur »).
+ *
+ * Écart assumé vs maquette : la phrase « les colonnes supplémentaires sont
+ * conservées telles quelles » est remplacée par la vérité du contrat API
+ * (ProductCreateSchema ignore les champs inconnus).
+ */
+
+import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
+import { api } from "@/lib/api";
+import { cx } from "@/lib/cx";
+import { fmtEuro } from "@/lib/format";
+import { Btn, Icon, Modal, Pill } from "@/components/ui";
+import { inputToCents, type Category } from "./types";
+
+const MAX_BYTES = 5 * 1024 * 1024;
+/** Au-delà, l'aperçu est tronqué (l'import, lui, traite tout le fichier). */
+const PREVIEW_ROWS = 100;
+
+// ─── Colonnes reconnues (accents et casse ignorés) ───
+const NAME_KEYS = ["nom", "name", "produit", "libelle", "titre", "designation"];
+const PRICE_KEYS = ["prix", "price", "tarif", "prix ttc", "prix de vente"];
+const CATEGORY_KEYS = ["categorie", "category", "rayon", "famille"];
+const DESC_KEYS = ["composition", "description", "ingredients", "desc", "detail"];
+const ACTIVE_KEYS = ["dispo", "disponible", "actif", "active", "available"];
+
+const FALSY = ["0", "non", "no", "false", "faux", "n", "off", "inactif", "masque"];
+
+/** Modèle CSV (séparateur « ; », BOM UTF-8 à l'écriture). */
+const TEMPLATE_CSV = [
+  "nom;prix;catégorie;composition;dispo",
+  'Wrap Crousty;8,90;Wraps;"Tenders, cheddar, salade";oui',
+  'Wrap Signature;9,90;Wraps;"Poulet mariné, sauce maison";oui',
+  "Brownie;3,50;Desserts & Glaces;Fait maison;oui",
+].join("\r\n");
+
+type Row = {
+  name: string;
+  priceCents: number;
+  categoryName: string;
+  description: string;
+  active: boolean;
+};
+
+type Parsed = { rows: Row[]; skipped: number };
+
+type Step = "drop" | "preview" | "done";
+
+/** Minuscules, sans accents, espaces normalisés — pour comparer des libellés. */
+const norm = (s: string) =>
+  s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
+function toRow(
+  name: string,
+  price: string,
+  category: string,
+  description: string,
+  active: string,
+): Row | null {
+  const n = name.trim();
+  const c = category.trim();
+  // Sans nom ni catégorie, la ligne est inexploitable (POST /products exige
+  // un `categoryId` existant) : elle est comptée « ignorée » dans l'aperçu.
+  if (!n || !c) return null;
+  return {
+    name: n,
+    priceCents: inputToCents(price) ?? 0,
+    categoryName: c,
+    description: description.trim(),
+    active: !FALSY.includes(norm(active)),
+  };
+}
+
+/** CSV → table de cellules : guillemets, « "" » échappés, sauts de ligne inclus. */
+function splitCsv(text: string, sep: string): string[][] {
+  const table: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  const pushRow = () => {
+    row.push(field);
+    field = "";
+    if (row.some((c) => c.trim() !== "")) table.push(row);
+    row = [];
+  };
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          quoted = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      quoted = true;
+    } else if (ch === sep) {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      pushRow();
+    } else {
+      field += ch;
+    }
+  }
+  pushRow();
+  return table;
+}
+
+function parseCsv(text: string): Parsed {
+  const clean = text.replace(/^\uFEFF/, "");
+  const firstLine = clean.split(/\r?\n/, 1)[0] ?? "";
+  const semis = firstLine.split(";").length - 1;
+  const commas = firstLine.split(",").length - 1;
+  const table = splitCsv(clean, semis >= commas ? ";" : ",");
+  if (table.length === 0) return { rows: [], skipped: 0 };
+
+  const header = (table[0] ?? []).map(norm);
+  const idx = {
+    name: header.findIndex((h) => NAME_KEYS.includes(h)),
+    price: header.findIndex((h) => PRICE_KEYS.includes(h)),
+    category: header.findIndex((h) => CATEGORY_KEYS.includes(h)),
+    desc: header.findIndex((h) => DESC_KEYS.includes(h)),
+    active: header.findIndex((h) => ACTIVE_KEYS.includes(h)),
+  };
+  // Sans ligne d'en-tête reconnaissable, on retombe sur l'ordre documenté :
+  // nom ; prix ; catégorie ; composition ; dispo.
+  const hasHeader = idx.name >= 0;
+  const body = hasHeader ? table.slice(1) : table;
+  const pick = (cells: string[], col: number, positional: number) => {
+    const at = hasHeader ? col : positional;
+    return at >= 0 ? (cells[at] ?? "") : "";
+  };
+
+  const rows: Row[] = [];
+  let skipped = 0;
+  for (const cells of body) {
+    const row = toRow(
+      pick(cells, idx.name, 0),
+      pick(cells, idx.price, 1),
+      pick(cells, idx.category, 2),
+      pick(cells, idx.desc, 3),
+      pick(cells, idx.active, 4),
+    );
+    if (row) rows.push(row);
+    else skipped++;
+  }
+  return { rows, skipped };
+}
+
+/** Texte du premier enfant direct dont le nom de balise correspond. */
+function childText(el: Element, keys: string[]): string {
+  for (const child of Array.from(el.children)) {
+    if (keys.includes(norm(child.tagName))) return (child.textContent ?? "").trim();
+  }
+  for (const key of keys) {
+    const attr = el.getAttribute(key);
+    if (attr != null) return attr.trim();
+  }
+  return "";
+}
+
+function parseXml(text: string): Parsed {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  const root = doc.documentElement;
+  if (!root || doc.getElementsByTagName("parsererror").length > 0) {
+    throw new Error("Fichier XML illisible.");
+  }
+  let nodes = Array.from(root.children);
+  const only = nodes.length === 1 ? nodes[0] : undefined;
+  // <carte><produits><produit/>…</produits></carte> : descendre d'un cran
+  if (only && only.children.length > 0 && !childText(only, NAME_KEYS)) {
+    nodes = Array.from(only.children);
+  }
+
+  const rows: Row[] = [];
+  let skipped = 0;
+  for (const node of nodes) {
+    const row = toRow(
+      childText(node, NAME_KEYS),
+      childText(node, PRICE_KEYS),
+      childText(node, CATEGORY_KEYS),
+      childText(node, DESC_KEYS),
+      childText(node, ACTIVE_KEYS),
+    );
+    if (row) rows.push(row);
+    else skipped++;
+  }
+  return { rows, skipped };
+}
+
+type Props = {
+  open: boolean;
+  /** Catégories existantes — sert à distinguer les catégories à créer. */
+  categories: Category[];
+  onClose: () => void;
+  /** Import terminé (même partiel) — le parent recharge la carte. */
+  onImported: () => void;
+};
+
+export function ImportModal({ open, categories, onClose, onImported }: Props) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [step, setStep] = useState<Step>("drop");
+  const [fileName, setFileName] = useState("");
+  const [rows, setRows] = useState<Row[]>([]);
+  const [skipped, setSkipped] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{
+    created: number;
+    failed: number;
+    cats: number;
+  } | null>(null);
+
+  const existing = useMemo(
+    () => new Map(categories.map((c) => [norm(c.name), c._id])),
+    [categories],
+  );
+
+  /** Catégories du fichier absentes de la carte, dans l'ordre d'apparition. */
+  const newCats = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of rows) {
+      const key = norm(r.categoryName);
+      if (!existing.has(key) && !seen.has(key)) seen.set(key, r.categoryName);
+    }
+    return [...seen].map(([key, name]) => ({ key, name }));
+  }, [rows, existing]);
+
+  const reset = useCallback(() => {
+    setStep("drop");
+    setFileName("");
+    setRows([]);
+    setSkipped(0);
+    setDragOver(false);
+    setError(null);
+    setBusy(false);
+    setResult(null);
+  }, []);
+
+  const close = useCallback(() => {
+    if (busy) return; // import en cours : on ne coupe pas la série de POST
+    reset();
+    onClose();
+  }, [busy, reset, onClose]);
+
+  const handleFile = useCallback(async (file: File) => {
+    setError(null);
+    const ext = file.name.toLowerCase().split(".").pop() ?? "";
+    if (ext !== "csv" && ext !== "xml") {
+      setError("Format non supporté — dépose un fichier .csv ou .xml.");
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      setError("Fichier trop volumineux — 5 Mo maximum.");
+      return;
+    }
+    try {
+      const text = await file.text();
+      const parsed = ext === "csv" ? parseCsv(text) : parseXml(text);
+      if (parsed.rows.length === 0) {
+        setError(
+          "Aucun produit exploitable — vérifie les colonnes nom et catégorie.",
+        );
+        return;
+      }
+      setFileName(file.name);
+      setRows(parsed.rows);
+      setSkipped(parsed.skipped);
+      setStep("preview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fichier illisible.");
+    }
+  }, []);
+
+  function onDrop(e: DragEvent<HTMLButtonElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) void handleFile(file);
+  }
+
+  function downloadTemplate() {
+    // BOM UTF-8 : Excel FR ouvre le fichier avec les bons accents.
+    const blob = new Blob(["\uFEFF" + TEMPLATE_CSV], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "modele-carte.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function confirmImport() {
+    setBusy(true);
+    const map = new Map(existing);
+    let cats = 0;
+    for (const c of newCats) {
+      try {
+        const doc = await api.post<{ _id: string }>("/categories", {
+          name: c.name,
+          order: categories.length + cats,
+        });
+        map.set(c.key, String(doc._id));
+        cats++;
+      } catch {
+        // Catégorie non créée : ses produits seront comptés en erreur.
+      }
+    }
+
+    let created = 0;
+    let failed = 0;
+    for (const r of rows) {
+      const categoryId = map.get(norm(r.categoryName));
+      if (!categoryId) {
+        failed++;
+        continue;
+      }
+      try {
+        await api.post("/products", {
+          categoryId,
+          name: r.name,
+          description: r.description,
+          price: r.priceCents,
+          active: r.active,
+        });
+        created++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setResult({ created, failed, cats });
+    setBusy(false);
+    setStep("done");
+    onImported();
+  }
+
+  const footer =
+    step === "drop" ? (
+      <>
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="mr-auto text-[13px] font-bold text-accent transition-opacity duration-200 hover:opacity-80"
+        >
+          Télécharger le modèle CSV
+        </button>
+        <Btn variant="ghost" size="sm" onClick={close}>
+          Annuler
+        </Btn>
+      </>
+    ) : step === "preview" ? (
+      <>
+        <Btn variant="ghost" size="sm" onClick={reset} disabled={busy}>
+          Retour
+        </Btn>
+        <Btn size="sm" icon="check" onClick={() => void confirmImport()} disabled={busy}>
+          {busy ? "Import en cours…" : "Confirmer l'import"}
+        </Btn>
+      </>
+    ) : undefined;
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      // Fermeture explicite uniquement (spec §7.5 : le clic sur l'overlay ne
+      // ferme pas) — d'autant plus pendant la série de POST.
+      destructive
+      width={520}
+      title="Importer la carte (CSV / XML)"
+      footer={footer}
+    >
+      {step === "drop" && (
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            className={cx(
+              "flex w-full flex-col items-center gap-1.5 rounded-card border-2 border-dashed bg-surface2 px-4 py-[26px] text-center transition-colors duration-200 ease-sm",
+              dragOver ? "border-accent" : "border-line hover:border-white/25",
+            )}
+          >
+            <Icon name="arrow" size={22} className="rotate-90 text-accent" />
+            <span className="text-[14.5px] font-bold text-ink">
+              Dépose ton fichier ici ou clique pour parcourir
+            </span>
+            <span className="text-[12.5px] text-mut">.csv · .xml — max 5 Mo</span>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xml,text/csv,text/xml,application/xml"
+            className="hidden"
+            aria-label="Fichier de carte à importer"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ""; // permet de re-choisir le même fichier
+              if (file) void handleFile(file);
+            }}
+          />
+
+          {error && (
+            <p role="alert" className="text-[12.5px] text-alertt">
+              {error}
+            </p>
+          )}
+
+          <p className="text-[12.5px] leading-[1.5] text-mut">
+            Colonnes attendues :{" "}
+            <b className="text-ink">nom ; prix ; catégorie ; composition ; dispo</b>. Les
+            catégories inconnues sont créées automatiquement. Séparateur «&nbsp;;&nbsp;» ou
+            «&nbsp;,&nbsp;» détecté automatiquement ; les colonnes supplémentaires sont
+            ignorées.
+          </p>
+        </div>
+      )}
+
+      {step === "preview" && (
+        <div className="flex flex-col gap-3">
+          <p className="text-[13.5px] text-mut">
+            Aperçu — <b className="text-ink">{fileName}</b> : {rows.length} produit
+            {rows.length > 1 ? "s" : ""} · {newCats.length} nouvelle
+            {newCats.length > 1 ? "s" : ""} catégorie{newCats.length > 1 ? "s" : ""}
+            {newCats.length > 0 && ` (« ${newCats.map((c) => c.name).join(" », « ")} »)`}
+          </p>
+
+          <div className="overflow-hidden rounded-ctrl border border-line">
+            <div className="flex items-center gap-2 bg-surface2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.06em] text-mut">
+              <span className="min-w-0 flex-1">Nom</span>
+              <span className="w-16 shrink-0 text-right">Prix</span>
+              <span className="w-[120px] shrink-0">Catégorie</span>
+            </div>
+            <div className="cf-scroll max-h-[240px] overflow-y-auto">
+              {rows.slice(0, PREVIEW_ROWS).map((r, i) => {
+                const isNewCat = !existing.has(norm(r.categoryName));
+                return (
+                  <div
+                    key={`${r.name}-${i}`}
+                    className="flex items-center gap-2 border-t border-line2 px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold text-ink">
+                        {r.name}
+                      </span>
+                      {r.description && (
+                        <span className="block truncate text-[11px] text-mut">
+                          {r.description}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={cx(
+                        "w-16 shrink-0 text-right text-[12.5px] tabular-nums",
+                        r.priceCents > 0 ? "text-ink" : "text-gold",
+                      )}
+                    >
+                      {r.priceCents > 0 ? fmtEuro(r.priceCents) : "à définir"}
+                    </span>
+                    <span className="w-[120px] shrink-0">
+                      {isNewCat ? (
+                        <Pill
+                          className="max-w-full truncate"
+                          style={{
+                            background: "var(--cf-green)",
+                            color: "var(--cf-text)",
+                          }}
+                        >
+                          {r.categoryName} · nouveau
+                        </Pill>
+                      ) : (
+                        <Pill className="max-w-full truncate">{r.categoryName}</Pill>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {rows.length > PREVIEW_ROWS && (
+            <p className="text-xs text-mut">
+              Aperçu limité aux {PREVIEW_ROWS} premières lignes —{" "}
+              {rows.length - PREVIEW_ROWS} autre
+              {rows.length - PREVIEW_ROWS > 1 ? "s" : ""} seront importées aussi.
+            </p>
+          )}
+          {skipped > 0 && (
+            <p className="text-xs text-gold">
+              {skipped} ligne{skipped > 1 ? "s" : ""} ignorée{skipped > 1 ? "s" : ""} : nom
+              ou catégorie manquant.
+            </p>
+          )}
+        </div>
+      )}
+
+      {step === "done" && result && (
+        <div className="flex flex-col items-center gap-2 py-2 text-center">
+          <div
+            aria-hidden
+            className="grid size-[52px] place-items-center rounded-pill"
+            style={{
+              background: "color-mix(in srgb, var(--cf-green) 22%, var(--cf-surface))",
+            }}
+          >
+            <Icon name="check" size={26} stroke={3} className="text-ok" />
+          </div>
+          <p className="text-base font-extrabold text-ink">Import terminé</p>
+          <p className="text-[13.5px] leading-[1.5] text-mut">
+            {result.created} produit{result.created > 1 ? "s" : ""} ajouté
+            {result.created > 1 ? "s" : ""}
+            {result.cats > 0 &&
+              ` · ${result.cats} catégorie${result.cats > 1 ? "s" : ""} créée${
+                result.cats > 1 ? "s" : ""
+              }`}
+            .
+            <br />
+            Retrouve-les dans la liste, prêts à éditer.
+          </p>
+          {result.failed > 0 && (
+            <p role="alert" className="text-[12.5px] text-alertt">
+              {result.created} créés, {result.failed} en erreur — reprends ces lignes à la
+              main.
+            </p>
+          )}
+          <Btn size="sm" className="mt-2" onClick={close}>
+            Fermer
+          </Btn>
+        </div>
+      )}
+    </Modal>
+  );
+}

@@ -44,11 +44,19 @@ export class TenantsService {
       'pauseMessage',
       'printTicketOn',
       'printStickerOn',
+      'dailyGoalCents',
     ];
     const $set: Record<string, unknown> = {};
     for (const k of allowed) {
       if (k in patch) $set[`settings.${k}`] = patch[k];
     }
+    return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+  }
+
+  /** Horaires hebdomadaires (vue Horaires du back-office). */
+  async updateHours(tenantId: string, hours: unknown[], closures?: unknown[]) {
+    const $set: Record<string, unknown> = { hours };
+    if (closures) $set.closures = closures;
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
   }
 }

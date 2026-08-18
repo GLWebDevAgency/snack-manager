@@ -9,7 +9,8 @@
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
     "lint": "echo ok",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "seed:orders": "tsx src/seed-orders.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",
