@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './supply';
 export * from './stats';
+export * from './ordering';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

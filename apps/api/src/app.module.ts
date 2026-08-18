@@ -11,11 +11,13 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { OrderingModule } from './modules/ordering/ordering.module';
 import { SupplyDbModule } from './supply-db.module';
 import { SupplyModule } from './modules/supply/supply.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { EngageModule } from './modules/engage/engage.module';
+import { SiteModule } from './modules/site/site.module';
 
 @Module({
   imports: [
@@ -38,11 +40,13 @@ import { EngageModule } from './modules/engage/engage.module';
     TenantsModule,
     MenuModule,
     OrdersModule,
+    OrderingModule,
     SupplyDbModule,
     SupplyModule,
     StatsModule,
     StaffModule,
     EngageModule,
+    SiteModule,
   ],
   controllers: [HealthController],
 })

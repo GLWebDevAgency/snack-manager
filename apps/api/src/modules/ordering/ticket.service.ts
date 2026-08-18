@@ -1,0 +1,226 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import {
+  ORDER_CHANNEL_LABELS,
+  ORDER_STATUS_LABELS,
+  ORDER_TYPE_LABELS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type OrderChannel,
+  type OrderStatus,
+  type OrderTicket,
+  type OrderType,
+  type PaymentMethod,
+  type PaymentStatus,
+  type TicketLine,
+  type TicketQuery,
+} from '@sm/contracts';
+import type { Order, Tenant } from '@sm/db';
+import { EscPosBuilder } from './escpos';
+import { pad2, parisHm, parisYmd } from './paris-time';
+
+/** Centimes → « 12,50 € » (jamais de float dans les données, uniquement à l'affichage). */
+export function formatEuros(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const abs = Math.abs(Math.round(cents));
+  return `${sign}${Math.floor(abs / 100)},${pad2(abs % 100)} €`;
+}
+
+/** Supplément d'option : « +0,50 € » — le signe lève l'ambiguïté sur le ticket. */
+function signedEuros(cents: number): string {
+  return cents > 0 ? `+${formatEuros(cents)}` : formatEuros(cents);
+}
+
+/** « 18/08/2026 19:12 » en heure du restaurant. */
+function formatStamp(at: Date): string {
+  const { y, m, d } = parisYmd(at);
+  return `${pad2(d)}/${pad2(m)}/${y} ${parisHm(at)}`;
+}
+
+const DEFAULT_WIDTH = 42;
+
+/**
+ * Ticket de commande : représentation JSON structurée (consommée par la caisse,
+ * le KDS et les aperçus web) et rendu ESC/POS dérivé de cette même structure.
+ */
+@Injectable()
+export class TicketService {
+  constructor(
+    @InjectModel('Order') private readonly orders: Model<Order>,
+    @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
+  ) {}
+
+  /** Ticket d'une commande, identifiée par son id (route publique de suivi). */
+  async build(orderId: string): Promise<OrderTicket> {
+    if (!Types.ObjectId.isValid(orderId)) throw new NotFoundException('Commande introuvable');
+    const order = await this.orders.findById(orderId).lean();
+    if (!order) throw new NotFoundException('Commande introuvable');
+
+    const tenant = await this.tenants.findById(order.tenantId).lean();
+    if (!tenant) throw new NotFoundException('Établissement introuvable');
+
+    const channel = (order.channel ?? 'online') as OrderChannel;
+    const type = (order.type ?? 'emporter') as OrderType;
+    const status = (order.status ?? 'new') as OrderStatus;
+    const method = (order.payment?.method ?? 'counter') as PaymentMethod;
+    const paymentStatus = (order.payment?.status ?? 'pending') as PaymentStatus;
+
+    const lines: TicketLine[] = (order.lines ?? []).map((line) => ({
+      qty: Number(line.qty ?? 1),
+      name: String(line.name ?? ''),
+      variantName: line.variantName ?? null,
+      options: (line.options ?? []).map((opt) => ({
+        name: String(opt.name ?? ''),
+        priceDelta: Number(opt.priceDelta ?? 0),
+      })),
+      removed: (line.removed ?? []).map(String),
+      note: line.note ?? null,
+      unitPrice: Number(line.unitPrice ?? 0),
+      lineTotal: Number(line.lineTotal ?? 0),
+    }));
+
+    const discount = order.totals?.discount;
+    const pickupSlot = order.pickup?.slot ? new Date(order.pickup.slot) : null;
+    const createdAt = order.createdAt ? new Date(order.createdAt) : new Date();
+
+    return {
+      orderId: String(order._id),
+      pickupNumber: Number(order.number ?? 0),
+      header: {
+        tenantName: String(tenant.name ?? ''),
+        slug: String(tenant.slug ?? ''),
+        address: String(tenant.address ?? ''),
+        phones: (tenant.phones ?? []).map(String),
+      },
+      createdAt: createdAt.toISOString(),
+      printedAt: new Date().toISOString(),
+      channel,
+      channelLabel: ORDER_CHANNEL_LABELS[channel] ?? channel,
+      type,
+      typeLabel: ORDER_TYPE_LABELS[type] ?? type,
+      status,
+      statusLabel: ORDER_STATUS_LABELS[status] ?? status,
+      pickup:
+        order.pickup && pickupSlot
+          ? {
+              slotIso: pickupSlot.toISOString(),
+              slotLabel: parisHm(pickupSlot),
+              customerName: String(order.pickup.customerName ?? ''),
+              customerPhone: order.pickup.customerPhone ?? null,
+            }
+          : null,
+      lines,
+      totals: {
+        subtotal: Number(order.totals?.subtotal ?? 0),
+        discount: discount
+          ? { amount: Number(discount.amount ?? 0), reason: String(discount.reason ?? '') }
+          : null,
+        total: Number(order.totals?.total ?? 0),
+      },
+      payment: {
+        method,
+        methodLabel: PAYMENT_METHOD_LABELS[method] ?? method,
+        status: paymentStatus,
+        statusLabel: PAYMENT_STATUS_LABELS[paymentStatus] ?? paymentStatus,
+        paid: paymentStatus === 'paid',
+      },
+      note: order.note ?? null,
+    };
+  }
+
+  /**
+   * Rendu ESC/POS du ticket.
+   * `variant: 'kitchen'` = bon cuisine : pas de prix, quantités agrandies.
+   */
+  render(ticket: OrderTicket, options: TicketQuery = {}): Buffer {
+    const width = options.width ?? DEFAULT_WIDTH;
+    const kitchen = options.variant === 'kitchen';
+    const p = new EscPosBuilder(width);
+
+    p.init();
+
+    // ── Entête établissement ──
+    p.align('center').bold(true).size(1, 2);
+    p.wrapped(ticket.header.tenantName.toUpperCase(), 1);
+    p.size(1, 1).bold(false);
+    if (!kitchen) {
+      if (ticket.header.address) p.wrapped(ticket.header.address);
+      if (ticket.header.phones.length > 0) p.line(ticket.header.phones.join(' · '));
+    }
+    p.align('left').rule('=');
+
+    // ── Numéro de retrait : l'information la plus lue du ticket ──
+    p.align('center').bold(true).line('NUMÉRO DE RETRAIT').bold(false);
+    p.size(3, 3).bold(true).line(String(ticket.pickupNumber)).bold(false).size(1, 1);
+    p.size(1, 2).bold(true);
+    p.line(ticket.typeLabel.toUpperCase());
+    p.size(1, 1).bold(false);
+    if (ticket.pickup) {
+      p.line(`Retrait ${ticket.pickup.slotLabel} · ${ticket.pickup.customerName}`);
+      if (ticket.pickup.customerPhone) p.line(ticket.pickup.customerPhone);
+    }
+    p.align('left').rule('=');
+
+    // ── Métadonnées commande ──
+    p.columns(`Cmd ${shortRef(ticket.orderId)}`, formatStamp(new Date(ticket.createdAt)));
+    p.columns(ticket.channelLabel, ticket.statusLabel);
+    p.rule();
+
+    // ── Lignes ──
+    for (const line of ticket.lines) {
+      const title = `${line.qty}x ${line.name}${line.variantName ? ` ${line.variantName}` : ''}`;
+      p.bold(true);
+      if (kitchen) p.wrapped(title, 1, '   ');
+      else p.columnsWrap(title, formatEuros(line.lineTotal), '   ');
+      p.bold(false);
+
+      for (const option of line.options) {
+        const suffix =
+          !kitchen && option.priceDelta !== 0 ? ` (${signedEuros(option.priceDelta)})` : '';
+        p.wrapped(`  + ${option.name}${suffix}`, 1, '    ');
+      }
+      for (const removed of line.removed) p.wrapped(`  - sans ${removed}`, 1, '    ');
+      if (line.note) p.wrapped(`  >> ${line.note}`, 1, '    ');
+    }
+
+    // ── Totaux (masqués sur le bon cuisine) ──
+    if (!kitchen) {
+      p.rule();
+      p.columns('Sous-total', formatEuros(ticket.totals.subtotal));
+      if (ticket.totals.discount) {
+        const label = ticket.totals.discount.reason
+          ? `Remise (${ticket.totals.discount.reason})`
+          : 'Remise';
+        p.columns(label, formatEuros(-ticket.totals.discount.amount));
+      }
+      p.bold(true).size(1, 2);
+      p.columns('TOTAL', formatEuros(ticket.totals.total), 2);
+      p.size(1, 1).bold(false);
+      p.rule();
+      p.columns(ticket.payment.methodLabel, ticket.payment.statusLabel);
+    }
+
+    // ── Instructions cuisine ──
+    if (ticket.note) {
+      p.rule();
+      p.bold(true).line('NOTE CLIENT').bold(false);
+      p.wrapped(ticket.note);
+    }
+
+    // ── Pied ──
+    p.rule();
+    p.align('center');
+    if (!kitchen) p.line('Merci et à bientôt !');
+    p.line(`Imprimé le ${formatStamp(new Date(ticket.printedAt))}`);
+    p.reset();
+    p.cut(options.cut ?? 'partial');
+
+    return p.build();
+  }
+}
+
+/** ObjectId → référence courte lisible au comptoir (« …4F2A »). */
+function shortRef(id: string): string {
+  return id.slice(-6).toUpperCase();
+}

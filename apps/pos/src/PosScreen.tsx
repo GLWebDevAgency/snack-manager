@@ -1,0 +1,534 @@
+/**
+ * Écran principal de la caisse (V1) et orchestration des surcouches.
+ *
+ * Invariants tenus ici :
+ *  - toute création de commande passe par `client.post` → file offline
+ *    persistée, avec `clientId` comme clé d'idempotence : un rejeu ne crée
+ *    jamais de doublon et une coupure réseau ne perd aucune commande ;
+ *  - l'écran confirme IMMÉDIATEMENT avec un numéro de retrait local, remplacé
+ *    par le numéro serveur dès que la file est vidée (réconciliation) ;
+ *  - les montants sont en CENTIMES partout, jamais en flottants.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
+import {
+  SmApiError,
+  cartTotal,
+  euros,
+  sameConfiguration,
+  uuid,
+  useAutoSync,
+  useMenu,
+  useNow,
+  useSyncState,
+  type CartLine,
+  type Product,
+} from '@sm/client-core';
+import { KEYS, client, TENANT_SLUG, type Session } from './client';
+import { S, makeBrand, palette } from './theme';
+import { Btn, Loading, useToasts } from './ui';
+import { TopBar } from './TopBar';
+import { CategoryRail, ProductArea } from './Catalog';
+import { TicketPanel } from './TicketPanel';
+import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
+import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto } from './modals';
+import {
+  buildOrderBody,
+  loadJson,
+  parkCode,
+  pickupSlots,
+  saveJson,
+  serviceDay,
+  startOfDayIso,
+  type DayEntry,
+  type Mode,
+  type ParkedTicket,
+  type PayMethod,
+} from './pos-state';
+
+interface DayLogFile {
+  day: string;
+  entries: DayEntry[];
+}
+
+interface ServerOrderRow {
+  _id: string;
+  number: number;
+  clientId: string;
+  totals?: { total?: number };
+}
+
+export function PosScreen({ session, onLock }: { session: Session; onLock: (reason?: string) => void }) {
+  const brand = useMemo(
+    () => makeBrand(session.tenantName, session.brandColor),
+    [session.brandColor, session.tenantName],
+  );
+
+  const { menu, error: menuError, offline, reload } = useMenu(client, TENANT_SLUG);
+  const sync = useSyncState(client);
+  useAutoSync(client);
+  const now = useNow(1000);
+  const { push, host } = useToasts();
+
+  // ─── Ticket en cours ───
+  const [mode, setMode] = useState<Mode>('surplace');
+  const [lines, setLines] = useState<CartLine[]>([]);
+  const [note, setNote] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [slotIso, setSlotIso] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [catId, setCatId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // ─── Surcouches ───
+  const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
+  const [cashOpen, setCashOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [sentClientId, setSentClientId] = useState<string | null>(null);
+  const [ticketFor, setTicketFor] = useState<DayEntry | null>(null);
+  const [discountFor, setDiscountFor] = useState<DayEntry | null>(null);
+
+  // ─── Journal du service + tickets en attente ───
+  const [dayLog, setDayLog] = useState<DayEntry[]>([]);
+  const [parked, setParked] = useState<ParkedTicket[]>([]);
+  const [ready, setReady] = useState(false);
+
+  const dayLogRef = useRef<DayEntry[]>([]);
+  useEffect(() => {
+    dayLogRef.current = dayLog;
+  }, [dayLog]);
+
+  // Restauration locale (le poste redémarre sans rien perdre).
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [log, park] = await Promise.all([
+        loadJson<DayLogFile>(KEYS.dayLog, { day: serviceDay(), entries: [] }),
+        loadJson<ParkedTicket[]>(KEYS.parked, []),
+      ]);
+      if (!alive) return;
+      setDayLog(log.day === serviceDay() ? log.entries : []);
+      setParked(park);
+      setReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (ready) void saveJson(KEYS.dayLog, { day: serviceDay(), entries: dayLog } satisfies DayLogFile);
+  }, [dayLog, ready]);
+
+  useEffect(() => {
+    if (ready) void saveJson(KEYS.parked, parked);
+  }, [parked, ready]);
+
+  useEffect(() => {
+    if (menu && catId === null && menu.categories.length > 0) setCatId(menu.categories[0]?._id ?? null);
+  }, [catId, menu]);
+
+  // ─── Réconciliation : numéro et identifiant serveur ───
+  /**
+   * Dernier numéro de retrait connu du serveur (tous canaux confondus, la
+   * séquence est journalière et partagée avec la commande en ligne). Il sert à
+   * proposer un numéro provisoire crédible avant confirmation.
+   */
+  const [serverMax, setServerMax] = useState(0);
+
+  const reconcile = useCallback(
+    async (force = false) => {
+      if (!force && !dayLogRef.current.some((e) => !e.serverId)) return;
+      try {
+        const res = await client.get<{ rows: ServerOrderRow[] }>(
+          `/orders?since=${encodeURIComponent(startOfDayIso())}`,
+        );
+        const byClient = new Map(res.rows.map((r) => [r.clientId, r]));
+        setServerMax(res.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
+        setDayLog((cur) =>
+          cur.map((e) => {
+            if (e.serverId) return e;
+            const hit = byClient.get(e.clientId);
+            return hit ? { ...e, serverId: String(hit._id), serverNumber: hit.number } : e;
+          }),
+        );
+      } catch (err) {
+        if (err instanceof SmApiError && err.status === 401) onLock('Session expirée — reconnectez-vous.');
+      }
+    },
+    [onLock],
+  );
+
+  useEffect(() => {
+    if (!ready) return;
+    // Premier passage forcé : il amorce la séquence de numéros du jour.
+    void reconcile(true);
+    const id = setInterval(() => void reconcile(), 12_000);
+    return () => clearInterval(id);
+  }, [ready, reconcile]);
+
+  useEffect(() => {
+    if (sync.pending === 0) void reconcile();
+  }, [reconcile, sync.pending]);
+
+  // ─── Panier ───
+  const addLine = useCallback((line: CartLine) => {
+    setLines((cur) => {
+      const idx = cur.findIndex((l) => sameConfiguration(l, line));
+      if (idx === -1) return [...cur, line];
+      const next = [...cur];
+      const current = next[idx];
+      if (current) next[idx] = { ...current, qty: Math.min(99, current.qty + line.qty) };
+      return next;
+    });
+  }, []);
+
+  const setQty = useCallback((lineId: string, qty: number) => {
+    setLines((cur) => (qty <= 0 ? cur.filter((l) => l.lineId !== lineId) : cur.map((l) => (l.lineId === lineId ? { ...l, qty } : l))));
+  }, []);
+
+  const resetTicket = useCallback(() => {
+    setLines([]);
+    setNote('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setSlotIso(null);
+  }, []);
+
+  const openEdit = useCallback(
+    (line: CartLine) => {
+      if (!menu) return;
+      for (const cat of menu.categories) {
+        const product = cat.products.find((p) => p._id === line.productId);
+        if (product) {
+          setConfig({
+            product,
+            categoryName: cat.name,
+            initial: {
+              lineId: line.lineId,
+              variantKey: line.variantKey,
+              options: line.options,
+              removed: line.removed,
+              note: line.note ?? '',
+              qty: line.qty,
+            },
+          });
+          return;
+        }
+      }
+      push('Produit introuvable dans le menu courant', 'warn');
+    },
+    [menu, push],
+  );
+
+  const submitConfig = useCallback(
+    (draft: ConfigDraft) => {
+      if (!config) return;
+      const line = draftToLine(config.product, draft, draft.lineId ?? uuid());
+      if (draft.lineId) {
+        setLines((cur) => cur.map((l) => (l.lineId === draft.lineId ? line : l)));
+      } else {
+        addLine(line);
+      }
+      setConfig(null);
+    },
+    [addLine, config],
+  );
+
+  // ─── Tickets en attente ───
+  const park = useCallback(() => {
+    if (lines.length === 0) return;
+    const ticket: ParkedTicket = {
+      code: parkCode(),
+      lines,
+      mode,
+      customerName,
+      customerPhone,
+      slot: slotIso,
+      note,
+      at: Date.now(),
+    };
+    setParked((cur) => [...cur, ticket]);
+    resetTicket();
+    push(`Ticket ${ticket.code} mis en attente`, 'warn');
+  }, [customerName, customerPhone, lines, mode, note, push, resetTicket, slotIso]);
+
+  const recall = useCallback(
+    (ticket: ParkedTicket) => {
+      if (lines.length > 0) {
+        push('Terminez ou mettez en attente le ticket en cours', 'bad');
+        return;
+      }
+      setLines(ticket.lines);
+      setMode(ticket.mode);
+      setCustomerName(ticket.customerName);
+      setCustomerPhone(ticket.customerPhone);
+      setSlotIso(ticket.slot);
+      setNote(ticket.note);
+      setParked((cur) => cur.filter((t) => t.code !== ticket.code));
+      push(`Ticket ${ticket.code} rappelé`);
+    },
+    [lines.length, push],
+  );
+
+  // ─── Envoi en cuisine ───
+  const nextLocalNumber = useMemo(
+    () => dayLog.reduce((max, e) => Math.max(max, e.serverNumber ?? e.localNumber), serverMax) + 1,
+    [dayLog, serverMax],
+  );
+
+  const send = useCallback(
+    async (method: PayMethod, cash?: { received: number; change: number }) => {
+      if (lines.length === 0 || busy) return;
+      setBusy(true);
+      const clientId = uuid();
+      const total = cartTotal(lines);
+      const items = lines.reduce((n, l) => n + l.qty, 0);
+      const body = buildOrderBody({
+        clientId,
+        mode,
+        lines,
+        note,
+        customerName,
+        customerPhone,
+        slotIso: slotIso ?? pickupSlots()[0]?.iso ?? null,
+      });
+
+      try {
+        // Persistée AVANT toute tentative réseau : rien ne se perd.
+        await client.post('/orders', body, `order:${clientId}`);
+        const entry: DayEntry = {
+          clientId,
+          localNumber: nextLocalNumber,
+          serverId: null,
+          serverNumber: null,
+          mode,
+          method,
+          paid: method !== 'retrait',
+          total,
+          items,
+          customerName: mode === 'tel' ? customerName.trim() : null,
+          ...(cash ? { received: cash.received, change: cash.change } : null),
+          at: Date.now(),
+        };
+        setDayLog((cur) => [...cur, entry]);
+        setSentClientId(clientId);
+        setCashOpen(false);
+        resetTicket();
+      } catch (e) {
+        push(e instanceof Error ? e.message : "Impossible d'enregistrer la commande", 'bad');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, customerName, customerPhone, lines, mode, nextLocalNumber, note, push, resetTicket, slotIso],
+  );
+
+  const onPay = useCallback(
+    (method: PayMethod) => {
+      if (method === 'especes') setCashOpen(true);
+      else void send(method);
+    },
+    [send],
+  );
+
+  // ─── Remise (PIN) ───
+  const applyDiscount = useCallback(
+    async (entry: DayEntry, amount: number, reason: string, pin: string): Promise<string | null> => {
+      if (!entry.serverId) return 'Commande pas encore synchronisée';
+      try {
+        // Écriture immédiate assumée : la vérification du PIN doit répondre
+        // tout de suite (un PIN rejoué plus tard par la file serait refusé en
+        // silence et bloquerait le sujet). Action explicitement en ligne.
+        const res = await client.direct<{ totals?: { total?: number; discount?: { amount: number } } }>(
+          'POST',
+          `/orders/${entry.serverId}/discount`,
+          { pin, amount, reason },
+        );
+        const applied = res.totals?.discount?.amount ?? amount;
+        setDayLog((cur) => cur.map((e) => (e.clientId === entry.clientId ? { ...e, discount: applied } : e)));
+        push(`Remise de ${euros(applied)} appliquée`, 'good');
+        return null;
+      } catch (e) {
+        if (e instanceof SmApiError && e.status === 401) return 'PIN incorrect';
+        return e instanceof Error ? e.message : 'Remise refusée';
+      }
+    },
+    [push],
+  );
+
+  const fetchTicket = useCallback(
+    (orderId: string) => client.get<OrderTicketDto>(`/public/orders/${orderId}/ticket`),
+    [],
+  );
+
+  const closeService = useCallback(() => {
+    const count = dayLog.length;
+    setDayLog([]);
+    setCloseOpen(false);
+    push(`Service clôturé · ${count} commande${count > 1 ? 's' : ''}`, 'good');
+  }, [dayLog.length, push]);
+
+  const sentEntry = sentClientId ? (dayLog.find((e) => e.clientId === sentClientId) ?? null) : null;
+
+  // ─── Rendu ───
+  if (!menu) {
+    return (
+      <View style={{ flex: 1, backgroundColor: palette.bg }}>
+        {menuError ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: S.lg }}>
+            <View style={{ maxWidth: 460 }}>
+              <Notice
+                tone={palette.red}
+                title="Menu indisponible"
+                body={`${menuError}. Aucun menu n'est encore en cache sur ce poste : la caisse a besoin d'une première connexion pour fonctionner hors ligne.`}
+              />
+            </View>
+            <Btn label="Réessayer" kind="primary" accent={brand.accent} onAccent={brand.onAccent} onPress={() => void reload()} />
+          </View>
+        ) : (
+          <Loading label="Chargement du menu…" />
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: palette.bg }}>
+      <TopBar
+        brand={brand}
+        staffName={session.staffName}
+        mode={mode}
+        onMode={setMode}
+        pending={sync.pending}
+        syncing={sync.syncing}
+        offline={offline}
+        now={now}
+        serviceCount={dayLog.length}
+        onService={() => {
+          // La barre haute reste active sous les surcouches : on referme la
+          // confirmation pour ne jamais empiler deux panneaux.
+          setSentClientId(null);
+          setCloseOpen(true);
+        }}
+        onLock={() => onLock()}
+      />
+
+      <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
+        <CategoryRail categories={menu.categories} activeId={catId} onSelect={setCatId} brand={brand} />
+
+        <View style={{ flex: 1 }}>
+          {offline ? (
+            <View
+              style={{
+                paddingHorizontal: S.lg,
+                paddingVertical: 7,
+                backgroundColor: '#161104',
+                borderBottomWidth: 1,
+                borderBottomColor: palette.line2,
+              }}
+            >
+              <Text style={{ color: palette.amber, fontSize: 13, fontWeight: '600' }}>
+                Menu servi depuis le cache local — les prix peuvent dater. Le service continue normalement.
+              </Text>
+            </View>
+          ) : null}
+          <ProductArea
+            categories={menu.categories}
+            activeId={catId}
+            brand={brand}
+            parked={parked}
+            query={query}
+            onQuery={setQuery}
+            onPick={(product, categoryName) => setConfig({ product, categoryName })}
+            onRecall={recall}
+          />
+        </View>
+
+        <TicketPanel
+          lines={lines}
+          mode={mode}
+          brand={brand}
+          note={note}
+          onNote={setNote}
+          customerName={customerName}
+          onCustomerName={setCustomerName}
+          customerPhone={customerPhone}
+          onCustomerPhone={setCustomerPhone}
+          slotIso={slotIso}
+          onSlot={setSlotIso}
+          onQty={setQty}
+          onEdit={openEdit}
+          onPark={park}
+          onClear={() => {
+            resetTicket();
+            push('Ticket vidé');
+          }}
+          onPay={onPay}
+          busy={busy}
+        />
+
+        {/* Surcouches — sous la barre haute, qui reste lisible */}
+        {config ? (
+          <QuickConfig
+            product={config.product}
+            categoryName={config.categoryName}
+            brand={brand}
+            initial={config.initial}
+            onClose={() => setConfig(null)}
+            onSubmit={submitConfig}
+          />
+        ) : null}
+
+        {cashOpen ? (
+          <CashModal
+            total={cartTotal(lines)}
+            brand={brand}
+            onClose={() => setCashOpen(false)}
+            onValidate={(received, change) => void send('especes', { received, change })}
+          />
+        ) : null}
+
+        {sentEntry ? (
+          <SentOverlay
+            entry={sentEntry}
+            brand={brand}
+            synced={!!sentEntry.serverId}
+            onClose={() => setSentClientId(null)}
+            onPrint={() => setTicketFor(sentEntry)}
+            onDiscount={() => setDiscountFor(sentEntry)}
+          />
+        ) : null}
+
+        {closeOpen ? (
+          <CloseModal
+            entries={dayLog}
+            pending={sync.pending}
+            brand={brand}
+            staffName={session.staffName}
+            onClose={() => setCloseOpen(false)}
+            onCloseService={closeService}
+            onOpenTicket={setTicketFor}
+            onOpenDiscount={setDiscountFor}
+          />
+        ) : null}
+
+        {ticketFor ? (
+          <TicketPreview entry={ticketFor} fetchTicket={fetchTicket} onClose={() => setTicketFor(null)} />
+        ) : null}
+
+        {discountFor ? (
+          <DiscountModal
+            entry={discountFor}
+            brand={brand}
+            onClose={() => setDiscountFor(null)}
+            onApply={(amount, reason, pin) => applyDiscount(discountFor, amount, reason, pin)}
+          />
+        ) : null}
+      </View>
+
+      {host}
+    </View>
+  );
+}
