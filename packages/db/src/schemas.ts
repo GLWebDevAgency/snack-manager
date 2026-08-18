@@ -39,6 +39,32 @@ export const TenantSchema = new Schema(
       ],
       default: [],
     },
+    // Domaines personnalisés rattachés à l'établissement (« commander.classfood.fr »).
+    // Le sous-domaine automatique `<slug>.snackmanager.app` n'y figure PAS : il
+    // est servi sans action du restaurateur, donc sans état à suivre. Ici on ne
+    // stocke que ce qui dépend d'un tiers — la zone DNS du client et le
+    // certificat de notre hébergeur — d'où `status`, `lastCheckedAt` et `detail`.
+    domains: {
+      type: [
+        new Schema({
+          hostname: { type: String, required: true, lowercase: true, trim: true },
+          // Identifiant chez le fournisseur (Railway, Cloudflare…) : sans lui on
+          // ne sait plus ni interroger l'état ni détacher le domaine.
+          providerId: { type: String, required: true },
+          status: {
+            type: String,
+            enum: ['pending_dns', 'issuing_certificate', 'active', 'failed'],
+            default: 'pending_dns',
+          },
+          target: { type: String, required: true }, // valeur CNAME dictée au client
+          isPrimary: { type: Boolean, default: false },
+          addedAt: { type: Date, default: Date.now },
+          lastCheckedAt: { type: Date, default: null },
+          detail: { type: String, default: null }, // cause lisible d'un échec
+        }),
+      ],
+      default: [],
+    },
     plan: { type: String, enum: ['essentiel', 'complet', 'boost'], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
     settings: {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SmClient } from './api';
 import type { QueueState } from './sync-queue';
 import type { Menu, Order, OrderStatus } from './types';
-import { STATUS_RANK } from './types';
+import { mostAdvancedStatus } from './types';
 
 /** État de la file de synchronisation (badge « N en attente » des barres hautes). */
 export function useSyncState(client: SmClient): QueueState {
@@ -83,10 +83,7 @@ export function mergeOrder(list: Order[], incoming: Order): Order[] {
   );
   if (idx === -1) return [incoming, ...list];
   const current = list[idx]!;
-  const keep =
-    STATUS_RANK[current.status as OrderStatus] > STATUS_RANK[incoming.status as OrderStatus]
-      ? current.status
-      : incoming.status;
+  const keep = mostAdvancedStatus(current.status as OrderStatus, incoming.status as OrderStatus);
   const next = [...list];
   next[idx] = { ...current, ...incoming, status: keep };
   return next;

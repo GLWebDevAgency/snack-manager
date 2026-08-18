@@ -93,14 +93,36 @@ export interface TenantPublic {
   brandColor: string;
 }
 
-/** Ordre d'avancement — sert à la réconciliation « le plus avancé gagne ». */
+/**
+ * Progression normale. `cancelled` en est exclu : ce n'est pas une étape plus
+ * avancée que la livraison, c'est une sortie de route.
+ */
 export const STATUS_RANK: Record<OrderStatus, number> = {
   new: 0,
   preparing: 1,
   ready: 2,
   delivered: 3,
-  cancelled: 4,
+  cancelled: -1,
 };
+
+const TERMINAL: readonly OrderStatus[] = ['delivered', 'cancelled'];
+
+export const isTerminalStatus = (status: OrderStatus): boolean => TERMINAL.includes(status);
+
+/**
+ * Réconciliation hors ligne : « le plus avancé gagne », à une exception près
+ * qui compte en service — un état TERMINAL ne se laisse jamais écraser.
+ *
+ * Un rejeu d'annulation ne doit pas transformer en « annulée » une commande
+ * déjà remise au client (le plat est parti, la caisse est faite), et une remise
+ * rejouée ne ressuscite pas une commande annulée. Le premier terminal fait foi.
+ */
+export function mostAdvancedStatus(current: OrderStatus, incoming: OrderStatus): OrderStatus {
+  if (current === incoming) return current;
+  if (isTerminalStatus(current)) return current;
+  if (isTerminalStatus(incoming)) return incoming;
+  return STATUS_RANK[incoming] > STATUS_RANK[current] ? incoming : current;
+}
 
 export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   new: 'preparing',

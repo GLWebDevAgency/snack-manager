@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { DatabaseModule } from './database.module';
 import { RedisModule } from './redis.module';
+import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { HealthController } from './modules/health/health.controller';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -35,6 +36,8 @@ import { SiteModule } from './modules/site/site.module';
     }),
     DatabaseModule,
     RedisModule,
+    // Adaptateurs des ports (@Global) : DOMAIN_REGISTRAR, PAYMENT_GATEWAY…
+    InfrastructureModule,
     AuditModule,
     AuthModule,
     TenantsModule,

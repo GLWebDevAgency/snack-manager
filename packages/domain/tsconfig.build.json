@@ -1,0 +1,23 @@
+{
+  // Transpilation CommonJS du cœur métier, pour Node uniquement.
+  //
+  // `tsconfig.json` reste la référence de la VÉRIFICATION (tests compris, sans
+  // émission). Ici on produit ce que l'API Nest requiert à l'exécution : sans
+  // ce `dist`, `require('@sm/domain')` échoue — Node ne sait pas charger des
+  // sources TypeScript aux imports relatifs sans extension.
+  //
+  // Les types, eux, continuent de venir des sources (`types` du package.json) :
+  // un `typecheck` reste possible sans build préalable.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "types": []
+  },
+  "include": ["src"],
+  "exclude": ["**/*.test.ts"]
+}

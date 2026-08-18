@@ -7,6 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "echo ok"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@nestjs/websockets": "^11.0.0",
     "@sm/contracts": "workspace:*",
     "@sm/db": "workspace:*",
+    "@sm/domain": "workspace:*",
     "argon2": "^0.44.0",
     "ioredis": "^5.6.0",
     "mongoose": "^8.16.0",
@@ -35,6 +37,7 @@
     "@nestjs/cli": "^11.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
-    "@types/pg": "^8.15.0"
+    "@types/pg": "^8.15.0",
+    "vitest": "^3.2.0"
   }
 }

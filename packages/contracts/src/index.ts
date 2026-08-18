@@ -12,14 +12,40 @@ export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'delivered', 'cancel
 export const OrderStatusSchema = z.enum(ORDER_STATUSES);
 export type OrderStatus = z.infer<typeof OrderStatusSchema>;
 
-/** Réconciliation offline : en cas de conflit, le statut le plus avancé gagne. */
+/**
+ * Progression normale d'une commande. `cancelled` n'y figure pas : ce n'est
+ * pas une étape « plus avancée » que la livraison, c'est une sortie de route.
+ */
 export const ORDER_STATUS_RANK: Record<OrderStatus, number> = {
   new: 0,
   preparing: 1,
   ready: 2,
   delivered: 3,
-  cancelled: 4,
+  cancelled: -1,
 };
+
+/** États terminaux : une fois atteints, plus aucune transition n'est acceptée. */
+export const TERMINAL_STATUSES: readonly OrderStatus[] = ['delivered', 'cancelled'];
+
+export const isTerminalStatus = (status: OrderStatus): boolean =>
+  TERMINAL_STATUSES.includes(status);
+
+/**
+ * Réconciliation hors ligne : deux appareils peuvent avoir fait avancer la même
+ * commande sans se voir. La règle « le plus avancé gagne » a une exception qui
+ * compte en service : un état TERMINAL ne se laisse jamais écraser.
+ *
+ * Concrètement, un rejeu d'annulation ne doit pas transformer en « annulée »
+ * une commande déjà remise au client (le plat est parti, la caisse est faite),
+ * et symétriquement une remise rejouée ne ressuscite pas une commande annulée.
+ * Le premier état terminal atteint fait foi.
+ */
+export function mostAdvancedStatus(current: OrderStatus, incoming: OrderStatus): OrderStatus {
+  if (current === incoming) return current;
+  if (isTerminalStatus(current)) return current;
+  if (isTerminalStatus(incoming)) return incoming;
+  return ORDER_STATUS_RANK[incoming] > ORDER_STATUS_RANK[current] ? incoming : current;
+}
 
 export const ORDER_CHANNELS = ['online', 'pos', 'phone'] as const;
 export const OrderChannelSchema = z.enum(ORDER_CHANNELS);

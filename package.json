@@ -10,7 +10,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "seed": "pnpm --filter @sm/db seed"
+    "seed": "pnpm --filter @sm/db seed",
+    "test": "turbo test"
   },
   "devDependencies": {
     "turbo": "^2.5.0",
