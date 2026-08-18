@@ -8,23 +8,37 @@ Architecture complète : [ARCHITECTURE.md](ARCHITECTURE.md) · Specs UI par surf
 
 | Espace | Contenu |
 |---|---|
-| `apps/api` | API NestJS — REST + WebSocket, MongoDB (Mongoose), Redis pub/sub, audit NF525 |
+| `apps/api` | API NestJS — REST + WebSocket, MongoDB (Mongoose), PostgreSQL (Drizzle), Redis pub/sub, audit NF525 |
 | `apps/web` | Next.js 16 App Router — back-office resto (`/admin`), puis commande en ligne, CRM, vitrine |
 | `packages/contracts` | Schémas zod partagés (DTO, énumérations, événements WS) |
-| `packages/db` | Modèles Mongoose + seed Class'Food (`pnpm seed`) |
+| `packages/db` | Modèles Mongoose — contexte **commerce** + seeds (carte Class'Food, historique de commandes) |
+| `packages/supply` | Schéma Drizzle — contexte **supply** (ingrédients, allergènes, recettes, fournisseurs, stocks) |
+
+## Persistance polyglotte
+
+| Contexte | Moteur | Pourquoi |
+|---|---|---|
+| Commerce (menus, commandes, équipe, avis) | **MongoDB** | documents flexibles (chaque resto a sa carte), écriture offline idempotente |
+| Supply (ingrédients, recettes, fournisseurs, factures) | **PostgreSQL** | relationnel profond, intégrité référentielle, historiques financiers |
+
+Ponts : cascade de rupture ingrédient → produits · coût matière & marge par produit/variante · rollup d'allergènes (INCO UE 1169/2011).
 
 ## Infra — tout sur Railway (projet `snack-manager`)
 
-- **MongoDB 8** + **Redis** (région UE `europe-west4`), accès local via proxy TCP (voir `.env`)
+- **MongoDB 8** + **PostgreSQL** + **Redis** (région UE `europe-west4`), accès local via proxys TCP (voir `.env`)
 - **api** : https://api-production-8949.up.railway.app (healthcheck `/health`)
-- Variables : `MONGO_URL` / `REDIS_URL` référencent les services internes, `JWT_SECRET` propre à la prod
+- **web** : https://web-production-99b58c.up.railway.app
+- Variables : `MONGO_URL` / `DATABASE_URL` / `REDIS_URL` référencent les services internes, `JWT_SECRET` propre à la prod
 
 ## Démarrage
 
 ```bash
 pnpm install
-cp .env.example .env   # renseigner les URLs (railway variables) + JWT_SECRET
-pnpm seed              # recharge la carte Class'Food (22 catégories, 109 produits)
+cp .env.example .env              # URLs des bases (railway variables) + JWT_SECRET
+pnpm --filter @sm/supply migrate  # schéma PostgreSQL
+pnpm seed                         # carte Class'Food (22 catégories, 109 produits)
+pnpm --filter @sm/supply seed     # ingrédients, recettes, fournisseurs
+pnpm --filter @sm/db seed:orders  # 30 jours d'historique de commandes
 pnpm --filter @sm/api dev
 pnpm --filter @sm/web dev
 ```
