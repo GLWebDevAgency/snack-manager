@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23000'/><text x='32' y='44' font-family='Arial' font-weight='800' font-size='32' fill='%23c9a15a' text-anchor='middle'>S</text></svg>"><meta name="theme-color" content="#000000">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snack Manager — Back-office interne (CRM)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app/classfood-ds.css">
+<link rel="stylesheet" href="app/sm-skin.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="menu-data.js"></script>
+<script src="app/cf-helpers.js"></script>
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; background: radial-gradient(1200px 700px at 50% -10%, #14161a, #0c0d10 60%, #060708); display: grid; place-items: center; overflow: hidden; }
+  :root { --cf-accent: #c9a15a; --cf-on-accent: #0a0b0d; }
+  #stage { position: fixed; left: 50%; top: 50%; transform-origin: center center; }
+</style>
+<style>:focus-visible{outline:2px solid #c9a15a;outline-offset:2px}@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}</style><style id="sm-polish">::selection{background:#c9a15a;color:#000}html{-webkit-text-size-adjust:100%}*{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}input,textarea{caret-color:#c9a15a}*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px;border:2px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:rgba(201,161,90,.5)}</style><style>html,body{overscroll-behavior:none}</style><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black"><meta name="robots" content="noindex"><meta name="description" content="CRM interne Snack Manager — démo."></head>
+<body>
+<div id="stage"><div id="root"></div></div>
+<script type="text/babel" src="app/cf-ui.jsx"></script>
+<script type="text/babel" src="app/sm-crm.jsx"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById('root')).render(<window.SMCRMApp />);
+  function fit() {
+    const stage = document.getElementById('stage');
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w < 50 || h < 50) { requestAnimationFrame(fit); return; }
+    const s = Math.max(0.05, Math.min(1, (h - 24) / 862, (w - 24) / 1360));
+    stage.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit);
+  setTimeout(fit, 60); setTimeout(fit, 400);
+</script>
+<div id="sm-hub-pill"><a href="SM - Écosystème & Flux.html" title="Écosystème Snack Manager">S</a></div><style>#sm-hub-pill{position:fixed;left:10px;bottom:10px;z-index:99999;opacity:.22;transition:opacity .15s}#sm-hub-pill:hover{opacity:1}#sm-hub-pill a{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#000;color:#c9a15a;font:800 15px/1 Arial,sans-serif;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}@media print{#sm-hub-pill{display:none}}</style><script>if(location.search.indexOf('embed')>-1){var _p=document.getElementById('sm-hub-pill');if(_p)_p.style.display='none'}</script></body>
+</html>

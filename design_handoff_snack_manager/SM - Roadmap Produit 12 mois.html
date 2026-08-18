@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23000'/><text x='32' y='44' font-family='Arial' font-weight='800' font-size='32' fill='%23c9a15a' text-anchor='middle'>S</text></svg>">
+<title>SM — Roadmap produit 12 mois</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+doc-page:not(:defined){visibility:hidden}
+:root{--brass:#b8893f;--ink:#17140f;--mut:#6b6455;--line:#e7e0d0;--cream:#f6f1e6}
+body{font-family:Inter,system-ui,sans-serif;color:var(--ink);font-size:10.5pt;line-height:1.5}
+a{color:var(--brass)}a:hover{color:#8f6a2f}
+h1{font-size:23pt;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+h2{font-size:14pt;font-weight:800;margin-top:24pt;padding-top:10pt;border-top:2px solid var(--ink)}
+h2 small{font-weight:700;color:var(--brass);font-size:9pt;letter-spacing:.08em}
+p{margin-top:6pt;color:#3a342b}
+.k{display:block;margin-top:26pt;font-size:8.5pt;font-weight:700;letter-spacing:.16em;color:var(--brass)}
+.lead{font-size:11.5pt;color:var(--mut)}
+ul{margin-top:6pt;padding-left:16pt}li{margin-top:4pt;color:#3a342b}
+li b{color:var(--ink)}
+.box{background:var(--cream);border-radius:10pt;padding:11pt 14pt;margin-top:10pt;break-inside:avoid}
+.box b{font-weight:800}
+.warn{background:#0b0b0c;color:#f2efe9;border-radius:10pt;padding:11pt 14pt;margin-top:10pt;font-size:9.8pt;break-inside:avoid}
+.warn b{color:#c9a15a}
+.hdr{display:flex;justify-content:space-between;align-items:center;font-size:8pt;color:var(--mut);font-weight:600}
+table{width:100%;border-collapse:collapse;margin-top:10pt;font-size:9.3pt}
+th{text-align:left;font-weight:800;font-size:8.3pt;letter-spacing:.08em;padding:6pt 8pt;border-bottom:2px solid var(--ink);text-transform:uppercase}
+td{padding:6pt 8pt;border-bottom:1px solid var(--line);vertical-align:top}
+tr{break-inside:avoid}
+</style>
+</head>
+<body>
+<doc-page>
+<div slot="header" class="hdr"><span>SNACK MANAGER · INTERNE</span><span>Roadmap produit — 12 mois</span></div>
+<span class="k">PRODUIT · ORDRE DE CONSTRUCTION</span>
+<h1>Roadmap produit 12 mois</h1>
+<p class="lead">Principe directeur : chaque trimestre livre quelque chose qu'un restaurant PAIE. On ne construit jamais deux trimestres d'avance, et le pilote Class'Food valide tout avant le premier client externe.</p>
+
+<h2>T1 — Le socle qui encaisse <small>· MOIS 1–3</small></h2>
+<p><b>Objectif : Class'Food tourne à 100 % sur notre système, plus aucun outil tiers.</b></p>
+<ul>
+<li><b>M1</b> — Modèle de données multi-tenant, auth (PIN staff + comptes gérant), back-office resto : CRUD menu complet (catégories drag &amp; drop, options, ruptures), import CSV.</li>
+<li><b>M2</b> — POS tablette (React Native) : prise de commande, options express, commande téléphone, impression tickets ESC/POS, totaux, clôture de caisse. Offline-first dès le départ — non négociable.</li>
+<li><b>M3</b> — KDS temps réel (colonnes, minuteurs, agrégat « à lancer », son), pointage équipe. <b>Bascule Class'Food en production réelle.</b></li>
+</ul>
+<div class="box"><b>Critère de sortie T1 :</b> 30 jours de services complets au Class'Food sans retour au papier, temps moyen d'encaissement &lt; 45 s, zéro commande perdue.</div>
+
+<h2>T2 — Le canal qui rapporte <small>· MOIS 4–6</small></h2>
+<p><b>Objectif : la commande en ligne 0 % commission en production + les 3 premiers clients payants installés.</b></p>
+<ul>
+<li><b>M4</b> — Commande en ligne client : menu, panier, personnalisation, créneaux de retrait, Stripe + paiement au comptoir, suivi de statut temps réel sans compte.</li>
+<li><b>M5</b> — Import de carte par photo (IA) : pipeline extraction → validation ligne à ligne. C'est l'arme d'onboarding — la démo « votre carte en 24 h » doit devenir vraie à 100 %.</li>
+<li><b>M6</b> — Durcissement multi-tenant (thème marque grise runtime, isolation données), monitoring, sauvegardes, page de statut. <b>Installation des clients fondateurs 1–3.</b></li>
+</ul>
+<div class="box"><b>Critère de sortie T2 :</b> 3 restos externes en production, ≥ 15 % de leurs commandes du soir passent en ligne au bout de 30 jours, support &lt; 2 appels/resto/semaine.</div>
+
+<h2>T3 — La rétention <small>· MOIS 7–9</small></h2>
+<p><b>Objectif : le gérant ouvre le back-office tous les jours sans qu'on le lui demande.</b></p>
+<ul>
+<li><b>M7</b> — Statistiques utiles : CA jour/semaine, top ventes, heures de pointe, digest hebdo automatique (« ta semaine en 10 lignes » par SMS/email).</li>
+<li><b>M8</b> — Fidélité simple (tampon digital par téléphone), codes promo, gestion des avis Google depuis le back-office.</li>
+<li><b>M9</b> — CRM interne SM : pipeline leads, relances tracées, compteur fondateur, facturation abonnements automatisée (Stripe Billing). Clients 4–7.</li>
+</ul>
+<div class="box"><b>Critère de sortie T3 :</b> connexion gérant ≥ 5 j/7 sur 80 % du parc, churn 0, MRR ≥ 1 000 €.</div>
+
+<h2>T4 — L'échelle <small>· MOIS 10–12</small></h2>
+<p><b>Objectif : les 10 places fondateur remplies, l'offre marques virtuelles opérationnelle.</b></p>
+<ul>
+<li><b>M10</b> — Intégration marques virtuelles : menus des 4 marques injectés chez le partenaire, tickets plateformes agrégés dans le KDS (saisie manuelle assistée d'abord, intégrations API ensuite).</li>
+<li><b>M11</b> — SM Boost outillé : tableau de bord des performances plateformes du client, rapport mensuel généré.</li>
+<li><b>M12</b> — Consolidation : dette technique, audit sécurité, RGPD complet, doc support. Décision T+1 : livraison en propre OU multi-établissement — selon la demande réelle des clients, pas l'intuition.</li>
+</ul>
+<div class="box"><b>Critère de sortie T4 :</b> 10 clients suite + 2 partenaires marques virtuelles, MRR ≥ 2 000 €, un mois complet sans intervention fondateur en cuisine.</div>
+
+<h2>Règles de gouvernance produit</h2>
+<table>
+<thead><tr><th>Règle</th><th>Application</th></tr></thead>
+<tbody>
+<tr><td><b>Le comptoir décide</b></td><td>Une feature n'entre en roadmap que si un client (ou Class'Food) a le problème CETTE semaine. Les demandes fondateur passent en premier — c'est la promesse vendue.</td></tr>
+<tr><td><b>Une dette assumée</b></td><td>Tout raccourci pris est noté dans un registre avec sa date de remboursement (M12 max). Pas de registre = pas de raccourci.</td></tr>
+<tr><td><b>Le vendredi soir est sacré</b></td><td>Aucun déploiement jeudi–dimanche. Les restos vivent le week-end ; on livre lundi–mercredi matin.</td></tr>
+<tr><td><b>Offline d'abord</b></td><td>POS et KDS doivent finir un service complet sans internet. Toute feature qui casse ça est refusée, quelle que soit sa valeur.</td></tr>
+</tbody>
+</table>
+<div class="warn"><b>Ce qu'on refuse en année 1 :</b> app livreur, multi-établissement, comptabilité intégrée, réservation de tables, app client native, international. Chaque « oui » à ça est un « non » à la fiabilité du service du vendredi soir.</div>
+</doc-page>
+<script src="doc-page.js"></script>
+</body>
+</html>

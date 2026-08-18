@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/*
+ * Tokens SM Dark — valeurs extraites des maquettes (docs/specs/design-system.md).
+ * Marque grise : SEUL --sm-accent / --sm-on-accent change par tenant (injecté au
+ * runtime). Les couleurs fonctionnelles sont fixes sur tous les comptes :
+ * vert = prêt, rouge = nouveau/alerte, ambre = en attente/prépa.
+ */
+:root {
+  --sm-bg: #000;
+  --sm-surface: #0b0b0c;
+  --sm-surface-2: #141416;
+  --sm-text: #fff;
+  --sm-text-2: rgba(255, 255, 255, 0.62);
+  --sm-line: rgba(255, 255, 255, 0.1);
+  --sm-accent: #c9a15a;
+  --sm-accent-hover: #e0b96f;
+  --sm-on-accent: #111;
+  --sm-green: #3fae4a;
+  --sm-red: #c94b3f;
+  --sm-amber: #e0973f;
+}
+
+@theme inline {
+  --color-bg: var(--sm-bg);
+  --color-surface: var(--sm-surface);
+  --color-surface2: var(--sm-surface-2);
+  --color-ink: var(--sm-text);
+  --color-ink2: var(--sm-text-2);
+  --color-line: var(--sm-line);
+  --color-accent: var(--sm-accent);
+  --color-accenthover: var(--sm-accent-hover);
+  --color-onaccent: var(--sm-on-accent);
+  --color-ok: var(--sm-green);
+  --color-alert: var(--sm-red);
+  --color-prep: var(--sm-amber);
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --radius-ctrl: 8px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+}
+
+::selection {
+  background: var(--sm-accent);
+  color: #000;
+}
+
+body {
+  background: var(--sm-bg);
+  color: var(--sm-text);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

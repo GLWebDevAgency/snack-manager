@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.next/
+.turbo/
+.expo/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Référence design complète (assets lourds, hors git — voir design_handoff_snack_manager/ pour le handoff)
+Menu Trivolet Redesign (1)/
+
+# Boilerplate tiers sous AGPL-3.0 — consulté comme référence de conventions,
+# JAMAIS copié dans ce code propriétaire (voir ARCHITECTURE.md)
+boilerplate-main.zip

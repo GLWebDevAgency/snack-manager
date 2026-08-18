@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23000'/><text x='32' y='44' font-family='Arial' font-weight='800' font-size='32' fill='%23c9a15a' text-anchor='middle'>S</text></svg>"><meta name="theme-color" content="#000000">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SM — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=ADLaM+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app/sm-ds.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--sm-black);color:var(--sm-white);font-family:var(--sm-font);-webkit-font-smoothing:antialiased}
+a{color:var(--sm-accent);text-decoration:none}a:hover{color:var(--sm-accent-hover)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 40px 120px}
+header.hero{padding:80px 40px 50px;border-bottom:1px solid var(--sm-surface-6);margin-bottom:60px}
+header.hero .in{max-width:1100px;margin:0 auto}
+.sec{margin-top:70px}
+.sec>h2{font-size:32px;font-weight:600;letter-spacing:-.03em;margin-bottom:6px}
+.sec>.lead{font-size:15px;color:var(--sm-gray);max-width:640px;line-height:1.55;margin-bottom:28px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.cell{background:var(--sm-card-gradient);border:1px solid var(--sm-surface-6);border-radius:14px;padding:20px}
+.cell h4{font-size:13px;font-weight:600;margin-bottom:14px;color:var(--sm-white)}
+.cell .note{font-size:12px;color:var(--sm-gray);margin-top:12px;line-height:1.5}
+.swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.sw{border:1px solid var(--sm-surface-6);border-radius:12px;overflow:hidden}
+.sw .c{height:64px}
+.sw .m{padding:9px 11px;font-size:11px;line-height:1.5;color:var(--sm-gray);background:var(--sm-card)}
+.sw .m b{display:block;color:var(--sm-white);font-weight:600;font-size:11.5px}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.type-row{display:flex;align-items:baseline;gap:20px;padding:13px 0;border-bottom:1px solid var(--sm-surface-6)}
+.type-row .tag{width:120px;flex-shrink:0;font-size:11px;color:var(--sm-gray)}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--sm-surface-6);color:var(--sm-gray)}
+.kv b{color:var(--sm-white);font-weight:500;font-family:ui-monospace,monospace;font-size:12px}
+.demo-tickets{display:flex;gap:12px;flex-wrap:wrap}
+.tk{width:250px;background:var(--sm-card-gradient);border:1px solid var(--sm-surface-6);border-radius:14px;overflow:hidden}
+.tk .tk-head{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--sm-surface-6)}
+.tk .no{font-size:19px;font-weight:600;letter-spacing:-.03em}
+.tk .tk-body{padding:11px 13px;font-size:13px;color:var(--sm-white-80);display:flex;flex-direction:column;gap:6px}
+.tk .tk-foot{padding:11px 13px;border-top:1px solid var(--sm-surface-6)}
+.radius-demo{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.radius-demo .r{background:var(--sm-badge-bg);border:1px solid var(--sm-border-10);display:grid;place-items:center;font-size:10px;color:var(--sm-gray);width:74px;height:56px}
+.map{width:100%;border-collapse:collapse;font-size:12.5px}
+.map th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--sm-gray);padding:8px 10px;border-bottom:1px solid var(--sm-border-10)}
+.map td{padding:8px 10px;border-bottom:1px solid var(--sm-surface-6);color:var(--sm-white-80);font-family:ui-monospace,monospace;font-size:11.5px}
+.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.dd{border-radius:14px;padding:18px;border:1px solid}
+.dd.do{border-color:rgba(63,174,74,.35);background:rgba(63,174,74,.05)}
+.dd.dont{border-color:rgba(201,75,63,.35);background:rgba(201,75,63,.05)}
+.dd p{font-size:13px;color:var(--sm-white-80);line-height:1.55;padding:5px 0}
+.dd .t{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px}
+.dd.do .t{color:#6ecf78}.dd.dont .t{color:#e77b70}
+@media(max-width:900px){.g3,.g4{grid-template-columns:1fr 1fr}.swatches{grid-template-columns:repeat(3,1fr)}.do-dont{grid-template-columns:1fr}}
+</style>
+<style>:focus-visible{outline:2px solid #c9a15a;outline-offset:2px}@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}</style><style id="sm-polish">::selection{background:#c9a15a;color:#000}html{-webkit-text-size-adjust:100%}*{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}input,textarea{caret-color:#c9a15a}*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px;border:2px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:rgba(201,161,90,.5)}</style><style>html{color-scheme:dark;scroll-behavior:smooth}</style><meta name="robots" content="noindex"><meta name="description" content="Design system SM Dark — tokens, composants, règles marque blanche."></head>
+<body>
+<header class="hero">
+<div class="in">
+<span class="sm-badge"><span class="sm-dot sm-dot--pulse"></span>SM Dark · v1</span>
+<h1 class="sm-h1" style="margin-top:18px;max-width:700px">Le design system Snack Manager</h1>
+<p class="sm-body" style="margin-top:16px;max-width:620px">Une seule base visuelle — héritée de la landing — pour toutes les surfaces : caisse, cuisine, commande en ligne, back-offices. Sombre, dense en information, lisible en plein rush.</p>
+<div class="row" style="margin-top:24px">
+<a class="sm-btn sm-btn--light" href="Snack Manager - Site Vitrine.html">Voir la landing (source)</a>
+<a class="sm-btn sm-btn--ghost" href="SM - Écosystème & Flux.html">L'écosystème</a>
+</div>
+</div>
+</header>
+<div class="wrap">
+
+<section class="sec" id="principes">
+<h2>Principes</h2>
+<p class="lead">Cinq règles non négociables, du site public à l'écran de cuisine.</p>
+<div class="grid g3">
+<div class="cell"><h4>1 · Noir, information en avant</h4><p class="note">Fond #000, cartes #111 en dégradé subtil, bordures blanches à 6–10 %. La couleur n'est jamais décorative : elle signale un statut ou l'accent de marque.</p></div>
+<div class="cell"><h4>2 · Fonctionnel fixe, marque variable</h4><p class="note">Vert = prêt/positif, rouge = nouveau/urgent, ambre = attente — identiques pour tous les restaurants. Seuls l'accent, le logo et le nom changent (marque blanche).</p></div>
+<div class="cell"><h4>3 · Tablette d'abord</h4><p class="note">POS et KDS visent React Native : cibles tactiles ≥ 44 px, colonnes scrollables, cartes non compressibles, aucune interaction au survol requise.</p></div>
+<div class="cell"><h4>4 · Une action primaire par écran</h4><p class="note">Un seul bouton accent/light par vue. Le reste : dark, ghost ou lien. La hiérarchie visuelle suit la hiérarchie de décision.</p></div>
+<div class="cell"><h4>5 · Le mouvement prouve, il ne décore pas</h4><p class="note">Pulse = vivant, minuteur coloré = urgence, transition 3D = navigation. Durées 200–600 ms, easing cubic-bezier(.2,.8,.2,1), prefers-reduced-motion respecté.</p></div>
+<div class="cell"><h4>6 · Chiffres tabulaires</h4><p class="note">Tout montant, minuteur ou compteur passe en font-variant-numeric: tabular-nums pour ne jamais sauter en se mettant à jour.</p></div>
+</div>
+</section>
+
+<section class="sec" id="couleurs">
+<h2>Couleurs</h2>
+<p class="lead">Tokens exacts de la landing. L'accent est la seule couleur injectée par marque (défaut laiton #c9a15a ; démo : Class'Food rouge, O'Braise orange, Green House vert).</p>
+<div class="swatches">
+<div class="sw"><div class="c" style="background:#000"></div><div class="m"><b>--sm-black</b>#000 · fond</div></div>
+<div class="sw"><div class="c" style="background:#111"></div><div class="m"><b>--sm-card</b>#111 · cartes</div></div>
+<div class="sw"><div class="c" style="background:#1a1a1a"></div><div class="m"><b>--sm-badge-bg</b>#1a1a1a · badges</div></div>
+<div class="sw"><div class="c" style="background:#262626"></div><div class="m"><b>--sm-btn-dark</b>#262626 · bouton dark</div></div>
+<div class="sw"><div class="c" style="background:#999"></div><div class="m"><b>--sm-gray</b>#999 · texte secondaire</div></div>
+<div class="sw"><div class="c" style="background:#fff"></div><div class="m"><b>--sm-white</b>#fff · texte</div></div>
+<div class="sw"><div class="c" style="background:#c9a15a"></div><div class="m"><b>--sm-accent</b>#c9a15a · marque (variable)</div></div>
+<div class="sw"><div class="c" style="background:#3fae4a"></div><div class="m"><b>--sm-green</b>#3fae4a · prêt / positif</div></div>
+<div class="sw"><div class="c" style="background:#c94b3f"></div><div class="m"><b>--sm-red</b>#c94b3f · nouveau / urgent</div></div>
+<div class="sw"><div class="c" style="background:#e0973f"></div><div class="m"><b>--sm-amber</b>#e0973f · attente</div></div>
+<div class="sw"><div class="c" style="background:rgba(255,255,255,.06)"></div><div class="m"><b>--sm-surface-6</b>blanc 6 % · bordures douces</div></div>
+<div class="sw"><div class="c" style="background:rgba(255,255,255,.1)"></div><div class="m"><b>--sm-border-10</b>blanc 10 % · bordures</div></div>
+</div>
+</section>
+
+<section class="sec" id="typo">
+<h2>Typographie</h2>
+<p class="lead">Inter partout (400–800), ADLaM Display réservé au logotype. Titres serrés (-.03/-.04 em), corps -.02 em.</p>
+<div class="cell">
+<div class="type-row"><span class="tag">sm-h1 · 70/600</span><span class="sm-h1" style="font-size:44px">Reprenez le contrôle</span></div>
+<div class="type-row"><span class="tag">sm-h2 · 46/600</span><span class="sm-h2" style="font-size:32px">Commandes en direct</span></div>
+<div class="type-row"><span class="tag">sm-h5 · 18/600</span><span class="sm-h5">Ticket n°42 — Yassine B.</span></div>
+<div class="type-row"><span class="tag">sm-body · 16/500</span><span class="sm-body">Le ticket file en cuisine, déjà encaissé.</span></div>
+<div class="type-row"><span class="tag">sm-small · 13.5</span><span class="sm-small">Créneau 12:30 · payé en ligne</span></div>
+<div class="type-row" style="border-bottom:none"><span class="tag">sm-micro · 11 caps</span><span class="sm-micro">Chiffre d'affaires</span></div>
+</div>
+</section>
+
+<section class="sec" id="forme">
+<h2>Rayons & effets</h2>
+<div class="grid g2">
+<div class="cell"><h4>Échelle de rayons</h4>
+<div class="radius-demo">
+<div class="r" style="border-radius:8px">8 · xs</div>
+<div class="r" style="border-radius:10px">10 · sm</div>
+<div class="r" style="border-radius:12px">12 · md</div>
+<div class="r" style="border-radius:16px">16 · base</div>
+<div class="r" style="border-radius:20px">20 · lg</div>
+<div class="r" style="border-radius:50px;width:110px;height:40px">pill · 50</div>
+</div>
+<p class="note">Cartes 16, tuiles internes 10–12, boutons et chips toujours en pilule.</p></div>
+<div class="cell sm-spot" id="spotcell"><h4>Spotlight (survol)</h4>
+<p class="note">Halo doré radial suivant le curseur (.sm-spot + --mx/--my en JS). Réservé aux cartes interactives des surfaces desktop — jamais sur tablette.</p>
+<div class="row" style="margin-top:14px"><span class="sm-dot sm-dot--pulse"></span><span class="sm-small">Pulse 2 s : présence temps réel (en ligne, live)</span></div>
+<div class="row" style="margin-top:8px"><span class="sm-dot sm-dot--red sm-dot--pulse"></span><span class="sm-small">Rouge pulsé : nouvelle commande à accepter</span></div>
+</div>
+</div>
+</section>
+
+<section class="sec" id="composants">
+<h2>Composants</h2>
+<div class="grid g2">
+<div class="cell"><h4>Boutons</h4>
+<div class="row">
+<button class="sm-btn sm-btn--light">Encaisser</button>
+<button class="sm-btn sm-btn--accent">Action de marque</button>
+<button class="sm-btn sm-btn--dark">Secondaire</button>
+<button class="sm-btn sm-btn--ghost">Tertiaire</button>
+<button class="sm-btn sm-btn--danger">Annuler la commande</button>
+</div>
+<div class="row" style="margin-top:12px">
+<button class="sm-btn sm-btn--light sm-btn--lg">Grand · 44px+</button>
+<button class="sm-btn sm-btn--dark sm-btn--sm">Petit</button>
+<button class="sm-btn sm-btn--light" disabled>Désactivé</button>
+</div>
+<p class="note">Light = action primaire neutre · Accent = action de marque (1 max/écran) · Danger réservé aux destructions avec confirmation.</p></div>
+<div class="cell"><h4>Badges, chips & statuts</h4>
+<div class="row"><span class="sm-badge"><span class="sm-dot sm-dot--pulse"></span>En ligne · Green House</span><span class="sm-badge">Offre fondateur <span class="accent">7 places</span></span></div>
+<div class="row" style="margin-top:12px"><button class="sm-chip is-on">Tout · 24</button><button class="sm-chip">Nouvelles · 3</button><button class="sm-chip">En prépa · 5</button><button class="sm-chip">Prêtes · 2</button></div>
+<div class="row" style="margin-top:12px"><span class="sm-tag sm-tag--new">Nouveau</span><span class="sm-tag sm-tag--wait">En préparation</span><span class="sm-tag sm-tag--ready">Prête</span><span class="sm-tag sm-tag--info">Payé en ligne</span></div>
+<p class="note">Les tags de statut portent TOUJOURS les couleurs fonctionnelles — jamais l'accent de marque.</p></div>
+<div class="cell"><h4>Formulaires</h4>
+<div class="grid g2" style="gap:10px">
+<div class="sm-field"><label>Nom du produit</label><input class="sm-input" value="Tacos L gratiné"></div>
+<div class="sm-field"><label>Prix</label><input class="sm-input" value="9,50 €"></div>
+</div>
+<div class="sm-field" style="margin-top:10px"><label>Catégorie</label><select class="sm-select"><option>Signatures</option><option>Tacos</option></select></div>
+<div class="row" style="margin-top:14px"><button class="sm-toggle is-on" onclick="this.classList.toggle('is-on')"></button><span class="sm-small">Disponible à la vente</span></div>
+<div class="row" style="margin-top:10px"><button class="sm-toggle sm-toggle--danger" onclick="this.classList.toggle('is-on')"></button><span class="sm-small">Rupture (retire de la commande en ligne)</span></div>
+<div style="margin-top:14px"><input type="range" class="sm-range" value="60"></div>
+</div>
+<div class="cell"><h4>KPI</h4>
+<div class="grid g2" style="gap:10px">
+<div class="sm-kpi" style="padding:16px"><span class="k-label">CA du jour</span><span class="k-value" style="font-size:26px">1 290 €</span><span class="k-delta up">▲ +18 % vs mardi dernier</span></div>
+<div class="sm-kpi" style="padding:16px"><span class="k-label">Temps moyen</span><span class="k-value" style="font-size:26px">11 min</span><span class="k-delta down">▼ à surveiller au rush</span></div>
+</div>
+<p class="note">Valeur en 600, delta coloré fonctionnel avec référence de comparaison explicite.</p></div>
+</div>
+
+<div class="cell" style="margin-top:14px"><h4>Ticket KDS — les 3 états</h4>
+<div class="demo-tickets">
+<div class="tk" style="border-color:rgba(201,75,63,.45)"><div class="tk-head"><span class="sm-dot sm-dot--red sm-dot--pulse"></span><span class="no">42</span><span class="sm-small">Yassine B.</span><span class="sm-tag sm-tag--new" style="margin-left:auto">Nouveau</span></div><div class="tk-body"><span>1× Tacos L gratiné — kebab, poulet</span><span>2× Coca 33cl</span></div><div class="tk-foot"><button class="sm-btn sm-btn--light" style="width:100%">Accepter · 00:41</button></div></div>
+<div class="tk"><div class="tk-head"><span class="no">41</span><span class="sm-small">Marie L.</span><span class="sm-tag sm-tag--wait" style="margin-left:auto">En prépa</span></div><div class="tk-body"><span style="text-decoration:line-through;opacity:.5">1× Menu Enfant</span><span>1× Milkshake Oréo XL</span></div><div class="tk-foot"><button class="sm-btn sm-btn--dark" style="width:100%">Marquer prête · 04:12</button></div></div>
+<div class="tk" style="border-color:rgba(63,174,74,.4)"><div class="tk-head"><span class="sm-dot"></span><span class="no">39</span><span class="sm-small">Karim D.</span><span class="sm-tag sm-tag--ready" style="margin-left:auto">Prête</span></div><div class="tk-body"><span>1× Mix Box 1</span><span>1× Onion rings</span></div><div class="tk-foot"><button class="sm-btn sm-btn--ghost" style="width:100%">Remise client · n°39</button></div></div>
+</div>
+<p class="note">Minuteur dans le bouton d'action : vert &lt; 5 min, ambre &lt; 10 min, rouge au-delà. Carte non compressible (flex-shrink: 0), colonne scrollable.</p></div>
+</section>
+
+<section class="sec" id="marque">
+<h2>Marque blanche</h2>
+<div class="do-dont">
+<div class="dd do"><p class="t">Personnalisable par restaurant</p>
+<p>· Accent --sm-accent / --cf-accent (bouton de marque, liens, focus)</p>
+<p>· Logo + nom (sm-brand.jsx : initiale, logotype, en-têtes, reçus)</p>
+<p>· Contenu : menu, catégories, prix, horaires, photos</p></div>
+<div class="dd dont"><p class="t">Fixe — identique tous comptes</p>
+<p>· Neutres (#000/#111/#1a1a1a), bordures, rayons, Inter</p>
+<p>· Vert prêt / rouge nouveau / ambre attente</p>
+<p>· Structure des écrans, tailles tactiles, composants</p></div>
+</div>
+</section>
+
+<section class="sec" id="mapping">
+<h2>Mapping technique</h2>
+<p class="lead">Les apps historiques consomment des tokens --cf-* ; app/sm-skin.css les remappe sur le référentiel. Pour tout nouveau code, utiliser directement --sm-* / .sm-*.</p>
+<div class="cell">
+<table class="map">
+<thead><tr><th>Token app (--cf-*)</th><th>Référentiel (--sm-*)</th><th>Valeur</th></tr></thead>
+<tbody>
+<tr><td>--cf-bg</td><td>--sm-black</td><td>#000</td></tr>
+<tr><td>--cf-surface / --cf-paper</td><td>--sm-card</td><td>#111 (+ gradient)</td></tr>
+<tr><td>--cf-surface-2 / --cf-fill</td><td>--sm-badge-bg</td><td>#1a1a1a</td></tr>
+<tr><td>--cf-text-mut / --cf-mut</td><td>--sm-gray</td><td>#999</td></tr>
+<tr><td>--cf-border / --cf-line</td><td>--sm-border-10</td><td>rgba(255,255,255,.1)</td></tr>
+<tr><td>--cf-accent</td><td>--sm-accent</td><td>injecté par marque</td></tr>
+<tr><td>--cf-green / --cf-red / --cf-gold</td><td>--sm-green / --sm-red / --sm-accent</td><td>#3fae4a / #c94b3f / #c9a15a</td></tr>
+<tr><td>--cf-disp / --cf-body / --cf-cond</td><td>--sm-font</td><td>Inter</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+</div>
+<script>
+document.querySelectorAll('.sm-spot').forEach(function(el){
+el.addEventListener('pointermove',function(ev){var r=el.getBoundingClientRect();el.style.setProperty('--mx',(ev.clientX-r.left)+'px');el.style.setProperty('--my',(ev.clientY-r.top)+'px')});
+});
+</script>
+<div id="sm-hub-pill"><a href="SM - Écosystème & Flux.html" title="Écosystème Snack Manager">S</a></div><style>#sm-hub-pill{position:fixed;left:10px;bottom:10px;z-index:99999;opacity:.22;transition:opacity .15s}#sm-hub-pill:hover{opacity:1}#sm-hub-pill a{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#000;color:#c9a15a;font:800 15px/1 Arial,sans-serif;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.35)}@media print{#sm-hub-pill{display:none}}</style><script>if(location.search.indexOf('embed')>-1){var _p=document.getElementById('sm-hub-pill');if(_p)_p.style.display='none'}</script></body>
+</html>

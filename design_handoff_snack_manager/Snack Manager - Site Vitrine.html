@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23000'/><text x='32' y='44' font-family='Arial' font-weight='800' font-size='32' fill='%23c9a15a' text-anchor='middle'>S</text></svg>"><meta name="theme-color" content="#000000">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snack Manager — On fait tourner votre restaurant. Pas l'inverse.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=ADLaM+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="Snack Manager - Site Vitrine.css">
+<script src="image-slot.js"></script>
+<style>:focus-visible{outline:2px solid #c9a15a;outline-offset:2px}@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}</style><style id="sm-polish">::selection{background:#c9a15a;color:#000}html{-webkit-text-size-adjust:100%}*{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}input,textarea{caret-color:#c9a15a}*::-webkit-scrollbar{width:10px;height:10px}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px;border:2px solid transparent;background-clip:content-box}*::-webkit-scrollbar-thumb:hover{background-color:rgba(201,161,90,.5)}</style><style>html{color-scheme:dark;scroll-behavior:smooth}</style><meta name="description" content="Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. 0 % commission, marque blanche, lancement accompagné."><meta property="og:title" content="Snack Manager — le système d'exploitation des snacks indépendants"><meta property="og:description" content="Caisse, cuisine, commande en ligne et back-office. 0 % commission, marque blanche."><meta property="og:type" content="website"><meta property="og:site_name" content="Snack Manager"></head>
+<body>
+
+<header class="site-head">
+<div class="hd-desktop">
+<div class="hd-strip"></div>
+<div class="hd-row">
+<svg viewBox="0 0 87 34" width="87" height="34" class="notch-fillet" aria-hidden="true"><path d="M 0 0 C 45.98 0 37 34 87 34 L 87 0 Z" fill="#000"></path></svg>
+<div class="hd-mid"><div class="hd-midc">
+<div class="hd-links"><a class="ui-link" href="#produit">Produit</a><a class="ui-link" href="#pourquoi">Expertise</a></div>
+<a class="hd-logolink" href="#top" aria-label="Accueil"><svg viewBox="0 0 24.958 24.991" width="25" height="25" aria-hidden="true"><path d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z" fill="#fff"></path><path d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z" fill="#fff"></path></svg></a>
+<div class="hd-links"><a class="ui-link" href="#revenus">Revenus</a><a class="ui-link" href="#tarifs">Tarifs</a><a class="ui-link" href="#contact">Contact</a></div>
+</div></div>
+<svg viewBox="0 0 87 34" width="87" height="34" class="notch-fillet" style="transform:scaleX(-1)" aria-hidden="true"><path d="M 0 0 C 45.98 0 37 34 87 34 L 87 0 Z" fill="#000"></path></svg>
+</div>
+</div>
+<div class="hd-mobile">
+<div class="hd-mobilebar">
+<a href="#top" aria-label="Accueil"><svg viewBox="0 0 24.958 24.991" width="25" height="25" aria-hidden="true"><path d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z" fill="#fff"></path><path d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z" fill="#fff"></path></svg></a>
+<button class="hd-burger" aria-label="Menu"><span></span><span></span><span></span></button>
+</div>
+<nav class="hd-mobilemenu"><a class="ui-link" href="#produit">Produit</a><a class="ui-link" href="#pourquoi">Expertise</a><a class="ui-link" href="#revenus">Revenus</a><a class="ui-link" href="#tarifs">Tarifs</a><a class="ui-link" href="#contact">Contact</a></nav>
+</div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+<div class="hero-frame">
+<div class="hero-demo" aria-hidden="true"><div class="hero-demotrack" id="hero-demotrack"></div></div>
+<div class="hero-blur"></div>
+<div class="hero-veil"></div>
+<div class="hero-shade"></div>
+<div class="hero-content">
+<span class="badge"><span class="accent">Nouveau</span>Conçu par des restaurateurs</span>
+<h1 class="h1 hero-title">On fait tourner votre restaurant.<br>Pas l'inverse.</h1>
+<p class="subheading hero-sub">Caisse, cuisine, back-office et commande en ligne réunis dans <span class="kw-w">une seule plateforme</span> — <span class="kw">à vos couleurs</span>, pensée par des gens qui ont <span class="kw-w">tenu le comptoir</span>.</p>
+<div class="hero-actions"><a class="btn light" href="#contact">Demander une démo</a><a class="btn dark" href="#demo">Explorer la démo</a></div>
+<div class="hero-trust"><span>Sans engagement</span><i></i><span>Installé en quelques jours</span><i></i><span>Testé en service réel 7 j/7</span></div>
+</div>
+<div class="hero-live" aria-hidden="true">
+<div class="hero-chip"><span class="hero-chipdot"></span><span class="t"><b>Commande en ligne · 18,90 € payée</b><span>Ticket parti en cuisine — sans passer par la caisse</span></span></div>
+<div class="hero-chip"><span class="hero-chipdot gold"></span><span class="t"><b>Cuisine · 3 frites à lancer</b><span>Agrégé sur toutes les commandes en cours</span></span></div>
+<div class="hero-chip"><span class="hero-chipdot"></span><span class="t"><b>N°42 prête en 11 min</b><span>Sticker sac imprimé, client prévenu</span></span></div>
+</div>
+</div>
+</section>
+
+<div class="ticker-wrap" aria-hidden="true">
+<span class="ticker-shoulder"><svg viewBox="0 0 87 34" width="87" height="34"><path d="M 0 0 C 45.98 0 37 34 87 34 L 87 0 Z" fill="#000"></path></svg></span>
+<div class="ticker-mid"><div class="ticker-track">
+<span class="ticker-item"><span class="td"></span>Cuisine (KDS)</span><span class="ticker-item"><span class="td"></span>Caisse (POS)</span><span class="ticker-item"><span class="td"></span>Back-office</span><span class="ticker-item"><span class="td"></span>Site &amp; commande</span>
+<span class="ticker-item"><span class="td"></span>Cuisine (KDS)</span><span class="ticker-item"><span class="td"></span>Caisse (POS)</span><span class="ticker-item"><span class="td"></span>Back-office</span><span class="ticker-item"><span class="td"></span>Site &amp; commande</span>
+</div></div>
+<span class="ticker-shoulder"><svg viewBox="0 0 87 34" width="87" height="34" style="transform:scaleY(-1) scaleX(-1)"><path d="M 0 0 C 45.98 0 37 34 87 34 L 87 0 Z" fill="#000"></path></svg></span>
+</div>
+
+<section class="intro" id="intro">
+<p class="intro-watermark" aria-hidden="true">×2</p>
+<h3 class="h3-display intro-heading rv">On vous fait économiser un poste entier — parfois deux — chaque mois, en réorganisant le travail plutôt qu'en l'ajoutant.</h3>
+</section>
+
+<section class="proof-band" aria-label="La preuve en chiffres">
+<div class="proof-grid rv">
+<div class="proof-item"><p class="proof-num"><span data-count="35" data-prefix="−" data-suffix=" %">−35 %</span></p><p class="proof-label">d'erreurs de commande avec la prise en ligne<span class="proof-src">Deliverect, 2023</span></p></div>
+<div class="proof-item"><p class="proof-num"><span data-count="15" data-prefix="+" data-suffix=" %">+15 %</span></p><p class="proof-label">de panier moyen sur les commandes en ligne<span class="proof-src">bas de fourchette des études</span></p></div>
+<div class="proof-item"><p class="proof-num"><span data-count="60" data-suffix=" min">60 min</span></p><p class="proof-label">pour former une recrue à la caisse<span class="proof-src">constaté au restaurant pilote</span></p></div>
+<div class="proof-item"><p class="proof-num"><span data-count="7" data-suffix=" j/7">7 j/7</span></p><p class="proof-label">testé en service réel, midi et soir<span class="proof-src">Class'Food — Normandie</span></p></div>
+</div>
+</section>
+
+<section class="section sim-section" id="simulateur">
+<span class="badge">Le calcul</span>
+<h2 class="h2" style="text-align:center;max-width:620px">Combien vous coûte votre organisation actuelle ?</h2>
+<p class="body-text sim-esc rv">Sans vrai POS, tout repose sur des feuilles griffonnées et des totaux calculés de tête. Une commande mal relue, c'est un plat refait : <strong>≈ 5,75 €</strong> à la poubelle. Deux par service, midi et soir, 7 j/7 : <strong>≈ 700 € par mois</strong> — sans compter les heures passées à former chaque nouvelle recrue à « votre » caisse. Faites le calcul avec vos chiffres :</p>
+<div class="sim-board rv">
+<div class="sim-controls">
+<div class="sim-ctl"><div class="sim-ctlhead"><label for="s-cmd">Commandes par jour</label><output id="o-cmd">80</output></div><input type="range" id="s-cmd" min="20" max="300" step="5" value="80"></div>
+<div class="sim-ctl"><div class="sim-ctlhead"><label for="s-panier">Panier moyen</label><output id="o-panier">11,50 €</output></div><input type="range" id="s-panier" min="6" max="25" step="0.5" value="11.5"></div>
+<div class="sim-ctl"><div class="sim-ctlhead"><label for="s-err">Commandes refaites par semaine <span class="sim-hint">écriture mal relue, oublis, erreurs de prix</span></label><output id="o-err">6</output></div><input type="range" id="s-err" min="0" max="30" step="1" value="6"></div>
+<div class="sim-ctl"><div class="sim-ctlhead"><label for="s-mins">Minutes perdues par service en coordination <span class="sim-hint">totaux calculés de tête, déchiffrage, re-annonces en cuisine</span></label><output id="o-mins">20 min</output></div><input type="range" id="s-mins" min="0" max="60" step="5" value="20"></div>
+<div class="sim-ctl"><div class="sim-ctlhead"><label for="s-tel">Commandes par téléphone par jour <span class="sim-hint">décrochés en plein rush — en caisse, ou par quelqu'un qui quitte son poste</span></label><output id="o-tel">12</output></div><input type="range" id="s-tel" min="0" max="40" step="1" value="12"></div>
+</div>
+<div class="sim-results">
+<p class="sim-reslabel">Récupérable chaque mois</p>
+<p class="sim-resbig" id="r-total">—</p>
+<p class="sim-resyear">soit <b id="r-year">—</b> par an, CA additionnel du panier en ligne inclus</p>
+<div class="sim-resrows">
+<div class="sim-resrow"><span>Erreurs évitées (−35 %)</span><b id="r-err"></b></div>
+<div class="sim-resrow"><span>Totaux, déchiffrage &amp; re-annonces supprimés</span><b id="r-coord"></b></div>
+<div class="sim-resrow"><span>Téléphone déchargé — appels + interruptions de poste</span><b id="r-tel"></b></div>
+<div class="sim-resrow accent"><span>CA additionnel — panier en ligne +15 %</span><b id="r-ca"></b></div>
+<div class="sim-resrow"><span>Heures d'équipe libérées</span><b id="r-h"></b></div>
+</div>
+<p class="sim-equiv" id="r-equiv"></p>
+<a class="btn light sim-cta" href="#contact">Vérifier ces chiffres avec nous</a>
+</div>
+</div>
+<div class="sim-flow rv">
+<p class="sim-flowtitle">Pourquoi ça tient : la commande en ligne ne passe plus par la caisse</p>
+<div class="sim-flowsteps">
+<span class="sim-flowstep">Le client commande &amp; paie en ligne</span><span class="sim-flowarrow">→</span>
+<span class="sim-flowstep">Ticket généré automatiquement</span><span class="sim-flowarrow">→</span>
+<span class="sim-flowstep">Visible en direct sur le KDS cuisine</span><span class="sim-flowarrow">→</span>
+<span class="sim-flowstep">La caisse remet le sac. C'est tout.</span>
+</div>
+<p class="sim-flownote">Pendant ce temps, la personne en caisse reste avec les clients physiques — personne ne quitte son poste en cuisine pour décrocher, personne ne fait patienter la file.</p>
+</div>
+<p class="sim-notes rv">Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · 10 % du comptoir migre la 1ʳᵉ année · panier en ligne +15 % (bas de fourchette des études : +15 à +30 %) · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois.</p>
+</section>
+
+<section class="proc-section" id="pourquoi">
+<div class="proc-inner">
+<div class="section-head proc-head rv"><span class="badge">Notre méthode</span><h2 class="h2">Comment on vous accompagne vers de vrais résultats</h2></div>
+<div class="proc-grid">
+
+<div class="proc-card rv">
+<div class="notch-tag tl">Étape 1.<span class="fl1"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span><span class="fl2"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span></div>
+<div class="proc-viewport"><div class="mock-panel"><div class="mock-panelinner">
+<p class="mock-title">Analyse du service</p><p class="mock-sub">Pour savoir ce qu'on peut simplifier</p><div class="mock-divider"></div>
+<div class="diag-rows">
+<div class="diag-row"><span class="icon-circle"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.1"></circle><path d="M8 5.4V8l1.9 1.3"></path></svg></span><div class="diag-col"><p class="diag-label">Rush du vendredi soir</p><p class="diag-value">Élevé</p></div></div>
+<div class="diag-row"><span class="icon-circle"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 6.6a4.8 4.8 0 0 0-8.7-1.3"></path><path d="M3.9 2.9v2.6h2.6"></path><path d="M3.4 9.4a4.8 4.8 0 0 0 8.7 1.3"></path><path d="M12.1 13.1v-2.6H9.5"></path></svg></span><div class="diag-col"><p class="diag-value">3 postes mobilisés</p><div class="diag-bar"><div class="diag-barfill" style="width:72%"></div></div></div></div>
+<div class="diag-row"><span class="icon-circle"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 7.4c0 2.4-2.3 4.3-5.2 4.3-.6 0-1.2-.1-1.7-.2l-2.6 1 .9-2A4 4 0 0 1 2.8 7.4c0-2.4 2.3-4.3 5.2-4.3s5.2 1.9 5.2 4.3Z"></path><circle cx="5.8" cy="7.4" r="0.5" fill="currentColor" stroke="none"></circle><circle cx="8" cy="7.4" r="0.5" fill="currentColor" stroke="none"></circle><circle cx="10.2" cy="7.4" r="0.5" fill="currentColor" stroke="none"></circle></svg></span><div class="diag-col"><p class="diag-label">Commandes au stylo</p><p class="diag-value">À déchiffrer en cuisine</p></div></div>
+<div class="diag-row dim"><span class="icon-circle"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.1"></circle><path d="M8 5.4V8l1.9 1.3"></path></svg></span><div class="diag-col"><p class="diag-value">~12 par semaine</p><div class="diag-bar"><div class="diag-barfill" style="width:34%"></div></div></div></div>
+<div class="diag-row dim"><span class="icon-circle"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.9" width="10" height="9.1" rx="1.6"></rect><path d="M3 7h10"></path><path d="M5.7 2.6v2M10.3 2.6v2"></path></svg></span><div class="diag-col"><p class="diag-label">Heures sup</p><p class="diag-value">Calculées à la main</p></div></div>
+</div>
+</div></div></div>
+<div class="proc-cardtext rv"><h4 class="h4">On observe votre service</h4><p class="body-text">On identifie ce qui ralentit votre équipe et où l'automatisation change vraiment la donne.</p></div>
+</div>
+
+<div class="proc-card rv">
+<div class="notch-tag tl">Étape 2.<span class="fl1"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span><span class="fl2"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span></div>
+<div class="proc-viewport"><div class="mock-panel"><div class="mock-panelinner">
+<p class="mock-title">Configuration</p><p class="mock-sub">Connecté à votre activité</p><div class="mock-divider"></div>
+<div class="int-row"><p class="int-title">Menu &amp; prix</p><p class="int-text">Importé depuis votre carte actuelle.</p><div class="int-tools"><span class="int-tool"></span><span class="int-tool"></span><span class="int-tool"></span><span class="int-more">+ Voir plus</span></div></div>
+<div class="int-row"><p class="int-title">Équipe</p><p class="int-text">Comptes créés pour chaque poste.</p></div>
+<div class="int-row"><p class="int-title">Paiement</p><p class="int-text">Carte, espèces, click &amp; collect.</p></div>
+<div class="int-row"><p class="int-title">Fidélité</p><p class="int-text">Points et codes promo activés.</p></div>
+</div></div></div>
+<div class="proc-cardtext rv"><h4 class="h4">On configure votre plateforme</h4><p class="body-text">Menu, équipe, logo, couleurs, moyens de paiement — tout est prêt avant l'ouverture.</p></div>
+</div>
+
+<div class="proc-card rv">
+<div class="notch-tag tl">Étape 3.<span class="fl1"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span><span class="fl2"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span></div>
+<div class="proc-viewport"><div class="mock-panel"><div class="mock-panelinner">
+<p class="mock-title">Mises à jour</p><p class="mock-sub">Tout continue de s'améliorer</p><div class="mock-divider"></div>
+<div class="upd-filters"><span class="upd-filter"><span class="mock-dot" style="background:var(--green)"></span>New</span><span class="upd-filter"><span class="mock-dot" style="background:var(--accent)"></span>Improved</span><span class="upd-filter"><span class="mock-dot" style="background:var(--orange)"></span>Fixed</span>
+<span class="upd-arrows"><button class="upd-arrowbtn" data-dir="prev" aria-label="Mois précédent"><svg viewBox="0 0 16 16" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 8h-9M7 3.5 2.5 8 7 12.5"></path></svg></button><button class="upd-arrowbtn" data-dir="next" aria-label="Mois suivant"><svg viewBox="0 0 16 16" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8h9M9 3.5 13.5 8 9 12.5"></path></svg></button></span></div>
+<div class="upd-changelog">
+<div class="upd-log"><p class="upd-month">Juillet 2026</p><p class="upd-monthsub">Ce qu'on a amélioré ce mois-ci.</p><div class="upd-logdivider"></div><ul class="upd-logitems">
+<li class="upd-logitem"><span class="mock-dot" style="background:var(--green)"></span><span class="upd-logtext">Sticker sac imprimé à l'acceptation</span></li>
+<li class="upd-logitem"><span class="mock-dot" style="background:var(--green)"></span><span class="upd-logtext">Pointage équipe sur tablette</span></li>
+<li class="upd-logitem"><span class="mock-dot" style="background:var(--accent)"></span><span class="upd-logtext">Synchro caisse ↔ cuisine plus rapide</span></li>
+<li class="upd-logitem" style="opacity:.55"><span class="mock-dot" style="background:var(--green)"></span><span class="upd-logtext">Alertes sonores personnalisables</span></li>
+<li class="upd-logitem" style="opacity:.4"><span class="mock-dot" style="background:var(--orange)"></span><span class="upd-logtext">Correctifs mode hors-ligne</span></li>
+</ul></div>
+<div class="upd-log" style="display:none"><p class="upd-month">Août 2026</p><p class="upd-monthsub">Et la suite.</p><div class="upd-logdivider"></div><ul class="upd-logitems">
+<li class="upd-logitem"><span class="mock-dot" style="background:var(--green)"></span><span class="upd-logtext">Fidélité multi-sites</span></li>
+<li class="upd-logitem"><span class="mock-dot" style="background:var(--accent)"></span><span class="upd-logtext">Chargement des tickets 30% plus rapide</span></li>
+<li class="upd-logitem" style="opacity:.55"><span class="mock-dot" style="background:var(--green)"></span><span class="upd-logtext">Export des plannings en PDF</span></li>
+<li class="upd-logitem" style="opacity:.4"><span class="mock-dot" style="background:var(--orange)"></span><span class="upd-logtext">Bug d'impression sticker corrigé</span></li>
+</ul></div>
+</div>
+</div></div></div>
+<div class="proc-cardtext rv"><h4 class="h4">On reste à vos côtés</h4><p class="body-text">Support continu, mises à jour, accompagnement — un vrai partenaire, pas un logiciel qu'on vous laisse.</p></div>
+</div>
+
+</div>
+</div>
+</section>
+
+<section class="section" id="produit">
+<span class="badge">La plateforme</span>
+<h2 class="h2" style="text-align:center;max-width:650px">Une plateforme, quatre métiers du service</h2>
+<div class="sol-grid">
+
+<div class="sol-col">
+<div class="sol-card rv">
+<div class="sol-mockup" aria-hidden="true"><div class="wf-nodes">
+<div class="wf-step"><div class="wf-node"><span class="wf-icon"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.1"></circle><path d="M8 5.4V8l1.9 1.3"></path></svg></span><span class="wf-label">Commande reçue</span><span class="wf-spacer"></span><span class="wf-status"></span></div></div>
+<div class="wf-step"><svg class="wf-connector" width="2" height="22"><line x1="1" y1="0" x2="1" y2="22" class="wf-dash"></line></svg><div class="wf-node"><span class="wf-icon"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="4.6" rx="4.6" ry="1.9"></ellipse><path d="M3.4 4.6v6.8c0 1 2.1 1.9 4.6 1.9s4.6-.9 4.6-1.9V4.6"></path></svg></span><span class="wf-label">En préparation</span><span class="wf-spacer"></span><span class="wf-status"></span></div></div>
+<div class="wf-step"><svg class="wf-connector" width="2" height="22"><line x1="1" y1="0" x2="1" y2="22" class="wf-dash"></line></svg><div class="wf-node"><span class="wf-icon"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 2.8h5.2l2.4 2.4v8H4.2Z"></path><path d="M6 8.2h4M6 10.4h4"></path></svg></span><span class="wf-label">Prête à remettre</span><span class="wf-spacer"></span><span class="wf-status"></span></div></div>
+</div></div>
+<p class="sol-caption"><strong>Cuisine.</strong> « 3 frites à lancer » : la cuisine voit tout ce qu'il faut lancer, en un coup d'œil.</p>
+</div>
+<div class="sol-card rv">
+<div class="sol-mockup" aria-hidden="true"><div class="ag-ticker"><div class="ag-track">
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Léa</span><span class="ag-role">Cuisine</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Hugo</span><span class="ag-role">Caisse</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Inès</span><span class="ag-role">Manager</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Noah</span><span class="ag-role">Service salle</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Jade</span><span class="ag-role">Plonge</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Adam</span><span class="ag-role">Ouverture</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Léa</span><span class="ag-role">Cuisine</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Hugo</span><span class="ag-role">Caisse</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Inès</span><span class="ag-role">Manager</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Noah</span><span class="ag-role">Service salle</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Jade</span><span class="ag-role">Plonge</span></span><span class="ag-dot"></span></div>
+<div class="ag-row"><span class="ag-avatar"></span><span class="ag-meta"><span class="ag-name">Adam</span><span class="ag-role">Ouverture</span></span><span class="ag-dot"></span></div>
+</div></div></div>
+<p class="sol-caption"><strong>Équipe.</strong> Rôles, plannings et présences gérés au même endroit.</p>
+</div>
+</div>
+
+<div class="sol-col">
+<div class="sol-card rv">
+<div class="sol-mockup" aria-hidden="true"><div class="vo-waves"><div class="vo-track">
+<span class="vo-bar" style="height:20px"></span><span class="vo-bar" style="height:45px"></span><span class="vo-bar" style="height:35px"></span><span class="vo-bar" style="height:32px"></span><span class="vo-bar" style="height:70px"></span><span class="vo-bar" style="height:15px"></span><span class="vo-bar" style="height:40px"></span><span class="vo-bar" style="height:25px"></span>
+<span class="vo-bar" style="height:20px"></span><span class="vo-bar" style="height:45px"></span><span class="vo-bar" style="height:35px"></span><span class="vo-bar" style="height:32px"></span><span class="vo-bar" style="height:70px"></span><span class="vo-bar" style="height:15px"></span><span class="vo-bar" style="height:40px"></span><span class="vo-bar" style="height:25px"></span>
+</div></div><span class="vo-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6.6 3.2c.5-.5 1.3-.4 1.7.1l1.9 2.4c.4.4.4 1 .1 1.5l-.9 1.3c-.2.3-.2.7 0 1a12 12 0 0 0 5.1 5.1c.3.2.7.2 1 0l1.3-.9c.5-.3 1.1-.3 1.5.1l2.4 1.9c.5.4.6 1.2.1 1.7l-1.1 1.1c-.7.7-1.7 1-2.6.7-2.9-.9-5.6-2.5-7.9-4.8a19.7 19.7 0 0 1-4.8-7.9c-.3-.9 0-1.9.7-2.6Z"></path></svg></span></div>
+<p class="sol-caption"><strong>Téléphone.</strong> Prenez les commandes par téléphone sans perdre le fil.</p>
+</div>
+<div class="sol-card rv">
+<div class="sol-mockup" aria-hidden="true"><div class="mk">
+<div class="mk-header"><svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8.8 2.2 3.8 9h3.4l-.9 4.8 5-6.8H7.9Z"></path></svg><span class="mk-title">Fidélité &amp; Promos</span><span class="mk-dots"><i></i><i></i><i></i></span></div>
+<p class="mk-line">Points cumulés à chaque passage…</p>
+<p class="mk-line">Codes promo actifs…</p>
+<div class="mk-chips"><span class="mk-chip">Points</span><span class="mk-chip">Tampons</span><span class="mk-chip">SMS</span><span class="mk-chip">Email</span><span class="mk-chip">Anniversaire</span><span class="mk-chip">Parrainage</span></div>
+</div></div>
+<p class="sol-caption"><strong>Fidélité.</strong> Points, tampons et codes promo qui donnent envie de revenir.</p>
+</div>
+</div>
+
+<div class="sol-col">
+<div class="sol-card rv">
+<div class="sol-mockup tall" aria-hidden="true">
+<div class="data-head"><span class="data-cell"><span class="data-label">CA DU JOUR</span><span class="data-value">1 290 €</span></span><span class="data-right"><span class="data-cell"><span class="data-label">ENCAISSÉ</span><span class="data-value">1 180 €</span></span><span class="data-cell"><span class="data-label">RESTE</span><span class="data-value">110 €</span></span></span></div>
+<svg class="data-graph" viewBox="0 0 320 60" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="sm-exp-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(201,161,90,.28)"></stop><stop offset="1" stop-color="rgba(201,161,90,0)"></stop></linearGradient></defs><path d="M0 50 L40 38 L80 44 L120 24 L160 34 L200 14 L240 30 L280 8 L320 20 L320 60 L0 60 Z" fill="url(#sm-exp-grad)"></path><path d="M0 50 L40 38 L80 44 L120 24 L160 34 L200 14 L240 30 L280 8 L320 20" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"></path></svg>
+<div class="data-rows">
+<div class="data-row"><span class="data-rowlabel">Signatures</span><span class="data-track"><span class="data-fill" style="width:82%"></span></span><span class="data-rowvalue">412 €</span></div>
+<div class="data-row"><span class="data-rowlabel">Tacos</span><span class="data-track"><span class="data-fill" style="width:70%"></span></span><span class="data-rowvalue">356 €</span></div>
+<div class="data-row"><span class="data-rowlabel">Boissons</span><span class="data-track"><span class="data-fill" style="width:45%"></span></span><span class="data-rowvalue">210 €</span></div>
+<div class="data-row"><span class="data-rowlabel">Desserts</span><span class="data-track"><span class="data-fill" style="width:30%"></span></span><span class="data-rowvalue">140 €</span></div>
+</div>
+</div>
+<p class="sol-caption"><strong>Back-office.</strong> Chiffre d'affaires et dépenses suivis en temps réel.</p>
+</div>
+<div class="sol-card rv">
+<div class="sol-mockup" aria-hidden="true"><div class="chat"><div class="chat-msgs">
+<div class="msg-customer"><span class="bubble-customer">Commande #42 envoyée ✓</span></div>
+<div class="msg-agent"><span class="chat-avatar"></span><span class="bubble-agent">Reçue en cuisine</span></div>
+<div class="msg-agent"><span class="chat-avatar"></span><span class="bubble-agent">Prête dans ~12 min</span></div>
+</div><span class="chat-tag">Suivi de commande en direct</span></div></div>
+<p class="sol-caption"><strong>Site &amp; commande.</strong> Vos clients commandent, vous êtes prévenu instantanément.</p>
+</div>
+</div>
+
+</div>
+</section>
+
+<section class="section cat-section" id="catalogue">
+<span class="badge">Dans le détail</span>
+<h2 class="h2" style="text-align:center;max-width:680px">Tout ce que la plateforme couvre, app par app</h2>
+<p class="body-text cat-sub rv">Pas une plaquette : chaque ligne ci-dessous existe déjà dans les maquettes — descendez d'une section pour les manipuler.</p>
+<div class="cat-grid">
+<div class="cat-col rv">
+<div class="cat-colhead"><p class="cat-appname">Caisse (POS)</p><p class="cat-device">Tablette, au comptoir</p></div>
+<div class="cat-items">
+<div class="cat-item"><span class="cat-dot"></span><span><strong>Sur place, à emporter, téléphone</strong> — même écran</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Config express : recette (Complet, ST, SO, SC…), sauces, tailles</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Tacos sur-mesure : taille, viandes, gratiné, suppléments</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Passage en menu (+2,50 €) en un tap</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Totaux et rendu monnaie automatiques</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span><strong>Ticket cuisine + sticker sac</strong> imprimés</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Lignes identiques cumulées, note par produit</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>CB, espèces, paiement au retrait</span></div>
+</div>
+<button class="cat-demolink" onclick="smDemoGo(1)">Essayer la caisse en démo →</button>
+</div>
+<div class="cat-col rv" style="transition-delay:.06s">
+<div class="cat-colhead"><p class="cat-appname">Cuisine (KDS)</p><p class="cat-device">Tablette &amp; téléphone</p></div>
+<div class="cat-items">
+<div class="cat-item"><span class="cat-dot"></span><span>Colonnes <strong>Nouveau → En prépa → Prêt</strong></span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>« À lancer » agrégé : 3 frites, 2 tacos… en un coup d'œil</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Minuteur couleur par commande, seuils d'alerte</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Alerte sonore à chaque nouvelle commande</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Chaque article cochable pendant la prépa</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Numéro de retrait pour appeler le client</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Thème sombre ou clair, pensé pour la cuisine</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Mode hors-ligne avec resynchronisation</span></div>
+</div>
+<button class="cat-demolink" onclick="smDemoGo(2)">Essayer la cuisine en démo →</button>
+</div>
+<div class="cat-col rv" style="transition-delay:.12s">
+<div class="cat-colhead"><p class="cat-appname">Commande en ligne</p><p class="cat-device">Web, mobile first</p></div>
+<div class="cat-items">
+<div class="cat-item"><span class="cat-dot"></span><span><strong>Click &amp; collect</strong> avec créneaux de retrait</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Paiement en ligne ou au retrait</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Configurateur identique à la caisse — zéro surprise</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Panier modifiable ligne par ligne</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Codes promo, fidélité points &amp; tampons</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Compte client, historique, recommande en 1 tap</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Suivi de commande en direct (reçue → prête)</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span><strong>À vos couleurs</strong> : logo, nom, identité complète</span></div>
+</div>
+<button class="cat-demolink" onclick="smDemoGo(3)">Essayer la commande en démo →</button>
+</div>
+<div class="cat-col rv" style="transition-delay:.18s">
+<div class="cat-colhead"><p class="cat-appname">Back-office</p><p class="cat-device">Web, côté gérant</p></div>
+<div class="cat-items">
+<div class="cat-item"><span class="cat-dot"></span><span><strong>CA &amp; commandes en temps réel</strong></span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Menu &amp; prix : édition en direct, import CSV/XML</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Catégories en drag &amp; drop, ruptures en un tap</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Stats : top ventes, affluence par heure, canaux</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Promos, codes et produits mis en avant</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Horaires, créneaux, fermetures exceptionnelles</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span><strong>Pointage &amp; heures</strong> de l'équipe</span></div>
+<div class="cat-item"><span class="cat-dot"></span><span>Avis clients et réponses publiques</span></div>
+</div>
+<button class="cat-demolink" onclick="smDemoGo(0)">Essayer le back-office en démo →</button>
+</div>
+</div>
+</section>
+
+<section class="section demo-section" id="demo">
+<span class="badge">La démo</span>
+<h2 class="h2" style="text-align:center;max-width:640px">Explorez les applications, en démo</h2>
+<p class="body-text demo-sub rv">Des <strong>maquettes interactives</strong>, pas des captures d'écran : cliquez, changez d'app, parcourez les écrans — un aperçu fidèle de <span class="kw">votre futur quotidien</span>.</p>
+<div class="demo-pills rv" id="demo-pills"></div>
+<div class="demo-stage rv" id="demo-stage"><div class="demo-track" id="demo-track"></div>
+<button class="demo-arrow prev" id="demo-prev" aria-label="Application précédente"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="transform:scaleX(-1)"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<button class="demo-arrow next" id="demo-next" aria-label="Application suivante"><svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+</div>
+<p class="demo-caption rv" id="demo-caption"></p>
+</section>
+
+<section class="section" id="revenus">
+<span class="badge">Du CA en plus</span>
+<h2 class="h2" style="text-align:center;max-width:680px">Vous venez de voir l'outil. Voici le chiffre d'affaires en plus.</h2>
+<p class="body-text" style="text-align:center;max-width:600px;margin:14px auto 0">Deux offres au-dessus de la suite : on installe une <span class="kw">marque de livraison clé en main</span> dans votre cuisine, ou on pilote <span class="kw">votre propre marque</span> sur les plateformes. <strong>Même équipe, même matériel, mêmes horaires.</strong></p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;max-width:900px;margin:36px auto 0">
+<div class="rv"><article class="pr-card" style="height:100%">
+<h5 class="h5">Une 2ᵉ enseigne dans votre cuisine</h5>
+<p class="pr-price" style="font-size:26px">Vous ne payez <span class="kw">rien</span> pour démarrer</p>
+<p class="body-text pr-desc">On installe une <strong>marque de livraison toute prête</strong> (Maki-Ya, Pastella, Wings Club, Green Bowl…) dans votre cuisine : recettes, formation, comptes Uber Eats &amp; Deliveroo, pub — <strong>on s'occupe de tout</strong>. Vous cuisinez, vous encaissez un <span class="kw">chiffre d'affaires que vous n'aviez pas</span>. Notre part : <strong>8 % de ces ventes</strong>, uniquement quand ça vend. <span class="kw">Premier ticket en 3 semaines</span>.</p>
+<a class="btn dark pr-cta" href="SM - Catalogue Marques.html">Découvrir les 4 marques</a>
+<p class="pr-featlabel" style="margin-top:14px">Concepts <strong>100 % halal</strong> · <span class="kw">CA en plus</span> — sans investissement, sans embauche, même équipe.</p>
+</article></div>
+<div class="rv" style="transition-delay:.1s"><article class="pr-card" style="height:100%">
+<h5 class="h5">Vos ventes Uber Eats, boostées</h5>
+<p class="pr-price" style="font-size:26px">dès 99 €/mois</p>
+<p class="body-text pr-desc">Vous êtes déjà sur Uber Eats ou Deliveroo, mais ça vend peu ? Nos experts reprennent votre page : <strong>menu réorganisé</strong>, <strong>photos retravaillées</strong>, <strong>promos aux bonnes heures</strong>, avis gérés. Vous ne touchez à rien, vous voyez le résultat sur un <strong>rapport clair chaque mois</strong>. Objectif : <span class="kw">+30 % de ventes en livraison en 60 jours</span>.</p>
+<a class="btn dark pr-cta" href="#contact">Être rappelé</a>
+<p class="pr-featlabel" style="margin-top:14px">Sans engagement · <span class="kw">se rembourse dès le premier mois</span>.</p>
+</article></div>
+</div>
+</section>
+
+<section class="section">
+<div class="section-head rv"><span class="badge">Avant / après</span><h2 class="h2">Ce que ça change, un vrai service</h2></div>
+<div class="cs-wrap">
+<div class="cs-textcol rv rv-x-l">
+<div class="cs-slide" style="display:flex"><div class="cs-textblock"><h3 class="h4">Avant Snack Manager</h3><p class="body-text">Tickets papier, un poste en plus aux heures de rush, des commandes en ligne à gérer à côté du comptoir.</p></div></div>
+<div class="cs-slide" style="display:none"><div class="cs-textblock"><h3 class="h4">Avec Snack Manager</h3><p class="body-text">Un service organisé, une équipe mieux répartie, et un gain de temps qui se voit dès la première semaine.</p></div></div>
+<div class="cs-arrows"><button class="cs-arrow" data-dir="prev" aria-label="Précédent"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="transform:rotate(180deg)"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="cs-arrow" data-dir="next" aria-label="Suivant"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div>
+</div>
+<div class="cs-collage rv rv-x-r">
+<image-slot id="sm-cs-1" fit="cover" placeholder="Photo — comptoir"></image-slot>
+<image-slot id="sm-cs-2" fit="cover" placeholder="Photo — cuisine"></image-slot>
+<image-slot id="sm-cs-3" fit="cover" placeholder="Photo large — équipe en service"></image-slot>
+</div>
+</div>
+</section>
+
+<section class="section">
+<div class="section-head rv"><span class="badge">Pourquoi nous</span><h2 class="h2">Ce qui change avec Snack Manager</h2></div>
+<div class="bf-grid">
+<div class="rv rv-x-l"><div class="bf-sidegrid bf-left">
+<div class="bf-tile"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"></circle><path d="M9 5.5 V9 L11.4 10.5"></path></svg></span><p class="bf-tiletext"><strong>Gain de temps.</strong> Automatisez les tâches répétitives.</p></div></div>
+<div class="bf-tile"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"></circle><path d="M9 5.4 V12.6"></path><path d="M10.9 6.9 C10.4 6.1 7.2 6 7.2 7.7 C7.2 9.4 10.8 8.6 10.8 10.3 C10.8 11.9 7.6 11.8 7 10.9"></path></svg></span><p class="bf-tiletext"><strong>Économique.</strong> Réduisez la charge de travail manuelle.</p></div></div>
+<div class="bf-tile"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9.7 2.6 L5 9.5 H8 L7.2 15.4 L12.9 8 H9.2 L9.7 2.6 Z"></path></svg></span><p class="bf-tiletext"><strong>Service plus fluide.</strong> Accélérez vos opérations.</p></div></div>
+</div></div>
+<div class="rv" style="transition-delay:.1s"><div class="bf-pillar"><div class="bf-pillarinner"><div class="bf-logozone"><span class="bf-halo"></span><span class="bf-logoborder"><span class="bf-logoholder"><svg viewBox="0 0 24.958 24.991" width="54" height="54"><path d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z" fill="#fff"></path><path d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z" fill="#fff"></path></svg></span></span></div></div></div></div>
+<div class="rv rv-x-r"><div class="bf-sidegrid bf-right">
+<div class="bf-tile right"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3.2 14.6 H14.8"></path><path d="M4.6 11.2 L7.5 8.2 L9.8 10.2 L13.4 5.6"></path><path d="M13.4 8.2 V5.6 H10.8"></path></svg></span><p class="bf-tiletext"><strong>Meilleure visibilité.</strong> Comprenez vos chiffres rapidement.</p></div></div>
+<div class="bf-tile right"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="9" cy="9" r="6.5"></circle><circle cx="9" cy="9" r="3.2"></circle><circle cx="9" cy="9" r="0.8" fill="currentColor" stroke="none"></circle></svg></span><p class="bf-tiletext"><strong>Moins d'erreurs.</strong> Réduisez les erreurs humaines.</p></div></div>
+<div class="bf-tile right"><div class="bf-tileinner"><span class="bf-iconholder"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M4.4 14.6 V11.4"></path><path d="M9 14.6 V8.2"></path><path d="M13.6 14.6 V4.6"></path></svg></span><p class="bf-tiletext"><strong>Évolutif.</strong> Grandissez sans effort supplémentaire.</p></div></div>
+</div></div>
+</div>
+</section>
+
+<section class="vg-section" id="temoignages">
+<div class="vg-inner">
+<div class="vg-headrow">
+<div class="section-head rv" style="align-items:flex-start;text-align:left"><span class="badge">Le quotidien</span><h2 class="h2">Des situations qu'on connaît par cœur</h2></div>
+<div class="vg-arrows rv" style="transition-delay:.2s"><button class="vg-arrow" data-dir="prev" aria-label="Précédent"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="transform:scaleX(-1)"><path d="M6 3.5 10.5 8 6 12.5" stroke="var(--white)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button><button class="vg-arrow" data-dir="next" aria-label="Suivant"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="var(--white)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div>
+</div>
+<div class="vg-viewport rv"><div class="vg-track">
+<div class="vg-slide"><article class="vg-card"><header class="vg-cardhead"><span class="vg-tagtext">Vendredi 20h</span></header><figure class="vg-media"><image-slot id="sm-vg-1" fit="cover" placeholder="Photo — rush de service"></image-slot><blockquote class="vg-quote">« Les commandes griffonnées au stylo que la cuisine doit déchiffrer en plein coup de feu. »</blockquote></figure></article></div>
+<div class="vg-slide"><article class="vg-card"><header class="vg-cardhead"><span class="vg-tagtext">Dimanche midi</span></header><figure class="vg-media"><image-slot id="sm-vg-2" fit="cover" placeholder="Photo — équipe en cuisine"></image-slot><blockquote class="vg-quote">« Une personne en plus juste pour gérer les commandes en ligne à côté du comptoir. »</blockquote></figure></article></div>
+<div class="vg-slide"><article class="vg-card"><header class="vg-cardhead"><span class="vg-tagtext">Fin de mois</span></header><figure class="vg-media"><image-slot id="sm-vg-3" fit="cover" placeholder="Photo — gérant au back-office"></image-slot><blockquote class="vg-quote">« Recompter les heures de l'équipe à la main pour sortir les plannings du mois. »</blockquote></figure></article></div>
+<div class="vg-slide"><article class="vg-card"><header class="vg-cardhead"><span class="vg-tagtext">Nouvelle recrue</span></header><figure class="vg-media"><image-slot id="sm-vg-4" fit="cover" placeholder="Photo — formation d'un nouvel équipier"></image-slot><blockquote class="vg-quote">« À chaque départ, des jours de formation juste pour que la nouvelle personne tienne la caisse. »</blockquote></figure></article></div>
+</div></div>
+</div>
+</section>
+
+<section class="section fd-section" id="pilote">
+<span class="badge">Né au comptoir</span>
+<h2 class="h2" style="text-align:center;max-width:620px">Construit dans un vrai restaurant, pas dans un bureau</h2>
+<div class="fd-card rv">
+<div class="fd-portrait"><image-slot id="sm-fd-portrait" fit="cover" placeholder="Photo — fondateurs au comptoir du restaurant pilote"></image-slot></div>
+<div class="fd-body">
+<blockquote class="fd-quote">« Snack Manager est né derrière le comptoir de notre restaurant pilote. Tickets perdus en plein rush, téléphone qui sonne pendant l'encaissement, heures recomptées à la main : on a vécu chaque problème avant de l'automatiser. Chaque écran de la plateforme est testé en service réel, midi et soir, avant d'arriver chez vous. »</blockquote>
+<p class="fd-name">Les fondateurs · <strong>Class'Food</strong>, restaurant pilote — Perriers-sur-Andelle</p>
+<div class="fd-facts"><span class="fd-fact">Testé en service réel 7 j/7</span><span class="fd-fact">Rodé sur de vrais rushs</span><span class="fd-fact">Amélioré chaque semaine</span></div>
+</div>
+</div>
+</section>
+
+<section class="section cmp-section">
+<span class="badge">Comparatif</span>
+<h2 class="h2" style="text-align:center;max-width:650px">Sans vs avec Snack Manager</h2>
+<div class="cmp-board">
+<div class="cmp-heads rv">
+<div class="cmp-headpill left"><svg width="14" height="14" viewBox="0 0 14 14" fill="var(--white)"><path d="M3.6 1.6h6.8v1.2L7.9 7l2.5 4.2v1.2H3.6v-1.2L6.1 7 3.6 2.8V1.6z"></path></svg><span>Sans Snack Manager</span></div>
+<div class="cmp-headpill right"><svg width="14" height="14" viewBox="0 0 14 14" fill="var(--white)"><path d="M8.2 1 3.4 8.1h2.9L5.6 13l4.9-7.1H7.6L8.2 1z"></path></svg><span>Snack Manager</span></div>
+</div>
+<span class="cmp-vs" aria-hidden="true">VS</span>
+<span class="cmp-divider" aria-hidden="true"></span>
+<div class="cmp-cols">
+<div class="rv rv-x-l"><ul class="cmp-col left">
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--red)"></circle><path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" stroke="var(--white)" stroke-width="1.3" stroke-linecap="round"></path></svg><span>Plusieurs outils qui ne se parlent pas</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--red)"></circle><path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" stroke="var(--white)" stroke-width="1.3" stroke-linecap="round"></path></svg><span>Commandes au stylo, totaux calculés de tête</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--red)"></circle><path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" stroke="var(--white)" stroke-width="1.3" stroke-linecap="round"></path></svg><span>Des jours de formation à chaque recrue</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--red)"></circle><path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" stroke="var(--white)" stroke-width="1.3" stroke-linecap="round"></path></svg><span>Plannings et heures à la main</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--red)"></circle><path d="M4.9 4.9l4.2 4.2M9.1 4.9l-4.2 4.2" stroke="var(--white)" stroke-width="1.3" stroke-linecap="round"></path></svg><span>Site figé, pas de click &amp; collect</span></li>
+</ul></div>
+<div class="rv rv-x-r"><ul class="cmp-col right">
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Une seule plateforme, tout connecté</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Menus cadrés, totaux automatiques, ticket + sticker sac</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Caisse prise en main en une heure</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Pointage &amp; plannings automatisés</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Site &amp; commande en ligne à vos couleurs</span></li>
+</ul></div>
+</div>
+</div>
+</section>
+
+<section class="section" id="tarifs">
+<span class="badge">Tarifs</span>
+<h2 class="h2" style="text-align:center;max-width:650px">Un lancement accompagné, un abonnement simple</h2>
+<div class="pr-founderbar rv">
+<span class="pr-founderchip">Offre fondateur</span>
+<p class="pr-foundertext">Les <strong>10 premiers restaurants</strong> conservent un tarif préférentiel, <strong>à vie</strong>. Snack Manager est en lancement accompagné — le tarif deviendra public ensuite. C'est prévu, c'est assumé.</p>
+<span class="pr-founderseats"><span class="pr-seatdots"><span class="pr-seat off"></span><span class="pr-seat off"></span><span class="pr-seat off"></span><span class="pr-seat"></span><span class="pr-seat"></span><span class="pr-seat"></span><span class="pr-seat"></span><span class="pr-seat"></span><span class="pr-seat"></span><span class="pr-seat"></span></span><span class="pr-seatlabel"><b>7 places restantes</b> sur 10</span></span>
+</div>
+<div class="pr-grid">
+
+<div class="rv"><article class="pr-card">
+<h5 class="h5">Starter</h5><p class="pr-price">Sur devis</p><p class="body-text pr-desc">Idéal pour un point de vente qui démarre avec l'automatisation.</p>
+<a class="btn dark pr-cta" href="#contact">Demander un devis</a>
+<p class="pr-featlabel">Inclus :</p>
+<ul class="pr-features">
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>App Cuisine (KDS)</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Caisse (POS)</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Ticket &amp; sticker imprimés</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Support par email</span></li>
+</ul>
+</article></div>
+
+<div class="rv" style="transition-delay:.1s"><article class="pr-card popular"><span class="pr-badge">Populaire</span>
+<h5 class="h5">Pro</h5><p class="pr-price">Sur devis</p><p class="body-text pr-desc">Le plus choisi : la plateforme complète, site inclus.</p>
+<a class="btn light pr-cta" href="#contact">Demander un devis</a>
+<p class="pr-featlabel">Tout Starter, plus :</p>
+<ul class="pr-features">
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Site &amp; commande en ligne</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Fidélité &amp; codes promo</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Module RH (pointage, planning)</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Support prioritaire</span></li>
+</ul>
+</article></div>
+
+<div class="rv" style="transition-delay:.2s"><article class="pr-card">
+<h5 class="h5">Multi-sites</h5><p class="pr-price">Sur devis</p><p class="body-text pr-desc">Pour les groupes de plusieurs restaurants.</p>
+<a class="btn dark pr-cta" href="#contact">Demander un devis</a>
+<p class="pr-featlabel">Tout Pro, plus :</p>
+<ul class="pr-features">
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Tableau de bord multi-sites</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Compte dédié</span></li>
+<li><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><span>Accompagnement sur mesure</span></li>
+</ul>
+</article></div>
+
+</div>
+</section>
+
+<section class="faq-section" id="faq">
+<div class="faq-grid">
+<div class="faq-left rv rv-x-l">
+<span class="badge">FAQ</span><h2 class="h2">Questions fréquentes</h2>
+<p class="body-text faq-help">Une question précise ? <a href="#contact" class="faq-helplink">Contactez-nous</a></p>
+</div>
+<div class="rv rv-x-r"><div class="faq-list">
+<div class="faq-item open"><div class="faq-q"><p class="h5">Dois-je changer mon matériel de caisse ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">Non — la plateforme fonctionne sur tablette et téléphone standards. On vous conseille sur l'imprimante ticket/sticker si besoin.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">Combien de temps avant d'être opérationnel ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">Quelques jours suffisent : configuration du menu, de l'équipe et de votre identité visuelle avant l'ouverture.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">C'est adapté à quel type de restaurant ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">Pensé pour les fast-foods et snacks indépendants — sur place, à emporter ou en click &amp; collect.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">Puis-je garder mon site actuel ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">Oui, on peut connecter le module commande à votre site existant ou vous fournir un site complet à vos couleurs.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">Y a-t-il un engagement de durée ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">On vous détaille les conditions au moment du devis, adaptées à votre activité.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">Et si la connexion internet coupe ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">La caisse et la cuisine continuent en local : les tickets restent affichés et s'impriment, puis tout se resynchronise au retour du réseau.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">C'est quoi, une marque virtuelle ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">Une marque de livraison qui existe uniquement sur Uber Eats &amp; Deliveroo, préparée dans votre cuisine avec votre équipe. On fournit le concept, les recettes, la formation et la gestion — vous encaissez un CA que vous n'aviez pas.</p></div></div>
+<div class="faq-item"><div class="faq-q"><p class="h5">À qui appartiennent mes données ?</p><span class="faq-chevron"><svg viewBox="0 0 16 16" width="16" height="16"><path d="M 3 6 L 8 11 L 13 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span></div><div class="faq-answerwrap"><p class="body-text faq-answer">À vous. Ventes, clients, menus : tout est exportable à tout moment (CSV), hébergé en Europe.</p></div></div>
+</div></div>
+</div>
+</section>
+
+<section class="cta-section" id="contact">
+<div class="cta-line" aria-hidden="true"></div>
+<div class="cta-inner rv">
+<div class="cta-logochip"><svg viewBox="0 0 24.958 24.991" width="18" height="18"><path d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z" fill="#fff"></path><path d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z" fill="#fff"></path></svg><span class="logo-wordmark" style="font-size:19px">Snack Manager</span></div>
+<h2 class="h2 cta-heading">Prêt à reprendre le contrôle de votre service ?</h2>
+<div class="ct-card rv">
+<div class="ct-left">
+<p class="ct-title">On vous rappelle</p>
+<p class="ct-sub">Laissez vos coordonnées — on vous rappelle sous 24 h ouvrées pour caler une démo de 30 min, dans votre restaurant ou en visio.</p>
+<div class="ct-points">
+<span class="ct-point"><svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Sans engagement, sans carte bancaire</span>
+<span class="ct-point"><svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>On repart avec vos chiffres du simulateur</span>
+<span class="ct-point"><svg width="13" height="13" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>Offre fondateur : 7 places restantes</span>
+</div>
+<p class="ct-alt">Vous préférez écrire ? <a href="mailto:contact@snackmanager.fr" class="ct-maillink">contact@snackmanager.fr</a></p>
+</div>
+<form class="ct-form" onsubmit="return false">
+<div class="ct-row">
+<div class="ct-field"><label for="ct-name">Votre nom</label><input id="ct-name" type="text" placeholder="Karim B." required></div>
+<div class="ct-field"><label for="ct-resto">Votre restaurant</label><input id="ct-resto" type="text" placeholder="Class'Food — Rouen"></div>
+</div>
+<div class="ct-row">
+<div class="ct-field"><label for="ct-tel">Téléphone</label><input id="ct-tel" type="tel" placeholder="06 12 34 56 78" required></div>
+<div class="ct-field"><label for="ct-when">Quand vous rappeler ?</label><select id="ct-when"><option>Plutôt le matin</option><option>Entre les services (14h–18h)</option><option>Après 21h</option></select></div>
+</div>
+<div class="ct-field"><label for="ct-msg">Un mot sur votre besoin <em>(optionnel)</em></label><textarea id="ct-msg" rows="3" placeholder="Ex : 2 caisses, gros rush le midi, pas encore de commande en ligne…"></textarea></div>
+<button class="btn light ct-submit" type="submit">Être rappelé</button>
+<p class="ct-privacy">Vos coordonnées servent uniquement à ce rappel — jamais revendues.</p>
+</form>
+</div>
+</div>
+</section>
+
+</main>
+
+<footer>
+<div class="foot-wrap">
+<div class="foot-card">
+<div class="foot-notchtab"><div class="foot-notchcontent"><svg viewBox="0 0 24.958 24.991" width="19" height="19"><path d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z" fill="#fff"></path><path d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z" fill="#fff"></path></svg><p class="logo-wordmark" style="font-size:18px">Snack Manager</p></div>
+<span class="foot-filletleft" aria-hidden="true"><svg viewBox="0 0 18 18" width="18" height="18" style="transform:rotate(90deg)"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span>
+<span class="foot-filletbottom" aria-hidden="true"><svg viewBox="0 0 18 18" width="18" height="18"><path d="M 0 0 L 0 18 C 0 8.059 8.059 0 18 0 Z" fill="#000"></path></svg></span>
+</div>
+<div class="foot-columns">
+<div class="foot-left">
+<p class="foot-tagline">Simplifier le quotidien du service</p>
+<div class="foot-newsletter"><p class="subheading foot-newsletterlabel">Rejoignez la liste pour suivre le lancement</p>
+<form class="foot-form" onsubmit="return false"><input type="email" name="email" placeholder="nom@email.com" class="foot-input" required><input type="submit" value="S'inscrire" class="foot-subscribe"></form>
+</div>
+</div>
+<div class="foot-linkcols">
+<div class="foot-linkcol"><p class="foot-colheading">Pages</p><a class="ui-link foot-link" href="#produit">Produit</a><a class="ui-link foot-link" href="#pourquoi">Expertise</a><a class="ui-link foot-link" href="#tarifs">Tarifs</a><a class="ui-link foot-link" href="#contact">Contact</a></div>
+<div class="foot-linkcol"><p class="foot-colheading">Réseaux</p><a class="ui-link foot-link" href="#" target="_blank" rel="noopener noreferrer">Instagram</a><a class="ui-link foot-link" href="#" target="_blank" rel="noopener noreferrer">LinkedIn</a></div>
+</div>
+</div>
+<div class="foot-legals">
+<p class="foot-credit">© <span id="sm-y">2026</span> Snack Manager. Tous droits réservés.</p>
+<a href="#" class="ui-link foot-link">Politique de confidentialité</a>
+</div>
+</div>
+</div>
+<div style="max-width:1200px;margin:20px auto 0;padding:0 24px;display:flex;gap:20px;flex-wrap:wrap"><a href="SM - Écosystème & Flux.html" style="color:rgba(255,255,255,.32);font-size:12.5px;text-decoration:none">Écosystème &amp; flux internes →</a><a href="SM - Design System.html" style="color:rgba(255,255,255,.32);font-size:12.5px;text-decoration:none">Design system →</a><a href="SM - Dossier Fondateur.html" style="color:rgba(255,255,255,.32);font-size:12.5px;text-decoration:none">Dossier fondateur →</a></div></footer>
+
+<script src="Snack Manager - Site Vitrine.js"></script>
+<script>
+(function(){
+var FILES=['SM - Back-office Restaurant.html','SM - Caisse (POS).html','SM - App Cuisine (KDS).html','SM - Commande en ligne.html'];
+var track=document.getElementById('hero-demotrack');
+if(!track)return;
+FILES.forEach(function(f){
+var c=document.createElement('div');c.className='hero-democard hd-hidden';
+c.innerHTML='<iframe src="'+f+'?embed=1" title="" loading="eager" tabindex="-1"></iframe>';
+track.appendChild(c);
+});
+var cur=0,N=FILES.length;
+function place(){
+for(var k=0;k<N;k++){
+var off=((k-cur)%N+N)%N;if(off>N/2)off-=N;
+track.children[k].className='hero-democard '+(off===0?'hd-center':off===-1?'hd-left':off===1?'hd-right':'hd-hidden');
+}
+}
+place();
+setInterval(function(){cur=(cur+1)%N;place();},4500);
+})();
+</script>
+<script>
+(function(){
+var APPS=[
+{id:'bo',file:'SM - Back-office Restaurant.html',label:'Back-office',desc:'<strong>Back-office gérant.</strong> Menu & prix modifiables en direct, CA du jour, ruptures, promos, pointage et heures de l\'équipe — toute la gestion au même endroit.<span class="demo-chips"><em>Import CSV/XML</em><em>Pointage équipe</em><em>Stats & CA</em></span>'},
+{id:'pos',file:'SM - Caisse (POS).html',label:'Caisse (POS)',desc:'<strong>Caisse.</strong> Menus cadrés, totaux automatiques, ticket cuisine et sticker sac imprimés — prise en main en une heure, même pour une nouvelle recrue.<span class="demo-chips"><em>Config express</em><em>Ticket + sticker sac</em><em>Sur place & téléphone</em></span>'},
+{id:'kds',file:'SM - App Cuisine (KDS).html',label:'Cuisine (KDS)',desc:'<strong>Cuisine.</strong> Les commandes arrivent seules, « 3 frites à lancer » en un coup d\'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.<span class="demo-chips"><em>À lancer agrégé</em><em>Minuteurs couleur</em><em>Alerte sonore</em></span>'},
+{id:'order',file:'SM - Commande en ligne.html',label:'Commande client',desc:'<strong>Commande en ligne.</strong> Le client commande et paie — le ticket file droit en cuisine, déjà encaissé. La caisse ne fait que remettre le sac.<span class="demo-chips"><em>Créneaux de retrait</em><em>Fidélité & promos</em><em>Paiement en ligne</em></span>'}
+];
+var cur=0,track=document.getElementById('demo-track'),pills=document.getElementById('demo-pills'),cap=document.getElementById('demo-caption');
+if(!track)return;
+APPS.forEach(function(a,i){
+var card=document.createElement('div');card.className='demo-card';card.dataset.i=i;
+card.innerHTML='<div class="demo-frame"><iframe title="'+a.label+'" loading="lazy"></iframe><button class="demo-focusbtn" aria-label="Voir '+a.label+'"></button></div>';
+track.appendChild(card);
+card.querySelector('.demo-focusbtn').addEventListener('click',function(){go(i)});
+var p=document.createElement('button');p.className='demo-pill';p.textContent=a.label;p.addEventListener('click',function(){go(i)});pills.appendChild(p);
+});
+function loadFrame(i){var f=track.children[i].querySelector('iframe');if(!f.src)f.src=APPS[i].file+'?embed=1';}
+function go(i){
+cur=(i+APPS.length)%APPS.length;
+for(var k=0;k<APPS.length;k++){
+var off=((k-cur)%APPS.length+APPS.length)%APPS.length;if(off>APPS.length/2)off-=APPS.length;
+var c=track.children[k];c.className='demo-card '+(off===0?'is-center':off===-1?'is-left':off===1?'is-right':'is-hidden');
+c.querySelector('iframe').style.pointerEvents=off===0?'auto':'none';
+c.querySelector('.demo-focusbtn').style.display=off===0?'none':'block';
+}
+loadFrame(cur);loadFrame((cur+1)%APPS.length);loadFrame((cur+APPS.length-1)%APPS.length);
+[].forEach.call(pills.children,function(p,k){p.classList.toggle('is-on',k===cur)});
+cap.innerHTML=APPS[cur].desc;
+}
+window.smDemoGo=function(i){go(i);var el=document.getElementById('demo');window.scrollTo({top:el.getBoundingClientRect().top+window.pageYOffset-70,behavior:'smooth'});};
+document.getElementById('demo-prev').addEventListener('click',function(){go(cur-1)});
+document.getElementById('demo-next').addEventListener('click',function(){go(cur+1)});
+var seen=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){go(0);seen.disconnect()}})},{rootMargin:'200px'});
+seen.observe(track);
+})();
+</script>
+<script>
+(function(){
+var $=function(id){return document.getElementById(id)};
+var H=13,DAYS=30.4,WKS=4.33,FT=151.67;
+var f=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:0})+' €'};
+function calc(){
+var cmd=+$('s-cmd').value,panier=+$('s-panier').value,err=+$('s-err').value,mins=+$('s-mins').value,tel=Math.min(+$('s-tel').value,cmd);
+$('o-cmd').textContent=cmd;$('o-panier').textContent=panier.toLocaleString('fr-FR',{minimumFractionDigits:2})+' €';$('o-err').textContent=err;$('o-mins').textContent=mins+' min';$('o-tel').textContent=tel;
+var errSave=err*WKS*panier*0.5*0.35;
+var coordH=mins*2*DAYS/60,coordSave=coordH*H;
+var telMig=tel*0.6,telH=telMig*4*DAYS/60,telSave=telH*H;
+var online=telMig+cmd*0.10,ca=online*DAYS*panier*0.15;
+$('r-total').textContent=f(errSave+coordSave+telSave);
+document.getElementById('r-year').textContent=f((errSave+coordSave+telSave+ca)*12);
+$('r-err').textContent=f(errSave);$('r-coord').textContent=f(coordSave);$('r-tel').textContent=f(telSave);
+$('r-ca').textContent='+ '+f(ca);
+var hrs=coordH+telH;
+$('r-h').textContent=hrs.toLocaleString('fr-FR',{maximumFractionDigits:0})+' h';
+$('r-equiv').textContent='≈ '+Math.round(hrs/FT*100)+' % d\'un temps plein récupéré — hors gain des erreurs évitées.';
+}
+['s-cmd','s-panier','s-err','s-mins','s-tel'].forEach(function(id){$(id).addEventListener('input',calc)});
+calc();
+})();
+</script>
+<div class="stickybar" id="stickybar">
+<div class="stickybar-in">
+<span class="stickybar-dot"></span>
+<p class="stickybar-text"><strong>Offre fondateur</strong> — 7 places restantes sur 10 au tarif préférentiel à vie</p>
+<a class="btn light" href="#contact">Réserver ma démo</a>
+<button class="stickybar-x" aria-label="Fermer">×</button>
+</div>
+</div>
+<script>
+(function(){
+var els=[].slice.call(document.querySelectorAll('[data-count]'));
+var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(els.length){
+var io=new IntersectionObserver(function(es){es.forEach(function(e){
+if(!e.isIntersecting)return;io.unobserve(e.target);
+var el=e.target,end=+el.dataset.count,pre=el.dataset.prefix||'',suf=el.dataset.suffix||'';
+if(reduce){el.textContent=pre+end+suf;return}
+var t0=null;function step(t){if(!t0)t0=t;var p=Math.min(1,(t-t0)/1100);p=1-Math.pow(1-p,3);el.textContent=pre+Math.round(end*p)+suf;if(p<1)requestAnimationFrame(step)}
+requestAnimationFrame(step);
+})},{threshold:.5});
+els.forEach(function(e){io.observe(e)});
+}
+var bar=document.getElementById('stickybar');
+if(bar){
+var closed=false;
+bar.querySelector('.stickybar-x').addEventListener('click',function(){closed=true;bar.classList.remove('is-on')});
+var contact=document.getElementById('contact');
+addEventListener('scroll',function(){
+if(closed)return;
+var nearEnd=contact&&contact.getBoundingClientRect().top<innerHeight*.9;
+bar.classList.toggle('is-on',window.scrollY>1000&&!nearEnd);
+},{passive:true});
+}
+var ctForm=document.querySelector('.ct-form');
+if(ctForm){ctForm.addEventListener('submit',function(){
+var tel=document.getElementById('ct-tel');
+if(!tel.value.trim()||!document.getElementById('ct-name').value.trim())return;
+ctForm.innerHTML='<div class="ct-done"><svg width="40" height="40" viewBox="0 0 14 14"><circle cx="7" cy="7" r="7" fill="var(--green)"></circle><path d="M4.2 7.3l1.9 1.9 3.7-4.2" fill="none" stroke="var(--white)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg><p class="ct-donetitle">C\'est noté !</p><p class="ct-donesub">On vous rappelle sous 24 h ouvrées sur le créneau choisi.</p></div>';
+});}
+['.pr-card','.sim-controls','.sim-results','.fd-card','.cat-col'].forEach(function(sel){
+[].forEach.call(document.querySelectorAll(sel),function(el){
+el.classList.add('spot');
+el.addEventListener('pointermove',function(ev){var r=el.getBoundingClientRect();el.style.setProperty('--mx',(ev.clientX-r.left)+'px');el.style.setProperty('--my',(ev.clientY-r.top)+'px')});
+});
+});
+})();
+</script>
+<script>var _y=document.getElementById("sm-y");if(_y)_y.textContent=new Date().getFullYear();</script></body>
+</html>

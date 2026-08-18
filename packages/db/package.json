@@ -1,0 +1,23 @@
+{
+  "name": "@sm/db",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo ok",
+    "seed": "tsx src/seed.ts"
+  },
+  "dependencies": {
+    "@sm/contracts": "workspace:*",
+    "argon2": "^0.44.0",
+    "dotenv": "^17.0.0",
+    "mongoose": "^8.16.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
