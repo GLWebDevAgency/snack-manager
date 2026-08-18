@@ -1,0 +1,109 @@
+/**
+ * Formes de données telles que servies par l'API aux surfaces terrain.
+ * Volontairement souples (documents Mongo « lean ») : on ne dépend pas des
+ * types Mongoose côté client.
+ */
+
+export interface Variant {
+  key: string;
+  name: string;
+  price: number;
+}
+
+export interface OptionChoice {
+  key: string;
+  name: string;
+  priceDelta: number;
+}
+
+export interface OptionGroup {
+  key: string;
+  name: string;
+  type: 'single' | 'multi';
+  min?: number;
+  max?: number | null;
+  choices: OptionChoice[];
+  perVariant?: Record<string, { min?: number; max?: number; priceDelta?: number }> | null;
+}
+
+export interface Product {
+  _id: string;
+  name: string;
+  description?: string;
+  price?: number;
+  variants?: Variant[];
+  optionGroups?: OptionGroup[];
+  removables?: string[];
+  tags?: string[];
+  isNew?: boolean;
+  outOfStock?: boolean;
+  outOfStockSource?: 'manual' | 'ingredient' | null;
+  active?: boolean;
+}
+
+export interface Category {
+  _id: string;
+  name: string;
+  products: Product[];
+}
+
+export interface Menu {
+  categories: Category[];
+  uncategorized?: Product[];
+}
+
+export type OrderStatus = 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+export type OrderChannel = 'online' | 'pos' | 'phone';
+export type OrderType = 'surplace' | 'emporter' | 'pickup';
+
+export interface OrderLine {
+  productId: string;
+  name: string;
+  variantKey?: string | null;
+  variantName?: string | null;
+  options: { groupKey: string; choiceKey: string; name: string; priceDelta: number }[];
+  removed: string[];
+  note?: string | null;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface Order {
+  _id: string;
+  number: number;
+  clientId: string;
+  channel: OrderChannel;
+  type: OrderType;
+  lines: OrderLine[];
+  totals: { subtotal: number; discount?: { amount: number; reason: string } | null; total: number };
+  payment: { method: 'online' | 'counter'; status: 'pending' | 'paid' | 'refunded' };
+  status: OrderStatus;
+  statusHistory: { status: OrderStatus; at: string; by?: string }[];
+  pickup?: { slot: string; customerName: string; customerPhone?: string | null } | null;
+  note?: string | null;
+  createdAt: string;
+}
+
+export interface TenantPublic {
+  _id?: string;
+  slug: string;
+  name: string;
+  logoUrl?: string | null;
+  brandColor: string;
+}
+
+/** Ordre d'avancement — sert à la réconciliation « le plus avancé gagne ». */
+export const STATUS_RANK: Record<OrderStatus, number> = {
+  new: 0,
+  preparing: 1,
+  ready: 2,
+  delivered: 3,
+  cancelled: 4,
+};
+
+export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
+  new: 'preparing',
+  preparing: 'ready',
+  ready: 'delivered',
+};

@@ -1,0 +1,32 @@
+{
+  "name": "@sm/kds",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "expo": "~57.0.14",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-dom": "19.2.3",
+    "react-native-web": "~0.21.0",
+    "expo-keep-awake": "~15.0.0",
+    "expo-screen-orientation": "~9.0.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@sm/client-core": "workspace:*",
+    "@sm/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "dev": "expo start --web --port 8083",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo ok",
+    "build": "echo \"build natif via EAS\""
+  },
+  "private": true
+}

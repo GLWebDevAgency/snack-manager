@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Snack Manager — Caisse",
+    "slug": "sm-pos",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "newArchEnabled": true,
+    "android": {
+      "package": "fr.snackmanager.pos",
+      "screenOrientation": "landscape"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "extra": {
+      "apiUrl": "https://api-production-8949.up.railway.app"
+    }
+  }
+}
