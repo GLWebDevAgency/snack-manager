@@ -440,6 +440,14 @@ jobs:
   sante:
     name: Santé après déploiement
     needs: [cible, deploiement]
+    # `always()` : on contrôle la santé MÊME si la mise en ligne a échoué.
+    # Un vendredi soir, la première question n'est pas « le déploiement
+    # est-il passé ? » mais « le restaurant peut-il encaisser ? ». Quand
+    # Railway refuse une mise en service, l'ancienne version continue de
+    # servir — et il faut le SAVOIR, pas le supposer.
+    # En revanche, si la vérification a échoué, `deploiement` est « skipped » :
+    # on n'a rien touché, il n'y a rien à contrôler.
+    if: always() && needs.cible.result == 'success' && needs.deploiement.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -450,6 +458,16 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      - name: Rappeler dans quel cas on se trouve
+        env:
+          RESULTAT: ${{ needs.deploiement.result }}
+          ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+        run: |
+          set -euo pipefail
+          if [ "$RESULTAT" != 'success' ]; then
+            echo "::warning title=Mise en ligne en échec::Le contrôle qui suit dit ce que « $ENVIRONNEMENT » sert MAINTENANT — donc, très probablement, la version PRÉCÉDENTE. Vert ici ne veut pas dire que le déploiement a réussi."
+          fi
 
       # Aucun `pnpm install` : le script n'a aucune dépendance, par exigence.
       - name: Vérifier les surfaces publiques

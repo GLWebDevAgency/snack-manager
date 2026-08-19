@@ -471,6 +471,15 @@ gh pr merge --squash --delete-branch   # ← déclenche le déploiement producti
 | 4 | **Mise en ligne** | `api` seul d'abord (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
 | 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
 
+Le job 5 tourne **aussi quand le job 4 a échoué** (`always()`). Un vendredi
+soir, la première question n'est pas « le déploiement est-il passé ? » mais
+« le restaurant peut-il encaisser ? ». Quand Railway refuse une mise en
+service, l'ancienne version continue de servir — et il faut le *savoir*, pas
+le supposer. Dans ce cas le job affiche un avertissement en tête : vert
+signifie alors « l'environnement répond », pas « le déploiement a réussi ».
+Si c'est la vérification qui a échoué, rien n'a été touché et le job 5 ne
+tourne pas.
+
 Les jobs 4 et 5 sont branchés par `needs:` sur les jobs 2 et 3. Ce n'est pas
 une politesse : un job dont un `needs` échoue **ne démarre pas**. Le
 déploiement n'est pas « sauté », il est inatteignable.
