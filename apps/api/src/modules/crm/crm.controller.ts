@@ -37,7 +37,23 @@ export class CrmController {
     return this.crm.overview();
   }
 
-  /** Restaurants clients réels + activité 30 jours (détection de décrochage). */
+  /**
+   * LE PARC RÉEL — identité, activité 30 jours, et la santé de chaque client.
+   *
+   * Chaque ligne porte désormais son `score`, son `accountStatus`, sa tendance
+   * (`previousOrders` / `ordersDeltaPct`) et ses appareils muets
+   * (`devicesOffline`). Ces quatre-là manquaient : la colonne « Santé »
+   * affichait un tiret, et l'écran comblait le trou en appelant
+   * `/crm/tenants/:id/health` UNE FOIS PAR CLIENT après l'affichage — une
+   * requête par ligne, dont chacune journalise une consultation de dossier.
+   * Afficher la liste revenait donc à « ouvrir » le parc entier.
+   *
+   * Le calcul se fait ici en une agrégation par champ sur tout le parc, avec
+   * les fonctions de jugement de la fiche : le score lu dans la liste est celui
+   * qu'on retrouve en cliquant dessus. La fiche reste la seule à rendre le
+   * DÉTAIL rédigé de chaque axe — et la seule à tracer la consultation, parce
+   * qu'elle seule ouvre vraiment un dossier.
+   */
   @Get('tenants')
   clients() {
     return this.crm.listClients();

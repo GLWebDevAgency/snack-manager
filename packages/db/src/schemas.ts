@@ -636,6 +636,10 @@ export const AdminLogSchema = new Schema(
     actorEmail: { type: String, default: '' },
     action: {
       type: String,
+      // RECOPIE de `ADMIN_LOG_ACTIONS` (@sm/contracts) : toute action ajoutée
+      // là-bas doit l'être ici, sinon l'écriture tombe en ValidationError APRÈS
+      // la mutation qu'elle devait tracer. `admin.test.ts` épingle l'égalité
+      // des deux listes.
       enum: [
         'tenant.suspend',
         'tenant.reactivate',
@@ -644,6 +648,9 @@ export const AdminLogSchema = new Schema(
         'tenant.detail_view',
         'device.revoke',
         'screen.revoke',
+        'invoice.issue',
+        'invoice.pay',
+        'invoice.cancel',
       ],
       required: true,
     },
@@ -693,6 +700,97 @@ for (const op of APPEND_ONLY_BLOCKED) {
 export type AdminLog = InferSchemaType<typeof AdminLogSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// invoices — facturation de l'abonnement Snack Manager
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * CE QUE NOUS FACTURONS À NOS CLIENTS RESTAURATEURS.
+ *
+ * À ne confondre ni avec `orders` (ce qu'un restaurant encaisse auprès de ses
+ * propres clients) ni avec `auditLogs` : ici, l'argent va du commerçant VERS
+ * Snack Manager. C'est la pièce qui rend une suspension légitime — sans elle,
+ * « impayé » n'est qu'une affirmation.
+ *
+ * TROIS PROPRIÉTÉS STRUCTURENT CE MODÈLE.
+ *
+ * 1. UNE PIÈCE COMPTABLE, PAS UNE LIGNE DE LOG. `number` vient d'une séquence
+ *    continue tenue dans `counters` (`invoice:<année>`) et l'index unique
+ *    ci-dessous interdit qu'un numéro serve deux fois. Une facture ne se
+ *    supprime jamais : le statut passe à `annulee`, avec un motif, et le numéro
+ *    reste consommé — un trou dans la numérotation est une question sans
+ *    réponse le jour d'un contrôle.
+ *
+ * 2. `en_retard` FIGURE DANS L'ÉNUMÉRATION MAIS N'EST PAS ÉCRIT par l'API. Le
+ *    retard est une fonction du temps : le figer en base le rendrait faux dès
+ *    le lendemain matin sans une tâche de nuit pour le rafraîchir, et un impayé
+ *    invisible est précisément ce qu'on cherche à supprimer. Il est recalculé à
+ *    chaque lecture (`effectiveInvoiceStatus`, @sm/contracts). La valeur reste
+ *    acceptée pour qu'une future relance automatique puisse la persister sans
+ *    migration.
+ *
+ * 3. LA PÉRIODE EST UN MOIS CALENDAIRE EN UTC, bornes incluses des deux côtés :
+ *    deux mois consécutifs ne se chevauchent pas et ne laissent pas de trou.
+ *    Le sous-schéma est explicite (et non un objet imbriqué implicite) pour que
+ *    Mongoose infère des champs NON nullables côté TypeScript — même raison que
+ *    pour `totals` et `account`.
+ */
+export const InvoiceSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /** `SM-2026-0004` — séquence annuelle, globale au parc, sans trou. */
+    number: { type: String, required: true },
+    kind: {
+      type: String,
+      enum: ['abonnement', 'mise_en_place', 'option', 'autre'],
+      default: 'abonnement',
+      required: true,
+    },
+    /** Libellé lisible : « Abonnement Complet — septembre 2026 ». */
+    label: { type: String, default: '' },
+    period: {
+      type: new Schema(
+        {
+          start: { type: Date, required: true },
+          end: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    /** Montant en CENTIMES, comme partout ailleurs. */
+    amountCents: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      enum: ['brouillon', 'envoyee', 'en_retard', 'payee', 'annulee'],
+      default: 'brouillon',
+      required: true,
+    },
+    /** Date d'envoi au client — `null` tant que la pièce est un brouillon. */
+    issuedAt: { type: Date, default: null },
+    dueAt: { type: Date, required: true },
+    paidAt: { type: Date, default: null },
+    /** Comment l'argent est arrivé — `null` tant que rien n'est encaissé. */
+    method: {
+      type: String,
+      enum: ['prelevement', 'virement', 'carte', 'cheque', null],
+      default: null,
+    },
+    cancelledAt: { type: Date, default: null },
+    cancelReason: { type: String, default: '' },
+  },
+  { timestamps: true },
+);
+/** Le numéro identifie la pièce : deux factures ne peuvent pas le partager. */
+InvoiceSchema.index({ number: 1 }, { unique: true });
+/** Fiche d'un client : son historique, échéance la plus récente en tête. */
+InvoiceSchema.index({ tenantId: 1, dueAt: -1 });
+/** File des impayés du parc : on balaie par statut, du plus ancien au plus récent. */
+InvoiceSchema.index({ status: 1, dueAt: 1 });
+/** Garde-fou anti-double-facturation : un abonnement par client et par période. */
+InvoiceSchema.index({ tenantId: 1, kind: 1, 'period.start': 1 });
+export type Invoice = InferSchemaType<typeof InvoiceSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Registre des modèles (consommé par l'API Nest et le seed)
 // ─────────────────────────────────────────────────────────────
 
@@ -707,6 +805,7 @@ export const MODELS = {
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
+  Invoice: { name: 'Invoice', schema: InvoiceSchema, collection: 'invoices' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },

@@ -5,14 +5,30 @@
  *
  * Le signal qui compte n'est pas l'abonnement (il court encore le jour où le
  * client décroche) mais l'ACTIVITÉ : sept jours sans une seule commande sur un
- * fast-food, ce n'est pas un creux, c'est un client qui part. Trois anomalies
+ * fast-food, ce n'est pas un creux, c'est un client qui part. Quatre anomalies
  * doivent se voir SANS un clic et sans lire une valeur (DA §7) :
  *
- *   1. le décrochage — filet rouge en bord de ligne + pastille de score rouge ;
- *   2. l'appareil muet — puce « caisse hors ligne », en rouge sur la ligne ;
- *   3. le compte suspendu — pilule rouge en colonne « Statut ».
+ *   1. le client à rappeler — marqueur rouge plein à côté du nom, + filet rouge
+ *      en bord de ligne ;
+ *   2. le décrochage — pastille de score rouge qui bat ;
+ *   3. l'appareil muet — puce « caisse hors ligne », en rouge sur la ligne ;
+ *   4. le compte suspendu — pilule rouge en colonne « Statut ».
  *
  * Chaque ligne ouvre la fiche `/sm/clients/[id]`, l'écran d'appel.
+ *
+ * ─── D'où viennent les chiffres ───
+ *
+ * `GET /crm/tenants` rend l'identité et l'activité brute (30 j), mais NI le
+ * score de santé, NI le statut de compte, NI la tendance. Le score vit dans
+ * `/crm/tenants/:id/health` — une route par client. Trois appels différents
+ * peuplent donc cette page, et l'ordre compte :
+ *
+ *   1. `/crm/tenants` — la liste s'affiche, complète et cliquable ;
+ *   2. `/crm/signals` — UN appel pour tout le parc : il dit qui rappeler, et
+ *      pourquoi. C'est lui qui allume les marqueurs rouges ;
+ *   3. `/crm/tenants/:id/health` — les scores, chargés APRÈS l'affichage, en
+ *      file de quatre, plafonnés, et dans l'ordre d'urgence (voir
+ *      `hydrateSummaries`). Jamais cinquante requêtes en vol.
  *
  * Cloisonnement : cette liste traverse TOUS les restaurants du parc. Elle est
  * réservée au rôle `sm_admin` — garde côté API, redirection côté coquille.
@@ -20,28 +36,44 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { CLIENT_RISK_DAYS, type CrmClientHealth } from "@sm/contracts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CLIENT_RISK_DAYS, type CrmClientHealth, type TenantAccountStatus } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Card, Chip, EmptyState, Icon, Input, Kpi, Skeleton } from "@/components/ui";
 import { euroRound, fmtMonth, int } from "../crm";
 import {
+  hydrateSummaries,
+  hydrationOrder,
+  readWorkSignals,
+  signalsByTenant,
+  worstSeverity,
+  SUMMARY_BUDGET,
+  type TenantSummary,
+  type WorkSignal,
+} from "../signals/data";
+import {
   clientsApi,
   fmtSince,
   readClientRows,
-  readSignals,
   scoreHealth,
-  SEVERITY_RANK,
+  SEVERITY_TEXT,
   type ClientRow,
-  type ClientSignal,
+  type SignalSeverity,
 } from "./data";
-import { AccountPill, PlanPill, ScorePill, Trend, Unavailable } from "./ui";
+import {
+  AccountPill,
+  CallBackFlag,
+  PlanPill,
+  ScorePill,
+  Trend,
+  Unavailable,
+} from "./ui";
 
-type Filter = "tous" | CrmClientHealth | "suspendus";
+type Filter = "tous" | "rappeler" | "attention" | "ok" | "suspendus";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "tous", label: "Tous" },
-  { key: "risque", label: "À rappeler" },
+  { key: "rappeler", label: "À rappeler" },
   { key: "attention", label: "À suivre" },
   { key: "ok", label: "Bonne santé" },
   { key: "suspendus", label: "Suspendus" },
@@ -54,13 +86,64 @@ const HEALTH_RANK: Record<CrmClientHealth, number> = {
   ok: 2,
 };
 
-/** Santé effective : le score quand l'API en calcule un, sinon la règle des contrats. */
-const toneOf = (c: ClientRow): CrmClientHealth => scoreHealth(c.score) ?? c.health;
+const BUCKET_RANK: Record<"rappeler" | "attention" | "ok", number> = {
+  rappeler: 0,
+  attention: 1,
+  ok: 2,
+};
+
+/**
+ * Une ligne, une fois recomposée depuis les trois sources.
+ *
+ * Chaque champ suit la même règle : la valeur de la FICHE DE SANTÉ l'emporte
+ * quand elle est chargée, celle de la liste sert de repli. Jamais l'inverse —
+ * la liste et la fiche doivent afficher le même chiffre.
+ */
+type Row = {
+  client: ClientRow;
+  score: number | null;
+  verdict: string;
+  /** Fiche de santé demandée, pas encore revenue. */
+  pending: boolean;
+  tone: CrmClientHealth;
+  accountStatus: TenantAccountStatus | null;
+  trendPct: number | null;
+  trendDays: number;
+  lastActivityAt: string | null;
+  devicesOffline: number | null;
+  signals: WorkSignal[];
+  worst: SignalSeverity | null;
+  /** Signal critique, accès coupé ou décrochage : ce client passe devant. */
+  callBack: boolean;
+  /**
+   * Le seau qui range le client — et qui sert AUSSI de filtre, de compteur et
+   * de critère de tri.
+   *
+   * Un seul calcul pour les quatre usages : la première version rangeait un
+   * client au score correct mais porteur d'un signal « à surveiller » dans
+   * « Bonne santé », parce que le filtre regardait la santé et la ligne
+   * affichait le signal. Deux réponses à la même question sur le même écran.
+   */
+  bucket: Bucket;
+};
+
+type Bucket = "rappeler" | "attention" | "ok";
+
+function bucketOf(
+  callBack: boolean,
+  worst: SignalSeverity | null,
+  tone: CrmClientHealth,
+): Bucket {
+  if (callBack) return "rappeler";
+  if (worst === "attention" || tone === "attention") return "attention";
+  return "ok";
+}
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const [signals, setSignals] = useState<ClientSignal[] | null>(null);
+  const [signals, setSignals] = useState<WorkSignal[] | null>(null);
+  const [summaries, setSummaries] = useState<Map<string, TenantSummary>>(new Map());
   const [filter, setFilter] = useState<Filter>("tous");
   const [q, setQ] = useState("");
 
@@ -77,58 +160,137 @@ export default function ClientsPage() {
         setFailed(true);
       });
     // La file de signaux n'est pas indispensable à la liste : elle l'annote.
-    // Son absence (route pas encore livrée) ne doit rien empêcher.
+    // Son absence (service à l'arrêt) ne doit rien empêcher — d'où une liste
+    // vide plutôt qu'un `null` qui bloquerait l'hydratation des scores.
     clientsApi
       .signals()
       .then((raw) => {
-        if (!cancelled) setSignals(readSignals(raw));
+        if (!cancelled) setSignals(readWorkSignals(raw));
       })
       .catch(() => {
-        if (!cancelled) setSignals(null);
+        if (!cancelled) setSignals([]);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  /** Signaux ouverts par établissement — la gravité la plus haute l'emporte. */
-  const signalsByTenant = useMemo(() => {
-    const map = new Map<string, ClientSignal[]>();
-    for (const s of signals ?? []) {
-      if (!s.tenantId) continue;
-      const arr = map.get(s.tenantId);
-      if (arr) arr.push(s);
-      else map.set(s.tenantId, [s]);
-    }
-    return map;
-  }, [signals]);
+  /** Signaux ouverts par établissement — le plus grave en tête. */
+  const byTenant = useMemo(() => signalsByTenant(signals ?? []), [signals]);
+
+  // ── Les scores, une fois la liste peinte ──
+  //
+  // L'ordre attend que les DEUX premières routes aient répondu : il dépend des
+  // signaux, et commencer sans eux reviendrait à dépenser le budget sur les
+  // clients qui vont bien.
+  const order = useMemo(
+    () =>
+      clients === null || signals === null ? [] : hydrationOrder(clients, byTenant),
+    [clients, signals, byTenant],
+  );
+
+  /**
+   * Les clients dont la fiche est DEMANDÉE — dérivé, jamais stocké.
+   *
+   * C'est ce qui distingue « score en cours de lecture » de « hors budget » sur
+   * la pastille. Le déduire de l'ordre plutôt que de le poser dans un état
+   * évite un rendu en cascade au montage : la file de rendu ne doit pas dépendre
+   * d'un effet qui lui écrirait dessus.
+   */
+  const queued = useMemo(
+    () => new Set(order.slice(0, SUMMARY_BUDGET)),
+    [order],
+  );
+
+  const cancelledRef = useRef(false);
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (order.length === 0) return;
+    void hydrateSummaries(
+      order,
+      (id, summary) => {
+        setSummaries((prev) => {
+          const next = new Map(prev);
+          next.set(id, summary);
+          return next;
+        });
+      },
+      () => cancelledRef.current,
+    );
+  }, [order]);
+
+  const rows = useMemo<Row[]>(() => {
+    return (clients ?? []).map((c) => {
+      const s = summaries.get(c._id) ?? null;
+      const sig = byTenant.get(c._id) ?? [];
+      const worst = worstSeverity(sig);
+      const score = s?.score ?? c.score;
+      // Le signal porte lui aussi le statut du compte : il arrive avec le
+      // premier appel, la fiche de santé avec le troisième. « Suspendu »
+      // s'affiche donc tout de suite sur le client concerné.
+      const accountStatus =
+        s?.accountStatus ?? sig[0]?.accountStatus ?? c.accountStatus;
+      const tone = scoreHealth(score) ?? c.health;
+      const callBack =
+        worst === "critique" || accountStatus === "suspended" || tone === "risque";
+      return {
+        client: c,
+        score,
+        verdict: s?.verdictLabel ?? "",
+        pending: s === null && queued.has(c._id),
+        tone,
+        accountStatus,
+        trendPct: s?.ordersDeltaPct ?? c.trendPct,
+        trendDays: s?.deltaDays ?? 30,
+        lastActivityAt: s?.lastOrderAt ?? c.lastActivityAt,
+        devicesOffline: s?.devicesOffline ?? c.devicesOffline,
+        signals: sig,
+        worst,
+        callBack,
+        bucket: bucketOf(callBack, worst, tone),
+      };
+    });
+  }, [clients, summaries, byTenant, queued]);
 
   const sorted = useMemo(
     () =>
-      [...(clients ?? [])].sort(
+      [...rows].sort(
         (a, b) =>
-          HEALTH_RANK[toneOf(a)] - HEALTH_RANK[toneOf(b)] ||
+          BUCKET_RANK[a.bucket] - BUCKET_RANK[b.bucket] ||
+          (b.signals[0]?.gravity ?? -1) - (a.signals[0]?.gravity ?? -1) ||
+          HEALTH_RANK[a.tone] - HEALTH_RANK[b.tone] ||
           (a.score ?? 50) - (b.score ?? 50) ||
-          b.orders30d - a.orders30d,
+          b.client.orders30d - a.client.orders30d,
       ),
-    [clients],
+    [rows],
   );
 
   const needle = q.trim().toLowerCase();
-  const shown = sorted.filter((c) => {
+  const shown = sorted.filter((r) => {
+    const c = r.client;
     if (needle && !`${c.name} ${c.city} ${c.slug}`.toLowerCase().includes(needle)) {
       return false;
     }
     if (filter === "tous") return true;
-    if (filter === "suspendus") return c.accountStatus === "suspended";
-    return toneOf(c) === filter;
+    if (filter === "suspendus") return r.accountStatus === "suspended";
+    return r.bucket === filter;
   });
 
-  const all = clients ?? [];
-  const mrr = all.filter((c) => c.orders30d > 0).reduce((n, c) => n + c.mrrCents, 0);
-  const atRisk = all.filter((c) => toneOf(c) === "risque").length;
-  const suspended = all.filter((c) => c.accountStatus === "suspended").length;
-  const mute = all.reduce((n, c) => n + (c.devicesOffline ?? 0), 0);
+  const mrr = rows
+    .filter((r) => r.client.orders30d > 0)
+    .reduce((n, r) => n + r.client.mrrCents, 0);
+  const toCall = rows.filter((r) => r.bucket === "rappeler").length;
+  const suspended = rows.filter((r) => r.accountStatus === "suspended").length;
+  const watch = rows.filter((r) => r.bucket === "attention").length;
+  const healthy = rows.filter((r) => r.bucket === "ok").length;
+  const mute = rows.reduce((n, r) => n + (r.devicesOffline ?? 0), 0);
+  const critical = (signals ?? []).filter((s) => s.severity === "critique").length;
 
   if (clients === null) {
     return (
@@ -143,23 +305,37 @@ export default function ClientsPage() {
     );
   }
 
+  const counts: Record<Filter, number> = {
+    tous: rows.length,
+    rappeler: toCall,
+    attention: watch,
+    ok: healthy,
+    suspendus: suspended,
+  };
+
   return (
     <div className="flex flex-col gap-4 p-[26px]">
       {/* ── Les quatre chiffres du parc ── */}
       <div className="flex items-stretch gap-4">
-        <Kpi label="Restaurants clients" value={int(all.length)} icon="user" />
+        <Kpi label="Restaurants clients" value={int(rows.length)} icon="user" />
         <Kpi
           label="Actifs sur 30 jours"
-          value={int(all.filter((c) => c.orders30d > 0).length)}
+          value={int(rows.filter((r) => r.client.orders30d > 0).length)}
           icon="check"
         />
         <Kpi
           label="À rappeler"
-          value={int(atRisk)}
-          icon="bell"
+          value={int(toCall)}
+          icon="phone"
           delta={
-            atRisk > 0
-              ? { dir: "down", text: `sans commande depuis ${CLIENT_RISK_DAYS} j` }
+            toCall > 0
+              ? {
+                  dir: "down",
+                  text:
+                    critical > 0
+                      ? `${int(critical)} signal${critical > 1 ? "s" : ""} critique${critical > 1 ? "s" : ""} ouvert${critical > 1 ? "s" : ""}`
+                      : `sans commande depuis ${CLIENT_RISK_DAYS} j`,
+                }
               : undefined
           }
         />
@@ -176,16 +352,19 @@ export default function ClientsPage() {
       {/* ── Filtres, recherche, accès à la file de travail ── */}
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
-          const count =
-            f.key === "risque" ? atRisk : f.key === "suspendus" ? suspended : 0;
+          const count = counts[f.key];
           return (
             <Chip key={f.key} on={filter === f.key} onClick={() => setFilter(f.key)}>
               {f.label}
               {count > 0 && (
                 <span
                   className={cx(
-                    "cf-fig rounded-pill px-1.5 text-[11px] font-extrabold text-white",
-                    f.key === "risque" ? "bg-alert" : "bg-alert/70",
+                    "cf-fig rounded-pill px-1.5 text-[11px] font-extrabold",
+                    f.key === "rappeler"
+                      ? "bg-alert text-white"
+                      : f.key === "suspendus"
+                        ? "bg-alert/70 text-white"
+                        : "bg-white/12 text-white",
                   )}
                 >
                   {count}
@@ -215,9 +394,14 @@ export default function ClientsPage() {
           className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
         >
           <Icon name="bell" size={15} />
-          File de signaux
+          File de travail
           {(signals?.length ?? 0) > 0 && (
-            <span className="cf-fig rounded-pill bg-alert px-1.5 text-[11px] font-extrabold text-white">
+            <span
+              className={cx(
+                "cf-fig rounded-pill px-1.5 text-[11px] font-extrabold text-white",
+                critical > 0 ? "bg-alert" : "bg-white/20",
+              )}
+            >
               {signals!.length}
             </span>
           )}
@@ -235,22 +419,22 @@ export default function ClientsPage() {
       {/* ── Le parc ── */}
       <Card className="p-0">
         {/*
-          Huit colonnes calées au pixel, dans un conteneur qui défile
-          horizontalement sous 880 px. Une largeur minimale plutôt qu'un
+          Neuf colonnes calées au pixel, dans un conteneur qui défile
+          horizontalement sous 940 px. Une largeur minimale plutôt qu'un
           empilement responsive : cette table SE BALAIE en colonnes, et des
           colonnes qui se réorganisent selon la fenêtre ne se balaient plus.
           Le défilement reste enfermé dans la carte — la page, elle, ne part
           jamais de travers.
         */}
         <div className="cf-scroll overflow-x-auto">
-          <div className="min-w-[880px]">
+          <div className="min-w-[940px]">
             {/* En-tête de table : niveau « élément » sur la carte (DA §1). */}
             <div className="flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut">
               <span className="min-w-0 flex-1">Restaurant</span>
               <span className="w-[78px] shrink-0">Formule</span>
               <span className="w-[86px] shrink-0">Statut</span>
               <span className="w-[74px] shrink-0 text-center">Santé</span>
-              <span className="w-[104px] shrink-0 text-right">Commandes 30 j</span>
+              <span className="w-[124px] shrink-0 text-right">Commandes 30 j</span>
               <span className="w-[92px] shrink-0 text-right">CA 30 j</span>
               <span className="w-[112px] shrink-0 text-right">Dernière activité</span>
               <span className="w-[72px] shrink-0 text-right">MRR</span>
@@ -261,32 +445,28 @@ export default function ClientsPage() {
               <EmptyState
                 icon="user"
                 title={
-                  all.length === 0
+                  rows.length === 0
                     ? "Aucun restaurant client"
                     : "Aucun client dans ce filtre"
                 }
                 hint={
-                  all.length === 0
+                  rows.length === 0
                     ? "Les restaurants apparaissent ici dès leur mise en service."
                     : "Changez de filtre ou videz la recherche pour voir le reste du parc."
                 }
               />
             ) : (
-              shown.map((c) => (
-                <ClientLine
-                  key={c._id}
-                  client={c}
-                  signals={signalsByTenant.get(c._id) ?? []}
-                />
-              ))
+              shown.map((r) => <ClientLine key={r.client._id} row={r} />)
             )}
           </div>
         </div>
       </Card>
 
       <p className="text-[13px] text-mut">
-        Tri par santé décroissante — les appels à passer sont en tête. Le score
-        vient de <span className="cf-fig">/crm/tenants/:id/health</span> ; sans
+        Tri par urgence — les clients à rappeler sont en tête, avec la raison de
+        l&apos;appel sous leur nom. Le score vient de{" "}
+        <span className="cf-fig">/crm/tenants/:id/health</span>, lu après
+        l&apos;affichage pour les {SUMMARY_BUDGET} clients les plus urgents ; sans
         lui, la santé retombe sur la dernière commande encaissée (bonne sous 2
         jours, à suivre jusqu&apos;à {CLIENT_RISK_DAYS} jours, à risque au-delà).
         MRR estimé d&apos;après la formule.
@@ -301,35 +481,25 @@ export default function ClientsPage() {
  * La ligne ENTIÈRE est le lien vers la fiche : au téléphone on vise large, pas
  * un nom de 90 px. Cible tactile ≥ 44 px de haut (DA §7).
  */
-function ClientLine({
-  client: c,
-  signals,
-}: {
-  client: ClientRow;
-  signals: ClientSignal[];
-}) {
-  const tone = toneOf(c);
-  const risk = tone === "risque";
-  const suspended = c.accountStatus === "suspended";
-  const mute = (c.devicesOffline ?? 0) > 0;
-  const worst = signals.reduce<number>(
-    (r, s) => Math.min(r, SEVERITY_RANK[s.severity]),
-    9,
-  );
+function ClientLine({ row: r }: { row: Row }) {
+  const c = r.client;
+  const mute = (r.devicesOffline ?? 0) > 0;
+  const top = r.signals[0];
 
   return (
     <Link
       href={`/sm/clients/${c._id}`}
       className={cx(
         "cf-press-row relative flex items-center gap-2.5 border-t border-line px-[18px] py-3 hover:bg-white/4",
-        (risk || suspended) && "bg-alert/6",
+        r.callBack && "bg-alert/6",
       )}
+      title={c.city ? `${c.name} — ${c.city}` : c.name}
     >
       {/*
         Filet rouge en bord de ligne : un décrochage ou une coupure se repère au
         balayage de la colonne, sans lire une seule valeur.
       */}
-      {(risk || suspended) && (
+      {r.callBack && (
         <span className="absolute inset-y-0 left-0 w-[3px] bg-alert" aria-hidden />
       )}
 
@@ -340,9 +510,19 @@ function ClientLine({
         >
           {c.name.trim().charAt(0).toUpperCase()}
         </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[14.5px] font-bold text-ink">{c.name}</span>
+        <div className="min-w-0 flex-1">
+          {/*
+            `flex-wrap`, et le nom à sa largeur naturelle plutôt qu'en
+            `flex-1` : sans ça, les pastilles (« muet », « à rappeler »)
+            rognaient le nom jusqu'à le faire DISPARAÎTRE dans une fenêtre
+            étroite — une ligne sans nom de restaurant, sur l'écran qui sert
+            justement à choisir qui appeler. Ce sont les pastilles qui passent
+            à la ligne, jamais le nom.
+          */}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="max-w-full truncate text-[14.5px] font-bold text-ink">
+              {c.name}
+            </span>
             {c.founderSeat && (
               <Icon
                 name="star"
@@ -357,21 +537,30 @@ function ClientLine({
                 title="Appareil sans battement de cœur — caisse, écran cuisine ou téléviseur"
               >
                 <Icon name="tv" size={11} />
-                {c.devicesOffline} muet{(c.devicesOffline ?? 0) > 1 ? "s" : ""}
+                {r.devicesOffline} muet{(r.devicesOffline ?? 0) > 1 ? "s" : ""}
               </span>
             )}
-            {worst === 0 && (
-              <span
-                className="shrink-0 rounded-pill bg-alert px-1.5 py-px text-[10px] font-extrabold uppercase tracking-[0.04em] text-white"
-                title="Signal critique ouvert sur ce client"
-              >
-                signal
-              </span>
-            )}
+            {r.callBack && <CallBackFlag reason={top?.title ?? "Client en décrochage"} />}
           </div>
-          <div className="truncate text-xs text-mut">
-            {c.city ? `${c.city} · ` : ""}client depuis {fmtMonth(c.since)}
-          </div>
+
+          {/*
+            Sous le nom : la RAISON de l'appel quand il y en a une, la fiche
+            d'identité sinon. Un intitulé de signal (« Écran cuisine muet ») en
+            dit plus, à cet endroit précis, que « Lyon · client depuis mars ».
+            La ville reste dans l'infobulle de la ligne et dans la recherche.
+          */}
+          {top ? (
+            <div className={cx("truncate text-xs font-semibold", SEVERITY_TEXT[top.severity])}>
+              {top.kindLabel} · {top.title}
+              {r.signals.length > 1 && (
+                <span className="text-mut"> · +{r.signals.length - 1} autre{r.signals.length > 2 ? "s" : ""}</span>
+              )}
+            </div>
+          ) : (
+            <div className="truncate text-xs text-mut">
+              {c.city ? `${c.city} · ` : ""}client depuis {fmtMonth(c.since)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -380,14 +569,19 @@ function ClientLine({
       </span>
 
       <span className="w-[86px] shrink-0">
-        <AccountPill status={c.accountStatus} />
+        <AccountPill status={r.accountStatus} />
       </span>
 
       <span className="flex w-[74px] shrink-0 justify-center">
-        <ScorePill score={c.score} health={c.health} />
+        <ScorePill
+          score={r.score}
+          health={c.health}
+          pending={r.pending}
+          verdict={r.verdict}
+        />
       </span>
 
-      <span className="w-[104px] shrink-0 text-right">
+      <span className="w-[124px] shrink-0 text-right">
         <span
           className={cx(
             "cf-fig block text-sm font-extrabold leading-tight",
@@ -396,7 +590,17 @@ function ClientLine({
         >
           {int(c.orders30d)}
         </span>
-        <Trend pct={c.trendPct} className="justify-end" />
+        {/*
+          La fenêtre est DITE quand elle n'est pas celle de la colonne : un
+          client entré il y a six semaines n'a pas de 30 jours précédents à
+          comparer, l'API bascule alors sur 7 jours. Afficher « −10 % » sans
+          préciser la période ferait discuter deux chiffres différents.
+        */}
+        <Trend
+          pct={r.trendPct}
+          className="justify-end"
+          suffix={r.trendPct !== null && r.trendDays !== 30 ? `sur ${r.trendDays} j` : undefined}
+        />
       </span>
 
       {/* CA agrégé : arrondi à l'euro, les centimes n'apportent rien ici. */}
@@ -407,15 +611,15 @@ function ClientLine({
       <span
         className={cx(
           "w-[112px] shrink-0 truncate text-right text-[13px]",
-          risk ? "font-bold text-alertt" : "text-mut",
+          r.tone === "risque" ? "font-bold text-alertt" : "text-mut",
         )}
         title={
-          c.lastActivityAt
-            ? new Date(c.lastActivityAt).toLocaleString("fr-FR")
+          r.lastActivityAt
+            ? new Date(r.lastActivityAt).toLocaleString("fr-FR")
             : "Aucune activité enregistrée"
         }
       >
-        {fmtSince(c.lastActivityAt)}
+        {fmtSince(r.lastActivityAt)}
       </span>
 
       <span className="cf-fig w-[72px] shrink-0 text-right text-sm font-extrabold text-accent">

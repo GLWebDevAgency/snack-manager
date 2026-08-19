@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ACCOUNT_SUSPENDED_MESSAGE,
   ADMIN_LOG_ACTIONS,
+  ADMIN_LOG_ACTION_LABELS,
   ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
+  INVOICE_LOG_ACTIONS,
   PAIRING_CODE_TTL_MS,
   PLANS,
   PUBLIC_ORDERING_SUSPENDED_MESSAGE,
@@ -12,10 +14,11 @@ import {
   isAccessBlocked,
   isPairingCodeShape,
   publicOrderingState,
+  type AdminInvoiceGesture,
   type AdminLogQuery,
   type JwtPayload,
 } from '@sm/contracts';
-import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
+import { AdminLogSchema, type AdminLog, type Device, type Screen, type Tenant, type User } from '@sm/db';
 import { requirePairedDevice } from '../devices/device-access';
 import type { DevicesRepository } from '../devices/devices.repository';
 import { AdminService } from './admin.service';
@@ -26,6 +29,7 @@ const AUTRE_RESTO = '65f000000000000000000002';
 const CAISSE = '65f0000000000000000000a1';
 const ECRAN = '65f0000000000000000000b1';
 const CAISSE_DU_VOISIN = '65f0000000000000000000a2';
+const FACTURE = '65f0000000000000000000f1';
 
 const SM: JwtPayload = {
   sub: '65f00000000000000000ff01',
@@ -174,6 +178,72 @@ describe('Administration client', () => {
     });
   });
 
+  // ─── Gestes de facturation ───
+
+  describe('Gestes de facturation', () => {
+    const facture = (over: Partial<AdminInvoiceGesture> = {}): AdminInvoiceGesture => ({
+      action: 'invoice.pay',
+      invoiceId: FACTURE,
+      summary: 'Facture SM-2026-0007 encaissée — 139,00 € par chèque le 14/08/2026.',
+      meta: {
+        number: 'SM-2026-0007',
+        kind: 'abonnement',
+        period: '2026-08',
+        amountCents: 13_900,
+        method: 'cheque',
+      },
+      ...over,
+    });
+
+    it('trace un encaissement sous SON nom, jamais sous « Note interne »', async () => {
+      const entry = await admin.recordInvoiceGesture(SM, CLASSFOOD, facture());
+
+      // Le fond de l'affaire : 139 € encaissés ne peuvent pas s'afficher comme
+      // un commentaire libre dans le registre qu'on ouvre en cas de litige.
+      expect(entry.action).toBe('invoice.pay');
+      expect(entry.actionLabel).toBe('Encaissement d’une facture');
+      expect(entry.actionLabel).not.toBe(ADMIN_LOG_ACTION_LABELS['tenant.note']);
+      // Rattaché à la PIÈCE, ce qu'une note ne portait pas : on relit ainsi
+      // l'histoire d'une facture précise, pas seulement celle du client.
+      expect(entry.targetId).toBe(FACTURE);
+      expect(entry.reason).toMatch(/encaissée/);
+      expect(entry.meta).toMatchObject({ number: 'SM-2026-0007', method: 'cheque' });
+    });
+
+    it('donne un intitulé français distinct à chacun des trois gestes', async () => {
+      await admin.recordInvoiceGesture(SM, CLASSFOOD, facture({ action: 'invoice.issue' }));
+      await admin.recordInvoiceGesture(SM, CLASSFOOD, facture({ action: 'invoice.pay' }));
+      await admin.recordInvoiceGesture(SM, CLASSFOOD, facture({ action: 'invoice.cancel' }));
+
+      const labels = (await admin.journal(CLASSFOOD, TOUT)).map((e) => e.actionLabel);
+      expect(new Set(labels)).toEqual(
+        new Set([
+          'Émission d’une facture',
+          'Encaissement d’une facture',
+          'Annulation d’une facture',
+        ]),
+      );
+    });
+
+    it('se filtre comme les autres actions du journal', async () => {
+      await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé le gérant' });
+      await admin.recordInvoiceGesture(SM, CLASSFOOD, facture({ action: 'invoice.issue' }));
+
+      // Isoler les gestes comptables des commentaires d'équipe est précisément
+      // ce que `tenant.note` interdisait.
+      const emissions = await admin.journal(CLASSFOOD, { limit: 200, action: 'invoice.issue' });
+      expect(emissions).toHaveLength(1);
+      expect(emissions[0]?.targetId).toBe(FACTURE);
+    });
+
+    it('rend 404 sur un établissement inconnu, sans rien écrire', async () => {
+      await expect(
+        admin.recordInvoiceGesture(SM, 'pas-un-objectid', facture()),
+      ).rejects.toThrow(/introuvable/);
+      expect(logs.size).toBe(0);
+    });
+  });
+
   // ─── Révocation d'appareil ───
 
   describe('Révocation d’un appareil', () => {
@@ -305,6 +375,19 @@ describe('Administration client', () => {
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });
+      for (const action of INVOICE_LOG_ACTIONS) {
+        await admin.recordInvoiceGesture(SM, CLASSFOOD, {
+          action,
+          invoiceId: FACTURE,
+          summary: `Facture SM-2026-0007 — ${action}`,
+          meta: {
+            number: 'SM-2026-0007',
+            kind: 'abonnement',
+            period: '2026-08',
+            amountCents: 13_900,
+          },
+        });
+      }
 
       // Nous agissons sur l'outil de travail d'un commerçant : aucun geste ne
       // doit pouvoir être fait sans laisser de trace.
@@ -465,6 +548,29 @@ describe('Vocabulaire d’administration', () => {
     // `ADMIN_PLANS` est redéclaré dans `admin.ts` pour éviter un cycle de
     // modules : rien n'empêcherait les deux listes de diverger en silence.
     expect([...ADMIN_PLANS]).toEqual([...PLANS]);
+  });
+
+  it('nomme en français CHAQUE action tracée', () => {
+    // Une action sans libellé s'afficherait « invoice.pay » dans la fiche d'un
+    // client — le journal doit se lire, pas se décoder.
+    for (const action of ADMIN_LOG_ACTIONS) {
+      expect(ADMIN_LOG_ACTION_LABELS[action], action).toMatch(/^[A-ZÉÈÀÇ]/);
+    }
+    // Les gestes de facturation sont bien des actions du MÊME journal : un fil
+    // unique, pas un registre parallèle.
+    for (const action of INVOICE_LOG_ACTIONS) {
+      expect(ADMIN_LOG_ACTIONS).toContain(action);
+    }
+  });
+
+  it('laisse la base accepter chaque action déclarée', () => {
+    // PIÈGE RÉEL, rencontré sur ce tour : `adminLogs.action` porte un `enum`
+    // Mongoose qui RECOPIE cette liste (packages/db/src/schemas.ts). Une action
+    // déclarée ici mais absente là-bas ne se voit ni au typecheck ni dans les
+    // tests à doublure — elle tombe en ValidationError à la première écriture
+    // réelle, APRÈS que la facture a été créée et son numéro consommé.
+    const path = AdminLogSchema.path('action') as unknown as { enumValues: string[] };
+    expect([...path.enumValues].sort()).toEqual([...ADMIN_LOG_ACTIONS].sort());
   });
 
   it('nomme en français chaque statut et chaque motif de révocation', () => {

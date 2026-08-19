@@ -3,6 +3,7 @@ import type { JwtPayload } from '@sm/contracts';
 import { CurrentUser, Roles } from '../../common/auth';
 import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
+import { SignalsService } from './signals.service';
 
 /**
  * PILOTAGE CLIENT — « tout ce qu'il faut savoir sur un restaurant pour
@@ -52,20 +53,29 @@ export class HealthController {
   constructor(
     private readonly health: HealthService,
     private readonly insights: InsightsService,
+    private readonly signalsQueue: SignalsService,
   ) {}
 
   /**
    * LA FILE DE TRAVAIL — ce qui mérite un appel cette semaine, tous clients
-   * confondus, trié par gravité décroissante.
+   * confondus, trié par gravité puis par ancienneté.
    *
    * Sans pagination volontairement : une file de travail qu'on feuillette
    * n'est plus une file de travail. Sa longueur est bornée par la taille du
    * parc, et si elle devient illisible, c'est le parc qui va mal — pas la
    * route.
+   *
+   * Servie par `SignalsService` et non plus par `HealthService` : la file
+   * croise désormais des sources que la fiche de santé n'ouvre pas — la
+   * facturation (impayés réels, et non plus le seul statut de compte) et
+   * l'approvisionnement (ruptures, suivi de stock). Le JUGEMENT partagé, lui,
+   * reste celui de `HealthService` (`buildModules`, `toFleetUnit`,
+   * `windowBounds`) : les deux surfaces ne peuvent pas se contredire sur ce
+   * qu'est un module utilisé ou une semaine.
    */
   @Get('signals')
   signals() {
-    return this.health.signals();
+    return this.signalsQueue.queue();
   }
 
   /**

@@ -34,10 +34,29 @@ import { crm, euroRound, HqContext, isHqSession } from "./crm";
 const HQ_ACCENT = "#c9a15a";
 const HQ_ON_ACCENT = "#12100d";
 
+/**
+ * LA TABLE DE NAVIGATION — et la source du titre de l'en-tête.
+ *
+ * Elle sert deux fois : à dessiner la colonne de gauche, et à TITRER l'écran
+ * (`active.title`). Une page absente de cette table hérite donc du premier
+ * item : `/sm/signals` s'intitulait « Tableau de bord » et surlignait le
+ * mauvais lien tant qu'elle n'y figurait pas. Toute page ajoutée sous `/sm/`
+ * doit y entrer le jour où elle est livrée.
+ *
+ * L'ordre est celui de la journée de travail : on regarde le parc, on vend, on
+ * suit ses clients, on traite les signaux du jour, on encaisse.
+ */
 const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
   { href: "/sm", label: "Tableau de bord", icon: "home", title: "Tableau de bord" },
   { href: "/sm/pipeline", label: "Pipeline", icon: "grid", title: "Pipeline commercial" },
   { href: "/sm/clients", label: "Clients", icon: "user", title: "Restaurants clients" },
+  { href: "/sm/signals", label: "Signaux", icon: "bell", title: "File de travail" },
+  {
+    href: "/sm/facturation",
+    label: "Facturation",
+    icon: "euro",
+    title: "Facturation et recouvrement",
+  },
 ];
 
 export default function SmLayout({ children }: Readonly<{ children: ReactNode }>) {

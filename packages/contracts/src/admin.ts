@@ -205,6 +205,9 @@ export const ADMIN_LOG_ACTIONS = [
   'tenant.detail_view',
   'device.revoke',
   'screen.revoke',
+  'invoice.issue',
+  'invoice.pay',
+  'invoice.cancel',
 ] as const;
 export const AdminLogActionSchema = z.enum(ADMIN_LOG_ACTIONS);
 export type AdminLogAction = z.infer<typeof AdminLogActionSchema>;
@@ -215,8 +218,86 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.plan_change': 'Changement de formule',
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
-  'device.revoke': "Révocation d'un appareil",
-  'screen.revoke': "Révocation d'un écran",
+  // Apostrophe TYPOGRAPHIQUE (’) et non droite : ces libellés s'affichent tels
+  // quels dans la fiche d'un client, à côté de phrases qui l'emploient déjà.
+  'device.revoke': 'Révocation d’un appareil',
+  'screen.revoke': 'Révocation d’un écran',
+  'invoice.issue': 'Émission d’une facture',
+  'invoice.pay': 'Encaissement d’une facture',
+  'invoice.cancel': 'Annulation d’une facture',
+};
+
+/**
+ * LES TROIS GESTES DE FACTURATION, tracés sous leur vrai nom.
+ *
+ * Ils partagent le journal des suspensions et des révocations — c'est la même
+ * histoire qui se raconte, et « relancé le 3, facture émise le 5, encaissée le
+ * 12, suspendu le 20 » ne se lit que dans un fil unique. Mais ils ont désormais
+ * leur PROPRE action : un encaissement de 139 € journalisé sous `tenant.note`
+ * s'affiche « Note interne », c'est-à-dire comme un commentaire libre. Un
+ * journal qui se trompe sur la NATURE du geste est exactement ce qu'on regarde
+ * en cas de litige, et c'est le moment où il ne doit pas mentir.
+ *
+ * Trois conséquences concrètes, toutes acquises par ces trois valeurs :
+ *  · le filtre `?action=` de `GET /crm/tenants/:id/logs` isole les gestes
+ *    comptables des commentaires d'équipe ;
+ *  · `targetId` porte l'identifiant de la PIÈCE, ce qu'une note ne portait pas ;
+ *  · `meta` porte le numéro, le montant et le moyen de règlement, relisibles
+ *    par une machine — la phrase française, elle, reste dans `reason`.
+ */
+export const INVOICE_LOG_ACTIONS = [
+  'invoice.issue',
+  'invoice.pay',
+  'invoice.cancel',
+] as const satisfies readonly AdminLogAction[];
+export type InvoiceLogAction = (typeof INVOICE_LOG_ACTIONS)[number];
+
+/**
+ * Le CONTEXTE MACHINE d'une ligne de facturation.
+ *
+ * La phrase rédigée (`BILLING_JOURNAL`, @sm/contracts) reste dans `reason` : un
+ * journal se lit d'abord avec des yeux. Ces champs-là existent pour tout ce que
+ * la phrase ne permet pas — recompter une année d'encaissements, retrouver une
+ * pièce par son numéro, vérifier un moyen de règlement sans analyser du texte.
+ *
+ * Les types restent PRIMITIFS à dessein : `billing.ts` importe `admin.ts`, donc
+ * `admin.ts` ne peut pas importer `InvoiceKind` sans créer un cycle de modules.
+ * La valeur écrite est celle de la facture, sans traduction.
+ */
+export type AdminInvoiceLogMeta = {
+  /** Numéro de pièce — « SM-2026-0007 ». */
+  number: string;
+  /** Nature : `abonnement`, `mise_en_place`, `option`… */
+  kind: string;
+  /** Période facturée, clé « AAAA-MM ». */
+  period: string;
+  /** Montant en CENTIMES. */
+  amountCents: number;
+  /** Échéance (ISO) — émission. */
+  dueAt?: string;
+  /** Statut STOCKÉ à l'émission : `brouillon` ou `envoyee`. */
+  storedStatus?: string;
+  /** Moyen de règlement — encaissement. */
+  method?: string;
+  /** Date de règlement (ISO) — encaissement. */
+  paidAt?: string;
+  /** Motif — annulation. */
+  cancelReason?: string;
+};
+
+/**
+ * Ce que la facturation demande au journal d'écrire.
+ *
+ * `summary` est la phrase déjà rédigée par `BILLING_JOURNAL` : le journal ne
+ * réécrit pas les mots de la facturation, il les enregistre.
+ */
+export type AdminInvoiceGesture = {
+  action: InvoiceLogAction;
+  /** Identifiant de la facture concernée — devient le `targetId` de la ligne. */
+  invoiceId: string;
+  /** La phrase française, telle qu'elle se lira dans le journal. */
+  summary: string;
+  meta: AdminInvoiceLogMeta;
 };
 
 /**

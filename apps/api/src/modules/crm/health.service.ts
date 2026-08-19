@@ -12,25 +12,35 @@ import {
   clientHealth,
   daysSince,
   isAccessBlocked,
+  paiementAxis,
   type CrmClientHealth,
   type JwtPayload,
   type RevocableDeviceKind,
   type TenantAccountStatus,
 } from '@sm/contracts';
 import type { Device, Order, Screen, Tenant } from '@sm/db';
-import type { SupplyDb } from '@sm/supply';
+import { stockMovements, type SupplyDb } from '@sm/supply';
+import { eq, sql } from 'drizzle-orm';
 import { SUPPLY_DB } from '../../supply-db.module';
 import { AdminService } from './admin.service';
+import { BillingService } from './billing.service';
 
 /**
  * PILOTAGE CLIENT — tout ce qu'il faut savoir sur un restaurant pour
  * l'accompagner, en une lecture.
  *
- * Ce service répond à trois questions que l'équipe se pose vraiment :
- * « ce client va-t-il bien ? » (`tenantHealth`), et « qui dois-je rappeler
- * cette semaine ? » (`signals`). Il n'écrit RIEN sur les données d'un
- * restaurant : c'est une surface de lecture, à l'inverse d'`AdminService` qui,
- * lui, agit sur les comptes.
+ * Ce service répond à la question que l'équipe se pose juste avant de décrocher
+ * son téléphone : « ce client va-t-il bien, et pourquoi ? » (`tenantHealth`).
+ * Il n'écrit RIEN sur les données d'un restaurant : c'est une surface de
+ * lecture, à l'inverse d'`AdminService` qui, lui, agit sur les comptes.
+ *
+ * La question voisine — « qui dois-je rappeler cette semaine ? » — appartient à
+ * `SignalsService`, qui sert `/crm/signals`. Ce fichier a porté une file de
+ * signaux ; elle a été SUPPRIMÉE le jour où l'autre l'a remplacée. Deux files
+ * avec deux vocabulaires dans le même module ne se seraient pas contredites un
+ * jour lointain : elles se seraient contredites à la première évolution. Le
+ * JUGEMENT partagé, lui, reste ici (`buildModules`, `toFleetUnit`,
+ * `windowBounds`, `activityGroup`) et `SignalsService` l'importe.
  *
  * ─── RESPECT DES CLIENTS DE NOS CLIENTS ───
  *
@@ -44,8 +54,8 @@ import { AdminService } from './admin.service';
  *
  * ─── CLOISONNEMENT ───
  *
- * Ce service est TRANS-TENANT par construction : `signals` lit le parc entier.
- * Il n'a donc aucun garde-fou interne et n'est appelé que depuis
+ * Ce service lit le dossier de N'IMPORTE QUEL restaurant à partir d'un
+ * identifiant d'URL : il n'a aucun garde-fou interne et n'est appelé que depuis
  * `HealthController`, qui porte `@Roles('sm_admin')`.
  */
 
@@ -58,8 +68,12 @@ const HOUR_MS = 3_600_000;
  * CA = commandes prêtes + remises — même convention que `StatsService` et
  * `CrmService`. Deux définitions du chiffre d'affaires dans le même produit,
  * et l'équipe finit par débattre du chiffre au lieu du client.
+ *
+ * EXPORTÉ, et c'est le point : `SignalsService` en avait recopié la liste faute
+ * de pouvoir l'importer. Une définition du chiffre d'affaires, un seul endroit
+ * où elle change.
  */
-const REVENUE_STATUSES = ['ready', 'delivered'];
+export const REVENUE_STATUSES = ['ready', 'delivered'];
 
 /**
  * Fenêtres GLISSANTES (7 × 24 h, 30 × 24 h) et non calendaires.
@@ -92,6 +106,40 @@ export const DEVICE_SILENT_AFTER_MS = 24 * HOUR_MS;
  */
 export const ACTIVITY_DROP_PCT = 30;
 export const ACTIVITY_DROP_MIN_ORDERS = 5;
+
+/**
+ * PLANCHER DE LA TENDANCE — en dessous, on ne dit rien.
+ *
+ * Un client entré dans le parc il y a cinq semaines affichait
+ * « +18 536,4 % de commandes sur 30 j » : le calcul est exact — 2 050 commandes
+ * contre 11 la période d'avant — et il est INUTILISABLE. Ce chiffre mesure
+ * l'arrivée du client, pas sa tendance, et il occupe la place de la seule chose
+ * qu'on voulait lire : est-ce que ça monte ou est-ce que ça descend.
+ *
+ * Le seuil n'est pas nouveau : c'est celui que la file de signaux applique déjà
+ * avant de crier à la chute d'activité — `ACTIVITY_DROP_MIN_ORDERS`, cinq
+ * commandes sur SEPT JOURS. On repart de la même constante plutôt que d'un
+ * jumeau, pour que les deux surfaces ne se mettent pas à parler de tendance à
+ * deux moments différents.
+ *
+ * Sous le plancher, `ordersDeltaPct` et `revenueDeltaPct` valent `null` — même
+ * convention que `deltaPct` face à une période vide : quand la référence ne pèse
+ * rien, on préfère ne rien dire.
+ */
+export const TREND_MIN_REFERENCE_ORDERS = ACTIVITY_DROP_MIN_ORDERS;
+
+/**
+ * Le même plancher, RAMENÉ À LA FENÊTRE COMPARÉE.
+ *
+ * Cinq commandes ne veulent pas dire la même chose sur sept jours et sur
+ * trente : un plancher fixe laissait passer le cas qui a motivé cette
+ * correction (onze commandes sur trente jours, soit une tous les trois jours,
+ * qui donnaient une tendance à cinq chiffres). C'est donc le RYTHME qui fait
+ * seuil — celui de la file de signaux —, pas le comptage brut : cinq commandes
+ * par semaine, arrondi au-dessus, soit 22 sur trente jours.
+ */
+export const trendFloorFor = (days: number): number =>
+  Math.ceil((days * TREND_MIN_REFERENCE_ORDERS) / SHORT_WINDOW_DAYS);
 
 // ─── Types de sortie ───
 
@@ -139,7 +187,22 @@ export type CrmActivityWindow = {
   revenueDeltaPct: number | null;
 };
 
-export type CrmModuleKey = 'caisse' | 'cuisine' | 'commande_en_ligne' | 'ecrans_salle';
+/**
+ * Les modules que la fiche sait regarder.
+ *
+ * `stocks` est arrivé en dernier, et par la file de signaux : elle sait dire
+ * « Suivi des stocks ouvert et jamais utilisé » depuis qu'elle lit le contexte
+ * appro, alors que la fiche n'en avait jamais entendu parler. Un chargé de
+ * compte qui cliquait sur ce signal atterrissait sur un dossier où le module
+ * n'existait pas — le pire endroit pour douter de son outil, celui où l'on
+ * vérifie avant d'appeler.
+ */
+export type CrmModuleKey =
+  | 'caisse'
+  | 'cuisine'
+  | 'commande_en_ligne'
+  | 'ecrans_salle'
+  | 'stocks';
 
 export type CrmModuleAdoption = {
   key: CrmModuleKey;
@@ -194,6 +257,13 @@ export type CrmSupplyHealth = {
   ruptures: number;
   priceIncreases30d: number;
   topPriceIncreases: CrmSupplyPriceIncrease[];
+  /** Ingrédients ACTIFS suivis par ce restaurant — le registre est-il monté ? */
+  ingredients: number;
+  suppliers: number;
+  /** Mouvements de stock enregistrés depuis toujours — le registre vit-il ? */
+  movements: number;
+  movements30d: number;
+  lastMovementAt: string | null;
 };
 
 export type CrmTenantHealth = {
@@ -225,29 +295,6 @@ export type CrmTenantHealth = {
   fleet: CrmFleet;
   supply: CrmSupplyHealth;
   computedAt: string;
-};
-
-export type CrmSignalKind =
-  | 'impaye'
-  | 'arret_activite'
-  | 'appareil_muet'
-  | 'chute_activite'
-  | 'module_inutilise';
-
-export type CrmSignal = {
-  kind: CrmSignalKind;
-  /** 0-100, décroissant : c'est l'ordre d'appel de la journée. */
-  gravity: number;
-  tenantId: string;
-  tenantName: string;
-  /** Intitulé court, lisible dans une liste. */
-  title: string;
-  /** Une phrase : ce qui se passe, et depuis quand. */
-  detail: string;
-  /** Le chiffre qui justifie l'appel. */
-  value: number;
-  unit: 'commandes' | 'pourcent' | 'jours' | 'heures' | 'modules';
-  since: string | null;
 };
 
 // ─── Barème du score composite ───
@@ -310,23 +357,38 @@ export const MODULE_LABELS: Record<CrmModuleKey, string> = {
   cuisine: 'Écran cuisine',
   commande_en_ligne: 'Commande en ligne',
   ecrans_salle: 'Écrans de salle',
+  stocks: 'Suivi des stocks',
 };
 
 /**
- * Bandes de gravité de la file de travail.
- *
- * Dix points par famille, et un bonus 0-9 à l'intérieur de la bande selon
- * l'ampleur : une chute de −85 % passe devant une chute de −31 %, mais jamais
- * devant une caisse muette. L'ordre des familles est un choix éditorial
- * assumé — c'est l'ordre dans lequel on décroche le téléphone.
+ * En dessous, le registre d'ingrédients n'est pas « configuré », il est
+ * ébauché — et un module qu'on n'a pas fini d'ouvrir ne peut pas être reproché
+ * au restaurateur. Même seuil que `SUPPLY_SETUP_MIN_INGREDIENTS` dans la file
+ * de signaux, qui juge la même chose sur les mêmes chiffres.
  */
-export const SIGNAL_GRAVITY_BASE: Record<CrmSignalKind, number> = {
-  impaye: 90,
-  arret_activite: 80,
-  appareil_muet: 70,
-  chute_activite: 50,
-  module_inutilise: 30,
-};
+export const STOCKS_SETUP_MIN_INGREDIENTS = 10;
+
+/**
+ * LES MODULES QUI COMPTENT DANS LE SCORE — ceux que MongoDB suffit à mesurer.
+ *
+ * `stocks` s'affiche sur la fiche mais reste HORS de l'axe adoption, et c'est
+ * un choix, pas un oubli. Il se lit dans PostgreSQL, dont l'indisponibilité est
+ * un cas prévu (`supply.available: false`) : l'y compter ferait bouger le score
+ * d'un client de six points selon qu'une base répond ou non ce matin-là. Un
+ * score qui dépend de l'infrastructure n'est plus un score, c'est un baromètre
+ * de notre propre exploitation.
+ *
+ * Conséquence utile : la liste `/crm/tenants`, qui ne lit que Mongo pour tout
+ * le parc, calcule EXACTEMENT le même nombre que la fiche. Cliquer sur une
+ * ligne ne change pas le score affiché — sinon l'équipe croirait l'un des deux
+ * écrans faux, et cesserait d'utiliser les deux.
+ */
+export const SCORED_MODULE_KEYS: readonly CrmModuleKey[] = [
+  'caisse',
+  'cuisine',
+  'commande_en_ligne',
+  'ecrans_salle',
+];
 
 // ─── Fonctions pures (le jugement, testable sans base) ───
 
@@ -367,11 +429,22 @@ export function eurosLabel(cents: number): string {
   return `${Math.round(cents / 100).toLocaleString('fr-FR')} €`;
 }
 
+/**
+ * Une fenêtre d'activité et sa comparaison à la précédente.
+ *
+ * LES DEUX VARIATIONS SONT GOUVERNÉES PAR LE MÊME PLANCHER, celui des
+ * COMMANDES (`trendFloorFor`) : le chiffre d'affaires d'une période n'existe
+ * que par les commandes qui l'ont produit, et un CA rapporté à trois tickets ne
+ * mesure pas plus une tendance qu'un comptage de commandes. Les rendre
+ * séparément mesurables afficherait « tendance non mesurable » sur une ligne et
+ * « +19 475 % » sur celle d'en dessous, dans le même bloc.
+ */
 export function buildWindow(
   days: number,
   current: { orders: number; revenueCents: number },
   previous: { orders: number; revenueCents: number },
 ): CrmActivityWindow {
+  const comparable = previous.orders >= trendFloorFor(days);
   return {
     days,
     orders: current.orders,
@@ -379,8 +452,8 @@ export function buildWindow(
     avgBasketCents: current.orders > 0 ? Math.round(current.revenueCents / current.orders) : 0,
     previousOrders: previous.orders,
     previousRevenueCents: previous.revenueCents,
-    ordersDeltaPct: deltaPct(current.orders, previous.orders),
-    revenueDeltaPct: deltaPct(current.revenueCents, previous.revenueCents),
+    ordersDeltaPct: comparable ? deltaPct(current.orders, previous.orders) : null,
+    revenueDeltaPct: comparable ? deltaPct(current.revenueCents, previous.revenueCents) : null,
   };
 }
 
@@ -393,8 +466,9 @@ export function buildWindow(
  *    afficher une bonne note d'activité.
  *  - TENDANCE : plein pot dès que le client fait au moins autant que la
  *    semaine précédente (croître n'est pas exigé, ne pas s'effondrer si), zéro
- *    à −100 %. Non mesurable quand la semaine précédente était vide — l'axe se
- *    rabat alors sur la seule récence.
+ *    à −100 %. Non mesurable quand la semaine précédente ne pesait pas
+ *    `TREND_MIN_REFERENCE_ORDERS` commandes — l'axe se rabat alors sur la seule
+ *    récence, et sa phrase le dit au lieu d'annoncer « +25 562 % ».
  *
  * Aucun historique du tout (jamais une commande) : l'axe n'est pas mesuré.
  * Un restaurant signé hier n'est pas un restaurant en train de mourir.
@@ -418,11 +492,14 @@ export function scoreActivite(input: {
   const recencyPhrase =
     days === 0 ? 'dernière commande aujourd’hui' : `dernière commande il y a ${days} j`;
 
-  if (input.previousOrders7d <= 0) {
+  if (input.previousOrders7d < TREND_MIN_REFERENCE_ORDERS) {
     return {
       measured: true,
       score: Math.round(recency * 100),
-      detail: `${input.orders7d} commande(s) sur 7 j, ${recencyPhrase} — tendance non mesurable, la semaine précédente était vide.`,
+      detail:
+        input.previousOrders7d <= 0
+          ? `${input.orders7d} commande(s) sur 7 j, ${recencyPhrase} — tendance non mesurable, la semaine précédente était vide.`
+          : `${input.orders7d} commande(s) sur 7 j, ${recencyPhrase} — tendance non mesurable, la semaine précédente ne pesait que ${input.previousOrders7d} commande(s).`,
     };
   }
 
@@ -448,13 +525,16 @@ export function scoreActivite(input: {
  * quatre du produit : reprocher à un restaurant sans téléviseur de ne pas
  * utiliser les écrans de salle n'apprend rien à personne. Ce qu'on veut voir,
  * c'est ce qui est en place et qui dort.
+ *
+ * Seuls les modules de `SCORED_MODULE_KEYS` entrent dans la note — voir là-bas
+ * pourquoi le suivi des stocks s'affiche sans compter.
  */
 export function scoreAdoption(modules: readonly CrmModuleAdoption[]): {
   measured: boolean;
   score: number | null;
   detail: string;
 } {
-  const open = modules.filter((m) => m.provisioned);
+  const open = modules.filter((m) => m.provisioned && SCORED_MODULE_KEYS.includes(m.key));
   if (open.length === 0) {
     return { measured: false, score: null, detail: 'Aucun module ouvert — rien à juger.' };
   }
@@ -502,30 +582,37 @@ export function scoreTechnique(fleet: CrmFleet): {
 }
 
 /**
- * AXE PAIEMENT — binaire, parce que la réalité l'est.
+ * AXE PAIEMENT — il vit dans `@sm/contracts` (`paiementAxis`), pas ici.
  *
- * `suspended` est le seul statut qui vaut zéro : c'est le seul où l'on a
- * coupé la porte. `churned` n'est pas un impayé — c'est un départ, et il n'a
- * pas à faire chuter le score technique d'un compte qu'on n'accompagne plus.
- * `trial` vaut plein pot : on ne facture pas encore.
+ * Ce fichier a porté un `scorePaiement(status)` qui ne lisait QUE le statut de
+ * compte, c'est-à-dire la conséquence d'un impayé et jamais sa cause : un
+ * client qui devait trois mois mais qu'on n'avait pas encore suspendu
+ * ressortait à « Abonnement à jour », 100/100. Le score était flatteur là où il
+ * fallait qu'il soit gênant, et la suspension qui finissait par tomber
+ * paraissait arbitraire — rien, sur la fiche, ne l'avait annoncée.
+ *
+ * `paiementAxis(status, outstanding)` rend la même forme, alimentée par
+ * l'ardoise réelle (`BillingService.outstandingFor`) : bandes de retard, montant
+ * échu, ancienneté de la plus vieille créance. Il est en contrats parce que la
+ * règle de recouvrement appartient à la facturation, pas à la santé.
  */
-export function scorePaiement(status: TenantAccountStatus): {
-  measured: boolean;
-  score: number | null;
-  detail: string;
-} {
-  if (status === 'suspended') {
-    return { measured: true, score: 0, detail: 'Compte suspendu — accès coupé.' };
-  }
-  if (status === 'churned') {
-    return { measured: true, score: 50, detail: 'Client parti — compte conservé, plus facturé.' };
-  }
-  return {
-    measured: true,
-    score: 100,
-    detail: status === 'trial' ? 'Période d’essai — rien à facturer.' : 'Abonnement à jour.',
-  };
-}
+
+/**
+ * Habille le résultat d'une fonction d'axe de son intitulé et de son poids.
+ *
+ * Exporté parce que la liste des clients compose EXACTEMENT les mêmes quatre
+ * axes que la fiche : le jour où un poids change, il doit changer aux deux
+ * écrans du même geste.
+ */
+export const healthAxis = (
+  key: CrmHealthAxisKey,
+  r: { measured: boolean; score: number | null; detail: string },
+): CrmHealthAxis => ({
+  key,
+  label: HEALTH_AXIS_LABELS[key],
+  weight: HEALTH_AXIS_WEIGHTS[key],
+  ...r,
+});
 
 /** Verdict qu'une note sur 100 mérite, prise isolément. */
 export function verdictFor(value: number): CrmHealthVerdict {
@@ -648,6 +735,19 @@ export function buildFleet(units: readonly CrmFleetUnit[]): CrmFleet {
  * canaux de vente, un battement de cœur pour les deux surfaces d'affichage.
  * Une tablette appairée qui n'a jamais émis un signe de vie n'est pas un
  * module utilisé, c'est un carton ouvert.
+ *
+ *  - SUIVI DES STOCKS : rendu SEULEMENT si `supply` est fourni, c'est-à-dire si
+ *    le contexte appro a répondu. Ouvert = un registre monté (assez
+ *    d'ingrédients actifs pour que ce ne soit pas une ébauche, et au moins un
+ *    fournisseur) ; utilisé = au moins un mouvement de stock enregistré. Les
+ *    recettes et les tarifs fournisseurs ne comptent pas comme un usage : ils se
+ *    saisissent une fois à l'installation, souvent par nous. C'est la règle de
+ *    `SignalsService.stocksModule`, tenue ici sur les mêmes chiffres — les deux
+ *    écrans doivent dire le même mot au même client.
+ *
+ * L'argument est OPTIONNEL, et pas par confort : `SignalsService` appelle cette
+ * fonction puis ajoute son propre module « stocks » ; lui en rendre un
+ * deuxième afficherait la ligne en double dans la file.
  */
 export function buildModules(input: {
   posOrders: number;
@@ -657,6 +757,14 @@ export function buildModules(input: {
   kdsDevices: readonly CrmFleetUnit[];
   posDevices: readonly CrmFleetUnit[];
   screens: readonly CrmFleetUnit[];
+  /** `null`/absent = appro injoignable ou non demandée : pas de module stocks. */
+  supply?: {
+    ingredients: number;
+    suppliers: number;
+    movements: number;
+    movements30d: number;
+    lastMovementAt?: Date | string | null;
+  } | null;
 }): CrmModuleAdoption[] {
   const lastSeen = (units: readonly CrmFleetUnit[]): string | null =>
     units
@@ -667,6 +775,25 @@ export function buildModules(input: {
 
   const kdsLast = lastSeen(input.kdsDevices);
   const screenLast = lastSeen(input.screens);
+
+  const supply = input.supply ?? null;
+  const stocks: CrmModuleAdoption[] = [];
+  if (supply) {
+    const provisioned =
+      supply.ingredients >= STOCKS_SETUP_MIN_INGREDIENTS && supply.suppliers > 0;
+    stocks.push({
+      key: 'stocks',
+      label: MODULE_LABELS.stocks,
+      provisioned,
+      used: supply.movements > 0,
+      lastUsedAt: iso(supply.lastMovementAt ?? null),
+      detail: !provisioned
+        ? `${supply.ingredients} ingrédient(s) et ${supply.suppliers} fournisseur(s) — registre pas encore monté.`
+        : supply.movements > 0
+          ? `${supply.movements} mouvement(s) de stock enregistré(s), dont ${supply.movements30d} sur 30 j.`
+          : `${supply.ingredients} ingrédients et ${supply.suppliers} fournisseurs configurés, aucun mouvement de stock jamais enregistré — le réassort que voit le gérant se calcule sur un stock qui ne bouge pas.`,
+    });
+  }
 
   return [
     {
@@ -719,163 +846,19 @@ export function buildModules(input: {
             ? `${input.screens.length} écran(s) de salle en service.`
             : `${input.screens.length} écran(s) de salle déclaré(s), jamais connecté(s).`,
     },
+    ...stocks,
   ];
-}
-
-/** Gravité finale : bande de la famille + ampleur (0-9) à l'intérieur. */
-export function gravityOf(kind: CrmSignalKind, magnitude: number): number {
-  return SIGNAL_GRAVITY_BASE[kind] + clamp(Math.round(magnitude), 0, 9);
-}
-
-/**
- * Ordre d'appel : gravité décroissante, puis chiffre décroissant, puis nom du
- * restaurant. Le dernier critère n'a aucun sens métier — il n'est là que pour
- * qu'une file identique s'affiche deux fois dans le même ordre.
- */
-export function sortSignals(signals: CrmSignal[]): CrmSignal[] {
-  return [...signals].sort(
-    (a, b) =>
-      b.gravity - a.gravity || b.value - a.value || a.tenantName.localeCompare(b.tenantName, 'fr'),
-  );
-}
-
-/**
- * LA FILE DE TRAVAIL — ce qui mérite un appel cette semaine, tous clients
- * confondus. Fonction pure : les lectures de base sont faites par le service,
- * la décision « faut-il appeler ? » est ici, où elle se teste.
- */
-export function buildSignalsFor(
-  client: {
-    tenantId: string;
-    tenantName: string;
-    accountStatus: TenantAccountStatus;
-    suspendedAt: Date | null;
-    /** Entrée dans le parc — sert à distinguer « jamais démarré » de « tout neuf ». */
-    since: Date | null;
-    lastOrderAt: Date | null;
-    orders7d: number;
-    previousOrders7d: number;
-    fleet: readonly CrmFleetUnit[];
-    modules: readonly CrmModuleAdoption[];
-  },
-  now: Date,
-): CrmSignal[] {
-  const out: CrmSignal[] = [];
-  const base = { tenantId: client.tenantId, tenantName: client.tenantName };
-
-  // ─ Impayé : l'accès est coupé, c'est le dossier le plus chaud du parc ─
-  if (isAccessBlocked(client.accountStatus)) {
-    const days = daysSince(client.suspendedAt, now) ?? 0;
-    out.push({
-      ...base,
-      kind: 'impaye',
-      gravity: gravityOf('impaye', days / 7),
-      title: 'Compte suspendu',
-      detail: `Accès coupé depuis ${days} j — le restaurant travaille sans son outil.`,
-      value: days,
-      unit: 'jours',
-      since: iso(client.suspendedAt),
-    });
-  }
-
-  // ─ Jamais démarré : signé, installé, et pas une seule commande ─
-  //
-  // Distinct de l'arrêt d'activité, et il ne faut surtout pas les confondre :
-  // « aucune commande depuis 12 j » sur un restaurant qui n'en a jamais passé
-  // une seule enverrait l'équipe parler d'un décrochage à quelqu'un qui n'a
-  // jamais commencé. C'est un appel d'ONBOARDING, pas de rétention — et c'est
-  // le plus rentable du parc. Le délai de grâce est le même que le seuil de
-  // risque : en dessous, le restaurant vient d'arriver, on le laisse s'installer.
-  const age = daysSince(client.since, now);
-  const silence = daysSince(client.lastOrderAt, now);
-  if (client.lastOrderAt === null) {
-    if (age !== null && age >= CLIENT_RISK_DAYS) {
-      out.push({
-        ...base,
-        kind: 'arret_activite',
-        gravity: gravityOf('arret_activite', age / 7),
-        title: 'Jamais démarré',
-        detail: `Client dans le parc depuis ${age} j sans une seule commande — l’installation n’a jamais abouti.`,
-        value: age,
-        unit: 'jours',
-        since: iso(client.since),
-      });
-    }
-  } else if (silence !== null && silence >= CLIENT_RISK_DAYS) {
-    // ─ Arrêt total : il encaissait, il n'encaisse plus ─
-    out.push({
-      ...base,
-      kind: 'arret_activite',
-      gravity: gravityOf('arret_activite', silence - CLIENT_RISK_DAYS),
-      title: 'Plus aucune commande',
-      detail: `Aucune commande depuis ${silence} j — le restaurant a arrêté d’encaisser sur Snack Manager.`,
-      value: silence,
-      unit: 'jours',
-      since: iso(client.lastOrderAt),
-    });
-  } else if (client.orders7d > 0 || client.previousOrders7d > 0) {
-    // ─ Chute d'activité : il encaisse encore, mais nettement moins ─
-    const pct = deltaPct(client.orders7d, client.previousOrders7d);
-    if (
-      pct !== null &&
-      pct <= -ACTIVITY_DROP_PCT &&
-      client.previousOrders7d >= ACTIVITY_DROP_MIN_ORDERS
-    ) {
-      out.push({
-        ...base,
-        kind: 'chute_activite',
-        gravity: gravityOf('chute_activite', Math.abs(pct) / 10),
-        title: 'Activité en chute',
-        detail: `${client.orders7d} commandes sur 7 j contre ${client.previousOrders7d} la semaine précédente, soit ${frNumber(pct)} %.`,
-        value: Math.abs(pct),
-        unit: 'pourcent',
-        since: iso(client.lastOrderAt),
-      });
-    }
-  }
-
-  // ─ Appareil muet : appairé, mais plus un signe de vie depuis 24 h ─
-  for (const unit of client.fleet) {
-    if (!unit.paired) continue;
-    const elapsed = unit.lastSeenAt ? now.getTime() - new Date(unit.lastSeenAt).getTime() : null;
-    if (elapsed !== null && elapsed < DEVICE_SILENT_AFTER_MS) continue;
-    const hours = elapsed === null ? null : Math.floor(elapsed / HOUR_MS);
-    out.push({
-      ...base,
-      kind: 'appareil_muet',
-      gravity: gravityOf('appareil_muet', hours === null ? 9 : hours / 24 - 1),
-      title: `${unit.kindLabel} muet — ${unit.name}`,
-      detail:
-        hours === null
-          ? `${unit.kindLabel} « ${unit.name} » appairé mais jamais connecté : l’installation n’a pas été finie.`
-          : `${unit.kindLabel} « ${unit.name} » sans signe de vie depuis ${sinceLabel(elapsed ?? 0)}.`,
-      value: hours ?? 0,
-      unit: 'heures',
-      since: unit.lastSeenAt,
-    });
-  }
-
-  // ─ Module ouvert jamais utilisé : de la formation, ou une ligne à justifier ─
-  const idle = client.modules.filter((m) => m.provisioned && !m.used);
-  if (idle.length > 0) {
-    out.push({
-      ...base,
-      kind: 'module_inutilise',
-      gravity: gravityOf('module_inutilise', idle.length - 1),
-      title: `Module ouvert jamais utilisé — ${idle.map((m) => m.label).join(', ')}`,
-      detail: `${idle.length} module(s) en service chez le client sans aucune utilisation : à former, ou à retirer de la facture.`,
-      value: idle.length,
-      unit: 'modules',
-      since: null,
-    });
-  }
-
-  return out;
 }
 
 // ─── Lignes d'agrégat MongoDB ───
 
-type TenantActivityRow = {
+/**
+ * Une ligne d'activité telle que `activityGroup` la rend, par tenant.
+ *
+ * EXPORTÉE avec l'agrégat : la liste des clients (`CrmService.listClients`)
+ * lit exactement la même chose sur tout le parc, en une passe.
+ */
+export type TenantActivityRow = {
   _id: unknown;
   lastOrderAt: Date | null;
   orders7: number;
@@ -892,7 +875,8 @@ type TenantActivityRow = {
   onlineLastAt: Date | null;
 };
 
-const EMPTY_ACTIVITY: Omit<TenantActivityRow, '_id'> = {
+/** Le repli d'un restaurant sans une seule commande — jamais « pas de ligne ». */
+export const EMPTY_ACTIVITY: Omit<TenantActivityRow, '_id'> = {
   lastOrderAt: null,
   orders7: 0,
   revenue7: 0,
@@ -935,8 +919,13 @@ export function windowBounds(now: Date): {
  * générateurs de recette : c'est la convention de `CrmService.listClients`, et
  * la fiche d'un client ne peut pas afficher un chiffre différent de la liste
  * d'où l'on vient de cliquer.
+ *
+ * EXPORTÉ pour que ce ne soit plus une convention mais LE MÊME CODE : la fiche
+ * le passe avec un `$match` sur un tenant, la liste et la file de signaux sans
+ * `$match` du tout. Un `$group` recopié à trois endroits aurait fini par ne
+ * plus compter la même chose aux trois écrans.
  */
-function activityGroup(bounds: ReturnType<typeof windowBounds>): Record<string, unknown> {
+export function activityGroup(bounds: ReturnType<typeof windowBounds>): Record<string, unknown> {
   const between = (from: Date, to?: Date) =>
     to
       ? { $and: [{ $gte: ['$createdAt', from] }, { $lt: ['$createdAt', to] }] }
@@ -986,6 +975,10 @@ export class HealthService {
     @InjectModel('Screen') private readonly screens: Model<Screen>,
     @Inject(SUPPLY_DB) private readonly db: SupplyDb,
     private readonly admin: AdminService,
+    // Le seul chiffre qui dise si un client PAIE. Sans lui, l'axe « paiement »
+    // ne pouvait que relire le statut de compte et répondre « à jour » à tout
+    // le monde, y compris à celui qu'on s'apprêtait à suspendre.
+    private readonly billing: BillingService,
   ) {}
 
   /**
@@ -1005,10 +998,14 @@ export class HealthService {
     await this.admin.recordDetailView(actor, id);
 
     const bounds = windowBounds(now);
-    const [activity, fleet, supply] = await Promise.all([
+    // L'ardoise est lue DANS cette passe, et pas dans l'expression de l'axe :
+    // l'y écrire aurait sérialisé une quatrième requête derrière les trois
+    // autres, sur le chemin critique d'une fiche qu'on ouvre entre deux appels.
+    const [activity, fleet, supply, outstanding] = await Promise.all([
       this.tenantActivity(id, bounds),
       this.tenantFleet(id, now),
       this.supplyHealth(id, now),
+      this.billing.outstandingFor(id, now),
     ]);
 
     const modules = buildModules({
@@ -1019,24 +1016,16 @@ export class HealthService {
       posDevices: fleet.units.filter((u) => u.kind === 'pos'),
       kdsDevices: fleet.units.filter((u) => u.kind === 'kds'),
       screens: fleet.units.filter((u) => u.kind === 'screen'),
+      // Appro injoignable : pas de module « stocks » inventé à partir de rien.
+      supply: supply.available ? supply : null,
     });
 
     const account = readAccount(tenant);
     const days = daysSince(activity.lastOrderAt, now);
     const health = clientHealth(activity.lastOrderAt, now);
 
-    const axis = (
-      key: CrmHealthAxisKey,
-      r: { measured: boolean; score: number | null; detail: string },
-    ): CrmHealthAxis => ({
-      key,
-      label: HEALTH_AXIS_LABELS[key],
-      weight: HEALTH_AXIS_WEIGHTS[key],
-      ...r,
-    });
-
     const score = compositeScore([
-      axis(
+      healthAxis(
         'activite',
         scoreActivite({
           daysSinceLastOrder: days,
@@ -1045,9 +1034,9 @@ export class HealthService {
           hasHistory: activity.lastOrderAt !== null,
         }),
       ),
-      axis('adoption', scoreAdoption(modules)),
-      axis('technique', scoreTechnique(fleet)),
-      axis('paiement', scorePaiement(account.status)),
+      healthAxis('adoption', scoreAdoption(modules)),
+      healthAxis('technique', scoreTechnique(fleet)),
+      healthAxis('paiement', paiementAxis(account.status, outstanding)),
     ]);
 
     const plan = (tenant.plan ?? 'essentiel') as CrmTenantHealth['plan'];
@@ -1088,85 +1077,6 @@ export class HealthService {
       supply,
       computedAt: now.toISOString(),
     };
-  }
-
-  /**
-   * LA FILE DE TRAVAIL — tous clients confondus, ce qui mérite un appel cette
-   * semaine, trié par gravité.
-   *
-   * Non journalisée, et c'est délibéré : cette vue n'ouvre le dossier de
-   * personne. Elle ne rend que des agrégats et des états de compte, exactement
-   * comme la liste des clients. La consultation est tracée au moment où l'on
-   * clique sur une ligne pour ouvrir la fiche.
-   */
-  async signals(now: Date = new Date()): Promise<CrmSignal[]> {
-    const bounds = windowBounds(now);
-
-    const [tenants, rows, devices, screens] = await Promise.all([
-      this.tenants.find({}, { name: 1, slug: 1, account: 1, createdAt: 1 }).lean(),
-      // Pas de filtre tenant : la file de travail est TRANS-TENANT par nature.
-      // Le cloisonnement se joue sur le rôle du contrôleur, pas ici.
-      this.orders.aggregate<TenantActivityRow>([
-        { $match: { status: { $ne: 'cancelled' } } },
-        { $group: { _id: '$tenantId', ...activityGroup(bounds) } },
-      ]),
-      this.devices.find({}, DEVICE_FIELDS).lean(),
-      this.screens.find({}, SCREEN_FIELDS).lean(),
-    ]);
-
-    const activityByTenant = new Map(rows.map((r) => [String(r._id), r]));
-    const fleetByTenant = new Map<string, CrmFleetUnit[]>();
-    const push = (tenantId: string, unit: CrmFleetUnit) => {
-      const list = fleetByTenant.get(tenantId) ?? [];
-      list.push(unit);
-      fleetByTenant.set(tenantId, list);
-    };
-    for (const d of devices) {
-      push(
-        String(d.tenantId),
-        toFleetUnit(d, (d.kind ?? 'pos') as RevocableDeviceKind, DEVICE_OFFLINE_AFTER_MS, now),
-      );
-    }
-    for (const s of screens) {
-      push(String(s.tenantId), toFleetUnit(s, 'screen', SCREEN_OFFLINE_AFTER_MS, now));
-    }
-
-    const signals: CrmSignal[] = [];
-    for (const tenant of tenants) {
-      const id = String(tenant._id);
-      const activity = activityByTenant.get(id) ?? EMPTY_ACTIVITY;
-      const fleet = fleetByTenant.get(id) ?? [];
-      const account = readAccount(tenant as RawTenant);
-      const modules = buildModules({
-        posOrders: activity.posOrders30,
-        posLastOrderAt: activity.posLastAt,
-        onlineOrders: activity.onlineOrders30,
-        onlineLastOrderAt: activity.onlineLastAt,
-        posDevices: fleet.filter((u) => u.kind === 'pos'),
-        kdsDevices: fleet.filter((u) => u.kind === 'kds'),
-        screens: fleet.filter((u) => u.kind === 'screen'),
-      });
-
-      signals.push(
-        ...buildSignalsFor(
-          {
-            tenantId: id,
-            tenantName: String(tenant.name ?? ''),
-            accountStatus: account.status,
-            suspendedAt: account.suspendedAt,
-            since: (tenant as RawTenant).createdAt ?? null,
-            lastOrderAt: activity.lastOrderAt,
-            orders7d: activity.orders7,
-            previousOrders7d: activity.ordersPrev7,
-            fleet,
-            modules,
-          },
-          now,
-        ),
-      );
-    }
-
-    return sortSignals(signals);
   }
 
   // ─── Lectures ───
@@ -1211,11 +1121,17 @@ export class HealthService {
    * Le contexte supply vit dans PostgreSQL, pas dans Mongo : une panne de cette
    * base ne doit pas emporter la fiche entière, d'où le repli sur
    * `available: false` plutôt qu'une erreur.
+   *
+   * Trois lectures, pas deux : le REGISTRE lui-même est une donnée
+   * d'accompagnement (combien d'ingrédients, combien de fournisseurs, combien
+   * de mouvements) — c'est ce qui dit si le module « Suivi des stocks » est
+   * monté et s'il vit. Les mouvements se comptent en SQL et ne se rapatrient
+   * pas : la table grossit à chaque réception et à chaque vente.
    */
   private async supplyHealth(tenantId: string, now: Date): Promise<CrmSupplyHealth> {
     const cutoff = new Date(now.getTime() - LONG_WINDOW_DAYS * DAY_MS);
     try {
-      const [rows, tenantSuppliers] = await Promise.all([
+      const [rows, tenantSuppliers, movements] = await Promise.all([
         this.db.query.ingredients.findMany({
           columns: { id: true, isOut: true, currentStock: true, parLevel: true },
           where: (t, { and, eq }) =>
@@ -1233,6 +1149,14 @@ export class HealthService {
             },
           },
         }),
+        this.db
+          .select({
+            total: sql<number>`count(*)::int`,
+            recent: sql<number>`count(*) filter (where ${stockMovements.at} >= ${cutoff})::int`,
+            lastAt: sql<Date | null>`max(${stockMovements.at})`,
+          })
+          .from(stockMovements)
+          .where(eq(stockMovements.tenantRef, tenantId)),
       ]);
 
       const increases: CrmSupplyPriceIncrease[] = [];
@@ -1260,12 +1184,18 @@ export class HealthService {
       }
       increases.sort((a, b) => b.increasePct - a.increasePct);
 
+      const counted = movements[0];
       return {
         available: true,
         belowPar: rows.filter((r) => Number(r.currentStock) < Number(r.parLevel)).length,
         ruptures: rows.filter((r) => r.isOut).length,
         priceIncreases30d: increases.length,
         topPriceIncreases: increases.slice(0, 3),
+        ingredients: rows.length,
+        suppliers: tenantSuppliers.length,
+        movements: Number(counted?.total ?? 0),
+        movements30d: Number(counted?.recent ?? 0),
+        lastMovementAt: iso(counted?.lastAt ?? null),
       };
     } catch (error) {
       this.logger.warn(
@@ -1279,6 +1209,11 @@ export class HealthService {
         ruptures: 0,
         priceIncreases30d: 0,
         topPriceIncreases: [],
+        ingredients: 0,
+        suppliers: 0,
+        movements: 0,
+        movements30d: 0,
+        lastMovementAt: null,
       };
     }
   }
@@ -1300,7 +1235,7 @@ export class HealthService {
  * qui n'ont aucune raison de traverser une vue de pilotage. Ce qu'on lit tient
  * en cinq champs — qui, de quel type, appairé, vu quand, révoqué quand.
  */
-const DEVICE_FIELDS = {
+export const DEVICE_FIELDS = {
   name: 1,
   kind: 1,
   paired: 1,
@@ -1310,7 +1245,7 @@ const DEVICE_FIELDS = {
   createdAt: 1,
 } as const;
 
-const SCREEN_FIELDS = {
+export const SCREEN_FIELDS = {
   name: 1,
   paired: 1,
   lastSeenAt: 1,

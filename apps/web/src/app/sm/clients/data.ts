@@ -18,20 +18,27 @@
  * met un jour à renvoyer des consommateurs nominativement, ce fichier ne doit
  * pas les lire.
  *
- * ─── Pourquoi tout est normalisé depuis `unknown` ───
- * `/crm/tenants/:id/health`, `/insights` et `/crm/signals` s'écrivent en
- * parallèle de cet écran. Plutôt que de parier sur un nom de champ et de
- * casser l'outil le jour où l'API tranche autrement, chaque section est lue
- * défensivement : plusieurs noms plausibles acceptés, section ABSENTE plutôt
- * qu'écran blanc, et jamais d'exception qui remonte jusqu'au rendu. Une fois
- * les types publiés dans `@sm/contracts`, ces lecteurs se remplacent par un
- * import — l'interface, elle, ne bouge pas.
+ * ─── Ce qui est TYPÉ et ce qui reste lu défensivement ───
+ * `/crm/signals` EST publié : `CrmQueueSignal` vit dans `@sm/contracts`, la file
+ * est donc lue avec ce type et plus une ligne de devinette. Une famille ajoutée
+ * ou renommée casse maintenant le typecheck des deux côtés — c'est exactement le
+ * but, et c'est ce qui manquait quand `action`, `href` et `severity` sont
+ * apparus sans que personne ne les affiche.
+ *
+ * `/crm/tenants/:id/health` et `/insights` n'ont pas encore de type publié :
+ * eux restent lus défensivement — plusieurs noms plausibles acceptés, section
+ * ABSENTE plutôt qu'écran blanc, jamais d'exception jusqu'au rendu. Ces
+ * lecteurs-là disparaîtront à leur tour le jour où leurs contrats sortiront.
  *
  * Rappel de convention : tous les montants circulent en CENTIMES (int).
  */
 
 import {
   CLIENT_HEALTHS,
+  CRM_SIGNAL_KIND_LABELS,
+  CRM_SIGNAL_SEVERITIES,
+  CRM_SIGNAL_SEVERITY_LABELS,
+  CRM_SIGNAL_SEVERITY_RANK,
   DEVICE_OFFLINE_AFTER_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
   SCREEN_OFFLINE_AFTER_MS,
@@ -41,6 +48,9 @@ import {
   type AdminTenantAccount,
   type CrmClient,
   type CrmClientHealth,
+  type CrmQueueSignal,
+  type CrmSignalSeverity,
+  type CrmSignalUnit,
   type DeviceRevoke,
   type RevocableDeviceKind,
   type TenantAccountStatus,
@@ -128,15 +138,21 @@ function firstList(...candidates: unknown[]): unknown[] {
 // Modèles de vue
 // ─────────────────────────────────────────────────────────────
 
-/** Trois gravités, pas davantage : une file de travail se trie à l'œil. */
-export const SIGNAL_SEVERITIES = ["critique", "attention", "info"] as const;
-export type SignalSeverity = (typeof SIGNAL_SEVERITIES)[number];
+/**
+ * TROIS GRAVITÉS, et elles viennent du CONTRAT.
+ *
+ * `@sm/contracts` publie la bande, son libellé français et l'ordre d'appel avec
+ * la file elle-même. On les reprend au lieu de les redéclarer : l'API TRANCHE la
+ * bande (`severity`) — elle ne se déduit pas du chiffre `gravity`, un essai qui
+ * s'achève sort à 40 en « critique » et un appareil muet à 60 en « à
+ * surveiller ». Deux tables parallèles finiraient par donner deux sens à
+ * « critique » selon la page d'où l'on vient.
+ */
+export const SIGNAL_SEVERITIES = CRM_SIGNAL_SEVERITIES;
+export type SignalSeverity = CrmSignalSeverity;
 
-export const SIGNAL_SEVERITY_LABELS: Record<SignalSeverity, string> = {
-  critique: "Critique",
-  attention: "À surveiller",
-  info: "Pour information",
-};
+export const SIGNAL_SEVERITY_LABELS: Record<SignalSeverity, string> =
+  CRM_SIGNAL_SEVERITY_LABELS;
 
 /**
  * Ce que chaque gravité veut dire pour l'équipe. Écrit ici plutôt que dans la
@@ -148,7 +164,14 @@ export const SIGNAL_SEVERITY_HINTS: Record<SignalSeverity, string> = {
   info: "Bon prétexte d'appel, sans urgence.",
 };
 
-/** L'API peut parler anglais, français, ou par niveaux — on ramène à trois. */
+/**
+ * Repli pour les surfaces SANS contrat.
+ *
+ * `/crm/signals` est publié : sa gravité est lue telle quelle. `/insights`, lui,
+ * ne l'est pas encore et parle tantôt anglais, tantôt par niveaux — on ramène
+ * ses recommandations aux trois mêmes bandes plutôt que d'inventer une échelle
+ * de plus. À supprimer le jour où `/insights` aura son type.
+ */
 const SEVERITY_ALIASES: Record<string, SignalSeverity> = {
   critique: "critique",
   critical: "critique",
@@ -171,14 +194,37 @@ const SEVERITY_ALIASES: Record<string, SignalSeverity> = {
 export const readSeverity = (v: unknown): SignalSeverity =>
   SEVERITY_ALIASES[String(v ?? "").toLowerCase()] ?? "info";
 
-export const SEVERITY_RANK: Record<SignalSeverity, number> = {
-  critique: 0,
-  attention: 1,
-  info: 2,
-};
+/**
+ * ORDRE D'APPEL — celui du contrat, donc celui de l'API.
+ *
+ * La liste des clients, la fiche et la file trient la MÊME file de travail :
+ * deux ordres différents feraient apparaître le même parc dans deux ordres
+ * selon la page d'où l'on vient, et l'équipe ne saurait plus ce qu'elle a déjà
+ * traité.
+ */
+export const SEVERITY_RANK: Record<SignalSeverity, number> =
+  CRM_SIGNAL_SEVERITY_RANK;
 
-/** Une ligne de la liste des clients, enrichie de ce que l'API veut bien donner. */
-export type ClientRow = CrmClient & {
+/**
+ * Une ligne de la liste des clients, enrichie de ce que l'API veut bien donner.
+ *
+ * `CrmClient` vient de se doter de `accountStatus`, `score`, `previousOrders`,
+ * `ordersDeltaPct` et `devicesOffline` — vérifié en curl sur `GET /crm/tenants`,
+ * qui les rend bien. Ils sont retirés de l'intersection pour deux raisons :
+ *
+ *  · les trois premiers restent NULLABLES ici. Le contrat les promet toujours
+ *    présents ; la liste, elle, doit continuer de s'afficher si un environnement
+ *    plus ancien ne les envoie pas — une pastille sans chiffre vaut mieux qu'un
+ *    parc entier absent ;
+ *  · `previousOrders` / `ordersDeltaPct` portent DÉJÀ un nom côté écran
+ *    (`ordersPrev30d`, `trendPct`), utilisé par la liste. Deux paires de noms
+ *    pour la même mesure, c'est la garantie qu'un jour l'une des deux affiche
+ *    autre chose que l'autre.
+ */
+export type ClientRow = Omit<
+  CrmClient,
+  "accountStatus" | "score" | "previousOrders" | "ordersDeltaPct" | "devicesOffline"
+> & {
   /** Ville — utile pour situer un appel, jamais une adresse de consommateur. */
   city: string;
   /** Statut commercial du compte ; `null` tant que la route ne le renvoie pas. */
@@ -282,16 +328,28 @@ export type Recommendation = {
   gainCentsPerMonth: number | null;
 };
 
-export type ClientSignal = {
-  id: string;
-  severity: SignalSeverity;
-  title: string;
-  detail: string;
-  tenantId: string;
-  tenantName: string;
-  at: string | null;
-  /** Étiquette courte de famille : « appareil », « stock », « activité »… */
-  kind: string;
+/**
+ * UNE LIGNE DE LA FILE DE TRAVAIL — la forme du contrat, sans rien perdre.
+ *
+ * `CrmQueueSignal` porte huit choses que l'écran doit dire et que l'ancienne
+ * lecture jetait : la BANDE tranchée par l'API (`severity`, `severityLabel`),
+ * la GRAVITÉ chiffrée qui départage deux signaux de même bande (`gravity`), le
+ * CHIFFRE qui justifie l'appel (`value` + `unit`), l'ANCIENNETÉ (`ageDays`), le
+ * LIEN direct vers la fiche (`href`) et surtout la CONSIGNE (`action`) — la
+ * phrase à dire quand le gérant décroche, rédigée par l'API parce qu'elle seule
+ * connaît le montant de l'ardoise et les jours d'essai restants.
+ *
+ * On étend le type plutôt que de le recopier : une famille ajoutée ou renommée
+ * casse alors la compilation ici, au lieu de se voir un lundi matin devant
+ * l'équipe.
+ */
+export type ClientSignal = CrmQueueSignal & {
+  /**
+   * Étiquette FRANÇAISE et COURTE de la famille (« Appareil muet »), résolue
+   * une fois. L'API rend la clé technique (`appareil_muet`) : elle est faite
+   * pour être groupée et comparée, pas pour être lue à l'écran.
+   */
+  kindLabel: string;
 };
 
 /**
@@ -434,8 +492,11 @@ export function trend(current: number, previous: number | null): number | null {
 export function readClientRow(raw: unknown): ClientRow {
   const o = bag(raw);
   const orders30d = num(o, "orders30d") ?? 0;
+  // `previousOrders` est le nom du contrat, relevé en curl ; les autres sont les
+  // noms qu'a portés cette route avant qu'il soit publié.
   const prev = num(
     o,
+    "previousOrders",
     "ordersPrev30d",
     "orders30dPrev",
     "ordersPrevious30d",
@@ -464,7 +525,21 @@ export function readClientRow(raw: unknown): ClientRow {
       readAccountStatus(o.status),
     score: num(o, "score", "healthScore"),
     ordersPrev30d: prev,
-    trendPct: num(o, "trendPct", "ordersTrendPct") ?? trend(orders30d, prev),
+    /*
+      `ordersDeltaPct: null` N'EST PAS UNE ABSENCE, c'est un REFUS — l'API dit
+      que la période de référence ne pesait pas assez pour qu'un pourcentage
+      veuille dire quelque chose. Relevé en curl sur le parc de développement :
+      `orders30d: 2045`, `previousOrders: 16`, `ordersDeltaPct: null`. Le
+      recalculer localement afficherait « +12 681 % », qui ne dit pas qu'un
+      restaurant explose mais qu'il a été installé le mois dernier — et une
+      colonne qui affiche ça une fois, on apprend à ne plus la lire.
+
+      On ne retombe donc sur le calcul local que si le champ est ABSENT.
+    */
+    trendPct:
+      "ordersDeltaPct" in o
+        ? num(o, "ordersDeltaPct")
+        : (num(o, "trendPct", "ordersTrendPct") ?? trend(orders30d, prev)),
     lastActivityAt: iso(o, "lastActivityAt", "lastSeenAt") ?? lastOrderAt,
     devicesOffline: num(o, "devicesOffline", "offlineDevices"),
     openSignals: num(o, "openSignals", "signals", "signalsCount"),
@@ -702,24 +777,114 @@ function readRecommendations(raw: unknown): Recommendation[] {
   });
 }
 
-export function readSignal(raw: unknown, i = 0): ClientSignal {
-  const o = bag(raw);
+/**
+ * DESTINATION DE CLIC — chemin interne de ce back-office, et rien d'autre.
+ *
+ * C'est le seul endroit où l'on ne fait PAS confiance au contrat, et pour une
+ * raison qui n'a rien à voir avec la forme des données : `href` finit dans un
+ * `<Link>`. Un « // » ou un « http » suffirait à envoyer l'équipe hors du
+ * produit sur un simple changement côté serveur. On retombe alors sur la fiche
+ * du client, qui est de toute façon la destination voulue.
+ */
+function readSignalHref(href: string, tenantId: string): string {
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  return tenantId ? `/sm/clients/${tenantId}` : "/sm/clients";
+}
+
+/**
+ * Le signal, tel que `GET /crm/signals` le rend — relevé en curl :
+ *
+ *   [{ "tenantId":"6a84…", "tenantName":"CLASS'FOOD", "tenantSlug":"classfood",
+ *      "planLabel":"Complet", "accountStatus":"active",
+ *      "accountStatusLabel":"Actif", "href":"/sm/clients/6a84…",
+ *      "id":"appareil_muet:6a84…:6a85…", "kind":"appareil_muet",
+ *      "severity":"attention", "gravity":60, "title":"Écran cuisine muet",
+ *      "detail":"Écran cuisine sans signe de vie depuis 4 h — le restaurant a
+ *      pris 1 commande depuis.", "action":"Appeler le comptoir : tablette
+ *      débranchée, wifi coupé ou application fermée.", "value":4,
+ *      "unit":"heures", "since":"2026-08-19T13:29:53.069Z",
+ *      "severityLabel":"À surveiller", "ageDays":0 }]
+ *
+ * Deux ajouts, pas un de plus : l'étiquette française de famille, et le
+ * garde-fou sur le lien. Tout le reste passe intact — réécrire `severity` ou
+ * `action` côté écran, ce serait se donner une seconde source de vérité pour la
+ * même phrase.
+ */
+export function readSignal(raw: CrmQueueSignal): ClientSignal {
   return {
-    id: str(o, "id", "_id", "key") || `s${i}`,
-    severity: readSeverity(o.severity ?? o.level ?? o.gravity ?? o.priority),
-    title: str(o, "title", "label", "headline", "message") || "Signal",
-    detail: str(o, "detail", "description", "hint", "message"),
-    tenantId: str(o, "tenantId", "tenant", "clientId", "_tenantId"),
-    tenantName: str(o, "tenantName", "name", "restaurant", "clientName"),
-    at: iso(o, "at", "createdAt", "since", "detectedAt"),
-    kind: str(o, "kind", "type", "family", "category"),
+    ...raw,
+    kindLabel: CRM_SIGNAL_KIND_LABELS[raw.kind] ?? raw.kind,
+    // L'API résout déjà le libellé de bande ; on ne recalcule que s'il manque.
+    severityLabel: raw.severityLabel || SIGNAL_SEVERITY_LABELS[raw.severity],
+    href: readSignalHref(raw.href, raw.tenantId),
   };
 }
 
+/**
+ * La route rend un TABLEAU nu, déjà trié et sans pagination (contrat + curl).
+ * Le seul cas qu'on absorbe est l'absence de réponse : `soft()` rend `null`
+ * quand le service est à l'arrêt, et une fiche client ne tombe pas pour ça.
+ */
 export const readSignals = (raw: unknown): ClientSignal[] =>
-  firstList(raw, dig(raw, "signals"), dig(raw, "items"), dig(raw, "results")).map(
-    readSignal,
-  );
+  (Array.isArray(raw) ? (raw as CrmQueueSignal[]) : []).map(readSignal);
+
+// ─── Mise en mots du chiffre porté par un signal ───
+
+/**
+ * SUFFIXE COURT PAR UNITÉ — deux unités n'en ont volontairement pas.
+ *
+ * `modules` vaut toujours 1 (un signal PAR module dormant) : « 1 mod. » n'ajoute
+ * rien à un titre qui nomme déjà le module, et une pastille qui n'apprend rien
+ * apprend à ne plus regarder les pastilles.
+ *
+ * `euros` existe dans le contrat mais aucune famille ne l'émet aujourd'hui, et
+ * rien ne dit si la valeur arriverait en euros ou en CENTIMES. Afficher
+ * « 4 500 € » pour 45,00 € est pire que ne rien afficher — le montant, lui, est
+ * déjà écrit en toutes lettres dans le `detail` rédigé par l'API.
+ */
+const SIGNAL_UNIT_SUFFIX: Record<CrmSignalUnit, string | null> = {
+  jours: "j",
+  heures: "h",
+  pourcent: "%",
+  commandes: "cmd",
+  ingredients: "ingr.",
+  modules: null,
+  euros: null,
+};
+
+/**
+ * Le chiffre qui justifie l'appel, écrit court : « 4 h », « 12 j », « 31 % ».
+ * Chaîne vide quand l'unité ne se résume pas — la phrase de l'API le porte.
+ */
+export function fmtSignalFigure(signal: {
+  value: number;
+  unit: CrmSignalUnit;
+}): string {
+  const suffix = SIGNAL_UNIT_SUFFIX[signal.unit];
+  if (!suffix) return "";
+  return `${Math.round(signal.value).toLocaleString("fr-FR")} ${suffix}`;
+}
+
+/**
+ * DEPUIS QUAND ÇA DURE — l'information qui manquait le plus à l'écran.
+ *
+ * Un impayé de douze jours et un impayé du matin se disent au téléphone avec
+ * deux voix différentes. `ageDays` est `null` quand la situation n'a pas de date
+ * d'entrée (un module dormant n'a jamais « commencé ») : on n'écrit alors rien
+ * plutôt qu'un « depuis 0 jour » qui serait faux.
+ */
+export function fmtSignalAge(ageDays: number | null): string {
+  if (ageDays === null) return "";
+  if (ageDays <= 0) return "depuis aujourd'hui";
+  if (ageDays === 1) return "depuis hier";
+  if (ageDays < 31) return `depuis ${ageDays} jours`;
+  const months = Math.round(ageDays / 30);
+  return `depuis ${months} mois`;
+}
+
+/** Date d'entrée en toutes lettres — pour une infobulle, jamais pour la ligne. */
+export const fmtSignalSince = (since: string | null): string | undefined =>
+  since ? new Date(since).toLocaleString("fr-FR") : undefined;
 
 function readJournal(raw: unknown): AdminLogEntry[] {
   return firstList(raw, dig(raw, "items"), dig(raw, "entries"), dig(raw, "logs"))

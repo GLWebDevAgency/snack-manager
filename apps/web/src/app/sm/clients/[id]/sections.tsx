@@ -19,6 +19,7 @@
  * restaurateur lui appartient.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   ADMIN_LOG_ACTION_LABELS,
@@ -31,6 +32,9 @@ import { Btn, Icon, Input, Panel, useToast } from "@/components/ui";
 import { euroRound, fmtDay, int } from "../../crm";
 import {
   clientsApi,
+  fmtSignalAge,
+  fmtSignalFigure,
+  fmtSignalSince,
   fmtSince,
   scoreHealth,
   HEALTH_TEXT,
@@ -39,6 +43,7 @@ import {
   SUPPLY_ALERT_LABELS,
   trend,
   type ClientFile,
+  type ClientSignal,
   type Comparison,
   type HealthComponent,
   type ModuleAdoption,
@@ -509,6 +514,175 @@ export function SupplySection({ file }: { file: ClientFile }) {
         </ul>
       )}
     </Panel>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Signaux ouverts
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * CE QUI EST OUVERT SUR CE CLIENT, ET CE QU'ON EN DIT.
+ *
+ * La file de travail (`/sm/signals`) balaie tout le parc ; cette carte n'en
+ * garde que ce restaurant, dans le MÊME ordre. C'est la première chose qu'on
+ * lit en ouvrant la fiche parce que c'est la raison de l'appel.
+ *
+ * Trois défauts corrigés ici, tous constatés à l'écran :
+ *
+ *  · la carte affichait la CLÉ technique de gravité (« critique ») en guise
+ *    d'étiquette. On affiche maintenant le libellé français rendu par l'API
+ *    (`severityLabel` : « À surveiller ») et la famille en clair
+ *    (« Appareil muet ») — la clé sert à grouper, pas à se lire ;
+ *  · la CONSIGNE (`action`) n'apparaissait nulle part : c'est pourtant la
+ *    phrase à dire au téléphone, et la moitié de la valeur du signal ;
+ *  · l'ANCIENNETÉ et le CHIFFRE (`ageDays`, `value`/`unit`) étaient jetés. Un
+ *    impayé de douze jours et un impayé du matin ne se disent pas pareil.
+ *
+ * Couleurs fonctionnelles uniquement — rouge, ambre, gris ; jamais l'accent
+ * laiton, qui reste aux actions primaires (DA §3).
+ */
+export function SignalsSection({ file }: { file: ClientFile }) {
+  const signals = [...file.signals].sort(
+    (a, b) =>
+      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.gravity - a.gravity,
+  );
+  const worst = signals[0]?.severity;
+
+  return (
+    <Panel
+      title="Signaux ouverts"
+      sub={
+        signals.length === 0
+          ? "Ce que la file de travail retient sur ce client"
+          : `${int(signals.length)} raison${signals.length > 1 ? "s" : ""} d'appeler, de la plus urgente à la moins urgente`
+      }
+      actions={
+        <Link
+          href="/sm/signals"
+          className="text-[13px] font-bold text-accent hover:underline"
+        >
+          Toute la file
+        </Link>
+      }
+    >
+      {signals.length === 0 ? (
+        file.offline.has("signals") ? (
+          <Unavailable
+            icon="bell"
+            title="File de signaux indisponible"
+            hint="La route /crm/signals n'a pas répondu : impossible de dire si ce client a quelque chose d'ouvert. Le reste de la fiche reste lisible."
+          />
+        ) : (
+          /*
+            RIEN À SIGNALER ≠ PANNE. Un vide muet, sur la carte qui porte la
+            raison de l'appel, se lit comme un service à l'arrêt. On affirme
+            donc, en vert fonctionnel, que la revue a eu lieu et n'a rien
+            trouvé.
+          */
+          <div className="flex items-start gap-2.5 rounded-card border border-ok/35 bg-ok/8 p-3">
+            <Icon name="check" size={16} className="mt-px shrink-0 text-okt" />
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-okt">
+                Rien à signaler sur ce client
+              </div>
+              <div className="mt-0.5 text-xs text-mut">
+                Ni impayé, ni décrochage, ni appareil muet, ni module dormant. Il
+                n&apos;apparaît dans aucune bande de la file de travail — un
+                appel ici serait un appel de courtoisie, pas un rattrapage.
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {signals.map((s) => (
+            <SignalCard key={s.id} signal={s} />
+          ))}
+        </ul>
+      )}
+
+      {signals.length > 0 && worst === "critique" && (
+        <p className="mt-3 border-t border-line2 pt-2.5 text-xs text-mut">
+          Gravité, ordre et consigne viennent de l&apos;API (
+          <span className="cf-fig">/crm/signals</span>) : c&apos;est la même file
+          que celle du matin, filtrée sur ce restaurant.
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+function SignalCard({ signal: s }: { signal: ClientSignal }) {
+  const figure = fmtSignalFigure(s);
+  const age = fmtSignalAge(s.ageDays);
+
+  return (
+    <li
+      className={cx(
+        "rounded-card border p-3",
+        s.severity === "critique"
+          ? "border-alert/40 bg-alert/8"
+          : "border-white/6 bg-[image:var(--cf-elev-gradient)]",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        {/* La bande, en toutes lettres et en couleur fonctionnelle. */}
+        <span
+          className={cx(
+            "shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
+            SEVERITY_BORDER[s.severity],
+          )}
+        >
+          {s.severityLabel}
+        </span>
+        <span className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
+          {s.kindLabel}
+        </span>
+        <span className="flex-1" />
+        {figure && (
+          <span
+            className={cx(
+              "cf-fig shrink-0 whitespace-nowrap rounded-pill border-[1.5px] px-2 py-px text-[12px] font-extrabold",
+              s.severity === "critique"
+                ? "border-alert/60 text-alertt"
+                : s.severity === "attention"
+                  ? "border-prep/55 text-prept"
+                  : "border-white/18 text-mut",
+            )}
+            title={`${s.value} ${s.unit}`}
+          >
+            {figure}
+          </span>
+        )}
+        {age && (
+          <span
+            className="shrink-0 whitespace-nowrap text-[12px] text-mut"
+            title={fmtSignalSince(s.since)}
+          >
+            {age}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-1.5 text-[13.5px] font-bold text-ink">{s.title}</div>
+      {s.detail && (
+        <p className="mt-0.5 text-[13px] leading-[1.45] text-mut">{s.detail}</p>
+      )}
+
+      {/*
+        LA PHRASE À DIRE. Détachée par un filet, jamais tronquée : c'est la
+        seule ligne de la carte qui se traduit en geste. Elle est rédigée par
+        l'API — elle seule connaît le montant de l'ardoise et les jours d'essai
+        restants ; en réécrire une seconde ici finirait par la contredire.
+      */}
+      <p className="mt-2 border-l-2 border-white/15 pl-2.5 text-[13px] font-semibold leading-[1.45] text-ink/90">
+        <span className="mr-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
+          À dire
+        </span>{" "}
+        {s.action}
+      </p>
+    </li>
   );
 }
 

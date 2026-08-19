@@ -8,6 +8,7 @@ import {
   REVOCABLE_DEVICE_KIND_LABELS,
   TENANT_ACCOUNT_STATUS_LABELS,
   isAccessBlocked,
+  type AdminInvoiceGesture,
   type AdminLogAction,
   type AdminLogEntry,
   type AdminLogQuery,
@@ -193,6 +194,45 @@ export class AdminService {
       action: 'tenant.note',
       tenantId: String(tenant._id),
       reason: body.note,
+    });
+  }
+
+  // ─── Facturation ───
+
+  /**
+   * Trace un GESTE DE FACTURATION — émission, encaissement, annulation.
+   *
+   * Point d'entrée réservé à `BillingService`, qui rédige la phrase (via
+   * `BILLING_JOURNAL`) et connaît la pièce ; ce service, lui, tient le registre.
+   * La séparation est celle du reste du fichier : la facturation décide, le
+   * journal enregistre.
+   *
+   * POURQUOI CE POINT D'ENTRÉE EXISTE. Ces trois gestes passaient par
+   * `addNote`, donc sous l'action `tenant.note`, intitulée « Note interne » à
+   * l'écran. Un encaissement de 139 € qui s'affiche comme un commentaire libre
+   * est un journal qui se trompe sur la NATURE de ce qui s'est produit — et
+   * c'est précisément ce registre qu'on ouvre en cas de litige. Trois actions
+   * dédiées le rendent exact, filtrable, et rattaché à la PIÈCE (`targetId`)
+   * plutôt qu'au seul établissement.
+   *
+   * L'écriture reste une INSERTION, comme toutes les autres : le journal est
+   * append-only (garanti par le schéma), une correction s'y fait en ajoutant
+   * une ligne, jamais en retouchant la précédente.
+   */
+  async recordInvoiceGesture(
+    actor: JwtPayload,
+    tenantId: string,
+    gesture: AdminInvoiceGesture,
+  ): Promise<AdminLogEntry> {
+    const tenant = await this.requireTenant(tenantId);
+    return this.record(actor, {
+      action: gesture.action,
+      tenantId: String(tenant._id),
+      // La pièce, pas seulement le client : c'est ce qui permet de relire
+      // l'histoire d'une facture précise six mois plus tard.
+      targetId: gesture.invoiceId,
+      reason: gesture.summary,
+      meta: { ...gesture.meta },
     });
   }
 

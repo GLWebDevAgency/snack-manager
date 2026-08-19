@@ -23,9 +23,12 @@ import { Icon, type IconName } from "@/components/ui";
 import {
   HEALTH_BAR,
   HEALTH_TEXT,
+  SEVERITY_BORDER,
+  SIGNAL_SEVERITY_LABELS,
   fmtTrend,
   scoreHealth,
   type ActivityPoint,
+  type SignalSeverity,
 } from "./data";
 
 // ─── Santé ───
@@ -47,10 +50,20 @@ export function ScorePill({
   score,
   health,
   className,
+  pending = false,
+  verdict,
 }: {
   score: number | null;
   health: CrmClientHealth;
   className?: string;
+  /**
+   * La fiche de santé est en route. On montre la pastille de santé DÉDUITE
+   * (elle est déjà juste au balayage) avec le chiffre en attente, plutôt qu'un
+   * tiret qui se transformerait en 88 sous les yeux de l'équipe.
+   */
+  pending?: boolean;
+  /** « Client solide », « Client fragile — à rappeler »… tel que l'API le rédige. */
+  verdict?: string;
 }) {
   const tone = scoreHealth(score) ?? health;
   return (
@@ -62,9 +75,11 @@ export function ScorePill({
         className,
       )}
       title={
-        score === null
-          ? "Score indisponible — santé déduite de la dernière commande"
-          : `Score de santé ${score} sur 100`
+        score !== null
+          ? `Score de santé ${score} sur 100${verdict ? ` — ${verdict}` : ""}`
+          : pending
+            ? "Score en cours de lecture…"
+            : "Score non chargé — santé déduite de la dernière commande encaissée"
       }
     >
       <span
@@ -77,9 +92,89 @@ export function ScorePill({
         aria-hidden
       />
       <span className="cf-fig">
-        {score === null ? "—" : score}
-        <span className="sr-only"> sur 100</span>
+        {score !== null ? (
+          <>
+            {score}
+            <span className="sr-only"> sur 100</span>
+          </>
+        ) : pending ? (
+          <span className="inline-block h-[9px] w-[18px] animate-pulse rounded-xs bg-current opacity-30" />
+        ) : (
+          "—"
+        )}
       </span>
+    </span>
+  );
+}
+
+// ─── Gravité d'un signal ───
+
+const SEVERITY_DOT: Record<SignalSeverity, string> = {
+  critique: "bg-alert animate-pulse",
+  attention: "bg-prep",
+  info: "bg-white/40",
+};
+
+/**
+ * Bande de gravité de la file de travail.
+ *
+ * Même pastille en tête d'un groupe de signaux, sur une ligne de client et
+ * dans les gestes du jour : trois écrans qui parlent de la même chose doivent
+ * la dessiner pareil, sinon « critique » finit par vouloir dire deux choses.
+ */
+export function SeverityPill({
+  severity,
+  label,
+  className,
+}: {
+  severity: SignalSeverity;
+  /** Remplace le libellé de gravité (« 3 à rappeler », « Impayé »…). */
+  label?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
+        SEVERITY_BORDER[severity],
+        className,
+      )}
+    >
+      <span
+        className={cx("size-[7px] shrink-0 rounded-full", SEVERITY_DOT[severity])}
+        aria-hidden
+      />
+      {label ?? SIGNAL_SEVERITY_LABELS[severity]}
+    </span>
+  );
+}
+
+/**
+ * LE MARQUEUR « À RAPPELER » — le seul aplat rouge plein de la liste.
+ *
+ * Il ne se lit pas, il se voit : c'est la seule chose de la ligne qui reste
+ * repérable à un mètre de l'écran, en balayant la colonne des noms. Réservé
+ * aux clients qui portent un signal critique ou un accès coupé — s'il
+ * s'allumait pour une baisse de 12 %, personne ne le regarderait plus.
+ */
+export function CallBackFlag({
+  reason,
+  className,
+}: {
+  /** Ce qui l'a déclenché, dit en trois mots — sert d'infobulle. */
+  reason?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center gap-1 rounded-pill bg-alert px-2 py-px text-[10px] font-extrabold uppercase tracking-[0.06em] text-white",
+        className,
+      )}
+      title={reason}
+    >
+      <Icon name="phone" size={11} />
+      À rappeler
     </span>
   );
 }

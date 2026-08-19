@@ -1,25 +1,31 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CLIENT_RISK_DAYS, type JwtPayload } from '@sm/contracts';
+import {
+  CLIENT_RISK_DAYS,
+  NO_OUTSTANDING,
+  summarizeOutstanding,
+  type CrmOutstanding,
+  type JwtPayload,
+} from '@sm/contracts';
 import type { AdminLog, Device, Order, Screen, Tenant, User } from '@sm/db';
 import type { SupplyDb } from '@sm/supply';
 import { AdminService } from './admin.service';
 import { FakeCollection, type Row } from './admin.fakes';
+import type { BillingService } from './billing.service';
 import {
-  ACTIVITY_DROP_MIN_ORDERS,
-  DEVICE_SILENT_AFTER_MS,
   HEALTH_AXIS_WEIGHTS,
   HealthService,
+  STOCKS_SETUP_MIN_INGREDIENTS,
+  TREND_MIN_REFERENCE_ORDERS,
   buildFleet,
   buildModules,
-  buildSignalsFor,
+  buildWindow,
   compositeScore,
   deltaPct,
   scoreActivite,
   scoreAdoption,
-  scorePaiement,
   scoreTechnique,
-  sortSignals,
   toFleetUnit,
+  trendFloorFor,
   verdictFor,
   windowBounds,
   type CrmFleetUnit,
@@ -245,20 +251,62 @@ describe('Axe technique', () => {
   });
 });
 
-describe('Axe paiement', () => {
-  it('met à zéro le seul statut qui coupe l’accès', () => {
-    expect(scorePaiement('suspended').score).toBe(0);
+/**
+ * L'axe PAIEMENT n'est plus jugé ici : sa règle vit dans `@sm/contracts`
+ * (`paiementAxis`), avec le reste de la facturation, et `billing.test.ts` la
+ * couvre bande par bande. Ce fichier vérifie le BRANCHEMENT — que la fiche lui
+ * passe bien l'ardoise réelle du client (voir « Fiche de santé »).
+ */
+
+describe('Plancher de la tendance', () => {
+  it('refuse de chiffrer une variation sous le plancher de référence', () => {
+    // Le cas réel : CLASS'FOOD, 2 050 commandes sur 30 j contre 11 la période
+    // d'avant parce qu'il venait d'arriver — « +18 536,4 % » est exact et ne
+    // mesure que son arrivée. Un chiffre pareil occupe la place de la seule
+    // chose qu'on voulait lire.
+    const w = buildWindow(
+      30,
+      { orders: 2_050, revenueCents: 4_220_520 },
+      { orders: 11, revenueCents: 21_560 },
+    );
+    expect(w.previousOrders).toBe(11);
+    expect(w.ordersDeltaPct).toBeNull();
+    // Le CA suit le MÊME plancher : « tendance non mesurable » au-dessus de
+    // « +19 475 % » dans le même bloc serait pire que les deux séparément.
+    expect(w.revenueDeltaPct).toBeNull();
   });
 
-  it('ne pénalise pas une période d’essai', () => {
-    // On ne facture pas encore : il n'y a rien à reprocher.
-    expect(scorePaiement('trial').score).toBe(100);
-    expect(scorePaiement('active').score).toBe(100);
+  it('mesure le plancher en RYTHME, pas en comptage brut', () => {
+    // Cinq commandes ne disent pas la même chose sur sept jours et sur trente.
+    // Un plancher fixe laissait justement passer le cas ci-dessus.
+    expect(trendFloorFor(7)).toBe(TREND_MIN_REFERENCE_ORDERS);
+    expect(trendFloorFor(30)).toBe(22);
+    const w = buildWindow(30, { orders: 40, revenueCents: 80_000 }, { orders: 22, revenueCents: 44_000 });
+    expect(w.ordersDeltaPct).toBe(81.8);
   });
 
-  it('traite un départ autrement qu’un impayé', () => {
-    // « churned » n'est pas un litige, c'est une fin de relation.
-    expect(scorePaiement('churned').score).toBe(50);
+  it('chiffre la tendance dès que la période de référence pèse assez', () => {
+    const w = buildWindow(
+      7,
+      { orders: 439, revenueCents: 877_640 },
+      { orders: 492, revenueCents: 1_054_830 },
+    );
+    expect(w.ordersDeltaPct).toBe(-10.8);
+    expect(w.revenueDeltaPct).toBe(-16.8);
+  });
+
+  it('applique le même plancher à la phrase de l’axe activité', () => {
+    // Sinon la fiche affiche « tendance non mesurable » dans le bloc activité
+    // et « +25 562,5 % vs 7 j précédents » trois lignes plus bas, dans le
+    // détail de l'axe — le même écran se contredisant tout seul.
+    const r = scoreActivite({
+      daysSinceLastOrder: 0,
+      orders7d: 2_054,
+      previousOrders7d: TREND_MIN_REFERENCE_ORDERS - 1,
+      hasHistory: true,
+    });
+    expect(r.detail).toContain('non mesurable');
+    expect(r.detail).not.toContain('%');
   });
 });
 
@@ -391,6 +439,84 @@ describe('Adoption des modules', () => {
       hoursAgo(5).toISOString(),
     );
   });
+
+  it('ne rend aucun module « stocks » quand l’appro n’a pas répondu', () => {
+    // `SignalsService` appelle `buildModules` puis ajoute son propre module
+    // stocks : en rendre un ici sans qu'on le demande afficherait la ligne en
+    // double dans la file de travail.
+    expect(classfoodModules().map((m) => m.key)).toEqual([
+      'caisse',
+      'cuisine',
+      'commande_en_ligne',
+      'ecrans_salle',
+    ]);
+  });
+
+  it('ouvre le suivi des stocks sur un registre monté, et le dit dormant sans mouvement', () => {
+    // Le cas réel de CLASS'FOOD : 107 ingrédients, 3 fournisseurs, pas un seul
+    // mouvement de stock. La file de signaux le disait déjà ; la fiche, elle,
+    // n'avait jamais entendu parler de ce module — le chargé de compte cliquait
+    // sur le signal et atterrissait sur un dossier où il n'existait pas.
+    const modules = buildModules({
+      posOrders: 1_729,
+      posLastOrderAt: hoursAgo(2),
+      onlineOrders: 508,
+      onlineLastOrderAt: hoursAgo(5),
+      posDevices: [unit()],
+      kdsDevices: [],
+      screens: [],
+      supply: { ingredients: 107, suppliers: 3, movements: 0, movements30d: 0 },
+    });
+    const stocks = modules.find((m) => m.key === 'stocks');
+    expect(stocks?.label).toBe('Suivi des stocks');
+    expect(stocks?.provisioned).toBe(true);
+    expect(stocks?.used).toBe(false);
+    expect(stocks?.detail).toContain('107 ingrédients');
+  });
+
+  it('ne reproche pas un registre à peine ébauché', () => {
+    const modules = buildModules({
+      posOrders: 0,
+      posLastOrderAt: null,
+      onlineOrders: 0,
+      onlineLastOrderAt: null,
+      posDevices: [],
+      kdsDevices: [],
+      screens: [],
+      supply: {
+        ingredients: STOCKS_SETUP_MIN_INGREDIENTS - 1,
+        suppliers: 1,
+        movements: 0,
+        movements30d: 0,
+      },
+    });
+    expect(modules.find((m) => m.key === 'stocks')?.provisioned).toBe(false);
+  });
+
+  it('garde le suivi des stocks HORS du score, affiché mais non compté', () => {
+    // Il se lit dans PostgreSQL, dont l'indisponibilité est un cas prévu :
+    // l'y compter ferait bouger le score du client selon qu'une base répond ou
+    // non ce matin-là — et la liste `/crm/tenants`, qui ne lit que Mongo,
+    // n'afficherait plus le même nombre que la fiche qu'on ouvre en cliquant.
+    const base = {
+      posOrders: 1_729,
+      posLastOrderAt: hoursAgo(2),
+      onlineOrders: 508,
+      onlineLastOrderAt: hoursAgo(5),
+      posDevices: [unit()],
+      kdsDevices: [unit({ id: CUISINE, name: 'Écran cuisine', kind: 'kds' })],
+      screens: [],
+    };
+    const sans = scoreAdoption(buildModules(base));
+    const avec = scoreAdoption(
+      buildModules({
+        ...base,
+        supply: { ingredients: 107, suppliers: 3, movements: 0, movements30d: 0 },
+      }),
+    );
+    expect(sans.score).toBe(100);
+    expect(avec.score).toBe(sans.score);
+  });
 });
 
 describe('État d’un appareil', () => {
@@ -424,178 +550,6 @@ describe('État d’un appareil', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// La file de travail
-// ─────────────────────────────────────────────────────────────
-
-describe('File de travail', () => {
-  const client = (over: Partial<Parameters<typeof buildSignalsFor>[0]> = {}) => ({
-    tenantId: CLASSFOOD,
-    tenantName: "CLASS'FOOD",
-    accountStatus: 'active' as const,
-    suspendedAt: null,
-    since: daysAgo(90),
-    lastOrderAt: hoursAgo(2),
-    orders7d: 430,
-    previousOrders7d: 410,
-    fleet: [unit()],
-    modules: buildModules({
-      posOrders: 1_729,
-      posLastOrderAt: hoursAgo(2),
-      onlineOrders: 508,
-      onlineLastOrderAt: hoursAgo(5),
-      posDevices: [unit()],
-      kdsDevices: [],
-      screens: [],
-    }),
-    ...over,
-  });
-
-  it('laisse tranquille un client qui tourne', () => {
-    expect(buildSignalsFor(client(), NOW)).toEqual([]);
-  });
-
-  it('remonte un impayé en tête de file', () => {
-    const signals = buildSignalsFor(
-      client({ accountStatus: 'suspended', suspendedAt: daysAgo(3) }),
-      NOW,
-    );
-    expect(signals[0]?.kind).toBe('impaye');
-    expect(signals[0]?.value).toBe(3);
-  });
-
-  it('signale une caisse muette depuis plus de 24 h', () => {
-    const signals = buildSignalsFor(
-      client({ fleet: [unit({ online: false, lastSeenAt: hoursAgo(30).toISOString() })] }),
-      NOW,
-    );
-    const mute = signals.find((s) => s.kind === 'appareil_muet');
-    expect(mute?.value).toBe(30);
-    expect(mute?.detail).toContain('Caisse comptoir');
-  });
-
-  it('ne signale pas une caisse hors ligne depuis vingt minutes', () => {
-    // Le back-office du gérant l'affiche déjà « hors ligne » ; nous, ce qu'on
-    // cherche, c'est la panne que le restaurant ne nous a pas signalée.
-    const signals = buildSignalsFor(
-      client({
-        fleet: [
-          unit({
-            online: false,
-            lastSeenAt: new Date(NOW.getTime() - DEVICE_SILENT_AFTER_MS + 60_000).toISOString(),
-          }),
-        ],
-      }),
-      NOW,
-    );
-    expect(signals.some((s) => s.kind === 'appareil_muet')).toBe(false);
-  });
-
-  it('signale une chute d’activité nette', () => {
-    const signals = buildSignalsFor(client({ orders7d: 120, previousOrders7d: 400 }), NOW);
-    const drop = signals.find((s) => s.kind === 'chute_activite');
-    expect(drop?.value).toBe(70);
-  });
-
-  it('ne crie pas au loup sur un petit volume', () => {
-    // 3 commandes contre 4 la semaine d'avant, c'est la météo — pas un
-    // décrochage. Une file pleine de faux positifs ne se lit plus.
-    const signals = buildSignalsFor(
-      client({ orders7d: 1, previousOrders7d: ACTIVITY_DROP_MIN_ORDERS - 1 }),
-      NOW,
-    );
-    expect(signals.some((s) => s.kind === 'chute_activite')).toBe(false);
-  });
-
-  it('remplace la chute par un arrêt franc quand plus rien ne rentre', () => {
-    // Deux lignes pour le même client diraient deux fois la même chose.
-    const signals = buildSignalsFor(
-      client({ lastOrderAt: daysAgo(11), orders7d: 0, previousOrders7d: 400 }),
-      NOW,
-    );
-    expect(signals.map((s) => s.kind)).toContain('arret_activite');
-    expect(signals.some((s) => s.kind === 'chute_activite')).toBe(false);
-  });
-
-  it('distingue « jamais démarré » de « plus aucune commande »', () => {
-    // Dire « aucune commande depuis 40 jours » à un restaurant qui n'en a
-    // jamais passé une seule, c'est parler de décrochage à quelqu'un qui n'a
-    // jamais commencé : c'est un appel d'onboarding, pas de rétention.
-    const signals = buildSignalsFor(
-      client({ lastOrderAt: null, since: daysAgo(40), orders7d: 0, previousOrders7d: 0 }),
-      NOW,
-    );
-    const stop = signals.find((s) => s.kind === 'arret_activite');
-    expect(stop?.title).toBe('Jamais démarré');
-    expect(stop?.value).toBe(40);
-    expect(stop?.detail).toContain('l’installation n’a jamais abouti');
-  });
-
-  it('laisse s’installer un restaurant qui vient d’arriver', () => {
-    // Signé il y a deux jours, pas encore de commande : c'est normal, et une
-    // file de travail qui crie dessus n'est plus une file de travail.
-    const signals = buildSignalsFor(
-      client({ lastOrderAt: null, since: daysAgo(2), orders7d: 0, previousOrders7d: 0 }),
-      NOW,
-    );
-    expect(signals.some((s) => s.kind === 'arret_activite')).toBe(false);
-  });
-
-  it('signale un module ouvert et jamais utilisé', () => {
-    const signals = buildSignalsFor(
-      client({
-        modules: buildModules({
-          posOrders: 1_729,
-          posLastOrderAt: hoursAgo(2),
-          onlineOrders: 0,
-          onlineLastOrderAt: null,
-          posDevices: [unit()],
-          kdsDevices: [],
-          screens: [],
-        }),
-      }),
-      NOW,
-    );
-    const idle = signals.find((s) => s.kind === 'module_inutilise');
-    expect(idle?.title).toContain('Commande en ligne');
-  });
-
-  it('trie par gravité : l’impayé avant la caisse muette, la caisse avant la chute', () => {
-    const signals = sortSignals([
-      ...buildSignalsFor(client({ orders7d: 100, previousOrders7d: 400 }), NOW),
-      ...buildSignalsFor(
-        client({
-          tenantId: VOISIN,
-          tenantName: 'Le Voisin',
-          fleet: [unit({ online: false, lastSeenAt: hoursAgo(48).toISOString() })],
-        }),
-        NOW,
-      ),
-      ...buildSignalsFor(
-        client({ accountStatus: 'suspended', suspendedAt: daysAgo(1), tenantName: 'Impayé' }),
-        NOW,
-      ),
-    ]);
-    expect(signals.map((s) => s.kind).slice(0, 3)).toEqual([
-      'impaye',
-      'appareil_muet',
-      'chute_activite',
-    ]);
-  });
-
-  it('classe deux chutes par ampleur décroissante', () => {
-    const signals = sortSignals([
-      ...buildSignalsFor(client({ orders7d: 280, previousOrders7d: 400 }), NOW),
-      ...buildSignalsFor(
-        client({ tenantId: VOISIN, tenantName: 'Le Voisin', orders7d: 40, previousOrders7d: 400 }),
-        NOW,
-      ),
-    ]);
-    expect(signals[0]?.tenantName).toBe('Le Voisin');
-    expect(signals[0]?.value).toBe(90);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
 // Le service, avec des doublures de base
 // ─────────────────────────────────────────────────────────────
 
@@ -619,17 +573,40 @@ class FakeOrders {
   }
 }
 
-/** Contexte supply (PostgreSQL) tel que la fiche de santé l'interroge. */
-function fakeSupply(over?: { throws?: boolean }): SupplyDb {
+/**
+ * Contexte supply (PostgreSQL) tel que la fiche de santé l'interroge.
+ *
+ * Trois lectures : les ingrédients, les fournisseurs et leurs tarifs, et le
+ * COMPTAGE des mouvements de stock — ce dernier en SQL, jamais rapatrié, parce
+ * que la table grossit à chaque réception et à chaque vente.
+ */
+function fakeSupply(over?: { throws?: boolean; movements?: number }): SupplyDb {
   if (over?.throws) {
     return {
       query: {
         ingredients: { findMany: () => Promise.reject(new Error('ECONNREFUSED 127.0.0.1:5432')) },
         suppliers: { findMany: () => Promise.reject(new Error('ECONNREFUSED 127.0.0.1:5432')) },
       },
+      select: () => ({
+        from: () => ({
+          where: () => Promise.reject(new Error('ECONNREFUSED 127.0.0.1:5432')),
+        }),
+      }),
     } as unknown as SupplyDb;
   }
+  const movements = over?.movements ?? 0;
   return {
+    select: () => ({
+      from: () => ({
+        where: async () => [
+          {
+            total: movements,
+            recent: movements,
+            lastAt: movements > 0 ? hoursAgo(6) : null,
+          },
+        ],
+      }),
+    }),
     query: {
       // 107 ingrédients chez classfood, dont 4 sous le seuil de réassort.
       ingredients: {
@@ -669,6 +646,22 @@ function fakeSupply(over?: { throws?: boolean }): SupplyDb {
     },
   } as unknown as SupplyDb;
 }
+
+/**
+ * `BillingService`, réduit au seul verbe que la fiche de santé emploie.
+ *
+ * Même doublure que dans `signals.test.ts` : l'ardoise est une DONNÉE d'entrée
+ * du score, sa règle de calcul est éprouvée dans `billing.test.ts`.
+ */
+const fakeBilling = (outstanding: CrmOutstanding = NO_OUTSTANDING): BillingService =>
+  ({ outstandingFor: async () => outstanding }) as unknown as BillingService;
+
+/** Une facture échue telle que `summarizeOutstanding` la lit. */
+const overdueInvoice = (dueDaysAgo: number, cents: number) => ({
+  status: 'en_retard' as const,
+  dueAt: daysAgo(dueDaysAgo).toISOString(),
+  dueCents: cents,
+});
 
 /** Une passe d'agrégat d'activité telle que MongoDB la rendrait. */
 const activityRow = (over: Row = {}): Row => ({
@@ -719,7 +712,10 @@ describe('Fiche de santé', () => {
   let users: FakeCollection;
   let orders: FakeOrders;
 
-  const build = (results: Row[][], supply = fakeSupply()) => {
+  const build = (
+    results: Row[][],
+    opts: { supply?: SupplyDb; billing?: BillingService } = {},
+  ) => {
     orders = new FakeOrders(results);
     const admin = new AdminService(
       tenants.asModel<Tenant>(),
@@ -733,8 +729,9 @@ describe('Fiche de santé', () => {
       orders.asModel<Order>(),
       devices.asModel<Device>(),
       screens.asModel<Screen>(),
-      supply,
+      opts.supply ?? fakeSupply(),
       admin,
+      opts.billing ?? fakeBilling(),
     );
   };
 
@@ -821,7 +818,10 @@ describe('Fiche de santé', () => {
     expect(health.score.verdictLabel).toMatch(/\S/);
   });
 
-  it('rend l’adoption des quatre modules du produit', async () => {
+  it('rend l’adoption des cinq modules, suivi des stocks compris', async () => {
+    // Le cinquième vient du contexte appro, et il n'apparaît que si celui-ci a
+    // répondu : c'est ce module-là que la file de signaux savait nommer alors
+    // que la fiche l'ignorait.
     const health = await build([[activityRow()]]).tenantHealth(SM, CLASSFOOD, NOW);
 
     expect(health.modules.map((m) => m.key)).toEqual([
@@ -829,9 +829,51 @@ describe('Fiche de santé', () => {
       'cuisine',
       'commande_en_ligne',
       'ecrans_salle',
+      'stocks',
     ]);
     expect(health.modules.find((m) => m.key === 'caisse')?.used).toBe(true);
     expect(health.modules.find((m) => m.key === 'ecrans_salle')?.provisioned).toBe(false);
+    // 107 ingrédients, un fournisseur, aucun mouvement : ouvert et dormant.
+    expect(health.modules.find((m) => m.key === 'stocks')).toMatchObject({
+      provisioned: true,
+      used: false,
+    });
+  });
+
+  it('retire le module stocks quand l’appro n’a pas répondu, au lieu de l’inventer', async () => {
+    const health = await build([[activityRow()]], {
+      supply: fakeSupply({ throws: true }),
+    }).tenantHealth(SM, CLASSFOOD, NOW);
+
+    expect(health.modules.map((m) => m.key)).not.toContain('stocks');
+  });
+
+  it('branche l’axe paiement sur l’ardoise réelle, pas sur le statut de compte', async () => {
+    // LA DETTE QUE CET AXE PORTAIT : il relisait `account.status`, c'est-à-dire
+    // la CONSÉQUENCE d'un impayé et jamais sa cause. Un client qui devait trois
+    // mois mais qu'on n'avait pas encore suspendu ressortait « Abonnement à
+    // jour », 100/100 — et la suspension qui finissait par tomber paraissait
+    // arbitraire, puisque rien sur la fiche ne l'avait annoncée.
+    const ardoise = summarizeOutstanding(
+      [overdueInvoice(45, 13_900), overdueInvoice(15, 13_900)] as never,
+      NOW,
+    );
+    const health = await build([[activityRow()]], {
+      billing: fakeBilling(ardoise),
+    }).tenantHealth(SM, CLASSFOOD, NOW);
+
+    const paiement = health.score.axes.find((a) => a.key === 'paiement');
+    expect(paiement?.score).toBe(20);
+    expect(paiement?.detail).toContain('2 factures en retard');
+    expect(paiement?.detail).toContain('45 jour(s)');
+  });
+
+  it('dit « à jour » quand le client ne doit rien — et le dit sur des chiffres', async () => {
+    const health = await build([[activityRow()]]).tenantHealth(SM, CLASSFOOD, NOW);
+    const paiement = health.score.axes.find((a) => a.key === 'paiement');
+
+    expect(paiement?.score).toBe(100);
+    expect(paiement?.detail).toBe('Abonnement à jour.');
   });
 
   it('rend le parc avec l’état en ligne et le dernier contact', async () => {
@@ -854,15 +896,18 @@ describe('Fiche de santé', () => {
     expect(health.supply.priceIncreases30d).toBe(1);
     expect(health.supply.topPriceIncreases[0]?.ingredientName).toBe('Viande kebab');
     expect(health.supply.topPriceIncreases[0]?.increasePct).toBe(20);
+    // Le registre lui-même : c'est lui qui dit si le module « stocks » est
+    // monté, et s'il vit.
+    expect(health.supply.ingredients).toBe(107);
+    expect(health.supply.suppliers).toBe(1);
+    expect(health.supply.movements).toBe(0);
   });
 
   it('sert la fiche même si le contexte appro est injoignable', async () => {
     // Une panne PostgreSQL ne doit pas emporter l'activité, le score et le parc.
-    const health = await build([[activityRow()]], fakeSupply({ throws: true })).tenantHealth(
-      SM,
-      CLASSFOOD,
-      NOW,
-    );
+    const health = await build([[activityRow()]], {
+      supply: fakeSupply({ throws: true }),
+    }).tenantHealth(SM, CLASSFOOD, NOW);
 
     expect(health.supply.available).toBe(false);
     expect(health.activity.last30d.orders).toBe(1_729);
@@ -906,125 +951,6 @@ describe('Fiche de santé', () => {
     // requêtes elles-mêmes, pas seulement sur ce qu'on choisit d'afficher.
     const health = await build([[activityRow()]]).tenantHealth(SM, CLASSFOOD, NOW);
     const seen = [...orders.pipelines.map(dump), dump(health)].join(' ');
-
-    for (const field of FORBIDDEN_FIELDS) {
-      expect(seen, field).not.toContain(field);
-    }
-  });
-});
-
-describe('File de travail du parc', () => {
-  let tenants: FakeCollection;
-  let devices: FakeCollection;
-  let screens: FakeCollection;
-  let logs: FakeCollection;
-  let users: FakeCollection;
-  let orders: FakeOrders;
-
-  const build = (results: Row[][]) => {
-    orders = new FakeOrders(results);
-    const admin = new AdminService(
-      tenants.asModel<Tenant>(),
-      devices.asModel<Device>(),
-      screens.asModel<Screen>(),
-      logs.asModel<AdminLog>(),
-      users.asModel<User>(),
-    );
-    return new HealthService(
-      tenants.asModel<Tenant>(),
-      orders.asModel<Order>(),
-      devices.asModel<Device>(),
-      screens.asModel<Screen>(),
-      fakeSupply(),
-      admin,
-    );
-  };
-
-  beforeEach(() => {
-    tenants = new FakeCollection('tenant');
-    devices = new FakeCollection('device');
-    screens = new FakeCollection('screen');
-    logs = new FakeCollection('log');
-    users = new FakeCollection('user');
-    users.seed({ _id: SM.sub, email: 'admin@snackmanager.fr' });
-  });
-
-  it('classe le parc entier par gravité, tous clients confondus', async () => {
-    tenants.seed({
-      _id: CLASSFOOD,
-      name: "CLASS'FOOD",
-      slug: 'classfood',
-      account: { status: 'active', since: daysAgo(1), reason: '', suspendedAt: null },
-    });
-    tenants.seed({
-      _id: VOISIN,
-      name: 'Le Voisin',
-      slug: 'voisin',
-      account: { status: 'suspended', since: daysAgo(2), reason: 'Impayé', suspendedAt: daysAgo(2) },
-    });
-    devices.seed({
-      _id: CAISSE,
-      tenantId: CLASSFOOD,
-      name: 'Caisse comptoir',
-      kind: 'pos',
-      paired: true,
-      lastSeenAt: hoursAgo(40),
-    });
-
-    const signals = await build([
-      [
-        activityRow(),
-        activityRow({ _id: VOISIN, orders7: 12, ordersPrev7: 140, onlineOrders30: 0, onlineLastAt: null }),
-      ],
-    ]).signals(NOW);
-
-    expect(signals[0]?.kind).toBe('impaye');
-    expect(signals[0]?.tenantName).toBe('Le Voisin');
-    expect(signals.map((s) => s.kind)).toContain('appareil_muet');
-    expect(signals.every((s, i) => i === 0 || s.gravity <= (signals[i - 1]?.gravity ?? 0))).toBe(
-      true,
-    );
-  });
-
-  it('n’oublie pas un client qui n’a jamais rien encaissé', async () => {
-    // Aucune ligne dans l'agrégat : sans repli, le restaurant disparaîtrait de
-    // la file — or c'est exactement celui qu'il faut rappeler.
-    tenants.seed({
-      _id: VOISIN,
-      name: 'Le Voisin',
-      slug: 'voisin',
-      createdAt: daysAgo(40),
-      account: { status: 'active', since: daysAgo(40), reason: '', suspendedAt: null },
-    });
-    devices.seed({
-      _id: 'device-neuf',
-      tenantId: VOISIN,
-      name: 'Caisse comptoir',
-      kind: 'pos',
-      paired: true,
-      lastSeenAt: null,
-    });
-
-    const signals = await build([[]]).signals(NOW);
-
-    expect(signals.map((s) => s.title)).toContain('Jamais démarré');
-    expect(signals.map((s) => s.kind)).toContain('appareil_muet');
-    expect(signals.map((s) => s.kind)).toContain('module_inutilise');
-  });
-
-  it('ne journalise pas la file de travail', async () => {
-    // Cette vue n'ouvre le dossier de personne : elle ne rend que des agrégats
-    // et des états de compte. La trace est écrite au clic sur une ligne.
-    tenants.seed({ _id: CLASSFOOD, name: "CLASS'FOOD", slug: 'classfood' });
-    await build([[activityRow()]]).signals(NOW);
-
-    expect(logs.size).toBe(0);
-  });
-
-  it('ne demande à MongoDB aucun champ de consommateur final', async () => {
-    tenants.seed({ _id: CLASSFOOD, name: "CLASS'FOOD", slug: 'classfood' });
-    const signals = await build([[activityRow()]]).signals(NOW);
-    const seen = [...orders.pipelines.map(dump), dump(signals)].join(' ');
 
     for (const field of FORBIDDEN_FIELDS) {
       expect(seen, field).not.toContain(field);

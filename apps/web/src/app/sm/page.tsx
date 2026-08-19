@@ -1,16 +1,22 @@
 "use client";
 
 /**
- * Tableau de bord HQ — les quatre chiffres que le fondateur regarde le matin :
- * places fondateur restantes, MRR estimé, clients actifs, leads en cours.
- * Puis le pipeline en un coup d'œil, la santé du parc et les dernières relances.
+ * Tableau de bord HQ — ce que l'équipe regarde en arrivant le matin.
  *
- * Aucune donnée n'est inventée : tout vient de `/crm/overview` et
- * `/crm/tenants` (montants en CENTIMES, convertis à l'affichage).
+ * En TÊTE, les gestes du jour : trois à cinq appels tirés de la file de
+ * signaux, dans l'ordre où on décroche. Le reste répond à « où en est la
+ * société ? » — places fondateur restantes, MRR estimé, clients actifs, leads
+ * en cours, pipeline, santé du parc, dernières relances.
+ *
+ * L'ordre n'est pas cosmétique : un tableau de bord qui ouvre sur des totaux
+ * se regarde, un tableau de bord qui ouvre sur des appels se traite.
+ *
+ * Aucune donnée n'est inventée : tout vient de `/crm/overview`, `/crm/tenants`
+ * et `/crm/signals` (montants en CENTIMES, convertis à l'affichage).
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FOUNDER_SEATS_TOTAL,
   LEAD_PIPELINE,
@@ -21,11 +27,15 @@ import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { Card, EmptyState, Icon, Kpi, Panel, Skeleton } from "@/components/ui";
 import { crm, euroRound, fmtDaysAgo, int, useHq } from "./crm";
+import { clientsApi } from "./clients/data";
+import { SeverityPill } from "./clients/ui";
+import { readWorkSignals, todaysMoves, type WorkSignal } from "./signals/data";
 import { Eyebrow, HealthPill } from "./parts";
 
 export default function HqDashboard() {
   const { overview, loading } = useHq();
   const [clients, setClients] = useState<CrmClient[] | null>(null);
+  const [signals, setSignals] = useState<WorkSignal[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,10 +47,24 @@ export default function HqDashboard() {
       .catch(() => {
         if (!cancelled) setClients([]);
       });
+    // La file de travail annote le tableau de bord ; son absence ne doit pas
+    // l'empêcher de s'afficher. Une liste vide se lit « rien à traiter », et
+    // c'est une information juste tant que la route répond.
+    clientsApi
+      .signals()
+      .then((raw) => {
+        if (!cancelled) setSignals(readWorkSignals(raw));
+      })
+      .catch(() => {
+        if (!cancelled) setSignals([]);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  /** Un client, un geste : voir `todaysMoves`. */
+  const moves = useMemo(() => todaysMoves(signals ?? [], 5), [signals]);
 
   if (loading && !overview) {
     return (
@@ -78,6 +102,44 @@ export default function HqDashboard() {
 
   return (
     <div className="flex flex-col gap-4 p-[26px]">
+      {/* ── Les gestes du jour ── */}
+      <Panel
+        title="Les gestes du jour"
+        sub={
+          signals === null
+            ? "Lecture de la file de travail…"
+            : moves.length === 0
+              ? "Aucun signal ouvert sur le parc"
+              : `${moves.length} appel${moves.length > 1 ? "s" : ""} à passer, du plus urgent au moins urgent`
+        }
+        actions={
+          <Link
+            href="/sm/signals"
+            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+          >
+            File de travail
+            {(signals?.length ?? 0) > moves.length && (
+              <span className="cf-fig rounded-pill bg-white/15 px-1.5 text-[11px] font-extrabold">
+                {signals!.length}
+              </span>
+            )}
+            <Icon name="arrow" size={15} />
+          </Link>
+        }
+        bodyClassName="flex flex-col gap-1.5"
+      >
+        {signals === null ? (
+          <Skeleton className="h-[52px]" />
+        ) : moves.length === 0 ? (
+          <p className="text-[13px] text-mut">
+            Rien à traiter ce matin : pas d&apos;impayé, pas de décrochage, pas
+            d&apos;appareil muet. Le bon moment pour appeler un client qui va bien.
+          </p>
+        ) : (
+          moves.map((m, i) => <MoveRow key={m.key} move={m} rank={i + 1} />)
+        )}
+      </Panel>
+
       {/* ── Les quatre chiffres ── */}
       <div className="flex items-stretch gap-4">
         <Kpi
@@ -305,6 +367,48 @@ export default function HqDashboard() {
         facturation : Stripe
       </Eyebrow>
     </div>
+  );
+}
+
+/**
+ * Un geste du jour = un appel à passer.
+ *
+ * Numéroté, parce que c'est un ORDRE de travail et pas une liste de faits : le
+ * 1 se traite avant le 2. La ligne entière ouvre la fiche du restaurant, d'où
+ * part l'appel. La dernière ligne est la consigne rédigée par l'API — ce qu'on
+ * fait de ce signal, pas seulement ce qu'on constate.
+ */
+function MoveRow({ move: m, rank }: { move: WorkSignal; rank: number }) {
+  return (
+    <Link
+      href={m.href}
+      className={cx(
+        "cf-press-row flex items-start gap-3 rounded-card border p-3 hover:bg-white/5",
+        m.severity === "critique"
+          ? "border-alert/35 bg-alert/6"
+          : "border-white/6 bg-[image:var(--cf-elev-gradient)]",
+      )}
+    >
+      <span
+        className="cf-fig mt-px grid size-[26px] shrink-0 place-items-center rounded-xs border border-white/10 bg-white/5 text-[13px] font-extrabold text-mut"
+        aria-hidden
+      >
+        {rank}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate text-sm font-bold text-ink">
+            {m.tenantName || "Restaurant inconnu"}
+          </span>
+          <SeverityPill severity={m.severity} label={m.kindLabel} />
+        </div>
+        <div className="mt-0.5 truncate text-xs text-mut">{m.title}</div>
+        <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-[1.4] text-ink/90">
+          {m.action}
+        </p>
+      </div>
+      <Icon name="arrow" size={16} className="mt-1 shrink-0 text-mut" />
+    </Link>
   );
 }
 

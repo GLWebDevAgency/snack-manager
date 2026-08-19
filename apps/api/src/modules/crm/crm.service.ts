@@ -6,33 +6,52 @@ import {
   daysSince,
   founderSeatsRemaining,
   isOpenLeadStage,
+  paiementAxis,
+  summarizeOutstanding,
+  DEVICE_OFFLINE_AFTER_MS,
   FOUNDER_SEATS_TOTAL,
   LEAD_STAGES,
   PLAN_MRR_CENTS,
+  SCREEN_OFFLINE_AFTER_MS,
   type CrmClient,
+  type CrmInvoice,
   type CrmLead,
   type CrmOverview,
   type LeadCreate,
   type LeadStage,
   type LeadTouchCreate,
   type LeadUpdate,
+  type RevocableDeviceKind,
+  type TenantAccountStatus,
 } from '@sm/contracts';
-import type { Lead, Order, Tenant } from '@sm/db';
+import type { Device, Lead, Order, Screen, Tenant } from '@sm/db';
+import { BillingService } from './billing.service';
+// Le JUGEMENT de la fiche de santé, réutilisé tel quel : mêmes bornes de
+// fenêtres, même `$group`, mêmes fonctions de notation. C'est ce qui garantit
+// que le score lu dans la liste est celui qu'on retrouve en cliquant dessus —
+// une liste qui annonce 88 et une fiche qui répond 82 feraient douter des deux.
+import {
+  DEVICE_FIELDS,
+  EMPTY_ACTIVITY,
+  SCREEN_FIELDS,
+  activityGroup,
+  buildFleet,
+  buildModules,
+  buildWindow,
+  compositeScore,
+  healthAxis,
+  scoreActivite,
+  scoreAdoption,
+  scoreTechnique,
+  toFleetUnit,
+  windowBounds,
+  type CrmFleetUnit,
+  type TenantActivityRow,
+} from './health.service';
 import { buildSeedLeads } from './crm.seed';
 
 /** Fenêtre d'activité d'un client : 30 jours glissants. */
 const ACTIVITY_WINDOW_DAYS = 30;
-const DAY_MS = 86_400_000;
-/** CA = commandes prêtes + remises (même convention que le module Stats). */
-const REVENUE_STATUSES = ['ready', 'delivered'];
-
-/** Agrégat d'activité par tenant, calculé côté MongoDB. */
-type ActivityRow = {
-  _id: Types.ObjectId;
-  lastOrderAt: Date | null;
-  orders30d: number;
-  revenue30dCents: number;
-};
 
 @Injectable()
 export class CrmService {
@@ -40,6 +59,11 @@ export class CrmService {
     @InjectModel('Lead') private readonly leads: Model<Lead>,
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     @InjectModel('Order') private readonly orders: Model<Order>,
+    @InjectModel('Device') private readonly devices: Model<Device>,
+    @InjectModel('Screen') private readonly screens: Model<Screen>,
+    // Ce qui reste dû, pour tout le parc, en une lecture : l'axe « paiement »
+    // du score se lit sur des factures échues, jamais sur un statut de compte.
+    private readonly billing: BillingService,
   ) {}
 
   // ─── Pipeline commercial ───
@@ -210,63 +234,145 @@ export class CrmService {
   // ─── Restaurants clients (le parc réel) ───
 
   /**
-   * Les tenants, enrichis de leur activité récente. Le décrochage se lit sur
-   * les COMMANDES, pas sur l'abonnement : un client qui n'encaisse plus paie
-   * encore, et c'est précisément celui-là qu'il faut rappeler cette semaine.
+   * LE PARC, LIGNE À LIGNE — identité, activité récente, ET SANTÉ.
+   *
+   * Le décrochage se lit sur les COMMANDES, pas sur l'abonnement : un client
+   * qui n'encaisse plus paie encore, et c'est précisément celui-là qu'il faut
+   * rappeler cette semaine.
+   *
+   * ─── CINQ LECTURES POUR TOUT LE PARC, PAS CINQ PAR CLIENT ───
+   *
+   * Le score, le statut de compte, la tendance et les appareils muets manquaient
+   * à cette route ; l'écran les obtenait en appelant `/crm/tenants/:id/health`
+   * CLIENT PAR CLIENT après affichage. Outre le coût (une requête par ligne, qui
+   * ne tient pas à cinquante restaurants), chacun de ces appels JOURNALISE une
+   * consultation de dossier : afficher la liste « ouvrait » tout le parc.
+   *
+   * Ici, une agrégation par champ — l'activité en un `$group` (le MÊME que la
+   * fiche, importé), le parc en deux projections étroites, l'ardoise en une
+   * passe de facturation — puis le jugement, en mémoire, avec les fonctions de
+   * `health.service`. Aucune boucle ne rappelle quoi que ce soit.
+   *
+   * Le score rendu ici est celui de la fiche AU POINT PRÈS : mêmes axes, mêmes
+   * poids, même plafonnement par l'activité. Seul le détail rédigé de chaque axe
+   * reste à la fiche — une liste n'a pas la place d'une phrase par axe.
    */
   async listClients(now: Date = new Date()): Promise<CrmClient[]> {
-    const since = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * DAY_MS);
+    const bounds = windowBounds(now);
 
-    const [tenants, activity] = await Promise.all([
+    const [tenants, activity, devices, screens, overdue] = await Promise.all([
       this.tenants
-        .find({}, { name: 1, slug: 1, plan: 1, founderSeat: 1, createdAt: 1 })
+        .find({}, { name: 1, slug: 1, plan: 1, founderSeat: 1, createdAt: 1, account: 1 })
         .sort({ createdAt: 1 })
         .lean(),
-      this.orders.aggregate<ActivityRow>([
+      this.orders.aggregate<TenantActivityRow>([
         { $match: { status: { $ne: 'cancelled' } } },
-        {
-          $group: {
-            _id: '$tenantId',
-            lastOrderAt: { $max: '$createdAt' },
-            orders30d: { $sum: { $cond: [{ $gte: ['$createdAt', since] }, 1, 0] } },
-            revenue30dCents: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ['$createdAt', since] },
-                      { $in: ['$status', REVENUE_STATUSES] },
-                    ],
-                  },
-                  '$totals.total',
-                  0,
-                ],
-              },
-            },
-          },
-        },
+        { $group: { _id: '$tenantId', ...activityGroup(bounds) } },
       ]),
+      this.devices.find({}, DEVICE_FIELDS).lean(),
+      this.screens.find({}, SCREEN_FIELDS).lean(),
+      // La file de recouvrement du parc, déjà écrite et déjà testée. Seules les
+      // pièces ÉCHUES y figurent — exactement ce dont l'axe « paiement » a
+      // besoin pour noter, une facture envoyée hier n'étant pas un impayé.
+      this.billing.overdue(now),
     ]);
 
     const byTenant = new Map(activity.map((a) => [String(a._id), a]));
 
+    const fleets = new Map<string, CrmFleetUnit[]>();
+    const push = (tenantId: string, unit: CrmFleetUnit) => {
+      const list = fleets.get(tenantId) ?? [];
+      list.push(unit);
+      fleets.set(tenantId, list);
+    };
+    for (const d of devices) {
+      push(
+        String(d.tenantId),
+        toFleetUnit(d, (d.kind ?? 'pos') as RevocableDeviceKind, DEVICE_OFFLINE_AFTER_MS, now),
+      );
+    }
+    for (const s of screens) {
+      push(String(s.tenantId), toFleetUnit(s, 'screen', SCREEN_OFFLINE_AFTER_MS, now));
+    }
+
+    const invoicesByTenant = new Map<string, CrmInvoice[]>();
+    for (const invoice of overdue.invoices) {
+      const list = invoicesByTenant.get(invoice.tenantId) ?? [];
+      list.push(invoice);
+      invoicesByTenant.set(invoice.tenantId, list);
+    }
+
     return tenants.map((t) => {
-      const a = byTenant.get(String(t._id));
-      const lastOrderAt = a?.lastOrderAt ?? null;
+      const id = String(t._id);
+      const a = byTenant.get(id) ?? EMPTY_ACTIVITY;
+      const lastOrderAt = a.lastOrderAt ?? null;
+      const silence = daysSince(lastOrderAt, now);
       const plan = (t.plan ?? 'essentiel') as CrmClient['plan'];
+      const fleet = buildFleet(fleets.get(id) ?? []);
+      // L'absence de bloc `account` vaut « essai », jamais « anomalie » : les
+      // tenants créés avant ce champ n'en ont pas, et `.lean()` ne matérialise
+      // pas les défauts Mongoose. Même lecture que `AdminService`.
+      const accountStatus = ((t.account as { status?: string } | undefined)?.status ??
+        'trial') as TenantAccountStatus;
+
+      const modules = buildModules({
+        posOrders: a.posOrders30,
+        posLastOrderAt: a.posLastAt,
+        onlineOrders: a.onlineOrders30,
+        onlineLastOrderAt: a.onlineLastAt,
+        posDevices: fleet.units.filter((u) => u.kind === 'pos'),
+        kdsDevices: fleet.units.filter((u) => u.kind === 'kds'),
+        screens: fleet.units.filter((u) => u.kind === 'screen'),
+        // Pas de volet appro ici, et c'est sans effet sur le score : le suivi
+        // des stocks est affiché par la fiche mais reste hors de l'axe adoption
+        // (`SCORED_MODULE_KEYS`), justement pour que les deux écrans comptent
+        // pareil sans que la liste ait à ouvrir PostgreSQL pour tout le parc.
+      });
+
+      // La fenêtre 30 j est construite par la MÊME fonction que la fiche : le
+      // plancher sous lequel une variation ne veut rien dire y est déjà.
+      const window30 = buildWindow(
+        ACTIVITY_WINDOW_DAYS,
+        { orders: a.orders30, revenueCents: a.revenue30 },
+        { orders: a.ordersPrev30, revenueCents: a.revenuePrev30 },
+      );
+
+      const score = compositeScore([
+        healthAxis(
+          'activite',
+          scoreActivite({
+            daysSinceLastOrder: silence,
+            orders7d: a.orders7,
+            previousOrders7d: a.ordersPrev7,
+            hasHistory: lastOrderAt !== null,
+          }),
+        ),
+        healthAxis('adoption', scoreAdoption(modules)),
+        healthAxis('technique', scoreTechnique(fleet)),
+        healthAxis(
+          'paiement',
+          paiementAxis(accountStatus, summarizeOutstanding(invoicesByTenant.get(id) ?? [], now)),
+        ),
+      ]);
+
       return {
-        _id: String(t._id),
+        _id: id,
         name: t.name,
         slug: t.slug,
         plan,
         mrrCents: PLAN_MRR_CENTS[plan] ?? 0,
         founderSeat: Boolean(t.founderSeat),
         since: iso((t as { createdAt?: Date }).createdAt) ?? now.toISOString(),
-        orders30d: a?.orders30d ?? 0,
-        revenue30dCents: a?.revenue30dCents ?? 0,
+        orders30d: window30.orders,
+        revenue30dCents: window30.revenueCents,
         lastOrderAt: iso(lastOrderAt),
-        daysSinceLastOrder: daysSince(lastOrderAt, now),
+        daysSinceLastOrder: silence,
         health: clientHealth(lastOrderAt, now),
+        accountStatus,
+        score: score.value,
+        previousOrders: window30.previousOrders,
+        ordersDeltaPct: window30.ordersDeltaPct,
+        devicesOffline: fleet.offline,
       };
     });
   }

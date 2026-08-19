@@ -39,16 +39,9 @@ import {
   type AdminPlan,
 } from "@sm/contracts";
 import { ApiError } from "@/lib/api";
-import { cx } from "@/lib/cx";
 import { Btn, Card, EmptyState, Icon, Skeleton } from "@/components/ui";
 import { euroRound, fmtDay, fmtMonth, int } from "../../crm";
-import {
-  loadClientFile,
-  SEVERITY_BORDER,
-  SEVERITY_RANK,
-  type ClientFile,
-  type ParkDevice,
-} from "../data";
+import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import {
   PlanModal,
@@ -62,6 +55,7 @@ import {
   DevicesSection,
   HealthSection,
   NotesSection,
+  SignalsSection,
   SupplySection,
 } from "./sections";
 
@@ -154,9 +148,6 @@ export default function ClientFilePage({
   const plan = (account?.plan ?? row?.plan ?? "essentiel") as AdminPlan;
   const status = account?.account.status ?? row?.accountStatus ?? null;
   const blocked = account?.accessBlocked ?? isAccessBlocked(status);
-  const signals = [...file.signals].sort(
-    (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity],
-  );
 
   return (
     <div className="flex flex-col gap-4 p-[26px]">
@@ -294,41 +285,13 @@ export default function ClientFilePage({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          {signals.length > 0 && (
-            <Card className="p-[18px]">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold tracking-[-0.03em] text-ink">
-                  Signaux ouverts
-                </h3>
-                <Link
-                  href="/sm/signals"
-                  className="text-[13px] font-bold text-accent hover:underline"
-                >
-                  Toute la file
-                </Link>
-              </div>
-              <ul className="flex flex-col gap-1.5">
-                {signals.map((s) => (
-                  <li key={s.id} className="flex items-start gap-2.5">
-                    <span
-                      className={cx(
-                        "mt-px shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
-                        SEVERITY_BORDER[s.severity],
-                      )}
-                    >
-                      {s.severity}
-                    </span>
-                    <span className="min-w-0 flex-1 text-[13px] text-ink">
-                      {s.title}
-                      {s.detail && (
-                        <span className="block text-xs text-mut">{s.detail}</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
+          {/*
+            EN TÊTE DE LA COLONNE DE DROITE, toujours montée — même vide.
+            C'est la raison de l'appel : elle se cherche au même endroit qu'on
+            ait trois signaux ouverts ou aucun, et « rien à signaler » est une
+            réponse, pas une absence de carte.
+          */}
+          <SignalsSection file={file} />
 
           <DevicesSection file={file} onRevoke={setDevice} />
           <SupplySection file={file} />

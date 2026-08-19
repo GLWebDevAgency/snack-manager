@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TenantAccountStatus } from './admin';
 
 // ─────────────────────────────────────────────────────────────
 // CRM Snack Manager — notre back-office interne (HQ), pas celui du client.
@@ -295,6 +296,22 @@ export type CrmOverview = {
   recentTouches: (CrmLeadTouch & { leadId: string; restaurantName: string })[];
 };
 
+/**
+ * Une ligne de la liste des clients.
+ *
+ * ─── POURQUOI ELLE PORTE LE SCORE ───
+ *
+ * La colonne « Santé » affichait un tiret : la route ne rendait ni score, ni
+ * statut de compte, ni tendance, et l'écran compensait en rappelant
+ * `/crm/tenants/:id/health` une fois PAR CLIENT après l'affichage. À dix
+ * restaurants c'est un scintillement ; à cinquante, c'est cinquante requêtes
+ * dont chacune journalise une consultation de dossier — l'équipe aurait
+ * « ouvert » tout le parc sans avoir cliqué nulle part.
+ *
+ * Les cinq champs ci-dessous sont donc calculés EN UNE AGRÉGATION PAR CHAMP sur
+ * tout le parc, avec les mêmes fonctions de jugement que la fiche : le score
+ * qu'on lit dans la liste est celui qu'on retrouve en cliquant, au point près.
+ */
 export type CrmClient = {
   _id: string;
   name: string;
@@ -311,4 +328,21 @@ export type CrmClient = {
   lastOrderAt: string | null;
   daysSinceLastOrder: number | null;
   health: CrmClientHealth;
+  /**
+   * Statut commercial du compte — `suspended` signifie accès coupé, et c'est
+   * l'information qui doit se lire AVANT d'appeler, pas après.
+   */
+  accountStatus: TenantAccountStatus;
+  /** Score de santé composite 0-100, identique à celui de la fiche. */
+  score: number;
+  /** Commandes des 30 jours PRÉCÉDENTS — le socle de la tendance. */
+  previousOrders: number;
+  /**
+   * Variation des commandes sur 30 j, en %. `null` quand la période de
+   * référence ne pesait pas assez pour qu'un pourcentage veuille dire quelque
+   * chose : un client arrivé le mois dernier n'a pas fait « +18 536 % ».
+   */
+  ordersDeltaPct: number | null;
+  /** Appareils appairés sans réponse — une caisse muette se voit sans cliquer. */
+  devicesOffline: number;
 };
