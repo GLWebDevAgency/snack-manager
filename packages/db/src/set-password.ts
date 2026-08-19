@@ -37,9 +37,9 @@ const MIN_LENGTH = 12;
 /**
  * Refus des mots de passe construits sur le produit lui-même.
  *
- * C'est exactement la faute qu'on répare : `***MOT-DE-PASSE-RETIRE***` est le nom du
- * produit suivi de l'année. Interdire ce motif évite de le remplacer par son
- * cousin.
+ * C'est exactement la faute qu'on répare : le mot de passe d'amorçage était le
+ * nom du produit suivi de l'année. Interdire ce motif évite de le remplacer
+ * par son cousin.
  */
 const FORBIDDEN = [/snack/i, /manager/i, /classfood/i, /class.?food/i, /motdepasse/i, /password/i];
 

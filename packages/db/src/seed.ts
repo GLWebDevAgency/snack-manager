@@ -5,6 +5,7 @@
  *
  *   pnpm --filter @sm/db seed
  */
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
@@ -13,6 +14,33 @@ import mongoose from 'mongoose';
 import { MODELS } from './schemas';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
+
+/**
+ * MOT DE PASSE D'AMORÇAGE — jamais écrit dans le code.
+ *
+ * Ce fichier a porté les mots de passe des deux comptes EN DUR. Celui de
+ * l'équipe Snack Manager est le plus sensible : c'est le compte
+ * concerné est celui qui voit le chiffre d'affaires de TOUS les restaurants du
+ * parc et peut en suspendre un : son mot de passe committé serait lisible par
+ * quiconque obtient le dépôt, aujourd'hui ou dans dix ans, et l'effacer plus
+ * tard ne l'effacerait pas des commits passés.
+ *
+ * Deux voies, aucune ne laisse de trace dans le code :
+ *  · la variable d'environnement, quand on veut un mot de passe choisi ;
+ *  · à défaut, un tirage aléatoire IMPRIMÉ UNE FOIS à la fin du seed. Le seed
+ *    reste donc utilisable sans configuration, ce qui compte : une amorce
+ *    pénible finit contournée, et c'est comme ça qu'un secret revient en dur.
+ *
+ * Pour changer un mot de passe ensuite, sans passer par le code :
+ *   pnpm --filter @sm/db exec tsx src/set-password.ts <email>
+ */
+function seedPassword(variable: string): string {
+  const provided = process.env[variable]?.trim();
+  if (provided) return provided;
+  // 18 octets en base64url ≈ 144 bits : hors de portée d'une attaque par
+  // dictionnaire, et encore copiable à la main depuis un terminal.
+  return randomBytes(18).toString('base64url');
+}
 
 // ─── Chargement de menu-data.js (script navigateur : window.MENU = …) ───
 const menuPath = resolve(__dirname, '../../../design_handoff_snack_manager/menu-data.js');
@@ -604,9 +632,12 @@ async function main() {
     founderSeat: true, // le pilote est la place fondateur n°1
   });
 
+  // Mots de passe d'amorçage — voir `seedPassword` : jamais écrits dans le code.
+  const ownerPassword = seedPassword('SEED_OWNER_PASSWORD');
+  const adminPassword = seedPassword('SEED_ADMIN_PASSWORD');
   const [ownerHash, adminHash] = await Promise.all([
-    argon2.hash('***MOT-DE-PASSE-RETIRE***'),
-    argon2.hash('***MOT-DE-PASSE-RETIRE***'),
+    argon2.hash(ownerPassword),
+    argon2.hash(adminPassword),
   ]);
   await User.create([
     { email: 'limame19@gmail.com', passwordHash: ownerHash, role: 'owner', tenantId: tenant._id, name: 'Gérant Class\'Food' },
@@ -653,7 +684,10 @@ async function main() {
   }
 
   console.log(`✓ Tenant « ${tenant.name} » (${tenant.slug}) — ${nCats} catégories, ${nProds} produits`);
-  console.log('  Comptes : limame19@gmail.com / ***MOT-DE-PASSE-RETIRE*** (gérant) · admin@snackmanager.fr / ***MOT-DE-PASSE-RETIRE*** (SM)');
+  console.log('  Comptes : limame19@gmail.com (gérant) · admin@snackmanager.fr (équipe SM)');
+  console.log(`    gérant    : ${ownerPassword}`);
+  console.log(`    équipe SM : ${adminPassword}`);
+  console.log('  Notez-les : ils ne sont stockés que hachés, personne ne pourra les relire.');
   console.log('  PIN staff : Gérant 1234 · Caisse 1111 · Cuisine 2222');
   await mongoose.disconnect();
 }

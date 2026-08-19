@@ -48,7 +48,28 @@ const WEB = local ? 'http://localhost:3000' : 'https://web-production-99b58c.up.
 const POS = local ? 'http://localhost:8082' : 'https://pos-production-a9d8.up.railway.app';
 const KDS = local ? 'http://localhost:8083' : 'https://kds-production-8991.up.railway.app';
 
-const OWNER = { email: 'limame19@gmail.com', password: '***MOT-DE-PASSE-RETIRE***' };
+/**
+ * Identifiants du gérant, lus dans l'environnement.
+ *
+ * Ce script se connecte réellement au back-office pour photographier des
+ * écrans peuplés : il lui faut donc un vrai mot de passe. Il n'a pas à vivre
+ * dans le dépôt pour autant — un secret committé reste lisible dans
+ * l'historique même après qu'on l'a retiré du fichier.
+ *
+ *   CAPTURE_OWNER_PASSWORD='…' node scripts/capture-shots.mjs
+ */
+const OWNER = {
+  email: process.env.CAPTURE_OWNER_EMAIL ?? 'limame19@gmail.com',
+  password: process.env.CAPTURE_OWNER_PASSWORD ?? '',
+};
+if (!OWNER.password) {
+  console.error(
+    'CAPTURE_OWNER_PASSWORD manquant — ce script se connecte au back-office pour\n' +
+      'photographier des écrans peuplés. Exemple :\n' +
+      "  CAPTURE_OWNER_PASSWORD='…' node scripts/capture-shots.mjs",
+  );
+  process.exit(1);
+}
 const TENANT_SLUG = 'classfood';
 const POS_PIN = '1111';
 const KDS_PIN = '2222';
