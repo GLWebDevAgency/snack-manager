@@ -19,3 +19,4 @@ boilerplate-main.zip
 
 # Bundles web exportés (Expo)
 apps/*/dist/
+.env.production.backup
