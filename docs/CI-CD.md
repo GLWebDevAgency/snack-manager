@@ -413,3 +413,5 @@ curl -s https://api-production-8949.up.railway.app/health
 
 - **Pas de balayage périodique de l'historique complet.** Les deux passes
   couvrent le diff et l'arbre courant, pas les 28 commits antérieurs.
+
+<!-- Ligne jetable : vérification que la CI se déclenche sur une PR neuve. Cette branche n' est pas destinée à être fusionnée. -->
