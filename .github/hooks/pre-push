@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+#
+# Refuse un push direct vers main.
+#
+# Palliatif, en attendant que la protection côté GitHub soit applicable :
+# le dépôt est privé sur un compte personnel sans abonnement, et l'API de
+# protection répond 403 (voir .github/protection-main.json et docs/CI-CD.md § 3).
+#
+# À activer, une fois par copie de travail :
+#     git config core.hooksPath .github/hooks
+#
+# Ce garde-fou est LOCAL et se contourne avec `git push --no-verify`. Il ne
+# remplace pas la protection côté serveur : il rattrape la faute d'inattention,
+# pas la décision délibérée.
+
+branche_protegee="refs/heads/main"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	if [ "$remote_ref" = "$branche_protegee" ]; then
+		cat >&2 <<'FIN'
+
+  ✗ Push direct vers main refusé.
+
+    main se met à jour par pull request, pour que la CI ait son mot à dire
+    avant qu'un restaurant en service reçoive le code.
+
+        git switch -c fix/nom-du-changement
+        git push -u origin fix/nom-du-changement
+        gh pr create --fill
+        gh pr checks --watch
+
+    Voir docs/CI-CD.md § 4.
+
+FIN
+		exit 1
+	fi
+done
+
+exit 0
