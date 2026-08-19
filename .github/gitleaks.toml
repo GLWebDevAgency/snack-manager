@@ -1,0 +1,125 @@
+# Garde-fou secrets de Snack Manager.
+#
+# Ce fichier existe parce que deux mots de passe — dont celui de sm_admin, le
+# compte qui voit le chiffre d'affaires de tout le parc et peut suspendre un
+# restaurant — ont été écrits en dur puis committés. Ils ont été retirés avant
+# le premier push ; cette configuration est là pour que le prochain ne passe
+# pas.
+#
+# Utilisé par .github/workflows/secrets.yml, en local par :
+#   gitleaks dir . --config .github/gitleaks.toml --redact
+
+title = "Snack Manager — garde-fou secrets"
+
+[extend]
+# On hérite des règles fournies par gitleaks (clés AWS, jetons GitHub, clés
+# Stripe, clés privées PEM, etc.) et on ajoute ce qui manque pour ce dépôt.
+useDefault = true
+
+# ── URL de connexion portant des identifiants ────────────────────────────────
+# MONGO_URL, DATABASE_URL et REDIS_URL sont les trois variables les plus
+# sensibles du projet : elles contiennent le mot de passe de la base en clair.
+[[rules]]
+id = "uri-connexion-avec-identifiants"
+description = "URL de connexion contenant un identifiant et un mot de passe"
+regex = '''(?i)\b(?:mongodb\+srv|mongodb|postgresql|postgres|mysql|mariadb|rediss|redis|amqps|amqp|mssql|clickhouse)://[^\s/:@]{1,64}:[^\s/@]{1,256}@[^\s/]{1,256}'''
+keywords = [
+  "mongodb://",
+  "mongodb+srv://",
+  "postgres://",
+  "postgresql://",
+  "mysql://",
+  "mariadb://",
+  "redis://",
+  "rediss://",
+  "amqp://",
+  "amqps://",
+  "mssql://",
+  "clickhouse://",
+]
+tags = ["base-de-donnees", "identifiants"]
+
+# ── Secret affecté en dur dans le code ───────────────────────────────────────
+# Exactement le défaut qui a été payé : `const password = "…"` dans le seed.
+[[rules]]
+id = "secret-en-dur"
+description = "Mot de passe, clé ou jeton affecté en dur dans le code"
+regex = '''(?i)\b(?:pass(?:word|wd)|mot[_-]?de[_-]?passe|motdepasse|secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|private[_-]?key)\b\s*[:=]\s*['"`][^'"`\s]{8,}['"`]'''
+keywords = [
+  "password",
+  "passwd",
+  "motdepasse",
+  "mot_de_passe",
+  "mot-de-passe",
+  "secret",
+  "apikey",
+  "api_key",
+  "api-key",
+  "access_token",
+  "auth_token",
+  "private_key",
+]
+tags = ["mot-de-passe"]
+
+  [[rules.allowlists]]
+  description = "Noms de variables d'environnement, pas des valeurs"
+  regexTarget = "line"
+  regexes = [
+    '''process\.env''',
+    '''ConfigService''',
+    '''configService''',
+  ]
+
+# ── Fichier d'environnement versionné ────────────────────────────────────────
+# .gitignore couvre déjà .env et .env.* ; cette règle attrape le `git add -f`
+# et le fichier d'environnement déposé ailleurs dans l'arborescence.
+[[rules]]
+id = "fichier-env-versionne"
+description = "Fichier d'environnement versionné — les valeurs réelles ne doivent jamais entrer dans git"
+path = '''(^|/)\.env(\..+)?$'''
+regex = '''(?im)^\s*[A-Z][A-Z0-9_]{2,}\s*=\s*\S+'''
+tags = ["environnement"]
+
+  [[rules.allowlists]]
+  description = ".env.example est un gabarit documenté, sans valeur réelle"
+  paths = ['''(^|/)\.env\.example$''']
+
+# ── Listes d'exclusion globales ──────────────────────────────────────────────
+[[allowlists]]
+description = "Gabarits documentés de .env.example — aucune valeur réelle"
+regexTarget = "match"
+regexes = [
+  # mongodb://user:password@host:port · redis://default:password@host:port
+  '''://(?:user|utilisateur|default|username|USER|USERNAME):(?:password|PASSWORD|mot-de-passe|motdepasse|xxx+|\*+)@''',
+  '''(?i)change[-_]?me''',
+]
+
+# Exemption assumée, et documentée dans docs/CI-CD.md § 9.
+#
+# apps/api/src/modules/ordering/stripe-webhook.test.ts fabrique un secret de
+# signature Stripe pour vérifier qu'une signature qui ne colle pas ne confirme
+# rien. C'est une valeur inventée pour le test, mais elle a exactement la forme
+# d'un secret — c'est précisément ce que le test met à l'épreuve.
+#
+# targetRules limite l'exemption aux deux règles GÉNÉRIQUES, celles qui
+# raisonnent par forme et par entropie. Tout le reste continue de s'appliquer
+# aux fichiers de test :
+#   · les règles gitleaks spécifiques (sk_live_…, AKIA…, ghp_…, clés PEM) ;
+#   · uri-connexion-avec-identifiants (MONGO_URL, DATABASE_URL, REDIS_URL) ;
+#   · fichier-env-versionne.
+# Ce qui n'est plus couvert : un mot de passe générique, sans forme
+# reconnaissable, collé en dur dans un fichier de test. Angle mort étroit,
+# connu, accepté — et à retirer le jour où ce test compose sa valeur.
+[[allowlists]]
+targetRules = ["secret-en-dur", "generic-api-key"]
+description = "Secrets fabriqués dans les fichiers de test"
+paths = ['''\.(?:test|spec)\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$''']
+
+[[allowlists]]
+description = "Fichiers sans secret par nature"
+paths = [
+  # Empreintes d'intégrité, très denses en entropie : faux positifs garantis.
+  '''(^|/)pnpm-lock\.yaml$''',
+  # Cette configuration elle-même contient les gabarits ci-dessus.
+  '''(^|/)\.github/gitleaks\.toml$''',
+]
