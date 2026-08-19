@@ -7,12 +7,60 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
-const TOKEN_KEY = "sm.token";
+/**
+ * UNE SESSION PAR BACK-OFFICE, PAS UNE PAR NAVIGATEUR.
+ *
+ * Les deux back-offices vivent sur le MÊME domaine : `/admin` pour le gérant
+ * du restaurant, `/sm` pour l'équipe Snack Manager. Le stockage local est
+ * partagé par origine et par onglet — une clé unique faisait donc que la
+ * seconde connexion écrasait la première.
+ *
+ * L'enchaînement observé, et il est vicieux : on se connecte à `/sm`, le
+ * jeton d'équipe remplace celui du gérant ; l'onglet `/admin` appelle une
+ * route rattachée à un établissement avec un jeton qui n'en désigne aucun,
+ * reçoit un refus, EFFACE le jeton et redirige vers sa page de connexion —
+ * tuant du même coup la session `/sm` qui venait pourtant de réussir. Les
+ * deux onglets se déconnectent mutuellement, indéfiniment.
+ *
+ * Chaque surface a donc son propre emplacement. Ce n'est pas seulement un
+ * confort : les deux identités sont distinctes — l'une administre un
+ * restaurant, l'autre administre le parc — et rien ne justifie qu'ouvrir la
+ * seconde ferme la première.
+ */
+const TOKEN_KEYS = {
+  /** Équipe Snack Manager (rôle `sm_admin`), surface `/sm`. */
+  hq: "sm.token.hq",
+  /** Gérant et équipe d'un restaurant, surface `/admin`. */
+  resto: "sm.token.resto",
+} as const;
+
+/** Ancienne clé unique — purgée au premier accès, voir `tokenKey`. */
+const LEGACY_TOKEN_KEY = "sm.token";
+
+/**
+ * L'emplacement se déduit du chemin courant.
+ *
+ * Le déduire évite de faire passer la surface en paramètre à travers tout le
+ * client : un appel oublié retomberait sur le mauvais jeton, et le défaut
+ * serait invisible jusqu'au moment où deux sessions cohabitent.
+ */
+function tokenKey(): string {
+  if (typeof window === "undefined") return TOKEN_KEYS.resto;
+  // L'ancien jeton n'est jamais adopté : on ignore lequel des deux comptes
+  // il désignait, et le rattacher au hasard recréerait exactement la collision
+  // qu'on répare. Une reconnexion, une fois.
+  try {
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+  } catch {
+    // Navigation privée verrouillée : sans stockage, il n'y a pas de collision.
+  }
+  return window.location.pathname.startsWith("/sm") ? TOKEN_KEYS.hq : TOKEN_KEYS.resto;
+}
 
 export const getToken = () =>
-  typeof window === "undefined" ? null : localStorage.getItem(TOKEN_KEY);
-export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+  typeof window === "undefined" ? null : localStorage.getItem(tokenKey());
+export const setToken = (t: string) => localStorage.setItem(tokenKey(), t);
+export const clearToken = () => localStorage.removeItem(tokenKey());
 
 export class ApiError extends Error {
   constructor(
