@@ -16,3 +16,6 @@ Menu Trivolet Redesign (1)/
 # Boilerplate tiers sous AGPL-3.0 — consulté comme référence de conventions,
 # JAMAIS copié dans ce code propriétaire (voir ARCHITECTURE.md)
 boilerplate-main.zip
+
+# Bundles web exportés (Expo)
+apps/*/dist/
