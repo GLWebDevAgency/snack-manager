@@ -3,16 +3,24 @@ import { Platform } from 'react-native';
 /**
  * Configuration de l'appareil cuisine.
  *
- * En production l'URL d'API et le slug du restaurant sont figés à
- * l'approvisionnement de la tablette. En développement web, on accepte une
- * surcharge par paramètre d'URL (`?api=http://localhost:3001&tenant=classfood`),
- * mémorisée ensuite pour survivre aux rechargements de Metro.
+ * L'ÉTABLISSEMENT NE FIGURE PLUS ICI. Ce module a porté un
+ * `TENANT_SLUG = 'classfood'` : l'écran cuisine savait chez qui il travaillait
+ * parce que c'était compilé dedans, ce qui aurait exigé un build par
+ * restaurant. La tablette l'apprend désormais à l'appairage — un code à six
+ * caractères saisi une fois, contre un jeton d'appareil qui porte le tenant
+ * (voir `client.ts`). Ne réintroduis pas de valeur par défaut ici : elle
+ * ferait silencieusement travailler une cuisine sur les commandes d'un autre
+ * restaurant, et personne ne le verrait avant le premier ticket servi.
+ *
+ * Reste l'URL d'API, qui est bien une propriété de l'installation. En
+ * développement web, on accepte une surcharge par paramètre d'URL
+ * (`?api=http://localhost:3001`), mémorisée ensuite pour survivre aux
+ * rechargements de Metro.
  */
 
 const DEFAULT_API = 'https://api-production-8949.up.railway.app';
-const DEFAULT_TENANT = 'classfood';
 
-function override(key: 'api' | 'tenant'): string | null {
+function override(key: 'api'): string | null {
   if (Platform.OS !== 'web') return null;
   const storeKey = `sm.kds.cfg.${key}`;
   try {
@@ -28,7 +36,6 @@ function override(key: 'api' | 'tenant'): string | null {
 }
 
 export const API_URL = override('api') ?? DEFAULT_API;
-export const TENANT_SLUG = override('tenant') ?? DEFAULT_TENANT;
 
 /** Rafraîchissement du tableau (le temps réel WebSocket viendra en complément). */
 export const POLL_MS = 5000;
