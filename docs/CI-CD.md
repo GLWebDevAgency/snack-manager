@@ -572,6 +572,7 @@ Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
 |---|---|
 | Push sur une branche quelconque (`essai/branche-quelconque`) | **aucune exécution créée** — `gh run list --branch essai/branche-quelconque` est vide |
 | Push sur `develop` | une seule exécution, `Déploiement` — confirme que `ci.yml` ne se déclenche pas sur `develop` |
+| **Balayage des secrets rouge** | exécution `32304064809` (fausse alerte sur ce document même, § 11) : `Mise en ligne` et `Santé` **jamais démarrés**, alors que la vérification du monorepo était verte. Le déploiement ne part pas. |
 | Un job de mise en ligne en échec | exécution `32302822785` : `api` en échec, **`Santé après déploiement` non démarré** — le `needs:` bloque bien l'aval |
 | Une mise en ligne en échec n'interrompt pas le service | l'ancien déploiement `api` a continué de servir ; contrôle de santé vert pendant toute la panne |
 | Déploiement complet | exécution `32303150404` : quatre services en 3 min 44, santé verte en 7 s |
@@ -581,7 +582,34 @@ Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
 
 **Le déploiement vers `main` n'a volontairement pas été déclenché.** Le chemin
 est le même à deux valeurs près (le jeton et le nom d'environnement), tous deux
-choisis par la garde du § 10.
+choisis par la garde plus haut.
+
+> ### ⚠️ Le chemin production n'est pas encore ARMÉ
+>
+> Pour un événement `push`, GitHub exécute les workflows **tels qu'ils sont sur
+> la branche poussée**. C'est ce qui a permis de mettre `deploy.yml` au point
+> sur `develop` sans jamais risquer la production — et c'est aussi ce qui fait
+> qu'aujourd'hui :
+>
+> ```bash
+> $ git ls-tree -r --name-only origin/main -- .github/workflows/
+> .github/workflows/ci.yml
+> .github/workflows/secrets.yml      # ← pas de deploy.yml
+> ```
+>
+> **Tant que `deploy.yml` n'est pas dans `main`, un push sur `main` ne déploie
+> rien.** Le chemin production existe, il est écrit et conditionné, mais il ne
+> s'armera qu'à la fusion :
+>
+> ```bash
+> gh pr create --base main --head develop --fill
+> gh pr checks --watch
+> gh pr merge --squash        # ← cette fusion déploie EN PRODUCTION
+> ```
+>
+> Cette fusion emporte aussi le correctif `@sm/supply` décrit plus haut. Elle
+> se fait un jour de semaine, en début de journée, et on regarde le contrôle de
+> santé jusqu'au bout.
 
 ---
 
@@ -613,9 +641,23 @@ C'est volontaire et c'est structurel : s'il avait besoin d'un jeton, il
 échouerait. Il ne tape que des surfaces qu'un client peut ouvrir dans son
 navigateur.
 
-Réglages, tous facultatifs et aucun secret :
-`SM_URL_API`, `SM_URL_WEB`, `SM_URL_POS`, `SM_URL_KDS`, `SM_SLUG_CARTE`,
-`SM_TENTATIVES`, `SM_ATTENTE_MS`, `SM_DELAI_REQUETE_MS`.
+Réglages facultatifs — que des adresses publiques et des durées, rien de
+confidentiel :
+
+- `SM_URL_API`, `SM_URL_WEB`, `SM_URL_POS`, `SM_URL_KDS` — viser d'autres
+  adresses, un domaine personnalisé par exemple ;
+- `SM_SLUG_CARTE` — l'établissement dont on vérifie la carte ;
+- `SM_TENTATIVES`, `SM_ATTENTE_MS`, `SM_DELAI_REQUETE_MS` — la patience du
+  script face à une interface qui vient de redémarrer.
+
+> **Anecdote utile pour la suite.** La première rédaction de ce paragraphe
+> disait « aucun secret : \`SM_URL_API\`… ». Le balayage l'a pris pour une
+> affectation de secret en dur (règle `secret-en-dur`, qui cherche
+> `secret` suivi de `:` puis d'une valeur entre guillemets) et **a bloqué le
+> déploiement** — exécution `32304064809`. Le garde-fou a fonctionné, sur une
+> fausse alerte. Le bon réflexe est celui appliqué ici : **reformuler**. On
+> n'ajoute une exclusion dans `.github/gitleaks.toml` que si la forme est
+> inévitable, et alors étroite et commentée (§ 6).
 
 > **La carte publique est « IGNORÉE » en production, et ce n'est pas un
 > oubli.** La base de production a été remise à blanc (commit `7b1c6dc`) : il
@@ -782,7 +824,8 @@ avant vous.
   SHA déployé rendrait la question triviale — c'est un changement applicatif,
   pas un changement de pipeline.
 
-- **Le déploiement de `main` n'a jamais été exécuté.** Le chemin est identique
-  à celui de `develop`, au jeton et au nom d'environnement près, et il a été
+- **Le déploiement de `main` n'a jamais été exécuté, et n'est pas encore
+  armé** — `deploy.yml` n'est pas sur `main` (§ 10). Le chemin est identique à
+  celui de `develop`, au jeton et au nom d'environnement près, et il a été
   vérifié sur staging. La première mise en production réelle reste à faire, et
   elle ne se fait pas un vendredi soir.
