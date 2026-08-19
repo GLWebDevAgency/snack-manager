@@ -95,8 +95,9 @@ export function ScreenCard({
           </span>
         </div>
 
-        {/* ── Actions ── */}
-        <div className="mt-3.5 flex flex-wrap items-center gap-2">
+        {/* ── Actions — collées en bas : dans une grille, les cartes d'une même
+             rangée s'étirent, et des boutons alignés se cliquent sans viser. ── */}
+        <div className="mt-auto flex flex-wrap items-center gap-2 pt-3.5">
           {screen.paired ? (
             <>
               <Btn variant="ink" size="sm" icon="grid" onClick={onCompose}>

@@ -500,7 +500,7 @@ export default function ScreensPage() {
           ) : (
             // Le contenu est long par nature (code + trois étapes) : sur un
             // portable peu haut il défile plutôt que de déborder de l'écran.
-            <div className="cf-scroll flex max-h-[64vh] flex-col gap-4 overflow-y-auto">
+            <div className="cf-scroll flex max-h-[calc(100vh-200px)] flex-col gap-4 overflow-y-auto">
               {/*
                 Puits SOMBRE sous les tuiles du code : celles-ci valent #1a1a1a,
                 et un support de la même valeur les ferait disparaître (DA §1).
@@ -588,8 +588,9 @@ export default function ScreensPage() {
           <div className="flex flex-col gap-3">
             {regenScreen.paired ? (
               <>
-                <div className="flex gap-2.5 rounded-ctrl border border-alert/40 bg-alert/10 px-3.5 py-3">
-                  <Icon name="bell" size={16} className="mt-0.5 shrink-0 text-alertt" />
+                {/* Bloc rouge sans icône, comme les autres avertissements du
+                    back-office : la couleur porte déjà le signal. */}
+                <div className="rounded-ctrl border border-alert/40 bg-alert/10 px-3.5 py-3">
                   <p className="text-[13px] leading-relaxed text-alertt">
                     <span className="font-bold">
                       L&apos;appareil actuellement appairé sera révoqué.
