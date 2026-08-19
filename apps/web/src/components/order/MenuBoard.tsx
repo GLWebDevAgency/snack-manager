@@ -23,6 +23,7 @@ import { euros, fold } from "./helpers";
 import {
   AddButton,
   Badge,
+  Plate,
   PriceTag,
   Rail,
   SectionHead,
@@ -177,17 +178,20 @@ export function MenuBoard({
                   data-cat={category.id}
                   onClick={() => goTo(category.id)}
                   className={cx(
-                    "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 text-[13px] font-bold",
+                    // Onglet actif : filet blanc, pas d'aplat de marque. L'accent
+                    // reste réservé aux boutons d'ajout (DA §3) — sinon vingt
+                    // pastilles d'ajout et un onglet doré se disputent l'œil.
+                    "flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-[13.5px] font-bold",
                     on
-                      ? "border-accent bg-accent text-onaccent"
-                      : "border-white/8 bg-surface2 text-mut hover:text-ink",
+                      ? "border-white/45 bg-surface2 text-ink"
+                      : "border-transparent bg-surface2 text-mut hover:text-ink",
                   )}
                 >
                   {category.name}
                   <span
                     className={cx(
                       "text-[11px] font-extrabold tabular-nums",
-                      on ? "opacity-65" : "text-white/30",
+                      on ? "text-mut" : "text-white/30",
                     )}
                   >
                     {category.products.length}
@@ -225,7 +229,10 @@ export function MenuBoard({
               title={category.name}
               note={categoryNote(category)}
             />
-            <div className="flex flex-col gap-2.5">
+            {/* Deux colonnes au-delà de 1024 px : une seule colonne de cartes
+                au milieu d'un écran de bureau ressemble à une capture de
+                téléphone collée sur un mur. */}
+            <div className="grid gap-2.5 lg:grid-cols-2">
               {category.products.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -264,10 +271,14 @@ function categoryNote(category: MenuCategory): string | null {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Densité de la carte (maquette §5.2.3) : vignette 68, nom 16/700, description
- * sur deux lignes maximum, pied prix + action. Le rythme vertical est le même
- * pour toutes les cartes, avec ou sans description — c’est ce qui fait qu’une
- * liste de vingt produits se parcourt au pouce sans fatigue.
+ * Carte produit — la brique la plus vue de tout le produit.
+ *
+ * Trois quarts de la surface sont donnés au couple **visuel + prix** : c'est un
+ * site de restauration, l'appétit passe avant la mise en page. Le plateau fait
+ * 92 px (contre 68 auparavant) et reçoit le visuel détouré en `contain` ; le
+ * prix descend au pied de la carte, sur la même ligne que le bouton d'ajout,
+ * comme dans la maquette. Un produit sans photo garde exactement le même
+ * gabarit — le monogramme occupe le plateau, la liste ne « saute » pas.
  */
 function ProductCard({
   product,
@@ -286,7 +297,7 @@ function ProductCard({
   return (
     <article
       className={cx(
-        "relative overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
+        "relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
         qty > 0 ? "border-accent/45" : "border-white/6",
         unavailable && "opacity-55",
       )}
@@ -296,18 +307,31 @@ function ProductCard({
         disabled={!clickable}
         aria-label={`${product.name}${product.configurable ? " — composer" : " — ajouter au panier"}`}
         className={cx(
-          "flex w-full items-center gap-3.5 p-3 text-left",
+          "flex h-full w-full items-stretch gap-3.5 p-3 text-left",
           !clickable && "cursor-default active:scale-100",
         )}
       >
-        <Thumb product={product} />
+        <Plate
+          photoUrl={product.photoUrl}
+          name={product.name}
+          mono={24}
+          pad="p-[3%]"
+          /* Plateau LÉGÈREMENT paysage : les visuels détourés de la carte le
+             sont presque tous (582×395, 665×329…). Dans un carré, ils
+             s'inscrivent par la largeur et laissent deux bandes vides. */
+          className="h-[92px] w-[104px]"
+        />
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <h3 className="min-w-0 truncate text-[16px] font-bold leading-tight tracking-[-0.015em] text-ink">
+          <div className="flex items-start gap-2">
+            <h3 className="min-w-0 flex-1 text-[16.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
               {product.name}
             </h3>
-            {product.isNew && !unavailable && <Badge tone="new">Nouveau</Badge>}
+            {product.isNew && !unavailable && (
+              <span className="mt-px">
+                <Badge tone="new">Nouveau</Badge>
+              </span>
+            )}
           </div>
 
           {product.description && (
@@ -316,16 +340,20 @@ function ProductCard({
             </p>
           )}
 
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          {/* Pied : le prix et l'action se lisent sur la même ligne — l'œil
+              n'a jamais à traverser la carte pour savoir combien ça coûte. */}
+          <div className="mt-auto flex items-center justify-between gap-2 pt-2">
             {unavailable ? (
               <Badge tone="out">Bientôt</Badge>
             ) : (
+              // Pas de mention « à composer » : sur cette carte, presque tout
+              // se compose — la pastille à curseurs le dit déjà, un libellé
+              // répété vingt fois n'informe plus, il encombre.
               <PriceTag cents={product.fromPrice} from={product.variants.length > 0} />
             )}
+            {clickable && <AddButton qty={qty} compose={product.configurable} />}
           </div>
         </div>
-
-        {clickable && <AddButton qty={qty} compose={product.configurable} />}
       </Tap>
 
       {/* Prix lisible par les moteurs (microdonnées portées par le JSON-LD). */}
@@ -333,29 +361,6 @@ function ProductCard({
         {product.name} — {euros(product.fromPrice)}
       </span>
     </article>
-  );
-}
-
-/** Vignette : photo du restaurant, sinon monogramme sur surface niveau 3. */
-function Thumb({ product }: { product: MenuProduct }) {
-  if (product.photoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={product.photoUrl}
-        alt=""
-        loading="lazy"
-        className="size-[68px] shrink-0 rounded-card border border-white/8 object-cover"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden
-      className="grid size-[68px] shrink-0 place-items-center overflow-hidden rounded-card border border-white/8 bg-surface2 text-[20px] font-black uppercase tracking-[-0.03em] text-white/25"
-    >
-      {product.name.trim().slice(0, 2)}
-    </span>
   );
 }
 
@@ -386,7 +391,6 @@ export function Highlights({
       <SectionHead
         id="incontournables"
         title="Les incontournables"
-        note="Les plats que le restaurant met en avant"
         aside={
           <Tap
             onClick={onBrowse}
@@ -407,35 +411,32 @@ export function Highlights({
               disabled={disabled}
               aria-label={`${product.name} — ${euros(product.fromPrice)}`}
               className={cx(
-                "w-[158px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
+                "w-[172px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
                 qty > 0 ? "border-accent/45" : "border-white/6",
               )}
             >
-              <span className="relative block h-[96px] w-full overflow-hidden bg-surface2">
-                {product.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={product.photoUrl}
-                    alt=""
-                    loading="lazy"
-                    className="size-full object-cover"
-                  />
-                ) : (
-                  <span className="grid size-full place-items-center text-[26px] font-black uppercase tracking-[-0.03em] text-white/15">
-                    {product.name.trim().slice(0, 2)}
-                  </span>
-                )}
+              {/* Le visuel occupe la moitié de la carte : c'est le rail qui
+                  doit donner faim, pas le convaincre de lire. */}
+              <span className="relative block">
+                <Plate
+                  photoUrl={product.photoUrl}
+                  name={product.name}
+                  mono={46}
+                  pad="p-[9%]"
+                  radius="rounded-none"
+                  className="h-[130px] w-full border-0 border-b border-white/6"
+                />
                 {product.isNew && (
                   <span className="absolute left-2 top-2">
                     <Badge tone="new">Nouveau</Badge>
                   </span>
                 )}
               </span>
-              <span className="block px-2.5 pb-2.5 pt-2">
-                <span className="block truncate text-[14px] font-bold leading-tight text-ink">
+              <span className="block px-3 pb-3 pt-2.5">
+                <span className="block truncate text-[14.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
                   {product.name}
                 </span>
-                <span className="mt-2 flex items-center justify-between gap-2">
+                <span className="mt-2.5 flex items-center justify-between gap-2">
                   <PriceTag
                     cents={product.fromPrice}
                     from={product.variants.length > 0}
@@ -443,15 +444,12 @@ export function Highlights({
                   />
                   <span
                     aria-hidden
-                    className={cx(
-                      "grid size-7 shrink-0 place-items-center rounded-pill",
-                      qty > 0 ? "bg-accent text-onaccent" : "bg-white/10 text-ink",
-                    )}
+                    className="grid size-9 shrink-0 place-items-center rounded-pill bg-accent text-onaccent"
                   >
                     {qty > 0 ? (
-                      <span className="text-[12px] font-extrabold tabular-nums">{qty}</span>
+                      <span className="text-[13px] font-extrabold tabular-nums">{qty}</span>
                     ) : (
-                      <Icon name="plus" size={14} stroke={2.8} />
+                      <Icon name="plus" size={17} stroke={2.8} />
                     )}
                   </span>
                 </span>

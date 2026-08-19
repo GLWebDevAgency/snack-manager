@@ -65,6 +65,48 @@
   white-space: nowrap;
 }
 
+/* ── Plateau produit ──────────────────────────────────────────────────────
+ * Les 46 photos de la carte sont des visuels DÉTOURÉS (fond transparent, format
+ * libre : 340×298 comme 1920×1280). Recadrées en `cover`, elles perdent leurs
+ * extrémités — un kebab coupé aux deux bouts n'ouvre l'appétit de personne.
+ * Le plateau les reçoit donc en `contain`, posées sur un halo chaud qui les
+ * décolle du noir, avec une ombre portée qui leur donne du poids.
+ */
+.sm-plate {
+  background:
+    radial-gradient(
+      120% 92% at 50% 4%,
+      rgba(255, 255, 255, 0.075),
+      rgba(255, 255, 255, 0) 62%
+    ),
+    linear-gradient(180deg, #1d1d1d 0%, #131313 100%);
+}
+/* Halo neutre sous le plat : il l'assoit sans dépenser l'accent (DA §3). */
+.sm-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    62% 52% at 50% 62%,
+    rgba(255, 255, 255, 0.09),
+    rgba(255, 255, 255, 0) 72%
+  );
+}
+/* Le visuel détouré porte son ombre : sinon il flotte, découpé au ciseau. */
+.sm-cut {
+  position: relative;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6));
+}
+
+/* Repli sans photo : monogramme en contour — un parti pris, pas un trou. */
+.sm-mono {
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.28);
+  letter-spacing: -0.03em;
+  user-select: none;
+}
+
 /* ── Voile de lisibilité sous une photo (nom du produit sur l'image) ───── */
 .sm-scrim {
   background: linear-gradient(
@@ -87,6 +129,22 @@
   pointer-events: none;
   opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Carte d'accroche de l'en-tête ───────────────────────────────────────
+ * L'aplat sombre stratifié de la DA, posé en CARTE et non en pleine page :
+ * l'accroche tient dans ~300 px, si bien que le premier plat apparaît dès le
+ * premier écran. Le halo prend la couleur du restaurant, sans jamais devenir
+ * un aplat de marque.
+ */
+.sm-hero {
+  background:
+    radial-gradient(
+      120% 120% at 88% -10%,
+      color-mix(in srgb, var(--cf-accent) 26%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(180deg, #171717 0%, #0c0c0c 62%, #080808 100%);
 }
 
 /* ── Ancrage de section sous les barres collantes ────────────────────────

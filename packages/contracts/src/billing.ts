@@ -664,3 +664,505 @@ export const planLabel = (plan: BillingPlan): string => PLAN_LABELS[plan] ?? pla
 /** Libellé d'un statut de compte — même raison. */
 export const accountStatusLabel = (status: TenantAccountStatus): string =>
   TENANT_ACCOUNT_STATUS_LABELS[status];
+
+// ═════════════════════════════════════════════════════════════
+// CÔTÉ GÉRANT — « Back-office → Abonnement : toutes vos factures »
+//
+// Tout ce qui précède décrit la facturation vue par NOTRE équipe. Ce qui suit
+// décrit la même facturation vue par CELUI QUI PAIE. La FAQ #17 lui promet
+// depuis le premier jour « Back-office → Abonnement : toutes les factures en
+// PDF, le détail de votre formule » ; jusqu'ici il n'avait rien, et une
+// promesse commerciale non tenue est une dette qui se rembourse en confiance.
+//
+// TROIS RÈGLES SUPPLÉMENTAIRES, propres à cette lecture-là.
+//
+// 1. LE TENANT VIENT DU JETON, JAMAIS DE L'URL. Une facture est une donnée
+//    financière : un gérant qui lirait celles du voisin serait une fuite grave,
+//    pas un bug d'affichage. Il n'existe donc AUCUN paramètre d'établissement
+//    sur ces routes — rien à deviner, rien à forger.
+//
+// 2. UNE FACTURE RENDUE AU CLIENT EST UNE PIÈCE OPPOSABLE. Elle porte les
+//    mentions obligatoires du droit français, et celles qui manquent en base
+//    s'affichent en EMPLACEMENT VIDE — jamais inventées. Une facture fausse est
+//    pire qu'une facture absente : la première expose le client à un redressement,
+//    la seconde à un e-mail de relance.
+//
+// 3. UN COMPTE SUSPENDU GARDE CET ÉCRAN. C'est le seul, et c'est la condition
+//    pour qu'il puisse régulariser : couper à un impayé l'accès à ses propres
+//    factures, c'est lui retirer le moyen de payer.
+// ═════════════════════════════════════════════════════════════
+
+// ─── Conversion d'une facture stockée en facture d'API ───
+
+/**
+ * Une facture telle qu'elle sort de la base, avec tout ce que Mongo autorise :
+ * champs absents sur les documents anciens, dates rendues en `Date` ou en
+ * chaîne selon le chemin de lecture, identifiants qui ne sont pas des chaînes.
+ */
+export type StoredInvoice = {
+  _id: unknown;
+  tenantId?: unknown;
+  number?: unknown;
+  kind?: string | null;
+  label?: string | null;
+  period?: { start?: Date | string | null; end?: Date | string | null } | null;
+  amountCents?: number | null;
+  status?: string | null;
+  issuedAt?: Date | string | null;
+  dueAt?: Date | string | null;
+  paidAt?: Date | string | null;
+  method?: string | null;
+  cancelledAt?: Date | string | null;
+  cancelReason?: string | null;
+};
+
+const isoOrNull = (value: Date | string | null | undefined): string | null =>
+  value ? new Date(value).toISOString() : null;
+
+/**
+ * DOCUMENT STOCKÉ → FACTURE D'API, statut effectif recalculé à l'instant `now`.
+ *
+ * Cette conversion vivait en privé dans `crm/billing.service.ts`, où elle
+ * servait la seule fiche de l'équipe SM. Elle est remontée ici parce qu'un
+ * SECOND lecteur existe désormais — le gérant — et que deux conversions
+ * parallèles finiraient par diverger sur le seul point qui compte : le statut.
+ * Le jour où le client verrait « Payée » là où l'équipe lit « En retard », la
+ * conversation ne serait plus rattrapable.
+ *
+ * Fonction PURE, sans Mongoose ni date implicite : `now` est un argument pour
+ * qu'un test puisse se placer la veille d'une échéance.
+ */
+export function invoiceView(raw: StoredInvoice, now: Date | string = new Date()): CrmInvoice {
+  const storedStatus = (raw.status ?? 'brouillon') as InvoiceStatus;
+  const dueAt = raw.dueAt ? new Date(raw.dueAt) : new Date(0);
+  const status = effectiveInvoiceStatus(storedStatus, dueAt, now);
+  const amountCents = Number(raw.amountCents ?? 0);
+  const kind = (raw.kind ?? 'abonnement') as InvoiceKind;
+  const method = (raw.method ?? null) as InvoicePaymentMethod | null;
+  const start = raw.period?.start ? new Date(raw.period.start) : dueAt;
+  const end = raw.period?.end ? new Date(raw.period.end) : dueAt;
+  const key = monthKey(start);
+
+  return {
+    _id: String(raw._id),
+    tenantId: String(raw.tenantId ?? ''),
+    number: String(raw.number ?? ''),
+    kind,
+    kindLabel: INVOICE_KIND_LABELS[kind] ?? kind,
+    label: String(raw.label ?? ''),
+    period: { key, start: start.toISOString(), end: end.toISOString(), label: billingPeriod(key).label },
+    amountCents,
+    amountLabel: formatEuros(amountCents),
+    status,
+    statusLabel: INVOICE_STATUS_LABELS[status] ?? status,
+    storedStatus,
+    issuedAt: isoOrNull(raw.issuedAt),
+    dueAt: dueAt.toISOString(),
+    paidAt: isoOrNull(raw.paidAt),
+    method,
+    methodLabel: method ? INVOICE_PAYMENT_METHOD_LABELS[method] : null,
+    cancelledAt: isoOrNull(raw.cancelledAt),
+    cancelReason: String(raw.cancelReason ?? ''),
+    overdueDays: status === 'en_retard' ? daysLate(dueAt, now) : 0,
+    dueCents: isDueInvoiceStatus(status) ? amountCents : 0,
+  };
+}
+
+/**
+ * LA PROCHAINE ÉCHÉANCE — même règle des trois cas que la fiche de l'équipe.
+ *
+ * `due` doit arriver TRIÉ PAR ÉCHÉANCE CROISSANTE : la première ligne est la
+ * prochaine à tomber, et une facture déjà échue passe donc devant. C'est
+ * volontaire — annoncer au gérant « prochain prélèvement le 1er du mois
+ * prochain » alors qu'il doit encore celui du mois dernier serait un écran qui
+ * ment par omission.
+ */
+export function nextInvoiceDue(
+  due: readonly CrmInvoice[],
+  plan: BillingPlan,
+  billable: boolean,
+  now: Date = new Date(),
+): CrmNextDue | null {
+  if (!billable) return null;
+
+  const first = due[0];
+  if (first) {
+    return {
+      at: first.dueAt,
+      amountCents: first.dueCents,
+      amountLabel: formatEuros(first.dueCents),
+      // Un retard compte en NÉGATIF le même nombre de jours qu'`overdueDays` :
+      // deux arrondis indépendants afficheraient « −80 jours » à côté de
+      // « 79 jours de retard » sur la même pièce.
+      daysUntil: first.overdueDays > 0 ? -first.overdueDays : daysBetween(now, first.dueAt),
+      invoiceNumber: first.number,
+    };
+  }
+
+  const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
+  const amountCents = planMrrCents(plan);
+  return {
+    at: at.toISOString(),
+    amountCents,
+    amountLabel: formatEuros(amountCents),
+    daysUntil: daysBetween(now, at),
+    invoiceNumber: null,
+  };
+}
+
+/**
+ * CE QUE LE GÉRANT A LE DROIT DE VOIR DANS SON HISTORIQUE.
+ *
+ * Un BROUILLON n'est jamais parti chez lui : l'afficher annoncerait un
+ * prélèvement qui n'existe pas et provoquerait un appel pour rien.
+ *
+ * Une facture ANNULÉE reste visible dès lors qu'elle a été ÉMISE — il l'a
+ * reçue, la faire disparaître ferait un trou dans SON historique au moment où
+ * il rapproche ses relevés. Annulée avant d'être envoyée, elle n'a jamais
+ * existé pour lui : on ne la ressuscite pas.
+ *
+ * Le test sur `issuedAt` ne porte QUE sur les annulées : une pièce ancienne
+ * réglée sans date d'émission en base ne doit pas s'évaporer de l'historique du
+ * client à cause d'un champ que personne n'avait rempli à l'époque.
+ */
+export function isTenantVisibleInvoice(invoice: {
+  storedStatus: InvoiceStatus;
+  issuedAt: string | null;
+}): boolean {
+  if (invoice.storedStatus === 'brouillon') return false;
+  if (invoice.storedStatus === 'annulee') return invoice.issuedAt !== null;
+  return true;
+}
+
+// ─── Mentions légales d'une facture française ───
+
+/**
+ * L'EMPLACEMENT D'UNE MENTION QU'ON N'A PAS.
+ *
+ * Il s'imprime tel quel sur le PDF. C'est laid, et c'est le but : une mention
+ * manquante doit se VOIR — sur la facture comme dans le rapport d'exploitation
+ * — au lieu d'être comblée par une valeur plausible. Un SIRET inventé sur une
+ * pièce comptable est un faux ; un crochet vide est un travail à finir.
+ */
+export const INVOICE_LEGAL_PLACEHOLDER = '[À COMPLÉTER]';
+
+/** Une mention obligatoire absente, avec ce qu'il faut collecter pour la combler. */
+export type InvoiceLegalGap = {
+  /** Identifiant machine — `issuer.siret`, `customer.address`… */
+  field: string;
+  /** Ce qui manque, en français. */
+  label: string;
+  /** Où le trouver / comment le renseigner. */
+  hint: string;
+};
+
+/**
+ * Une partie de la facture — l'émetteur (nous) ou le client (le restaurant).
+ *
+ * TOUT est nullable, délibérément : ces informations n'existent nulle part en
+ * base aujourd'hui, et un type qui promettrait une chaîne obligerait la couche
+ * du dessous à inventer un défaut. `null` circule jusqu'au rendu, qui imprime
+ * un emplacement.
+ */
+export type InvoiceParty = {
+  name: string | null;
+  /** Forme juridique et capital — « SASU au capital de 1 000 € ». */
+  legalForm: string | null;
+  address: string | null;
+  siret: string | null;
+  /** Numéro de TVA intracommunautaire — `FR…`. */
+  vatNumber: string | null;
+  /** Greffe d'immatriculation — « RCS Rouen 900 000 000 ». */
+  rcs: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
+/** Partie entièrement inconnue — le point de départ, jamais un défaut acceptable. */
+export const EMPTY_PARTY: InvoiceParty = {
+  name: null,
+  legalForm: null,
+  address: null,
+  siret: null,
+  vatNumber: null,
+  rcs: null,
+  email: null,
+  phone: null,
+};
+
+/**
+ * CE QUE `amountCents` REPRÉSENTE, ET À QUEL TAUX.
+ *
+ * La base ne stocke qu'UN montant, sans dire s'il est hors taxes ou toutes
+ * taxes comprises, et aucun taux n'y figure. Une facture française doit
+ * pourtant montrer les trois : HT, taux et montant de TVA, TTC.
+ *
+ * On ne DEVINE donc pas. Tant que l'exploitant n'a pas déclaré son régime, les
+ * trois lignes restent des emplacements et le montant réellement facturé est
+ * imprimé tel quel, sous son vrai nom. Le jour où le régime est renseigné, la
+ * ventilation devient exacte sans qu'une ligne de code change.
+ */
+export type InvoiceVatConfig = {
+  /** Taux en POURCENT (`20`, `10`, `5.5`, `0`). `null` = régime non déclaré. */
+  ratePercent: number | null;
+  /** Ce que vaut le montant stocké. `null` = non déclaré (sans objet si taux 0). */
+  amountsAre: 'ht' | 'ttc' | null;
+};
+
+/** Régime inconnu — l'état par défaut tant que rien n'est configuré. */
+export const UNKNOWN_VAT: InvoiceVatConfig = { ratePercent: null, amountsAre: null };
+
+export type InvoiceVatBreakdown = {
+  /** `false` = régime non déclaré : les trois montants sont `null`. */
+  known: boolean;
+  ratePercent: number | null;
+  /** Base hors taxes, en CENTIMES. */
+  baseCents: number | null;
+  vatCents: number | null;
+  /** Toutes taxes comprises, en CENTIMES. */
+  totalCents: number | null;
+  /** Ligne à imprimer : « TVA 20 % », la franchise, ou l'emplacement. */
+  mention: string;
+};
+
+/** Franchise en base : la seule mention qui remplace légalement un taux. */
+export const INVOICE_VAT_EXEMPT_MENTION = 'TVA non applicable, article 293 B du CGI.';
+
+/** Taux écrit à la française : `5.5` → « 5,5 % ». */
+export const formatVatRate = (rate: number): string =>
+  `${String(rate).replace('.', ',')} %`;
+
+/**
+ * VENTILATION HT / TVA / TTC à partir du seul montant stocké.
+ *
+ * L'arrondi porte sur la TVA et se déduit du reste : additionner deux montants
+ * arrondis séparément produit un TTC qui ne tombe pas juste, et une facture
+ * dont la somme est fausse d'un centime est une facture qu'on refait.
+ */
+export function invoiceVat(
+  amountCents: number,
+  config: InvoiceVatConfig = UNKNOWN_VAT,
+): InvoiceVatBreakdown {
+  const rate = config.ratePercent;
+  if (rate === null || !Number.isFinite(rate) || rate < 0) {
+    return {
+      known: false,
+      ratePercent: null,
+      baseCents: null,
+      vatCents: null,
+      totalCents: null,
+      mention: `TVA ${INVOICE_LEGAL_PLACEHOLDER}`,
+    };
+  }
+
+  // Franchise en base : HT = TTC, et `amountsAre` n'a plus d'objet.
+  if (rate === 0) {
+    return {
+      known: true,
+      ratePercent: 0,
+      baseCents: amountCents,
+      vatCents: 0,
+      totalCents: amountCents,
+      mention: INVOICE_VAT_EXEMPT_MENTION,
+    };
+  }
+
+  if (config.amountsAre === null) {
+    return {
+      known: false,
+      ratePercent: rate,
+      baseCents: null,
+      vatCents: null,
+      totalCents: null,
+      mention: `TVA ${formatVatRate(rate)} — assiette ${INVOICE_LEGAL_PLACEHOLDER}`,
+    };
+  }
+
+  if (config.amountsAre === 'ht') {
+    const vatCents = Math.round((amountCents * rate) / 100);
+    return {
+      known: true,
+      ratePercent: rate,
+      baseCents: amountCents,
+      vatCents,
+      totalCents: amountCents + vatCents,
+      mention: `TVA ${formatVatRate(rate)}`,
+    };
+  }
+
+  const baseCents = Math.round(amountCents / (1 + rate / 100));
+  return {
+    known: true,
+    ratePercent: rate,
+    baseCents,
+    vatCents: amountCents - baseCents,
+    totalCents: amountCents,
+    mention: `TVA ${formatVatRate(rate)}`,
+  };
+}
+
+/**
+ * LES MENTIONS DE RÈGLEMENT, obligatoires sur toute facture entre
+ * professionnels (art. L. 441-9 et L. 441-10 du Code de commerce).
+ *
+ * Elles sont écrites ici, en toutes lettres, plutôt que dans le gabarit : ce
+ * sont des textes de loi, pas de la mise en page, et le jour où un article
+ * change c'est un seul endroit qu'on relit.
+ */
+export const INVOICE_LATE_PENALTY_MENTION =
+  'Pénalités de retard : en cas de règlement après l’échéance, une pénalité égale à trois fois le taux d’intérêt légal en vigueur est exigible, sans qu’un rappel soit nécessaire (art. L. 441-10 du Code de commerce).';
+
+export const INVOICE_RECOVERY_FEE_MENTION =
+  'Indemnité forfaitaire pour frais de recouvrement : 40 € (art. D. 441-5 du Code de commerce).';
+
+export const INVOICE_DISCOUNT_MENTION = 'Escompte pour paiement anticipé : néant.';
+
+/** Conditions de règlement — l'échéance de la pièce, en clair. */
+export const invoiceTermsMention = (dueAt: Date | string): string =>
+  `Conditions de règlement : paiement au plus tard le ${formatFrDate(dueAt)}.`;
+
+// ─── La facture telle qu'elle s'imprime ───
+
+/**
+ * TOUT CE QU'UNE FACTURE DOIT DIRE, assemblé et vérifié une seule fois.
+ *
+ * Le rendu PDF n'est plus qu'une mise en page : il ne décide de rien, ne
+ * complète rien, n'arrondit rien. C'est la condition pour qu'un second rendu
+ * (courriel, aperçu HTML, archive) dise EXACTEMENT la même chose que le
+ * premier — sur une pièce comptable, deux versions qui divergent d'un centime
+ * ou d'une mention, c'est un litige.
+ */
+export type InvoiceDocument = {
+  number: string;
+  issuer: InvoiceParty;
+  customer: InvoiceParty;
+  /** Date d'émission — `null` si la pièce n'a jamais été datée en base. */
+  issuedAt: string | null;
+  dueAt: string;
+  /** Période de la prestation — « septembre 2026 ». */
+  periodLabel: string;
+  designation: string;
+  /** Montant STOCKÉ, celui qui a réellement circulé. */
+  amountCents: number;
+  vat: InvoiceVatBreakdown;
+  status: InvoiceStatus;
+  statusLabel: string;
+  paidAt: string | null;
+  methodLabel: string | null;
+  cancelReason: string;
+  /** Conditions de règlement, pénalités, escompte — dans l'ordre d'impression. */
+  settlement: readonly string[];
+  /** Mentions obligatoires manquantes : imprimées en emplacement, remontées à l'équipe. */
+  gaps: readonly InvoiceLegalGap[];
+};
+
+/** Ce qu'on exige d'une partie pour qu'une facture soit opposable. */
+const REQUIRED_ISSUER: readonly { key: keyof InvoiceParty; label: string; hint: string }[] = [
+  { key: 'name', label: 'Dénomination de l’émetteur', hint: 'Raison sociale exacte de l’éditeur (extrait Kbis).' },
+  { key: 'address', label: 'Adresse du siège de l’émetteur', hint: 'Adresse postale complète du siège social.' },
+  { key: 'siret', label: 'SIRET de l’émetteur', hint: 'Numéro à 14 chiffres (extrait Kbis / avis de situation INSEE).' },
+  { key: 'vatNumber', label: 'TVA intracommunautaire de l’émetteur', hint: 'Numéro FR — obligatoire dès l’assujettissement à la TVA.' },
+];
+
+const REQUIRED_CUSTOMER: readonly { key: keyof InvoiceParty; label: string; hint: string }[] = [
+  { key: 'name', label: 'Dénomination du client', hint: 'Raison sociale du restaurant facturé.' },
+  { key: 'address', label: 'Adresse de facturation du client', hint: 'Adresse de facturation — distincte de l’adresse de l’établissement si le siège diffère.' },
+];
+
+function partyGaps(
+  party: InvoiceParty,
+  required: readonly { key: keyof InvoiceParty; label: string; hint: string }[],
+  prefix: string,
+): InvoiceLegalGap[] {
+  return required
+    .filter(({ key }) => {
+      const value = party[key];
+      return value === null || String(value).trim() === '';
+    })
+    .map(({ key, label, hint }) => ({ field: `${prefix}.${String(key)}`, label, hint }));
+}
+
+/**
+ * ASSEMBLE LA PIÈCE, et dit franchement ce qui lui manque.
+ *
+ * Rien n'est deviné : ce que la base ne porte pas ressort dans `gaps` et
+ * s'imprimera en emplacement. La désignation reprend le libellé saisi à
+ * l'émission et, à défaut, se reconstruit depuis la nature et la période —
+ * une facture sans désignation n'est pas une facture.
+ */
+export function buildInvoiceDocument(
+  invoice: CrmInvoice,
+  issuer: InvoiceParty,
+  customer: InvoiceParty,
+  vatConfig: InvoiceVatConfig = UNKNOWN_VAT,
+): InvoiceDocument {
+  const vat = invoiceVat(invoice.amountCents, vatConfig);
+  const gaps = [
+    ...partyGaps(issuer, REQUIRED_ISSUER, 'issuer'),
+    ...partyGaps(customer, REQUIRED_CUSTOMER, 'customer'),
+    ...(vat.known
+      ? []
+      : [
+          {
+            field: 'vat.regime',
+            label: 'Régime de TVA de l’émetteur',
+            hint: 'Taux applicable, et si les montants en base sont HT ou TTC. Sans lui, la ventilation HT / TVA / TTC ne peut pas être calculée.',
+          },
+        ]),
+  ];
+
+  return {
+    number: invoice.number,
+    issuer,
+    customer,
+    issuedAt: invoice.issuedAt,
+    dueAt: invoice.dueAt,
+    periodLabel: invoice.period.label,
+    designation: invoice.label || `${invoice.kindLabel} — ${invoice.period.label}`,
+    amountCents: invoice.amountCents,
+    vat,
+    status: invoice.status,
+    statusLabel: invoice.statusLabel,
+    paidAt: invoice.paidAt,
+    methodLabel: invoice.methodLabel,
+    cancelReason: invoice.cancelReason,
+    settlement: [
+      invoiceTermsMention(invoice.dueAt),
+      INVOICE_DISCOUNT_MENTION,
+      INVOICE_LATE_PENALTY_MENTION,
+      INVOICE_RECOVERY_FEE_MENTION,
+    ],
+    gaps,
+  };
+}
+
+/** Nom du fichier PDF proposé au gérant — « facture-SM-2026-0004.pdf ». */
+export const invoicePdfFilename = (number: string): string =>
+  `facture-${(number || 'sans-numero').replace(/[^A-Za-z0-9._-]/g, '-')}.pdf`;
+
+// ─── L'écran « Abonnement » du gérant ───
+
+/**
+ * CE QUE LE GÉRANT LIT SUR SON PROPRE ABONNEMENT.
+ *
+ * Volontairement PLUS ÉTROIT que `CrmTenantBilling` : pas d'ardoise du parc,
+ * pas de score, pas de place fondateur d'un autre. Et surtout aucun champ qui
+ * n'aurait de sens que pour nous — ce qu'il voit, c'est son contrat.
+ */
+export type MyBilling = {
+  tenant: { id: string; name: string; slug: string };
+  subscription: CrmSubscription;
+  nextDue: CrmNextDue | null;
+  outstanding: CrmOutstanding;
+  /** Historique ÉMIS, du plus récent au plus ancien — brouillons exclus. */
+  invoices: CrmInvoice[];
+  /**
+   * Mentions obligatoires encore absentes en base.
+   *
+   * Rendu au gérant, et pas seulement à l'équipe : s'il télécharge une facture
+   * qui porte des emplacements vides, il doit savoir pourquoi avant son
+   * comptable.
+   */
+  legalGaps: InvoiceLegalGap[];
+  generatedAt: string;
+};
