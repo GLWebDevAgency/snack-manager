@@ -49,6 +49,7 @@ import {
   type TenantActivityRow,
 } from './health.service';
 import { buildSeedLeads } from './crm.seed';
+import { demoSeedEnabled } from '../../common/demo-seed';
 
 /** Fenêtre d'activité d'un client : 30 jours glissants. */
 const ACTIVITY_WINDOW_DAYS = 30;
@@ -387,6 +388,10 @@ export class CrmService {
   private seeding: Promise<void> | null = null;
 
   private ensureSeeded(): Promise<void> {
+    // Jamais en production : voir `demoSeedEnabled`. Sans ce garde-fou, vider
+    // la base pour démarrer proprement se solderait par un pipeline de leads
+    // fictifs recréé au premier chargement de page.
+    if (!demoSeedEnabled()) return Promise.resolve();
     this.seeding ??= (async () => {
       if ((await this.leads.countDocuments({})) > 0) return;
       await this.leads.insertMany(buildSeedLeads());

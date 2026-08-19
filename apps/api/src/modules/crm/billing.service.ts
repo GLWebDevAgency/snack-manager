@@ -47,6 +47,7 @@ import {
 } from '@sm/contracts';
 import type { Counter, Invoice, Tenant } from '@sm/db';
 import { AdminService } from './admin.service';
+import { demoSeedEnabled } from '../../common/demo-seed';
 
 /**
  * Historique d'un client, échéance la plus récente en tête.
@@ -575,6 +576,9 @@ export class BillingService {
    * jamais faire tomber la vue, au pire la fiche s'affiche sans historique.
    */
   private ensureSeeded(): Promise<void> {
+    // Jamais en production : voir `demoSeedEnabled`. Des factures inventées
+    // dans un registre comptable seraient bien pires que des leads fictifs.
+    if (!demoSeedEnabled()) return Promise.resolve();
     this.seeding ??= (async () => {
       if ((await this.invoices.countDocuments({})) > 0) return;
       await this.seedDemo();

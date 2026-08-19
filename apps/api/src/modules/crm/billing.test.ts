@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Types, type Model } from 'mongoose';
 import {
   ADMIN_LOG_ACTION_LABELS,
@@ -854,6 +854,17 @@ describe('Facturation', () => {
   // ─── Jeu de démonstration ───
 
   describe('Jeu de démonstration Class’Food', () => {
+    // L'amorçage n'écrit QUE si `SM_DEMO_SEED=on` est posé explicitement — la
+    // production ne doit jamais se repeupler de factures inventées après une
+    // purge. Ces deux cas décrivent l'amorçage lui-même : ils l'activent donc,
+    // et le cas « rien sans le drapeau » est vérifié juste après.
+    beforeEach(() => {
+      process.env.SM_DEMO_SEED = 'on';
+    });
+    afterEach(() => {
+      delete process.env.SM_DEMO_SEED;
+    });
+
     it('écrit une histoire cohérente : des factures réglées et une en cours', async () => {
       const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT);
 
