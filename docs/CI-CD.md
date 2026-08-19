@@ -43,10 +43,10 @@ Quatre étapes distinctes, pour que l'échec se lise d'un coup d'œil dans
 l'interface GitHub :
 
 ```
-Typage             → turbo run typecheck
-Analyse statique   → turbo run lint
-Tests              → turbo run test
-Compilation        → turbo run build
+Typage             → turbo run typecheck        bloquant
+Analyse statique   → turbo run lint             NON bloquant (§ 9)
+Tests              → turbo run test             bloquant
+Compilation        → turbo run build            bloquant
 ```
 
 Points à connaître :
@@ -134,7 +134,9 @@ une surprise. Relevez-la volontairement.
 - **Pas de push direct sur `main`.** Le passage par une pull request est
   obligatoire, y compris pour l'auteur du dépôt.
 - **Les deux contrôles doivent être verts** avant que le bouton de fusion
-  s'active : `Vérification du monorepo` et `Balayage des secrets`.
+  s'active : `Vérification du monorepo` et `Balayage des secrets`. Attention :
+  au sein du premier, l'étape « Analyse statique » ne bloque pas (§ 9) — le
+  contrôle peut être vert avec ESLint en échec, signalé en annotation jaune.
 - **La branche doit être à jour** avec `main` avant fusion.
 - **Pas de force-push ni de suppression** de `main`.
 - **Aucune relecture par un tiers n'est exigée.** L'auteur est seul sur le
@@ -307,8 +309,30 @@ curl -s https://api-production-8949.up.railway.app/health
 - **Pas de tests de bout en bout.** `playwright` est présent à la racine mais
   aucun scénario n'est joué en CI. La caisse, l'écran cuisine et la commande en
   ligne se vérifient à la main.
-- **`lint` est un `echo ok` dans la plupart des paquets.** Seul `@sm/web` lance
-  réellement ESLint. L'étape « Analyse statique » de la CI est donc, pour
-  l'instant, largement décorative — c'est le typage qui fait le travail.
+- **L'étape « Analyse statique » ne bloque pas la fusion.** C'est le
+  compromis le plus important de ce pipeline, et il est temporaire.
+
+  `lint` est un `echo ok` dans presque tous les paquets ; seul `@sm/web` lance
+  réellement ESLint, et il sort **42 erreurs préexistantes**, essentiellement
+  `react-hooks/set-state-in-effect` — une règle que `eslint-config-next` érige
+  en erreur depuis Next 16, sur du code écrit avant qu'aucune CI ne le
+  regarde (`Checkout.tsx`, `cart.ts`, `primitives.tsx`…).
+
+  Rendre l'étape bloquante le jour de sa mise en place aurait interdit *toute*
+  fusion, y compris un correctif de production un vendredi soir. L'étape tourne
+  donc, échoue **visiblement** — annotation jaune sur l'exécution et encart
+  dans le résumé — mais laisse passer.
+
+  **Pour la rendre bloquante** (c'est l'objectif) : solder les 42 erreurs, puis
+  retirer de `.github/workflows/ci.yml` le `continue-on-error: true` de l'étape
+  « Analyse statique » ainsi que l'étape « Signaler la dette d'analyse
+  statique ». Le critère est net :
+
+  ```bash
+  pnpm exec turbo run lint   # doit sortir en 0
+  ```
+
+  Tant que ce n'est pas fait, **une CI verte ne dit rien de l'analyse
+  statique** : allez lire l'annotation.
 - **Pas de balayage périodique de l'historique complet.** Les deux passes
   couvrent le diff et l'arbre courant, pas les 28 commits antérieurs.
