@@ -35,7 +35,9 @@ async function main() {
 
   const cursor = orders.find(missing, { projection: { _id: 1 } });
   let done = 0;
-  let ops: Parameters<typeof orders.bulkWrite>[0] = [];
+  // `bulkWrite` reçoit un tableau en lecture seule : on extrait le type
+  // d'élément pour construire une file mutable sans transtypage.
+  let ops: Parameters<typeof orders.bulkWrite>[0][number][] = [];
 
   const flush = async () => {
     if (ops.length === 0) return;

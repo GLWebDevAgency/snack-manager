@@ -508,6 +508,36 @@
   flex: 0 0 40%;
 }
 
+/*
+ * Cartes côte à côte en paysage : le texte prend EXACTEMENT sa hauteur, la
+ * photo occupe le reste. Le nom et la description réservent deux lignes chacun,
+ * même quand ils n'en remplissent qu'une — c'est ce qui aligne les trois photos
+ * au pixel, et surtout ce qui empêche le prix d'être rogné par le bas de la
+ * carte quand un nom passe sur deux lignes (« Compose ton Tacos »).
+ */
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-photo {
+  flex: 1 1 auto;
+}
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-body {
+  flex: 0 0 auto;
+}
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-name {
+  min-height: 2.12em;
+}
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-desc {
+  -webkit-line-clamp: 2;
+  min-height: 2.6em;
+}
+
+/* Plus il y a de références, plus l'espace par carte est court : la
+   typographie suit, au lieu de déborder. */
+.bd-hero[data-count="2"] {
+  --bd-hero-name: calc(var(--bd-hero-size) * 0.86);
+}
+.bd-hero[data-count="3"] {
+  --bd-hero-name: calc(var(--bd-hero-size) * 0.72);
+}
+
 .bd-hero-photo img {
   position: absolute;
   inset: 0;
@@ -651,7 +681,7 @@
 }
 
 .bd-plate-title {
-  font-size: calc(var(--bd-title-size) * 1.5);
+  font-size: calc(var(--bd-title-size) * 2);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -659,7 +689,7 @@
 }
 
 .bd-plate-line {
-  font-size: calc(var(--bd-title-size) * 0.46);
+  font-size: calc(var(--bd-title-size) * 0.52);
   font-weight: 600;
   color: var(--bd-mut);
   line-height: 1.3;
@@ -667,7 +697,7 @@
 }
 
 .bd-plate-hours {
-  font-size: calc(var(--bd-title-size) * 0.62);
+  font-size: calc(var(--bd-title-size) * 0.74);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -953,7 +983,8 @@
   --bd-name-size: 42px;
   --bd-desc-size: 24px;
   --bd-price-size: 46px;
-  --bd-hero-name: 78px;
+  --bd-hero-size: 92px;
+  --bd-hero-name: var(--bd-hero-size);
   --bd-hero-photo: 52%;
   --bd-promo-label: 120px;
   --bd-progress-h: 8px;
@@ -1018,7 +1049,8 @@
   --bd-name-size: 56px;
   --bd-desc-size: 30px;
   --bd-price-size: 62px;
-  --bd-hero-name: 88px;
+  --bd-hero-size: 96px;
+  --bd-hero-name: var(--bd-hero-size);
   --bd-hero-photo: 46%;
   --bd-promo-label: 130px;
   --bd-progress-h: 10px;

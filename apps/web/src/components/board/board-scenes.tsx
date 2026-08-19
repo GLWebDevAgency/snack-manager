@@ -90,6 +90,7 @@ function HeroProducts({
     <div
       className="bd-hero"
       data-solo={solo ? "1" : "0"}
+      data-count={String(products.length)}
       style={{ "--bd-cols": products.length } as CSSProperties}
     >
       {products.map((product, index) => (
@@ -140,6 +141,7 @@ function PromoScene({ scene }: { scene: ScreenScenePayload }) {
       <div
         className="bd-hero"
         data-solo={scene.promos.length === 1 ? "1" : "0"}
+        data-count={String(Math.min(scene.promos.length, 3))}
         style={{ "--bd-cols": Math.min(scene.promos.length, 3) } as CSSProperties}
       >
         {scene.promos.slice(0, 3).map((promo, index) => (
