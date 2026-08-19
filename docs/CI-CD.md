@@ -21,8 +21,13 @@ Le pipeline répond à ces deux risques, et à rien d'autre :
 2. **Rien ne fusionne dans `main` avec un mot de passe, une URL de connexion ou
    une clé dans le diff.**
 
-Ce n'est pas un pipeline de déploiement : la mise en ligne sur Railway reste
-manuelle (§ 7).
+Puis un troisième risque s'est matérialisé, et il a fallu l'ajouter :
+
+3. **Rien ne part en ligne à la main.** Les mises en ligne se faisaient depuis
+   un poste (`railway up`). Le 19 août, l'API de staging est restée **deux
+   heures en retard sur la production** — un correctif déployé d'un côté,
+   oublié de l'autre, et personne pour le voir. Depuis, `develop` et `main`
+   se déploient toutes seules (§ 10).
 
 ---
 
@@ -32,10 +37,16 @@ manuelle (§ 7).
 |---|---|---|---|
 | `.github/workflows/ci.yml` | **Vérification du monorepo** | pull request · push sur `main` | `typecheck`, `lint`, `test`, `build` sur tout le monorepo via Turborepo |
 | `.github/workflows/secrets.yml` | **Balayage des secrets** | pull request · push sur `main` | gitleaks sur les commits apportés, puis sur l'arbre complet |
+| `.github/workflows/deploy.yml` | **Déploiement** | push sur `develop` · push sur `main` | vérifie, puis met en ligne les quatre services sur Railway, puis contrôle la santé (§ 10) |
 
-Les deux tournent en parallèle. Sur une pull request, la précédente exécution
-est annulée à chaque nouveau push (`concurrency`) ; sur `main`, jamais — chaque
-commit livré mérite son verdict.
+Les deux premiers tournent en parallèle. Sur une pull request, la précédente
+exécution est annulée à chaque nouveau push (`concurrency`) ; sur `main`,
+jamais — chaque commit livré mérite son verdict.
+
+> ⚠️ **`ci.yml` et `secrets.yml` ne tournent PAS sur un push vers `develop`.**
+> Leurs déclencheurs sont `pull_request` et `push` sur `main`. C'est un fait
+> structurant : il interdit de chaîner le déploiement sur eux, et c'est pour
+> cela que `deploy.yml` refait la vérification lui-même (§ 10).
 
 ### Vérification du monorepo
 
@@ -240,6 +251,10 @@ jour du retour arrière.
 pas que ça marche.** Le monorepo n'a pas de tests de bout en bout sur les
 surfaces terrain : la caisse et l'écran cuisine se vérifient à la main.
 
+Ce paragraphe décrit le trajet jusqu'à `main`. **La suite — de `main` jusqu'au
+restaurant en service — est au § 10**, et elle est automatique : la fusion
+déclenche le déploiement en production.
+
 ---
 
 ## 5 · Reproduire la CI en local
@@ -300,41 +315,15 @@ et le garde-fou ne sert plus à rien.
 
 ---
 
-## 7 · Mise en ligne et retour arrière
+## 7 · Mise en ligne
 
-⚠️ **Le déploiement n'est pas automatisé.** Aucun fichier de configuration
-Railway n'est versionné ; la mise en ligne se fait depuis un poste de
-développement ou depuis l'interface Railway (projet `snack-manager`, services
-`api` et `web`). La CI verrouille ce qui entre dans `main` ; elle ne pousse
-rien en production.
+**Le déploiement est automatique depuis le 19 août 2026.** Tout est décrit aux
+§§ 10 à 13 : le chemin d'un changement (§ 10), le contrôle de santé (§ 11), le
+retour arrière (§ 12), les limites (§ 13).
 
-**Règle maison, plus forte que la CI : jamais de déploiement du jeudi au
-dimanche.** Les restaurants vivent le week-end.
-
-### Revenir en arrière
-
-Par ordre de préférence :
-
-1. **Redéployer la révision précédente depuis Railway** — c'est le retour
-   arrière le plus rapide, et il ne touche pas au dépôt. Service `api` ou
-   `web` → historique des déploiements → redéployer.
-2. **Annuler la fusion dans `main`**, ce qui repasse par la CI :
-   ```bash
-   gh pr revert <numéro>          # ou : git revert -m 1 <sha-de-fusion>
-   ```
-   Puis redéployer. `revert` est préférable à un force-push : la protection de
-   `main` interdit ce dernier, et à raison.
-3. **Restauration de données** : ni la CI ni Railway ne rejouent une migration
-   à l'envers. Une migration PostgreSQL (`@sm/supply`) ou un script de
-   rétro-remplissage MongoDB doit être conçu réversible, ou accompagné de son
-   inverse. Le champ « ce que ça peut casser » du gabarit de pull request
-   existe pour que cette question soit posée avant, pas après.
-
-### Vérifier après déploiement
-
-```bash
-curl -s https://api-production-8949.up.railway.app/health
-```
+**Règle maison, plus forte que toute automatisation : jamais de déploiement du
+jeudi au dimanche.** Les restaurants vivent le week-end. La machine ne connaît
+pas cette règle — c'est vous qui décidez du moment où vous poussez.
 
 ---
 
@@ -357,9 +346,8 @@ curl -s https://api-production-8949.up.railway.app/health
   reste techniquement possible. Débloqué par un abonnement GitHub Pro, pas par
   du code.
 
-- **Le déploiement reste manuel** (§ 7). L'étape suivante naturelle est de
-  brancher Railway sur `main` : la CI qui garde la branche existe désormais,
-  c'était le préalable.
+- ~~Le déploiement reste manuel.~~ **Réglé le 19 août 2026** — voir §§ 10 à 13.
+  Les limites propres au déploiement sont au § 13.
 - **Pas de tests de bout en bout.** `playwright` est présent à la racine mais
   aucun scénario n'est joué en CI. La caisse, l'écran cuisine et la commande en
   ligne se vérifient à la main.
@@ -413,3 +401,388 @@ curl -s https://api-production-8949.up.railway.app/health
 
 - **Pas de balayage périodique de l'historique complet.** Les deux passes
   couvrent le diff et l'arbre courant, pas les 28 commits antérieurs.
+
+---
+
+## 10 · De la branche au restaurant en service
+
+C'est la section à lire un vendredi soir. Elle décrit ce qui se passe tout
+seul, et ce qui reste à votre charge.
+
+```
+   votre branche
+        │  git push + gh pr create
+        ▼
+   pull request ───► CI + Balayage des secrets      (ci.yml, secrets.yml)
+        │            ces deux contrôles verts = fusion possible
+        │
+        ├─ fusion dans develop ──► Déploiement ──► STAGING     (deploy.yml)
+        │
+        └─ fusion dans main ─────► Déploiement ──► PRODUCTION  (deploy.yml)
+```
+
+**Une seule règle à retenir : ce qui arrive dans `develop` part sur staging,
+ce qui arrive dans `main` part en production.** Il n'y a rien d'autre à faire,
+et surtout plus rien à lancer à la main.
+
+### Le chemin recommandé
+
+```bash
+# 1. Partir de main à jour
+git switch main && git pull
+
+# 2. Une branche par changement
+git switch -c fix/nom-du-changement
+
+# 3. Vérifier AVANT de pousser (§ 5)
+pnpm verify
+
+# 4. Répéter sur staging d'abord — c'est là que ça doit casser
+git switch develop && git pull && git merge fix/nom-du-changement
+git push origin develop            # ← déclenche le déploiement staging
+
+# 5. Regarder le déploiement, vraiment
+gh run watch
+
+# 6. Essayer sur staging à la main : la caisse, l'écran cuisine, une commande
+#    en ligne. Le contrôle de santé (§ 11) dit que ça répond, pas que ça marche.
+
+# 7. Alors seulement, la production, par pull request (§ 4)
+gh pr create --base main --fill
+gh pr checks --watch
+gh pr merge --squash --delete-branch   # ← déclenche le déploiement production
+```
+
+> **`develop` doit rester à jour avec `main`.** Le 19 août, `develop` avait
+> sept commits de retard : staging aurait servi du code plus ancien que la
+> production, et un essai sur staging n'aurait rien prouvé. À vérifier d'un
+> coup d'œil :
+> ```bash
+> git log --oneline origin/develop..origin/main   # doit être vide
+> ```
+
+### Ce que fait `deploy.yml`, dans l'ordre
+
+| # | Job | Ce qu'il fait | Ce qui se passe s'il échoue |
+|---|---|---|---|
+| 1 | **Cible du déploiement** | traduit la branche en environnement (`main`→production, `develop`→staging) | une référence inconnue arrête tout, immédiatement |
+| 2 | **Vérification du monorepo** | `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
+| 3 | **Balayage des secrets** | `gitleaks dir .` sur l'arbre qui allait être téléversé | rien ne part |
+| 4 | **Mise en ligne** | `api` seul d'abord (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
+| 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
+
+Les jobs 4 et 5 sont branchés par `needs:` sur les jobs 2 et 3. Ce n'est pas
+une politesse : un job dont un `needs` échoue **ne démarre pas**. Le
+déploiement n'est pas « sauté », il est inatteignable.
+
+> **Tout push déploie, même un changement de documentation.** Il n'y a
+> volontairement aucun `paths-ignore` : le jour où une exclusion existe, la
+> tête de `develop` peut différer de ce qui tourne sur staging, et on retombe
+> exactement dans le décalage que ce pipeline supprime. Un déploiement coûte
+> une poignée de minutes ; un décalage invisible a coûté deux heures.
+
+> **Deux poussées coup sur coup font la queue** (`concurrency`, sans
+> annulation). On n'interrompt jamais un déploiement en vol : annuler le job
+> GitHub n'annulerait de toute façon pas le déploiement Railway déjà lancé, et
+> une migration peut être en cours.
+
+### Pourquoi `api` part seule, et en premier
+
+Le service `api` porte un `preDeployCommand` **posé côté Railway** (pas dans
+GitHub Actions, et il ne faut pas l'y déplacer) :
+
+```
+node packages/supply/dist/migrate.js
+```
+
+Il s'exécute dans le conteneur Railway, où `DATABASE_URL` est déjà présente, et
+**il bloque la mise en service si la migration échoue**. Le schéma PostgreSQL
+est donc à jour avant que la nouvelle version serve la moindre requête, et
+avant que les trois interfaces se remettent à appeler l'API.
+
+C'est aussi la raison de l'ordre : `web`, `pos` et `kds` ne partent qu'une fois
+l'`api` **en service**, pas seulement construite.
+
+> **Ce que le déploiement automatique a trouvé le premier jour.** Le tsconfig de
+> `@sm/supply` excluait `src/migrate.ts` de la compilation : `dist/migrate.js`
+> n'était donc jamais produit à partir de l'arbre versionné. Les deux
+> environnements tournaient quand même, parce que les `railway up` partaient
+> d'un poste dont la copie de travail portait un correctif **non committé**.
+> Première exécution automatique, premier échec, message net :
+> `Cannot find module '/app/packages/supply/dist/migrate.js'`. C'est
+> exactement ce qu'on attend d'une machine qui ne déploie que le dépôt.
+
+### Pourquoi `push` et pas `workflow_run`
+
+« Quand la CI a fini, déploie » (`workflow_run`) est le montage qu'on essaie en
+premier. Il a été écarté, et le raisonnement complet est en tête de
+`.github/workflows/deploy.yml`. En bref :
+
+1. **Rédhibitoire** — `ci.yml` ne tourne pas sur un push vers `develop` (§ 2).
+   Il n'y a donc aucune exécution à laquelle s'accrocher : **staging ne serait
+   jamais déployé**. Vérifiable : après un push sur `develop`, `gh run list
+   --branch develop` ne montre que `Déploiement`.
+2. `workflow_run` se déclenche pour les exécutions de **n'importe quelle
+   branche**, branches de pull request comprises. Sans filtre explicite sur
+   `head_branch` **et** sur `event`, du code non relu part en production. Le
+   défaut est silencieux : rien ne signale qu'on déploie la mauvaise branche.
+3. Dans un `workflow_run`, `github.sha` et `github.ref` désignent la **branche
+   par défaut**, pas le commit vérifié — un `actions/checkout` sans argument y
+   récupère `main`. On déploierait autre chose que ce qui a été testé.
+4. `workflow_run` n'existe que dans la version du fichier présente sur la
+   branche par défaut : impossible à mettre au point depuis `develop`.
+
+Le montage retenu — **vérifier et déployer dans la même exécution, déclenchée
+par le push** — n'a aucun de ces défauts. `github.sha` *est* le commit poussé,
+par construction.
+
+### Ce qui interdit de déployer depuis une branche quelconque
+
+Quatre verrous, et il faut les franchir tous les quatre :
+
+1. `on.push.branches: [main, develop]` — une autre branche **ne crée même pas
+   d'exécution**. Vérifié : un push sur `essai/branche-quelconque` n'a produit
+   aucune exécution.
+2. `if: github.repository == 'GLWebDevAgency/snack-manager'` sur le job
+   `cible` — un fork n'essaie pas.
+3. Le job `cible` traduit la référence par un `case` **fermé** : tout ce qui
+   n'est ni `refs/heads/main` ni `refs/heads/develop` fait `exit 1`, et comme
+   tous les autres jobs en dépendent (`needs: cible`), plus rien ne démarre.
+4. **Le jeton est la frontière.** `RAILWAY_TOKEN` est choisi sur la même ligne
+   que la garde qui le protège :
+
+   ```yaml
+   RAILWAY_TOKEN: >-
+     ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_TOKEN_PRODUCTION
+     || github.ref == 'refs/heads/develop' && secrets.RAILWAY_TOKEN_STAGING
+     || '' }}
+   ```
+
+   Une référence inattendue donne la **chaîne vide**, et le job s'arrête avant
+   d'appeler Railway. Surtout : chaque jeton de projet Railway est cloisonné sur
+   **son** environnement. Même si cette correspondance était fausse, un jeton de
+   staging ne peut rien déployer en production. C'est pour cela qu'aucune
+   commande ne passe `--environment` : le jeton, et lui seul, désigne la cible.
+
+### Ce qui a été vérifié, et comment
+
+Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
+
+| Vérification | Résultat |
+|---|---|
+| Push sur une branche quelconque (`essai/branche-quelconque`) | **aucune exécution créée** — `gh run list --branch essai/branche-quelconque` est vide |
+| Push sur `develop` | une seule exécution, `Déploiement` — confirme que `ci.yml` ne se déclenche pas sur `develop` |
+| Un job de mise en ligne en échec | exécution `32302822785` : `api` en échec, **`Santé après déploiement` non démarré** — le `needs:` bloque bien l'aval |
+| Une mise en ligne en échec n'interrompt pas le service | l'ancien déploiement `api` a continué de servir ; contrôle de santé vert pendant toute la panne |
+| Déploiement complet | exécution `32303150404` : quatre services en 3 min 44, santé verte en 7 s |
+| Ordre `api` d'abord | `api` `SUCCESS` à 21:21:38, `web`/`pos`/`kds` lancés à 21:21:39 |
+| Migrations en pré-déploiement | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
+| Retour arrière | § 12 — mesuré dans les deux sens, 29 s et 24 s |
+
+**Le déploiement vers `main` n'a volontairement pas été déclenché.** Le chemin
+est le même à deux valeurs près (le jeton et le nom d'environnement), tous deux
+choisis par la garde du § 10.
+
+---
+
+## 11 · Le contrôle de santé — `scripts/smoke.mjs`
+
+« C'est en ligne » et « ça marche » sont deux affirmations différentes. Le
+job **Santé après déploiement** ne répond qu'à la seconde.
+
+```bash
+node scripts/smoke.mjs staging
+node scripts/smoke.mjs production
+```
+
+Aucune dépendance à installer (Node ≥ 20 suffit), et il tourne aussi bien
+depuis un poste que dans la CI.
+
+| Contrôle | Ce qu'il prouve |
+|---|---|
+| `GET /health` | l'API répond, et c'est bien **notre** API (`service: snack-manager-api`) |
+| `GET /public/tenants/<slug>/menu` | la lecture traverse Mongo de bout en bout et le multi-établissement résout |
+| `GET /` sur `web`, `pos`, `kds` | chaque interface sert **sa** page — le titre attendu est vérifié |
+
+**Un 200 ne suffit pas.** Une page d'erreur d'infrastructure en renvoie un
+aussi. C'est pourquoi chaque interface est reconnue à son titre : si `kds`
+servait la page de `web`, le contrôle serait rouge.
+
+Le script **ne reçoit aucun secret** — le job qui l'exécute n'en déclare aucun.
+C'est volontaire et c'est structurel : s'il avait besoin d'un jeton, il
+échouerait. Il ne tape que des surfaces qu'un client peut ouvrir dans son
+navigateur.
+
+Réglages, tous facultatifs et aucun secret :
+`SM_URL_API`, `SM_URL_WEB`, `SM_URL_POS`, `SM_URL_KDS`, `SM_SLUG_CARTE`,
+`SM_TENTATIVES`, `SM_ATTENTE_MS`, `SM_DELAI_REQUETE_MS`.
+
+> **La carte publique est « IGNORÉE » en production, et ce n'est pas un
+> oubli.** La base de production a été remise à blanc (commit `7b1c6dc`) : il
+> n'y a aujourd'hui aucun établissement, donc aucune carte à servir. Le
+> contrôle s'annonce alors `IGNORÉ` — bruyamment, avec une annotation — plutôt
+> que rouge pour une raison qui n'est pas une panne. **Le jour où le premier
+> restaurant est en ligne**, renseigner son slug dans `scripts/smoke.mjs`
+> (`CIBLES.production.slugCarte`) et le contrôle redevient réel. Un contrôle
+> qui ne peut pas tourner n'est pas un contrôle qui passe.
+
+Chaque interface est aussi accompagnée d'une **empreinte** (12 caractères de
+SHA-256 du corps servi). Elle ne sert à rien au quotidien, et à tout le jour où
+l'on se demande « est-ce que staging sert bien ma modification ? » : comparez
+l'empreinte avant et après.
+
+---
+
+## 12 · Revenir en arrière
+
+**À lire avant d'en avoir besoin.** Le déploiement automatique met en ligne
+plus vite ; il ne défait rien tout seul.
+
+### La règle qui compte : les migrations ne se défont pas
+
+Un retour arrière **remet le code d'avant. Il ne remet pas le schéma
+d'avant.** `packages/supply/dist/migrate.js` applique les migrations en avant,
+il n'a pas d'inverse, et Railway ne rejoue rien à l'envers.
+
+Conséquence, en clair : après un retour arrière, **l'ancien code parle à la
+nouvelle base**. Ça se passe bien quand la migration était additive (une
+colonne en plus, une table en plus : l'ancien code l'ignore). Ça se passe mal
+quand elle était destructive (colonne renommée ou supprimée : l'ancien code la
+cherche et ne la trouve plus).
+
+C'est pour cela que le champ « ce que ça peut casser » du gabarit de pull
+request existe, et qu'une migration doit être **additive par défaut** :
+ajouter, déployer, migrer les données, et seulement au déploiement suivant
+retirer l'ancienne colonne. Une migration destructive et son déploiement ne
+doivent jamais voyager ensemble.
+
+### Trois voies, de la plus rapide à la plus propre
+
+**1 · Revenir au déploiement précédent (30 secondes, mesuré)**
+
+C'est le geste d'urgence. Il ne touche pas au dépôt, et il repart d'une image
+déjà construite — donc pas de reconstruction.
+
+Depuis l'interface : service → onglet **Deployments** → le dernier déploiement
+`SUCCESS` d'avant → **Rollback**.
+
+Depuis un terminal, exactement la même chose :
+
+```bash
+# 1. Trouver l'identifiant du dernier bon déploiement
+railway deployment list --service api --environment production --limit 5 --json \
+  | jq -r '.[] | "\(.createdAt)  \(.status)  \(.id)"'
+
+# 2. Y revenir  (JETON_RAILWAY : jeton de projet Railway, jamais écrit dans un fichier)
+curl -s -X POST https://backboard.railway.com/graphql/v2 \
+  -H "Project-Access-Token: $JETON_RAILWAY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"mutation($id:String!){deploymentRollback(id:$id)}","variables":{"id":"<ID-DU-BON-DÉPLOIEMENT>"}}'
+
+# 3. Vérifier que le restaurant peut travailler
+node scripts/smoke.mjs production
+```
+
+**Mesuré sur `api` en staging, le 19 août 2026** — l'essai a été fait dans les
+deux sens :
+
+| Sens | Déploiement obtenu | Durée |
+|---|---|---|
+| retour arrière `660dd9d7` → image de `3e48d02a` | `a98fd8ec` `SUCCESS` | **29 s** |
+| retour en avant → image de `660dd9d7` | `b7413695` `SUCCESS` | **24 s** |
+
+Contrôle de santé vert après chacun des deux. Le pré-déploiement rejoue les
+migrations à chaque fois (`✓ Migrations supply appliquées` dans le journal) :
+elles sont idempotentes, les rejouer ne coûte rien.
+
+Notez ce que la mutation fait : elle **crée un nouveau déploiement** à partir
+de l'image visée. On ne « remonte » pas dans l'historique, on ajoute un
+déploiement de plus — l'historique reste lisible, et on peut repartir en avant
+par la même commande, avec l'identifiant de la version qu'on vient de quitter.
+
+À refaire service par service si plusieurs sont en cause — commencer par `api`.
+
+> `railway redeploy` ne fait **pas** ça : il rejoue le déploiement *le plus
+> récent*, c'est-à-dire celui qui pose problème. La CLI 4.16 n'a pas de
+> commande de retour arrière ; c'est pour cela que l'on passe par l'API.
+
+**2 · Annuler le commit (≈ 10 à 15 minutes)**
+
+C'est la voie propre, celle qui laisse le dépôt et la production d'accord.
+
+```bash
+git switch main && git pull
+git revert <sha>          # ou : git revert -m 1 <sha-de-fusion> pour une fusion
+git push                  # ← redéclenche tout le pipeline, vérifications comprises
+gh run watch
+```
+
+Le prix est le temps : vérification (~1 à 6 min) + construction et mise en
+service des quatre services (~5 à 10 min). **En pleine panne, faites d'abord la
+voie 1, puis la voie 2 à froid** — sinon le prochain déploiement remettra en
+ligne le code que vous venez de retirer.
+
+**3 · Restauration de données**
+
+Ni GitHub ni Railway ne restaurent des données. Le nécessaire est dans
+`@sm/db` (outil de sauvegarde/copie/purge). Une migration destructive doit
+être accompagnée de son inverse, écrit **avant** le déploiement.
+
+### Après tout retour arrière
+
+```bash
+node scripts/smoke.mjs production     # ou staging
+```
+
+Et prévenir le restaurant si le service a été interrompu : ils le sauront
+avant vous.
+
+---
+
+## 13 · Limites du déploiement automatique
+
+- **La vérification tourne deux fois sur `main`** — une fois dans `ci.yml`
+  (déclenché par le push), une fois dans `deploy.yml`. C'est le coût assumé de
+  ne pas toucher à `ci.yml` et `secrets.yml`. **La sortie propre**, le jour où
+  l'on accepte de les modifier : leur ajouter `on: workflow_call`, puis
+  remplacer dans `deploy.yml` les jobs `verification` et `secrets` par
+  `uses: ./.github/workflows/ci.yml` et `uses: ./.github/workflows/secrets.yml`.
+  Une seule définition, plus de dérive possible. **En attendant : toute
+  modification de `ci.yml` doit être recopiée dans `deploy.yml`.** C'est la
+  dette la plus dangereuse de ce fichier, parce qu'elle est silencieuse.
+
+- **`main` n'est toujours pas protégée** (§ 3). Un `git push` direct sur `main`
+  déclenche maintenant un **déploiement en production**. Le garde-fou local
+  (`.github/hooks/pre-push`) prend donc une importance qu'il n'avait pas :
+  ```bash
+  git config core.hooksPath .github/hooks
+  ```
+  À faire sur chaque copie de travail, tout de suite.
+
+- **Aucun environnement GitHub, donc aucune approbation manuelle avant la
+  production.** Les *environments* et leurs règles de protection sont réservés
+  aux dépôts publics ou aux comptes Pro ; ce dépôt est privé sur un compte
+  gratuit. Le jour où le compte passe en Pro, ajouter `environment: production`
+  au job de mise en ligne et exiger un relecteur : c'est deux lignes.
+
+- **Le déploiement ne s'arrête pas au premier restaurant mécontent.** Rien ne
+  déploie par vagues, ni ne revient en arrière tout seul si la santé est
+  rouge. Le retour arrière est **humain** (§ 12), et volontairement : un
+  retour automatique après une migration additive peut faire plus de mal que
+  la panne.
+
+- **Le contrôle de santé ne dit pas que ça marche.** Il dit que ça répond. La
+  caisse, l'écran cuisine et une commande en ligne complète se vérifient à la
+  main, sur staging, avant `main`. Il n'y a toujours pas de test de bout en
+  bout (§ 9).
+
+- **Aucune surface ne publie sa révision.** On ne peut pas demander à l'API
+  quel commit elle sert ; on le déduit de l'identifiant de déploiement Railway
+  et de l'empreinte des interfaces (§ 11). Un `GET /health` qui renverrait le
+  SHA déployé rendrait la question triviale — c'est un changement applicatif,
+  pas un changement de pipeline.
+
+- **Le déploiement de `main` n'a jamais été exécuté.** Le chemin est identique
+  à celui de `develop`, au jeton et au nom d'environnement près, et il a été
+  vérifié sur staging. La première mise en production réelle reste à faire, et
+  elle ne se fait pas un vendredi soir.
