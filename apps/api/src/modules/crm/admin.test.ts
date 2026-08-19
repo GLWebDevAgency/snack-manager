@@ -1,0 +1,475 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  ACCOUNT_SUSPENDED_MESSAGE,
+  ADMIN_LOG_ACTIONS,
+  ADMIN_PLANS,
+  DEVICE_REVOKE_REASONS,
+  PAIRING_CODE_TTL_MS,
+  PLANS,
+  PUBLIC_ORDERING_SUSPENDED_MESSAGE,
+  TENANT_ACCOUNT_STATUSES,
+  TenantSuspendSchema,
+  isAccessBlocked,
+  isPairingCodeShape,
+  publicOrderingState,
+  type AdminLogQuery,
+  type JwtPayload,
+} from '@sm/contracts';
+import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
+import { requirePairedDevice } from '../devices/device-access';
+import type { DevicesRepository } from '../devices/devices.repository';
+import { AdminService } from './admin.service';
+import { FakeCollection } from './admin.fakes';
+
+const CLASSFOOD = '65f000000000000000000001';
+const AUTRE_RESTO = '65f000000000000000000002';
+const CAISSE = '65f0000000000000000000a1';
+const ECRAN = '65f0000000000000000000b1';
+const CAISSE_DU_VOISIN = '65f0000000000000000000a2';
+
+const SM: JwtPayload = {
+  sub: '65f00000000000000000ff01',
+  tenantId: null,
+  role: 'sm_admin',
+  kind: 'user',
+};
+
+const TOUT = { limit: 200 } satisfies AdminLogQuery;
+
+describe('Administration client', () => {
+  let tenants: FakeCollection;
+  let devices: FakeCollection;
+  let screens: FakeCollection;
+  let logs: FakeCollection;
+  let users: FakeCollection;
+  let admin: AdminService;
+
+  beforeEach(() => {
+    tenants = new FakeCollection('tenant');
+    devices = new FakeCollection('device');
+    screens = new FakeCollection('screen');
+    logs = new FakeCollection('log');
+    users = new FakeCollection('user');
+
+    tenants.seed({
+      _id: CLASSFOOD,
+      slug: 'classfood',
+      name: "Class'Food",
+      plan: 'essentiel',
+      founderSeat: true,
+      createdAt: new Date('2026-01-04T09:00:00Z'),
+    });
+    tenants.seed({ _id: AUTRE_RESTO, slug: 'voisin', name: 'Le Voisin', plan: 'complet' });
+    users.seed({ _id: SM.sub, email: 'admin@snackmanager.fr' });
+
+    admin = new AdminService(
+      tenants.asModel<Tenant>(),
+      devices.asModel<Device>(),
+      screens.asModel<Screen>(),
+      logs.asModel<AdminLog>(),
+      users.asModel<User>(),
+    );
+  });
+
+  const seedCaisse = () =>
+    devices.seed({
+      _id: CAISSE,
+      tenantId: CLASSFOOD,
+      name: 'Caisse comptoir',
+      kind: 'pos',
+      paired: true,
+      deviceToken: 'jeton-de-la-tablette-volée',
+      pairingCode: null,
+      lastSeenAt: new Date('2026-08-19T11:30:00Z'),
+      active: true,
+    });
+
+  /** Le dépôt d'appareils tel que le voit la caisse qui appelle l'API. */
+  const deviceRepository = (): DevicesRepository =>
+    ({
+      findByDeviceToken: async (token: string) =>
+        (devices.rows.find((r) => r.deviceToken === token && r.paired === true) as never) ?? null,
+    }) as unknown as DevicesRepository;
+
+  // ─── Statut de compte ───
+
+  describe('Suspension et réactivation', () => {
+    it('suspend un établissement en enregistrant le motif et la date', async () => {
+      const view = await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé — relance 3 sans réponse' });
+
+      expect(view.account.status).toBe('suspended');
+      expect(view.accessBlocked).toBe(true);
+      expect(view.statusLabel).toBe('Suspendu');
+      expect(view.account.reason).toBe('Impayé — relance 3 sans réponse');
+      expect(view.account.suspendedAt).not.toBeNull();
+      // `since` marque le début du statut COURANT, pas l'entrée dans le parc.
+      expect(view.account.since).toBe(view.account.suspendedAt);
+    });
+
+    it('ne détruit rien : suspendre ne touche ni au nom, ni à la formule', async () => {
+      // « Un restaurant suspendu ne doit pas perdre ses données, seulement
+      // l'accès. » Le document reste entier, prêt à rouvrir.
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      const row = tenants.rows.find((r) => r._id === CLASSFOOD)!;
+
+      expect(row.name).toBe("Class'Food");
+      expect(row.slug).toBe('classfood');
+      expect(row.plan).toBe('essentiel');
+      expect(row.founderSeat).toBe(true);
+    });
+
+    it('rouvre l’accès et efface la trace de blocage — mais pas celle du journal', async () => {
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      const view = await admin.reactivate(SM, CLASSFOOD, { reason: 'Facture réglée' });
+
+      expect(view.account.status).toBe('active');
+      expect(view.accessBlocked).toBe(false);
+      expect(view.account.suspendedAt).toBeNull();
+
+      // L'épisode reste lisible : c'est tout l'intérêt d'un journal append-only.
+      const journal = await admin.journal(CLASSFOOD, TOUT);
+      expect(journal.map((e) => e.action)).toContain('tenant.suspend');
+      expect(journal.map((e) => e.action)).toContain('tenant.reactivate');
+    });
+
+    it('exige un motif pour suspendre, jamais pour réactiver', () => {
+      // Fermer la porte d'un commerçant se justifie ; la rouvrir se raconte.
+      expect(TenantSuspendSchema.safeParse({ reason: '' }).success).toBe(false);
+      expect(TenantSuspendSchema.safeParse({ reason: 'Impayé' }).success).toBe(true);
+    });
+  });
+
+  describe('Changement de formule', () => {
+    it('journalise l’ancienne et la nouvelle formule', async () => {
+      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'boost', reason: 'Upsell démo' });
+
+      expect(view.plan).toBe('boost');
+      const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
+        (e) => e.action === 'tenant.plan_change',
+      );
+      // Sans l'ancienne valeur, impossible de dire si le client a monté ou
+      // descendu en gamme six mois plus tard.
+      expect(entry?.meta).toEqual({ from: 'essentiel', to: 'boost' });
+      expect(entry?.reason).toBe('Upsell démo');
+    });
+
+    it('ne touche pas au statut de compte', async () => {
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+
+      // Changer de formule n'est pas une décision d'accès : un client suspendu
+      // qu'on repasse en « Complet » reste suspendu.
+      expect(view.account.status).toBe('suspended');
+      expect(view.accessBlocked).toBe(true);
+    });
+  });
+
+  describe('Notes internes', () => {
+    it('écrit la note dans le journal, sans collection parallèle', async () => {
+      const entry = await admin.addNote(SM, CLASSFOOD, { note: 'Gérant promet de régler vendredi' });
+
+      expect(entry.action).toBe('tenant.note');
+      expect(entry.reason).toBe('Gérant promet de régler vendredi');
+      expect((await admin.journal(CLASSFOOD, TOUT))[0]?._id).toBe(entry._id);
+    });
+  });
+
+  // ─── Révocation d'appareil ───
+
+  describe('Révocation d’un appareil', () => {
+    it('coupe immédiatement le jeton d’une tablette volée', async () => {
+      seedCaisse();
+      const repository = deviceRepository();
+      // Avant : la tablette encaisse.
+      await expect(requirePairedDevice(repository, 'jeton-de-la-tablette-volée')).resolves.toEqual(
+        expect.objectContaining({ name: 'Caisse comptoir' }),
+      );
+
+      await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: 'Oubliée en salle' });
+
+      // Après : plus jamais. Le jeton est DÉTRUIT, pas désactivé — même
+      // réappairé, l'appareil repartira sur un secret neuf.
+      await expect(
+        requirePairedDevice(repository, 'jeton-de-la-tablette-volée'),
+      ).rejects.toThrow(/plus reconnu/);
+    });
+
+    it('repose l’appareil en attente d’appairage, avec un code frais à dicter', async () => {
+      seedCaisse();
+      const revoked = await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
+
+      expect(revoked.paired).toBe(false);
+      expect(revoked.kind).toBe('pos');
+      expect(revoked.kindLabel).toBe('Caisse');
+      // L'équipe SM est au téléphone avec le restaurateur au moment où elle
+      // coupe : le code de remise en service part avec la réponse.
+      expect(isPairingCodeShape(revoked.pairing.code)).toBe(true);
+      expect(Date.parse(revoked.pairing.expiresAt) - Date.parse(revoked.revokedAt)).toBe(
+        PAIRING_CODE_TTL_MS,
+      );
+
+      const row = devices.rows.find((r) => r._id === CAISSE)!;
+      expect(row.deviceToken).toBeNull();
+      expect(row.paired).toBe(false);
+      expect(row.lastSeenAt).toBeNull();
+      expect(row.pairingCode).toBe(revoked.pairing.code);
+    });
+
+    it('enregistre le motif, sur l’appareil comme au journal', async () => {
+      seedCaisse();
+      await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'perte', note: 'Taxi' });
+
+      const row = devices.rows.find((r) => r._id === CAISSE)!;
+      expect(row.revokedReason).toBe('perte');
+      expect(row.revokedAt).toBeInstanceOf(Date);
+
+      const entry = (await admin.journal(CLASSFOOD, TOUT)).find((e) => e.action === 'device.revoke');
+      expect(entry?.targetId).toBe(CAISSE);
+      expect(entry?.reason).toBe('Taxi');
+      expect(entry?.meta).toMatchObject({ reason: 'perte', kind: 'pos', name: 'Caisse comptoir' });
+    });
+
+    it('révoque un écran de salle avec le même geste', async () => {
+      screens.seed({
+        _id: ECRAN,
+        tenantId: CLASSFOOD,
+        name: 'Écran comptoir',
+        paired: true,
+        deviceToken: 'jeton-hdmi',
+      });
+
+      const revoked = await admin.revokeScreen(SM, CLASSFOOD, ECRAN, {
+        reason: 'remplacement',
+        note: '',
+      });
+
+      expect(revoked.kind).toBe('screen');
+      expect(revoked.kindLabel).toBe('Écran de salle');
+      expect(screens.rows.find((r) => r._id === ECRAN)!.deviceToken).toBeNull();
+      expect((await admin.journal(CLASSFOOD, TOUT))[0]?.action).toBe('screen.revoke');
+    });
+
+    it('refuse de couper la caisse d’un autre établissement', async () => {
+      devices.seed({
+        _id: CAISSE_DU_VOISIN,
+        tenantId: AUTRE_RESTO,
+        name: 'Caisse du voisin',
+        kind: 'pos',
+        paired: true,
+        deviceToken: 'jeton-du-voisin',
+      });
+
+      // Le filtre porte le tenant : deviner un identifiant ne suffit pas, même
+      // depuis un compte d'équipe.
+      await expect(
+        admin.revokeDevice(SM, CLASSFOOD, CAISSE_DU_VOISIN, { reason: 'vol', note: '' }),
+      ).rejects.toThrow(/introuvable/);
+      expect(devices.rows.find((r) => r._id === CAISSE_DU_VOISIN)!.deviceToken).toBe(
+        'jeton-du-voisin',
+      );
+    });
+
+    it('rend 404 sur un identifiant illisible plutôt qu’une erreur de cast', async () => {
+      await expect(
+        admin.revokeDevice(SM, CLASSFOOD, 'pas-un-objectid', { reason: 'panne', note: '' }),
+      ).rejects.toThrow(/introuvable/);
+    });
+  });
+
+  // ─── Journal ───
+
+  describe('Journal d’administration', () => {
+    it('trace QUI, QUOI, SUR QUI, QUAND et POURQUOI', async () => {
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé — relance 3' });
+      const entry = (await admin.journal(CLASSFOOD, TOUT))[0]!;
+
+      expect(entry.actor.id).toBe(SM.sub);
+      // Dénormalisé à l'écriture : le journal ne doit pas changer de contenu
+      // le jour où un compte d'équipe est renommé ou supprimé.
+      expect(entry.actor.email).toBe('admin@snackmanager.fr');
+      expect(entry.action).toBe('tenant.suspend');
+      expect(entry.actionLabel).toBe('Suspension du compte');
+      expect(entry.tenantId).toBe(CLASSFOOD);
+      expect(Date.parse(entry.at)).not.toBeNaN();
+      expect(entry.reason).toBe('Impayé — relance 3');
+    });
+
+    it('écrit une ligne pour CHAQUE action d’administration, consultation comprise', async () => {
+      seedCaisse();
+      screens.seed({ _id: ECRAN, tenantId: CLASSFOOD, name: 'Écran', paired: true });
+
+      await admin.account(SM, CLASSFOOD);
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
+      await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+      await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
+      await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
+      await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });
+
+      // Nous agissons sur l'outil de travail d'un commerçant : aucun geste ne
+      // doit pouvoir être fait sans laisser de trace.
+      const actions = (await admin.journal(CLASSFOOD, TOUT)).map((e) => e.action);
+      expect(new Set(actions)).toEqual(new Set(ADMIN_LOG_ACTIONS));
+      expect(actions).toHaveLength(ADMIN_LOG_ACTIONS.length);
+    });
+
+    it('rend le journal du plus récent au plus ancien', async () => {
+      await admin.addNote(SM, CLASSFOOD, { note: 'première' });
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+
+      const journal = await admin.journal(CLASSFOOD, TOUT);
+      expect(journal[0]?.action).toBe('tenant.suspend');
+      expect(journal.at(-1)?.action).toBe('tenant.note');
+    });
+
+    it('cloisonne le journal par établissement, et sait le lire en entier', async () => {
+      await admin.addNote(SM, CLASSFOOD, { note: 'chez nous' });
+      await admin.addNote(SM, AUTRE_RESTO, { note: 'chez le voisin' });
+
+      expect(await admin.journal(CLASSFOOD, TOUT)).toHaveLength(1);
+      expect(await admin.allLogs(TOUT)).toHaveLength(2);
+      expect(await admin.allLogs({ limit: 200, action: 'tenant.note' })).toHaveLength(2);
+      expect(await admin.allLogs({ limit: 1 })).toHaveLength(1);
+    });
+
+    it('n’écrit rien quand l’action échoue', async () => {
+      // Un journal qui affirme une suspension jamais appliquée est pire qu'un
+      // journal muet : c'est un registre qui ment.
+      await expect(admin.suspend(SM, 'inconnu', { reason: 'Impayé' })).rejects.toThrow(
+        /introuvable/,
+      );
+      expect(logs.size).toBe(0);
+    });
+  });
+
+  // ─── Fiche compte ───
+
+  describe('Fiche compte', () => {
+    it('affiche un tenant sans champ « account » comme un compte d’essai', async () => {
+      // Tous les établissements créés avant ce module sont dans ce cas : la
+      // fiche doit les montrer ordinaires, jamais bloqués ni en anomalie.
+      const view = await admin.account(SM, CLASSFOOD);
+
+      expect(view.account.status).toBe('trial');
+      expect(view.accessBlocked).toBe(false);
+      expect(view.statusLabel).toBe('Essai');
+      // À défaut de statut daté, on retombe sur l'entrée dans le parc.
+      expect(view.account.since).toBe(new Date('2026-01-04T09:00:00Z').toISOString());
+    });
+
+    it('rend 404 sur un établissement inconnu', async () => {
+      await expect(admin.account(SM, AUTRE_RESTO + 'x')).rejects.toThrow(/introuvable/);
+    });
+
+    it('regroupe les consultations rapprochées d’un même dossier', async () => {
+      // Une fiche se recharge à chaque navigation : sans regroupement, une
+      // matinée de support noierait les suspensions sous des lignes identiques.
+      await admin.account(SM, CLASSFOOD);
+      await admin.account(SM, CLASSFOOD);
+      await admin.account(SM, CLASSFOOD);
+
+      expect(await admin.journal(CLASSFOOD, TOUT)).toHaveLength(1);
+    });
+
+    it('trace à nouveau après la fenêtre de regroupement', async () => {
+      await admin.account(SM, CLASSFOOD);
+      // Consultation d'il y a une heure : c'est un autre moment, une autre ligne.
+      const vieille = logs.rows[0]!;
+      vieille.at = new Date(Date.now() - 60 * 60_000);
+
+      await admin.account(SM, CLASSFOOD);
+      expect(await admin.journal(CLASSFOOD, TOUT)).toHaveLength(2);
+    });
+
+    it('ne regroupe jamais une action qui modifie l’état', async () => {
+      // Le regroupement est un confort de lecture réservé aux consultations :
+      // deux suspensions successives restent deux décisions.
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé — confirmé' });
+
+      const journal = await admin.journal(CLASSFOOD, TOUT);
+      expect(journal.filter((e) => e.action === 'tenant.suspend')).toHaveLength(2);
+    });
+
+    it('distingue deux membres de l’équipe consultant le même dossier', async () => {
+      const collegue = { ...SM, sub: '65f00000000000000000ff02' };
+      users.seed({ _id: collegue.sub, email: 'support@snackmanager.fr' });
+
+      await admin.account(SM, CLASSFOOD);
+      await admin.account(collegue, CLASSFOOD);
+
+      const auteurs = (await admin.journal(CLASSFOOD, TOUT)).map((e) => e.actor.email);
+      expect(new Set(auteurs)).toEqual(
+        new Set(['admin@snackmanager.fr', 'support@snackmanager.fr']),
+      );
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Règles partagées (contrats)
+// ─────────────────────────────────────────────────────────────
+
+describe('Règle d’accès', () => {
+  it('ne bloque QUE les comptes suspendus', () => {
+    expect(isAccessBlocked('suspended')).toBe(true);
+    for (const status of TENANT_ACCOUNT_STATUSES.filter((s) => s !== 'suspended')) {
+      expect(isAccessBlocked(status), status).toBe(false);
+    }
+    // Absence de statut (tenant d'avant le champ) : jamais un blocage.
+    expect(isAccessBlocked(undefined)).toBe(false);
+    expect(isAccessBlocked(null)).toBe(false);
+  });
+
+  it('ne ferme pas la porte à un client qui nous quitte', () => {
+    // `churned` est un état commercial, pas une sanction : couper l'accès
+    // reste un geste explicite, motivé et journalisé.
+    expect(isAccessBlocked('churned')).toBe(false);
+  });
+});
+
+describe('Fermeture du site public', () => {
+  it('ferme proprement la commande en ligne d’un restaurant suspendu', () => {
+    const state = publicOrderingState(
+      { status: 'suspended' },
+      { paused: false, message: null },
+    );
+
+    expect(state.paused).toBe(true);
+    expect(state.message).toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+    // Le consommateur n'a rien à voir avec notre litige commercial : il ne
+    // lit ni « suspendu », ni « impayé », ni une erreur technique.
+    expect(state.message).not.toMatch(/suspend|impay|erreur|Snack Manager/i);
+  });
+
+  it('laisse la pause du restaurateur inchangée quand le compte va bien', () => {
+    const pause = { paused: true, message: 'Victimes de notre succès !' };
+    expect(publicOrderingState({ status: 'active' }, pause)).toEqual(pause);
+    expect(publicOrderingState(undefined, { paused: false, message: null })).toEqual({
+      paused: false,
+      message: null,
+    });
+  });
+
+  it('prime sur une pause déjà posée par le restaurateur', () => {
+    const state = publicOrderingState(
+      { status: 'suspended' },
+      { paused: true, message: 'Victimes de notre succès !' },
+    );
+    expect(state.message).toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+  });
+});
+
+describe('Vocabulaire d’administration', () => {
+  it('garde les formules alignées sur celles du reste du produit', () => {
+    // `ADMIN_PLANS` est redéclaré dans `admin.ts` pour éviter un cycle de
+    // modules : rien n'empêcherait les deux listes de diverger en silence.
+    expect([...ADMIN_PLANS]).toEqual([...PLANS]);
+  });
+
+  it('nomme en français chaque statut et chaque motif de révocation', () => {
+    expect([...TENANT_ACCOUNT_STATUSES]).toEqual(['trial', 'active', 'suspended', 'churned']);
+    expect([...DEVICE_REVOKE_REASONS]).toEqual(['perte', 'vol', 'panne', 'remplacement']);
+    expect(ACCOUNT_SUSPENDED_MESSAGE).toBe('Accès suspendu — contactez Snack Manager');
+  });
+});

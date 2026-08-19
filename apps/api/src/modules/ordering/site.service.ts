@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type {
-  PublicSiteCategory,
-  PublicSiteProduct,
-  PublicSiteResponse,
-  PublicSiteReview,
+import {
+  publicOrderingState,
+  type PublicSiteCategory,
+  type PublicSiteProduct,
+  type PublicSiteResponse,
+  type PublicSiteReview,
 } from '@sm/contracts';
 import type { Category, Product, Review } from '@sm/db';
 import { TenantsService } from '../tenants/tenants.service';
@@ -40,7 +41,13 @@ export class SiteService {
       this.reviewsSummary(tenantId),
     ]);
 
-    const paused = tenant.settings?.onlineOrderingPaused === true;
+    // Suspension de compte = pause de service aux yeux du public (message
+    // neutre, jamais le motif du litige) — règle partagée des contrats.
+    const gate = publicOrderingState(tenant.account, {
+      paused: tenant.settings?.onlineOrderingPaused === true,
+      message: tenant.settings?.pauseMessage ?? null,
+    });
+    const paused = gate.paused;
 
     return {
       tenant: {
@@ -61,7 +68,7 @@ export class SiteService {
       reviews,
       ordering: {
         paused,
-        message: paused ? (tenant.settings?.pauseMessage ?? null) : null,
+        message: gate.message,
       },
       openNow: this.slots.isOpenNow(tenant),
       todayHours: this.slots.todayHours(tenant, parisYmd(new Date())),

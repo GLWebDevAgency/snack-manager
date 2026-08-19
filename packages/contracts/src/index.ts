@@ -6,6 +6,7 @@ export * from './ordering';
 export * from './screens';
 export * from './devices';
 export * from './crm';
+export * from './admin';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

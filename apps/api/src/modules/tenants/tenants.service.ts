@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { publicOrderingState } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 
 @Injectable()
@@ -22,6 +23,12 @@ export class TenantsService {
   /** Vue publique (page de commande client) — pas de données internes. */
   async publicBySlug(slug: string) {
     const t = await this.bySlug(slug);
+    // Une suspension de compte se présente au public comme une pause de
+    // service — la page reste belle, le litige commercial reste privé.
+    const gate = publicOrderingState(t.account, {
+      paused: t.settings?.onlineOrderingPaused ?? false,
+      message: t.settings?.pauseMessage ?? null,
+    });
     return {
       slug: t.slug,
       name: t.name,
@@ -30,8 +37,8 @@ export class TenantsService {
       address: t.address,
       phones: t.phones,
       hours: t.hours,
-      onlineOrderingPaused: t.settings?.onlineOrderingPaused ?? false,
-      pauseMessage: t.settings?.pauseMessage,
+      onlineOrderingPaused: gate.paused,
+      pauseMessage: gate.message,
       slotIntervalMin: t.settings?.slotIntervalMin ?? 10,
     };
   }

@@ -4,6 +4,7 @@ import {
   type CreateOrder,
   type JwtPayload,
   type OrderStatus,
+  publicOrderingState,
   TrackingTokenQuerySchema,
   type TrackingTokenQuery,
   UpdateOrderStatusSchema,
@@ -87,9 +88,14 @@ export class OrdersController {
   @Post('public/tenants/:slug/orders')
   async createOnline(@Param('slug') slug: string, @Body(zod(CreateOrderSchema)) body: CreateOrder) {
     const tenant = await this.tenants.bySlug(slug);
-    if (tenant.settings?.onlineOrderingPaused) {
-      return { paused: true, message: tenant.settings.pauseMessage };
-    }
+    // Pause volontaire du gérant OU suspension du compte par Snack Manager :
+    // même fermeture propre côté client, messages distincts (le consommateur
+    // ne doit jamais lire « impayé » — le litige ne le concerne pas).
+    const gate = publicOrderingState(tenant.account, {
+      paused: tenant.settings?.onlineOrderingPaused ?? false,
+      message: tenant.settings?.pauseMessage ?? null,
+    });
+    if (gate.paused) return gate;
     // Canal forcé : une commande postée sur la route publique est toujours « online »
     return this.orders.create(String(tenant._id), { ...body, channel: 'online' }, 'online');
   }

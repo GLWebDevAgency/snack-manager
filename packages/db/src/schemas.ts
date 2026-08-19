@@ -67,6 +67,42 @@ export const TenantSchema = new Schema(
     },
     plan: { type: String, enum: ['essentiel', 'complet', 'boost'], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
+    /**
+     * État du compte côté Snack Manager — le seul champ qui décide de l'ACCÈS.
+     *
+     * Suspendre coupe l'accès, jamais les données : le menu, les commandes et
+     * l'historique d'un restaurant suspendu restent intacts, prêts à rouvrir le
+     * jour où la facture est réglée. Rien ici n'est destructif.
+     *
+     * Le sous-schéma est explicite (et non un objet imbriqué implicite) pour
+     * que Mongoose infère des champs NON nullables côté TypeScript — même
+     * raison que pour `totals` et `payment` sur les commandes.
+     *
+     * ATTENTION : les tenants créés avant ce champ n'ont pas d'`account` en
+     * base, et `.lean()` ne matérialise pas les défauts. Toute lecture doit
+     * traiter l'absence comme « pas de blocage » (`DEFAULT_TENANT_ACCOUNT_STATUS`
+     * vaut `trial`) — un champ manquant ne doit jamais fermer un restaurant.
+     */
+    account: {
+      type: new Schema(
+        {
+          status: {
+            type: String,
+            enum: ['trial', 'active', 'suspended', 'churned'],
+            default: 'trial',
+            required: true,
+          },
+          /** Début du statut COURANT, réécrit à chaque changement. */
+          since: { type: Date, default: Date.now, required: true },
+          /** Motif du dernier changement, saisi par l'équipe SM. */
+          reason: { type: String, default: '' },
+          /** Horodatage de la suspension en cours — `null` dès la réactivation. */
+          suspendedAt: { type: Date, default: null },
+        },
+        { _id: false },
+      ),
+      default: () => ({ status: 'trial', since: new Date(), reason: '', suspendedAt: null }),
+    },
     settings: {
       slotIntervalMin: { type: Number, default: 10 },
       slotCapacity: { type: Number, default: 4 },
@@ -485,6 +521,16 @@ export const ScreenSchema = new Schema(
     // Dernier battement de cœur — source du « hors ligne depuis 20 min ».
     lastSeenAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
+    // Dernière révocation prononcée depuis le back-office interne (clé HDMI
+    // volée, écran remplacé). Le détail « qui, quand, pourquoi » vit dans
+    // `adminLogs` ; ces deux champs ne sont là que pour l'afficher sur la
+    // fiche de l'écran sans relire tout le journal.
+    revokedAt: { type: Date, default: null },
+    revokedReason: {
+      type: String,
+      enum: ['perte', 'vol', 'panne', 'remplacement', null],
+      default: null,
+    },
   },
   { timestamps: true },
 );
@@ -536,6 +582,16 @@ export const DeviceSchema = new Schema(
     // Dernier battement de cœur — source du « hors ligne depuis 12 min ».
     lastSeenAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
+    // Dernière révocation prononcée depuis le back-office interne (tablette
+    // perdue ou volée). Le détail « qui, quand, pourquoi » vit dans
+    // `adminLogs` ; ces deux champs ne sont là que pour l'afficher sur la
+    // fiche de l'appareil sans relire tout le journal.
+    revokedAt: { type: Date, default: null },
+    revokedReason: {
+      type: String,
+      enum: ['perte', 'vol', 'panne', 'remplacement', null],
+      default: null,
+    },
   },
   { timestamps: true },
 );
@@ -553,6 +609,90 @@ DeviceSchema.index({ pairingCode: 1 }, { sparse: true });
 export type Device = InferSchemaType<typeof DeviceSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// adminLogs — journal d'administration Snack Manager, append-only
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Ce que l'ÉQUIPE SM fait aux comptes de ses clients.
+ *
+ * À ne pas confondre avec `auditLogs`, qui trace ce que fait le PERSONNEL d'un
+ * restaurant dans sa propre caisse (annulations, remises — socle NF525). Deux
+ * publics, deux responsabilités, deux collections : mélanger les deux rendrait
+ * le journal d'un restaurateur illisible et le nôtre incontrôlable.
+ *
+ * Nous agissons sur l'outil de travail d'un commerçant : suspendre son accès,
+ * couper une tablette, changer sa formule. Chaque geste doit pouvoir être
+ * reconstitué — qui, quoi, sur quel établissement, quand, pourquoi.
+ *
+ * `actorEmail` est DÉNORMALISÉ volontairement : un journal qui se relit à
+ * travers une jointure change de contenu quand un compte d'équipe est renommé
+ * ou supprimé. Ce qui est écrit reste écrit.
+ */
+export const AdminLogSchema = new Schema(
+  {
+    at: { type: Date, default: Date.now, required: true },
+    /** L'humain de l'équipe SM (rôle `sm_admin`) — jamais « system ». */
+    actorId: { type: Schema.Types.ObjectId, required: true },
+    actorEmail: { type: String, default: '' },
+    action: {
+      type: String,
+      enum: [
+        'tenant.suspend',
+        'tenant.reactivate',
+        'tenant.plan_change',
+        'tenant.note',
+        'tenant.detail_view',
+        'device.revoke',
+        'screen.revoke',
+      ],
+      required: true,
+    },
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /** Cible secondaire : identifiant d'appareil ou d'écran. */
+    targetId: { type: String, default: null },
+    reason: { type: String, default: '' },
+    /** Contexte : ancienne/nouvelle formule, motif de révocation, note… */
+    meta: { type: Schema.Types.Mixed, default: null },
+  },
+  { timestamps: false },
+);
+AdminLogSchema.index({ tenantId: 1, at: -1 });
+AdminLogSchema.index({ at: -1 });
+
+/**
+ * APPEND-ONLY, garanti par l'ODM et pas seulement par la discipline.
+ *
+ * Un journal qu'on peut réécrire ne prouve rien. Ces hooks refusent toute
+ * mise à jour et toute suppression : la seule écriture possible est une
+ * insertion. Une correction se fait donc en AJOUTANT une ligne, comme dans un
+ * livre de comptes — jamais en effaçant la précédente.
+ *
+ * (Cela ne remplace pas des droits Mongo restrictifs en production ; cela
+ * ferme la porte au code applicatif, qui est la voie réellement empruntée.)
+ */
+const APPEND_ONLY_BLOCKED = [
+  'updateOne',
+  'updateMany',
+  'replaceOne',
+  'findOneAndUpdate',
+  'findOneAndReplace',
+  'deleteOne',
+  'deleteMany',
+  'findOneAndDelete',
+] as const;
+
+for (const op of APPEND_ONLY_BLOCKED) {
+  // `as never` : la signature de `pre` est une union de littéraux que TS ne
+  // peut pas réduire depuis une variable de boucle. Le comportement, lui, est
+  // celui d'un middleware de requête ordinaire.
+  AdminLogSchema.pre(op as never, function blockMutation() {
+    throw new Error(`adminLogs est append-only : « ${op} » est refusé.`);
+  });
+}
+
+export type AdminLog = InferSchemaType<typeof AdminLogSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Registre des modèles (consommé par l'API Nest et le seed)
 // ─────────────────────────────────────────────────────────────
 
@@ -566,6 +706,7 @@ export const MODELS = {
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
+  AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },

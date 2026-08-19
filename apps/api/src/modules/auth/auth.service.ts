@@ -1,9 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
 import * as argon2 from 'argon2';
-import type { JwtPayload, Login, PinLogin } from '@sm/contracts';
+import {
+  ACCOUNT_SUSPENDED_MESSAGE,
+  isAccessBlocked,
+  type JwtPayload,
+  type Login,
+  type PinLogin,
+} from '@sm/contracts';
 import type { Staff, Tenant, User } from '@sm/db';
 
 @Injectable()
@@ -40,6 +46,15 @@ export class AuthService {
   async loginPin({ tenantSlug, pin }: PinLogin) {
     const tenant = await this.tenants.findOne({ slug: tenantSlug });
     if (!tenant) throw new UnauthorizedException('Établissement inconnu');
+
+    // Compte suspendu : on refuse D'ÉMETTRE un jeton, pas seulement de le
+    // servir. Sans ce refus, la tablette afficherait « connecté » puis
+    // échouerait sur chaque appel — un poste de caisse qui ment est pire
+    // qu'un poste fermé. L'équipe lit le vrai motif : c'est elle qui
+    // préviendra le patron.
+    if (isAccessBlocked(tenant.account?.status)) {
+      throw new ForbiddenException(ACCOUNT_SUSPENDED_MESSAGE);
+    }
 
     const members = await this.staff.find({ tenantId: tenant._id, active: true });
     for (const member of members) {
