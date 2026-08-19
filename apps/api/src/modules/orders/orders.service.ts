@@ -12,12 +12,15 @@ import {
   type CreateOrder,
   ORDER_STATUS_RANK,
   type OrderStatus,
+  type OrderTracking,
   ordersChannel,
   WS_EVENTS,
 } from '@sm/contracts';
 import type { Counter, Order, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { AuditService } from '../audit/audit.module';
+import { resolvePayment } from './payment';
+import { newTrackingToken, trackingFilter } from './tracking';
 
 @Injectable()
 export class OrdersService {
@@ -53,7 +56,7 @@ export class OrdersService {
    */
   async create(tenantId: string, dto: CreateOrder, actor: string) {
     const existing = await this.orders.findOne({ tenantId, clientId: dto.clientId });
-    if (existing) return existing; // rejeu de la file offline
+    if (existing) return this.withTrackingToken(existing); // rejeu de la file offline
 
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
@@ -135,7 +138,10 @@ export class OrdersService {
         type: dto.type,
         lines,
         totals: { subtotal, discount: null, total: subtotal },
-        payment: { method: dto.payment.method, status: 'pending' },
+        // Le total fait autorité pour le rendu monnaie : il vient d'être
+        // recalculé depuis le menu, pas du corps envoyé par l'appareil.
+        payment: resolvePayment(dto.channel, dto.payment, subtotal),
+        trackingToken: newTrackingToken(),
         status: 'new',
         statusHistory: [{ status: 'new', at: new Date(), by: actor }],
         pickup: dto.pickup
@@ -152,10 +158,30 @@ export class OrdersService {
     } catch (err: unknown) {
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
-        return this.orders.findOne({ tenantId, clientId: dto.clientId });
+        const raced = await this.orders.findOne({ tenantId, clientId: dto.clientId });
+        return raced ? this.withTrackingToken(raced) : raced;
       }
       throw err;
     }
+  }
+
+  /**
+   * Garantit un jeton de suivi sur une commande retrouvée.
+   *
+   * Une commande créée avant l'introduction du champ — ou parquée dans la file
+   * offline d'une tablette pas encore mise à jour — n'en a pas. Sans ce
+   * rattrapage, son lien de suivi et son ticket seraient définitivement
+   * inaccessibles. Écrit en `$set` ciblé : un `save()` revaliderait tout le
+   * document, en plein service, pour un champ ajouté après coup.
+   */
+  private async withTrackingToken(order: Order & { _id: unknown }) {
+    if (order.trackingToken) return order;
+    const patched = await this.orders.findOneAndUpdate(
+      { _id: order._id, $or: [{ trackingToken: null }, { trackingToken: { $exists: false } }] },
+      { $set: { trackingToken: newTrackingToken() } },
+      { new: true },
+    );
+    return patched ?? order;
   }
 
   async list(tenantId: string, filter: { status?: OrderStatus; since?: string }) {
@@ -172,16 +198,27 @@ export class OrdersService {
     return order;
   }
 
-  /** Suivi public (page client sans compte) — projection minimale. */
-  async publicTracking(id: string) {
-    const order = await this.orders.findById(id).lean();
+  /**
+   * Suivi public (page client sans compte) — projection minimale.
+   *
+   * Exige `?t=<trackingToken>`. Jeton absent ou faux ⇒ 404 et non 403 : un 403
+   * confirmerait l'existence de la commande, donc la validité de l'ObjectId
+   * deviné, ce que le jeton doit justement empêcher.
+   */
+  async publicTracking(id: string, token: unknown): Promise<OrderTracking> {
+    const filter = trackingFilter(id, token);
+    if (!filter) throw new NotFoundException('Commande introuvable');
+    const order = await this.orders.findOne(filter).lean();
     if (!order) throw new NotFoundException('Commande introuvable');
     return {
-      _id: order._id,
-      number: order.number,
-      status: order.status,
-      statusHistory: order.statusHistory,
-      pickupSlot: order.pickup?.slot ?? null,
+      _id: String(order._id),
+      number: Number(order.number ?? 0),
+      status: (order.status ?? 'new') as OrderStatus,
+      statusHistory: (order.statusHistory ?? []).map((step) => ({
+        status: (step.status ?? 'new') as OrderStatus,
+        at: new Date(step.at ?? order.createdAt ?? Date.now()).toISOString(),
+      })),
+      pickupSlot: order.pickup?.slot ? new Date(order.pickup.slot).toISOString() : null,
     };
   }
 
@@ -198,7 +235,14 @@ export class OrdersService {
 
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor });
-    if (status === 'delivered' && order.payment.method === 'counter') {
+    // Filet pour les commandes parties sans encaissement (« à régler au
+    // retrait ») : l'argent rentre à la remise. Une commande déjà réglée à la
+    // caisse garde son tender et son horodatage — on ne la « repaie » pas.
+    if (
+      status === 'delivered' &&
+      order.payment.method === 'counter' &&
+      order.payment.status === 'pending'
+    ) {
       order.payment.status = 'paid';
     }
     await order.save();

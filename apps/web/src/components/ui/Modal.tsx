@@ -45,7 +45,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4"
+      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4"
       role="dialog"
       aria-modal="true"
       aria-label={typeof title === "string" ? title : undefined}
@@ -54,7 +54,7 @@ export function Modal({
       }}
     >
       <div
-        className="w-full animate-pop rounded-panel border border-white/6 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
+        className="w-full animate-pop rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -151,7 +151,7 @@ export default function IngredientsPage() {
       {/* ── Bandeau d'alertes (chaque tuile filtre la table) ── */}
       <div className="mb-4" aria-live="polite">
         {totalAlerts === 0 ? (
-          <div className="flex items-center gap-2.5 rounded-ctrl border border-ok/40 bg-ok/10 px-4 py-3 text-[13px] text-ink">
+          <div className="flex items-center gap-2.5 rounded-ctrl border border-ok/35 bg-ok/8 px-4 py-3 text-[13px] text-ink">
             <span className="size-2.5 shrink-0 rounded-full bg-ok" aria-hidden />
             Aucune alerte — tous les stocks sont au-dessus de leur seuil et
             aucune hausse de prix relevée sur les 30 derniers jours.
@@ -201,7 +201,7 @@ export default function IngredientsPage() {
             <Icon name={t.icon} size={14} />
             {t.label}
             {t.key === "ingredients" && (
-              <span className="tabular-nums">· {ingredients.length}</span>
+              <span className="cf-fig">· {ingredients.length}</span>
             )}
           </Chip>
         ))}
@@ -298,7 +298,7 @@ function AlertTile({
       aria-pressed={empty ? undefined : active}
       title={empty ? undefined : active ? `${action} — retirer le filtre` : action}
       className={cx(
-        "flex items-center gap-3 rounded-ctrl border px-4 py-3 text-left transition-colors duration-200 ease-sm",
+        "cf-press-row flex items-center gap-3 rounded-ctrl border px-4 py-3 text-left",
         empty
           ? "cursor-default border-line bg-white/3"
           : active
@@ -315,7 +315,7 @@ function AlertTile({
       />
       <span
         className={cx(
-          "shrink-0 text-[26px] font-semibold leading-none tabular-nums",
+          "cf-fig shrink-0 text-[26px] font-extrabold leading-none",
           empty ? "text-mut" : t.value,
         )}
       >

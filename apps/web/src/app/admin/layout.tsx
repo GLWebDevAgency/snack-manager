@@ -27,6 +27,30 @@ const RAIL = 66;
 const PANEL = 232;
 const NAV_STORE = "sm-bo-nav";
 
+/**
+ * Texte lisible sur l'accent tenant — même règle que `readableOn()` côté
+ * caisse : un accent clair (laiton #c9a15a) réclame du texte sombre, le blanc
+ * y tombe à 2,4:1, très en dessous du seuil WCAG.
+ */
+function readableOnAccent(hex: string): string {
+  const raw = hex.replace("#", "");
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : raw;
+  const n = Number.parseInt(full.slice(0, 6), 16);
+  if (!Number.isFinite(n)) return "#12100d";
+  const lin = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return luminance > 0.18 ? "#12100d" : "#ffffff";
+}
+
 const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "dashboard", href: "/admin/dashboard", label: "Tableau de bord", icon: "home" },
   { id: "orders", href: "/admin/orders", label: "Commandes", icon: "ticket" },
@@ -106,9 +130,10 @@ function Shell({ children }: { children: ReactNode }) {
       .then((t) => {
         if (cancelled) return;
         setTenant(t);
+        const accent = t.brandColor || "#c9a15a";
         const root = document.documentElement.style;
-        root.setProperty("--cf-accent", t.brandColor || "#c9a15a");
-        root.setProperty("--cf-on-accent", "#fff");
+        root.setProperty("--cf-accent", accent);
+        root.setProperty("--cf-on-accent", readableOnAccent(accent));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -224,28 +249,26 @@ function Shell({ children }: { children: ReactNode }) {
           {/* En-tête : logo tuile accent + nom tenant */}
           <div className="mb-3 flex items-center gap-2.5 px-1">
             <div
-              className="grid size-[30px] shrink-0 place-items-center rounded-[8px] bg-accent text-[15px] font-extrabold text-white"
+              className="grid size-[30px] shrink-0 place-items-center rounded-xs bg-accent text-[15px] font-extrabold text-onaccent"
               aria-hidden
             >
               {initial}
             </div>
             <div
-              className="min-w-0 truncate whitespace-nowrap text-lg font-semibold text-ink transition-opacity duration-200"
+              className="min-w-0 truncate whitespace-nowrap text-lg font-semibold text-ink transition-opacity duration-200 ease-sm"
               style={{ opacity: open ? 1 : 0 }}
             >
               {tenant?.name ?? "…"}
             </div>
           </div>
 
+          {/* Intitulé de section : 11px, 600, capitales, .06em, gris #999 (DA §2). */}
           {open ? (
-            <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[rgba(244,238,225,0.4)]">
+            <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
               Gestion
             </div>
           ) : (
-            <div
-              className="mx-1 mb-2.5 h-px shrink-0 bg-[rgba(244,238,225,0.12)]"
-              aria-hidden
-            />
+            <div className="mx-1 mb-2.5 h-px shrink-0 bg-line" aria-hidden />
           )}
 
           {/* Navigation */}
@@ -263,11 +286,11 @@ function Shell({ children }: { children: ReactNode }) {
                   title={item.label}
                   aria-current={isActive ? "page" : undefined}
                   className={cx(
-                    "relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm transition-colors duration-200",
+                    "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
                     open ? "px-3" : "justify-center px-0",
                     isActive
-                      ? "bg-accent font-extrabold text-white"
-                      : "font-semibold text-[rgba(244,238,225,0.72)] hover:bg-[rgba(244,238,225,0.06)]",
+                      ? "bg-accent font-extrabold text-onaccent shadow-card"
+                      : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
                   )}
                 >
                   <Icon
@@ -283,7 +306,7 @@ function Shell({ children }: { children: ReactNode }) {
                   )}
                   {badge &&
                     (open ? (
-                      <span className="shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold tabular-nums text-[#1C1612]">
+                      <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
                         {newCount}
                         <span className="sr-only"> nouvelles commandes</span>
                       </span>
@@ -301,31 +324,29 @@ function Shell({ children }: { children: ReactNode }) {
           {/* Pied : gérant + réglages + réduire */}
           <div
             className={cx(
-              "mt-auto flex shrink-0 items-center gap-2.5 border-t border-[rgba(244,238,225,0.12)] pt-3",
+              "mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3",
               !open && "flex-col",
             )}
           >
             <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-bold text-white"
+              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
               aria-hidden
             >
               M
             </div>
             {open && (
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold text-[#F4EEE1]">
+                <div className="truncate text-sm font-bold text-ink">
                   Le Gérant
                 </div>
-                <div className="truncate text-xs text-[rgba(244,238,225,0.5)]">
-                  {city}
-                </div>
+                <div className="truncate text-xs text-mut">{city}</div>
               </div>
             )}
             <button
               type="button"
               title="Paramètres"
               aria-label="Paramètres"
-              className="shrink-0 text-[rgba(244,238,225,0.5)] transition-colors duration-200 hover:text-white"
+              className="cf-press shrink-0 text-mut hover:text-white"
             >
               <Icon name="gear" size={17} />
             </button>
@@ -335,7 +356,7 @@ function Shell({ children }: { children: ReactNode }) {
               title={open ? "Réduire le menu" : "Développer le menu"}
               aria-label={open ? "Réduire le menu" : "Développer le menu"}
               aria-expanded={open}
-              className="grid size-7 shrink-0 place-items-center rounded-[8px] border border-[rgba(244,238,225,0.18)] bg-[rgba(244,238,225,0.06)] text-ink transition-colors duration-200 hover:bg-[rgba(244,238,225,0.12)]"
+              className="cf-press grid size-7 shrink-0 place-items-center rounded-xs border border-white/12 bg-white/6 text-ink hover:border-white/25 hover:bg-white/12"
             >
               <Icon name={open ? "back" : "arrow"} size={14} />
             </button>
@@ -345,9 +366,14 @@ function Shell({ children }: { children: ReactNode }) {
 
       {/* ── Colonne topbar + contenu ── */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line bg-bg px-[26px] py-4">
+        {/*
+          La topbar est une SURFACE À PART : #111 au-dessus du canevas noir.
+          Deux surfaces adjacentes ne portent jamais la même valeur (DA §1) —
+          la barre ne peut pas se contenter d'un filet pour se détacher.
+        */}
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4">
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-[-0.03em] text-ink">
+            <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
               {active?.label ?? "Back-office"}
             </h1>
             <p className="truncate text-sm text-mut" suppressHydrationWarning>
@@ -366,7 +392,7 @@ function Shell({ children }: { children: ReactNode }) {
                 type="search"
                 placeholder="Rechercher…"
                 aria-label="Recherche globale"
-                className="w-[220px] rounded-ctrl border border-white/6 bg-white/5 py-2.5 pl-9 pr-3 text-sm text-white outline-none transition-colors duration-200 placeholder:text-mut/75 focus:border-accent"
+                className="w-[220px] rounded-ctrl border border-white/8 bg-white/5 py-2.5 pl-9 pr-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8"
               />
             </div>
 
@@ -382,7 +408,7 @@ function Shell({ children }: { children: ReactNode }) {
                   : "Commande en ligne active — cliquer pour mettre en pause"
               }
               className={cx(
-                "flex items-center gap-2 rounded-pill border-2 bg-surface px-3.5 py-2 text-sm font-bold text-ink transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40",
+                "cf-press flex items-center gap-2 rounded-pill border-2 bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-sm font-bold text-ink disabled:cursor-not-allowed disabled:opacity-40",
                 paused ? "border-alert" : "border-ok",
               )}
             >

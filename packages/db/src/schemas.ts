@@ -273,8 +273,17 @@ export const OrderSchema = new Schema(
     payment: {
       type: new Schema(
         {
+          // OÙ l'argent est encaissé.
           method: { type: String, enum: ['online', 'counter'], required: true },
+          // AVEC QUOI le client a payé. `null` = rien n'a encore été perçu.
+          // Sans ce champ, une carte passée à la caisse est indiscernable d'un
+          // « à encaisser au retrait » et la clôture de caisse (Z) est fausse.
+          tender: { type: String, enum: ['cash', 'card', 'online', null], default: null },
           status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
+          // Rendu monnaie, en CENTIMES. Calculés par le serveur à la création :
+          // changeGiven = cashReceived − totals.total.
+          cashReceived: { type: Number, default: null },
+          changeGiven: { type: Number, default: null },
           stripePaymentIntentId: { type: String, default: null },
         },
         { _id: false },
@@ -304,6 +313,19 @@ export const OrderSchema = new Schema(
       default: null,
     },
     note: { type: String, default: null },
+    /**
+     * Jeton de suivi public — 32 caractères URL-safe tirés de `crypto`.
+     *
+     * L'ObjectId seul ne peut pas garder un secret : son préfixe est un
+     * horodatage et son suffixe un compteur, donc partiellement devinable.
+     * Les routes `/public/orders/:id…` exigent ce jeton avant d'exposer le
+     * nom et le téléphone du client (RGPD).
+     *
+     * NON `required` volontairement : les commandes antérieures à ce champ
+     * doivent rester enregistrables (`order.save()` sur un changement de
+     * statut) plutôt que d'échouer en validation en plein service.
+     */
+    trackingToken: { type: String, default: null },
     virtualBrandId: { type: Schema.Types.ObjectId, default: null }, // marques virtuelles T4
     // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
     meta: { type: Schema.Types.Mixed, default: null },
@@ -313,6 +335,10 @@ export const OrderSchema = new Schema(
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
+// Non unique : les commandes créées avant le champ portent toutes `null`, et
+// un index unique les ferait entrer en collision. La collision de deux jetons
+// de 192 bits tirés au hasard, elle, n'arrive pas.
+OrderSchema.index({ trackingToken: 1 });
 export type Order = InferSchemaType<typeof OrderSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -421,6 +447,54 @@ export const PromotionSchema = new Schema(
 export type Promotion = InferSchemaType<typeof PromotionSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// screens — Menu Board : les écrans TV accrochés en salle
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Une scène de la playlist. Aucun contenu n'est recopié ici : une scène
+ * DÉSIGNE (une catégorie, des produits) et le contenu est résolu à l'affichage.
+ * Sans ça, changer un prix obligerait à repasser sur chaque écran.
+ */
+const SceneSub = new Schema(
+  {
+    kind: { type: String, enum: ['category', 'promo', 'featured', 'custom'], required: true },
+    categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+    productIds: { type: [Schema.Types.ObjectId], default: [] },
+    title: { type: String, default: null },
+    durationMs: { type: Number, default: 10000 },
+  },
+  { _id: false },
+);
+
+export const ScreenSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    name: { type: String, required: true }, // « Écran comptoir gauche »
+    // Code d'appairage à 6 caractères non ambigus (ni I, ni O, ni 0, ni 1) :
+    // le gérant le lit sur le téléviseur et le recopie sur son téléphone.
+    // `null` une fois l'écran appairé — un code qui traîne est un secret exposé.
+    pairingCode: { type: String, default: null },
+    pairingCodeExpiresAt: { type: Date, default: null },
+    paired: { type: Boolean, default: false },
+    // Secret long remis À L'APPAIRAGE et jamais renvoyé ensuite : c'est la seule
+    // identité de l'écran, qui n'a ni compte ni mot de passe.
+    deviceToken: { type: String, default: null },
+    orientation: { type: String, enum: ['landscape', 'portrait'], default: 'landscape' },
+    playlist: { type: [SceneSub], default: [] },
+    theme: { type: String, enum: ['brand', 'dark', 'light'], default: 'brand' },
+    // Dernier battement de cœur — source du « hors ligne depuis 20 min ».
+    lastSeenAt: { type: Date, default: null },
+    active: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+ScreenSchema.index({ tenantId: 1, createdAt: -1 });
+// `sparse` : les écrans non appairés ont tous `null`, ce qui violerait l'unicité.
+ScreenSchema.index({ deviceToken: 1 }, { unique: true, sparse: true });
+ScreenSchema.index({ pairingCode: 1 }, { sparse: true });
+export type Screen = InferSchemaType<typeof ScreenSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Registre des modèles (consommé par l'API Nest et le seed)
 // ─────────────────────────────────────────────────────────────
 
@@ -437,4 +511,5 @@ export const MODELS = {
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
+  Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },
 } as const;

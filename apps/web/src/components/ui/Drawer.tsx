@@ -20,8 +20,9 @@ type DrawerProps = {
 
 /**
  * Tiroir latéral — positionné en ABSOLU dans la zone de contenu (le parent,
- * le <main> du shell admin, est `position: relative`) : overlay brun 35 %,
- * panneau droit 400px bord gauche 2px blanc, animation pop .18s.
+ * le <main> du shell admin, est `position: relative`).
+ * Profondeur (DA §1) : voile noir, panneau de niveau 2 en dégradé, séparation
+ * portée par l'ombre (filet blanc 8 %) plutôt que par un bord blanc dur.
  */
 export function Drawer({
   open,
@@ -51,17 +52,17 @@ export function Drawer({
       aria-label={label ?? (typeof title === "string" ? title : "Panneau")}
     >
       <div
-        className="absolute inset-0 bg-[rgba(28,22,18,0.35)]"
+        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/55"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="absolute inset-y-0 right-0 flex max-w-full animate-pop flex-col border-l-2 border-white bg-surface"
+        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)]"
         style={{ width }}
       >
         <div
           className={cx(
-            "flex shrink-0 items-center justify-between gap-3 border-b border-line px-[18px] py-3.5",
+            "flex shrink-0 items-center justify-between gap-3 border-b border-line2 px-[18px] py-3.5",
             !title && "border-b-0 pb-0",
           )}
         >
@@ -83,7 +84,7 @@ export function Drawer({
           {children}
         </div>
         {footer && (
-          <div className="shrink-0 border-t border-line px-[18px] py-3.5">
+          <div className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5">
             {footer}
           </div>
         )}

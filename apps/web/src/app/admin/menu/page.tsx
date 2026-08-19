@@ -441,7 +441,7 @@ export default function MenuPage() {
           >
             <Icon name="tag" size={17} className="shrink-0 text-gold" />
             <p className="text-sm text-ink">
-              <b className="tabular-nums">{toDefine} prix à définir</b> — ces produits
+              <b className="cf-fig">{toDefine} prix à définir</b> — ces produits
               n&apos;apparaissent pas encore à la commande client.
             </p>
           </div>
@@ -501,7 +501,7 @@ export default function MenuPage() {
           </div>
 
           {/* En-tête de colonnes (§7.3) */}
-          <div className="mt-3 flex items-center gap-2.5 bg-surface2 px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
+          <div className="mt-3 flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
             <span className="min-w-0 flex-1 truncate">{listTitle}</span>
             <span className={COL.price}>Prix</span>
             <span className={COL.avail}>Dispo</span>
@@ -534,7 +534,7 @@ export default function MenuPage() {
                 <EmptyState
                   icon="grid"
                   title="Aucun produit ici"
-                  hint="Rattache des produits via ✎ ou importe un fichier."
+                  hint="Rattache des produits avec le bouton Modifier, ou importe un fichier."
                   action={
                     <Btn
                       variant="ink"
@@ -563,7 +563,7 @@ export default function MenuPage() {
                   <div key={p._id}>
                     <div
                       className={cx(
-                        "flex items-center gap-2.5 border-t border-line px-[18px] py-2.5 transition-opacity duration-200 ease-sm",
+                        "flex items-center gap-2.5 border-t border-line2 px-[18px] py-2.5 transition-[opacity,background-color] duration-200 ease-sm hover:bg-white/3",
                         p.outOfStock && "opacity-50",
                       )}
                     >
@@ -629,11 +629,11 @@ export default function MenuPage() {
                           aria-label={`Prix de ${p.name}`}
                           title={
                             hasVariants
-                              ? "Prix porté par les variantes — édite-les via ✎"
+                              ? "Prix porté par les variantes — édite-les avec le bouton Modifier"
                               : undefined
                           }
                           className={cx(
-                            "py-[7px] pl-[10px] pr-[22px] text-[14px] tabular-nums",
+                            "cf-fig py-[7px] pl-[10px] pr-[22px] text-[14px] font-bold",
                             hasVariants && "cursor-not-allowed text-mut",
                           )}
                           // État « à définir » (§7.3) : bord et fond gold posés
@@ -698,10 +698,10 @@ export default function MenuPage() {
                           aria-expanded={isEditing}
                           title="Modifier le produit"
                           className={cx(
-                            "grid size-8 place-items-center rounded-xs border transition-colors duration-200 ease-sm",
+                            "cf-press grid size-8 place-items-center rounded-xs border",
                             isEditing
                               ? "border-accent bg-accent text-onaccent"
-                              : "border-line bg-surface2 text-ink hover:border-white/50",
+                              : "border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
                           )}
                         >
                           <Icon name="edit" size={15} />
@@ -776,7 +776,7 @@ export default function MenuPage() {
       >
         <p className="leading-[1.5] text-mut">
           Cette catégorie contient{" "}
-          <b className="tabular-nums text-ink">
+          <b className="cf-fig text-ink">
             {deleteTarget?.attached ?? 0} produit(s)
           </b>
           . Ils ne seront <b className="text-ink">pas supprimés</b> : ils passeront en

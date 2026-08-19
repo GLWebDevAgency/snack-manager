@@ -405,6 +405,13 @@ export type CreatedOrder = {
   status: OrderStatus;
   totals: { subtotal: number; total: number };
   pickup: { slot: string; customerName: string } | null;
+  /**
+   * Secret de suivi remis une seule fois, à la création. L’identifiant de
+   * commande ne suffit pas à consulter le suivi : un ObjectId Mongo est
+   * partiellement prévisible, et ces pages exposent le nom et le téléphone
+   * du client. Il doit accompagner tout lien `/t/:id`.
+   */
+  trackingToken: string;
 };
 
 /** Réponse « commande en ligne suspendue par le gérant ». */
@@ -447,18 +454,24 @@ export type TrackingState = {
   pickupSlot: string | null;
 };
 
+/** `?t=` — sans jeton valide l’API répond 404, jamais 403. */
+const withToken = (path: string, token: string) =>
+  `${path}?t=${encodeURIComponent(token)}`;
+
 export function loadTracking(
   id: string,
+  token: string,
   signal?: AbortSignal,
 ): Promise<TrackingState> {
-  return getJson<TrackingState>(`/public/orders/${encodeURIComponent(id)}`, {
-    signal,
-  });
+  return getJson<TrackingState>(
+    withToken(`/public/orders/${encodeURIComponent(id)}`, token),
+    { signal },
+  );
 }
 
 /** Récapitulatif complet de la commande (lignes, totaux, restaurant). */
-export function loadTicket(id: string): Promise<OrderTicket> {
+export function loadTicket(id: string, token: string): Promise<OrderTicket> {
   return getJson<OrderTicket>(
-    `/public/orders/${encodeURIComponent(id)}/ticket`,
+    withToken(`/public/orders/${encodeURIComponent(id)}/ticket`, token),
   );
 }

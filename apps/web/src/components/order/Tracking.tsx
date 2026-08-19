@@ -38,11 +38,14 @@ const RANK: Record<OrderStatus, number> = {
 
 export function Tracking({
   orderId,
+  trackingToken,
   ticket,
   initial,
   accent,
 }: {
   orderId: string;
+  /** Secret du lien de suivi : sans lui, le rafraîchissement reçoit un 404. */
+  trackingToken: string;
   /**
    * Récapitulatif figé (lignes, totaux, restaurant). `null` quand l’API ne
    * publie pas encore la route ticket : le suivi reste utilisable, seul le
@@ -63,14 +66,14 @@ export function Tracking({
 
   const refresh = useCallback(async () => {
     try {
-      const next = await loadTracking(orderId);
+      const next = await loadTracking(orderId, trackingToken);
       setState(next);
       setStale(false);
     } catch {
       // Réseau capricieux : on garde le dernier état connu et on le signale.
       setStale(true);
     }
-  }, [orderId]);
+  }, [orderId, trackingToken]);
 
   useEffect(() => {
     if (finished) return;

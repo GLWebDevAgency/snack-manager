@@ -27,21 +27,22 @@ export function Kpi({ label, value, icon, delta, className }: KpiProps) {
         </div>
         {icon && (
           <div
-            className="grid size-[34px] shrink-0 place-items-center rounded-[9px] bg-surface2 text-accent"
+            className="grid size-[34px] shrink-0 place-items-center rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] text-accent"
             aria-hidden
           >
             <Icon name={icon} size={18} />
           </div>
         )}
       </div>
-      <div className="mt-2 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em] tabular-nums text-ink">
+      {/* Chiffre qui compte : 800, chiffres tabulaires, approche −0.02em (DA §2). */}
+      <div className="cf-fig mt-2 text-[30px] font-extrabold leading-[1.1] text-ink">
         {value}
       </div>
       {delta && (
         <div
           className={cx(
-            "mt-0.5 text-[13px] font-bold tabular-nums",
-            delta.dir === "up" ? "text-ok" : "text-alert",
+            "cf-fig mt-1 text-[13px] font-bold",
+            delta.dir === "up" ? "text-okt" : "text-alertt",
           )}
         >
           <span aria-hidden>{delta.dir === "up" ? "▲" : "▼"}</span>

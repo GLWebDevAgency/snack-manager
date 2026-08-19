@@ -40,10 +40,13 @@ import {
   saveJson,
   serviceDay,
   startOfDayIso,
+  zFromJournal,
+  zFromServer,
   type DayEntry,
   type Mode,
   type ParkedTicket,
   type PayMethod,
+  type ServiceOrderRow,
 } from './pos-state';
 
 interface DayLogFile {
@@ -51,11 +54,28 @@ interface DayLogFile {
   entries: DayEntry[];
 }
 
-interface ServerOrderRow {
+interface ServiceStartFile {
+  day: string;
+  /** Horodatage ms de l'ouverture du service courant. */
+  at: number;
+}
+
+/** Minuit local — borne par défaut du premier service de la journée. */
+function startOfDay(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * Ligne de `GET /orders` : réconciliation (numéro, id, jeton) ET ventilation
+ * du Z. C'est la seule vue du poste qui voie aussi la vente en ligne.
+ */
+interface ServerOrderRow extends ServiceOrderRow {
   _id: string;
   number: number;
   clientId: string;
-  totals?: { total?: number };
+  trackingToken?: string | null;
 }
 
 export function PosScreen({ session, onLock }: { session: Session; onLock: (reason?: string) => void }) {
@@ -93,6 +113,14 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [dayLog, setDayLog] = useState<DayEntry[]>([]);
   const [parked, setParked] = useState<ParkedTicket[]>([]);
   const [ready, setReady] = useState(false);
+  /**
+   * Début du service courant (ms). Une clôture à 15 h ne doit pas faire
+   * ressortir le midi dans le Z du soir : c'est cette borne, et non minuit,
+   * qui découpe les commandes serveur.
+   */
+  const [serviceStart, setServiceStart] = useState(() => startOfDay());
+  /** Dernière vue serveur des commandes du jour — base du Z (vente en ligne comprise). */
+  const [serverRows, setServerRows] = useState<ServerOrderRow[] | null>(null);
 
   const dayLogRef = useRef<DayEntry[]>([]);
   useEffect(() => {
@@ -103,13 +131,17 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [log, park] = await Promise.all([
+      const [log, park, start] = await Promise.all([
         loadJson<DayLogFile>(KEYS.dayLog, { day: serviceDay(), entries: [] }),
         loadJson<ParkedTicket[]>(KEYS.parked, []),
+        loadJson<ServiceStartFile>(KEYS.serviceStart, { day: serviceDay(), at: startOfDay() }),
       ]);
       if (!alive) return;
-      setDayLog(log.day === serviceDay() ? log.entries : []);
+      const sameDay = log.day === serviceDay();
+      setDayLog(sameDay ? log.entries : []);
       setParked(park);
+      // Un service jamais clôturé la veille repart de minuit, pas de son heure.
+      setServiceStart(start.day === serviceDay() ? start.at : startOfDay());
       setReady(true);
     })();
     return () => {
@@ -124,6 +156,12 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   useEffect(() => {
     if (ready) void saveJson(KEYS.parked, parked);
   }, [parked, ready]);
+
+  useEffect(() => {
+    if (ready) {
+      void saveJson(KEYS.serviceStart, { day: serviceDay(), at: serviceStart } satisfies ServiceStartFile);
+    }
+  }, [ready, serviceStart]);
 
   useEffect(() => {
     if (menu && catId === null && menu.categories.length > 0) setCatId(menu.categories[0]?._id ?? null);
@@ -146,11 +184,20 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         );
         const byClient = new Map(res.rows.map((r) => [r.clientId, r]));
         setServerMax(res.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
+        setServerRows(res.rows);
         setDayLog((cur) =>
           cur.map((e) => {
-            if (e.serverId) return e;
             const hit = byClient.get(e.clientId);
-            return hit ? { ...e, serverId: String(hit._id), serverNumber: hit.number } : e;
+            if (!hit) return e;
+            // Le jeton de suivi peut manquer sur une entrée déjà réconciliée
+            // (poste mis à jour en cours de service) : on le rattrape ici.
+            if (e.serverId && e.trackingToken) return e;
+            return {
+              ...e,
+              serverId: String(hit._id),
+              serverNumber: hit.number,
+              trackingToken: hit.trackingToken ?? e.trackingToken ?? null,
+            };
           }),
         );
       } catch (err) {
@@ -293,6 +340,10 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         customerName,
         customerPhone,
         slotIso: slotIso ?? pickupSlots()[0]?.iso ?? null,
+        // Le moyen réellement encaissé part avec la commande : l'API la marque
+        // « payée » sur-le-champ, au lieu d'attendre la remise du plat.
+        method,
+        cash,
       });
 
       try {
@@ -303,6 +354,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           localNumber: nextLocalNumber,
           serverId: null,
           serverNumber: null,
+          // Renseigné à la réconciliation : la file offline ne rend pas la
+          // réponse du serveur, seul `GET /orders` porte le jeton.
+          trackingToken: null,
           mode,
           method,
           paid: method !== 'retrait',
@@ -358,14 +412,35 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     [push],
   );
 
-  const fetchTicket = useCallback(
-    (orderId: string) => client.get<OrderTicketDto>(`/public/orders/${orderId}/ticket`),
-    [],
+  /**
+   * Le ticket porte le nom et le téléphone du client : la route publique exige
+   * désormais le jeton de suivi. Sans lui, on le dit plutôt que de laisser
+   * remonter un 404 sec au comptoir.
+   */
+  const fetchTicket = useCallback((orderId: string, token: string | null | undefined) => {
+    if (!token) {
+      return Promise.reject(
+        new Error('Jeton de suivi absent — la commande finit de se synchroniser.'),
+      );
+    }
+    return client.get<OrderTicketDto>(
+      `/public/orders/${orderId}/ticket?t=${encodeURIComponent(token)}`,
+    );
+  }, []);
+
+  /** Z du service : commandes serveur si disponibles, journal local sinon. */
+  const z = useMemo(
+    () => (serverRows ? zFromServer(serverRows, serviceStart) : zFromJournal(dayLog)),
+    [dayLog, serverRows, serviceStart],
   );
 
   const closeService = useCallback(() => {
     const count = dayLog.length;
     setDayLog([]);
+    // Le service suivant démarre ici : sans cette borne, le Z du soir
+    // recompterait le service du midi depuis les commandes serveur.
+    setServiceStart(Date.now());
+    setServerRows(null);
     setCloseOpen(false);
     push(`Service clôturé · ${count} commande${count > 1 ? 's' : ''}`, 'good');
   }, [dayLog.length, push]);
@@ -504,6 +579,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         {closeOpen ? (
           <CloseModal
             entries={dayLog}
+            z={z}
             pending={sync.pending}
             brand={brand}
             staffName={session.staffName}

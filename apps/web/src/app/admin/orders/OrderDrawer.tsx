@@ -74,7 +74,7 @@ export function OrderDrawer({
       width={400}
       title={
         <span className="block whitespace-normal">
-          <span className="block text-[30px] font-extrabold leading-none tracking-[-0.02em] tabular-nums text-gold">
+          <span className="cf-fig block text-[32px] font-black leading-none text-gold">
             n°{order.number}
           </span>
           <span className="mt-1 block text-base font-bold text-ink">
@@ -125,7 +125,7 @@ export function OrderDrawer({
           )}
           {slot ? (
             <Pill variant="out">
-              Retrait <span className="tabular-nums">{slot}</span>
+              Retrait <span className="cf-fig">{slot}</span>
             </Pill>
           ) : (
             <Pill variant="out">{TYPE_LABELS[order.type]}</Pill>
@@ -139,7 +139,7 @@ export function OrderDrawer({
             className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-ink"
           >
             <Icon name="phone" size={15} className="text-accent" />
-            <span className="tabular-nums">{phone}</span>
+            <span className="cf-fig">{phone}</span>
           </a>
         )}
 
@@ -158,9 +158,9 @@ export function OrderDrawer({
               return (
                 <li
                   key={`${line.productId}-${i}`}
-                  className="flex items-start gap-2 rounded-ctrl bg-surface2 px-3 py-[9px]"
+                  className="flex items-start gap-2 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-[9px]"
                 >
-                  <span className="min-w-[22px] shrink-0 text-[15px] font-bold tabular-nums text-accent">
+                  <span className="cf-fig min-w-[22px] shrink-0 text-[15px] font-extrabold text-accent">
                     {line.qty > 0 ? `${line.qty}×` : "•"}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -169,12 +169,17 @@ export function OrderDrawer({
                       <div className="text-[13px] text-mut">{details.join(" · ")}</div>
                     )}
                     {line.note && (
-                      <div className="text-[13px] font-semibold text-accent">
-                        ➜ {line.note}
+                      <div className="flex items-start gap-1.5 text-[13px] font-bold text-prept">
+                        <Icon
+                          name="arrow"
+                          size={13}
+                          className="mt-[3px] shrink-0"
+                        />
+                        {line.note}
                       </div>
                     )}
                   </div>
-                  <span className="shrink-0 text-sm font-bold tabular-nums text-ink">
+                  <span className="cf-fig shrink-0 text-sm font-extrabold text-ink">
                     {fmtEuro(line.lineTotal)}
                   </span>
                 </li>
@@ -182,16 +187,19 @@ export function OrderDrawer({
             })}
           </ul>
           {order.note && (
-            <p className="mt-2 text-[13px] font-semibold text-accent">➜ {order.note}</p>
+            <p className="mt-2 flex items-start gap-1.5 text-[13px] font-bold text-prept">
+              <Icon name="arrow" size={13} className="mt-[3px] shrink-0" />
+              {order.note}
+            </p>
           )}
 
           {/* ── Total ── */}
-          <div className="mt-3 border-t border-line pt-3">
+          <div className="mt-3 border-t border-line2 pt-3">
             {order.totals.discount && (
               <>
                 <div className="flex items-baseline justify-between text-[13px] text-mut">
                   <span>Sous-total</span>
-                  <span className="tabular-nums">{fmtEuro(order.totals.subtotal)}</span>
+                  <span className="cf-fig">{fmtEuro(order.totals.subtotal)}</span>
                 </div>
                 <div className="mb-1 flex items-baseline justify-between text-[13px] text-mut">
                   <span>
@@ -200,15 +208,17 @@ export function OrderDrawer({
                       ? ` — ${order.totals.discount.reason}`
                       : ""}
                   </span>
-                  <span className="tabular-nums">
+                  <span className="cf-fig">
                     − {fmtEuro(order.totals.discount.amount)}
                   </span>
                 </div>
               </>
             )}
             <div className="flex items-baseline justify-between">
-              <span className="text-base font-semibold text-ink">Total</span>
-              <span className="text-xl font-extrabold tabular-nums text-accent">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+                Total
+              </span>
+              <span className="cf-fig text-[26px] font-extrabold leading-none text-accent">
                 {fmtEuro(order.totals.total)}
               </span>
             </div>
@@ -257,7 +267,7 @@ export function OrderDrawer({
                       {done && <span className="sr-only"> — étape effectuée</span>}
                     </span>
                     {done && at && (
-                      <span className="text-xs tabular-nums text-mut">{timeHHMM(at)}</span>
+                      <span className="cf-fig text-xs text-mut">{timeHHMM(at)}</span>
                     )}
                   </li>
                 </Fragment>

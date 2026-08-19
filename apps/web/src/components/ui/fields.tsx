@@ -9,9 +9,25 @@ import type {
 } from "react";
 import { cx } from "@/lib/cx";
 
-/** Style commun des contrôles de saisie (spec backoffice §4.5). */
+/**
+ * Style commun des contrôles de saisie (spec backoffice §4.5) : niveau
+ * « élément » posé sur la carte, bord qui s'éclaircit au survol, accent au
+ * focus (le seul emploi d'accent ici — élément actif, DA §3).
+ */
 const CONTROL =
-  "w-full rounded-ctrl border border-white/6 bg-white/5 px-3.5 py-3 text-sm text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-ctrl border border-white/8 bg-white/5 px-3.5 py-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/8";
+
+/**
+ * Largeur par défaut `w-full`, SAUF si l'appelant pose déjà une largeur.
+ *
+ * Tailwind tranche les conflits par l'ordre dans la feuille, pas par l'ordre
+ * des classes : `w-full` l'emportait sur `w-[280px]`, ce qui écrasait toutes
+ * les largeurs demandées (barres d'outils Ingrédients / Mouvements /
+ * Fournisseurs étalées sur trois lignes). On ne l'ajoute donc que si besoin.
+ * `min-w-0` n'est pas une largeur — d'où l'ancre de début de mot.
+ */
+const widthClass = (className?: string) =>
+  /(^|\s)!?w-/.test(className ?? "") ? undefined : "w-full";
 
 export function Label({
   className,
@@ -65,14 +81,24 @@ export function Input({
   className,
   ...rest
 }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cx(CONTROL, className)} {...rest} />;
+  return (
+    <input
+      className={cx(CONTROL, widthClass(className), className)}
+      {...rest}
+    />
+  );
 }
 
 export function Textarea({
   className,
   ...rest
 }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cx(CONTROL, "min-h-20", className)} {...rest} />;
+  return (
+    <textarea
+      className={cx(CONTROL, "min-h-20", widthClass(className), className)}
+      {...rest}
+    />
+  );
 }
 
 export function Select({
@@ -80,5 +106,10 @@ export function Select({
   ...rest
 }: SelectHTMLAttributes<HTMLSelectElement>) {
   // .cf-select : chevron gris intégré (globals.css)
-  return <select className={cx(CONTROL, "cf-select", className)} {...rest} />;
+  return (
+    <select
+      className={cx(CONTROL, "cf-select", widthClass(className), className)}
+      {...rest}
+    />
+  );
 }

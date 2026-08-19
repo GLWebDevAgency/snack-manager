@@ -28,7 +28,8 @@ export function StatusBadge({
   return (
     <span
       className={cx(
-        "inline-flex items-center whitespace-nowrap rounded-pill px-[9px] py-[3px] text-[9px] font-bold uppercase tracking-[0.06em]",
+        // 10px : le 9px d'origine était sous le seuil de lisibilité de service.
+        "inline-flex items-center whitespace-nowrap rounded-pill px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
         s.cls,
         className,
       )}

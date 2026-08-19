@@ -64,15 +64,21 @@ const WEEKDAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 /** Heures de la heatmap : 11 h → 23 h (13 colonnes, cf. contrat). */
 const HEAT_HOURS = Array.from({ length: 13 }, (_, i) => 11 + i);
 
-/** Canaux §10.2 : accent / blanc / gold — couleurs de série, pas de statut. */
+/**
+ * Canaux §10.2 — couleurs de SÉRIE, jamais de statut.
+ * Accent pour le canal en ligne, puis deux neutres dégressifs : la trilogie
+ * d'origine (accent / blanc / gold) rendait « En ligne » et « Téléphone »
+ * indiscernables chez tout tenant dont l'accent est le laiton, et posait un
+ * aplat blanc pur au milieu du panneau.
+ */
 const CHANNELS: {
   key: StatsChannelBucket["channel"];
   label: string;
   fill: string;
 }[] = [
   { key: "online", label: "En ligne (Click & Collect)", fill: "bg-accent" },
-  { key: "pos", label: "Sur place / comptoir", fill: "bg-ink" },
-  { key: "phone", label: "Téléphone", fill: "bg-gold" },
+  { key: "pos", label: "Sur place / comptoir", fill: "bg-white/60" },
+  { key: "phone", label: "Téléphone", fill: "bg-white/25" },
 ];
 
 // ─── Formatage fr-FR ─────────────────────────────────────────────────
@@ -227,7 +233,7 @@ export default function StatsPage() {
       {/* ── Erreur (chargement initial ou rafraîchissement) ── */}
       {error && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
-          <p className="text-sm text-alert" role="alert">
+          <p className="text-sm font-semibold text-alertt" role="alert">
             {error}
           </p>
           <Btn variant="ghost" size="sm" onClick={retry}>
@@ -262,7 +268,7 @@ export default function StatsPage() {
       {data && (
         <div
           className={cx(
-            "space-y-4 transition-opacity duration-200",
+            "space-y-4 transition-opacity duration-200 ease-sm",
             refreshing && "opacity-60",
           )}
           aria-busy={refreshing}
@@ -443,17 +449,17 @@ function ChannelBars({ channels }: { channels: StatsChannelBucket[] }) {
               title={`${ch.label} : ${int(orders)} commande(s) · ${fmtEuro(bucket?.caCents ?? 0)}`}
             >
               <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate text-sm text-ink">
+                <span className="min-w-0 truncate text-sm font-semibold text-ink">
                   {ch.label}
                 </span>
-                <span className="shrink-0 text-sm tabular-nums">
+                <span className="cf-fig shrink-0 text-sm">
                   <span className="text-mut">{int(orders)} cmd · </span>
-                  <span className="font-bold text-ink">{pct} %</span>
+                  <span className="font-extrabold text-ink">{pct} %</span>
                 </span>
               </div>
-              <div className="h-3 overflow-hidden rounded-md bg-surface2">
+              <div className="h-3 overflow-hidden rounded-pill border border-white/6 bg-surface2">
                 <div
-                  className={cx("h-full rounded-md", ch.fill)}
+                  className={cx("h-full rounded-pill", ch.fill)}
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -520,7 +526,7 @@ function Heatmap({ cells }: { cells: StatsHeatmapCell[] }) {
           {HEAT_HOURS.map((h) => (
             <div
               key={h}
-              className="text-center text-[10px] font-semibold tabular-nums text-mut"
+              className="cf-fig text-center text-[10px] font-semibold text-mut"
             >
               {h}h
             </div>
@@ -616,29 +622,29 @@ function TopProducts({ top }: { top: StatsTopProduct[] }) {
           )}
         >
           <span
-            className="w-[22px] shrink-0 text-[15px] font-bold tabular-nums text-mut"
+            className="cf-fig w-[22px] shrink-0 text-[15px] font-extrabold text-mut"
             aria-hidden
           >
             {i + 1}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-semibold text-ink">
+            <div className="truncate text-[15px] font-bold text-ink">
               {t.name}
             </div>
             <div
-              className="mt-1.5 h-2 overflow-hidden rounded-md bg-surface2"
+              className="mt-1.5 h-2 overflow-hidden rounded-pill bg-surface2"
               aria-hidden
             >
               <div
-                className="h-full rounded-md bg-accent"
+                className="h-full rounded-pill bg-accent"
                 style={{ width: `${Math.round((t.qty / maxQty) * 100)}%` }}
               />
             </div>
           </div>
-          <span className="w-[74px] shrink-0 text-right text-sm tabular-nums text-mut">
+          <span className="cf-fig w-[74px] shrink-0 text-right text-sm text-mut">
             {int(t.qty)} vendus
           </span>
-          <span className="w-[84px] shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+          <span className="cf-fig w-[84px] shrink-0 text-right text-sm font-extrabold text-ink">
             {fmtEuro(t.caCents)}
           </span>
         </li>
@@ -652,19 +658,19 @@ function PrepTimes({ prep }: { prep: StatsPrepTimes }) {
   return (
     <>
       <div className="flex flex-col gap-4 sm:flex-row">
-        <div className="flex-1 rounded-card bg-surface2 p-4">
+        <div className="flex-1 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
             Temps moyen
           </div>
-          <div className="mt-1 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] tabular-nums text-ink">
+          <div className="cf-fig mt-1.5 text-[28px] font-extrabold leading-[1.1] text-ink">
             {minutes(prep.avgMinutes)}
           </div>
         </div>
-        <div className="flex-1 rounded-card bg-surface2 p-4">
+        <div className="flex-1 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
             P90 · 9 commandes sur 10
           </div>
-          <div className="mt-1 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] tabular-nums text-ink">
+          <div className="cf-fig mt-1.5 text-[28px] font-extrabold leading-[1.1] text-ink">
             {minutes(prep.p90Minutes)}
           </div>
         </div>

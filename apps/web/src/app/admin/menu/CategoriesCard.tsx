@@ -90,7 +90,7 @@ export function CategoriesCard({
             type="button"
             onClick={onSortAlpha}
             title="Trier par ordre alphabétique"
-            className="rounded-[7px] border border-line bg-surface2 px-2 py-[3px] text-[11px] font-extrabold text-ink transition-colors duration-200 hover:border-white/50"
+            className="cf-press rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-2 py-[3px] text-[11px] font-extrabold text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
           >
             A→Z
           </button>
@@ -99,7 +99,7 @@ export function CategoriesCard({
             onClick={() => setCreating(true)}
             title="Nouvelle catégorie"
             aria-label="Nouvelle catégorie"
-            className="rounded-[7px] border border-line bg-surface2 px-[7px] py-[3px] text-ink transition-colors duration-200 hover:border-white/50"
+            className="cf-press rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-[7px] py-[3px] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
           >
             <Icon name="plus" size={13} />
           </button>
@@ -122,7 +122,7 @@ export function CategoriesCard({
             }}
             placeholder="Nom de la catégorie"
             aria-label="Nom de la nouvelle catégorie"
-            className="min-w-0 flex-1 rounded-ctrl border border-white/6 bg-white/5 px-2.5 py-[7px] text-[13px] text-white outline-none transition-colors duration-200 placeholder:text-mut/75 focus:border-accent"
+            className="min-w-0 flex-1 rounded-ctrl border border-white/6 bg-white/5 px-2.5 py-[7px] text-[13px] text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 hover:border-white/16 focus:border-accent focus:bg-white/8"
           />
           <button
             type="button"
@@ -133,7 +133,7 @@ export function CategoriesCard({
             }}
             aria-label="Créer la catégorie"
             title="Créer la catégorie"
-            className="grid size-[30px] shrink-0 place-items-center rounded-ctrl bg-accent text-onaccent"
+            className="cf-press grid size-[30px] shrink-0 place-items-center rounded-ctrl bg-accent text-onaccent hover:opacity-85"
           >
             <Icon name="check" size={14} stroke={3} />
           </button>
@@ -196,8 +196,10 @@ export function CategoriesCard({
                   tabIndex={0}
                   aria-current={isSel || undefined}
                   className={cx(
-                    "flex cursor-pointer items-center gap-2 rounded-[9px] px-2 py-2 transition-colors duration-150",
-                    isSel ? "bg-surface2" : "hover:bg-white/6",
+                    "cf-press-row flex cursor-pointer items-center gap-2 rounded-ctrl px-2 py-2",
+                    isSel
+                      ? "bg-[image:var(--cf-elev-gradient)] shadow-[inset_0_0_0_1px_rgba(255,255,255,.06)]"
+                      : "hover:bg-white/6",
                     dragIndex === i && "opacity-40",
                   )}
                 >
@@ -221,7 +223,7 @@ export function CategoriesCard({
                   >
                     {cat.name}
                   </span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-mut">
+                  <span className="cf-fig shrink-0 text-[11px] font-bold text-mut">
                     {cat.products.length}
                   </span>
                   <button
@@ -232,7 +234,7 @@ export function CategoriesCard({
                     }}
                     title="Supprimer la catégorie"
                     aria-label={`Supprimer la catégorie ${cat.name}`}
-                    className="shrink-0 text-mut transition-colors duration-150 hover:text-alertt"
+                    className="cf-press shrink-0 rounded-xs p-0.5 text-mut hover:bg-alert/15 hover:text-alertt"
                   >
                     <Icon name="trash" size={13} />
                   </button>
@@ -259,8 +261,10 @@ export function CategoriesCard({
             }}
             aria-current={selected === UNCAT || undefined}
             className={cx(
-              "flex cursor-pointer items-center gap-2 rounded-[9px] px-2 py-2 transition-colors duration-150",
-              selected === UNCAT ? "bg-surface2" : "hover:bg-white/6",
+              "cf-press-row flex cursor-pointer items-center gap-2 rounded-ctrl px-2 py-2",
+              selected === UNCAT
+                ? "bg-[image:var(--cf-elev-gradient)] shadow-[inset_0_0_0_1px_rgba(255,255,255,.06)]"
+                : "hover:bg-white/6",
             )}
           >
             <Icon
@@ -276,7 +280,7 @@ export function CategoriesCard({
             >
               Non rattachés
             </span>
-            <span className="shrink-0 text-[11px] tabular-nums text-mut">
+            <span className="cf-fig shrink-0 text-[11px] font-bold text-mut">
               {uncategorizedCount}
             </span>
           </div>

@@ -21,6 +21,7 @@ import {
   Drawer,
   EmptyState,
   Field,
+  Icon,
   IconBtn,
   Input,
   Modal,
@@ -191,9 +192,10 @@ export function SuppliersTab({
           <button
             type="button"
             onClick={onClearFilter}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-gold/60 bg-gold/10 px-3 py-[7px] text-[13px] font-semibold text-gold transition-colors duration-200"
+            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-gold/60 bg-gold/10 px-3 py-[7px] text-[13px] font-semibold text-gold hover:bg-gold/16"
           >
-            Filtre : Hausses de prix ✕
+            Filtre : Hausses de prix
+            <Icon name="close" size={12} />
             <span className="sr-only">— retirer le filtre</span>
           </button>
         )}
@@ -406,13 +408,13 @@ function ItemRow({
         )}
       </td>
       <td className="px-4 py-2.5 text-mut">{item.brand?.name ?? "—"}</td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-ink">
+      <td className="cf-fig whitespace-nowrap px-4 py-2.5 text-right font-semibold text-ink">
         {fmtQty(item.packQty)} {unit}
       </td>
       <td className="whitespace-nowrap px-4 py-2.5 text-right">
         <PriceEditor item={item} onSaved={onPriceSaved} />
       </td>
-      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-mut">
+      <td className="cf-fig whitespace-nowrap px-4 py-2.5 text-right text-mut">
         {unitPriceCents !== null ? (
           <>
             {fmtEuro(unitPriceCents)} / {unit}
@@ -507,7 +509,7 @@ function PriceEditor({
   if (!editing)
     return (
       <span className="inline-flex items-center gap-1.5">
-        <span className="font-bold tabular-nums text-ink">
+        <span className="cf-fig text-[15px] font-extrabold text-ink">
           {fmtEuro(item.packPriceCents)}
         </span>
         <IconBtn
@@ -667,7 +669,7 @@ function SupplierDrawer({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="mr-auto rounded-pill px-2 py-1 text-[13px] font-semibold text-alertt transition-colors duration-200 hover:text-alert"
+                className="cf-press mr-auto rounded-pill px-2 py-1 text-[13px] font-semibold text-alertt hover:bg-alert/12 hover:text-alert"
               >
                 Supprimer
               </button>

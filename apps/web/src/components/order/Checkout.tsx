@@ -405,9 +405,9 @@ export function Checkout({
             amount={intent.amount}
             accent={accent}
             returnUrl={
-              typeof window === "undefined"
+              typeof window === "undefined" || !order
                 ? ""
-                : `${window.location.origin}/t/${order?._id ?? ""}`
+                : `${window.location.origin}/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`
             }
             onPaid={() => {
               setPaidOnline(true);
@@ -511,7 +511,7 @@ function Footer({
       <div className="flex flex-col gap-2.5">
         {order && (
           <Link
-            href={`/t/${order._id}`}
+            href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
             className="flex w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 py-[15px] text-[15px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:duration-75 active:scale-[0.97]"

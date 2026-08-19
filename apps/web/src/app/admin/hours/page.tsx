@@ -172,8 +172,10 @@ function TimeInput({
       aria-label={label}
       aria-invalid={invalid || undefined}
       className={cx(
-        "w-[92px] rounded-ctrl border bg-white/5 px-2 py-1.5 text-center text-[13px] font-semibold text-white tabular-nums outline-none transition-colors duration-200 [color-scheme:dark]",
-        invalid ? "border-alert" : "border-white/6 focus:border-accent",
+        "cf-fig w-[92px] rounded-ctrl border bg-white/5 px-2 py-1.5 text-center text-[13px] font-bold text-white outline-none transition-colors duration-200 ease-sm [color-scheme:dark]",
+        invalid
+          ? "border-alert bg-alert/10"
+          : "border-white/8 hover:border-white/16 focus:border-accent focus:bg-white/8",
       )}
     />
   );
@@ -539,7 +541,7 @@ export default function HoursPage() {
                     i > 0 && "border-t border-line2",
                   )}
                 >
-                  <div className="w-[74px] shrink-0 text-center text-[15px] font-bold text-accent tabular-nums">
+                  <div className="cf-fig w-[74px] shrink-0 text-center text-[15px] font-extrabold text-accent">
                     {closureDateLabel(c)}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -555,7 +557,7 @@ export default function HoursPage() {
                     onClick={() => setDeleteIdx(idx)}
                     aria-label={`Supprimer la fermeture « ${c.reason?.trim() || closureDateLabel(c)} »`}
                     title="Supprimer"
-                    className="grid size-8 shrink-0 place-items-center rounded-ctrl text-mut transition-colors duration-200 hover:text-alertt"
+                    className="cf-press grid size-8 shrink-0 place-items-center rounded-ctrl text-mut hover:bg-alert/12 hover:text-alertt"
                   >
                     <Icon name="trash" size={15} />
                   </button>
@@ -570,7 +572,7 @@ export default function HoursPage() {
           title="Pause commande en ligne"
           sub="Message affiché au client pendant la pause"
         >
-          <div className="flex items-center justify-between gap-3 rounded-card border border-line2 bg-surface2 px-3.5 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3.5 py-3">
             <div className="min-w-0">
               <div className="text-sm font-bold text-ink">Commande en ligne</div>
               <div

@@ -10,7 +10,8 @@ type ChipProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 /**
  * Chip de filtre (spec backoffice §4.3) : pilule fond blanc 6 %, texte #999,
- * hover texte blanc, actif texte blanc + bord blanc 50 %.
+ * hover texte blanc + fond éclairci, actif blanc sur bord clair.
+ * Retour tactile immédiat à l'appui (DA §4).
  */
 export function Chip({
   on = false,
@@ -24,10 +25,11 @@ export function Chip({
       type={type}
       aria-pressed={on}
       className={cx(
-        "inline-flex select-none items-center gap-1.5 whitespace-nowrap rounded-pill border bg-white/6 px-3.5 py-[7px] text-[13px] font-medium transition-colors duration-200 ease-sm",
+        // Graisse identique dans les deux états : bascule sans saut de largeur.
+        "cf-press inline-flex select-none items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 py-[7px] text-[13px] font-semibold",
         on
-          ? "border-white/50 text-white"
-          : "border-transparent text-mut hover:text-white",
+          ? "border-white/55 bg-white/12 text-white"
+          : "border-transparent bg-white/6 text-mut hover:bg-white/10 hover:text-white",
         className,
       )}
       {...rest}

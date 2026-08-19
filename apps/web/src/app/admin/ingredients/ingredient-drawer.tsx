@@ -223,7 +223,7 @@ export function IngredientDrawer({
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="mr-auto rounded-pill px-2 py-1 text-[13px] font-semibold text-alertt transition-colors duration-200 hover:text-alert"
+                className="cf-press mr-auto rounded-pill px-2 py-1 text-[13px] font-semibold text-alertt hover:bg-alert/12 hover:text-alert"
               >
                 Supprimer
               </button>
@@ -380,7 +380,7 @@ export function IngredientDrawer({
               }}
             />
           ) : (
-            <p className="rounded-card bg-surface2 px-3.5 py-3 text-[13px] text-mut">
+            <p className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3.5 py-3 text-[13px] text-mut">
               Enregistrez l'ingrédient pour gérer ses marques.
             </p>
           )}
@@ -494,7 +494,7 @@ function BrandsEditor({
         {brands.map((b) => (
           <li
             key={b.id}
-            className="flex items-center gap-2 rounded-card bg-surface2 px-3 py-2"
+            className="flex items-center gap-2 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2"
           >
             <button
               type="button"
@@ -508,7 +508,7 @@ function BrandsEditor({
               }
               title={b.preferred ? "Marque préférée" : "Définir comme préférée"}
               className={cx(
-                "shrink-0 transition-colors duration-200",
+                "cf-press shrink-0",
                 b.preferred ? "text-gold" : "text-mut hover:text-white",
               )}
             >

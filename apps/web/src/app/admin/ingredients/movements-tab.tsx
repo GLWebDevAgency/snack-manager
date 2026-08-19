@@ -118,7 +118,7 @@ export function MovementsTab({
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/6 px-3 py-[7px] text-[13px] font-semibold text-ink transition-colors duration-200 ease-sm hover:bg-white/10"
+            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/6 px-3 py-[7px] text-[13px] font-semibold text-ink hover:bg-white/10"
           >
             Réinitialiser les filtres
             <Icon name="close" size={12} />
@@ -171,9 +171,9 @@ export function MovementsTab({
                     {visible.map((m) => (
                       <tr
                         key={m.id}
-                        className="border-b border-line2 transition-colors duration-200 last:border-b-0 hover:bg-white/3"
+                        className="border-b border-line2 transition-colors duration-200 ease-sm last:border-b-0 hover:bg-white/4"
                       >
-                        <td className="whitespace-nowrap px-4 py-3 text-[13px] text-mut tabular-nums">
+                        <td className="cf-fig whitespace-nowrap px-4 py-3 text-[13px] text-mut">
                           {fmtDateTimeFr(m.at)}
                         </td>
                         <td className="px-4 py-3 font-bold text-ink">
@@ -184,7 +184,7 @@ export function MovementsTab({
                         </td>
                         <td
                           className={cx(
-                            "whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums",
+                            "cf-fig whitespace-nowrap px-4 py-3 text-right text-[15px] font-extrabold",
                             m.qty > 0
                               ? "text-okt"
                               : m.qty < 0
@@ -213,7 +213,7 @@ export function MovementsTab({
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-[13px] text-mut tabular-nums">
+            <div className="cf-fig flex flex-wrap items-center justify-between gap-3 border-t border-line2 bg-black/20 px-4 py-3 text-[13px] text-mut">
               <span>
                 {visible.length} mouvement{visible.length > 1 ? "s" : ""}
                 {type &&

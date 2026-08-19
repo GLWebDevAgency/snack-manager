@@ -170,8 +170,8 @@ export function StockGauge({
   const parPos = par > 0 ? (par / scale) * 100 : null;
   return (
     <div className="min-w-[120px]">
-      <div className="flex items-baseline gap-1.5 whitespace-nowrap tabular-nums">
-        <span className={cx("text-sm font-bold", valueCls)}>
+      <div className="cf-fig flex items-baseline gap-1.5 whitespace-nowrap">
+        <span className={cx("text-[15px] font-extrabold", valueCls)}>
           {fmtQty(stock)} {UNIT_LABELS[unit]}
         </span>
         <span className="text-[11px] text-mut">
@@ -226,7 +226,7 @@ export function ErrorState({
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-pill border border-line bg-transparent px-3.5 py-[9px] text-xs font-semibold text-white transition-[opacity,background-color] duration-200 ease-sm hover:bg-white/6"
+        className="cf-press rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
       >
         Réessayer
       </button>
@@ -252,7 +252,7 @@ export function DangerBtn({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "inline-flex items-center justify-center gap-[9px] whitespace-nowrap rounded-pill bg-alert px-5 py-[13px] text-sm font-semibold tracking-[-0.2px] text-white transition-opacity duration-200 ease-sm hover:opacity-85 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40",
+        "cf-press inline-flex items-center justify-center gap-[9px] whitespace-nowrap rounded-pill bg-alert px-5 py-[13px] text-sm font-bold tracking-[-0.01em] text-white shadow-card hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40",
         className,
       )}
     >
@@ -261,7 +261,12 @@ export function DangerBtn({
   );
 }
 
-/** En-tête de colonne de table standard. */
+/**
+ * En-tête de colonne de table standard — bandeau de niveau « élément »
+ * (#1a1a1a + voile vertical) posé sur la carte : l'en-tête ne porte jamais la
+ * même valeur que le corps de la table (DA §1) et reprend exactement le
+ * dégradé des en-têtes de Commandes et de Menu.
+ */
 export function Th({
   children,
   className,
@@ -273,7 +278,7 @@ export function Th({
     <th
       scope="col"
       className={cx(
-        "whitespace-nowrap px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.06em] text-mut",
+        "whitespace-nowrap bg-[image:var(--cf-elev-gradient)] px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut",
         className,
       )}
     >

@@ -302,20 +302,25 @@ export default function PromosPage() {
               <article
                 key={p._id}
                 aria-label={`Promo ${p.code ?? p.name}`}
+                /*
+                 * Tuile de niveau « élément » posée sur la carte : l'ancien
+                 * cadre pointillé accent répétait la couleur de marque sur
+                 * toute la colonne. L'accent ne reste que sur le code (DA §3).
+                 */
                 className={cx(
-                  "rounded-card border-[1.5px] border-dashed border-accent bg-surface px-3.5 py-3 transition-opacity duration-200",
-                  !p.active && "opacity-55",
+                  "rounded-card border border-white/8 bg-[image:var(--cf-elev-gradient)] px-3.5 py-3 transition-opacity duration-200 ease-sm",
+                  !p.active && "opacity-50",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className="grid size-11 shrink-0 place-items-center rounded-ctrl bg-surface2 text-accent"
+                    className="grid size-11 shrink-0 place-items-center rounded-ctrl border border-white/8 bg-black/25 text-accent"
                     aria-hidden
                   >
                     <Icon name="tag" size={22} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-lg font-semibold tracking-[-0.03em] text-accent">
+                    <div className="truncate text-lg font-extrabold tracking-[-0.02em] text-accent">
                       {p.code ?? p.name}
                     </div>
                     <div className="truncate text-sm text-mut">
@@ -325,7 +330,7 @@ export default function PromosPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2.5">
-                    <span className="text-[13px] tabular-nums text-mut">
+                    <span className="cf-fig text-[13px] text-mut">
                       {p.usageCount.toLocaleString("fr-FR")} utilisés
                     </span>
                     <Toggle
@@ -372,7 +377,7 @@ export default function PromosPage() {
             {FEATURED.map((name) => (
               <div
                 key={name}
-                className="flex items-center gap-2.5 rounded-ctrl bg-surface2 px-3 py-2.5"
+                className="flex items-center gap-2.5 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2.5"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -397,10 +402,12 @@ export default function PromosPage() {
           </div>
 
           {/* Encart « Menu du moment » (spec §8.3) */}
-          <div className="mt-4 rounded-card bg-fill p-3.5">
-            <div className="text-[15px] font-bold text-gold">Menu du moment</div>
+          <div className="mt-4 rounded-card border border-gold/25 bg-[image:var(--cf-elev-gradient)] p-3.5">
+            <div className="text-[15px] font-extrabold text-gold">
+              Menu du moment
+            </div>
             <div className="mt-1 flex items-center gap-3">
-              <p className="min-w-0 flex-1 text-sm text-[rgba(244,238,225,0.8)]">
+              <p className="min-w-0 flex-1 text-sm text-mut">
                 Bandeau « Passe en menu +2,50 € » sur l&apos;accueil client
               </p>
               <Toggle on label="Bandeau menu du moment" />

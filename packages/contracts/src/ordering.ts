@@ -7,6 +7,7 @@ import type {
   OrderType,
   PaymentMethod,
   PaymentStatus,
+  PaymentTender,
 } from './index';
 
 // ─────────────────────────────────────────────────────────────
@@ -132,6 +133,24 @@ export const TicketQuerySchema = z.object({
 });
 export type TicketQuery = z.infer<typeof TicketQuerySchema>;
 
+// ─── Accès public à une commande : `?t=<trackingToken>` ───
+
+/**
+ * Jeton de suivi porté par l'URL. Typé `string` explicitement : Express
+ * interprète `?t[$ne]=x` comme un objet, qui deviendrait un opérateur Mongo
+ * si on le passait tel quel au filtre.
+ */
+export const TrackingTokenQuerySchema = z.object({
+  t: z.string().min(1).max(128).optional(),
+});
+export type TrackingTokenQuery = z.infer<typeof TrackingTokenQuerySchema>;
+
+/** Options de rendu du ticket + jeton de suivi (routes `/ticket` et `/escpos`). */
+export const TicketRequestQuerySchema = TicketQuerySchema.extend(
+  TrackingTokenQuerySchema.shape,
+);
+export type TicketRequestQuery = z.infer<typeof TicketRequestQuerySchema>;
+
 export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   surplace: 'Sur place',
   emporter: 'À emporter',
@@ -154,6 +173,16 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   paid: 'Réglé',
   refunded: 'Remboursé',
 };
+
+/** Libellés du moyen réellement encaissé — ceux du Z de fin de service. */
+export const PAYMENT_TENDER_LABELS: Record<PaymentTender, string> = {
+  cash: 'Espèces',
+  card: 'Carte bancaire',
+  online: 'En ligne',
+};
+
+/** Ligne « à encaisser » du Z : une commande partie sans tender. */
+export const PAYMENT_DUE_LABEL = 'À encaisser au retrait';
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   new: 'Reçue',
@@ -205,9 +234,15 @@ export interface TicketTotals {
 export interface TicketPayment {
   method: PaymentMethod;
   methodLabel: string;
+  /** Moyen réellement encaissé — `null` tant que rien n'a été perçu. */
+  tender: PaymentTender | null;
+  tenderLabel: string | null;
   status: PaymentStatus;
   statusLabel: string;
   paid: boolean;
+  /** Espèces reçues et rendu monnaie, en centimes (`null` hors paiement espèces). */
+  cashReceived: number | null;
+  changeGiven: number | null;
 }
 
 /** Représentation imprimable d'une commande (source du rendu ESC/POS). */
@@ -230,6 +265,31 @@ export interface OrderTicket {
   payment: TicketPayment;
   /** Instructions cuisine saisies par le client. */
   note: string | null;
+}
+
+// ─── Suivi public (page `/t/[id]?t=…`) ───
+
+export interface OrderTrackingStep {
+  status: OrderStatus;
+  /** ISO 8601. */
+  at: string;
+}
+
+/**
+ * Projection MINIMALE renvoyée par `GET /public/orders/:id?t=<trackingToken>`.
+ *
+ * Volontairement sans nom ni téléphone : le client qui suit sa commande n'a
+ * besoin que de son numéro de retrait et de l'avancement en cuisine. Le détail
+ * nominatif reste sur `/ticket`, derrière le même jeton.
+ */
+export interface OrderTracking {
+  _id: string;
+  /** Numéro de retrait crié au comptoir. */
+  number: number;
+  status: OrderStatus;
+  statusHistory: OrderTrackingStep[];
+  /** ISO 8601 du créneau de retrait, `null` en vente directe. */
+  pickupSlot: string | null;
 }
 
 // ─── Page publique du restaurant (un seul appel) ───

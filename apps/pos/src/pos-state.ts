@@ -7,6 +7,7 @@
  * même que la file offline.
  */
 import { getStore, uuid, type CartLine } from '@sm/client-core';
+import { PAYMENT_DUE_LABEL, PAYMENT_TENDER_LABELS, type PaymentTender } from '@sm/contracts';
 
 export type Mode = 'surplace' | 'emporter' | 'tel';
 
@@ -19,9 +20,23 @@ export const MODE_LABEL: Record<Mode, string> = {
 export type PayMethod = 'cb' | 'especes' | 'retrait';
 
 export const PAY_LABEL: Record<PayMethod, string> = {
-  cb: 'Carte bancaire',
-  especes: 'Espèces',
-  retrait: 'À encaisser au retrait',
+  cb: PAYMENT_TENDER_LABELS.card,
+  especes: PAYMENT_TENDER_LABELS.cash,
+  retrait: PAYMENT_DUE_LABEL,
+};
+
+/**
+ * Bouton de la caisse → moyen réellement encaissé, tel que l'API l'enregistre.
+ *
+ * `retrait` reste `null` : rien n'est perçu, la commande part « à encaisser ».
+ * Sans cette traduction, l'API recevait `method: 'counter'` pour les trois
+ * boutons et enregistrait tout en attente — le Z du soir était donc faux même
+ * quand l'écran affichait « Payé (carte bancaire) ».
+ */
+export const PAY_TENDER: Record<PayMethod, PaymentTender | null> = {
+  cb: 'card',
+  especes: 'cash',
+  retrait: null,
 };
 
 /** Une commande envoyée pendant le service (journal local du poste). */
@@ -31,6 +46,8 @@ export interface DayEntry {
   localNumber: number;
   serverId: string | null;
   serverNumber: number | null;
+  /** Jeton de suivi renvoyé par l'API — requis pour le ticket et le lien client. */
+  trackingToken?: string | null;
   mode: Mode;
   method: PayMethod;
   paid: boolean;
@@ -151,7 +168,14 @@ export interface OrderBody {
     note?: string;
     qty: number;
   }[];
-  payment: { method: 'counter' };
+  payment: {
+    /** Le POS encaisse au comptoir : `online` ne concerne pas cette surface. */
+    method: 'counter';
+    /** Moyen réellement présenté — `null` = à encaisser au retrait. */
+    tender: PaymentTender | null;
+    cashReceived?: number;
+    changeGiven?: number;
+  };
   pickup?: { slot: string; customerName: string; customerPhone?: string };
   note?: string;
 }
@@ -164,8 +188,14 @@ export function buildOrderBody(params: {
   customerName: string;
   customerPhone: string;
   slotIso: string | null;
+  /** Bouton d'encaissement pressé au comptoir. */
+  method: PayMethod;
+  /** Encaissement espèces : montant posé et rendu calculé localement. */
+  cash?: { received: number; change: number };
 }): OrderBody {
-  const { clientId, mode, lines, note, customerName, customerPhone, slotIso } = params;
+  const { clientId, mode, lines, note, customerName, customerPhone, slotIso, method, cash } =
+    params;
+  const tender = PAY_TENDER[method];
   const body: OrderBody = {
     clientId,
     channel: mode === 'tel' ? 'phone' : 'pos',
@@ -178,8 +208,15 @@ export function buildOrderBody(params: {
       ...(l.note ? { note: l.note.slice(0, 200) } : null),
       qty: l.qty,
     })),
-    // Le POS encaisse au comptoir : le paiement en ligne ne concerne pas cette surface.
-    payment: { method: 'counter' },
+    payment: {
+      method: 'counter',
+      tender,
+      // Le rendu est transmis pour trace, mais l'API le recalcule sur SON
+      // total : la file offline peut rejouer ce corps bien plus tard.
+      ...(tender === 'cash' && cash
+        ? { cashReceived: cash.received, changeGiven: Math.max(0, cash.change) }
+        : null),
+    },
   };
   if (mode === 'tel') {
     body.pickup = {
@@ -191,4 +228,111 @@ export function buildOrderBody(params: {
   const trimmed = note.trim();
   if (trimmed) body.note = trimmed.slice(0, 500);
   return body;
+}
+
+// ─── Clôture de service (Z) ───
+
+/**
+ * Ventilation du service par moyen de paiement.
+ *
+ * Ce que compte réellement un gérant le soir : les espèces du tiroir, le
+ * bordereau du TPE, ce qui est déjà tombé sur le compte via la vente en ligne,
+ * et ce qui reste dû. Un total unique ne se recoupe avec rien.
+ */
+export interface ServiceZ {
+  orders: number;
+  /** Chiffre d'affaires du service, remises déduites (centimes). */
+  ca: number;
+  cash: number;
+  card: number;
+  online: number;
+  /** Commandes parties sans encaissement (« à encaisser au retrait »). */
+  due: number;
+  /** Encaissé sans moyen renseigné — n'existe que sur des données anciennes. */
+  unspecified: number;
+  discounts: number;
+  /**
+   * `server` : calculé sur les commandes enregistrées, donc vente en ligne
+   * comprise. `local` : repli hors ligne sur le seul journal de ce poste.
+   */
+  source: 'server' | 'local';
+}
+
+const EMPTY_Z: Omit<ServiceZ, 'source'> = {
+  orders: 0,
+  ca: 0,
+  cash: 0,
+  card: 0,
+  online: 0,
+  due: 0,
+  unspecified: 0,
+  discounts: 0,
+};
+
+/** Commande telle que la renvoie `GET /orders` (champs utiles au Z). */
+export interface ServiceOrderRow {
+  createdAt?: string;
+  status?: string;
+  totals?: { total?: number; discount?: { amount?: number } | null };
+  payment?: { status?: string; tender?: PaymentTender | null };
+}
+
+/**
+ * Z de référence : calculé sur les commandes enregistrées côté serveur.
+ *
+ * Seule source qui voie la vente en ligne et les remises passées depuis le
+ * back-office. Les commandes annulées en sortent — elles n'ont encaissé rien.
+ *
+ * @param since début du service en ms (la clôture précédente, ou minuit).
+ */
+export function zFromServer(rows: ServiceOrderRow[], since: number): ServiceZ {
+  const z = { ...EMPTY_Z, source: 'server' as const };
+  for (const row of rows) {
+    if (row.status === 'cancelled') continue;
+    const at = row.createdAt ? Date.parse(row.createdAt) : Number.NaN;
+    if (Number.isFinite(at) && at < since) continue;
+
+    const total = Math.round(row.totals?.total ?? 0);
+    z.orders += 1;
+    z.ca += total;
+    z.discounts += Math.round(row.totals?.discount?.amount ?? 0);
+
+    if (row.payment?.status !== 'paid') {
+      z.due += total;
+      continue;
+    }
+    const tender = row.payment.tender ?? null;
+    if (tender === 'cash') z.cash += total;
+    else if (tender === 'card') z.card += total;
+    else if (tender === 'online') z.online += total;
+    else z.unspecified += total;
+  }
+  return z;
+}
+
+/**
+ * Repli hors ligne : le journal local du poste.
+ *
+ * Il ne connaît que ce qui est parti de CETTE caisse — la vente en ligne y est
+ * donc absente, et le Z le signale par `source: 'local'` plutôt que d'afficher
+ * un zéro qui passerait pour un fait.
+ */
+export function zFromJournal(entries: DayEntry[]): ServiceZ {
+  const z = { ...EMPTY_Z, source: 'local' as const };
+  for (const entry of entries) {
+    const net = entry.total - (entry.discount ?? 0);
+    z.orders += 1;
+    z.ca += net;
+    z.discounts += entry.discount ?? 0;
+
+    if (!entry.paid) {
+      z.due += net;
+      continue;
+    }
+    const tender = PAY_TENDER[entry.method];
+    if (tender === 'cash') z.cash += net;
+    else if (tender === 'card') z.card += net;
+    else z.unspecified += net;
+  }
+  return z;
 }

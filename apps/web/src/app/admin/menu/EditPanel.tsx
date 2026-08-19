@@ -229,7 +229,12 @@ export function EditPanel({
   const detachDisabled = mode === "edit" && product?.categoryId != null;
 
   return (
-    <div className="bg-surface2 px-[18px] pb-3.5 pt-2.5">
+    /*
+     * Panneau d'édition ouvert sous sa ligne : niveau « élément » + liseré
+     * d'accent à gauche. Sans cela il se confondait avec la carte (#111) et
+     * on ne voyait plus quelle ligne était dépliée (DA §1 et §3).
+     */
+    <div className="border-l-[3px] border-l-accent bg-[image:var(--cf-elev-gradient)] px-[18px] pb-3.5 pt-2.5 shadow-[inset_0_10px_18px_-12px_rgba(0,0,0,.9)]">
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="Nom" htmlFor={`edit-name-${product?._id ?? "new"}`}>
           <Input
@@ -285,7 +290,7 @@ export function EditPanel({
       {mode === "create" ? (
         <p className="mt-3 border-t border-line pt-3 text-xs text-mut">
           Enregistre d&apos;abord le produit — tu pourras définir sa recette et sa
-          marge juste après, via ✎.
+          marge juste après, avec le bouton Modifier.
         </p>
       ) : (
         <div className="mt-3 border-t border-line pt-3">
@@ -324,13 +329,15 @@ export function EditPanel({
               <div className="mt-2.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
                 <span className="text-mut">
                   Coût matière{" "}
-                  <b className="tabular-nums text-ink">{fmtEuro(costCents)}</b>
+                  <b className="cf-fig text-[15px] font-extrabold text-ink">
+                    {fmtEuro(costCents)}
+                  </b>
                 </span>
                 <span className="text-mut">
                   Marge{" "}
                   <b
                     className={cx(
-                      "tabular-nums",
+                      "cf-fig text-[15px] font-extrabold",
                       marginPct == null
                         ? "text-ink"
                         : marginPct >= 0
@@ -412,7 +419,7 @@ export function EditPanel({
                       inputMode="decimal"
                       placeholder="Qté"
                       aria-label={`Quantité de la ligne ${i + 1}`}
-                      className="w-[76px] py-2 text-right text-[13px] tabular-nums"
+                      className="cf-fig w-[76px] py-2 text-right text-[13px] font-bold"
                     />
                     <Select
                       value={l.unit}
@@ -433,7 +440,7 @@ export function EditPanel({
                       ))}
                     </Select>
                     <span
-                      className="w-[64px] shrink-0 text-right text-xs tabular-nums text-mut"
+                      className="cf-fig w-[64px] shrink-0 text-right text-xs font-semibold text-mut"
                       aria-label="Coût de la ligne"
                     >
                       {cost == null ? "—" : fmtEuro(cost)}
@@ -443,7 +450,7 @@ export function EditPanel({
                       onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
                       aria-label={`Retirer la ligne ${i + 1}`}
                       title="Retirer la ligne"
-                      className="shrink-0 text-mut transition-colors duration-150 hover:text-alertt"
+                      className="cf-press shrink-0 rounded-xs p-1 text-mut hover:bg-alert/15 hover:text-alertt"
                     >
                       <Icon name="close" size={14} />
                     </button>

@@ -421,7 +421,10 @@ export default function TeamPage() {
               </thead>
               <tbody>
                 {rows.map((t) => (
-                  <tr key={t.staffId} className="border-b border-line last:border-0">
+                  <tr
+                    key={t.staffId}
+                    className="border-b border-line2 transition-colors duration-200 ease-sm last:border-0 hover:bg-white/4"
+                  >
                     <th scope="row" className="px-1.5 py-3 text-left">
                       <span className="text-[15px] font-bold text-ink">
                         {t.name}
@@ -440,12 +443,12 @@ export default function TeamPage() {
                       return (
                         <td
                           key={+d}
-                          className="px-1.5 py-3 text-right tabular-nums text-ink"
+                          className="cf-fig px-1.5 py-3 text-right font-semibold text-ink"
                         >
                           {cell && cell.closed > 0 ? (
                             fmtH(cell.closed)
                           ) : cell?.open ? (
-                            <span className="text-xs font-bold text-ok">
+                            <span className="text-xs font-bold text-okt">
                               en cours
                             </span>
                           ) : cell ? (
@@ -458,7 +461,7 @@ export default function TeamPage() {
                         </td>
                       );
                     })}
-                    <td className="px-1.5 py-3 text-right font-bold tabular-nums text-ink">
+                    <td className="cf-fig px-1.5 py-3 text-right font-extrabold text-ink">
                       {fmtH(t.hours)} h
                     </td>
                   </tr>
@@ -473,7 +476,7 @@ export default function TeamPage() {
                     Total équipe
                   </th>
                   <td colSpan={7} aria-hidden />
-                  <td className="px-1.5 pt-3 text-right font-bold tabular-nums text-ink">
+                  <td className="cf-fig px-1.5 pt-3 text-right text-[15px] font-extrabold text-accent">
                     {fmtH(weekTotal)} h
                   </td>
                 </tr>
@@ -529,7 +532,7 @@ function MemberCard({
       </div>
 
       {m.onDuty ? (
-        <p className="flex items-center gap-2 text-[13.5px] font-bold text-ok">
+        <p className="flex items-center gap-2 text-[13.5px] font-bold text-okt">
           <span className="relative flex size-2 shrink-0" aria-hidden>
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-ok opacity-60" />
             <span className="relative inline-flex size-2 rounded-full bg-ok" />
@@ -727,7 +730,7 @@ function MemberModal({
         </div>
 
         {isEdit && (
-          <div className="rounded-ctrl border border-line bg-surface p-3">
+          <div className="rounded-ctrl border border-white/8 bg-[image:var(--cf-elev-gradient)] p-3">
             {confirmOff ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[13px] font-bold text-alertt">

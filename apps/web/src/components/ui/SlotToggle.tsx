@@ -29,17 +29,21 @@ export function SlotToggle({
       type="button"
       aria-pressed={on}
       onClick={() => onChange?.(!on)}
+      // Fond teinté posé sur le niveau « élément » : jamais la même valeur que
+      // la carte qui le porte (DA §1).
       style={
         on
           ? {
               background:
-                "color-mix(in srgb, var(--cf-green) 12%, var(--cf-surface))",
+                "color-mix(in srgb, var(--cf-green) 16%, var(--cf-surface-2))",
             }
           : undefined
       }
       className={cx(
-        "inline-flex items-center gap-2 whitespace-nowrap rounded-pill border-[1.5px] px-3.5 py-1.5 text-[13px] font-bold transition-colors duration-200 ease-sm",
-        on ? "border-ok text-ok" : "border-line bg-surface text-mut",
+        "cf-press inline-flex items-center gap-2 whitespace-nowrap rounded-pill border-[1.5px] px-3.5 py-1.5 text-[13px] font-bold",
+        on
+          ? "border-ok text-okt"
+          : "border-line bg-surface2 text-mut hover:border-white/25 hover:text-ink",
         className,
       )}
       {...rest}

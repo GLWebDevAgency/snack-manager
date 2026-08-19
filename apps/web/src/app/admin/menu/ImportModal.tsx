@@ -374,7 +374,7 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
         <button
           type="button"
           onClick={downloadTemplate}
-          className="mr-auto text-[13px] font-bold text-accent transition-opacity duration-200 hover:opacity-80"
+          className="cf-press mr-auto text-[13px] font-bold text-accent hover:opacity-80"
         >
           Télécharger le modèle CSV
         </button>
@@ -416,8 +416,12 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             className={cx(
-              "flex w-full flex-col items-center gap-1.5 rounded-card border-2 border-dashed bg-surface2 px-4 py-[26px] text-center transition-colors duration-200 ease-sm",
-              dragOver ? "border-accent" : "border-line hover:border-white/25",
+              // cf-press-row : un bloc pleine largeur s'enfonce, il ne se met
+              // pas à l'échelle (DA §4).
+              "cf-press-row flex w-full flex-col items-center gap-1.5 rounded-card border-2 border-dashed bg-[image:var(--cf-elev-gradient)] px-4 py-[26px] text-center",
+              dragOver
+                ? "border-accent"
+                : "border-line hover:border-white/25 hover:bg-[image:var(--cf-elev-hover)]",
             )}
           >
             <Icon name="arrow" size={22} className="rotate-90 text-accent" />
@@ -465,7 +469,7 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
           </p>
 
           <div className="overflow-hidden rounded-ctrl border border-line">
-            <div className="flex items-center gap-2 bg-surface2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.06em] text-mut">
+            <div className="flex items-center gap-2 bg-[image:var(--cf-elev-gradient)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.06em] text-mut">
               <span className="min-w-0 flex-1">Nom</span>
               <span className="w-16 shrink-0 text-right">Prix</span>
               <span className="w-[120px] shrink-0">Catégorie</span>

@@ -153,14 +153,14 @@ export default function ReviewsPage() {
         <div className="mb-4 flex flex-col gap-4 sm:flex-row">
           {/* Carte note moyenne */}
           <Card className="flex w-full shrink-0 flex-col items-center justify-center gap-1 p-5 text-center sm:w-[200px]">
-            <div className="text-[44px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-accent">
+            <div className="cf-fig text-[46px] font-black leading-none text-accent">
               {summary.avg.toLocaleString("fr-FR", {
                 minimumFractionDigits: 1,
                 maximumFractionDigits: 1,
               })}
             </div>
-            <Stars value={summary.avg} size={17} />
-            <p className="text-[13px] text-mut">
+            <Stars value={summary.avg} size={17} className="mt-1" />
+            <p className="cf-fig mt-0.5 text-[13px] text-mut">
               {summary.monthCount.toLocaleString("fr-FR")} avis ce mois ·{" "}
               {summary.total.toLocaleString("fr-FR")} au total
             </p>
@@ -173,16 +173,16 @@ export default function ReviewsPage() {
               const pct = summary.total === 0 ? 0 : (n / summary.total) * 100;
               return (
                 <div key={s} className="flex items-center gap-2.5" aria-hidden>
-                  <span className="w-5 shrink-0 text-[13px] tabular-nums text-ink">
+                  <span className="cf-fig w-5 shrink-0 text-[13px] font-bold text-ink">
                     {s}★
                   </span>
-                  <div className="h-[9px] min-w-0 flex-1 overflow-hidden rounded-[5px] bg-surface2">
+                  <div className="h-[9px] min-w-0 flex-1 overflow-hidden rounded-pill border border-white/6 bg-surface2">
                     <div
-                      className="h-full rounded-[5px] bg-gold"
+                      className="h-full rounded-pill bg-gold"
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="w-6 shrink-0 text-right text-[13px] tabular-nums text-mut">
+                  <span className="cf-fig w-6 shrink-0 text-right text-[13px] font-bold text-mut">
                     {n}
                   </span>
                 </div>
@@ -218,7 +218,7 @@ export default function ReviewsPage() {
         <Chip on={filter === "pending"} onClick={() => changeFilter("pending")}>
           Sans réponse
           {summary && summary.pending > 0 && (
-            <span className="tabular-nums text-mut">({summary.pending})</span>
+            <span className="cf-fig text-mut">({summary.pending})</span>
           )}
         </Chip>
       </div>
@@ -252,7 +252,7 @@ export default function ReviewsPage() {
             <Card key={r._id} className="p-4">
               <div className="flex items-center gap-3">
                 <div
-                  className="grid size-10 shrink-0 place-items-center rounded-full bg-surface2 text-base font-bold text-accent"
+                  className="grid size-10 shrink-0 place-items-center rounded-full border border-white/8 bg-[image:var(--cf-elev-gradient)] text-base font-extrabold text-accent"
                   aria-hidden
                 >
                   {r.author.trim().charAt(0).toUpperCase()}
@@ -267,8 +267,8 @@ export default function ReviewsPage() {
               <p className="mt-2.5 text-[15px] leading-[1.4] text-ink">{r.text}</p>
 
               {r.reply ? (
-                <div className="ml-5 mt-2.5 rounded-ctrl border-l-[3px] border-l-accent bg-surface2 px-3.5 py-2.5">
-                  <div className="text-[13px] font-semibold text-accent">{replyLabel}</div>
+                <div className="ml-5 mt-2.5 rounded-ctrl border border-white/6 border-l-[3px] border-l-accent bg-[image:var(--cf-elev-gradient)] px-3.5 py-2.5">
+                  <div className="text-[13px] font-bold text-accent">{replyLabel}</div>
                   <p className="mt-0.5 text-sm text-ink">{r.reply.text}</p>
                 </div>
               ) : (
@@ -287,7 +287,15 @@ export default function ReviewsPage() {
                     }
                     placeholder="Répondre publiquement…"
                     aria-label={`Répondre à l'avis de ${r.author}`}
-                    className="min-h-0 flex-1 resize-none py-2.5"
+                    className="flex-1 resize-none py-2.5"
+                    /*
+                     * Hauteur imposée en style : `min-h-20` vient de Textarea et
+                     * l'emporterait sur une classe `min-h-0` (Tailwind tranche
+                     * par l'ordre dans la feuille, pas par l'ordre des classes).
+                     * Sans cela le champ s'ouvre en grand rectangle vide, deux
+                     * fois plus haut que le bouton qu'il jouxte.
+                     */
+                    style={{ minHeight: 42 }}
                   />
                   <Btn
                     variant="ink"

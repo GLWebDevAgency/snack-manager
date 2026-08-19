@@ -1,22 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import {
   ORDER_CHANNEL_LABELS,
   ORDER_STATUS_LABELS,
   ORDER_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
+  PAYMENT_TENDER_LABELS,
   type OrderChannel,
   type OrderStatus,
   type OrderTicket,
   type OrderType,
   type PaymentMethod,
   type PaymentStatus,
+  type PaymentTender,
   type TicketLine,
   type TicketQuery,
 } from '@sm/contracts';
 import type { Order, Tenant } from '@sm/db';
+import { trackingFilter } from '../orders/tracking';
 import { EscPosBuilder } from './escpos';
 import { pad2, parisHm, parisYmd } from './paris-time';
 
@@ -51,10 +54,17 @@ export class TicketService {
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
   ) {}
 
-  /** Ticket d'une commande, identifiée par son id (route publique de suivi). */
-  async build(orderId: string): Promise<OrderTicket> {
-    if (!Types.ObjectId.isValid(orderId)) throw new NotFoundException('Commande introuvable');
-    const order = await this.orders.findById(orderId).lean();
+  /**
+   * Ticket d'une commande, identifiée par son id ET son jeton de suivi.
+   *
+   * Le ticket porte le nom et le téléphone du client : il ne s'ouvre pas sur
+   * un simple ObjectId, qui est devinable. Jeton absent ou faux ⇒ 404, pour ne
+   * pas confirmer l'existence de la commande.
+   */
+  async build(orderId: string, token: unknown): Promise<OrderTicket> {
+    const filter = trackingFilter(orderId, token);
+    if (!filter) throw new NotFoundException('Commande introuvable');
+    const order = await this.orders.findOne(filter).lean();
     if (!order) throw new NotFoundException('Commande introuvable');
 
     const tenant = await this.tenants.findById(order.tenantId).lean();
@@ -65,6 +75,7 @@ export class TicketService {
     const status = (order.status ?? 'new') as OrderStatus;
     const method = (order.payment?.method ?? 'counter') as PaymentMethod;
     const paymentStatus = (order.payment?.status ?? 'pending') as PaymentStatus;
+    const tender = (order.payment?.tender ?? null) as PaymentTender | null;
 
     const lines: TicketLine[] = (order.lines ?? []).map((line) => ({
       qty: Number(line.qty ?? 1),
@@ -121,9 +132,13 @@ export class TicketService {
       payment: {
         method,
         methodLabel: PAYMENT_METHOD_LABELS[method] ?? method,
+        tender,
+        tenderLabel: tender ? (PAYMENT_TENDER_LABELS[tender] ?? tender) : null,
         status: paymentStatus,
         statusLabel: PAYMENT_STATUS_LABELS[paymentStatus] ?? paymentStatus,
         paid: paymentStatus === 'paid',
+        cashReceived: numberOrNull(order.payment?.cashReceived),
+        changeGiven: numberOrNull(order.payment?.changeGiven),
       },
       note: order.note ?? null,
     };
@@ -198,7 +213,13 @@ export class TicketService {
       p.columns('TOTAL', formatEuros(ticket.totals.total), 2);
       p.size(1, 1).bold(false);
       p.rule();
-      p.columns(ticket.payment.methodLabel, ticket.payment.statusLabel);
+      // Le moyen réellement encaissé prime sur « à régler au comptoir » : c'est
+      // la ligne que le gérant recoupe le soir avec son tiroir et son TPE.
+      p.columns(ticket.payment.tenderLabel ?? ticket.payment.methodLabel, ticket.payment.statusLabel);
+      if (ticket.payment.cashReceived !== null) {
+        p.columns('Reçu', formatEuros(ticket.payment.cashReceived));
+        p.columns('Rendu', formatEuros(ticket.payment.changeGiven ?? 0));
+      }
     }
 
     // ── Instructions cuisine ──
@@ -223,4 +244,9 @@ export class TicketService {
 /** ObjectId → référence courte lisible au comptoir (« …4F2A »). */
 function shortRef(id: string): string {
   return id.slice(-6).toUpperCase();
+}
+
+/** Centimes optionnels : `null` reste `null`, jamais un `0` trompeur. */
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }

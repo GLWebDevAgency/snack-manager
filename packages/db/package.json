@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "echo ok",
     "seed": "tsx src/seed.ts",
-    "seed:orders": "tsx src/seed-orders.ts"
+    "seed:orders": "tsx src/seed-orders.ts",
+    "backfill:tracking": "tsx src/backfill-tracking.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",

@@ -3,6 +3,7 @@ import { z } from 'zod';
 export * from './supply';
 export * from './stats';
 export * from './ordering';
+export * from './screens';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -62,6 +63,30 @@ export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
 export const PAYMENT_STATUSES = ['pending', 'paid', 'refunded'] as const;
 export const PaymentStatusSchema = z.enum(PAYMENT_STATUSES);
 export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
+
+/**
+ * Moyen de paiement RÉELLEMENT présenté, à distinguer de `method` :
+ * `method` dit OÙ l'argent est encaissé (en ligne / au comptoir),
+ * `tender` dit AVEC QUOI le client a payé. Sans cette distinction, une carte
+ * bancaire passée à la caisse est indiscernable d'un « à encaisser au
+ * retrait » — et la clôture de caisse (Z) devient fausse.
+ *
+ * `null` = pas encore encaissé (commande à régler à la remise).
+ */
+export const PAYMENT_TENDERS = ['cash', 'card', 'online'] as const;
+export const PaymentTenderSchema = z.enum(PAYMENT_TENDERS);
+export type PaymentTender = z.infer<typeof PaymentTenderSchema>;
+
+/**
+ * Jeton de suivi public : chaîne aléatoire URL-safe accompagnant l'ObjectId
+ * sur les routes `/public/orders/:id…`. Un ObjectId Mongo est partiellement
+ * prévisible (horodatage + compteur machine) : il ne peut pas servir seul de
+ * secret pour exposer le nom et le téléphone d'un client.
+ *
+ * 24 octets aléatoires → 32 caractères base64url, sans remplissage.
+ */
+export const TRACKING_TOKEN_BYTES = 24;
+export const TRACKING_TOKEN_LENGTH = 32;
 
 export const STAFF_ROLES = ['gerant', 'caisse', 'cuisine'] as const;
 export const StaffRoleSchema = z.enum(STAFF_ROLES);
@@ -160,13 +185,31 @@ export const OrderLineInputSchema = z.object({
 });
 export type OrderLineInput = z.infer<typeof OrderLineInputSchema>;
 
+/**
+ * Paiement transmis à la création.
+ *
+ * `changeGiven` est accepté — la file offline du POS rejoue le corps qu'elle a
+ * persisté — mais TOUJOURS recalculé côté serveur à partir de `cashReceived`
+ * et du total résolu depuis le menu : aucun montant venu du client ne fait foi.
+ */
+export const CreateOrderPaymentSchema = z.object({
+  method: PaymentMethodSchema,
+  /** Moyen réellement présenté. Absent/`null` = pas encore encaissé. */
+  tender: PaymentTenderSchema.nullish(),
+  /** Espèces posées sur le comptoir, en centimes. */
+  cashReceived: z.number().int().nonnegative().optional(),
+  /** Indicatif : le serveur recalcule le rendu monnaie. */
+  changeGiven: z.number().int().nonnegative().optional(),
+});
+export type CreateOrderPayment = z.infer<typeof CreateOrderPaymentSchema>;
+
 export const CreateOrderSchema = z.object({
   /** Clé d'idempotence générée par l'appareil — le rejeu offline ne crée jamais de doublon. */
   clientId: z.uuid(),
   channel: OrderChannelSchema,
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),
-  payment: z.object({ method: PaymentMethodSchema }),
+  payment: CreateOrderPaymentSchema,
   pickup: z
     .object({
       slot: z.iso.datetime(),

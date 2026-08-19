@@ -50,6 +50,8 @@ export const KEYS = {
   session: 'sm.pos.session.v1',
   parked: 'sm.pos.parked.v1',
   dayLog: 'sm.pos.daylog.v1',
+  /** Ouverture du service courant — borne de découpe du Z. */
+  serviceStart: 'sm.pos.servicestart.v1',
 } as const;
 
 export interface Session {

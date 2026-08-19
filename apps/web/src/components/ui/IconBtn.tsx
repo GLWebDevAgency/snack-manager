@@ -17,8 +17,8 @@ type IconBtnProps = Omit<
 };
 
 /**
- * Bouton icône rond (spec backoffice §4.2) : 40px pilule, fond #1a1a1a,
- * bord 1px blanc 10 %, hover bord blanc 50 %.
+ * Bouton icône rond (spec backoffice §4.2) : 40px pilule, niveau « élément »,
+ * bord 1px blanc 10 %, hover bord clair + fond éclairci, appui enfoncé (DA §4).
  */
 export function IconBtn({
   icon,
@@ -36,9 +36,9 @@ export function IconBtn({
       title={label}
       style={{ width: size, height: size }}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-surface2 text-ink transition-colors duration-200 ease-sm",
-        "hover:border-white/50",
-        "disabled:cursor-not-allowed disabled:opacity-40",
+        "cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink",
+        "hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
+        "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line",
         className,
       )}
       {...rest}

@@ -2,13 +2,17 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { cx } from "@/lib/cx";
 
 type CardProps = HTMLAttributes<HTMLDivElement> & {
-  /** flat = fond #111 plat, rayon 12 (tuile interne) ; sinon gradient + rayon 16. */
+  /**
+   * flat = tuile INTERNE, posée dans une carte : niveau « élément » #1a1a1a,
+   * rayon 12. Jamais #111 — deux surfaces adjacentes ne portent jamais la même
+   * valeur (DA §1). Sinon : carte de niveau 2 (#111), rayon 16, ombre douce.
+   */
   flat?: boolean;
 };
 
 /**
- * Carte SM Dark (spec backoffice §4.8) : fond dégradé, bord blanc 6 %,
- * rayon 16, ombre carte.
+ * Carte SM Dark (spec backoffice §4.8) : dégradé vertical très discret
+ * (voile blanc 5 % en haut), bord blanc 6 %, rayon 16, ombre carte.
  */
 export function Card({ flat = false, className, ...rest }: CardProps) {
   return (
@@ -16,7 +20,7 @@ export function Card({ flat = false, className, ...rest }: CardProps) {
       className={cx(
         "overflow-hidden border border-white/6",
         flat
-          ? "rounded-card bg-surface"
+          ? "rounded-card bg-[image:var(--cf-elev-gradient)]"
           : "rounded-panel bg-[image:var(--cf-card-gradient)] shadow-card",
         className,
       )}

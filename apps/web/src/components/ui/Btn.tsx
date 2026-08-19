@@ -16,15 +16,17 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const VARIANTS: Record<NonNullable<BtnProps["variant"]>, string> = {
-  primary: "bg-accent text-onaccent hover:opacity-85",
-  ink: "bg-btndark text-white hover:opacity-85",
-  ghost: "border border-line bg-transparent text-white hover:bg-white/6",
-  gold: "bg-gold text-[#1C1612] hover:opacity-85",
+  primary: "bg-accent text-onaccent shadow-card hover:opacity-85",
+  ink: "bg-btndark text-white hover:bg-[#333]",
+  ghost:
+    "border border-line bg-white/3 text-white hover:border-white/25 hover:bg-white/8",
+  gold: "bg-gold text-[#1C1612] shadow-card hover:opacity-85",
 };
 
 /**
- * Bouton du design system (spec backoffice §4.1) : pilule, Inter 600,
- * hover opacity .85, pressed translateY(1px), disabled opacity .4.
+ * Bouton du design system (spec backoffice §4.1) : pilule, Inter 600.
+ * Retour tactile (DA §4) : léger enfoncement `scale(.97)` + variation de fond,
+ * perçu sous les 100 ms grâce à l'ease `cubic-bezier(.2,.8,.2,1)`.
  */
 export function Btn({
   variant = "primary",
@@ -43,10 +45,9 @@ export function Btn({
       type={type}
       className={cx(
         block ? "flex w-full" : "inline-flex",
-        "items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-semibold tracking-[-0.2px] transition-[opacity,background-color,transform] duration-200 ease-sm",
-        "active:translate-y-px",
-        "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0",
-        size === "sm" ? "px-3.5 py-[9px] text-xs" : "px-5 py-[13px] text-sm",
+        "cf-press items-center justify-center gap-[9px] whitespace-nowrap rounded-pill font-bold tracking-[-0.01em]",
+        "disabled:cursor-not-allowed disabled:opacity-40",
+        size === "sm" ? "px-3.5 py-[9px] text-[13px]" : "px-5 py-[13px] text-sm",
         VARIANTS[variant],
         className,
       )}

@@ -4,6 +4,8 @@ import {
   type CreateOrder,
   type JwtPayload,
   type OrderStatus,
+  TrackingTokenQuerySchema,
+  type TrackingTokenQuery,
   UpdateOrderStatusSchema,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
@@ -92,9 +94,16 @@ export class OrdersController {
     return this.orders.create(String(tenant._id), { ...body, channel: 'online' }, 'online');
   }
 
+  /**
+   * Suivi client — exige `?t=<trackingToken>` (remis à la création).
+   * Sans jeton valide : 404, jamais 403 (voir `OrdersService.publicTracking`).
+   */
   @Public()
   @Get('public/orders/:id')
-  tracking(@Param('id') id: string) {
-    return this.orders.publicTracking(id);
+  tracking(
+    @Param('id') id: string,
+    @Query(zod(TrackingTokenQuerySchema)) query: TrackingTokenQuery,
+  ) {
+    return this.orders.publicTracking(id, query.t);
   }
 }

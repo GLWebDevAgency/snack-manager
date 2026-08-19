@@ -32,17 +32,20 @@ export default function LoginPage() {
 
   return (
     <main className="grid min-h-screen place-items-center bg-bg px-4">
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm shadow-deep">
         <form onSubmit={submit} className="flex flex-col gap-4 p-8">
           <div className="mb-2 flex items-center gap-3">
             <div
-              className="grid size-11 place-items-center rounded-card bg-black text-lg font-extrabold text-gold ring-1 ring-line"
+              // Tuile de niveau « élément » posée sur la carte, comme partout
+              // ailleurs : un aplat noir creuserait un trou dans la carte au
+              // lieu de l'élever (DA §1).
+              className="grid size-11 place-items-center rounded-card border border-white/8 bg-[image:var(--cf-elev-gradient)] text-lg font-extrabold text-gold"
               aria-hidden
             >
               S
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-[-0.03em] leading-tight text-ink">
+              <h1 className="text-lg font-extrabold leading-tight tracking-[-0.03em] text-ink">
                 Back-office
               </h1>
               <p className="text-sm text-mut">Snack Manager</p>

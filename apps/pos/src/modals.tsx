@@ -10,7 +10,7 @@ import { Animated, Easing, ScrollView, Text, View } from 'react-native';
 import { TOUCH_MIN, euros, palette } from '@sm/client-core';
 import { FONT, R, S, TABULAR, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMotion } from './ui';
-import { MODE_LABEL, PAY_LABEL, type DayEntry, type Mode } from './pos-state';
+import { MODE_LABEL, PAY_LABEL, type DayEntry, type Mode, type ServiceZ } from './pos-state';
 
 // ─────────────────────────────────────────────────────────────
 // V3 · Encaissement espèces
@@ -454,7 +454,15 @@ export interface OrderTicketDto {
   pickup: { slotLabel: string; customerName: string; customerPhone: string | null } | null;
   lines: TicketLineDto[];
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
-  payment: { methodLabel: string; statusLabel: string; paid: boolean };
+  payment: {
+    methodLabel: string;
+    /** Moyen réellement encaissé — prime sur `methodLabel` quand il est connu. */
+    tenderLabel?: string | null;
+    statusLabel: string;
+    paid: boolean;
+    cashReceived?: number | null;
+    changeGiven?: number | null;
+  };
   note: string | null;
 }
 
@@ -466,22 +474,24 @@ export function TicketPreview({
   onClose,
 }: {
   entry: DayEntry;
-  fetchTicket: (orderId: string) => Promise<OrderTicketDto>;
+  /** Le jeton de suivi conditionne l'accès : le ticket est nominatif. */
+  fetchTicket: (orderId: string, token: string | null | undefined) => Promise<OrderTicketDto>;
   onClose: () => void;
 }) {
   const [ticket, setTicket] = useState<OrderTicketDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const orderId = entry.serverId;
+  const token = entry.trackingToken;
 
   const load = useCallback(async () => {
     if (!orderId) return;
     setError(null);
     try {
-      setTicket(await fetchTicket(orderId));
+      setTicket(await fetchTicket(orderId, token));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ticket indisponible');
     }
-  }, [fetchTicket, orderId]);
+  }, [fetchTicket, orderId, token]);
 
   useEffect(() => {
     void load();
@@ -580,7 +590,22 @@ export function TicketPreview({
                 </Paper>
               </View>
               <Rule />
-              <Paper center>{ticket.payment.methodLabel} · {ticket.payment.statusLabel}</Paper>
+              <Paper center>
+                {ticket.payment.tenderLabel ?? ticket.payment.methodLabel} ·{' '}
+                {ticket.payment.statusLabel}
+              </Paper>
+              {typeof ticket.payment.cashReceived === 'number' ? (
+                <>
+                  <View style={sheet.between}>
+                    <Paper>Reçu</Paper>
+                    <Paper>{euros(ticket.payment.cashReceived)}</Paper>
+                  </View>
+                  <View style={sheet.between}>
+                    <Paper>Rendu</Paper>
+                    <Paper>{euros(ticket.payment.changeGiven ?? 0)}</Paper>
+                  </View>
+                </>
+              ) : null}
               {ticket.note ? <Paper center>Note : {ticket.note}</Paper> : null}
               <Paper center>Merci et à bientôt !</Paper>
             </View>
@@ -640,6 +665,7 @@ function Rule() {
 
 export function CloseModal({
   entries,
+  z,
   pending,
   brand,
   staffName,
@@ -649,6 +675,8 @@ export function CloseModal({
   onOpenDiscount,
 }: {
   entries: DayEntry[];
+  /** Ventilation du service par moyen de paiement — le cœur du Z. */
+  z: ServiceZ;
   pending: number;
   brand: Brand;
   staffName: string;
@@ -659,27 +687,16 @@ export function CloseModal({
 }) {
   const [tab, setTab] = useState<'recap' | 'orders'>('recap');
 
-  const totals = useMemo(() => {
-    const sum = (f: (e: DayEntry) => boolean) =>
-      entries.filter(f).reduce((n, e) => n + e.total - (e.discount ?? 0), 0);
+  const counts = useMemo(() => {
     const byMode = (m: Mode) => entries.filter((e) => e.mode === m).length;
-    return {
-      ca: entries.reduce((n, e) => n + e.total - (e.discount ?? 0), 0),
-      cb: sum((e) => e.method === 'cb'),
-      cash: sum((e) => e.method === 'especes'),
-      unpaid: sum((e) => !e.paid),
-      discounts: entries.reduce((n, e) => n + (e.discount ?? 0), 0),
-      surplace: byMode('surplace'),
-      emporter: byMode('emporter'),
-      tel: byMode('tel'),
-    };
+    return { surplace: byMode('surplace'), emporter: byMode('emporter'), tel: byMode('tel') };
   }, [entries]);
 
   return (
     <Overlay onClose={onClose} width={560}>
       <PanelHead
         title="Clôture de service"
-        sub={`${entries.length} commande${entries.length > 1 ? 's' : ''} · poste 1 · ${staffName}`}
+        sub={`${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
         onClose={onClose}
       />
 
@@ -700,24 +717,38 @@ export function CloseModal({
           <View style={[sheet.inset, sheet.between, { padding: S.lg }]}>
             <View>
               <Text style={type.eyebrow}>Chiffre d'affaires</Text>
-              <Text style={[type.mut, { marginTop: 3, fontSize: 12.5 }]}>Calculé localement sur ce poste</Text>
+              <Text style={[type.mut, { marginTop: 3, fontSize: 12.5 }]}>
+                {z.source === 'server'
+                  ? 'Commandes enregistrées — vente en ligne comprise'
+                  : 'Hors ligne : journal de ce poste seul, sans la vente en ligne'}
+              </Text>
             </View>
-            <Text style={[type.display, { fontSize: 32, color: brand.accent }]}>{euros(totals.ca)}</Text>
+            <Text style={[type.display, { fontSize: 32, color: brand.accent }]}>{euros(z.ca)}</Text>
           </View>
 
+          {/* Ce que le gérant recoupe réellement le soir : le tiroir, le
+              bordereau du TPE, ce qui est déjà tombé sur le compte, le reste dû. */}
           <View style={{ gap: 2 }}>
-            <StatRow label="Carte bancaire" value={euros(totals.cb)} />
-            <StatRow label="Espèces" value={euros(totals.cash)} />
-            <StatRow label="À encaisser au retrait" value={euros(totals.unpaid)} tone={palette.amber} />
-            {totals.discounts > 0 ? (
-              <StatRow label="Remises accordées" value={`− ${euros(totals.discounts)}`} tone={palette.green} />
+            <StatRow label="Espèces" value={euros(z.cash)} />
+            <StatRow label="Carte bancaire" value={euros(z.card)} />
+            <StatRow label="En ligne" value={euros(z.online)} />
+            <StatRow label="À encaisser au retrait" value={euros(z.due)} tone={palette.amber} />
+            {z.unspecified > 0 ? (
+              <StatRow
+                label="Encaissé, moyen non précisé"
+                value={euros(z.unspecified)}
+                tone={palette.amber}
+              />
+            ) : null}
+            {z.discounts > 0 ? (
+              <StatRow label="Remises accordées" value={`− ${euros(z.discounts)}`} tone={palette.green} />
             ) : null}
           </View>
 
           <View style={[sheet.inset, { padding: S.md, flexDirection: 'row', justifyContent: 'space-between' }]}>
-            <Counter label="Sur place" value={totals.surplace} />
-            <Counter label="À emporter" value={totals.emporter} />
-            <Counter label="Téléphone" value={totals.tel} />
+            <Counter label="Sur place" value={counts.surplace} />
+            <Counter label="À emporter" value={counts.emporter} />
+            <Counter label="Téléphone" value={counts.tel} />
           </View>
 
           <View
@@ -757,7 +788,9 @@ export function CloseModal({
               size="md"
               accent={brand.accent}
               onAccent={brand.onAccent}
-              disabled={entries.length === 0}
+              // Un service ne comptant que des commandes en ligne se clôture
+              // aussi : le journal local est vide, la caisse ne l'est pas.
+              disabled={z.orders === 0}
               onPress={onCloseService}
               style={{ flex: 1 }}
             />

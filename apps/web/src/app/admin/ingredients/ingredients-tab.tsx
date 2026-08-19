@@ -176,7 +176,7 @@ export function IngredientsTab({
             type="button"
             onClick={onClearAlertFilter}
             className={cx(
-              "inline-flex items-center gap-1.5 rounded-pill border px-3 py-[7px] text-[13px] font-semibold transition-colors duration-200",
+              "cf-press inline-flex items-center gap-1.5 rounded-pill border px-3 py-[7px] text-[13px] font-semibold",
               alertFilter === "out"
                 ? "border-alert/60 bg-alert/10 text-alertt"
                 : "border-prep/60 bg-prep/10 text-prept",
@@ -239,7 +239,7 @@ export function IngredientsTab({
                   {filtered.map((ing) => (
                     <tr
                       key={ing.id}
-                      className="border-b border-line2 transition-colors duration-200 last:border-b-0 hover:bg-white/3"
+                      className="border-b border-line2 transition-colors duration-200 ease-sm last:border-b-0 hover:bg-white/4"
                     >
                       <td className="px-4 py-3">
                         <div
@@ -286,8 +286,8 @@ export function IngredientsTab({
                           isOut={ing.isOut}
                         />
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                        <span className="font-bold text-ink">
+                      <td className="cf-fig whitespace-nowrap px-4 py-3 text-right">
+                        <span className="text-[15px] font-extrabold text-ink">
                           {fmtEuro(ing.costPerUnitCents)}
                         </span>
                         <span className="text-mut"> / {UNIT_LABELS[ing.unit]}</span>
@@ -347,7 +347,7 @@ export function IngredientsTab({
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2.5 text-[13px] text-mut tabular-nums">
+            <div className="cf-fig flex items-center justify-between gap-3 border-t border-line2 bg-black/20 px-4 py-3 text-[13px] text-mut">
               <span>
                 {filtered.length} ingrédient{filtered.length > 1 ? "s" : ""}
                 {filtered.length !== ingredients.length &&
@@ -355,7 +355,7 @@ export function IngredientsTab({
               </span>
               <span>
                 Valeur du stock affiché :{" "}
-                <span className="font-bold text-ink">
+                <span className="text-[15px] font-extrabold text-ink">
                   {fmtEuro(stockValueCents)}
                 </span>
               </span>

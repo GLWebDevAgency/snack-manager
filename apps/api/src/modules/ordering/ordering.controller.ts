@@ -1,9 +1,11 @@
 import { Controller, Get, HttpCode, Param, Post, Query, StreamableFile } from '@nestjs/common';
 import {
   SlotsQuerySchema,
-  TicketQuerySchema,
+  TicketRequestQuerySchema,
+  TrackingTokenQuerySchema,
   type SlotsQuery,
-  type TicketQuery,
+  type TicketRequestQuery,
+  type TrackingTokenQuery,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
 import { Public } from '../../common/auth';
@@ -54,25 +56,33 @@ export class OrderingController {
     return this.payments.createIntent(id);
   }
 
-  /** Ticket imprimable, en JSON structuré (aperçu web, caisse, KDS). */
+  /**
+   * Ticket imprimable, en JSON structuré (aperçu web, caisse, KDS).
+   * Exige `?t=<trackingToken>` : le ticket porte le nom et le téléphone du
+   * client, l'ObjectId seul ne suffit pas à l'ouvrir.
+   */
   @Public()
   @Get('public/orders/:id/ticket')
-  ticket(@Param('id') id: string) {
-    return this.tickets.build(id);
+  ticket(
+    @Param('id') id: string,
+    @Query(zod(TrackingTokenQuerySchema)) query: TrackingTokenQuery,
+  ) {
+    return this.tickets.build(id, query.t);
   }
 
   /**
    * Même ticket, encodé en commandes ESC/POS prêtes à être poussées vers une
-   * imprimante thermique. `?width=32|42|48`, `?cut=partial|full|none`,
+   * imprimante thermique. `?t=<trackingToken>` obligatoire, puis
+   * `?width=32|42|48`, `?cut=partial|full|none`,
    * `?variant=customer|kitchen` (bon cuisine sans prix).
    */
   @Public()
   @Get('public/orders/:id/escpos')
   async escpos(
     @Param('id') id: string,
-    @Query(zod(TicketQuerySchema)) query: TicketQuery,
+    @Query(zod(TicketRequestQuerySchema)) query: TicketRequestQuery,
   ): Promise<StreamableFile> {
-    const ticket = await this.tickets.build(id);
+    const ticket = await this.tickets.build(id, query.t);
     const buffer = this.tickets.render(ticket, query);
     return new StreamableFile(buffer, {
       type: 'application/octet-stream',

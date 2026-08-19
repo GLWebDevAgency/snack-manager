@@ -13,8 +13,10 @@ type BarChartProps = {
 
 /**
  * Histogramme simple (spec backoffice §4.10) : barres accent, rayon 6px 6px 0 0,
- * transition height .4s, valeurs 12px #999 au-dessus, labels dessous.
+ * valeurs au-dessus, libellés dessous.
  * Baseline zéro TOUJOURS (hauteur ∝ valeur/max, min 4px si > 0).
+ * L'apparition anime `transform: scaleY` depuis la base — jamais `height`,
+ * qui déclencherait une remise en page (DA §6).
  */
 export function BarChart({
   data,
@@ -41,10 +43,11 @@ export function BarChart({
 
   return (
     <div className={className}>
+      {/* Filet de base : la baseline zéro doit se voir (DA — graphiques sobres). */}
       <div
         role="img"
         aria-label={title}
-        className="flex items-end gap-2.5"
+        className="flex items-end gap-2.5 border-b border-line2"
         style={{ height }}
       >
         {data.map((d, i) => {
@@ -57,12 +60,27 @@ export function BarChart({
               key={`${d.label}-${i}`}
               className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1"
             >
-              <div className="max-w-full truncate text-xs font-semibold tabular-nums text-mut">
+              <div className="cf-fig max-w-full truncate text-xs font-bold text-mut">
                 {formatValue(d.value)}
               </div>
+              {/*
+                Accent parcimonieux (DA §3) : la barre n'est PAS un aplat de
+                marque. Seule sa crête — la valeur qu'on lit, le sommet qu'on
+                compare d'une barre à l'autre — porte l'accent pur, sur 3 px ;
+                la masse en dessous n'est qu'un voile de la même teinte, qui
+                s'éteint vers la base. Un histogramme se lit par ses sommets,
+                pas par sa surface. Dégradé sur une seule teinte, jamais
+                multicolore.
+              */}
               <div
-                className="w-full rounded-t-[6px] bg-accent transition-[height] duration-[400ms] ease-out"
-                style={{ height: h }}
+                className="w-full origin-bottom rounded-t-[6px]"
+                style={{
+                  height: h,
+                  background:
+                    "linear-gradient(180deg, color-mix(in srgb, var(--cf-accent) 30%, transparent) 0%, color-mix(in srgb, var(--cf-accent) 9%, transparent) 100%)",
+                  boxShadow: "inset 0 3px 0 0 var(--cf-accent)",
+                  animation: `cf-rise .32s var(--sm-ease) ${Math.min(i * 24, 240)}ms both`,
+                }}
               />
               <div className="max-w-full truncate text-xs font-semibold text-mut">
                 {d.label}

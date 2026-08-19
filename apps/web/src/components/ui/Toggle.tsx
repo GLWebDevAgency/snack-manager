@@ -18,7 +18,8 @@ type ToggleProps = {
 
 /**
  * Interrupteur 46×26 (spec backoffice §4.6) : off blanc 10 %, on VERT #3fae4a,
- * pouce blanc 20px, transitions .15s.
+ * pouce blanc 20px. Le pouce se déplace en `translateX` — le mouvement ne porte
+ * jamais sur une propriété de mise en page (DA §6).
  */
 export function Toggle({
   on,
@@ -38,16 +39,16 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange?.(!on)}
       className={cx(
-        "relative h-[26px] w-[46px] shrink-0 rounded-pill transition-colors duration-150",
-        on ? (danger ? "bg-alert" : "bg-ok") : "bg-white/10",
+        "relative h-[26px] w-[46px] shrink-0 rounded-pill border border-white/6 transition-[background-color,opacity] duration-200 ease-sm",
+        on ? (danger ? "bg-alert" : "bg-ok") : "bg-white/10 hover:bg-white/16",
         disabled && "cursor-not-allowed opacity-40",
         className,
       )}
     >
       <span
         aria-hidden
-        className="absolute top-[3px] size-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-[left] duration-150"
-        style={{ left: on ? 23 : 3 }}
+        className="absolute left-[2px] top-[2px] size-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-sm"
+        style={{ transform: `translateX(${on ? 20 : 0}px)` }}
       />
     </button>
   );

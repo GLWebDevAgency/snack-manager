@@ -233,7 +233,7 @@ export default function OrdersPage() {
         {CHIP_DEFS.map((c) => (
           <Chip key={c.key} on={filter === c.key} onClick={() => setFilter(c.key)}>
             {c.label} ·{" "}
-            <span className="tabular-nums">
+            <span className="cf-fig">
               {orders === null ? "—" : counts[c.key]}
             </span>
           </Chip>
@@ -266,7 +266,7 @@ export default function OrdersPage() {
 
       {/* ── Table des commandes (§6.2) ── */}
       <Card>
-        <div className="flex items-center gap-3 bg-surface2 px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut">
+        <div className="flex items-center gap-3 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut">
           <span className={COLS.num}>N°</span>
           <span className="min-w-0 flex-1">Client</span>
           <span className={COLS.channel}>Canal</span>
@@ -290,7 +290,7 @@ export default function OrdersPage() {
         ) : orders === null ? (
           <div aria-busy="true" aria-label="Chargement des commandes">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="border-t border-line px-[18px] py-3">
+              <div key={i} className="border-t border-line2 px-[18px] py-3">
                 <Skeleton className="h-10" />
               </div>
             ))}
@@ -331,13 +331,13 @@ export default function OrdersPage() {
                     openDrawer(o);
                   }
                 }}
-                className="flex cursor-pointer items-center gap-3 border-t border-line px-[18px] py-3 transition-colors duration-200 ease-sm hover:bg-white/3"
+                className="cf-press-row flex cursor-pointer items-center gap-3 border-t border-line2 px-[18px] py-3 hover:bg-white/4"
               >
                 {/* N° retrait */}
                 <span
                   className={cx(
                     COLS.num,
-                    "text-xl font-extrabold tabular-nums text-accent",
+                    "cf-fig text-xl font-extrabold text-accent",
                   )}
                 >
                   {o.number}
@@ -354,23 +354,23 @@ export default function OrdersPage() {
                 </div>
 
                 {/* Canal (+ « à payer » si non payée) */}
+                {/*
+                  Canal : plein (niveau élément) pour « En ligne », contour pour
+                  les autres. L'accent est réservé au n° et au total (DA §3) ;
+                  l'ancien fond #999 + texte blanc tombait sous le seuil de
+                  contraste.
+                */}
                 <div className={cx(COLS.channel, "flex flex-col items-start gap-0.5")}>
-                  <Pill
-                    className={
-                      o.channel === "online"
-                        ? "bg-accent text-onaccent"
-                        : "bg-mut text-white"
-                    }
-                  >
+                  <Pill variant={o.channel === "online" ? "solid" : "out"}>
                     {CHANNEL_LABELS[o.channel]}
                   </Pill>
                   {!isPaid(o) && o.payment.status !== "refunded" && (
-                    <span className="text-xs font-semibold text-accent">· à payer</span>
+                    <span className="text-xs font-bold text-prept">· à payer</span>
                   )}
                 </div>
 
                 {/* Créneau de retrait */}
-                <span className={cx(COLS.slot, "text-sm tabular-nums text-ink")}>
+                <span className={cx(COLS.slot, "cf-fig text-sm font-semibold text-ink")}>
                   {slotHHMM(o) ?? "—"}
                 </span>
 
@@ -381,7 +381,7 @@ export default function OrdersPage() {
 
                 {/* Total */}
                 <span
-                  className={cx(COLS.total, "text-[15px] font-bold tabular-nums text-ink")}
+                  className={cx(COLS.total, "cf-fig text-[15px] font-extrabold text-ink")}
                 >
                   {fmtEuro(o.totals.total)}
                 </span>
@@ -423,14 +423,14 @@ export default function OrdersPage() {
 
             {/* ── Pagination « charger plus » au-delà de 50 (§6) ── */}
             {filtered.length > limit && (
-              <div className="border-t border-line p-3 text-center">
+              <div className="border-t border-line2 bg-black/20 p-3 text-center">
                 <Btn
                   variant="ghost"
                   size="sm"
                   onClick={() => setLimit((l) => l + PAGE_SIZE)}
                 >
                   Charger plus (
-                  <span className="tabular-nums">{filtered.length - limit}</span>
+                  <span className="cf-fig">{filtered.length - limit}</span>
                   {" restantes)"}
                 </Btn>
               </div>

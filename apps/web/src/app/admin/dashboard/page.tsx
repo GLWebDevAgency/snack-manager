@@ -448,7 +448,7 @@ export default function DashboardPage() {
       ) : (
         <div
           className={cx(
-            "flex flex-col gap-4 transition-opacity duration-200 md:flex-row",
+            "flex flex-col gap-4 transition-opacity duration-200 ease-sm md:flex-row",
             overview.loading && "opacity-60",
           )}
         >
@@ -523,11 +523,13 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              <div className="mt-2 flex flex-wrap items-baseline gap-x-1.5 tabular-nums">
-                <span className="text-[22px] font-extrabold text-ink">
+              <div className="cf-fig mt-2 flex flex-wrap items-baseline gap-x-1.5">
+                <span className="text-[26px] font-extrabold leading-none text-ink">
                   {fmtEuro(caToday)}
                 </span>
-                <span className="text-sm text-mut">/ {fmtEuro(goalCents)}</span>
+                <span className="text-sm font-semibold text-mut">
+                  / {fmtEuro(goalCents)}
+                </span>
               </div>
               <div
                 role="progressbar"
@@ -535,11 +537,11 @@ export default function DashboardPage() {
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={goalPct}
-                className="mt-2.5 h-[10px] overflow-hidden rounded-[6px] bg-surface2"
+                className="mt-3 h-[10px] overflow-hidden rounded-pill border border-white/6 bg-surface2"
               >
                 <div
                   className={cx(
-                    "h-full rounded-[6px] transition-[width] duration-300",
+                    "h-full rounded-pill",
                     reached ? "bg-ok" : "bg-accent",
                   )}
                   style={{ width: `${goalPct}%` }}
@@ -547,8 +549,8 @@ export default function DashboardPage() {
               </div>
               <p
                 className={cx(
-                  "mt-2 text-[13px] tabular-nums",
-                  reached ? "font-semibold text-okt" : "text-mut",
+                  "cf-fig mt-2 text-[13px]",
+                  reached ? "font-bold text-okt" : "text-mut",
                 )}
               >
                 {goalLine}
@@ -579,39 +581,50 @@ export default function DashboardPage() {
               prévisions apparaîtront après quelques jours de commandes.
             </p>
           ) : (
+            /* Icônes du DS, jamais d'emoji dans le produit (DA — « ce qu'on ne fait jamais »). */
             <ul className="mt-3 flex flex-col gap-[9px]">
-              <li className="flex items-start gap-2 text-[13.5px] leading-snug text-ink">
-                <span aria-hidden className="text-[15px]">
-                  📈
-                </span>
+              <li className="flex items-start gap-2.5 text-[13.5px] leading-snug text-ink">
+                <Icon
+                  name="clock"
+                  size={15}
+                  className="mt-0.5 shrink-0 text-mut"
+                />
                 <span>
                   Rush attendu{" "}
-                  <strong className="tabular-nums">
+                  <strong className="cf-fig font-extrabold">
                     {fmtHour(rush.start)} – {fmtHour(rush.end)}
                   </strong>{" "}
                   — {dayName} type : ≈{" "}
-                  <span className="tabular-nums">{int(rush.avgWindow)}</span>{" "}
+                  <span className="cf-fig font-extrabold">
+                    {int(rush.avgWindow)}
+                  </span>{" "}
                   commandes sur le créneau (moyenne 30 j)
                 </span>
               </li>
-              <li className="flex items-start gap-2 text-[13.5px] leading-snug text-ink">
-                <span aria-hidden className="text-[15px]">
-                  📊
-                </span>
+              <li className="flex items-start gap-2.5 text-[13.5px] leading-snug text-ink">
+                <Icon
+                  name="chart"
+                  size={15}
+                  className="mt-0.5 shrink-0 text-mut"
+                />
                 <span>
                   Volume attendu aujourd'hui : ≈{" "}
-                  <span className="tabular-nums">{int(rush.avgDay)}</span>{" "}
+                  <span className="cf-fig font-extrabold">
+                    {int(rush.avgDay)}
+                  </span>{" "}
                   commandes (moyenne des {dayName}s sur 30 j)
                 </span>
               </li>
-              <li className="flex items-start gap-2 text-[13.5px] leading-snug text-ink">
-                <span aria-hidden className="text-[15px]">
-                  👥
-                </span>
+              <li className="flex items-start gap-2.5 text-[13.5px] leading-snug text-ink">
+                <Icon
+                  name="user"
+                  size={15}
+                  className="mt-0.5 shrink-0 text-mut"
+                />
                 <span>
                   {rush.avgPeak >= 25 ? "2 en cuisine" : "1 en cuisine"} + 1
                   comptoir recommandés sur le créneau{" "}
-                  <span className="tabular-nums">
+                  <span className="cf-fig font-extrabold">
                     {fmtHour(rush.start)} – {fmtHour(rush.end)}
                   </span>
                 </span>
@@ -634,8 +647,8 @@ export default function DashboardPage() {
               <Skeleton className="h-10" />
             </div>
           ) : todos.length === 0 ? (
-            <div className="mt-3 flex items-center gap-2 rounded-[9px] bg-surface2 px-3 py-[9px] text-[13.5px] text-mut">
-              <Icon name="check" size={15} className="shrink-0 text-ok" />
+            <div className="mt-3 flex items-center gap-2 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-[9px] text-[13.5px] text-mut">
+              <Icon name="check" size={15} className="shrink-0 text-okt" />
               Rien à traiter — tout est à jour.
             </div>
           ) : (
@@ -644,20 +657,22 @@ export default function DashboardPage() {
                 <Link
                   key={t.key}
                   href={t.href}
-                  className="flex items-center gap-2.5 rounded-[9px] bg-surface2 px-3 py-[9px] text-[13.5px] font-semibold text-ink transition-colors duration-200 hover:bg-white/10"
+                  className="cf-press-row group flex items-center gap-2.5 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-[9px] text-[13.5px] font-semibold text-ink hover:border-white/16 hover:bg-[image:var(--cf-elev-hover)]"
                 >
                   <span
                     className={cx(
-                      "inline-flex min-w-[22px] shrink-0 items-center justify-center rounded-pill px-1.5 py-px text-[11px] font-extrabold tabular-nums",
+                      "cf-fig inline-flex min-w-[22px] shrink-0 items-center justify-center rounded-pill px-1.5 py-px text-[11px] font-extrabold",
                       t.pillCls,
                     )}
                   >
                     {int(t.count)}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{t.label}</span>
-                  <span aria-hidden className="font-bold text-accent">
-                    →
-                  </span>
+                  <Icon
+                    name="arrow"
+                    size={14}
+                    className="shrink-0 text-mut transition-colors duration-200 ease-sm group-hover:text-accent"
+                  />
                 </Link>
               ))}
             </div>
@@ -673,9 +688,10 @@ export default function DashboardPage() {
           actions={
             <Link
               href="/admin/orders"
-              className="whitespace-nowrap text-sm font-bold text-accent transition-opacity duration-200 hover:opacity-85"
+              className="cf-press inline-flex items-center gap-1 whitespace-nowrap text-sm font-bold text-accent hover:opacity-85"
             >
-              Tout voir <span aria-hidden>→</span>
+              Tout voir
+              <Icon name="arrow" size={14} />
             </Link>
           }
         >
@@ -702,22 +718,22 @@ export default function DashboardPage() {
                 return (
                   <li
                     key={o._id}
-                    className="flex items-center gap-3 rounded-[10px] bg-surface2 px-3 py-2.5"
+                    className="flex items-center gap-3 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2.5"
                   >
-                    <span className="min-w-[34px] text-xl font-extrabold tabular-nums text-accent">
+                    <span className="cf-fig min-w-[34px] text-xl font-extrabold text-accent">
                       {o.number}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[15px] font-bold text-ink">
                         {name} · {items} article{items > 1 ? "s" : ""}
                       </div>
-                      <div className="truncate text-[13px] tabular-nums text-mut">
+                      <div className="cf-fig truncate text-[13px] text-mut">
                         #{o._id.slice(-6)} · {CHANNEL_FR[o.channel]} ·{" "}
                         {timeAgo(o.createdAt)}
                       </div>
                     </div>
                     <StatusBadge status={o.status} className="shrink-0" />
-                    <span className="min-w-[62px] shrink-0 text-right text-[15px] font-bold tabular-nums text-ink">
+                    <span className="cf-fig min-w-[62px] shrink-0 text-right text-[15px] font-extrabold text-ink">
                       {fmtEuro(o.totals.total)}
                     </span>
                   </li>
@@ -739,7 +755,7 @@ export default function DashboardPage() {
           ) : (
             <div
               className={cx(
-                "transition-opacity duration-200",
+                "transition-opacity duration-200 ease-sm",
                 series.loading && "opacity-60",
               )}
             >
@@ -776,27 +792,27 @@ export default function DashboardPage() {
           <ol className="flex flex-col gap-2.5">
             {topRows.map((r, i) => (
               <li key={r.name} className="flex items-center gap-3">
-                <span className="min-w-[22px] shrink-0 text-lg font-bold tabular-nums text-mut">
+                <span className="cf-fig min-w-[22px] shrink-0 text-lg font-extrabold text-mut">
                   {i + 1}
                 </span>
                 <span className="min-w-[160px] max-w-[240px] truncate text-[15px] font-bold text-ink">
                   {r.name}
                 </span>
                 <div
-                  className="h-3 min-w-0 flex-1 overflow-hidden rounded-[6px] bg-surface2"
+                  className="h-3 min-w-0 flex-1 overflow-hidden rounded-pill border border-white/6 bg-surface2"
                   aria-hidden
                 >
                   <div
-                    className="h-full rounded-[6px] bg-accent transition-[width] duration-300"
+                    className="h-full rounded-pill bg-accent"
                     style={{
                       width: `${Math.round((r.qty / topMax) * 100)}%`,
                     }}
                   />
                 </div>
-                <span className="min-w-[70px] shrink-0 text-right text-sm tabular-nums text-mut">
+                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm text-mut">
                   {int(r.qty)} vendus
                 </span>
-                <span className="min-w-[70px] shrink-0 text-right text-sm font-bold tabular-nums text-ink">
+                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm font-extrabold text-ink">
                   {euroRound(r.caCents)}
                 </span>
               </li>
