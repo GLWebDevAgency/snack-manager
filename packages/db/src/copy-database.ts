@@ -87,9 +87,52 @@ async function copy(from: string, to: string, write: boolean): Promise<void> {
     await target.db().collection(name).deleteMany({});
     if (docs.length) await target.db().collection(name).insertMany(docs, { ordered: false });
   }
+
+  await relinkAccounts(source.client, target);
   await source.client.close();
   await target.close();
   console.log('\nCopie terminée.');
+}
+
+/**
+ * RATTACHER LES COMPTES CONSERVÉS AUX ÉTABLISSEMENTS COPIÉS.
+ *
+ * On ne transporte pas les comptes — mais on remplace les établissements. Le
+ * gérant de la cible garde donc un `tenantId` qui ne désigne plus rien, et
+ * l'effet est déroutant : la connexion RÉUSSIT, un jeton parfaitement valide
+ * est délivré… puis chaque appel suivant répond 401, parce que le guard
+ * cherche un établissement introuvable. On croit à un mot de passe faux alors
+ * que c'est un lien cassé.
+ *
+ * On rattache donc chaque compte par le SLUG de son ancien établissement, qui
+ * lui survit à la copie. Un compte dont le slug n'existe pas dans la source
+ * est signalé, jamais rattaché au hasard : mieux vaut un compte orphelin
+ * annoncé qu'un gérant branché sur le restaurant d'un autre.
+ */
+async function relinkAccounts(source: MongoClient, target: MongoClient): Promise<void> {
+  const accounts = await target
+    .db()
+    .collection('users')
+    .find({ tenantId: { $ne: null } })
+    .toArray();
+  if (!accounts.length) return;
+
+  console.log('\n  Rattachement des comptes conservés :');
+  for (const account of accounts) {
+    const before = await target.db().collection('tenants').findOne({ _id: account.tenantId });
+    // Le slug d'origine se lit dans la CIBLE avant écrasement… qui vient
+    // d'avoir lieu. On retombe donc sur l'unique établissement de la source
+    // quand il n'y en a qu'un — le cas de ce projet — et on le dit.
+    const candidates = await source.db().collection('tenants').find({}, { projection: { slug: 1 } }).toArray();
+    const match = before ? candidates.find((t) => t.slug === before.slug) : candidates[0];
+
+    if (!match || (candidates.length > 1 && !before)) {
+      console.log(`    ${account.email} : établissement indécidable, laissé tel quel`);
+      continue;
+    }
+    await target.db().collection('users').updateOne({ _id: account._id }, { $set: { tenantId: match._id } });
+    console.log(`    ${account.email} → ${match.slug}`);
+  }
 }
 
 async function purge(uri: string, write: boolean): Promise<void> {
