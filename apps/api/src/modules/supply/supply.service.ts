@@ -3,12 +3,13 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, type AnyBulkWriteOperation } from 'mongoose';
 import Redis from 'ioredis';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   ALLERGENS,
   ingredientBrands,
@@ -23,7 +24,14 @@ import {
   suppliers,
   type SupplyDb,
 } from '@sm/supply';
-import { ordersChannel, WS_EVENTS } from '@sm/contracts';
+import {
+  isRemovableByDefault,
+  ordersChannel,
+  SUPPLEMENT_GROUP_KEY,
+  SUPPLEMENT_GROUP_NAME,
+  WS_EVENTS,
+  type ProductModifiers,
+} from '@sm/contracts';
 import type {
   BomPut,
   BrandCreate,
@@ -42,8 +50,19 @@ import type {
 import type { Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { SUPPLY_DB } from '../../supply-db.module';
+import { buildProductModifiers, modifierKey, type ModifierIngredient } from './menu-modifiers';
 
 type IngredientRow = typeof ingredients.$inferSelect;
+
+/** Produit Mongo réduit à ce dont dépendent les modificateurs. */
+export interface ProductForModifiers {
+  _id: unknown;
+  removables?: readonly string[] | null;
+  optionGroups?: readonly {
+    key?: string | null;
+    choices?: readonly { key?: string | null; name?: string | null; priceDelta?: number | null }[] | null;
+  }[] | null;
+}
 
 /** Ligne (recette ou option) hydratée avec son ingrédient. */
 interface LineWithIngredient {
@@ -76,6 +95,8 @@ const pct1 = (n: number) => Math.round(n * 10) / 10;
 
 @Injectable()
 export class SupplyService {
+  private readonly logger = new Logger(SupplyService.name);
+
   constructor(
     @Inject(SUPPLY_DB) private readonly db: SupplyDb,
     @InjectModel('Product') private readonly products: Model<Product>,
@@ -134,8 +155,15 @@ export class SupplyService {
           currentStock: String(round3(dto.currentStock)),
           parLevel: String(round3(dto.parLevel)),
           storage: dto.storage,
+          // Non transmis : la catégorie décide (crudités, fromages et sauces
+          // sont retirables ; pain, viande principale et emballage non).
+          removable: dto.removable ?? isRemovableByDefault(dto.category),
+          supplementPriceCents: dto.supplementPriceCents ?? null,
+          displayName: dto.displayName ?? null,
         })
         .returning();
+      // Nouveau supplément tarifé : il rejoint la caisse tout de suite.
+      if (dto.supplementPriceCents != null) await this.refreshSupplementProjection(tenantId);
       return this.mapIngredient({ ...mustRow(row), brands: [] });
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException('Un ingrédient porte déjà ce nom');
@@ -155,6 +183,9 @@ export class SupplyService {
     if (dto.currentStock !== undefined) patch.currentStock = String(round3(dto.currentStock));
     if (dto.parLevel !== undefined) patch.parLevel = String(round3(dto.parLevel));
     if (dto.storage !== undefined) patch.storage = dto.storage;
+    if (dto.removable !== undefined) patch.removable = dto.removable;
+    if (dto.supplementPriceCents !== undefined) patch.supplementPriceCents = dto.supplementPriceCents;
+    if (dto.displayName !== undefined) patch.displayName = dto.displayName;
 
     try {
       const [row] = await this.db
@@ -166,6 +197,18 @@ export class SupplyService {
       const brands = await this.db.query.ingredientBrands.findMany({
         where: (t, { eq: eqOp }) => eqOp(t.ingredientId, id),
       });
+      // Tarif, libellé ou retrait modifiés : la carte de la caisse suit sans
+      // attendre la prochaine lecture de menu.
+      if (
+        dto.removable !== undefined ||
+        dto.supplementPriceCents !== undefined ||
+        dto.displayName !== undefined ||
+        dto.name !== undefined ||
+        dto.category !== undefined
+      ) {
+        await this.refreshSupplementProjection(tenantId);
+        this.publishMenuUpdated(tenantId, { scope: 'supply', ingredientId: id });
+      }
       return this.mapIngredient({ ...row, brands });
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException('Un ingrédient porte déjà ce nom');
@@ -180,8 +223,10 @@ export class SupplyService {
       .update(ingredients)
       .set({ active: false, updatedAt: new Date() })
       .where(and(eq(ingredients.id, id), eq(ingredients.tenantRef, tenantId)))
-      .returning({ id: ingredients.id });
+      .returning({ id: ingredients.id, supplementPriceCents: ingredients.supplementPriceCents });
     if (!row) throw new NotFoundException('Ingrédient introuvable');
+    // Un ingrédient retiré du catalogue ne doit plus être encaissable.
+    if (row.supplementPriceCents !== null) await this.refreshSupplementProjection(tenantId);
     return { deleted: true };
   }
 
@@ -236,6 +281,10 @@ export class SupplyService {
       );
       productsUpdated = res.modifiedCount;
     }
+
+    // Un supplément en rupture disparaît de la caisse ; il y revient au retour
+    // du produit — sans quoi on encaisserait un cheddar qu'on n'a plus.
+    if (ing.supplementPriceCents !== null) await this.refreshSupplementProjection(tenantId);
 
     this.publishMenuUpdated(tenantId, { scope: 'supply', ingredientId: id, isOut, productsUpdated });
     return { ingredient: this.mapIngredient({ ...ing }), productsUpdated };
@@ -701,7 +750,7 @@ export class SupplyService {
       dto.variantKey === null ? isNull(recipes.variantKey) : eq(recipes.variantKey, dto.variantKey),
     );
 
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const [existing] = await tx.select().from(recipes).where(scope).limit(1);
       if (!dto.lines.length) {
         if (existing) await tx.delete(recipes).where(eq(recipes.id, existing.id));
@@ -745,6 +794,12 @@ export class SupplyService {
         costCents: lines.reduce((s, l) => s + l.costCents, 0),
       };
     });
+
+    // La recette vient de changer : « sans tomate » et les suppléments encore
+    // proposables suivent immédiatement, à la caisse comme en ligne.
+    await this.refreshSupplementProjection(tenantId, [productRef]);
+    this.publishMenuUpdated(tenantId, { scope: 'supply', productRef });
+    return result;
   }
 
   /** Remplace la nomenclature d'un choix d'option. `lines: []` la supprime. */
@@ -851,6 +906,244 @@ export class SupplyService {
       };
     }
     return out;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Modificateurs du menu — la RECETTE pilote la caisse
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Blocs `removables` et `supplements` de chaque produit du menu.
+   *
+   * Mutualisé : deux lectures Postgres pour TOUT le menu (les lignes de recette
+   * de tous les produits demandés, puis le catalogue des ingrédients tarifés du
+   * restaurant), jamais une lecture par produit.
+   *
+   * Tolérant : si le contexte supply est indisponible (Postgres coupé, réseau),
+   * le menu se sert quand même — chaque produit retombe sur ses `removables`
+   * saisis en dur et se passe de suppléments.
+   */
+  async modifiersForMenu(
+    tenantId: string,
+    products: readonly ProductForModifiers[],
+  ): Promise<Map<string, ProductModifiers>> {
+    const refs = products.map((p) => String(p._id)).filter((r) => Types.ObjectId.isValid(r));
+    const source = refs.length ? await this.readModifierSource(tenantId, refs) : null;
+
+    const byRef = new Map<string, ProductModifiers>();
+    for (const p of products) {
+      const ref = String(p._id);
+      byRef.set(
+        ref,
+        buildProductModifiers(
+          source?.recipeByProduct.get(ref) ?? [],
+          source?.catalog ?? [],
+          (p.removables ?? []).map(String),
+          this.choicesAlreadyOffered(p),
+        ),
+      );
+    }
+
+    // Le prix facturé se relit sur le produit Mongo à la création de commande :
+    // la projection n'est tentée que sur des données Postgres fraîches.
+    if (source) await this.projectSupplementGroups(tenantId, products, byRef);
+    return byRef;
+  }
+
+  /**
+   * Choix déjà vendus par les groupes d'options du gérant.
+   *
+   * Un produit qui propose déjà « supp. 1,00 € → Cheddar » à sa façon (le
+   * « Compose ton Tacos ») ne doit pas voir le même cheddar réapparaître dans
+   * les suppléments dérivés : la caisse l'afficherait deux fois.
+   */
+  private choicesAlreadyOffered(product: ProductForModifiers): string[] {
+    const keys: string[] = [];
+    for (const group of product.optionGroups ?? []) {
+      if (!group || group.key === SUPPLEMENT_GROUP_KEY) continue;
+      for (const choice of group.choices ?? []) {
+        if (choice?.key) keys.push(choice.key);
+        if (choice?.name) keys.push(modifierKey(choice.name));
+      }
+    }
+    return keys;
+  }
+
+  /** Lecture mutualisée : recettes des produits demandés + catalogue des suppléments. */
+  private async readModifierSource(
+    tenantId: string,
+    refs: string[],
+  ): Promise<{ recipeByProduct: Map<string, ModifierIngredient[]>; catalog: ModifierIngredient[] } | null> {
+    const columns = {
+      ingredientId: ingredients.id,
+      name: ingredients.name,
+      displayName: ingredients.displayName,
+      category: ingredients.category,
+      removable: ingredients.removable,
+      supplementPriceCents: ingredients.supplementPriceCents,
+      isOut: ingredients.isOut,
+    };
+    try {
+      const [lines, catalog] = await Promise.all([
+        this.db
+          .select({ productRef: recipes.productRef, ...columns })
+          .from(recipeLines)
+          .innerJoin(recipes, eq(recipeLines.recipeId, recipes.id))
+          .innerJoin(ingredients, eq(recipeLines.ingredientId, ingredients.id))
+          .where(and(eq(recipes.tenantRef, tenantId), inArray(recipes.productRef, refs))),
+        this.db
+          .select(columns)
+          .from(ingredients)
+          .where(
+            and(
+              eq(ingredients.tenantRef, tenantId),
+              eq(ingredients.active, true),
+              isNotNull(ingredients.supplementPriceCents),
+            ),
+          ),
+      ]);
+
+      // Un produit à variantes a plusieurs recettes : on retire les doublons
+      // d'ingrédients, « sans tomate » vaut pour toutes les tailles.
+      const recipeByProduct = new Map<string, ModifierIngredient[]>();
+      const seen = new Set<string>();
+      for (const { productRef, ...ing } of lines) {
+        if (seen.has(`${productRef}|${ing.ingredientId}`)) continue;
+        seen.add(`${productRef}|${ing.ingredientId}`);
+        const list = recipeByProduct.get(productRef) ?? [];
+        list.push(ing);
+        recipeByProduct.set(productRef, list);
+      }
+      return { recipeByProduct, catalog };
+    } catch (err) {
+      this.logger.warn(
+        `Modificateurs indisponibles (contexte supply) — menu servi sans suppléments : ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Projette le groupe d'options RÉSERVÉ « supplements » sur les produits Mongo.
+   *
+   * C'est ce groupe qui fait autorité à la création de commande : la caisse
+   * n'envoie qu'une clé de choix, le montant facturé est celui projeté ici
+   * depuis PostgreSQL — jamais un prix venu de l'appareil. Le gérant ne le
+   * saisit pas : il se régénère à chaque lecture de menu et après toute
+   * évolution de recette ou de tarif.
+   *
+   * Écriture chirurgicale (`arrayFilters`, `$push`, `$pull`) et seulement pour
+   * les produits dont le groupe a réellement changé : servir la carte
+   * n'écrit rien tant qu'elle est à jour.
+   */
+  private async projectSupplementGroups(
+    tenantId: string,
+    products: readonly ProductForModifiers[],
+    modifiers: Map<string, ProductModifiers>,
+  ): Promise<number> {
+    const tenantFilter = Types.ObjectId.isValid(tenantId) ? new Types.ObjectId(tenantId) : tenantId;
+    const ops: AnyBulkWriteOperation<Product>[] = [];
+
+    for (const p of products) {
+      const ref = String(p._id);
+      if (!Types.ObjectId.isValid(ref)) continue;
+      const desired = modifiers.get(ref)?.supplements ?? [];
+      const current = (p.optionGroups ?? []).find((g) => g?.key === SUPPLEMENT_GROUP_KEY);
+      const _id = new Types.ObjectId(ref);
+
+      if (desired.length === 0) {
+        if (current) {
+          ops.push({
+            updateOne: {
+              filter: { _id, tenantId: tenantFilter } as never,
+              update: { $pull: { optionGroups: { key: SUPPLEMENT_GROUP_KEY } } } as never,
+            },
+          });
+        }
+        continue;
+      }
+
+      const choices = desired.map((s) => ({ key: s.key, name: s.label, priceDelta: s.priceCents }));
+      const unchanged =
+        current !== undefined &&
+        (current.choices ?? []).length === choices.length &&
+        choices.every((c, i) => {
+          const existing = (current.choices ?? [])[i];
+          return (
+            existing?.key === c.key &&
+            existing?.name === c.name &&
+            (existing?.priceDelta ?? 0) === c.priceDelta
+          );
+        });
+      if (unchanged) continue;
+
+      const group = {
+        key: SUPPLEMENT_GROUP_KEY,
+        name: SUPPLEMENT_GROUP_NAME,
+        type: 'multi',
+        min: 0,
+        max: null,
+        choices,
+        perVariant: null,
+      };
+      ops.push(
+        current
+          ? {
+              updateOne: {
+                filter: { _id, tenantId: tenantFilter } as never,
+                update: { $set: { 'optionGroups.$[g]': group } } as never,
+                arrayFilters: [{ 'g.key': SUPPLEMENT_GROUP_KEY }],
+              },
+            }
+          : {
+              updateOne: {
+                filter: {
+                  _id,
+                  tenantId: tenantFilter,
+                  'optionGroups.key': { $ne: SUPPLEMENT_GROUP_KEY },
+                } as never,
+                update: { $push: { optionGroups: group } } as never,
+              },
+            },
+      );
+    }
+
+    if (!ops.length) return 0;
+    try {
+      const res = await this.products.bulkWrite(ops);
+      return res.modifiedCount;
+    } catch (err) {
+      // Une projection ratée ne doit jamais empêcher de servir la carte.
+      this.logger.warn(
+        `Projection des suppléments impossible : ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Recalcule la projection après une évolution de recette ou de tarif, sans
+   * attendre la prochaine lecture de menu : le prix facturé suit le catalogue.
+   */
+  private async refreshSupplementProjection(tenantId: string, productRefs?: string[]): Promise<void> {
+    try {
+      const filter: Record<string, unknown> = { tenantId };
+      if (productRefs?.length) {
+        const valid = productRefs.filter((r) => Types.ObjectId.isValid(r));
+        if (!valid.length) return;
+        filter._id = { $in: valid };
+      }
+      const products = await this.products
+        .find(filter, { removables: 1, optionGroups: 1 })
+        .lean<ProductForModifiers[]>();
+      if (products.length) await this.modifiersForMenu(tenantId, products);
+    } catch (err) {
+      this.logger.warn(
+        `Rafraîchissement des suppléments impossible : ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ─────────────────────────────────────────────────────────────

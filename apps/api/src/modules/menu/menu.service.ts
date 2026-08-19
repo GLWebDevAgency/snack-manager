@@ -2,9 +2,10 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
-import { ordersChannel, WS_EVENTS } from '@sm/contracts';
+import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS } from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
 
 @Injectable()
 export class MenuService {
@@ -12,7 +13,34 @@ export class MenuService {
     @InjectModel('Category') private readonly categories: Model<Category>,
     @InjectModel('Product') private readonly products: Model<Product>,
     @Inject(REDIS_PUB) private readonly redis: Redis,
+    private readonly supply: SupplyService,
   ) {}
+
+  /**
+   * Joint à chaque produit les modificateurs DÉRIVÉS de sa recette.
+   *
+   * `removables` : les ingrédients retirables réellement présents dans la
+   * recette (« sans tomate » n'apparaît que sur un produit qui en contient),
+   * complétés par les anciens modificateurs express du produit.
+   * `supplements` : les ingrédients tarifés qui n'y sont pas encore, prix
+   * résolu côté serveur.
+   *
+   * Le groupe d'options réservé « supplements » est retiré de `optionGroups` :
+   * il n'existe que pour faire foi sur le prix à la création de commande, la
+   * carte l'expose une seule fois, dans son propre bloc.
+   */
+  private async withModifiers<T extends ProductForModifiers>(tenantId: string, prods: T[]) {
+    const modifiers = await this.supply.modifiersForMenu(tenantId, prods);
+    return prods.map((p) => {
+      const derived = modifiers.get(String(p._id));
+      return {
+        ...p,
+        optionGroups: (p.optionGroups ?? []).filter((g) => g?.key !== SUPPLEMENT_GROUP_KEY),
+        removables: derived?.removables ?? [],
+        supplements: derived?.supplements ?? [],
+      };
+    });
+  }
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
     void this.redis.publish(
@@ -23,10 +51,11 @@ export class MenuService {
 
   /** Menu complet (back-office) : toutes catégories + produits, y compris inactifs. */
   async fullMenu(tenantId: string) {
-    const [cats, prods] = await Promise.all([
+    const [cats, rawProds] = await Promise.all([
       this.categories.find({ tenantId }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId }).sort({ order: 1 }).lean(),
     ]);
+    const prods = await this.withModifiers(tenantId, rawProds);
     return {
       categories: cats.map((c) => ({
         ...c,
@@ -39,10 +68,11 @@ export class MenuService {
 
   /** Menu public (commande en ligne / POS) : actifs seulement, ruptures signalées. */
   async publicMenu(tenantId: string) {
-    const [cats, prods] = await Promise.all([
+    const [cats, rawProds] = await Promise.all([
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
     ]);
+    const prods = await this.withModifiers(tenantId, rawProds);
     return {
       categories: cats.map((c) => ({
         _id: c._id,

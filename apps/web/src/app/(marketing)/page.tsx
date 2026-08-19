@@ -1,24 +1,36 @@
-import { Compliance } from "@/components/marketing/Compliance";
-import { ContactForm } from "@/components/marketing/ContactForm";
+import { AppsShowcase } from "@/components/marketing/AppsShowcase";
+import { Benefits } from "@/components/marketing/Benefits";
+import { CaseStudy } from "@/components/marketing/CaseStudy";
+import { Comparison } from "@/components/marketing/Comparison";
+import { ContactSection } from "@/components/marketing/ContactSection";
 import { Faq } from "@/components/marketing/Faq";
+import { Founder } from "@/components/marketing/Founder";
 import { Hero } from "@/components/marketing/Hero";
-import { Modules } from "@/components/marketing/Modules";
-import { Pillars } from "@/components/marketing/Pillars";
+import { Intro } from "@/components/marketing/Intro";
+import { Platform } from "@/components/marketing/Platform";
 import { Pricing } from "@/components/marketing/Pricing";
+import { Process } from "@/components/marketing/Process";
 import { ProofBand } from "@/components/marketing/ProofBand";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
+import { Revenue } from "@/components/marketing/Revenue";
+import { Simulator } from "@/components/marketing/Simulator";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
-import { SocialProof } from "@/components/marketing/SocialProof";
 import { StickyBar } from "@/components/marketing/StickyBar";
-import { WidgetSection } from "@/components/marketing/WidgetSection";
-import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
+import { Ticker } from "@/components/marketing/Ticker";
+import { Vignettes } from "@/components/marketing/Vignettes";
+import { CONTACT_EMAIL, FAQ } from "@/components/marketing/content";
 
 /**
  * Landing commerciale Snack Manager (route `/`).
  *
- * Page statique : tout le contenu est rendu côté serveur, seuls les onglets, la
- * FAQ, les compteurs, le presse-papiers, le formulaire et la barre collante
+ * L'ordre des sections est celui de la maquette « Snack Manager - Site
+ * Vitrine » : hero + bandeau de confiance, manifeste, preuve chiffrée,
+ * simulateur, méthode, plateforme, catalogue + démo 3D, revenus, avant/après,
+ * bénéfices, quotidien, fondateur, comparatif, tarifs, FAQ, contact.
+ *
+ * Tout ce qui peut rester statique reste un composant serveur ; seuls les
+ * carrousels, le simulateur, la FAQ, le formulaire et les deux observateurs
  * sont des îlots clients.
  */
 export default function LandingPage() {
@@ -30,25 +42,24 @@ export default function LandingPage() {
 
       <SiteHeader />
 
-      <main>
+      <main id="top">
         <Hero />
+        <Ticker />
+        <Intro />
         <ProofBand />
-        <hr className="mk-rule" />
-        <Modules />
-        <hr className="mk-rule" />
-        <WidgetSection />
-        <hr className="mk-rule" />
-        <Pillars />
-        <hr className="mk-rule" />
+        <Simulator />
+        <Process />
+        <Platform />
+        <AppsShowcase />
+        <Revenue />
+        <CaseStudy />
+        <Benefits />
+        <Vignettes />
+        <Founder />
+        <Comparison />
         <Pricing />
-        <hr className="mk-rule" />
-        <SocialProof />
-        <hr className="mk-rule" />
-        <Compliance />
-        <hr className="mk-rule" />
         <Faq />
-        <hr className="mk-rule" />
-        <ContactForm />
+        <ContactSection />
       </main>
 
       <SiteFooter />
@@ -73,15 +84,15 @@ function structuredData() {
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iPadOS, Android",
       description:
-        "Suite de gestion pour snacks et fast-foods indépendants : caisse, cuisine (KDS), commande en ligne sans commission et back-office.",
+        "Suite de gestion pour snacks et fast-foods indépendants : caisse, cuisine (KDS), commande en ligne et back-office.",
       inLanguage: "fr-FR",
-      offers: PLANS.map((p) => ({
+      // Les tarifs publics sont « sur devis » : on ne fabrique pas de prix pour Google.
+      offers: {
         "@type": "Offer",
-        name: p.name,
-        price: p.price.replace(/[^\d]/g, ""),
         priceCurrency: "EUR",
-        description: p.desc,
-      })),
+        availability: "https://schema.org/LimitedAvailability",
+        description: "Lancement accompagné — tarif préférentiel à vie pour les 10 premiers restaurants.",
+      },
       email: CONTACT_EMAIL,
     },
     {

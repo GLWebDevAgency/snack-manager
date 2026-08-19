@@ -8,6 +8,13 @@
       "when": 1787074510723,
       "tag": "0000_magical_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787143952357,
+      "tag": "0001_shiny_young_avengers",
+      "breakpoints": true
     }
   ]
 }

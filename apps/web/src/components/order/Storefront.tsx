@@ -10,6 +10,13 @@
  *   `mode="embed"` → /embed/[slug] : la même carte et le même tunnel, sans
  *                    en-tête ni pied de page, calibrés pour une iframe.
  *
+ * Hiérarchie de la page (maquette `docs/specs/commande-en-ligne.md` §5.1) :
+ *   en-tête de restaurant (identité + état + héro + appel à l’action)
+ *   ├ bandeau d’état (pause, fermeture, panier réconcilié)
+ *   ├ rail « Les incontournables »
+ *   ├ carte : navigation collante + sections à double filet
+ *   └ avis · infos pratiques · mentions
+ *
  * Le rendu est identique côté serveur et côté client : noms, descriptions et
  * prix sont dans le HTML livré, sans attendre l’exécution du JavaScript.
  */
@@ -31,6 +38,7 @@ import {
 import {
   cityOf,
   euros,
+  hhmm,
   initial,
   nextOpeningLabel,
   onAccent,
@@ -39,15 +47,27 @@ import {
   weekSchedule,
 } from "./helpers";
 import { Checkout } from "./Checkout";
-import { MenuBoard } from "./MenuBoard";
+import { Highlights, MenuBoard } from "./MenuBoard";
 import { ProductSheet } from "./ProductSheet";
-import { Banner, BrandMark, Dot, Money, Surface, Tap } from "./primitives";
+import {
+  Badge,
+  Banner,
+  BrandMark,
+  Dot,
+  Glyph,
+  Money,
+  Surface,
+  Tap,
+} from "./primitives";
 
 /** Protocole postMessage avec le chargeur `w.js`. */
 const WIDGET_ORIGIN_TAG = "snackmanager";
 
 /** Hauteur de l’en-tête collant de l’embed — décale les éléments collants. */
 const EMBED_HEADER_H = 58;
+
+/** Nombre de produits mis en avant sur la vitrine. */
+const HIGHLIGHT_COUNT = 8;
 
 export function Storefront({
   site,
@@ -75,6 +95,27 @@ export function Storefront({
 
   const paused = site.ordering.paused;
   const blocked = paused || site.categories.length === 0;
+
+  const inCart = useMemo(
+    () =>
+      cart.lines.reduce<Record<string, number>>((acc, line) => {
+        acc[line.productId] = (acc[line.productId] ?? 0) + line.qty;
+        return acc;
+      }, {}),
+    [cart.lines],
+  );
+
+  /**
+   * Mise en avant : les nouveautés d’abord, puis le début de carte. Aucun
+   * champ « populaire » n’étant exposé par l’API, l’ordre du menu — celui que
+   * le restaurateur a lui-même arrangé — fait autorité.
+   */
+  const highlights = useMemo(() => {
+    const all = site.categories.flatMap((c) => c.products).filter((p) => !p.outOfStock);
+    const fresh = all.filter((p) => p.isNew);
+    const rest = all.filter((p) => !p.isNew);
+    return [...fresh, ...rest].slice(0, HIGHLIGHT_COUNT);
+  }, [site.categories]);
 
   // ── Lignes écartées à la réconciliation : on l’annonce, on ne l’escamote pas ──
   const notice =
@@ -212,6 +253,16 @@ export function Storefront({
           </div>
         )}
 
+        {!embed && (
+          <Highlights
+            products={highlights}
+            inCart={inCart}
+            disabled={blocked}
+            onPick={pick}
+            onBrowse={scrollToMenu}
+          />
+        )}
+
         <section id="carte" className="scroll-mt-4">
           {site.categories.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-6 py-20 text-center">
@@ -229,10 +280,7 @@ export function Storefront({
             <MenuBoard
               categories={site.categories}
               onPick={pick}
-              inCart={cart.lines.reduce<Record<string, number>>((acc, line) => {
-                acc[line.productId] = (acc[line.productId] ?? 0) + line.qty;
-                return acc;
-              }, {})}
+              inCart={inCart}
               disabled={blocked}
               stickyTop={embed ? EMBED_HEADER_H : 0}
             />
@@ -254,16 +302,16 @@ export function Storefront({
           <div className="mx-auto max-w-[560px]">
             <Tap
               onClick={() => setTunnel(true)}
-              className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-4 py-3.5 text-onaccent shadow-[0_14px_34px_rgba(0,0,0,0.55)]"
+              className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-3.5 py-3 text-onaccent shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
             >
-              <span className="grid size-7 shrink-0 place-items-center rounded-pill bg-black/25 text-[13px] font-extrabold tabular-nums">
+              <span className="grid size-8 shrink-0 place-items-center rounded-pill bg-black/25 text-[14px] font-extrabold tabular-nums">
                 {cart.count}
               </span>
-              <span className="flex-1 text-left text-[15px] font-extrabold tracking-[-0.01em]">
+              <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
                 Voir mon panier
               </span>
               <Money cents={cart.subtotal} className="text-[16px]" />
-              <Icon name="arrow" size={16} stroke={2.4} />
+              <Icon name="arrow" size={16} stroke={2.4} className="opacity-70" />
             </Tap>
           </div>
         </div>
@@ -284,6 +332,7 @@ export function Storefront({
         open={tunnel}
         slug={site.tenant.slug}
         tenantName={site.tenant.name}
+        tenantAddress={site.tenant.address}
         accent={accent}
         cart={cart}
         paused={paused}
@@ -304,6 +353,13 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
 // En-têtes
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * En-tête de restaurant — le bloc qui donne son ton à la page.
+ *
+ * Un seul aplat sombre stratifié : identité, état de service, promesse en trois
+ * lignes, appel à l’action. Le nom du restaurant reste le `h1` (c’est la page
+ * référencée) ; la promesse est une accroche, pas un titre de document.
+ */
 function SiteHeader({
   site,
   letter,
@@ -316,87 +372,127 @@ function SiteHeader({
   onOrder: () => void;
 }) {
   const phone = site.tenant.phones[0];
+  const lead = site.slots?.leadTimeMin ?? 15;
+  const nextSlot = site.slots?.slots.find((s) => !s.full)?.iso ?? null;
+  const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
+
   return (
-    <header className="border-b border-white/6 bg-[linear-gradient(180deg,#111,#000)]">
-      <div className="mx-auto w-full max-w-[560px] px-4 pb-7 pt-6">
+    <header className="sm-grain relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,#121212_0%,#050505_62%,#000_100%)]">
+      {/* Halo d’accent : la marque du restaurant colore la scène, sans aplat. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full opacity-[0.16] blur-3xl"
+        style={{ background: "var(--cf-accent)" }}
+      />
+      {/* Nom en typographie fantôme — profondeur, jamais lu. */}
+      <span
+        aria-hidden
+        className="sm-ghost absolute -left-3 top-[132px] text-[92px] font-black opacity-60"
+      >
+        {site.tenant.name}
+      </span>
+
+      <div className="relative mx-auto w-full max-w-[560px] px-4 pb-6 pt-5">
         <div className="flex items-center gap-3.5">
           <BrandMark
             name={site.tenant.name}
             logoUrl={site.tenant.logoUrl}
             letter={letter}
-            size={52}
+            size={54}
           />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[26px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
+            <h1 className="truncate text-[25px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
               {site.tenant.name}
             </h1>
-            {cityName && (
-              <p className="truncate text-[13px] font-semibold uppercase tracking-[0.1em] text-mut">
-                {cityName}
-              </p>
-            )}
+            <p className="truncate text-[12px] font-bold uppercase tracking-[0.16em] text-mut">
+              {cityName || "Click & collect"}
+            </p>
           </div>
         </div>
 
+        {/* État de service — la première chose qu’un client cherche. */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span
             className={cx(
-              "inline-flex items-center gap-2 rounded-pill border px-3 py-1.5 text-[13px] font-bold",
-              site.openNow
-                ? "border-ok/40 text-okt"
-                : "border-white/12 text-mut",
+              "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
+              site.openNow ? "border-ok/40 text-okt" : "border-white/12 text-mut",
             )}
           >
             <Dot tone={site.openNow ? "ok" : "mut"} />
             {site.openNow ? "Ouvert maintenant" : "Fermé"}
+            {site.openNow && nextSlot && (
+              <span className="font-extrabold tabular-nums text-ink">
+                · retrait {hhmm(nextSlot)}
+              </span>
+            )}
+            {!site.openNow && reopen && (
+              <span className="font-semibold text-mut">· {reopen}</span>
+            )}
           </span>
           {site.reviews.count > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-pill border border-white/10 px-3 py-1.5 text-[13px] font-bold text-ink">
-              <Stars value={site.reviews.avg} size={13} />
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-white/10 px-3 text-[13px] font-bold text-ink">
+              <Stars value={site.reviews.avg} size={12} />
               <span className="tabular-nums">
                 {site.reviews.avg.toLocaleString("fr-FR", {
                   minimumFractionDigits: 1,
                   maximumFractionDigits: 1,
                 })}
               </span>
-              <span className="font-semibold text-mut tabular-nums">
+              <span className="font-semibold tabular-nums text-mut">
                 ({site.reviews.count})
               </span>
             </span>
           )}
         </div>
 
-        <p className="mt-4 text-[15px] leading-relaxed text-mut">
-          Commandez en ligne, récupérez sur place. Sans compte, sans attente au
-          comptoir.
+        {/* Promesse en trois temps — la copy de la maquette. */}
+        <p className="mt-5 text-[32px] font-extrabold leading-[0.99] tracking-[-0.045em] text-ink">
+          Commandez.
+          <br />
+          Récupérez.
+          <br />
+          <span className="text-accent">Régalez-vous.</span>
+        </p>
+        <p className="mt-3 text-[14px] leading-relaxed text-mut">
+          Prêt en ~{lead} min · sans compte, sans attente au comptoir.
         </p>
 
         <div className="mt-5 flex gap-2.5">
           <Tap
             onClick={onOrder}
-            className="flex flex-1 items-center justify-center gap-2 rounded-pill bg-accent px-5 py-3.5 text-[15px] font-extrabold text-onaccent"
+            className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent shadow-[0_12px_30px_-12px_var(--cf-accent)]"
           >
-            <Icon name="cart" size={17} stroke={2.4} />
-            Commander en ligne
+            Commander maintenant
+            <Icon name="arrow" size={17} stroke={2.6} />
           </Tap>
           {phone && (
             <a
               href={telHref(phone)}
               aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-              className="grid size-[50px] shrink-0 place-items-center rounded-pill border border-white/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:duration-75 active:scale-[0.97]"
+              className="grid size-[52px] shrink-0 place-items-center rounded-pill border border-white/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
             >
               <Icon name="phone" size={18} />
             </a>
           )}
         </div>
 
-        {site.todayHours && (
-          <p className="mt-4 flex items-center gap-2 text-[13px] text-mut">
-            <Icon name="clock" size={14} />
-            Aujourd’hui&nbsp;: {hoursOfToday(site)}
-          </p>
-        )}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-mut">
+          {site.todayHours && (
+            <span className="inline-flex items-center gap-1.5">
+              <Icon name="clock" size={14} className="shrink-0" />
+              Aujourd’hui&nbsp;: {hoursOfToday(site)}
+            </span>
+          )}
+          {site.tenant.address && (
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <Glyph name="pin" size={14} className="shrink-0" />
+              <span className="truncate">{site.tenant.address}</span>
+            </span>
+          )}
+        </div>
       </div>
+
+      <div aria-hidden className="sm-rule" />
     </header>
   );
 }
@@ -456,19 +552,18 @@ function EmbedHeader({
 
 function Reviews({ site }: { site: Site }) {
   return (
-    <section aria-labelledby="avis" className="pt-10">
-      <div className="flex items-baseline justify-between gap-3 pb-3">
-        <h2
-          id="avis"
-          className="text-[20px] font-extrabold tracking-[-0.03em] text-ink"
-        >
-          Ce qu’en disent les clients
-        </h2>
-      </div>
+    <section aria-labelledby="avis" className="pt-11">
+      <h2
+        id="avis"
+        className="pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+      >
+        Ce qu’en disent les clients
+      </h2>
+      <div aria-hidden className="sm-rule mb-4" />
 
       <Surface className="p-5">
-        <div className="flex items-center gap-3">
-          <span className="text-[38px] font-black leading-none tracking-[-0.04em] tabular-nums text-accent">
+        <div className="flex items-center gap-3.5">
+          <span className="text-[40px] font-black leading-none tracking-[-0.045em] tabular-nums text-accent">
             {site.reviews.avg.toLocaleString("fr-FR", {
               minimumFractionDigits: 1,
               maximumFractionDigits: 1,
@@ -476,7 +571,7 @@ function Reviews({ site }: { site: Site }) {
           </span>
           <div>
             <Stars value={site.reviews.avg} size={15} />
-            <p className="mt-0.5 text-[13px] text-mut tabular-nums">
+            <p className="mt-1 text-[13px] tabular-nums text-mut">
               {site.reviews.count} avis
             </p>
           </div>
@@ -512,18 +607,20 @@ function Reviews({ site }: { site: Site }) {
 
 function Practical({ site, cityName }: { site: Site; cityName: string }) {
   const week = weekSchedule(site.tenant.hours);
+  const today = site.todayHours;
   const mapsHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${site.tenant.name} ${site.tenant.address}`,
   )}`;
 
   return (
-    <section aria-labelledby="infos" className="pt-10">
+    <section aria-labelledby="infos" className="pt-11">
       <h2
         id="infos"
-        className="pb-3 text-[20px] font-extrabold tracking-[-0.03em] text-ink"
+        className="pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
       >
         Infos pratiques
       </h2>
+      <div aria-hidden className="sm-rule mb-4" />
 
       <Surface className="divide-y divide-white/6">
         {site.tenant.address && (
@@ -533,8 +630,8 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
             rel="noopener noreferrer"
             className="flex items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-white/[0.03]"
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
-              <Icon name="home" size={17} />
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+              <Glyph name="pin" size={18} />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
@@ -554,7 +651,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
             href={telHref(phone)}
             className="flex items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-white/[0.03]"
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
               <Icon name="phone" size={17} />
             </span>
             <span className="min-w-0 flex-1">
@@ -570,16 +667,37 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
         ))}
 
         <div className="px-4 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
-            Horaires
-          </p>
-          <ul className="mt-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-3.5">
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+              <Icon name="clock" size={17} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+                Horaires
+              </span>
+              <span className="block text-[15px] font-semibold text-ink">
+                {site.openNow ? "Ouvert maintenant" : "Fermé actuellement"}
+              </span>
+            </span>
+          </div>
+          <ul className="mt-3 flex flex-col gap-1.5 border-t border-white/6 pt-3">
             {week.map((row) => (
               <li
                 key={row.day}
-                className="flex items-baseline justify-between gap-4 text-[14px]"
+                className={cx(
+                  "flex items-baseline justify-between gap-4 text-[14px]",
+                  today && Number(today.day) === row.day && "text-ink",
+                )}
               >
-                <span className="text-mut">{row.label}</span>
+                <span
+                  className={cx(
+                    today && Number(today.day) === row.day
+                      ? "font-bold text-ink"
+                      : "text-mut",
+                  )}
+                >
+                  {row.label}
+                </span>
                 <span
                   className={cx(
                     "text-right font-semibold tabular-nums",
@@ -606,21 +724,22 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
 
 function LegalFooter({ site, cityName }: { site: Site; cityName: string }) {
   const year = new Date().getFullYear();
+  const lowest = lowestPrice(site);
   return (
-    <footer className="mt-12 border-t border-white/6 pt-6 text-center">
+    <footer className="mt-12 border-t border-white/6 pt-7 text-center">
+      {lowest > 0 && (
+        <p className="mb-4 inline-flex items-center gap-2 rounded-pill border border-white/10 bg-surface2 px-3.5 py-2 text-[13px] text-mut">
+          <Badge tone="hot">Dès</Badge>
+          <span className="font-extrabold tabular-nums text-ink">{euros(lowest)}</span>
+        </p>
+      )}
       <p className="text-[12px] leading-relaxed text-mut">
         {site.tenant.name} © {year}
         {cityName ? ` · ${cityName}` : ""} · Prix TTC, service compris
       </p>
-      <p className="mt-1 text-[12px] text-mut">
+      <p className="mt-1 text-[12px] leading-relaxed text-mut">
         Allergènes et composition&nbsp;: demandez au comptoir. Commande en ligne
         propulsée par Snack Manager.
-      </p>
-      <p className="mt-3 text-[12px] text-mut">
-        À partir de{" "}
-        <span className="font-bold text-ink">
-          {euros(lowestPrice(site))}
-        </span>
       </p>
     </footer>
   );

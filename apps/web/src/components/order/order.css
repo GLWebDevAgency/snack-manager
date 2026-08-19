@@ -1,0 +1,114 @@
+/*
+ * Surface client — utilitaires visuels propres au parcours de commande.
+ *
+ * Tout ce qui ne s'exprime pas proprement en classes utilitaires : masques de
+ * défilement, filets composés, typographie fantôme, ancrage de section. Les
+ * couleurs sont toujours lues dans les tokens `--cf-*` du design system :
+ * ce fichier n'invente aucune valeur de marque.
+ */
+
+/* ── Rails horizontaux (catégories, incontournables, upsell) ───────────────
+ * Pas de barre de défilement visible, inertie iOS, et le geste ne « fuit »
+ * pas vers la page quand on arrive en bout de course.
+ */
+.sm-rail {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.sm-rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* Accroche douce : la carte suivante se cale sans jamais bloquer le geste. */
+.sm-snap {
+  scroll-snap-type: x proximity;
+}
+.sm-snap > * {
+  scroll-snap-align: start;
+}
+
+/* Fondu latéral : le rail se perd dans le fond au lieu d'être coupé net. */
+.sm-fade-x {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
+
+/* ── Double filet d'en-tête de section (maquette « .cf-head .rule ») ────── */
+.sm-rule {
+  height: 3px;
+  border-top: 2px solid var(--cf-line);
+  border-bottom: 1px solid var(--cf-line-2);
+}
+
+/* ── Typographie fantôme : contour, jamais lu, jamais cliquable ────────── */
+.sm-ghost {
+  color: transparent;
+  -webkit-text-stroke: 1.4px rgba(255, 255, 255, 0.11);
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+  line-height: 0.78;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* ── Voile de lisibilité sous une photo (nom du produit sur l'image) ───── */
+.sm-scrim {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.15) 42%,
+    rgba(0, 0, 0, 0.72) 78%,
+    var(--cf-surface) 100%
+  );
+}
+
+/* ── Grain très fin sur les grandes surfaces sombres (héro, bandeau) ────
+ * Un aplat noir pur sur écran OLED « colle » ; ce bruit à 3 % casse la
+ * bande sans jamais devenir visible.
+ */
+.sm-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Ancrage de section sous les barres collantes ────────────────────────
+ * `--sm-anchor` est posé par le composant : la hauteur exacte de la barre de
+ * recherche + rail de catégories, en-tête d'embed comprise.
+ */
+.sm-anchor {
+  scroll-margin-top: var(--sm-anchor, 96px);
+}
+
+/* ── Feuille montante : la poignée reste saisissable, le corps défile ──── */
+.sm-grab {
+  touch-action: none;
+}
+
+/* Barre de progression du tunnel : la teinte suit l'accent tenant. */
+.sm-step-on {
+  background: var(--cf-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-snap {
+    scroll-snap-type: none;
+  }
+}

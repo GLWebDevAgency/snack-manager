@@ -104,6 +104,22 @@ export const ingredients = pgTable(
     /** Seuil de réassort (alerte « à commander »). */
     parLevel: numeric('par_level', { precision: 12, scale: 3 }).notNull().default('0'),
     storage: storageEnum('storage').notNull().default('sec'),
+    /**
+     * L'ingrédient peut-il être RETIRÉ du produit ? La caisse et la commande
+     * en ligne proposent « sans X » pour chaque ingrédient retirable présent
+     * dans la recette — le gérant ne saisit aucun modificateur produit par
+     * produit. Défaut posé par catégorie (crudités, fromages et sauces oui ;
+     * pain, viande principale et emballage non).
+     */
+    removable: boolean('removable').notNull().default(false),
+    /**
+     * Prix de l'ingrédient AJOUTÉ en supplément, en centimes.
+     * NULL = jamais proposé en supplément. Seule source du montant facturé :
+     * le client n'envoie qu'une clé, jamais un prix.
+     */
+    supplementPriceCents: integer('supplement_price_cents'),
+    /** Libellé court pour la caisse et le ticket (« Oignons » vs « Oignon rouge »). */
+    displayName: text('display_name'),
     /** Rupture ingrédient — propagée aux produits dont la recette l'exige. */
     isOut: boolean('is_out').notNull().default(false),
     active: boolean('active').notNull().default(true),

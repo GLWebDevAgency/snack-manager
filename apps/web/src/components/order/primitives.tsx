@@ -14,20 +14,27 @@
  * Écran de comptoir : rien sous 13 px pour une information utile, réponse
  * tactile visible en moins de 100 ms, mouvement limité à l’opacité et à la
  * transformation (et neutralisé sous `prefers-reduced-motion`).
+ *
+ * La hiérarchie de la maquette (`docs/specs/commande-en-ligne.md` §4) est
+ * portée ici : eyebrow de section, en-tête à double filet, pastille de prix,
+ * chips d’options, lignes cochables, feuille montante.
  */
 
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
   useState,
   type ButtonHTMLAttributes,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { cx } from "@/lib/cx";
 import { Icon, type IconName } from "@/components/ui";
 import { eurosBare } from "./helpers";
+import "./order.css";
 
 // ─────────────────────────────────────────────────────────────
 // Retour tactile
@@ -35,13 +42,79 @@ import { eurosBare } from "./helpers";
 
 /** Enfoncement immédiat, relâchement doux — à poser sur tout élément appuyable. */
 export const TAP =
-  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:scale-[0.97]";
+  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:scale-[0.97] motion-reduce:active:scale-100";
+
+/** Variante « ligne » : une ligne pleine largeur s’enfonce, elle ne rétrécit pas. */
+export const TAP_ROW =
+  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:translate-y-px motion-reduce:active:translate-y-0";
 
 type TapProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 /** `<button>` nu doté du retour tactile (aucun style de surface imposé). */
 export function Tap({ className, type = "button", ...rest }: TapProps) {
   return <button type={type} className={cx(TAP, className)} {...rest} />;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Icônes propres au parcours client
+// ─────────────────────────────────────────────────────────────
+
+const GLYPHS = {
+  /** Épingle de lieu — carte « où retirer ». */
+  pin: ["M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11z", "M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"],
+  /** Flamme — « au plus tôt », créneau chaud. */
+  fire: [
+    "M12 3s5.5 4.2 5.5 9a5.5 5.5 0 0 1-11 0c0-2 .9-3.4 1.8-4.4.4 1.2 1.2 1.9 2 1.9 1.4 0 1.9-1.3 1.7-6.5z",
+  ],
+  /** Sac de retrait — paiement au comptoir. */
+  bag: ["M5 8h14l-1.1 12.5H6.1z", "M9 8V6a3 3 0 0 1 6 0v2"],
+  /** Étincelle — nouveauté, mise en avant. */
+  spark: ["M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9z"],
+  /** Curseurs — « ce produit se compose » : une feuille d’options va s’ouvrir. */
+  sliders: [
+    "M4 7h9",
+    "M17 7h3",
+    "M4 17h3",
+    "M11 17h9",
+    "M15 7a2 2 0 1 0 4 0 2 2 0 0 0-4 0z",
+    "M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0z",
+  ],
+} as const;
+
+export type GlyphName = keyof typeof GLYPHS;
+
+/** Icônes absentes du DS back-office, nécessaires à la surface client. */
+export function Glyph({
+  name,
+  size = 18,
+  stroke = 2,
+  className,
+  filled = false,
+}: {
+  name: GlyphName;
+  size?: number;
+  stroke?: number;
+  className?: string;
+  filled?: boolean;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={stroke}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      {GLYPHS[name].map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -74,6 +147,38 @@ export function Money({
   );
 }
 
+/**
+ * Pastille de prix (maquette §4.5) — le prix ne flotte pas dans la carte, il
+ * est posé sur un aplat de niveau 3. C’est ce qui le rend lisible d’un coup
+ * d’œil dans une liste de vingt produits.
+ */
+export function PriceTag({
+  cents,
+  from = false,
+  size = "md",
+}: {
+  cents: number | null | undefined;
+  /** Produit à variantes : préfixe « dès ». */
+  from?: boolean;
+  size?: "sm" | "md";
+}) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-baseline gap-1 rounded-ctrl bg-surface2 text-ink",
+        size === "sm" ? "px-2 py-[3px]" : "px-2.5 py-1",
+      )}
+    >
+      {from && (
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-mut">
+          dès
+        </span>
+      )}
+      <Money cents={cents} className={size === "sm" ? "text-[13px]" : "text-[14px]"} />
+    </span>
+  );
+}
+
 /** Intitulé de section : capitales espacées, gris — l’ossature de la page. */
 export function SectionLabel({
   children,
@@ -86,10 +191,43 @@ export function SectionLabel({
 }) {
   return (
     <div className={cx("flex items-baseline justify-between gap-3", className)}>
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
         {children}
       </h3>
-      {hint && <span className="text-[13px] text-mut">{hint}</span>}
+      {hint && <span className="shrink-0 text-[13px] text-mut">{hint}</span>}
+    </div>
+  );
+}
+
+/**
+ * En-tête de section de carte (maquette §4.10) : titre à l’accent, double
+ * filet, puis la note. C’est ce filet qui donne à la carte sa structure
+ * « imprimée » — sans lui, la page redevient une liste plate.
+ */
+export function SectionHead({
+  title,
+  note,
+  id,
+  aside,
+}: {
+  title: ReactNode;
+  note?: ReactNode;
+  id?: string;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className="pb-3">
+      <div className="flex items-end justify-between gap-3">
+        <h2
+          id={id}
+          className="text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+        >
+          {title}
+        </h2>
+        {aside}
+      </div>
+      <div aria-hidden className="sm-rule mt-2" />
+      {note && <p className="mt-2 text-[13px] leading-snug text-mut">{note}</p>}
     </div>
   );
 }
@@ -143,6 +281,35 @@ export function Dot({
   );
 }
 
+/**
+ * Badge produit (maquette §4.4). `new` porte l’accent tenant, `hot` reste
+ * neutre — deux aplats accent côte à côte tueraient la parcimonie (DA §3).
+ */
+export function Badge({
+  tone = "new",
+  children,
+}: {
+  tone?: "new" | "hot" | "out" | "ok";
+  children: ReactNode;
+}) {
+  const skin = {
+    new: "bg-accent text-onaccent",
+    hot: "bg-white/12 text-ink",
+    out: "border border-white/15 text-mut",
+    ok: "bg-ok text-black",
+  }[tone];
+  return (
+    <span
+      className={cx(
+        "inline-flex shrink-0 items-center rounded-pill px-2 py-[3px] text-[10px] font-extrabold uppercase leading-none tracking-[0.09em]",
+        skin,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 /** Tuile de marque : initiale du restaurant sur l’accent, ou logo fourni. */
 export function BrandMark({
   name,
@@ -186,6 +353,32 @@ export function BrandMark({
   );
 }
 
+/** Rail horizontal : défilement au doigt, bords fondus, pas de barre. */
+export function Rail({
+  children,
+  className,
+  label,
+  snap = true,
+}: {
+  children: ReactNode;
+  className?: string;
+  label?: string;
+  snap?: boolean;
+}) {
+  return (
+    <div
+      aria-label={label}
+      className={cx(
+        "sm-rail -mx-4 flex gap-2.5 overflow-x-auto px-4",
+        snap && "sm-snap",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Stepper de quantité
 // ─────────────────────────────────────────────────────────────
@@ -206,20 +399,20 @@ export function Stepper({
   label: string;
 }) {
   const btn =
-    "grid size-9 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-white/10";
+    "grid size-10 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-white/10";
   return (
-    <div className="inline-flex items-center gap-0.5 rounded-pill border border-white/10 bg-surface2 p-0.5">
+    <div className="inline-flex items-center rounded-pill border border-white/12 bg-surface2 p-0.5">
       <Tap
         className={btn}
         onClick={() => onChange(value - 1)}
         disabled={value <= min}
         aria-label={min === 0 && value === 1 ? `Retirer ${label}` : `Moins de ${label}`}
       >
-        <Icon name="minus" size={16} />
+        <Icon name="minus" size={16} stroke={2.4} />
       </Tap>
       <span
         aria-live="polite"
-        className="min-w-7 text-center text-[15px] font-extrabold tabular-nums tracking-[-0.02em]"
+        className="min-w-7 text-center text-[16px] font-extrabold tabular-nums tracking-[-0.02em]"
       >
         {value}
       </span>
@@ -229,9 +422,47 @@ export function Stepper({
         disabled={value >= max}
         aria-label={`Plus de ${label}`}
       >
-        <Icon name="plus" size={16} />
+        <Icon name="plus" size={16} stroke={2.4} />
       </Tap>
     </div>
+  );
+}
+
+/**
+ * Affordance d’ajout d’une carte produit (maquette §5.2.3).
+ *
+ * Trois états, un seul gabarit — c’est le signe qui dit ce qui va se passer :
+ *   déjà au panier → la quantité ;
+ *   produit à options → curseurs (une feuille de composition va s’ouvrir) ;
+ *   produit simple → « + » (un appui, c’est ajouté).
+ *
+ * Un gabarit unique de 40 px garde le rythme vertical de la liste : vingt
+ * cartes se parcourent sans que l’œil ait à re-mesurer chaque ligne. Rendu en
+ * `<span aria-hidden>` — c’est la carte entière qui est le bouton, une cible
+ * tactile bien plus large que la pastille.
+ */
+export function AddButton({
+  qty = 0,
+  compose = false,
+}: {
+  /** Quantité déjà au panier : le bouton devient un compteur. */
+  qty?: number;
+  /** Produit configurable : on annonce « composer », pas « ajouter ». */
+  compose?: boolean;
+}) {
+  return (
+    <span
+      aria-hidden
+      className="grid size-10 shrink-0 place-items-center rounded-pill bg-accent text-onaccent"
+    >
+      {qty > 0 ? (
+        <span className="text-[15px] font-extrabold tabular-nums">{qty}</span>
+      ) : compose ? (
+        <Glyph name="sliders" size={18} stroke={2.2} />
+      ) : (
+        <Icon name="plus" size={18} stroke={2.6} />
+      )}
+    </span>
   );
 }
 
@@ -260,13 +491,14 @@ export function OptionChip({
       disabled={disabled}
       aria-pressed={on}
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[14px] font-semibold",
+        "inline-flex min-h-11 items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[14px] font-semibold",
         on
-          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_18%,transparent)] text-ink"
+          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_20%,transparent)] text-ink"
           : "border-white/10 bg-surface2 text-ink/85 hover:border-white/25",
         disabled && "cursor-not-allowed opacity-35 active:scale-100",
       )}
     >
+      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accent" />}
       {children}
       {price !== undefined && price !== 0 && (
         <span
@@ -279,6 +511,69 @@ export function OptionChip({
         </span>
       )}
     </Tap>
+  );
+}
+
+/**
+ * Contrôle segmenté — le sélecteur de format. Deux à quatre segments égaux,
+ * le curseur actif porte l’accent : c’est le choix qui pilote le prix, il doit
+ * se lire avant tout le reste de la fiche.
+ */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { key: T; label: string; sub?: string }[];
+  value: T | null;
+  onChange: (next: T) => void;
+  label: string;
+}) {
+  const wrap = options.length > 3;
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="grid gap-1.5 rounded-panel border border-white/8 bg-surface2 p-1.5"
+      style={{
+        // Au-delà de trois segments, deux colonnes : quatre libellés côte à
+        // côte à 390 px se réduisent à des moignons illisibles.
+        gridTemplateColumns: `repeat(${wrap ? 2 : options.length}, minmax(0,1fr))`,
+      }}
+    >
+      {options.map((option) => {
+        const on = option.key === value;
+        return (
+          <Tap
+            key={option.key}
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(option.key)}
+            className={cx(
+              "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-card px-2 py-2 text-center",
+              on
+                ? "bg-accent text-onaccent shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                : "text-mut hover:text-ink",
+            )}
+          >
+            <span className="max-w-full truncate text-[13.5px] font-bold leading-tight">
+              {option.label}
+            </span>
+            {option.sub && (
+              <span
+                className={cx(
+                  "text-[12px] font-bold tabular-nums leading-none",
+                  on ? "opacity-80" : "text-mut",
+                )}
+              >
+                {option.sub}
+              </span>
+            )}
+          </Tap>
+        );
+      })}
+    </div>
   );
 }
 
@@ -303,14 +598,16 @@ export function OptionRow({
   onClick: () => void;
 }) {
   return (
-    <Tap
+    <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       role={radio ? "radio" : "checkbox"}
       aria-checked={on}
       className={cx(
-        "flex w-full items-center gap-3 border-b border-white/6 py-3 text-left last:border-b-0",
-        disabled && "cursor-not-allowed opacity-35 active:scale-100",
+        TAP_ROW,
+        "flex min-h-[52px] w-full items-center gap-3 border-b border-white/6 py-3 text-left last:border-b-0",
+        disabled && "cursor-not-allowed opacity-35",
       )}
     >
       <span
@@ -334,7 +631,70 @@ export function OptionRow({
           +{eurosBare(price)} €
         </span>
       )}
-    </Tap>
+    </button>
+  );
+}
+
+/**
+ * Carte de choix exclusif (mode de paiement, mode de retrait) — plus lourde
+ * qu’une `OptionRow` : elle porte une icône et une bordure pleine à l’état
+ * sélectionné. Réservée aux embranchements du tunnel.
+ */
+export function ChoiceCard({
+  on,
+  icon,
+  glyph,
+  title,
+  sub,
+  onClick,
+  disabled,
+}: {
+  on: boolean;
+  icon?: IconName;
+  glyph?: GlyphName;
+  title: ReactNode;
+  sub?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cx(
+        TAP_ROW,
+        "flex w-full items-center gap-3 rounded-panel border p-3.5 text-left",
+        on
+          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_10%,var(--cf-surface))]"
+          : "border-white/8 bg-surface hover:border-white/20",
+        disabled && "cursor-not-allowed opacity-40",
+      )}
+    >
+      <span
+        className={cx(
+          "grid size-10 shrink-0 place-items-center rounded-card",
+          on ? "bg-accent text-onaccent" : "bg-surface2 text-accent",
+        )}
+      >
+        {glyph ? <Glyph name={glyph} size={19} /> : icon ? <Icon name={icon} size={19} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-bold text-ink">{title}</span>
+        {sub && <span className="mt-0.5 block text-[13px] leading-snug text-mut">{sub}</span>}
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200 ease-sm",
+          on ? "border-accent bg-accent text-onaccent" : "border-white/25",
+        )}
+      >
+        {on && <Icon name="check" size={12} stroke={3} />}
+      </span>
+    </button>
   );
 }
 
@@ -342,15 +702,22 @@ export function OptionRow({
 // Feuille (bottom sheet)
 // ─────────────────────────────────────────────────────────────
 
-const SHEET_MS = 260;
+const SHEET_MS = 300;
+/** Course au-delà de laquelle le relâchement ferme la feuille. */
+const DISMISS_PX = 96;
 
 /**
  * Feuille montante ancrée en bas (fiche produit, tunnel). Positionnée en
  * `fixed` : dans une iframe, la fenêtre EST l’encart hôte — la même feuille
  * sert donc la page plein écran et le widget embarqué, sans code spécifique.
  *
- * Fermeture : croix, Échap, appui sur le fond. Le focus part sur le panneau et
- * revient à l’élément déclencheur à la fermeture.
+ * Fermeture : croix, Échap, appui sur le fond, **et glissement vers le bas
+ * depuis la poignée ou l’en-tête** (le geste attendu sur un téléphone). Le
+ * focus part sur le panneau et revient à l’élément déclencheur à la fermeture.
+ *
+ * En mode `float`, la barre de tête est transparente sur le visuel puis se
+ * solidifie dès que le contenu défile dessous — la croix ne se retrouve jamais
+ * posée sur du texte.
  */
 export function Sheet({
   open,
@@ -364,6 +731,16 @@ export function Sheet({
   /** Occupe toute la hauteur : évite que la feuille « saute » entre deux étapes. */
   fill = false,
   headerExtra,
+  /**
+   * `bar` : en-tête plein (poignée, titre, croix) — le tunnel, où l’étape doit
+   * rester lisible en permanence.
+   * `float` : aucun en-tête ; la poignée et la croix flottent au-dessus du
+   * contenu, qui commence donc par son propre visuel plein cadre et défile
+   * sous elles — c’est la fiche produit de la maquette.
+   */
+  chrome = "bar",
+  /** Bouton retour dans l’en-tête (étapes du tunnel). */
+  onBack,
   /** Empilement : la fiche produit doit passer AU-DESSUS du tunnel (60 > 50). */
   zIndex = 50,
 }: {
@@ -375,19 +752,26 @@ export function Sheet({
   footer?: ReactNode;
   maxHeight?: string;
   headerExtra?: ReactNode;
+  chrome?: "bar" | "float";
+  onBack?: (() => void) | null;
   fill?: boolean;
   zIndex?: number;
 }) {
   const [mounted, setMounted] = useState(false);
   const [shown, setShown] = useState(false);
+  const [drag, setDrag] = useState(0);
+  /** Mode `float` : le visuel de tête est-il déjà passé sous la barre ? */
+  const [sunk, setSunk] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const dragFrom = useRef<number | null>(null);
   const titleId = useId();
 
   useEffect(() => {
     if (open) {
       restoreRef.current = document.activeElement as HTMLElement | null;
       setMounted(true);
+      setDrag(0);
       const raf = requestAnimationFrame(() => setShown(true));
       return () => cancelAnimationFrame(raf);
     }
@@ -426,7 +810,34 @@ export function Sheet({
     };
   }, [shown]);
 
+  // ── Glisser pour fermer ──
+  const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse") return;
+    dragFrom.current = e.clientY;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragFrom.current === null) return;
+    // Vers le haut : rien (la feuille ne grandit pas), vers le bas : elle suit.
+    setDrag(Math.max(0, e.clientY - dragFrom.current));
+  }, []);
+
+  const endDrag = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (dragFrom.current === null) return;
+      const travelled = Math.max(0, e.clientY - dragFrom.current);
+      dragFrom.current = null;
+      e.currentTarget.releasePointerCapture?.(e.pointerId);
+      if (travelled > DISMISS_PX) onClose();
+      setDrag(0);
+    },
+    [onClose],
+  );
+
   if (!mounted) return null;
+
+  const dragging = drag > 0;
 
   return (
     <div
@@ -436,8 +847,8 @@ export function Sheet({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 transition-opacity duration-[260ms] ease-sm"
-        style={{ opacity: shown ? 1 : 0 }}
+        className="absolute inset-0 bg-black/72 transition-opacity duration-300 ease-sm"
+        style={{ opacity: shown ? Math.max(0, 1 - drag / 320) : 0 }}
       />
       <div
         ref={panelRef}
@@ -446,47 +857,113 @@ export function Sheet({
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : label}
         tabIndex={-1}
-        className="relative flex w-full max-w-[560px] max-h-full flex-col overflow-hidden rounded-t-[20px] border-x border-t border-white/10 bg-surface shadow-[0_-18px_60px_rgba(0,0,0,0.65)] outline-none"
+        className="relative flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-t-wide border-x border-t border-white/10 bg-surface shadow-[0_-20px_70px_rgba(0,0,0,0.72)] outline-none"
         style={{
           maxHeight,
           height: fill ? maxHeight : undefined,
-          transform: shown ? "translateY(0)" : "translateY(100%)",
-          transition: `transform ${SHEET_MS}ms var(--sm-ease)`,
+          transform: shown ? `translateY(${drag}px)` : "translateY(100%)",
+          transition: dragging ? "none" : `transform ${SHEET_MS}ms var(--sm-ease)`,
         }}
       >
-        <div className="relative shrink-0 border-b border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)] px-4 pb-3 pt-3">
-          <span
-            aria-hidden
-            className="mx-auto mb-3 block h-1 w-9 rounded-full bg-white/20"
-          />
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              {title && (
-                <h2
-                  id={titleId}
-                  className="truncate text-[19px] font-extrabold tracking-[-0.02em] text-ink"
+        {chrome === "bar" ? (
+          <div
+            className="sm-grab relative shrink-0 border-b border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)] px-4 pb-3 pt-2.5"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
+            <span
+              aria-hidden
+              className="mx-auto mb-3 block h-1 w-9 rounded-full bg-white/20"
+            />
+            <div className="flex items-start gap-3">
+              {onBack && (
+                <Tap
+                  onClick={onBack}
+                  aria-label="Étape précédente"
+                  className="-ml-1 grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
                 >
-                  {title}
-                </h2>
+                  <Icon name="back" size={16} />
+                </Tap>
               )}
-              {headerExtra}
+              <div className="min-w-0 flex-1">
+                {title && (
+                  <h2
+                    id={titleId}
+                    className="truncate text-[19px] font-extrabold tracking-[-0.025em] text-ink"
+                  >
+                    {title}
+                  </h2>
+                )}
+                {headerExtra}
+              </div>
+              <Tap
+                onClick={onClose}
+                aria-label="Fermer"
+                className="grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+              >
+                <Icon name="close" size={16} />
+              </Tap>
             </div>
+          </div>
+        ) : (
+          <div
+            className={cx(
+              "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-300 ease-sm",
+              sunk ? "border-b border-white/8 bg-surface/95 backdrop-blur-md" : "",
+            )}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+          >
+            {/* Poignée : visible tant que le visuel occupe la tête de feuille. */}
+            <span
+              aria-hidden
+              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/45 shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-opacity duration-300"
+              style={{ opacity: sunk ? 0 : 1 }}
+            />
+            {title && (
+              <h2
+                id={titleId}
+                className="min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-300"
+                style={{ opacity: sunk ? 1 : 0 }}
+              >
+                {title}
+              </h2>
+            )}
             <Tap
               onClick={onClose}
               aria-label="Fermer"
-              className="grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+              className={cx(
+                "ml-auto grid size-10 shrink-0 place-items-center rounded-pill border text-white transition-colors duration-300",
+                sunk
+                  ? "border-white/12 bg-surface2 text-ink hover:border-white/30"
+                  : "border-white/15 bg-black/55 backdrop-blur-md hover:bg-black/75",
+              )}
             >
-              <Icon name="close" size={16} />
+              <Icon name="close" size={17} stroke={2.4} />
             </Tap>
           </div>
-        </div>
+        )}
 
-        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className="cf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          onScroll={
+            chrome === "float"
+              ? (e) => {
+                  const next = e.currentTarget.scrollTop > 96;
+                  setSunk((prev) => (prev === next ? prev : next));
+                }
+              : undefined
+          }
+        >
           {children}
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-white/8 bg-surface px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
+          <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(0deg,var(--cf-surface),var(--cf-surface))] px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
             {footer}
           </div>
         )}
@@ -577,7 +1054,7 @@ export function PrimaryAction({
       aria-busy={loading || undefined}
       className={cx(
         TAP,
-        "flex w-full items-center justify-center gap-2.5 rounded-pill bg-accent px-5 py-[15px] text-[15px] font-extrabold tracking-[-0.01em] text-onaccent",
+        "flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-pill bg-accent px-5 text-[15px] font-extrabold tracking-[-0.01em] text-onaccent",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100",
       )}
     >
@@ -616,7 +1093,7 @@ export function GhostAction({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "flex w-full items-center justify-center gap-2 rounded-pill border border-white/12 bg-surface2 px-5 py-[13px] text-[14px] font-bold text-ink hover:border-white/30",
+        "flex min-h-12 w-full items-center justify-center gap-2 rounded-pill border border-white/12 bg-surface2 px-5 text-[14px] font-bold text-ink hover:border-white/30",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100",
       )}
     >

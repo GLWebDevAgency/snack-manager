@@ -1,91 +1,129 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { NAV } from "./content";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { NAV_LEFT, NAV_RIGHT } from "./content";
+import { LogoMark, NotchFillet } from "./icons";
+
+/** `useLayoutEffect` côté client, `useEffect` au rendu serveur (pas d'avertissement). */
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
- * En-tête collant : fond qui se densifie au scroll, menu plein écran ≤ 880 px.
- * Le lien « Demander une démo » est la seule action en accent laiton.
+ * Barre de navigation « encoche » de la maquette.
+ *
+ * Au repos l'encoche noire ne fait que 48 px de large ; au survol (ou au focus
+ * clavier) elle s'ouvre jusqu'à `--hd-open-w` — une largeur MESURÉE sur les
+ * liens réels, parce que les libellés français sont plus longs que ceux du
+ * gabarit d'origine. C'est la fonction `fitNotch` du JS de maquette, portée en
+ * hook : mesure via refs + ResizeObserver, jamais d'écriture DOM manuelle.
  */
 export function SiteHeader() {
-  const [open, setOpen] = useState(false);
-  const [stuck, setStuck] = useState(false);
+  const [openWidth, setOpenWidth] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const onScroll = () => setStuck(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+  const leftRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLAnchorElement>(null);
+
+  const measure = useCallback(() => {
+    const left = leftRef.current;
+    const right = rightRef.current;
+    const logo = logoRef.current;
+    if (!left || !right || !logo) return;
+
+    const groupWidth = (group: HTMLElement) => {
+      const kids = Array.from(group.children) as HTMLElement[];
+      if (kids.length === 0) return 0;
+      return kids.reduce((sum, k) => sum + k.offsetWidth, 0) + 16 * (kids.length - 1);
+    };
+
+    // Groupes symétriques : on prend le plus large des deux, ×2, + le logo + les gouttières.
+    const maxGroup = Math.max(groupWidth(left), groupWidth(right));
+    setOpenWidth(maxGroup * 2 + logo.offsetWidth + 16 * 2 + 36);
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+  useIsoLayoutEffect(() => {
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (leftRef.current) ro.observe(leftRef.current);
+    if (rightRef.current) ro.observe(rightRef.current);
+    window.addEventListener("resize", measure);
+    // Les largeurs changent quand Inter remplace la police de repli.
+    document.fonts?.ready.then(measure).catch(() => {});
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [measure]);
 
   return (
-    <header className="mk-header" data-stuck={stuck}>
-      <div className="mk-wrap">
-        <div className="mk-header-row">
-          <a className="mk-logo" href="#top" aria-label="Snack Manager — accueil">
-            <span className="mk-logo-mark" aria-hidden="true">
-              S
-            </span>
-            Snack Manager
-          </a>
-
-          <nav className="mk-nav" aria-label="Navigation principale">
-            {NAV.map((item) => (
-              <a key={item.href} href={item.href}>
-                {item.label}
+    <header className="site-head">
+      <div className="hd-desktop">
+        <div className="hd-strip" />
+        <div className="hd-row">
+          <NotchFillet className="notch-fillet" />
+          <div
+            className="hd-mid"
+            style={openWidth ? ({ "--hd-open-w": `${openWidth}px` } as React.CSSProperties) : undefined}
+          >
+            <div className="hd-midc">
+              <div className="hd-links" ref={leftRef}>
+                {NAV_LEFT.map((l) => (
+                  <a className="ui-link" href={l.href} key={l.href}>
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+              <a className="hd-logolink" href="#top" aria-label="Accueil" ref={logoRef}>
+                <LogoMark />
               </a>
-            ))}
-          </nav>
-
-          <div className="mk-header-cta">
-            <a className="mk-btn mk-btn--primary" href="#contact">
-              Demander une démo
-            </a>
+              <div className="hd-links" ref={rightRef}>
+                {NAV_RIGHT.map((l) => (
+                  <a className="ui-link" href={l.href} key={l.href}>
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+            </div>
           </div>
+          <NotchFillet className="notch-fillet" flip />
+        </div>
+      </div>
 
+      <div className="hd-mobile">
+        <div className="hd-mobilebar">
+          <a href="#top" aria-label="Accueil">
+            <LogoMark />
+          </a>
           <button
             type="button"
-            className="mk-burger"
-            aria-expanded={open}
-            aria-controls="mk-mobilemenu"
-            aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
-            onClick={() => setOpen((v) => !v)}
+            className={menuOpen ? "hd-burger open" : "hd-burger"}
+            aria-label={menuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-expanded={menuOpen}
+            aria-controls="hd-mobilemenu"
+            onClick={() => setMenuOpen((v) => !v)}
           >
             <span />
             <span />
             <span />
           </button>
         </div>
-      </div>
-
-      <div className="mk-mobilemenu" id="mk-mobilemenu" data-open={open} aria-hidden={!open}>
-        <div className="mk-wrap">
-          <div className="mk-mobilemenu-in">
-            {NAV.map((item) => (
-              <a key={item.href} href={item.href} onClick={() => setOpen(false)} tabIndex={open ? 0 : -1}>
-                {item.label}
-              </a>
-            ))}
+        <nav
+          id="hd-mobilemenu"
+          className={menuOpen ? "hd-mobilemenu open" : "hd-mobilemenu"}
+          aria-hidden={!menuOpen}
+        >
+          {[...NAV_LEFT, ...NAV_RIGHT].map((l) => (
             <a
-              className="mk-btn mk-btn--primary mk-btn--block"
-              href="#contact"
-              onClick={() => setOpen(false)}
-              tabIndex={open ? 0 : -1}
-              style={{ marginTop: 10 }}
+              className="ui-link"
+              href={l.href}
+              key={l.href}
+              tabIndex={menuOpen ? undefined : -1}
+              onClick={() => setMenuOpen(false)}
             >
-              Demander une démo
+              {l.label}
             </a>
-          </div>
-        </div>
+          ))}
+        </nav>
       </div>
     </header>
   );

@@ -4,6 +4,8 @@ export * from './supply';
 export * from './stats';
 export * from './ordering';
 export * from './screens';
+export * from './devices';
+export * from './crm';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

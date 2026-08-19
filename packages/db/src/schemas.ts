@@ -505,6 +505,54 @@ ScreenSchema.index({ pairingCode: 1 }, { sparse: true });
 export type Screen = InferSchemaType<typeof ScreenSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// devices — les appareils de terrain : caisses et écrans cuisine
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Une tablette de comptoir ou de piano.
+ *
+ * Elle n'a ni compte, ni mot de passe : son `deviceToken` EST son identité, et
+ * c'est lui qui porte l'établissement. Sans cette collection, la caisse
+ * embarquait le slug du restaurant en dur dans son code — un seul client
+ * possible par binaire.
+ *
+ * Structure volontairement CALQUÉE sur `screens` : mêmes noms de champs,
+ * mêmes index, même cycle de vie du code d'appairage. Deux mécanismes
+ * d'appairage divergents dans un même produit, c'est deux fois plus de support
+ * au téléphone.
+ */
+export const DeviceSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    name: { type: String, required: true }, // « Caisse comptoir », « Écran cuisine »
+    kind: { type: String, enum: ['pos', 'kds'], required: true },
+    // Code à 6 caractères non ambigus (ni I, ni O, ni 0, ni 1), lu dans le
+    // back-office et recopié sur la tablette. `null` une fois appairé.
+    pairingCode: { type: String, default: null },
+    pairingCodeExpiresAt: { type: Date, default: null },
+    paired: { type: Boolean, default: false },
+    // Secret long remis À L'APPAIRAGE et jamais renvoyé ensuite.
+    deviceToken: { type: String, default: null },
+    // Dernier battement de cœur — source du « hors ligne depuis 12 min ».
+    lastSeenAt: { type: Date, default: null },
+    active: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+DeviceSchema.index({ tenantId: 1, createdAt: -1 });
+/**
+ * Index PARTIEL, et non `sparse` — même piège que sur les écrans : le défaut
+ * écrit explicitement `null`, si bien que deux appareils non appairés
+ * entreraient en collision sur un index unique classique.
+ */
+DeviceSchema.index(
+  { deviceToken: 1 },
+  { unique: true, partialFilterExpression: { deviceToken: { $type: 'string' } } },
+);
+DeviceSchema.index({ pairingCode: 1 }, { sparse: true });
+export type Device = InferSchemaType<typeof DeviceSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // Registre des modèles (consommé par l'API Nest et le seed)
 // ─────────────────────────────────────────────────────────────
 
@@ -522,4 +570,5 @@ export const MODELS = {
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },
+  Device: { name: 'Device', schema: DeviceSchema, collection: 'devices' },
 } as const;

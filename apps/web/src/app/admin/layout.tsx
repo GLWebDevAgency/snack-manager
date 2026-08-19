@@ -59,6 +59,7 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "promos", href: "/admin/promos", label: "Promos", icon: "tag" },
   { id: "hours", href: "/admin/hours", label: "Horaires", icon: "clock" },
   { id: "screens", href: "/admin/screens", label: "Écrans TV", icon: "tv" },
+  { id: "devices", href: "/admin/devices", label: "Caisses & cuisine", icon: "print" },
   { id: "stats", href: "/admin/stats", label: "Statistiques", icon: "chart" },
   { id: "team", href: "/admin/team", label: "Équipe & pointage", icon: "user" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },

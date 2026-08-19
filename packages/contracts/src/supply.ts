@@ -81,6 +81,82 @@ export const INGREDIENT_CATEGORIES = [
 export const IngredientCategorySchema = z.enum(INGREDIENT_CATEGORIES);
 export type IngredientCategory = z.infer<typeof IngredientCategorySchema>;
 
+// ─────────────────────────────────────────────────────────────
+// Modificateurs pilotés par la recette
+//
+// La caisse et la commande en ligne ne proposent QUE ce que la recette
+// contient : « sans tomate » n'apparaît que sur un produit dont la recette
+// porte de la tomate. Le gérant ne ressaisit aucun modificateur produit par
+// produit — c'est la nomenclature (contexte supply) qui pilote la carte.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Catégories retirables par défaut : ce qu'un client demande couramment de
+ * retirer. Pain, viande principale, féculents et emballage n'en sont pas —
+ * les retirer changerait le produit, pas sa garniture.
+ */
+export const REMOVABLE_DEFAULT_CATEGORIES = ['legume', 'fromage', 'sauce'] as const;
+
+/** Défaut appliqué à la création d'un ingrédient quand `removable` n'est pas transmis. */
+export function isRemovableByDefault(category: IngredientCategory): boolean {
+  return (REMOVABLE_DEFAULT_CATEGORIES as readonly string[]).includes(category);
+}
+
+/**
+ * Clé de groupe RÉSERVÉE aux suppléments payants.
+ *
+ * Elle n'est jamais saisie par le gérant : le groupe est projeté depuis la
+ * recette et le catalogue d'ingrédients, et c'est lui qui fait autorité sur le
+ * prix à la création de commande.
+ */
+export const SUPPLEMENT_GROUP_KEY = 'supplements';
+export const SUPPLEMENT_GROUP_NAME = 'Suppléments';
+
+/**
+ * Ordre d'affichage des suppléments au comptoir : d'abord ce qui se vend le
+ * plus vite (fromages, œuf, miel), puis charcuterie et viandes, enfin les
+ * légumes. À catégorie égale, du moins cher au plus cher.
+ */
+export const SUPPLEMENT_CATEGORY_ORDER = [
+  'fromage',
+  'epicerie',
+  'volaille',
+  'viande',
+  'poisson',
+  'legume',
+  'sauce',
+  'feculent',
+  'pain',
+  'dessert',
+  'boisson',
+  'autre',
+  'emballage',
+] as const;
+
+/** Retrait proposé : « sans salade », « sans oignons ». Ne change pas le prix. */
+export interface MenuRemovable {
+  /** Clé stable envoyée dans `removed` à la création de commande. */
+  key: string;
+  /** Libellé affiché (`displayName` de l'ingrédient, sinon son nom). */
+  label: string;
+}
+
+/** Supplément payant proposé : le prix vient de PostgreSQL, jamais du client. */
+export interface MenuSupplement {
+  /** Clé stable envoyée comme `choiceKey` du groupe « supplements ». */
+  key: string;
+  label: string;
+  /** Prix du supplément en centimes, ajouté au prix unitaire de la ligne. */
+  priceCents: number;
+  category: IngredientCategory;
+}
+
+/** Les deux blocs dérivés de la recette, joints à chaque produit du menu. */
+export interface ProductModifiers {
+  removables: MenuRemovable[];
+  supplements: MenuSupplement[];
+}
+
 /** Tous les types de mouvement existants (`sale` est généré par le système). */
 export const STOCK_MOVEMENT_TYPES = ['purchase', 'sale', 'waste', 'count'] as const;
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
@@ -106,10 +182,40 @@ export const IngredientCreateSchema = z.object({
   /** Seuil de réassort — alerte « à commander » quand stock < seuil. */
   parLevel: z.number().nonnegative().default(0),
   storage: StorageModeSchema.default('sec'),
+  /** Absent = défaut par catégorie (`isRemovableByDefault`). */
+  removable: z.boolean().optional(),
+  /** Renseigné = l'ingrédient est proposé en supplément payant. `null` = non proposé. */
+  supplementPriceCents: z.number().int().nonnegative().nullable().optional(),
+  /** Libellé court pour la caisse et le ticket (« Oignons »). */
+  displayName: z.string().min(1).max(60).nullable().optional(),
 });
 export type IngredientCreate = z.infer<typeof IngredientCreateSchema>;
 
-export const IngredientUpdateSchema = IngredientCreateSchema.partial();
+/**
+ * Mise à jour PARTIELLE — surtout pas `IngredientCreateSchema.partial()`.
+ *
+ * `.partial()` rend les champs facultatifs mais CONSERVE leurs `.default()`
+ * (cf. la même régression corrigée sur les produits) : un PATCH
+ * `{ supplementPriceCents: 100 }` ressortait de la validation avec
+ * `currentStock: 0, costPerUnitCents: 0, allergens: []` et écrasait le stock
+ * réel, le coût matière et les allergènes de l'ingrédient.
+ *
+ * Ici aucun champ ne porte de valeur par défaut : ce qui n'est pas transmis
+ * n'est pas modifié.
+ */
+export const IngredientUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  category: IngredientCategorySchema.optional(),
+  unit: BaseUnitSchema.optional(),
+  allergens: z.array(AllergenSchema).optional(),
+  costPerUnitCents: z.number().int().nonnegative().optional(),
+  currentStock: z.number().nonnegative().optional(),
+  parLevel: z.number().nonnegative().optional(),
+  storage: StorageModeSchema.optional(),
+  removable: z.boolean().optional(),
+  supplementPriceCents: z.number().int().nonnegative().nullable().optional(),
+  displayName: z.string().min(1).max(60).nullable().optional(),
+});
 export type IngredientUpdate = z.infer<typeof IngredientUpdateSchema>;
 
 /** Rupture ingrédient — déclenche la cascade vers les produits Mongo. */
@@ -238,6 +344,12 @@ export interface SupplyIngredient {
   storage: StorageMode;
   isOut: boolean;
   active: boolean;
+  /** L'ingrédient peut être retiré du produit (« sans salade »). */
+  removable: boolean;
+  /** Prix du supplément en centimes — `null` = non proposé en supplément. */
+  supplementPriceCents: number | null;
+  /** Libellé court pour la caisse et le ticket — `null` = utiliser `name`. */
+  displayName: string | null;
   /** Indicateur calculé : currentStock < parLevel. */
   belowPar: boolean;
   brands: SupplyBrand[];

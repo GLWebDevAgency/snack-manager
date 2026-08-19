@@ -3,13 +3,25 @@
 /**
  * Fiche produit — feuille montante de configuration.
  *
+ * C’est le moment clé du parcours : le client y passe plus de temps que sur
+ * toute autre vue. Structure reprise de la maquette
+ * (`docs/specs/commande-en-ligne.md` §5.3), dans l’ordre :
+ *
+ *   visuel plein cadre (photo ou typographie) — la croix flotte par-dessus
+ *   ├ identité : nom, badge, prix de base, description
+ *   ├ « Format » : contrôle segmenté (le choix qui pilote le prix)
+ *   ├ choix obligatoires (pain, garniture, plat…) : segments ou chips
+ *   ├ choix libres (sauces, viandes) : chips avec compteur « 1/2 »
+ *   ├ « Personnaliser » : ce que je retire · ce que j’ajoute (payant)
+ *   └ mot pour la cuisine
+ *
  * Un seul composant sert la création ET l’édition : « Modifier » depuis le
  * panier ouvre la même feuille pré-remplie (le `Draft` porte le `lineId`), il
  * n’y a jamais de re-saisie. Les bornes min/max sont celles du menu, y compris
  * les règles par variante (le nombre de viandes suit la taille du tacos).
  */
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import type { MenuGroup } from "./api";
@@ -26,19 +38,42 @@ import {
   type Draft,
 } from "./cart";
 import { euros } from "./helpers";
+/** Groupe réservé : c'est le serveur qui fait foi sur le prix d'un supplément. */
+const SUPPLEMENT_GROUP = "supplements";
 import {
+  Badge,
   Money,
   OptionChip,
   OptionRow,
   PrimaryAction,
   SectionLabel,
+  Segmented,
   Sheet,
   Stepper,
+  Tap,
 } from "./primitives";
 
-/** Un groupe est rendu en lignes cochables dès qu’il porte des prix ou des sous-titres. */
-function isPricedGroup(group: MenuGroup, variantKey: string | null): boolean {
-  return group.choices.some((c) => choicePrice(group, c.key, variantKey) !== 0);
+/**
+ * Trois familles de groupes, trois traitements visuels :
+ *  — `choice` : le client DOIT trancher (pain, garniture, plat) ;
+ *  — `free`   : plusieurs choix offerts (sauces, viandes comprises dans le prix) ;
+ *  — `extra`  : suppléments payants, regroupés sous « Ce que j’ajoute ».
+ */
+type GroupKind = "choice" | "free" | "extra";
+
+function kindOf(group: MenuGroup, variantKey: string | null): GroupKind {
+  const { min } = groupRules(group, variantKey);
+  if (min >= 1) return "choice";
+  const priced = group.choices.every(
+    (c) => choicePrice(group, c.key, variantKey) > 0,
+  );
+  return priced ? "extra" : "free";
+}
+
+/** Un groupe plafonné à zéro pour la variante choisie n’a rien à montrer. */
+function isMuted(group: MenuGroup, variantKey: string | null): boolean {
+  const { max } = groupRules(group, variantKey);
+  return max === 0;
 }
 
 export function ProductSheet({
@@ -61,30 +96,37 @@ export function ProductSheet({
   if (draft && draft !== snapshot) setSnapshot(draft);
 
   const current = draft ?? snapshot;
+
+  const groups = useMemo(() => {
+    if (!current) return { choice: [], free: [], extra: [] };
+    const bucket: Record<GroupKind, MenuGroup[]> = { choice: [], free: [], extra: [] };
+    for (const group of current.product.groups) {
+      if (isMuted(group, current.variantKey)) continue;
+      bucket[kindOf(group, current.variantKey)].push(group);
+    }
+    return bucket;
+  }, [current]);
+
   if (!current) return null;
 
   const { product } = current;
   const unit = draftUnitPrice(current);
   const blocker = draftBlocker(current);
   const editing = current.lineId !== null;
+  const base = basePrice(product, current.variantKey);
+  const extras = unit - base;
+  const canCustomize =
+    product.removables.length > 0 ||
+    groups.extra.length > 0 ||
+    product.supplements.length > 0;
 
   return (
     <Sheet
       open={draft !== null}
       onClose={onClose}
+      chrome="float"
       title={product.name}
-      headerExtra={
-        <p className="mt-0.5 flex items-center gap-2 text-[13px] text-mut">
-          <span className="tabular-nums">
-            {euros(basePrice(product, current.variantKey))}
-          </span>
-          {product.isNew && (
-            <span className="rounded-pill bg-accent px-2 py-px text-[10px] font-extrabold uppercase tracking-[0.08em] text-onaccent">
-              Nouveau
-            </span>
-          )}
-        </p>
-      }
+      zIndex={60}
       footer={
         <div className="flex items-center gap-3">
           <Stepper
@@ -108,34 +150,56 @@ export function ProductSheet({
         </div>
       }
     >
-      <ProductHeader
-        name={product.name}
-        photoUrl={product.photoUrl}
-        description={product.description}
-      />
+      <ProductHero name={product.name} photoUrl={product.photoUrl} />
 
-      <div className="flex flex-col gap-6 px-4 pb-6 pt-5">
+      <div className="px-4 pb-1 pt-4">
+        <div className="flex items-start gap-3">
+          <h2 className="min-w-0 flex-1 text-[23px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
+            {product.name}
+          </h2>
+          {product.isNew && (
+            <span className="mt-1.5">
+              <Badge tone="new">Nouveau</Badge>
+            </span>
+          )}
+        </div>
+        <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-[16px] font-extrabold tabular-nums tracking-[-0.02em] text-ink">
+            {euros(base)}
+          </span>
+          {extras > 0 && (
+            <span className="text-[13px] font-semibold tabular-nums text-accent">
+              + {euros(extras)} d’options
+            </span>
+          )}
+        </p>
+        {product.description && (
+          <p className="mt-2.5 text-[14px] leading-relaxed text-mut">
+            {product.description}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-6 px-4 pb-8 pt-5">
+        {/* ── Format : le choix qui pilote le prix, donc le premier ── */}
         {product.variants.length > 0 && (
           <section className="flex flex-col gap-2.5">
-            <SectionLabel>Format</SectionLabel>
-            <div className="flex flex-wrap gap-2">
-              {product.variants.map((variant) => (
-                <OptionChip
-                  key={variant.key}
-                  on={current.variantKey === variant.key}
-                  onClick={() => onChange(setVariant(current, variant.key))}
-                >
-                  <span className="font-bold">{variant.name}</span>
-                  <span className="text-[12px] font-bold tabular-nums opacity-70">
-                    {euros(variant.price)}
-                  </span>
-                </OptionChip>
-              ))}
-            </div>
+            <SectionLabel hint="obligatoire">Format</SectionLabel>
+            <Segmented
+              label="Format"
+              value={current.variantKey}
+              onChange={(key) => onChange(setVariant(current, key))}
+              options={product.variants.map((variant) => ({
+                key: variant.key,
+                label: variant.name,
+                sub: euros(variant.price),
+              }))}
+            />
           </section>
         )}
 
-        {product.groups.map((group) => (
+        {/* ── Choix obligatoires, dans l’ordre voulu par le restaurant ── */}
+        {groups.choice.map((group) => (
           <GroupSection
             key={group.key}
             group={group}
@@ -144,39 +208,111 @@ export function ProductSheet({
           />
         ))}
 
-        {product.removables.length > 0 && (
-          <section className="flex flex-col gap-2.5">
-            <SectionLabel hint="on retire, c’est offert">La recette</SectionLabel>
-            <div className="flex flex-wrap gap-2">
-              <OptionChip
-                on={current.removed.length === 0}
-                onClick={() => onChange({ ...current, removed: [] })}
-              >
-                Complet
-              </OptionChip>
-              {product.removables.map((item) => {
-                const on = current.removed.includes(item);
-                return (
+        {/* ── Choix compris dans le prix ── */}
+        {groups.free.map((group) => (
+          <GroupSection
+            key={group.key}
+            group={group}
+            draft={current}
+            onChange={onChange}
+          />
+        ))}
+
+        {/* ── Personnaliser : retraits gratuits · ajouts payants ── */}
+        {canCustomize && (
+          <section className="flex flex-col gap-4">
+            <SectionLabel hint="à votre goût">Personnaliser</SectionLabel>
+
+            {product.removables.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                <SubLabel icon="minus">Ce que je retire</SubLabel>
+                <div className="flex flex-wrap gap-2">
                   <OptionChip
-                    key={item}
-                    on={on}
-                    onClick={() =>
-                      onChange({
-                        ...current,
-                        removed: on
-                          ? current.removed.filter((r) => r !== item)
-                          : [...current.removed, item],
-                      })
-                    }
+                    on={current.removed.length === 0}
+                    onClick={() => onChange({ ...current, removed: [] })}
                   >
-                    sans {item}
+                    Complet
                   </OptionChip>
-                );
-              })}
-            </div>
+                  {product.removables.map((item) => {
+                    const on = current.removed.includes(item.key);
+                    return (
+                      <OptionChip
+                        key={item.key}
+                        on={on}
+                        onClick={() =>
+                          onChange({
+                            ...current,
+                            removed: on
+                              ? current.removed.filter((r) => r !== item.key)
+                              : [...current.removed, item.key],
+                          })
+                        }
+                      >
+                        sans {item.label.toLowerCase()}
+                      </OptionChip>
+                    );
+                  })}
+                </div>
+                <p className="text-[12.5px] text-mut">
+                  Ce que vous retirez est offert et part tel quel en cuisine.
+                </p>
+              </div>
+            )}
+
+            {product.supplements.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                <SubLabel icon="plus">Suppléments</SubLabel>
+                <div className="flex flex-wrap gap-2">
+                  {product.supplements.map((sup) => {
+                    const on = (current.picked[SUPPLEMENT_GROUP] ?? []).includes(sup.key);
+                    return (
+                      <OptionChip
+                        key={sup.key}
+                        on={on}
+                        onClick={() => {
+                          const picked = current.picked[SUPPLEMENT_GROUP] ?? [];
+                          onChange({
+                            ...current,
+                            picked: {
+                              ...current.picked,
+                              [SUPPLEMENT_GROUP]: on
+                                ? picked.filter((k) => k !== sup.key)
+                                : [...picked, sup.key],
+                            },
+                          });
+                        }}
+                      >
+                        {sup.label}
+                        <span className="ml-1.5 tabular-nums opacity-70">
+                          +{euros(sup.priceCents)}
+                        </span>
+                      </OptionChip>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {groups.extra.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                <SubLabel icon="plus">Ce que j’ajoute</SubLabel>
+                <div className="overflow-hidden rounded-card border border-white/8 bg-white/[0.02]">
+                  {groups.extra.map((group) => (
+                    <ExtraGroup
+                      key={group.key}
+                      group={group}
+                      draft={current}
+                      onChange={onChange}
+                      showName={groups.extra.length > 1}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
+        {/* ── Mot pour la cuisine ── */}
         <section className="flex flex-col gap-2.5">
           <SectionLabel hint="facultatif">Un mot pour la cuisine</SectionLabel>
           <textarea
@@ -193,47 +329,70 @@ export function ProductSheet({
   );
 }
 
-/** Bandeau visuel : photo si le restaurant en a une, sinon typographie. */
-function ProductHeader({
+/** Intitulé de sous-bloc dans « Personnaliser ». */
+function SubLabel({
+  children,
+  icon,
+}: {
+  children: ReactNode;
+  icon: "plus" | "minus";
+}) {
+  return (
+    <p className="flex items-center gap-2 text-[13px] font-bold text-ink">
+      <span
+        aria-hidden
+        className={cx(
+          "grid size-5 place-items-center rounded-full",
+          icon === "plus" ? "bg-accent text-onaccent" : "bg-white/12 text-ink",
+        )}
+      >
+        <Icon name={icon} size={12} stroke={3} />
+      </span>
+      {children}
+    </p>
+  );
+}
+
+/**
+ * Visuel de tête. Avec photo : plein cadre, fondu vers la surface de la feuille
+ * pour que l’image ne soit jamais coupée au couteau. Sans photo : bandeau
+ * typographique — le nom du produit en très grand, en contour.
+ */
+function ProductHero({
   name,
   photoUrl,
-  description,
 }: {
   name: string;
   photoUrl: string | null;
-  description: string;
 }) {
+  if (photoUrl) {
+    return (
+      <div className="relative h-[188px] w-full overflow-hidden">
+        {/* Photo produit : URL saisie par le restaurant, domaine non maîtrisé. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={photoUrl} alt={name} className="size-full object-cover" />
+        <span aria-hidden className="sm-scrim absolute inset-x-0 bottom-0 h-24" />
+      </div>
+    );
+  }
   return (
-    <div>
-      {photoUrl ? (
-        // Photo produit : URL saisie par le restaurant, domaine non maîtrisé.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={photoUrl}
-          alt={name}
-          className="h-44 w-full border-b border-white/6 object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden
-          className="relative h-24 overflow-hidden border-b border-white/6 bg-[linear-gradient(180deg,#171717,#0d0d0d)]"
-        >
-          <span className="absolute -left-1 top-1/2 -translate-y-1/2 select-none whitespace-nowrap text-[62px] font-black uppercase leading-none tracking-[-0.04em] text-white/[0.05]">
-            {name}
-          </span>
-          <span className="absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--cf-accent),transparent)] opacity-50" />
-        </div>
-      )}
-      {description && (
-        <p className="px-4 pt-4 text-[14px] leading-relaxed text-mut">
-          {description}
-        </p>
-      )}
+    <div
+      aria-hidden
+      className="sm-grain relative h-[112px] overflow-hidden bg-[linear-gradient(180deg,#1a1a1a,#0d0d0d)]"
+    >
+      <span className="sm-ghost absolute -left-2 top-1/2 -translate-y-1/2 text-[64px] font-black">
+        {name}
+      </span>
+      <span className="absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--cf-accent),transparent)] opacity-60" />
     </div>
   );
 }
 
-/** Une section d’options : chips pour les choix gratuits, lignes pour les payants. */
+/**
+ * Section d’un groupe de choix : segments quand l’alternative est courte,
+ * chips au-delà. Le compteur « 1/2 » vit dans l’intitulé, à droite — le client
+ * sait toujours combien il lui reste de choix sans compter les pastilles.
+ */
 function GroupSection({
   group,
   draft,
@@ -250,45 +409,45 @@ function GroupSection({
   // rendrait le groupe non modifiable une fois la valeur par défaut posée.
   const capped =
     group.type === "multi" && max > 1 && Number.isFinite(max) && picked.length >= max;
-  const priced = isPricedGroup(group, draft.variantKey);
+  const satisfied = picked.length >= min;
 
   const hint = (() => {
-    if (Number.isFinite(max) && max > 1) return `${picked.length}/${max}`;
+    // Compteur dès qu’on peut en cocher plusieurs — « 1/2 » vaut mieux qu’un
+    // adjectif : le client sait ce qu’il lui reste sans compter les pastilles.
+    if (group.type === "multi" && Number.isFinite(max)) {
+      return `${picked.length}/${max}`;
+    }
     if (min >= 1) return "obligatoire";
     return group.type === "multi" ? "plusieurs choix" : "facultatif";
   })();
 
-  const satisfied = picked.length >= min;
+  // Deux à quatre alternatives exclusives : un segment se lit d’un coup d’œil.
+  const asSegments = group.type === "single" && group.choices.length <= 4;
 
   return (
     <section className="flex flex-col gap-2.5">
       <SectionLabel
         hint={
-          <span className={cx("tabular-nums", !satisfied && "text-alertt")}>
-            {hint}
-          </span>
+          <span className={cx("tabular-nums", !satisfied && "text-alertt")}>{hint}</span>
         }
       >
         {group.name}
       </SectionLabel>
 
-      {priced ? (
-        <div className="rounded-card border border-white/8 bg-white/[0.02] px-3.5">
-          {group.choices.map((choice) => {
-            const on = picked.includes(choice.key);
-            return (
-              <OptionRow
-                key={choice.key}
-                on={on}
-                radio={group.type === "single" || max === 1}
-                disabled={!on && capped}
-                title={choice.name}
-                price={choicePrice(group, choice.key, draft.variantKey)}
-                onClick={() => onChange(toggleChoice(draft, group, choice.key))}
-              />
-            );
+      {asSegments ? (
+        <Segmented
+          label={group.name}
+          value={picked[0] ?? null}
+          onChange={(key) => onChange(toggleChoice(draft, group, key))}
+          options={group.choices.map((choice) => {
+            const price = choicePrice(group, choice.key, draft.variantKey);
+            return {
+              key: choice.key,
+              label: choice.name,
+              sub: price > 0 ? `+${euros(price)}` : undefined,
+            };
           })}
-        </div>
+        />
       ) : (
         <div className="flex flex-wrap gap-2">
           {group.choices.map((choice) => {
@@ -298,6 +457,7 @@ function GroupSection({
                 key={choice.key}
                 on={on}
                 disabled={!on && capped}
+                price={choicePrice(group, choice.key, draft.variantKey)}
                 onClick={() => onChange(toggleChoice(draft, group, choice.key))}
               >
                 {choice.name}
@@ -307,13 +467,93 @@ function GroupSection({
         </div>
       )}
 
-      {capped && group.type === "multi" && (
-        <p className="flex items-center gap-1.5 text-[13px] text-mut">
-          <Icon name="check" size={14} className="text-ok" />
+      {capped && (
+        <p className="flex items-center gap-1.5 text-[12.5px] text-mut">
+          <Icon name="check" size={13} className="text-ok" />
           Sélection complète — décochez pour changer.
         </p>
       )}
     </section>
+  );
+}
+
+/** Au-delà de ce seuil, un groupe de suppléments est replié : 28 lignes de
+ *  fromages ne se lisent pas, elles s’endurent. */
+const EXTRAS_PREVIEW = 6;
+
+/**
+ * Un groupe de suppléments payants, en lignes cochables. Les groupes longs
+ * n’affichent que leurs premières lignes et ce qui est déjà coché : la fiche
+ * reste parcourable au pouce, tout est à un appui.
+ */
+function ExtraGroup({
+  group,
+  draft,
+  onChange,
+  showName,
+}: {
+  group: MenuGroup;
+  draft: Draft;
+  onChange: (next: Draft) => void;
+  /** Plusieurs groupes de suppléments : on rappelle lequel. */
+  showName: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const picked = draft.picked[group.key] ?? [];
+  const { max } = groupRules(group, draft.variantKey);
+  const capped =
+    group.type === "multi" && max > 1 && Number.isFinite(max) && picked.length >= max;
+  const single = group.type === "single" || max === 1;
+
+  const foldable = group.choices.length > EXTRAS_PREVIEW + 2;
+  const shown =
+    !foldable || expanded
+      ? group.choices
+      : group.choices.filter(
+          (choice, i) => i < EXTRAS_PREVIEW || picked.includes(choice.key),
+        );
+  const hidden = group.choices.length - shown.length;
+
+  return (
+    <div className="border-b border-white/6 px-3.5 last:border-b-0">
+      {showName && (
+        <p className="pt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+          {group.name}
+        </p>
+      )}
+      {shown.map((choice) => {
+        const on = picked.includes(choice.key);
+        return (
+          <OptionRow
+            key={choice.key}
+            on={on}
+            radio={single && group.choices.length > 1}
+            disabled={!on && capped}
+            title={choice.name}
+            price={choicePrice(group, choice.key, draft.variantKey)}
+            onClick={() => onChange(toggleChoice(draft, group, choice.key))}
+          />
+        );
+      })}
+      {foldable && hidden > 0 && (
+        <Tap
+          onClick={() => setExpanded(true)}
+          className="flex w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-accent"
+        >
+          Voir les {hidden} autres
+          <Icon name="arrow" size={13} stroke={2.6} className="rotate-90" />
+        </Tap>
+      )}
+      {foldable && expanded && (
+        <Tap
+          onClick={() => setExpanded(false)}
+          className="flex w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-mut hover:text-ink"
+        >
+          Réduire
+          <Icon name="arrow" size={13} stroke={2.6} className="-rotate-90" />
+        </Tap>
+      )}
+    </div>
   );
 }
 

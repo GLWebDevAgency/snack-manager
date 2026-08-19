@@ -1,62 +1,61 @@
 "use client";
 
 import { useId, useState } from "react";
-import { CONTACT_EMAIL, FAQ } from "./content";
-import { MkIcon } from "./icons";
+import { FAQ } from "./content";
+import { FaqChevron } from "./icons";
 
 /**
- * FAQ en accordéon : un seul panneau ouvert, tous fermables. Vrais `<button>`
- * avec `aria-expanded`/`aria-controls` — le clavier fonctionne sans code
- * supplémentaire, et la hauteur s'anime en grid-template-rows (0fr → 1fr) donc
- * aucune réponse n'est tronquée quelle que soit sa longueur.
+ * FAQ en accordéon — une seule réponse ouverte à la fois (comportement du JS
+ * de la maquette). La hauteur est animée par `grid-template-rows: 0fr → 1fr`
+ * plutôt que par un `max-height` arbitraire : les réponses longues ne sont
+ * jamais tronquées.
  */
 export function Faq() {
-  const [open, setOpen] = useState(0);
-  const base = useId().replace(/[:]/g, "");
+  const [open, setOpen] = useState<number | null>(0);
+  const uid = useId();
 
   return (
-    <section className="mk-section" id="faq">
-      <div className="mk-wrap">
-        <div className="mk-faq">
-          <div data-rv>
-            <span className="mk-eyebrow">FAQ</span>
-            <h2 className="mk-h2" style={{ marginTop: 16 }}>
-              Questions fréquentes
-            </h2>
-            <p className="mk-lead" style={{ marginTop: 14 }}>
-              Une question précise ?{" "}
-              <a className="mk-link" href="#contact">
-                Contactez-nous
-              </a>{" "}
-              ou écrivez à{" "}
-              <a className="mk-link" href={`mailto:${CONTACT_EMAIL}`}>
-                {CONTACT_EMAIL}
-              </a>
-              .
-            </p>
-          </div>
+    <section className="faq-section" id="faq">
+      <div className="faq-grid">
+        <div className="faq-left rv rv-x-l">
+          <span className="badge">FAQ</span>
+          <h2 className="h2">Questions fréquentes</h2>
+          <p className="body-text faq-help">
+            Une question précise ?{" "}
+            <a href="#contact" className="faq-helplink">
+              Contactez-nous
+            </a>
+          </p>
+        </div>
 
-          <div className="mk-faq-list" data-rv style={{ transitionDelay: "60ms" }}>
+        <div className="rv rv-x-r">
+          <div className="faq-list">
             {FAQ.map((item, i) => {
               const isOpen = open === i;
               return (
-                <div className="mk-faq-item" key={item.q} data-open={isOpen ? "true" : undefined}>
-                  <h3 style={{ margin: 0 }}>
-                    <button
-                      type="button"
-                      className="mk-faq-q"
-                      aria-expanded={isOpen}
-                      aria-controls={`${base}-a-${i}`}
-                      id={`${base}-q-${i}`}
-                      onClick={() => setOpen(isOpen ? -1 : i)}
-                    >
-                      {item.q}
-                      <MkIcon name="chevron" size={16} />
-                    </button>
-                  </h3>
-                  <div className="mk-faq-a" id={`${base}-a-${i}`} role="region" aria-labelledby={`${base}-q-${i}`}>
-                    <div>
-                      <p>{item.a}</p>
+                <div className={isOpen ? "faq-item open" : "faq-item"} key={item.q}>
+                  <button
+                    type="button"
+                    className="faq-q"
+                    id={`${uid}-q${i}`}
+                    aria-expanded={isOpen}
+                    aria-controls={`${uid}-a${i}`}
+                    onClick={() => setOpen(isOpen ? null : i)}
+                  >
+                    <span className="h5">{item.q}</span>
+                    <span className="faq-chevron">
+                      <FaqChevron />
+                    </span>
+                  </button>
+                  <div
+                    className="faq-answerwrap"
+                    id={`${uid}-a${i}`}
+                    role="region"
+                    aria-labelledby={`${uid}-q${i}`}
+                    aria-hidden={!isOpen}
+                  >
+                    <div className="faq-answerinner">
+                      <p className="body-text faq-answer">{item.a}</p>
                     </div>
                   </div>
                 </div>

@@ -146,7 +146,7 @@ export function draftFromLine(line: CartLine, product: MenuProduct): Draft {
     product,
     variantKey,
     picked,
-    removed: line.removed.filter((r) => product.removables.includes(r)),
+    removed: line.removed.filter((r) => product.removables.some((x) => x.key === r)),
     note: line.note ?? "",
     qty: Math.max(1, line.qty),
   };
@@ -222,19 +222,27 @@ export function draftUnitPrice(draft: Draft): number {
   );
 }
 
-/** Premier groupe non satisfait — sert à désactiver le CTA et à l’expliquer. */
+/**
+ * Premier groupe non satisfait — sert à désactiver le CTA et à l’expliquer.
+ *
+ * Le libellé atterrit dans un bouton de 240 px : il doit tenir sans troncature.
+ * D’où la forme courte « Choisissez : Viandes » plutôt qu’une phrase.
+ */
 export function draftBlocker(draft: Draft): string | null {
   if (draft.product.variants.length > 0 && !draft.variantKey) {
-    return "Choisissez une taille";
+    return "Choisissez le format";
   }
   for (const group of draft.product.groups) {
     const { min, max } = groupRules(group, draft.variantKey);
     const count = (draft.picked[group.key] ?? []).length;
     if (count < min) {
       const missing = min - count;
-      return min === max && min > 1
-        ? `Choisissez ${min} × ${group.name.toLowerCase()}`
-        : `Choisissez ${missing > 1 ? `${missing} options` : "une option"} · ${group.name}`;
+      if (min === max && min > 1) {
+        return `Choisissez ${min} ${group.name.toLowerCase()}`;
+      }
+      return missing > 1
+        ? `Encore ${missing} · ${group.name}`
+        : `Choisissez : ${group.name}`;
     }
     if (count > max) return `${group.name} : ${max} maximum`;
   }

@@ -214,6 +214,150 @@ const INGREDIENT_DEFS: IngredientDef[] = [
   I('boite-carton', 'Boîte carton (box)', 'emballage', 'pcs', [], 22, 'sec', 60),
 ];
 
+// ─────────────────────────────────────────────────────────────
+// 1 bis. Modificateurs pilotés par la recette
+//
+// Ces trois colonnes suffisent à alimenter TOUTE la caisse : les « sans X »
+// proposés sur un produit sont ses ingrédients retirables, et les suppléments
+// payants son catalogue d'ingrédients tarifés. Aucune ressaisie produit par
+// produit — la recette fait la carte.
+// ─────────────────────────────────────────────────────────────
+
+/** Miroir de `SUPPLEMENT_GROUP_KEY` (@sm/contracts) — @sm/supply ne dépend pas de contracts. */
+const SUPPLEMENT_GROUP_KEY = 'supplements';
+
+/** Catégories retirables par défaut (miroir de `isRemovableByDefault`, @sm/contracts). */
+const REMOVABLE_CATEGORIES = new Set<IngCategory>(['legume', 'fromage', 'sauce']);
+
+/**
+ * Exceptions au défaut par catégorie.
+ * `true`  : épicerie qu'on retire couramment (l'œuf du végétarien, le miel du chèvre-miel).
+ * `false` : produits panés vendus tels quels — « sans onion rings » sur une
+ *           barquette d'onion rings n'a aucun sens au comptoir.
+ */
+const REMOVABLE_OVERRIDES: Record<string, boolean> = {
+  oeufs: true,
+  miel: true,
+  'onion-rings': false,
+  jalapenos: false,
+  'mozza-sticks': false,
+};
+
+const isRemovable = (d: IngredientDef): boolean =>
+  REMOVABLE_OVERRIDES[d.key] ?? REMOVABLE_CATEGORIES.has(d.category);
+
+/**
+ * Tarifs RÉELS des suppléments de la carte Class'Food
+ * (design_handoff_snack_manager/menu-data.js — supp100 / supp150 / supp080).
+ * Un ingrédient absent de cette table n'est jamais proposé en supplément.
+ */
+const SUPPLEMENT_PRICES: Record<string, number> = {
+  // +1,00 € — fromages, œuf, miel
+  cheddar: 100,
+  chevre: 100,
+  bleu: 100,
+  boursin: 100,
+  miel: 100,
+  oeufs: 100,
+  reblochon: 100,
+  raclette: 100,
+  camembert: 100,
+  // +1,50 € — charcuterie de volaille
+  'lardons-dinde': 150,
+  'bacon-dinde': 150,
+  'jambon-dinde': 150,
+  chorizo: 150,
+  // +0,80 € — légumes
+  champignons: 80,
+  avocat: 80,
+  poivrons: 80,
+  aubergine: 80,
+  'oignons-frits': 80,
+  // +2,00 € — viandes en supplément (les viandes du « Compose ton Tacos »)
+  'viande-kebab': 200,
+  'steak-hache': 200,
+  kefta: 200,
+  merguez: 200,
+  'escalope-poulet': 200,
+  'poulet-pane': 200,
+  'poulet-tikka': 200,
+  'poulet-tandoori': 200,
+  'cordon-bleu': 200,
+  nuggets: 200,
+  tenders: 200,
+};
+
+/**
+ * Libellés courts pour la caisse et le ticket : le stock parle de
+ * « Oignon rouge », le client demande « sans oignons ».
+ */
+const DISPLAY_NAMES: Record<string, string> = {
+  'viande-kebab': 'Kebab',
+  'steak-hache': 'Steak',
+  kefta: 'Kefta',
+  'escalope-poulet': 'Poulet',
+  'poulet-pane': 'Poulet pané',
+  'poulet-tikka': 'Tikka',
+  'poulet-tandoori': 'Tandoori',
+  nuggets: 'Nuggets',
+  tenders: 'Tenders',
+  wings: 'Wings',
+  'bacon-dinde': 'Bacon',
+  'lardons-dinde': 'Lardons',
+  chorizo: 'Chorizo',
+  'saucisse-hotdog': 'Saucisse',
+  'poisson-pane': 'Poisson pané',
+  thon: 'Thon',
+  calamar: 'Calamars',
+  cheddar: 'Cheddar',
+  chevre: 'Chèvre',
+  boursin: 'Boursin',
+  raclette: 'Raclette',
+  mozzarella: 'Mozzarella',
+  emmental: 'Emmental',
+  burrata: 'Burrata',
+  'mozza-sticks': 'Mozza sticks',
+  salade: 'Salade',
+  'oignon-rouge': 'Oignons',
+  'oignons-frits': 'Oignons frits',
+  'onion-rings': 'Onion rings',
+  jalapenos: 'Jalapeños',
+  'galette-pdt': 'Galette de pomme de terre',
+  oeufs: 'Œuf',
+  'sauce-ketchup': 'Ketchup',
+  'sauce-mayonnaise': 'Mayonnaise',
+  'sauce-samourai': 'Samouraï',
+  'sauce-andalouse': 'Andalouse',
+  'sauce-biggy': 'Biggy',
+  'sauce-blanche': 'Sauce blanche',
+  'sauce-harissa': 'Harissa',
+  'sauce-cheesy': 'Cheesy',
+  'sauce-algerienne': 'Algérienne',
+  'sauce-fromagere': 'Sauce fromagère',
+  'sauce-creme': 'Sauce crème',
+  'base-milkshake': 'Milkshake',
+  'gobelet-milkshake': 'Gobelet milkshake',
+  'bol-salade': 'Bol salade',
+  'boite-carton': 'Boîte carton',
+  'glace-100': 'Glace 100 ml',
+  'glace-500': 'Glace 500 ml',
+  'tarte-daim': 'Tarte au Daim',
+  cheesecake: 'Cheesecake',
+  tiramisu: 'Tiramisu',
+  fondant: 'Fondant chocolat',
+  oreo: 'Oréo',
+  bueno: 'Kinder Bueno',
+  compote: 'Compote',
+  cafe: 'Café / thé',
+};
+
+/** Colonnes « modificateurs » d'un ingrédient — identiques canonique et fork. */
+const modifierColumns = (d: IngredientDef) => ({
+  removable: isRemovable(d),
+  supplementPriceCents: SUPPLEMENT_PRICES[d.key] ?? null,
+  displayName: DISPLAY_NAMES[d.key] ?? null,
+});
+
 /** Stocks du fork Class'Food : 3 ingrédients sous le par (alertes), 1 à zéro. */
 const UNDER_PAR: Record<string, number> = {
   'pain-burger': 12, // par 40 → alerte réassort
@@ -1347,6 +1491,7 @@ async function main() {
       currentStock: '0',
       parLevel: String(d.par),
       storage: d.storage,
+      ...modifierColumns(d),
       isOut: false,
       active: true,
     };
@@ -1377,6 +1522,7 @@ async function main() {
       currentStock: String(stock),
       parLevel: String(d.par),
       storage: d.storage,
+      ...modifierColumns(d),
       isOut: false,
       active: true,
     };
@@ -1435,6 +1581,11 @@ async function main() {
   for (const p of products) {
     const keyName = `${catName.get(p.categoryId.toString())}|${p.name}`;
     for (const g of p.optionGroups ?? []) {
+      // Groupe RÉSERVÉ, projeté par l'API depuis la recette et le catalogue :
+      // il n'a pas de nomenclature à saisir, et son contenu est optionnel — lui
+      // en donner une propagerait à tort la rupture d'un supplément à tous les
+      // produits qui le proposent.
+      if (g.key === SUPPLEMENT_GROUP_KEY) continue;
       for (const c of g.choices ?? []) {
         const lines = optionLinesFor(keyName, g.key, c.key);
         if (!lines) {
@@ -1549,6 +1700,11 @@ async function main() {
   console.log('✓ Seed supply — récapitulatif');
   console.log(`  Ingrédients : ${canonicalRows.length} canoniques + ${forkRows.length} fork classfood`);
   console.log(`    dont ${underParCount} sous le par (${Object.keys(UNDER_PAR).join(', ')}) et 1 à zéro (reblochon, isOut=false)`);
+  const removableCount = INGREDIENT_DEFS.filter(isRemovable).length;
+  const suppCount = INGREDIENT_DEFS.filter((d) => SUPPLEMENT_PRICES[d.key] != null).length;
+  console.log(
+    `  Modificateurs : ${removableCount} ingrédients retirables · ${suppCount} suppléments payants (0,80 € → 2,00 €) · ${Object.keys(DISPLAY_NAMES).length} libellés courts`,
+  );
   console.log(`  Recettes : ${recipeRows.length} (${recipeLineRows.length} lignes) — ${covered.size}/${products.length} produits couverts`);
   console.log(`  Options : ${optionRows.length} lignes de nomenclature (sauces, viandes, pain, suppléments, garnitures…)`);
   console.log(`  Fournisseurs : ${SUPPLIER_DEFS.length} · références : ${ITEM_DEFS.length} · marques : ${BRAND_DEFS.length} · historique prix : ${PRICE_HISTORY_DEFS.length}`);

@@ -1,64 +1,111 @@
-import { CONTACT_EMAIL, NAV } from "./content";
+"use client";
 
-/** Pied de page : rappel de l'offre, navigation secondaire, mentions. */
+import { useState } from "react";
+import { LogoMark, SmallFillet } from "./icons";
+
+const PAGES = [
+  { href: "#produit", label: "Produit" },
+  { href: "#pourquoi", label: "Expertise" },
+  { href: "#tarifs", label: "Tarifs" },
+  { href: "#contact", label: "Contact" },
+];
+
+/**
+ * Pied de page en carte, avec l'onglet-encoche du logo posé sur son bord haut
+ * (et ses deux congés qui le raccordent au noir).
+ *
+ * L'inscription à la liste n'a pas de back-end : on le dit, plutôt que de faire
+ * semblant — le formulaire renvoie vers le rappel téléphonique.
+ */
 export function SiteFooter() {
-  const year = 2026;
+  const [sent, setSent] = useState(false);
+  const year = new Date().getFullYear();
 
   return (
-    <footer className="mk-footer">
-      <div className="mk-wrap">
-        <div className="mk-footer-top">
-          <div>
-            <a className="mk-logo" href="#top" aria-label="Snack Manager — accueil">
-              <span className="mk-logo-mark" aria-hidden="true">
-                S
-              </span>
-              Snack Manager
+    <footer>
+      <div className="foot-wrap">
+        <div className="foot-card">
+          <div className="foot-notchtab">
+            <div className="foot-notchcontent">
+              <LogoMark width={19} height={19} />
+              <p className="logo-wordmark" style={{ fontSize: 18 }}>
+                Snack Manager
+              </p>
+            </div>
+            <span className="foot-filletleft" aria-hidden="true">
+              <SmallFillet rotate={90} />
+            </span>
+            <span className="foot-filletbottom" aria-hidden="true">
+              <SmallFillet />
+            </span>
+          </div>
+
+          <div className="foot-columns">
+            <div className="foot-left">
+              <p className="foot-tagline">Simplifier le quotidien du service</p>
+              <div className="foot-newsletter">
+                <p className="subheading foot-newsletterlabel">Rejoignez la liste pour suivre le lancement</p>
+                {sent ? (
+                  <p className="foot-note" role="status">
+                    Merci — on vous écrit au prochain jalon. Pour une démo tout de suite,{" "}
+                    <a className="faq-helplink" href="#contact">
+                      demandez un rappel
+                    </a>
+                    .
+                  </p>
+                ) : (
+                  <form
+                    className="foot-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setSent(true);
+                    }}
+                  >
+                    <label className="ct-hp" htmlFor="foot-email">
+                      Votre adresse e-mail
+                    </label>
+                    <input
+                      id="foot-email"
+                      type="email"
+                      name="email"
+                      placeholder="nom@email.com"
+                      className="foot-input"
+                      autoComplete="email"
+                      required
+                    />
+                    <input type="submit" value="S'inscrire" className="foot-subscribe" />
+                  </form>
+                )}
+              </div>
+            </div>
+
+            <div className="foot-linkcols">
+              <div className="foot-linkcol">
+                <p className="foot-colheading">Pages</p>
+                {PAGES.map((p) => (
+                  <a className="ui-link foot-link" href={p.href} key={p.href}>
+                    {p.label}
+                  </a>
+                ))}
+              </div>
+              <div className="foot-linkcol">
+                <p className="foot-colheading">Contact</p>
+                <a className="ui-link foot-link" href="mailto:contact@snackmanager.fr">
+                  contact@snackmanager.fr
+                </a>
+                <a className="ui-link foot-link" href="#faq">
+                  Questions fréquentes
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="foot-legals">
+            <p className="foot-credit">© {year} Snack Manager. Tous droits réservés.</p>
+            <a href="#faq" className="ui-link foot-link">
+              Vos données vous appartiennent
             </a>
-            <p className="mk-body" style={{ marginTop: 14, maxWidth: 340 }}>
-              La suite qui fait tourner les snacks et fast-foods indépendants : caisse, cuisine, commande en ligne et
-              back-office. Hébergé en Europe, sans engagement.
-            </p>
-            <p className="mk-body" style={{ marginTop: 14 }}>
-              <a className="mk-link" href={`mailto:${CONTACT_EMAIL}`}>
-                {CONTACT_EMAIL}
-              </a>
-            </p>
           </div>
-
-          <div>
-            <h4>Le produit</h4>
-            <ul>
-              {NAV.map((n) => (
-                <li key={n.href}>
-                  <a href={n.href}>{n.label}</a>
-                </li>
-              ))}
-              <li>
-                <a href="#pilote">Le restaurant pilote</a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4>Accès</h4>
-            <ul>
-              <li>
-                <a href="#contact">Demander une démo</a>
-              </li>
-              <li>
-                <a href="#conformite">RGPD & conformité caisse</a>
-              </li>
-              <li>
-                <a href="/admin">Espace restaurateur</a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mk-footer-legal">
-          <span>© {year} Snack Manager. Tous droits réservés.</span>
-          <span>Données hébergées en Europe · Prix hors taxes</span>
         </div>
       </div>
     </footer>

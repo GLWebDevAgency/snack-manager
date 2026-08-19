@@ -116,7 +116,14 @@ export type MenuProduct = {
   price: number;
   variants: MenuVariant[];
   groups: MenuGroup[];
-  removables: string[];
+  /**
+   * Retraits dérivés de la recette du produit : « sans tomate » n'apparaît
+   * que sur un produit qui en contient. `key` part en commande, `label`
+   * s'affiche.
+   */
+  removables: { key: string; label: string }[];
+  /** Ingrédients ajoutables, prix résolu côté serveur à la commande. */
+  supplements: { key: string; label: string; priceCents: number }[];
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
@@ -209,7 +216,34 @@ function toProduct(raw: unknown): MenuProduct | null {
     : [];
 
   const price = Number(p.price ?? 0);
-  const removables = Array.isArray(p.removables) ? p.removables.map(String) : [];
+
+  // Le contrat a évolué de `string[]` vers `{key,label}[]` : on accepte les
+  // deux le temps que tous les caches se vident.
+  const removables = Array.isArray(p.removables)
+    ? p.removables
+        .map((r) =>
+          typeof r === "string"
+            ? { key: r, label: r }
+            : {
+                key: String((r as { key?: unknown }).key ?? ""),
+                label: String((r as { label?: unknown }).label ?? ""),
+              },
+        )
+        .filter((r) => r.key !== "")
+    : [];
+
+  const supplements = Array.isArray(p.supplements)
+    ? p.supplements
+        .map((s) => {
+          const o = s as { key?: unknown; label?: unknown; priceCents?: unknown };
+          return {
+            key: String(o.key ?? ""),
+            label: String(o.label ?? ""),
+            priceCents: Number(o.priceCents ?? 0),
+          };
+        })
+        .filter((s) => s.key !== "")
+    : [];
 
   return {
     id,
@@ -219,6 +253,7 @@ function toProduct(raw: unknown): MenuProduct | null {
     variants,
     groups,
     removables,
+    supplements,
     tags: Array.isArray(p.tags) ? p.tags.map(String) : [],
     isNew: p.isNew === true,
     outOfStock: p.outOfStock === true,
@@ -228,7 +263,10 @@ function toProduct(raw: unknown): MenuProduct | null {
         ? Math.min(...variants.map((v) => v.price))
         : price,
     configurable:
-      variants.length > 0 || groups.length > 0 || removables.length > 0,
+      variants.length > 0 ||
+      groups.length > 0 ||
+      removables.length > 0 ||
+      supplements.length > 0,
   };
 }
 

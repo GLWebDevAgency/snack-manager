@@ -4,20 +4,33 @@
  * Carte du restaurant : recherche, navigation par catégories avec repérage au
  * défilement, et cartes produit.
  *
+ * Structure reprise de la maquette (`docs/specs/commande-en-ligne.md` §5.2) :
+ *   barre collante (recherche + rail de catégories)
+ *   ├ section : en-tête à double filet — titre accent, note, compteur
+ *   └ cartes produit denses : vignette, nom + badges, description, prix, action
+ *
  * Le balisage est le même en rendu serveur qu’à l’écran : noms, descriptions et
  * prix sont dans le HTML livré à Google, pas seulement une fois le JavaScript
  * exécuté. C’est la page que le restaurateur met dans sa fiche Google Business.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import type { MenuCategory, MenuProduct } from "./api";
 import { euros, fold } from "./helpers";
-import { Money, Tap } from "./primitives";
+import {
+  AddButton,
+  Badge,
+  PriceTag,
+  Rail,
+  SectionHead,
+  Tap,
+} from "./primitives";
 
-/** Hauteur de la barre recherche + onglets, au-dessus de laquelle on repère. */
-const SPY_BAR_H = 124;
+/** Hauteur de la barre recherche + rail de catégories. */
+const SPY_BAR_H = 118;
 
 export function MenuBoard({
   categories,
@@ -73,12 +86,28 @@ export function MenuBoard({
     return () => window.removeEventListener("scroll", onScroll);
   }, [categories, query, spyOffset]);
 
-  // Recentre l’onglet actif dans sa piste horizontale.
+  /**
+   * Recentre l’onglet actif dans sa piste horizontale.
+   *
+   * On pilote le défilement du rail lui-même plutôt que `scrollIntoView` :
+   * celui-ci fait défiler TOUS les ancêtres, y compris la page — il entrait en
+   * concurrence avec l’ancrage de section et l’un des deux mouvements restait
+   * en plan. Et pendant que la page s’anime vers une section, le rail se recale
+   * sèchement : deux défilements doux simultanés s’annulent.
+   */
   useEffect(() => {
-    const tab = tabsRef.current?.querySelector<HTMLElement>(
-      `[data-cat="${active}"]`,
-    );
-    tab?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const rail = tabsRef.current;
+    const tab = rail?.querySelector<HTMLElement>(`[data-cat="${active}"]`);
+    if (!rail || !tab) return;
+    const offset =
+      tab.getBoundingClientRect().left -
+      rail.getBoundingClientRect().left +
+      rail.scrollLeft;
+    const left = offset - (rail.clientWidth - tab.offsetWidth) / 2;
+    rail.scrollTo({
+      left: Math.max(0, left),
+      behavior: Date.now() < lockRef.current ? "auto" : "smooth",
+    });
   }, [active]);
 
   const goTo = useCallback(
@@ -97,12 +126,14 @@ export function MenuBoard({
     [spyOffset],
   );
 
+  const anchor = { "--sm-anchor": `${spyOffset + 8}px` } as CSSProperties;
+
   return (
-    <div>
-      {/* ── Recherche + onglets, collants sous l’en-tête ── */}
+    <div style={anchor}>
+      {/* ── Recherche + rail de catégories, collants sous l’en-tête ── */}
       <div
         style={{ top: stickyTop }}
-        className="sticky z-30 -mx-4 border-b border-white/6 bg-bg/92 px-4 pb-2 pt-3 backdrop-blur-md"
+        className="sticky z-30 -mx-4 border-b border-white/6 bg-bg/95 px-4 pb-2 pt-3 backdrop-blur-md"
       >
         <div className="relative">
           <Icon
@@ -114,9 +145,9 @@ export function MenuBoard({
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Chercher un plat, une boisson…"
+            placeholder="Un kebab ? Un tacos gratiné ?"
             aria-label="Rechercher dans la carte"
-            className="w-full rounded-pill border border-white/8 bg-surface2 py-2.5 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent"
+            className="h-11 w-full rounded-pill border border-white/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent"
           />
           {query && (
             <Tap
@@ -134,7 +165,7 @@ export function MenuBoard({
             ref={tabsRef}
             role="tablist"
             aria-label="Catégories de la carte"
-            className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="sm-rail sm-fade-x -mx-4 mt-2.5 flex gap-2 overflow-x-auto px-4 pb-1"
           >
             {categories.map((category) => {
               const on = active === category.id;
@@ -146,13 +177,21 @@ export function MenuBoard({
                   data-cat={category.id}
                   onClick={() => goTo(category.id)}
                   className={cx(
-                    "shrink-0 rounded-pill border px-3.5 py-[7px] text-[13px] font-bold whitespace-nowrap",
+                    "flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 text-[13px] font-bold",
                     on
-                      ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_18%,transparent)] text-ink"
+                      ? "border-accent bg-accent text-onaccent"
                       : "border-white/8 bg-surface2 text-mut hover:text-ink",
                   )}
                 >
                   {category.name}
+                  <span
+                    className={cx(
+                      "text-[11px] font-extrabold tabular-nums",
+                      on ? "opacity-65" : "text-white/30",
+                    )}
+                  >
+                    {category.products.length}
+                  </span>
                 </Tap>
               );
             })}
@@ -170,7 +209,7 @@ export function MenuBoard({
             Aucun résultat pour «&nbsp;{query.trim()}&nbsp;»
           </p>
           <p className="text-[13px] text-mut">
-            Essayez «&nbsp;tacos&nbsp;», «&nbsp;menu&nbsp;» ou «&nbsp;boisson&nbsp;».
+            Essayez «&nbsp;tacos&nbsp;», «&nbsp;kebab&nbsp;» ou «&nbsp;boisson&nbsp;».
           </p>
         </div>
       ) : (
@@ -179,20 +218,13 @@ export function MenuBoard({
             key={category.id}
             id={`cat-${category.id}`}
             aria-labelledby={`cat-title-${category.id}`}
-            className="scroll-mt-36 pt-7"
+            className="sm-anchor pt-8"
           >
-            <div className="flex items-baseline justify-between gap-3 pb-3">
-              <h2
-                id={`cat-title-${category.id}`}
-                className="text-[20px] font-extrabold tracking-[-0.03em] text-ink"
-              >
-                {category.name}
-              </h2>
-              <span className="text-[12px] font-semibold uppercase tracking-[0.1em] text-mut tabular-nums">
-                {category.products.length}
-                <span className="sr-only"> produits</span>
-              </span>
-            </div>
+            <SectionHead
+              id={`cat-title-${category.id}`}
+              title={category.name}
+              note={categoryNote(category)}
+            />
             <div className="flex flex-col gap-2.5">
               {category.products.map((product) => (
                 <ProductCard
@@ -211,6 +243,32 @@ export function MenuBoard({
   );
 }
 
+/**
+ * Note de section — la maquette porte une accroche rédigée par catégorie
+ * (« Servis avec crudités & frites »). L’API n’expose pas encore ce champ :
+ * on affiche la fourchette de prix, seule information juste que l’on possède,
+ * plutôt qu’une phrase inventée.
+ */
+function categoryNote(category: MenuCategory): string | null {
+  const prices = category.products
+    .filter((p) => !p.outOfStock && p.fromPrice > 0)
+    .map((p) => p.fromPrice);
+  if (prices.length === 0) return null;
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  return low === high ? `Tous à ${euros(low)}` : `De ${euros(low)} à ${euros(high)}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Carte produit
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Densité de la carte (maquette §5.2.3) : vignette 68, nom 16/700, description
+ * sur deux lignes maximum, pied prix + action. Le rythme vertical est le même
+ * pour toutes les cartes, avec ou sans description — c’est ce qui fait qu’une
+ * liste de vingt produits se parcourt au pouce sans fatigue.
+ */
 function ProductCard({
   product,
   qty,
@@ -228,7 +286,8 @@ function ProductCard({
   return (
     <article
       className={cx(
-        "relative overflow-hidden rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_90px)] shadow-card",
+        "relative overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
+        qty > 0 ? "border-accent/45" : "border-white/6",
         unavailable && "opacity-55",
       )}
     >
@@ -237,22 +296,18 @@ function ProductCard({
         disabled={!clickable}
         aria-label={`${product.name}${product.configurable ? " — composer" : " — ajouter au panier"}`}
         className={cx(
-          "flex w-full items-stretch gap-3.5 p-3 text-left",
+          "flex w-full items-center gap-3.5 p-3 text-left",
           !clickable && "cursor-default active:scale-100",
         )}
       >
         <Thumb product={product} />
 
-        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <h3 className="min-w-0 truncate text-[16px] font-bold tracking-[-0.01em] text-ink">
+            <h3 className="min-w-0 truncate text-[16px] font-bold leading-tight tracking-[-0.015em] text-ink">
               {product.name}
             </h3>
-            {product.isNew && !unavailable && (
-              <span className="shrink-0 rounded-pill bg-accent px-2 py-px text-[10px] font-extrabold uppercase tracking-[0.08em] text-onaccent">
-                Nouveau
-              </span>
-            )}
+            {product.isNew && !unavailable && <Badge tone="new">Nouveau</Badge>}
           </div>
 
           {product.description && (
@@ -261,44 +316,16 @@ function ProductCard({
             </p>
           )}
 
-          <div className="mt-0.5 flex items-center gap-2">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {unavailable ? (
-              <span className="rounded-pill border border-white/12 px-2 py-px text-[11px] font-bold uppercase tracking-[0.08em] text-mut">
-                Épuisé
-              </span>
+              <Badge tone="out">Bientôt</Badge>
             ) : (
-              <>
-                {product.variants.length > 0 && (
-                  <span className="text-[12px] font-semibold text-mut">dès</span>
-                )}
-                <Money cents={product.fromPrice} className="text-[15px] text-ink" />
-                {product.configurable && (
-                  <span className="text-[12px] font-semibold text-mut">
-                    · à composer
-                  </span>
-                )}
-              </>
+              <PriceTag cents={product.fromPrice} from={product.variants.length > 0} />
             )}
           </div>
         </div>
 
-        {clickable && (
-          <span
-            aria-hidden
-            className={cx(
-              "relative grid size-9 shrink-0 self-center place-items-center rounded-pill transition-colors duration-200 ease-sm",
-              qty > 0
-                ? "bg-accent text-onaccent"
-                : "border border-white/12 bg-surface2 text-ink",
-            )}
-          >
-            {qty > 0 ? (
-              <span className="text-[14px] font-extrabold tabular-nums">{qty}</span>
-            ) : (
-              <Icon name="plus" size={17} stroke={2.4} />
-            )}
-          </span>
-        )}
+        {clickable && <AddButton qty={qty} compose={product.configurable} />}
       </Tap>
 
       {/* Prix lisible par les moteurs (microdonnées portées par le JSON-LD). */}
@@ -317,16 +344,122 @@ function Thumb({ product }: { product: MenuProduct }) {
       <img
         src={product.photoUrl}
         alt=""
-        className="size-[62px] shrink-0 rounded-card border border-white/8 object-cover"
+        loading="lazy"
+        className="size-[68px] shrink-0 rounded-card border border-white/8 object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden
-      className="grid size-[62px] shrink-0 place-items-center overflow-hidden rounded-card border border-white/8 bg-surface2 text-[19px] font-black uppercase tracking-[-0.03em] text-white/25"
+      className="grid size-[68px] shrink-0 place-items-center overflow-hidden rounded-card border border-white/8 bg-surface2 text-[20px] font-black uppercase tracking-[-0.03em] text-white/25"
     >
       {product.name.trim().slice(0, 2)}
     </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Rail « Les incontournables » (accueil de la vitrine)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Mise en avant horizontale (maquette §5.1.4). Elle n’existe que sur la page
+ * publique : dans l’embed, l’encart doit aller droit à la carte.
+ */
+export function Highlights({
+  products,
+  inCart,
+  disabled,
+  onPick,
+  onBrowse,
+}: {
+  products: MenuProduct[];
+  inCart: Record<string, number>;
+  disabled: boolean;
+  onPick: (product: MenuProduct) => void;
+  onBrowse: () => void;
+}) {
+  if (products.length === 0) return null;
+  return (
+    <section aria-labelledby="incontournables" className="pt-8">
+      <SectionHead
+        id="incontournables"
+        title="Les incontournables"
+        note="Les plats que le restaurant met en avant"
+        aside={
+          <Tap
+            onClick={onBrowse}
+            className="shrink-0 pb-0.5 text-[13px] font-bold text-mut hover:text-ink"
+          >
+            Tout voir →
+          </Tap>
+        }
+      />
+
+      <Rail label="Sélection du restaurant" className="pb-1">
+        {products.map((product) => {
+          const qty = inCart[product.id] ?? 0;
+          return (
+            <Tap
+              key={product.id}
+              onClick={() => !disabled && onPick(product)}
+              disabled={disabled}
+              aria-label={`${product.name} — ${euros(product.fromPrice)}`}
+              className={cx(
+                "w-[158px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
+                qty > 0 ? "border-accent/45" : "border-white/6",
+              )}
+            >
+              <span className="relative block h-[96px] w-full overflow-hidden bg-surface2">
+                {product.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={product.photoUrl}
+                    alt=""
+                    loading="lazy"
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <span className="grid size-full place-items-center text-[26px] font-black uppercase tracking-[-0.03em] text-white/15">
+                    {product.name.trim().slice(0, 2)}
+                  </span>
+                )}
+                {product.isNew && (
+                  <span className="absolute left-2 top-2">
+                    <Badge tone="new">Nouveau</Badge>
+                  </span>
+                )}
+              </span>
+              <span className="block px-2.5 pb-2.5 pt-2">
+                <span className="block truncate text-[14px] font-bold leading-tight text-ink">
+                  {product.name}
+                </span>
+                <span className="mt-2 flex items-center justify-between gap-2">
+                  <PriceTag
+                    cents={product.fromPrice}
+                    from={product.variants.length > 0}
+                    size="sm"
+                  />
+                  <span
+                    aria-hidden
+                    className={cx(
+                      "grid size-7 shrink-0 place-items-center rounded-pill",
+                      qty > 0 ? "bg-accent text-onaccent" : "bg-white/10 text-ink",
+                    )}
+                  >
+                    {qty > 0 ? (
+                      <span className="text-[12px] font-extrabold tabular-nums">{qty}</span>
+                    ) : (
+                      <Icon name="plus" size={14} stroke={2.8} />
+                    )}
+                  </span>
+                </span>
+              </span>
+            </Tap>
+          );
+        })}
+      </Rail>
+    </section>
   );
 }

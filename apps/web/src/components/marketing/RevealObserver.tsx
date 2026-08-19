@@ -3,45 +3,58 @@
 import { useEffect } from "react";
 
 /**
- * Îlot unique qui anime toutes les révélations au scroll de la page.
+ * Îlot unique qui pilote les deux effets « ambiants » de la maquette :
  *
- * Les sections restent des server components : elles posent juste `data-rv`
- * (+ `style={{ transitionDelay }}` pour les cascades). Un seul
- * IntersectionObserver suffit, et `prefers-reduced-motion` court-circuite tout
- * (le CSS neutralise déjà opacité/transform, on se contente de ne pas observer).
+ *  1. la révélation au scroll — un seul IntersectionObserver ajoute `.in` aux
+ *     éléments `.rv`, ce qui laisse toutes les sections en composants serveur ;
+ *  2. le projecteur au survol — les cartes `.spot` reçoivent la position du
+ *     pointeur dans `--mx` / `--my`, via un écouteur délégué sur le document.
+ *
+ * `prefers-reduced-motion` court-circuite les deux : le CSS affiche déjà les
+ * éléments, on se contente de ne rien observer.
  */
 export function RevealObserver() {
   useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-rv]"));
-    if (nodes.length === 0) return;
-
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".mk .rv"));
+
+    let io: IntersectionObserver | undefined;
     if (reduced || typeof IntersectionObserver === "undefined") {
-      nodes.forEach((n) => n.classList.add("mk-in"));
-      return;
+      nodes.forEach((n) => n.classList.add("in"));
+    } else {
+      io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.classList.add("in");
+            io?.unobserve(entry.target);
+          }
+        },
+        { threshold: 0.15 },
+      );
+      for (const n of nodes) {
+        // Déjà visible au chargement : on affiche sans attendre un défilement.
+        if (n.getBoundingClientRect().top < window.innerHeight * 0.9) {
+          n.classList.add("in");
+          continue;
+        }
+        io.observe(n);
+      }
     }
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          entry.target.classList.add("mk-in");
-          io.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.14, rootMargin: "0px 0px -6% 0px" },
-    );
+    const onPointerMove = (ev: PointerEvent) => {
+      const target = (ev.target as Element | null)?.closest<HTMLElement>(".mk .spot");
+      if (!target) return;
+      const r = target.getBoundingClientRect();
+      target.style.setProperty("--mx", `${ev.clientX - r.left}px`);
+      target.style.setProperty("--my", `${ev.clientY - r.top}px`);
+    };
+    if (!reduced) document.addEventListener("pointermove", onPointerMove, { passive: true });
 
-    nodes.forEach((n) => {
-      // Déjà dans le viewport au chargement : on affiche sans attendre un scroll.
-      if (n.getBoundingClientRect().top < window.innerHeight * 0.9) {
-        n.classList.add("mk-in");
-        return;
-      }
-      io.observe(n);
-    });
-
-    return () => io.disconnect();
+    return () => {
+      io?.disconnect();
+      document.removeEventListener("pointermove", onPointerMove);
+    };
   }, []);
 
   return null;

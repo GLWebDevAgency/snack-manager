@@ -11,5 +11,8 @@ import { SupplyService } from './supply.service';
 @Module({
   controllers: [SupplyController],
   providers: [SupplyService],
+  // Exporté pour le module menu : les modificateurs de la caisse (« sans
+  // tomate », suppléments payants) sont dérivés des recettes, pas ressaisis.
+  exports: [SupplyService],
 })
 export class SupplyModule {}

@@ -20,6 +20,8 @@ import { StaffModule } from './modules/staff/staff.module';
 import { EngageModule } from './modules/engage/engage.module';
 import { SiteModule } from './modules/site/site.module';
 import { ScreensModule } from './modules/screens/screens.module';
+import { DevicesModule } from './modules/devices/devices.module';
+import { CrmModule } from './modules/crm/crm.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { ScreensModule } from './modules/screens/screens.module';
     EngageModule,
     SiteModule,
     ScreensModule,
+    DevicesModule,
+    CrmModule,
   ],
   controllers: [HealthController],
 })

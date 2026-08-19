@@ -26,6 +26,21 @@ export interface OptionGroup {
   perVariant?: Record<string, { min?: number; max?: number; priceDelta?: number }> | null;
 }
 
+export interface MenuRemovable {
+  key: string;
+  label: string;
+}
+
+export interface MenuSupplement {
+  key: string;
+  label: string;
+  priceCents: number;
+  category?: string;
+}
+
+/** Groupe d'options réservé au serveur pour facturer les suppléments. */
+export const SUPPLEMENT_GROUP = 'supplements';
+
 export interface Product {
   _id: string;
   name: string;
@@ -33,7 +48,14 @@ export interface Product {
   price?: number;
   variants?: Variant[];
   optionGroups?: OptionGroup[];
-  removables?: string[];
+  /**
+   * Retraits proposés — dérivés de la RECETTE du produit côté serveur.
+   * Un sandwich dont la fiche contient tomate propose « sans tomate », sans
+   * que le gérant n'ait rien saisi. `key` part en commande, `label` s'affiche.
+   */
+  removables?: MenuRemovable[];
+  /** Ingrédients ajoutables en supplément payant, prix résolu serveur. */
+  supplements?: MenuSupplement[];
   tags?: string[];
   isNew?: boolean;
   outOfStock?: boolean;

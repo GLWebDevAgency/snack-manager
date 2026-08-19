@@ -7,6 +7,10 @@
  * il vit dans une feuille plein écran, donc le même code marche dans une page et
  * dans une iframe. Aucun compte n’est demandé : un nom et un téléphone suffisent.
  *
+ * Forme reprise de la maquette (`docs/specs/commande-en-ligne.md` §5.4 à §5.7) :
+ * une étape = un titre, un retour, un pied d’écran qui porte l’action et le
+ * montant. La progression est nommée, pas seulement dessinée.
+ *
  * Points de vigilance tenus ici :
  *  — aucun prix n’est envoyé à l’API, seulement des identifiants de produits ;
  *  — la clé d’idempotence (`clientId`) est stable sur toute une tentative :
@@ -48,12 +52,14 @@ import {
 } from "./cart";
 import { euros, hhmm, parisParts, phoneOk, uid } from "./helpers";
 import {
+  Badge,
   Banner,
+  ChoiceCard,
   Dot,
   ErrorState,
   GhostAction,
+  Glyph,
   Money,
-  OptionRow,
   PrimaryAction,
   SectionLabel,
   Sheet,
@@ -66,7 +72,7 @@ import { StripeCard } from "./StripeCard";
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
 /** Doit dépasser la durée d’animation de sortie de `Sheet`. */
-const SHEET_EXIT_MS = 320;
+const SHEET_EXIT_MS = 340;
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "cart", label: "Panier" },
@@ -99,6 +105,7 @@ export function Checkout({
   open,
   slug,
   tenantName,
+  tenantAddress,
   accent,
   cart,
   paused,
@@ -112,6 +119,8 @@ export function Checkout({
   open: boolean;
   slug: string;
   tenantName: string;
+  /** Adresse affichée sur la carte « où retirer » de l’étape créneau. */
+  tenantAddress: string;
   accent: string;
   cart: CartApi;
   paused: boolean;
@@ -300,6 +309,7 @@ export function Checkout({
     slot: "customer",
     pay: "slot",
   };
+  const backTo = back[step];
 
   return (
     <Sheet
@@ -308,6 +318,7 @@ export function Checkout({
       maxHeight="100%"
       fill
       title={titles[step]}
+      onBack={backTo ? () => setStep(backTo) : null}
       headerExtra={
         !finished ? (
           <Progress index={stepIndex} onJump={(target) => setStep(target)} step={step} />
@@ -320,6 +331,7 @@ export function Checkout({
           cart={cart}
           contactOk={contactOk}
           slotIso={slotIso}
+          slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
           blocked={blockedByPause}
           method={method}
           order={order}
@@ -333,17 +345,7 @@ export function Checkout({
         />
       }
     >
-      <div className="px-4 pb-6 pt-4">
-        {back[step] && (
-          <Tap
-            onClick={() => setStep(back[step]!)}
-            className="mb-3 inline-flex items-center gap-1.5 rounded-pill border border-white/8 bg-surface2 py-1.5 pl-2 pr-3.5 text-[13px] font-bold text-mut hover:text-ink"
-          >
-            <Icon name="back" size={14} />
-            Retour
-          </Tap>
-        )}
-
+      <div className={step === "done" ? "" : "px-4 pb-8 pt-4"}>
         {blockedByPause && step !== "done" && (
           <div className="mb-4">
             <Banner tone="prep" icon="clock" title="Commande en ligne suspendue">
@@ -383,6 +385,8 @@ export function Checkout({
             onSelect={setSlotIso}
             onDate={setDate}
             onRetry={() => fetchSlots(date)}
+            tenantName={tenantName}
+            tenantAddress={tenantAddress}
           />
         )}
 
@@ -434,6 +438,11 @@ export function Checkout({
 // Fil d’étapes
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Progression nommée : un trait par étape, son libellé dessous. Une étape
+ * franchie reste cliquable — revenir corriger son numéro de téléphone ne doit
+ * pas obliger à ressortir du tunnel.
+ */
 function Progress({
   index,
   step,
@@ -444,25 +453,34 @@ function Progress({
   onJump: (target: Step) => void;
 }) {
   return (
-    <ol className="mt-2 flex items-center gap-1.5">
+    <ol className="mt-2.5 flex items-start gap-1.5">
       {STEPS.map((entry, i) => {
         const done = i < index;
         const current = entry.id === step;
         return (
-          <li key={entry.id} className="flex flex-1 items-center gap-1.5">
+          <li key={entry.id} className="min-w-0 flex-1">
             <button
               type="button"
               disabled={!done}
               onClick={() => onJump(entry.id)}
               aria-current={current ? "step" : undefined}
-              className={cx(
-                "h-1 flex-1 rounded-full transition-colors duration-200 ease-sm",
-                current || done ? "bg-accent" : "bg-white/12",
-                done && "cursor-pointer",
-              )}
+              className={cx("block w-full text-left", done && "cursor-pointer")}
             >
-              <span className="sr-only">
+              <span
+                className={cx(
+                  "block h-1 rounded-full transition-colors duration-300 ease-sm",
+                  current || done ? "bg-accent" : "bg-white/12",
+                )}
+              />
+              <span
+                className={cx(
+                  "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-300",
+                  current ? "text-ink" : done ? "text-mut" : "text-white/25",
+                )}
+              >
                 {entry.label}
+              </span>
+              <span className="sr-only">
                 {done ? " — terminé, revenir" : current ? " — étape en cours" : ""}
               </span>
             </button>
@@ -483,6 +501,7 @@ function Footer({
   cart,
   contactOk,
   slotIso,
+  slotLabel,
   blocked,
   method,
   order,
@@ -496,6 +515,7 @@ function Footer({
   cart: CartApi;
   contactOk: boolean;
   slotIso: string | null;
+  slotLabel: string | null;
   blocked: boolean;
   method: "online" | "counter";
   order: CreatedOrder | null;
@@ -514,7 +534,7 @@ function Footer({
             href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
-            className="flex w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 py-[15px] text-[15px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:duration-75 active:scale-[0.97]"
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
           >
             <Icon name="clock" size={17} stroke={2.4} />
             Suivre ma commande
@@ -558,7 +578,7 @@ function Footer({
         icon="arrow"
         onClick={() => onNext("pay")}
       >
-        {slotIso ? "Continuer" : "Choisissez un créneau"}
+        {slotLabel ? `Continuer · retrait ${slotLabel}` : "Choisissez un créneau"}
       </PrimaryAction>
     );
   }
@@ -601,10 +621,10 @@ function CartStep({
   if (cart.lines.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-        <span className="grid size-12 place-items-center rounded-panel bg-surface2 text-mut">
-          <Icon name="cart" size={22} />
+        <span className="grid size-14 place-items-center rounded-panel bg-surface2 text-mut">
+          <Icon name="cart" size={24} />
         </span>
-        <p className="text-[16px] font-bold text-ink">Votre panier est vide</p>
+        <p className="text-[17px] font-bold text-ink">Votre panier est vide</p>
         <p className="max-w-[260px] text-[13px] leading-relaxed text-mut">
           Ajoutez un plat depuis la carte, il n’y a pas de compte à créer.
         </p>
@@ -618,56 +638,20 @@ function CartStep({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2.5">
         {cart.lines.map((line) => (
-          <div
+          <CartRow
             key={line.lineId}
-            className="rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_80px)] p-3.5 shadow-card"
-          >
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-bold text-ink">{line.name}</p>
-                {lineSummary(line) && (
-                  <p className="mt-0.5 text-[13px] leading-snug text-mut">
-                    {lineSummary(line)}
-                  </p>
-                )}
-                {line.note && (
-                  <p className="mt-1 text-[13px] italic text-prept">« {line.note} »</p>
-                )}
-              </div>
-              <Money cents={lineTotal(line)} className="shrink-0 text-[16px] text-ink" />
-            </div>
-
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <Stepper
-                value={line.qty}
-                min={0}
-                label={line.name}
-                onChange={(qty) => cart.setQty(line.lineId, qty)}
-              />
-              <div className="flex items-center gap-1.5">
-                <Tap
-                  onClick={() => onEditLine(line)}
-                  className="rounded-pill border border-white/10 px-3 py-1.5 text-[13px] font-bold text-mut hover:text-ink"
-                >
-                  Modifier
-                </Tap>
-                <Tap
-                  onClick={() => cart.remove(line.lineId)}
-                  aria-label={`Retirer ${line.name}`}
-                  className="grid size-8 place-items-center rounded-pill text-mut hover:text-alertt"
-                >
-                  <Icon name="trash" size={16} />
-                </Tap>
-              </div>
-            </div>
-          </div>
+            line={line}
+            onQty={(qty) => cart.setQty(line.lineId, qty)}
+            onEdit={() => onEditLine(line)}
+            onRemove={() => cart.remove(line.lineId)}
+          />
         ))}
       </div>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex flex-col gap-2.5">
         <SectionLabel hint="facultatif">Instructions pour la cuisine</SectionLabel>
         <textarea
           value={cart.note}
@@ -679,14 +663,103 @@ function CartStep({
         />
       </section>
 
-      <div className="flex items-center justify-between border-t border-white/8 pt-4">
-        <span className="text-[15px] font-semibold text-mut">Total</span>
-        <Money cents={cart.subtotal} className="text-[24px] text-ink" />
-      </div>
-      <p className="-mt-3 text-[12px] text-mut">
-        Prix TTC. Le montant est recalculé par le restaurant à la validation.
-      </p>
+      <section className="rounded-panel border border-white/8 bg-surface2 p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[14px] text-mut">
+            Sous-total ·{" "}
+            <span className="tabular-nums">
+              {cart.count} article{cart.count > 1 ? "s" : ""}
+            </span>
+          </span>
+          <Money cents={cart.subtotal} className="text-[15px] text-mut" />
+        </div>
+        <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-white/8 pt-3">
+          <span className="text-[16px] font-extrabold uppercase tracking-[0.04em] text-ink">
+            Total
+          </span>
+          <Money cents={cart.subtotal} className="text-[26px] text-ink" />
+        </div>
+        <p className="mt-2 text-[12px] leading-relaxed text-mut">
+          Prix TTC, service compris. Le montant est recalculé par le restaurant à
+          la validation.
+        </p>
+      </section>
     </div>
+  );
+}
+
+/** Ligne de panier : vignette, récap des options, quantité, reprise. */
+function CartRow({
+  line,
+  onQty,
+  onEdit,
+  onRemove,
+}: {
+  line: CartLine;
+  onQty: (qty: number) => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const summary = lineSummary(line);
+  return (
+    <article className="overflow-hidden rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_80px)] p-3 shadow-card">
+      <div className="flex items-start gap-3">
+        {line.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={line.photoUrl}
+            alt=""
+            loading="lazy"
+            className="size-[52px] shrink-0 rounded-card border border-white/8 object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="grid size-[52px] shrink-0 place-items-center rounded-card border border-white/8 bg-surface2 text-[16px] font-black uppercase text-white/25"
+          >
+            {line.name.trim().slice(0, 2)}
+          </span>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 text-[15px] font-bold leading-tight text-ink">
+              {line.name}
+            </p>
+            <Money cents={lineTotal(line)} className="shrink-0 text-[16px] text-ink" />
+          </div>
+          {summary && (
+            <p className="mt-1 text-[13px] leading-snug text-mut">{summary}</p>
+          )}
+          {line.note && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-[13px] italic leading-snug text-prept">
+              <Icon name="edit" size={13} className="mt-0.5 shrink-0" />
+              {line.note}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/6 pt-3">
+        <Stepper value={line.qty} min={0} label={line.name} onChange={onQty} />
+        <div className="flex items-center gap-1.5">
+          <Tap
+            onClick={onEdit}
+            className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-white/12 px-3 text-[13px] font-bold text-mut hover:text-ink"
+          >
+            <Icon name="edit" size={14} />
+            Modifier
+          </Tap>
+          <Tap
+            onClick={onRemove}
+            aria-label={`Retirer ${line.name}`}
+            className="grid size-9 place-items-center rounded-pill text-mut hover:text-alertt"
+          >
+            <Icon name="trash" size={16} />
+          </Tap>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -722,7 +795,7 @@ function CustomerStep({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="sm-name"
-          className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut"
+          className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut"
         >
           Prénom et nom
         </label>
@@ -748,7 +821,7 @@ function CustomerStep({
       <div className="flex flex-col gap-1.5">
         <label
           htmlFor="sm-phone"
-          className="text-[11px] font-bold uppercase tracking-[0.14em] text-mut"
+          className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut"
         >
           Téléphone
         </label>
@@ -810,6 +883,8 @@ function SlotStep({
   onSelect,
   onDate,
   onRetry,
+  tenantName,
+  tenantAddress,
 }: {
   slots: SlotsResponse | null;
   state: "idle" | "loading" | "error";
@@ -817,6 +892,8 @@ function SlotStep({
   onSelect: (iso: string) => void;
   onDate: (ymd: string) => void;
   onRetry: () => void;
+  tenantName: string;
+  tenantAddress: string;
 }) {
   if (state === "error") {
     return (
@@ -848,6 +925,19 @@ function SlotStep({
 
   return (
     <div className={cx("flex flex-col gap-5", state === "loading" && "opacity-60")}>
+      {/* Où retirer — le client vérifie l’adresse avant de choisir l’heure. */}
+      <div className="flex items-center gap-3 rounded-panel border border-white/8 bg-surface2 p-3.5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-pill bg-accent text-onaccent">
+          <Glyph name="pin" size={20} />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-bold text-ink">{tenantName}</p>
+          <p className="truncate text-[13px] text-mut">
+            {tenantAddress || "Retrait au comptoir"}
+          </p>
+        </div>
+      </div>
+
       {dates.length > 1 && (
         <div className="flex gap-2">
           {dates.map((ymd) => (
@@ -856,9 +946,9 @@ function SlotStep({
               onClick={() => onDate(ymd)}
               aria-pressed={ymd === slots.date}
               className={cx(
-                "flex-1 rounded-card border px-3 py-2.5 text-[14px] font-bold",
+                "min-h-11 flex-1 rounded-card border px-3 text-[14px] font-bold",
                 ymd === slots.date
-                  ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_18%,transparent)] text-ink"
+                  ? "border-accent bg-accent text-onaccent"
                   : "border-white/8 bg-surface2 text-mut hover:text-ink",
               )}
             >
@@ -891,16 +981,14 @@ function SlotStep({
         </Banner>
       ) : (
         <>
-          <p className="text-[14px] leading-relaxed text-mut">
-            Comptez au moins {slots.leadTimeMin} minutes de préparation. Le
-            restaurant lance votre commande pour l’heure choisie.
-          </p>
+          <Banner icon="clock" title={`Comptez ~${slots.leadTimeMin} min de préparation`}>
+            Le restaurant lance votre commande pour l’heure choisie&nbsp;: elle
+            vous attend chaude, pas depuis une heure.
+          </Banner>
 
           {[...byService.entries()].map(([service, list]) => (
             <section key={service} className="flex flex-col gap-2.5">
-              <SectionLabel
-                hint={`${list.filter((s) => !s.full).length} libres`}
-              >
+              <SectionLabel hint={`${list.filter((s) => !s.full).length} libres`}>
                 {SERVICE_LABELS[service] ?? service}
               </SectionLabel>
               <div className="grid grid-cols-4 gap-2">
@@ -914,14 +1002,19 @@ function SlotStep({
                       aria-pressed={on}
                       aria-label={`${hhmm(slot.iso)}${slot.full ? " — complet" : slot.load === "busy" ? " — créneau chargé" : ""}`}
                       className={cx(
-                        "flex flex-col items-center gap-1 rounded-card border py-2.5",
+                        "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-card border",
                         on
-                          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_20%,transparent)]"
+                          ? "border-accent bg-accent"
                           : "border-white/8 bg-surface2 hover:border-white/25",
                         slot.full && "cursor-not-allowed opacity-30 active:scale-100",
                       )}
                     >
-                      <span className="text-[15px] font-extrabold tabular-nums tracking-[-0.02em] text-ink">
+                      <span
+                        className={cx(
+                          "text-[15px] font-extrabold tabular-nums tracking-[-0.02em]",
+                          on ? "text-onaccent" : "text-ink",
+                        )}
+                      >
                         {hhmm(slot.iso)}
                       </span>
                       <Dot
@@ -973,10 +1066,10 @@ function PayStep({
   cardAvailable: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-5">
-      <section className="rounded-panel border border-white/6 bg-surface2 p-4">
+    <div className="flex flex-col gap-6">
+      <section className="rounded-panel border border-white/8 bg-surface2 p-4">
         <SectionLabel className="mb-3">Récapitulatif</SectionLabel>
-        <dl className="flex flex-col gap-2 text-[14px]">
+        <dl className="flex flex-col gap-2.5 text-[14px]">
           <Row label="Retrait">
             <span className="font-bold text-ink">
               {slotDate ? `${dayLabelOf(slotDate)} · ` : ""}
@@ -990,32 +1083,30 @@ function PayStep({
             <span className="font-semibold tabular-nums text-ink">{cart.count}</span>
           </Row>
         </dl>
-        <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-          <span className="text-[15px] font-semibold text-mut">Total à régler</span>
-          <Money cents={cart.subtotal} className="text-[22px] text-ink" />
+        <div className="mt-3.5 flex items-baseline justify-between border-t border-white/8 pt-3.5">
+          <span className="text-[15px] font-extrabold uppercase tracking-[0.04em] text-ink">
+            Total à régler
+          </span>
+          <Money cents={cart.subtotal} className="text-[24px] text-ink" />
         </div>
       </section>
 
       <section className="flex flex-col gap-2.5">
         <SectionLabel>Mode de paiement</SectionLabel>
         {cardAvailable ? (
-          <div
-            role="radiogroup"
-            aria-label="Mode de paiement"
-            className="rounded-card border border-white/8 bg-white/[0.02] px-3.5"
-          >
-            <OptionRow
-              radio
+          <div role="radiogroup" aria-label="Mode de paiement" className="flex flex-col gap-2.5">
+            <ChoiceCard
               on={method === "online"}
+              icon="euro"
               title="Carte bancaire"
-              sub="Paiement sécurisé en ligne"
+              sub="Paiement sécurisé en ligne · Visa, Mastercard, CB"
               onClick={() => onMethod("online")}
             />
-            <OptionRow
-              radio
+            <ChoiceCard
               on={method === "counter"}
+              glyph="bag"
               title="Payer au comptoir"
-              sub="Carte ou espèces sur place"
+              sub="Carte ou espèces au moment du retrait"
               onClick={() => onMethod("counter")}
             />
           </div>
@@ -1042,6 +1133,20 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 // Étape 5 — confirmation
 // ─────────────────────────────────────────────────────────────
 
+/** Les trois étapes que le client suit (le KDS en pilote la progression). */
+const TIMELINE = [
+  { label: "Reçue", hint: "La cuisine a votre commande" },
+  { label: "En préparation", hint: "Ça chauffe" },
+  { label: "Prête", hint: "À récupérer au comptoir" },
+];
+
+/**
+ * Confirmation — la récompense du parcours (maquette §5.7).
+ *
+ * Bandeau accent plein cadre, médaillon, puis le numéro de retrait porté par
+ * une carte qui chevauche le bandeau : c’est le seul chiffre que le client
+ * devra montrer au comptoir, il domine tout le reste.
+ */
 function DoneStep({
   order,
   paidOnline,
@@ -1054,53 +1159,98 @@ function DoneStep({
   tenantName: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-5 pt-2 text-center">
-      <span className="grid size-16 animate-pop place-items-center rounded-full bg-ok/15 text-ok">
-        <Icon name="check" size={30} stroke={2.6} />
-      </span>
-
-      <div>
-        <h3 className="text-[22px] font-extrabold tracking-[-0.03em] text-ink">
+    <div className="pb-8">
+      <div className="sm-grain relative overflow-hidden bg-accent px-6 pb-16 pt-9 text-center text-onaccent">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-4 -top-6 select-none text-[132px] font-black leading-none tracking-[-0.05em] text-white/15"
+        >
+          OK
+        </span>
+        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-accent shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+          <Icon name="check" size={38} stroke={3} />
+        </span>
+        <h3 className="relative text-[24px] font-extrabold tracking-[-0.035em]">
           C’est envoyé en cuisine
         </h3>
-        <p className="mt-1 text-[14px] text-mut">
+        <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
           {tenantName} vous prévient par SMS dès que c’est prêt.
         </p>
       </div>
 
-      <div className="w-full rounded-panel border border-white/8 bg-surface2 px-5 py-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-          Numéro de retrait
-        </p>
-        <p className="mt-1 text-[64px] font-black leading-none tracking-[-0.04em] tabular-nums text-accent">
-          {order.number}
-        </p>
-        {order.pickup?.slot && (
-          <p className="mt-2 text-[14px] text-mut">
-            Retrait à{" "}
-            <span className="font-bold tabular-nums text-ink">
-              {hhmm(order.pickup.slot)}
-            </span>
+      <div className="px-4">
+        {/* `relative` obligatoire : le bandeau accent est positionné, il
+            passerait sinon par-dessus la carte qui le chevauche. */}
+        <div className="relative -mt-11 rounded-panel border border-white/10 bg-surface px-5 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
+            Numéro de retrait
           </p>
-        )}
-      </div>
+          <p className="mt-1 text-[62px] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
+            {order.number}
+          </p>
+          {order.pickup?.slot && (
+            <p className="mt-2 text-[14px] text-mut">
+              Retrait à{" "}
+              <span className="font-bold tabular-nums text-ink">
+                {hhmm(order.pickup.slot)}
+              </span>
+            </p>
+          )}
+        </div>
 
-      <div className="w-full">
-        {downgraded ? (
-          <Banner tone="prep" icon="euro" title="À régler au comptoir">
-            Le paiement en ligne n’était pas disponible. Votre commande est bien
-            enregistrée : réglez sur place au moment du retrait.
-          </Banner>
-        ) : paidOnline ? (
-          <Banner tone="ok" icon="check" title="Paiement accepté">
-            {euros(order.totals?.total ?? 0)} réglés en ligne. Présentez votre
-            numéro de retrait au comptoir.
-          </Banner>
-        ) : (
-          <Banner icon="euro" title="À régler au comptoir">
-            {euros(order.totals?.total ?? 0)} à régler au moment du retrait.
-          </Banner>
-        )}
+        {/* Suivi : la première étape est acquise, les suivantes viennent du KDS. */}
+        <ol className="mt-4 rounded-panel border border-white/8 bg-surface2 px-4 py-2">
+          {TIMELINE.map((entry, i) => {
+            const reached = i === 0;
+            return (
+              <li
+                key={entry.label}
+                className={cx(
+                  "flex items-center gap-3 border-b border-white/6 py-3 last:border-b-0",
+                  !reached && "opacity-45",
+                )}
+              >
+                <span
+                  className={cx(
+                    "grid size-7 shrink-0 place-items-center rounded-full",
+                    reached ? "bg-ok text-black" : "bg-white/12",
+                  )}
+                >
+                  {reached ? (
+                    <Icon name="check" size={14} stroke={3} />
+                  ) : (
+                    <span className="size-2 rounded-full bg-white/50" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-bold text-ink">
+                    {entry.label}
+                  </span>
+                  <span className="block text-[13px] text-mut">{entry.hint}</span>
+                </span>
+                {reached && <Badge tone="ok">En cours</Badge>}
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="mt-4">
+          {downgraded ? (
+            <Banner tone="prep" icon="euro" title="À régler au comptoir">
+              Le paiement en ligne n’était pas disponible. Votre commande est bien
+              enregistrée : réglez sur place au moment du retrait.
+            </Banner>
+          ) : paidOnline ? (
+            <Banner tone="ok" icon="check" title="Paiement accepté">
+              {euros(order.totals?.total ?? 0)} réglés en ligne. Présentez votre
+              numéro de retrait au comptoir.
+            </Banner>
+          ) : (
+            <Banner icon="euro" title="À régler au comptoir">
+              {euros(order.totals?.total ?? 0)} à régler au moment du retrait.
+            </Banner>
+          )}
+        </div>
       </div>
     </div>
   );

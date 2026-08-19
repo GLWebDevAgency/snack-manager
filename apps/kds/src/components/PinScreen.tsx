@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { PAIRING_CODE_ALPHABET, PAIRING_CODE_LENGTH } from '@sm/contracts';
 import {
   alpha,
   contrastOn,
@@ -14,19 +15,26 @@ import {
   TOUCH_MIN,
   type,
 } from '../ui';
+import { forgetPairedDevice, pairDevice, type PairedDevice } from '../client';
+import { useDevice } from '../useSession';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Sheen, Tap } from './primitives';
 
 /**
- * Connexion par PIN — la seule porte d'entrée de l'écran cuisine.
+ * L'ouverture de l'écran cuisine, en deux temps.
  *
- * Pavé numérique plutôt que champ texte : gants, écran gras, aucun clavier
- * logiciel à faire apparaître. Les touches font 76 px à l'échelle de référence
- * (bien au-delà des 44 px réglementaires), grandissent avec l'écran, et
- * répondent à l'appui en moins de 100 ms.
+ *   APPAIRAGE — une fois, à l'installation : six caractères qui apprennent à
+ *               la tablette chez quel restaurant elle travaille ;
+ *   CODE      — tous les jours : le code équipe à quatre à six chiffres.
+ *
+ * Pavé tactile plutôt que champ texte, dans les deux cas : gants, écran gras,
+ * aucun clavier logiciel à faire apparaître. Les touches dépassent largement
+ * les 44 px réglementaires, grandissent avec l'écran, et répondent à l'appui
+ * en moins de 100 ms.
  */
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+const ALPHABET = PAIRING_CODE_ALPHABET.split('');
 const MIN_PIN = 4;
 const MAX_PIN = 6;
 
@@ -37,16 +45,236 @@ export function PinScreen({
   reducedMotion,
   layout,
 }: {
+  /** Accent de repli, tant qu'aucun établissement n'est appairé. */
   accent: string;
+  /** Nom de repli, tant qu'aucun établissement n'est appairé. */
   tenantName: string;
   onSubmit: (pin: string) => Promise<void>;
   reducedMotion: boolean;
   layout: Layout;
 }) {
+  const device = useDevice();
+
+  // Tant que la tablette n'est appairée à personne, il n'y a pas de code
+  // équipe à demander : il n'existe pas encore d'équipe à laquelle le
+  // rattacher.
+  if (!device) {
+    return <PairingView reducedMotion={reducedMotion} layout={layout} />;
+  }
+
+  return (
+    <CodeView
+      device={device}
+      fallbackAccent={accent}
+      fallbackName={tenantName}
+      onSubmit={onSubmit}
+      reducedMotion={reducedMotion}
+      layout={layout}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Appairage
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Écran d'appairage.
+ *
+ * Ni adresse de serveur, ni identifiant, ni mot de passe : six caractères lus
+ * dans le back-office. L'alphabet exclut I, O, 0 et 1 — les seules confusions
+ * qui restent une fois le code affiché en gros, et un cuisinier ganté n'a pas
+ * à se demander s'il lit un zéro ou un O.
+ */
+function PairingView({
+  reducedMotion,
+  layout,
+}: {
+  reducedMotion: boolean;
+  layout: Layout;
+}) {
   const styles = pinStyles(layout);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  /** Un refus laisse le code affiché : la frappe suivante repart de zéro. */
+  const [errored, setErrored] = useState(false);
+
+  const submit = useCallback(async (value: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await pairDevice(value);
+      // Succès : le magasin d'appareil prévient `useDevice`, l'écran bascule
+      // seul sur le code équipe. Rien à faire de plus ici.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Appairage impossible — réessayez');
+      setErrored(true);
+      setBusy(false);
+    }
+  }, []);
+
+  const push = useCallback(
+    (char: string) => {
+      if (busy) return;
+      setCode((cur) => {
+        // Après un refus, la première touche recommence la saisie : on ne
+        // corrige pas un code entier caractère par caractère.
+        const base = errored ? '' : cur;
+        const next = (base + char).slice(0, PAIRING_CODE_LENGTH);
+        if (next.length === PAIRING_CODE_LENGTH) void submit(next);
+        return next;
+      });
+      setError(null);
+      setErrored(false);
+    },
+    [busy, errored, submit],
+  );
+
+  const back = useCallback(() => {
+    if (busy) return;
+    setError(null);
+    setErrored(false);
+    setCode((cur) => cur.slice(0, -1));
+  }, [busy]);
+
+  // La tablette est souvent installée avec un clavier USB (maintenance), et
+  // c'est le confort de démonstration au navigateur.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onKey = (event: KeyboardEvent) => {
+      const char = event.key.toUpperCase();
+      if (char.length === 1 && PAIRING_CODE_ALPHABET.includes(char)) push(char);
+      else if (event.key === 'Backspace') back();
+      else if (event.key === 'Escape') setCode('');
+    };
+    globalThis.addEventListener?.('keydown', onKey);
+    return () => globalThis.removeEventListener?.('keydown', onKey);
+  }, [push, back]);
+
+  return (
+    <View style={styles.screen}>
+      <View style={[styles.widePanel, shadow.panel]}>
+        <Sheen height={160} radius={radius.xl} />
+
+        <View style={styles.head}>
+          <View style={[styles.brand, { backgroundColor: palette.gold }]}>
+            <Text style={[styles.brandLetter, { color: contrastOn(palette.gold) }]}>S</Text>
+          </View>
+          <Text style={styles.title}>Appairer cet appareil</Text>
+          <Text style={styles.subtitle}>Snack Manager · Cuisine</Text>
+        </View>
+
+        <Text style={styles.lead}>
+          Saisissez le code à {PAIRING_CODE_LENGTH} caractères affiché dans votre back-office,
+          rubrique « Caisses & cuisine ».
+        </Text>
+
+        {/* Tuiles de saisie : une case par caractère, comme dans le back-office
+            — on ne perd pas sa place au milieu du code. */}
+        <View style={styles.slots}>
+          {Array.from({ length: PAIRING_CODE_LENGTH }, (_, i) => {
+            const char = code[i];
+            const active = code.length === i && !errored;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.slot,
+                  active && { borderColor: palette.gold, borderWidth: 2 },
+                  errored && { borderColor: palette.red },
+                ]}
+              >
+                <Text style={[styles.slotText, errored && { color: ink.onRed }]}>
+                  {char ?? ''}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={styles.errorSlot}>
+          <Text
+            style={[styles.error, !error && styles.hintInline]}
+            accessibilityLiveRegion="polite"
+          >
+            {error ?? (busy ? 'Appairage en cours…' : 'Ni I, ni O, ni 0, ni 1 dans le code')}
+          </Text>
+        </View>
+
+        <View style={styles.alphaPad}>
+          {ALPHABET.map((char) => (
+            <Tap
+              key={char}
+              onPress={() => push(char)}
+              label={char}
+              reducedMotion={reducedMotion}
+              style={styles.alphaKey}
+              pressedStyle={{ backgroundColor: surface.el2, borderColor: hair }}
+            >
+              <Text style={styles.alphaKeyText}>{char}</Text>
+            </Tap>
+          ))}
+        </View>
+
+        <View style={styles.row}>
+          <Tap
+            onPress={() => setCode('')}
+            label="Tout effacer"
+            reducedMotion={reducedMotion}
+            style={[styles.wideKey, styles.keyGhost]}
+            pressedStyle={{ backgroundColor: surface.el }}
+          >
+            <Text style={styles.keyGhostText}>Tout effacer</Text>
+          </Tap>
+          <Tap
+            onPress={back}
+            label="Corriger"
+            reducedMotion={reducedMotion}
+            style={[styles.wideKey, styles.keyGhost]}
+            pressedStyle={{ backgroundColor: surface.el }}
+          >
+            {/* Libellé en toutes lettres plutôt qu'un pictogramme : le glyphe
+                « retour arrière » manque à une bonne partie des polices
+                système et se dessine alors en carré vide. */}
+            <Text style={styles.keyGhostText}>Corriger</Text>
+          </Tap>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Code équipe
+// ─────────────────────────────────────────────────────────────
+
+function CodeView({
+  device,
+  fallbackAccent,
+  fallbackName,
+  onSubmit,
+  reducedMotion,
+  layout,
+}: {
+  device: PairedDevice;
+  fallbackAccent: string;
+  fallbackName: string;
+  onSubmit: (pin: string) => Promise<void>;
+  reducedMotion: boolean;
+  layout: Layout;
+}) {
+  const styles = pinStyles(layout);
+  // Le nom et l'accent viennent de l'établissement APPAIRÉ : plus aucune
+  // constante côté application. Les valeurs reçues en props ne servent que de
+  // repli si la marque revenait vide du serveur.
+  const accent = device.tenant.brandColor || fallbackAccent;
+  const tenantName = device.tenant.name || fallbackName;
+
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmUnpair, setConfirmUnpair] = useState(false);
 
   const push = useCallback(
     (digit: string) => {
@@ -92,6 +320,59 @@ export function PinScreen({
   }, [push, submit, clear]);
 
   const ready = pin.length >= MIN_PIN && !busy;
+
+  /*
+   * « Changer d'établissement » — un geste rarissime sur une tablette
+   * installée, et catastrophique s'il part tout seul en plein coup de feu.
+   * D'où le lien gris en pied de panneau, et cette confirmation qui prend
+   * toute la place plutôt qu'une boîte de dialogue à fermer avec un gant.
+   */
+  if (confirmUnpair) {
+    return (
+      <View style={styles.screen}>
+        <View style={[styles.panel, shadow.panel]}>
+          <Sheen height={160} radius={radius.xl} />
+          <Text style={styles.title}>Changer d&apos;établissement</Text>
+          <View style={styles.warn}>
+            <Text style={styles.warnText}>
+              <Text style={{ fontWeight: '800' }}>
+                Cet écran cessera d&apos;afficher les tickets de « {tenantName} ».
+              </Text>{' '}
+              Il faudra saisir un nouveau code d&apos;appairage pour le remettre en service.
+            </Text>
+          </View>
+          <Text style={styles.hint}>
+            À ne faire qu&apos;en cas de changement d&apos;établissement. Pour un écran
+            simplement figé, fermez et rouvrez l&apos;application : elle repart avec son
+            appairage.
+          </Text>
+          <View style={styles.row}>
+            <Tap
+              onPress={() => setConfirmUnpair(false)}
+              label="Annuler"
+              reducedMotion={reducedMotion}
+              style={[styles.wideKey, styles.keyGhost]}
+              pressedStyle={{ backgroundColor: surface.el }}
+            >
+              <Text style={styles.keyGhostText}>Annuler</Text>
+            </Tap>
+            <Tap
+              onPress={() => void forgetPairedDevice()}
+              label="Désappairer cet écran"
+              reducedMotion={reducedMotion}
+              style={[
+                styles.wideKey,
+                { backgroundColor: alpha(palette.red, 0.16), borderColor: alpha(palette.red, 0.4) },
+              ]}
+              pressedStyle={{ opacity: 0.82 }}
+            >
+              <Text style={[styles.keyGhostText, { color: ink.onRed }]}>Désappairer</Text>
+            </Tap>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -194,6 +475,21 @@ export function PinScreen({
         <Text style={styles.hint}>
           {MIN_PIN} à {MAX_PIN} chiffres, puis validez.
         </Text>
+
+        {/* Nom de l'APPAREIL, pas un numéro inventé : c'est celui que le gérant
+            a saisi dans le back-office, donc celui qu'il cherche quand il veut
+            savoir quelle tablette est laquelle. */}
+        <Tap
+          onPress={() => setConfirmUnpair(true)}
+          label="Changer d'établissement"
+          reducedMotion={reducedMotion}
+          style={styles.unpair}
+          pressedStyle={{ backgroundColor: surface.el }}
+        >
+          <Text style={styles.unpairText}>
+            {device.device.name} · Changer d&apos;établissement
+          </Text>
+        </Tap>
       </View>
     </View>
   );
@@ -203,6 +499,13 @@ const pinStyles = scaledStyles((l: Layout) => {
   const keyW = Math.round(76 * l.scale);
   const keyH = Math.max(TOUCH_MIN, l.touch, Math.round(62 * l.scale));
   const gap = 10;
+  // Pavé de 32 symboles : 8 colonnes sur une tablette, 6 sur un écran étroit.
+  const alphaCols = l.width < 620 ? 6 : 8;
+  const alphaKey = Math.max(TOUCH_MIN, Math.round(58 * l.scale));
+  // Largeur du panneau d'appairage : touches + gouttières + 2 × 20 de padding
+  // + 2 × 1 de bordure. Le `+ 2` n'est pas cosmétique — sans lui la dernière
+  // colonne de touches passe à la ligne, et le pavé perd sa grille.
+  const wideWidth = alphaKey * alphaCols + gap * (alphaCols - 1) + 40 + 2;
   return StyleSheet.create({
     screen: {
       flex: 1,
@@ -216,6 +519,19 @@ const pinStyles = scaledStyles((l: Layout) => {
     // bordures — sinon la troisième colonne de touches passe à la ligne.
     panel: {
       width: Math.max(Math.round(340 * l.scale), keyW * 3 + gap * 2 + 46),
+      maxWidth: '100%',
+      backgroundColor: surface.card,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: hair2,
+      paddingHorizontal: 20,
+      paddingTop: 26,
+      paddingBottom: 20,
+      overflow: 'hidden',
+    },
+    /** Même panneau, dimensionné pour le pavé alphabétique de l'appairage. */
+    widePanel: {
+      width: wideWidth,
       maxWidth: '100%',
       backgroundColor: surface.card,
       borderRadius: radius.xl,
@@ -247,6 +563,7 @@ const pinStyles = scaledStyles((l: Layout) => {
       fontWeight: '700',
       letterSpacing: -0.4,
       color: palette.text,
+      textAlign: 'center',
     },
     subtitle: {
       fontFamily: type.micro.fontFamily,
@@ -255,6 +572,15 @@ const pinStyles = scaledStyles((l: Layout) => {
       letterSpacing: 1.1,
       textTransform: 'uppercase',
       color: ink.dim,
+    },
+    lead: {
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(13.5),
+      lineHeight: l.fs(20),
+      color: ink.dim,
+      textAlign: 'center',
+      marginTop: 18,
+      paddingHorizontal: 8,
     },
     prompt: {
       fontFamily: type.micro.fontFamily,
@@ -276,7 +602,25 @@ const pinStyles = scaledStyles((l: Layout) => {
       backgroundColor: 'transparent',
     },
     dotOptional: { borderColor: alpha('#ffffff', 0.06) },
-    errorSlot: { minHeight: 26, justifyContent: 'center' },
+    slots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 18 },
+    slot: {
+      width: Math.round(46 * l.scale),
+      height: Math.round(58 * l.scale),
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: hair2,
+      backgroundColor: surface.el,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    slotText: {
+      fontFamily: type.hero.fontFamily,
+      fontSize: l.far(28),
+      fontWeight: '800',
+      color: palette.text,
+      ...tabular,
+    },
+    errorSlot: { minHeight: 30, justifyContent: 'center' },
     error: {
       fontFamily: type.body.fontFamily,
       fontSize: l.fs(13),
@@ -284,6 +628,7 @@ const pinStyles = scaledStyles((l: Layout) => {
       color: ink.onRed,
       textAlign: 'center',
     },
+    hintInline: { color: ink.dimmer, fontWeight: '600' },
     pad: { flexDirection: 'row', flexWrap: 'wrap', gap, justifyContent: 'center' },
     key: {
       width: keyW,
@@ -302,6 +647,34 @@ const pinStyles = scaledStyles((l: Layout) => {
       color: palette.text,
       ...tabular,
     },
+    alphaPad: { flexDirection: 'row', flexWrap: 'wrap', gap, justifyContent: 'center' },
+    alphaKey: {
+      width: alphaKey,
+      height: alphaKey,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: hair2,
+      backgroundColor: surface.el,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    alphaKeyText: {
+      fontFamily: type.hero.fontFamily,
+      fontSize: l.far(21),
+      fontWeight: '700',
+      color: palette.text,
+      ...tabular,
+    },
+    row: { flexDirection: 'row', gap, justifyContent: 'center', marginTop: 14 },
+    wideKey: {
+      flex: 1,
+      height: Math.max(TOUCH_MIN, l.touch),
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: hair2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     keyGhost: { backgroundColor: 'transparent', borderColor: hair2 },
     keyGhostText: {
       fontFamily: type.micro.fontFamily,
@@ -309,12 +682,42 @@ const pinStyles = scaledStyles((l: Layout) => {
       fontWeight: '700',
       color: ink.dim,
     },
+    warn: {
+      marginTop: 16,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: alpha(palette.red, 0.4),
+      backgroundColor: alpha(palette.red, 0.1),
+      padding: 14,
+    },
+    warnText: {
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(13.5),
+      lineHeight: l.fs(20),
+      color: palette.text,
+    },
     hint: {
       fontFamily: type.body.fontFamily,
       fontSize: l.fs(12),
+      lineHeight: l.fs(18),
       color: ink.dimmer,
       textAlign: 'center',
       marginTop: 16,
+    },
+    unpair: {
+      alignSelf: 'center',
+      marginTop: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      borderColor: hair2,
+    },
+    unpairText: {
+      fontFamily: type.micro.fontFamily,
+      fontSize: l.fs(11.5),
+      fontWeight: '600',
+      color: ink.dimmer,
     },
   });
 });

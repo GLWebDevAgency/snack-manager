@@ -12,8 +12,10 @@ import {
   euros,
   missingRequired,
   ruleFor,
+  SUPPLEMENT_GROUP,
   unitPrice,
   type CartLine,
+  type MenuSupplement,
   type OptionGroup,
   type Product,
   type SelectedOption,
@@ -137,6 +139,34 @@ export function QuickConfig({
     setRemoved((cur) => (cur.includes(item) ? cur.filter((r) => r !== item) : [...cur, item]));
   }
 
+  /**
+   * Les suppléments voyagent comme des options du groupe réservé
+   * « supplements » : le serveur y retrouve le prix depuis la fiche
+   * ingrédient. Le montant porté ici ne sert qu'à l'affichage immédiat au
+   * comptoir — il est recalculé à la création de la commande.
+   */
+  function toggleSupplement(sup: MenuSupplement) {
+    setOptions((cur) => {
+      const already = cur.some(
+        (o) => o.groupKey === SUPPLEMENT_GROUP && o.choiceKey === sup.key,
+      );
+      if (already) {
+        return cur.filter(
+          (o) => !(o.groupKey === SUPPLEMENT_GROUP && o.choiceKey === sup.key),
+        );
+      }
+      return [
+        ...cur,
+        {
+          groupKey: SUPPLEMENT_GROUP,
+          choiceKey: sup.key,
+          name: sup.label,
+          priceDelta: sup.priceCents,
+        },
+      ];
+    });
+  }
+
   const ctaLabel = missing.length === 0 ? `Ajouter · ${euros(unit * qty)}` : 'Complétez la configuration';
 
   return (
@@ -214,15 +244,35 @@ export function QuickConfig({
         })}
 
         {product.removables?.length ? (
-          <Section title="Retraits" hint="Ce que le client ne veut pas">
+          <Section
+            title="Retraits"
+            hint={removed.length === 0 ? 'Complet par défaut' : 'Ce que le client ne veut pas'}
+          >
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
               {product.removables.map((item) => (
                 <Chip
-                  key={item}
-                  label={`sans ${item}`}
-                  on={removed.includes(item)}
-                  onPress={() => toggleRemoved(item)}
+                  key={item.key}
+                  label={`sans ${item.label.toLowerCase()}`}
+                  on={removed.includes(item.key)}
+                  onPress={() => toggleRemoved(item.key)}
                   tone="red"
+                />
+              ))}
+            </View>
+          </Section>
+        ) : null}
+
+        {product.supplements?.length ? (
+          <Section title="Suppléments" hint="Ce que le client ajoute — facturé">
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
+              {product.supplements.map((sup) => (
+                <Chip
+                  key={sup.key}
+                  label={`${sup.label} +${euros(sup.priceCents)}`}
+                  on={options.some(
+                    (o) => o.groupKey === SUPPLEMENT_GROUP && o.choiceKey === sup.key,
+                  )}
+                  onPress={() => toggleSupplement(sup)}
                 />
               ))}
             </View>
