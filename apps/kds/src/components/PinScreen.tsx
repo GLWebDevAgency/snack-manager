@@ -211,9 +211,11 @@ const pinStyles = scaledStyles((l: Layout) => {
       justifyContent: 'center',
       padding: 24,
     },
-    // Le panneau se déduit du pavé : trois touches + deux gouttières + marges.
+    // Le panneau suit l'échelle (340 px à la référence) mais ne descend jamais
+    // sous la largeur du pavé : trois touches + deux gouttières + marges +
+    // bordures — sinon la troisième colonne de touches passe à la ligne.
     panel: {
-      width: keyW * 3 + gap * 2 + 40,
+      width: Math.max(Math.round(340 * l.scale), keyW * 3 + gap * 2 + 46),
       maxWidth: '100%',
       backgroundColor: surface.card,
       borderRadius: radius.xl,

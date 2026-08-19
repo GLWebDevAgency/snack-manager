@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { TOUCH_MIN } from '@sm/client-core';
 import {
   COMPACT_W,
+  RAIL_REF,
   REFERENCE,
   SCALE_MAX,
   SCALE_MIN,
   TICKET_MAX,
   TICKET_MIN,
+  TICKET_REF,
+  TOPBAR_REF,
   cardWidth,
   columnsFor,
   computeLayout,
@@ -22,14 +25,16 @@ describe('Référence 1280 × 800 — la maquette ne bouge pas', () => {
   const L = computeLayout(REFERENCE.width, REFERENCE.height);
 
   it('redonne exactement le rail 108 et le ticket 384 de la spécification', () => {
-    expect(L.railW).toBe(108);
-    expect(L.ticketW).toBe(384);
+    expect(L.railW).toBe(RAIL_REF);
+    expect(L.ticketW).toBe(TICKET_REF);
   });
 
   it("garde l'échelle typographique neutre", () => {
     expect(L.scale).toBe(1);
     expect(L.fs(15)).toBe(15);
-    expect(L.topbarH).toBe(66);
+    expect(L.topbarH).toBe(TOPBAR_REF);
+    // 13 px : la taille d'origine des libellés du rail.
+    expect(L.railFs).toBe(13);
   });
 
   it('tient 4 colonnes, comme la grille d’origine', () => {
@@ -152,6 +157,10 @@ describe('Orientation et bornes générales', () => {
     for (let w = 320; w <= 2560; w += 20) {
       const L = computeLayout(w, 900);
       expect(L.railW).toBeLessThan(w);
+      // Un libellé de catégorie reste lisible : jamais sous 11,5 px, et il
+      // dispose toujours d'au moins ~5 px de large par point de police.
+      expect(L.railFs).toBeGreaterThanOrEqual(11.5);
+      expect(L.railW - 28).toBeGreaterThan(L.railFs * 4);
       expect(L.modal(560)).toBeLessThanOrEqual(w);
       expect(L.ticketW).toBeLessThanOrEqual(w);
       // Rail + ticket ancré laissent toujours de la place à la grille.

@@ -24,16 +24,12 @@ export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 } as const;
 export const R = { ctrl: 8, card: 12, panel: 18, pill: 999 } as const;
 
 /**
- * Géométrie de RÉFÉRENCE (tablette 10" paysage, 1280 × 800).
- *
- * Ces valeurs ne sont plus posées telles quelles dans les écrans : elles
- * servent d'ancrage documentaire à `layout.ts`, qui les redonne exactement à
- * 1280 px de large et les fait varier entre bornes ailleurs. Toute dimension
- * consommée par un composant vient de `useLayout()`.
+ * La géométrie du poste (rail, ticket, barre haute) n'est plus figée ici : elle
+ * vit dans `layout.ts`, qui la calcule à partir de la fenêtre entre des bornes
+ * documentées et redonne exactement les valeurs de la maquette (108 / 384 / 66)
+ * sur la tablette de référence 1280 × 800. Toute dimension consommée par un
+ * composant vient de `useLayout()`.
  */
-export const RAIL_W = 108;
-export const TICKET_W = 384;
-export const TOPBAR_H = 66;
 
 // ─── Couleurs dérivées de l'accent tenant ───
 

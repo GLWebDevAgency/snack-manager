@@ -11,6 +11,7 @@ import { TOUCH_MIN, palette } from '@sm/client-core';
 import { client, TENANT_SLUG, type PinLoginResponse, type Session } from './client';
 import { FONT, R, makeBrand, shadow, type } from './theme';
 import { Press, Sheen, useReducedMotion } from './ui';
+import { useLayout } from './useLayout';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'] as const;
 
@@ -26,6 +27,7 @@ export function PinScreen({
   /** Raison du verrouillage (session expirée, fin de poste…). */
   notice?: string | null;
 }) {
+  const L = useLayout();
   const brand = makeBrand(tenantName, brandColor);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
@@ -109,6 +111,15 @@ export function PinScreen({
     return () => doc.removeEventListener('keydown', onKey);
   }, [back, push]);
 
+  // Pavé : 378 px de large sur la référence (3 touches + 2 gouttières de 12 +
+  // 2 × 18 de padding + 2 × 1 de bordure), fluide ailleurs, jamais plus large
+  // que l'écran. On dimensionne la TOUCHE d'abord puis le panneau autour :
+  // partir de la largeur du panneau laisse les bordures déborder d'un pixel et
+  // fait retomber le pavé sur deux colonnes.
+  const padMax = Math.min(Math.round(378 * (1 + (L.scale - 1) * 0.6)), L.width - 32);
+  const keySize = Math.max(TOUCH_MIN, Math.floor((padMax - 36 - 24 - 2) / 3));
+  const padW = keySize * 3 + 24 + 36 + 2;
+
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg, alignItems: 'center', justifyContent: 'center' }}>
       {/* Filet d'accent en tête d'écran : signature de marque discrète. */}
@@ -186,10 +197,12 @@ export function PinScreen({
         </View>
 
         {/* Pavé numérique — posé sur un panneau, pour la stratification
-            fond → panneau → touche plutôt qu'un aplat unique. */}
+            fond → panneau → touche plutôt qu'un aplat unique. Sa largeur suit
+            l'écran : 378 px sur la tablette de référence, jamais plus large
+            que la fenêtre sur un téléphone de dépannage. */}
         <View
           style={{
-            width: 378,
+            width: padW,
             flexDirection: 'row',
             flexWrap: 'wrap',
             gap: 12,
@@ -205,13 +218,22 @@ export function PinScreen({
           {KEYS.map((k) => {
             if (k === 'clear') {
               return (
-                <PadKey key={k} label="C" muted onPress={() => setPin('')} accessibilityLabel="Effacer" />
+                <PadKey
+                  key={k}
+                  label="C"
+                  muted
+                  size={keySize}
+                  onPress={() => setPin('')}
+                  accessibilityLabel="Effacer"
+                />
               );
             }
             if (k === 'back') {
-              return <PadKey key={k} label="⌫" muted onPress={back} accessibilityLabel="Corriger" />;
+              return (
+                <PadKey key={k} label="⌫" muted size={keySize} onPress={back} accessibilityLabel="Corriger" />
+              );
             }
-            return <PadKey key={k} label={k} onPress={() => push(k)} />;
+            return <PadKey key={k} label={k} size={keySize} onPress={() => push(k)} />;
           })}
         </View>
       </Animated.View>
@@ -227,11 +249,14 @@ function PadKey({
   label,
   onPress,
   muted,
+  size,
   accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   muted?: boolean;
+  /** Côté de la touche, calculé par l'écran depuis la largeur du pavé. */
+  size: number;
   accessibilityLabel?: string;
 }) {
   return (
@@ -241,8 +266,8 @@ function PadKey({
       scale={0.94}
       style={[
         {
-          width: 104,
-          height: 72,
+          width: size,
+          height: Math.max(TOUCH_MIN, Math.round(size * 0.7)),
           minHeight: TOUCH_MIN,
           borderRadius: R.panel,
           backgroundColor: palette.surface,

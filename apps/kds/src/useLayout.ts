@@ -108,15 +108,21 @@ export function computeLayout(width: number, height: number): Layout {
   const gap = Math.round(clamp(12 * scale, 10, 20));
   const farScale = 1 + (scale - 1) * FAR_BOOST;
 
+  // Largeur de colonne définitive, une fois marges et gouttières arrêtées.
+  const finalStage = w - pad * 2 - (allDayW > 0 ? allDayW + gap : 0);
+  const finalColW = Math.max(0, (finalStage - gap * (cols - 1)) / cols);
+
   return {
     width: w,
     height: h,
     orientation: h > w ? 'portrait' : 'landscape',
     compact,
     cols,
-    colW: Math.round(colW),
+    colW: Math.round(finalColW),
     allDayW,
-    denseToolbar: w < DENSE_TOOLBAR_MAX_WIDTH,
+    // Le seuil vaut pour l'échelle de référence : une barre dont tout le
+    // contenu a grossi de 28 % réclame d'autant plus de largeur pour tenir.
+    denseToolbar: w < DENSE_TOOLBAR_MAX_WIDTH * scale,
     scale,
     gap,
     pad,

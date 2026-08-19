@@ -15,16 +15,18 @@
  * ─── Seuils retenus, et pourquoi ───────────────────────────────────────────
  *
  * • COMPACT_W = 900 px. En dessous, rail + ticket + grille ne cohabitent plus :
- *   même en resserrant le ticket à sa borne basse (340) et le rail à 88, il ne
- *   reste que ~440 px de grille, soit deux cartes étriquées. Sous ce seuil le
- *   ticket devient donc un panneau escamotable, avec une barre d'accès
- *   permanente (« Ticket · N articles · total ») et l'encaissement carte à
- *   portée d'un seul geste. 900 correspond aussi à une 10" en portrait (820) et
- *   à toute la famille téléphone, qui basculent ensemble.
+ *   même en resserrant le ticket à sa borne basse (340) et le rail à son
+ *   minimum, il ne reste que ~440 px de grille, soit deux cartes étriquées.
+ *   Sous ce seuil le ticket devient donc un panneau escamotable, avec une barre
+ *   d'accès permanente (« Ticket · N articles · total ») et l'encaissement
+ *   carte à portée d'un seul geste. 900 correspond aussi à une 10" en portrait
+ *   (820) et à toute la famille téléphone, qui basculent ensemble.
  *
- * • Rail : 8,5 % de la largeur, borné 88…148 (72 sous 700 px de large, où
+ * • Rail : 8,5 % de la largeur, borné 96…148 (76 sous 700 px de large, où
  *   chaque pixel compte). À 1280 la formule redonne exactement 108 px, la
- *   valeur de la maquette : la référence ne bouge pas.
+ *   valeur de la maquette : la référence ne bouge pas. Le libellé de catégorie
+ *   suit la largeur du rail (12 %), pas l'échelle générale : c'est la place
+ *   disponible qui décide si « Classiques » tient sur une ligne.
  *
  * • Ticket : 30 % de la largeur, borné 340…460. À 1280 → 384 px, là encore la
  *   valeur d'origine. La borne haute évite qu'un 24" transforme le ticket en
@@ -52,6 +54,15 @@ import { TOUCH_MIN } from '@sm/client-core';
 /** Tablette Android 10" en paysage : la cible de référence du poste. */
 export const REFERENCE = { width: 1280, height: 800 } as const;
 
+/**
+ * Géométrie de la maquette, à 1280 px de large. Ce ne sont plus des constantes
+ * de rendu mais les ANCRES que les formules ci-dessous doivent redonner à
+ * l'identique sur la tablette de référence (vérifié par `layout.test.ts`).
+ */
+export const RAIL_REF = 108;
+export const TICKET_REF = 384;
+export const TOPBAR_REF = 66;
+
 /** Sous cette largeur, le ticket ne tient plus à côté de la grille. */
 export const COMPACT_W = 900;
 
@@ -59,11 +70,16 @@ export const COMPACT_W = 900;
 export const TICKET_MIN = 340;
 export const TICKET_MAX = 460;
 
-/** Bornes du rail de catégories. */
-export const RAIL_MIN = 88;
+/**
+ * Bornes du rail de catégories. Le minimum de 96 n'est pas cosmétique : sous
+ * cette largeur, « Classiques » ou « Barquettes » se coupent en plein milieu
+ * d'un mot, et un rail illisible coûte plus cher que les quelques pixels rendus
+ * à la grille.
+ */
+export const RAIL_MIN = 96;
 export const RAIL_MAX = 148;
 /** Sous 700 px de large (téléphone), le rail cède quelques pixels à la grille. */
-export const RAIL_MIN_TIGHT = 72;
+export const RAIL_MIN_TIGHT = 76;
 
 /** Largeur « idéale » d'une carte produit à l'échelle 1 (maquette : 180). */
 export const IDEAL_CARD = 190;
@@ -88,6 +104,8 @@ export interface Layout {
   compact: boolean;
   /** Rail des catégories (zone B). */
   railW: number;
+  /** Taille du libellé de catégorie — calée sur la largeur du rail, pas sur l'échelle. */
+  railFs: number;
   /** Ticket (zone D) — largeur du panneau ancré, ou du tiroir en compact. */
   ticketW: number;
   /** Barre haute (zone A) — sa rangée principale. */
@@ -190,8 +208,12 @@ export function computeLayout(width: number, height: number): Layout {
     screen,
     compact,
     railW,
+    // Le libellé suit la largeur du rail (12 % : 13 px à 108, la valeur de la
+    // maquette) et non l'échelle générale : c'est la place disponible, et non
+    // la distance de lecture, qui décide ici.
+    railFs: clamp(11.5, Math.round(railW * 0.12 * 2) / 2, 15),
     ticketW,
-    topbarH: clamp(60, Math.round(66 * spaceScale), 84),
+    topbarH: clamp(60, Math.round(TOPBAR_REF * spaceScale), 84),
     cols,
     minCols,
     maxCols,

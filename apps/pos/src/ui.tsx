@@ -793,11 +793,22 @@ export function useToasts() {
 }
 
 function ToastHost({ items }: { items: Toast[] }) {
+  const L = useLayout();
   if (items.length === 0) return null;
   return (
     <View
       pointerEvents="none"
-      style={{ position: 'absolute', left: 0, right: 0, bottom: 26, alignItems: 'center', gap: 8, zIndex: 9000 }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        // En compact, la barre d'accès au ticket occupe le pied d'écran : le
+        // toast se pose au-dessus plutôt que de la recouvrir.
+        bottom: L.compact ? 26 + L.touch(52) + 24 : 26,
+        alignItems: 'center',
+        gap: 8,
+        zIndex: 9000,
+      }}
     >
       {items.map((t) => {
         const color =

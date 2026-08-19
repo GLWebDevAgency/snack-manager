@@ -31,7 +31,7 @@ import { CardSkeleton, EmptyState, Tap } from './components/primitives';
  *
  *  - **colonnes** (≥ 900 px) — les trois statuts se partagent la largeur à
  *    parts égales ; le panneau « À lancer » n'apparaît que s'il reste la place
- *    (≥ 1180 px), sinon il se replie AVANT que les colonnes ne se serrent ;
+ *    (≥ 1240 px), sinon il se replie AVANT que les colonnes ne se serrent ;
  *  - **onglets** (< 900 px) — une seule liste, un onglet par statut avec son
  *    compteur, plus un onglet « À lancer ». C'est le comportement téléphone
  *    prévu par la spec, étendu à toute fenêtre étroite (tablette en portrait,
@@ -133,6 +133,7 @@ export function Board(props: BoardProps) {
           <TabButton
             label="À lancer"
             count={toLaunch}
+            noun="article"
             active={tab === 'allday'}
             tone={props.accent}
             onPress={() => setTab('allday')}
@@ -147,6 +148,7 @@ export function Board(props: BoardProps) {
               orders={visible}
               accent={props.accent}
               filterLabel={filterLabel}
+              style={styles.fill}
               layout={layout}
             />
           </View>
@@ -277,6 +279,7 @@ function OfflineBanner({
 function TabButton({
   label,
   count,
+  noun = 'commande',
   active,
   tone,
   onPress,
@@ -285,6 +288,8 @@ function TabButton({
 }: {
   label: string;
   count?: number;
+  /** Ce que compte le badge — des commandes, sauf « À lancer » qui cumule des articles. */
+  noun?: 'commande' | 'article';
   active: boolean;
   tone: string;
   onPress: () => void;
@@ -295,7 +300,7 @@ function TabButton({
   return (
     <Tap
       onPress={onPress}
-      label={count === undefined ? label : `${label}, ${count} commande(s)`}
+      label={count === undefined ? label : `${label}, ${count} ${noun}(s)`}
       selected={active}
       reducedMotion={reducedMotion}
       style={[
@@ -378,5 +383,8 @@ const boardStyles = scaledStyles((l: Layout) =>
     compactList: { flex: 1, minHeight: 0 },
     compactListContent: { padding: l.gap, gap: l.gap, paddingBottom: l.gap * 2 },
     compactAllDay: { flex: 1, padding: l.gap, minHeight: 0 },
+    // Longhands (et non `flex: 1`) : le panneau porte déjà `flexShrink: 0`,
+    // seule une surcharge propriété par propriété le neutralise à coup sûr.
+    fill: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0 },
   }),
 );

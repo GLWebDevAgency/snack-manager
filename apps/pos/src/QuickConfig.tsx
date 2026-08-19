@@ -20,6 +20,7 @@ import {
 } from '@sm/client-core';
 import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, Field, Overlay, PanelHead, Stepper } from './ui';
+import { useLayout } from './useLayout';
 
 export interface ConfigDraft {
   lineId?: string;
@@ -61,6 +62,7 @@ export function QuickConfig({
   onClose: () => void;
   onSubmit: (draft: ConfigDraft) => void;
 }) {
+  const L = useLayout();
   const variants = product.variants ?? [];
   const [variantKey, setVariantKey] = useState<string | null>(
     initial?.variantKey ?? (variants.length ? (variants[0]?.key ?? null) : null),
@@ -138,6 +140,7 @@ export function QuickConfig({
   const ctaLabel = missing.length === 0 ? `Ajouter · ${euros(unit * qty)}` : 'Complétez la configuration';
 
   return (
+    // 520 px est une largeur SOUHAITÉE : `Overlay` la borne à l'écran.
     <Overlay onClose={onClose} width={520}>
       <PanelHead
         title={product.name}
@@ -147,8 +150,11 @@ export function QuickConfig({
       <View style={sheet.hairline} />
 
       <ScrollView
-        style={{ maxHeight: 470 }}
-        contentContainerStyle={{ padding: S.xl, gap: S.xl }}
+        // Plus de hauteur figée : la modale est bornée à l'écran et c'est ce
+        // bloc qui absorbe la différence. Sur une 10" en portrait, le pied et
+        // son bouton d'ajout restent visibles, le contenu défile.
+        style={{ flexShrink: 1 }}
+        contentContainerStyle={{ padding: L.sp(S.xl), gap: L.sp(S.xl) }}
         keyboardShouldPersistTaps="handled"
       >
         {variants.length > 0 ? (
@@ -163,7 +169,7 @@ export function QuickConfig({
                   onPress={() => pickVariant(v.key)}
                   accent={brand.accent}
                   onAccent={brand.onAccent}
-                  minHeight={52}
+                  minHeight={L.compact ? 48 : 52}
                 />
               ))}
             </View>
@@ -236,7 +242,7 @@ export function QuickConfig({
 
       <View style={sheet.hairline} />
 
-      <View style={{ padding: S.xl, gap: S.md }}>
+      <View style={{ padding: L.sp(S.xl), gap: L.sp(S.md) }}>
         {missingDetail.length > 0 ? (
           <View
             style={{
@@ -252,7 +258,7 @@ export function QuickConfig({
             }}
           >
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: palette.amber }} />
-            <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: 13.5, fontWeight: '700', flex: 1 }}>
+            <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13.5), fontWeight: '700', flex: 1 }}>
               {missingDetail.join(' · ')}
             </Text>
           </View>
@@ -295,7 +301,7 @@ function Section({
   return (
     <View style={{ gap: S.md }}>
       <View style={[sheet.between, { gap: S.sm }]}>
-        <View style={[sheet.row, { gap: 8 }]}>
+        <View style={[sheet.row, { gap: 8, flexShrink: 1 }]}>
           <Text style={type.eyebrow}>{title}</Text>
           {required ? (
             <View

@@ -94,9 +94,9 @@ export function CategoryRail({
                 style={{
                   fontFamily: FONT,
                   color: on ? palette.text : '#8d8d8d',
-                  fontSize: L.fs(13),
+                  fontSize: L.railFs,
                   fontWeight: on ? '700' : '600',
-                  lineHeight: L.fs(16),
+                  lineHeight: L.railFs + 3,
                   letterSpacing: -0.1,
                   textAlign: 'center',
                 }}
@@ -107,7 +107,7 @@ export function CategoryRail({
                 style={{
                   fontFamily: FONT,
                   color: on ? brand.accent : '#757575',
-                  fontSize: L.fs(11.5),
+                  fontSize: Math.max(11, L.railFs - 1.5),
                   fontWeight: '700',
                   textAlign: 'center',
                   marginTop: 3,

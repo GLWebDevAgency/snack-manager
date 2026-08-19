@@ -10,6 +10,7 @@ import { Animated, Easing, ScrollView, Text, View } from 'react-native';
 import { TOUCH_MIN, euros, palette } from '@sm/client-core';
 import { FONT, R, S, TABULAR, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMotion } from './ui';
+import { useLayout } from './useLayout';
 import { MODE_LABEL, PAY_LABEL, type DayEntry, type Mode, type ServiceZ } from './pos-state';
 
 // ─────────────────────────────────────────────────────────────
@@ -29,9 +30,12 @@ export function CashModal({
   onClose: () => void;
   onValidate: (received: number, change: number) => void;
 }) {
+  const L = useLayout();
   const [received, setReceived] = useState(0);
   const change = received - total;
   const rounded = Math.ceil(total / 100) * 100;
+  /** Sous 560 px, pavé et afficheur ne tiennent plus côte à côte. */
+  const stacked = L.width < 560;
 
   const digit = (d: string) => setReceived((cur) => Math.min(99_999_99, cur * 10 + Number(d)));
 
@@ -40,7 +44,7 @@ export function CashModal({
       <PanelHead title="Encaissement espèces" sub={`Total à encaisser · ${euros(total)}`} onClose={onClose} />
       <View style={sheet.hairline} />
 
-      <View style={{ padding: S.xl, gap: S.lg }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: L.sp(S.lg) }}>
         {/* Coupures rapides */}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
           {BILLS.map((b) => (
@@ -57,8 +61,8 @@ export function CashModal({
           <Chip label="Compte juste" onPress={() => setReceived(total)} minHeight={50} />
         </View>
 
-        {/* Saisie libre */}
-        <View style={{ flexDirection: 'row', gap: S.md }}>
+        {/* Saisie libre — l'afficheur passe au-dessus du pavé sur écran étroit */}
+        <View style={{ flexDirection: stacked ? 'column-reverse' : 'row', gap: S.md }}>
           <View style={{ flex: 1, gap: 6 }}>
             {[
               ['1', '2', '3'],
@@ -78,7 +82,7 @@ export function CashModal({
                     }}
                     style={{
                       flex: 1,
-                      minHeight: TOUCH_MIN + 4,
+                      minHeight: L.touch(TOUCH_MIN + 4),
                       borderRadius: R.ctrl,
                       backgroundColor: palette.surface2,
                       borderWidth: 1,
@@ -93,7 +97,7 @@ export function CashModal({
                       style={{
                         fontFamily: FONT,
                         color: k === 'C' || k === '⌫' ? palette.mut : palette.text,
-                        fontSize: 19,
+                        fontSize: L.fs(19),
                         fontWeight: '700',
                       }}
                     >
@@ -108,7 +112,7 @@ export function CashModal({
           <View style={{ flex: 1, gap: S.sm }}>
             <View style={[sheet.inset, { padding: S.md }]}>
               <Text style={type.eyebrow}>Reçu</Text>
-              <Text style={[type.display, { fontSize: 30, marginTop: 4 }]}>{euros(received)}</Text>
+              <Text style={[type.display, { fontSize: L.fs(30), marginTop: 4 }]}>{euros(received)}</Text>
             </View>
             <View
               style={[
@@ -128,7 +132,7 @@ export function CashModal({
               <Text
                 style={[
                   type.display,
-                  { fontSize: 32, marginTop: 4, color: change >= 0 ? palette.green : palette.amber },
+                  { fontSize: L.fs(32), marginTop: 4, color: change >= 0 ? palette.green : palette.amber },
                 ]}
               >
                 {euros(Math.abs(change))}
@@ -136,7 +140,11 @@ export function CashModal({
             </View>
           </View>
         </View>
+      </ScrollView>
 
+      {/* La validation reste hors du défilement : elle ne doit jamais être à
+          chercher, même sur un petit écran. */}
+      <View style={{ paddingHorizontal: L.sp(S.xl), paddingBottom: L.sp(S.xl), paddingTop: S.sm }}>
         <Btn
           label="Valider l'encaissement"
           kind="primary"
@@ -172,6 +180,7 @@ export function SentOverlay({
   onPrint: () => void;
   onDiscount: () => void;
 }) {
+  const L = useLayout();
   const reduced = useReducedMotion();
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -191,7 +200,7 @@ export function SentOverlay({
 
   return (
     <Overlay onClose={onClose} width={440} dim={0.72}>
-      <View style={{ padding: 28, alignItems: 'center' }}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(28), alignItems: 'center' }}>
         <Animated.View
           style={{
             width: 68,
@@ -208,13 +217,15 @@ export function SentOverlay({
           <Text style={{ fontFamily: FONT, color: palette.green, fontSize: 30, fontWeight: '700' }}>✓</Text>
         </Animated.View>
 
-        <Text style={[type.h1, { marginTop: 16 }]}>Envoyée en cuisine</Text>
+        <Text style={[type.h1, { marginTop: 16, fontSize: L.fs(22) }]}>Envoyée en cuisine</Text>
 
         <Text style={[type.eyebrow, { marginTop: 22 }]}>Numéro de retrait</Text>
         <Text
           style={[
             type.display,
-            { fontSize: 76, lineHeight: 84, color: brand.accent, letterSpacing: -3, marginTop: 2 },
+            // Le numéro de retrait est lu à travers le comptoir : c'est le
+            // premier élément qui doit profiter d'un grand écran.
+            { fontSize: L.fs(76), lineHeight: L.fs(84), color: brand.accent, letterSpacing: -3, marginTop: 2 },
           ]}
         >
           {number}
@@ -243,16 +254,17 @@ export function SentOverlay({
           <Text
             style={{
               fontFamily: FONT,
-              fontSize: 13,
+              fontSize: L.fs(13),
               fontWeight: '700',
               color: synced ? palette.green : palette.amber,
+              textAlign: 'center',
             }}
           >
             {synced ? 'Confirmée par le serveur' : 'Numéro provisoire · en file de synchronisation'}
           </Text>
         </View>
 
-        <Text style={[type.mut, { marginTop: 14, textAlign: 'center', fontSize: 14 }]}>
+        <Text style={[type.mut, { marginTop: 14, textAlign: 'center', fontSize: L.fs(14) }]}>
           {MODE_LABEL[entry.mode]} · {euros(entry.total)} ·{' '}
           {entry.paid ? `Payé (${PAY_LABEL[entry.method].toLowerCase()})` : 'À encaisser au retrait'}
         </Text>
@@ -276,7 +288,7 @@ export function SentOverlay({
             }}
           >
             <Text style={[type.eyebrow, { color: palette.green }]}>À rendre</Text>
-            <Text style={[type.display, { fontSize: 26, color: palette.green }]}>{euros(entry.change)}</Text>
+            <Text style={[type.display, { fontSize: L.fs(26), color: palette.green }]}>{euros(entry.change)}</Text>
           </View>
         ) : null}
 
@@ -295,7 +307,7 @@ export function SentOverlay({
             block
           />
         </View>
-      </View>
+      </ScrollView>
     </Overlay>
   );
 }
@@ -315,6 +327,7 @@ export function DiscountModal({
   onClose: () => void;
   onApply: (amountCents: number, reason: string, pin: string) => Promise<string | null>;
 }) {
+  const L = useLayout();
   const [pin, setPin] = useState('');
   const [reason, setReason] = useState('');
   const [percent, setPercent] = useState<number | null>(10);
@@ -350,7 +363,7 @@ export function DiscountModal({
           <Btn label="Compris" kind="solid" size="md" onPress={onClose} block style={{ marginTop: S.lg }} />
         </View>
       ) : (
-        <View style={{ padding: S.xl, gap: S.lg }}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: L.sp(S.lg) }}>
           <View style={{ gap: S.sm }}>
             <Text style={type.eyebrow}>Montant</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
@@ -391,12 +404,16 @@ export function DiscountModal({
           />
 
           {error ? (
-            <Text style={{ fontFamily: FONT, color: palette.red, fontSize: 13.5, fontWeight: '600' }}>{error}</Text>
+            <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(13.5), fontWeight: '600' }}>
+              {error}
+            </Text>
           ) : null}
 
           <View style={[sheet.between, sheet.inset, { padding: S.md }]}>
             <Text style={type.mut}>Nouveau total</Text>
-            <Text style={[type.display, { fontSize: 22, color: brand.accent }]}>{euros(entry.total - amount)}</Text>
+            <Text style={[type.display, { fontSize: L.fs(22), color: brand.accent }]}>
+              {euros(entry.total - amount)}
+            </Text>
           </View>
 
           <Btn
@@ -418,7 +435,7 @@ export function DiscountModal({
               } else onClose();
             }}
           />
-        </View>
+        </ScrollView>
       )}
     </Overlay>
   );
@@ -478,6 +495,7 @@ export function TicketPreview({
   fetchTicket: (orderId: string, token: string | null | undefined) => Promise<OrderTicketDto>;
   onClose: () => void;
 }) {
+  const L = useLayout();
   const [ticket, setTicket] = useState<OrderTicketDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const orderId = entry.serverId;
@@ -525,7 +543,7 @@ export function TicketPreview({
         </View>
       ) : (
         <>
-          <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ padding: S.xl }}>
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl) }}>
             <View style={{ backgroundColor: '#f6f4ef', borderRadius: 6, padding: 18 }}>
               <Paper center bold size={15}>
                 {ticket.header.tenantName}
@@ -612,7 +630,7 @@ export function TicketPreview({
           </ScrollView>
           <View style={sheet.hairline} />
           <View style={{ padding: S.lg, gap: S.sm }}>
-            <Text style={[type.mut, { fontSize: 12.5 }]}>
+            <Text style={[type.mut, { fontSize: L.fs(12.5) }]}>
               Aperçu fidèle du ticket ESC/POS (42 colonnes). L'envoi à l'imprimante réseau se branche sur ce même
               rendu.
             </Text>
@@ -685,6 +703,7 @@ export function CloseModal({
   onOpenTicket: (entry: DayEntry) => void;
   onOpenDiscount: (entry: DayEntry) => void;
 }) {
+  const L = useLayout();
   const [tab, setTab] = useState<'recap' | 'orders'>('recap');
 
   const counts = useMemo(() => {
@@ -713,17 +732,28 @@ export function CloseModal({
       <View style={sheet.hairline} />
 
       {tab === 'recap' ? (
-        <View style={{ padding: S.xl, gap: S.md }}>
-          <View style={[sheet.inset, sheet.between, { padding: S.lg }]}>
-            <View>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: S.md }}>
+          <View
+            style={[
+              sheet.inset,
+              sheet.between,
+              { padding: S.lg, gap: S.md },
+              // Sur un écran étroit, le chiffre d'affaires passe SOUS son
+              // intitulé : tronqué à « 70,… », il ne sert plus à rien.
+              L.width < 620 ? { flexDirection: 'column', alignItems: 'flex-start' } : null,
+            ]}
+          >
+            <View style={{ flexShrink: 1 }}>
               <Text style={type.eyebrow}>Chiffre d'affaires</Text>
-              <Text style={[type.mut, { marginTop: 3, fontSize: 12.5 }]}>
+              <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(12.5) }]}>
                 {z.source === 'server'
                   ? 'Commandes enregistrées — vente en ligne comprise'
                   : 'Hors ligne : journal de ce poste seul, sans la vente en ligne'}
               </Text>
             </View>
-            <Text style={[type.display, { fontSize: 32, color: brand.accent }]}>{euros(z.ca)}</Text>
+            <Text numberOfLines={1} style={[type.display, { fontSize: L.fs(32), color: brand.accent }]}>
+              {euros(z.ca)}
+            </Text>
           </View>
 
           {/* Ce que le gérant recoupe réellement le soir : le tiroir, le
@@ -769,7 +799,7 @@ export function CloseModal({
               style={{
                 fontFamily: FONT,
                 color: pending > 0 ? palette.amber : palette.green,
-                fontSize: 13.5,
+                fontSize: L.fs(13.5),
                 fontWeight: '600',
                 flex: 1,
               }}
@@ -795,9 +825,9 @@ export function CloseModal({
               style={{ flex: 1 }}
             />
           </View>
-        </View>
+        </ScrollView>
       ) : (
-        <ScrollView style={{ maxHeight: 440 }} contentContainerStyle={{ padding: S.lg }}>
+        <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.lg) }}>
           {entries.length === 0 ? (
             <EmptyState title="Aucune commande sur ce service" sub="Le journal se remplit à chaque envoi en cuisine." />
           ) : (
@@ -820,30 +850,41 @@ function OrderRow({
   onTicket: (e: DayEntry) => void;
   onDiscount: (e: DayEntry) => void;
 }) {
+  const L = useLayout();
   const time = new Date(entry.at);
   const hm = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
   return (
     <View
       style={[
         sheet.inset,
-        { padding: S.md, marginBottom: S.sm, flexDirection: 'row', alignItems: 'center', gap: S.md },
+        {
+          padding: S.md,
+          marginBottom: S.sm,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: S.md,
+          // Sur un écran étroit la ligne se replie au lieu d'écraser le montant.
+          flexWrap: 'wrap',
+        },
       ]}
     >
-      <View style={{ width: 52 }}>
-        <Text style={[type.display, { fontSize: 20 }]}>{entry.serverNumber ?? entry.localNumber}</Text>
-        <Text style={[type.mut, { fontSize: 12 }]}>{hm}</Text>
+      <View style={{ width: L.sp(52) }}>
+        <Text style={[type.display, { fontSize: L.fs(20) }]}>{entry.serverNumber ?? entry.localNumber}</Text>
+        <Text style={[type.mut, { fontSize: L.fs(12) }]}>{hm}</Text>
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={type.strong}>
+      <View style={{ flex: 1, minWidth: 120 }}>
+        <Text style={[type.strong, { fontSize: L.fs(15) }]}>
           {MODE_LABEL[entry.mode]} · {entry.items} art.
         </Text>
-        <Text style={[type.mut, { fontSize: 12.5, marginTop: 2 }]}>
+        <Text style={[type.mut, { fontSize: L.fs(12.5), marginTop: 2 }]}>
           {PAY_LABEL[entry.method]}
           {entry.serverId ? '' : ' · en file'}
           {entry.discount ? ` · remise ${euros(entry.discount)}` : ''}
         </Text>
       </View>
-      <Text style={[type.num, { fontSize: 16, fontWeight: '800' }]}>{euros(entry.total - (entry.discount ?? 0))}</Text>
+      <Text style={[type.num, { fontSize: L.fs(16), fontWeight: '800' }]}>
+        {euros(entry.total - (entry.discount ?? 0))}
+      </Text>
       <View style={{ flexDirection: 'row', gap: 6 }}>
         <MiniAction label="Ticket" onPress={() => onTicket(entry)} />
         <MiniAction label="Remise" onPress={() => onDiscount(entry)} />
@@ -853,12 +894,13 @@ function OrderRow({
 }
 
 function MiniAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const L = useLayout();
   return (
     <Press
       onPress={onPress}
       accessibilityLabel={label}
       style={{
-        minHeight: TOUCH_MIN,
+        minHeight: L.touch(),
         paddingHorizontal: 12,
         justifyContent: 'center',
         borderRadius: R.pill,
@@ -867,32 +909,35 @@ function MiniAction({ label, onPress }: { label: string; onPress: () => void }) 
       }}
       activeStyle={{ backgroundColor: '#262626' }}
     >
-      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+      <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13), fontWeight: '600' }}>{label}</Text>
     </Press>
   );
 }
 
 function StatRow({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  const L = useLayout();
   return (
     <View
-      style={[sheet.between, { paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: palette.line2 }]}
+      style={[sheet.between, { paddingVertical: L.sp(11), borderBottomWidth: 1, borderBottomColor: palette.line2 }]}
     >
-      <Text style={[type.mut, { fontSize: 14 }]}>{label}</Text>
-      <Text style={[type.num, { fontSize: 15, fontWeight: '700', color: tone ?? palette.text }]}>{value}</Text>
+      <Text style={[type.mut, { fontSize: L.fs(14) }]}>{label}</Text>
+      <Text style={[type.num, { fontSize: L.fs(15), fontWeight: '700', color: tone ?? palette.text }]}>{value}</Text>
     </View>
   );
 }
 
 function Counter({ label, value }: { label: string; value: number }) {
+  const L = useLayout();
   return (
     <View style={{ alignItems: 'center', flex: 1 }}>
-      <Text style={[type.display, { fontSize: 22 }]}>{value}</Text>
-      <Text style={[type.mut, { fontSize: 12.5, marginTop: 2 }]}>{label}</Text>
+      <Text style={[type.display, { fontSize: L.fs(22) }]}>{value}</Text>
+      <Text style={[type.mut, { fontSize: L.fs(12.5), marginTop: 2, textAlign: 'center' }]}>{label}</Text>
     </View>
   );
 }
 
 export function Notice({ tone, title, body }: { tone: string; title: string; body: string }) {
+  const L = useLayout();
   return (
     <View
       style={{
@@ -904,8 +949,8 @@ export function Notice({ tone, title, body }: { tone: string; title: string; bod
         gap: 6,
       }}
     >
-      <Text style={{ fontFamily: FONT, color: tone, fontSize: 14.5, fontWeight: '700' }}>{title}</Text>
-      <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 13.5, lineHeight: 19 }}>{body}</Text>
+      <Text style={{ fontFamily: FONT, color: tone, fontSize: L.fs(14.5), fontWeight: '700' }}>{title}</Text>
+      <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(13.5), lineHeight: L.fs(19) }}>{body}</Text>
     </View>
   );
 }

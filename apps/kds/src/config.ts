@@ -64,11 +64,19 @@ export const TABS_MAX_WIDTH = 900;
 /**
  * En dessous : le panneau « À lancer » se replie automatiquement.
  *
- * Les colonnes priment — c'est le cœur du service. À 1180 px, le panneau
- * (~216 px) + trois colonnes laisse encore ~300 px par colonne, soit la largeur
- * de confort d'une carte. En dessous, on rend l'espace aux colonnes.
+ * Les colonnes priment — c'est le cœur du service. Le seuil est DÉDUIT, pas
+ * choisi : le panneau n'a le droit d'apparaître que si les trois colonnes
+ * gardent ≥ 320 px, la largeur à laquelle une carte affiche encore le nom du
+ * client sans le tronquer.
+ *
+ *   3 × 320 (colonnes) + 2 × 12 (gouttières) + 216 (panneau) + 12 + 2 × 14
+ *   (marges du plateau) ≈ 1240 px
+ *
+ * La tablette de référence (1280) reste donc exactement telle qu'elle était :
+ * panneau 224 px, colonnes 330 px. En dessous de 1240, l'espace revient aux
+ * colonnes et la bascule « À lancer » disparaît avec le panneau.
  */
-export const ALLDAY_MIN_SCREEN = 1180;
+export const ALLDAY_MIN_SCREEN = 1240;
 
 /** Largeur du panneau « À lancer » : proportion de la fenêtre, entre bornes. */
 export const ALLDAY_PANEL = { ratio: 0.175, min: 216, max: 340 } as const;
@@ -77,6 +85,10 @@ export const ALLDAY_PANEL = { ratio: 0.175, min: 216, max: 340 } as const;
  * En dessous : barre haute allégée. Les trois compteurs colorés cèdent la place
  * (les en-têtes de colonnes portent déjà le même chiffre) ; le total « Actives »,
  * l'horloge et l'état réseau restent toujours visibles.
+ *
+ * Le seuil est exprimé À L'ÉCHELLE DE RÉFÉRENCE : `useLayout` le multiplie par
+ * l'échelle courante, puisqu'une barre dont tout le contenu a grossi de 28 %
+ * réclame d'autant plus de largeur pour tenir sur une ligne.
  */
 export const DENSE_TOOLBAR_MAX_WIDTH = 1380;
 

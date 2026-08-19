@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import type { Order } from '@sm/client-core';
 import { hair, hair2, ink, radius, surface, tabular, type } from '../ui';
 import { scaledStyles, type Layout } from '../useLayout';
@@ -57,7 +57,11 @@ export function AllDayPanel({
   accent: string;
   /** Nom du filtre canal actif, affiché en pied quand il n'est pas « Tous ». */
   filterLabel?: string;
-  style?: { width?: number };
+  /**
+   * Dimension imposée par le plateau : une largeur calculée en mode colonnes,
+   * une occupation complète quand le panneau est le contenu d'un onglet.
+   */
+  style?: StyleProp<ViewStyle>;
   layout: Layout;
 }) {
   const styles = panelStyles(layout);

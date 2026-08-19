@@ -159,7 +159,7 @@ export function Toolbar({
 
       {/* ─── Filtre canal ─── */}
       <View
-        style={styles.filters}
+        style={bar.filters}
         accessibilityRole="tablist"
         accessibilityLabel="Filtrer par canal de commande"
       >
@@ -178,7 +178,7 @@ export function Toolbar({
       </View>
 
       {/* ─── Compteurs, horloge, bascules ─── */}
-      <View style={styles.right}>
+      <View style={bar.right}>
         {!layout.denseToolbar ? (
           <>
             <Counter
@@ -199,13 +199,13 @@ export function Toolbar({
               color={STATUS_TONE.ready.bg}
               layout={layout}
             />
-            <View style={styles.divider} />
+            <View style={bar.divider} />
           </>
         ) : null}
 
         <Counter value={counts.total} label="Actives" color={palette.text} layout={layout} />
 
-        <View style={styles.divider} />
+        <View style={bar.divider} />
         <Text style={bar.clock}>{clock}</Text>
 
         <SyncBadge online={online} pending={pending} layout={layout} />
@@ -366,6 +366,32 @@ const barStyles = scaledStyles((l: Layout) =>
       color: palette.text,
       ...tabular,
     },
+    filters: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Math.round(8 * l.scale),
+      flexGrow: 1,
+      flexShrink: 1,
+      justifyContent: 'center',
+    },
+    // `flexGrow` + `flex-end` : quand la barre passe sur deux lignes (écran
+    // étroit, pastille « Hors ligne » présente), ce groupe reste collé à droite
+    // au lieu de repartir à gauche et d'inverser la lecture.
+    right: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: Math.round(14 * l.scale),
+      flexWrap: 'wrap',
+      rowGap: 8,
+      flexGrow: 1,
+    },
+    divider: {
+      width: 1,
+      alignSelf: 'stretch',
+      minHeight: Math.round(30 * l.scale),
+      backgroundColor: hair2,
+    },
   }),
 );
 
@@ -375,27 +401,4 @@ const styles = StyleSheet.create({
   brandLetter: { fontFamily: type.title.fontFamily, fontWeight: '800', letterSpacing: -0.5 },
   identity: { gap: 3, flexShrink: 1, minWidth: 0 },
   connection: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-
-  filters: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexGrow: 1,
-    flexShrink: 1,
-    justifyContent: 'center',
-  },
-
-  // `flexGrow` + `flex-end` : quand la barre passe sur deux lignes (écran étroit,
-  // pastille « Hors ligne » présente), ce groupe reste collé à droite au lieu de
-  // repartir à gauche et d'inverser la lecture.
-  right: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 14,
-    flexWrap: 'wrap',
-    rowGap: 8,
-    flexGrow: 1,
-  },
-  divider: { width: 1, alignSelf: 'stretch', minHeight: 30, backgroundColor: hair2 },
 });

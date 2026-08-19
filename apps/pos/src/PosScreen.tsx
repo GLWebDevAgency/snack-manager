@@ -550,7 +550,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
                 borderBottomColor: palette.line2,
               }}
             >
-              <Text style={{ color: palette.amber, fontSize: 13, fontWeight: '600' }}>
+              <Text style={{ color: palette.amber, fontSize: layout.fs(13), fontWeight: '600' }}>
                 Menu servi depuis le cache local — les prix peuvent dater. Le service continue normalement.
               </Text>
             </View>
