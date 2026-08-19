@@ -11,13 +11,19 @@ import {
   type,
   type BoardStatus,
 } from '../ui';
+import { scaledStyles, type Layout } from '../useLayout';
 import { CardSkeleton, EmptyState } from './primitives';
 import { OrderCard } from './OrderCard';
 
 /**
  * Une colonne de statut. L'en-tête porte la couleur fonctionnelle du statut —
  * c'est le seul aplat coloré large de l'écran, et il sert de repère à distance :
- * rouge = à prendre, ambre = en cours, vert = à remettre.
+ * rouge = à prendre, ambre = en cours, vert = à remettre. Il suit donc l'échelle
+ * `far()` : sur un mural, on doit reconnaître la colonne avant de lire un mot.
+ *
+ * Les trois colonnes se partagent la largeur à parts égales (`flex: 1`) : leur
+ * dimension n'est jamais codée en dur, c'est `useLayout` qui décide seulement
+ * s'il y a la place pour le panneau « À lancer » à côté.
  */
 export function StatusColumn({
   status,
@@ -28,6 +34,7 @@ export function StatusColumn({
   loading,
   pendingIds,
   onAdvance,
+  layout,
 }: {
   status: BoardStatus;
   orders: Order[];
@@ -37,7 +44,9 @@ export function StatusColumn({
   loading: boolean;
   pendingIds: Set<string>;
   onAdvance: (order: Order) => void;
+  layout: Layout;
 }) {
+  const styles = columnStyles(layout);
   const tone = STATUS_TONE[status];
   const empty = EMPTY_COPY[status];
 
@@ -60,11 +69,11 @@ export function StatusColumn({
       >
         {loading && orders.length === 0 ? (
           <>
-            <CardSkeleton reducedMotion={reducedMotion} />
-            <CardSkeleton reducedMotion={reducedMotion} />
+            <CardSkeleton reducedMotion={reducedMotion} layout={layout} />
+            <CardSkeleton reducedMotion={reducedMotion} layout={layout} />
           </>
         ) : orders.length === 0 ? (
-          <EmptyState title={empty.title} hint={empty.hint} />
+          <EmptyState title={empty.title} hint={empty.hint} layout={layout} />
         ) : (
           orders.map((order) => (
             <OrderCard
@@ -75,6 +84,7 @@ export function StatusColumn({
               reducedMotion={reducedMotion}
               pending={pendingIds.has(order._id)}
               onAdvance={onAdvance}
+              layout={layout}
             />
           ))
         )}
@@ -83,41 +93,48 @@ export function StatusColumn({
   );
 }
 
-const styles = StyleSheet.create({
-  column: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: surface.column,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: hair2,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  headerLabel: {
-    fontFamily: type.title.fontFamily,
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    flexShrink: 1,
-  },
-  badge: {
-    minWidth: 30,
-    height: 26,
-    borderRadius: radius.pill,
-    paddingHorizontal: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: { fontFamily: type.title.fontFamily, fontSize: 15, fontWeight: '900', ...tabular },
-  body: { flex: 1, minHeight: 0 },
-  bodyContent: { padding: 12, gap: 12, paddingBottom: 18 },
-});
+const columnStyles = scaledStyles((l: Layout) =>
+  StyleSheet.create({
+    column: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: surface.column,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: hair2,
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: space.sm,
+      paddingHorizontal: Math.round(14 * l.scale),
+      paddingVertical: Math.round(11 * l.scale),
+    },
+    headerLabel: {
+      fontFamily: type.title.fontFamily,
+      fontSize: l.far(15),
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      flexShrink: 1,
+    },
+    badge: {
+      minWidth: l.far(30),
+      height: l.far(26),
+      borderRadius: radius.pill,
+      paddingHorizontal: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    badgeText: {
+      fontFamily: type.title.fontFamily,
+      fontSize: l.far(15),
+      fontWeight: '900',
+      ...tabular,
+    },
+    body: { flex: 1, minHeight: 0 },
+    bodyContent: { padding: l.gap, gap: l.gap, paddingBottom: l.gap + 6 },
+  }),
+);

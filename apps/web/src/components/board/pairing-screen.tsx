@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   PAIRING_CODE_ALPHABET,
@@ -71,9 +71,6 @@ export function PairingScreen() {
   const [status, setStatus] = useState<Status | null>(null);
   const [paired, setPaired] = useState<ScreenPaired | null>(null);
   const [brandName, setBrandName] = useState<string | null>(null);
-  const phaseRef = useRef<Phase>("entry");
-
-  phaseRef.current = phase;
 
   const stage = useStage(null);
   const palette = boardPalette(null);
@@ -92,33 +89,35 @@ export function PairingScreen() {
     setReady(true);
   }, [router]);
 
-  const pushChar = useCallback((char: string) => {
-    const current = phaseRef.current;
-    if (current === "paired") return;
-    setStatus(null);
-    // On retape par-dessus une tentative en cours ou un refus : le gérant
-    // corrige sa saisie, il ne doit pas avoir à chercher un bouton « annuler ».
-    if (current === "pairing" || current === "stopped") {
-      setPhase("entry");
-      setCode(char);
-      return;
-    }
-    setCode((value) => (value.length >= PAIRING_CODE_LENGTH ? value : value + char));
-  }, []);
+  const pushChar = useCallback(
+    (char: string) => {
+      if (phase === "paired") return;
+      setStatus(null);
+      // On retape par-dessus une tentative en cours ou un refus : le gérant
+      // corrige sa saisie, il ne doit pas avoir à chercher un bouton « annuler ».
+      if (phase === "pairing" || phase === "stopped") {
+        setPhase("entry");
+        setCode(char);
+        return;
+      }
+      setCode((value) => (value.length >= PAIRING_CODE_LENGTH ? value : value + char));
+    },
+    [phase],
+  );
 
   const eraseChar = useCallback(() => {
-    if (phaseRef.current === "paired") return;
+    if (phase === "paired") return;
     setStatus(null);
     setPhase("entry");
     setCode((value) => value.slice(0, -1));
-  }, []);
+  }, [phase]);
 
   const eraseAll = useCallback(() => {
-    if (phaseRef.current === "paired") return;
+    if (phase === "paired") return;
     setStatus(null);
     setPhase("entry");
     setCode("");
-  }, []);
+  }, [phase]);
 
   // Clavier physique (USB, Bluetooth, ou la saisie déportée d'une box) —
   // beaucoup plus rapide que le pavé à l'écran quand il y en a un sous la main.

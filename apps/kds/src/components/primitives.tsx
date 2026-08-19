@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { hair, hair2, ink, palette, radius, surface, TOUCH_MIN, type } from '../ui';
+import type { Layout } from '../useLayout';
 
 /**
  * Le pilote natif d'Animated n'existe pas en web : le demander déclenche un
@@ -124,13 +125,17 @@ export function Pill({
   background,
   border,
   style,
+  layout,
 }: {
   text: string;
   color: string;
   background?: string;
   border?: string;
   style?: StyleProp<ViewStyle>;
+  /** Sans `layout`, la pastille garde sa taille de référence (écran 10"). */
+  layout?: Layout;
 }) {
+  const size = layout ? layout.fs(13) : 13;
   return (
     <View
       style={[
@@ -139,11 +144,13 @@ export function Pill({
           backgroundColor: background ?? 'transparent',
           borderColor: border ?? 'transparent',
           borderWidth: border ? 1 : 0,
+          paddingHorizontal: Math.round(size * 0.7),
+          paddingVertical: Math.round(size * 0.23),
         },
         style,
       ]}
     >
-      <Text style={[styles.pillText, { color }]} numberOfLines={1}>
+      <Text style={[styles.pillText, { color, fontSize: size }]} numberOfLines={1}>
         {text}
       </Text>
     </View>
@@ -158,6 +165,7 @@ export function Chip({
   accent,
   reducedMotion,
   tone,
+  layout,
 }: {
   text: string;
   active: boolean;
@@ -166,8 +174,11 @@ export function Chip({
   reducedMotion?: boolean;
   /** Teinte d'état actif ; par défaut l'accent de marque. */
   tone?: { bg: string; fg: string };
+  layout?: Layout;
 }) {
   const on = tone ?? { bg: accent, fg: '#ffffff' };
+  // La cible tactile suit l'écran mais ne descend jamais sous TOUCH_MIN.
+  const minHeight = layout ? layout.touch : TOUCH_MIN;
   return (
     <Tap
       onPress={onPress}
@@ -176,13 +187,20 @@ export function Chip({
       reducedMotion={reducedMotion}
       style={[
         styles.chip,
+        { minHeight, paddingHorizontal: Math.round(minHeight * 0.36) },
         active
           ? { backgroundColor: on.bg, borderColor: on.bg }
           : { backgroundColor: surface.el, borderColor: hair },
       ]}
       pressedStyle={{ backgroundColor: active ? on.bg : surface.el2 }}
     >
-      <Text style={[styles.chipText, { color: active ? on.fg : ink.dim }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.chipText,
+          { color: active ? on.fg : ink.dim, fontSize: layout ? layout.fs(13.5) : 13.5 },
+        ]}
+        numberOfLines={1}
+      >
         {text}
       </Text>
     </Tap>
@@ -342,19 +360,39 @@ export function PulseRing({
 // États transverses
 // ─────────────────────────────────────────────────────────────
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({
+  title,
+  hint,
+  layout,
+}: {
+  title: string;
+  hint?: string;
+  layout?: Layout;
+}) {
+  const scale = layout?.scale ?? 1;
   return (
-    <View style={styles.empty}>
+    <View style={[styles.empty, { paddingVertical: Math.round(34 * scale) }]}>
       <View style={styles.emptyMark} />
-      <Text style={styles.emptyTitle}>{title}</Text>
-      {hint ? <Text style={styles.emptyHint}>{hint}</Text> : null}
+      <Text style={[styles.emptyTitle, { fontSize: layout ? layout.fs(14) : 14 }]}>{title}</Text>
+      {hint ? (
+        <Text style={[styles.emptyHint, { fontSize: layout ? layout.fs(12.5) : 12.5 }]}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 /** Squelette de carte — occupe la place réelle pendant le premier chargement. */
-export function CardSkeleton({ reducedMotion }: { reducedMotion: boolean }) {
+export function CardSkeleton({
+  reducedMotion,
+  layout,
+}: {
+  reducedMotion: boolean;
+  layout?: Layout;
+}) {
   const value = useRef(new Animated.Value(0.5)).current;
+  const scale = layout?.scale ?? 1;
   useEffect(() => {
     if (reducedMotion) return;
     const loop = Animated.loop(
@@ -369,10 +407,10 @@ export function CardSkeleton({ reducedMotion }: { reducedMotion: boolean }) {
 
   return (
     <Animated.View style={[styles.skeleton, { opacity: reducedMotion ? 0.6 : value }]}>
-      <View style={styles.skeletonHead} />
+      <View style={[styles.skeletonHead, { height: Math.round(44 * scale) }]} />
       <View style={[styles.skeletonLine, { width: '70%' }]} />
       <View style={[styles.skeletonLine, { width: '45%' }]} />
-      <View style={styles.skeletonAction} />
+      <View style={[styles.skeletonAction, { height: layout?.actionH ?? 40 }]} />
     </Animated.View>
   );
 }

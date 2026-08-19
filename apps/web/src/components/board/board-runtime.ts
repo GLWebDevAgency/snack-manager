@@ -76,6 +76,12 @@ export function useDailyReload(dailyReloadAt: string | null | undefined): void {
     const target = Date.parse(dailyReloadAt);
     if (!Number.isFinite(target)) return;
 
+    // Une échéance DÉJÀ PASSÉE vient forcément d'un contenu mis en cache la
+    // veille : la respecter enfermerait un écran privé de réseau dans un
+    // rechargement toutes les minutes, à l'ouverture, devant les clients. On
+    // attend le prochain contenu frais, qui porte toujours une heure à venir.
+    if (target <= Date.now()) return;
+
     const timer = setInterval(() => {
       if (Date.now() >= target) window.location.reload();
     }, RELOAD_CHECK_MS);

@@ -13,6 +13,7 @@ import {
   type,
   type ChannelFilter,
 } from '../ui';
+import { scaledStyles, type Layout } from '../useLayout';
 import { Chip, Pill, Sheen, StatusDot } from './primitives';
 
 export interface Counts {
@@ -36,16 +37,28 @@ export interface ToolbarProps {
   allDayOn: boolean;
   onToggleAllDay: () => void;
   reducedMotion: boolean;
-  /** Écran étroit : les compteurs détaillés cèdent la place. */
-  compact: boolean;
+  layout: Layout;
 }
 
-function BrandTile({ name, accent, size = 34 }: { name: string; accent: string; size?: number }) {
+function BrandTile({
+  name,
+  accent,
+  size = 34,
+}: {
+  name: string;
+  accent: string;
+  size?: number;
+}) {
   return (
     <View
       style={[
         styles.brand,
-        { width: size, height: size, borderRadius: Math.round(size * 0.28), backgroundColor: accent },
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.28),
+          backgroundColor: accent,
+        },
       ]}
     >
       <Text
@@ -60,25 +73,38 @@ function BrandTile({ name, accent, size = 34 }: { name: string; accent: string; 
   );
 }
 
-function Counter({ value, label, color }: { value: number; label: string; color: string }) {
+function Counter({
+  value,
+  label,
+  color,
+  layout,
+}: {
+  value: number;
+  label: string;
+  color: string;
+  layout: Layout;
+}) {
+  const bar = barStyles(layout);
   return (
-    <View style={styles.counter}>
-      <Text style={[styles.counterValue, { color }]}>{value}</Text>
-      <Text style={styles.counterLabel}>{label}</Text>
+    <View style={bar.counter}>
+      <Text style={[bar.counterValue, { color }]}>{value}</Text>
+      <Text style={bar.counterLabel}>{label}</Text>
     </View>
   );
 }
 
 /** Pastille d'état réseau + file offline — toujours visible, jamais alarmiste sans raison. */
-function SyncBadge({ online, pending }: { online: boolean; pending: number }) {
+function SyncBadge({
+  online,
+  pending,
+  layout,
+}: {
+  online: boolean;
+  pending: number;
+  layout: Layout;
+}) {
   if (!online) {
-    return (
-      <Pill
-        text="Hors ligne"
-        color="#ffffff"
-        background={palette.red}
-      />
-    );
+    return <Pill text="Hors ligne" color="#ffffff" background={palette.red} layout={layout} />;
   }
   if (pending > 0) {
     return (
@@ -87,6 +113,7 @@ function SyncBadge({ online, pending }: { online: boolean; pending: number }) {
         color={ink.onAmber}
         background={alpha(palette.amber, 0.16)}
         border={alpha(palette.amber, 0.5)}
+        layout={layout}
       />
     );
   }
@@ -107,22 +134,23 @@ export function Toolbar({
   allDayOn,
   onToggleAllDay,
   reducedMotion,
-  compact,
+  layout,
 }: ToolbarProps) {
+  const bar = barStyles(layout);
   return (
-    <View style={styles.bar}>
-      <Sheen height={70} />
+    <View style={bar.bar}>
+      <Sheen height={layout.fs(70)} />
 
       {/* ─── Identité & état de connexion ─── */}
       <View style={styles.left}>
-        <BrandTile name={tenantName} accent={accent} />
+        <BrandTile name={tenantName} accent={accent} size={Math.round(34 * layout.scale)} />
         <View style={styles.identity}>
-          <Text style={styles.appTitle} numberOfLines={1}>
+          <Text style={bar.appTitle} numberOfLines={1}>
             Cuisine · KDS
           </Text>
           <View style={styles.connection}>
-            <StatusDot color={online ? palette.green : palette.red} />
-            <Text style={styles.connectionText} numberOfLines={1}>
+            <StatusDot color={online ? palette.green : palette.red} size={layout.fs(9)} />
+            <Text style={bar.connectionText} numberOfLines={1}>
               {online ? 'En ligne' : 'Hors ligne'} · {tenantName}
             </Text>
           </View>
@@ -144,36 +172,57 @@ export function Toolbar({
             accent={accent}
             reducedMotion={reducedMotion}
             tone={{ bg: accent, fg: contrastOn(accent) }}
+            layout={layout}
           />
         ))}
       </View>
 
       {/* ─── Compteurs, horloge, bascules ─── */}
       <View style={styles.right}>
-        {!compact ? (
+        {!layout.denseToolbar ? (
           <>
-            <Counter value={counts.new} label="Nouveau" color={STATUS_TONE.new.bg} />
-            <Counter value={counts.preparing} label="En prépa" color={STATUS_TONE.preparing.bg} />
-            <Counter value={counts.ready} label="Prêt" color={STATUS_TONE.ready.bg} />
+            <Counter
+              value={counts.new}
+              label="Nouveau"
+              color={STATUS_TONE.new.bg}
+              layout={layout}
+            />
+            <Counter
+              value={counts.preparing}
+              label="En prépa"
+              color={STATUS_TONE.preparing.bg}
+              layout={layout}
+            />
+            <Counter
+              value={counts.ready}
+              label="Prêt"
+              color={STATUS_TONE.ready.bg}
+              layout={layout}
+            />
             <View style={styles.divider} />
           </>
         ) : null}
 
-        <Counter value={counts.total} label="Actives" color={palette.text} />
+        <Counter value={counts.total} label="Actives" color={palette.text} layout={layout} />
 
         <View style={styles.divider} />
-        <Text style={styles.clock}>{clock}</Text>
+        <Text style={bar.clock}>{clock}</Text>
 
-        <SyncBadge online={online} pending={pending} />
+        <SyncBadge online={online} pending={pending} layout={layout} />
 
-        <Chip
-          text="À lancer"
-          active={allDayOn}
-          onPress={onToggleAllDay}
-          accent={accent}
-          reducedMotion={reducedMotion}
-          tone={{ bg: accent, fg: contrastOn(accent) }}
-        />
+        {/* Sous ALLDAY_MIN_SCREEN, le panneau ne tient plus à côté des colonnes :
+            la bascule disparaît avec lui plutôt que de mentir sur son effet. */}
+        {layout.allDayW > 0 ? (
+          <Chip
+            text="À lancer"
+            active={allDayOn}
+            onPress={onToggleAllDay}
+            accent={accent}
+            reducedMotion={reducedMotion}
+            tone={{ bg: accent, fg: contrastOn(accent) }}
+            layout={layout}
+          />
+        ) : null}
         <Chip
           text={soundOn ? 'Son' : 'Muet'}
           active={soundOn}
@@ -181,14 +230,15 @@ export function Toolbar({
           accent={accent}
           reducedMotion={reducedMotion}
           tone={{ bg: accent, fg: contrastOn(accent) }}
+          layout={layout}
         />
       </View>
     </View>
   );
 }
 
-/** Barre du mode téléphone — titre, horloge, réseau, son. */
-export function PhoneBar({
+/** Barre du mode compact (téléphone, petite tablette) — titre, horloge, réseau, son. */
+export function CompactBar({
   tenantName,
   accent,
   clock,
@@ -197,27 +247,37 @@ export function PhoneBar({
   soundOn,
   onToggleSound,
   reducedMotion,
+  layout,
 }: Pick<
   ToolbarProps,
-  'tenantName' | 'accent' | 'clock' | 'online' | 'pending' | 'soundOn' | 'onToggleSound' | 'reducedMotion'
+  | 'tenantName'
+  | 'accent'
+  | 'clock'
+  | 'online'
+  | 'pending'
+  | 'soundOn'
+  | 'onToggleSound'
+  | 'reducedMotion'
+  | 'layout'
 >) {
+  const bar = barStyles(layout);
   return (
-    <View style={styles.phoneBar}>
-      <Sheen height={56} />
-      <BrandTile name={tenantName} accent={accent} size={30} />
+    <View style={bar.compactBar}>
+      <Sheen height={layout.fs(56)} />
+      <BrandTile name={tenantName} accent={accent} size={Math.round(30 * layout.scale)} />
       <View style={styles.identity}>
-        <Text style={styles.appTitle} numberOfLines={1}>
+        <Text style={bar.appTitle} numberOfLines={1}>
           Cuisine
         </Text>
         <View style={styles.connection}>
-          <StatusDot color={online ? palette.green : palette.red} size={7} />
-          <Text style={styles.connectionText} numberOfLines={1}>
+          <StatusDot color={online ? palette.green : palette.red} size={layout.fs(7)} />
+          <Text style={bar.connectionText} numberOfLines={1}>
             {online ? 'En ligne' : 'Hors ligne'}
           </Text>
         </View>
       </View>
-      <SyncBadge online={online} pending={pending} />
-      <Text style={styles.clockSm}>{clock}</Text>
+      <SyncBadge online={online} pending={pending} layout={layout} />
+      <Text style={bar.clockSm}>{clock}</Text>
       <Chip
         text={soundOn ? 'Son' : 'Muet'}
         active={soundOn}
@@ -225,6 +285,7 @@ export function PhoneBar({
         accent={accent}
         reducedMotion={reducedMotion}
         tone={{ bg: accent, fg: contrastOn(accent) }}
+        layout={layout}
       />
     </View>
   );

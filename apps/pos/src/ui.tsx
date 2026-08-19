@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { TOUCH_MIN, palette } from '@sm/client-core';
 import { DUR, FONT, R, S, TABULAR, sheet, shadow, type, withAlpha } from './theme';
+import { useLayout } from './useLayout';
 
 // ─── Mouvement ───
 
@@ -183,8 +184,11 @@ export function Btn({
   glyph?: string;
   accessibilityLabel?: string;
 }) {
-  const h = size === 'lg' ? 60 : size === 'sm' ? TOUCH_MIN : 52;
-  const fs = size === 'lg' ? 17 : size === 'sm' ? 14 : 15.5;
+  const L = useLayout();
+  // La hauteur suit l'écran mais ne passe jamais sous TOUCH_MIN : c'est
+  // `touch()` qui porte cette garantie, pas l'appelant.
+  const h = L.touch(size === 'lg' ? 60 : size === 'sm' ? TOUCH_MIN : 52);
+  const fs = L.fs(size === 'lg' ? 17 : size === 'sm' ? 14 : 15.5);
 
   const bg =
     kind === 'primary'
@@ -255,7 +259,7 @@ export function Btn({
           {label}
         </Text>
         {sub ? (
-          <Text style={{ fontFamily: FONT, color: fg, opacity: 0.72, fontSize: 12.5, fontWeight: '600', ...TABULAR }}>
+          <Text style={{ fontFamily: FONT, color: fg, opacity: 0.72, fontSize: L.fs(12.5), fontWeight: '600', ...TABULAR }}>
             {sub}
           </Text>
         ) : null}
@@ -264,15 +268,16 @@ export function Btn({
   );
 }
 
-/** Bouton rond « fermer » — 44 px de zone tactile pour un glyphe de 16. */
+/** Bouton rond « fermer » — 44 px de zone tactile au minimum pour un glyphe de 16. */
 export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; label?: string }) {
+  const L = useLayout();
   return (
     <Press
       onPress={onPress}
       accessibilityLabel={label}
       style={{
-        width: TOUCH_MIN,
-        height: TOUCH_MIN,
+        width: L.touch(),
+        height: L.touch(),
         borderRadius: R.pill,
         backgroundColor: palette.surface2,
         borderWidth: 1,
@@ -282,7 +287,9 @@ export function CloseBtn({ onPress, label = 'Fermer' }: { onPress: () => void; l
       }}
       activeStyle={{ backgroundColor: '#242424' }}
     >
-      <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 17, fontWeight: '600', lineHeight: 20 }}>✕</Text>
+      <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(17), fontWeight: '600', lineHeight: L.fs(20) }}>
+        ✕
+      </Text>
     </Press>
   );
 }
@@ -310,6 +317,7 @@ export function Chip({
   tone?: 'accent' | 'red' | 'neutral';
   minHeight?: number;
 }) {
+  const L = useLayout();
   const activeBg =
     tone === 'red' ? withAlpha(palette.red, 0.18) : tone === 'neutral' ? '#efefef' : (accent ?? palette.gold);
   const activeFg = tone === 'red' ? palette.red : tone === 'neutral' ? '#111' : (onAccent ?? '#12100d');
@@ -321,9 +329,9 @@ export function Chip({
       accessibilityRole="checkbox"
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       style={{
-        minHeight,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
+        minHeight: L.touch(minHeight),
+        paddingHorizontal: L.sp(14),
+        paddingVertical: L.sp(8),
         borderRadius: R.pill,
         borderWidth: 1,
         borderColor: on ? 'transparent' : palette.line,
@@ -337,7 +345,7 @@ export function Chip({
       <Text
         style={{
           fontFamily: FONT,
-          fontSize: 14.5,
+          fontSize: L.fs(14.5),
           fontWeight: on ? '700' : '600',
           color: on ? activeFg : palette.text,
           letterSpacing: -0.1,
@@ -349,7 +357,7 @@ export function Chip({
         <Text
           style={{
             fontFamily: FONT,
-            fontSize: 13,
+            fontSize: L.fs(13),
             fontWeight: '700',
             color: on ? activeFg : palette.mut,
             opacity: on ? 0.8 : 1,
@@ -382,6 +390,8 @@ export function Segmented<T extends string>({
   height?: number;
   flex?: boolean;
 }) {
+  const L = useLayout();
+  const h = L.touch(height);
   return (
     <View
       style={{
@@ -406,8 +416,8 @@ export function Segmented<T extends string>({
             accessibilityLabel={opt.label}
             scale={0.98}
             style={{
-              minHeight: height - 6,
-              paddingHorizontal: 16,
+              minHeight: h - 6,
+              paddingHorizontal: L.sp(16),
               borderRadius: R.pill,
               backgroundColor: on ? accent : 'transparent',
               alignItems: 'center',
@@ -420,7 +430,7 @@ export function Segmented<T extends string>({
               numberOfLines={1}
               style={{
                 fontFamily: FONT,
-                fontSize: 14.5,
+                fontSize: L.fs(14.5),
                 fontWeight: on ? '700' : '600',
                 color: on ? onAccent : palette.mut,
                 letterSpacing: -0.1,
@@ -432,7 +442,7 @@ export function Segmented<T extends string>({
               <Text
                 style={{
                   fontFamily: FONT,
-                  fontSize: 12,
+                  fontSize: L.fs(12),
                   fontWeight: '700',
                   color: on ? onAccent : palette.mut,
                   opacity: 0.75,
@@ -464,7 +474,8 @@ export function Stepper({
   max?: number;
   compact?: boolean;
 }) {
-  const size = compact ? TOUCH_MIN : 48;
+  const L = useLayout();
+  const size = L.touch(compact ? TOUCH_MIN : 48);
   const btn: ViewStyle = {
     width: size,
     height: size,
@@ -490,15 +501,15 @@ export function Stepper({
         style={btn}
         activeStyle={{ backgroundColor: '#2c2c2c' }}
       >
-        <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 20, fontWeight: '700' }}>−</Text>
+        <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(20), fontWeight: '700' }}>−</Text>
       </Press>
       <Text
         style={{
           fontFamily: FONT,
           color: palette.text,
-          fontSize: 16,
+          fontSize: L.fs(16),
           fontWeight: '800',
-          minWidth: 26,
+          minWidth: L.sp(26),
           textAlign: 'center',
           ...TABULAR,
         }}
@@ -512,7 +523,7 @@ export function Stepper({
         style={btn}
         activeStyle={{ backgroundColor: '#2c2c2c' }}
       >
-        <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 20, fontWeight: '700' }}>+</Text>
+        <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(20), fontWeight: '700' }}>+</Text>
       </Press>
     </View>
   );
@@ -545,6 +556,7 @@ export function Field({
   accent?: string;
   multiline?: boolean;
 }) {
+  const L = useLayout();
   const [focus, setFocus] = useState(false);
   return (
     <View style={style}>
@@ -562,18 +574,18 @@ export function Field({
         onBlur={() => setFocus(false)}
         accessibilityLabel={label ?? placeholder}
         style={{
-          minHeight: TOUCH_MIN,
-          paddingHorizontal: 14,
-          paddingVertical: 10,
+          minHeight: L.touch(),
+          paddingHorizontal: L.sp(14),
+          paddingVertical: L.sp(10),
           borderRadius: R.ctrl,
           backgroundColor: palette.surface2,
           borderWidth: 1,
           borderColor: invalid ? palette.red : focus ? (accent ?? palette.gold) : palette.line2,
           color: palette.text,
           fontFamily: FONT,
-          fontSize: 15,
+          fontSize: L.fs(15),
           fontWeight: '600',
-          ...(multiline ? { textAlignVertical: 'top', minHeight: 64 } : null),
+          ...(multiline ? { textAlignVertical: 'top', minHeight: L.sp(64) } : null),
         }}
       />
     </View>
@@ -582,6 +594,15 @@ export function Field({
 
 // ─── Overlay modal ───
 
+/**
+ * Surcouche modale — largeur FLUIDE bornée à l'écran.
+ *
+ * `width` n'est plus une largeur figée mais une largeur souhaitée : `L.modal()`
+ * la fait suivre l'échelle et la borne à la fenêtre, marges comprises. Le
+ * panneau peut rétrécir en hauteur (`flexShrink`) au lieu de se faire couper :
+ * sur une 10" en portrait, la config express garde son pied et son bouton
+ * d'ajout visibles, le contenu défile.
+ */
 export function Overlay({
   onClose,
   children,
@@ -595,6 +616,7 @@ export function Overlay({
   align?: 'center' | 'top';
   dim?: number;
 }) {
+  const L = useLayout();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
 
@@ -636,18 +658,84 @@ export function Overlay({
       />
       <Animated.View
         style={{
-          width,
-          maxWidth: '94%',
-          maxHeight: '92%',
-          marginTop: align === 'top' ? 24 : 0,
+          width: L.modal(width),
+          maxWidth: '96%',
+          maxHeight: align === 'top' ? '88%' : '94%',
+          flexShrink: 1,
+          marginTop: align === 'top' ? L.sp(24) : 0,
           opacity: v,
           transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
         }}
       >
-        <View style={sheet.panel}>
+        <View style={[sheet.panel, { flexShrink: 1 }]}>
           <Sheen intensity={0.9} />
           {children}
         </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * Tiroir latéral — support du ticket escamotable en mode compact.
+ *
+ * Il se glisse par la droite, là où le panneau ancré se trouve sur les grands
+ * écrans : le caissier retrouve le ticket au même endroit, quelle que soit la
+ * taille du poste. Son z-index reste SOUS celui des modales, pour qu'une
+ * configuration produit ouverte depuis une ligne du ticket passe devant.
+ */
+export function Drawer({
+  onClose,
+  children,
+  width,
+}: {
+  onClose: () => void;
+  children: ReactNode;
+  width: number;
+}) {
+  const reduced = useReducedMotion();
+  const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(v, {
+      toValue: 1,
+      duration: reduced ? 0 : DUR.fast,
+      easing: Easing.bezier(0.2, 0.8, 0.2, 1),
+      useNativeDriver: true,
+    }).start();
+  }, [reduced, v]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    doc.addEventListener('keydown', onKey);
+    return () => doc.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <View style={[StyleSheet.absoluteFill, { flexDirection: 'row', justifyContent: 'flex-end', zIndex: 60 }]}>
+      <Pressable
+        importantForAccessibility="no"
+        accessibilityElementsHidden
+        onPress={onClose}
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+      />
+      <Animated.View
+        style={[
+          {
+            width,
+            maxWidth: '100%',
+            opacity: v,
+            transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [width, 0] }) }],
+          },
+          shadow(3),
+        ]}
+      >
+        {children}
       </Animated.View>
     </View>
   );
@@ -665,16 +753,17 @@ export function PanelHead({
   onClose?: () => void;
   right?: ReactNode;
 }) {
+  const L = useLayout();
   return (
     <View
       style={[
         sheet.between,
-        { paddingHorizontal: S.xl, paddingTop: S.xl, paddingBottom: S.md, gap: S.md },
+        { paddingHorizontal: L.sp(S.xl), paddingTop: L.sp(S.xl), paddingBottom: L.sp(S.md), gap: L.sp(S.md) },
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[type.h1, { fontSize: 20 }]}>{title}</Text>
-        {sub ? <Text style={[type.mut, { marginTop: 3 }]}>{sub}</Text> : null}
+        <Text style={[type.h1, { fontSize: L.fs(20) }]}>{title}</Text>
+        {sub ? <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(13) }]}>{sub}</Text> : null}
       </View>
       {right}
       {onClose ? <CloseBtn onPress={onClose} /> : null}
@@ -752,8 +841,18 @@ function ToastHost({ items }: { items: Toast[] }) {
 // ─── États transverses ───
 
 export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: string; glyph?: string }) {
+  const L = useLayout();
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 56, paddingHorizontal: 24 }}>
+    <View
+      style={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Un état vide ne doit pas pousser le contenu utile hors de l'écran sur
+        // une petite hauteur.
+        paddingVertical: L.height < 700 ? 28 : L.sp(56),
+        paddingHorizontal: L.sp(24),
+      }}
+    >
       <View
         style={{
           width: 56,
@@ -768,9 +867,11 @@ export function EmptyState({ title, sub, glyph = '·' }: { title: string; sub?: 
       >
         <Text style={{ fontFamily: FONT, color: '#4a4a4a', fontSize: 24, fontWeight: '300' }}>{glyph}</Text>
       </View>
-      <Text style={[type.strong, { color: palette.mut, textAlign: 'center' }]}>{title}</Text>
+      <Text style={[type.strong, { color: palette.mut, textAlign: 'center', fontSize: L.fs(15) }]}>{title}</Text>
       {sub ? (
-        <Text style={[type.mut, { textAlign: 'center', marginTop: 5, color: '#6f6f6f' }]}>{sub}</Text>
+        <Text style={[type.mut, { textAlign: 'center', marginTop: 5, color: '#6f6f6f', fontSize: L.fs(13) }]}>
+          {sub}
+        </Text>
       ) : null}
     </View>
   );

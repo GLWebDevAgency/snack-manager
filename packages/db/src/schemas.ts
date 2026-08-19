@@ -489,8 +489,18 @@ export const ScreenSchema = new Schema(
   { timestamps: true },
 );
 ScreenSchema.index({ tenantId: 1, createdAt: -1 });
-// `sparse` : les écrans non appairés ont tous `null`, ce qui violerait l'unicité.
-ScreenSchema.index({ deviceToken: 1 }, { unique: true, sparse: true });
+/**
+ * Index PARTIEL, et non `sparse`.
+ *
+ * `sparse` n'exclut que les documents où le champ est ABSENT — or le défaut
+ * écrit explicitement `null`. Deux écrans non appairés portaient donc tous
+ * deux `deviceToken: null` et entraient en collision : impossible de créer un
+ * second écran. Le filtre partiel n'indexe que les jetons réellement émis.
+ */
+ScreenSchema.index(
+  { deviceToken: 1 },
+  { unique: true, partialFilterExpression: { deviceToken: { $type: 'string' } } },
+);
 ScreenSchema.index({ pairingCode: 1 }, { sparse: true });
 export type Screen = InferSchemaType<typeof ScreenSchema>;
 

@@ -19,6 +19,7 @@ import { StatsModule } from './modules/stats/stats.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { EngageModule } from './modules/engage/engage.module';
 import { SiteModule } from './modules/site/site.module';
+import { ScreensModule } from './modules/screens/screens.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { SiteModule } from './modules/site/site.module';
     StaffModule,
     EngageModule,
     SiteModule,
+    ScreensModule,
   ],
   controllers: [HealthController],
 })

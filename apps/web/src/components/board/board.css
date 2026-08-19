@@ -515,16 +515,16 @@
  * au pixel, et surtout ce qui empêche le prix d'être rogné par le bas de la
  * carte quand un nom passe sur deux lignes (« Compose ton Tacos »).
  */
-.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-photo {
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"][data-photo="1"] .bd-hero-photo {
   flex: 1 1 auto;
 }
-.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-body {
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"][data-photo="1"] .bd-hero-body {
   flex: 0 0 auto;
 }
-.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-name {
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"][data-photo="1"] .bd-hero-name {
   min-height: 2.12em;
 }
-.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"] .bd-hero-desc {
+.bd-stage[data-orientation="landscape"] .bd-hero-card[data-solo="0"][data-photo="1"] .bd-hero-desc {
   -webkit-line-clamp: 2;
   min-height: 2.6em;
 }
@@ -771,6 +771,15 @@
   flex-direction: column;
   justify-content: center;
   gap: calc(var(--bd-title-size) * 0.3);
+}
+
+/* Empilés, les deux blocs se suivent et l'ensemble est centré : deux moitiés
+   d'écran séparées par 400 px de noir donnaient deux affiches sans rapport. */
+.bd-stage[data-orientation="portrait"] .bd-pair {
+  justify-content: center;
+}
+.bd-stage[data-orientation="portrait"] .bd-pair-side {
+  flex: 0 0 auto;
 }
 
 .bd-pair-kicker {

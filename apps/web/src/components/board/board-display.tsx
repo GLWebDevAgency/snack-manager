@@ -17,13 +17,15 @@ import { useStage } from "./use-stage";
  *  effets du carrousel en boucle. */
 const NO_SCENES: ScreenScenePayload[] = [];
 
-function formatSync(at: number | null): string {
+/** « 14:32 », à l'heure du RESTAURANT — celle qu'un gérant peut recouper. */
+function formatSync(at: number | null, timezone: string | null): string {
   if (!at) return "";
   try {
     return new Intl.DateTimeFormat("fr-FR", {
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
+      ...(timezone ? { timeZone: timezone } : {}),
     }).format(new Date(at));
   } catch {
     return "";
@@ -143,7 +145,9 @@ export function BoardDisplay() {
             <div className="bd-offline">
               <span className="bd-offline-dot" />
               Hors ligne
-              {lastSyncAt ? ` · carte du ${formatSync(lastSyncAt)}` : ""}
+              {lastSyncAt
+                ? ` · carte de ${formatSync(lastSyncAt, content?.timezone ?? null)}`
+                : ""}
             </div>
           ) : null}
         </div>
