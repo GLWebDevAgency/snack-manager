@@ -58,6 +58,7 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "ingredients", href: "/admin/ingredients", label: "Ingrédients & stocks", icon: "fries" },
   { id: "promos", href: "/admin/promos", label: "Promos", icon: "tag" },
   { id: "hours", href: "/admin/hours", label: "Horaires", icon: "clock" },
+  { id: "screens", href: "/admin/screens", label: "Écrans TV", icon: "tv" },
   { id: "stats", href: "/admin/stats", label: "Statistiques", icon: "chart" },
   { id: "team", href: "/admin/team", label: "Équipe & pointage", icon: "user" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },

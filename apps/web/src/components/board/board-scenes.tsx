@@ -85,6 +85,10 @@ function HeroProducts({
   durationMs: number;
 }) {
   const solo = products.length === 1;
+  // Dès qu'UNE carte porte un badge, toutes réservent la ligne : sinon la
+  // photo de la carte étiquetée « Nouveau » est plus courte que ses voisines,
+  // et l'œil accroche sur l'alignement avant de lire le prix.
+  const reserveBadges = products.some((p) => p.isNew || p.outOfStock);
 
   return (
     <div
@@ -109,7 +113,7 @@ function HeroProducts({
             </div>
           ) : null}
           <div className="bd-hero-body">
-            <div className="bd-name-line">
+            <div className="bd-name-line" data-reserve={reserveBadges ? "1" : "0"}>
               {product.isNew && !product.outOfStock ? (
                 <span className="bd-badge" data-kind="new">
                   Nouveau

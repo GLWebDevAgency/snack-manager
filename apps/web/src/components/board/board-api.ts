@@ -55,9 +55,15 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
+    // Nest renvoie `{ message, error, statusCode }`, mais `message` devient un
+    // TABLEAU quand la validation échoue sur plusieurs champs. Sur un écran de
+    // salle, mieux vaut une phrase générique qu'un « [object Object] » en
+    // capitales de 40 pixels.
+    const raw = (payload as { message?: unknown } | null)?.message;
     const message =
-      (payload as { message?: string } | null)?.message ??
-      `Erreur serveur (${response.status})`;
+      typeof raw === "string" && raw.trim().length > 0
+        ? raw
+        : `Erreur serveur (${response.status})`;
     throw new BoardApiError(response.status, message);
   }
 

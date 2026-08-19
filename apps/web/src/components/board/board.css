@@ -301,8 +301,16 @@
   animation: bd-line-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--bd-i, 0) * 70ms + 0.12s) both;
 }
 
-.bd-row[data-out="1"] {
-  opacity: 0.4;
+/*
+ * Produit épuisé : c'est le CONTENU de la ligne qu'on éteint, pas la ligne.
+ * Une opacité posée sur `.bd-row` serait annulée par l'animation d'entrée —
+ * une animation en `fill-mode: both` fige sa dernière image (opacity: 1) et
+ * l'emporte sur toute déclaration normale. Le bogue est invisible en relecture
+ * de code : à l'écran, les ruptures ne grisaient tout simplement pas.
+ */
+.bd-row[data-out="1"] .bd-thumb,
+.bd-row[data-out="1"] .bd-row-main {
+  opacity: 0.5;
 }
 
 .bd-thumb {
@@ -343,9 +351,12 @@
 }
 
 /* Une ligne de badges seule (scène « mise en avant ») ne réserve pas d'espace
-   quand le produit n'en porte aucun. */
-.bd-name-line:empty {
+   quand AUCUNE carte de la scène n'en porte. */
+.bd-name-line[data-reserve="0"]:empty {
   display: none;
+}
+.bd-name-line[data-reserve="1"] {
+  min-height: calc(var(--bd-desc-size) * 1.7);
 }
 
 .bd-name {
@@ -547,8 +558,10 @@
   animation: bd-ken var(--bd-ken, 10s) linear both;
 }
 
-.bd-hero-card[data-out="1"] {
-  opacity: 0.44;
+/* Même raison que pour les lignes : la carte est animée, son contenu non. */
+.bd-hero-card[data-out="1"] .bd-hero-photo,
+.bd-hero-card[data-out="1"] .bd-hero-body {
+  opacity: 0.5;
 }
 
 /* Sans photo, la carte n'est pas amputée : la composition typographique prend
