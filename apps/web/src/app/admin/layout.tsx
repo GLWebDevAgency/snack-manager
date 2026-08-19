@@ -63,6 +63,10 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "stats", href: "/admin/stats", label: "Statistiques", icon: "chart" },
   { id: "team", href: "/admin/team", label: "Équipe & pointage", icon: "user" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },
+  // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
+  // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
+  // trouver seul — la FAQ lui promet mot pour mot d'y retrouver ses factures.
+  { id: "abonnement", href: "/admin/abonnement", label: "Abonnement", icon: "euro" },
 ];
 
 export default function AdminLayout({

@@ -20,3 +20,7 @@ boilerplate-main.zip
 # Bundles web exportés (Expo)
 apps/*/dist/
 .env.production.backup
+
+# Artefacts de vérification des agents
+pos-demo.png
+.playwright-mcp/
