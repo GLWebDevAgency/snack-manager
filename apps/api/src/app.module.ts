@@ -22,6 +22,7 @@ import { SiteModule } from './modules/site/site.module';
 import { ScreensModule } from './modules/screens/screens.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { CrmModule } from './modules/crm/crm.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -56,6 +57,10 @@ import { CrmModule } from './modules/crm/crm.module';
     ScreensModule,
     DevicesModule,
     CrmModule,
+    // Facturation vue par le gérant (`/billing/me`) — distincte du CRM, qui la
+    // voit côté équipe. Déclarée APRÈS `CrmModule` sans que l'ordre compte :
+    // les préfixes `/billing` et `/crm` ne se recouvrent pas.
+    BillingModule,
   ],
   controllers: [HealthController],
 })

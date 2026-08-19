@@ -132,9 +132,14 @@ async function main(): Promise<void> {
   const write = rest.includes('--go');
   const args = rest.filter((a) => a !== '--go');
 
-  if (mode === 'dump' && args.length === 2) return dump(args[0], args[1]);
-  if (mode === 'copy' && args.length === 2) return copy(args[0], args[1], write);
-  if (mode === 'purge' && args.length === 1) return purge(args[0], write);
+  // Déstructuration plutôt qu'un test sur `length` : `noUncheckedIndexedAccess`
+  // ne déduit pas la présence d'un élément d'un contrôle de longueur, et il a
+  // raison — c'est l'absence explicite qui doit décider, sur un outil dont un
+  // argument manquant viserait la mauvaise base.
+  const [first, second] = args;
+  if (mode === 'dump' && first && second) return dump(first, second);
+  if (mode === 'copy' && first && second) return copy(first, second, write);
+  if (mode === 'purge' && first && !second) return purge(first, write);
 
   console.error(
     'Usage :\n' +

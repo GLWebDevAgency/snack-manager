@@ -118,6 +118,108 @@ export function Glyph({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Plateau produit — le visuel qui donne faim
+// ─────────────────────────────────────────────────────────────
+
+/** Initiales de repli : deux lettres, articles et prépositions écartés. */
+const FILLER = /^(le|la|les|l|de|du|des|d|au|aux|à|et|the)$/i;
+
+export function monogram(name: string): string {
+  const words = name.trim().split(/[\s'’-]+/).filter(Boolean);
+  const strong = words.filter((w) => !FILLER.test(w));
+  const source = strong.length > 0 ? strong : words;
+  // Un seul mot (« Végétarien ») : deux lettres. Une initiale isolée flotte au
+  // milieu du plateau, deux lettres tiennent la surface comme un monogramme.
+  const letters =
+    source.length > 1
+      ? source
+          .slice(0, 2)
+          .map((w) => w[0] ?? "")
+          .join("")
+      : (source[0] ?? name.trim()).slice(0, 2);
+  return (letters || name.trim().slice(0, 2)).toUpperCase();
+}
+
+/**
+ * Plateau : le réceptacle de TOUT visuel produit (carte, rail, panier, fiche).
+ *
+ * Trois exigences, un seul composant :
+ *  — les photos de la carte sont **détournées** et de format libre : elles
+ *    tiennent en `contain` sur un halo, jamais recadrées en `cover` (un plat
+ *    coupé aux deux bouts ne donne pas faim) ;
+ *  — un produit sans photo — la majorité de la carte — reçoit le monogramme
+ *    en contour : une mise en page réglée, pas un cadre vide ;
+ *  — une photo qui ne charge PAS bascule sur ce même monogramme. Sans cela le
+ *    navigateur dessine son icône d'image cassée, ce qui donne à la carte
+ *    l'air d'un site en panne.
+ */
+export function Plate({
+  photoUrl,
+  name,
+  className,
+  radius = "rounded-card",
+  /** Corps du monogramme de repli, en pixels. */
+  mono = 22,
+  /** Marge intérieure de la photo (le détourage respire). */
+  pad = "p-[7%]",
+}: {
+  photoUrl: string | null;
+  name: string;
+  className?: string;
+  radius?: string;
+  mono?: number;
+  pad?: string;
+}) {
+  /**
+   * L’état porte l’URL qu’il juge : la feuille produit réutilise le même
+   * plateau d’un produit à l’autre, une photo cassée ne doit pas condamner la
+   * suivante (motif « ajuster l’état pendant le rendu » de la doc React).
+   */
+  const [state, setState] = useState({ url: photoUrl, broken: false });
+  if (state.url !== photoUrl) setState({ url: photoUrl, broken: false });
+  const shown = photoUrl && !state.broken;
+  const fail = () => setState({ url: photoUrl, broken: true });
+  return (
+    <span
+      aria-hidden
+      className={cx(
+        "sm-plate relative grid shrink-0 place-items-center overflow-hidden border border-white/6",
+        radius,
+        className,
+      )}
+    >
+      {shown ? (
+        // Photo tenant : domaine non maîtrisé, next/image imposerait une
+        // liste blanche — <img> volontaire, avec repli à l'erreur.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photoUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={fail}
+          /* La page est rendue côté serveur : une image morte a déjà échoué
+             quand React s’attache, et `onError` ne se déclenchera JAMAIS. On
+             relit donc l’état réel du nœud au montage — sans quoi le
+             navigateur laisse son icône d’image cassée dans la carte. */
+          ref={(node) => {
+            if (node?.complete && node.naturalWidth === 0) fail();
+          }}
+          className={cx("sm-cut size-full object-contain", pad)}
+        />
+      ) : (
+        <span
+          style={{ fontSize: mono }}
+          className="sm-mono relative font-black uppercase leading-none"
+        >
+          {monogram(name)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Typographie des chiffres
 // ─────────────────────────────────────────────────────────────
 
@@ -165,8 +267,8 @@ export function PriceTag({
   return (
     <span
       className={cx(
-        "inline-flex items-baseline gap-1 rounded-ctrl bg-surface2 text-ink",
-        size === "sm" ? "px-2 py-[3px]" : "px-2.5 py-1",
+        "inline-flex items-baseline gap-1 rounded-ctrl border border-white/6 bg-surface2 text-ink",
+        size === "sm" ? "px-2 py-[3px]" : "px-2.5 py-[5px]",
       )}
     >
       {from && (
@@ -174,7 +276,7 @@ export function PriceTag({
           dès
         </span>
       )}
-      <Money cents={cents} className={size === "sm" ? "text-[13px]" : "text-[14px]"} />
+      <Money cents={cents} className={size === "sm" ? "text-[13px]" : "text-[15px]"} />
     </span>
   );
 }
@@ -453,14 +555,14 @@ export function AddButton({
   return (
     <span
       aria-hidden
-      className="grid size-10 shrink-0 place-items-center rounded-pill bg-accent text-onaccent"
+      className="grid size-11 shrink-0 place-items-center rounded-pill bg-accent text-onaccent shadow-[0_6px_16px_-6px_var(--cf-accent)]"
     >
       {qty > 0 ? (
-        <span className="text-[15px] font-extrabold tabular-nums">{qty}</span>
+        <span className="text-[16px] font-extrabold tabular-nums">{qty}</span>
       ) : compose ? (
-        <Glyph name="sliders" size={18} stroke={2.2} />
+        <Glyph name="sliders" size={19} stroke={2.2} />
       ) : (
-        <Icon name="plus" size={18} stroke={2.6} />
+        <Icon name="plus" size={20} stroke={2.6} />
       )}
     </span>
   );

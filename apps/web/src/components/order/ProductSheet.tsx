@@ -45,6 +45,7 @@ import {
   Money,
   OptionChip,
   OptionRow,
+  Plate,
   PrimaryAction,
   SectionLabel,
   Segmented,
@@ -354,8 +355,9 @@ function SubLabel({
 }
 
 /**
- * Visuel de tête. Avec photo : plein cadre, fondu vers la surface de la feuille
- * pour que l’image ne soit jamais coupée au couteau. Sans photo : bandeau
+ * Visuel de tête. Avec photo : le plat entier, posé sur son plateau et fondu
+ * vers la surface de la feuille — jamais recadré (les visuels de la carte sont
+ * détourés, un `cover` leur couperait les deux bouts). Sans photo : bandeau
  * typographique — le nom du produit en très grand, en contour.
  */
 function ProductHero({
@@ -367,10 +369,15 @@ function ProductHero({
 }) {
   if (photoUrl) {
     return (
-      <div className="relative h-[188px] w-full overflow-hidden">
-        {/* Photo produit : URL saisie par le restaurant, domaine non maîtrisé. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photoUrl} alt={name} className="size-full object-cover" />
+      <div className="relative h-[210px] w-full overflow-hidden">
+        <Plate
+          photoUrl={photoUrl}
+          name={name}
+          mono={64}
+          pad="p-6"
+          radius="rounded-none"
+          className="size-full border-0"
+        />
         <span aria-hidden className="sm-scrim absolute inset-x-0 bottom-0 h-24" />
       </div>
     );

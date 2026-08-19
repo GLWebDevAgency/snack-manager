@@ -106,15 +106,19 @@ export function Storefront({
   );
 
   /**
-   * Mise en avant : les nouveautés d’abord, puis le début de carte. Aucun
-   * champ « populaire » n’étant exposé par l’API, l’ordre du menu — celui que
-   * le restaurateur a lui-même arrangé — fait autorité.
+   * Mise en avant : les produits **photographiés** d’abord.
+   *
+   * Aucun champ « populaire » n’étant exposé par l’API, l’ordre du menu — celui
+   * que le restaurateur a lui-même arrangé — fait autorité ; à rang égal, le
+   * plat qui a une photo passe devant. C’est le seul rail de la page où le
+   * visuel occupe la moitié de la carte : le remplir de plats sans photo
+   * reviendrait à ouvrir la vitrine sur une rangée de monogrammes.
    */
   const highlights = useMemo(() => {
     const all = site.categories.flatMap((c) => c.products).filter((p) => !p.outOfStock);
-    const fresh = all.filter((p) => p.isNew);
-    const rest = all.filter((p) => !p.isNew);
-    return [...fresh, ...rest].slice(0, HIGHLIGHT_COUNT);
+    const shot = all.filter((p) => p.photoUrl);
+    const rest = all.filter((p) => !p.photoUrl);
+    return [...shot, ...rest].slice(0, HIGHLIGHT_COUNT);
   }, [site.categories]);
 
   // ── Lignes écartées à la réconciliation : on l’annonce, on ne l’escamote pas ──
@@ -208,11 +212,12 @@ export function Storefront({
           site={site}
           letter={letter}
           cityName={cityName}
+          paused={paused}
           onOrder={scrollToMenu}
         />
       )}
 
-      <main className="mx-auto w-full max-w-[560px] px-4">
+      <main className="mx-auto w-full max-w-[560px] px-4 lg:max-w-[1080px]">
         {notice && (
           <div className="pt-4">
             <Banner
@@ -234,24 +239,7 @@ export function Storefront({
           </div>
         )}
 
-        {paused && (
-          <div className="pt-4">
-            <Banner tone="prep" icon="clock" title="Commande en ligne suspendue">
-              {site.ordering.message ??
-                "Victimes de notre succès — la commande en ligne rouvre très vite. La carte reste consultable."}
-            </Banner>
-          </div>
-        )}
-
-        {!paused && !site.openNow && (
-          <div className="pt-4">
-            <Banner tone="info" icon="clock" title="Le restaurant est fermé">
-              {nextOpeningLabel(site.tenant.hours)
-                ? `${capitalize(nextOpeningLabel(site.tenant.hours)!)} — vous pouvez commander dès maintenant pour un créneau à venir.`
-                : "Consultez la carte, la commande rouvrira au prochain service."}
-            </Banner>
-          </div>
-        )}
+        {paused && <PauseCard site={site} />}
 
         {!embed && (
           <Highlights
@@ -289,8 +277,12 @@ export function Storefront({
 
         {!embed && (
           <>
-            {site.reviews.count > 0 && <Reviews site={site} />}
-            <Practical site={site} cityName={cityName} />
+            {/* Sur grand écran, avis et infos pratiques se font face plutôt que
+                de s’empiler sur 1 080 px de large. */}
+            <div className="grid gap-x-6 lg:grid-cols-2 lg:items-start">
+              {site.reviews.count > 0 && <Reviews site={site} />}
+              <Practical site={site} cityName={cityName} />
+            </div>
             <LegalFooter site={site} cityName={cityName} />
           </>
         )}
@@ -356,19 +348,28 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
 /**
  * En-tête de restaurant — le bloc qui donne son ton à la page.
  *
- * Un seul aplat sombre stratifié : identité, état de service, promesse en trois
- * lignes, appel à l’action. Le nom du restaurant reste le `h1` (c’est la page
- * référencée) ; la promesse est une accroche, pas un titre de document.
+ * Deux étages, et c’est la maquette : une **barre d’identité** courte (logo,
+ * nom, appel) puis une **carte d’accroche** — état de service, promesse en
+ * trois lignes, appel à l’action. L’accroche est une CARTE et non une pleine
+ * page : elle tient dans ~300 px, si bien que le premier plat de la carte
+ * apparaît dès le premier écran d’un téléphone. Un site de restauration dont
+ * le premier écran ne montre aucun plat perd le client avant la faim.
+ *
+ * Le nom du restaurant reste le `h1` (c’est la page référencée) ; la promesse
+ * est une accroche, pas un titre de document.
  */
 function SiteHeader({
   site,
   letter,
   cityName,
+  paused,
   onOrder,
 }: {
   site: Site;
   letter: string;
   cityName: string;
+  /** Commande en ligne suspendue : l’appel à l’action ne promet plus rien. */
+  paused: boolean;
   onOrder: () => void;
 }) {
   const phone = site.tenant.phones[0];
@@ -377,122 +378,147 @@ function SiteHeader({
   const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
 
   return (
-    <header className="sm-grain relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,#121212_0%,#050505_62%,#000_100%)]">
-      {/* Halo d’accent : la marque du restaurant colore la scène, sans aplat. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full opacity-[0.16] blur-3xl"
-        style={{ background: "var(--cf-accent)" }}
-      />
-      {/* Nom en typographie fantôme — profondeur, jamais lu. */}
-      <span
-        aria-hidden
-        className="sm-ghost absolute -left-3 top-[132px] text-[92px] font-black opacity-60"
-      >
-        {site.tenant.name}
-      </span>
-
-      <div className="relative mx-auto w-full max-w-[560px] px-4 pb-6 pt-5">
-        <div className="flex items-center gap-3.5">
-          <BrandMark
-            name={site.tenant.name}
-            logoUrl={site.tenant.logoUrl}
-            letter={letter}
-            size={54}
-          />
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[25px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
-              {site.tenant.name}
-            </h1>
-            <p className="truncate text-[12px] font-bold uppercase tracking-[0.16em] text-mut">
-              {cityName || "Click & collect"}
-            </p>
-          </div>
+    <header className="relative">
+      {/* ── Barre d’identité ── */}
+      <div className="mx-auto flex w-full max-w-[560px] items-center gap-3 px-4 pb-3 pt-4 lg:max-w-[1080px]">
+        <BrandMark
+          name={site.tenant.name}
+          logoUrl={site.tenant.logoUrl}
+          letter={letter}
+          size={44}
+        />
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
+            {site.tenant.name}
+          </h1>
+          <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
+            {cityName || "Click & collect"}
+          </p>
         </div>
-
-        {/* État de service — la première chose qu’un client cherche. */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span
-            className={cx(
-              "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
-              site.openNow ? "border-ok/40 text-okt" : "border-white/12 text-mut",
-            )}
+        {phone && (
+          <a
+            href={telHref(phone)}
+            aria-label={`Appeler ${site.tenant.name} au ${phone}`}
+            className="grid size-11 shrink-0 place-items-center rounded-pill border border-white/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
           >
-            <Dot tone={site.openNow ? "ok" : "mut"} />
-            {site.openNow ? "Ouvert maintenant" : "Fermé"}
-            {site.openNow && nextSlot && (
-              <span className="font-extrabold tabular-nums text-ink">
-                · retrait {hhmm(nextSlot)}
-              </span>
-            )}
-            {!site.openNow && reopen && (
-              <span className="font-semibold text-mut">· {reopen}</span>
-            )}
-          </span>
-          {site.reviews.count > 0 && (
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-white/10 px-3 text-[13px] font-bold text-ink">
-              <Stars value={site.reviews.avg} size={12} />
-              <span className="tabular-nums">
-                {site.reviews.avg.toLocaleString("fr-FR", {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1,
-                })}
-              </span>
-              <span className="font-semibold tabular-nums text-mut">
-                ({site.reviews.count})
-              </span>
-            </span>
-          )}
-        </div>
-
-        {/* Promesse en trois temps — la copy de la maquette. */}
-        <p className="mt-5 text-[32px] font-extrabold leading-[0.99] tracking-[-0.045em] text-ink">
-          Commandez.
-          <br />
-          Récupérez.
-          <br />
-          <span className="text-accent">Régalez-vous.</span>
-        </p>
-        <p className="mt-3 text-[14px] leading-relaxed text-mut">
-          Prêt en ~{lead} min · sans compte, sans attente au comptoir.
-        </p>
-
-        <div className="mt-5 flex gap-2.5">
-          <Tap
-            onClick={onOrder}
-            className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent shadow-[0_12px_30px_-12px_var(--cf-accent)]"
-          >
-            Commander maintenant
-            <Icon name="arrow" size={17} stroke={2.6} />
-          </Tap>
-          {phone && (
-            <a
-              href={telHref(phone)}
-              aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-              className="grid size-[52px] shrink-0 place-items-center rounded-pill border border-white/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
-            >
-              <Icon name="phone" size={18} />
-            </a>
-          )}
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-mut">
-          {site.todayHours && (
-            <span className="inline-flex items-center gap-1.5">
-              <Icon name="clock" size={14} className="shrink-0" />
-              Aujourd’hui&nbsp;: {hoursOfToday(site)}
-            </span>
-          )}
-          {site.tenant.address && (
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              <Glyph name="pin" size={14} className="shrink-0" />
-              <span className="truncate">{site.tenant.address}</span>
-            </span>
-          )}
-        </div>
+            <Icon name="phone" size={18} />
+          </a>
+        )}
       </div>
 
-      <div aria-hidden className="sm-rule" />
+      {/* ── Carte d’accroche ── */}
+      <div className="mx-auto w-full max-w-[560px] px-4 pb-1 lg:max-w-[1080px]">
+        <div className="sm-hero sm-grain relative overflow-hidden rounded-wide border border-white/8 shadow-card">
+          {/* Nom en typographie fantôme — profondeur, jamais lu. */}
+          <span
+            aria-hidden
+            className="sm-ghost absolute -left-2 top-14 text-[76px] font-black opacity-70 lg:text-[112px]"
+          >
+            {site.tenant.name}
+          </span>
+
+          <div className="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-end lg:justify-between lg:p-7">
+            <div className="min-w-0">
+              {/* État de service et note : les deux questions que le client se
+                  pose avant de lire quoi que ce soit — « c’est ouvert ? » et
+                  « c’est bon ? ». Elles restent visibles à 390 px. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={cx(
+                    "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
+                    paused
+                      ? "border-prep/45 text-prept"
+                      : site.openNow
+                        ? "border-ok/40 text-okt"
+                        : "border-white/14 text-mut",
+                  )}
+                >
+                  <Dot tone={paused ? "prep" : site.openNow ? "ok" : "mut"} />
+                  {paused
+                    ? "Commande en ligne suspendue"
+                    : site.openNow
+                      ? "Ouvert maintenant"
+                      : "Fermé"}
+                  {!paused && site.openNow && nextSlot && (
+                    <span className="font-extrabold tabular-nums text-ink">
+                      · retrait {hhmm(nextSlot)}
+                    </span>
+                  )}
+                  {!paused && !site.openNow && reopen && (
+                    <span className="font-semibold text-mut">· {reopen}</span>
+                  )}
+                </span>
+                {site.reviews.count > 0 && (
+                  <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-white/12 px-3 text-[13px] font-bold text-ink">
+                    <Stars value={site.reviews.avg} size={12} />
+                    <span className="tabular-nums">
+                      {site.reviews.avg.toLocaleString("fr-FR", {
+                        minimumFractionDigits: 1,
+                        maximumFractionDigits: 1,
+                      })}
+                    </span>
+                    <span className="font-semibold tabular-nums text-mut">
+                      ({site.reviews.count})
+                    </span>
+                  </span>
+                )}
+              </div>
+
+              {/* Promesse en trois temps — la copy de la maquette. */}
+              <p className="mt-4 text-[30px] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink lg:text-[40px]">
+                Commandez.
+                <br />
+                Récupérez.
+                <br />
+                <span className="text-accent">Régalez-vous.</span>
+              </p>
+              <p className="mt-2.5 text-[14px] leading-relaxed text-mut">
+                {paused
+                  ? "La carte reste consultable — la commande rouvre très vite."
+                  : site.openNow
+                    ? `Click & collect · prêt en ~${lead} min, sans compte.`
+                    : "Commandez dès maintenant pour un créneau au prochain service."}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-col gap-3 lg:items-end">
+              <div className="flex gap-2.5">
+                <Tap
+                  onClick={onOrder}
+                  className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-pill bg-accent px-6 text-[15px] font-extrabold text-onaccent shadow-[0_12px_30px_-12px_var(--cf-accent)]"
+                >
+                  {paused ? "Voir la carte" : "Commander maintenant"}
+                  <Icon name="arrow" size={17} stroke={2.6} />
+                </Tap>
+                {paused && phone && (
+                  <a
+                    href={telHref(phone)}
+                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-white/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+                  >
+                    <Icon name="phone" size={16} />
+                    Appeler
+                  </a>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-mut lg:justify-end">
+                {site.todayHours && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Icon name="clock" size={14} className="shrink-0" />
+                    Aujourd’hui&nbsp;: {hoursOfToday(site)}
+                  </span>
+                )}
+                {site.tenant.address && (
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    <Glyph name="pin" size={14} className="shrink-0" />
+                    <span className="truncate">{site.tenant.address}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
   );
 }
@@ -549,6 +575,67 @@ function EmbedHeader({
 // ─────────────────────────────────────────────────────────────
 // Sections de la vitrine
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Commande en ligne suspendue — l’état le plus délicat de la page.
+ *
+ * Le client arrive avec faim et sans savoir que le restaurant a coupé le
+ * bouton. La page ne doit surtout pas ressembler à une panne : elle explique,
+ * puis donne les deux choses qui restent utiles — le téléphone et l’heure de
+ * réouverture — sans jamais cacher la carte, qui reste consultable dessous.
+ */
+function PauseCard({ site }: { site: Site }) {
+  const phone = site.tenant.phones[0];
+  const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
+  return (
+    <div className="pt-5">
+      <Surface className="overflow-hidden">
+        <div className="flex items-start gap-3.5 p-5">
+          <span className="grid size-11 shrink-0 place-items-center rounded-card bg-prep/15 text-prept">
+            <Icon name="clock" size={20} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[17px] font-extrabold tracking-[-0.025em] text-ink">
+              Commande en ligne en pause
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-prep/40 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.1em] text-prept">
+                <Dot tone="prep" />
+                Temporaire
+              </span>
+            </p>
+            <p className="mt-1.5 text-[14px] leading-relaxed text-mut">
+              {site.ordering.message ??
+                "Le service est au coup de feu : la commande en ligne rouvre très vite."}
+            </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              {phone && (
+                <a
+                  href={telHref(phone)}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-accent px-4 text-[14px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+                >
+                  <Icon name="phone" size={16} stroke={2.3} />
+                  Commander par téléphone
+                </a>
+              )}
+              <span className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-white/10 bg-surface2 px-4 text-[13.5px] font-semibold text-mut">
+                <Icon name="clock" size={15} className="shrink-0" />
+                {site.openNow
+                  ? `Aujourd’hui : ${hoursOfToday(site)}`
+                  : reopen
+                    ? capitalize(reopen)
+                    : "Voir les horaires plus bas"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <p className="border-t border-white/6 bg-white/[0.02] px-5 py-3 text-[13px] text-mut">
+          La carte ci-dessous reste à jour&nbsp;: prix, recettes et suppléments
+          sont ceux du comptoir.
+        </p>
+      </Surface>
+    </div>
+  );
+}
 
 function Reviews({ site }: { site: Site }) {
   return (

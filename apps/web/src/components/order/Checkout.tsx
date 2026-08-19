@@ -60,6 +60,7 @@ import {
   GhostAction,
   Glyph,
   Money,
+  Plate,
   PrimaryAction,
   SectionLabel,
   Sheet,
@@ -704,22 +705,15 @@ function CartRow({
   return (
     <article className="overflow-hidden rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_80px)] p-3 shadow-card">
       <div className="flex items-start gap-3">
-        {line.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={line.photoUrl}
-            alt=""
-            loading="lazy"
-            className="size-[52px] shrink-0 rounded-card border border-white/8 object-cover"
-          />
-        ) : (
-          <span
-            aria-hidden
-            className="grid size-[52px] shrink-0 place-items-center rounded-card border border-white/8 bg-surface2 text-[16px] font-black uppercase text-white/25"
-          >
-            {line.name.trim().slice(0, 2)}
-          </span>
-        )}
+        {/* Même plateau que la carte : le plat se reconnaît d'un écran à
+            l'autre, et une photo morte n'y laisse jamais un cadre cassé. */}
+        <Plate
+          photoUrl={line.photoUrl}
+          name={line.name}
+          mono={17}
+          pad="p-[4%]"
+          className="size-[58px]"
+        />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
