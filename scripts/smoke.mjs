@@ -1,0 +1,316 @@
+#!/usr/bin/env node
+/**
+ * Vérification de bonne santé après déploiement — « est-ce que le restaurant
+ * peut travailler, là, maintenant ? »
+ *
+ *     node scripts/smoke.mjs staging
+ *     node scripts/smoke.mjs production
+ *
+ * Ce script ne teste QUE des surfaces publiques : aucune authentification,
+ * aucun jeton, aucune variable secrète. Il peut donc tourner dans un job
+ * GitHub Actions qui ne reçoit AUCUN secret — c'est volontaire, et c'est ce qui
+ * garantit qu'un journal d'exécution public ne peut rien laisser fuiter.
+ *
+ * Ce qu'il vérifie, dans l'ordre où ça compte pour un service en cours :
+ *   1. l'API répond            → sans elle, ni caisse ni cuisine ;
+ *   2. la carte publique sort  → c'est la seule lecture qui traverse
+ *                                Mongo de bout en bout ; si elle sort, la base
+ *                                est jointe et le multi-établissement résout ;
+ *   3. les trois interfaces servent leur page — et la bonne :
+ *      on ne se contente pas d'un 200, on cherche le titre attendu, sinon un
+ *      « 200 » servi par une page d'erreur d'infrastructure passerait pour un
+ *      succès.
+ *
+ * Aucune dépendance : `fetch` et `node:crypto` suffisent (Node ≥ 20).
+ *
+ * Voir docs/CI-CD.md § 11.
+ */
+
+import { createHash } from 'node:crypto';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Les cibles
+//
+// Ces adresses sont PUBLIQUES — ce sont celles qu'un client tape dans son
+// navigateur. Les écrire ici n'est pas une fuite, c'est une documentation
+// exécutable. Elles sont surchargeables par variable d'environnement pour
+// pouvoir viser un domaine personnalisé sans toucher au script.
+// ─────────────────────────────────────────────────────────────────────────────
+const CIBLES = {
+  staging: {
+    api: 'https://api-staging-a5e8.up.railway.app',
+    web: 'https://web-staging-6f5f.up.railway.app',
+    pos: 'https://pos-staging-7f92.up.railway.app',
+    kds: 'https://kds-staging-90da.up.railway.app',
+    // Établissement de démonstration semé par `pnpm seed`.
+    slugCarte: 'classfood',
+  },
+  production: {
+    api: 'https://api-production-8949.up.railway.app',
+    web: 'https://web-production-99b58c.up.railway.app',
+    pos: 'https://pos-production-a9d8.up.railway.app',
+    kds: 'https://kds-production-8991.up.railway.app',
+    // ⚠️ VIDE À DESSEIN, ce n'est pas un oubli.
+    // La base de production a été remise à blanc (commit 7b1c6dc) : il n'y a
+    // aujourd'hui AUCUN établissement, donc aucune carte publique à servir.
+    // Le contrôle est alors annoncé « IGNORÉ », bruyamment, plutôt que rouge
+    // pour une raison qui n'est pas une panne.
+    // Le jour où le premier restaurant est en ligne : mettre son slug ici (ou
+    // exporter SM_SLUG_CARTE) et le contrôle redevient réel. Voir § 11.
+    slugCarte: '',
+  },
+};
+
+const CONTROLES_INTERFACES = [
+  { cle: 'web', nom: 'Commande en ligne + back-office', marqueur: /<title>[^<]*Snack Manager/i },
+  { cle: 'pos', nom: 'Caisse', marqueur: /<title>[^<]*Snack Manager\s*—\s*Caisse/i },
+  { cle: 'kds', nom: 'Écran cuisine', marqueur: /<title>[^<]*Snack Manager\s*—\s*Cuisine/i },
+];
+
+// Une interface qui vient d'être redéployée peut mettre quelques secondes à
+// accepter sa première requête (démarrage du processus, bascule du routeur
+// Railway). On réessaie, mais pas éternellement : au-delà, c'est une panne.
+const TENTATIVES = Number(process.env.SM_TENTATIVES ?? 8);
+const ATTENTE_MS = Number(process.env.SM_ATTENTE_MS ?? 8000);
+const DELAI_REQUETE_MS = Number(process.env.SM_DELAI_REQUETE_MS ?? 15000);
+
+const DANS_ACTIONS = process.env.GITHUB_ACTIONS === 'true';
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function usage(message) {
+  console.error(`✗ ${message}
+
+Usage :
+    node scripts/smoke.mjs <staging|production>
+
+Surcharges facultatives (aucune n'est un secret) :
+    SM_URL_API   SM_URL_WEB   SM_URL_POS   SM_URL_KDS   SM_SLUG_CARTE
+    SM_TENTATIVES (${TENTATIVES})   SM_ATTENTE_MS (${ATTENTE_MS})   SM_DELAI_REQUETE_MS (${DELAI_REQUETE_MS})
+`);
+  process.exit(2);
+}
+
+function resoudreCible() {
+  const nom = (process.argv[2] ?? '').trim();
+  if (!nom) usage('Environnement manquant.');
+  const base = CIBLES[nom];
+  if (!base) usage(`Environnement « ${nom} » inconnu — attendu : staging ou production.`);
+
+  return {
+    nom,
+    api: process.env.SM_URL_API || base.api,
+    web: process.env.SM_URL_WEB || base.web,
+    pos: process.env.SM_URL_POS || base.pos,
+    kds: process.env.SM_URL_KDS || base.kds,
+    slugCarte: (process.env.SM_SLUG_CARTE ?? base.slugCarte).trim(),
+  };
+}
+
+/** Empreinte courte du corps servi — permet de voir d'un coup d'œil si une
+ *  surface sert autre chose qu'avant le déploiement. */
+function empreinte(texte) {
+  return createHash('sha256').update(texte).digest('hex').slice(0, 12);
+}
+
+async function requete(url) {
+  const debut = Date.now();
+  const reponse = await fetch(url, {
+    redirect: 'follow',
+    headers: { 'user-agent': 'snack-manager-smoke/1' },
+    signal: AbortSignal.timeout(DELAI_REQUETE_MS),
+  });
+  const corps = await reponse.text();
+  return { statut: reponse.status, corps, ms: Date.now() - debut };
+}
+
+/**
+ * Rejoue `verifier` jusqu'à ce qu'il rende `null` (succès) ou que les essais
+ * soient épuisés. `verifier` rend une chaîne décrivant le défaut, ou lève.
+ */
+async function avecReessais(verifier) {
+  let dernier = 'jamais exécuté';
+  for (let essai = 1; essai <= TENTATIVES; essai += 1) {
+    try {
+      const defaut = await verifier();
+      if (!defaut) return null;
+      dernier = defaut;
+    } catch (erreur) {
+      dernier = erreur?.name === 'TimeoutError' ? `pas de réponse en ${DELAI_REQUETE_MS} ms` : String(erreur?.message ?? erreur);
+    }
+    if (essai < TENTATIVES) {
+      process.stdout.write(`    … essai ${essai}/${TENTATIVES} : ${dernier} — nouvelle tentative dans ${ATTENTE_MS / 1000} s\n`);
+      await new Promise((resoudre) => setTimeout(resoudre, ATTENTE_MS));
+    }
+  }
+  return dernier;
+}
+
+// ─── Les contrôles ───────────────────────────────────────────────────────────
+
+function controleApi(cible) {
+  const url = `${cible.api}/health`;
+  return {
+    nom: "L'API répond",
+    url,
+    executer: async (detail) => {
+      const { statut, corps, ms } = await requete(url);
+      if (statut !== 200) return `HTTP ${statut}`;
+      let charge;
+      try {
+        charge = JSON.parse(corps);
+      } catch {
+        return `réponse non-JSON : ${corps.slice(0, 120)}`;
+      }
+      if (charge.ok !== true) return `charge inattendue : ${corps.slice(0, 120)}`;
+      if (charge.service !== 'snack-manager-api') return `ce n'est pas notre API : service=${charge.service}`;
+      detail.push(`${ms} ms`);
+      return null;
+    },
+  };
+}
+
+function controleCarte(cible) {
+  if (!cible.slugCarte) {
+    return {
+      nom: 'La carte publique se sert',
+      url: '—',
+      ignore:
+        `aucun slug d'établissement configuré pour « ${cible.nom} » ` +
+        '(voir scripts/smoke.mjs → CIBLES et docs/CI-CD.md § 11)',
+    };
+  }
+  const url = `${cible.api}/public/tenants/${cible.slugCarte}/menu`;
+  return {
+    nom: 'La carte publique se sert',
+    url,
+    executer: async (detail) => {
+      const { statut, corps, ms } = await requete(url);
+      if (statut !== 200) return `HTTP ${statut} — ${corps.slice(0, 160)}`;
+      let charge;
+      try {
+        charge = JSON.parse(corps);
+      } catch {
+        return `réponse non-JSON : ${corps.slice(0, 120)}`;
+      }
+      if (!Array.isArray(charge.categories)) return 'charge sans tableau « categories »';
+      const nbProduits = charge.categories.reduce((somme, c) => somme + (c.products?.length ?? 0), 0);
+      if (charge.categories.length === 0) {
+        // La lecture traverse bien Mongo : ce n'est pas une panne, mais une
+        // carte vide sur un restaurant en service se remarque.
+        detail.push('⚠ carte vide (0 catégorie)');
+      }
+      detail.push(`${charge.categories.length} catégories · ${nbProduits} produits · ${ms} ms`);
+      return null;
+    },
+  };
+}
+
+function controleInterface(cible, { cle, nom, marqueur }) {
+  const url = `${cible[cle]}/`;
+  return {
+    nom: `${nom} (${cle})`,
+    url,
+    executer: async (detail) => {
+      const { statut, corps, ms } = await requete(url);
+      if (statut !== 200) return `HTTP ${statut}`;
+      if (!marqueur.test(corps)) {
+        // Un 200 ne suffit pas : une page d'erreur d'infrastructure en rend un
+        // aussi. On exige le titre de NOTRE application.
+        return `page servie mais ce n'est pas ${nom} (titre attendu absent) — ${corps.slice(0, 120).replace(/\s+/g, ' ')}`;
+      }
+      detail.push(`${ms} ms · empreinte ${empreinte(corps)}`);
+      return null;
+    },
+  };
+}
+
+// ─── Exécution ───────────────────────────────────────────────────────────────
+
+async function principal() {
+  const cible = resoudreCible();
+
+  console.log(`\n▶ Vérification de bonne santé — ${cible.nom}\n`);
+
+  const controles = [
+    controleApi(cible),
+    controleCarte(cible),
+    ...CONTROLES_INTERFACES.map((i) => controleInterface(cible, i)),
+  ];
+
+  const resultats = [];
+  for (const controle of controles) {
+    if (controle.ignore) {
+      console.log(`  ◌ ${controle.nom} — IGNORÉ : ${controle.ignore}`);
+      if (DANS_ACTIONS) {
+        console.log(`::warning title=Contrôle ignoré::${controle.nom} — ${controle.ignore}`);
+      }
+      resultats.push({ nom: controle.nom, etat: 'IGNORÉ', detail: controle.ignore, url: controle.url });
+      continue;
+    }
+
+    console.log(`  · ${controle.nom} → ${controle.url}`);
+    const detail = [];
+    const defaut = await avecReessais(() => controle.executer(detail));
+
+    if (defaut) {
+      console.log(`  ✗ ${controle.nom} — ${defaut}`);
+      if (DANS_ACTIONS) {
+        console.log(`::error title=Santé ${cible.nom} — ${controle.nom}::${controle.url} : ${defaut}`);
+      }
+      resultats.push({ nom: controle.nom, etat: 'ÉCHEC', detail: defaut, url: controle.url });
+    } else {
+      const texte = detail.join(' · ') || 'ok';
+      console.log(`  ✓ ${controle.nom} — ${texte}`);
+      resultats.push({ nom: controle.nom, etat: 'OK', detail: texte, url: controle.url });
+    }
+  }
+
+  const echecs = resultats.filter((r) => r.etat === 'ÉCHEC');
+  const ignores = resultats.filter((r) => r.etat === 'IGNORÉ');
+
+  await ecrireResume(cible, resultats, echecs, ignores);
+
+  console.log('');
+  if (echecs.length > 0) {
+    console.log(`✗ ${echecs.length} contrôle(s) en échec sur ${cible.nom} — le déploiement est DÉCLARÉ EN ÉCHEC.`);
+    console.log('  Le code est en ligne malgré tout : Railway ne défait rien tout seul.');
+    console.log('  Retour arrière → docs/CI-CD.md § 12.');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(
+    `✓ ${cible.nom} en bonne santé — ${resultats.length - ignores.length} contrôle(s) verts` +
+      (ignores.length ? `, ${ignores.length} ignoré(s)` : '') +
+      '.',
+  );
+}
+
+async function ecrireResume(cible, resultats, echecs, ignores) {
+  const fichier = process.env.GITHUB_STEP_SUMMARY;
+  if (!fichier) return;
+  const { appendFile } = await import('node:fs/promises');
+
+  const icone = { OK: '✅', ÉCHEC: '❌', IGNORÉ: '⚪️' };
+  const lignes = [
+    `### Santé après déploiement — \`${cible.nom}\``,
+    '',
+    echecs.length > 0
+      ? `❌ **${echecs.length} contrôle(s) en échec.** Le code est en ligne : voir le retour arrière, \`docs/CI-CD.md\` § 12.`
+      : `✅ Les ${resultats.length - ignores.length} contrôles bloquants sont verts.`,
+    '',
+    '| | Contrôle | Résultat | Surface |',
+    '|---|---|---|---|',
+    ...resultats.map((r) => `| ${icone[r.etat]} | ${r.nom} | ${r.detail} | \`${r.url}\` |`),
+    '',
+  ];
+  await appendFile(fichier, lignes.join('\n'), 'utf8');
+}
+
+principal().catch((erreur) => {
+  console.error(`✗ La vérification s'est interrompue : ${erreur?.stack ?? erreur}`);
+  if (DANS_ACTIONS) {
+    console.log(`::error title=Santé — interruption::${erreur?.message ?? erreur}`);
+  }
+  process.exitCode = 1;
+});
