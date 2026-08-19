@@ -802,8 +802,11 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
   const modules = readModules(
     firstList(h.modules, h.adoption, ins.modules, ins.adoption),
   );
+  // `/health` rend le parc COMPTÉ : `fleet` est un objet de totaux dont les
+  // appareils vivent dans `units`. On lit l'unité avant l'agrégat, sinon la
+  // section se croit vide alors que le compteur affiche cinq appareils.
   const devices = readDevices(
-    firstList(h.devices, h.park, h.fleet, ins.devices, ins.park),
+    firstList(bag(h.fleet).units, h.devices, h.park, h.fleet, ins.devices, ins.park),
   );
   const supply = readSupply(ins.supply ?? ins.stock ?? h.supply ?? h.stock ?? {});
   const recommendations = readRecommendations(
@@ -817,7 +820,11 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     ),
   );
 
-  const score = num(h, "score", "healthScore") ?? row?.score ?? null;
+  // `/crm/tenants/:id/health` rend le score COMPOSÉ : un objet qui porte la
+  // note, son verdict rédigé et les axes qui l'expliquent. On accepte aussi le
+  // score nu, au cas où une surface plus ancienne n'enverrait qu'un nombre.
+  const scoreBag = bag(h.score);
+  const score = num(scoreBag, "value") ?? num(h, "score", "healthScore") ?? row?.score ?? null;
 
   return {
     id,
@@ -826,9 +833,13 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     city: str(bag(account), "city", "ville") || str(h, "city") || row?.city || "",
     contact: readContact(account, health, rows === null ? null : row),
     score,
-    health: readEnum(h.health, HEALTHS) ?? row?.health ?? "attention",
+    // La pastille suit le score chiffré quand il existe : l'API rend un verdict
+    // rédigé (« solide », « à surveiller »…) qui n'est pas l'énuméré de la
+    // charte, et le traduire mot à mot créerait deux vocabulaires à maintenir.
+    health:
+      scoreHealth(score) ?? readEnum(h.health, HEALTHS) ?? row?.health ?? "attention",
     components: readComponents(
-      firstList(h.components, h.breakdown, h.criteria, h.parts),
+      firstList(scoreBag.axes, h.axes, h.components, h.breakdown, h.criteria, h.parts),
     ),
     activity: readActivity(h.activity ?? h.trend ?? h.orders ?? {}),
     modules,

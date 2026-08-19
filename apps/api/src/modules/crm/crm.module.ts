@@ -3,6 +3,9 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
+import { HealthController } from './health.controller';
+import { HealthService } from './health.service';
+import { InsightsService } from './insights.service';
 
 /**
  * Back-office interne Snack Manager (CRM HQ) — pipeline commercial, places
@@ -12,8 +15,8 @@ import { CrmService } from './crm.service';
  * (Lead, Tenant, Order) viennent du DatabaseModule global.
  */
 @Module({
-  controllers: [CrmController, AdminController],
-  providers: [CrmService, AdminService],
+  controllers: [CrmController, AdminController, HealthController],
+  providers: [CrmService, AdminService, HealthService, InsightsService],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal
   // (`recordDetailView`) : un accès non journalisé serait un angle mort.

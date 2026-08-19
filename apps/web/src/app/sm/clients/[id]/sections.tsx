@@ -379,7 +379,12 @@ function DeviceRow({
   return (
     <li
       className={cx(
-        "flex items-center gap-3 border-t border-line px-[18px] py-2.5",
+        // `flex-wrap` : cette carte vit dans la colonne étroite de la fiche.
+        // Sans lui, le nom se faisait rogner en « Cais… » sur la ligne MÊME
+        // où se trouve le bouton de révocation — on ne pouvait plus dire
+        // quelle tablette on s'apprêtait à couper. L'état et l'horodatage
+        // passent sous le nom plutôt que de lui voler sa place.
+        "flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line px-[18px] py-2.5",
         !d.online && "bg-alert/6",
       )}
     >
@@ -388,8 +393,12 @@ function DeviceRow({
         size={17}
         className="shrink-0 text-mut"
       />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px] font-bold text-ink">{d.name}</div>
+      <div className="min-w-[152px] flex-1 basis-[152px]">
+        {/* Le nom porte aussi son `title` : dernier filet quand la colonne est
+            vraiment trop étroite, avant un geste irréversible. */}
+        <div className="truncate text-[13.5px] font-bold text-ink" title={d.name}>
+          {d.name}
+        </div>
         <div className="truncate text-xs text-mut">
           {d.kindLabel}
           {!d.paired && " · en attente d'appairage"}
@@ -398,7 +407,7 @@ function DeviceRow({
 
       <span
         className={cx(
-          "flex w-[112px] shrink-0 items-center gap-1.5 text-[12.5px] font-bold",
+          "flex shrink-0 items-center gap-1.5 text-[12.5px] font-bold",
           d.online ? "text-okt" : "text-alertt",
         )}
       >
@@ -413,7 +422,7 @@ function DeviceRow({
       </span>
 
       <span
-        className="w-[104px] shrink-0 truncate text-right text-[12.5px] text-mut"
+        className="ml-auto shrink-0 truncate text-right text-[12.5px] text-mut"
         title={
           d.lastSeenAt
             ? new Date(d.lastSeenAt).toLocaleString("fr-FR")
