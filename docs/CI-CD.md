@@ -335,17 +335,22 @@ curl -s https://api-production-8949.up.railway.app/health
   Tant que ce n'est pas fait, **une CI verte ne dit rien de l'analyse
   statique** : allez lire l'annotation.
 - **Angle mort assumé du balayage : un mot de passe générique en dur dans un
-  fichier de test.** La règle `secret-en-dur` est désactivée sur les fichiers
-  `*.test.ts` / `*.spec.ts`, parce que
+  fichier de test.** Les deux règles *génériques* — `secret-en-dur` et la règle
+  gitleaks `generic-api-key`, celles qui raisonnent par forme et par entropie —
+  sont désactivées sur les fichiers `*.test.ts` / `*.spec.ts`, parce que
   `apps/api/src/modules/ordering/stripe-webhook.test.ts` fabrique un secret de
   signature Stripe — une valeur inventée qui a, volontairement, la forme d'un
   secret. Sans cette exemption le balayage serait rouge en permanence, donc
   ignoré, donc inutile.
 
   Ce qui continue de couvrir les fichiers de test : toutes les règles gitleaks
-  par défaut (clés Stripe `sk_live_`, AWS, jetons GitHub, clés privées PEM…),
-  `uri-connexion-avec-identifiants` et `fichier-env-versionne`. Seul un mot de
-  passe **sans forme reconnaissable** passerait entre les mailles.
+  **spécifiques** (clés Stripe `sk_live_`, AWS, jetons GitHub, clés privées
+  PEM…), `uri-connexion-avec-identifiants` et `fichier-env-versionne`. Seul un
+  mot de passe **sans forme reconnaissable** passerait entre les mailles.
+
+  L'exemption est portée par un `[[allowlists]]` global à `targetRules`
+  explicite, pas par une exclusion de chemin : elle nomme les deux règles
+  qu'elle relâche, et rien d'autre ne bouge.
 
   Le vrai correctif est en amont : que ce test compose sa valeur au lieu de la
   porter en dur. `apps/api` n'est pas du ressort de ce pipeline ; l'exemption
