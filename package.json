@@ -11,7 +11,8 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "seed": "pnpm --filter @sm/db seed",
-    "test": "turbo test"
+    "test": "turbo test",
+    "verify": "turbo run typecheck lint test build --cache=local:rw,remote:"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

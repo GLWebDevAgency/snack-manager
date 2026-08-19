@@ -1,0 +1,93 @@
+name: CI
+
+# Deux déclencheurs, deux rôles :
+#   · pull_request → vérifier AVANT de fusionner (c'est ce contrôle que la
+#     protection de « main » exige) ;
+#   · push sur main → vérifier ce qui est réellement en ligne, et alimenter le
+#     cache Turborepo dont profiteront les pull requests suivantes.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Une PR qu'on repousse trois fois de suite n'a pas besoin de trois CI : on
+# annule la précédente. Sur main on ne cancel pas — chaque commit livré mérite
+# son verdict.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # Le cache distant Turborepo est explicitement coupé : rien ne sort du
+  # dépôt, et aucun jeton n'est nécessaire. Le cache LOCAL, lui, est restauré
+  # d'une exécution à l'autre par actions/cache (étape plus bas).
+  TURBO_FLAGS: '--cache=local:rw,remote: --output-logs=new-only'
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+
+jobs:
+  verification:
+    name: Vérification du monorepo
+    runs-on: ubuntu-latest
+    # Budget annoncé : moins de dix minutes. Le garde-fou est au-dessus pour
+    # laisser voir un dépassement plutôt que de le masquer par un timeout serré.
+    timeout-minutes: 20
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer pnpm
+        # Aucune version ici : action-setup lit le champ « packageManager » du
+        # package.json racine. Une seule source de vérité pour pnpm.
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          # Le package.json racine déclare « engines.node: >=20 », qui est une
+          # borne et non une version. On fige 22 (LTS), qui satisfait la borne.
+          # Si un .nvmrc apparaît un jour, c'est lui qui doit gagner.
+          node-version: 22
+          cache: pnpm
+
+      - name: Restaurer le cache Turborepo
+        uses: actions/cache@v6
+        with:
+          # Turborepo 2 range ses artefacts dans .turbo/cache. On ne met en
+          # cache que ce dossier : le reste de .turbo (démon, journaux) n'a
+          # aucune valeur d'une exécution à l'autre.
+          path: .turbo/cache
+          # Clé unique par commit — actions/cache n'écrase jamais une clé
+          # existante, donc une clé fixe ne serait sauvegardée qu'une fois.
+          # Le repli restore-keys récupère le cache de l'exécution précédente.
+          key: turbo-${{ runner.os }}-node22-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-node22-
+
+      - name: Installer les dépendances
+        # --frozen-lockfile : si le lockfile ne correspond plus aux
+        # package.json, la CI s'arrête ici au lieu de résoudre en douce des
+        # versions différentes de celles du poste de développement.
+        run: pnpm install --frozen-lockfile
+
+      # Les quatre vérifications sont des étapes distinctes pour que l'échec
+      # soit lisible d'un coup d'œil dans l'interface GitHub. Turborepo ignore
+      # silencieusement les paquets qui ne déclarent pas la tâche demandée
+      # (@sm/web, @sm/kds, @sm/db et @sm/supply n'ont pas de « test ») : leur
+      # absence de script ne fait donc pas échouer la CI.
+      - name: Typage
+        run: pnpm exec turbo run typecheck $TURBO_FLAGS
+
+      - name: Analyse statique
+        run: pnpm exec turbo run lint $TURBO_FLAGS
+
+      - name: Tests
+        run: pnpm exec turbo run test $TURBO_FLAGS
+
+      - name: Compilation
+        run: pnpm exec turbo run build $TURBO_FLAGS
