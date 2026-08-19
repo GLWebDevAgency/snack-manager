@@ -1,14 +1,18 @@
 /**
  * Zones B et C — rail des catégories et grille produits.
  *
- * La grille mesure sa largeur pour tenir exactement 4 colonnes quel que soit
- * l'écran : les colonnes fixes en pourcentage n'existent pas en RN.
+ * La grille mesure sa largeur réelle (`onLayout`) puis demande à `useLayout()`
+ * combien de colonnes y tiennent : 3 sur une petite tablette, 4 sur la
+ * référence 1280, 5 à 6 sur un grand écran de comptoir. Les colonnes fixes en
+ * pourcentage n'existent pas en RN, et un nombre figé donnerait soit des
+ * cartes étirées, soit des noms tronqués.
  */
 import { useMemo, useState } from 'react';
 import { ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
-import { TOUCH_MIN, basePrice, euros, palette, type Category, type Product } from '@sm/client-core';
-import { FONT, R, RAIL_W, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
+import { basePrice, euros, palette, type Category, type Product } from '@sm/client-core';
+import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
 import { EmptyState, Field, Press, Sheen } from './ui';
+import { cardWidth, columnsFor, useLayout, type Layout } from './useLayout';
 import type { ParkedTicket } from './pos-state';
 
 /** Étiquette courte du rail : « Compose ton Tacos » → « Tacos ». */
@@ -44,8 +48,9 @@ export function CategoryRail({
   onSelect: (id: string) => void;
   brand: Brand;
 }) {
+  const L = useLayout();
   return (
-    <View style={{ width: RAIL_W, backgroundColor: '#0a0a0a', borderRightWidth: 1, borderRightColor: palette.line2 }}>
+    <View style={{ width: L.railW, backgroundColor: '#0a0a0a', borderRightWidth: 1, borderRightColor: palette.line2 }}>
       <ScrollView contentContainerStyle={{ paddingVertical: S.sm, paddingHorizontal: 6, gap: 5 }}>
         {categories.map((cat) => {
           const on = cat._id === activeId;
@@ -58,7 +63,7 @@ export function CategoryRail({
               accessibilityLabel={cat.name}
               scale={0.96}
               style={{
-                minHeight: 62,
+                minHeight: L.touch(62),
                 borderRadius: R.card,
                 paddingVertical: 9,
                 paddingHorizontal: 8,
@@ -89,9 +94,9 @@ export function CategoryRail({
                 style={{
                   fontFamily: FONT,
                   color: on ? palette.text : '#8d8d8d',
-                  fontSize: 13,
+                  fontSize: L.fs(13),
                   fontWeight: on ? '700' : '600',
-                  lineHeight: 16,
+                  lineHeight: L.fs(16),
                   letterSpacing: -0.1,
                   textAlign: 'center',
                 }}
@@ -102,7 +107,7 @@ export function CategoryRail({
                 style={{
                   fontFamily: FONT,
                   color: on ? brand.accent : '#757575',
-                  fontSize: 11.5,
+                  fontSize: L.fs(11.5),
                   fontWeight: '700',
                   textAlign: 'center',
                   marginTop: 3,
@@ -138,6 +143,7 @@ export function ProductArea({
   query: string;
   onQuery: (q: string) => void;
 }) {
+  const L = useLayout();
   const [gridWidth, setGridWidth] = useState(0);
 
   const activeCat = categories.find((c) => c._id === activeId) ?? categories[0];
@@ -159,17 +165,17 @@ export function ProductArea({
   const shown: { product: Product; categoryName: string }[] =
     results ?? (activeCat?.products ?? []).map((p) => ({ product: p, categoryName: activeCat?.name ?? '' }));
 
-  // 4 colonnes sur la tablette cible (1280 paysage) ; on retombe
-  // proprement à 2 ou 3 sur un écran plus étroit plutôt que d'écraser les
-  // noms de produits.
-  const gap = 12;
-  const cols = gridWidth > 0 ? Math.max(2, Math.min(4, Math.floor((gridWidth + gap) / (168 + gap)))) : 4;
-  const cardW = gridWidth > 0 ? (gridWidth - gap * (cols - 1)) / cols : 0;
+  // Colonnes déduites de la largeur RÉELLEMENT disponible (rail et ticket déjà
+  // déduits par le flex) : 3 sur petite tablette, 4 à 1280, 5 à 6 sur un grand
+  // écran de comptoir. Jamais un nombre figé.
+  const gap = L.gridGap;
+  const cols = columnsFor(gridWidth, L);
+  const cardW = cardWidth(gridWidth, cols, gap);
 
   return (
     <View style={{ flex: 1 }}>
       {/* Recherche + tickets en attente */}
-      <View style={{ paddingHorizontal: S.lg, paddingTop: S.md, gap: S.md }}>
+      <View style={{ paddingHorizontal: L.gridPad, paddingTop: S.md, gap: S.md }}>
         <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
           <Field
             value={query}
@@ -183,8 +189,8 @@ export function ProductArea({
               onPress={() => onQuery('')}
               accessibilityLabel="Effacer la recherche"
               style={{
-                width: TOUCH_MIN,
-                height: TOUCH_MIN,
+                width: L.touch(),
+                height: L.touch(),
                 borderRadius: R.pill,
                 backgroundColor: palette.surface2,
                 borderWidth: 1,
@@ -213,7 +219,7 @@ export function ProductArea({
                   onPress={() => onRecall(t)}
                   accessibilityLabel={`Rappeler le ticket ${t.code}, ${items} articles, ${euros(total)}`}
                   style={{
-                    minHeight: TOUCH_MIN,
+                    minHeight: L.touch(),
                     paddingHorizontal: 14,
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -226,7 +232,7 @@ export function ProductArea({
                   activeStyle={{ backgroundColor: withAlpha(palette.amber, 0.2) }}
                 >
                   <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
-                  <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 14, fontWeight: '700' }}>
+                  <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(14), fontWeight: '700' }}>
                     {t.code}
                     {t.customerName ? ` · ${t.customerName}` : ''}
                   </Text>
@@ -234,7 +240,7 @@ export function ProductArea({
                     style={{
                       fontFamily: FONT,
                       color: palette.amber,
-                      fontSize: 13,
+                      fontSize: L.fs(13),
                       fontWeight: '700',
                       fontVariant: ['tabular-nums'],
                     }}
@@ -251,11 +257,13 @@ export function ProductArea({
       {/* Grille */}
       <ScrollView
         style={{ flex: 1, marginTop: S.md }}
-        contentContainerStyle={{ paddingHorizontal: S.lg, paddingBottom: S.xl }}
+        contentContainerStyle={{ paddingHorizontal: L.gridPad, paddingBottom: S.xl }}
       >
         <View style={[sheet.between, { marginBottom: S.md }]}>
-          <Text style={type.eyebrow}>{results ? 'Résultats' : (activeCat?.name ?? 'Catalogue')}</Text>
-          <Text style={[type.mut, { fontSize: 12.5 }]}>
+          <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>
+            {results ? 'Résultats' : (activeCat?.name ?? 'Catalogue')}
+          </Text>
+          <Text style={[type.mut, { fontSize: L.fs(12.5) }]}>
             {shown.length} produit{shown.length > 1 ? 's' : ''}
           </Text>
         </View>
@@ -278,6 +286,7 @@ export function ProductArea({
                 key={product._id}
                 product={product}
                 width={cardW}
+                layout={L}
                 brand={brand}
                 onPress={() => onPick(product, categoryName)}
               />
@@ -292,11 +301,13 @@ export function ProductArea({
 function ProductCard({
   product,
   width,
+  layout: L,
   brand,
   onPress,
 }: {
   product: Product;
   width: number;
+  layout: Layout;
   brand: Brand;
   onPress: () => void;
 }) {
@@ -317,12 +328,14 @@ function ProductCard({
       style={[
         {
           width,
-          minHeight: 108,
+          // Hauteur commune à toutes les cartes : une grille de tuiles
+          // régulières se balaie du regard, une grille en escalier non.
+          height: L.cardH,
           borderRadius: R.card,
           backgroundColor: palette.surface,
           borderWidth: 1,
           borderColor: palette.line2,
-          padding: 13,
+          padding: L.sp(13),
           justifyContent: 'space-between',
           overflow: 'hidden',
         },
@@ -339,9 +352,9 @@ function ProductCard({
             flex: 1,
             fontFamily: FONT,
             color: palette.text,
-            fontSize: 14.5,
+            fontSize: L.fs(14.5),
             fontWeight: '700',
-            lineHeight: 18,
+            lineHeight: L.fs(18),
             letterSpacing: -0.2,
           }}
         >
@@ -356,7 +369,9 @@ function ProductCard({
               backgroundColor: withAlpha(palette.green, 0.14),
             }}
           >
-            <Text style={{ fontFamily: FONT, color: palette.green, fontSize: 11, fontWeight: '800' }}>NOUV.</Text>
+            <Text style={{ fontFamily: FONT, color: palette.green, fontSize: L.fs(11), fontWeight: '800' }}>
+              NOUV.
+            </Text>
           </View>
         ) : required && !out ? (
           // Pastille discrète : ce produit ouvrira une configuration obligatoire.
@@ -382,18 +397,22 @@ function ProductCard({
               backgroundColor: withAlpha(palette.red, 0.18),
             }}
           >
-            <Text style={{ fontFamily: FONT, color: palette.red, fontSize: 12.5, fontWeight: '800' }}>RUPTURE</Text>
+            <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(12.5), fontWeight: '800' }}>
+              RUPTURE
+            </Text>
           </View>
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }}>
             {hasVariants ? (
-              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 11.5, fontWeight: '700' }}>dès</Text>
+              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(11.5), fontWeight: '700' }}>
+                dès
+              </Text>
             ) : null}
             <Text
               style={{
                 fontFamily: FONT,
                 color: palette.text,
-                fontSize: 19,
+                fontSize: L.fs(19),
                 fontWeight: '800',
                 letterSpacing: -0.7,
                 fontVariant: ['tabular-nums'],

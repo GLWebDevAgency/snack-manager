@@ -557,6 +557,20 @@
   padding: calc(var(--bd-hero-name) * 0.62);
 }
 
+/*
+ * Un produit vedette sans photo — les trois quarts de la carte de Class'Food
+ * n'en ont pas — devient une plaque centrée, nom en très grand. Aligné à gauche
+ * dans un panneau de 1800 px, il flottait dans le vide.
+ */
+.bd-hero-card[data-solo="1"][data-photo="0"] .bd-hero-body {
+  --bd-hero-name: calc(var(--bd-hero-size) * 1.5);
+  align-items: center;
+  text-align: center;
+}
+.bd-hero-card[data-solo="1"][data-photo="0"] .bd-hero-price {
+  align-self: center;
+}
+
 .bd-hero-body {
   flex: 1 1 0;
   min-width: 0;

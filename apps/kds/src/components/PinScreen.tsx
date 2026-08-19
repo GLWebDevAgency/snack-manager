@@ -14,14 +14,16 @@ import {
   TOUCH_MIN,
   type,
 } from '../ui';
+import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Sheen, Tap } from './primitives';
 
 /**
  * Connexion par PIN — la seule porte d'entrée de l'écran cuisine.
  *
  * Pavé numérique plutôt que champ texte : gants, écran gras, aucun clavier
- * logiciel à faire apparaître. Les touches font 76 px (bien au-delà des 44 px
- * réglementaires) et répondent à l'appui en moins de 100 ms.
+ * logiciel à faire apparaître. Les touches font 76 px à l'échelle de référence
+ * (bien au-delà des 44 px réglementaires), grandissent avec l'écran, et
+ * répondent à l'appui en moins de 100 ms.
  */
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -33,12 +35,15 @@ export function PinScreen({
   tenantName,
   onSubmit,
   reducedMotion,
+  layout,
 }: {
   accent: string;
   tenantName: string;
   onSubmit: (pin: string) => Promise<void>;
   reducedMotion: boolean;
+  layout: Layout;
 }) {
+  const styles = pinStyles(layout);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -181,7 +186,7 @@ export function PinScreen({
             {busy ? (
               <ActivityIndicator color={contrastOn(accent)} />
             ) : (
-              <Check color={ready ? contrastOn(accent) : ink.dimmer} size={26} />
+              <Check color={ready ? contrastOn(accent) : ink.dimmer} size={layout.far(26)} />
             )}
           </Tap>
         </View>
@@ -194,116 +199,120 @@ export function PinScreen({
   );
 }
 
-const KEY_SIZE = 76;
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: palette.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  panel: {
-    width: 340,
-    maxWidth: '100%',
-    backgroundColor: surface.card,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: hair2,
-    paddingHorizontal: 20,
-    paddingTop: 26,
-    paddingBottom: 20,
-    overflow: 'hidden',
-  },
-  head: { alignItems: 'center', gap: 8 },
-  brand: {
-    width: 52,
-    height: 52,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  brandLetter: {
-    fontFamily: type.hero.fontFamily,
-    fontSize: 27,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-  title: {
-    fontFamily: type.title.fontFamily,
-    fontSize: 19,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    color: palette.text,
-  },
-  subtitle: {
-    fontFamily: type.micro.fontFamily,
-    fontSize: 11.5,
-    fontWeight: '700',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    color: ink.dim,
-  },
-  prompt: {
-    fontFamily: type.micro.fontFamily,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: ink.dimmer,
-    textAlign: 'center',
-    marginTop: 22,
-  },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 12 },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: hair,
-    backgroundColor: 'transparent',
-  },
-  dotOptional: { borderColor: alpha('#ffffff', 0.06) },
-  errorSlot: { minHeight: 26, justifyContent: 'center' },
-  error: {
-    fontFamily: type.body.fontFamily,
-    fontSize: 13,
-    fontWeight: '700',
-    color: ink.onRed,
-    textAlign: 'center',
-  },
-  pad: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  key: {
-    width: KEY_SIZE,
-    height: Math.max(TOUCH_MIN, 62),
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: hair2,
-    backgroundColor: surface.el,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyText: {
-    fontFamily: type.hero.fontFamily,
-    fontSize: 26,
-    fontWeight: '700',
-    color: palette.text,
-    ...tabular,
-  },
-  keyGhost: { backgroundColor: 'transparent', borderColor: hair2 },
-  keyGhostText: {
-    fontFamily: type.micro.fontFamily,
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: ink.dim,
-  },
-  hint: {
-    fontFamily: type.body.fontFamily,
-    fontSize: 12,
-    color: ink.dimmer,
-    textAlign: 'center',
-    marginTop: 16,
-  },
+const pinStyles = scaledStyles((l: Layout) => {
+  const keyW = Math.round(76 * l.scale);
+  const keyH = Math.max(TOUCH_MIN, l.touch, Math.round(62 * l.scale));
+  const gap = 10;
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: palette.bg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    // Le panneau se déduit du pavé : trois touches + deux gouttières + marges.
+    panel: {
+      width: keyW * 3 + gap * 2 + 40,
+      maxWidth: '100%',
+      backgroundColor: surface.card,
+      borderRadius: radius.xl,
+      borderWidth: 1,
+      borderColor: hair2,
+      paddingHorizontal: 20,
+      paddingTop: 26,
+      paddingBottom: 20,
+      overflow: 'hidden',
+    },
+    head: { alignItems: 'center', gap: 8 },
+    brand: {
+      width: Math.round(52 * l.scale),
+      height: Math.round(52 * l.scale),
+      borderRadius: Math.round(15 * l.scale),
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    brandLetter: {
+      fontFamily: type.hero.fontFamily,
+      fontSize: l.far(27),
+      fontWeight: '800',
+      letterSpacing: -0.8,
+    },
+    title: {
+      fontFamily: type.title.fontFamily,
+      fontSize: l.fs(19),
+      fontWeight: '700',
+      letterSpacing: -0.4,
+      color: palette.text,
+    },
+    subtitle: {
+      fontFamily: type.micro.fontFamily,
+      fontSize: l.fs(11.5),
+      fontWeight: '700',
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
+      color: ink.dim,
+    },
+    prompt: {
+      fontFamily: type.micro.fontFamily,
+      fontSize: l.fs(11),
+      fontWeight: '800',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: ink.dimmer,
+      textAlign: 'center',
+      marginTop: 22,
+    },
+    dots: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 12 },
+    dot: {
+      width: l.fs(14),
+      height: l.fs(14),
+      borderRadius: l.fs(7),
+      borderWidth: 1.5,
+      borderColor: hair,
+      backgroundColor: 'transparent',
+    },
+    dotOptional: { borderColor: alpha('#ffffff', 0.06) },
+    errorSlot: { minHeight: 26, justifyContent: 'center' },
+    error: {
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(13),
+      fontWeight: '700',
+      color: ink.onRed,
+      textAlign: 'center',
+    },
+    pad: { flexDirection: 'row', flexWrap: 'wrap', gap, justifyContent: 'center' },
+    key: {
+      width: keyW,
+      height: keyH,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: hair2,
+      backgroundColor: surface.el,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    keyText: {
+      fontFamily: type.hero.fontFamily,
+      fontSize: l.far(26),
+      fontWeight: '700',
+      color: palette.text,
+      ...tabular,
+    },
+    keyGhost: { backgroundColor: 'transparent', borderColor: hair2 },
+    keyGhostText: {
+      fontFamily: type.micro.fontFamily,
+      fontSize: l.fs(12.5),
+      fontWeight: '700',
+      color: ink.dim,
+    },
+    hint: {
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(12),
+      color: ink.dimmer,
+      textAlign: 'center',
+      marginTop: 16,
+    },
+  });
 });

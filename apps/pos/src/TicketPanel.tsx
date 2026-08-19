@@ -1,16 +1,22 @@
 /**
- * Panneau ticket (zone D) — 384 px fixes à droite de l'écran.
+ * Panneau ticket (zone D) — colonne de droite du poste.
  *
  * C'est la colonne que le caissier regarde en permanence : hiérarchie franche
  * (nom en gras, options en second niveau gris), total en très grande graisse
  * accent, boutons d'encaissement pleine largeur en pied fixe.
+ *
+ * Sa largeur n'est plus figée à 384 px : elle suit l'écran entre 340 et 460
+ * (`useLayout`). Sous 900 px de large (mode compact), le panneau quitte la
+ * disposition en trois colonnes pour devenir un TIROIR, ouvert depuis la barre
+ * `TicketDock` restée visible en pied d'écran.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { cartTotal, euros, TOUCH_MIN, type CartLine } from '@sm/client-core';
-import { FONT, R, S, TICKET_W, palette, sheet, type, withAlpha, type Brand } from './theme';
+import { ScrollView, Text, View } from 'react-native';
+import { cartTotal, euros, type CartLine } from '@sm/client-core';
+import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
 import { MODE_LABEL, lineDetail, pickupSlots, type Mode } from './pos-state';
-import { Btn, Chip, EmptyState, Field, Press, Stepper } from './ui';
+import { Btn, Chip, CloseBtn, EmptyState, Field, Press, Stepper } from './ui';
+import { useLayout, type Layout } from './useLayout';
 
 export function TicketPanel({
   lines,
@@ -30,6 +36,7 @@ export function TicketPanel({
   onClear,
   onPay,
   busy,
+  onCollapse,
 }: {
   lines: CartLine[];
   mode: Mode;
@@ -48,11 +55,11 @@ export function TicketPanel({
   onClear: () => void;
   onPay: (method: 'cb' | 'especes' | 'retrait') => void;
   busy: boolean;
+  /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
+  onCollapse?: () => void;
 }) {
-  const { width: screenW } = useWindowDimensions();
-  // 384 px sur la tablette cible ; on resserre plutôt que d'étouffer la grille
-  // sur un écran plus étroit.
-  const panelWidth = screenW < 1120 ? 320 : TICKET_W;
+  const L = useLayout();
+  const drawer = !!onCollapse;
   const subtotal = cartTotal(lines);
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const phoneOk = customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8;
@@ -62,7 +69,9 @@ export function TicketPanel({
   return (
     <View
       style={{
-        width: panelWidth,
+        // Ancré : largeur fluide bornée. Tiroir : il remplit la largeur que le
+        // tiroir lui donne.
+        ...(drawer ? { flex: 1 } : { width: L.ticketW }),
         backgroundColor: palette.surface,
         borderLeftWidth: 1,
         borderLeftColor: palette.line,
@@ -71,8 +80,8 @@ export function TicketPanel({
       {/* En-tête */}
       <View style={[sheet.between, { paddingHorizontal: S.lg, paddingVertical: S.md, gap: S.sm }]}>
         <View style={{ flex: 1 }}>
-          <Text style={type.eyebrow}>Ticket</Text>
-          <Text style={[type.h2, { marginTop: 2 }]}>{MODE_LABEL[mode]}</Text>
+          <Text style={[type.eyebrow, { fontSize: L.fs(12) }]}>Ticket</Text>
+          <Text style={[type.h2, { marginTop: 2, fontSize: L.fs(17) }]}>{MODE_LABEL[mode]}</Text>
         </View>
         {lines.length > 0 ? (
           <View style={[sheet.row, { gap: 6 }]}>
@@ -80,6 +89,7 @@ export function TicketPanel({
             <ConfirmAction label="Vider" confirmLabel="Confirmer ?" tone={palette.red} onConfirm={onClear} />
           </View>
         ) : null}
+        {onCollapse ? <CloseBtn onPress={onCollapse} label="Replier le ticket" /> : null}
       </View>
       <View style={sheet.hairline} />
 
@@ -101,7 +111,7 @@ export function TicketPanel({
             /* Un champ vide n'est pas une erreur : seul un numéro trop court en est une. */
             invalid={customerPhone.length > 0 && customerPhone.replace(/\D/g, '').length < 8}
           />
-          <Text style={[type.eyebrow, { marginTop: 2 }]}>Heure de retrait</Text>
+          <Text style={[type.eyebrow, { marginTop: 2, fontSize: L.fs(12) }]}>Heure de retrait</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
             {slots.map((s) => (
               <Chip
@@ -111,14 +121,13 @@ export function TicketPanel({
                 onPress={() => onSlot(s.iso)}
                 accent={brand.accent}
                 onAccent={brand.onAccent}
-                minHeight={TOUCH_MIN}
               />
             ))}
           </ScrollView>
           {lines.length > 0 && !phoneOk ? (
             <View style={[sheet.row, { gap: 8 }]}>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
-              <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: 13, fontWeight: '600', flex: 1 }}>
+              <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13), fontWeight: '600', flex: 1 }}>
                 Nom et téléphone requis pour envoyer une commande téléphone
               </Text>
             </View>
@@ -140,6 +149,7 @@ export function TicketPanel({
             <TicketLine
               key={line.lineId}
               line={line}
+              layout={L}
               onQty={(q) => onQty(line.lineId, q)}
               onEdit={() => onEdit(line)}
             />
@@ -172,18 +182,27 @@ export function TicketPanel({
         }}
       >
         <View style={sheet.between}>
-          <Text style={type.mut}>
+          <Text style={[type.mut, { fontSize: L.fs(13) }]}>
             Sous-total · {count} article{count > 1 ? 's' : ''}
           </Text>
-          <Text style={[type.num, { fontSize: 14, fontWeight: '600', color: palette.mut }]}>{euros(subtotal)}</Text>
+          <Text style={[type.num, { fontSize: L.fs(14), fontWeight: '600', color: palette.mut }]}>
+            {euros(subtotal)}
+          </Text>
         </View>
 
         <View style={[sheet.between, { alignItems: 'flex-end' }]}>
-          <Text style={[type.eyebrow, { fontSize: 13, marginBottom: 6 }]}>Total</Text>
+          <Text style={[type.eyebrow, { fontSize: L.fs(13), marginBottom: 6 }]}>Total</Text>
           <Text
             style={[
               type.display,
-              { fontSize: 38, fontWeight: '900', color: lines.length ? brand.accent : '#3a3a3a', letterSpacing: -1.4 },
+              {
+                // Le total est l'information la plus lue du poste : c'est elle
+                // qui doit profiter le plus d'un grand écran.
+                fontSize: L.fs(38),
+                fontWeight: '900',
+                color: lines.length ? brand.accent : '#3a3a3a',
+                letterSpacing: -1.4,
+              },
             ]}
           >
             {euros(subtotal)}
@@ -229,10 +248,12 @@ export function TicketPanel({
 
 function TicketLine({
   line,
+  layout: L,
   onQty,
   onEdit,
 }: {
   line: CartLine;
+  layout: Layout;
   onQty: (qty: number) => void;
   onEdit: () => void;
 }) {
@@ -247,24 +268,26 @@ function TicketLine({
           activeStyle={{ opacity: 0.7 }}
           scale={0.99}
         >
-          <Text style={[type.strong, { fontSize: 15.5, lineHeight: 19 }]}>{line.name}</Text>
+          <Text style={[type.strong, { fontSize: L.fs(15.5), lineHeight: L.fs(19) }]}>{line.name}</Text>
           {detail ? (
-            <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 13, lineHeight: 17, marginTop: 3 }}>
+            <Text
+              style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(13), lineHeight: L.fs(17), marginTop: 3 }}
+            >
               {detail}
             </Text>
           ) : null}
           {line.note ? (
             <Text
-              style={{ fontFamily: FONT, color: palette.amber, fontSize: 13, lineHeight: 17, marginTop: 3 }}
+              style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(13), lineHeight: L.fs(17), marginTop: 3 }}
             >
               « {line.note} »
             </Text>
           ) : null}
-          <Text style={[type.num, { color: '#7a7a7a', fontSize: 12.5, marginTop: 4 }]}>
+          <Text style={[type.num, { color: '#7a7a7a', fontSize: L.fs(12.5), marginTop: 4 }]}>
             {euros(line.unitPrice)} / u
           </Text>
         </Press>
-        <Text style={[type.num, { fontSize: 16, fontWeight: '800', letterSpacing: -0.4 }]}>
+        <Text style={[type.num, { fontSize: L.fs(16), fontWeight: '800', letterSpacing: -0.4 }]}>
           {euros(line.unitPrice * line.qty)}
         </Text>
       </View>
@@ -273,14 +296,16 @@ function TicketLine({
           onPress={() => onQty(0)}
           accessibilityLabel={`Supprimer ${line.name}`}
           style={{
-            minHeight: TOUCH_MIN,
+            minHeight: L.touch(),
             paddingHorizontal: 12,
             justifyContent: 'center',
             borderRadius: R.pill,
           }}
           activeStyle={{ backgroundColor: withAlpha(palette.red, 0.14) }}
         >
-          <Text style={{ fontFamily: FONT, color: palette.red, fontSize: 13.5, fontWeight: '700' }}>Supprimer</Text>
+          <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(13.5), fontWeight: '700' }}>
+            Supprimer
+          </Text>
         </Press>
         <Stepper qty={line.qty} onChange={onQty} min={0} compact />
       </View>
@@ -344,12 +369,13 @@ function TextAction({
   onPress: () => void;
   filled?: boolean;
 }) {
+  const L = useLayout();
   return (
     <Press
       onPress={onPress}
       accessibilityLabel={label}
       style={{
-        minHeight: TOUCH_MIN,
+        minHeight: L.touch(),
         paddingHorizontal: 12,
         justifyContent: 'center',
         borderRadius: R.pill,
@@ -359,7 +385,107 @@ function TextAction({
       }}
       activeStyle={{ backgroundColor: withAlpha(tone, 0.16) }}
     >
-      <Text style={{ fontFamily: FONT, color: tone, fontSize: 13, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ fontFamily: FONT, color: tone, fontSize: L.fs(13), fontWeight: '700' }}>{label}</Text>
     </Press>
+  );
+}
+
+/**
+ * Barre d'accès permanente du mode compact (< 900 px).
+ *
+ * Le ticket est replié, mais le caissier doit garder sous les yeux ce qu'il a
+ * saisi ET pouvoir encaisser sans détour : à gauche « Ticket · N articles ·
+ * total » ouvre le tiroir, à droite le paiement carte — le plus fréquent —
+ * part en UN seul geste. Espèces et paiement au retrait restent dans le
+ * tiroir, où le pied de ticket est inchangé.
+ */
+export function TicketDock({
+  lines,
+  mode,
+  brand,
+  busy,
+  customerName,
+  customerPhone,
+  onOpen,
+  onPay,
+}: {
+  lines: CartLine[];
+  mode: Mode;
+  brand: Brand;
+  busy: boolean;
+  customerName: string;
+  customerPhone: string;
+  onOpen: () => void;
+  onPay: (method: 'cb' | 'especes' | 'retrait') => void;
+}) {
+  const L = useLayout();
+  const subtotal = cartTotal(lines);
+  const count = lines.reduce((n, l) => n + l.qty, 0);
+  const phoneOk = customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8;
+  const canSend = lines.length > 0 && (mode !== 'tel' || phoneOk) && !busy;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: S.sm,
+        paddingHorizontal: S.md,
+        paddingVertical: S.sm,
+        backgroundColor: '#0c0c0c',
+        borderTopWidth: 1,
+        borderTopColor: palette.line,
+      }}
+    >
+      <Press
+        onPress={onOpen}
+        accessibilityLabel={`Ouvrir le ticket, ${count} article${count > 1 ? 's' : ''}, total ${euros(subtotal)}`}
+        style={{
+          flex: 1,
+          minHeight: L.touch(52),
+          paddingHorizontal: S.md,
+          borderRadius: R.pill,
+          borderWidth: 1,
+          borderColor: lines.length ? withAlpha(brand.accent, 0.45) : palette.line,
+          backgroundColor: palette.surface2,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: S.sm,
+        }}
+        activeStyle={{ backgroundColor: '#262626' }}
+      >
+        <Text numberOfLines={1} style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(14), fontWeight: '700' }}>
+          Ticket · {count} art.
+        </Text>
+        <Text
+          style={[
+            type.num,
+            { fontSize: L.fs(20), fontWeight: '900', color: lines.length ? brand.accent : '#3a3a3a', letterSpacing: -0.6 },
+          ]}
+        >
+          {euros(subtotal)}
+        </Text>
+      </Press>
+
+      <Btn
+        label="Carte"
+        kind="primary"
+        size="md"
+        accent={brand.accent}
+        onAccent={brand.onAccent}
+        disabled={!canSend}
+        onPress={() => onPay('cb')}
+        accessibilityLabel={`Encaisser ${euros(subtotal)} par carte`}
+      />
+      <Btn
+        label="Espèces"
+        kind="solid"
+        size="md"
+        disabled={!canSend}
+        onPress={() => onPay('especes')}
+        accessibilityLabel={`Encaisser ${euros(subtotal)} en espèces`}
+      />
+    </View>
   );
 }

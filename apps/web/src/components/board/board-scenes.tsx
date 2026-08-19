@@ -232,9 +232,19 @@ export function SceneBody({ scene, orientation, brandName, logoUrl }: SceneProps
     scene.products.length < LIST_MIN ||
     (scene.kind === "featured" && scene.products.length <= HERO_MAX);
 
+  /**
+   * Catégorie d'un seul produit qui porte le nom de la catégorie (« Compose ton
+   * Tacos ») : afficher le titre PUIS le même nom en dessous ferait bégayer
+   * l'écran. On supprime l'en-tête, la photo prend toute la scène.
+   */
+  const echoesTitle =
+    hero &&
+    scene.products.length === 1 &&
+    scene.products[0]!.name.trim().toLowerCase() === scene.title.trim().toLowerCase();
+
   return (
     <>
-      <SceneHead scene={scene} />
+      {echoesTitle ? null : <SceneHead scene={scene} />}
       {hero ? (
         <HeroProducts products={scene.products} durationMs={scene.durationMs} />
       ) : (

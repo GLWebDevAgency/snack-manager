@@ -26,10 +26,11 @@ import {
 } from '@sm/client-core';
 import { KEYS, client, TENANT_SLUG, type Session } from './client';
 import { S, makeBrand, palette } from './theme';
-import { Btn, Loading, useToasts } from './ui';
+import { Btn, Drawer, Loading, useToasts } from './ui';
+import { useLayout } from './useLayout';
 import { TopBar } from './TopBar';
 import { CategoryRail, ProductArea } from './Catalog';
-import { TicketPanel } from './TicketPanel';
+import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
 import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto } from './modals';
 import {
@@ -84,6 +85,12 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     [session.brandColor, session.tenantName],
   );
 
+  /**
+   * Toutes les dimensions du poste descendent d'ici : rail, ticket, colonnes,
+   * échelle typographique et bascule compacte. Aucun écran ne décide seul.
+   */
+  const layout = useLayout();
+
   const { menu, error: menuError, offline, reload } = useMenu(client, TENANT_SLUG);
   const sync = useSyncState(client);
   useAutoSync(client);
@@ -100,6 +107,8 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [query, setQuery] = useState('');
   const [catId, setCatId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Mode compact seulement : tiroir du ticket ouvert. */
+  const [ticketOpen, setTicketOpen] = useState(false);
 
   // ─── Surcouches ───
   const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
@@ -166,6 +175,12 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   useEffect(() => {
     if (menu && catId === null && menu.categories.length > 0) setCatId(menu.categories[0]?._id ?? null);
   }, [catId, menu]);
+
+  // Le poste repasse en large (rotation, écran branché, fenêtre agrandie) :
+  // le ticket redevient une colonne ancrée, le tiroir n'a plus lieu d'être.
+  useEffect(() => {
+    if (!layout.compact) setTicketOpen(false);
+  }, [layout.compact]);
 
   // ─── Réconciliation : numéro et identifiant serveur ───
   /**
@@ -369,6 +384,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         setDayLog((cur) => [...cur, entry]);
         setSentClientId(clientId);
         setCashOpen(false);
+        setTicketOpen(false);
         resetTicket();
       } catch (e) {
         push(e instanceof Error ? e.message : "Impossible d'enregistrer la commande", 'bad');
@@ -381,6 +397,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
 
   const onPay = useCallback(
     (method: PayMethod) => {
+      // En compact, l'encaissement se déclenche depuis la barre d'accès comme
+      // depuis le tiroir : on referme le tiroir pour rendre la main à la vue.
+      setTicketOpen(false);
       if (method === 'especes') setCashOpen(true);
       else void send(method);
     },
@@ -446,6 +465,33 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   }, [dayLog.length, push]);
 
   const sentEntry = sentClientId ? (dayLog.find((e) => e.clientId === sentClientId) ?? null) : null;
+
+  /** Le ticket, identique en colonne ancrée et en tiroir : un seul composant. */
+  const ticket = (collapse?: () => void) => (
+    <TicketPanel
+      lines={lines}
+      mode={mode}
+      brand={brand}
+      note={note}
+      onNote={setNote}
+      customerName={customerName}
+      onCustomerName={setCustomerName}
+      customerPhone={customerPhone}
+      onCustomerPhone={setCustomerPhone}
+      slotIso={slotIso}
+      onSlot={setSlotIso}
+      onQty={setQty}
+      onEdit={openEdit}
+      onPark={park}
+      onClear={() => {
+        resetTicket();
+        push('Ticket vidé');
+      }}
+      onPay={onPay}
+      busy={busy}
+      {...(collapse ? { onCollapse: collapse } : null)}
+    />
+  );
 
   // ─── Rendu ───
   if (!menu) {
@@ -521,28 +567,16 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           />
         </View>
 
-        <TicketPanel
-          lines={lines}
-          mode={mode}
-          brand={brand}
-          note={note}
-          onNote={setNote}
-          customerName={customerName}
-          onCustomerName={setCustomerName}
-          customerPhone={customerPhone}
-          onCustomerPhone={setCustomerPhone}
-          slotIso={slotIso}
-          onSlot={setSlotIso}
-          onQty={setQty}
-          onEdit={openEdit}
-          onPark={park}
-          onClear={() => {
-            resetTicket();
-            push('Ticket vidé');
-          }}
-          onPay={onPay}
-          busy={busy}
-        />
+        {/* Ticket ancré — au-dessus de 900 px de large uniquement */}
+        {layout.compact ? null : ticket()}
+
+        {/* Ticket escamoté : tiroir depuis la droite, SOUS les modales pour
+            qu'une configuration ouverte depuis une ligne passe devant. */}
+        {layout.compact && ticketOpen ? (
+          <Drawer onClose={() => setTicketOpen(false)} width={layout.ticketW}>
+            {ticket(() => setTicketOpen(false))}
+          </Drawer>
+        ) : null}
 
         {/* Surcouches — sous la barre haute, qui reste lisible */}
         {config ? (
@@ -603,6 +637,21 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           />
         ) : null}
       </View>
+
+      {/* Barre d'accès permanente du mode compact : état du ticket toujours
+          lisible, encaissement à un geste. */}
+      {layout.compact ? (
+        <TicketDock
+          lines={lines}
+          mode={mode}
+          brand={brand}
+          busy={busy}
+          customerName={customerName}
+          customerPhone={customerPhone}
+          onOpen={() => setTicketOpen(true)}
+          onPay={onPay}
+        />
+      ) : null}
 
       {host}
     </View>

@@ -19,13 +19,24 @@ import {
   type ChannelFilter,
 } from './ui';
 import { clockHM } from './format';
-import { AllDayPanel } from './components/AllDayPanel';
+import { scaledStyles, type Layout } from './useLayout';
+import { aggregate, AllDayPanel } from './components/AllDayPanel';
 import { OrderCard } from './components/OrderCard';
 import { StatusColumn } from './components/StatusColumn';
-import { PhoneBar, Toolbar } from './components/Toolbar';
+import { CompactBar, Toolbar } from './components/Toolbar';
 import { CardSkeleton, EmptyState, Tap } from './components/primitives';
 
-const ALL_DAY_WIDTH = 224;
+/**
+ * Le plateau. Deux régimes, tranchés par `useLayout` et par lui seul :
+ *
+ *  - **colonnes** (≥ 900 px) — les trois statuts se partagent la largeur à
+ *    parts égales ; le panneau « À lancer » n'apparaît que s'il reste la place
+ *    (≥ 1180 px), sinon il se replie AVANT que les colonnes ne se serrent ;
+ *  - **onglets** (< 900 px) — une seule liste, un onglet par statut avec son
+ *    compteur, plus un onglet « À lancer ». C'est le comportement téléphone
+ *    prévu par la spec, étendu à toute fenêtre étroite (tablette en portrait,
+ *    gérant qui jette un œil depuis son bureau).
+ */
 
 export interface BoardProps {
   orders: Order[];
@@ -41,17 +52,17 @@ export interface BoardProps {
   onToggleSound: () => void;
   onAdvance: (order: Order) => void;
   reducedMotion: boolean;
-  phone: boolean;
-  compact: boolean;
+  layout: Layout;
 }
 
-type PhoneTab = BoardStatus | 'allday';
+type CompactTab = BoardStatus | 'allday';
 
 export function Board(props: BoardProps) {
-  const { orders, phone } = props;
+  const { orders, layout } = props;
+  const styles = boardStyles(layout);
   const [filter, setFilter] = useState<ChannelFilter>('all');
   const [allDay, setAllDay] = useState(true);
-  const [tab, setTab] = useState<PhoneTab>('new');
+  const [tab, setTab] = useState<CompactTab>('new');
 
   const visible = useMemo(
     () => (filter === 'all' ? orders : orders.filter((o) => o.channel === filter)),
@@ -78,15 +89,22 @@ export function Board(props: BoardProps) {
     total: visible.length,
   };
 
+  /** Cumul « À lancer », pour le compteur de l'onglet en mode compact. */
+  const toLaunch = useMemo(
+    () => aggregate(visible).reduce((sum, line) => sum + line.qty, 0),
+    [visible],
+  );
+
   const filterLabel =
     filter === 'all' ? undefined : CHANNEL_FILTERS.find((f) => f.key === filter)?.label;
 
   const banner = props.error && !props.loading ? props.error : null;
 
-  if (phone) {
+  // ─── Régime onglets ───
+  if (layout.compact) {
     return (
       <View style={styles.root}>
-        <PhoneBar
+        <CompactBar
           tenantName={props.tenantName}
           accent={props.accent}
           clock={clockHM(props.now)}
@@ -95,12 +113,13 @@ export function Board(props: BoardProps) {
           soundOn={props.soundOn}
           onToggleSound={props.onToggleSound}
           reducedMotion={props.reducedMotion}
+          layout={layout}
         />
-        {banner ? <OfflineBanner message={banner} pending={props.pending} /> : null}
+        {banner ? <OfflineBanner message={banner} pending={props.pending} layout={layout} /> : null}
 
-        <View style={styles.tabs}>
+        <View style={styles.tabs} accessibilityRole="tablist">
           {BOARD_STATUSES.map((status) => (
-            <PhoneTabButton
+            <TabButton
               key={status}
               label={STATUS_TONE[status].short}
               count={counts[status]}
@@ -108,34 +127,46 @@ export function Board(props: BoardProps) {
               tone={STATUS_TONE[status].bg}
               onPress={() => setTab(status)}
               reducedMotion={props.reducedMotion}
+              layout={layout}
             />
           ))}
-          <PhoneTabButton
+          <TabButton
             label="À lancer"
+            count={toLaunch}
             active={tab === 'allday'}
             tone={props.accent}
             onPress={() => setTab('allday')}
             reducedMotion={props.reducedMotion}
+            layout={layout}
           />
         </View>
 
         {tab === 'allday' ? (
-          <View style={styles.phoneAllDay}>
-            <AllDayPanel orders={visible} accent={props.accent} filterLabel={filterLabel} />
+          <View style={styles.compactAllDay}>
+            <AllDayPanel
+              orders={visible}
+              accent={props.accent}
+              filterLabel={filterLabel}
+              layout={layout}
+            />
           </View>
         ) : (
           <ScrollView
-            style={styles.phoneList}
-            contentContainerStyle={styles.phoneListContent}
+            style={styles.compactList}
+            contentContainerStyle={styles.compactListContent}
             showsVerticalScrollIndicator={false}
           >
             {props.loading && grouped[tab].length === 0 ? (
               <>
-                <CardSkeleton reducedMotion={props.reducedMotion} />
-                <CardSkeleton reducedMotion={props.reducedMotion} />
+                <CardSkeleton reducedMotion={props.reducedMotion} layout={layout} />
+                <CardSkeleton reducedMotion={props.reducedMotion} layout={layout} />
               </>
             ) : grouped[tab].length === 0 ? (
-              <EmptyState title={EMPTY_COPY[tab].title} hint={EMPTY_COPY[tab].hint} />
+              <EmptyState
+                title={EMPTY_COPY[tab].title}
+                hint={EMPTY_COPY[tab].hint}
+                layout={layout}
+              />
             ) : (
               grouped[tab].map((order) => (
                 <OrderCard
@@ -146,6 +177,7 @@ export function Board(props: BoardProps) {
                   reducedMotion={props.reducedMotion}
                   pending={props.pendingIds.has(order._id)}
                   onAdvance={props.onAdvance}
+                  layout={layout}
                 />
               ))
             )}
@@ -154,6 +186,12 @@ export function Board(props: BoardProps) {
       </View>
     );
   }
+
+  // ─── Régime colonnes ───
+  // `layout.allDayW === 0` = la fenêtre ne peut plus loger le panneau à côté
+  // des colonnes : il se replie de lui-même, la préférence est conservée pour
+  // le jour où l'écran retrouve de la place.
+  const showAllDay = allDay && layout.allDayW > 0;
 
   return (
     <View style={styles.root}>
@@ -171,18 +209,19 @@ export function Board(props: BoardProps) {
         allDayOn={allDay}
         onToggleAllDay={() => setAllDay((v) => !v)}
         reducedMotion={props.reducedMotion}
-        compact={props.compact}
+        layout={layout}
       />
 
-      {banner ? <OfflineBanner message={banner} pending={props.pending} /> : null}
+      {banner ? <OfflineBanner message={banner} pending={props.pending} layout={layout} /> : null}
 
       <View style={styles.stage}>
-        {allDay ? (
+        {showAllDay ? (
           <AllDayPanel
             orders={visible}
             accent={props.accent}
             filterLabel={filterLabel}
-            style={{ width: ALL_DAY_WIDTH }}
+            style={{ width: layout.allDayW }}
+            layout={layout}
           />
         ) : null}
 
@@ -197,6 +236,7 @@ export function Board(props: BoardProps) {
             loading={props.loading}
             pendingIds={props.pendingIds}
             onAdvance={props.onAdvance}
+            layout={layout}
           />
         ))}
       </View>
@@ -208,7 +248,16 @@ export function Board(props: BoardProps) {
  * Bandeau de dégradation : le service continue, mais le cuisinier doit savoir
  * que ce qu'il voit n'est plus rafraîchi et que ses appuis partent en file.
  */
-function OfflineBanner({ message, pending }: { message: string; pending: number }) {
+function OfflineBanner({
+  message,
+  pending,
+  layout,
+}: {
+  message: string;
+  pending: number;
+  layout: Layout;
+}) {
+  const styles = boardStyles(layout);
   return (
     <View style={styles.banner} accessibilityLiveRegion="polite">
       <Text style={styles.bannerText} numberOfLines={2}>
@@ -220,13 +269,19 @@ function OfflineBanner({ message, pending }: { message: string; pending: number 
   );
 }
 
-function PhoneTabButton({
+/**
+ * Onglet de statut du mode compact. Il remplace un en-tête de colonne : il en
+ * porte donc la couleur ET le compteur, sinon on perd le coup d'œil « combien
+ * il en reste » qui fait tout l'intérêt du tableau.
+ */
+function TabButton({
   label,
   count,
   active,
   tone,
   onPress,
   reducedMotion,
+  layout,
 }: {
   label: string;
   count?: number;
@@ -234,7 +289,9 @@ function PhoneTabButton({
   tone: string;
   onPress: () => void;
   reducedMotion: boolean;
+  layout: Layout;
 }) {
+  const styles = boardStyles(layout);
   return (
     <Tap
       onPress={onPress}
@@ -262,54 +319,64 @@ function PhoneTabButton({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.bg },
-  stage: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, minHeight: 0 },
+const boardStyles = scaledStyles((l: Layout) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: palette.bg },
+    stage: { flex: 1, flexDirection: 'row', gap: l.gap, padding: l.pad, minHeight: 0 },
 
-  banner: {
-    backgroundColor: alpha(palette.red, 0.14),
-    borderBottomWidth: 1,
-    borderBottomColor: alpha(palette.red, 0.4),
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-  },
-  bannerText: {
-    fontFamily: type.body.fontFamily,
-    fontSize: 13,
-    fontWeight: '700',
-    color: ink.onRed,
-    lineHeight: 17,
-  },
-  bannerDetail: { fontWeight: '500', color: alpha('#ff8b7b', 0.75) },
+    banner: {
+      backgroundColor: alpha(palette.red, 0.14),
+      borderBottomWidth: 1,
+      borderBottomColor: alpha(palette.red, 0.4),
+      paddingHorizontal: l.pad + 2,
+      paddingVertical: 9,
+    },
+    bannerText: {
+      fontFamily: type.body.fontFamily,
+      fontSize: l.fs(13),
+      fontWeight: '700',
+      color: ink.onRed,
+      lineHeight: l.fs(17),
+    },
+    bannerDetail: { fontWeight: '500', color: alpha('#ff8b7b', 0.75) },
 
-  tabs: { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4 },
-  tab: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    backgroundColor: surface.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    gap: 1,
-  },
-  tabText: {
-    fontFamily: type.micro.fontFamily,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-    textAlign: 'center',
-  },
-  tabCount: {
-    fontFamily: type.title.fontFamily,
-    fontSize: 17,
-    fontWeight: '900',
-    lineHeight: 20,
-    ...tabular,
-  },
+    tabs: {
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: l.gap,
+      paddingTop: 10,
+      paddingBottom: 4,
+    },
+    // Un onglet est la navigation principale du mode compact : au moins aussi
+    // haut qu'un bouton d'action, donc ≥ 56 px, et jamais sous la cible tactile.
+    tab: {
+      flex: 1,
+      minHeight: Math.max(l.touch, l.actionH),
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      backgroundColor: surface.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+      gap: 1,
+    },
+    tabText: {
+      fontFamily: type.micro.fontFamily,
+      fontSize: l.fs(12),
+      fontWeight: '800',
+      letterSpacing: 0.3,
+      textAlign: 'center',
+    },
+    tabCount: {
+      fontFamily: type.title.fontFamily,
+      fontSize: l.far(18),
+      fontWeight: '900',
+      lineHeight: l.far(21),
+      ...tabular,
+    },
 
-  phoneList: { flex: 1, minHeight: 0 },
-  phoneListContent: { padding: 12, gap: 12, paddingBottom: 24 },
-  phoneAllDay: { flex: 1, padding: 12, minHeight: 0 },
-});
+    compactList: { flex: 1, minHeight: 0 },
+    compactListContent: { padding: l.gap, gap: l.gap, paddingBottom: l.gap * 2 },
+    compactAllDay: { flex: 1, padding: l.gap, minHeight: 0 },
+  }),
+);

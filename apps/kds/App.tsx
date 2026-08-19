@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   getStore,
@@ -13,11 +13,12 @@ import { client } from './src/client';
 import { Board } from './src/Board';
 import { PinScreen } from './src/components/PinScreen';
 import { useBoard } from './src/useBoard';
+import { useLayout } from './src/useLayout';
 import { useReducedMotion } from './src/useReducedMotion';
 import { useSession } from './src/useSession';
 import { useStayAwake } from './src/useStayAwake';
 import { sound, soundSupported } from './src/sound';
-import { COMPACT_MAX_WIDTH, KEY_PREFS, PHONE_MAX_WIDTH, REMINDER_MS } from './src/config';
+import { KEY_PREFS, REMINDER_MS } from './src/config';
 import { ink, palette, type } from './src/ui';
 
 /**
@@ -42,9 +43,9 @@ export default function App() {
   // Une cuisine ne doit jamais voir l'écran s'éteindre en plein coup de feu.
   useStayAwake();
 
-  const { width } = useWindowDimensions();
-  const phone = width < PHONE_MAX_WIDTH;
-  const compact = width < COMPACT_MAX_WIDTH;
+  // Toutes les dimensions de l'écran — colonnes, panneau, échelle typo, cibles
+  // tactiles — sortent d'ici et de nulle part ailleurs.
+  const layout = useLayout();
 
   const reducedMotion = useReducedMotion();
   const now = useNow(1000);
@@ -169,6 +170,7 @@ export default function App() {
           tenantName="Snack Manager"
           onSubmit={login}
           reducedMotion={reducedMotion}
+          layout={layout}
         />
       </View>
     );
@@ -193,8 +195,7 @@ export default function App() {
         onToggleSound={toggleSound}
         onAdvance={board.advance}
         reducedMotion={reducedMotion}
-        phone={phone}
-        compact={compact}
+        layout={layout}
       />
     </View>
   );
