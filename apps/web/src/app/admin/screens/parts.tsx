@@ -5,7 +5,14 @@
  * code d'appairage géant, marche à suivre, note sur le dayparting.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { PAIRING_CODE_TTL_MS, SCENE_MAX_LINES } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
@@ -28,18 +35,31 @@ import {
 /**
  * Horodatage courant, réévalué toutes les `tickMs`.
  *
- * `null` au premier rendu : la page est rendue côté serveur avant que la
- * session ne soit connue, et un `Date.now()` d'initialisation y produirait un
- * écart d'hydratation systématique.
+ * L'horloge est un système EXTERNE : on s'y abonne plutôt que de la lire
+ * pendant le rendu (`Date.now()` y est impur) ou de la recopier dans un état
+ * depuis un effet. `null` tant que l'abonnement n'a pas eu lieu — donc au
+ * rendu serveur, ce qui évite au passage tout écart d'hydratation.
  */
 export function useNow(tickMs: number): number | null {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), tickMs);
-    return () => window.clearInterval(id);
-  }, [tickMs]);
-  return now;
+  const value = useRef<number | null>(null);
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      // Renseigné AVANT que React ne relise l'instantané après l'abonnement :
+      // la première valeur apparaît donc sans attendre un tour d'horloge.
+      value.current = Date.now();
+      const id = window.setInterval(() => {
+        value.current = Date.now();
+        onChange();
+      }, tickMs);
+      return () => window.clearInterval(id);
+    },
+    [tickMs],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => value.current,
+    () => null,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -120,7 +140,7 @@ export function StatusLine({
   now: number | null;
   size?: "md" | "sm";
 }) {
-  const tone = screenTone(screen, now ?? Date.now());
+  const tone = screenTone(screen, now);
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="relative grid size-[10px] shrink-0 place-items-center" aria-hidden>

@@ -19,7 +19,14 @@
  *       POST /screens/:id/regenerate-code · GET /menu
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   SCREEN_ORIENTATIONS,
   SCREEN_ORIENTATION_LABELS,
@@ -55,8 +62,11 @@ import { PlaylistDrawer } from "./playlist-drawer";
 import { ScreenCard } from "./screen-card";
 import type { MenuData, ScreenView } from "./types";
 
-/** Cadence de rafraîchissement de la liste — cf. mission : l'état reste juste seul. */
+/** Cadence de rafraîchissement de la liste — l'état reste juste sans action. */
 const REFRESH_MS = 30_000;
+
+/** Store qui n'émet jamais : l'origine du navigateur ne change pas de la session. */
+const NEVER_CHANGES = () => () => {};
 
 export default function ScreensPage() {
   const toast = useToast();
@@ -69,9 +79,13 @@ export default function ScreensPage() {
 
   // L'adresse à ouvrir sur la TV est celle DE CETTE INSTANCE : en production
   // comme en démo, on donne l'origine réellement servie plutôt qu'une constante
-  // qui finirait par mentir.
-  const [origin, setOrigin] = useState("");
-  useEffect(() => setOrigin(window.location.origin), []);
+  // qui finirait par mentir. Lue comme un store externe (même procédé que le
+  // shell admin pour le jeton) : vide côté serveur, sans écart d'hydratation.
+  const origin = useSyncExternalStore(
+    NEVER_CHANGES,
+    () => window.location.origin,
+    () => "",
+  );
   const boardUrl = `${origin}/board`;
 
   // ── Dialogues ──
@@ -92,16 +106,8 @@ export default function ScreensPage() {
   const [deleting, setDeleting] = useState(false);
   const [composeId, setComposeId] = useState<string | null>(null);
 
-  /**
-   * Le `Drawer` du design system est positionné en ABSOLU dans la zone de
-   * contenu, laquelle défile. Ouvert alors que la page est descendue, il
-   * s'ancrerait au haut du CONTENU — donc au-dessus de la fenêtre, invisible.
-   * On remonte la zone avant de l'ouvrir plutôt que de toucher au composant
-   * partagé, qui convient aux vues plus longues du back-office.
-   */
   const rootRef = useRef<HTMLDivElement | null>(null);
   function openCompose(id: string) {
-    rootRef.current?.closest("main")?.scrollTo({ top: 0, behavior: "smooth" });
     setComposeId(id);
   }
 
@@ -516,7 +522,7 @@ export default function ScreensPage() {
                         code={installScreen.pairing.code}
                         dimmed={installScreen.pairing.expired}
                       />
-                      <div className="flex flex-col items-start gap-2">
+                      <div className="flex flex-wrap items-center gap-3">
                         <CodeCountdown
                           expiresAt={installScreen.pairing.expiresAt}
                           expired={installScreen.pairing.expired}

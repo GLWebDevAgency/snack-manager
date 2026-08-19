@@ -41,12 +41,17 @@ export type ScreenTone = "pairing" | "online" | "warn" | "down";
 
 export const OFFLINE_CRITICAL_AFTER_MS = 2 * SCREEN_OFFLINE_AFTER_MS;
 
-export function screenTone(screen: ScreenView, now: number): ScreenTone {
+/**
+ * `now` peut être `null` (horloge pas encore abonnée, rendu serveur) : on s'en
+ * tient alors au verdict de l'API, jamais à `Date.now()` — lire l'horloge
+ * pendant le rendu rendrait la teinte instable d'un rendu à l'autre.
+ */
+export function screenTone(screen: ScreenView, now: number | null): ScreenTone {
   if (!screen.paired) return "pairing";
   if (screen.online) return "online";
   // Appairé sans premier contact : anomalie rare (l'appairage horodate déjà),
   // traitée en attente plutôt qu'en panne pour ne pas alarmer à tort.
-  if (!screen.lastSeenAt) return "warn";
+  if (!screen.lastSeenAt || now === null) return "warn";
   const elapsed = now - Date.parse(screen.lastSeenAt);
   return elapsed > OFFLINE_CRITICAL_AFTER_MS ? "down" : "warn";
 }

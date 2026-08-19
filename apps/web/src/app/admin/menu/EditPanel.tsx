@@ -19,6 +19,7 @@ import {
   type MeasureUnit,
   type SupplyIngredient,
 } from "@sm/contracts";
+import { DAYPART_TAGS } from "@sm/contracts";
 import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
@@ -71,6 +72,30 @@ export function EditPanel({
     mode === "create" ? (createCategoryId ?? "") : (product?.categoryId ?? ""),
   );
   const [desc, setDesc] = useState(product?.description ?? "");
+
+  /**
+   * Services d'affichage sur les écrans de salle.
+   *
+   * La règle est celle de `DAYPART_TAGS` : un produit étiqueté « midi » ne
+   * s'affiche qu'au service du midi, et sans aucune étiquette il reste visible
+   * toute la journée — le cas de l'immense majorité de la carte. On ne
+   * manipule ici que ces deux mots-clés : les autres étiquettes du produit
+   * (« Mega Burger », « 1+1 »…) sont préservées telles quelles.
+   */
+  const initialTags = product?.tags ?? [];
+  const hasTag = (kind: "lunch" | "dinner", tags: readonly string[]) =>
+    tags.some((t) => DAYPART_TAGS[kind].includes(t.trim().toLowerCase()));
+  const [lunch, setLunch] = useState(() => hasTag("lunch", initialTags));
+  const [dinner, setDinner] = useState(() => hasTag("dinner", initialTags));
+
+  /** Étiquettes finales : on retire les mots-clés de service puis on repose la sélection. */
+  const nextTags = (): string[] => {
+    const known = [...DAYPART_TAGS.lunch, ...DAYPART_TAGS.dinner];
+    const others = initialTags.filter((t) => !known.includes(t.trim().toLowerCase()));
+    return [...others, ...(lunch ? ["midi"] : []), ...(dinner ? ["soir"] : [])];
+  };
+  const tagsChanged = () =>
+    JSON.stringify([...nextTags()].sort()) !== JSON.stringify([...initialTags].sort());
 
   // ─── Recette (mode edit uniquement — le produit doit exister pour un BOM) ───
   const [bomState, setBomState] = useState<"loading" | "ready" | "error">("loading");
@@ -195,6 +220,7 @@ export function EditPanel({
           categoryId: catId,
           name: trimmed,
           description: desc.trim(),
+          tags: nextTags(),
         });
         onSaved("Produit créé");
         return;
@@ -205,6 +231,7 @@ export function EditPanel({
       if (trimmed !== product.name) patch.name = trimmed;
       if (desc.trim() !== product.description) patch.description = desc.trim();
       if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
+      if (tagsChanged()) patch.tags = nextTags();
       if (Object.keys(patch).length > 0) {
         await api.patch(`/products/${product._id}`, patch);
       }
@@ -284,6 +311,43 @@ export function EditPanel({
             className="py-2"
           />
         </Field>
+
+        {/* Services d'affichage sur les écrans de salle (dayparting). */}
+        <div className="col-span-2">
+          <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[.04em] text-mut">
+            Écrans de salle
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                ["Midi", lunch, setLunch] as const,
+                ["Soir", dinner, setDinner] as const,
+              ]
+            ).map(([label, on, set]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => set(!on)}
+                aria-pressed={on}
+                className={cx(
+                  "rounded-pill border px-3.5 py-1.5 text-sm font-bold transition duration-200 ease-sm active:scale-[0.97]",
+                  on
+                    ? "border-transparent bg-accent text-onaccent"
+                    : "border-line text-ink2 hover:bg-surface2 hover:text-ink",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+            <p className="text-xs text-mut">
+              {lunch && !dinner
+                ? "Affiché au service du midi uniquement."
+                : dinner && !lunch
+                  ? "Affiché au service du soir uniquement."
+                  : "Affiché toute la journée — cochez un service pour le limiter."}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ─── Recette & marge (supply) ─── */}

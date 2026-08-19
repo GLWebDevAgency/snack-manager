@@ -30,7 +30,7 @@ export function ScreenCard({
   onRegenerate: () => void;
   onDelete: () => void;
 }) {
-  const tone = screenTone(screen, now ?? Date.now());
+  const tone = screenTone(screen, now);
   const pairing = screen.pairing;
   const expired = pairing?.expired ?? false;
 

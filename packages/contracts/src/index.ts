@@ -153,7 +153,32 @@ export const ProductCreateSchema = z.object({
 });
 export type ProductCreate = z.infer<typeof ProductCreateSchema>;
 
-export const ProductUpdateSchema = ProductCreateSchema.partial();
+/**
+ * Mise à jour PARTIELLE — surtout pas `ProductCreateSchema.partial()`.
+ *
+ * `.partial()` rend les champs facultatifs mais CONSERVE leurs `.default()` :
+ * un `PATCH { tags: ['midi'] }` ressortait de la validation avec
+ * `price: 0, variants: [], optionGroups: []…` et écrasait silencieusement le
+ * produit. Un gérant qui renommait un plat perdait son prix et ses options.
+ * Bug réel, constaté en production sur trois produits.
+ *
+ * Ici, aucun champ ne porte de valeur par défaut : ce qui n'est pas transmis
+ * n'est pas modifié.
+ */
+export const ProductUpdateSchema = z.object({
+  categoryId: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  price: z.number().int().nonnegative().optional(),
+  variants: z.array(VariantSchema).optional(),
+  optionGroups: z.array(OptionGroupSchema).optional(),
+  removables: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  isNew: z.boolean().optional(),
+  photoUrl: z.string().optional(),
+  order: z.number().int().optional(),
+  active: z.boolean().optional(),
+});
 export type ProductUpdate = z.infer<typeof ProductUpdateSchema>;
 
 export const CategoryCreateSchema = z.object({
@@ -163,7 +188,12 @@ export const CategoryCreateSchema = z.object({
 });
 export type CategoryCreate = z.infer<typeof CategoryCreateSchema>;
 
-export const CategoryUpdateSchema = CategoryCreateSchema.partial();
+/** Même piège que pour les produits : pas de `.partial()`, pas de défauts. */
+export const CategoryUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  order: z.number().int().optional(),
+  active: z.boolean().optional(),
+});
 
 /** Drag & drop : liste complète des ids de catégories dans le nouvel ordre. */
 export const ReorderSchema = z.object({ ids: z.array(z.string()).min(1) });

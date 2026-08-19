@@ -45,8 +45,20 @@ export function Drawer({
   if (!open) return null;
 
   return (
+    /**
+     * `fixed`, et non `absolute`.
+     *
+     * En absolu, le tiroir se cale sur la ZONE DE CONTENU, qui défile et peut
+     * mesurer plusieurs milliers de pixels : ouvert depuis le bas d'une longue
+     * liste de commandes, il s'ancrait en haut du contenu et sortait de
+     * l'écran. En fixe, il suit toujours la fenêtre.
+     *
+     * Le décalage à gauche préserve l'intention de la maquette (§6.4) : le
+     * rail de navigation reste visible et cliquable, le tiroir ne recouvre que
+     * la zone de travail. Il tombe à zéro sous 640 px, où l'espace manque.
+     */
     <div
-      className="absolute inset-0 z-50"
+      className="fixed inset-y-0 right-0 left-0 z-50 sm:left-[66px]"
       role="dialog"
       aria-modal="true"
       aria-label={label ?? (typeof title === "string" ? title : "Panneau")}
