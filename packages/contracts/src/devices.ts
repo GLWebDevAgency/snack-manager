@@ -166,6 +166,16 @@ export interface DeviceHeartbeatResult {
   at: string;
   tenant: DeviceTenantBrand;
   device: DeviceIdentity;
+  /**
+   * `true` quand l'abonnement de l'établissement est suspendu.
+   *
+   * Le battement reste ACCEPTÉ dans ce cas — c'est un signe de vie, pas un
+   * geste de commerce, et le support a besoin de voir que la tablette est
+   * allumée pour aider au téléphone. C'est la surface qui verrouille son
+   * écran, plutôt que d'attendre qu'une prise de commande échoue au moment
+   * de l'encaissement, devant un client.
+   */
+  suspended?: boolean;
 }
 
 /** Réponse de `POST /public/devices/pin` — même forme que l'ancien `/auth/pin`. */

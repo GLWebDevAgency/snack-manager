@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { DeviceTenantBrand } from '@sm/contracts';
+import type { DeviceTenantBrand, TenantAccountStatus } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 
 /**
@@ -31,5 +31,26 @@ export class TenantBrandRepository {
       brandColor: raw.brandColor || '#c9a15a',
       logoUrl: raw.logoUrl ?? null,
     };
+  }
+
+  /**
+   * Statut d'abonnement de l'établissement.
+   *
+   * Une tablette appairée ne présente pas de JWT pour ouvrir son service : elle
+   * présente son jeton d'appareil, qui ne passe pas par le guard global. Sans
+   * cette lecture, suspendre un client laisserait ses caisses déjà installées
+   * encaisser indéfiniment — c'est-à-dire tout le parc en service, donc la
+   * suspension entière.
+   *
+   * `undefined` quand l'établissement n'existe pas ou n'a pas encore de champ
+   * `account` : l'appelant traite l'absence comme « pas de blocage », un champ
+   * manquant ne doit jamais fermer une caisse en plein coup de feu.
+   */
+  async accountStatus(tenantId: string): Promise<TenantAccountStatus | undefined> {
+    if (!Types.ObjectId.isValid(tenantId)) return undefined;
+    const raw = await this.tenants
+      .findById(tenantId, { 'account.status': 1 })
+      .lean<{ account?: { status?: TenantAccountStatus } } | null>();
+    return raw?.account?.status;
   }
 }

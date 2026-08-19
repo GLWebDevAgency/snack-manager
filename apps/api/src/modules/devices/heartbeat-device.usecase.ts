@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DeviceHeartbeatResult } from '@sm/contracts';
+import { isAccessBlocked, type DeviceHeartbeatResult } from '@sm/contracts';
 import { CLOCK, type Clock } from './devices.tokens';
 import { requirePairedDevice } from './device-access';
 import { DevicesRepository } from './devices.repository';
@@ -33,7 +33,10 @@ export class HeartbeatDevice {
 
     await this.devices.touch(device.id, now);
 
-    const tenant = await this.tenants.byId(device.tenantId);
+    const [tenant, status] = await Promise.all([
+      this.tenants.byId(device.tenantId),
+      this.tenants.accountStatus(device.tenantId),
+    ]);
     if (!tenant) throw new NotFoundException('Établissement introuvable');
 
     return {
@@ -41,6 +44,9 @@ export class HeartbeatDevice {
       at: now.toISOString(),
       tenant,
       device: toDeviceIdentity(device),
+      // Volontairement `true` ou absent, jamais `false` : la caisse d'un client
+      // à jour ne transporte rien de plus à chaque battement.
+      ...(isAccessBlocked(status) ? { suspended: true } : {}),
     };
   }
 }

@@ -31,6 +31,7 @@
  */
 
 import {
+  CLIENT_HEALTHS,
   DEVICE_OFFLINE_AFTER_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
   SCREEN_OFFLINE_AFTER_MS,
@@ -407,6 +408,23 @@ function readAccountStatus(v: unknown): TenantAccountStatus | null {
     : null;
 }
 
+/**
+ * Une valeur d'énumération inconnue vaut une valeur ABSENTE.
+ *
+ * Sans ce filtre, un `health: "degraded"` inattendu traverserait le cast et
+ * finirait en clé de `Record` : `HEALTH_TEXT[health]` rendrait `undefined`,
+ * donc une classe CSS littérale « undefined » et une pastille invisible. Une
+ * pastille qui disparaît sur l'écran qui sert à repérer les décrochages est
+ * pire qu'une pastille fausse.
+ */
+function readEnum<T extends string>(v: unknown, allowed: readonly T[]): T | null {
+  const s = String(v ?? "").toLowerCase();
+  return (allowed as readonly string[]).includes(s) ? (s as T) : null;
+}
+
+const HEALTHS = CLIENT_HEALTHS;
+const PLANS: CrmClient["plan"][] = ["essentiel", "complet", "boost"];
+
 /** Variation en % entre deux périodes ; `null` si la base est vide ou absente. */
 export function trend(current: number, previous: number | null): number | null {
   if (previous === null || previous <= 0) return null;
@@ -429,7 +447,7 @@ export function readClientRow(raw: unknown): ClientRow {
     _id: str(o, "_id", "id", "tenantId"),
     name: str(o, "name") || "Sans nom",
     slug: str(o, "slug"),
-    plan: (str(o, "plan") || "essentiel") as CrmClient["plan"],
+    plan: readEnum(o.plan, PLANS) ?? "essentiel",
     mrrCents: num(o, "mrrCents") ?? 0,
     founderSeat: bool(o, "founderSeat") ?? false,
     since: iso(o, "since", "createdAt") ?? new Date().toISOString(),
@@ -438,8 +456,7 @@ export function readClientRow(raw: unknown): ClientRow {
     lastOrderAt,
     daysSinceLastOrder: num(o, "daysSinceLastOrder"),
     // La santé reste calculable sans l'API : la règle est dans les contrats.
-    health:
-      (str(o, "health") as CrmClientHealth) || clientHealth(lastOrderAt),
+    health: readEnum(o.health, HEALTHS) ?? clientHealth(lastOrderAt),
     city: str(o, "city", "ville", "town"),
     accountStatus:
       readAccountStatus(o.accountStatus) ??
@@ -562,10 +579,11 @@ const DEVICE_KINDS: RevocableDeviceKind[] = ["pos", "kds", "screen"];
 function readDevices(raw: unknown): ParkDevice[] {
   return firstList(raw).map((d, i) => {
     const o = bag(d);
-    const rawKind = str(o, "kind", "type").toLowerCase();
-    const kind = (DEVICE_KINDS as string[]).includes(rawKind)
-      ? (rawKind as RevocableDeviceKind)
-      : "pos";
+    // Genre inconnu → « pos » : une tablette de caisse est le cas courant, et
+    // se tromper de pictogramme est moins grave que de perdre l'appareil de la
+    // liste — un appareil qui n'apparaît pas est un appareil qu'on ne révoque
+    // pas.
+    const kind = readEnum(o.kind ?? o.type, DEVICE_KINDS) ?? "pos";
     const lastSeenAt = iso(o, "lastSeenAt", "lastHeartbeatAt", "lastPingAt", "at");
     const declared = bool(o, "online");
     return {
@@ -808,8 +826,7 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     city: str(bag(account), "city", "ville") || str(h, "city") || row?.city || "",
     contact: readContact(account, health, rows === null ? null : row),
     score,
-    health:
-      (str(h, "health") as CrmClientHealth) || row?.health || "attention",
+    health: readEnum(h.health, HEALTHS) ?? row?.health ?? "attention",
     components: readComponents(
       firstList(h.components, h.breakdown, h.criteria, h.parts),
     ),

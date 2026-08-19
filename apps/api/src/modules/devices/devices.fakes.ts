@@ -1,5 +1,5 @@
 import type { Clock } from '@sm/domain';
-import type { DeviceTenantBrand } from '@sm/contracts';
+import type { DeviceTenantBrand, TenantAccountStatus } from '@sm/contracts';
 import type {
   DevicePatch,
   DevicesRepository,
@@ -168,14 +168,25 @@ export class FakeDevicesRepository {
 
 /** Modèle de lecture en mémoire de l'identité visuelle du restaurant. */
 export class FakeTenantBrandRepository {
+  private status: TenantAccountStatus | undefined;
+
   constructor(private brand: DeviceTenantBrand | null = CLASSFOOD_BRAND) {}
 
   set(brand: DeviceTenantBrand | null): void {
     this.brand = brand;
   }
 
+  /** Statut d'abonnement ; `undefined` reproduit un tenant antérieur au champ. */
+  setStatus(status: TenantAccountStatus | undefined): void {
+    this.status = status;
+  }
+
   async byId(): Promise<DeviceTenantBrand | null> {
     return this.brand;
+  }
+
+  async accountStatus(): Promise<TenantAccountStatus | undefined> {
+    return this.status;
   }
 
   asRepository(): TenantBrandRepository {

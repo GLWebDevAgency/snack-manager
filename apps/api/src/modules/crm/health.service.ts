@@ -113,10 +113,17 @@ export type CrmHealthAxis = {
 export type CrmHealthVerdict = 'solide' | 'correct' | 'fragile' | 'critique';
 
 export type CrmHealthScore = {
-  /** Score composite sur 100. */
+  /** Score composite sur 100 — la moyenne pondérée, sans correctif. */
   value: number;
   verdict: CrmHealthVerdict;
   verdictLabel: string;
+  /**
+   * Axe qui a PLAFONNÉ le verdict, quand la moyenne était plus flatteuse que
+   * lui. `null` la plupart du temps. Renvoyé pour que l'écran puisse écrire
+   * « correct sur la moyenne, mais l'activité le tire vers le bas » plutôt que
+   * de laisser l'équipe se demander pourquoi 66 donne « fragile ».
+   */
+  cappedBy: CrmHealthAxisKey | null;
   axes: CrmHealthAxis[];
 };
 
@@ -345,6 +352,16 @@ export function sinceLabel(elapsedMs: number): string {
   return `${Math.floor(elapsedMs / DAY_MS)} j`;
 }
 
+/**
+ * Nombre décimal à la française : « 288,7 », « -10,9 ».
+ *
+ * Toutes les phrases rendues par cette surface passent par là. Un « 288.7 »
+ * anglo-saxon au milieu d'une phrase française est une faute que l'équipe lit
+ * cinquante fois par jour — et le monorepo est en français, sans exception.
+ */
+export const frNumber = (n: number): string =>
+  n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+
 /** Montant en centimes → « 1 234 € » pour les phrases d'explication. */
 export function eurosLabel(cents: number): string {
   return `${Math.round(cents / 100).toLocaleString('fr-FR')} €`;
@@ -412,7 +429,10 @@ export function scoreActivite(input: {
   const ratio = (input.orders7d - input.previousOrders7d) / input.previousOrders7d;
   const trend = clamp(1 + Math.min(0, ratio), 0, 1);
   const pct = deltaPct(input.orders7d, input.previousOrders7d);
-  const trendPhrase = pct === null ? 'tendance inconnue' : `${pct > 0 ? '+' : ''}${pct} % vs 7 j précédents`;
+  const trendPhrase =
+    pct === null
+      ? 'tendance inconnue'
+      : `${pct > 0 ? '+' : ''}${frNumber(pct)} % vs 7 j précédents`;
 
   return {
     measured: true,
@@ -507,10 +527,31 @@ export function scorePaiement(status: TenantAccountStatus): {
   };
 }
 
+/** Verdict qu'une note sur 100 mérite, prise isolément. */
+export function verdictFor(value: number): CrmHealthVerdict {
+  return HEALTH_VERDICT_THRESHOLDS.find((t) => value >= t.min)?.verdict ?? 'critique';
+}
+
+/** 0 = le meilleur verdict. Sert à comparer deux verdicts, jamais à les afficher. */
+const verdictRank = (verdict: CrmHealthVerdict): number =>
+  HEALTH_VERDICT_THRESHOLDS.findIndex((t) => t.verdict === verdict);
+
 /**
- * Assemble les quatre axes. Les axes non mesurés sortent du numérateur ET du
- * dénominateur : c'est ce qui empêche un manque de donnée de se transformer en
- * mauvaise note.
+ * Assemble les quatre axes.
+ *
+ * DEUX RÈGLES, et elles sont l'essentiel de ce fichier.
+ *
+ * 1. Les axes non mesurés sortent du numérateur ET du dénominateur. C'est ce
+ *    qui empêche un manque de donnée de se transformer en mauvaise note.
+ *
+ * 2. LE VERDICT NE PEUT PAS ÊTRE MEILLEUR QUE L'ACTIVITÉ. Une moyenne, par
+ *    construction, dilue : un restaurant dont les commandes se sont effondrées
+ *    de 78 % mais dont les tablettes clignotent et la facture est réglée
+ *    ressortait à 66/100, soit « client correct » — exactement le client qu'on
+ *    ne rappelle pas, et qu'on retrouve résilié six semaines plus tard. Le
+ *    verdict est donc plafonné par celui que l'axe activité mériterait seul.
+ *    Le score chiffré, lui, reste la moyenne honnête : c'est le verdict qui
+ *    décide, pas le nombre, et `cappedBy` dit lequel des deux a parlé.
  */
 export function compositeScore(axes: readonly CrmHealthAxis[]): CrmHealthScore {
   const measured = axes.filter((a) => a.measured && a.score !== null);
@@ -522,9 +563,21 @@ export function compositeScore(axes: readonly CrmHealthAxis[]): CrmHealthScore {
     weight > 0
       ? Math.round(measured.reduce((sum, a) => sum + a.weight * (a.score ?? 0), 0) / weight)
       : 0;
-  const verdict =
-    HEALTH_VERDICT_THRESHOLDS.find((t) => value >= t.min)?.verdict ?? 'critique';
-  return { value, verdict, verdictLabel: HEALTH_VERDICT_LABELS[verdict], axes: [...axes] };
+
+  const average = verdictFor(value);
+  const activite = axes.find((a) => a.key === 'activite');
+  const ceiling =
+    activite?.measured && activite.score !== null ? verdictFor(activite.score) : null;
+  const capped = ceiling !== null && verdictRank(ceiling) > verdictRank(average);
+  const verdict = capped && ceiling !== null ? ceiling : average;
+
+  return {
+    value,
+    verdict,
+    verdictLabel: HEALTH_VERDICT_LABELS[verdict],
+    cappedBy: capped ? 'activite' : null,
+    axes: [...axes],
+  };
 }
 
 /** État d'un appareil ou d'un écran, rédigé plutôt qu'à interpréter côté web. */
@@ -697,6 +750,8 @@ export function buildSignalsFor(
     tenantName: string;
     accountStatus: TenantAccountStatus;
     suspendedAt: Date | null;
+    /** Entrée dans le parc — sert à distinguer « jamais démarré » de « tout neuf ». */
+    since: Date | null;
     lastOrderAt: Date | null;
     orders7d: number;
     previousOrders7d: number;
@@ -723,9 +778,31 @@ export function buildSignalsFor(
     });
   }
 
-  // ─ Arrêt total : plus une commande depuis une semaine ─
+  // ─ Jamais démarré : signé, installé, et pas une seule commande ─
+  //
+  // Distinct de l'arrêt d'activité, et il ne faut surtout pas les confondre :
+  // « aucune commande depuis 12 j » sur un restaurant qui n'en a jamais passé
+  // une seule enverrait l'équipe parler d'un décrochage à quelqu'un qui n'a
+  // jamais commencé. C'est un appel d'ONBOARDING, pas de rétention — et c'est
+  // le plus rentable du parc. Le délai de grâce est le même que le seuil de
+  // risque : en dessous, le restaurant vient d'arriver, on le laisse s'installer.
+  const age = daysSince(client.since, now);
   const silence = daysSince(client.lastOrderAt, now);
-  if (client.lastOrderAt !== null && silence !== null && silence >= CLIENT_RISK_DAYS) {
+  if (client.lastOrderAt === null) {
+    if (age !== null && age >= CLIENT_RISK_DAYS) {
+      out.push({
+        ...base,
+        kind: 'arret_activite',
+        gravity: gravityOf('arret_activite', age / 7),
+        title: 'Jamais démarré',
+        detail: `Client dans le parc depuis ${age} j sans une seule commande — l’installation n’a jamais abouti.`,
+        value: age,
+        unit: 'jours',
+        since: iso(client.since),
+      });
+    }
+  } else if (silence !== null && silence >= CLIENT_RISK_DAYS) {
+    // ─ Arrêt total : il encaissait, il n'encaisse plus ─
     out.push({
       ...base,
       kind: 'arret_activite',
@@ -749,7 +826,7 @@ export function buildSignalsFor(
         kind: 'chute_activite',
         gravity: gravityOf('chute_activite', Math.abs(pct) / 10),
         title: 'Activité en chute',
-        detail: `${client.orders7d} commandes sur 7 j contre ${client.previousOrders7d} la semaine précédente, soit ${pct} %.`,
+        detail: `${client.orders7d} commandes sur 7 j contre ${client.previousOrders7d} la semaine précédente, soit ${frNumber(pct)} %.`,
         value: Math.abs(pct),
         unit: 'pourcent',
         since: iso(client.lastOrderAt),
@@ -1026,7 +1103,7 @@ export class HealthService {
     const bounds = windowBounds(now);
 
     const [tenants, rows, devices, screens] = await Promise.all([
-      this.tenants.find({}, { name: 1, slug: 1, account: 1 }).lean(),
+      this.tenants.find({}, { name: 1, slug: 1, account: 1, createdAt: 1 }).lean(),
       // Pas de filtre tenant : la file de travail est TRANS-TENANT par nature.
       // Le cloisonnement se joue sur le rôle du contrôleur, pas ici.
       this.orders.aggregate<TenantActivityRow>([
@@ -1077,6 +1154,7 @@ export class HealthService {
             tenantName: String(tenant.name ?? ''),
             accountStatus: account.status,
             suspendedAt: account.suspendedAt,
+            since: (tenant as RawTenant).createdAt ?? null,
             lastOrderAt: activity.lastOrderAt,
             orders7d: activity.orders7,
             previousOrders7d: activity.ordersPrev7,

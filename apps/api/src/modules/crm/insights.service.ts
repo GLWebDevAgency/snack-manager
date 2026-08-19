@@ -6,6 +6,11 @@ import type { Order, Product, Tenant } from '@sm/db';
 import { lineCostCents, type SupplyDb } from '@sm/supply';
 import { SUPPLY_DB } from '../../supply-db.module';
 import { AdminService } from './admin.service';
+// Mise en forme française partagée avec la fiche de santé : les deux surfaces
+// écrivent des phrases lues par la même équipe, sur le même écran. Les
+// redéclarer ici, c'est se garantir qu'un jour l'une écrira « 288,7 » et
+// l'autre « 288.7 ».
+import { eurosLabel, frNumber } from './health.service';
 
 /**
  * LE CONSEIL CHIFFRÉ — notre différenciateur.
@@ -197,10 +202,6 @@ export type CrmTenantInsights = {
 
 const pct1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Montant en centimes → « 1 234 € ». */
-export const eurosLabel = (cents: number): string =>
-  `${Math.round(cents / 100).toLocaleString('fr-FR')} €`;
-
 /**
  * Médiane d'une série. Sur un nombre pair de valeurs, la moyenne des deux
  * valeurs centrales — la définition ordinaire, et celle qui rend la médiane du
@@ -345,7 +346,7 @@ export function buildRecommendations(facts: {
     out.push({
       key: 'food_cost_above_network',
       title: 'Coût matière au-dessus du réseau',
-      detail: `Le coût matière est à ${foodCost.tenantPct} % du chiffre d’affaires, contre ${foodCost.networkMedianPct} % pour la médiane de ${foodCost.panel} restaurants du réseau.`,
+      detail: `Le coût matière est à ${frNumber(foodCost.tenantPct)} % du chiffre d’affaires, contre ${frNumber(foodCost.networkMedianPct)} % pour la médiane de ${foodCost.panel} restaurants du réseau.`,
       value: pct1(foodCost.deltaPoints),
       unit: 'points',
       severity: foodCost.deltaPoints >= 5 ? 'urgent' : 'attention',
@@ -358,7 +359,7 @@ export function buildRecommendations(facts: {
     out.push({
       key: 'low_margin_products',
       title: 'Produits à marge faible',
-      detail: `${facts.lowMarginProducts.length} produit(s) vendus sous ${LOW_MARGIN_PCT} % de marge matière, dont « ${worst.name} » à ${worst.marginPct} %.`,
+      detail: `${facts.lowMarginProducts.length} produit(s) vendus sous ${LOW_MARGIN_PCT} % de marge matière, dont « ${worst.name} » à ${frNumber(worst.marginPct)} %.`,
       value: worst.marginPct,
       unit: 'pourcent',
       severity: 'attention',
@@ -371,7 +372,7 @@ export function buildRecommendations(facts: {
     out.push({
       key: 'falling_margin_products',
       title: 'Marges en recul',
-      detail: `« ${falling.name} » a perdu ${falling.marginDropPoints} points de marge en quinze jours (${falling.previousMarginPct} % → ${falling.recentMarginPct} %).`,
+      detail: `« ${falling.name} » a perdu ${frNumber(falling.marginDropPoints)} points de marge en quinze jours (${frNumber(falling.previousMarginPct ?? 0)} % → ${frNumber(falling.recentMarginPct ?? 0)} %).`,
       value: falling.marginDropPoints,
       unit: 'points',
       severity: 'attention',
@@ -384,7 +385,7 @@ export function buildRecommendations(facts: {
     out.push({
       key: 'quiet_slots',
       title: 'Créneau creux',
-      detail: `Le créneau ${quiet.label} fait ${quiet.gapPct} % de moins que la moyenne des heures de service de ce restaurant (${quiet.orders} commandes contre ${quiet.averageOrders} en moyenne).`,
+      detail: `Le créneau ${quiet.label} fait ${frNumber(quiet.gapPct)} % de moins que la moyenne des heures de service de ce restaurant (${quiet.orders} commandes contre ${frNumber(quiet.averageOrders)} en moyenne).`,
       value: quiet.gapPct,
       unit: 'pourcent',
       severity: 'info',

@@ -1,9 +1,19 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
 import * as argon2 from 'argon2';
-import type { DevicePinSession, JwtPayload } from '@sm/contracts';
+import {
+  ACCOUNT_SUSPENDED_MESSAGE,
+  isAccessBlocked,
+  type DevicePinSession,
+  type JwtPayload,
+} from '@sm/contracts';
 import type { Staff } from '@sm/db';
 import { requirePairedDevice } from './device-access';
 import { DevicesRepository } from './devices.repository';
@@ -37,6 +47,16 @@ export class DevicePinLogin {
 
   async execute(deviceToken: string | null, pin: string): Promise<DevicePinSession> {
     const device = await requirePairedDevice(this.devices, deviceToken);
+
+    // Abonnement suspendu : on refuse D'OUVRIR le service, avant même de
+    // regarder le PIN. Le jeton d'appareil ne passe pas par le guard global —
+    // sans ce contrôle ici, une caisse déjà installée continuerait d'encaisser
+    // pour un client qu'on a coupé, ce qui viderait la suspension de son sens.
+    // L'équipe lit le motif réel : elle est du côté du restaurant, c'est elle
+    // qui préviendra le gérant.
+    if (isAccessBlocked(await this.tenants.accountStatus(device.tenantId))) {
+      throw new ForbiddenException(ACCOUNT_SUSPENDED_MESSAGE);
+    }
 
     const tenant = await this.tenants.byId(device.tenantId);
     if (!tenant) throw new NotFoundException('Établissement introuvable');

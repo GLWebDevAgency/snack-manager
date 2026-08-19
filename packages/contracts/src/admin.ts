@@ -60,6 +60,37 @@ export const DEFAULT_TENANT_ACCOUNT_STATUS: TenantAccountStatus = 'trial';
 export const isAccessBlocked = (status: TenantAccountStatus | null | undefined): boolean =>
   status === 'suspended';
 
+/**
+ * CE QU'UNE SUSPENSION FERME, ET CE QU'ELLE LAISSE OUVERT.
+ *
+ * La règle tient en une phrase : **on ferme ce qui encaisse, on laisse ouvert
+ * ce qui affiche.** Elle est écrite ici parce qu'elle se décide une fois et
+ * s'applique à six endroits ; sans elle, chaque surface tranche à sa manière.
+ *
+ * FERMÉ — les surfaces qui prennent de l'argent ou pilotent le service :
+ *  · le back-office du gérant (guard global, à chaque requête) ;
+ *  · l'ouverture de service au PIN, sur tablette appairée COMME par slug —
+ *    une caisse s'authentifie par son jeton d'appareil, hors du guard, et
+ *    l'oublier laisserait tout le parc déjà installé encaisser librement ;
+ *  · la prise de commande en ligne.
+ *
+ * OUVERT — les surfaces que voit le CLIENT FINAL du restaurant :
+ *  · la carte, les horaires et les avis du site public ;
+ *  · l'écran de menu accroché en salle.
+ *
+ * Le consommateur n'est pour rien dans un impayé. Éteindre la télé du mur
+ * au-dessus d'une file d'attente n'accélère aucun règlement : ça humilie le
+ * restaurateur devant ses clients et ça donne de NOUS l'image d'un logiciel
+ * qui tombe en panne. La pression s'exerce là où le gérant travaille, pas
+ * dans sa salle.
+ *
+ * Cas particulier de l'écran de salle, à ne pas « corriger » sans y penser :
+ * la clé HDMI interprète tout 401/403 comme un dépairage et bascule sur son
+ * écran de saisie de code. Lui refuser son contenu afficherait donc un
+ * formulaire d'appairage en grand format devant les convives — et le code que
+ * le gérant y saisirait ne marcherait pas davantage.
+ */
+
 /** Message rendu au gérant dont le compte est suspendu — jamais une erreur technique. */
 export const ACCOUNT_SUSPENDED_MESSAGE = 'Accès suspendu — contactez Snack Manager';
 
