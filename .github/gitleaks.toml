@@ -70,6 +70,24 @@ tags = ["mot-de-passe"]
     '''configService''',
   ]
 
+  # Exemption assumée, et documentée dans docs/CI-CD.md § 9.
+  #
+  # apps/api/src/modules/ordering/stripe-webhook.test.ts fabrique un secret de
+  # signature Stripe pour vérifier qu'une signature qui ne colle pas ne
+  # confirme rien. C'est une valeur inventée pour le test, pas un secret — mais
+  # elle a exactement la forme d'un secret, et c'est le but.
+  #
+  # L'exemption est limitée à CETTE règle et aux fichiers de test. Ce qui
+  # continue de couvrir les fichiers de test :
+  #   · toutes les règles gitleaks par défaut (sk_live_, AKIA…, ghp_…, clés PEM) ;
+  #   · uri-connexion-avec-identifiants (MONGO_URL, DATABASE_URL, REDIS_URL) ;
+  #   · fichier-env-versionne.
+  # Ce qui ne l'est plus : un mot de passe générique, sans forme reconnaissable,
+  # collé en dur dans un fichier de test. Angle mort connu, étroit, accepté.
+  [[rules.allowlists]]
+  description = "Secrets fabriqués dans les fichiers de test"
+  paths = ['''\.(?:test|spec)\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$''']
+
 # ── Fichier d'environnement versionné ────────────────────────────────────────
 # .gitignore couvre déjà .env et .env.* ; cette règle attrape le `git add -f`
 # et le fichier d'environnement déposé ailleurs dans l'arborescence.
