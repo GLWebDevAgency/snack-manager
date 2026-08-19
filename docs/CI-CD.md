@@ -129,29 +129,78 @@ une surprise. Relevez-la volontairement.
 
 ## 3 · Ce qui bloque une fusion
 
-`main` est protégée. Concrètement :
+> ### ⛔ À lire en premier : `main` n'est PAS protégée aujourd'hui
+>
+> Le dépôt est **privé sur un compte personnel sans abonnement**. GitHub
+> réserve la protection de branche aux comptes Pro (ou aux dépôts publics), et
+> répond `403` sur **toute** l'API concernée — règles modernes comme protection
+> classique, en écriture comme en lecture :
+>
+> ```
+> $ gh api -X POST repos/GLWebDevAgency/snack-manager/rulesets --input .github/protection-main.json
+> Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)
+> ```
+>
+> **Conséquence concrète : rien n'empêche techniquement un `git push` direct
+> sur `main` en contournant la CI.** Les deux contrôles s'exécutent bien sur
+> chaque push, mais ils constatent après coup au lieu de bloquer avant.
+>
+> Ce n'est pas un oubli de configuration : c'est le plan du compte, et cela ne
+> se règle pas dans le code.
 
-- **Pas de push direct sur `main`.** Le passage par une pull request est
-  obligatoire, y compris pour l'auteur du dépôt.
-- **Les deux contrôles doivent être verts** avant que le bouton de fusion
-  s'active : `Vérification du monorepo` et `Balayage des secrets`. Attention :
-  au sein du premier, l'étape « Analyse statique » ne bloque pas (§ 9) — le
-  contrôle peut être vert avec ESLint en échec, signalé en annotation jaune.
-- **La branche doit être à jour** avec `main` avant fusion.
-- **Pas de force-push ni de suppression** de `main`.
-- **Aucune relecture par un tiers n'est exigée.** L'auteur est seul sur le
-  dépôt : exiger une approbation le bloquerait complètement. Le jour où une
-  deuxième personne rejoint le projet, c'est le premier réglage à changer :
-  ```bash
-  gh api -X PATCH repos/GLWebDevAgency/snack-manager/branches/main/protection/required_pull_request_reviews \
-    -F required_approving_review_count=1
-  ```
+### L'activer
 
-Lire la protection en place à tout moment :
+La configuration est écrite, versionnée et prête. Dès que le compte passe en
+**GitHub Pro** — une seule commande :
 
 ```bash
-gh api repos/GLWebDevAgency/snack-manager/branches/main/protection
+gh api -X POST repos/GLWebDevAgency/snack-manager/rulesets \
+  --input .github/protection-main.json
 ```
+
+Vérifier ensuite :
+
+```bash
+gh api repos/GLWebDevAgency/snack-manager/rulesets --jq '.[] | {name, enforcement}'
+```
+
+Les deux autres voies, si l'abonnement n'est pas envisagé : transférer le dépôt
+vers une organisation GitHub sur un plan qui inclut les règles, ou le rendre
+public — ce dernier est exclu, le code est propriétaire.
+
+### Ce que la protection imposera
+
+- **Pas de push direct sur `main`** — pull request obligatoire, y compris pour
+  le propriétaire du dépôt (`bypass_actors` est volontairement vide : sinon la
+  protection ne protège de rien).
+- **Les deux contrôles verts** avant que la fusion s'active :
+  `Vérification du monorepo` et `Balayage des secrets`. Attention : au sein du
+  premier, l'étape « Analyse statique » ne bloque pas (§ 9) — le contrôle peut
+  être vert avec ESLint en échec, signalé par une annotation jaune.
+- **La branche à jour** avec `main` avant fusion
+  (`strict_required_status_checks_policy`).
+- **Ni force-push ni suppression** de `main`.
+- **Aucune relecture par un tiers.** L'auteur est seul sur le dépôt : exiger
+  une approbation le bloquerait complètement. Le jour où une deuxième personne
+  rejoint le projet, passer `required_approving_review_count` à `1` dans
+  `.github/protection-main.json` et rejouer la commande.
+
+> Si un job de workflow est renommé, renommer aussi son `context` dans
+> `.github/protection-main.json`. Sinon GitHub attend un contrôle qui n'arrivera
+> jamais, et plus rien ne peut fusionner.
+
+### En attendant : un garde-fou local
+
+`.github/hooks/pre-push` refuse un push direct vers `main`. À activer une fois
+par copie de travail :
+
+```bash
+git config core.hooksPath .github/hooks
+```
+
+Il est **local et contournable** (`git push --no-verify`). Il rattrape la faute
+d'inattention, pas la décision délibérée — ce n'est pas un remplacement de la
+protection côté serveur.
 
 ---
 
@@ -302,6 +351,11 @@ curl -s https://api-production-8949.up.railway.app/health
 ---
 
 ## 9 · Limites connues
+
+- **`main` n'est pas protégée** (§ 3), et c'est la limite la plus lourde de
+  tout ce document : la CI constate, elle ne barre pas la route. Un push direct
+  reste techniquement possible. Débloqué par un abonnement GitHub Pro, pas par
+  du code.
 
 - **Le déploiement reste manuel** (§ 7). L'étape suivante naturelle est de
   brancher Railway sur `main` : la CI qui garde la branche existe désormais,

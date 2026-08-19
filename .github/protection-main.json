@@ -1,0 +1,67 @@
+{
+  "_commentaire": [
+    "Protection de la branche main, prête à appliquer :",
+    "  gh api -X POST repos/GLWebDevAgency/snack-manager/rulesets \\",
+    "    --input .github/protection-main.json",
+    "",
+    "ELLE N'EST PAS ACTIVE AUJOURD'HUI. Le dépôt est privé sur un compte",
+    "personnel sans abonnement : GitHub renvoie 403 « Upgrade to GitHub Pro or",
+    "make this repository public to enable this feature » sur TOUTE l'API de",
+    "protection — règles ET protection classique, en écriture comme en lecture.",
+    "Ce n'est pas un défaut de cette configuration, c'est le plan du compte.",
+    "Voir docs/CI-CD.md § 3.",
+    "",
+    "Ce que ces règles imposent une fois applicables :",
+    "  · deletion + non_fast_forward : main ne peut être ni supprimée ni",
+    "    réécrite de force ;",
+    "  · pull_request : plus aucun push direct, tout passe par une PR. Zéro",
+    "    approbation exigée — l'auteur est seul sur le dépôt, exiger une",
+    "    relecture par un tiers le bloquerait complètement ;",
+    "  · required_status_checks : les deux contrôles doivent être verts, et la",
+    "    branche à jour avec main (strict).",
+    "",
+    "bypass_actors est vide VOLONTAIREMENT : sans cela le propriétaire du dépôt",
+    "contourne tout, et la protection ne protège de rien.",
+    "",
+    "Les deux « context » doivent correspondre EXACTEMENT au champ « name » des",
+    "jobs de .github/workflows/ci.yml et secrets.yml. Si un job est renommé,",
+    "renommer ici aussi — sinon GitHub attend un contrôle qui n'arrive jamais et",
+    "plus rien ne peut fusionner."
+  ],
+  "name": "Protection de main",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash", "merge", "rebase"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "Vérification du monorepo" },
+          { "context": "Balayage des secrets" }
+        ]
+      }
+    }
+  ]
+}
