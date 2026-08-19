@@ -11,7 +11,9 @@
     "lint": "echo ok",
     "seed": "tsx src/seed.ts",
     "seed:orders": "tsx src/seed-orders.ts",
-    "backfill:tracking": "tsx src/backfill-tracking.ts"
+    "photos": "tsx src/seed-photos.ts",
+    "backfill:tracking": "tsx src/backfill-tracking.ts",
+    "repair:options": "tsx src/repair-options.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",
