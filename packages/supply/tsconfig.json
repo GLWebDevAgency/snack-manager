@@ -7,5 +7,11 @@
     "rootDir": "src"
   },
   "include": ["src"],
-  "exclude": ["src/seed.ts", "src/migrate.ts"]
+  // `migrate.ts` EST compilé : il tourne en pré-déploiement sur Railway, dans
+  // un conteneur qui n'a ni `tsx` ni les dépendances de développement. Les
+  // migrations doivent s'appliquer AVANT que la nouvelle version ne serve du
+  // trafic, sinon le code parle à un schéma qui n'existe pas encore.
+  // `seed.ts`, lui, reste dehors : une amorce de démonstration n'a rien à
+  // faire dans une image de production.
+  "exclude": ["src/seed.ts"]
 }

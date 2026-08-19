@@ -1,0 +1,483 @@
+name: Déploiement
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pourquoi ce fichier existe
+#
+# Les mises en ligne partaient à la main, depuis un poste, avec `railway up`.
+# Le 19 août, l'API de staging est restée DEUX HEURES en retard sur la
+# production : un correctif déployé d'un côté, oublié de l'autre, et personne
+# pour le voir. Un déploiement automatique supprime exactement cette faute-là.
+#
+#   push sur develop → staging
+#   push sur main    → production
+#
+# Rien ne part sans que la vérification du monorepo ET le balayage des secrets
+# soient verts SUR CE COMMIT-LÀ.
+#
+# Voir docs/CI-CD.md § 10 à 13.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Pourquoi `push` et pas `workflow_run` ────────────────────────────────────
+# `workflow_run` (« quand la CI a fini, déploie ») paraît le montage évident.
+# Il est ici INAPPLICABLE, et dangereux si on l'applique quand même :
+#
+#   1. RÉDHIBITOIRE — `ci.yml` ne tourne PAS sur un push vers `develop` : son
+#      déclencheur est `pull_request` + `push: branches: [main]`. Aucune
+#      exécution de CI n'existe donc pour `develop`, et `workflow_run` n'aurait
+#      jamais rien à quoi s'accrocher : staging ne serait JAMAIS déployé. On ne
+#      corrige pas ça ici — `ci.yml` ne nous appartient pas.
+#   2. `workflow_run` se déclenche pour les exécutions de N'IMPORTE QUELLE
+#      branche, y compris une branche de pull request. Sans filtre explicite
+#      sur `head_branch` ET sur `event`, du code non relu part en production.
+#      C'est le défaut classique, et il est silencieux.
+#   3. Dans un `workflow_run`, `github.sha` et `github.ref` désignent la branche
+#      PAR DÉFAUT, pas le commit vérifié. Un `actions/checkout` sans argument y
+#      récupère `main` — on déploierait donc autre chose que ce qui a été
+#      testé. Il faut penser à `github.event.workflow_run.head_sha` partout.
+#   4. `workflow_run` n'existe que dans la version du fichier présente sur la
+#      branche par défaut : tant que `deploy.yml` n'est pas fusionné dans
+#      `main`, rien ne se déclenche — impossible à mettre au point sur develop.
+#
+# Le montage retenu — vérifier ET déployer dans la MÊME exécution, déclenchée
+# par le push — n'a aucun de ces quatre défauts :
+#   · `github.sha` EST le commit poussé, par construction ;
+#   · `on.push.branches` filtre au niveau du déclencheur : une branche
+#     quelconque ne crée même pas d'exécution ;
+#   · le graphe `needs:` rend le déploiement structurellement inatteignable
+#     tant que la vérification ou le balayage est rouge.
+#
+# Le prix : la vérification tourne deux fois sur `main` (ici et dans `ci.yml`).
+# C'est le coût assumé de ne pas toucher à `ci.yml`. La sortie propre est
+# notée dans docs/CI-CD.md § 13.
+
+on:
+  push:
+    branches: [main, develop]
+
+# Deux poussées coup sur coup ne doivent pas se doubler sur Railway.
+# `cancel-in-progress: false` est VOLONTAIRE : on ne coupe jamais un
+# déploiement en vol. Annuler le job GitHub n'annulerait de toute façon pas le
+# déploiement Railway déjà lancé — on aurait juste perdu les journaux, et une
+# migration pourrait être en cours. On fait la queue.
+concurrency:
+  group: deploiement-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TURBO_FLAGS: '--cache=local:rw,remote: --output-logs=new-only'
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+  # Version figée, même raison que gitleaks dans secrets.yml : un outil de
+  # déploiement qui change de comportement tout seul n'est pas un outil de
+  # déploiement. À relever volontairement.
+  VERSION_RAILWAY: 4.16.1
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1 · La cible
+  #
+  # Un seul endroit décide « quelle branche va où ». Tout le reste en dépend
+  # (`needs: cible`), donc si cette correspondance refuse de trancher, RIEN ne
+  # se déploie. C'est la définition de « fermé par défaut ».
+  # ───────────────────────────────────────────────────────────────────────────
+  cible:
+    name: Cible du déploiement
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Un fork n'a pas nos secrets, mais il n'a pas non plus à essayer.
+    if: github.repository == 'GLWebDevAgency/snack-manager'
+    outputs:
+      environnement: ${{ steps.resoudre.outputs.environnement }}
+    steps:
+      - name: Résoudre la branche en environnement
+        id: resoudre
+        # `github.ref` passe par l'environnement et jamais par interpolation
+        # directe dans le script : une référence n'est pas du code shell.
+        env:
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$REF" in
+            refs/heads/main)    environnement=production ;;
+            refs/heads/develop) environnement=staging ;;
+            *)
+              echo "::error title=Branche non déployable::« $REF » ne correspond à aucun environnement. Rien ne part."
+              exit 1
+              ;;
+          esac
+          echo "environnement=$environnement" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Déploiement — \`$environnement\`"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Branche | \`${REF#refs/heads/}\` |"
+            echo "| Commit | \`$SHA\` |"
+            echo "| Environnement Railway | **$environnement** |"
+            echo "| Services | \`api\` (migrations), puis \`web\`, \`pos\`, \`kds\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "→ $environnement (branche ${REF#refs/heads/}, commit $SHA)"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2 · Les deux garde-fous, sur CE commit
+  #
+  # Ils reproduisent volontairement `ci.yml` et `secrets.yml` : c'est le seul
+  # moyen de conditionner le déploiement sans modifier ces deux fichiers, qui
+  # ne nous appartiennent pas. Toute divergence se corrige ICI, en recopiant
+  # ce qu'ils font. Le remède définitif est en § 13 de docs/CI-CD.md.
+  # ───────────────────────────────────────────────────────────────────────────
+  verification:
+    name: Vérification du monorepo
+    needs: cible
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Restaurer le cache Turborepo
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-node22-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-node22-
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Typage
+        run: pnpm exec turbo run typecheck $TURBO_FLAGS
+
+      # NON BLOQUANT, exactement comme dans ci.yml et pour la même raison :
+      # apps/web traîne 42 erreurs ESLint préexistantes (Next 16). Rendre
+      # l'étape bloquante ici interdirait tout déploiement, y compris un
+      # correctif de production. Voir docs/CI-CD.md § 9.
+      - name: Analyse statique
+        id: analyse
+        continue-on-error: true
+        run: pnpm exec turbo run lint $TURBO_FLAGS
+
+      - name: Signaler la dette d'analyse statique
+        if: steps.analyse.outcome == 'failure'
+        run: |
+          echo "::warning title=Analyse statique::turbo run lint échoue sur une dette préexistante d'apps/web — non bloquant, voir docs/CI-CD.md § 9"
+
+      - name: Tests
+        run: pnpm exec turbo run test $TURBO_FLAGS
+
+      - name: Compilation
+        run: pnpm exec turbo run build $TURBO_FLAGS
+
+  secrets:
+    name: Balayage des secrets
+    needs: cible
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERSION_GITLEAKS: 8.30.1
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer gitleaks
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION_GITLEAKS}/gitleaks_${VERSION_GITLEAKS}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # On balaie L'ARBRE, pas le diff. Avant une mise en ligne la question
+      # n'est pas « ce commit ajoute-t-il un secret ? » mais « l'arbre qu'on
+      # s'apprête à téléverser chez Railway en contient-il un ? ».
+      # --redact : le journal d'exécution ne doit pas devenir le deuxième
+      # endroit d'où le secret fuite.
+      - name: Balayer l'arbre déployé
+        run: |
+          set -euo pipefail
+          gitleaks dir . \
+            --config .github/gitleaks.toml \
+            --verbose \
+            --redact \
+            --no-banner \
+            --exit-code 1
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3 · Le déploiement
+  #
+  # `needs` porte toute la garantie : ce job n'existe pas tant que les deux
+  # précédents ne sont pas verts. Un échec de la vérification ou du balayage ne
+  # « saute » pas ce job, il le rend inatteignable.
+  # ───────────────────────────────────────────────────────────────────────────
+  deploiement:
+    name: Mise en ligne des quatre services
+    needs: [cible, verification, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # LE JETON EST LA FRONTIÈRE.
+      #
+      # Chaque jeton de projet Railway est cloisonné sur SON environnement :
+      # même si la correspondance branche → environnement était fausse, un
+      # jeton de staging ne peut RIEN déployer en production. Il n'y a donc
+      # aucun `--environment` dans les commandes plus bas : c'est le jeton, et
+      # lui seul, qui désigne la cible.
+      #
+      # La garde est écrite sur la même ligne que le nom du secret, pour
+      # qu'un `grep RAILWAY_TOKEN_PRODUCTION` montre immédiatement à quelle
+      # branche il est attaché. Si la référence n'est ni main ni develop, le
+      # jeton vaut la chaîne vide et railway refuse de démarrer — fermé par
+      # défaut, une troisième fois.
+      RAILWAY_TOKEN: >-
+        ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_TOKEN_PRODUCTION
+        || github.ref == 'refs/heads/develop' && secrets.RAILWAY_TOKEN_STAGING
+        || '' }}
+      ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+    steps:
+      # Aucun `pnpm install` ici : `railway up` téléverse l'arbre tel quel et
+      # c'est Railway qui construit (`pnpm turbo build --filter=@sm/<app>`).
+      # Un arbre sans node_modules, c'est un téléversement court et un
+      # déploiement qui ne dépend pas de ce que le runner a installé.
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer la CLI Railway
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin railway
+          railway --version
+
+      # Contrôle préalable : le jeton existe, il ouvre bien les quatre services,
+      # et on note l'état AVANT — c'est cet identifiant que l'attente comparera
+      # pour savoir si le nouveau déploiement est apparu.
+      - name: Vérifier le jeton et relever l'état avant
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            echo "::error title=Aucun jeton Railway::« ${GITHUB_REF} » n'a pas de jeton associé. Rien ne part."
+            exit 1
+          fi
+          echo "Environnement visé : ${ENVIRONNEMENT}"
+          for service in api web pos kds; do
+            if ! sortie="$(railway deployment list --service "$service" --limit 1 --json 2>&1)"; then
+              echo "::error title=Jeton Railway inutilisable::service « $service » : $sortie"
+              exit 1
+            fi
+            printf '  %-4s → en tête : %s (%s)\n' "$service" \
+              "$(printf '%s' "$sortie" | jq -r '.[0].id // "aucun"')" \
+              "$(printf '%s' "$sortie" | jq -r '.[0].status // "—"')"
+          done
+
+      # La procédure de déploiement est écrite une fois, dans un fichier, puis
+      # sourcée par les deux étapes qui suivent — plutôt que recopiée.
+      - name: Préparer la procédure de déploiement
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/deployer.sh" <<'SCRIPT'
+          # Identifiant du déploiement actuellement en tête pour un service.
+          derniere_id() {
+            railway deployment list --service "$1" --limit 1 --json 2>/dev/null \
+              | jq -r '.[0].id // "aucun"'
+          }
+
+          # Téléverse, puis ATTEND l'état terminal du NOUVEAU déploiement.
+          #
+          # `railway up` rend la main à la fin de la CONSTRUCTION (GitHub Actions
+          # pose CI=true, la CLI se met d'elle-même en mode « --ci »). Sans cette
+          # attente, un échec de migration ou de démarrage passerait pour un
+          # succès : le job serait vert et le restaurant en panne.
+          deployer() {
+            service="$1"
+            avant="$(derniere_id "$service")"
+            echo "▶ $service — déploiement en tête avant : $avant"
+
+            # On ne s'arrête pas sur le code de sortie de `railway up` : c'est
+            # l'état du déploiement chez Railway qui fait foi, et lui seul sait
+            # si la migration puis le contrôle de santé sont passés.
+            if ! railway up --service "$service" --ci; then
+              echo "::warning title=$service::railway up a rendu un code non nul — on interroge l'état du déploiement."
+            fi
+
+            sans_nouveau=0
+            for _ in $(seq 1 240); do
+              ligne="$(railway deployment list --service "$service" --limit 1 --json 2>/dev/null || echo '[]')"
+              id="$(printf '%s' "$ligne" | jq -r '.[0].id // "aucun"')"
+              statut="$(printf '%s' "$ligne" | jq -r '.[0].status // "INCONNU"')"
+
+              # Tant que la tête n'a pas changé, le nouveau déploiement n'est
+              # pas encore enregistré : on ne conclut pas sur l'ancien. Mais on
+              # ne l'attend pas vingt minutes non plus — s'il n'apparaît pas en
+              # deux minutes, c'est que le téléversement n'a rien créé.
+              if [ "$id" = "$avant" ]; then
+                sans_nouveau=$((sans_nouveau + 1))
+                if [ "$sans_nouveau" -gt 24 ]; then
+                  echo "::error title=Déploiement $service::aucun nouveau déploiement deux minutes après le téléversement"
+                  return 1
+                fi
+                sleep 5
+                continue
+              fi
+
+              case "$statut" in
+                SUCCESS)
+                  echo "✓ $service — déploiement $id en service"
+                  echo "$service|$id|SUCCESS" >> "$RUNNER_TEMP/deploiements.txt"
+                  return 0
+                  ;;
+                FAILED|CRASHED|SKIPPED|REMOVED)
+                  echo "::error title=Déploiement $service::état $statut (déploiement $id)"
+                  echo "$service|$id|$statut" >> "$RUNNER_TEMP/deploiements.txt"
+                  echo "───── 80 dernières lignes de construction ($service) ─────"
+                  railway logs --service "$service" --build --lines 80 "$id" 2>&1 | tail -80 || true
+                  echo "───── 80 dernières lignes d'exécution ($service) ─────"
+                  railway logs --service "$service" --deployment --lines 80 "$id" 2>&1 | tail -80 || true
+                  return 1
+                  ;;
+                *) sleep 5 ;;
+              esac
+            done
+
+            echo "::error title=Déploiement $service::état non terminal après 20 minutes"
+            return 1
+          }
+          SCRIPT
+          echo "Procédure écrite dans $RUNNER_TEMP/deployer.sh"
+
+      # ── L'api d'abord, seule ──────────────────────────────────────────────
+      # Elle porte le preDeployCommand Railway
+      # `node packages/supply/dist/migrate.js` (posé sur les deux
+      # environnements, idempotent) : le schéma PostgreSQL doit être à jour
+      # AVANT que les interfaces se remettent à l'appeler. Si la migration
+      # échoue, Railway refuse la mise en service, cette étape échoue, et les
+      # trois interfaces ne partent même pas.
+      - name: Déployer api — migrations PostgreSQL comprises
+        run: |
+          set -euo pipefail
+          . "$RUNNER_TEMP/deployer.sh"
+          deployer api
+
+      # ── Puis les trois interfaces, ensemble ───────────────────────────────
+      # Elles ne dépendent que de l'api, qui est déjà en service. Les lancer en
+      # parallèle divise l'attente par trois ; les journaux sont séparés puis
+      # réaffichés dans l'ordre, sinon ils s'entrelacent et ne servent à rien.
+      - name: Déployer web, pos et kds
+        run: |
+          set -euo pipefail
+          . "$RUNNER_TEMP/deployer.sh"
+
+          pids=''
+          for service in web pos kds; do
+            ( deployer "$service" ) > "$RUNNER_TEMP/$service.log" 2>&1 &
+            pids="$pids $!:$service"
+          done
+
+          echec=0
+          for couple in $pids; do
+            pid="${couple%%:*}"
+            service="${couple##*:}"
+            if wait "$pid"; then
+              resultat='✓'
+            else
+              resultat='✗'
+              echec=1
+            fi
+            echo "$resultat $service"
+          done
+
+          for service in web pos kds; do
+            echo "───────────── journal $service ─────────────"
+            cat "$RUNNER_TEMP/$service.log"
+          done
+
+          exit "$echec"
+
+      - name: Récapituler les déploiements
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "### Déploiements Railway — \`${ENVIRONNEMENT}\`"
+            echo
+            echo "| Service | Identifiant du déploiement | État |"
+            echo "|---|---|---|"
+            if [ -s "$RUNNER_TEMP/deploiements.txt" ]; then
+              while IFS='|' read -r service id statut; do
+                [ -n "$service" ] || continue
+                echo "| \`$service\` | \`$id\` | $statut |"
+              done < "$RUNNER_TEMP/deploiements.txt"
+            else
+              echo "| — | aucun déploiement enregistré | — |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4 · La santé
+  #
+  # Ce job ne reçoit AUCUN secret — pas de RAILWAY_TOKEN, rien. C'est la preuve
+  # structurelle que `scripts/smoke.mjs` ne tape que des surfaces publiques :
+  # s'il avait besoin d'un secret, il échouerait ici.
+  #
+  # Il échoue en rouge, et son échec est celui du déploiement : « c'est en
+  # ligne » et « ça marche » sont deux affirmations différentes.
+  # ───────────────────────────────────────────────────────────────────────────
+  sante:
+    name: Santé après déploiement
+    needs: [cible, deploiement]
+    # `always()` : on contrôle la santé MÊME si la mise en ligne a échoué.
+    # Un vendredi soir, la première question n'est pas « le déploiement
+    # est-il passé ? » mais « le restaurant peut-il encaisser ? ». Quand
+    # Railway refuse une mise en service, l'ancienne version continue de
+    # servir — et il faut le SAVOIR, pas le supposer.
+    # En revanche, si la vérification a échoué, `deploiement` est « skipped » :
+    # on n'a rien touché, il n'y a rien à contrôler.
+    if: always() && needs.cible.result == 'success' && needs.deploiement.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Rappeler dans quel cas on se trouve
+        env:
+          RESULTAT: ${{ needs.deploiement.result }}
+          ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+        run: |
+          set -euo pipefail
+          if [ "$RESULTAT" != 'success' ]; then
+            echo "::warning title=Mise en ligne en échec::Le contrôle qui suit dit ce que « $ENVIRONNEMENT » sert MAINTENANT — donc, très probablement, la version PRÉCÉDENTE. Vert ici ne veut pas dire que le déploiement a réussi."
+          fi
+
+      # Aucun `pnpm install` : le script n'a aucune dépendance, par exigence.
+      - name: Vérifier les surfaces publiques
+        env:
+          ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+        run: node scripts/smoke.mjs "$ENVIRONNEMENT"
+
+      - name: Annoncer la panne
+        if: failure()
+        env:
+          ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+        run: |
+          echo "::error title=Déploiement en échec::$ENVIRONNEMENT : le code est EN LIGNE mais une surface ne répond pas. Retour arrière → docs/CI-CD.md § 12."
