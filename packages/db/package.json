@@ -13,7 +13,8 @@
     "seed:orders": "tsx src/seed-orders.ts",
     "photos": "tsx src/seed-photos.ts",
     "backfill:tracking": "tsx src/backfill-tracking.ts",
-    "repair:options": "tsx src/repair-options.ts"
+    "repair:options": "tsx src/repair-options.ts",
+    "set:password": "tsx src/set-password.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",
