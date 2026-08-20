@@ -1,0 +1,34 @@
+name: Essai — appel des workflows réutilisables
+
+# ⚠️ FICHIER JETABLE — il ne doit JAMAIS être fusionné.
+#
+# Il n'existe que le temps d'une pull request d'essai, pour une raison précise :
+# `deploy.yml` ne se déclenche que sur un push vers `main` ou `develop`, donc
+# aucune pull request ne peut le faire tourner. Les deux lignes qui portent tout
+# le changement — les `uses: ./.github/workflows/…` — ne seraient donc vérifiées
+# que par le premier déploiement réel, c'est-à-dire en poussant sur staging.
+#
+# Ce fichier reproduit EXACTEMENT les deux appels de `deploy.yml`, `permissions`
+# comprises, mais sur un déclencheur `pull_request`. Si ces deux jobs tournent
+# et passent, le montage de `deploy.yml` est bon : c'est le même mécanisme, sur
+# les mêmes fichiers.
+#
+# À supprimer avec la branche d'essai.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  secrets:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/secrets.yml
