@@ -713,9 +713,10 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
     const rendu = renderInvoicePdf(doc).toString('latin1');
     expect(rendu).toContain('Total hors taxes');
     expect(rendu).toContain('139,00');
-    // Les parenthèses sont ÉCHAPPÉES dans une chaîne littérale PDF — sans quoi
-    // le lecteur croirait la chaîne terminée au milieu du taux.
-    expect(rendu).toContain('TVA \\(TVA 20 %\\)');
+    // Le taux figure en toutes lettres, UNE fois : la ligne dit « TVA 20 % »,
+    // pas « TVA (TVA 20 %) ».
+    expect(rendu).toContain('TVA 20 %');
+    expect(rendu).not.toContain('TVA \\(TVA');
     expect(rendu).toContain('27,80');
     expect(rendu).toContain('Total toutes taxes comprises');
     expect(rendu).toContain('166,80');

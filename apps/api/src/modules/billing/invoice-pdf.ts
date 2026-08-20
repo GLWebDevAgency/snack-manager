@@ -355,12 +355,14 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
   const money = (cents: number | null): string =>
     cents === null ? INVOICE_LEGAL_PLACEHOLDER : formatEuros(cents);
 
+  // `mention` porte déjà le mot « TVA » et le taux — « TVA 20 % », ou la
+  // formule de franchise en base. L'envelopper dans un second « TVA (…) »
+  // imprimait « TVA (TVA 20 %) » : sur une ligne d'assiette imposable, un
+  // bégaiement suffit à faire douter du reste du document.
   const totals: [string, string, boolean][] = [
     ['Total hors taxes', money(doc.vat.baseCents), false],
     [
-      doc.vat.ratePercent === 0
-        ? doc.vat.mention
-        : `TVA (${doc.vat.ratePercent === null ? `taux ${INVOICE_LEGAL_PLACEHOLDER}` : doc.vat.mention})`,
+      doc.vat.ratePercent === null ? `TVA — taux ${INVOICE_LEGAL_PLACEHOLDER}` : doc.vat.mention,
       money(doc.vat.vatCents),
       false,
     ],

@@ -14,6 +14,7 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import type { OrderStatus } from "@sm/contracts";
@@ -279,16 +280,44 @@ function Shell({ children }: { children: ReactNode }) {
       <BandeauDemo actif={demo} />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* ── Sidebar : rail 66px dans le flux, panneau absolu en OVERLAY ── */}
-        <div className="relative z-[45] shrink-0" style={{ width: RAIL }}>
+        {/*
+          ── Sidebar : elle POUSSE sur grand écran, elle SURVOLE en dessous ──
+
+          Le panneau est toujours en position absolue ; ce qui change, c'est la
+          largeur du réservataire qui le précède dans le flux. Au repos il vaut
+          le rail (66 px) et le panneau déployé passe donc PAR-DESSUS le
+          contenu ; à partir de `xl` il suit le panneau, et le contenu se
+          décale d'autant.
+
+          Pourquoi deux comportements plutôt qu'un seul : sur une tablette,
+          rendre 232 px au menu ampute le contenu d'un cinquième de la largeur
+          — le survol est le bon geste, il est temporaire et on referme. Sur un
+          écran d'ordinateur il reste plus de 1 000 px une fois le menu déployé,
+          et recouvrir la liste des catégories qu'on est en train de lire n'a
+          plus aucune justification. Le seuil est `xl` (1280 px) : en dessous,
+          pousser laisserait moins de 800 px de contenu, ce qui serre trop les
+          tableaux de prix et de stocks.
+
+          L'ombre portée disparaît quand la barre pousse : une ombre dit « je
+          flotte au-dessus », ce qui devient un mensonge dès qu'elle occupe sa
+          propre place.
+        */}
+        <div
+          className="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] motion-reduce:transition-none xl:w-[var(--sm-panel)]"
+          style={
+            {
+              "--sm-rail": `${RAIL}px`,
+              "--sm-panel": `${open ? PANEL : RAIL}px`,
+            } as CSSProperties
+          }
+        >
           <aside
-            className="absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-fill px-3 py-[18px]"
-            style={{
-              width: open ? PANEL : RAIL,
-              transition:
-                "width .28s var(--sm-ease), box-shadow .28s var(--sm-ease)",
-              boxShadow: open ? "18px 0 44px rgba(0,0,0,0.45)" : "none",
-            }}
+            className={cx(
+              "absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-fill px-3 py-[18px]",
+              "transition-[width,box-shadow] duration-[280ms] ease-[var(--sm-ease)] motion-reduce:transition-none",
+              open && "shadow-[18px_0_44px_rgba(0,0,0,0.45)] xl:shadow-none",
+            )}
+            style={{ width: open ? PANEL : RAIL }}
           >
             {/* En-tête : logo tuile accent + nom tenant */}
             <div className="mb-3 flex items-center gap-2.5 px-1">

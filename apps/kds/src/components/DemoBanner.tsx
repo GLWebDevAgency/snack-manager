@@ -29,8 +29,14 @@ import { FONT, ink, palette } from '../ui';
 /** Hauteur de la barre. Identique sur les quatre démonstrations. */
 export const DEMO_BAR_H = 44;
 
-/** En dessous, la mention longue ne tient plus : on garde l'essentiel. */
-const COMPACT_W = 720;
+/**
+ * En dessous, la mention longue ne tient plus : on garde l'essentiel.
+ *
+ * 768 px, soit exactement le seuil `md` de Tailwind employé par le bandeau des
+ * deux surfaces web : la barre change de forme au même endroit sur les quatre
+ * démonstrations.
+ */
+const COMPACT_W = 768;
 
 export function DemoBanner() {
   // `?demo=1` est lu une fois pour la vie de la page : inutile de recalculer à

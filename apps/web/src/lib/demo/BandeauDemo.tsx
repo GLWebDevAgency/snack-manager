@@ -84,8 +84,10 @@ export function BandeauDemo({ actif }: { actif: boolean }) {
         </span>
         {/* Le nom cède la place avant la mention : sur un téléphone, savoir
             que rien n'est enregistré compte plus que relire notre marque, que
-            la tuile porte déjà. */}
-        <span className="hidden whitespace-nowrap text-[13px] font-bold text-ink sm:inline">
+            la tuile porte déjà. Le seuil est `md` (768 px), le même que
+            `COMPACT_W` côté caisse et cuisine — la barre change de forme au
+            même endroit sur les quatre démonstrations. */}
+        <span className="hidden whitespace-nowrap text-[13px] font-bold text-ink md:inline">
           {retour.marque}
         </span>
         <span className="truncate text-[13px] font-medium text-mut">
