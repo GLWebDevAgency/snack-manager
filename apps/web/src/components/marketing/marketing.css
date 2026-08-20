@@ -3914,47 +3914,361 @@ html:has(.mk) {
   }
 }
 
-/* ===== Revenus (2 offres) ===== */
-.mk .rev-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  max-width: 900px;
-  margin: 36px auto 0;
-  width: 100%;
-}
-.mk .rev-grid .pr-card {
-  overflow: hidden;
-}
-.mk .rev-grid .pr-card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -70%;
-  width: 45%;
-  height: 100%;
-  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-  transform: skewX(-18deg);
-  animation: sm-sheen 5.5s ease-in-out infinite;
-  pointer-events: none;
-}
-.mk .rev-grid > *:nth-child(2) .pr-card::after {
-  animation-delay: 2.7s;
-}
-@keyframes sm-sheen {
-  0%,
-  55%,
-  100% {
-    left: -70%;
-  }
-  25% {
-    left: 120%;
-  }
+/* ===== Revenus — la bascule vers le chiffre =====
+ *
+ * Deux offres, deux FORMES : une vitrine large qui met les marques devant
+ * (offre 1), une bande compacte à deux colonnes (offre 2). C'est la forme qui
+ * les distingue, pas un titre — le reproche du fondateur portait justement sur
+ * deux pavés jumeaux qu'on ne pouvait pas départager d'un coup d'œil.
+ *
+ * `--bt` est la teinte d'identité de la marque sélectionnée (voir `BRANDS`).
+ * Elle n'a aucune valeur de statut : elle ne sert qu'au filet, au nom et à une
+ * lueur très basse, jamais en aplat.
+ */
+.mk .rev-section {
+  /* 70 et non 90 : la section s'ouvre désormais sur une carte, pas sur un
+     pavé de texte — et la consigne est de ne pas rallonger la page. */
+  padding-block: 64px;
+  gap: 18px;
 }
 .mk .rev-lead {
   text-align: center;
-  max-width: 600px;
-  margin: 14px auto 0;
+  max-width: 640px;
+  margin: 0 auto 2px;
+}
+.mk .rev-offer {
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--card-gradient);
+  border: 1px solid var(--surface-6);
+  border-radius: 20px;
+  padding: 22px;
+  transition: border-color 0.35s;
+}
+.mk .rev-offer:hover {
+  border-color: rgba(201, 161, 90, 0.28);
+}
+.mk .rev-offerhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+.mk .rev-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid rgba(201, 161, 90, 0.35);
+  border-radius: 50px;
+  padding: 4px 10px;
+}
+.mk .rev-offertitle {
+  color: var(--white);
+}
+.mk .rev-offerline {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--gray);
+  flex-basis: 100%;
+}
+
+/* ── La vitrine des quatre marques ── */
+.mk .rev-brands {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.mk .rev-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 90px;
+  padding: 13px 14px 11px;
+  border: 1px solid var(--surface-6);
+  border-radius: 14px;
+  background: var(--surface-3);
+  text-align: left;
+  transition:
+    border-color 0.3s,
+    background 0.3s,
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mk .rev-brand::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--bt);
+  opacity: 0.6;
+  transition: opacity 0.3s;
+}
+.mk .rev-brand:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-10);
+}
+.mk .rev-brand.is-on {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bt) 12%, transparent), transparent 70%), var(--card);
+  border-color: color-mix(in srgb, var(--bt) 45%, transparent);
+}
+.mk .rev-brand.is-on::before {
+  opacity: 1;
+}
+.mk .rev-brandname {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--white);
+  transition: color 0.3s;
+}
+.mk .rev-brand.is-on .rev-brandname {
+  color: var(--bt);
+}
+.mk .rev-brandcuisine {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--gray);
+}
+.mk .rev-halal {
+  margin-top: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--white-70);
+  border: 1px solid var(--border-10);
+  border-radius: 50px;
+  padding: 2px 7px;
+}
+.mk .rev-brandpanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--surface-6);
+  border-left: 2px solid var(--bt);
+  border-radius: 4px 12px 12px 4px;
+  background: var(--surface-3);
+}
+.mk .rev-kit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+.mk .rev-kititem {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--white-80);
+  background: var(--badge-bg);
+  border: 1px solid var(--surface-6);
+  border-radius: 50px;
+  padding: 5px 11px;
+}
+.mk .rev-discover {
+  flex-shrink: 0;
+}
+
+/* ── Trois étapes, presque sans mots ── */
+.mk .rev-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.mk .rev-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--white);
+}
+.mk .rev-stepnum {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 161, 90, 0.4);
+  background: rgba(201, 161, 90, 0.1);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Les chiffres, seuls et gros ── */
+.mk .rev-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--surface-6);
+}
+.mk .rev-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mk .rev-fig {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+.mk .rev-figures.boost .rev-fig {
+  font-size: 34px;
+}
+.mk .rev-figlabel {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+
+/* ── Offre 2 — la bande, deux colonnes ──
+ *
+ * Ce qu'on fait à gauche, ce que ça coûte à droite. Deux colonnes plutôt que
+ * quatre rangées empilées : l'offre tient sur la hauteur de la plus haute des
+ * deux, et elle ne peut pas être confondue avec la vitrine du dessus. */
+.mk .rev-offer.boost {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 30px;
+  align-items: start;
+}
+.mk .rev-boostmain,
+.mk .rev-boostside {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mk .rev-levers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mk .rev-lever {
+  position: relative;
+  padding-left: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--white-80);
+}
+.mk .rev-lever::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+.mk .rev-offer.boost .rev-figures {
+  padding-top: 0;
+  border-top: none;
+}
+.mk .rev-boostcta {
+  align-self: flex-start;
+}
+
+@media (max-width: 809.98px) {
+  .mk .rev-section {
+    padding-block: 56px;
+  }
+  .mk .rev-offer {
+    padding: 18px 14px;
+    gap: 12px;
+  }
+  .mk .rev-brands {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .mk .rev-brand {
+    min-height: 84px;
+    padding: 11px 12px 9px;
+    gap: 3px;
+  }
+  .mk .rev-brandname {
+    font-size: 19px;
+  }
+  .mk .rev-brandpanel {
+    gap: 8px 10px;
+    padding: 10px 12px;
+  }
+  .mk .rev-kit {
+    gap: 6px;
+  }
+  .mk .rev-kititem {
+    font-size: 12px;
+    padding: 4px 9px;
+  }
+  .mk .rev-steps {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .mk .rev-step {
+    font-size: 14px;
+    gap: 9px;
+  }
+  .mk .rev-stepnum {
+    width: 22px;
+    height: 22px;
+  }
+  /* Chiffre à gauche, libellé à droite — et les trois libellés alignés sur
+     la MÊME verticale. Une largeur fixe ne peut pas le faire : « 3 semaines »
+     est trois fois plus large que « 8 % ». `display: contents` sort la paire
+     de son conteneur, les six éléments retombent dans une seule grille à deux
+     colonnes, et la colonne des chiffres se cale sur le plus large. */
+  .mk .rev-figures {
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 10px;
+    align-items: baseline;
+    padding-top: 12px;
+  }
+  .mk .rev-figure {
+    display: contents;
+  }
+  .mk .rev-fig,
+  .mk .rev-figures.boost .rev-fig {
+    font-size: 26px;
+  }
+  .mk .rev-offer.boost {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .mk .rev-boostmain,
+  .mk .rev-boostside {
+    gap: 12px;
+  }
+  .mk .rev-discover,
+  .mk .rev-boostcta {
+    width: 100%;
+  }
 }
 
 /* ===== FAQ ===== */
@@ -4571,7 +4885,6 @@ html:has(.mk) {
   .mk .vg-tagtext::before,
   .mk .fd-card::before,
   .mk .pr-card.popular,
-  .mk .rev-grid .pr-card::after,
   .mk .ticker-track,
   .mk .ag-track,
   .mk .vo-track,

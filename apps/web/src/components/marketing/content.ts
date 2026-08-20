@@ -26,7 +26,14 @@ export const NAV_RIGHT = [
 
 /* ── Bandeau de fonctionnalités sous le hero ─────────────────── */
 
-export const TICKER = ["Cuisine (KDS)", "Caisse (POS)", "Back-office", "Site & commande"] as const;
+export const TICKER = [
+  "Cuisine (KDS)",
+  "Caisse (POS)",
+  "Back-office",
+  "Planning & masse salariale",
+  "Stocks & coût matière",
+  "Site & commande",
+] as const;
 
 /* ── Bandeau de preuve ───────────────────────────────────────── */
 
@@ -138,6 +145,80 @@ export const CHANGELOG: ChangelogMonth[] = [
   },
 ];
 
+/* ── Revenus — les quatre marques de livraison ────────────────── */
+
+/**
+ * LES QUATRE MARQUES N'ONT AUCUN VISUEL, ET C'EST ASSUMÉ ICI.
+ *
+ * Ni logo, ni photo de plat n'existe (rien dans `public/`). On ne fabrique pas
+ * l'un ni l'autre : publier une identité qui n'existe pas, c'est promettre au
+ * restaurateur un produit qu'on ne pourra pas lui livrer le jour de la
+ * signature. La vitrine est donc TYPOGRAPHIQUE — le nom posé grand, la cuisine
+ * en dessous, une teinte propre à chaque marque, le repère halal.
+ *
+ * `tint` n'est PAS une couleur fonctionnelle. Les trois couleurs de sens de la
+ * direction artistique (vert « prêt », rouge « alerte », ambre « en cours »)
+ * n'ont pas de raison d'être ici : aucune de ces quatre teintes ne reprend
+ * leur valeur, et rien sur cette page ne porte de statut. Ce sont des repères
+ * d'identité, provisoires : le jour où les vraies identités arrivent, on
+ * remplace `tint` et on ajoute `logo` — la structure ne bouge pas.
+ */
+export type VirtualBrand = {
+  id: string;
+  name: string;
+  /** Deux ou trois mots, pas une carte : ce qu'on cuisine sous cette enseigne. */
+  cuisine: string;
+  tint: string;
+};
+
+export const BRANDS: VirtualBrand[] = [
+  { id: "maki-ya", name: "Maki-Ya", cuisine: "Sushis & makis", tint: "#7f9fd4" },
+  { id: "pastella", name: "Pastella", cuisine: "Pâtes italiennes", tint: "#d7a15f" },
+  { id: "wings-club", name: "Wings Club", cuisine: "Ailes & poulet frit", tint: "#c96f5a" },
+  { id: "green-bowl", name: "Green Bowl", cuisine: "Bowls & salades", tint: "#7cb98d" },
+];
+
+/** Ce qu'on installe avec la marque — identique pour les quatre. */
+export const BRAND_KIT = ["Recettes", "Formation", "Uber Eats & Deliveroo", "Publicité"] as const;
+
+/**
+ * Les trois étapes, presque sans mots — c'est le déroulé, pas l'argumentaire.
+ * Le détail (« on ouvre les comptes », « on pilote la pub ») est déjà dans
+ * `BRAND_KIT` ; le répéter ici, c'est le reproche du fondateur qui revient.
+ */
+export const BRAND_STEPS = ["On installe", "Vous cuisinez", "Vous encaissez"] as const;
+
+/**
+ * LES SEULS CHIFFRES AUTORISÉS SUR CETTE SECTION.
+ *
+ * Ils viennent du brief du fondateur, un par un. Not So Dark annonce 50 à
+ * 150 k€ mensuels supplémentaires : on ne reprend JAMAIS ce genre de promesse
+ * à notre compte, ni ici ni ailleurs.
+ */
+export const BRAND_FIGURES = [
+  { fig: "0 €", label: "pour démarrer" },
+  { fig: "8 %", label: "sur ce que ça vend, et rien d'autre" },
+  { fig: "3 semaines", label: "avant votre premier ticket" },
+] as const;
+
+/** Offre 2 — la reprise en main des pages de livraison existantes. */
+export const BOOST_LEVERS = [
+  "Menu réorganisé",
+  "Photos retravaillées",
+  "Promos aux bonnes heures",
+  "Avis gérés",
+] as const;
+
+export const BOOST_FIGURES = [
+  { fig: "99 €", label: "par mois" },
+  // « Objectif » n'est pas une précaution de langage : c'est le mot du brief.
+  // On vise +30 %, on ne le garantit pas.
+  { fig: "+30 %", label: "de ventes en livraison — objectif à 60 jours" },
+  // « Sans engagement » posé comme un chiffre : c'est un argument de prix,
+  // il tient sa place dans la rangée au lieu de finir en note de bas de carte.
+  { fig: "0", label: "engagement" },
+] as const;
+
 /* ── Catalogue app par app ───────────────────────────────────── */
 
 export type CatalogueColumn = {
@@ -149,6 +230,20 @@ export type CatalogueColumn = {
   items: { pre?: string; strong?: string; post?: string }[];
 };
 
+/**
+ * SEPT LIGNES PAR COLONNE, PAS HUIT — ET C'EST UNE CONTRAINTE, PAS UN HASARD.
+ *
+ * Le back-office a gagné des surfaces entières (planning, ingrédients &
+ * stocks, abonnement) qu'il fallait faire entrer ici. « Ne rallonge pas la
+ * page » : chaque colonne a donc été resserrée d'une ligne, et les lignes
+ * jumelles ont fusionné (minuteur + alerte sonore, totaux + moyens de
+ * paiement). Le catalogue dit plus de choses en occupant moins de hauteur.
+ *
+ * La grille est à QUATRE colonnes en dur (`.cat-grid`), et `demo:` pointe un
+ * index de `DEMO_APPS` : on ne peut ni ajouter une cinquième colonne « RH &
+ * stocks », ni réordonner sans casser le lien vers la scène de démonstration.
+ * Les nouvelles surfaces vivent donc dans la colonne du gérant.
+ */
 export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Caisse (POS)",
@@ -157,29 +252,27 @@ export const CATALOGUE: CatalogueColumn[] = [
     demoLabel: "Essayer la caisse en démo →",
     items: [
       { strong: "Sur place, à emporter, téléphone", post: " — même écran" },
-      { pre: "Config express : recette (Complet, ST, SO, SC…), sauces, tailles" },
-      { pre: "Tacos sur-mesure : taille, viandes, gratiné, suppléments" },
-      { pre: "Passage en menu (+2,50 €) en un tap" },
-      { pre: "Totaux et rendu monnaie automatiques" },
+      { pre: "Config express : recette, sauces, tailles, suppléments" },
+      { pre: "Tacos sur-mesure, passage en menu (+2,50 €) en un tap" },
+      { pre: "Totaux, rendu monnaie, CB / espèces / au retrait" },
       { strong: "Ticket cuisine + sticker sac", post: " imprimés" },
       { pre: "Lignes identiques cumulées, note par produit" },
-      { pre: "CB, espèces, paiement au retrait" },
+      { pre: "Appairage par code à six caractères, révocable" },
     ],
   },
   {
     name: "Cuisine (KDS)",
-    device: "Tablette & téléphone",
+    device: "Mural en cuisine, ou tablette",
     demo: 1,
     demoLabel: "Essayer la cuisine en démo →",
     items: [
       { pre: "Colonnes ", strong: "Nouveau → En prépa → Prêt" },
       { pre: "« À lancer » agrégé : 3 frites, 2 tacos… en un coup d'œil" },
-      { pre: "Minuteur couleur par commande, seuils d'alerte" },
-      { pre: "Alerte sonore à chaque nouvelle commande" },
+      { pre: "Minuteur couleur par commande, alerte sonore" },
       { pre: "Chaque article cochable pendant la prépa" },
       { pre: "Numéro de retrait pour appeler le client" },
       { pre: "Thème sombre ou clair, pensé pour la cuisine" },
-      { pre: "Mode hors-ligne avec resynchronisation" },
+      { strong: "Mode hors-ligne", post: " avec resynchronisation" },
     ],
   },
   {
@@ -191,27 +284,27 @@ export const CATALOGUE: CatalogueColumn[] = [
       { strong: "Click & collect", post: " avec créneaux de retrait" },
       { pre: "Paiement en ligne ou au retrait" },
       { pre: "Configurateur identique à la caisse — zéro surprise" },
-      { pre: "Panier modifiable ligne par ligne" },
       { pre: "Codes promo, fidélité points & tampons" },
       { pre: "Compte client, historique, recommande en 1 tap" },
       { pre: "Suivi de commande en direct (reçue → prête)" },
-      { strong: "À vos couleurs", post: " : logo, nom, identité complète" },
+      { strong: "À vos couleurs", post: ", sur votre nom de domaine" },
     ],
   },
   {
     name: "Back-office",
-    device: "Web, côté gérant",
+    device: "Web, côté gérant — 14 écrans",
     demo: 3,
     demoLabel: "Essayer le back-office en démo →",
     items: [
-      { strong: "CA & commandes en temps réel" },
-      { pre: "Menu & prix : édition en direct, import CSV/XML" },
-      { pre: "Catégories en drag & drop, ruptures en un tap" },
-      { pre: "Stats : top ventes, affluence par heure, canaux" },
-      { pre: "Promos, codes et produits mis en avant" },
-      { pre: "Horaires, créneaux, fermetures exceptionnelles" },
-      { strong: "Pointage & heures", post: " de l'équipe" },
-      { pre: "Avis clients et réponses publiques" },
+      { strong: "CA, commandes et stats", post: " en direct, exports CSV" },
+      { pre: "Menu & prix en direct, import CSV/XML, ruptures en un tap" },
+      // La ligne qui vaut la section : le planning fait DÉCIDER une dépense
+      // au lieu de la constater. Le coût bouge à chaque service posé.
+      { pre: "Planning : ", strong: "le coût de la semaine bouge pendant que vous la posez" },
+      { pre: "Volume attendu en face de chaque service, ", strong: "prévu contre pointé" },
+      { strong: "Ingrédients & stocks", post: " : seuils, ruptures, pertes, inventaires" },
+      { pre: "Fournisseurs, prix au colis, ", strong: "coût matière et marge par produit" },
+      { pre: "Horaires, promos, avis clients, ", strong: "abonnement & factures" },
     ],
   },
 ];
@@ -455,8 +548,8 @@ export const DEMO_APPS: DemoApp[] = [
     device: "wide",
     shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
     lead: "Back-office gérant.",
-    body: " Menu & prix modifiables en direct, CA du jour, ruptures, promos, pointage et heures de l'équipe — toute la gestion au même endroit.",
-    chips: ["Import CSV/XML", "Pointage équipe", "Stats & CA"],
+    body: " Quatorze écrans : CA du jour, menu & prix en direct, planning dont le coût s'affiche avant que vous validiez, stocks et coût matière, factures.",
+    chips: ["Planning & coût projeté", "Stocks & coût matière", "Abonnement & factures"],
     live: {
       href: DEMO_PATHS.bo,
       cta: "Essayer le back-office",
@@ -532,7 +625,8 @@ export const VS_WITHOUT = [
   "Plusieurs outils qui ne se parlent pas",
   "Commandes au stylo, totaux calculés de tête",
   "Des jours de formation à chaque recrue",
-  "Plannings et heures à la main",
+  // La ligne du planning : sans outil, la masse salariale est CONSTATÉE.
+  "Masse salariale découverte en fin de mois",
   "Site figé, pas de click & collect",
 ] as const;
 
@@ -540,7 +634,7 @@ export const VS_WITH = [
   "Une seule plateforme, tout connecté",
   "Menus cadrés, totaux automatiques, ticket + sticker sac",
   "Caisse prise en main en une heure",
-  "Pointage & plannings automatisés",
+  "Coût de la semaine et volume attendu, avant de valider",
   "Site & commande en ligne à vos couleurs",
 ] as const;
 
@@ -568,7 +662,13 @@ export const PLANS: Plan[] = [
     price: "Sur devis",
     desc: "Le plus choisi : la plateforme complète, site inclus.",
     featLabel: "Tout Starter, plus :",
-    features: ["Site & commande en ligne", "Fidélité & codes promo", "Module RH (pointage, planning)", "Support prioritaire"],
+    features: [
+      "Site & commande en ligne",
+      "Fidélité & codes promo",
+      "Planning, pointage & coût de la semaine",
+      "Ingrédients, stocks & coût matière",
+      "Support prioritaire",
+    ],
     popular: true,
   },
   {

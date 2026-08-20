@@ -85,8 +85,14 @@ export function Platform() {
                 </div>
               </div>
             </div>
+            {/*
+              Le planning est la seule fonction de la suite qui fait DÉCIDER
+              une dépense au lieu de la constater : le coût projeté de la
+              semaine bouge à chaque service posé, avant publication. La
+              légende dit donc ça, et pas « plannings gérés au même endroit ».
+            */}
             <p className="sol-caption">
-              <strong>Équipe.</strong> Rôles, plannings et présences gérés au même endroit.
+              <strong>Équipe.</strong> Vous posez la semaine, son coût s&apos;affiche avant de valider.
             </p>
           </div>
         </div>

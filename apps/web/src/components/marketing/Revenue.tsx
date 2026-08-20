@@ -1,67 +1,162 @@
+"use client";
+
+import { useState } from "react";
+import { BOOST_FIGURES, BOOST_LEVERS, BRANDS, BRAND_FIGURES, BRAND_KIT, BRAND_STEPS } from "./content";
+
 /**
- * « Du CA en plus » — les deux offres posées au-dessus de la suite logicielle :
- * la marque de livraison clé en main, et le pilotage de la page Uber Eats.
- * Elles réutilisent la carte de tarif (`.pr-card`), avec le reflet animé de la
- * maquette (`.rev-grid .pr-card::after`).
+ * « Gérer, c'est fait. Maintenant, on vend. » — le moment où la vitrine passe
+ * de l'outil à l'argent.
+ *
+ * CE QUI A CHANGÉ, ET POURQUOI. La section disait la même chose en deux pavés
+ * de texte jumeaux : « trop chargée, difficile de comprendre » (le fondateur).
+ * Le fond est conservé mot pour mot — deux offres, quatre marques, 0 €, 8 %,
+ * 3 semaines, 99 €/mois, +30 % en 60 jours, sans engagement — mais il est
+ * maintenant REGARDÉ au lieu d'être lu :
+ *
+ *   · les deux offres n'ont plus la même forme (une vitrine large, une bande
+ *     compacte), donc on ne les confond plus d'un coup d'œil ;
+ *   · les marques passent DEVANT l'argumentaire, comme chez Not So Dark et
+ *     Taster — ce sont des produits, pas des paragraphes ;
+ *   · les chiffres sont seuls et gros, sans phrase autour ;
+ *   · le déroulé tient en trois mots.
+ *
+ * Les marques n'ont aucun visuel (voir `BRANDS`) : les tuiles sont
+ * typographiques, et le jour où les vraies identités existent elles se posent
+ * dedans sans toucher à cette structure.
  */
 export function Revenue() {
+  const [active, setActive] = useState(0);
+  const brand = BRANDS[active];
+
+  /**
+   * Flèches gauche/droite dans la vitrine — c'est ce qu'attend un lecteur
+   * d'écran d'un `role="tablist"`, et le `tabIndex` glissant ci-dessous n'a de
+   * sens qu'avec : sans ces touches, une seule tuile serait atteignable et les
+   * trois autres marques deviendraient invisibles au clavier.
+   */
+  function onKey(e: React.KeyboardEvent<HTMLDivElement>) {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (dir === 0) return;
+    e.preventDefault();
+    const next = (active + dir + BRANDS.length) % BRANDS.length;
+    setActive(next);
+    document.getElementById(`rev-tab-${BRANDS[next].id}`)?.focus();
+  }
+
   return (
-    <section className="section" id="revenus">
-      <span className="badge">Du CA en plus</span>
-      <h2 className="h2 center-h2" style={{ maxWidth: 680 }}>
-        Vous venez de voir l&apos;outil. Voici le chiffre d&apos;affaires en plus.
+    <section className="section rev-section" id="revenus">
+      <span className="badge">Le virage</span>
+      {/* Une seule ligne, à pleine largeur : c'est une rupture, pas un
+          paragraphe. Le titre annonce la couleur commerciale au lieu de
+          l'enrober — et il tient sur un souffle. */}
+      <h2 className="h2 center-h2" style={{ maxWidth: 940 }}>
+        Gérer, c&apos;est fait. Maintenant, on vend.
       </h2>
       <p className="body-text rev-lead">
-        Deux offres au-dessus de la suite : on installe une <span className="kw">marque de livraison clé en main</span>{" "}
-        dans votre cuisine, ou on pilote <span className="kw">votre propre marque</span> sur les plateformes.{" "}
-        <strong>Même équipe, même matériel, mêmes horaires.</strong>
+        Deux façons de faire du chiffre avec la cuisine et l&apos;équipe que vous avez déjà.
       </p>
 
-      <div className="rev-grid">
-        <div className="rv">
-          <article className="pr-card spot">
-            <h5 className="h5">Une 2ᵉ enseigne dans votre cuisine</h5>
-            <p className="pr-price sm">
-              Vous ne payez <span className="kw">rien</span> pour démarrer
-            </p>
-            <p className="body-text pr-desc">
-              On installe une <strong>marque de livraison toute prête</strong> (Maki-Ya, Pastella, Wings Club, Green
-              Bowl…) dans votre cuisine : recettes, formation, comptes Uber Eats &amp; Deliveroo, pub —{" "}
-              <strong>on s&apos;occupe de tout</strong>. Vous cuisinez, vous encaissez un{" "}
-              <span className="kw">chiffre d&apos;affaires que vous n&apos;aviez pas</span>. Notre part :{" "}
-              <strong>8 % de ces ventes</strong>, uniquement quand ça vend.{" "}
-              <span className="kw">Premier ticket en 3 semaines</span>.
-            </p>
-            <a className="btn dark pr-cta" href="#contact">
-              Découvrir les 4 marques
-            </a>
-            <p className="pr-featlabel" style={{ marginTop: 14 }}>
-              Concepts <strong>100 % halal</strong> · <span className="kw">CA en plus</span> — sans investissement, sans
-              embauche, même équipe.
-            </p>
-          </article>
+      {/* ─── Offre 1 — la vitrine des marques ─── */}
+      <article className="rev-offer rv spot">
+        <header className="rev-offerhead">
+          <span className="rev-kicker">Offre 1</span>
+          <h3 className="h4 rev-offertitle">Une 2ᵉ enseigne dans votre cuisine</h3>
+          {/* Pas « vous cuisinez, vous encaissez » : c'est mot pour mot les
+              étapes 2 et 3 du déroulé, dix centimètres plus bas. */}
+          <p className="rev-offerline">Livrée clé en main, dans la cuisine que vous avez.</p>
+        </header>
+
+        <div className="rev-brands" role="tablist" aria-label="Nos quatre marques de livraison" onKeyDown={onKey}>
+          {BRANDS.map((b, i) => (
+            <button
+              type="button"
+              key={b.id}
+              role="tab"
+              id={`rev-tab-${b.id}`}
+              aria-selected={i === active}
+              aria-controls="rev-brandpanel"
+              tabIndex={i === active ? 0 : -1}
+              className={i === active ? "rev-brand is-on" : "rev-brand"}
+              style={{ "--bt": b.tint } as React.CSSProperties}
+              onClick={() => setActive(i)}
+            >
+              <span className="rev-brandname">{b.name}</span>
+              <span className="rev-brandcuisine">{b.cuisine}</span>
+              <span className="rev-halal">100 % halal</span>
+            </button>
+          ))}
         </div>
 
-        <div className="rv" style={{ transitionDelay: "0.1s" }}>
-          <article className="pr-card spot">
-            <h5 className="h5">Vos ventes Uber Eats, boostées</h5>
-            <p className="pr-price sm">dès 99 €/mois</p>
-            <p className="body-text pr-desc">
-              Vous êtes déjà sur Uber Eats ou Deliveroo, mais ça vend peu ? Nos experts reprennent votre page :{" "}
-              <strong>menu réorganisé</strong>, <strong>photos retravaillées</strong>,{" "}
-              <strong>promos aux bonnes heures</strong>, avis gérés. Vous ne touchez à rien, vous voyez le résultat sur
-              un <strong>rapport clair chaque mois</strong>. Objectif :{" "}
-              <span className="kw">+30 % de ventes en livraison en 60 jours</span>.
-            </p>
-            <a className="btn dark pr-cta" href="#contact">
-              Être rappelé
-            </a>
-            <p className="pr-featlabel" style={{ marginTop: 14 }}>
-              Sans engagement · <span className="kw">se rembourse dès le premier mois</span>.
-            </p>
-          </article>
+        <div
+          className="rev-brandpanel"
+          id="rev-brandpanel"
+          role="tabpanel"
+          aria-labelledby={`rev-tab-${brand.id}`}
+          style={{ "--bt": brand.tint } as React.CSSProperties}
+        >
+          <ul className="rev-kit">
+            {BRAND_KIT.map((k) => (
+              <li className="rev-kititem" key={k}>
+                {k}
+              </li>
+            ))}
+          </ul>
+          <a className="btn light rev-discover" href="#contact">
+            Découvrir {brand.name}
+          </a>
         </div>
-      </div>
+
+        <ol className="rev-steps">
+          {BRAND_STEPS.map((s, i) => (
+            <li className="rev-step" key={s}>
+              <span className="rev-stepnum">{i + 1}</span>
+              {s}
+            </li>
+          ))}
+        </ol>
+
+        <dl className="rev-figures">
+          {BRAND_FIGURES.map((f) => (
+            <div className="rev-figure" key={f.fig}>
+              <dt className="rev-fig">{f.fig}</dt>
+              <dd className="rev-figlabel">{f.label}</dd>
+            </div>
+          ))}
+        </dl>
+      </article>
+
+      {/* ─── Offre 2 — la bande compacte, deux colonnes ─── */}
+      <article className="rev-offer boost rv spot" style={{ transitionDelay: "0.08s" }}>
+        <div className="rev-boostmain">
+          <header className="rev-offerhead">
+            <span className="rev-kicker">Offre 2</span>
+            <h3 className="h4 rev-offertitle">Vous y êtes déjà, mais ça vend peu</h3>
+            <p className="rev-offerline">On reprend votre page Uber Eats et Deliveroo.</p>
+          </header>
+
+          <ul className="rev-levers">
+            {BOOST_LEVERS.map((l) => (
+              <li className="rev-lever" key={l}>
+                {l}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rev-boostside">
+          <dl className="rev-figures boost">
+            {BOOST_FIGURES.map((f) => (
+              <div className="rev-figure" key={f.fig}>
+                <dt className="rev-fig">{f.fig}</dt>
+                <dd className="rev-figlabel">{f.label}</dd>
+              </div>
+            ))}
+          </dl>
+          <a className="btn dark rev-boostcta" href="#contact">
+            Être rappelé
+          </a>
+        </div>
+      </article>
     </section>
   );
 }
