@@ -15,10 +15,10 @@ import { Photo } from "./Photo";
  * alternatif dit exactement ce qu'elles sont.
  */
 export function Founder() {
-  const { badge, title } = section("pilote");
+  const { badge, title } = section("histoire");
 
   return (
-    <section className="section fd-section" id="pilote">
+    <section className="section fd-section" id="histoire">
       {badge ? <span className="badge">{badge}</span> : null}
       <h2 className="h2 center-h2" style={{ maxWidth: 680 }}>
         {title}

@@ -111,10 +111,24 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: "lancement",
     nav: "Lancement",
     badge: "Le lancement",
-    title: "On date ce qu'on livre. Jamais ce que vous gagnerez.",
+    // Le titre disait « On date ce qu'on livre. Jamais ce que vous gagnerez. » :
+    // une précaution déguisée en promesse, qui parlait de nos scrupules au lieu
+    // de répondre à la question posée — comment ça se passe ? Vite, et
+    // accompagné. Les quatre jalons le disaient déjà ; le titre les contredisait.
+    title: "On installe vite. Et on reste après.",
   },
-  { id: "faq", nav: "Questions", badge: "Questions", title: "Vous avez des doutes. Ils sont légitimes." },
-  { id: "pilote", nav: "Le pilote", badge: "Né au comptoir", title: "Ce logiciel a un restaurant. Il s'appelle Class'Food." },
+  // « Vous avez des doutes. Ils sont légitimes. » installait le doute au lieu de
+  // le lever. Un visiteur arrivé jusqu'ici n'a pas de doutes, il a des questions.
+  { id: "faq", nav: "Questions", badge: "Questions", title: "Vos questions. Nos réponses." },
+  {
+    id: "histoire",
+    nav: "Notre histoire",
+    badge: "Notre histoire",
+    // « Ce logiciel a un restaurant. Il s'appelle Class'Food. » mettait l'outil
+    // au centre au moment précis où le lecteur cherche des gens. Ce qu'il veut
+    // savoir avant de laisser son numéro, c'est à QUI il le laisse.
+    title: "Un expert de la tech, un restaurateur, et le logiciel qui leur manquait.",
+  },
   { id: "contact", nav: "Contact", badge: null, title: "Laissez-nous votre numéro. On rappelle sous 24 h." },
 ] as const;
 
@@ -879,30 +893,14 @@ export const SIM_ESC = {
  * vente ne prouve rien. Or ce taux pesait 61 % du chiffre annuel affiché : il ne
  * reste donc plus une seule hypothèse maison dans le total.
  *
- * Il ne disparaît pas pour autant — il devient `SIM_NOT_COUNTED`. Dire ce qu'on
- * a refusé de compter persuade mieux que le montant qu'on aurait gagné à le
- * compter : c'est le seul endroit de la page où l'on démontre une méthode au
- * lieu d'affirmer un résultat.
+ * ET ON NE LE RACONTE PAS. Un bloc ouvert titrait un temps « le seul chiffre que
+ * nous n'avons pas mesuré nous-mêmes » et détaillait ce qu'on avait refusé de
+ * compter. Chaque phrase était exacte, l'ensemble sonnait faux : devancer une
+ * objection que personne n'a formulée, c'est s'accuser tout seul. Il ne reste que
+ * ce dépliable — disponible pour qui cherche, silencieux pour les autres.
  */
-export const SIM_ASSUMPTIONS = [
-  {
-    fig: "− 35 %",
-    label: "d'erreurs de commande avec la prise en ligne",
-    source: "Deliverect, 2023",
-  },
-] as const;
-
-/**
- * CE QU'ON A REFUSÉ DE COMPTER — et c'est un argument, pas un aveu.
- * Le restaurateur qui lit ça vient de voir un montant ; apprendre qu'on aurait
- * pu l'augmenter de moitié et qu'on s'en est abstenu vaut toutes les sources.
- */
-export const SIM_NOT_COUNTED =
-  "Les éditeurs du secteur annoncent un panier en ligne supérieur de 15 à 30 %. Nous ne l'avons pas compté : ce résultat ne retient que ce qui se déduit des chiffres que vous venez de saisir.";
-
-/** Le détail des hypothèses, sous un dépliable « Nos hypothèses ». */
 export const SIM_NOTES =
-  "Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois. Aucun chiffre d'affaires additionnel n'entre dans le calcul.";
+  "Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois.";
 
 /**
  * LA PHRASE QUI RECOUD LA PAGE.
@@ -1006,15 +1004,20 @@ export const FAQ = [
 /* ── 10. Le pilote — né au comptoir ──────────────────────────── */
 
 /**
- * LA CITATION PERD SA PREMIÈRE MOITIÉ.
+ * LA CITATION RACONTE UNE RENCONTRE, PLUS UNE ORIGINE.
  *
- * « Tickets perdus en plein rush, téléphone qui sonne pendant l'encaissement,
- * heures recomptées à la main » rouvrait le catalogue des douleurs pour la
- * sixième fois. La section 2 le dit une fois pour toutes ; ce qui reste ici
- * n'appartient qu'à cette section.
+ * Elle disait « Snack Manager est né derrière le comptoir de notre restaurant
+ * pilote » : l'outil au centre, au moment précis où le lecteur cherche des
+ * gens. Ce qu'il veut savoir avant de laisser son numéro, c'est à QUI il le
+ * laisse — et la réponse est deux métiers qui se sont trouvés, pas un logiciel
+ * qui a poussé tout seul.
+ *
+ * Elle a perdu au passage sa première moitié d'origine (« tickets perdus en
+ * plein rush, téléphone qui sonne pendant l'encaissement ») : la section 2 dit
+ * les douleurs une fois pour toutes.
  */
 export const FOUNDER_QUOTE =
-  "« Snack Manager est né derrière le comptoir de notre restaurant pilote. Chaque écran de la plateforme est testé en service réel, midi et soir, avant d'arriver chez vous. »";
+  "« D'un côté, un restaurateur qui tient son snack et connaît chaque friction du service par cœur. De l'autre, un expert de la tech. On s'est rencontrés, on a regardé le problème ensemble, et on a construit l'outil qui manquait. Chaque écran est testé en service réel, midi et soir, avant d'arriver chez vous. »";
 
 /**
  * LES PHOTOS — UN CÂBLAGE CASSÉ, PAS UN MANQUE D'IMAGES.

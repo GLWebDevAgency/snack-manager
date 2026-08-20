@@ -3,12 +3,10 @@
 import { useMemo, useState } from "react";
 import {
   CTA_CALLBACK,
-  SIM_ASSUMPTIONS,
   SIM_CTA_NOTE,
   SIM_ESC,
   SIM_LEAD,
   SIM_NOTES,
-  SIM_NOT_COUNTED,
   section,
 } from "./content";
 
@@ -72,8 +70,8 @@ const FIELDS: Field[] = [
 /**
  * Le calcul — cinq curseurs, un panneau de résultats recalculé à chaque
  * `input`. Les formules sont reprises telles quelles du script de la maquette :
- * on ne « corrige » pas les hypothèses du fondateur, on les DÉCLARE (voir
- * `SIM_ASSUMPTIONS` sous les curseurs et le dépliable en pied).
+ * on ne « corrige » pas les hypothèses du fondateur, on les rend consultables
+ * dans le dépliable de pied de section — disponibles, jamais annoncées.
  *
  * LA SECTION A CHANGÉ DE MÉTIER SANS CHANGER D'UNE FORMULE. Elle passait avant
  * les tarifs : cinq curseurs à bouger au pouce entre deux services, juste avant
@@ -244,39 +242,24 @@ export function Simulator() {
       </div>
 
       {/*
-       * CE QUI RESTE DE PROOFBAND, ET EN CORPS DE TEXTE — jamais en nombres
-       * géants au-dessus des curseurs : ce serait la reconstruire à l'intérieur
-       * de la section qui l'a exécutée. `source` est affichée à chaque ligne,
-       * c'est tout le sujet.
+       * LA MÉTHODE EST DISPONIBLE. ELLE N'EST PAS ANNONCÉE.
        *
-       * Le titre dit « le seul chiffre » et non plus « les deux » : le +15 % de
-       * panier a quitté le calcul faute de source nommable, et il reparaît
-       * juste en dessous comme ce qu'on a REFUSÉ de compter. L'ordre est voulu —
-       * d'abord ce qu'on emprunte à autrui, ensuite ce qu'on s'interdit.
+       * Il y avait ici un bloc ouvert qui titrait « le seul chiffre que nous
+       * n'avons pas mesuré nous-mêmes », affichait sa source, puis expliquait ce
+       * qu'on avait refusé de compter. Chaque phrase était exacte et l'ensemble
+       * sonnait faux : une page qui devance une objection que personne n'a
+       * formulée s'accuse toute seule. Le lecteur n'y lit pas de la rigueur, il
+       * y lit un doute.
+       *
+       * Le dépliable dit la même chose sans la crier. Qui veut savoir d'où
+       * sortent les taux ouvre et trouve tout, source et année comprises ; les
+       * autres voient un montant qui s'assume. `details` reste ouvrable sans
+       * JavaScript.
        */}
-      <div className="sim-hyp rv">
-        <p className="sim-hyptitle">Le seul chiffre que nous n&apos;avons pas mesuré nous-mêmes</p>
-        <ul className="sim-hyplist">
-          {SIM_ASSUMPTIONS.map((a) => (
-            <li className="sim-hypline" key={a.fig}>
-              <b>{a.fig}</b> {a.label} — <span className="sim-hypsrc">{a.source}</span>
-            </li>
-          ))}
-        </ul>
-
-        <p className="sim-notcounted">{SIM_NOT_COUNTED}</p>
-
-        {/*
-         * Le détail complet sous un dépliable natif, et logé DANS le bloc des
-         * hypothèses plutôt qu'en bande séparée : c'est la même matière, une
-         * bande de texte gris de plus ne coûterait que de la hauteur. `details`
-         * reste lisible et ouvrable sans JavaScript.
-         */}
-        <details className="sim-fold">
-          <summary className="sim-foldsum">Nos hypothèses</summary>
-          <p className="sim-foldtext">{SIM_NOTES}</p>
-        </details>
-      </div>
+      <details className="sim-fold rv">
+        <summary className="sim-foldsum">Nos hypothèses</summary>
+        <p className="sim-foldtext">{SIM_NOTES}</p>
+      </details>
     </section>
   );
 }
