@@ -3916,10 +3916,18 @@ html:has(.mk) {
 
 /* ===== Revenus — la bascule vers le chiffre =====
  *
- * Deux offres, deux FORMES : une vitrine large qui met les marques devant
- * (offre 1), une bande compacte à deux colonnes (offre 2). C'est la forme qui
- * les distingue, pas un titre — le reproche du fondateur portait justement sur
- * deux pavés jumeaux qu'on ne pouvait pas départager d'un coup d'œil.
+ * UNE QUESTION, DEUX VOIES, UNE PHRASE COMMUNE. Le sélecteur trie le prospect
+ * (« Vous êtes sur Uber Eats ou Deliveroo ? ») et n'affiche que la voie qui le
+ * concerne ; la phrase de convergence est posée dessous, hors des voies, donc
+ * toujours lue.
+ *
+ * C'est aussi ce qui tient la densité : trois offres empilées feraient de la
+ * section le pavé qu'on vient de démonter. Une seule voie visible à la fois, et
+ * la section ne grandit que de la hauteur de la question et de la phrase finale.
+ *
+ * Chaque voie garde sa FORME propre : bande compacte à deux colonnes pour la
+ * reprise des pages, vitrine large pour les marques, deux cartes jumelles pour
+ * le direct. On ne confond pas deux offres d'un coup d'œil.
  *
  * `--bt` est la teinte d'identité de la marque sélectionnée (voir `BRANDS`).
  * Elle n'a aucune valeur de statut : elle ne sert qu'au filet, au nom et à une
@@ -3928,14 +3936,91 @@ html:has(.mk) {
 .mk .rev-section {
   /* 70 et non 90 : la section s'ouvre désormais sur une carte, pas sur un
      pavé de texte — et la consigne est de ne pas rallonger la page. */
-  padding-block: 64px;
-  gap: 18px;
+  padding-block: 60px;
+  gap: 16px;
 }
-.mk .rev-lead {
-  text-align: center;
-  max-width: 640px;
-  margin: 0 auto 2px;
+
+/* ── La question qui trie ──
+ *
+ * Question et réponses sur une seule ligne : c'est une question posée, pas un
+ * intertitre suivi d'un menu déroulant. La ligne est centrée et `wrap` — en
+ * dessous de ~700 px les réponses passent sous la question d'elles-mêmes, sans
+ * point de rupture dédié. */
+.mk .rev-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+  margin-bottom: 2px;
 }
+.mk .rev-askq {
+  font-size: clamp(18px, 1.5vw, 21px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: var(--white);
+  text-wrap: balance;
+}
+.mk .rev-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--surface-6);
+  border-radius: 50px;
+  background: var(--surface-3);
+}
+.mk .rev-choice {
+  padding: 8px 16px;
+  border-radius: 50px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--gray);
+  white-space: nowrap;
+  transition:
+    color 0.25s,
+    background 0.25s,
+    border-color 0.25s;
+}
+.mk .rev-choice:hover {
+  color: var(--white);
+}
+.mk .rev-choice.is-on {
+  color: var(--accent);
+  background: rgba(201, 161, 90, 0.12);
+  border-color: rgba(201, 161, 90, 0.35);
+}
+
+/* ── Une voie ──
+ *
+ * `hidden` doit gagner sur le `display: flex` de la voie : sans cette règle,
+ * l'attribut ne masquerait rien et les deux voies s'empileraient. */
+.mk .rev-lane {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: rev-lane-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.mk .rev-lane[hidden] {
+  display: none;
+}
+@keyframes rev-lane-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk .rev-lane {
+    animation: none;
+  }
+}
+
 .mk .rev-offer {
   width: 100%;
   max-width: 1000px;
@@ -4195,6 +4280,166 @@ html:has(.mk) {
   align-self: flex-start;
 }
 
+/* ── Voie « en direct » — deux cartes jumelles ──
+ *
+ * Deux choix de MÊME poids : la page qu'on sert, ou le module qu'on greffe.
+ * Aucun des deux n'est « le bon » — c'est le restaurateur qui sait s'il tient à
+ * son site actuel. Deux colonnes égales le disent mieux qu'une hiérarchie. */
+.mk .rev-channels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.mk .rev-channel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 15px;
+  border: 1px solid var(--surface-6);
+  border-radius: 14px;
+  background: var(--surface-3);
+}
+.mk .rev-channeltitle {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--white);
+}
+.mk .rev-channelline {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.45;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+/* Les pastilles sur une ligne, la livraison sur la sienne. Serrée à droite des
+   pastilles, la phrase de livraison se lisait comme une note de bas de page —
+   or c'est le cœur de l'argument : personne ne s'intercale. */
+.mk .rev-does {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+}
+/* La livraison tient sur une ligne de texte, pas sur une pastille : une
+   pastille se lit comme une fonctionnalité qu'on fournit, et nous ne
+   fournissons pas de livreurs. */
+.mk .rev-delivery {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.45;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .rev-delivery strong {
+  color: var(--white);
+  font-weight: 600;
+}
+/* « Vos prix » est un mot, pas un nombre : à 38 px il déborderait de sa
+   colonne. La rangée du direct descend donc d'un cran. */
+.mk .rev-figures.direct .rev-fig {
+  font-size: 30px;
+}
+.mk .rev-directcta {
+  align-self: flex-start;
+}
+
+/* ── Acte 3 — la 2ᵉ enseigne ──
+ *
+ * Hors des voies : elle se vend sur la page de commande qu'on installe, donc
+ * elle s'adresse autant à qui n'a jamais entendu parler d'Uber qu'à qui en vit.
+ * Elle suit la phrase de convergence, d'où la respiration au-dessus. */
+.mk .rev-offer.brandsact {
+  margin-top: 6px;
+}
+
+/* ── La clause d'honnêteté ──
+ *
+ * Le filet doré à gauche, et rien d'autre : pas de carte, pas de fond. Encadrer
+ * cette phrase la ferait lire comme un encart de conditions — exactement ce
+ * qu'elle n'est pas. C'est une parole tenue à voix haute, au milieu de
+ * l'argumentaire. */
+.mk .rev-fair {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid rgba(201, 161, 90, 0.45);
+}
+.mk .rev-fairline {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.5;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .rev-fairline strong {
+  color: var(--white);
+  font-weight: 600;
+}
+/* La comparaison est la dernière chose lue de la section : elle prend le ton
+   d'une phrase dite, pas d'une ligne d'argumentaire. */
+.mk .rev-fairedge {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.4;
+  color: var(--white-80);
+  text-wrap: balance;
+}
+
+/* ── La note de l'astérisque ──
+ *
+ * Petite, jamais illisible : 11.5 px est le plancher de la direction artistique,
+ * et `--white-50` sur le fond noir reste au-dessus du contraste AA. Une note
+ * qu'on ne peut pas lire ne protège personne — elle accuse. */
+.mk .rev-note {
+  width: 100%;
+  max-width: 1000px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  line-height: 1.5;
+  color: var(--white-50);
+  text-wrap: pretty;
+}
+
+/* ── Le point de convergence ──
+ *
+ * Hors des voies : c'est la phrase que les deux réponses partagent, et la seule
+ * chose que le prospect doit retenir s'il ne retient qu'une chose. Pas de
+ * carte, pas de bordure — du blanc sur le noir, en grand. */
+.mk .rev-payoff {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  text-align: center;
+}
+.mk .rev-payofftitle {
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  color: var(--white);
+  text-wrap: balance;
+}
+.mk .rev-payoffline {
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.5;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+
 @media (max-width: 809.98px) {
   .mk .rev-section {
     padding-block: 56px;
@@ -4266,8 +4511,60 @@ html:has(.mk) {
     gap: 12px;
   }
   .mk .rev-discover,
-  .mk .rev-boostcta {
+  .mk .rev-boostcta,
+  .mk .rev-directcta {
     width: 100%;
+  }
+  /* Les deux réponses se partagent la largeur : deux cibles franches, aucune
+     qui déborde, et le pouce n'a pas à viser. */
+  .mk .rev-switch {
+    width: 100%;
+    max-width: 360px;
+  }
+  .mk .rev-choice {
+    flex: 1 1 0;
+    /* 11 px et non 9 : la cible tactile passe de 42 à 46 px de haut, au-dessus
+       du plancher de 44 px de la direction artistique. */
+    padding: 11px 8px;
+    font-size: 13.5px;
+    /* « Non, ou pas encore » ne tient pas sur une ligne dans la moitié d'un
+       écran de 390 px : on le laisse revenir plutôt que rogner la police. */
+    white-space: normal;
+  }
+  .mk .rev-lane {
+    gap: 12px;
+  }
+  .mk .rev-channels {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .mk .rev-channel {
+    padding: 12px 13px;
+  }
+  .mk .rev-does {
+    gap: 8px;
+  }
+  .mk .rev-delivery {
+    font-size: 13px;
+  }
+  .mk .rev-figures.direct .rev-fig {
+    font-size: 24px;
+  }
+  .mk .rev-payoff {
+    margin-top: 2px;
+    gap: 6px;
+  }
+  .mk .rev-offer.brandsact {
+    margin-top: 2px;
+  }
+  .mk .rev-fair {
+    padding-left: 11px;
+  }
+  .mk .rev-fairline {
+    font-size: 13px;
+  }
+  .mk .rev-fairedge {
+    font-size: 14px;
   }
 }
 

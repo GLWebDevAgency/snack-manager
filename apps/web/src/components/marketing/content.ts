@@ -178,8 +178,16 @@ export const BRANDS: VirtualBrand[] = [
   { id: "green-bowl", name: "Green Bowl", cuisine: "Bowls & salades", tint: "#7cb98d" },
 ];
 
-/** Ce qu'on installe avec la marque — identique pour les quatre. */
-export const BRAND_KIT = ["Recettes", "Formation", "Uber Eats & Deliveroo", "Publicité"] as const;
+/**
+ * Ce qu'on installe avec la marque — identique pour les quatre.
+ *
+ * « Mise en ligne » a remplacé « Uber Eats & Deliveroo », et ce n'est pas une
+ * reformulation : c'était une ERREUR DE MODÈLE. Le kit nommait deux plateformes
+ * comme si l'enseigne avait besoin d'elles pour exister — alors que le canal qui
+ * la fait vivre partout, y compris dans les communes où Uber n'est pas déployé,
+ * c'est NOTRE page de commande. Voir `BRAND_CHANNELS`.
+ */
+export const BRAND_KIT = ["Recettes", "Formation", "Mise en ligne", "Publicité"] as const;
 
 /**
  * Les trois étapes, presque sans mots — c'est le déroulé, pas l'argumentaire.
@@ -197,11 +205,59 @@ export const BRAND_STEPS = ["On installe", "Vous cuisinez", "Vous encaissez"] as
  */
 export const BRAND_FIGURES = [
   { fig: "0 €", label: "pour démarrer" },
-  { fig: "8 %", label: "sur ce que ça vend, et rien d'autre" },
+  // Le libellé porte la PORTÉE de la commission, pas seulement son taux : c'est
+  // le seul endroit de la page où les 8 % et le « 0 % de commission » de la voie
+  // directe se croisent. S'il reste flou, l'un des deux passe pour un mensonge.
+  { fig: "8 %", label: "sur ce que l'enseigne vend, jamais sur votre carte" },
   { fig: "3 semaines", label: "avant votre premier ticket" },
 ] as const;
 
-/** Offre 2 — la reprise en main des pages de livraison existantes. */
+/**
+ * OÙ L'ENSEIGNE SE VEND — la correction qui remet le modèle d'aplomb.
+ *
+ * La marque blanche était enfermée dans la voie « Oui, j'y suis », comme si elle
+ * était un service RENDU AUX PLATEFORMES. Elle ne l'est pas : elle a besoin d'un
+ * canal, pas d'Uber. Notre page de commande en est un — et c'est même le seul
+ * qui existe partout, sans négociation et sans zone de couverture.
+ *
+ * D'où deux canaux, dans cet ordre : celui qui existe toujours d'abord, celui
+ * qui dépend de la commune ensuite.
+ */
+export const BRAND_CHANNELS = [
+  {
+    id: "direct",
+    title: "Sur votre page de commande",
+    line: "Celle qu'on vous installe. L'enseigne y a sa carte, ses photos, son créneau de retrait — et vous gardez le client, son numéro, son historique.",
+  },
+  {
+    id: "plateformes",
+    title: "Sur vos plateformes, si vous en avez",
+    line: "Uber Eats, Deliveroo : on ouvre les comptes de l'enseigne et on tient ses pages. Un canal de plus, jamais une condition.",
+  },
+] as const;
+
+/**
+ * LA CLAUSE D'HONNÊTETÉ, ET L'ARGUMENT LE PLUS FORT DE LA PAGE — c'est le même
+ * texte.
+ *
+ * Le prospect vient de lire « 0 % de commission » quinze centimètres plus haut.
+ * Lui présenter 8 % sans traiter la contradiction, c'est perdre la confiance de
+ * tout ce qui précède. On la traite donc FRONTALEMENT, et elle devient une
+ * preuve : la commission ne touche jamais ce qu'il vendait avant nous.
+ *
+ * `edge` est la comparaison qui rend les 8 % soutenables là où une plateforme a
+ * besoin de 30 % : elle monétise une acquisition une fois et garde le client ;
+ * nous le rendons au restaurateur, qui peut le faire revenir. C'est vrai de
+ * notre architecture (le client est enregistré chez lui), pas une figure de
+ * style.
+ */
+export const BRAND_FAIR = {
+  lead: "Une commission ? Oui — la seule de toute notre offre.",
+  line: "Elle ne porte que sur l'enseigne qu'on vous apporte. Sur votre carte, vos clients, ce que vous vendiez avant nous : zéro, toujours. On ne se paie que sur ce qu'on ajoute.",
+  edge: "Une plateforme prend jusqu'à 30 % et garde le client. Nous prenons 8 %, et le client est le vôtre.",
+} as const;
+
+/** Voie « sur les plateformes » — la reprise en main des pages existantes. */
 export const BOOST_LEVERS = [
   "Menu réorganisé",
   "Photos retravaillées",
@@ -218,6 +274,132 @@ export const BOOST_FIGURES = [
   // il tient sa place dans la rangée au lieu de finir en note de bas de carte.
   { fig: "0", label: "engagement" },
 ] as const;
+
+/* ── Revenus — la question qui trie ───────────────────────────── */
+
+/**
+ * LA SECTION NE S'OUVRE PLUS SUR UNE OFFRE, ELLE S'OUVRE SUR UNE QUESTION.
+ *
+ * Elle portait deux argumentaires posés l'un sous l'autre, et une contradiction
+ * qu'elle ne disait pas : les DEUX exigeaient qu'Uber Eats et Deliveroo soient
+ * actifs dans la zone. Or beaucoup des meilleurs clients de Snack Manager sont
+ * dans des communes où ils ne le sont pas — la page ne leur parlait pas.
+ *
+ * On trie donc AVANT d'argumenter. Le prospect répond à une question qu'il
+ * connaît par cœur, et ne lit que la voie qui le concerne. La voie « en direct »
+ * est celle qui manquait.
+ *
+ * CE QUE LE TRI NE DOIT PAS EMPORTER AVEC LUI. La marque blanche a d'abord été
+ * rangée dans la voie « Oui, j'y suis », et c'était une faute : elle n'a jamais
+ * eu besoin d'une plateforme, seulement d'un canal — et le canal, c'est nous.
+ * Elle a donc quitté les voies pour devenir le TROISIÈME ACTE, commun, posé
+ * après la convergence. Effet de bord voulu : les deux réponses mènent au même
+ * endroit, alors que la voie « Non » était visiblement la plus pauvre des deux.
+ */
+export const REVENUE_ASK = "Vous êtes sur Uber Eats ou Deliveroo ?";
+
+export const REVENUE_LANES = [
+  { id: "plateformes", answer: "Oui, j'y suis" },
+  { id: "direct", answer: "Non, ou pas encore" },
+] as const;
+
+/**
+ * Voie « en direct » — les deux façons de vendre sans plateforme.
+ *
+ * TOUT CE QUI EST ÉCRIT ICI EXISTE. La page de commande est servie sur un
+ * sous-domaine actif dès l'ouverture du compte, ou sur le nom de domaine du
+ * restaurateur via un CNAME avec certificat automatique (voir
+ * `app/admin/site/`) ; le module est le chargeur `public/w.js`, une balise
+ * `<script>` à coller, avec `data-target` pour l'insérer en ligne dans une page
+ * existante.
+ */
+export const DIRECT_CHANNELS = [
+  {
+    id: "page",
+    title: "Votre page de commande",
+    line: "Une adresse Snack Manager active dès l'ouverture du compte. Vous avez déjà un nom de domaine ? La même page répond dessus : un réglage chez votre hébergeur, le certificat s'installe tout seul.",
+  },
+  {
+    id: "module",
+    title: "Le module dans votre site",
+    line: "Vous avez déjà un site et vous y tenez ? On y branche le bouton « Commander ». Une ligne à coller — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
+  },
+] as const;
+
+/**
+ * CE QUE LA COMMANDE EN LIGNE FAIT, ET RIEN DE PLUS.
+ *
+ * Le tunnel va du panier au créneau de retrait (`components/order/Checkout`) :
+ * c'est du click & collect. On ne fournit PAS de livreurs et on n'en laisse rien
+ * entendre — la livraison, quand il y en a une, reste celle du restaurateur.
+ */
+export const DIRECT_DOES = ["Commande en ligne", "Click & collect", "Retrait sur créneau", "Paiement en ligne"] as const;
+
+/**
+ * La phrase qui dit la livraison sans jamais promettre de livreurs.
+ * Elle n'est pas une pastille de fonctionnalité : une pastille se lit comme
+ * quelque chose qu'on fournit, et nous ne fournissons pas de livreurs.
+ */
+export const DIRECT_DELIVERY = {
+  lead: "Vous livrez ?",
+  line: "Vous continuez comme aujourd'hui — vos tournées, vos horaires. Personne ne s'intercale entre votre cuisine et votre client.",
+} as const;
+
+/**
+ * Trois repères, pas trois promesses. « 0 % » n'est pas une remise : c'est le
+ * modèle — un abonnement mensuel, aucune part prélevée sur les commandes.
+ */
+export const DIRECT_FIGURES = [
+  // L'astérisque renvoie à `REVENUE_FOOTNOTE`, en bas de section. Il n'est pas
+  // une précaution juridique posée à contrecœur : le lecteur qui descend jusqu'à
+  // la note compare 1,5 % à 30 % et se convainc tout seul. La note vend.
+  { fig: "0 %", label: "de commission *, vous payez l'abonnement, rien d'autre" },
+  { fig: "Vos prix", label: "ceux de votre carte, sans marge de plateforme à absorber" },
+  { fig: "1 ligne", label: "à coller sur le site que vous avez déjà" },
+] as const;
+
+/**
+ * LE POINT DE CONVERGENCE — la seule phrase que les deux voies partagent.
+ *
+ * « Jusqu'à 30 % » et non « 30 % » : les taux varient selon le contrat et selon
+ * qu'il s'agit de livraison ou de retrait. Annoncer un taux ferme qu'on n'a pas
+ * vérifié, c'est offrir à un restaurateur l'occasion de nous corriger — et de
+ * douter du reste. La force de l'argument ne vient pas du taux, elle vient de ce
+ * qu'il devient : zéro.
+ */
+export const REVENUE_PAYOFF = {
+  title: "Reprenez la main sur votre marge.",
+  line: "Sur les plateformes, on va chercher le volume qui vous manque. En direct, on va chercher la commission que vous payez déjà — jusqu'à 30 % du ticket, ramenés à zéro.",
+} as const;
+
+/**
+ * L'OUVERTURE DU TROISIÈME ACTE — commun aux deux voies.
+ *
+ * La marge reprise, la question suivante n'est plus « comment garder plus », mais
+ * « comment faire tourner ce qui est déjà là ». Une cuisine de snack tourne deux
+ * services par jour et dort le reste du temps : c'est l'actif sous-employé que
+ * l'enseigne vient charger.
+ */
+export const BRAND_INTRO = {
+  kicker: "On ajoute",
+  title: "Et si votre cuisine tournait deux fois ?",
+  line: "Une deuxième enseigne, livrée clé en main, dans les murs et l'équipe que vous avez déjà.",
+} as const;
+
+/**
+ * LA NOTE DE BAS DE SECTION — l'astérisque du « 0 % ».
+ *
+ * Elle dit les DEUX choses qu'un restaurateur découvrirait autrement sur son
+ * relevé, et un mensonge par omission au premier relevé coûte le client entier :
+ *   · les frais d'encaissement carte, qui ne sont pas les nôtres et qu'il paierait
+ *     avec n'importe quel encaissement en ligne ;
+ *   · la portée exacte des 8 %.
+ *
+ * « environ 1,5 % » et non un taux ferme : le taux dépend du prestataire de
+ * paiement et de la carte présentée, et nous ne le fixons pas.
+ */
+export const REVENUE_FOOTNOTE =
+  "* Aucune commission sur vos ventes. Seuls s'appliquent les frais d'encaissement de votre prestataire de paiement — environ 1,5 % par transaction carte — que vous régleriez avec n'importe quelle solution de paiement en ligne. La commission de 8 % ne concerne que les ventes réalisées sous une enseigne Snack Manager.";
 
 /* ── Catalogue app par app ───────────────────────────────────── */
 
@@ -709,7 +891,10 @@ export const FAQ = [
   },
   {
     q: "C'est quoi, une marque virtuelle ?",
-    a: "Une marque de livraison qui existe uniquement sur Uber Eats & Deliveroo, préparée dans votre cuisine avec votre équipe. On fournit le concept, les recettes, la formation et la gestion — vous encaissez un CA que vous n'aviez pas.",
+    // Corrigé : la réponse disait « uniquement sur Uber Eats & Deliveroo », ce
+    // qui n'est pas le modèle. L'enseigne vit d'abord sur la page de commande
+    // qu'on installe ; les plateformes sont un canal de plus, pas la condition.
+    a: "Une deuxième enseigne qui n'existe qu'en ligne, préparée dans votre cuisine avec votre équipe. Elle se vend sur votre page de commande — et sur Uber Eats ou Deliveroo aussi, si vous y êtes. On fournit le concept, les recettes, la formation et la publicité ; vous encaissez un CA que vous n'aviez pas, et la commission ne porte que sur ce que cette enseigne vend.",
   },
   {
     q: "À qui appartiennent mes données ?",
