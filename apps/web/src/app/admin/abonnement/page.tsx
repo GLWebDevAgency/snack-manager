@@ -538,7 +538,7 @@ function PanelIdentite({
             value={form.legalName}
             onChange={set("legalName")}
             disabled={!editable}
-            placeholder="CLASS’FOOD SARL"
+            placeholder="MON RESTAURANT SARL"
             autoComplete="organization"
           />
         </Field>
@@ -568,7 +568,15 @@ function PanelIdentite({
             value={form.siret}
             onChange={set("siret")}
             disabled={!editable}
-            placeholder="732 829 320 00074"
+            /*
+             * Exemple volontairement INVALIDE au sens de la clé de Luhn.
+             * Un SIRET bien formé désigne une vraie entreprise : en publier un
+             * comme exemple, sur une page que n'importe qui peut ouvrir en
+             * démonstration, revient à exposer l'identifiant d'un tiers qui
+             * n'a rien demandé. Celui-ci enseigne le format sans désigner
+             * personne.
+             */
+            placeholder="123 456 789 00012"
             inputMode="numeric"
           />
         </Field>
@@ -584,7 +592,7 @@ function PanelIdentite({
             value={form.vatNumber}
             onChange={set("vatNumber")}
             disabled={!editable}
-            placeholder="FR44732829320"
+            placeholder="FR00123456789"
           />
         </Field>
 
