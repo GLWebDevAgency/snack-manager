@@ -1,74 +1,165 @@
 /**
  * Copy du site vitrine — source unique, en français.
  *
- * Le texte est celui de la maquette « Snack Manager - Site Vitrine.html »
- * (Menu Trivolet Redesign) : on ne le réécrit pas, on le structure.
+ * ═══ LA RÈGLE QUI PRIME SUR TOUTES LES AUTRES ═══
+ *
+ * On n'écrit ici QUE ce que le produit tient aujourd'hui. Pas un chiffre de
+ * résultat (nous n'avons aucun client hors du pilote, donc aucun résultat à
+ * montrer), pas un témoignage, pas un compteur de places prises, et jamais
+ * un mot qui laisse entendre qu'on fournit des livreurs : le tunnel de
+ * commande s'arrête au CRÉNEAU DE RETRAIT.
+ *
+ * La page est découpée en onze sections, une par question que se pose un
+ * patron de snack, dans l'ordre où il se la pose. `SECTIONS` porte cet ordre
+ * et sert à la fois de sommaire (menu burger) et de source des titres.
  */
 
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
-export const FOUNDER_SEATS_TOTAL = 10;
-export const FOUNDER_SEATS_TAKEN = 3;
-export const FOUNDER_SEATS_LEFT = FOUNDER_SEATS_TOTAL - FOUNDER_SEATS_TAKEN;
+
+/**
+ * LA CLAUSE D'ENGAGEMENT — DÉCISION DU FONDATEUR, UN SEUL TEXTE.
+ *
+ * Elle est une CONSTANTE et non une phrase recopiée, parce que la page se
+ * contredisait à voix haute : le hero affichait « Sans engagement » pendant
+ * que la FAQ répondait « on vous détaille les conditions au moment du devis ».
+ * Un prospect qui attrape les deux ne croit plus ni l'une ni l'autre.
+ *
+ * Partout où la question se pose — bandeau sous la grille tarifaire, FAQ — on
+ * affiche CETTE valeur, jamais une reformulation. Le forfait de mise en route
+ * est dit dans la même phrase que l'absence d'engagement : le taire ferait de
+ * « sans engagement » un demi-mensonge découvert au devis.
+ */
+export const ENGAGEMENT =
+  "Abonnement sans engagement, résiliable à tout moment. S'y ajoute un forfait de mise en route, non remboursable, qui couvre les journées d'installation.";
+
+/**
+ * LA RARETÉ SANS LE COMPTEUR.
+ *
+ * `FOUNDER_SEATS_TAKEN` valait 3 alors que nous n'avons AUCUN client signé :
+ * c'était le seul énoncé de la page qu'un prospect pouvait prendre en flagrant
+ * délit d'un coup de téléphone. Le décompte et ses pastilles sont supprimés —
+ * constante, calcul et affichage. La politique, elle, est vraie et reste.
+ */
+export const FOUNDER_POLICY = "Les dix premiers restaurants gardent leur tarif à vie.";
+
+/* ── Appels à l'action ───────────────────────────────────────── */
+
+/**
+ * DEUX LIBELLÉS POUR TOUTE LA PAGE, ET PAS UN DE PLUS.
+ *
+ * Elle en portait six (« Demander une démo », « Demander un devis »,
+ * « Réserver ma démo », « Vérifier ces chiffres avec nous », « Explorer la
+ * démo », « Contactez-nous ») pour deux destinations seulement. Six verbes
+ * pour deux gestes, c'est six décisions demandées au lecteur là où il y en a
+ * deux.
+ *
+ * `CTA_DEMO` est le seul qui reste distinct : il ne mène PAS au formulaire.
+ * Ce n'est pas un appel commercial, c'est une commande de produit.
+ */
+export const CTA_CALLBACK = "Être rappelé";
+export const CTA_DEMO = "Prendre une commande en démo";
+
+/* ── Les onze sections ───────────────────────────────────────── */
+
+export type SectionMeta = {
+  /** Ancre réelle dans le DOM — toute entrée de navigation doit la viser. */
+  id: string;
+  /** Libellé court du sommaire (menu burger, encoche d'en-tête). */
+  nav: string;
+  /** Pastille au-dessus du titre. `null` = la section n'en porte pas. */
+  badge: string | null;
+  /** Le `h2` de la section, écrit ici et nulle part ailleurs. */
+  title: string;
+};
+
+/**
+ * L'ORDRE DE LA PAGE, ET C'EST UN ORDRE DE QUESTIONS.
+ *
+ * Est-ce que je suis au bon endroit ? est-ce que ça me parle ? est-ce que ça
+ * existe ? comment mes clients commandent ? est-ce que ça marche dans MA
+ * cuisine ? combien ? et par rapport à ce que je paie déjà ? si je dis oui,
+ * il se passe quoi ? qu'est-ce que je risque ? à qui je donne mon numéro ?
+ *
+ * Chaque question est posée UNE fois. Une section qui redit le travail d'une
+ * autre n'a pas sa place ici — les sections ne se répètent plus, elles se
+ * citent (voir `SIM_CTA_NOTE` et `PILOTE_SIGNATURE`).
+ */
+export const SECTIONS: readonly SectionMeta[] = [
+  { id: "hero", nav: "Accueil", badge: null, title: "On fait tourner votre restaurant. Pas l'inverse." },
+  {
+    id: "votre-service",
+    nav: "Votre service",
+    badge: "Comparatif",
+    title: "Votre service aujourd'hui. Votre service lundi prochain.",
+  },
+  { id: "produit", nav: "Produit", badge: "Le produit", title: "Ne nous croyez pas sur parole. Prenez une commande." },
+  { id: "commander", nav: "Commander", badge: "Vos canaux", title: "Vos clients commandent chez vous. Pas chez eux." },
+  {
+    id: "materiel",
+    nav: "Matériel",
+    badge: "Chez vous",
+    title: "Rien à racheter. Et rien ne s'arrête quand le réseau tombe.",
+  },
+  { id: "tarifs", nav: "Tarifs", badge: "Tarifs", title: "Trois prix, affichés. Zéro commission, toujours." },
+  {
+    id: "simulateur",
+    nav: "Le calcul",
+    badge: "Le calcul",
+    title: "139 € par mois. Et votre organisation actuelle, elle vous coûte combien ?",
+  },
+  {
+    id: "lancement",
+    nav: "Lancement",
+    badge: "Le lancement",
+    title: "On date ce qu'on livre. Jamais ce que vous gagnerez.",
+  },
+  { id: "faq", nav: "Questions", badge: "Questions", title: "Vous avez des doutes. Ils sont légitimes." },
+  { id: "pilote", nav: "Le pilote", badge: "Né au comptoir", title: "Ce logiciel a un restaurant. Il s'appelle Class'Food." },
+  { id: "contact", nav: "Contact", badge: null, title: "Laissez-nous votre numéro. On rappelle sous 24 h." },
+] as const;
+
+/** Retrouve la pastille et le titre d'une section par son ancre. */
+export function section(id: string): SectionMeta {
+  const found = SECTIONS.find((s) => s.id === id);
+  if (!found) throw new Error(`Section inconnue : ${id}`);
+  return found;
+}
 
 /* ── Navigation ──────────────────────────────────────────────── */
 
-/** L'encoche s'ouvre en deux groupes symétriques autour du logo. */
+/**
+ * L'encoche s'ouvre en deux groupes symétriques autour du logo.
+ *
+ * Les trois ancres d'hier étaient MORTES ou le devenaient : `#pourquoi`
+ * (Process, supprimé), `#revenus` (Revenue, éclaté), et `#produit` qui
+ * désignait six maquettes inventées — il désigne désormais la démonstration
+ * manipulable, ce qui est un progrès pour le lien d'évitement « Aller au
+ * contenu » : il atterrit sur le produit et non sur des captures dessinées.
+ */
 export const NAV_LEFT = [
   { href: "#produit", label: "Produit" },
-  { href: "#pourquoi", label: "Expertise" },
+  { href: "#commander", label: "Commander" },
 ] as const;
 
 export const NAV_RIGHT = [
-  { href: "#revenus", label: "Revenus" },
   { href: "#tarifs", label: "Tarifs" },
+  { href: "#faq", label: "Questions" },
   { href: "#contact", label: "Contact" },
 ] as const;
 
-/* ── Bandeau de fonctionnalités sous le hero ─────────────────── */
+/**
+ * LE SOMMAIRE DU MENU BURGER — pas la même chose que l'encoche.
+ *
+ * La barre collante disparaît ; sur téléphone, le burger devient la SEULE
+ * navigation de la page. Il doit donc être un sommaire complet, pas un
+ * raccourci de cinq entrées. Le hero est exclu : on y est déjà.
+ */
+export const NAV_MOBILE = SECTIONS.filter((s) => s.id !== "hero").map((s) => ({
+  href: `#${s.id}`,
+  label: s.nav,
+}));
 
-export const TICKER = [
-  "Cuisine (KDS)",
-  "Caisse (POS)",
-  "Back-office",
-  "Planning & masse salariale",
-  "Stocks & coût matière",
-  "Site & commande",
-] as const;
-
-/* ── Bandeau de preuve ───────────────────────────────────────── */
-
-export const PROOF = [
-  {
-    value: 35,
-    prefix: "−",
-    suffix: " %",
-    label: "d'erreurs de commande avec la prise en ligne",
-    source: "Deliverect, 2023",
-  },
-  {
-    value: 15,
-    prefix: "+",
-    suffix: " %",
-    label: "de panier moyen sur les commandes en ligne",
-    source: "bas de fourchette des études",
-  },
-  {
-    value: 60,
-    prefix: "",
-    suffix: " min",
-    label: "pour former une recrue à la caisse",
-    source: "constaté au restaurant pilote",
-  },
-  {
-    value: 7,
-    prefix: "",
-    suffix: " j/7",
-    label: "testé en service réel, midi et soir",
-    source: "Class'Food — Normandie",
-  },
-] as const;
-
-/* ── Captures réelles des applications ───────────────────────── */
+/* ── 1. Hero — captures réelles des applications ─────────────── */
 
 export type Shot = { src: string; alt: string; portrait?: boolean };
 
@@ -81,364 +172,79 @@ export const HERO_SHOTS: Shot[] = [
   { src: "/shots/board.png", alt: "Écran d'appel client Snack Manager : numéros prêts au retrait" },
 ];
 
-/* ── Simulateur ──────────────────────────────────────────────── */
+/* ── 2. Votre service — le miroir ────────────────────────────── */
 
-export const SIM_NOTES =
-  "Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · 10 % du comptoir migre la 1ʳᵉ année · panier en ligne +15 % (bas de fourchette des études : +15 à +30 %) · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois.";
-
-export const SIM_FLOW = [
-  "Le client commande & paie en ligne",
-  "Ticket généré automatiquement",
-  "Visible en direct sur le KDS cuisine",
-  "La caisse remet le sac. C'est tout.",
+/**
+ * SIX LIGNES DE CHAQUE CÔTÉ, ET ELLES SE RÉPONDENT UNE À UNE.
+ *
+ * C'est le SEUL endroit de la page où la douleur est écrite. Plus jamais
+ * ailleurs : le catalogue des douleurs était rouvert par Vignettes, CaseStudy,
+ * le premier panneau de Process et la citation du fondateur — cinq fois la
+ * même journée décrite au restaurateur, qui la connaît mieux que nous.
+ *
+ * Le vocabulaire est celui d'un lecteur AU DEUXIÈME ÉCRAN, qui ne connaît pas
+ * encore le produit. « Menus cadrés, totaux automatiques, ticket + sticker
+ * sac » était un récapitulatif écrit pour quelqu'un qui avait déjà tout lu.
+ *
+ * La sixième ligne de gauche est la douleur numéro un d'un restaurateur en
+ * 2026, et elle manquait entièrement. Sa réponse en face est le meilleur
+ * argument de la page (voir `ORDER_CHANNELS[0]`).
+ */
+export const VS_WITHOUT = [
+  "Trois outils qui ne se parlent pas, et vous au milieu",
+  "Les commandes au stylo, les totaux calculés de tête",
+  "Des jours de formation à chaque nouvelle recrue",
+  // Sans outil, la masse salariale est CONSTATÉE, jamais décidée.
+  "La masse salariale, vous la découvrez en fin de mois",
+  "Un site qui ne prend pas les commandes",
+  "Jusqu'à 30 % prélevés sur chaque commande livrée — et le client reste le leur",
 ] as const;
 
-/* ── Processus (3 panneaux) ──────────────────────────────────── */
-
-export const PROC_TEXTS = [
-  {
-    step: "Étape 1.",
-    title: "On observe votre service",
-    text: "On identifie ce qui ralentit votre équipe et où l'automatisation change vraiment la donne.",
-  },
-  {
-    step: "Étape 2.",
-    title: "On configure votre plateforme",
-    text: "Menu, équipe, logo, couleurs, moyens de paiement — tout est prêt avant l'ouverture.",
-  },
-  {
-    step: "Étape 3.",
-    title: "On reste à vos côtés",
-    text: "Support continu, mises à jour, accompagnement — un vrai partenaire, pas un logiciel qu'on vous laisse.",
-  },
+export const VS_WITH = [
+  "Une seule plateforme — caisse, cuisine, back-office, commande en ligne",
+  "La caisse calcule, imprime le ticket cuisine et le sticker du sac",
+  "Une heure pour qu'une nouvelle recrue tienne la caisse",
+  "Le planning affiche ce que la semaine va coûter avant que vous validiez",
+  "Votre page de commande en ligne, à vos couleurs, sur votre nom de domaine",
+  "Votre lien de commande sur votre fiche Google, marqué « préféré par l'établissement »",
 ] as const;
 
-export type ChangelogTone = "new" | "improved" | "fixed";
-
-export type ChangelogMonth = {
-  month: string;
-  sub: string;
-  items: { tone: ChangelogTone; text: string; faded?: 0 | 1 | 2 }[];
-};
-
-export const CHANGELOG: ChangelogMonth[] = [
-  {
-    month: "Juillet 2026",
-    sub: "Ce qu'on a amélioré ce mois-ci.",
-    items: [
-      { tone: "new", text: "Sticker sac imprimé à l'acceptation" },
-      { tone: "new", text: "Pointage équipe sur tablette" },
-      { tone: "improved", text: "Synchro caisse ↔ cuisine plus rapide" },
-      { tone: "new", text: "Alertes sonores personnalisables", faded: 1 },
-      { tone: "fixed", text: "Correctifs mode hors-ligne", faded: 2 },
-    ],
-  },
-  {
-    month: "Août 2026",
-    sub: "Et la suite.",
-    items: [
-      { tone: "new", text: "Fidélité multi-sites" },
-      { tone: "improved", text: "Chargement des tickets 30 % plus rapide" },
-      { tone: "new", text: "Export des plannings en PDF", faded: 1 },
-      { tone: "fixed", text: "Bug d'impression sticker corrigé", faded: 2 },
-    ],
-  },
-];
-
-/* ── Revenus — les quatre marques de livraison ────────────────── */
-
-/**
- * LES QUATRE MARQUES N'ONT AUCUN VISUEL, ET C'EST ASSUMÉ ICI.
- *
- * Ni logo, ni photo de plat n'existe (rien dans `public/`). On ne fabrique pas
- * l'un ni l'autre : publier une identité qui n'existe pas, c'est promettre au
- * restaurateur un produit qu'on ne pourra pas lui livrer le jour de la
- * signature. La vitrine est donc TYPOGRAPHIQUE — le nom posé grand, la cuisine
- * en dessous, une teinte propre à chaque marque, le repère halal.
- *
- * `tint` n'est PAS une couleur fonctionnelle. Les trois couleurs de sens de la
- * direction artistique (vert « prêt », rouge « alerte », ambre « en cours »)
- * n'ont pas de raison d'être ici : aucune de ces quatre teintes ne reprend
- * leur valeur, et rien sur cette page ne porte de statut. Ce sont des repères
- * d'identité, provisoires : le jour où les vraies identités arrivent, on
- * remplace `tint` et on ajoute `logo` — la structure ne bouge pas.
- */
-export type VirtualBrand = {
-  id: string;
-  name: string;
-  /** Deux ou trois mots, pas une carte : ce qu'on cuisine sous cette enseigne. */
-  cuisine: string;
-  tint: string;
-};
-
-export const BRANDS: VirtualBrand[] = [
-  { id: "maki-ya", name: "Maki-Ya", cuisine: "Sushis & makis", tint: "#7f9fd4" },
-  { id: "pastella", name: "Pastella", cuisine: "Pâtes italiennes", tint: "#d7a15f" },
-  { id: "wings-club", name: "Wings Club", cuisine: "Ailes & poulet frit", tint: "#c96f5a" },
-  { id: "green-bowl", name: "Green Bowl", cuisine: "Bowls & salades", tint: "#7cb98d" },
-];
-
-/**
- * Ce qu'on installe avec la marque — identique pour les quatre.
- *
- * « Mise en ligne » a remplacé « Uber Eats & Deliveroo », et ce n'est pas une
- * reformulation : c'était une ERREUR DE MODÈLE. Le kit nommait deux plateformes
- * comme si l'enseigne avait besoin d'elles pour exister — alors que le canal qui
- * la fait vivre partout, y compris dans les communes où Uber n'est pas déployé,
- * c'est NOTRE page de commande. Voir `BRAND_CHANNELS`.
- */
-export const BRAND_KIT = ["Recettes", "Formation", "Mise en ligne", "Publicité"] as const;
-
-/**
- * Les trois étapes, presque sans mots — c'est le déroulé, pas l'argumentaire.
- * Le détail (« on ouvre les comptes », « on pilote la pub ») est déjà dans
- * `BRAND_KIT` ; le répéter ici, c'est le reproche du fondateur qui revient.
- */
-export const BRAND_STEPS = ["On installe", "Vous cuisinez", "Vous encaissez"] as const;
-
-/**
- * LES SEULS CHIFFRES AUTORISÉS SUR CETTE SECTION.
- *
- * Ils viennent du brief du fondateur, un par un. Not So Dark annonce 50 à
- * 150 k€ mensuels supplémentaires : on ne reprend JAMAIS ce genre de promesse
- * à notre compte, ni ici ni ailleurs.
- */
-export const BRAND_FIGURES = [
-  { fig: "0 €", label: "pour démarrer" },
-  // Le libellé porte la PORTÉE de la commission, pas seulement son taux : c'est
-  // le seul endroit de la page où les 8 % et le « 0 % de commission » de la voie
-  // directe se croisent. S'il reste flou, l'un des deux passe pour un mensonge.
-  { fig: "8 %", label: "sur ce que l'enseigne vend, jamais sur votre carte" },
-  { fig: "3 semaines", label: "avant votre premier ticket" },
-] as const;
-
-/**
- * OÙ L'ENSEIGNE SE VEND — la correction qui remet le modèle d'aplomb.
- *
- * La marque blanche était enfermée dans la voie « Oui, j'y suis », comme si elle
- * était un service RENDU AUX PLATEFORMES. Elle ne l'est pas : elle a besoin d'un
- * canal, pas d'Uber. Notre page de commande en est un — et c'est même le seul
- * qui existe partout, sans négociation et sans zone de couverture.
- *
- * D'où deux canaux, dans cet ordre : celui qui existe toujours d'abord, celui
- * qui dépend de la commune ensuite.
- */
-export const BRAND_CHANNELS = [
-  {
-    id: "direct",
-    title: "Sur votre page de commande",
-    line: "Celle qu'on vous installe. L'enseigne y a sa carte, ses photos, son créneau de retrait — et vous gardez le client, son numéro, son historique.",
-  },
-  {
-    id: "plateformes",
-    title: "Sur vos plateformes, si vous en avez",
-    line: "Uber Eats, Deliveroo : on ouvre les comptes de l'enseigne et on tient ses pages. Un canal de plus, jamais une condition.",
-  },
-] as const;
-
-/**
- * LA CLAUSE D'HONNÊTETÉ, ET L'ARGUMENT LE PLUS FORT DE LA PAGE — c'est le même
- * texte.
- *
- * Le prospect vient de lire « 0 % de commission » quinze centimètres plus haut.
- * Lui présenter 8 % sans traiter la contradiction, c'est perdre la confiance de
- * tout ce qui précède. On la traite donc FRONTALEMENT, et elle devient une
- * preuve : la commission ne touche jamais ce qu'il vendait avant nous.
- *
- * `edge` est la comparaison qui rend les 8 % soutenables là où une plateforme a
- * besoin de 30 % : elle monétise une acquisition une fois et garde le client ;
- * nous le rendons au restaurateur, qui peut le faire revenir. C'est vrai de
- * notre architecture (le client est enregistré chez lui), pas une figure de
- * style.
- */
-export const BRAND_FAIR = {
-  lead: "Une commission ? Oui — la seule de toute notre offre.",
-  line: "Elle ne porte que sur l'enseigne qu'on vous apporte. Sur votre carte, vos clients, ce que vous vendiez avant nous : zéro, toujours. On ne se paie que sur ce qu'on ajoute.",
-  edge: "Une plateforme prend jusqu'à 30 % et garde le client. Nous prenons 8 %, et le client est le vôtre.",
-} as const;
-
-/** Voie « sur les plateformes » — la reprise en main des pages existantes. */
-export const BOOST_LEVERS = [
-  "Menu réorganisé",
-  "Photos retravaillées",
-  "Promos aux bonnes heures",
-  "Avis gérés",
-] as const;
-
-export const BOOST_FIGURES = [
-  { fig: "99 €", label: "par mois" },
-  // « Objectif » n'est pas une précaution de langage : c'est le mot du brief.
-  // On vise +30 %, on ne le garantit pas.
-  { fig: "+30 %", label: "de ventes en livraison — objectif à 60 jours" },
-  // « Sans engagement » posé comme un chiffre : c'est un argument de prix,
-  // il tient sa place dans la rangée au lieu de finir en note de bas de carte.
-  { fig: "0", label: "engagement" },
-] as const;
-
-/* ── Revenus — la question qui trie ───────────────────────────── */
-
-/**
- * LA SECTION NE S'OUVRE PLUS SUR UNE OFFRE, ELLE S'OUVRE SUR UNE QUESTION.
- *
- * Elle portait deux argumentaires posés l'un sous l'autre, et une contradiction
- * qu'elle ne disait pas : les DEUX exigeaient qu'Uber Eats et Deliveroo soient
- * actifs dans la zone. Or beaucoup des meilleurs clients de Snack Manager sont
- * dans des communes où ils ne le sont pas — la page ne leur parlait pas.
- *
- * On trie donc AVANT d'argumenter. Le prospect répond à une question qu'il
- * connaît par cœur, et ne lit que la voie qui le concerne. La voie « en direct »
- * est celle qui manquait.
- *
- * CE QUE LE TRI NE DOIT PAS EMPORTER AVEC LUI. La marque blanche a d'abord été
- * rangée dans la voie « Oui, j'y suis », et c'était une faute : elle n'a jamais
- * eu besoin d'une plateforme, seulement d'un canal — et le canal, c'est nous.
- * Elle a donc quitté les voies pour devenir le TROISIÈME ACTE, commun, posé
- * après la convergence. Effet de bord voulu : les deux réponses mènent au même
- * endroit, alors que la voie « Non » était visiblement la plus pauvre des deux.
- */
-export const REVENUE_ASK = "Vous êtes sur Uber Eats ou Deliveroo ?";
-
-export const REVENUE_LANES = [
-  { id: "plateformes", answer: "Oui, j'y suis" },
-  { id: "direct", answer: "Non, ou pas encore" },
-] as const;
-
-/**
- * Voie « en direct » — les deux façons de vendre sans plateforme.
- *
- * TOUT CE QUI EST ÉCRIT ICI EXISTE. La page de commande est servie sur un
- * sous-domaine actif dès l'ouverture du compte, ou sur le nom de domaine du
- * restaurateur via un CNAME avec certificat automatique (voir
- * `app/admin/site/`) ; le module est le chargeur `public/w.js`, une balise
- * `<script>` à coller, avec `data-target` pour l'insérer en ligne dans une page
- * existante.
- */
-export const DIRECT_CHANNELS = [
-  {
-    id: "page",
-    title: "Votre page de commande",
-    line: "Une adresse Snack Manager active dès l'ouverture du compte. Vous avez déjà un nom de domaine ? La même page répond dessus : un réglage chez votre hébergeur, le certificat s'installe tout seul.",
-  },
-  {
-    id: "module",
-    title: "Le module dans votre site",
-    line: "Vous avez déjà un site et vous y tenez ? On y branche le bouton « Commander ». Une ligne à coller — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
-  },
-] as const;
-
-/**
- * CE QUE LA COMMANDE EN LIGNE FAIT, ET RIEN DE PLUS.
- *
- * Le tunnel va du panier au créneau de retrait (`components/order/Checkout`) :
- * c'est du click & collect. On ne fournit PAS de livreurs et on n'en laisse rien
- * entendre — la livraison, quand il y en a une, reste celle du restaurateur.
- */
-export const DIRECT_DOES = ["Commande en ligne", "Click & collect", "Retrait sur créneau", "Paiement en ligne"] as const;
-
-/**
- * La phrase qui dit la livraison sans jamais promettre de livreurs.
- * Elle n'est pas une pastille de fonctionnalité : une pastille se lit comme
- * quelque chose qu'on fournit, et nous ne fournissons pas de livreurs.
- */
-export const DIRECT_DELIVERY = {
-  lead: "Vous livrez ?",
-  line: "Vous continuez comme aujourd'hui — vos tournées, vos horaires. Personne ne s'intercale entre votre cuisine et votre client.",
-} as const;
-
-/**
- * Trois repères, pas trois promesses. « 0 % » n'est pas une remise : c'est le
- * modèle — un abonnement mensuel, aucune part prélevée sur les commandes.
- */
-export const DIRECT_FIGURES = [
-  // L'astérisque renvoie à `REVENUE_FOOTNOTE`, en bas de section. Il n'est pas
-  // une précaution juridique posée à contrecœur : le lecteur qui descend jusqu'à
-  // la note compare 1,5 % à 30 % et se convainc tout seul. La note vend.
-  { fig: "0 %", label: "de commission *, vous payez l'abonnement, rien d'autre" },
-  { fig: "Vos prix", label: "ceux de votre carte, sans marge de plateforme à absorber" },
-  { fig: "1 ligne", label: "à coller sur le site que vous avez déjà" },
-] as const;
-
-/**
- * LE POINT DE CONVERGENCE — la seule phrase que les deux voies partagent.
- *
- * « Jusqu'à 30 % » et non « 30 % » : les taux varient selon le contrat et selon
- * qu'il s'agit de livraison ou de retrait. Annoncer un taux ferme qu'on n'a pas
- * vérifié, c'est offrir à un restaurateur l'occasion de nous corriger — et de
- * douter du reste. La force de l'argument ne vient pas du taux, elle vient de ce
- * qu'il devient : zéro.
- */
-export const REVENUE_PAYOFF = {
-  title: "Reprenez la main sur votre marge.",
-  line: "Sur les plateformes, on va chercher le volume qui vous manque. En direct, on va chercher la commission que vous payez déjà — jusqu'à 30 % du ticket, ramenés à zéro.",
-} as const;
-
-/**
- * L'OUVERTURE DU TROISIÈME ACTE — commun aux deux voies.
- *
- * La marge reprise, la question suivante n'est plus « comment garder plus », mais
- * « comment faire tourner ce qui est déjà là ». Une cuisine de snack tourne deux
- * services par jour et dort le reste du temps : c'est l'actif sous-employé que
- * l'enseigne vient charger.
- */
-export const BRAND_INTRO = {
-  kicker: "On ajoute",
-  title: "Et si votre cuisine tournait deux fois ?",
-  line: "Une deuxième enseigne, livrée clé en main, dans les murs et l'équipe que vous avez déjà.",
-} as const;
-
-/**
- * LA NOTE DE BAS DE SECTION — l'astérisque du « 0 % ».
- *
- * Elle dit les DEUX choses qu'un restaurateur découvrirait autrement sur son
- * relevé, et un mensonge par omission au premier relevé coûte le client entier :
- *   · les frais d'encaissement carte, qui ne sont pas les nôtres et qu'il paierait
- *     avec n'importe quel encaissement en ligne ;
- *   · la portée exacte des 8 %.
- *
- * « environ 1,5 % » et non un taux ferme : le taux dépend du prestataire de
- * paiement et de la carte présentée, et nous ne le fixons pas.
- */
-export const REVENUE_FOOTNOTE =
-  "* Aucune commission sur vos ventes. Seuls s'appliquent les frais d'encaissement de votre prestataire de paiement — environ 1,5 % par transaction carte — que vous régleriez avec n'importe quelle solution de paiement en ligne. La commission de 8 % ne concerne que les ventes réalisées sous une enseigne Snack Manager.";
-
-/* ── Catalogue app par app ───────────────────────────────────── */
+/* ── 3. Produit — le catalogue, en légende sous chaque cadre ──── */
 
 export type CatalogueColumn = {
   name: string;
   device: string;
-  /** `demo` pointe vers l'index de la scène 3D. */
+  /** `demo` pointe vers l'index de la scène 3D (`DEMO_APPS`). */
   demo: number;
-  demoLabel: string;
   items: { pre?: string; strong?: string; post?: string }[];
 };
 
 /**
- * SEPT LIGNES PAR COLONNE, PAS HUIT — ET C'EST UNE CONTRAINTE, PAS UN HASARD.
+ * CINQ LIGNES PAR COLONNE, ET C'EST LE CHANGEMENT DE MÉTIER DE CE TABLEAU.
  *
- * Le back-office a gagné des surfaces entières (planning, ingrédients &
- * stocks, abonnement) qu'il fallait faire entrer ici. « Ne rallonge pas la
- * page » : chaque colonne a donc été resserrée d'une ligne, et les lignes
- * jumelles ont fusionné (minuteur + alerte sonore, totaux + moyens de
- * paiement). Le catalogue dit plus de choses en occupant moins de hauteur.
+ * Il était une SECTION posée AU-DESSUS de sa preuve : un inventaire avant la
+ * démonstration est une plaquette. Il devient la LÉGENDE sous le cadre de
+ * l'application correspondante — le même inventaire, mais on peut vérifier
+ * chaque ligne au doigt dans les trente secondes qui suivent.
  *
- * La grille est à QUATRE colonnes en dur (`.cat-grid`), et `demo:` pointe un
- * index de `DEMO_APPS` : on ne peut ni ajouter une cinquième colonne « RH &
- * stocks », ni réordonner sans casser le lien vers la scène de démonstration.
- * Les nouvelles surfaces vivent donc dans la colonne du gérant.
+ * D'où la coupe de sept lignes à cinq : on ne garde que ce qui se VÉRIFIE au
+ * clic. Deux idées rescapées de Platform y sont versées, faute d'exister
+ * ailleurs : la prise de commande par téléphone (colonne Caisse) et la
+ * fidélité points/tampons (colonne Commande en ligne).
+ *
+ * La grille est à QUATRE colonnes en dur et `demo:` pointe un index de
+ * `DEMO_APPS` : on ne réordonne pas sans casser le lien vers la scène.
  */
 export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Caisse (POS)",
     device: "Tablette, au comptoir",
     demo: 0,
-    demoLabel: "Essayer la caisse en démo →",
     items: [
       { strong: "Sur place, à emporter, téléphone", post: " — même écran" },
-      { pre: "Config express : recette, sauces, tailles, suppléments" },
       { pre: "Tacos sur-mesure, passage en menu (+2,50 €) en un tap" },
       { pre: "Totaux, rendu monnaie, CB / espèces / au retrait" },
       { strong: "Ticket cuisine + sticker sac", post: " imprimés" },
-      { pre: "Lignes identiques cumulées, note par produit" },
       { pre: "Appairage par code à six caractères, révocable" },
     ],
   },
@@ -446,14 +252,11 @@ export const CATALOGUE: CatalogueColumn[] = [
     name: "Cuisine (KDS)",
     device: "Mural en cuisine, ou tablette",
     demo: 1,
-    demoLabel: "Essayer la cuisine en démo →",
     items: [
       { pre: "Colonnes ", strong: "Nouveau → En prépa → Prêt" },
       { pre: "« À lancer » agrégé : 3 frites, 2 tacos… en un coup d'œil" },
       { pre: "Minuteur couleur par commande, alerte sonore" },
-      { pre: "Chaque article cochable pendant la prépa" },
       { pre: "Numéro de retrait pour appeler le client" },
-      { pre: "Thème sombre ou clair, pensé pour la cuisine" },
       { strong: "Mode hors-ligne", post: " avec resynchronisation" },
     ],
   },
@@ -461,14 +264,11 @@ export const CATALOGUE: CatalogueColumn[] = [
     name: "Commande en ligne",
     device: "Web, mobile first",
     demo: 2,
-    demoLabel: "Essayer la commande en démo →",
     items: [
       { strong: "Click & collect", post: " avec créneaux de retrait" },
       { pre: "Paiement en ligne ou au retrait" },
       { pre: "Configurateur identique à la caisse — zéro surprise" },
-      { pre: "Codes promo, fidélité points & tampons" },
-      { pre: "Compte client, historique, recommande en 1 tap" },
-      { pre: "Suivi de commande en direct (reçue → prête)" },
+      { pre: "Codes promo, ", strong: "fidélité points & tampons" },
       { strong: "À vos couleurs", post: ", sur votre nom de domaine" },
     ],
   },
@@ -476,22 +276,19 @@ export const CATALOGUE: CatalogueColumn[] = [
     name: "Back-office",
     device: "Web, côté gérant — 14 écrans",
     demo: 3,
-    demoLabel: "Essayer le back-office en démo →",
     items: [
       { strong: "CA, commandes et stats", post: " en direct, exports CSV" },
-      { pre: "Menu & prix en direct, import CSV/XML, ruptures en un tap" },
-      // La ligne qui vaut la section : le planning fait DÉCIDER une dépense
+      { pre: "Menu & prix en direct, ruptures en un tap" },
+      // La ligne qui vaut la colonne : le planning fait DÉCIDER une dépense
       // au lieu de la constater. Le coût bouge à chaque service posé.
       { pre: "Planning : ", strong: "le coût de la semaine bouge pendant que vous la posez" },
-      { pre: "Volume attendu en face de chaque service, ", strong: "prévu contre pointé" },
       { strong: "Ingrédients & stocks", post: " : seuils, ruptures, pertes, inventaires" },
-      { pre: "Fournisseurs, prix au colis, ", strong: "coût matière et marge par produit" },
-      { pre: "Horaires, promos, avis clients, ", strong: "abonnement & factures" },
+      { pre: "Fournisseurs, ", strong: "coût matière et marge par produit" },
     ],
   },
 ];
 
-/* ── Scène de démonstration 3D ───────────────────────────────── */
+/* ── 3. Produit — la scène de démonstration ──────────────────── */
 
 /**
  * Châssis dans lequel l'application est présentée. C'est l'appareil RÉEL du
@@ -552,13 +349,18 @@ export const DEVICE_SCREEN: Record<DemoDevice, { w: number; h: number }> = {
 /**
  * Origines des applications DE TERRAIN embarquées dans la vitrine.
  *
- * Aujourd'hui STAGING : ce sont les seules URL où le mode démonstration est
- * déployé. Le jour où les domaines de production sont à jour, on remplace les
- * deux valeurs ici et rien d'autre ne bouge.
+ * PRODUCTION, et ce n'est plus un détail d'exploitation : toute la page repose
+ * désormais sur ces adresses. Elles pointaient sur des déploiements de STAGING
+ * (`pos-staging-7f92`, `kds-staging-90da`) — un cadre blanc en troisième
+ * section détruit la page entière, là où seize autres sections continuaient
+ * hier de vendre sans que personne s'en aperçoive.
+ *
+ * Corollaire à assumer côté exploitation : ces démonstrations sont un SERVICE
+ * à surveiller, pas une image qu'on dépose et qu'on oublie.
  */
 export const DEMO_ORIGINS = {
-  pos: "https://pos-staging-7f92.up.railway.app",
-  kds: "https://kds-staging-90da.up.railway.app",
+  pos: "https://pos-production-a9d8.up.railway.app",
+  kds: "https://kds-production-8991.up.railway.app",
 } as const;
 
 /**
@@ -655,7 +457,6 @@ export type DemoApp = {
   shot: Shot;
   lead: string;
   body: string;
-  chips: string[];
   live?: DemoLive;
 };
 
@@ -670,7 +471,7 @@ export type DemoApp = {
  *
  * L'ordre suit ensuite le trajet d'une commande — caisse, cuisine, commande
  * client — et finit par le poste du gérant. C'est aussi l'ordre des colonnes
- * du catalogue ci-dessus ; les `demo:` de `CATALOGUE` pointent ces index.
+ * de `CATALOGUE` ci-dessus ; ses `demo:` pointent ces index.
  */
 export const DEMO_APPS: DemoApp[] = [
   {
@@ -680,7 +481,6 @@ export const DEMO_APPS: DemoApp[] = [
     shot: { src: "/shots/pos.png", alt: "Caisse : catalogue, configurateur produit et ticket en cours" },
     lead: "Caisse.",
     body: " Menus cadrés, totaux automatiques, ticket cuisine et sticker sac imprimés — prise en main en une heure, même pour une nouvelle recrue.",
-    chips: ["Config express", "Ticket + sticker sac", "Sur place & téléphone"],
     live: {
       href: demoHref(DEMO_ORIGINS.pos),
       cta: "Essayer la caisse",
@@ -699,7 +499,6 @@ export const DEMO_APPS: DemoApp[] = [
     shot: { src: "/shots/kds.png", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
     lead: "Cuisine.",
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
-    chips: ["À lancer agrégé", "Minuteurs couleur", "Alerte sonore"],
     live: {
       href: demoHref(DEMO_ORIGINS.kds),
       cta: "Essayer l'écran cuisine",
@@ -715,7 +514,6 @@ export const DEMO_APPS: DemoApp[] = [
     shot: { src: "/shots/commande.png", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
     lead: "Commande en ligne.",
     body: " Le client commande et paie — le ticket file droit en cuisine, déjà encaissé. La caisse ne fait que remettre le sac.",
-    chips: ["Créneaux de retrait", "Fidélité & promos", "Paiement en ligne"],
     live: {
       href: DEMO_PATHS.order,
       cta: "Essayer la commande en ligne",
@@ -731,7 +529,6 @@ export const DEMO_APPS: DemoApp[] = [
     shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
     lead: "Back-office gérant.",
     body: " Quatorze écrans : CA du jour, menu & prix en direct, planning dont le coût s'affiche avant que vous validiez, stocks et coût matière, factures.",
-    chips: ["Planning & coût projeté", "Stocks & coût matière", "Abonnement & factures"],
     live: {
       href: DEMO_PATHS.bo,
       cta: "Essayer le back-office",
@@ -744,157 +541,461 @@ export const DEMO_APPS: DemoApp[] = [
   },
 ];
 
-/* ── Cas client (avant / après) ──────────────────────────────── */
+/**
+ * L'APPLICATION QUI RESTE MANIPULABLE SOUS 810 px, ET C'EST LA SEULE.
+ *
+ * Le hero promet un geste (« Prendre une commande en démo ») ; sous le seuil
+ * étroit, `AppsShowcase` démontait TOUTE iframe et la promesse tombait sur
+ * l'appareil que le prospect tient dans la main. Or la commande client est
+ * dessinée pour 390 px — et c'est en plus la seule des quatre que les clients
+ * du restaurateur utiliseront vraiment.
+ *
+ * On ouvre donc la scène sur elle en dessous du seuil, et on l'épargne du
+ * démontage. Les trois autres gardent l'affiche et « Ouvrir en plein écran » :
+ * une caisse de 1280 px réduite dans 340 px n'est pas une démonstration, c'est
+ * une vignette illisible.
+ */
+export const DEMO_MOBILE_ID = "order";
 
-export const CASE_SLIDES = [
+/**
+ * LE REPLI, ET IL N'EST PAS NÉGOCIABLE.
+ *
+ * Si le cadre ne charge pas — origine tombée, réseau coupé, iframe bloquée par
+ * le navigateur — on affiche la capture de `public/shots` avec CETTE mention.
+ * Jamais un cadre blanc : un cadre blanc, sur la section dont dépend toute la
+ * page, se lit comme un produit qui n'existe pas.
+ */
+export const DEMO_FALLBACK = "La démonstration ne répond pas — voici l'écran réel.";
+
+/**
+ * LA SIGNATURE DU PILOTE, EN PIED DE DÉMONSTRATION — une ligne, pas une
+ * section.
+ *
+ * Founder est en dixième position sur onze : sans elle, le visiteur défile
+ * cinq mille pixels sans une preuve d'existence. L'EXISTENCE du pilote est
+ * donc affirmée ici, au troisième écran ; sa VOIX reste en section 10, à
+ * l'endroit où l'on se demande à qui on donne son numéro.
+ */
+export const PILOTE_SIGNATURE =
+  "Ce que vous venez de manipuler tourne à Class'Food, Perriers-sur-Andelle, midi et soir, 7 j/7.";
+
+/* ── 4. Commander — les trois canaux directs ─────────────────── */
+
+/**
+ * TROIS RANGÉES, ET LA FICHE GOOGLE EN TÊTE.
+ *
+ * C'est le meilleur argument de la page, et il n'y était pas : les plateformes
+ * posent automatiquement leur lien de commande sur la fiche Google du
+ * restaurant. Le restaurateur, lui, connaît sa fiche par cœur — c'est par là
+ * que ses clients le trouvent.
+ *
+ * VÉRIFIÉ CONTRE LA DOCUMENTATION GOOGLE (support.google.com/business/
+ * answer/10842217, consultée le 20/08/2026), et on n'écrit rien de plus que ce
+ * qu'elle dit : un établissement peut ajouter ses propres liens de commande,
+ * les marquer comme préférés pour le retrait et pour la livraison, et demander
+ * le retrait des liens tiers — les fournisseurs ont alors cinq jours ouvrés
+ * pour s'exécuter. On ne promet donc PAS de « faire disparaître Uber Eats de
+ * votre fiche » : ce n'est pas nous qui l'exécutons, c'est Google.
+ *
+ * Ce n'est pas non plus une troisième colonne d'une grille à trois colonnes :
+ * ce sont des RANGÉES pleine largeur, la première la plus haute. Une carte
+ * parmi trois cartes fait de l'argument un élément de liste.
+ */
+export const ORDER_CHANNELS = [
   {
-    title: "Avant Snack Manager",
-    text: "Tickets papier, un poste en plus aux heures de rush, des commandes en ligne à gérer à côté du comptoir.",
+    id: "google",
+    title: "Votre fiche Google",
+    line: "Le bouton « Commander » de votre fiche peut pointer chez vous, marqué « préféré par l'établissement » — et vous pouvez demander le retrait des liens des plateformes. On fait la démarche avec vous.",
   },
   {
-    title: "Avec Snack Manager",
-    text: "Un service organisé, une équipe mieux répartie, et un gain de temps qui se voit dès la première semaine.",
+    id: "page",
+    title: "Votre page de commande",
+    line: "Active dès l'ouverture du compte, à vos couleurs. Vous avez déjà un nom de domaine ? La même page répond dessus.",
+  },
+  {
+    id: "module",
+    title: "Le module dans le site que vous avez déjà",
+    line: "Une balise à coller pour brancher le bouton « Commander » — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
   },
 ] as const;
 
-/** Photos réelles du restaurant pilote (apps/web/public/photos). */
-export const CASE_PHOTOS: Shot[] = [
-  { src: "/photos/sandwichs1.jpeg", alt: "La carte papier des sandwichs, affichée au-dessus du comptoir du restaurant pilote" },
-  { src: "/photos/tacos.jpeg", alt: "Le panneau « Compose ton tacos » et sa grille de suppléments, au mur du restaurant" },
-  { src: "/photos/tacos-gratine-hero.png", alt: "Le tacos gratiné, produit signature du restaurant pilote Class'Food" },
-];
+/**
+ * LA CLAUSE D'HONNÊTETÉ, EN PIED DE SECTION.
+ *
+ * Le tunnel va du panier au créneau de retrait (`components/order/Checkout`) :
+ * c'est du click & collect, et NOUS NE FOURNISSONS AUCUN LIVREUR. On le dit
+ * ici, à l'endroit exact où le lecteur vient de comprendre qu'il peut reprendre
+ * son volume aux plateformes — c'est là et nulle part ailleurs qu'il se demande
+ * qui va porter les sacs.
+ *
+ * Ce n'est pas une pastille de fonctionnalité : une pastille se lit comme
+ * quelque chose qu'on fournit.
+ */
+export const DIRECT_DELIVERY = {
+  lead: "Vous livrez ?",
+  line: "Vous continuez comme aujourd'hui — vos tournées, vos horaires. Personne ne s'intercale entre votre cuisine et votre client.",
+} as const;
 
-/* ── Vignettes du quotidien ──────────────────────────────────── */
+/* ── 5. Matériel — ce qu'on ne rachète pas ───────────────────── */
 
-export const VIGNETTES: { tag: string; quote: string; photo: Shot }[] = [
-  {
-    tag: "Vendredi 20h",
-    quote: "« Les commandes griffonnées au stylo que la cuisine doit déchiffrer en plein coup de feu. »",
-    photo: { src: "/photos/classiques.jpeg", alt: "Le panneau des burgers, affiché au-dessus du comptoir du restaurant pilote" },
-  },
-  {
-    tag: "Dimanche midi",
-    quote: "« Une personne en plus juste pour gérer les commandes en ligne à côté du comptoir. »",
-    photo: { src: "/photos/paninis.jpeg", alt: "Le panneau des assiettes et des paninis, au mur du restaurant pilote" },
-  },
-  {
-    tag: "Fin de mois",
-    quote: "« Recompter les heures de l'équipe à la main pour sortir les plannings du mois. »",
-    photo: { src: "/photos/salades-barquettes.jpeg", alt: "Le panneau des salades et des barquettes de frites, au-dessus du comptoir" },
-  },
-  {
-    tag: "Nouvelle recrue",
-    quote: "« À chaque départ, des jours de formation juste pour que la nouvelle personne tienne la caisse. »",
-    photo: { src: "/photos/enfant-glaces.jpeg", alt: "Le panneau menu enfant, glaces et desserts, au-dessus des friteuses" },
-  },
-];
-
-/* ── Né au comptoir ──────────────────────────────────────────── */
-
-export const FOUNDER_QUOTE =
-  "« Snack Manager est né derrière le comptoir de notre restaurant pilote. Tickets perdus en plein rush, téléphone qui sonne pendant l'encaissement, heures recomptées à la main : on a vécu chaque problème avant de l'automatiser. Chaque écran de la plateforme est testé en service réel, midi et soir, avant d'arriver chez vous. »";
-
-export const FOUNDER_PHOTO: Shot = {
-  src: "/photos/sandwichs3.jpeg",
-  alt: "Le panneau des kebabs et des sandwichs, au-dessus du comptoir du restaurant pilote Class'Food",
+export type HardwareItem = {
+  /** Sert à choisir le pictogramme dans `icons.tsx` — aucun emoji, la charte ne bouge pas. */
+  id: "tablette" | "imprimante" | "ecran" | "reseau";
+  label: string;
+  /** SIX MOTS. Pas une phrase de brochure, pas deux lignes : six mots. */
+  line: string;
 };
 
-export const FOUNDER_FACTS = ["Testé en service réel 7 j/7", "Rodé sur de vrais rushs", "Amélioré chaque semaine"] as const;
-
-/* ── Comparatif ──────────────────────────────────────────────── */
-
-export const VS_WITHOUT = [
-  "Plusieurs outils qui ne se parlent pas",
-  "Commandes au stylo, totaux calculés de tête",
-  "Des jours de formation à chaque recrue",
-  // La ligne du planning : sans outil, la masse salariale est CONSTATÉE.
-  "Masse salariale découverte en fin de mois",
-  "Site figé, pas de click & collect",
+/**
+ * QUATRE PICTOGRAMMES, QUATRE LIGNES, ZÉRO PROSE.
+ *
+ * « Est-ce que ça marche chez MOI ? » est la question qui bloque le plus, et
+ * la page n'y répondait qu'en sixième et huitième position d'un accordéon.
+ * Elle est PROMUE hors de la FAQ, juste après la démonstration : la question se
+ * pose exactement une fois dans le parcours, à cet endroit-là.
+ *
+ * C'est aussi la respiration la plus courte de la page, posée juste avant la
+ * plus commerciale. Toute phrase ajoutée ici la détruit.
+ */
+export const HARDWARE: readonly HardwareItem[] = [
+  { id: "tablette", label: "Tablette Android ou iPad", line: "Le vôtre. Aucun matériel propriétaire." },
+  { id: "imprimante", label: "Imprimante ticket 80 mm", line: "En réseau. Ticket cuisine et sticker." },
+  { id: "ecran", label: "Écran cuisine", line: "Une TV ou un moniteur mural." },
+  { id: "reseau", label: "Connexion internet", line: "Une box suffit. Fibre non requise." },
 ] as const;
 
-export const VS_WITH = [
-  "Une seule plateforme, tout connecté",
-  "Menus cadrés, totaux automatiques, ticket + sticker sac",
-  "Caisse prise en main en une heure",
-  "Coût de la semaine et volume attendu, avant de valider",
-  "Site & commande en ligne à vos couleurs",
+/**
+ * LE HORS-LIGNE — un demi-titre, pas une cinquième ligne.
+ *
+ * C'est notre vrai différenciant, il est implémenté (voir la colonne Cuisine de
+ * `CATALOGUE`), et il était absent du hero, de Platform et du comparatif. Le
+ * ranger dans une pastille de fonctionnalité serait le gâcher.
+ */
+export const HARDWARE_OFFLINE = {
+  lead: "Et si le réseau tombe ?",
+  line: "La caisse et la cuisine continuent en local : les tickets restent affichés et s'impriment. Tout se resynchronise au retour du réseau.",
+} as const;
+
+/* ── 6. Tarifs — les commissions, puis la grille ─────────────── */
+
+/**
+ * LE TABLEAU DES COMMISSIONS, EN TÊTE DE SECTION — trois lignes, et AUCUNE
+ * phrase de plaidoyer autour. L'adjacence fait tout le travail.
+ *
+ * « Jusqu'à 30 % » et non « 30 % » : les taux varient selon le contrat et selon
+ * qu'il s'agit de livraison ou de retrait. Annoncer un taux ferme qu'on n'a pas
+ * vérifié, c'est offrir à un restaurateur l'occasion de nous corriger — et de
+ * douter du reste.
+ *
+ * La troisième ligne est l'ancienne note de bas de section. L'AFFICHER
+ * NOUS-MÊMES, au même rang que les deux autres, prouve qu'on ne dissimule
+ * rien : un restaurateur qui compare 1,5 % à 30 % se convainc tout seul. Une
+ * note qu'on soupçonne d'être cachée vend contre nous.
+ */
+export const COMMISSIONS = [
+  { who: "Snack Manager", rate: "0 %", note: "un abonnement mensuel, rien de prélevé sur vos commandes" },
+  { who: "Les plateformes", rate: "jusqu'à 30 %", note: "sur chaque commande livrée, et le client reste le leur" },
+  { who: "Encaissement carte", rate: "≈ 1,5 %", note: "votre prestataire de paiement — cet argent ne nous revient pas" },
 ] as const;
 
-/* ── Tarifs ──────────────────────────────────────────────────── */
+/**
+ * LA LISTE DE MODULES EST UNIQUE, ET C'EST TOUTE LA REFONTE DE LA GRILLE.
+ *
+ * Les trois colonnes portaient des listes CUMULATIVES (« Tout Starter,
+ * plus : ») de quatre, cinq et trois lignes : le lecteur comparait des listes
+ * de longueurs différentes et devait reconstruire de tête ce que chacune
+ * contenait. Il lit désormais la MÊME liste trois fois, avec une pastille
+ * pleine ou vide par ligne. Il n'a plus qu'une chose à trouver : où s'arrête
+ * sa colonne.
+ */
+export type PlanModule = { id: string; label: string };
+
+export const PLAN_MODULES: readonly PlanModule[] = [
+  { id: "pos", label: "Caisse (POS)" },
+  { id: "kds", label: "Écran cuisine (KDS)" },
+  { id: "print", label: "Ticket cuisine & sticker sac" },
+  { id: "offline", label: "Mode hors-ligne" },
+  { id: "bo", label: "Back-office : CA, commandes, exports CSV" },
+  { id: "menu", label: "Menu & prix en direct" },
+  { id: "planning", label: "Planning, pointage & coût de la semaine" },
+  { id: "stocks", label: "Ingrédients, stocks & coût matière" },
+  { id: "online", label: "Commande en ligne & click and collect" },
+  { id: "loyalty", label: "Fidélité, codes promo & comptes clients" },
+  { id: "priority", label: "Support prioritaire" },
+] as const;
 
 export type Plan = {
+  id: string;
   name: string;
+  /** Le PRIX, affiché. Plus jamais « Sur devis ». */
   price: string;
+  period: string;
   desc: string;
-  featLabel: string;
-  features: string[];
+  /** Les `id` de `PLAN_MODULES` inclus dans la formule. */
+  modules: readonly string[];
   popular?: boolean;
 };
 
+/**
+ * TROIS PRIX AFFICHÉS, ET « MULTI-SITES » QUITTE LA GRILLE.
+ *
+ * Les trois « Sur devis » forçaient la conversation ; combinés à « 7 places
+ * restantes », ils produisaient de la pression sans information — exactement
+ * le contraire de la confiance que la page passe dix sections à construire.
+ * Le coût est assumé : un prospect peut s'auto-éliminer sans nous parler, et
+ * un concurrent lit notre grille en trente secondes.
+ *
+ * « Multi-sites » sort parce que nous n'avons pas un client, encore moins un
+ * groupe. Un exploitant à trois adresses ne voit plus rien qui lui soit
+ * adressé, et c'est honnête.
+ */
 export const PLANS: Plan[] = [
   {
-    name: "Starter",
-    price: "Sur devis",
-    desc: "Idéal pour un point de vente qui démarre avec l'automatisation.",
-    featLabel: "Inclus :",
-    features: ["App Cuisine (KDS)", "Caisse (POS)", "Ticket & sticker imprimés", "Support par email"],
+    id: "essentiel",
+    name: "Essentiel",
+    price: "89 €",
+    period: "par mois",
+    desc: "La caisse, la cuisine et le back-office. De quoi tenir un service.",
+    modules: ["pos", "kds", "print", "offline", "bo", "menu"],
   },
   {
-    name: "Pro",
-    price: "Sur devis",
-    desc: "Le plus choisi : la plateforme complète, site inclus.",
-    featLabel: "Tout Starter, plus :",
-    features: [
-      "Site & commande en ligne",
-      "Fidélité & codes promo",
-      "Planning, pointage & coût de la semaine",
-      "Ingrédients, stocks & coût matière",
-      "Support prioritaire",
-    ],
+    id: "complet",
+    name: "Complet",
+    price: "139 €",
+    period: "par mois",
+    desc: "Tout l'Essentiel, plus ce qui fait décider : le planning et le coût matière.",
+    modules: ["pos", "kds", "print", "offline", "bo", "menu", "planning", "stocks"],
     popular: true,
   },
   {
-    name: "Multi-sites",
-    price: "Sur devis",
-    desc: "Pour les groupes de plusieurs restaurants.",
-    featLabel: "Tout Pro, plus :",
-    features: ["Tableau de bord multi-sites", "Compte dédié", "Accompagnement sur mesure"],
+    id: "boost",
+    name: "Boost",
+    price: "189 €",
+    period: "par mois",
+    desc: "Tout, commande en ligne comprise. Vos clients commandent chez vous.",
+    modules: [
+      "pos",
+      "kds",
+      "print",
+      "offline",
+      "bo",
+      "menu",
+      "planning",
+      "stocks",
+      "online",
+      "loyalty",
+      "priority",
+    ],
   },
 ];
 
-/* ── FAQ ─────────────────────────────────────────────────────── */
+/**
+ * LE MODULE VENDU À PART, ET SON LIBELLÉ EST UNE DÉCISION.
+ *
+ * Il s'affiche « Commande en ligne & click and collect », JAMAIS
+ * « Livraison » : le mot Livraison en face d'un prix se lit comme un livreur
+ * qu'on facture, et nous ne fournissons aucun livreur.
+ */
+export const MODULE_ADDON = {
+  name: "Commande en ligne & click and collect",
+  price: "79 € par mois",
+  line: "Se branche sur Essentiel ou sur Complet. Déjà inclus dans Boost.",
+} as const;
 
+/**
+ * L'ADDITION, ÉCRITE FRANCHEMENT — on ne la laisse pas découvrir.
+ *
+ * Complet + le module font 218 €, Boost en coûte 189 : vingt-neuf euros de
+ * moins. Un prospect qui fait ce calcul tout seul après avoir lu la grille se
+ * demande pourquoi on ne le lui a pas dit. Quatre nombres, tous les nôtres,
+ * aucune hypothèse de marché : l'addition est désamorcée avant d'être faite.
+ */
+export const PRICING_MATH = {
+  left: "Complet 139 € + le module 79 €",
+  sum: "218 €",
+  right: "Boost",
+  boost: "189 €",
+  save: "− 29 €",
+  line: "Au-delà du Complet, Boost coûte 29 € de moins que le Complet plus le module.",
+} as const;
+
+/**
+ * L'ASTÉRISQUE DU « 0 % », en note discrète sous la grille.
+ *
+ * Elle dit la chose qu'un restaurateur découvrirait autrement sur son premier
+ * relevé, et un mensonge par omission au premier relevé coûte le client entier.
+ * « Environ 1,5 % » et non un taux ferme : il dépend du prestataire de paiement
+ * et de la carte présentée, et nous ne le fixons pas.
+ */
+export const PRICING_FOOTNOTE =
+  "* Aucune commission sur vos ventes. Seuls s'appliquent les frais d'encaissement de votre prestataire de paiement — environ 1,5 % par transaction carte — que vous régleriez avec n'importe quelle solution de paiement en ligne.";
+
+/* ── 7. Le calcul — simulateur ───────────────────────────────── */
+
+/**
+ * LES DEUX LIGNES AU-DESSUS DES CURSEURS — ce qui reste d'Intro.
+ *
+ * La phrase la plus forte de la page était posée seule sur un filigrane géant,
+ * sans une preuve à portée de regard. Elle devient l'affirmation immédiatement
+ * suivie du calcul qui la produit.
+ *
+ * DEUX MOTS SONT TOMBÉS, ET CHACUN POUR SA RAISON. « Parfois deux » ne sort
+ * d'aucun calcul et n'a été constaté chez personne. « On enlève un poste » est
+ * écarté délibérément : chez un patron de snack, ce poste c'est souvent sa
+ * belle-sœur au comptoir, et « enlever un poste » sonne comme un consultant qui
+ * vient conseiller un licenciement.
+ */
+export const SIM_LEAD = {
+  title: "On n'ajoute pas un outil.",
+  line: "On vous rend les heures que votre organisation vous prend.",
+} as const;
+
+/**
+ * L'AMORCE, RAMENÉE DE SOIXANTE MOTS À DEUX LIGNES, ses deux montants sortis
+ * en cases de chiffres — ils se lisaient noyés au milieu d'un paragraphe.
+ */
+export const SIM_ESC = {
+  line: "Une commande mal relue, c'est un plat refait. Deux par service, midi et soir, 7 j/7.",
+  figures: [
+    { fig: "≈ 5,75 €", label: "le plat qu'on refait" },
+    { fig: "≈ 700 €", label: "par mois, à la poubelle" },
+  ],
+} as const;
+
+/**
+ * LES DEUX HYPOTHÈSES EXTÉRIEURES, EN CORPS DE TEXTE SOUS LES CURSEURS —
+ * jamais en nombres géants au-dessus.
+ *
+ * C'est tout ce qui survit de ProofBand, et elle était innocente du crime dont
+ * on l'accusait : c'est la seule section qui citait une source extérieure, elle
+ * ne plaidait pas. Son tort était sa POSITION — cent pixels au-dessus du
+ * simulateur, à qui elle volait ses deux chiffres. Les remonter en nombres
+ * géants ici, ce serait la reconstruire à l'intérieur de la section qui l'a
+ * exécutée.
+ *
+ * LE +15 % A QUITTÉ LE CALCUL. Il s'annonçait « bas de fourchette des études » ;
+ * vérification faite, les seules sources qui l'avancent (15 à 30 %) sont des
+ * éditeurs qui vendent la même chose que nous. Citer un vendeur pour appuyer une
+ * vente ne prouve rien. Or ce taux pesait 61 % du chiffre annuel affiché : il ne
+ * reste donc plus une seule hypothèse maison dans le total.
+ *
+ * Il ne disparaît pas pour autant — il devient `SIM_NOT_COUNTED`. Dire ce qu'on
+ * a refusé de compter persuade mieux que le montant qu'on aurait gagné à le
+ * compter : c'est le seul endroit de la page où l'on démontre une méthode au
+ * lieu d'affirmer un résultat.
+ */
+export const SIM_ASSUMPTIONS = [
+  {
+    fig: "− 35 %",
+    label: "d'erreurs de commande avec la prise en ligne",
+    source: "Deliverect, 2023",
+  },
+] as const;
+
+/**
+ * CE QU'ON A REFUSÉ DE COMPTER — et c'est un argument, pas un aveu.
+ * Le restaurateur qui lit ça vient de voir un montant ; apprendre qu'on aurait
+ * pu l'augmenter de moitié et qu'on s'en est abstenu vaut toutes les sources.
+ */
+export const SIM_NOT_COUNTED =
+  "Les éditeurs du secteur annoncent un panier en ligne supérieur de 15 à 30 %. Nous ne l'avons pas compté : ce résultat ne retient que ce qui se déduit des chiffres que vous venez de saisir.";
+
+/** Le détail des hypothèses, sous un dépliable « Nos hypothèses ». */
+export const SIM_NOTES =
+  "Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois. Aucun chiffre d'affaires additionnel n'entre dans le calcul.";
+
+/**
+ * LA PHRASE QUI RECOUD LA PAGE.
+ *
+ * C'est le SEUL endroit où une section en cite une autre, et c'est le modèle
+ * qui remplace la redondance supprimée : les sections ne se répètent plus,
+ * elles se citent. Elle est reprise à l'identique dans `CONTACT_POINTS`.
+ */
+export const SIM_CTA_NOTE = "On repart avec vos chiffres.";
+
+/* ── 8. Lancement — les jalons ───────────────────────────────── */
+
+export type Milestone = {
+  /** La DATE, et elle porte sur ce que NOUS livrons. */
+  when: string;
+  title: string;
+  /** Deux lignes, pas trois. */
+  lines: readonly [string, string];
+};
+
+/**
+ * ON DATE CE QU'ON LIVRE, JAMAIS CE QUE LE CLIENT GAGNERA.
+ *
+ * C'est la seule réponse honnête possible au « +30 % en 60 jours » du
+ * concurrent, et la seule qui tienne sans un client : une date que nous tenons
+ * SEULS ne peut être démentie que par nous. Aucun de ces quatre jalons ne
+ * dépend du marché, de la saison ou de la clientèle du restaurateur.
+ *
+ * Le fond de PROC_TEXTS survit ici — on observe, on configure, on reste — mais
+ * il change de forme : Process était écrit comme une frise et rendu comme trois
+ * cartes identiques à celles qui l'entouraient. On lui rend sa forme.
+ */
+export const MILESTONES: readonly Milestone[] = [
+  {
+    when: "Jour 1",
+    title: "La démonstration",
+    lines: ["Trente minutes, chez vous ou en visio.", "On repart avec vos chiffres du simulateur."],
+  },
+  {
+    when: "Semaine 1",
+    title: "La configuration",
+    lines: ["Menu, équipe, couleurs, moyens de paiement, imprimante.", "C'est nous qui la faisons, pas vous."],
+  },
+  {
+    when: "Jour d'ouverture",
+    title: "On est là",
+    lines: ["Midi et soir, dans votre cuisine.", "Le premier service se passe avec nous."],
+  },
+  {
+    when: "Ensuite",
+    title: "On reste",
+    lines: ["Mises à jour incluses, support, corrections.", "Vos données exportables quand vous voulez."],
+  },
+] as const;
+
+/* ── 9. FAQ ──────────────────────────────────────────────────── */
+
+/**
+ * HUIT ENTRÉES RAMENÉES À CINQ, ET L'ACCORDÉON CESSE D'ÊTRE UN PLACARD.
+ *
+ * Trois questions sont PROMUES dans leur section — matériel et hors-ligne en
+ * section 5, délai de mise en route en section 8 — parce qu'elles se posent à
+ * un endroit précis du parcours et pas à la fin. Une quatrième (« Puis-je
+ * garder mon site actuel ? ») est absorbée par la troisième rangée des canaux.
+ * La cinquième (« C'est quoi, une marque virtuelle ? ») part avec les marques
+ * blanches, reportées hors de la landing.
+ *
+ * Deux entrées neuves, et les deux disent ce qu'on préférerait taire. « Vous
+ * avez combien de clients ? » est l'objection numéro un d'un produit jeune :
+ * l'écrire nous-mêmes vaut mieux que de la laisser découvrir — c'est exactement
+ * ce que le compteur « 3 places prises » essayait de cacher. « Est-ce que vous
+ * livrez ? » ferme la porte que toute la page laisse entrouverte.
+ */
 export const FAQ = [
-  {
-    q: "Dois-je changer mon matériel de caisse ?",
-    a: "Non — la plateforme fonctionne sur tablette et téléphone standards. On vous conseille sur l'imprimante ticket/sticker si besoin.",
-  },
-  {
-    q: "Combien de temps avant d'être opérationnel ?",
-    a: "Quelques jours suffisent : configuration du menu, de l'équipe et de votre identité visuelle avant l'ouverture.",
-  },
   {
     q: "C'est adapté à quel type de restaurant ?",
     a: "Pensé pour les fast-foods et snacks indépendants — sur place, à emporter ou en click & collect.",
   },
   {
-    q: "Puis-je garder mon site actuel ?",
-    a: "Oui, on peut connecter le module commande à votre site existant ou vous fournir un site complet à vos couleurs.",
+    q: "Vous avez combien de clients ?",
+    a: "Un. Class'Food, à Perriers-sur-Andelle, en service 7 j/7 : c'est notre restaurant pilote, et chaque écran y est testé midi et soir. Nous ouvrons dix places de lancement — vous seriez parmi les dix premiers, et vous gardez votre tarif à vie.",
   },
   {
     q: "Y a-t-il un engagement de durée ?",
-    a: "On vous détaille les conditions au moment du devis, adaptées à votre activité.",
+    // La réponse d'hier (« on vous détaille les conditions au moment du devis »)
+    // contredisait le hero qui affichait « Sans engagement ». On affiche la
+    // constante, pas une reformulation : c'est ce qui garantit qu'elle ne
+    // divergera plus du bandeau tarifaire.
+    a: ENGAGEMENT,
   },
   {
-    q: "Et si la connexion internet coupe ?",
-    a: "La caisse et la cuisine continuent en local : les tickets restent affichés et s'impriment, puis tout se resynchronise au retour du réseau.",
-  },
-  {
-    q: "C'est quoi, une marque virtuelle ?",
-    // Corrigé : la réponse disait « uniquement sur Uber Eats & Deliveroo », ce
-    // qui n'est pas le modèle. L'enseigne vit d'abord sur la page de commande
-    // qu'on installe ; les plateformes sont un canal de plus, pas la condition.
-    a: "Une deuxième enseigne qui n'existe qu'en ligne, préparée dans votre cuisine avec votre équipe. Elle se vend sur votre page de commande — et sur Uber Eats ou Deliveroo aussi, si vous y êtes. On fournit le concept, les recettes, la formation et la publicité ; vous encaissez un CA que vous n'aviez pas, et la commission ne porte que sur ce que cette enseigne vend.",
+    q: "Est-ce que vous livrez ?",
+    a: "Non, et nous n'avons jamais eu l'intention de le faire. Le tunnel de commande s'arrête au créneau de retrait. La livraison, quand il y en a une, reste la vôtre — vos tournées, vos horaires.",
   },
   {
     q: "À qui appartiennent mes données ?",
@@ -902,10 +1003,92 @@ export const FAQ = [
   },
 ] as const;
 
-/* ── Contact ─────────────────────────────────────────────────── */
+/* ── 10. Le pilote — né au comptoir ──────────────────────────── */
+
+/**
+ * LA CITATION PERD SA PREMIÈRE MOITIÉ.
+ *
+ * « Tickets perdus en plein rush, téléphone qui sonne pendant l'encaissement,
+ * heures recomptées à la main » rouvrait le catalogue des douleurs pour la
+ * sixième fois. La section 2 le dit une fois pour toutes ; ce qui reste ici
+ * n'appartient qu'à cette section.
+ */
+export const FOUNDER_QUOTE =
+  "« Snack Manager est né derrière le comptoir de notre restaurant pilote. Chaque écran de la plateforme est testé en service réel, midi et soir, avant d'arriver chez vous. »";
+
+/**
+ * LES PHOTOS — UN CÂBLAGE CASSÉ, PAS UN MANQUE D'IMAGES.
+ *
+ * Sept des huit chemins référencés ici pointaient sur des fichiers ABSENTS du
+ * disque (sandwichs1.jpeg, tacos.jpeg, classiques.jpeg, paninis.jpeg,
+ * salades-barquettes.jpeg, enfant-glaces.jpeg, sandwichs3.jpeg) : trois
+ * sections rendaient sept cartouches sombres par le repli de `Photo.tsx`, sans
+ * que personne s'en aperçoive. `public/photos` contient dix-sept images
+ * réelles ; on repointe au lieu de supprimer.
+ *
+ * ATTENTION — CE QUE CES PHOTOS SONT, ET CE QU'ELLES NE SONT PAS. Ce sont les visuels de
+ * la CARTE du restaurant pilote, pas des photos de sa salle ni de son équipe.
+ * Les textes alternatifs le disent exactement, et aucune légende de composant
+ * ne doit les présenter comme une preuve d'exploitation : la preuve, c'est la
+ * commune nommée et la démonstration manipulable, pas un plat photographié.
+ */
+export const FOUNDER_PHOTO: Shot = {
+  src: "/photos/tacos-gratine-hero.png",
+  alt: "Le tacos gratiné, produit signature de la carte du restaurant pilote Class'Food",
+};
+
+/** Le collage qui accompagne la citation — deux visuels de la carte du pilote. */
+export const PILOTE_PHOTOS: Shot[] = [
+  { src: "/photos/smash-burger.png", alt: "Le smash burger de la carte du restaurant pilote Class'Food" },
+  { src: "/photos/panini-menu.png", alt: "Le panini en formule menu, sur la carte du restaurant pilote Class'Food" },
+];
+
+/**
+ * UN SEUL FAIT. Les deux autres (« Rodé sur de vrais rushs », « Amélioré chaque
+ * semaine ») sont déjà dans la citation, mot pour mot ou presque.
+ */
+export const FOUNDER_FACTS = ["Testé en service réel 7 j/7"] as const;
+
+/* ── 11. Contact ─────────────────────────────────────────────── */
 
 export const CALLBACK_SLOTS = [
   { value: "matin", label: "Plutôt le matin" },
   { value: "entre-services", label: "Entre les services (14h–18h)" },
   { value: "apres-21h", label: "Après 21h" },
 ] as const;
+
+/**
+ * LES TROIS POINTS À GAUCHE DU FORMULAIRE, compteur de places retiré.
+ *
+ * Le deuxième est repris à l'identique de `SIM_CTA_NOTE` : c'est la couture
+ * qui remplace la redondance supprimée.
+ */
+export const CONTACT_POINTS = [
+  "On vous rappelle sous 24 h ouvrées",
+  "On repart avec vos chiffres du simulateur",
+  FOUNDER_POLICY,
+] as const;
+
+/**
+ * LÀ OÙ ATTERRIT LE SERVICE À 99 € — une case à cocher, et rien d'autre.
+ *
+ * « Voulez-vous qu'on améliore vos pages Uber Eats et Deliveroo ? » n'est pas
+ * une question que le visiteur se pose sur cette page : celui qui est sur les
+ * plateformes est venu voir comment s'en affranchir, celui qui n'y est pas ne
+ * comprend pas de quoi on parle. Mais le formulaire est le seul endroit où
+ * c'est NOUS qui posons les questions — et une question qu'on pose devient
+ * légitime.
+ *
+ * SANS PRIX, SANS PROMESSE, SANS DÉLAI. Le « +30 % à 60 jours » est un chiffre
+ * de RÉSULTAT sur ZÉRO client, et c'est mot pour mot ce que le concurrent
+ * publie comme résultat observé : côte à côte, notre page se lisait comme sa
+ * copie sans sa preuve.
+ *
+ * `help` n'est pas décoratif : une case sans motif est une friction, une case
+ * avec sa phrase est une question.
+ */
+export const CONTACT_PLATFORMS = {
+  name: "platforms",
+  label: "Vous vendez déjà sur Uber Eats ou Deliveroo ?",
+  help: "On regarde vos pages avec vous pendant l'appel.",
+} as const;

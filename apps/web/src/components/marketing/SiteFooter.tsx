@@ -1,14 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import { NAV_LEFT, NAV_RIGHT } from "./content";
 import { LogoMark, SmallFillet } from "./icons";
 
-const PAGES = [
-  { href: "#produit", label: "Produit" },
-  { href: "#pourquoi", label: "Expertise" },
-  { href: "#tarifs", label: "Tarifs" },
-  { href: "#contact", label: "Contact" },
-];
+/**
+ * LA COLONNE « PAGES » EST DÉRIVÉE DE LA NAVIGATION, ELLE N'EST PLUS RECOPIÉE.
+ *
+ * Elle portait « Expertise » → `#pourquoi`, une ancre qui appartenait à
+ * Process ; le composant supprimé, le lien ne menait plus nulle part et rien
+ * ne le signalait — un défaut invisible en développement et évident en
+ * production. La dériver de `NAV_LEFT` / `NAV_RIGHT` rend ce cas impossible :
+ * une ancre qui disparaît disparaît des deux endroits à la fois.
+ *
+ * `#faq` est retirée du groupe : la colonne voisine porte déjà « Questions
+ * fréquentes », et un pied de page qui propose deux fois le même lien à dix
+ * centimètres d'écart se lit comme une erreur.
+ */
+const PAGES = [...NAV_LEFT, ...NAV_RIGHT].filter((p) => p.href !== "#faq");
 
 /**
  * Pied de page en carte, avec l'onglet-encoche du logo posé sur son bord haut

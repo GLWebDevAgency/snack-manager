@@ -24,14 +24,12 @@
   --surface-3: rgba(255, 255, 255, 0.03);
   --surface-6: rgba(255, 255, 255, 0.06);
   --border-10: rgba(255, 255, 255, 0.1);
-  --watermark: rgba(255, 255, 255, 0.18);
   --white-30: rgba(255, 255, 255, 0.3);
   --white-50: rgba(255, 255, 255, 0.5);
   --white-70: rgba(255, 255, 255, 0.7);
   --white-80: rgba(255, 255, 255, 0.8);
   --green: #3fae4a;
   --red: #c94b3f;
-  --orange: #e0973f;
   --seam: #050505;
   --card-gradient: linear-gradient(180deg, rgba(17, 17, 17, 0.9) 0%, rgb(17, 17, 17) 100%);
   --footer-gradient: linear-gradient(
@@ -125,12 +123,6 @@ html:has(.mk) {
   line-height: 1em;
   text-wrap: balance;
 }
-.mk .h3-display {
-  font-size: 54px;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1.1em;
-}
 .mk .h4 {
   font-size: 22px;
   font-weight: 600;
@@ -170,9 +162,6 @@ html:has(.mk) {
   .mk .h2 {
     font-size: 37px;
   }
-  .mk .h3-display {
-    font-size: 43px;
-  }
 }
 @media (max-width: 809.98px) {
   .mk .h1 {
@@ -180,9 +169,6 @@ html:has(.mk) {
   }
   .mk .h2 {
     font-size: 29px;
-  }
-  .mk .h3-display {
-    font-size: 25px;
   }
   .mk .subheading {
     font-size: 16px;
@@ -280,35 +266,6 @@ html:has(.mk) {
 .mk .notch-fillet {
   display: block;
   flex-shrink: 0;
-}
-.mk .notch-tag {
-  position: absolute;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--white);
-  white-space: nowrap;
-  background: var(--black);
-}
-.mk .notch-tag.tl {
-  top: 0;
-  left: 0;
-  border-radius: 0 0 14px 0;
-}
-.mk .notch-tag.tl .fl1 {
-  position: absolute;
-  top: 0;
-  right: -18px;
-}
-.mk .notch-tag.tl .fl2 {
-  position: absolute;
-  bottom: -18px;
-  left: 0;
 }
 
 /* Photo réelle (remplace les <image-slot> de la maquette) */
@@ -548,16 +505,13 @@ html:has(.mk) {
   .mk .hero-sub {
     max-width: 400px;
   }
+  /* Les deux appels portent « Prendre une commande en démo » et « Être
+     rappelé », soit ~230 px et ~110 px de libellés que `.btn` interdit de
+     couper : sur 390 px ils débordent, on les laisse passer à la ligne. */
   .mk .hero-actions {
     margin-top: 28px;
-  }
-  /* Sur 390 px les trois gages se compressent en colonnes illisibles : on les
-     laisse passer à la ligne plutôt que de rétrécir chaque libellé. */
-  .mk .hero-trust {
     flex-wrap: wrap;
     justify-content: center;
-    gap: 6px 10px;
-    font-size: 12px;
   }
 }
 
@@ -641,21 +595,10 @@ html:has(.mk) {
   }
 }
 
-/* Hero — bandeau de confiance + chips « en direct » */
-.mk .hero-trust {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 22px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.72);
-}
-.mk .hero-trust i {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
-}
+/* Hero — chips « en direct » (la rangée de gages est partie avec ses trois
+   pastilles : l'engagement se dit sous la grille tarifaire et dans la FAQ, le
+   délai d'installation est la frise du lancement, le service réel est la
+   section du pilote). */
 .mk .hero-live {
   position: absolute;
   right: 44px;
@@ -769,203 +712,7 @@ html:has(.mk) {
   }
 }
 
-/* ===== Bandeau de fonctionnalités (encoche basse) ===== */
-.mk .ticker-wrap {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  height: 52px;
-  margin-top: -75px;
-  margin-bottom: 23px;
-  pointer-events: none;
-}
-.mk .ticker-shoulder {
-  line-height: 0;
-  transform: scaleY(-1);
-}
-.mk .ticker-mid {
-  width: 330px;
-  height: 100%;
-  background: var(--black);
-  overflow: hidden;
-  mask-image: linear-gradient(to right, transparent 0%, black 12.5%, black 87.5%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12.5%, black 87.5%, transparent 100%);
-}
-.mk .ticker-track {
-  display: flex;
-  gap: 34px;
-  height: 100%;
-  align-items: center;
-  width: max-content;
-  animation: sm-ticker-scroll 16s linear infinite;
-}
-.mk .ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--white-70);
-  white-space: nowrap;
-}
-.mk .ticker-item .td {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--green);
-  flex-shrink: 0;
-}
-@keyframes sm-ticker-scroll {
-  to {
-    transform: translateX(-50%);
-  }
-}
-@media (max-width: 809.98px) {
-  .mk .ticker-wrap {
-    height: 44px;
-    margin-top: -67px;
-  }
-  .mk .ticker-mid {
-    width: 200px;
-  }
-  .mk .ticker-shoulder svg {
-    width: 56px;
-    height: 22px;
-  }
-}
-
-/* ===== Intro (filigrane géant) ===== */
-.mk .intro {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 180px var(--section-pad-x);
-  overflow: hidden;
-}
-.mk .intro-watermark {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  font-size: min(28vw, 320px);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--watermark);
-  opacity: 0.9;
-  white-space: nowrap;
-  pointer-events: none;
-  user-select: none;
-}
-.mk .intro-heading {
-  position: relative;
-  z-index: 2;
-  max-width: 800px;
-  text-align: center;
-  text-wrap: balance;
-  background-image: linear-gradient(0deg, var(--gray) 0%, var(--white) 84%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-}
-@media (max-width: 1199.98px) {
-  .mk .intro {
-    padding: 140px var(--section-pad-x);
-  }
-}
-@media (max-width: 809.98px) {
-  .mk .intro {
-    padding: 90px var(--section-pad-x);
-  }
-}
-
-/* ===== Bandeau preuve ===== */
-.mk .proof-band {
-  display: flex;
-  justify-content: center;
-  padding: 0 40px 84px;
-  background: var(--black);
-}
-.mk .proof-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  width: 100%;
-  max-width: var(--content-width);
-  border: 1px solid var(--surface-6);
-  border-radius: 16px;
-  background: var(--card-gradient);
-  overflow: hidden;
-}
-.mk .proof-item {
-  padding: 28px 26px;
-  border-left: 1px solid var(--surface-6);
-}
-.mk .proof-item:first-child {
-  border-left: 0;
-}
-.mk .proof-num {
-  font-size: 40px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.1em;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-.mk .proof-label {
-  margin-top: 6px;
-  font-size: 13.5px;
-  line-height: 1.5em;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-.mk .proof-src {
-  display: block;
-  margin-top: 7px;
-  font-size: 11px;
-  color: var(--gray);
-  opacity: 0.6;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-@media (max-width: 809.98px) {
-  .mk .proof-band {
-    padding: 0 16px 64px;
-  }
-  .mk .proof-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .mk .proof-item {
-    border-top: 1px solid var(--surface-6);
-    padding: 20px 18px;
-  }
-  .mk .proof-item:nth-child(-n + 2) {
-    border-top: 0;
-  }
-  .mk .proof-item:nth-child(odd) {
-    border-left: 0;
-  }
-  .mk .proof-num {
-    font-size: 30px;
-  }
-}
-
 /* ===== Simulateur ===== */
-.mk .sim-esc {
-  max-width: 620px;
-  text-align: center;
-  color: var(--gray);
-}
-.mk .sim-esc strong {
-  color: var(--white);
-  font-weight: 600;
-}
 .mk .sim-board {
   width: 100%;
   max-width: 1000px;
@@ -1109,14 +856,6 @@ html:has(.mk) {
   margin-top: 18px;
   align-self: flex-start;
 }
-.mk .sim-notes {
-  max-width: 1000px;
-  font-size: 12.5px;
-  line-height: 1.6em;
-  color: var(--gray);
-  opacity: 0.75;
-  text-align: center;
-}
 @media (max-width: 809.98px) {
   .mk .sim-board {
     grid-template-columns: 1fr;
@@ -1125,1010 +864,221 @@ html:has(.mk) {
     font-size: 42px;
   }
 }
-.mk .sim-flow {
-  width: 100%;
-  max-width: 1000px;
-  background: var(--card);
-  border: 1px solid var(--surface-6);
-  border-radius: 14px;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.mk .sim-flowtitle {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--white);
-}
-.mk .sim-flowsteps {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.mk .sim-flowstep {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--white-70);
-  background: var(--surface-6);
-  border-radius: 20px;
-  padding: 6px 12px;
-  white-space: nowrap;
-}
-.mk .sim-flowstep:last-child {
-  background: rgba(201, 161, 90, 0.16);
-  border: 1px solid rgba(201, 161, 90, 0.4);
-  color: var(--accent);
-}
-.mk .sim-flowarrow {
-  color: var(--gray);
-  font-size: 13px;
-}
-.mk .sim-flownote {
-  font-size: 13px;
-  line-height: 1.6em;
-  color: var(--gray);
-}
-@media (max-width: 809.98px) {
-  .mk .sim-flowsteps {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .mk .sim-flowarrow {
-    transform: rotate(90deg);
-    margin-left: 14px;
-  }
+
+/* ===== Le calcul — accroche, cases de chiffres, hypothèses =====
+ *
+ * Ce qui vient d'Intro et de ProofBand, absorbé dans la section du
+ * simulateur : les deux composants n'existent plus, leur contenu vit ici.
+ *
+ * La section tombe de ~1 400 px à ~1 150. Le gain vient des suppressions
+ * (le bloc `.sim-flow`, le paragraphe de soixante mots de `.sim-esc`) ; le gap
+ * resserré à 28 px achève de la faire respirer sans la comprimer. Le plateau
+ * de curseurs, lui, ne bouge pas : c'est le seul chiffre de résultat de la
+ * page et il doit rester manipulable au pouce.
+ */
+.mk .section.sim-section {
+  gap: 28px;
 }
 
-/* ===== Processus ===== */
-.mk .proc-section {
-  display: flex;
-  justify-content: center;
-  padding: 90px var(--section-pad-x);
-}
-.mk .proc-inner {
-  width: 100%;
-  max-width: 1120px;
-  display: flex;
-  flex-direction: column;
-  gap: 60px;
-}
-.mk .proc-head {
-  max-width: 500px;
-  align-items: flex-start !important;
-  text-align: left !important;
-}
-.mk .proc-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-.mk .proc-card {
-  position: relative;
-  border-radius: 20px;
-  background: var(--card-gradient);
-  padding: 52px 26px 30px;
-  display: flex;
-  flex-direction: column;
-}
-.mk .proc-viewport {
-  position: relative;
-  height: 288px;
-  overflow: hidden;
-  margin-bottom: 44px;
-  mask-image: linear-gradient(to bottom, #000 55%, transparent 98%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 98%);
-}
-.mk .proc-cardtext {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.mk .mock-panel {
-  border-radius: 14px;
-  padding: 1px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.28) 0%,
-    rgba(255, 255, 255, 0.07) 40%,
-    rgba(255, 255, 255, 0.04) 100%
-  );
-}
-.mk .mock-panelinner {
-  border-radius: 13px;
-  background: linear-gradient(180deg, #1b1b1b 0%, #141414 55%, #111 100%);
-  padding: 18px;
-  min-height: 330px;
-}
-.mk .mock-title {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .mock-sub {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--gray);
-  margin-top: 3px;
-}
-.mk .mock-divider {
-  height: 1px;
-  background: var(--border-10);
-  margin: 14px 0;
-}
-.mk .mock-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.mk .diag-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.mk .diag-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.mk .diag-row.dim {
-  opacity: 0.55;
-}
-.mk .icon-circle {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--surface-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--white);
-  flex-shrink: 0;
-}
-.mk .diag-col {
-  flex: 1;
-  min-width: 0;
+/* Ce qui reste d'Intro : deux lignes, plus de filigrane « ×2 ». */
+.mk .sim-lead {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-width: 720px;
+  text-align: center;
 }
-.mk .diag-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gray);
-}
-.mk .diag-value {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+.mk .sim-leadtitle {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
   color: var(--white);
 }
-.mk .diag-bar {
-  height: 3px;
-  border-radius: 2px;
-  background: var(--border-10);
-  margin-top: 6px;
-  overflow: hidden;
+.mk .sim-leadline {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+  color: var(--accent);
+  text-wrap: balance;
 }
-.mk .diag-barfill {
-  height: 100%;
-  border-radius: 2px;
-  background: var(--white);
+
+/*
+ * L'amorce n'est PAS une carte : le plateau de curseurs en est une, cent
+ * pixels plus bas, et deux cadres empilés se lisent comme une grille de
+ * plus. Une ligne, deux montants posés à côté, aucune bordure.
+ */
+.mk .sim-escbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 20px 40px;
+  max-width: 900px;
 }
-.mk .int-row {
-  padding: 12px 0;
+.mk .sim-escline {
+  flex: 0 1 380px;
+  font-size: 15px;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-wrap: pretty;
 }
-.mk .int-row + .int-row {
+.mk .sim-figs {
+  display: flex;
+  gap: 34px;
+}
+.mk .sim-fig {
+  padding-left: 14px;
+  border-left: 1px solid var(--surface-6);
+}
+.mk .sim-fignum {
+  font-size: 29px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mk .sim-figlabel {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.4em;
+  color: var(--gray);
+}
+
+/* La couture vers le formulaire, sous le bouton et non dedans. */
+.mk .sim-ctanote {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--gray);
+}
+
+/*
+ * Les hypothèses extérieures, en CORPS DE TEXTE. Le filet en tête suffit à
+ * les séparer du plateau : leur donner un cadre ou des nombres géants, ce
+ * serait reconstruire ProofBand à l'intérieur de la section qui l'a
+ * exécutée — et lui revoler ses deux chiffres.
+ */
+.mk .sim-hyp {
+  width: 100%;
+  max-width: 1000px;
+  padding-top: 18px;
   border-top: 1px solid var(--surface-6);
 }
-.mk .int-row:last-child {
-  padding-bottom: 0;
-}
-.mk .int-title {
-  font-size: 14px;
+.mk .sim-hyptitle {
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .int-text {
-  font-size: 11px;
-  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--gray);
-  margin-top: 3px;
 }
-.mk .int-tools {
+.mk .sim-hyplist {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   margin-top: 10px;
 }
-.mk .int-tool {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--surface-6);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: var(--white-70);
-}
-.mk .int-more {
-  margin-left: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--white-80);
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--surface-6);
-  border: 1px solid var(--surface-6);
-  white-space: nowrap;
-}
-.mk .upd-filters {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.mk .upd-filter {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--white-80);
-}
-.mk .upd-arrows {
-  margin-left: auto;
-  display: flex;
-  gap: 5px;
-}
-.mk .upd-arrowbtn {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  background: var(--surface-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--white-80);
-  cursor: pointer;
-}
-.mk .upd-changelog {
-  margin-top: 12px;
-  border-radius: 10px;
-  background: var(--surface-3);
-  padding: 14px;
-}
-.mk .upd-month {
+.mk .sim-hypline {
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .upd-monthsub {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gray);
-  margin-top: 3px;
-}
-.mk .upd-logdivider {
-  height: 1px;
-  background: var(--surface-6);
-  margin: 10px 0;
-}
-.mk .upd-logitems {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.mk .upd-logitem {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--white-80);
-}
-.mk .upd-logtext {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mk .upd-log {
-  animation: sm-log-in 0.35s ease both;
-}
-@keyframes sm-log-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@media (max-width: 1199.98px) {
-  .mk .proc-inner {
-    gap: 48px;
-  }
-  .mk .proc-grid {
-    grid-template-columns: 1fr;
-  }
-  .mk .proc-viewport {
-    height: 300px;
-  }
-}
-@media (max-width: 809.98px) {
-  .mk .proc-inner {
-    gap: 40px;
-  }
-  .mk .proc-card {
-    padding: 48px 18px 26px;
-  }
-  .mk .proc-viewport {
-    height: 272px;
-    margin-bottom: 36px;
-  }
-}
-
-/* ===== Plateforme (bento 6) ===== */
-.mk .sol-grid {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  width: 100%;
-  max-width: 1154px;
-  padding: 0 10px;
-}
-.mk .sol-col {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.mk .sol-card {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  background: var(--card);
-  border-radius: 18px;
-  padding: 15px;
-}
-.mk .sol-caption {
-  padding: 0 6px 6px;
-  color: var(--gray);
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.5em;
-}
-.mk .sol-caption strong {
-  color: var(--white);
-  font-weight: 600;
-}
-.mk .sol-mockup {
-  position: relative;
-  height: 200px;
-  border-radius: 12px;
-  border: 1px solid var(--surface-6);
-  background: var(--card-gradient);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.mk .sol-mockup.tall {
-  height: auto;
-  min-height: 230px;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 14px 0 10px;
-}
-.mk .wf-nodes {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.mk .wf-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.mk .wf-node {
-  width: 214px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--surface-6);
-  background: rgba(18, 18, 18, 0.7);
-  border-radius: 10px;
-}
-.mk .wf-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 1px solid var(--surface-6);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: var(--white-70);
-}
-.mk .wf-label {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--white);
-  white-space: nowrap;
-}
-.mk .wf-spacer {
-  flex: 1;
-  height: 1px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.18);
-}
-.mk .wf-status {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  flex-shrink: 0;
-}
-.mk .wf-connector {
-  display: block;
-}
-.mk .wf-dash {
-  stroke: rgba(255, 255, 255, 0.35);
-  stroke-width: 1.5;
-  stroke-dasharray: 3 4;
-  animation: sm-dash-flow 0.9s linear infinite;
-}
-@keyframes sm-dash-flow {
-  to {
-    stroke-dashoffset: -14;
-  }
-}
-.mk .ag-ticker {
-  position: absolute;
-  inset: 0;
-  padding: 14px 16px;
-  overflow: hidden;
-  mask-image: linear-gradient(to bottom, transparent 0, black 20%, black 80%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 20%, black 80%, transparent 100%);
-}
-.mk .ag-track {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: sm-ag-scroll 14s linear infinite;
-}
-@keyframes sm-ag-scroll {
-  to {
-    transform: translateY(-50%);
-  }
-}
-.mk .ag-row {
-  width: 100%;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.mk .ag-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #5a4526);
-  flex-shrink: 0;
-}
-.mk .ag-meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-  min-width: 0;
-}
-.mk .ag-name {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .ag-role {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gray);
-}
-.mk .ag-dot {
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--green);
-  flex-shrink: 0;
-}
-.mk .vo-waves {
-  position: absolute;
-  left: 5%;
-  top: 50%;
-  width: 90%;
-  height: 70px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  mask-image: linear-gradient(
-    270deg,
-    transparent 0,
-    rgba(0, 0, 0, 0.9) 25%,
-    #000 51%,
-    rgba(0, 0, 0, 0.9) 78%,
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    270deg,
-    transparent 0,
-    rgba(0, 0, 0, 0.9) 25%,
-    #000 51%,
-    rgba(0, 0, 0, 0.9) 78%,
-    transparent 100%
-  );
-}
-.mk .vo-track {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  animation: sm-vo-scroll 8s linear infinite;
-}
-@keyframes sm-vo-scroll {
-  to {
-    transform: translateX(50%);
-  }
-}
-.mk .vo-bar {
-  width: 4px;
-  border-radius: 2px;
-  background: var(--white-80);
-  flex-shrink: 0;
-}
-.mk .vo-icon {
-  position: relative;
-  z-index: 1;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: #0a0a0a;
-  border: 1px solid var(--surface-6);
-  display: grid;
-  place-items: center;
-  color: var(--white);
-}
-.mk .vo-icon:before {
-  content: "";
-  position: absolute;
-  inset: -28px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 65%);
-  z-index: -1;
-}
-.mk .mkt {
-  width: 100%;
-  height: 100%;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.mk .mkt-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--white-70);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--surface-6);
-}
-.mk .mkt-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .mkt-dots {
-  margin-left: auto;
-  display: flex;
-  gap: 3px;
-}
-.mk .mkt-dots i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
-}
-.mk .mkt-line {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--white-70);
-}
-.mk .mkt-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-.mk .mkt-chip {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--gray);
-  background: var(--surface-6);
-  border: 1px solid transparent;
-  border-radius: 50px;
-  padding: 4px 10px;
-  white-space: nowrap;
-  animation: sm-chip-glow 4.9s ease-in-out infinite;
-}
-.mk .mkt-chip:nth-child(1) {
-  animation-delay: 0s;
-}
-.mk .mkt-chip:nth-child(2) {
-  animation-delay: 0.5s;
-}
-.mk .mkt-chip:nth-child(3) {
-  animation-delay: 1s;
-}
-.mk .mkt-chip:nth-child(4) {
-  animation-delay: 1.5s;
-}
-.mk .mkt-chip:nth-child(5) {
-  animation-delay: 2s;
-}
-.mk .mkt-chip:nth-child(6) {
-  animation-delay: 2.5s;
-}
-@keyframes sm-chip-glow {
-  0%,
-  82%,
-  100% {
-    color: var(--gray);
-    border-color: transparent;
-  }
-  6%,
-  12% {
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.7);
-  }
-}
-.mk .data-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 0 14px;
-}
-.mk .data-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.mk .data-right {
-  display: flex;
-  gap: 16px;
-  text-align: right;
-}
-.mk .data-label {
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--gray);
-}
-.mk .data-value {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .data-graph {
-  width: 100%;
-  height: 44px;
-  display: block;
-  flex-shrink: 0;
-}
-.mk .data-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 14px;
-}
-.mk .data-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mk .data-rowlabel {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gray);
-  width: 60px;
-  flex-shrink: 0;
-}
-.mk .data-track {
-  flex: 1;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--border-10);
-  overflow: hidden;
-}
-.mk .data-fill {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: var(--white-80);
-}
-.mk .data-rowvalue {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--white);
-  min-width: 38px;
-  text-align: right;
-}
-.mk .chat {
-  width: 100%;
-  height: 100%;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.mk .chat-msgs {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow: hidden;
-  justify-content: flex-end;
-}
-.mk .msg-customer {
-  align-self: flex-end;
-  width: 64%;
-  display: flex;
-}
-.mk .msg-agent {
-  align-self: flex-start;
-  width: 74%;
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-}
-.mk .bubble-customer {
-  flex: 1;
-  background: var(--surface-6);
-  border-radius: 10px 10px 2px 10px;
-  padding: 7px 9px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--white);
-}
-.mk .bubble-agent {
-  flex: 1;
-  background: var(--surface-3);
-  border: 1px solid var(--surface-6);
-  border-radius: 10px 10px 10px 2px;
-  padding: 7px 9px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--white-80);
-}
-.mk .chat-avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #5a4526);
-  flex-shrink: 0;
-}
-.mk .chat-tag {
-  align-self: center;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gray);
-  background: var(--badge-bg);
-  border: 1px solid var(--surface-6);
-  border-radius: 50px;
-  padding: 3px 10px;
-  white-space: nowrap;
-}
-@media (max-width: 1199.98px) {
-  .mk .sol-grid {
-    flex-direction: column;
-    padding: 0;
-  }
-  .mk .sol-col {
-    flex: none;
-    width: 100%;
-    max-width: 650px;
-    margin: 0 auto;
-  }
-}
-@media (max-width: 809.98px) {
-  .mk .sol-card {
-    padding: 12px;
-    gap: 15px;
-  }
-}
-
-/* ===== Catalogue app par app ===== */
-.mk .cat-sub {
-  max-width: 560px;
-  text-align: center;
-  color: var(--gray);
-}
-.mk .cat-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  width: 100%;
-  max-width: 1154px;
-}
-.mk .cat-col {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  background: var(--card-gradient);
-  border: 1px solid var(--surface-6);
-  border-radius: 16px;
-  padding: 22px 20px;
-  transition:
-    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 0.35s;
-}
-.mk .cat-col:hover {
-  transform: translateY(-4px);
-  border-color: rgba(201, 161, 90, 0.4);
-}
-.mk .cat-colhead {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--surface-6);
-}
-.mk .cat-appname {
-  font-size: 16.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--white);
-}
-.mk .cat-device {
-  font-size: 12px;
-  color: var(--gray);
-}
-.mk .cat-items {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.mk .cat-item {
-  display: flex;
-  gap: 10px;
-  font-size: 13.5px;
-  line-height: 1.45em;
+  line-height: 1.6em;
   color: var(--gray);
   text-wrap: pretty;
-  border-radius: 8px;
-  padding: 3px 6px;
-  margin: -3px -6px;
-  transition:
-    background 0.25s,
-    color 0.25s;
 }
-.mk .cat-item strong {
+.mk .sim-hypline b {
   color: var(--white);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* La source est en retrait de ton, jamais absente — c'est tout le sujet. */
+.mk .sim-hypsrc {
+  color: var(--white-50);
+  font-style: italic;
+}
+
+/* Ce qu'on a refusé de compter.
+ *
+ * Le filet doré à gauche, pas d'encadré : ce n'est pas une clause, c'est une
+ * phrase dite. Et elle porte la couleur de la marque parce qu'elle est un
+ * ARGUMENT — la seule ligne de la page qui démontre une méthode au lieu
+ * d'affirmer un résultat. */
+.mk .sim-notcounted {
+  margin-top: 12px;
+  padding-left: 13px;
+  border-left: 2px solid rgba(201, 161, 90, 0.45);
+  font-size: 13.5px;
   font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.5;
+  color: var(--gray);
+  text-wrap: pretty;
 }
-.mk .cat-item:hover {
-  background: var(--surface-6);
+
+.mk .sim-fold {
+  margin-top: 14px;
 }
-.mk .cat-item:hover strong {
-  color: var(--accent);
-}
-.mk .cat-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  transform: rotate(45deg);
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-.mk .cat-demolink {
-  margin-top: auto;
-  padding: 14px 0 0;
+.mk .sim-foldsum {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent);
-  background: none;
-  border: none;
-  border-top: 1px solid var(--surface-6);
-  text-align: left;
+  color: var(--white-70);
   cursor: pointer;
-  font-family: inherit;
+  user-select: none;
+  list-style: none;
+  transition: color 0.2s;
 }
-.mk .cat-demolink:hover {
-  text-decoration: underline;
+/* Le triangle natif de Safari ne se retire que par ce pseudo-élément. */
+.mk .sim-foldsum::-webkit-details-marker {
+  display: none;
 }
-.mk .rv.in .cat-item {
-  animation: sm-cat-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+.mk .sim-foldsum::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.3s;
 }
-.mk .rv.in .cat-item:nth-child(1) {
-  animation-delay: 0.1s;
+.mk .sim-fold[open] .sim-foldsum::after {
+  transform: translateY(1px) rotate(-135deg);
 }
-.mk .rv.in .cat-item:nth-child(2) {
-  animation-delay: 0.18s;
+.mk .sim-foldsum:hover {
+  color: var(--accent);
 }
-.mk .rv.in .cat-item:nth-child(3) {
-  animation-delay: 0.26s;
+.mk .sim-foldtext {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.6em;
+  color: var(--gray);
+  opacity: 0.75;
 }
-.mk .rv.in .cat-item:nth-child(4) {
-  animation-delay: 0.34s;
-}
-.mk .rv.in .cat-item:nth-child(5) {
-  animation-delay: 0.42s;
-}
-.mk .rv.in .cat-item:nth-child(6) {
-  animation-delay: 0.5s;
-}
-.mk .rv.in .cat-item:nth-child(7) {
-  animation-delay: 0.58s;
-}
-.mk .rv.in .cat-item:nth-child(8) {
-  animation-delay: 0.66s;
-}
-@keyframes sm-cat-in {
-  from {
-    opacity: 0;
-    transform: translateX(-14px);
+@media (max-width: 809.98px) {
+  .mk .sim-leadtitle,
+  .mk .sim-leadline {
+    font-size: 20px;
   }
-  to {
-    opacity: 1;
-    transform: none;
+  .mk .sim-escbox {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
   }
-}
-.mk .rv.in .cat-dot {
-  animation: sm-dot-pulse 2.6s ease-in-out infinite;
-}
-@keyframes sm-dot-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(201, 161, 90, 0.5);
+  .mk .sim-escline {
+    flex: 1 1 auto;
   }
-  50% {
-    box-shadow: 0 0 0 5px rgba(201, 161, 90, 0);
+  /* Les deux montants restent côte à côte : empilés, ils cesseraient d'être
+     une comparaison. */
+  .mk .sim-figs {
+    gap: 22px;
   }
-}
-@media (max-width: 1023.98px) {
-  .mk .cat-grid {
-    grid-template-columns: 1fr 1fr;
+  .mk .sim-fignum {
+    font-size: 25px;
   }
-}
-@media (max-width: 639.98px) {
-  .mk .cat-grid {
-    grid-template-columns: 1fr;
+  .mk .sim-hypline {
+    font-size: 13.5px;
   }
 }
 
@@ -2830,34 +1780,6 @@ html:has(.mk) {
 .mk .demo-arrow.next {
   right: -6px;
 }
-.mk .demo-caption {
-  max-width: 640px;
-  text-align: center;
-  font-size: 15px;
-  line-height: 1.6em;
-  color: var(--gray);
-}
-.mk .demo-caption strong {
-  color: var(--white);
-  font-weight: 600;
-}
-.mk .demo-chips {
-  display: flex;
-  gap: 6px;
-  justify-content: center;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-.mk .demo-chips em {
-  font-style: normal;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--white);
-  background: var(--badge-bg);
-  border: 1px solid var(--surface-6);
-  border-radius: 20px;
-  padding: 4px 11px;
-}
 @media (max-width: 1199.98px) {
   /*
    * La scène se referme, mais les applications embarquées gardent LEUR
@@ -3021,434 +1943,669 @@ html:has(.mk) {
   }
 }
 
-/* ===== Cas client (avant / après) ===== */
-.mk .cs-wrap {
-  width: 100%;
-  max-width: 1120px;
-  display: grid;
-  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
-  gap: 60px;
-  align-items: center;
+/* ===== Produit — repli, jouabilité mobile, légende =====
+ *
+ * La suite immédiate de « Démo 3D navigable » : la même section, dont les deux
+ * balises ont fusionné en une. Le catalogue app par app a disparu comme
+ * section — ses colonnes sont descendues ici, en légende sous le cadre.
+ */
+
+/*
+ * ═══ L'AFFICHE NE QUITTE JAMAIS LE CADRE ═══
+ *
+ * `display: contents` : l'enveloppe ne sert qu'à porter l'`aria-hidden` quand
+ * l'application est montée — une capture décrite en toutes lettres derrière une
+ * démonstration vivante ferait lire deux fois le même écran à un lecteur
+ * d'écran. Elle ne doit rien changer à la mise en page : l'affiche continue de
+ * se poser en absolu sur `.dv-screen`, comme l'iframe.
+ */
+.mk .demo-poster {
+  display: contents;
 }
-.mk .cs-textcol {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 32px;
+/*
+ * L'APPLICATION ARRIVE EN FONDU PAR-DESSUS L'AFFICHE.
+ *
+ * Une iframe monte avec un fond opaque et met une à deux secondes à peindre
+ * son premier écran. Sans ce fondu, ce délai est un rectangle noir posé sur la
+ * section dont dépend toute la page. Elle reste donc transparente tant qu'elle
+ * n'a pas signalé sa présence (`onLoad`) : ce qu'on voit pendant ce temps,
+ * c'est l'écran réel, et le passage de l'un à l'autre ne déplace pas un pixel.
+ */
+.mk .dv-live {
+  opacity: 1;
+  transition: opacity 0.35s ease;
 }
-.mk .cs-textblock {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 150px;
+.mk .dv-live.is-pending {
+  opacity: 0;
 }
-.mk .cs-arrows {
-  display: flex;
-  gap: 12px;
-}
-.mk .cs-arrow {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+/* Discret, et posé en bas pour ne pas masquer l'affiche qu'il accompagne. */
+.mk .demo-loading {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--white-70);
+  background: rgba(0, 0, 0, 0.72);
   border: 1px solid var(--border-10);
-  display: grid;
-  place-items: center;
-  color: var(--white);
-  cursor: pointer;
-  transition: background-color 0.2s;
+  border-radius: 16px;
+  padding: 5px 12px;
+  white-space: nowrap;
+  pointer-events: none;
 }
-.mk .cs-arrow:hover {
-  background-color: var(--surface-6);
+/*
+ * ═══ LE REPLI, ET IL EST ÉCRIT AVANT LE RESTE ═══
+ *
+ * Même géométrie que l'appel à manipuler : une barre en pied d'affiche, sur un
+ * dégradé qui laisse la capture lisible au-dessus. C'est voulu — le visiteur
+ * qui vient de cliquer « Essayer » retrouve son bouton exactement là où il
+ * l'avait laissé, remplacé par une phrase qui nomme la panne et par la sortie
+ * qui, elle, ne dépend pas de l'iframe.
+ */
+.mk .demo-fallback {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 9px 10px;
+  padding: 56px 16px 20px;
+  text-align: center;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.58) 44%,
+    rgba(0, 0, 0, 0.9) 100%
+  );
 }
-.mk .cs-collage {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.mk .cs-collage .ph {
-  border-radius: 12px;
-  overflow: hidden;
-}
-.mk .cs-collage > *:nth-child(1),
-.mk .cs-collage > *:nth-child(2) {
-  aspect-ratio: 4 / 3;
-}
-.mk .cs-collage > *:nth-child(3) {
-  grid-column: 1 / -1;
-  aspect-ratio: 21 / 8;
-}
-@media (max-width: 1199.98px) {
-  .mk .cs-wrap {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 40px;
-  }
-}
-@media (max-width: 809.98px) {
-  .mk .cs-wrap {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
-  }
-  .mk .cs-textblock {
-    min-height: 0;
-  }
+.mk .demo-fallbacktext {
+  flex-basis: 100%;
+  font-size: 13px;
+  line-height: 1.5em;
+  color: var(--white-80);
+  text-wrap: pretty;
 }
 
-/* ===== Pourquoi nous (escalier + pilier) ===== */
-.mk .bf-grid {
+/* ===== La légende : le catalogue, descendu sous sa preuve =====
+ *
+ * Vingt-huit lignes posées au-dessus de la démonstration étaient une
+ * plaquette ; les cinq lignes de l'application au centre, posées sous son
+ * cadre, sont une légende. La marge négative annule une partie du `gap: 40px`
+ * de `.section` : la légende doit TOUCHER le bas du cadre, sinon elle redevient
+ * une section de plus et le lien avec l'appareil se perd.
+ */
+.mk .demo-legend {
   width: 100%;
-  max-width: 1154px;
-  display: grid;
-  grid-template-columns: 1fr 230px 1fr;
-  gap: 16px;
-  align-items: end;
-}
-.mk .bf-sidegrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 16px;
-}
-.mk .bf-left > *:nth-child(1) {
-  grid-area: 2 / 1 / 3 / 2;
-}
-.mk .bf-left > *:nth-child(2) {
-  grid-area: 1 / 2 / 2 / 3;
-}
-.mk .bf-left > *:nth-child(3) {
-  grid-area: 2 / 2 / 3 / 3;
-}
-.mk .bf-right > *:nth-child(1) {
-  grid-area: 1 / 1 / 2 / 2;
-}
-.mk .bf-right > *:nth-child(2) {
-  grid-area: 2 / 1 / 3 / 2;
-}
-.mk .bf-right > *:nth-child(3) {
-  grid-area: 2 / 2 / 3 / 3;
-}
-.mk .bf-tile {
-  border-radius: 17px;
-  padding: 1px;
-  min-height: 140px;
-  display: flex;
-  background: linear-gradient(132deg, rgba(255, 255, 255, 0.7) 0%, var(--surface-6) 31%);
-  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.mk .bf-tile.right {
-  background: linear-gradient(228deg, rgba(255, 255, 255, 0.7) 0%, var(--border-10) 33%);
-}
-.mk .bf-tile:hover {
-  transform: translateY(-5px);
-}
-.mk .bf-tileinner {
-  flex: 1;
+  max-width: 1040px;
+  margin-top: -18px;
+  padding: 22px 24px 16px;
+  background: var(--card-gradient);
+  border: 1px solid var(--surface-6);
   border-radius: 16px;
-  padding: 20px;
+}
+.mk .demo-legendbody {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  background: linear-gradient(132deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 45%), var(--black);
-  transition: background 0.35s;
+  gap: 16px;
+  animation: sm-leg-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.mk .bf-tile.right .bf-tileinner {
-  background: linear-gradient(228deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 45%), var(--black);
-}
-.mk .bf-tile:hover .bf-tileinner {
-  background: linear-gradient(132deg, rgba(201, 161, 90, 0.14), rgba(255, 255, 255, 0.02) 55%);
-}
-.mk .bf-iconholder {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--surface-6);
-  display: grid;
-  place-items: center;
-  color: var(--white);
-  transition:
-    background 0.3s,
-    color 0.3s,
-    transform 0.3s;
-}
-.mk .bf-tile:hover .bf-iconholder {
-  background: var(--accent);
-  color: var(--black);
-  transform: scale(1.12) rotate(-6deg);
-}
-.mk .bf-tiletext {
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.5em;
-  color: var(--gray);
-}
-.mk .bf-tiletext strong {
-  display: block;
-  color: var(--white);
-  font-weight: 600;
-}
-.mk .bf-pillar {
-  flex: 1;
-  height: 345px;
-  border-radius: 20px;
-  padding: 1px;
-  display: flex;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, var(--border-10) 39%);
-}
-.mk .bf-pillarinner {
-  flex: 1;
-  border-radius: 19px;
-  background: var(--black);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 50px;
-  position: relative;
-}
-.mk .bf-logozone {
-  position: relative;
-  width: 94px;
-  height: 94px;
-}
-.mk .bf-halo {
-  position: absolute;
-  inset: -3px;
-  border-radius: 14px;
-  background: linear-gradient(2deg, rgba(201, 161, 90, 0.8) 0%, rgba(171, 171, 171, 0) 100%);
-  filter: blur(41px);
-  animation: sm-bf-pulse 3.6s ease-in-out infinite;
-}
-@keyframes sm-bf-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.85;
-    transform: scale(1.06);
-  }
-}
-.mk .bf-logoborder {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 100%;
-  height: 100%;
-  padding: 1px;
-  border-radius: 12px;
-  background: linear-gradient(2deg, rgba(255, 255, 255, 0.9) 0%, var(--surface-6) 100%);
-}
-.mk .bf-logoholder {
-  flex: 1;
-  border-radius: 11px;
-  background: var(--black);
-  display: grid;
-  place-items: center;
-}
-.mk .rv.in .bf-tile {
-  animation: sm-tile-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.mk .rv.in .bf-tile:nth-child(1) {
-  animation-delay: 0.05s;
-}
-.mk .rv.in .bf-tile:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.mk .rv.in .bf-tile:nth-child(3) {
-  animation-delay: 0.25s;
-}
-@keyframes sm-tile-in {
+@keyframes sm-leg-in {
   from {
     opacity: 0;
-    transform: translateY(26px) scale(0.97);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-@media (max-width: 1199.98px) {
-  .mk .bf-grid {
-    grid-template-columns: 1fr 220px 1fr;
-    align-items: stretch;
-  }
-  .mk .bf-sidegrid {
-    grid-template-columns: 1fr;
-    height: 100%;
-    align-content: center;
-  }
-  .mk .bf-left > *,
-  .mk .bf-right > * {
-    grid-area: auto;
-  }
-  .mk .bf-pillar {
-    height: auto;
-    min-height: 345px;
+@media (prefers-reduced-motion: reduce) {
+  .mk .demo-legendbody {
+    animation: none;
   }
 }
-@media (max-width: 809.98px) {
-  .mk .bf-grid {
-    grid-template-columns: 1fr;
-  }
-  /*
-   * La maquette voulait empiler les tuiles en dessous du pilier, mais son
-   * `grid-area:auto` était moins spécifique que les placements en escalier :
-   * l'escalier survivait, et sur 390 px il donnait deux colonnes bancales
-   * (134 px / 190 px) dont la seconde débordait. On repasse la même
-   * spécificité pour que la remise à zéro s'applique enfin.
-   */
-  .mk .bf-sidegrid {
-    grid-template-columns: 1fr;
-  }
-  .mk .bf-left > *:nth-child(n),
-  .mk .bf-right > *:nth-child(n) {
-    grid-area: auto;
-  }
-  .mk .bf-pillar {
-    min-height: 280px;
-  }
-  .mk .bf-pillarinner {
-    align-items: center;
-    padding-top: 0;
+.mk .demo-legendlead {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--surface-6);
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .demo-legendlead strong {
+  color: var(--white);
+  font-weight: 600;
+}
+/* Cinq lignes en trois colonnes : 3 + 2, le déséquilibre se lit comme une
+ * légende qui court sous le cadre, pas comme une grille de plus. */
+.mk .demo-legenditems {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 28px;
+}
+.mk .demo-legenditem {
+  display: flex;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.45em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .demo-legenditem strong {
+  color: var(--white);
+  font-weight: 500;
+}
+.mk .demo-legenddot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  transform: rotate(45deg);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+/* L'appareil sur lequel cette application vit dans le restaurant : la seule
+ * information du catalogue qui n'était nulle part ailleurs. */
+.mk .demo-legenddevice {
+  text-align: right;
+  font-size: 12px;
+  color: var(--gray);
+  opacity: 0.8;
+}
+
+/* La signature du pilote : une ligne, jamais un bloc. */
+.mk .demo-signature {
+  max-width: 620px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.6em;
+  color: var(--white-70);
+  text-wrap: pretty;
+}
+
+@media (max-width: 1023.98px) {
+  .mk .demo-legenditems {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* ===== Vignettes (carrousel) ===== */
-.mk .vg-section {
+@media (max-width: 809.98px) {
+  /*
+   * ═══ LA COMMANDE CLIENT SE JOUE VRAIMENT ICI, DONC ELLE PREND LA PLACE ═══
+   *
+   * Les trois autres applications renoncent proprement sous ce seuil (voir le
+   * bloc « PETIT ÉCRAN : ON RENONCE PROPREMENT »). Celle-ci non : elle est
+   * dessinée pour 390 px, c'est la seule des quatre que les clients du
+   * restaurateur utiliseront vraiment, et c'est elle qui rend tenable la
+   * promesse du hero sur l'appareil que le prospect tient dans la main.
+   *
+   * Sa hauteur n'est donc pas celle d'une vignette de 360 px : on lui donne
+   * presque toute la fenêtre. Le calcul est contraint par la HAUTEUR, pas par
+   * la largeur — un écran de 390 × 844 dans un cadre de ~630 px de haut est
+   * réduit d'environ un quart, et son texte courant arrive à ~12 px. C'est le
+   * maximum atteignable : à 1:1 il faudrait 858 px de hauteur, que le téléphone
+   * n'a pas. Rogner encore la fenêtre pour « faire propre » rendrait la
+   * démonstration illisible, donc inutile.
+   */
+  .mk .demo-stage[data-device="phone"] {
+    --card-h: min(calc(100svh - 64px), 700px);
+    --dv-hint: 40px;
+    --stage-gap: 14px;
+  }
+  /*
+   * La consigne revient POUR ELLE SEULE : c'est elle qui porte « Arrêter la
+   * démo ». Sans elle, une démonstration lancée sur téléphone ne se referme
+   * qu'en changeant d'onglet — le visiteur reste enfermé dans le cadre.
+   */
+  .mk .demo-stage[data-device="phone"] .demo-hint {
+    display: flex;
+  }
+  /* Démo lancée, la ligne cède sa place aux deux sorties : à cette largeur,
+   * la consigne et les deux boutons ne tiennent pas sur 40 px. */
+  .mk .demo-stage[data-device="phone"] .demo-hint.is-live .demo-hinttext {
+    display: none;
+  }
+  /*
+   * Le bouton « Essayer » revient pour elle, et le plein écran redescend au
+   * second rôle : il n'est plus le seul recours puisque la démo se joue dans
+   * la page. Sélecteurs plus spécifiques que les règles de renoncement
+   * ci-dessus — l'ordre de fusion n'a donc pas d'importance.
+   */
+  .mk .demo-cta.plays-narrow .demo-try {
+    display: inline-flex;
+  }
+  .mk .demo-cta.plays-narrow .demo-tryout {
+    color: var(--white);
+    background: rgba(18, 18, 18, 0.82);
+    border-color: var(--border-10);
+  }
+  .mk .demo-cta.plays-narrow .demo-tryout:hover {
+    color: var(--white);
+    background: var(--btn-dark);
+    border-color: var(--white-30);
+  }
+  /* Le repli doit rester lisible sur une affiche déjà petite. */
+  .mk .demo-fallback {
+    gap: 6px;
+    padding: 26px 10px 12px;
+  }
+  .mk .demo-fallbacktext {
+    font-size: 12px;
+  }
+  .mk .demo-loading {
+    bottom: 10px;
+    font-size: 10.5px;
+  }
+  .mk .demo-legend {
+    margin-top: -10px;
+    padding: 18px 16px 14px;
+  }
+  .mk .demo-legendbody {
+    gap: 14px;
+  }
+  .mk .demo-legendlead {
+    font-size: 14px;
+    padding-bottom: 14px;
+  }
+  .mk .demo-legenditems {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  .mk .demo-legenddevice {
+    text-align: left;
+  }
+  .mk .demo-signature {
+    font-size: 13px;
+  }
+}
+
+/* ===== Commander — la bande-liste des canaux =====
+ *
+ * TROIS RANGÉES, PAS TROIS CARTES, et la règle est structurelle : la grille
+ * tarifaire est deux sections plus bas. Aucun fond, aucun encadré, aucun rayon
+ * de bordure — un filet horizontal sépare les rangées et la largeur est celle
+ * du contenu. Si à l'écran cette section et la suivante se lisent comme deux
+ * rangées de cartes, c'est celle-ci qu'il faut refaire.
+ */
+.mk .ch-section {
+  padding-block: 54px;
+  gap: 28px;
+}
+
+/*
+ * L'en-tête des trois sections courtes est FERRÉ À GAUCHE, contre le bord de
+ * leur contenu. Deux raisons : un titre centré au-dessus de rangées pleine
+ * largeur flotte au milieu de rien, et le fer de 650 px de `.section-head`
+ * casserait chacun des trois `h2` sur deux lignes — quatre-vingt-dix pixels
+ * perdus dans des sections dont tout l'intérêt est d'être des respirations.
+ */
+.mk .ch-head,
+.mk .mt-head,
+.mk .jl-head {
+  align-items: flex-start;
+  text-align: left;
   width: 100%;
-  padding: 90px var(--section-pad-x);
-  display: flex;
-  justify-content: center;
-  --vg-slide: 375px;
+  max-width: var(--content-width);
+  gap: 14px;
 }
-.mk .vg-inner {
+
+.mk .ch-rows {
   width: 100%;
-  max-width: 1147px;
-  display: flex;
-  flex-direction: column;
-  gap: 44px;
+  max-width: var(--content-width);
+  border-top: 1px solid var(--border-10);
 }
-.mk .vg-headrow {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
+/*
+ * Intitulé à gauche sur une colonne fixe, phrase à droite : c'est cette
+ * fracture verticale unique qui fait lire une RANGÉE. Trois blocs empilés dans
+ * un encadré se liraient comme trois cartes posées en colonne.
+ */
+.mk .ch-row {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 28px;
+  align-items: baseline;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid var(--border-10);
 }
-.mk .vg-arrows {
-  display: flex;
-  gap: 8px;
+.mk .ch-row:nth-child(2) {
+  transition-delay: 0.08s;
 }
-.mk .vg-arrow {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--badge-bg);
-  border: 1px solid var(--border-10);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition:
-    background 0.2s,
-    opacity 0.2s;
+.mk .ch-row:nth-child(3) {
+  transition-delay: 0.16s;
 }
-.mk .vg-arrow:hover {
-  background: var(--btn-dark);
+/* La fiche Google est le meilleur argument de la page : elle doit se voir
+   avant d'être lue, donc elle est la plus haute et la plus grosse. */
+.mk .ch-row.lead {
+  padding: 26px 0 28px;
 }
-.mk .vg-arrow:disabled {
-  opacity: 0.35;
-  cursor: default;
+.mk .ch-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+  color: var(--white);
 }
-.mk .vg-viewport {
-  width: 100%;
-  overflow: hidden;
-  user-select: none;
+.mk .ch-row.lead .ch-title {
+  font-size: 27px;
+  letter-spacing: -0.04em;
 }
-.mk .vg-track {
-  display: flex;
-  gap: 10px;
-  width: max-content;
-  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.mk .vg-slide {
-  width: var(--vg-slide);
-  flex-shrink: 0;
-}
-.mk .vg-card {
-  height: 100%;
-  background: var(--card);
-  border-radius: 16px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  transition:
-    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.35s;
-}
-.mk .vg-slide:hover .vg-card {
-  transform: translateY(-6px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
-}
-.mk .vg-cardhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 8px 14px;
-}
-.mk .vg-tagtext {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--accent);
-  position: relative;
-  padding-left: 14px;
-}
-.mk .vg-tagtext::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: sm-dot-pulse 2.4s infinite;
-}
-.mk .vg-media {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  height: 376px;
-  margin: 0;
-}
-.mk .vg-quote {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 16px;
+.mk .ch-line {
   font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.02em;
-  line-height: 1.5em;
-  color: var(--white);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.72) 55%, rgba(0, 0, 0, 0.88) 100%);
-  z-index: 2;
+  line-height: 1.55em;
+  color: var(--gray);
+}
+.mk .ch-row.lead .ch-line {
+  font-size: 18px;
+  color: var(--white-70);
+}
+/* La clause de livraison : pas de pastille, pas de cadre — une phrase. Une
+   pastille se lit comme une fonctionnalité qu'on fournit, et nous ne
+   fournissons aucun livreur. */
+.mk .ch-delivery {
+  width: 100%;
+  max-width: var(--content-width);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.55em;
+  color: var(--gray);
+}
+.mk .ch-delivery strong {
+  color: var(--accent);
+  font-weight: 600;
 }
 @media (max-width: 809.98px) {
-  .mk .vg-section {
-    --vg-slide: min(375px, calc(100vw - 60px));
+  .mk .ch-section {
+    padding-block: 52px;
+    gap: 26px;
   }
-  .mk .vg-headrow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
+  /* La colonne d'intitulé disparaît, le filet reste : c'est lui qui porte la
+     forme « rangée » une fois le titre passé au-dessus de sa phrase. */
+  .mk .ch-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 18px 0 20px;
   }
-  .mk .vg-media {
-    height: 330px;
+  .mk .ch-row.lead {
+    padding: 22px 0 24px;
+  }
+  .mk .ch-title {
+    font-size: 18px;
+  }
+  .mk .ch-row.lead .ch-title {
+    font-size: 22px;
+  }
+  .mk .ch-line,
+  .mk .ch-row.lead .ch-line,
+  .mk .ch-delivery {
+    font-size: 15px;
+  }
+}
+
+/* ===== Matériel — quatre pictogrammes, zéro prose =====
+ *
+ * La respiration la plus courte de la page, posée juste avant la plus
+ * commerciale. Rien qui ressemble à une carte : pas de fond, pas de bordure,
+ * pas de rayon — quatre colonnes de texte nu sous quatre traits laiton. C'est
+ * ce qui la distingue de la bande-liste juste au-dessus.
+ */
+.mk .mt-section {
+  padding-block: 46px;
+  gap: 26px;
+}
+.mk .mt-grid {
+  width: 100%;
+  max-width: var(--content-width);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 30px;
+}
+.mk .mt-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mk .mt-picto {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  color: var(--accent);
+}
+.mk .mt-label {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3em;
+  color: var(--white);
+}
+.mk .mt-line {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.45em;
+  color: var(--gray);
+}
+/*
+ * LE HORS-LIGNE EST UN DEMI-TITRE, pas une cinquième colonne. C'est notre vrai
+ * différenciant : lui donner la taille d'une ligne de matériel le rangerait au
+ * même niveau qu'une imprimante.
+ */
+.mk .mt-offline {
+  width: 100%;
+  max-width: var(--content-width);
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: baseline;
+  padding-top: 22px;
+  border-top: 1px solid var(--border-10);
+}
+.mk .mt-offlinelead {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.25em;
+  color: var(--white);
+}
+.mk .mt-offlineline {
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.55em;
+  color: var(--white-70);
+}
+@media (max-width: 809.98px) {
+  .mk .mt-section {
+    padding-block: 46px;
+    gap: 26px;
+  }
+  /* Deux par deux plutôt qu'empilés : quatre lignes à la suite redeviendraient
+     une liste, et la section n'est plus une rangée de pictogrammes. */
+  .mk .mt-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 20px;
+  }
+  .mk .mt-picto {
+    height: 30px;
+  }
+  .mk .mt-picto svg {
+    width: 30px;
+    height: 30px;
+  }
+  /* En deux colonnes, « Imprimante ticket 80 mm » passe sur deux lignes et les
+     quatre lignes de six mots cessent de s'aligner d'une colonne à l'autre. On
+     réserve la seconde ligne d'intitulé plutôt que de laisser la rangée
+     boiter — c'est une rangée de pictogrammes, pas une liste. */
+  .mk .mt-label {
+    font-size: 16px;
+    min-height: 2.6em;
+  }
+  .mk .mt-line {
+    font-size: 14px;
+  }
+  .mk .mt-offline {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding-top: 22px;
+  }
+  .mk .mt-offlinelead {
+    font-size: 20px;
+  }
+  .mk .mt-offlineline {
+    font-size: 15px;
+  }
+}
+
+/* ===== Lancement — la frise datée =====
+ *
+ * Le seul type visuel que la page ne possédait pas, et c'est ce qui la sauve :
+ * Process disait « Étape 1, 2, 3 » et rendait trois cartes identiques à celles
+ * qui l'entouraient. Ici le rail est visible, les dates sont en tête, et rien
+ * n'est encadré.
+ */
+.mk .jl-section {
+  padding-block: 62px;
+  gap: 34px;
+}
+.mk .jl-track {
+  width: 100%;
+  max-width: var(--content-width);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.mk .jl-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 30px 0 0;
+}
+/*
+ * LE RAIL EST DESSINÉ PAR SEGMENTS : chaque jalon trace le trait qui le relie
+ * au suivant, et le dernier n'en trace aucun. La frise s'arrête donc exactement
+ * sur le quatrième point, jamais dans le vide — et elle reste juste si le
+ * nombre de jalons change.
+ */
+.mk .jl-step::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 0;
+  border-top: 1px solid var(--border-10);
+}
+.mk .jl-step:last-child::before {
+  display: none;
+}
+.mk .jl-step:nth-child(2) {
+  transition-delay: 0.08s;
+}
+.mk .jl-step:nth-child(3) {
+  transition-delay: 0.16s;
+}
+.mk .jl-step:nth-child(4) {
+  transition-delay: 0.24s;
+}
+.mk .jl-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* « Ensuite » n'a pas de date de fin : son point reste ouvert. C'est la seule
+   différence de la frise, et elle dit quelque chose de vrai. */
+.mk .jl-step.open .jl-node {
+  background: transparent;
+  border: 1px solid var(--accent);
+}
+.mk .jl-when {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2em;
+  color: var(--accent);
+}
+.mk .jl-title {
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+  color: var(--white);
+}
+.mk .jl-lines {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mk .jl-line {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--gray);
+}
+/* La seconde ligne du tuple est toujours la conséquence de la première : elle
+   se lit après, pas en même temps. */
+.mk .jl-line.dim {
+  color: var(--white-50);
+}
+@media (max-width: 1199.98px) {
+  .mk .jl-step {
+    padding-right: 22px;
+  }
+  .mk .jl-title {
+    font-size: 18px;
+  }
+}
+@media (max-width: 809.98px) {
+  .mk .jl-section {
+    padding-block: 56px;
+    gap: 30px;
+  }
+  /* La frise bascule à la verticale : le rail passe de l'horizontale au bord
+     gauche, les segments deviennent des hauteurs. Le principe ne change pas —
+     le dernier jalon n'en trace toujours aucun. */
+  .mk .jl-track {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mk .jl-step {
+    padding: 0 0 26px 26px;
+  }
+  .mk .jl-step:last-child {
+    padding-bottom: 0;
+  }
+  .mk .jl-step::before {
+    top: 8px;
+    bottom: 0;
+    left: 5px;
+    right: auto;
+    border-top: none;
+    border-left: 1px solid var(--border-10);
+  }
+  /* Le point s'aligne sur l'axe optique de la date, pas sur le haut du bloc. */
+  .mk .jl-node {
+    top: 2px;
+  }
+  .mk .jl-title {
+    margin-top: 8px;
+    font-size: 18px;
+  }
+  .mk .jl-lines {
+    margin-top: 8px;
+  }
+  .mk .jl-line {
+    font-size: 14px;
   }
 }
 
@@ -3483,22 +2640,6 @@ html:has(.mk) {
     transform: translate(10%, 14%);
   }
 }
-.mk .fd-portrait {
-  position: relative;
-  z-index: 1;
-  border-radius: 12px;
-  overflow: hidden;
-  min-height: 240px;
-}
-/*
- * La photo est détachée du flux : sans cela une image en portrait imposerait
- * sa hauteur intrinsèque à la ligne de grille et la carte doublerait de haut.
- * Ici c'est le texte qui donne la hauteur, la photo remplit ce qui reste.
- */
-.mk .fd-portrait .ph {
-  position: absolute;
-  inset: 0;
-}
 .mk .fd-body {
   position: relative;
   z-index: 1;
@@ -3524,29 +2665,6 @@ html:has(.mk) {
   color: var(--accent);
   font-weight: 600;
 }
-.mk .fd-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.mk .fd-fact {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--white-70);
-  background: var(--surface-6);
-  border: 1px solid var(--surface-6);
-  border-radius: 20px;
-  padding: 5px 12px;
-  transition:
-    border-color 0.3s,
-    color 0.3s,
-    transform 0.3s;
-}
-.mk .fd-fact:hover {
-  border-color: rgba(201, 161, 90, 0.5);
-  color: var(--accent);
-  transform: translateY(-2px);
-}
 @media (max-width: 809.98px) {
   .mk .fd-card {
     grid-template-columns: 1fr;
@@ -3559,25 +2677,107 @@ html:has(.mk) {
   }
 }
 
-/* ===== Comparatif ===== */
-.mk .cmp-section {
-  gap: 56px;
+/* ===== Le pilote — la citation et son collage =====
+ *
+ * Le collage prend la place du portrait unique : trois cadres, donc une
+ * colonne plus large que les 280 px de `.fd-card`. Le sélecteur est écrit
+ * en `.fd-card.fd-pilote` — spécificité supérieure — pour que la valeur
+ * générique ne le reprenne jamais, quel que soit l'ordre du fichier.
+ */
+.mk .fd-card.fd-pilote {
+  grid-template-columns: minmax(0, 440px) 1fr;
+  gap: 22px;
+  align-items: center;
 }
-.mk .cmp-board {
-  width: 100%;
-  max-width: 826px;
+.mk .fd-collage {
   position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 210px 148px;
+  gap: 10px;
+}
+.mk .fd-shot {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+}
+/* Le visuel signature tient la rangée haute à lui seul. */
+.mk .fd-shot.lead {
+  grid-column: 1 / -1;
+}
+/*
+ * Même raison que pour l'ancien `.fd-portrait` : détachée du flux, la photo
+ * n'impose pas sa hauteur intrinsèque à sa ligne de grille. Ici les rangées
+ * sont fixées, la photo remplit ce qu'on lui donne.
+ */
+.mk .fd-shot .ph {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+ * UN fait, donc pas une rangée de pastilles à moitié vide : un trait laiton
+ * et une ligne. Le jour où la liste regrossit, `.fd-facts` existe toujours
+ * pour ça — c'est un choix de forme, pas une limite technique.
+ */
+.mk .fd-solofacts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mk .fd-solofact {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--white-70);
+}
+.mk .fd-solofact::before {
+  content: "";
+  flex-shrink: 0;
+  width: 22px;
+  height: 1px;
+  background: var(--accent);
+}
+@media (max-width: 809.98px) {
+  /* Le collage passe en pleine largeur, ses rangées se raccourcissent. */
+  .mk .fd-card.fd-pilote {
+    grid-template-columns: 1fr;
+  }
+  .mk .fd-collage {
+    grid-template-rows: 170px 118px;
+  }
+}
+/* ===== Comparatif — le miroir ===== *
+ *
+ * Deux colonnes affrontées, six lignes appariées, AUCUNE carte : deux plateaux
+ * encadrés se liraient comme deux offres à choisir, or il n'y a rien à choisir
+ * ici — il y a un avant et un après. C'est aussi ce qui empêche la section de
+ * ressembler à la grille tarifaire, quatre écrans plus bas, où il y a vraiment
+ * trois colonnes à comparer.
+ *
+ * La ligne est l'unité de mise en page, pas la colonne : `.cmp-row` porte les
+ * deux cellules, donc une douleur et sa réponse restent à la même hauteur quoi
+ * qu'il arrive à la longueur des textes.
+ */
+.mk .cmp-section {
+  gap: 44px;
+}
+.mk .cmp-mirror {
+  position: relative;
+  width: 100%;
+  max-width: 980px;
 }
 .mk .cmp-heads {
-  display: flex;
-  justify-content: center;
-  gap: 66px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
   width: 100%;
-  max-width: 600px;
-  margin: 0 auto;
 }
 .mk .cmp-headpill {
-  flex: 1;
   min-width: 0;
   height: 36px;
   display: flex;
@@ -3592,13 +2792,11 @@ html:has(.mk) {
   color: var(--white);
   white-space: nowrap;
 }
-.mk .cmp-headpill.left {
-  justify-content: flex-start;
+.mk .cmp-headpill svg {
+  flex-shrink: 0;
 }
 .mk .cmp-headpill.right {
-  justify-content: flex-end;
   border: 1px solid rgba(201, 161, 90, 0.45);
-  color: var(--white);
   animation: sm-pill-glow 3s ease-in-out infinite;
 }
 @keyframes sm-pill-glow {
@@ -3610,203 +2808,164 @@ html:has(.mk) {
     box-shadow: 0 0 18px 2px rgba(201, 161, 90, 0.22);
   }
 }
-.mk .cmp-vs {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--white);
-  color: var(--black);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
+/* Le trait court sous les pastilles jusqu'au bas du miroir : c'est lui qui
+   fait l'affrontement, et il remplace le disque « VS » — l'étiquette d'hier
+   contredirait le titre d'aujourd'hui, qui oppose deux dates et non deux
+   camps. */
 .mk .cmp-divider {
   position: absolute;
-  top: 50px;
-  bottom: 0;
+  top: 52px;
+  bottom: 4px;
   left: 50%;
   width: 1px;
   background: var(--border-10);
 }
-.mk .cmp-cols {
-  margin-top: 30px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 62px;
-  align-items: start;
-}
-.mk .cmp-col {
-  border-radius: 16px;
-  border: 1px solid var(--surface-6);
-  padding: 24px 28px;
+.mk .cmp-rows {
+  margin-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
 }
-.mk .cmp-col.left {
-  background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      rgba(255, 255, 255, 0.015) 40%,
-      rgba(255, 255, 255, 0) 70%
-    ),
-    var(--surface-3);
+.mk .cmp-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--surface-6);
 }
-.mk .cmp-col.right {
-  background: linear-gradient(
-      225deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      rgba(255, 255, 255, 0.015) 40%,
-      rgba(255, 255, 255, 0) 70%
-    ),
-    var(--surface-3);
+.mk .cmp-row:last-child {
+  border-bottom: none;
 }
-.mk .cmp-col li {
+.mk .cmp-cell {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 20px;
-  color: var(--gray);
-  border-radius: 8px;
-  padding: 4px 8px;
-  margin: -4px -8px;
-  transition:
-    background 0.25s,
-    opacity 0.3s;
+  transition: opacity 0.3s;
 }
-.mk .cmp-col.right li {
+.mk .cmp-cell svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.mk .cmp-cell.left {
+  color: var(--gray);
+}
+.mk .cmp-cell.right {
   color: var(--white-80);
 }
-.mk .cmp-col svg {
-  flex-shrink: 0;
-}
-.mk .cmp-board:hover .cmp-col.left li {
-  opacity: 0.55;
-}
-.mk .cmp-col.right li:hover {
-  background: rgba(63, 174, 106, 0.1);
-}
-.mk .cmp-col.left li:hover {
-  background: rgba(216, 81, 74, 0.07);
+/* Au survol du miroir, aujourd'hui s'efface. Le geste dit ce qu'aucune phrase
+   ne dirait sans se vanter. */
+.mk .cmp-mirror:hover .cmp-cell.left {
+  opacity: 0.45;
 }
 @media (max-width: 809.98px) {
   .mk .cmp-section {
-    gap: 40px;
+    gap: 32px;
   }
+  /* Les deux pastilles restent en tête même quand les lignes se déplient :
+     elles portent les deux dates, et c'est tout ce que la section oppose. */
   .mk .cmp-heads {
-    gap: 44px;
+    gap: 10px;
   }
   .mk .cmp-headpill {
-    height: 32px;
-    padding: 0 12px;
+    height: auto;
+    min-height: 32px;
+    padding: 7px 12px;
     gap: 6px;
-    font-size: 13px;
-  }
-  .mk .cmp-vs {
-    width: 44px;
-    height: 44px;
-    font-size: 13px;
-    top: 16px;
+    font-size: 12.5px;
+    line-height: 1.25em;
+    white-space: normal;
   }
   .mk .cmp-divider {
     display: none;
   }
-  .mk .cmp-cols {
+  /* La paire se lit alors de haut en bas — la douleur, puis sa réponse juste
+     dessous. L'appariement survit à la colonne unique, c'est lui qui compte. */
+  .mk .cmp-row {
     grid-template-columns: 1fr;
-    gap: 16px;
-    margin-top: 24px;
+    gap: 10px;
+    padding: 14px 0;
   }
-  .mk .cmp-col {
-    padding: 20px;
-    gap: 12px;
-  }
-  .mk .cmp-col li {
+  .mk .cmp-cell {
     font-size: 14px;
+  }
+  /* Au doigt, il n'y a pas de survol : un simple appui laisserait la colonne
+     d'aujourd'hui éteinte pour de bon. */
+  .mk .cmp-mirror:hover .cmp-cell.left {
+    opacity: 1;
   }
 }
 
-/* ===== Tarifs ===== */
-.mk .pr-founderbar {
+/* ===== Tarifs ===== *
+ *
+ * Neuf blocs empilés : à 40 px d'écart chacun, la section prendrait 320 px de
+ * vide. Elle a un ordre serré à faire lire d'un trait, on resserre. */
+.mk .pr-section {
+  gap: 26px;
+}
+
+/* Le tableau des commissions, en tête. Trois lignes de colonnes FIXES : chaque
+   ligne est sa propre grille, seule une largeur posée les aligne les unes sous
+   les autres — et c'est l'alignement de « 0 % » sous « jusqu'à 30 % » qui fait
+   tout le travail de la section. */
+.mk .pr-commissions {
   width: 100%;
-  max-width: var(--content-width);
+  max-width: 860px;
+  margin: 0;
   display: flex;
-  align-items: center;
-  gap: 16px;
-  background: linear-gradient(90deg, rgba(201, 161, 90, 0.14), rgba(201, 161, 90, 0.03) 60%), var(--card);
-  border: 1px dashed rgba(201, 161, 90, 0.5);
+  flex-direction: column;
+  border: 1px solid var(--surface-6);
   border-radius: 14px;
-  padding: 16px 20px;
+  background: var(--surface-3);
+  overflow: hidden;
 }
-.mk .pr-founderchip {
-  flex-shrink: 0;
-  background: var(--accent);
-  color: var(--black);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  border-radius: 20px;
-  padding: 6px 12px;
+.mk .pr-commission {
+  display: grid;
+  grid-template-columns: 200px 190px 1fr;
+  align-items: baseline;
+  gap: 16px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--surface-6);
 }
-.mk .pr-foundertext {
-  font-size: 14.5px;
-  line-height: 1.5em;
-  color: var(--gray);
+.mk .pr-commission:first-child {
+  border-top: none;
 }
-.mk .pr-foundertext strong {
-  color: var(--white);
+.mk .pr-commission.is-ours {
+  background: linear-gradient(90deg, rgba(201, 161, 90, 0.12), rgba(201, 161, 90, 0.02) 70%);
+}
+.mk .pr-cwho {
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
 }
-.mk .pr-founderseats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-.mk .pr-seatdots {
-  display: flex;
-  gap: 4px;
-}
-.mk .pr-seat {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.mk .pr-seat.off {
-  background: var(--surface-6);
-}
-.mk .pr-seatlabel {
-  font-size: 12.5px;
-  color: var(--gray);
+.mk .pr-crate {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1em;
+  color: var(--white);
   white-space: nowrap;
 }
-.mk .pr-seatlabel b {
-  color: var(--white);
-  font-weight: 600;
+.mk .pr-commission.is-ours .pr-crate {
+  color: var(--accent);
 }
-@media (max-width: 809.98px) {
-  .mk .pr-founderbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .mk .pr-founderseats {
-    margin-left: 0;
-  }
+.mk .pr-star {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray);
 }
+.mk .pr-cnote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45em;
+  color: var(--gray);
+}
+
 .mk .pr-grid {
   width: 100%;
   max-width: var(--content-width);
@@ -3860,711 +3019,222 @@ html:has(.mk) {
   border-radius: 50px;
 }
 .mk .pr-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
   font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.2em;
   color: var(--white);
-  margin-top: 10px;
 }
-.mk .pr-price.sm {
-  font-size: 26px;
-}
-.mk .pr-desc {
-  margin-top: 8px;
-}
-.mk .pr-cta {
-  width: 100%;
-  margin-top: 20px;
-}
-.mk .pr-featlabel {
-  margin-top: 24px;
-  font-size: 13px;
+.mk .pr-period {
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--gray);
 }
-.mk .pr-features {
-  margin-top: 14px;
+/* Hauteur réservée, et ce n'est pas de la cosmétique : trois accroches de
+   longueurs différentes décaleraient les trois listes de modules, et le seul
+   geste que la grille demande — lire une ligne en travers des trois colonnes —
+   deviendrait impossible. */
+.mk .pr-desc {
+  margin-top: 8px;
+  min-height: 66px;
+}
+.mk .pr-modules {
+  margin-top: 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
-.mk .pr-features li {
+.mk .pr-module {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.02em;
+  line-height: 18px;
   color: var(--white-80);
-  transition: transform 0.25s;
 }
-.mk .pr-features li:hover {
-  transform: translateX(4px);
+/* Éteinte, jamais absente : la ligne reste à sa place dans les trois colonnes,
+   sinon le lecteur compare de nouveau des listes de longueurs différentes. */
+.mk .pr-module.off {
+  color: rgba(255, 255, 255, 0.3);
 }
-.mk .pr-features svg {
+.mk .pr-dot {
   flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
+.mk .pr-module.off .pr-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+/* Le mot que la pastille ne dit pas — même procédé que le pot de miel du
+   formulaire (`.ct-hp`) : hors de l'écran, jamais hors du texte. */
+.mk .pr-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* UN seul appel, en pied de grille. Trois boutons identiques posés sur trois
+   cartes redemandent à chaque colonne la décision qu'on vient de réduire à
+   une seule. */
+.mk .pr-cta {
+  min-width: 260px;
+  padding: 12px 24px;
+}
+
+/* L'addition, en géant. Quatre nombres, tous les nôtres, aucune hypothèse de
+   marché : elle est désamorcée avant d'être faite. */
+.mk .pr-math {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 24px;
+  border: 1px solid var(--surface-6);
+  border-radius: 16px;
+  background: var(--card-gradient);
+  text-align: center;
+}
+.mk .pr-mathrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px 56px;
+}
+.mk .pr-mathside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.mk .pr-mathlabel {
+  font-size: 14px;
+  line-height: 1.4em;
+  color: var(--gray);
+}
+.mk .pr-mathside.is-boost .pr-mathlabel {
+  font-weight: 600;
+  color: var(--white);
+}
+.mk .pr-mathsum {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1em;
+  color: var(--white);
+}
+.mk .pr-mathsave {
+  font-size: 56px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1em;
+  color: var(--accent);
+}
+.mk .pr-mathline {
+  max-width: 540px;
+  font-size: 14.5px;
+  line-height: 1.5em;
+  color: var(--gray);
+}
+
+.mk .pr-addon {
+  max-width: 860px;
+  font-size: 14.5px;
+  line-height: 1.55em;
+  color: var(--gray);
+  text-align: center;
+}
+.mk .pr-addon strong {
+  font-weight: 600;
+  color: var(--white);
+}
+.mk .pr-addonprice {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* La clause d'engagement et la politique fondateur, dans le même cadre : ce
+   sont les deux seules conditions de la section, et un prospect qui les lit
+   séparées d'un écran croit en avoir manqué une. */
+.mk .pr-band {
+  width: 100%;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 22px;
+  border: 1px dashed rgba(201, 161, 90, 0.5);
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(201, 161, 90, 0.12), rgba(201, 161, 90, 0.02) 70%), var(--card);
+  text-align: center;
+}
+.mk .pr-engagement {
+  font-size: 15px;
+  line-height: 1.55em;
+  color: var(--white);
+}
+.mk .pr-policy {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+.mk .pr-note {
+  max-width: 860px;
+  font-size: 12.5px;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-align: center;
+}
+
 @media (max-width: 809.98px) {
+  .mk .pr-commission {
+    grid-template-columns: 1fr auto;
+    gap: 4px 14px;
+    padding: 14px 16px;
+  }
+  .mk .pr-cnote {
+    grid-column: 1 / -1;
+  }
+  .mk .pr-crate {
+    font-size: 22px;
+  }
   .mk .pr-grid {
     grid-template-columns: 1fr;
     gap: 20px;
     max-width: 480px;
   }
-}
-
-/* ===== Revenus — la bascule vers le chiffre =====
- *
- * UNE QUESTION, DEUX VOIES, UNE PHRASE COMMUNE. Le sélecteur trie le prospect
- * (« Vous êtes sur Uber Eats ou Deliveroo ? ») et n'affiche que la voie qui le
- * concerne ; la phrase de convergence est posée dessous, hors des voies, donc
- * toujours lue.
- *
- * C'est aussi ce qui tient la densité : trois offres empilées feraient de la
- * section le pavé qu'on vient de démonter. Une seule voie visible à la fois, et
- * la section ne grandit que de la hauteur de la question et de la phrase finale.
- *
- * Chaque voie garde sa FORME propre : bande compacte à deux colonnes pour la
- * reprise des pages, vitrine large pour les marques, deux cartes jumelles pour
- * le direct. On ne confond pas deux offres d'un coup d'œil.
- *
- * `--bt` est la teinte d'identité de la marque sélectionnée (voir `BRANDS`).
- * Elle n'a aucune valeur de statut : elle ne sert qu'au filet, au nom et à une
- * lueur très basse, jamais en aplat.
- */
-.mk .rev-section {
-  /* 70 et non 90 : la section s'ouvre désormais sur une carte, pas sur un
-     pavé de texte — et la consigne est de ne pas rallonger la page. */
-  padding-block: 60px;
-  gap: 16px;
-}
-
-/* ── La question qui trie ──
- *
- * Question et réponses sur une seule ligne : c'est une question posée, pas un
- * intertitre suivi d'un menu déroulant. La ligne est centrée et `wrap` — en
- * dessous de ~700 px les réponses passent sous la question d'elles-mêmes, sans
- * point de rupture dédié. */
-.mk .rev-ask {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 10px 18px;
-  margin-bottom: 2px;
-}
-.mk .rev-askq {
-  font-size: clamp(18px, 1.5vw, 21px);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-  color: var(--white);
-  text-wrap: balance;
-}
-.mk .rev-switch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--surface-6);
-  border-radius: 50px;
-  background: var(--surface-3);
-}
-.mk .rev-choice {
-  padding: 8px 16px;
-  border-radius: 50px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--gray);
-  white-space: nowrap;
-  transition:
-    color 0.25s,
-    background 0.25s,
-    border-color 0.25s;
-}
-.mk .rev-choice:hover {
-  color: var(--white);
-}
-.mk .rev-choice.is-on {
-  color: var(--accent);
-  background: rgba(201, 161, 90, 0.12);
-  border-color: rgba(201, 161, 90, 0.35);
-}
-
-/* ── Une voie ──
- *
- * `hidden` doit gagner sur le `display: flex` de la voie : sans cette règle,
- * l'attribut ne masquerait rien et les deux voies s'empileraient. */
-.mk .rev-lane {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  animation: rev-lane-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.mk .rev-lane[hidden] {
-  display: none;
-}
-@keyframes rev-lane-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+  /* Une seule colonne : il n'y a plus de ligne à lire en travers, la hauteur
+     réservée ne servirait qu'à creuser trois trous. */
+  .mk .pr-desc {
+    min-height: 0;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .mk .rev-lane {
-    animation: none;
-  }
-}
-
-.mk .rev-offer {
-  width: 100%;
-  max-width: 1000px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  background: var(--card-gradient);
-  border: 1px solid var(--surface-6);
-  border-radius: 20px;
-  padding: 22px;
-  transition: border-color 0.35s;
-}
-.mk .rev-offer:hover {
-  border-color: rgba(201, 161, 90, 0.28);
-}
-.mk .rev-offerhead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 14px;
-}
-.mk .rev-kicker {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-  border: 1px solid rgba(201, 161, 90, 0.35);
-  border-radius: 50px;
-  padding: 4px 10px;
-}
-.mk .rev-offertitle {
-  color: var(--white);
-}
-.mk .rev-offerline {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--gray);
-  flex-basis: 100%;
-}
-
-/* ── La vitrine des quatre marques ── */
-.mk .rev-brands {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-.mk .rev-brand {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 90px;
-  padding: 13px 14px 11px;
-  border: 1px solid var(--surface-6);
-  border-radius: 14px;
-  background: var(--surface-3);
-  text-align: left;
-  transition:
-    border-color 0.3s,
-    background 0.3s,
-    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.mk .rev-brand::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 14px;
-  right: 14px;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-  background: var(--bt);
-  opacity: 0.6;
-  transition: opacity 0.3s;
-}
-.mk .rev-brand:hover {
-  transform: translateY(-3px);
-  border-color: var(--border-10);
-}
-.mk .rev-brand.is-on {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bt) 12%, transparent), transparent 70%), var(--card);
-  border-color: color-mix(in srgb, var(--bt) 45%, transparent);
-}
-.mk .rev-brand.is-on::before {
-  opacity: 1;
-}
-.mk .rev-brandname {
-  font-size: 21px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  color: var(--white);
-  transition: color 0.3s;
-}
-.mk .rev-brand.is-on .rev-brandname {
-  color: var(--bt);
-}
-.mk .rev-brandcuisine {
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--gray);
-}
-.mk .rev-halal {
-  margin-top: auto;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--white-70);
-  border: 1px solid var(--border-10);
-  border-radius: 50px;
-  padding: 2px 7px;
-}
-.mk .rev-brandpanel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--surface-6);
-  border-left: 2px solid var(--bt);
-  border-radius: 4px 12px 12px 4px;
-  background: var(--surface-3);
-}
-.mk .rev-kit {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex: 1 1 auto;
-}
-.mk .rev-kititem {
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--white-80);
-  background: var(--badge-bg);
-  border: 1px solid var(--surface-6);
-  border-radius: 50px;
-  padding: 5px 11px;
-}
-.mk .rev-discover {
-  flex-shrink: 0;
-}
-
-/* ── Trois étapes, presque sans mots ── */
-.mk .rev-steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.mk .rev-step {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--white);
-}
-.mk .rev-stepnum {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid rgba(201, 161, 90, 0.4);
-  background: rgba(201, 161, 90, 0.1);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Les chiffres, seuls et gros ── */
-.mk .rev-figures {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--surface-6);
-}
-.mk .rev-figure {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.mk .rev-fig {
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--white);
-  font-variant-numeric: tabular-nums;
-}
-.mk .rev-figures.boost .rev-fig {
-  font-size: 34px;
-}
-.mk .rev-figlabel {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.35;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-
-/* ── Offre 2 — la bande, deux colonnes ──
- *
- * Ce qu'on fait à gauche, ce que ça coûte à droite. Deux colonnes plutôt que
- * quatre rangées empilées : l'offre tient sur la hauteur de la plus haute des
- * deux, et elle ne peut pas être confondue avec la vitrine du dessus. */
-.mk .rev-offer.boost {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px 30px;
-  align-items: start;
-}
-.mk .rev-boostmain,
-.mk .rev-boostside {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.mk .rev-levers {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.mk .rev-lever {
-  position: relative;
-  padding-left: 16px;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--white-80);
-}
-.mk .rev-lever::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 7px;
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  transform: rotate(45deg);
-}
-.mk .rev-offer.boost .rev-figures {
-  padding-top: 0;
-  border-top: none;
-}
-.mk .rev-boostcta {
-  align-self: flex-start;
-}
-
-/* ── Voie « en direct » — deux cartes jumelles ──
- *
- * Deux choix de MÊME poids : la page qu'on sert, ou le module qu'on greffe.
- * Aucun des deux n'est « le bon » — c'est le restaurateur qui sait s'il tient à
- * son site actuel. Deux colonnes égales le disent mieux qu'une hiérarchie. */
-.mk .rev-channels {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.mk .rev-channel {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 13px 15px;
-  border: 1px solid var(--surface-6);
-  border-radius: 14px;
-  background: var(--surface-3);
-}
-.mk .rev-channeltitle {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  color: var(--white);
-}
-.mk .rev-channelline {
-  font-size: 13.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.45;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-/* Les pastilles sur une ligne, la livraison sur la sienne. Serrée à droite des
-   pastilles, la phrase de livraison se lisait comme une note de bas de page —
-   or c'est le cœur de l'argument : personne ne s'intercale. */
-.mk .rev-does {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 9px;
-}
-/* La livraison tient sur une ligne de texte, pas sur une pastille : une
-   pastille se lit comme une fonctionnalité qu'on fournit, et nous ne
-   fournissons pas de livreurs. */
-.mk .rev-delivery {
-  font-size: 13.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.45;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-.mk .rev-delivery strong {
-  color: var(--white);
-  font-weight: 600;
-}
-/* « Vos prix » est un mot, pas un nombre : à 38 px il déborderait de sa
-   colonne. La rangée du direct descend donc d'un cran. */
-.mk .rev-figures.direct .rev-fig {
-  font-size: 30px;
-}
-.mk .rev-directcta {
-  align-self: flex-start;
-}
-
-/* ── Acte 3 — la 2ᵉ enseigne ──
- *
- * Hors des voies : elle se vend sur la page de commande qu'on installe, donc
- * elle s'adresse autant à qui n'a jamais entendu parler d'Uber qu'à qui en vit.
- * Elle suit la phrase de convergence, d'où la respiration au-dessus. */
-.mk .rev-offer.brandsact {
-  margin-top: 6px;
-}
-
-/* ── La clause d'honnêteté ──
- *
- * Le filet doré à gauche, et rien d'autre : pas de carte, pas de fond. Encadrer
- * cette phrase la ferait lire comme un encart de conditions — exactement ce
- * qu'elle n'est pas. C'est une parole tenue à voix haute, au milieu de
- * l'argumentaire. */
-.mk .rev-fair {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 2px 0 2px 14px;
-  border-left: 2px solid rgba(201, 161, 90, 0.45);
-}
-.mk .rev-fairline {
-  font-size: 13.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.5;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-.mk .rev-fairline strong {
-  color: var(--white);
-  font-weight: 600;
-}
-/* La comparaison est la dernière chose lue de la section : elle prend le ton
-   d'une phrase dite, pas d'une ligne d'argumentaire. */
-.mk .rev-fairedge {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.4;
-  color: var(--white-80);
-  text-wrap: balance;
-}
-
-/* ── La note de l'astérisque ──
- *
- * Petite, jamais illisible : 11.5 px est le plancher de la direction artistique,
- * et `--white-50` sur le fond noir reste au-dessus du contraste AA. Une note
- * qu'on ne peut pas lire ne protège personne — elle accuse. */
-.mk .rev-note {
-  width: 100%;
-  max-width: 1000px;
-  margin-top: 2px;
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  line-height: 1.5;
-  color: var(--white-50);
-  text-wrap: pretty;
-}
-
-/* ── Le point de convergence ──
- *
- * Hors des voies : c'est la phrase que les deux réponses partagent, et la seule
- * chose que le prospect doit retenir s'il ne retient qu'une chose. Pas de
- * carte, pas de bordure — du blanc sur le noir, en grand. */
-.mk .rev-payoff {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  text-align: center;
-}
-.mk .rev-payofftitle {
-  font-size: clamp(24px, 2.6vw, 32px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
-  color: var(--white);
-  text-wrap: balance;
-}
-.mk .rev-payoffline {
-  font-size: 14.5px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.5;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-
-@media (max-width: 809.98px) {
-  .mk .rev-section {
-    padding-block: 56px;
-  }
-  .mk .rev-offer {
-    padding: 18px 14px;
-    gap: 12px;
-  }
-  .mk .rev-brands {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .mk .rev-brand {
-    min-height: 84px;
-    padding: 11px 12px 9px;
-    gap: 3px;
-  }
-  .mk .rev-brandname {
-    font-size: 19px;
-  }
-  .mk .rev-brandpanel {
-    gap: 8px 10px;
-    padding: 10px 12px;
-  }
-  .mk .rev-kit {
-    gap: 6px;
-  }
-  .mk .rev-kititem {
-    font-size: 12px;
-    padding: 4px 9px;
-  }
-  .mk .rev-steps {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-  .mk .rev-step {
-    font-size: 14px;
-    gap: 9px;
-  }
-  .mk .rev-stepnum {
-    width: 22px;
-    height: 22px;
-  }
-  /* Chiffre à gauche, libellé à droite — et les trois libellés alignés sur
-     la MÊME verticale. Une largeur fixe ne peut pas le faire : « 3 semaines »
-     est trois fois plus large que « 8 % ». `display: contents` sort la paire
-     de son conteneur, les six éléments retombent dans une seule grille à deux
-     colonnes, et la colonne des chiffres se cale sur le plus large. */
-  .mk .rev-figures {
-    grid-template-columns: max-content 1fr;
-    column-gap: 12px;
-    row-gap: 10px;
-    align-items: baseline;
-    padding-top: 12px;
-  }
-  .mk .rev-figure {
-    display: contents;
-  }
-  .mk .rev-fig,
-  .mk .rev-figures.boost .rev-fig {
-    font-size: 26px;
-  }
-  .mk .rev-offer.boost {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .mk .rev-boostmain,
-  .mk .rev-boostside {
-    gap: 12px;
-  }
-  .mk .rev-discover,
-  .mk .rev-boostcta,
-  .mk .rev-directcta {
+  .mk .pr-cta {
     width: 100%;
+    max-width: 480px;
   }
-  /* Les deux réponses se partagent la largeur : deux cibles franches, aucune
-     qui déborde, et le pouce n'a pas à viser. */
-  .mk .rev-switch {
-    width: 100%;
-    max-width: 360px;
+  .mk .pr-mathrow {
+    gap: 18px 28px;
   }
-  .mk .rev-choice {
-    flex: 1 1 0;
-    /* 11 px et non 9 : la cible tactile passe de 42 à 46 px de haut, au-dessus
-       du plancher de 44 px de la direction artistique. */
-    padding: 11px 8px;
-    font-size: 13.5px;
-    /* « Non, ou pas encore » ne tient pas sur une ligne dans la moitié d'un
-       écran de 390 px : on le laisse revenir plutôt que rogner la police. */
-    white-space: normal;
-  }
-  .mk .rev-lane {
-    gap: 12px;
-  }
-  .mk .rev-channels {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .mk .rev-channel {
-    padding: 12px 13px;
-  }
-  .mk .rev-does {
-    gap: 8px;
-  }
-  .mk .rev-delivery {
-    font-size: 13px;
-  }
-  .mk .rev-figures.direct .rev-fig {
-    font-size: 24px;
-  }
-  .mk .rev-payoff {
-    margin-top: 2px;
-    gap: 6px;
-  }
-  .mk .rev-offer.brandsact {
-    margin-top: 2px;
-  }
-  .mk .rev-fair {
-    padding-left: 11px;
-  }
-  .mk .rev-fairline {
-    font-size: 13px;
-  }
-  .mk .rev-fairedge {
-    font-size: 14px;
+  .mk .pr-mathsave {
+    font-size: 44px;
   }
 }
 
@@ -4867,6 +3537,58 @@ html:has(.mk) {
   }
 }
 
+/* ===== Contact — la case à cocher et sa raison d'être =====
+ *
+ * Encadrée, mais discrètement : c'est le seul champ du formulaire qui pose
+ * une question que le visiteur ne se posait pas, il doit se distinguer des
+ * quatre autres sans les dominer. Sans prix, sans promesse, sans délai —
+ * ni ici ni dans la copie. C'est là qu'atterrit le service sorti de la page.
+ */
+.mk .ct-check {
+  margin-top: 2px;
+  padding: 13px 15px;
+  background: var(--surface-3);
+  border: 1px solid var(--surface-6);
+  border-radius: 12px;
+}
+.mk .ct-checkrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.mk .ct-checkrow input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.mk .ct-checklabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35em;
+  color: var(--white);
+}
+/*
+ * Alignée sous le libellé et non sous la case : une ligne d'aide qui repart
+ * du bord gauche se lit comme une mention légale, pas comme la suite de la
+ * question. `27px` = largeur de la case + gap.
+ */
+.mk .ct-checkhelp {
+  margin-top: 6px;
+  padding-left: 27px;
+  font-size: 12.5px;
+  line-height: 1.5em;
+  color: var(--gray);
+}
+@media (max-width: 809.98px) {
+  .mk .ct-check {
+    padding: 12px 13px;
+  }
+}
+
 /* ===== Pied de page ===== */
 .mk .foot-wrap {
   width: 100%;
@@ -5032,78 +3754,6 @@ html:has(.mk) {
   }
 }
 
-/* ===== Barre collante ===== */
-.mk .stickybar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 900;
-  display: flex;
-  justify-content: center;
-  padding: 0 16px 16px;
-  pointer-events: none;
-  transform: translateY(120%);
-  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.mk .stickybar.is-on {
-  transform: translateY(0);
-}
-.mk .stickybar-in {
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  background: rgba(12, 12, 12, 0.92);
-  border: 1px solid var(--border-10);
-  border-radius: 16px;
-  padding: 12px 14px 12px 20px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-  max-width: 680px;
-}
-.mk .stickybar-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: sm-chipPulse 2s infinite;
-  flex-shrink: 0;
-}
-.mk .stickybar-text {
-  font-size: 13.5px;
-  color: var(--gray);
-  line-height: 1.4em;
-}
-.mk .stickybar-text strong {
-  color: var(--white);
-  font-weight: 600;
-}
-.mk .stickybar .btn {
-  padding: 10px 18px;
-  font-size: 13.5px;
-  white-space: nowrap;
-}
-.mk .stickybar-x {
-  background: none;
-  border: none;
-  color: var(--gray);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px;
-  font-family: inherit;
-}
-.mk .stickybar-x:hover {
-  color: var(--white);
-}
-@media (max-width: 639.98px) {
-  .mk .stickybar-text {
-    display: none;
-  }
-}
-
 /* ===== Révélation au scroll ===== */
 .mk .rv {
   opacity: 0;
@@ -5173,24 +3823,14 @@ html:has(.mk) {
     opacity: 1;
     transform: none;
   }
+  /* La liste a fondu avec les sections qui la remplissaient : les onze
+     porteurs d'hier (bandeau collant, tuiles, catalogue, vignettes, bandeau
+     de fonctionnalités, bento) ont été démontés. Ne restent que les quatre
+     animations perpétuelles de la page d'aujourd'hui. */
   .mk .hero-chipdot,
-  .mk .stickybar-dot,
-  .mk .bf-tile,
-  .mk .cat-item,
-  .mk .cat-dot,
   .mk .cmp-headpill.right,
-  .mk .vg-tagtext::before,
   .mk .fd-card::before,
-  .mk .pr-card.popular,
-  .mk .ticker-track,
-  .mk .ag-track,
-  .mk .vo-track,
-  .mk .wf-dash,
-  .mk .mkt-chip,
-  .mk .bf-halo {
+  .mk .pr-card.popular {
     animation: none !important;
-  }
-  .mk .stickybar {
-    transition: none;
   }
 }

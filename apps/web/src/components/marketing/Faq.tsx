@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { FAQ } from "./content";
+import { CTA_CALLBACK, FAQ, section } from "./content";
 import { FaqChevron } from "./icons";
 
 /**
@@ -9,8 +9,21 @@ import { FaqChevron } from "./icons";
  * de la maquette). La hauteur est animée par `grid-template-rows: 0fr → 1fr`
  * plutôt que par un `max-height` arbitraire : les réponses longues ne sont
  * jamais tronquées.
+ *
+ * HUIT ENTRÉES RAMENÉES À CINQ, ET L'ACCORDÉON CESSE D'ÊTRE UN PLACARD. Trois
+ * questions sont montées dans la section où elles se posent (matériel et
+ * hors-ligne en section 5, délai de mise en route en section 8), une est
+ * absorbée par les canaux, une part avec les marques blanches. Le tri est fait
+ * dans `FAQ` : ce composant ne filtre rien et ne doit rien filtrer.
+ *
+ * L'ENTRÉE SUR L'ENGAGEMENT NE S'ÉCRIT PAS ICI. Elle vaut `ENGAGEMENT`, la
+ * même constante que le bandeau sous la grille tarifaire — la page se
+ * contredisait à voix haute (« Sans engagement » au hero contre « on vous
+ * détaille au moment du devis » ici), et c'est la référence partagée, pas la
+ * bonne volonté, qui empêche la contradiction de revenir.
  */
 export function Faq() {
+  const { badge, title } = section("faq");
   const [open, setOpen] = useState<number | null>(0);
   const uid = useId();
 
@@ -18,12 +31,13 @@ export function Faq() {
     <section className="faq-section" id="faq">
       <div className="faq-grid">
         <div className="faq-left rv rv-x-l">
-          <span className="badge">FAQ</span>
-          <h2 className="h2">Questions fréquentes</h2>
+          {badge ? <span className="badge">{badge}</span> : null}
+          <h2 className="h2">{title}</h2>
+          {/* Un seul lien, et il dit ce que disent les quatre autres appels de la page. */}
           <p className="body-text faq-help">
             Une question précise ?{" "}
             <a href="#contact" className="faq-helplink">
-              Contactez-nous
+              {CTA_CALLBACK}
             </a>
           </p>
         </div>

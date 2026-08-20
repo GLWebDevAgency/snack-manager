@@ -259,6 +259,71 @@ export function BfBars() {
   );
 }
 
+/* ── Pictos 24×24 de la section « Matériel » ── */
+
+/*
+ * Quatre traits, aucun emoji : la charte sombre et dorée ne bouge pas, et une
+ * section qui dit « rien à racheter » ne peut pas le dire avec des vignettes de
+ * catalogue. Ils sont dessinés plus grands que les pictos de tuiles (34 px au
+ * rendu contre 18) parce qu'ils portent la section à eux seuls — il n'y a pas
+ * une phrase autour d'eux.
+ *
+ * Le trait est plus épais que celui des maquettes internes : à 34 px, 1,3
+ * disparaît.
+ */
+const line24 = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.4,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+/** Tablette Android ou iPad — la vôtre, aucun matériel propriétaire. */
+export function MtTablette({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <rect x="5" y="2.8" width="14" height="18.4" rx="2.4" />
+      <path d="M10.4 18.5h3.2" />
+    </svg>
+  );
+}
+
+/** Imprimante ticket 80 mm — le ticket sort par le bas, c'est ce qu'on regarde. */
+export function MtImprimante({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <path d="M7.2 8.4V4.2h9.6v4.2" />
+      <rect x="3.2" y="8.4" width="17.6" height="6.4" rx="1.6" />
+      <path d="M7.2 12.4h9.6v7.4H7.2z" />
+      <path d="M9.6 15.4h4.8M9.6 17.6h3.2" />
+      <circle cx="17.9" cy="10.9" r="0.55" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Écran cuisine — une TV ou un moniteur mural, rien de spécifique. */
+export function MtEcran({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <rect x="2.8" y="4" width="18.4" height="12.6" rx="1.8" />
+      <path d="M12 16.6v3.6" />
+      <path d="M8.5 20.2h7" />
+    </svg>
+  );
+}
+
+/** Connexion internet — une box suffit, la fibre n'est pas requise. */
+export function MtReseau({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <path d="M3.6 10.4a11.4 11.4 0 0 1 16.8 0" />
+      <path d="M7.2 14a6.6 6.6 0 0 1 9.6 0" />
+      <circle cx="12" cy="18.4" r="1.05" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
 export function CmpCross() {
   return (

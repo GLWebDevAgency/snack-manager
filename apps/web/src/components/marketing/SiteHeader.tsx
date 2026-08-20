@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NAV_LEFT, NAV_RIGHT } from "./content";
+import { NAV_LEFT, NAV_MOBILE, NAV_RIGHT } from "./content";
 import { LogoMark, NotchFillet } from "./icons";
 
 /** `useLayoutEffect` côté client, `useEffect` au rendu serveur (pas d'avertissement). */
@@ -107,12 +107,19 @@ export function SiteHeader() {
             <span />
           </button>
         </div>
+        {/*
+         * LE BURGER EST DEVENU LE SOMMAIRE DE LA PAGE, ET IL N'AVAIT PAS LE
+         * CHOIX. La barre collante a disparu : sur téléphone, ce menu est
+         * désormais la SEULE navigation, et le seul raccourci vers le prix.
+         * Les cinq entrées de l'encoche n'y suffisaient plus — il déroule les
+         * dix sections de `NAV_MOBILE` (tout sauf le hero, où l'on est déjà).
+         */}
         <nav
           id="hd-mobilemenu"
           className={menuOpen ? "hd-mobilemenu open" : "hd-mobilemenu"}
           aria-hidden={!menuOpen}
         >
-          {[...NAV_LEFT, ...NAV_RIGHT].map((l) => (
+          {NAV_MOBILE.map((l) => (
             <a
               className="ui-link"
               href={l.href}

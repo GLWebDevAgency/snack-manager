@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HERO_SHOTS } from "./content";
+import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS } from "./content";
 import { Photo } from "./Photo";
 
 /** Position d'une carte dans le deck : centre, gauche, droite, ou hors-champ. */
@@ -22,6 +22,19 @@ function slot(index: number, current: number, total: number) {
  *
  * La maquette y plaçait des iframes de démonstration ; on affiche les VRAIES
  * captures de nos applications (`public/shots/`).
+ *
+ * LE HERO N'OUVRE QU'UNE PORTE, ET CE N'EST PAS LE FORMULAIRE. Son appel
+ * principal mène à la démonstration manipulable, un écran plus bas : c'est la
+ * seule inversion de hiérarchie de la page, et elle est le corollaire de la
+ * thèse — le seul actif que personne d'autre n'a, c'est que nos applications
+ * se touchent. « Être rappelé » reste offert juste à côté, en second.
+ *
+ * LA RANGÉE DE GAGES EST PARTIE (« Sans engagement », « Installé en quelques
+ * jours », « Testé en service réel »). Elle répondait ici à trois questions
+ * que le visiteur ne se pose pas encore, et les usait avant qu'elles ne
+ * comptent : l'engagement se dit une fois, dans les termes exacts du socle,
+ * sous la grille tarifaire et dans la FAQ ; le délai d'installation est la
+ * frise du lancement ; le service réel est la section du pilote.
  */
 export function Hero() {
   const total = HERO_SHOTS.length;
@@ -34,7 +47,7 @@ export function Hero() {
   }, [total]);
 
   return (
-    <section className="hero">
+    <section className="hero" id="hero">
       <div className="hero-frame">
         <div className="hero-demo" aria-hidden="true">
           <div className="hero-demotrack">
@@ -64,19 +77,12 @@ export function Hero() {
             <span className="kw-w">tenu le comptoir</span>.
           </p>
           <div className="hero-actions">
-            <a className="btn light" href="#contact">
-              Demander une démo
+            <a className="btn light" href="#produit">
+              {CTA_DEMO}
             </a>
-            <a className="btn dark" href="#demo">
-              Explorer la démo
+            <a className="btn dark" href="#contact">
+              {CTA_CALLBACK}
             </a>
-          </div>
-          <div className="hero-trust">
-            <span>Sans engagement</span>
-            <i />
-            <span>Installé en quelques jours</span>
-            <i />
-            <span>Testé en service réel 7 j/7</span>
           </div>
         </div>
 

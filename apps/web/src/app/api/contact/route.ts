@@ -52,6 +52,13 @@ type Lead = {
   email: string | null;
   callbackSlot: string;
   message: string | null;
+  /**
+   * « Vous vendez déjà sur Uber Eats ou Deliveroo ? » — la case à cocher du
+   * formulaire. C'est un signal de qualification, pas une commande : on regarde
+   * les pages du restaurateur avec lui pendant l'appel. Aucun prix, aucune
+   * promesse, aucun délai n'est attaché à ce booléen, ni ici ni dans la page.
+   */
+  platforms: boolean;
   source: "site-vitrine";
   createdAt: string;
 };
@@ -86,6 +93,11 @@ function parse(body: unknown): { lead: Lead } | { error: string } {
       email: email || null,
       callbackSlot: SLOTS.has(slot) ? slot : "matin",
       message: str(b.message, MAX.message) || null,
+      // Une case décochée n'est pas envoyée par le navigateur : tout ce qui
+      // n'est pas strictement `true` vaut « non », y compris un "on" en chaîne
+      // ou un champ absent. Un booléen mal formé ne doit pas faire échouer un
+      // rappel — le nom et le téléphone sont les seuls champs qui le peuvent.
+      platforms: b.platforms === true,
       source: "site-vitrine",
       createdAt: new Date().toISOString(),
     },
