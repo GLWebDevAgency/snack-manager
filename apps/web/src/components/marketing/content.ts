@@ -633,12 +633,27 @@ export type Service = {
  * Trois services, et chacun dit ce qu'il produit. La fiche Google reste en
  * tête : c'est le meilleur argument de la page, et il est vérifiable.
  *
+ * ═══ ON NE SE BAT PAS CONTRE UBER EATS, ON SE PLACE À CÔTÉ ═══
+ *
+ * Première rédaction : « les plateformes posent leur lien sans vous demander
+ * votre avis », « on demande le retrait des autres ». Le fondateur a coupé
+ * court, et il a raison sur le fond commercial : les plateformes sont un ATOUT
+ * pour le chiffre d'affaires du restaurateur, elles lui apportent des clients
+ * qu'il n'aurait pas eus et elles portent les sacs. Un prospect qui en vit
+ * n'écoute pas quelqu'un qui commence par les attaquer — il entend qu'on lui
+ * demande de renoncer à du volume.
+ *
+ * La division du travail est plus juste ET plus vendeuse : LES PLATEFORMES
+ * ACQUIÈRENT, LE CANAL DIRECT FIDÉLISE. L'habitué qui commande en direct paie
+ * le prix de la carte, celui qu'on n'a pas eu à gonfler pour absorber la
+ * commission et les frais de service ; ses points de fidélité sont dans la
+ * page ; son numéro appartient au restaurateur. On n'enlève rien, on ajoute.
+ *
  * VÉRIFIÉ CONTRE LA DOCUMENTATION GOOGLE (support.google.com/business/
  * answer/10842217, consultée le 20/08/2026) : un établissement peut ajouter ses
- * propres liens de commande, les marquer comme préférés, et demander le retrait
- * des liens tiers. On ne promet PAS de « faire disparaître Uber Eats de votre
- * fiche » — ce n'est pas nous qui l'exécutons, c'est Google — et on ne prête
- * plus de délai à Google, qui n'en publie aucun.
+ * propres liens de commande et les marquer comme préférés. La fiche porte donc
+ * les DEUX — celui des plateformes et le sien, préféré. On ne prête aucun délai
+ * à Google, qui n'en publie pas.
  *
  * LES PRIX SONT ÉCRITS ICI, pas renvoyés à un devis. Un service dont le prix se
  * demande est un service qu'on ne demande pas.
@@ -647,8 +662,8 @@ export const SERVICES: readonly Service[] = [
   {
     id: "google",
     title: "Votre visibilité sur Google",
-    lead: "Le bouton « Commander » de votre fiche pointe vers vous, pas vers eux.",
-    line: "Les plateformes posent leur lien sur votre fiche Google sans vous demander votre avis — et c'est par là que vos clients vous trouvent. On installe le vôtre à la place, marqué « préféré par l'établissement », et on demande le retrait des autres. Même repas, même prix pour le client : la commission, elle, reste dans votre caisse.",
+    lead: "Vos clients vous trouvent sur Google. Offrez-leur aussi le choix de commander en direct.",
+    line: "On ajoute votre lien de commande sur votre fiche, à côté de ceux des plateformes et marqué « préféré par l'établissement ». Uber Eats et Deliveroo continuent de vous apporter des clients que vous n'auriez pas eus, et de porter les sacs. Votre page, elle, retient ceux qui reviennent.",
     price: "Compris dans la mise en route",
   },
   {
@@ -661,8 +676,8 @@ export const SERVICES: readonly Service[] = [
   {
     id: "commande",
     title: "Votre page de commande",
-    lead: "En ligne dès l'ouverture du compte, à vos couleurs.",
-    line: "Sur une adresse Snack Manager, ou sur votre propre nom de domaine si vous en avez un. Vous tenez déjà à votre site ? On y branche le bouton « Commander » avec une balise à coller — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
+    lead: "Vos prix de la carte, et un client qui revient.",
+    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Les points de fidélité sont dans la page, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs, sur votre nom de domaine si vous en avez un — ou branchée sur le site que vous avez déjà, avec une balise que nous collons pour vous.",
     price: "Compris dans l'abonnement",
   },
 ];
