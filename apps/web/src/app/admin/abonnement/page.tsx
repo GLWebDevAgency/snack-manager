@@ -160,7 +160,7 @@ export default function AbonnementPage() {
    *
    * Nos tarifs sont annoncés hors taxes — c'est le prix qui coûte réellement à
    * un professionnel, qui récupère la TVA — mais ce que le gérant PRÉLÈVE sur
-   * son compte, lui, est TTC. Afficher 139 € là où 166,80 € partent du compte
+   * son compte, lui, est TTC. Afficher 159 € là où 190,80 € partent du compte
    * en banque, c'est le rendez-vous téléphonique assuré. La formule reste donc
    * annoncée en HT (c'est le prix du contrat) et les ÉCHÉANCES en TTC (c'est le
    * mouvement bancaire), chacune disant laquelle elle est.

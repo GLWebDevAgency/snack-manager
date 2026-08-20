@@ -77,10 +77,12 @@ const FIELDS: Field[] = [
  * les tarifs : cinq curseurs à bouger au pouce entre deux services, juste avant
  * la seule chose que le visiteur cherche, c'est un péage — il défile, il rate
  * les hypothèses et il arrive au prix de mauvaise humeur. Posée APRÈS le prix,
- * elle répond à l'objection qui naît exactement là : « 139 € par mois, et ce
- * que je paie déjà, c'est combien ? » Le seul chiffre de résultat de toute la
- * page est celui que le visiteur fabrique lui-même — il ne peut pas être notre
- * mensonge.
+ * elle répond à l'objection qui naît exactement là : « d'accord pour ce
+ * tarif-là, et ce que je paie déjà, c'est combien ? » — le titre de la section
+ * (`SECTIONS`, content.ts) cite le montant, et il le DÉRIVE de la grille
+ * plutôt que de le recopier, ce commentaire compris. Le seul chiffre de
+ * résultat de toute la page est celui que le visiteur fabrique lui-même — il
+ * ne peut pas être notre mensonge.
  */
 export function Simulator() {
   const { badge, title } = section("simulateur");

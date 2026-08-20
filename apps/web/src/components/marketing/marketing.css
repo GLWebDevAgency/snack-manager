@@ -3269,6 +3269,110 @@ html:has(.mk) {
   color: var(--gray);
 }
 
+/* ── Le sélecteur de périodicité ──
+ *
+ * DEUX ONGLETS ET UNE PASTILLE QUI GLISSE DESSOUS. La glissade n'est pas une
+ * décoration : c'est elle qui dit que les deux onglets montrent la MÊME grille
+ * payée autrement, là où deux boutons qui s'allument tour à tour se liraient
+ * comme deux offres différentes.
+ *
+ * `--i` porte le rang de l'onglet actif, `--n` le nombre d'onglets — les deux
+ * posés par le composant, parce que le CSS ne sait ni lequel est sélectionné ni
+ * combien il y en a. Une largeur calculée en JavaScript se serait désaccordée
+ * du texte au premier changement de police ; ici la pastille tient sa mesure de
+ * la grille elle-même.
+ *
+ * Le décalage : la piste intérieure fait `100% − 8px` (les 4 px de marge de
+ * chaque côté), donc une pastille large d'un `n`-ième de cette piste tombe
+ * exactement sur le premier et sur le dernier onglet. */
+.mk .pr-billing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.mk .pr-cycles {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--n), 1fr);
+  padding: 4px;
+  border: 1px solid var(--surface-6);
+  border-radius: 999px;
+  background: var(--badge-bg);
+}
+.mk .pr-cycles::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--n));
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translateX(calc(var(--i) * 100%));
+  transition: transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* 44 px de haut à toute largeur : c'est la cible tactile minimale, et un
+   sélecteur qu'on rate au pouce entre deux services ne sera pas essayé deux
+   fois. */
+.mk .pr-cycle {
+  position: relative;
+  z-index: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--gray);
+  transition: color 0.28s ease;
+}
+.mk .pr-cycle:hover {
+  color: var(--white);
+}
+/* L'état vient de `aria-selected`, jamais d'une classe : ce que voit l'œil et
+   ce qu'annonce le lecteur d'écran ne peuvent plus diverger. */
+.mk .pr-cycle[aria-selected="true"] {
+  font-weight: 600;
+  color: var(--black);
+}
+.mk .pr-cycle:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+.mk .pr-cyclehint {
+  padding: 3px 9px;
+  border: 1px solid rgba(201, 161, 90, 0.35);
+  border-radius: 999px;
+  background: rgba(201, 161, 90, 0.16);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  transition:
+    background 0.28s ease,
+    border-color 0.28s ease,
+    color 0.28s ease;
+}
+/* Posée sur la pastille dorée, elle passe en creux : de l'or sur de l'or ne se
+   lit pas. */
+.mk .pr-cycle[aria-selected="true"] .pr-cyclehint {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--black);
+}
+.mk .pr-billingnote {
+  max-width: 620px;
+  font-size: 13px;
+  line-height: 1.5em;
+  color: var(--gray);
+  text-align: center;
+}
+
 .mk .pr-grid {
   width: 100%;
   max-width: var(--content-width);
@@ -3276,6 +3380,14 @@ html:has(.mk) {
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   align-items: stretch;
+}
+/* La grille est le panneau des deux onglets, donc elle est atteignable au
+   clavier : sans cet arrêt, un utilisateur qui vient de changer de périodicité
+   n'aurait aucun moyen d'aller lire ce qu'il vient de changer. */
+.mk .pr-grid:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 10px;
+  border-radius: 20px;
 }
 .mk .pr-card {
   position: relative;
@@ -3321,22 +3433,95 @@ html:has(.mk) {
   padding: 5px 12px;
   border-radius: 50px;
 }
+/* ── Le prix, et les DEUX montants qu'il porte ──
+ *
+ * Les deux périodicités occupent la MÊME case de grille. C'est ce qui permet
+ * au chiffre de se substituer en glissant au lieu de sauter — un nombre qui
+ * saute ne se lit pas comme une remise, il se lit comme une erreur de
+ * chargement — et c'est aussi ce qui garantit que la carte garde exactement la
+ * même hauteur d'un onglet à l'autre.
+ *
+ * LE MOUVEMENT VA TOUJOURS VERS LE HAUT : le mensuel s'en va par là, l'annuel
+ * arrive par en bas. Un prix qui descend se lit comme une chute, et ce n'est
+ * pas ce qu'on raconte ici. */
 .mk .pr-price {
+  display: grid;
+  justify-items: start;
+  margin-top: 10px;
+}
+.mk .pr-amt {
+  grid-area: 1 / 1;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-top: 10px;
   font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.2em;
   color: var(--white);
+  transition:
+    opacity 0.3s ease,
+    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* Le montant que l'onglet ne montre pas tient toujours sa place dans la case
+   (c'est lui qui fixe la hauteur), mais ne s'attrape plus ni à la souris ni au
+   clavier — et il est déjà hors du texte, `aria-hidden` étant posé par le
+   composant. */
+.mk .pr-grid[data-cycle="mensuel"] .pr-amt.is-year,
+.mk .pr-grid[data-cycle="annuel"] .pr-amt.is-month {
+  opacity: 0;
+  pointer-events: none;
+}
+.mk .pr-grid[data-cycle="mensuel"] .pr-amt.is-year {
+  transform: translateY(14px);
+}
+.mk .pr-grid[data-cycle="annuel"] .pr-amt.is-month {
+  transform: translateY(-14px);
 }
 .mk .pr-period {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--gray);
+}
+
+/* ── Ce que l'année économise, sous le prix ──
+ *
+ * ELLE SE DÉPLIE, ELLE N'APPARAÎT PAS. `0fr` → `1fr` sur une ligne de grille
+ * est le seul moyen d'animer une hauteur qu'on ne connaît pas d'avance ; une
+ * case qui surgit d'un coup décalerait les trois cartes et le pied de section
+ * avec elles, au moment précis où le lecteur compare deux chiffres. */
+.mk .pr-year {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 0.42s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.3s ease;
+}
+.mk .pr-grid[data-cycle="annuel"] .pr-year {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.mk .pr-yearin {
+  min-height: 0;
+  overflow: hidden;
+}
+.mk .pr-yearmonth {
+  padding-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
+}
+.mk .pr-yearsave {
+  font-size: 12.5px;
+  line-height: 1.45em;
+  color: var(--gray);
+}
+.mk .pr-yearsave b {
+  font-weight: 600;
+  color: var(--accent);
 }
 /* Hauteur réservée, et ce n'est pas de la cosmétique : trois accroches de
    longueurs différentes décaleraient les trois listes de modules, et le seul
@@ -3398,62 +3583,328 @@ html:has(.mk) {
   padding: 12px 24px;
 }
 
-/* L'addition, en géant. Quatre nombres, tous les nôtres, aucune hypothèse de
-   marché : elle est désamorcée avant d'être faite. */
-.mk .pr-math {
+/* ═══ LA CARTE DE CALCUL — L'ADDITION SE FAIT SOUS LES YEUX ═══
+ *
+ * Une somme déjà posée se vérifie ; une somme qui se construit se VIT. Les
+ * lignes s'empilent une à une, la barre se trace, le total tombe, Boost répond
+ * en face, et l'écart arrive en dernier — c'est la chute, elle n'apparaît
+ * jamais en premier.
+ *
+ * ─── DEUX NOMBRES TIENNENT TOUT LE RYTHME ───
+ *
+ *   `--t0` — le temps qu'on laisse à la carte pour finir d'apparaître avant que
+ *            la première ligne bouge (la révélation `.rv` dure 0,7 s) ;
+ *   `--dt` — l'écart entre deux rangs. À 0,1 s les entrées se chevauchent et la
+ *            séquence se lit comme une vague ; au-delà de 0,2 s elle se hache et
+ *            on attend.
+ *
+ * Le retard d'un élément vaut `--t0 + --i × --dt`, et `--i` est son RANG dans la
+ * séquence — posé par le composant, qui seul sait dans quel ordre les temps se
+ * suivent. Même motif que `--i` sur `.cmp-row`, section comparatif.
+ *
+ * ─── CE QUI N'EST PAS NÉGOCIABLE ───
+ *
+ * Tout est en CSS : aucun temporisateur JavaScript, donc rien qui puisse se
+ * désynchroniser dans un onglet resté en arrière-plan pendant que le navigateur
+ * étrangle les minuteries.
+ *
+ * Rien ne part avant `.in`. Sans cette garde, la séquence se jouerait pendant
+ * que le visiteur est trois écrans plus haut, et il arriverait devant un
+ * tableau déjà figé — c'est-à-dire devant rien.
+ *
+ * Et HORS ANIMATION LE CALCUL EST COMPLET : aucune règle de base ne cache quoi
+ * que ce soit. Tous les montants, les deux totaux et les trois écarts sont
+ * dans le DOM, dans l'ordre, lisibles par un moteur de recherche, un lecteur
+ * d'écran ou quelqu'un sous `prefers-reduced-motion`. L'animation embellit,
+ * elle ne conditionne rien. */
+.mk .pr-calc {
+  --t0: 0.3s;
+  --dt: 0.1s;
+  --step: 0.5s;
+  /* Rang par défaut : un élément qui oublierait le sien entre avec le premier
+     plutôt que de rendre son retard invalide. */
+  --i: 0;
   width: 100%;
   max-width: 860px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 28px 24px;
+  gap: 22px;
+  padding: 28px;
   border: 1px solid var(--surface-6);
   border-radius: 16px;
   background: var(--card-gradient);
+}
+
+/* Les deux chemins, à la même hauteur. Le lecteur compare une ligne à celle
+   qui lui fait face — c'est la seule raison pour laquelle les deux colonnes
+   portent le même nombre de totaux. */
+.mk .pr-calccols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.mk .pr-calcside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--surface-6);
+  border-radius: 14px;
+  background: var(--surface-3);
+}
+.mk .pr-calcside.is-boost {
+  border-color: rgba(201, 161, 90, 0.35);
+  background: linear-gradient(180deg, rgba(201, 161, 90, 0.12), rgba(201, 161, 90, 0.02) 70%);
+}
+.mk .pr-calctitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35em;
+  color: var(--gray);
+}
+.mk .pr-calcside.is-boost .pr-calctitle {
+  color: var(--accent);
+}
+.mk .pr-calcrows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mk .pr-calcrow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+.mk .pr-calclabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35em;
+  color: var(--white-80);
+  text-wrap: pretty;
+}
+.mk .pr-calcnote {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gray);
+}
+/* Chiffres tabulaires : les montants s'alignent au chiffre près d'une ligne à
+   l'autre, sinon la colonne de droite n'est plus une addition, c'est une
+   liste. */
+.mk .pr-calcamt {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2em;
+  color: var(--white);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Le signe de l'addition est POSÉ PAR LA POSITION, pas écrit dans le contenu :
+   toute ligne empilée après la première s'ajoute à celle du dessus. Il ne
+   paraît que du côté qu'on additionne — en face, il n'y a rien à additionner,
+   c'est tout le propos. */
+.mk .pr-calcside:not(.is-boost) .pr-calcrows .pr-calcrow:not(:first-child) .pr-calcamt::before {
+  content: "+\a0";
+  font-weight: 500;
+  color: var(--gray);
+}
+/* « Comprise » — un mot à la place d'un montant, et le seul endroit de la page
+   où l'absence de chiffre vaut mieux qu'un chiffre. On ne le formate donc pas
+   comme un nombre : il répond aux 55 € d'en face, il ne s'y additionne pas. */
+.mk .pr-calcamt.is-word {
+  font-size: 14px;
+  color: var(--accent);
+}
+
+/* La barre de l'addition, puis les deux totaux. Le premier mois d'abord :
+   c'est la mise en service qui creuse l'écart et elle n'est due qu'une fois. */
+/* `margin-top: auto` colle les deux bandes de totaux au BAS de leur colonne,
+   donc à la même hauteur : 293 € tombe exactement en face de 199 €. Sans lui,
+   la colonne qui empile trois lignes descend son total plus bas que l'autre, et
+   les deux nombres qu'il s'agit de comparer ne sont plus sur la même ligne. */
+.mk .pr-calctotals {
+  position: relative;
+  margin: auto 0 0;
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mk .pr-calctotals::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-10);
+  transform-origin: left;
+}
+.mk .pr-calcside.is-boost .pr-calctotals::before {
+  background: rgba(201, 161, 90, 0.45);
+}
+/* Hauteur réservée, et ce n'est pas de la cosmétique — même raison que
+   `.pr-desc` dans la grille : une seule des quatre lignes de total porte une
+   condition (« mise en service comprise »), et sans cette réserve elle
+   décalerait 199 € de quatorze pixels au-dessus des 293 € qu'il s'agit
+   justement de lire EN FACE. */
+.mk .pr-calcrow.is-total .pr-calclabel {
+  min-height: 39px;
+  font-weight: 600;
+  color: var(--white);
+}
+.mk .pr-calcrow.is-total .pr-calcamt {
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+.mk .pr-calcside.is-boost .pr-calcrow.is-total .pr-calcamt {
+  color: var(--accent);
+}
+
+/* ── La chute ──
+ *
+ * `auto-fit` plutôt que trois colonnes en dur : `PRICING_MATH.gaps.items` a la
+ * longueur qu'il a, et une quatrième ligne d'écart ne doit pas déborder de la
+ * carte le jour où on l'ajoute. */
+.mk .pr-gaps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mk .pr-gapstitle {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
   text-align: center;
 }
-.mk .pr-mathrow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 16px 56px;
+.mk .pr-gapitems {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
 }
-.mk .pr-mathside {
+.mk .pr-gap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 16px 12px;
+  border: 1px solid rgba(201, 161, 90, 0.28);
+  border-radius: 12px;
+  background: rgba(201, 161, 90, 0.06);
+  text-align: center;
+}
+/* Le signe moins est déjà dans le montant (`euros`, U+2212 collé au chiffre) :
+   on n'en préfixe pas un second, ici ou ailleurs. */
+.mk .pr-gapamt {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mk .pr-gaplabel {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
+}
+.mk .pr-gapdetail {
+  font-size: 12.5px;
+  line-height: 1.4em;
+  color: var(--gray);
+}
+
+.mk .pr-calcfoot {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
 }
-.mk .pr-mathlabel {
-  font-size: 14px;
-  line-height: 1.4em;
-  color: var(--gray);
-}
-.mk .pr-mathside.is-boost .pr-mathlabel {
-  font-weight: 600;
-  color: var(--white);
-}
-.mk .pr-mathsum {
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1em;
-  color: var(--white);
-}
-.mk .pr-mathsave {
-  font-size: 56px;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1em;
-  color: var(--accent);
-}
-.mk .pr-mathline {
-  max-width: 540px;
+.mk .pr-calcline {
+  max-width: 560px;
   font-size: 14.5px;
   line-height: 1.5em;
   color: var(--gray);
+  text-align: center;
+}
+.mk .pr-calcbase {
+  font-size: 12px;
+  line-height: 1.5em;
+  color: var(--white-30);
+  text-align: center;
+}
+
+/* ── La séquence, et elle ne part qu'une fois la carte révélée ──
+ *
+ * Un seul retard, la même formule pour tous : le rang fait le reste. Les
+ * lignes empilées montent (`pr-step-in`), les totaux TOMBENT (`pr-total-in`) —
+ * un total qui arrive par le haut se lit comme le résultat de ce qui est
+ * au-dessus, un total qui monte se lit comme une ligne de plus. */
+.mk .pr-calc.in .pr-calctitle,
+.mk .pr-calc.in .pr-calcrow,
+.mk .pr-calc.in .pr-gapstitle,
+.mk .pr-calc.in .pr-calcline,
+.mk .pr-calc.in .pr-calcbase {
+  animation: pr-step-in var(--step) calc(var(--t0) + var(--i) * var(--dt)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mk .pr-calc.in .pr-calcrow.is-total {
+  animation-name: pr-total-in;
+}
+/* Le trait se tire de gauche à droite, comme on le tire à la main sous une
+   colonne de chiffres — et il part AVANT le total, sinon le total tombe sur
+   rien. */
+.mk .pr-calc.in .pr-calctotals::before {
+  animation: pr-bar-draw 0.42s calc(var(--t0) + var(--i) * var(--dt)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mk .pr-calc.in .pr-gap {
+  animation: pr-gap-in 0.55s calc(var(--t0) + var(--i) * var(--dt)) cubic-bezier(0.2, 0.9, 0.25, 1.12) both;
+}
+@keyframes pr-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pr-total-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pr-bar-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes pr-gap-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .mk .pr-addon {
@@ -3533,11 +3984,73 @@ html:has(.mk) {
     width: 100%;
     max-width: 480px;
   }
-  .mk .pr-mathrow {
-    gap: 18px 28px;
+  /* Le sélecteur reste sur une seule ligne — deux onglets empilés ne sont plus
+     un choix, c'est une liste — mais il garde ses 44 px de haut. */
+  .mk .pr-cycles {
+    width: 100%;
+    max-width: 480px;
   }
-  .mk .pr-mathsave {
-    font-size: 44px;
+  .mk .pr-cycle {
+    gap: 6px;
+    padding: 0 12px;
+    font-size: 13.5px;
+  }
+  .mk .pr-cyclehint {
+    padding: 2px 7px;
+    font-size: 10.5px;
+  }
+  /* LES DEUX CHEMINS PASSENT L'UN SOUS L'AUTRE, et l'ordre du récit y survit :
+     on additionne, puis Boost répond, puis l'écart tombe. C'est la même
+     séquence lue à la verticale. */
+  .mk .pr-calc {
+    gap: 18px;
+    padding: 18px;
+  }
+  .mk .pr-calccols {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .mk .pr-calcside {
+    padding: 16px;
+  }
+  /* Les deux colonnes sont l'une SOUS l'autre : il n'y a plus de ligne à lire
+     en travers, et la hauteur réservée ne creuserait qu'un trou. Même arbitrage
+     que `.pr-desc` dans la grille. */
+  .mk .pr-calcrow.is-total .pr-calclabel {
+    min-height: 0;
+  }
+  .mk .pr-calcrow.is-total .pr-calcamt {
+    font-size: 22px;
+  }
+  .mk .pr-gapamt {
+    font-size: 30px;
+  }
+}
+
+/* Le mouvement réduit ne coupe pas le calcul, il le POSE : tout est déjà écrit
+   dans le DOM, il n'y a qu'à cesser de l'animer. Même règle qu'au comparatif —
+   la garde vaut aussi pour l'observateur, qui ajoute `.in` d'emblée dans ce
+   mode et déclencherait donc la séquence sans qu'on l'ait vue arriver. */
+@media (prefers-reduced-motion: reduce) {
+  .mk .pr-calc.in .pr-calctitle,
+  .mk .pr-calc.in .pr-calcrow,
+  .mk .pr-calc.in .pr-gapstitle,
+  .mk .pr-calc.in .pr-calcline,
+  .mk .pr-calc.in .pr-calcbase,
+  .mk .pr-calc.in .pr-gap {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .mk .pr-calc.in .pr-calctotals::before {
+    animation: none;
+    transform: none;
+  }
+  /* Le prix change toujours, il ne glisse plus. */
+  .mk .pr-amt,
+  .mk .pr-year,
+  .mk .pr-cycles::before {
+    transition: none;
   }
 }
 

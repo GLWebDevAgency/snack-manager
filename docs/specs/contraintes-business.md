@@ -317,6 +317,10 @@ Logique commerciale (texte exact) : « chaque pilier vend les deux autres. Le re
 
 ### 6.2 Pilier 1 — Suite SaaS
 
+> **Mise à jour du 21/08/2026 — la grille n'est plus « à définir ».** Le fondateur a arrêté trois formules : **Essentiel 99 €**, **Complet 159 €**, **Boost 199 €** par mois, hors taxes. Engagement annuel : **deux mois offerts** (douze mois payés dix), soit 990 / 1 590 / 1 990 € par an. Module **Commande en ligne & fidélité** : 79 €/mois **plus 55 € de mise en service, une seule fois** — les deux compris dans Boost.
+>
+> Les montants ci-dessous décrivent l'INTENTION DE DÉPART (fourchette 89–189, MRR de référence 139) et sont conservés comme trace de la source. Ils ne pilotent plus rien : la grille qui fait loi est `PLAN_MRR_CENTS` dans `packages/contracts/src/crm.ts`, que le CRM et la facturation lisent tous les deux. Un prix corrigé ici sans l'être là-bas ne changerait aucune facture.
+
 - Fourchette officielle : **89–189 €/mois** (MRR).
 - Le MRR de référence utilisé dans les simulations est **139 €/mois** (ligne « SaaS seul (référence) » du tableau d'impact).
 - Une formule nommée « **Complet** » existe (le service A6 est « inclus dans l'offre Complet »). Le détail des formules SaaS individuelles (noms, paliers exacts entre 89 et 189 €) n'est pas dans ces 4 fichiers : **à définir** (cf. site vitrine / proposition commerciale).

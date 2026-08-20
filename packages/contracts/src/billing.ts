@@ -64,8 +64,10 @@ export const INSTALL_FEE_CENTS = 29_000;
 /**
  * NOS TARIFS SONT EXPRIMÉS HORS TAXES, TVA EN SUS.
  *
- * Les 290 € de mise en place et les 139 € mensuels sont donc du HT : le client
- * règle 348 € et 166,80 €, et récupère la TVA. C'est le standard du B2B — le
+ * Les 290 € de mise en place et les 159 € mensuels de la formule Complet sont
+ * donc du HT : le client règle 348 € et 190,80 €, et récupère la TVA. Les
+ * montants cités viennent de `PLAN_MRR_CENTS`, jamais l'inverse — cette phrase
+ * illustre la convention, elle ne fixe aucun tarif. C'est le standard du B2B — le
  * prix HT est celui qui lui coûte réellement — et c'est une DÉCISION, pas une
  * déduction : elle est écrite ici une fois, en toutes lettres, parce que toute
  * la ventilation d'une facture en découle.

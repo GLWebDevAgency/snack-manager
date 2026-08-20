@@ -14,6 +14,10 @@
  * et sert à la fois de sommaire (menu burger) et de source des titres.
  */
 
+// `import type` UNIQUEMENT : effacé à la compilation, donc zod ne descend pas
+// dans le paquet client de la page d'accueil. Voir `GRILLES_ACCORDÉES`.
+import type { PLAN_MRR_CENTS as PlanMrrCents } from "@sm/contracts";
+
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
 
 /**
@@ -31,6 +35,132 @@ export const CONTACT_EMAIL = "contact@snackmanager.fr";
  */
 export const ENGAGEMENT =
   "Abonnement sans engagement, résiliable à tout moment. S'y ajoute un forfait de mise en route, non remboursable, qui couvre les journées d'installation.";
+
+/* ── Les montants — la grille, et rien qu'elle ───────────────── */
+
+/**
+ * ═══ TOUS LES PRIX DE LA PAGE NAISSENT ICI, ET EN CENTIMES ═══
+ *
+ * Ils étaient recopiés à la main dans une dizaine de chaînes — les trois
+ * formules, le titre du simulateur, le service vendu à part, l'addition de
+ * pied de section, la description qui part chez Google — et la révision de
+ * grille du 21/08/2026 a montré ce que ça coûte : il a fallu les retrouver une
+ * par une, et l'addition, elle, additionnait encore les tarifs de l'année
+ * dernière en oubliant les 55 € de mise en service. La page se trompait dans
+ * son propre calcul, sous les yeux du prospect, à l'endroit exact où on lui
+ * demande de nous faire confiance.
+ *
+ * Un montant ne s'écrit donc plus qu'une fois. En CENTIMES, comme partout
+ * ailleurs dans le produit : une addition d'euros flottants finit par afficher
+ * un centime qui n'existe pas.
+ *
+ * ═══ ET CE N'EST PAS LA SOURCE DE VÉRITÉ ═══
+ *
+ * Celle-là est `PLAN_MRR_CENTS`, dans `packages/contracts/src/crm.ts` : c'est
+ * elle que lisent le CRM et la facturation, c'est elle qui édite les factures.
+ * On ne l'IMPORTE pas ici, et c'est un arbitrage assumé : `crm.ts` embarque
+ * zod, `content.ts` est lu par des composants clients (`Hero`, `Faq`,
+ * `Simulator`), et le paquet n'expose pas de sous-chemin — l'import ferait
+ * descendre un validateur de schémas entier dans le JavaScript de la page
+ * d'accueil pour trois nombres.
+ *
+ * Les valeurs sont donc recopiées, et c'est le SEUL endroit de la vitrine où
+ * elles le sont. Une révision de grille se fait dans ces deux fichiers, jamais
+ * dans un troisième.
+ */
+export const PLAN_MONTHLY_CENTS = {
+  essentiel: 9_900,
+  complet: 15_900,
+  boost: 19_900,
+} as const;
+
+/**
+ * LE GARDE-FOU QUI REND LA RECOPIE HONNÊTE.
+ *
+ * Recopier une grille de prix sans rien pour vérifier qu'elle concorde, c'est
+ * se garantir qu'un jour la vitrine annoncera un tarif et la facture en portera
+ * un autre — sans qu'un seul test bronche, et sans que personne le voie avant
+ * un client mécontent.
+ *
+ * `import type` est EFFACÉ à la compilation : zod ne descend pas dans le paquet
+ * client de la page d'accueil, et la vérification ne coûte pas un octet à
+ * l'exécution. Elle coûte en revanche une erreur de typecheck franche le jour
+ * où l'une des deux tables bouge sans l'autre, ce qui est précisément le prix
+ * qu'on veut payer.
+ */
+type MêmeGrille<A, B> = A extends B ? (B extends A ? true : false) : false;
+
+export const GRILLES_ACCORDÉES: MêmeGrille<typeof PLAN_MONTHLY_CENTS, typeof PlanMrrCents> = true;
+
+/**
+ * Le module vendu à part et sa mise en service.
+ *
+ * La mise en service n'est due qu'UNE FOIS, et jamais sur Boost qui la
+ * comprend. Elle a longtemps vécu dans le seul texte de la section services :
+ * l'addition de la grille l'ignorait donc, et se trompait de 55 €.
+ */
+export const MODULE_MONTHLY_CENTS = 7_900;
+export const MODULE_SETUP_CENTS = 5_500;
+
+/**
+ * L'ENGAGEMENT ANNUEL — douze mois payés dix.
+ *
+ * Même règle que les contrats (`YEARLY_MONTHS_BILLED`, `crm.ts`), et l'annuel
+ * se DÉDUIT toujours du mensuel : deux grilles saisies à la main finissent par
+ * diverger, et c'est le genre d'écart qu'on découvre sur une facture.
+ *
+ * « Deux mois offerts » plutôt que « −16,7 % » : le premier se retient, le
+ * second se vérifie — et un prospect qui sort sa calculette devant une page de
+ * prix ne la sort jamais en notre faveur.
+ */
+export const YEARLY_MONTHS_BILLED = 10;
+export const yearlyCents = (monthlyCents: number): number => monthlyCents * YEARLY_MONTHS_BILLED;
+
+/**
+ * FORMATAGE MAISON, ET SÛREMENT PAS `toLocaleString`.
+ *
+ * Même raison que dans `Simulator.tsx` : le séparateur de milliers de l'ICU
+ * français a changé d'espace selon les versions, et un écart d'un caractère
+ * entre le rendu serveur et le rendu navigateur casse l'hydratation de la
+ * page entière.
+ *
+ * Les centimes ne s'écrivent que s'il y en a : « 159 € » dans une grille de
+ * prix, « 132,50 € » quand l'année ramenée au mois tombe sur un demi-euro.
+ * « 159,00 € » a l'air d'une facture, pas d'un tarif.
+ */
+const NARROW_NBSP = " "; // milliers : « 2 911 € » ne se coupe pas en fin de ligne
+const NBSP = " "; // devant le symbole — typographie française
+
+export function euros(cents: number): string {
+  const rounded = Math.round(cents);
+  const abs = Math.abs(rounded);
+  const units = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, NARROW_NBSP);
+  const decimals = abs % 100;
+  // Signe MOINS typographique (U+2212), pas le trait d'union du clavier : sur
+  // une économie affichée en gros, le tiret court se lit comme une puce.
+  return `${rounded < 0 ? "−" : ""}${units}${decimals ? `,${String(decimals).padStart(2, "0")}` : ""}${NBSP}€`;
+}
+
+/**
+ * LA FOURCHETTE EN UNE LIGNE — « 99, 159 ou 199 € par mois ».
+ *
+ * Elle existe pour la META DESCRIPTION de la vitrine
+ * (`app/(marketing)/layout.tsx`), c'est-à-dire pour le texte que Google
+ * affiche sous le lien et que les messageries collent dans leur aperçu.
+ *
+ * ET ELLE EST ICI POUR UNE RAISON PRÉCISE : la description vivait HORS de
+ * `components/marketing/`, donc invisible pour qui corrige ce fichier. À la
+ * révision du 21/08/2026 elle a continué d'annoncer l'ancienne grille dans le
+ * résultat de recherche pendant que la page affichait la nouvelle — le seul
+ * endroit du site où un prix périmé se lit sans même ouvrir la page.
+ *
+ * Un seul symbole € en fin d'énumération, comme on l'écrit à l'oral.
+ */
+const plainEuros = (cents: number): string => euros(cents).replace(`${NBSP}€`, "");
+
+export const PRICE_RANGE = `${plainEuros(PLAN_MONTHLY_CENTS.essentiel)}, ${plainEuros(
+  PLAN_MONTHLY_CENTS.complet,
+)} ou ${plainEuros(PLAN_MONTHLY_CENTS.boost)}${NBSP}€ par mois`;
 
 /**
  * LA RARETÉ SANS LE COMPTEUR.
@@ -111,7 +241,11 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: "simulateur",
     nav: "Le calcul",
     badge: "Le calcul",
-    title: "139 € par mois. Et votre organisation actuelle, elle vous coûte combien ?",
+    // Le titre CITE le tarif de la formule la plus vendue, et il était recopié
+    // à la main : à la révision de grille, la section qui compare nos prix à
+    // ceux de l'organisation actuelle a continué d'annoncer un montant que la
+    // section juste au-dessus démentait. Il se dérive maintenant.
+    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et votre organisation actuelle, elle vous coûte combien ?`,
   },
   {
     id: "lancement",
@@ -688,8 +822,12 @@ export const SERVICES: readonly Service[] = [
     title: "Commande en ligne & fidélité",
     lead: "Le click and collect et la carte de fidélité, dans la même page.",
     line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Ses points se cumulent tout seuls à chaque commande, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs, sur votre nom de domaine si vous en avez un — ou branchée sur le site que vous avez déjà, avec une balise que nous collons pour vous.",
-    price: "79 € / mois",
-    priceNote: "+ 55 € de mise en service · les deux compris dans Boost",
+    // Le module est vendu deux fois sur la page — ici, et sous la grille
+    // (`MODULE_ADDON`). Les deux montants descendent des mêmes constantes :
+    // c'est le seul service dont le prix est répété, donc le seul qui pouvait
+    // se contredire d'une section à l'autre.
+    price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
+    priceNote: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service · les deux compris dans Boost`,
   },
 ];
 
@@ -837,17 +975,97 @@ export const PLAN_MODULES: readonly PlanModule[] = [
   { id: "priority", label: "Support prioritaire" },
 ] as const;
 
+/**
+ * LES DEUX PÉRIODICITÉS DU SÉLECTEUR — et « Par an » n'est pas une deuxième
+ * grille.
+ *
+ * C'est la MÊME formule payée d'avance : douze mois pour le prix de dix. Deux
+ * jeux de prix saisis côte à côte finiraient par diverger d'une révision à
+ * l'autre, et le prospect qui compare les deux onglets est justement celui qui
+ * lit le plus attentivement.
+ */
+export type BillingCycleId = "mensuel" | "annuel";
+
+export type BillingCycle = {
+  id: BillingCycleId;
+  /** Le libellé de l'onglet — deux mots, pas une phrase. */
+  label: string;
+  /** La pastille qui pend à l'onglet annuel. `null` sur le mensuel. */
+  hint: string | null;
+};
+
+export const BILLING_CYCLES: readonly BillingCycle[] = [
+  { id: "mensuel", label: "Par mois", hint: null },
+  // « 2 mois offerts » se déduit de la règle, il ne se saisit pas : le jour où
+  // l'on facturerait onze mois, la pastille suivrait au lieu de mentir.
+  { id: "annuel", label: "Par an", hint: `${12 - YEARLY_MONTHS_BILLED} mois offerts` },
+] as const;
+
+/**
+ * LA PHRASE SOUS LE SÉLECTEUR, et elle doit tenir avec `ENGAGEMENT`.
+ *
+ * Le bandeau de la section dit « sans engagement, résiliable à tout moment » :
+ * un onglet « Par an » posé au-dessus sans un mot se lit comme un démenti. On
+ * dit donc lequel des deux engage — l'annuel, parce qu'il est réglé d'avance —
+ * et on ne reformule jamais `ENGAGEMENT`, qui reste affichée telle quelle plus
+ * bas.
+ */
+export const BILLING_YEARLY_NOTE =
+  "Au mois, sans engagement. À l'année, douze mois réglés d'avance pour le prix de dix — deux mois offerts.";
+
 export type Plan = {
   id: string;
   name: string;
-  /** Le PRIX, affiché. Plus jamais « Sur devis ». */
+  /**
+   * LE PRIX MENSUEL, affiché — « 159 € ». Plus jamais « Sur devis ».
+   *
+   * C'est le prix de RÉFÉRENCE de la page : celui du sélecteur par défaut,
+   * celui que cite le titre du simulateur, celui que publie l'extrait enrichi
+   * de `page.tsx`. L'annuel s'en déduit, jamais l'inverse.
+   */
   price: string;
   period: string;
+  /** Le même montant, nu et en centimes — pour qui doit calculer plutôt qu'afficher. */
+  monthlyCents: number;
+  /** LE PRIX ANNUEL, déduit du mensuel — « 1 590 € ». */
+  priceYearly: string;
+  periodYearly: string;
+  yearlyCents: number;
+  /**
+   * L'année ramenée au mois — « soit 132,50 € par mois ».
+   *
+   * C'est le SEUL chiffre de la colonne annuelle qui se compare à quoi que ce
+   * soit : « 1 590 € » posé seul à côté de « 159 € » se lit comme dix fois
+   * plus cher avant qu'on ait lu la période.
+   */
+  yearlyPerMonth: string;
   desc: string;
   /** Les `id` de `PLAN_MODULES` inclus dans la formule. */
   modules: readonly string[];
   popular?: boolean;
 };
+
+/**
+ * Les deux prix d'une formule, à partir de son seul tarif mensuel.
+ *
+ * Écrit une fois et appelé trois fois : c'est ce qui garantit que les trois
+ * lignes de la grille obéissent à la même règle. Un annuel saisi à la main sur
+ * une seule des trois passerait toutes les relectures.
+ */
+function planPrices(monthlyCents: number) {
+  const yearly = yearlyCents(monthlyCents);
+  return {
+    price: euros(monthlyCents),
+    period: "par mois",
+    monthlyCents,
+    priceYearly: euros(yearly),
+    periodYearly: "par an",
+    yearlyCents: yearly,
+    // Arrondi au centime : 1 990 / 12 tombe sur 165,833… et un tarif ne
+    // s'affiche pas avec trois décimales.
+    yearlyPerMonth: `soit ${euros(yearly / 12)} par mois`,
+  };
+}
 
 /**
  * TROIS PRIX AFFICHÉS, ET « MULTI-SITES » QUITTE LA GRILLE.
@@ -861,21 +1079,26 @@ export type Plan = {
  * « Multi-sites » sort parce que nous n'avons pas un client, encore moins un
  * groupe. Un exploitant à trois adresses ne voit plus rien qui lui soit
  * adressé, et c'est honnête.
+ *
+ * ═══ L'ÉCHELLE 99 → 159 → 199 EST UN CHOIX, PAS UNE MOYENNE ═══
+ *
+ * Ses écarts sont DÉCROISSANTS (+60, puis +40). Le haut de gamme se lit donc
+ * comme la bonne affaire, alors qu'un troisième palier à 229 aurait rendu les
+ * écarts croissants et produit l'effet inverse — c'est aussi ce qui rend Boost
+ * moins cher que Complet plus le module (voir `PRICING_MATH`).
  */
 export const PLANS: Plan[] = [
   {
     id: "essentiel",
     name: "Essentiel",
-    price: "89 €",
-    period: "par mois",
+    ...planPrices(PLAN_MONTHLY_CENTS.essentiel),
     desc: "La caisse, la cuisine et le back-office. De quoi tenir un service.",
     modules: ["pos", "kds", "print", "offline", "bo", "menu"],
   },
   {
     id: "complet",
     name: "Complet",
-    price: "139 €",
-    period: "par mois",
+    ...planPrices(PLAN_MONTHLY_CENTS.complet),
     desc: "Tout l'Essentiel, plus ce qui fait décider : le planning et le coût matière.",
     modules: ["pos", "kds", "print", "offline", "bo", "menu", "planning", "stocks"],
     popular: true,
@@ -883,8 +1106,7 @@ export const PLANS: Plan[] = [
   {
     id: "boost",
     name: "Boost",
-    price: "189 €",
-    period: "par mois",
+    ...planPrices(PLAN_MONTHLY_CENTS.boost),
     desc: "Tout, commande en ligne comprise. Vos clients commandent chez vous.",
     modules: [
       "pos",
@@ -905,35 +1127,132 @@ export const PLANS: Plan[] = [
 /**
  * LE MODULE VENDU À PART, ET SON LIBELLÉ EST UNE DÉCISION.
  *
- * Il s'affiche « Commande en ligne & click and collect », JAMAIS
- * « Livraison » : le mot Livraison en face d'un prix se lit comme un livreur
- * qu'on facture, et nous ne fournissons aucun livreur.
+ * Il s'affiche « Commande en ligne & fidélité », JAMAIS « Livraison » : le mot
+ * Livraison en face d'un prix se lit comme un livreur qu'on facture, et nous
+ * ne fournissons aucun livreur — le tunnel s'arrête au créneau de retrait.
  */
 export const MODULE_ADDON = {
   name: "Commande en ligne & fidélité",
-  price: "79 € par mois",
-  // La mise en service était absente de la grille alors qu'elle est facturée.
-  // Un montant qu'on découvre sur la première facture coûte plus cher que les
-  // 55 € qu'il rapporte : il est donc affiché au même rang que l'abonnement.
-  line: "55 € de mise en service la première fois. Se branche sur Essentiel ou sur Complet — les deux sont déjà compris dans Boost.",
+  price: `${euros(MODULE_MONTHLY_CENTS)} par mois`,
+  /**
+   * LA MISE EN SERVICE A SA PROPRE CLÉ, et ce n'est pas un raffinement.
+   *
+   * Elle était absente de la grille alors qu'elle est facturée : un montant
+   * qu'on découvre sur la première facture coûte bien plus cher que les 55 €
+   * qu'il rapporte. Elle est donc affichée au même rang que l'abonnement, et
+   * séparée pour qu'une carte puisse la poser sur sa propre ligne — c'est la
+   * ligne que Boost fait disparaître.
+   */
+  setup: `${euros(MODULE_SETUP_CENTS)} de mise en service, la première fois`,
+  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Se branche sur Essentiel ou sur Complet — les deux sont déjà compris dans Boost.`,
 } as const;
 
 /**
- * L'ADDITION, ÉCRITE FRANCHEMENT — on ne la laisse pas découvrir.
+ * ═══ L'ADDITION, ÉCRITE FRANCHEMENT — on ne la laisse pas découvrir ═══
  *
- * Complet + le module font 218 €, Boost en coûte 189 : vingt-neuf euros de
- * moins. Un prospect qui fait ce calcul tout seul après avoir lu la grille se
- * demande pourquoi on ne le lui a pas dit. Quatre nombres, tous les nôtres,
- * aucune hypothèse de marché : l'addition est désamorcée avant d'être faite.
+ * Un prospect qui veut la commande en ligne a deux chemins : Complet plus le
+ * module, ou Boost. S'il fait l'addition tout seul après avoir lu la grille et
+ * qu'il trouve Boost moins cher, il se demande pourquoi on ne le lui a pas
+ * dit. On la fait donc pour lui, en entier.
+ *
+ * ELLE SE RACONTE EN TROIS TEMPS, et c'est pour ça qu'elle est structurée
+ * ainsi plutôt qu'écrite en phrases :
+ *
+ *   1. `stack`  — ce qu'on additionne : 159 + 79, plus 55 une seule fois ;
+ *   2. `boost`  — ce que Boost coûte : 199, mise en service comprise ;
+ *   3. `gaps`   — les trois écarts : 94 le premier mois, 39 par mois, 523 sur
+ *                 douze mois.
+ *
+ * CHAQUE ÉTAPE PORTE SON LIBELLÉ ET SON MONTANT SÉPARÉMENT, jamais une phrase
+ * toute faite : une carte qui déroule le calcul doit pouvoir faire apparaître
+ * les lignes une à une, aligner les montants en colonne et n'animer que les
+ * chiffres. Une phrase recousue ne se démonte pas.
+ *
+ * LE PREMIER MOIS EST LE TEMPS FORT, et c'est la mise en service qui le rend
+ * tel : 293 contre 199. Le tenir caché derrière la moyenne mensuelle, ce
+ * serait se priver du seul écart à trois chiffres de la page.
+ *
+ * TOUS CES NOMBRES SONT LES NÔTRES — aucune hypothèse de marché, aucun tarif
+ * de concurrent. Ils se déduisent des quatre constantes du haut de fichier,
+ * donc l'addition ne peut plus se tromper : c'était exactement son défaut, elle
+ * ignorait la mise en service et additionnait deux prix qui n'étaient plus les
+ * nôtres.
  */
-export const PRICING_MATH = {
-  left: "Complet 139 € + le module 79 €",
-  sum: "218 €",
-  right: "Boost",
-  boost: "189 €",
-  save: "− 29 €",
-  line: "Au-delà du Complet, Boost coûte 29 € de moins que le Complet plus le module.",
-} as const;
+const STACK_MONTHLY_CENTS = PLAN_MONTHLY_CENTS.complet + MODULE_MONTHLY_CENTS;
+const STACK_FIRST_MONTH_CENTS = STACK_MONTHLY_CENTS + MODULE_SETUP_CENTS;
+const BOOST_MONTHLY_CENTS = PLAN_MONTHLY_CENTS.boost;
+/** Douze mois de l'un contre douze mois de l'autre — la mise en service ne compte qu'une fois. */
+const STACK_YEAR_CENTS = STACK_MONTHLY_CENTS * 12 + MODULE_SETUP_CENTS;
+const BOOST_YEAR_CENTS = BOOST_MONTHLY_CENTS * 12;
+
+/** Une ligne du calcul : ce qu'on compte, combien, et à quel titre. */
+export type MathLine = {
+  label: string;
+  /** Déjà formaté (« 159 € »), ou le mot qui remplace un montant (« Comprise »). */
+  amount: string;
+  /** La périodicité ou la condition — « par mois », « une seule fois ». */
+  note?: string;
+};
+
+/** Un écart : quand, combien, et l'opération qui le produit. */
+export type MathGap = { label: string; amount: string; detail: string };
+
+export type PricingMath = {
+  /** Temps 1 — ce qu'on additionne à côté de Boost. */
+  stack: { title: string; steps: readonly MathLine[]; firstMonth: MathLine; everyMonth: MathLine };
+  /** Temps 2 — ce que Boost coûte, mise en service comprise. */
+  boost: { title: string; steps: readonly MathLine[]; firstMonth: MathLine; everyMonth: MathLine };
+  /** Temps 3 — les trois écarts, du plus spectaculaire au plus durable. */
+  gaps: { title: string; items: readonly MathGap[] };
+  /** La conclusion en une ligne, pour qui ne lit pas le tableau. */
+  line: string;
+};
+
+export const PRICING_MATH: PricingMath = {
+  stack: {
+    title: "Complet, plus le module",
+    steps: [
+      { label: "Complet", amount: euros(PLAN_MONTHLY_CENTS.complet), note: "par mois" },
+      { label: MODULE_ADDON.name, amount: euros(MODULE_MONTHLY_CENTS), note: "par mois" },
+      { label: "Mise en service du module", amount: euros(MODULE_SETUP_CENTS), note: "une seule fois" },
+    ],
+    firstMonth: { label: "Le premier mois", amount: euros(STACK_FIRST_MONTH_CENTS) },
+    everyMonth: { label: "Puis chaque mois", amount: euros(STACK_MONTHLY_CENTS) },
+  },
+  boost: {
+    title: "Boost",
+    steps: [
+      { label: "Tout Complet, la commande en ligne et la fidélité comprises", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
+      // La ligne qui fait tout le travail : en face des 55 €, un mot au lieu
+      // d'un montant. C'est le seul endroit de la page où l'absence de chiffre
+      // vaut mieux qu'un chiffre.
+      { label: "Mise en service", amount: "Comprise", note: "rien à régler la première fois" },
+    ],
+    firstMonth: { label: "Le premier mois", amount: euros(BOOST_MONTHLY_CENTS), note: "mise en service comprise" },
+    everyMonth: { label: "Puis chaque mois", amount: euros(BOOST_MONTHLY_CENTS) },
+  },
+  gaps: {
+    title: "Ce que Boost vous fait économiser",
+    items: [
+      {
+        label: "Le premier mois",
+        amount: euros(BOOST_MONTHLY_CENTS - STACK_FIRST_MONTH_CENTS),
+        detail: `${euros(STACK_FIRST_MONTH_CENTS)} contre ${euros(BOOST_MONTHLY_CENTS)}`,
+      },
+      {
+        label: "Chaque mois ensuite",
+        amount: euros(BOOST_MONTHLY_CENTS - STACK_MONTHLY_CENTS),
+        detail: `${euros(STACK_MONTHLY_CENTS)} contre ${euros(BOOST_MONTHLY_CENTS)}`,
+      },
+      {
+        label: "Sur douze mois",
+        amount: euros(BOOST_YEAR_CENTS - STACK_YEAR_CENTS),
+        detail: `${euros(STACK_YEAR_CENTS)} contre ${euros(BOOST_YEAR_CENTS)}`,
+      },
+    ],
+  },
+  line: `Au-delà du Complet, Boost coûte ${euros(STACK_FIRST_MONTH_CENTS - BOOST_MONTHLY_CENTS)} de moins le premier mois, puis ${euros(STACK_MONTHLY_CENTS - BOOST_MONTHLY_CENTS)} chaque mois — ${euros(STACK_YEAR_CENTS - BOOST_YEAR_CENTS)} sur douze mois.`,
+};
 
 /**
  * L'ASTÉRISQUE DU « 0 % », en note discrète sous la grille.
@@ -1175,7 +1494,13 @@ export const CONTACT_POINTS = [
 ] as const;
 
 /**
- * LÀ OÙ ATTERRIT LE SERVICE À 99 € — une case à cocher, et rien d'autre.
+ * LÀ OÙ ATTERRIT L'ACCOMPAGNEMENT SUR LES PLATEFORMES — une case à cocher, et
+ * rien d'autre.
+ *
+ * L'en-tête chiffrait ce service (« le service à 99 € ») alors qu'il n'a plus
+ * de prix propre depuis qu'il est compris dans la mise en route, et le montant
+ * qu'il citait est devenu celui d'une FORMULE : un relecteur pressé pouvait
+ * lire ici un tarif d'abonnement posé sur un formulaire de contact.
  *
  * « Voulez-vous qu'on améliore vos pages Uber Eats et Deliveroo ? » n'est pas
  * une question que le visiteur se pose sur cette page : celui qui est sur les

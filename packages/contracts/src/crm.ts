@@ -107,23 +107,65 @@ export const LEAD_TOUCH_LABELS: Record<LeadTouchType, string> = {
 export const FOUNDER_SEATS_TOTAL = 10;
 
 /**
- * Valeur mensuelle d'une formule, en CENTIMES.
+ * LA GRILLE, EN CENTIMES, ET C'EST ICI QU'ELLE FAIT LOI.
  *
- * Les trois montants sont ceux de `docs/specs/contraintes-business.md` §6.2 :
- * fourchette officielle **89–189 €/mois**, dont **139 €** est le « MRR de
- * référence » du tableau d'impact — d'où bas de fourchette, référence, haut de
- * fourchette. Le site vitrine, lui, n'affiche plus de montant (« Sur devis ») :
- * il ne peut plus servir de source.
+ * Le CRM calcule le MRR avec ces valeurs et la facturation les reprend : un
+ * prix changé sur la vitrine sans l'être ici produit des factures au tarif de
+ * l'année dernière, sans que rien ne casse et sans que personne le voie.
  *
- * C'est une ESTIMATION : la source de vérité facturation reste Stripe. Le jour
- * où Stripe Billing est branché (roadmap M9), c'est cette table qui disparaît,
- * pas le calcul qui l'utilise.
+ * Révisée le 21/08/2026 : 89/139/189 → 99/159/199.
+ *
+ * Boost à 199 et non 229, et le choix est arithmétique. Complet (159) plus le
+ * module de commande en ligne (79) font 238 par mois, plus 55 de mise en
+ * service : Boost fait donc économiser 94 le premier mois puis 39 par mois. À
+ * 229 il n'en resterait que 9, trop peu pour décider quiconque. Et l'échelle
+ * 99 → 159 → 199 a des écarts DÉCROISSANTS (+60, +40), ce qui fait lire le haut
+ * de gamme comme la bonne affaire ; 99 → 159 → 229 les rend croissants et
+ * produit l'effet inverse.
+ *
+ * Le MRR qu'en tire le CRM reste une ESTIMATION tant que Stripe Billing n'est
+ * pas branché (roadmap M9) : le jour où il l'est, c'est cette table qui
+ * disparaît, pas les calculs qui la lisent. Elle remplace au passage la
+ * fourchette « 89–189 €/mois » de `docs/specs/contraintes-business.md` §6.2,
+ * qui décrivait l'intention de départ et non la grille arrêtée.
  */
-export const PLAN_MRR_CENTS: Record<'essentiel' | 'complet' | 'boost', number> = {
-  essentiel: 8_900,
-  complet: 13_900,
-  boost: 18_900,
-};
+/*
+ * `as const satisfies` et non une annotation `Record<…, number>`, et ce n'est
+ * pas un raffinement de style. L'annotation ÉLARGIT les valeurs à `number` :
+ * le type ne dit plus que Complet vaut 15 900, seulement que c'est un nombre.
+ * Or la vitrine recopie cette table (`PLAN_MONTHLY_CENTS`, content.ts) faute de
+ * pouvoir importer zod dans le paquet client de la page d'accueil, et c'est
+ * cette recopie qu'il faut garder honnête. Avec les littéraux préservés, la
+ * vitrine peut poser une assertion de type qui casse le typecheck le jour où
+ * les deux tables divergent — le `satisfies` continuant de vérifier qu'aucune
+ * formule ne manque.
+ */
+export const PLAN_MRR_CENTS = {
+  essentiel: 9_900,
+  complet: 15_900,
+  boost: 19_900,
+} as const satisfies Record<'essentiel' | 'complet' | 'boost', number>;
+
+/**
+ * Le module de commande en ligne et sa mise en service, en centimes.
+ *
+ * Ils vivaient uniquement dans le texte de la vitrine, donc la facturation ne
+ * savait pas les compter. `SETUP_CENTS` n'est dû qu'UNE FOIS, et jamais sur
+ * Boost, qui le comprend.
+ */
+export const MODULE_ORDERING_CENTS = 7_900;
+export const MODULE_ORDERING_SETUP_CENTS = 5_500;
+
+/**
+ * L'ENGAGEMENT ANNUEL — deux mois offerts.
+ *
+ * Douze mois payés dix. C'est la remise la plus répandue du SaaS, et surtout la
+ * seule qui se dise sans calcul : « deux mois offerts » se retient, « −16,7 % »
+ * se vérifie. Le montant annuel se déduit toujours du mensuel, il n'est jamais
+ * saisi à la main — deux grilles indépendantes finiraient par diverger.
+ */
+export const YEARLY_MONTHS_BILLED = 10;
+export const yearlyCents = (monthlyCents: number): number => monthlyCents * YEARLY_MONTHS_BILLED;
 
 export const PLAN_LABELS: Record<'essentiel' | 'complet' | 'boost', string> = {
   essentiel: 'Essentiel',

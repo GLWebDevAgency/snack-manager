@@ -44,6 +44,7 @@
  * promet une application et livre une image.
  */
 
+import { PLAN_MRR_CENTS } from "@sm/contracts";
 import type {
   Allergen,
   BaseUnit,
@@ -1103,7 +1104,22 @@ function buildBilling(bootAt: number): Record<string, unknown> {
   const template =
     source.invoices.find((i) => i.kind === "abonnement") ?? source.invoices[0] ?? {};
   const setup = source.invoices.find((i) => i.kind === "mise_en_place");
-  const amount = (source.subscription.mrrCents as number) ?? 13900;
+  /**
+   * LE TARIF DE LA DÉMONSTRATION SORT DE LA GRILLE, PAS DE LA PHOTO.
+   *
+   * L'instantané a été pris le 20/08/2026, la veille de la révision
+   * 89/139/189 → 99/159/199 : il porte encore 139 €. Et comme TOUTES les
+   * factures déroulées plus bas — douze mois d'historique, l'échéance à venir,
+   * l'ardoise — se bâtissent sur ce seul montant, le prospect visitait un
+   * back-office qui contredisait la page tarifs treize lignes d'un coup.
+   *
+   * On relit donc `PLAN_MRR_CENTS`, la même table que le CRM et la
+   * facturation : la photo ne fournit plus que la FORME d'une facture, jamais
+   * son prix. Le repli sur le montant photographié ne sert qu'au jour où la
+   * démonstration porterait une formule disparue de la grille.
+   */
+  const plan = source.subscription.plan as keyof typeof PLAN_MRR_CENTS;
+  const amount = PLAN_MRR_CENTS[plan] ?? (source.subscription.mrrCents as number);
   const planLabel = (source.subscription.planLabel as string) ?? "Complet";
 
   // Bornes de mois en UTC : une facture datée « 1er septembre » à l'heure de
@@ -1187,6 +1203,10 @@ function buildBilling(bootAt: number): Record<string, unknown> {
     tenant: source.tenant,
     subscription: {
       ...source.subscription,
+      // Le bandeau annonce la formule : il annonce donc le tarif de la grille,
+      // sans quoi l'en-tête dirait 139 € au-dessus de factures à 159 €.
+      mrrCents: amount,
+      mrrLabel: euros(amount),
       // Le compte doit être aussi vieux que ses factures ; « client depuis
       // avant-hier » sous douze mois d'historique se contredit tout seul.
       since: opened.toISOString(),

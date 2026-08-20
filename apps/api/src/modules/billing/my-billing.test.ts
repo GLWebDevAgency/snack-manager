@@ -22,6 +22,7 @@ import {
   TenantBillingIdentitySchema,
   billingIdentityMismatch,
   buildInvoiceDocument,
+  formatEuros,
   isFrenchVatShape,
   invoiceVat,
   invoiceView,
@@ -156,6 +157,39 @@ const VOISIN = '65f000000000000000000002';
 const NOW = new Date('2026-09-15T10:00:00.000Z');
 const TOUT = { limit: 200 } satisfies BillingHistoryQuery;
 
+/**
+ * LE TARIF DE LA FIXTURE, LU DANS LA GRILLE ET JAMAIS RECOPIÉ.
+ *
+ * La révision du 21/08/2026 (89/139/189 → 99/159/199) a fait tomber une
+ * douzaine de cas qui ne disaient pourtant rien de faux : ils attendaient
+ * « 139,00 € » d'une pièce bâtie sur `PLAN_MRR_CENTS.complet`. Un test qui
+ * casse à chaque révision de prix est un test qu'on désactive un jour de rush,
+ * et le jour où on le désactive, plus rien ne surveille la facturation.
+ *
+ * Les montants ARBITRAIRES, eux, restent écrits en clair plus bas (13 900,
+ * 29 000, 9 999…) : ils éprouvent l'arithmétique de TVA et le formatage, pas
+ * la grille. Les indexer sur le tarif reviendrait à prétendre qu'on ne peut
+ * pas facturer 139 €.
+ */
+const MRR = PLAN_MRR_CENTS.complet;
+
+/**
+ * Sa ventilation au régime courant — montants stockés HT.
+ *
+ * Recalculée ICI à la main, et surtout PAS par `invoiceVat` : une attente qui
+ * appelle la fonction qu'elle vérifie ne vérifie plus rien. Que la ventilation
+ * soit juste se joue dans « ventile juste, dans les deux sens », sur un montant
+ * arbitraire ; ici on ne réancre que l'assiette.
+ */
+const MRR_VAT = Math.round((MRR * LEGACY_INVOICE_VAT.ratePercent) / 100);
+const MRR_TTC = MRR + MRR_VAT;
+
+/**
+ * Le montant sans son symbole : le PDF écrit l'euro en CP1252 (0x80), qu'une
+ * relecture `latin1` ne rend pas comme « € ». On cherche donc les chiffres.
+ */
+const sansSymbole = (cents: number): string => formatEuros(cents).replace(' €', '');
+
 const invoiceRow = (over: Row = {}): Row => ({
   _id: new Types.ObjectId(),
   tenantId: CLASSFOOD,
@@ -163,7 +197,7 @@ const invoiceRow = (over: Row = {}): Row => ({
   kind: 'abonnement',
   label: 'Abonnement Complet — septembre 2026',
   period: { start: new Date('2026-09-01T00:00:00.000Z'), end: new Date('2026-09-30T23:59:59.999Z') },
-  amountCents: PLAN_MRR_CENTS.complet,
+  amountCents: MRR,
   status: 'payee',
   issuedAt: new Date('2026-09-01T00:00:00.000Z'),
   dueAt: new Date('2026-09-01T00:00:00.000Z'),
@@ -420,9 +454,9 @@ describe('Mentions légales', () => {
   it('ne signale plus rien quand tout est renseigné', () => {
     const doc = buildInvoiceDocument(facture, ISSUER_COMPLET, CUSTOMER);
     expect(doc.gaps).toEqual([]);
-    expect(doc.vat.baseCents).toBe(13_900);
-    expect(doc.vat.vatCents).toBe(2_780);
-    expect(doc.vat.totalCents).toBe(16_680);
+    expect(doc.vat.baseCents).toBe(MRR);
+    expect(doc.vat.vatCents).toBe(MRR_VAT);
+    expect(doc.vat.totalCents).toBe(MRR_TTC);
   });
 
   it('porte les quatre mentions de règlement obligatoires', () => {
@@ -581,8 +615,8 @@ describe('Rendu PDF', () => {
      * DÉCIDE, et la pièce le porte depuis son émission. Une facture peut donc
      * être ventilée juste tout en restant incomplète.
      */
-    expect(incomplet.vat.baseCents).toBe(13_900);
-    expect(incomplet.vat.totalCents).toBe(16_680);
+    expect(incomplet.vat.baseCents).toBe(MRR);
+    expect(incomplet.vat.totalCents).toBe(MRR_TTC);
   });
 });
 
@@ -643,7 +677,7 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
 
   /**
    * Un demi-marquage ne dit pas ce qu'est le montant : un taux sans assiette
-   * laisse entière la question « 139 €, HT ou TTC ? ». Il vaut donc une
+   * laisse entière la question « ce montant, HT ou TTC ? ». Il vaut donc une
    * absence — et l'absence, elle, a une règle écrite.
    */
   it('refuse un marquage incomplet et retombe sur la règle écrite', () => {
@@ -687,11 +721,11 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
 
     const mine = await service.mine(CLASSFOOD, TOUT, NOW);
 
-    expect(mine.outstanding.totalDueCents).toBe(13_900);
-    expect(mine.outstanding.totalDueTtcCents).toBe(16_680);
-    expect(mine.outstanding.totalDueTtcLabel).toBe('166,80 €');
-    expect(mine.nextDue?.amountCents).toBe(13_900);
-    expect(mine.nextDue?.amountTtcCents).toBe(16_680);
+    expect(mine.outstanding.totalDueCents).toBe(MRR);
+    expect(mine.outstanding.totalDueTtcCents).toBe(MRR_TTC);
+    expect(mine.outstanding.totalDueTtcLabel).toBe(formatEuros(MRR_TTC));
+    expect(mine.nextDue?.amountCents).toBe(MRR);
+    expect(mine.nextDue?.amountTtcCents).toBe(MRR_TTC);
   });
 
   it('projette l’échéance théorique au régime COURANT, TVA comprise', async () => {
@@ -700,8 +734,8 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
     const mine = await service.mine(CLASSFOOD, TOUT, NOW);
     // Aucune facture : le prochain prélèvement est une projection, sans numéro.
     expect(mine.nextDue?.invoiceNumber).toBeNull();
-    expect(mine.nextDue?.amountCents).toBe(PLAN_MRR_CENTS.complet);
-    expect(mine.nextDue?.amountTtcCents).toBe(16_680);
+    expect(mine.nextDue?.amountCents).toBe(MRR);
+    expect(mine.nextDue?.amountTtcCents).toBe(MRR_TTC);
   });
 
   it('imprime les trois lignes sur le PDF, chiffrées', () => {
@@ -712,19 +746,19 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
     );
     const rendu = renderInvoicePdf(doc).toString('latin1');
     expect(rendu).toContain('Total hors taxes');
-    expect(rendu).toContain('139,00');
+    expect(rendu).toContain(sansSymbole(MRR));
     // Le taux figure en toutes lettres, UNE fois : la ligne dit « TVA 20 % »,
     // pas « TVA (TVA 20 %) ».
     expect(rendu).toContain('TVA 20 %');
     expect(rendu).not.toContain('TVA \\(TVA');
-    expect(rendu).toContain('27,80');
+    expect(rendu).toContain(sansSymbole(MRR_VAT));
     expect(rendu).toContain('Total toutes taxes comprises');
-    expect(rendu).toContain('166,80');
+    expect(rendu).toContain(sansSymbole(MRR_TTC));
   });
 
   /**
-   * CE QUE LE CLIENT VIRE, C'EST LE TTC. Annoncer « reste à régler 139,00 € »
-   * ferait arriver un virement inférieur d'un cinquième, et la facture
+   * CE QUE LE CLIENT VIRE, C'EST LE TTC. Annoncer le montant hors taxes comme
+   * reste à régler ferait arriver un virement inférieur d'un cinquième, et la facture
    * resterait éternellement « partiellement réglée » pour une raison que
    * personne ne comprendrait au téléphone.
    */
@@ -743,7 +777,7 @@ describe('Hors taxes, TVA, toutes taxes comprises', () => {
       { ...EMPTY_PARTY, name: "CLASS'FOOD" },
     );
     const rendu = renderInvoicePdf(impayee).toString('latin1');
-    expect(rendu).toContain('Reste à régler : 166,80');
+    expect(rendu).toContain(`Reste à régler : ${sansSymbole(MRR_TTC)}`);
     expect(rendu).toContain('TTC');
   });
 });

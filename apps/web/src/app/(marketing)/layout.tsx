@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ADLaM_Display } from "next/font/google";
+import { PRICE_RANGE } from "@/components/marketing/content";
 import "@/components/marketing/marketing.css";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://snackmanager.fr";
@@ -25,9 +26,14 @@ const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse
  * applications, le zéro commission de la section 6, la personnalisation
  * annoncée par le hero, l'accompagnement daté de la section 8 et les trois
  * tarifs affichés.
+ *
+ * LES TROIS TARIFS NE SONT PLUS RECOPIÉS ICI. Ce fichier vit hors de
+ * `components/marketing/`, donc une révision de grille menée dans `content.ts`
+ * le laissait intact : le résultat Google a annoncé l'ancienne grille pendant
+ * que la page affichait la nouvelle — un prix périmé lisible sans même ouvrir
+ * le site. La fourchette est désormais dérivée (`PRICE_RANGE`, content.ts).
  */
-const DESCRIPTION =
-  "Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. Zéro commission, à vos couleurs, lancement accompagné. 89, 139 ou 189 € par mois.";
+const DESCRIPTION = `Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. Zéro commission, à vos couleurs, lancement accompagné. ${PRICE_RANGE}.`;
 
 /**
  * Le logotype « Snack Manager » de la maquette est composé en ADLaM Display.

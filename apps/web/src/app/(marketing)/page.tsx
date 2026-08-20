@@ -84,10 +84,16 @@ export default function LandingPage() {
 }
 
 /**
- * Le prix affiché, en nombre. `PLANS[i].price` vaut « 89 € » : la grille est
- * écrite pour un lecteur humain, schema.org veut un nombre nu. On le dérive
- * plutôt que de le recopier — deux endroits où vit le même prix, c'est deux
- * endroits qui finissent par diverger.
+ * Le prix affiché, en nombre. `PLANS[i].price` est écrit pour un lecteur
+ * humain (« 99 € », symbole compris) quand schema.org veut un nombre nu. On le
+ * dérive plutôt que de le recopier — deux endroits où vit le même prix, c'est
+ * deux endroits qui finissent par diverger.
+ *
+ * `parseInt` s'arrête à la première espace, ce qui suffit tant que la grille
+ * mensuelle tient en trois chiffres. Un tarif à quatre chiffres porterait un
+ * séparateur de milliers et ne se lirait plus ainsi — c'est le cas des prix
+ * ANNUELS (`priceYearly`), qu'on ne passe donc jamais ici : `plan.monthlyCents`
+ * et `plan.yearlyCents` existent pour ça.
  */
 function priceOf(plan: (typeof PLANS)[number]) {
   return String(Number.parseInt(plan.price, 10));
@@ -107,10 +113,13 @@ function structuredData() {
       /*
        * LES TROIS PRIX SONT PUBLICS, DONC ILS SONT ICI. La page disait
        * « sur devis » et l'offre structurée le répétait ; elle affiche
-       * maintenant 89 / 139 / 189 € par mois, et un extrait enrichi qui porte
-       * un prix vaut mieux qu'un extrait qui n'en porte aucun. La fourchette
-       * est déclarée en `AggregateOffer` parce qu'il y a bien trois offres à
-       * comparer, pas une seule à négocier.
+       * maintenant les trois tarifs mensuels de `PLANS`, et un extrait enrichi
+       * qui porte un prix vaut mieux qu'un extrait qui n'en porte aucun. La
+       * fourchette est déclarée en `AggregateOffer` parce qu'il y a bien trois
+       * offres à comparer, pas une seule à négocier.
+       *
+       * Aucun montant n'est recopié ici : les trois se lisent dans la grille,
+       * qui est le seul endroit de la vitrine où ils s'écrivent.
        */
       offers: {
         "@type": "AggregateOffer",
