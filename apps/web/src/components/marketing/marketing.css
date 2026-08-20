@@ -2280,11 +2280,49 @@ html:has(.mk) {
  */
 .mk .ch-row {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr) 156px;
   gap: 28px;
   align-items: baseline;
   padding: 18px 0 20px;
   border-bottom: 1px solid var(--border-10);
+}
+.mk .ch-head-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+/* L'accroche : ce que le service PRODUIT, en une phrase, sous son intitulé.
+   Elle est en blanc cassé quand le détail est en gris — la hiérarchie se joue
+   au ton, pas à la taille, sinon la rangée compte trois niveaux de titre. */
+.mk .ch-lead {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.45em;
+  color: var(--white-70);
+  text-wrap: pretty;
+}
+.mk .ch-row.lead .ch-lead {
+  font-size: 16.5px;
+  color: var(--white-80);
+}
+/* Le prix, aligné à droite et en chiffres tabulaires : les trois lignes se
+   comparent d'un coup d'œil vertical. Doré uniquement quand c'est un vrai
+   montant — « compris dans l'abonnement » n'est pas une dépense, le dorer
+   ferait croire à un supplément. */
+.mk .ch-price {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.4em;
+  text-align: right;
+  color: var(--white-50);
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+.mk .ch-row:nth-child(2) .ch-price {
+  font-size: 17px;
+  color: var(--accent);
 }
 .mk .ch-row:nth-child(2) {
   transition-delay: 0.08s;
@@ -2360,6 +2398,19 @@ html:has(.mk) {
   .mk .ch-row.lead .ch-line,
   .mk .ch-delivery {
     font-size: 15px;
+  }
+  .mk .ch-lead,
+  .mk .ch-row.lead .ch-lead {
+    font-size: 15px;
+  }
+  /* Le prix repasse à gauche sous sa rangée : aligné à droite dans une colonne
+     unique, il flotterait seul contre le bord, à trois lignes de l'intitulé
+     auquel il se rapporte. */
+  .mk .ch-price,
+  .mk .ch-row:nth-child(2) .ch-price {
+    margin-top: 2px;
+    font-size: 15px;
+    text-align: left;
   }
 }
 

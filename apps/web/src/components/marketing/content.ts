@@ -93,7 +93,11 @@ export const SECTIONS: readonly SectionMeta[] = [
     title: "Votre service aujourd'hui. Votre service lundi prochain.",
   },
   { id: "produit", nav: "Produit", badge: "Le produit", title: "Ne nous croyez pas sur parole. Prenez une commande." },
-  { id: "commander", nav: "Commander", badge: "Vos canaux", title: "Vos clients commandent chez vous. Pas chez eux." },
+  // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
+  // sans le nommer — « chez eux », c'est qui ? — et n'expliquait nulle part
+  // l'avantage qu'il y a à commander chez le restaurateur. Une préférence
+  // annoncée sans sa raison. La section dit maintenant ce qu'on FAIT.
+  { id: "commander", nav: "Services", badge: "Nos services +", title: "Un logiciel ne suffit pas. On s'occupe du reste." },
   {
     id: "materiel",
     nav: "Matériel",
@@ -213,7 +217,7 @@ export const HERO_SHOTS: Shot[] = [
  *
  * La sixième ligne de gauche est la douleur numéro un d'un restaurateur en
  * 2026, et elle manquait entièrement. Sa réponse en face est le meilleur
- * argument de la page (voir `ORDER_CHANNELS[0]`).
+ * argument de la page (voir `SERVICES[0]`).
  */
 export const VS_WITHOUT = [
   "Trois outils qui ne se parlent pas, et vous au milieu",
@@ -604,45 +608,64 @@ export const DEMO_FALLBACK = "La démonstration ne répond pas — voici l'écra
 export const PILOTE_SIGNATURE =
   "Ce que vous venez de manipuler tourne à Class'Food, Perriers-sur-Andelle, midi et soir, 7 j/7.";
 
-/* ── 4. Commander — les trois canaux directs ─────────────────── */
+/* ── 4. Nos services + — ce qu'on fait, en plus du logiciel ──── */
+
+export type Service = {
+  id: string;
+  title: string;
+  /** L'accroche, en une phrase. Ce que le service PRODUIT, pas ce qu'il est. */
+  lead: string;
+  /** Le détail, deux ou trois phrases. C'est ici que l'avantage se chiffre. */
+  line: string;
+  /** « 499 € » ou « Compris dans la mise en route ». Jamais vide. */
+  price: string;
+};
 
 /**
- * TROIS RANGÉES, ET LA FICHE GOOGLE EN TÊTE.
+ * LA SECTION NE PARLE PLUS DE CANAUX, ELLE PARLE DE CE QU'ON FAIT.
  *
- * C'est le meilleur argument de la page, et il n'y était pas : les plateformes
- * posent automatiquement leur lien de commande sur la fiche Google du
- * restaurant. Le restaurateur, lui, connaît sa fiche par cœur — c'est par là
- * que ses clients le trouvent.
+ * Elle s'intitulait « Vos clients commandent chez vous. Pas chez eux. » et le
+ * fondateur a mis le doigt sur le défaut : « chez eux », c'est qui ? Le titre
+ * désignait un adversaire sans le nommer, et surtout il n'expliquait NULLE PART
+ * l'avantage qu'il y a à commander chez le restaurateur plutôt que sur Uber
+ * Eats. Il annonçait une préférence sans donner sa raison.
+ *
+ * Trois services, et chacun dit ce qu'il produit. La fiche Google reste en
+ * tête : c'est le meilleur argument de la page, et il est vérifiable.
  *
  * VÉRIFIÉ CONTRE LA DOCUMENTATION GOOGLE (support.google.com/business/
- * answer/10842217, consultée le 20/08/2026), et on n'écrit rien de plus que ce
- * qu'elle dit : un établissement peut ajouter ses propres liens de commande,
- * les marquer comme préférés pour le retrait et pour la livraison, et demander
- * le retrait des liens tiers — les fournisseurs ont alors cinq jours ouvrés
- * pour s'exécuter. On ne promet donc PAS de « faire disparaître Uber Eats de
- * votre fiche » : ce n'est pas nous qui l'exécutons, c'est Google.
+ * answer/10842217, consultée le 20/08/2026) : un établissement peut ajouter ses
+ * propres liens de commande, les marquer comme préférés, et demander le retrait
+ * des liens tiers. On ne promet PAS de « faire disparaître Uber Eats de votre
+ * fiche » — ce n'est pas nous qui l'exécutons, c'est Google — et on ne prête
+ * plus de délai à Google, qui n'en publie aucun.
  *
- * Ce n'est pas non plus une troisième colonne d'une grille à trois colonnes :
- * ce sont des RANGÉES pleine largeur, la première la plus haute. Une carte
- * parmi trois cartes fait de l'argument un élément de liste.
+ * LES PRIX SONT ÉCRITS ICI, pas renvoyés à un devis. Un service dont le prix se
+ * demande est un service qu'on ne demande pas.
  */
-export const ORDER_CHANNELS = [
+export const SERVICES: readonly Service[] = [
   {
     id: "google",
-    title: "Votre fiche Google",
-    line: "Le bouton « Commander » de votre fiche peut pointer chez vous, marqué « préféré par l'établissement » — et vous pouvez demander le retrait des liens des plateformes. On fait la démarche avec vous.",
+    title: "Votre visibilité sur Google",
+    lead: "Le bouton « Commander » de votre fiche pointe vers vous, pas vers eux.",
+    line: "Les plateformes posent leur lien sur votre fiche Google sans vous demander votre avis — et c'est par là que vos clients vous trouvent. On installe le vôtre à la place, marqué « préféré par l'établissement », et on demande le retrait des autres. Même repas, même prix pour le client : la commission, elle, reste dans votre caisse.",
+    price: "Compris dans la mise en route",
   },
   {
-    id: "page",
+    id: "identite",
+    title: "Votre identité visuelle",
+    lead: "Une enseigne qui a l'air de ce qu'elle vaut.",
+    line: "Logo, palette, carte remise en forme et photographiée : on reprend votre identité et on la pose partout — page de commande, écrans de salle, sacs, réseaux. Beaucoup de très bons snacks se vendent moins bien que leur cuisine, et ça se corrige.",
+    price: "499 €, une fois",
+  },
+  {
+    id: "commande",
     title: "Votre page de commande",
-    line: "Active dès l'ouverture du compte, à vos couleurs. Vous avez déjà un nom de domaine ? La même page répond dessus.",
+    lead: "En ligne dès l'ouverture du compte, à vos couleurs.",
+    line: "Sur une adresse Snack Manager, ou sur votre propre nom de domaine si vous en avez un. Vous tenez déjà à votre site ? On y branche le bouton « Commander » avec une balise à coller — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
+    price: "Compris dans l'abonnement",
   },
-  {
-    id: "module",
-    title: "Le module dans le site que vous avez déjà",
-    line: "Une balise à coller pour brancher le bouton « Commander » — et c'est nous qui la collons. Le reste de votre site ne bouge pas.",
-  },
-] as const;
+];
 
 /**
  * LA CLAUSE D'HONNÊTETÉ, EN PIED DE SECTION.
