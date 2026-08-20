@@ -218,19 +218,78 @@ export const CATALOGUE: CatalogueColumn[] = [
 
 /* ── Scène de démonstration 3D ───────────────────────────────── */
 
+/**
+ * Châssis dans lequel l'application est présentée. C'est l'appareil RÉEL du
+ * terrain, pas une préférence graphique : une caisse se tient sur une tablette
+ * posée en paysage au comptoir, la commande client se prend au téléphone, le
+ * back-office et l'écran de salle vivent sur un écran large.
+ */
+export type DemoDevice = "tablet" | "phone" | "wide";
+
+/**
+ * Origines des applications embarquées dans la vitrine.
+ *
+ * Aujourd'hui STAGING : ce sont les seules URL où le mode démonstration est
+ * déployé. Le jour où les domaines de production sont à jour, on remplace les
+ * deux valeurs ici et rien d'autre ne bouge.
+ */
+export const DEMO_ORIGINS = {
+  pos: "https://pos-staging-7f92.up.railway.app",
+  kds: "https://kds-staging-90da.up.railway.app",
+} as const;
+
+/**
+ * Le seul déclencheur du mode démonstration, côté applications de terrain
+ * (`packages/client-core/src/demo/mode.ts`) : `?demo=1`, et rien d'autre.
+ *
+ * Ce mode ne touche AUCUNE base : la carte, le service en cours et les
+ * commandes prises par le visiteur vivent dans son propre navigateur. Deux
+ * visiteurs ne se croisent jamais, aucun faux restaurant n'apparaît dans le
+ * CRM, et rien ne pollue la médiane réseau qui alimente notre conseil chiffré.
+ */
+export const DEMO_QUERY = "?demo=1";
+
+/** URL complète à charger dans le cadre (ou à ouvrir dans un onglet). */
+export function demoHref(origin: string): string {
+  return `${origin}/${DEMO_QUERY}`;
+}
+
+/**
+ * Ce qu'il faut pour rendre une application MANIPULABLE depuis la vitrine.
+ *
+ * Absent = l'application n'a pas (encore) de mode démonstration : on garde
+ * l'affiche seule plutôt que d'embarquer un écran d'appairage ou un écran de
+ * connexion, qui donneraient l'impression d'un produit fermé.
+ */
+export type DemoLive = {
+  /** Origine de l'application ; `?demo=1` est ajouté par `demoHref`. */
+  origin: string;
+  /** Bouton posé sur l'affiche, sur grand écran. */
+  cta: string;
+  /** Même promesse en petit écran, où la démo s'ouvre dans un onglet. */
+  ctaOut: string;
+  /** Par où commencer, une fois l'application chargée. */
+  hint: string;
+  /** `title` de l'iframe — lu tel quel par les lecteurs d'écran. */
+  title: string;
+};
+
 export type DemoApp = {
   id: string;
   label: string;
+  device: DemoDevice;
   shot: Shot;
   lead: string;
   body: string;
   chips: string[];
+  live?: DemoLive;
 };
 
 export const DEMO_APPS: DemoApp[] = [
   {
     id: "bo",
     label: "Back-office",
+    device: "wide",
     shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
     lead: "Back-office gérant.",
     body: " Menu & prix modifiables en direct, CA du jour, ruptures, promos, pointage et heures de l'équipe — toute la gestion au même endroit.",
@@ -239,22 +298,39 @@ export const DEMO_APPS: DemoApp[] = [
   {
     id: "pos",
     label: "Caisse (POS)",
+    device: "tablet",
     shot: { src: "/shots/pos.png", alt: "Caisse : catalogue, configurateur produit et ticket en cours" },
     lead: "Caisse.",
     body: " Menus cadrés, totaux automatiques, ticket cuisine et sticker sac imprimés — prise en main en une heure, même pour une nouvelle recrue.",
     chips: ["Config express", "Ticket + sticker sac", "Sur place & téléphone"],
+    live: {
+      origin: DEMO_ORIGINS.pos,
+      cta: "Essayer la caisse",
+      ctaOut: "Ouvrir la caisse en plein écran",
+      hint: "Touchez un produit pour composer une commande, puis encaissez.",
+      title: "Caisse Snack Manager en démonstration",
+    },
   },
   {
     id: "kds",
     label: "Cuisine (KDS)",
+    device: "tablet",
     shot: { src: "/shots/kds.png", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
     lead: "Cuisine.",
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
     chips: ["À lancer agrégé", "Minuteurs couleur", "Alerte sonore"],
+    live: {
+      origin: DEMO_ORIGINS.kds,
+      cta: "Essayer l'écran cuisine",
+      ctaOut: "Ouvrir la cuisine en plein écran",
+      hint: "Ouvrez « Nouveau » et touchez « Accepter » : le ticket part en préparation.",
+      title: "Écran cuisine Snack Manager en démonstration",
+    },
   },
   {
     id: "order",
     label: "Commande client",
+    device: "phone",
     shot: { src: "/shots/commande.png", alt: "Commande en ligne sur mobile : carte du restaurant et panier", portrait: true },
     lead: "Commande en ligne.",
     body: " Le client commande et paie — le ticket file droit en cuisine, déjà encaissé. La caisse ne fait que remettre le sac.",

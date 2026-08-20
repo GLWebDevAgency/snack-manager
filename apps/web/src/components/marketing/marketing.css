@@ -2184,6 +2184,13 @@ html:has(.mk) {
   width: min(880px, 78%);
   height: 600px;
   margin-left: max(-440px, -39%);
+  /*
+   * Colonne : le châssis prend la hauteur restante, la consigne (« par où
+   * commencer ») se pose dessous SANS déborder de la scène. La hauteur totale
+   * ne bouge donc pas quand la démo démarre.
+   */
+  display: flex;
+  flex-direction: column;
   transition:
     transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 0.6s,
@@ -2214,46 +2221,288 @@ html:has(.mk) {
   z-index: 1;
   pointer-events: none;
 }
-.mk .demo-frame {
+/* ===== Châssis d'appareils (100 % CSS, cf. DeviceFrame.tsx) =====
+ *
+ * Trois surfaces stratifiées, jamais deux valeurs identiques côte à côte :
+ * la tranche du châssis (claire, elle prend la lumière), sa masse (sombre),
+ * puis l'écran (le plus sombre). C'est ce qui donne l'objet plutôt que le
+ * rectangle — sans un octet d'image.
+ */
+.mk .dv {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.mk .dv-chassis {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid var(--border-10);
+  background: linear-gradient(180deg, #2c2c2c 0%, #191919 42%, #0c0c0c 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(0, 0, 0, 0.3),
+    0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.mk .dv-screen {
   position: relative;
   width: 100%;
   height: 100%;
-  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid var(--border-10);
-  background: var(--card);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  background: #0b0b0b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  /* La démo ne récupère pas le défilement de la page d'accueil. */
+  overscroll-behavior: contain;
 }
-.mk .demo-frame img {
+.mk .dv-screen .ph {
+  height: 100%;
+}
+.mk .dv-screen .ph img {
+  object-position: top center;
+}
+.mk .dv-live {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  display: block;
+  border: 0;
+  background: #0b0b0b;
+  overscroll-behavior: contain;
 }
-/* Capture portrait (commande mobile) : présentée dans un châssis de téléphone. */
-.mk .demo-frame.is-portrait {
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(110% 75% at 50% 0%, rgba(201, 161, 90, 0.18), transparent 62%),
-    linear-gradient(180deg, #232323, #0f0f0f);
+
+/* Tablette en paysage — la caisse et l'écran cuisine, posés au comptoir. */
+.mk .dv-tablet .dv-chassis {
+  width: 100%;
+  height: 100%;
+  border-radius: 24px;
+  padding: 13px 17px;
 }
-.mk .demo-phone {
-  height: 88%;
-  aspect-ratio: 860 / 1864;
+.mk .dv-tablet .dv-screen {
+  border-radius: 7px;
+}
+.mk .dv-tablet .dv-cam {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #565656, #060606 72%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+/* Téléphone — la commande client, prise à une main. */
+.mk .dv-phone .dv-chassis {
+  height: 100%;
+  aspect-ratio: 9 / 19.5;
+  border-radius: 38px;
+  padding: 9px;
+}
+.mk .dv-phone .dv-screen {
   border-radius: 30px;
-  border: 7px solid #1c1c1c;
+}
+.mk .dv-phone .dv-cam {
+  position: absolute;
+  z-index: 4;
+  top: 17px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78px;
+  height: 19px;
+  border-radius: 12px;
+  background: #050505;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+/* Bouton latéral : la tranche, seule preuve qu'un téléphone a une épaisseur. */
+.mk .dv-phone .dv-chassis::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 24%;
+  width: 2px;
+  height: 54px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, #3d3d3d, #171717);
+}
+
+/* Écran large sur pied — le back-office du gérant (et l'écran de salle). */
+.mk .dv-wide .dv-chassis {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border-radius: 13px 13px 9px 9px;
+  padding: 11px 11px 26px;
+}
+.mk .dv-wide .dv-screen {
+  border-radius: 5px;
+}
+/* Témoin de veille sur le menton, laiton de marque, discret. */
+.mk .dv-wide .dv-cam {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.5;
+  box-shadow: 0 0 7px rgba(201, 161, 90, 0.55);
+}
+.mk .dv-wide .dv-stand {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: 24px;
+}
+.mk .dv-wide .dv-stand::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92px;
+  height: 17px;
+  clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, #262626, #131313);
+}
+.mk .dv-wide .dv-stand::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 196px;
+  height: 7px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2e2e2e, #101010);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Appel à manipuler, posé sur l'affiche =====
+ *
+ * Le dégradé ne couvre que le bas : la capture reste lisible au-dessus, donc
+ * l'affiche fait toujours son travail pendant que le bouton fait le sien.
+ */
+.mk .demo-cta {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 56px 16px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.58) 44%, rgba(0, 0, 0, 0.9) 100%);
+  pointer-events: none;
+}
+.mk .demo-cta > * {
+  pointer-events: auto;
+}
+.mk .demo-trybtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--black);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 22px;
+  padding: 11px 21px;
+  text-decoration: none;
+  cursor: pointer;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.12),
-    0 24px 60px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-  background: #000;
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 26px rgba(0, 0, 0, 0.5);
+  transition:
+    background 0.2s,
+    transform 0.15s;
 }
-.mk .demo-phone img {
-  object-fit: cover;
-  object-position: top center;
+.mk .demo-trybtn:hover {
+  background: var(--link-hover);
+  border-color: var(--link-hover);
 }
+.mk .demo-trybtn:active {
+  transform: translateY(1px);
+}
+.mk .demo-trybtn:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+/* Le repli plein écran n'existe que sous le seuil de lisibilité (voir plus bas). */
+.mk .demo-tryout {
+  display: none;
+}
+.mk .demo-ctanote {
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--white-70);
+}
+
+/* ===== Consigne de démarrage, une fois l'application montée ===== */
+.mk .demo-hint {
+  flex: none;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.4em;
+  color: var(--white-70);
+}
+.mk .demo-hintdot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(201, 161, 90, 0.16);
+  animation: sm-demo-live 2.4s ease-in-out infinite;
+}
+@keyframes sm-demo-live {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.mk .demo-stop {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--gray);
+  background: var(--badge-bg);
+  border: 1px solid var(--surface-6);
+  border-radius: 16px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.mk .demo-stop:hover {
+  color: var(--white);
+}
+.mk .demo-stop:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk .demo-hintdot {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .mk .demo-focusbtn {
   position: absolute;
   inset: 0;
@@ -2322,31 +2571,118 @@ html:has(.mk) {
 }
 @media (max-width: 809.98px) {
   .mk .demo-stage {
-    height: 420px;
+    height: 380px;
     perspective: 1000px;
+    transition: height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .mk .demo-card {
     width: 92%;
     margin-left: -46%;
-    height: 400px;
+    height: 360px;
+    transition:
+      transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+      height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.6s,
+      filter 0.6s;
+  }
+  /* Appareils couchés : la scène se referme sur eux au lieu de flotter. */
+  .mk .demo-stage[data-device="tablet"],
+  .mk .demo-stage[data-device="wide"] {
+    height: 300px;
+  }
+  .mk .demo-stage[data-device="tablet"] .demo-card,
+  .mk .demo-stage[data-device="wide"] .demo-card {
+    height: 280px;
+  }
+  /*
+   * Châssis raccourcis : à cette taille, une grosse bordure mange l'écran.
+   * Et surtout, on leur rend leur FORME : une tablette de comptoir est plus
+   * large que haute. Sans `aspect-ratio`, le châssis prendrait la hauteur de
+   * la carte et on présenterait une tablette debout tenant une capture
+   * couchée — l'objet ne serait plus reconnaissable.
+   */
+  .mk .dv-tablet .dv-chassis {
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border-radius: 16px;
+    padding: 8px 10px;
+  }
+  .mk .dv-wide .dv-chassis {
+    flex: none;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border-radius: 10px 10px 7px 7px;
+    padding: 8px 8px 18px;
+  }
+  .mk .dv-wide {
+    justify-content: center;
+  }
+  .mk .dv-wide .dv-stand {
+    height: 18px;
+  }
+  .mk .dv-wide .dv-stand::before {
+    height: 12px;
+    width: 70px;
+  }
+  .mk .dv-wide .dv-stand::after {
+    width: 140px;
+    height: 6px;
+  }
+  .mk .dv-phone .dv-chassis {
+    border-radius: 30px;
+    padding: 7px;
+  }
+  .mk .dv-phone .dv-screen {
+    border-radius: 24px;
+  }
+  .mk .dv-phone .dv-cam {
+    top: 13px;
+    width: 60px;
+    height: 15px;
   }
   /*
    * Une capture de tablette rognée en `cover` sur une carte de 350 px ne
    * montrerait plus qu'un fragment d'écran : sur mobile on affiche l'app
-   * entière, posée sur le même fond que le châssis de téléphone.
+   * entière, posée sur un fond stratifié plutôt que sur du noir plat.
    */
-  .mk .demo-frame {
+  .mk .dv-tablet .dv-screen,
+  .mk .dv-wide .dv-screen {
     background:
       radial-gradient(110% 75% at 50% 0%, rgba(201, 161, 90, 0.16), transparent 62%),
       linear-gradient(180deg, #1e1e1e, #0d0d0d);
   }
-  .mk .demo-frame img {
+  .mk .dv-tablet .dv-screen .ph img,
+  .mk .dv-wide .dv-screen .ph img {
     object-fit: contain;
     object-position: center;
   }
-  .mk .demo-frame.is-portrait img {
-    object-fit: cover;
-    object-position: top center;
+  /*
+   * PETIT ÉCRAN : ON RENONCE PROPREMENT.
+   *
+   * Une caisse dessinée pour une tablette de 1024 px, pliée dans 375 px, ne se
+   * lit pas et ne se manipule pas — elle donnerait au patron du snack l'exacte
+   * impression inverse de celle qu'on cherche. On garde donc l'affiche, et on
+   * propose la vraie application en plein écran, dans un onglet à elle.
+   * `AppsShowcase` démonte toute iframe déjà montée au passage sous ce seuil :
+   * les deux bascules partagent la constante `NARROW`.
+   */
+  .mk .demo-try {
+    display: none;
+  }
+  .mk .demo-tryout {
+    display: inline-flex;
+  }
+  /* Le dégradé ne doit pas avaler une affiche déjà petite. */
+  .mk .demo-cta {
+    gap: 6px;
+    padding: 26px 10px 12px;
+  }
+  .mk .demo-trybtn {
+    font-size: 13px;
+    padding: 9px 15px;
+  }
+  .mk .demo-ctanote {
+    font-size: 10.5px;
   }
   .mk .demo-card.is-left,
   .mk .demo-card.is-right {

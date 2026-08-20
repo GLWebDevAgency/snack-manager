@@ -6,3 +6,4 @@ export * from './types';
 export * from './pricing';
 export * from './theme';
 export * from './hooks';
+export * from './demo';

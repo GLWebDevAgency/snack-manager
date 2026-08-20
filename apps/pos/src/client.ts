@@ -17,6 +17,18 @@
  *
  * Conséquence directe : le nom, l'accent et le logo affichés par la caisse ne
  * viennent plus d'aucune constante — ils descendent du tenant appairé.
+ *
+ * ─── LE MODE DÉMONSTRATION ───
+ *
+ * Avec `?demo=1` — et seulement ainsi — la caisse tourne entièrement dans le
+ * navigateur du visiteur : transport en mémoire, carte issue d'une fixture,
+ * aucune base de données touchée. Ce module est le seul endroit qui le sache ;
+ * `App.tsx` et l'écran de vente n'ont pas une ligne de conditionnel.
+ *
+ * L'appairage et la session sont PRÉ-REMPLIS dans un magasin volatil, avant
+ * qu'aucun écran ne se monte. C'est ce qui fait que le visiteur arrive
+ * directement sur une caisse ouverte : ni code d'appairage, ni clavier de PIN.
+ * Un patron de snack qui tombe sur un formulaire de code s'en va.
  */
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,7 +40,17 @@ import {
   type DevicePinSession,
   type DeviceTenantBrand,
 } from '@sm/contracts';
-import { SmClient, getStore, setStore, webStore, type KeyValueStore } from '@sm/client-core';
+import {
+  DEMO_TENANT,
+  SmClient,
+  demoStore,
+  demoTransport,
+  getStore,
+  isDemoRequested,
+  setStore,
+  webStore,
+  type KeyValueStore,
+} from '@sm/client-core';
 
 const DEFAULT_API = 'https://api-production-8949.up.railway.app';
 
@@ -57,13 +79,6 @@ function nativeStore(): KeyValueStore {
   };
 }
 
-// Doit être appelé AVANT toute construction de file de sync.
-setStore(Platform.OS === 'web' ? webStore() : nativeStore());
-
-const BASE_URL = resolveBaseUrl();
-
-export const client = new SmClient({ baseUrl: BASE_URL });
-
 // ─── Clés de persistance locale ───
 
 export const KEYS = {
@@ -85,6 +100,71 @@ export interface Session {
   brandColor: string;
   at: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Démonstration
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Ce poste est-il une démonstration ?
+ *
+ * Lu UNE fois, au chargement du module, depuis l'URL et rien d'autre. Ni
+ * variable d'environnement, ni valeur par défaut, ni reste dans le stockage :
+ * une tablette en service ne peut pas y tomber par accident (cf.
+ * `client-core/src/demo/mode.ts` et son test).
+ */
+export const DEMO = isDemoRequested();
+
+/** Équipier de démonstration — un prénom, comme sur une vraie caisse. */
+const DEMO_STAFF = { name: 'Sarah', role: 'caisse' } as const;
+
+const DEMO_PAIRED: PairedDevice = {
+  deviceToken: 'demo',
+  tenant: {
+    slug: DEMO_TENANT.slug,
+    name: DEMO_TENANT.name,
+    brandColor: DEMO_TENANT.brandColor,
+    logoUrl: DEMO_TENANT.logoUrl ?? null,
+  },
+  device: { id: 'demo-pos', name: 'Caisse comptoir', kind: 'pos', kindLabel: 'Caisse' },
+};
+
+/**
+ * Le poste de démonstration s'ouvre DÉJÀ appairé et DÉJÀ en service.
+ *
+ * `App.tsx` restaure l'appairage puis la session au montage : les deux sont
+ * donc semées ici, avant que quoi que ce soit ne se peigne. Le visiteur ne voit
+ * jamais l'écran d'appairage ni le clavier de code — il voit une caisse.
+ */
+function demoSeed(): Record<string, string> {
+  const session: Session = {
+    token: 'demo',
+    staffName: DEMO_STAFF.name,
+    staffRole: DEMO_STAFF.role,
+    tenantName: DEMO_TENANT.name,
+    tenantSlug: DEMO_TENANT.slug,
+    brandColor: DEMO_TENANT.brandColor,
+    at: Date.now(),
+  };
+  return {
+    [KEYS.device]: JSON.stringify(DEMO_PAIRED),
+    [KEYS.session]: JSON.stringify(session),
+  };
+}
+
+// Doit être appelé AVANT toute construction de file de sync.
+// En démonstration le magasin est volatil : rien n'atterrit dans le navigateur
+// du visiteur, et un rechargement lui rend une caisse neuve.
+setStore(
+  DEMO ? demoStore(demoSeed()) : Platform.OS === 'web' ? webStore() : nativeStore(),
+);
+
+const BASE_URL = resolveBaseUrl();
+
+export const client = new SmClient({
+  baseUrl: BASE_URL,
+  ...(DEMO ? { transport: demoTransport() } : null),
+});
 
 export interface PinLoginResponse {
   token: string;
@@ -198,6 +278,12 @@ export async function forgetPairedDevice(): Promise<void> {
  * routes `/public/devices/*`, qui sont publiques (aucun Bearer à joindre).
  */
 async function deviceFetch<T>(path: string, body: unknown, deviceToken?: string): Promise<T> {
+  // En démonstration, ces trois routes n'ont pas de correspondant : l'appareil
+  // n'existe pas, il n'y a personne à qui donner signe de vie. Laisser passer
+  // l'appel serait pire qu'inutile — le serveur répondrait 401 sur un jeton
+  // « demo », `App.tsx` en conclurait une révocation et renverrait le visiteur
+  // sur l'écran d'appairage, en pleine démonstration.
+  if (DEMO) throw new DeviceError('Route indisponible en démonstration', 503);
   const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: {
