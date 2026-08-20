@@ -17,6 +17,7 @@ import { SupplyDbModule } from './supply-db.module';
 import { SupplyModule } from './modules/supply/supply.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { PlanningModule } from './modules/planning/planning.module';
 import { EngageModule } from './modules/engage/engage.module';
 import { SiteModule } from './modules/site/site.module';
 import { ScreensModule } from './modules/screens/screens.module';
@@ -52,6 +53,9 @@ import { BillingModule } from './modules/billing/billing.module';
     SupplyModule,
     StatsModule,
     StaffModule,
+    // Planning des services prévus — complète `StaffModule`, qui ne connaît
+    // que les pointages. Les préfixes `/staff` et `/planning` sont distincts.
+    PlanningModule,
     EngageModule,
     SiteModule,
     ScreensModule,

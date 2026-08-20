@@ -147,6 +147,21 @@ export const StaffSchema = new Schema(
     role: { type: String, enum: ['gerant', 'caisse', 'cuisine'], required: true },
     pinHash: { type: String, required: true },
     active: { type: Boolean, default: true },
+    /**
+     * Coût horaire employeur, en CENTIMES — sans lui aucune projection de masse
+     * salariale n'est possible.
+     *
+     * DONNÉE PERSONNELLE. Une rémunération ne doit jamais transiter vers une
+     * session ouverte au PIN sur la tablette du comptoir : un équipier lirait
+     * le salaire de son collègue en tapotant l'écran. La lecture est réservée
+     * au compte propriétaire (cf. `canReadPayroll`, module planning) — au même
+     * titre que `pinHash`, ce champ ne part JAMAIS dans une réponse par défaut.
+     *
+     * `null` = non renseigné, à distinguer de `0` : une projection qui compte
+     * un salarié non tarifé comme gratuit est un chiffre faux, pas un chiffre
+     * prudent. Le module planning remonte explicitement les manquants.
+     */
+    hourlyCostCents: { type: Number, default: null, min: 0 },
   },
   { timestamps: true },
 );
@@ -168,6 +183,59 @@ export const ShiftSchema = new Schema(
 );
 ShiftSchema.index({ tenantId: 1, staffId: 1, clockIn: -1 });
 export type Shift = InferSchemaType<typeof ShiftSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// plannedshifts — services PRÉVUS (planning du gérant)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Un service prévu, à ne pas confondre avec le pointage (`Shift`) : celui-ci
+ * dit ce que le gérant a DÉCIDÉ, celui-là ce qui s'est RÉELLEMENT passé. Les
+ * confronter est tout l'intérêt du module.
+ *
+ * POURQUOI DES CHAÎNES ET NON DES `Date`. « Samedi, 18:00 → 23:30 » est une
+ * heure MURALE : c'est l'heure de la pendule du snack, pas un instant. Stocké
+ * en `Date`, un planning posé en août se décalerait d'une heure au passage à
+ * l'heure d'hiver — l'équipe recevrait un planning faux deux fois par an. Le
+ * jour reste donc `AAAA-MM-JJ` et les heures `HH:MM` ; la conversion en
+ * instants n'a lieu qu'au moment de croiser avec les pointages.
+ *
+ * `end` peut être INFÉRIEUR à `start` : un snack qui ferme à 00:30 saisit
+ * « 18:00 → 00:30 ». La durée se calcule en ajoutant 24 h dans ce cas.
+ */
+export const PlannedShiftSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    staffId: { type: Schema.Types.ObjectId, ref: 'Staff', required: true },
+    /** Jour calendaire parisien, `AAAA-MM-JJ`. */
+    date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    /** Heure murale de début, `HH:MM`. */
+    start: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    /** Heure murale de fin, `HH:MM` — peut précéder `start` (service de nuit). */
+    end: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    position: {
+      type: String,
+      enum: ['caisse', 'cuisine', 'polyvalent'],
+      default: 'polyvalent',
+      required: true,
+    },
+    note: { type: String, default: '' },
+    /**
+     * Un gérant construit son planning en plusieurs fois, entre deux services.
+     * Le BROUILLON est ce qui rend l'outil utilisable : tant qu'il n'a pas
+     * publié, son équipe ne doit voir aucun jet intermédiaire.
+     */
+    status: { type: String, enum: ['brouillon', 'publie'], default: 'brouillon', required: true },
+    /** Horodatage de la publication — `null` tant que le service est brouillon. */
+    publishedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+/** Lecture d'une semaine : le tri chronologique sort directement de l'index. */
+PlannedShiftSchema.index({ tenantId: 1, date: 1, start: 1 });
+/** Totaux par personne sur une période (projection de coût, confrontation). */
+PlannedShiftSchema.index({ tenantId: 1, staffId: 1, date: 1 });
+export type PlannedShift = InferSchemaType<typeof PlannedShiftSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // categories
@@ -799,6 +867,11 @@ export const MODELS = {
   User: { name: 'User', schema: UserSchema, collection: 'users' },
   Staff: { name: 'Staff', schema: StaffSchema, collection: 'staff' },
   Shift: { name: 'Shift', schema: ShiftSchema, collection: 'shifts' },
+  PlannedShift: {
+    name: 'PlannedShift',
+    schema: PlannedShiftSchema,
+    collection: 'plannedshifts',
+  },
   Category: { name: 'Category', schema: CategorySchema, collection: 'categories' },
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },

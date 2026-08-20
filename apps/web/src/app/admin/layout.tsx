@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { OrderStatus } from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
+import { isDemoActive } from "@/lib/demo";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
@@ -62,6 +63,10 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "devices", href: "/admin/devices", label: "Caisses & cuisine", icon: "print" },
   { id: "stats", href: "/admin/stats", label: "Statistiques", icon: "chart" },
   { id: "team", href: "/admin/team", label: "Équipe & pointage", icon: "user" },
+  // Juste après « Équipe & pointage », et les deux se répondent : là on badge
+  // ce qui s'est passé, ici on décide ce qui va se passer. L'écart entre les
+  // deux — prévu contre pointé — est justement ce que le planning affiche.
+  { id: "planning", href: "/admin/planning", label: "Planning", icon: "clock" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },
   // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
   // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
@@ -98,9 +103,16 @@ function Shell({ children }: { children: ReactNode }) {
   const [togglingOnline, setTogglingOnline] = useState(false);
 
   // ── Session (token localStorage ; null côté serveur) ──
+  //
+  // La démonstration de la page d'accueil n'a PAS de session : elle ne se
+  // connecte à rien, tout vit dans l'onglet. Sans cette exception, la garde
+  // ci-dessous renverrait le visiteur vers `/admin/login` au premier rendu et
+  // la démonstration s'arrêterait avant d'avoir commencé. `isDemoActive()` ne
+  // répond `true` que si l'URL d'entrée portait `?demo=1` — jamais autrement,
+  // et jamais côté serveur, ce qui laisse le rendu d'hydratation identique.
   const hasToken = useSyncExternalStore(
     emptySubscribe,
-    () => Boolean(getToken()),
+    () => Boolean(getToken()) || isDemoActive(),
     () => false,
   );
 
