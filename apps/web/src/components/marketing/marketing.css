@@ -2280,7 +2280,7 @@ html:has(.mk) {
  */
 .mk .ch-row {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 156px;
+  grid-template-columns: 280px minmax(0, 1fr) 186px;
   gap: 28px;
   align-items: baseline;
   padding: 18px 0 20px;
@@ -2320,9 +2320,25 @@ html:has(.mk) {
   font-variant-numeric: tabular-nums;
   text-wrap: pretty;
 }
-.mk .ch-row:nth-child(2) .ch-price {
+/* Les deux rangées qui portent un VRAI montant. La première dit « compris dans
+   la mise en route » : la dorer ferait lire les trois lignes comme trois
+   dépenses, l'inverse exact de ce qu'on veut dire. */
+.mk .ch-row:nth-child(2) .ch-price,
+.mk .ch-row:nth-child(3) .ch-price {
   font-size: 17px;
   color: var(--accent);
+}
+/* La condition sous le montant. Elle reprend le gris et redescend en taille :
+   deux niveaux dans la même colonne, sinon « + 55 € de mise en service » se lit
+   aussi fort que les 79 € et le prix cesse d'être un prix. */
+.mk .ch-pricenote {
+  display: block;
+  margin-top: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4em;
+  color: var(--white-50);
+  text-wrap: pretty;
 }
 .mk .ch-row:nth-child(2) {
   transition-delay: 0.08s;
@@ -2462,6 +2478,61 @@ html:has(.mk) {
  * différenciant : lui donner la taille d'une ligne de matériel le rangerait au
  * même niveau qu'une imprimante.
  */
+
+/* ── Les deux voies ──
+ *
+ * Deux colonnes de même poids : le restaurateur choisit, on ne pousse pas. Un
+ * filet horizontal les sépare de la rangée de pictogrammes plutôt qu'un
+ * encadré — la section entière tient sur l'absence de carte, et deux plateaux
+ * encadrés ici la feraient basculer du côté de la grille tarifaire. */
+.mk .mt-paths {
+  width: 100%;
+  max-width: var(--content-width);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border-10);
+}
+.mk .mt-path {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Le prix sur la MÊME ligne que l'intitulé, poussé au bout : le lecteur compare
+   « 0 € » et « à partir de 290 € » d'un seul balayage horizontal, sans avoir à
+   traverser les deux paragraphes qui les séparent. */
+.mk .mt-pathhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.mk .mt-pathtitle {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+  color: var(--white);
+}
+.mk .mt-pathprice {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mk .mt-pathline {
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.5em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+
 .mk .mt-offline {
   width: 100%;
   max-width: var(--content-width);
@@ -2513,6 +2584,20 @@ html:has(.mk) {
     min-height: 2.6em;
   }
   .mk .mt-line {
+    font-size: 14px;
+  }
+  /* Les deux voies s'empilent : côte à côte dans 350 px, chaque intitulé se
+     couperait en trois lignes et le prix passerait sous lui, ce qui annulerait
+     le balayage horizontal qui fait tout leur intérêt. */
+  .mk .mt-paths {
+    grid-template-columns: 1fr;
+    gap: 22px;
+    padding-top: 20px;
+  }
+  .mk .mt-pathtitle {
+    font-size: 16px;
+  }
+  .mk .mt-pathline {
     font-size: 14px;
   }
   .mk .mt-offline {

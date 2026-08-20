@@ -51,8 +51,12 @@ export function Canaux() {
             {/* Le prix tient sa colonne plutôt que de finir en queue de
                 paragraphe : c'est la première chose qu'on cherche dans une
                 liste de services, et la dernière qu'on trouve quand elle est
-                noyée dans la prose. */}
-            <p className="ch-price">{service.price}</p>
+                noyée dans la prose. Le montant seul, puis sa condition sous
+                lui — mise en service, devis, formule qui l'inclut. */}
+            <p className="ch-price">
+              {service.price}
+              {service.priceNote ? <span className="ch-pricenote">{service.priceNote}</span> : null}
+            </p>
           </li>
         ))}
       </ol>

@@ -102,7 +102,9 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: "materiel",
     nav: "Matériel",
     badge: "Chez vous",
-    title: "Rien à racheter. Et rien ne s'arrête quand le réseau tombe.",
+    // « Rien à racheter » ne répondait qu'à moitié : le restaurateur qui n'a pas
+    // de tablette, ou qui ne veut pas s'en occuper, restait sans réponse.
+    title: "Vous avez le matériel ? Parfait. Sinon, on s'en occupe.",
   },
   { id: "tarifs", nav: "Tarifs", badge: "Tarifs", title: "Trois prix, affichés. Zéro commission, toujours." },
   {
@@ -617,8 +619,15 @@ export type Service = {
   lead: string;
   /** Le détail, deux ou trois phrases. C'est ici que l'avantage se chiffre. */
   line: string;
-  /** « 499 € » ou « Compris dans la mise en route ». Jamais vide. */
+  /** Le montant, seul. « 79 € / mois », « À partir de 250 € ». Jamais vide. */
   price: string;
+  /**
+   * La condition, sous le montant : mise en service, sur devis, formule qui
+   * l'inclut. Elle a sa ligne parce qu'un prix suivi de ses conditions sur la
+   * même ligne cesse d'être lisible d'un coup d'œil — or c'est tout ce qu'on
+   * lui demande.
+   */
+  priceNote?: string;
 };
 
 /**
@@ -671,14 +680,16 @@ export const SERVICES: readonly Service[] = [
     title: "Votre identité visuelle",
     lead: "Une enseigne qui a l'air de ce qu'elle vaut.",
     line: "Logo, palette, carte remise en forme et photographiée : on reprend votre identité et on la pose partout — page de commande, écrans de salle, sacs, réseaux. Beaucoup de très bons snacks se vendent moins bien que leur cuisine, et ça se corrige.",
-    price: "499 €, une fois",
+    price: "À partir de 250 €",
+    priceNote: "Sur devis, une fois",
   },
   {
     id: "commande",
-    title: "Votre page de commande",
-    lead: "Vos prix de la carte, et un client qui revient.",
-    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Les points de fidélité sont dans la page, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs, sur votre nom de domaine si vous en avez un — ou branchée sur le site que vous avez déjà, avec une balise que nous collons pour vous.",
-    price: "Compris dans l'abonnement",
+    title: "Commande en ligne & fidélité",
+    lead: "Le click and collect et la carte de fidélité, dans la même page.",
+    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Ses points se cumulent tout seuls à chaque commande, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs, sur votre nom de domaine si vous en avez un — ou branchée sur le site que vous avez déjà, avec une balise que nous collons pour vous.",
+    price: "79 € / mois",
+    priceNote: "+ 55 € de mise en service · les deux compris dans Boost",
   },
 ];
 
@@ -719,12 +730,48 @@ export type HardwareItem = {
  *
  * C'est aussi la respiration la plus courte de la page, posée juste avant la
  * plus commerciale. Toute phrase ajoutée ici la détruit.
+ *
+ * « ÉCRAN CUISINE » EST DEVENU « TABLETTE CUISINE », et ce n'est pas un détail
+ * de vocabulaire : un patron de snack qui lit « écran » comprend « il me faut
+ * un écran de plus », c'est-à-dire un achat et un mur à percer. Une tablette,
+ * il en a déjà une, ou il sait ce que ça coûte.
  */
 export const HARDWARE: readonly HardwareItem[] = [
-  { id: "tablette", label: "Tablette Android ou iPad", line: "Le vôtre. Aucun matériel propriétaire." },
+  { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad. Aucun matériel propriétaire." },
   { id: "imprimante", label: "Imprimante ticket 80 mm", line: "En réseau. Ticket cuisine et sticker." },
-  { id: "ecran", label: "Écran cuisine", line: "Une TV ou un moniteur mural." },
+  { id: "ecran", label: "Tablette pour la cuisine", line: "Ou un moniteur mural, si vous préférez." },
   { id: "reseau", label: "Connexion internet", line: "Une box suffit. Fibre non requise." },
+] as const;
+
+/**
+ * LES DEUX VOIES — et la seconde manquait entièrement.
+ *
+ * La section disait « rien à racheter », ce qui est vrai et ne répond qu'à
+ * MOITIÉ. Le restaurateur qui n'a pas de tablette, ou qui n'a aucune envie de
+ * s'en occuper, se retrouvait sans réponse : la page lui expliquait qu'il
+ * n'avait rien à acheter chez nous, pas qu'on pouvait tout lui poser.
+ *
+ * D'où deux voies affichées côte à côte, dans cet ordre : celle qui ne coûte
+ * rien d'abord, celle qui se facture ensuite. Proposer l'installation avant de
+ * dire qu'elle est facultative ferait lire un supplément obligatoire.
+ *
+ * « À PARTIR DE » et non un prix ferme : le chantier dépend du nombre de
+ * postes, de la cuisine et du réseau en place. Annoncer 290 € tout court, c'est
+ * garantir une mauvaise surprise à celui qui a trois écrans à poser.
+ */
+export const HARDWARE_PATHS = [
+  {
+    id: "vous",
+    title: "Vous avez déjà le matériel",
+    line: "Vous branchez, vous appairez avec un code à six caractères, et vous ouvrez le service. On reste au téléphone le temps qu'il faut.",
+    price: "0 €",
+  },
+  {
+    id: "nous",
+    title: "On vous équipe et on installe",
+    line: "On fournit les tablettes et l'imprimante, on les configure à votre carte et à votre façon de travailler, et on pose tout sur place. Vous ouvrez le lendemain sans rien avoir à comprendre.",
+    price: "À partir de 290 €",
+  },
 ] as const;
 
 /**
@@ -775,7 +822,10 @@ export type PlanModule = { id: string; label: string };
 
 export const PLAN_MODULES: readonly PlanModule[] = [
   { id: "pos", label: "Caisse (POS)" },
-  { id: "kds", label: "Écran cuisine (KDS)" },
+  // « Écran cuisine » désignait ici un MODULE du logiciel, alors que la section
+  // matériel utilise le mot pour un objet à acheter. Le catalogue dit déjà
+  // « Cuisine (KDS) » : un seul nom pour une seule chose.
+  { id: "kds", label: "Cuisine (KDS)" },
   { id: "print", label: "Ticket cuisine & sticker sac" },
   { id: "offline", label: "Mode hors-ligne" },
   { id: "bo", label: "Back-office : CA, commandes, exports CSV" },
@@ -860,9 +910,12 @@ export const PLANS: Plan[] = [
  * qu'on facture, et nous ne fournissons aucun livreur.
  */
 export const MODULE_ADDON = {
-  name: "Commande en ligne & click and collect",
+  name: "Commande en ligne & fidélité",
   price: "79 € par mois",
-  line: "Se branche sur Essentiel ou sur Complet. Déjà inclus dans Boost.",
+  // La mise en service était absente de la grille alors qu'elle est facturée.
+  // Un montant qu'on découvre sur la première facture coûte plus cher que les
+  // 55 € qu'il rapporte : il est donc affiché au même rang que l'abonnement.
+  line: "55 € de mise en service la première fois. Se branche sur Essentiel ou sur Complet — les deux sont déjà compris dans Boost.",
 } as const;
 
 /**

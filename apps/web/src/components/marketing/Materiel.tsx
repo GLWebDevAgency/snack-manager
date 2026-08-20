@@ -1,4 +1,4 @@
-import { HARDWARE, HARDWARE_OFFLINE, section, type HardwareItem } from "./content";
+import { HARDWARE, HARDWARE_OFFLINE, HARDWARE_PATHS, section, type HardwareItem } from "./content";
 import { MtEcran, MtImprimante, MtReseau, MtTablette } from "./icons";
 
 /**
@@ -47,6 +47,24 @@ export function Materiel() {
             </span>
             <p className="mt-label">{item.label}</p>
             <p className="mt-line">{item.line}</p>
+          </li>
+        ))}
+      </ul>
+
+      {/*
+       * LES DEUX VOIES, DANS CET ORDRE. Celle qui ne coûte rien d'abord :
+       * proposer l'installation avant de dire qu'elle est facultative ferait
+       * lire un supplément obligatoire, et la question de la section est
+       * justement « est-ce que ça marche chez moi », pas « combien en plus ».
+       */}
+      <ul className="mt-paths rv">
+        {HARDWARE_PATHS.map((path) => (
+          <li className="mt-path" key={path.id}>
+            <div className="mt-pathhead">
+              <h3 className="mt-pathtitle">{path.title}</h3>
+              <span className="mt-pathprice">{path.price}</span>
+            </div>
+            <p className="mt-pathline">{path.line}</p>
           </li>
         ))}
       </ul>
