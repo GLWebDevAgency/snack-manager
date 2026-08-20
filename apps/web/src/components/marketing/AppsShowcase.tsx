@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CATALOGUE, demoHref, DEMO_APPS } from "./content";
+import { CATALOGUE, DEMO_APPS } from "./content";
 import { DeviceFrame } from "./DeviceFrame";
 import { Chevron } from "./icons";
 import { Photo } from "./Photo";
@@ -36,13 +36,20 @@ const NARROW = "(max-width: 809.98px)";
  *
  * La maquette embarquait des iframes ; une étape intermédiaire les avait
  * remplacées par des captures statiques. On revient aux cadres, avec les
- * applications de terrain réelles en `?demo=1` — le visiteur prend une
- * commande, l'encaisse, la voit tomber en cuisine.
+ * QUATRE applications réelles en `?demo=1` — le visiteur prend une commande,
+ * l'encaisse, la voit tomber en cuisine, la recommande en ligne côté client,
+ * puis va lire son chiffre d'affaires côté gérant.
+ *
+ * Les quatre, et pas deux : ce que le restaurateur doit constater ici, c'est
+ * autant l'ÉTENDUE que la profondeur. Une application qu'on ne peut qu'admirer
+ * en photo à côté de trois qu'on manipule, c'est celle-là qu'on soupçonne de
+ * ne pas exister.
  *
  * ─── CE QUI EMPÊCHE LA PAGE DE COULER ───
  *
- * Chaque application de terrain pèse ~1 Mo de JavaScript. Quatre iframes
- * montées au chargement, ce serait 4 Mo sur la page d'accueil. Donc :
+ * Chaque application pèse de plusieurs centaines de kilo-octets à ~1 Mo de
+ * JavaScript. Quatre iframes montées au chargement, ce serait autant sur la
+ * page d'accueil. Donc :
  *   1. l'AFFICHE (capture déjà optimisée) s'affiche instantanément ;
  *   2. l'iframe ne se monte QU'AU CLIC, et seulement pour l'app au centre ;
  *   3. changer d'onglet démonte l'iframe précédente (`setLive(null)` dans
@@ -53,13 +60,20 @@ const NARROW = "(max-width: 809.98px)";
  * ─── AUCUNE BASE DE DONNÉES ───
  *
  * `?demo=1` fait tourner l'application entièrement dans le navigateur du
- * visiteur (`packages/client-core/src/demo`). Pas de restaurant de
- * démonstration en base : il n'apparaîtrait pas dans le CRM comme un faux
- * client, deux visiteurs ne se marchent pas dessus, et surtout les commandes
- * jouées ici ne faussent pas la médiane réseau dont sort notre conseil chiffré.
- * Chacun a sa démo, neuve ; un rechargement remet tout à zéro.
+ * visiteur — `packages/client-core/src/demo` pour la caisse et la cuisine,
+ * `apps/web/src/lib/demo` pour le back-office, `apps/web/src/components/order/
+ * demo` pour la commande en ligne. Pas de restaurant de démonstration en
+ * base : il n'apparaîtrait pas dans le CRM comme un faux client, deux
+ * visiteurs ne se marchent pas dessus, et surtout les commandes jouées ici ne
+ * faussent pas la médiane réseau dont sort notre conseil chiffré. Chacun a sa
+ * démo, neuve ; un rechargement remet tout à zéro.
  */
 export function AppsShowcase() {
+  /*
+   * On ouvre sur `DEMO_APPS[0]`, la caisse : c'est l'écran auquel un
+   * restaurateur s'identifie, et celui dont le bouton « Essayer » doit tomber
+   * sous les yeux sans changer d'onglet (voir le commentaire de `DEMO_APPS`).
+   */
   const [current, setCurrent] = useState(0);
   /** Identifiant de l'application actuellement MONTÉE. Une seule à la fois. */
   const [live, setLive] = useState<string | null>(null);
@@ -149,9 +163,10 @@ export function AppsShowcase() {
           Explorez les applications, en démo
         </h2>
         <p className="body-text demo-sub rv">
-          La caisse et l&apos;écran cuisine sont <strong>manipulables ici même</strong> : lancez-en un, prenez une
-          commande, encaissez. Tout tourne dans <span className="kw">votre navigateur</span> — rien n&apos;est
-          enregistré, un rechargement remet la démo à zéro.
+          Les quatre applications sont <strong>manipulables ici même</strong> : prenez une commande, suivez-la en
+          cuisine, commandez en ligne, ouvrez le back-office. Tout tourne dans{" "}
+          <span className="kw">votre navigateur</span> — rien n&apos;est enregistré, un rechargement remet la démo à
+          zéro.
         </p>
 
         <div className="demo-pills rv">
@@ -185,15 +200,37 @@ export function AppsShowcase() {
                   <DeviceFrame device={a.device}>
                     {isLive && a.live ? (
                       /*
-                       * `sandbox` sans `allow-top-navigation` : l'application
-                       * embarquée ne peut pas emmener la page d'accueil
-                       * ailleurs. `allow-same-origin` la laisse parler à sa
-                       * propre origine (elle en a besoin pour son stockage),
-                       * pas à la nôtre.
+                       * ─── LE BAC À SABLE, ET CE QU'IL TIENT VRAIMENT ───
+                       *
+                       * Pas d'`allow-top-navigation` : quelle que soit son
+                       * origine, l'application embarquée ne peut pas emmener
+                       * la page d'accueil ailleurs — le navigateur refuse la
+                       * navigation et le dit en console. Pas d'`allow-popups`
+                       * non plus : elle ne peut pas davantage ouvrir un onglet.
+                       * Les deux sont vérifiés au navigateur, pas supposés.
+                       *
+                       * `allow-same-origin` n'est pas un confort : sans lui le
+                       * document reçoit une origine opaque, `localStorage` et
+                       * `document.cookie` lèvent une SecurityError, et les
+                       * quatre applications tombent au premier rendu (le
+                       * back-office lit `localStorage` dès son squelette).
+                       *
+                       * Conséquence assumée pour les deux démonstrations
+                       * servies par CETTE origine — le back-office et la
+                       * commande en ligne, reconnaissables à leur `href`
+                       * relatif : elles redeviennent de plein droit du même
+                       * domaine que la vitrine, donc capables d'en lire le
+                       * DOM (le navigateur le signale en console). Ce sont nos
+                       * propres pages, construites au même build, servies
+                       * depuis le même dépôt : elles n'obtiennent rien qu'un
+                       * `<script>` de la page d'accueil n'ait déjà. Le jour où
+                       * une démonstration embarquerait du contenu tiers, elle
+                       * devra passer par une origine à elle — pas par un
+                       * assouplissement d'attribut.
                        */
                       <iframe
                         className="dv-live"
-                        src={demoHref(a.live.origin)}
+                        src={a.live.href}
                         title={a.live.title}
                         loading="lazy"
                         sandbox="allow-scripts allow-same-origin allow-forms"
@@ -215,12 +252,7 @@ export function AppsShowcase() {
                          * tablette pliée dans 375 px ne se lit pas — le plein
                          * écran, lui, se manipule vraiment.
                          */}
-                        <a
-                          className="demo-trybtn demo-tryout"
-                          href={demoHref(a.live.origin)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
+                        <a className="demo-trybtn demo-tryout" href={a.live.href} target="_blank" rel="noopener noreferrer">
                           {a.live.ctaOut}
                         </a>
                         <span className="demo-ctanote">Démo dans votre navigateur · aucune donnée réelle</span>
@@ -238,15 +270,37 @@ export function AppsShowcase() {
                     )}
                   </DeviceFrame>
 
-                  {isLive && a.live ? (
-                    <p className="demo-hint">
-                      <span className="demo-hintdot" aria-hidden="true" />
-                      <span className="demo-hinttext">{a.live.hint}</span>
-                      <button type="button" className="demo-stop" onClick={() => setLive(null)}>
-                        Arrêter la démo
-                      </button>
-                    </p>
-                  ) : null}
+                  {/*
+                   * LA CONSIGNE EST TOUJOURS LÀ, ET ELLE PARLE DE CETTE APP.
+                   *
+                   * Deux raisons, une de fond et une de géométrie.
+                   *
+                   * De fond : avant le clic elle annonce ce qu'on va pouvoir
+                   * faire, après le clic elle dit par où commencer. Elle est
+                   * propre à l'application — inviter à « toucher un produit »
+                   * devant un back-office ne voudrait rien dire, et devant
+                   * celui-ci on invite à parcourir le menu de gauche, puisque
+                   * c'est l'étendue qu'il s'agit de constater.
+                   *
+                   * De géométrie : cette ligne réserve sa hauteur (`--dv-hint`
+                   * dans marketing.css) que la démo tourne ou non. Sans elle,
+                   * la hauteur disponible pour l'appareil changerait au clic —
+                   * le cadre sursauterait, et le rapport d'aspect de l'écran
+                   * ne pourrait plus être calculé d'avance.
+                   */}
+                  <p className={isLive ? "demo-hint is-live" : "demo-hint"}>
+                    {a.live ? (
+                      <>
+                        <span className="demo-hintdot" aria-hidden="true" />
+                        <span className="demo-hinttext">{a.live.hint}</span>
+                        {isLive ? (
+                          <button type="button" className="demo-stop" onClick={() => setLive(null)}>
+                            Arrêter la démo
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </p>
                 </div>
               );
             })}

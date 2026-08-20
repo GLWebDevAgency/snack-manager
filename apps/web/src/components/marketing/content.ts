@@ -153,7 +153,7 @@ export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Caisse (POS)",
     device: "Tablette, au comptoir",
-    demo: 1,
+    demo: 0,
     demoLabel: "Essayer la caisse en démo →",
     items: [
       { strong: "Sur place, à emporter, téléphone", post: " — même écran" },
@@ -169,7 +169,7 @@ export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Cuisine (KDS)",
     device: "Tablette & téléphone",
-    demo: 2,
+    demo: 1,
     demoLabel: "Essayer la cuisine en démo →",
     items: [
       { pre: "Colonnes ", strong: "Nouveau → En prépa → Prêt" },
@@ -185,7 +185,7 @@ export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Commande en ligne",
     device: "Web, mobile first",
-    demo: 3,
+    demo: 2,
     demoLabel: "Essayer la commande en démo →",
     items: [
       { strong: "Click & collect", post: " avec créneaux de retrait" },
@@ -201,7 +201,7 @@ export const CATALOGUE: CatalogueColumn[] = [
   {
     name: "Back-office",
     device: "Web, côté gérant",
-    demo: 0,
+    demo: 3,
     demoLabel: "Essayer le back-office en démo →",
     items: [
       { strong: "CA & commandes en temps réel" },
@@ -227,7 +227,7 @@ export const CATALOGUE: CatalogueColumn[] = [
 export type DemoDevice = "tablet" | "phone" | "wide";
 
 /**
- * Origines des applications embarquées dans la vitrine.
+ * Origines des applications DE TERRAIN embarquées dans la vitrine.
  *
  * Aujourd'hui STAGING : ce sont les seules URL où le mode démonstration est
  * déployé. Le jour où les domaines de production sont à jour, on remplace les
@@ -255,6 +255,28 @@ export function demoHref(origin: string): string {
 }
 
 /**
+ * Les deux démonstrations servies par CE site — même origine que la vitrine.
+ *
+ * Ces adresses ne sont pas devinées, elles sont RECOPIÉES de la bascule que
+ * chaque surface expose ; toucher l'une sans l'autre casserait la vitrine.
+ *
+ *   · back-office  → `apps/web/src/lib/demo/mode.ts`
+ *     `DEMO_PARAM=demo`, `DEMO_VALUE=1`, et une borne de chemin `/admin` :
+ *     le paramètre seul ne suffit pas, l'adresse doit être sous `/admin`.
+ *     On vise `/admin/dashboard` et non `/admin` : la page d'index fait une
+ *     redirection serveur vers `/admin/menu` qui perdrait la requête — donc
+ *     le paramètre, donc la démonstration, remplacée par l'écran de connexion.
+ *
+ *   · commande en ligne → `apps/web/src/components/order/demo/mode.ts`
+ *     deux verrous : `?demo=1` ET le slug réservé `demo`. Sans les deux,
+ *     `/r/demo` répond 404 comme n'importe quel restaurant inconnu.
+ */
+export const DEMO_PATHS = {
+  bo: `/admin/dashboard${DEMO_QUERY}`,
+  order: `/r/demo${DEMO_QUERY}`,
+} as const;
+
+/**
  * Ce qu'il faut pour rendre une application MANIPULABLE depuis la vitrine.
  *
  * Absent = l'application n'a pas (encore) de mode démonstration : on garde
@@ -262,13 +284,29 @@ export function demoHref(origin: string): string {
  * connexion, qui donneraient l'impression d'un produit fermé.
  */
 export type DemoLive = {
-  /** Origine de l'application ; `?demo=1` est ajouté par `demoHref`. */
-  origin: string;
+  /**
+   * Adresse complète à charger, paramètre de démonstration compris.
+   *
+   * Deux formes cohabitent, et la différence n'est pas cosmétique : une URL
+   * absolue (caisse, cuisine — déployées à part) ou un chemin de CE site
+   * (back-office, commande en ligne). Une page de même origine embarquée avec
+   * `allow-same-origin` retrouve le droit de lire le DOM de la vitrine ; la
+   * conséquence est arbitrée et expliquée là où l'iframe est écrite, dans
+   * `AppsShowcase`.
+   */
+  href: string;
   /** Bouton posé sur l'affiche, sur grand écran. */
   cta: string;
   /** Même promesse en petit écran, où la démo s'ouvre dans un onglet. */
   ctaOut: string;
-  /** Par où commencer, une fois l'application chargée. */
+  /**
+   * Par où commencer — UNE phrase, propre à l'application.
+   *
+   * Elle est affichée sous le cadre, affiche comprise : avant le clic elle
+   * annonce ce qu'on va pouvoir faire, après le clic elle dit par où
+   * commencer. « Touchez un produit » n'a aucun sens devant un back-office ;
+   * chaque application a donc la sienne.
+   */
   hint: string;
   /** `title` de l'iframe — lu tel quel par les lecteurs d'écran. */
   title: string;
@@ -285,16 +323,20 @@ export type DemoApp = {
   live?: DemoLive;
 };
 
+/**
+ * L'ORDRE EST UN CHOIX, ET IL COMMENCE PAR LA CAISSE.
+ *
+ * La scène s'ouvre sur `DEMO_APPS[0]`. Le back-office y était : le visiteur
+ * tombait sur un écran de gestion, sans bouton « Essayer » sous les yeux
+ * puisque la démonstration du back-office n'existait pas encore — l'effet
+ * était perdu au premier regard. La caisse est l'écran auquel un restaurateur
+ * s'identifie immédiatement : c'est celui qu'il a devant lui toute la journée.
+ *
+ * L'ordre suit ensuite le trajet d'une commande — caisse, cuisine, commande
+ * client — et finit par le poste du gérant. C'est aussi l'ordre des colonnes
+ * du catalogue ci-dessus ; les `demo:` de `CATALOGUE` pointent ces index.
+ */
 export const DEMO_APPS: DemoApp[] = [
-  {
-    id: "bo",
-    label: "Back-office",
-    device: "wide",
-    shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
-    lead: "Back-office gérant.",
-    body: " Menu & prix modifiables en direct, CA du jour, ruptures, promos, pointage et heures de l'équipe — toute la gestion au même endroit.",
-    chips: ["Import CSV/XML", "Pointage équipe", "Stats & CA"],
-  },
   {
     id: "pos",
     label: "Caisse (POS)",
@@ -304,7 +346,7 @@ export const DEMO_APPS: DemoApp[] = [
     body: " Menus cadrés, totaux automatiques, ticket cuisine et sticker sac imprimés — prise en main en une heure, même pour une nouvelle recrue.",
     chips: ["Config express", "Ticket + sticker sac", "Sur place & téléphone"],
     live: {
-      origin: DEMO_ORIGINS.pos,
+      href: demoHref(DEMO_ORIGINS.pos),
       cta: "Essayer la caisse",
       ctaOut: "Ouvrir la caisse en plein écran",
       hint: "Touchez un produit pour composer une commande, puis encaissez.",
@@ -320,7 +362,7 @@ export const DEMO_APPS: DemoApp[] = [
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
     chips: ["À lancer agrégé", "Minuteurs couleur", "Alerte sonore"],
     live: {
-      origin: DEMO_ORIGINS.kds,
+      href: demoHref(DEMO_ORIGINS.kds),
       cta: "Essayer l'écran cuisine",
       ctaOut: "Ouvrir la cuisine en plein écran",
       hint: "Ouvrez « Nouveau » et touchez « Accepter » : le ticket part en préparation.",
@@ -335,6 +377,31 @@ export const DEMO_APPS: DemoApp[] = [
     lead: "Commande en ligne.",
     body: " Le client commande et paie — le ticket file droit en cuisine, déjà encaissé. La caisse ne fait que remettre le sac.",
     chips: ["Créneaux de retrait", "Fidélité & promos", "Paiement en ligne"],
+    live: {
+      href: DEMO_PATHS.order,
+      cta: "Essayer la commande en ligne",
+      ctaOut: "Ouvrir la commande en ligne",
+      hint: "Composez un tacos, ajoutez-le au panier, choisissez votre créneau.",
+      title: "Commande en ligne Snack Manager en démonstration",
+    },
+  },
+  {
+    id: "bo",
+    label: "Back-office",
+    device: "wide",
+    shot: { src: "/shots/backoffice.png", alt: "Back-office : CA du jour, commandes en direct, prévisions du service" },
+    lead: "Back-office gérant.",
+    body: " Menu & prix modifiables en direct, CA du jour, ruptures, promos, pointage et heures de l'équipe — toute la gestion au même endroit.",
+    chips: ["Import CSV/XML", "Pointage équipe", "Stats & CA"],
+    live: {
+      href: DEMO_PATHS.bo,
+      cta: "Essayer le back-office",
+      ctaOut: "Ouvrir le back-office en plein écran",
+      // L'enjeu du back-office n'est pas un geste, c'est l'ÉTENDUE : on invite
+      // donc explicitement à ouvrir les écrans les uns après les autres.
+      hint: "Promenez-vous dans le menu de gauche : tout est là, écran par écran.",
+      title: "Back-office Snack Manager en démonstration",
+    },
   },
 ];
 

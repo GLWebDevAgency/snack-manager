@@ -2164,11 +2164,27 @@ html:has(.mk) {
   color: var(--black);
   font-weight: 600;
 }
+/*
+ * ===== LE BUDGET VERTICAL DE LA SCÈNE =====
+ *
+ * Tout part d'ici, et deux nombres suffisent :
+ *   · `--card-h`  — hauteur d'une carte (l'appareil ET sa consigne) ;
+ *   · `--dv-hint` — hauteur RÉSERVÉE à la consigne, démo lancée ou non.
+ *
+ * La hauteur laissée à l'appareil s'en déduit (`--dv-h` sur la carte), et c'est
+ * elle qui permet de calculer la taille de l'écran SANS jamais le déformer :
+ * voir le châssis plus bas. Changer la hauteur de la scène, c'est changer
+ * `--card-h` — rien d'autre ne bouge.
+ */
 .mk .demo-stage {
+  --card-h: 640px;
+  --dv-hint: 40px;
+  /* Respiration sous la carte : la profondeur 3D des cartes de côté y déborde. */
+  --stage-gap: 40px;
   position: relative;
   width: 100%;
   max-width: 1154px;
-  height: 640px;
+  height: calc(var(--card-h) + var(--stage-gap));
   perspective: 1600px;
 }
 .mk .demo-track {
@@ -2182,12 +2198,14 @@ html:has(.mk) {
   top: 0;
   left: 50%;
   width: min(880px, 78%);
-  height: 600px;
+  height: var(--card-h);
+  /* Hauteur laissée à l'appareil : le reste de la carte, consigne déduite. */
+  --dv-h: calc(var(--card-h) - var(--dv-hint));
   margin-left: max(-440px, -39%);
   /*
-   * Colonne : le châssis prend la hauteur restante, la consigne (« par où
-   * commencer ») se pose dessous SANS déborder de la scène. La hauteur totale
-   * ne bouge donc pas quand la démo démarre.
+   * Colonne : l'appareil occupe `--dv-h`, la consigne (« par où commencer »)
+   * se pose dessous dans sa hauteur réservée. Rien ne bouge quand la démo
+   * démarre — ni la hauteur totale, ni celle du cadre.
    */
   display: flex;
   flex-direction: column;
@@ -2227,8 +2245,39 @@ html:has(.mk) {
  * la tranche du châssis (claire, elle prend la lumière), sa masse (sombre),
  * puis l'écran (le plus sombre). C'est ce qui donne l'objet plutôt que le
  * rectangle — sans un octet d'image.
+ *
+ * ─── LE RAPPORT D'ASPECT PORTE SUR L'ÉCRAN, JAMAIS SUR LE CHÂSSIS ───
+ *
+ * C'est le défaut qui a coûté une colonne entière de l'écran cuisine, et il
+ * était invisible en revue de code. Le rapport était posé sur le CHÂSSIS ;
+ * l'épaisseur des bordures (13 px en haut et en bas, 17 px sur les côtés pour
+ * une tablette) se retirait donc du RÉSULTAT, et l'écran finissait en 1,476
+ * au lieu de 1,600. Une capture en 16/10 recadrée en `cover` dans un cadre en
+ * 1,476, ce sont 8 % de largeur mangés — soit, sur l'écran cuisine, la colonne
+ * « Prêt » coupée en deux sur l'affiche qui doit convaincre.
+ *
+ * On inverse donc l'ordre du calcul : L'ÉCRAN d'abord, à son rapport exact,
+ * les bordures ENSUITE, autour. Le châssis n'a plus de forme propre — il a
+ * celle que son écran lui impose, comme un vrai appareil.
+ *
+ * Chaque appareil déclare cinq mesures, et le calcul en découle :
+ *   --dv-ar    rapport de l'écran (largeur / hauteur) ;
+ *   --dv-px    bordure gauche et droite ;
+ *   --dv-pt    bordure haute ;      --dv-pb   bordure basse (menton) ;
+ *   --dv-extra ce que l'appareil occupe EN DEHORS du châssis (le pied).
+ *
+ * La largeur du châssis est alors la plus petite des deux contraintes : la
+ * largeur disponible, ou celle qu'autorise la hauteur disponible. L'écran
+ * garde son rapport dans les deux cas — c'est tout l'objet du `min()`.
  */
 .mk .dv {
+  --dv-extra: 0px;
+  /*
+   * Grossissement de l'application embarquée. Voir `.dv-live` : à 1, l'app
+   * voit exactement la largeur de l'écran dessiné ; en dessous, elle croit
+   * disposer d'un écran plus large et se met en page comme sur l'appareil réel.
+   */
+  --dv-zoom: 1;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -2238,9 +2287,15 @@ html:has(.mk) {
   justify-content: center;
 }
 .mk .dv-chassis {
+  --dv-bw: 1px;
+  /* Épaisseur totale du cadre, dérivée des bordures : aucune valeur en double. */
+  --dv-fx: calc(2 * (var(--dv-px) + var(--dv-bw)));
+  --dv-fy: calc(var(--dv-pt) + var(--dv-pb) + 2 * var(--dv-bw));
   position: relative;
   box-sizing: border-box;
-  border: 1px solid var(--border-10);
+  width: min(100%, calc((var(--dv-h) - var(--dv-extra) - var(--dv-fy)) * var(--dv-ar) + var(--dv-fx)));
+  border: var(--dv-bw) solid var(--border-10);
+  padding: var(--dv-pt) var(--dv-px) var(--dv-pb);
   background: linear-gradient(180deg, #2c2c2c 0%, #191919 42%, #0c0c0c 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -2251,14 +2306,24 @@ html:has(.mk) {
 .mk .dv-screen {
   position: relative;
   width: 100%;
-  height: 100%;
+  aspect-ratio: var(--dv-ar);
   overflow: hidden;
   background: #0b0b0b;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   /* La démo ne récupère pas le défilement de la page d'accueil. */
   overscroll-behavior: contain;
 }
-.mk .dv-screen .ph {
+/*
+ * Affiche et application se posent l'une comme l'autre sur toute la surface de
+ * l'écran, en absolu : la hauteur de l'écran vient d'`aspect-ratio`, et un
+ * `height: 100%` en flux ne saurait pas la résoudre.
+ */
+.mk .dv-screen .ph,
+.mk .dv-live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
   height: 100%;
 }
 .mk .dv-screen .ph img {
@@ -2266,19 +2331,39 @@ html:has(.mk) {
 }
 .mk .dv-live {
   display: block;
-  width: 100%;
-  height: 100%;
   border: 0;
   background: #0b0b0b;
   overscroll-behavior: contain;
+  /*
+   * L'application est rendue plus grande que l'écran, puis réduite. Elle croit
+   * donc disposer de `largeur / --dv-zoom` pixels — c'est ce qui rend au
+   * téléphone la mise en page d'un vrai téléphone plutôt que celle d'un écran
+   * de 268 px, largeur qu'aucun client n'a jamais eue dans la poche.
+   */
+  width: calc(100% / var(--dv-zoom));
+  height: calc(100% / var(--dv-zoom));
+  transform: scale(var(--dv-zoom));
+  transform-origin: top left;
 }
 
-/* Tablette en paysage — la caisse et l'écran cuisine, posés au comptoir. */
+/* Tablette en paysage — la caisse et l'écran cuisine, posés au comptoir.
+ * 16/10 : le rapport EXACT de pos.png et kds.png (2560 × 1600). */
+.mk .dv-tablet {
+  --dv-ar: 1.6;
+  --dv-px: 17px;
+  --dv-pt: 13px;
+  --dv-pb: 13px;
+  /*
+   * 844 / 1024 : l'écran dessiné fait 844 px, la tablette du comptoir en fait
+   * 1024. Sans ce rapport, la caisse embarquée se replie sur sa mise en page
+   * étroite — ticket ramené en bas, panneau de droite escamoté — et le
+   * visiteur voit une caisse qui ne ressemble pas à l'affiche juste au-dessus.
+   * Avec, il manipule EXACTEMENT l'écran de 1024 px du comptoir.
+   */
+  --dv-zoom: 0.824;
+}
 .mk .dv-tablet .dv-chassis {
-  width: 100%;
-  height: 100%;
   border-radius: 24px;
-  padding: 13px 17px;
 }
 .mk .dv-tablet .dv-screen {
   border-radius: 7px;
@@ -2295,12 +2380,24 @@ html:has(.mk) {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
-/* Téléphone — la commande client, prise à une main. */
+/* Téléphone — la commande client, prise à une main.
+ * 0,4614 : le rapport EXACT de commande.png (860 × 1864), soit le 9/19,5 d'un
+ * téléphone d'aujourd'hui à 0,04 % près. */
+.mk .dv-phone {
+  --dv-ar: 0.4614;
+  --dv-px: 9px;
+  --dv-pt: 9px;
+  --dv-pb: 9px;
+  /*
+   * ~390 px de large côté application, la largeur d'un téléphone courant :
+   * l'écran dessiné fait 268 px, et la commande en ligne y serait à l'étroit
+   * — titres coupés, bouton sur deux lignes — alors qu'elle tient sur un vrai
+   * téléphone. On lui rend sa largeur logique, on réduit l'image ensuite.
+   */
+  --dv-zoom: 0.69;
+}
 .mk .dv-phone .dv-chassis {
-  height: 100%;
-  aspect-ratio: 9 / 19.5;
   border-radius: 38px;
-  padding: 9px;
 }
 .mk .dv-phone .dv-screen {
   border-radius: 30px;
@@ -2329,13 +2426,27 @@ html:has(.mk) {
   background: linear-gradient(180deg, #3d3d3d, #171717);
 }
 
-/* Écran large sur pied — le back-office du gérant (et l'écran de salle). */
+/* Écran large sur pied — le back-office du gérant (et l'écran de salle).
+ * 16/10 : le rapport EXACT de backoffice.png (2880 × 1800), et celui d'un
+ * écran d'ordinateur portable. Le menton (26 px) et le pied (24 px) prennent
+ * de la hauteur : c'est `--dv-extra` qui les déclare au calcul. */
+.mk .dv-wide {
+  --dv-ar: 1.6;
+  --dv-px: 11px;
+  --dv-pt: 11px;
+  --dv-pb: 26px;
+  --dv-extra: 24px;
+  /*
+   * Pas de grossissement ici, contrairement à la tablette et au téléphone, et
+   * ce n'est pas un oubli : ces deux-là ont une largeur logique canonique
+   * (1024 px au comptoir, ~390 px en poche) qu'il fallait leur rendre. Un
+   * ordinateur n'en a pas. Les 856 px de cet écran sont ceux d'un portable, le
+   * back-office y est chez lui — et réduire encore le texte pour gagner de la
+   * largeur rendrait illisible ce que le gérant est venu lire.
+   */
+}
 .mk .dv-wide .dv-chassis {
-  width: 100%;
-  flex: 1;
-  min-height: 0;
   border-radius: 13px 13px 9px 9px;
-  padding: 11px 11px 26px;
 }
 .mk .dv-wide .dv-screen {
   border-radius: 5px;
@@ -2357,7 +2468,9 @@ html:has(.mk) {
   position: relative;
   flex: none;
   width: 100%;
-  height: 24px;
+  /* Le pied et le calcul de l'écran lisent la même valeur : ils ne peuvent
+   * pas diverger, et un pied plus haut rétrécit l'écran comme il se doit. */
+  height: var(--dv-extra);
 }
 .mk .dv-wide .dv-stand::before {
   content: "";
@@ -2447,10 +2560,17 @@ html:has(.mk) {
   color: var(--white-70);
 }
 
-/* ===== Consigne de démarrage, une fois l'application montée ===== */
+/* ===== Consigne : par où commencer, dans CETTE application =====
+ *
+ * Présente affiche comprise, et de hauteur RÉSERVÉE (`--dv-hint`) : c'est elle
+ * qui rend la hauteur de l'appareil calculable d'avance, et qui évite que le
+ * cadre sursaute au moment où la démo démarre. Voir `AppsShowcase`.
+ */
 .mk .demo-hint {
   flex: none;
-  margin-top: 12px;
+  box-sizing: border-box;
+  height: var(--dv-hint);
+  padding-top: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2467,6 +2587,12 @@ html:has(.mk) {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 4px rgba(201, 161, 90, 0.16);
+  /* Éteint tant que rien ne tourne : un point qui bat annoncerait une
+   * application en vie devant une simple capture. */
+  opacity: 0.4;
+}
+.mk .demo-hint.is-live .demo-hintdot {
+  opacity: 1;
   animation: sm-demo-live 2.4s ease-in-out infinite;
 }
 @keyframes sm-demo-live {
@@ -2497,7 +2623,7 @@ html:has(.mk) {
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .mk .demo-hintdot {
+  .mk .demo-hint.is-live .demo-hintdot {
     animation: none;
     opacity: 1;
   }
@@ -2563,62 +2689,65 @@ html:has(.mk) {
 }
 @media (max-width: 1199.98px) {
   .mk .demo-stage {
-    height: 520px;
+    --card-h: 520px;
   }
-  .mk .demo-card {
-    height: 490px;
+  /* Même intention qu'au-dessus : rendre à la caisse ses 1024 px de tablette,
+   * sur un écran dessiné qui n'en fait plus que ~723. */
+  .mk .dv-tablet {
+    --dv-zoom: 0.706;
   }
 }
 @media (max-width: 809.98px) {
   .mk .demo-stage {
-    height: 380px;
+    /*
+     * Plus de consigne réservée : sous ce seuil la démo ne se lance pas dans
+     * la page (voir plus bas), il n'y a donc rien à expliquer sous le cadre —
+     * et 40 px de texte pris sur 360 px de scène se verraient.
+     */
+    --card-h: 360px;
+    --dv-hint: 0px;
+    --stage-gap: 20px;
     perspective: 1000px;
     transition: height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* Appareils couchés : la scène se referme sur eux au lieu de flotter. */
+  .mk .demo-stage[data-device="tablet"],
+  .mk .demo-stage[data-device="wide"] {
+    --card-h: 280px;
+  }
+  .mk .demo-hint {
+    display: none;
   }
   .mk .demo-card {
     width: 92%;
     margin-left: -46%;
-    height: 360px;
     transition:
       transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
       height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
       opacity 0.6s,
       filter 0.6s;
   }
-  /* Appareils couchés : la scène se referme sur eux au lieu de flotter. */
-  .mk .demo-stage[data-device="tablet"],
-  .mk .demo-stage[data-device="wide"] {
-    height: 300px;
-  }
-  .mk .demo-stage[data-device="tablet"] .demo-card,
-  .mk .demo-stage[data-device="wide"] .demo-card {
-    height: 280px;
-  }
   /*
-   * Châssis raccourcis : à cette taille, une grosse bordure mange l'écran.
-   * Et surtout, on leur rend leur FORME : une tablette de comptoir est plus
-   * large que haute. Sans `aspect-ratio`, le châssis prendrait la hauteur de
-   * la carte et on présenterait une tablette debout tenant une capture
-   * couchée — l'objet ne serait plus reconnaissable.
+   * Bordures raccourcies : à cette taille, une grosse tranche mange l'écran.
+   * La FORME de l'appareil, elle, ne bouge pas d'un pouce — elle vient du
+   * rapport de l'écran, qui est le même à toutes les largeurs.
    */
-  .mk .dv-tablet .dv-chassis {
-    height: auto;
-    aspect-ratio: 16 / 10;
-    border-radius: 16px;
-    padding: 8px 10px;
+  .mk .dv-tablet {
+    --dv-px: 10px;
+    --dv-pt: 8px;
+    --dv-pb: 8px;
   }
-  .mk .dv-wide .dv-chassis {
-    flex: none;
-    height: auto;
-    aspect-ratio: 16 / 9;
-    border-radius: 10px 10px 7px 7px;
-    padding: 8px 8px 18px;
+  .mk .dv-tablet .dv-chassis {
+    border-radius: 16px;
   }
   .mk .dv-wide {
-    justify-content: center;
+    --dv-px: 8px;
+    --dv-pt: 8px;
+    --dv-pb: 18px;
+    --dv-extra: 18px;
   }
-  .mk .dv-wide .dv-stand {
-    height: 18px;
+  .mk .dv-wide .dv-chassis {
+    border-radius: 10px 10px 7px 7px;
   }
   .mk .dv-wide .dv-stand::before {
     height: 12px;
@@ -2628,9 +2757,13 @@ html:has(.mk) {
     width: 140px;
     height: 6px;
   }
+  .mk .dv-phone {
+    --dv-px: 7px;
+    --dv-pt: 7px;
+    --dv-pb: 7px;
+  }
   .mk .dv-phone .dv-chassis {
     border-radius: 30px;
-    padding: 7px;
   }
   .mk .dv-phone .dv-screen {
     border-radius: 24px;
@@ -2639,22 +2772,6 @@ html:has(.mk) {
     top: 13px;
     width: 60px;
     height: 15px;
-  }
-  /*
-   * Une capture de tablette rognée en `cover` sur une carte de 350 px ne
-   * montrerait plus qu'un fragment d'écran : sur mobile on affiche l'app
-   * entière, posée sur un fond stratifié plutôt que sur du noir plat.
-   */
-  .mk .dv-tablet .dv-screen,
-  .mk .dv-wide .dv-screen {
-    background:
-      radial-gradient(110% 75% at 50% 0%, rgba(201, 161, 90, 0.16), transparent 62%),
-      linear-gradient(180deg, #1e1e1e, #0d0d0d);
-  }
-  .mk .dv-tablet .dv-screen .ph img,
-  .mk .dv-wide .dv-screen .ph img {
-    object-fit: contain;
-    object-position: center;
   }
   /*
    * PETIT ÉCRAN : ON RENONCE PROPREMENT.

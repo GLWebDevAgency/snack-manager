@@ -25,7 +25,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
-import type { MenuProduct, Site } from "./api";
+import { networkApi, type MenuProduct, type OrderingApi, type Site } from "./api";
 import {
   draftFromLine,
   draftToLine,
@@ -73,6 +73,8 @@ export function Storefront({
   site,
   mode = "site",
   showClose = false,
+  api = networkApi,
+  demo = false,
 }: {
   site: Site;
   mode?: "site" | "embed";
@@ -83,6 +85,15 @@ export function Storefront({
    * peut la réclamer avec `?close=1` et écouter le message `close`.
    */
   showClose?: boolean;
+  /**
+   * Client des routes publiques. Le RÉSEAU par défaut : seule la route de
+   * démonstration (`/r/demo?demo=1`) en passe un autre, branché sur une
+   * fixture en mémoire. Aucune page de restaurant ne peut le faire par
+   * accident — il faut le donner explicitement.
+   */
+  api?: OrderingApi;
+  /** Démonstration : bandeau d’avertissement et parcours sans paiement réel. */
+  demo?: boolean;
 }) {
   const embed = mode === "embed";
   const accent = safeColor(site.tenant.brandColor);
@@ -199,6 +210,8 @@ export function Storefront({
         cart.count > 0 ? "pb-28" : "pb-10",
       )}
     >
+      {demo && <DemoRibbon />}
+
       {embed ? (
         <EmbedHeader
           name={site.tenant.name}
@@ -322,6 +335,8 @@ export function Storefront({
 
       <Checkout
         open={tunnel}
+        api={api}
+        demo={demo}
         slug={site.tenant.slug}
         tenantName={site.tenant.name}
         tenantAddress={site.tenant.address}
@@ -340,6 +355,31 @@ export function Storefront({
 }
 
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+/**
+ * Bandeau de démonstration.
+ *
+ * Le visiteur doit savoir en une seconde que « Le Comptoir » n’existe pas, que
+ * les avis sont écrits pour l’exercice et que sa commande ne partira dans
+ * aucune cuisine. Un bandeau discret mais permanent, jamais une modale : on ne
+ * met pas une porte devant la vitrine qu’on veut faire visiter.
+ */
+function DemoRibbon() {
+  return (
+    <div className="border-b border-accent/25 bg-accent/10">
+      <p className="mx-auto flex w-full max-w-[560px] items-center justify-center gap-2 px-4 py-2 text-center text-[12px] font-semibold leading-snug text-mut lg:max-w-[1080px]">
+        <Dot tone="prep" />
+        <span>
+          <span className="font-extrabold uppercase tracking-[0.14em] text-ink">
+            Démonstration
+          </span>{" "}
+          · restaurant fictif, tout se passe dans votre navigateur — aucune
+          commande n’est transmise, aucun paiement n’est encaissé.
+        </span>
+      </p>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // En-têtes

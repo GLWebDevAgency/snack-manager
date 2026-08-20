@@ -23,6 +23,21 @@ import type { DemoDevice } from "./content";
  *
  * Le contenu (affiche ou iframe) est passé en `children` : le châssis ne sait
  * pas ce qu'il encadre, et n'a donc rien à démonter quand la démo s'arrête.
+ *
+ * ─── OÙ VIT LA FORME, ET POURQUOI CE N'EST PAS ICI ───
+ *
+ * Ce composant ne pose aucune dimension. La forme de l'appareil est calculée
+ * en CSS (`marketing.css`, section « Châssis d'appareils »), et dans un ordre
+ * qui compte : LE RAPPORT D'ASPECT PORTE SUR `.dv-screen`, l'épaisseur du
+ * châssis s'ajoute autour. L'inverse — le rapport posé sur le châssis, comme
+ * c'était le cas — déformait la zone d'écran de l'épaisseur des bordures :
+ * l'écran de la tablette tombait à 1,476 pour une capture en 1,600, et
+ * `object-fit: cover` rognait 8 % de largeur. Sur l'écran cuisine, c'était une
+ * colonne entière coupée sur l'affiche censée convaincre.
+ *
+ * Conséquence pratique : changer la tranche d'un appareil (`--dv-px`,
+ * `--dv-pt`, `--dv-pb`) ne peut plus déformer son écran. Changer le rapport
+ * `--dv-ar`, si — il doit rester celui de la capture ET de l'appareil réel.
  */
 export function DeviceFrame({ device, children }: { device: DemoDevice; children: ReactNode }) {
   return (

@@ -29,16 +29,15 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import type { PaymentIntentResponse, SlotsResponse } from "@sm/contracts";
+import type { OrderStatus, PaymentIntentResponse, SlotsResponse } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import {
-  createOrder,
-  createPaymentIntent,
   isPaused,
-  loadSlots,
+  networkApi,
   PublicApiError,
   type CreatedOrder,
+  type OrderingApi,
 } from "./api";
 import {
   lineSummary,
@@ -113,6 +112,8 @@ export function Checkout({
   pauseMessage,
   initialSlots,
   embed = false,
+  api = networkApi,
+  demo = false,
   onClose,
   onBrowse,
   onEditLine,
@@ -129,6 +130,19 @@ export function Checkout({
   /** Créneaux déjà connus (rendus avec la page) — évite une attente à l’ouverture. */
   initialSlots: SlotsResponse | null;
   embed?: boolean;
+  /** Client des routes publiques — le réseau partout, sauf en démonstration. */
+  api?: OrderingApi;
+  /**
+   * Démonstration de la vitrine.
+   *
+   * Change trois choses, et rien d’autre : le paiement par carte est
+   * ENCAISSÉ SUR PLACE dans la fiction (aucun appel à Stripe, jamais), la
+   * confirmation suit l’avancement en cuisine sans quitter le tunnel — la page
+   * de suivi vit dans un autre document, et la mémoire de la démonstration ne
+   * la suivrait pas —, et l’écran final dit ce qui vient de se passer pour de
+   * faux.
+   */
+  demo?: boolean;
   onClose: () => void;
   /** « Voir la carte » depuis un panier vide. */
   onBrowse: () => void;
@@ -148,6 +162,7 @@ export function Checkout({
   const [intent, setIntent] = useState<PaymentIntentResponse | null>(null);
 
   const [order, setOrder] = useState<CreatedOrder | null>(null);
+  const [status, setStatus] = useState<OrderStatus>("new");
   const [paidOnline, setPaidOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,17 +177,21 @@ export function Checkout({
   useEffect(() => {
     if (!open) return;
     setCustomer((prev) => (prev.name || prev.phone ? prev : readCustomer()));
-    setProbe(readPayProbe(slug));
-  }, [open, slug]);
+    // La démonstration ne consulte ni n’écrit la mémoire de session : elle
+    // propose toujours les deux moyens de paiement, puisque c’est justement
+    // ce choix-là qu’il s’agit de montrer.
+    if (!demo) setProbe(readPayProbe(slug));
+  }, [open, slug, demo]);
 
   // Un tenant sans paiement en ligne n’a qu’un mode : le comptoir.
-  const method: "online" | "counter" = probe === "off" ? "counter" : wanted;
+  const method: "online" | "counter" = !demo && probe === "off" ? "counter" : wanted;
 
   // ── Créneaux : toujours rechargés à l’entrée de l’étape (capacité vivante) ──
   const fetchSlots = useCallback(
     (target: string | null, signal?: AbortSignal) => {
       setSlotsState("loading");
-      loadSlots(slug, target ?? undefined, signal)
+      api
+        .loadSlots(slug, target ?? undefined, signal)
         .then((res) => {
           if (signal?.aborted) return;
           setSlots(res);
@@ -185,7 +204,7 @@ export function Checkout({
           if (!signal?.aborted) setSlotsState("error");
         });
     },
-    [slug],
+    [api, slug],
   );
 
   useEffect(() => {
@@ -217,6 +236,7 @@ export function Checkout({
   function resetTunnel() {
     setStep("cart");
     setOrder(null);
+    setStatus("new");
     setIntent(null);
     setPaidOnline(false);
     setDowngraded(false);
@@ -226,6 +246,38 @@ export function Checkout({
     clientIdRef.current = null;
   }
 
+  /**
+   * Démonstration : la cuisine avance, et le visiteur la regarde avancer.
+   *
+   * Le suivi réel vit sur `/t/:id`, une autre page — et la mémoire de la
+   * démonstration ne franchit pas la frontière d’un document. On interroge
+   * donc le MÊME point d’entrée (`GET /public/orders/:id`) depuis l’écran de
+   * confirmation : c’est le vrai chemin de code, avec le vrai jeton, et le
+   * ticket passe « Reçue → En préparation → Prête » sous les yeux du visiteur.
+   */
+  useEffect(() => {
+    // Le sondage s’arrête à « Prête » : plus rien ne bougera, et une
+    // démonstration laissée ouverte dans un onglet ne doit pas tourner en fond.
+    if (!demo || step !== "done" || !order || status === "ready") return;
+    let alive = true;
+    const tick = () => {
+      api
+        .loadTracking(order._id, order.trackingToken)
+        .then((next) => {
+          if (alive) setStatus(next.status);
+        })
+        .catch(() => {
+          /* le suivi qui bégaie n’a rien à dire au client : dernier état gardé */
+        });
+    };
+    tick();
+    const timer = window.setInterval(tick, 4_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [api, demo, step, order, status]);
+
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
     if (busy || !slotIso || !contactOk || cart.lines.length === 0) return;
@@ -234,7 +286,7 @@ export function Checkout({
     try {
       writeCustomer(customer);
       clientIdRef.current ??= uid();
-      const created = await createOrder(slug, {
+      const created = await api.createOrder(slug, {
         clientId: clientIdRef.current,
         channel: "online",
         type: "pickup",
@@ -267,7 +319,18 @@ export function Checkout({
         return;
       }
 
-      const res = await createPaymentIntent(created._id);
+      // ── Démonstration : le paiement s’arrête ici ──
+      //
+      // Aucune intention de paiement n’est demandée : pas de clé Stripe
+      // chargée, pas de formulaire de carte monté, aucun montant envoyé chez
+      // un prestataire. On ne feint pas davantage un encaissement — l’écran de
+      // confirmation dit franchement où le vrai paiement se serait produit.
+      if (demo) {
+        setStep("done");
+        return;
+      }
+
+      const res = await api.createPaymentIntent(created._id);
       if (res.unavailable || !res.publishableKey) {
         writePayProbe(slug, "off");
         setProbe("off");
@@ -337,6 +400,7 @@ export function Checkout({
           method={method}
           order={order}
           embed={embed}
+          demo={demo}
           onNext={(next) => {
             if (next === "customer") setTouched(false);
             setStep(next);
@@ -425,9 +489,12 @@ export function Checkout({
         {step === "done" && order && (
           <DoneStep
             order={order}
+            status={status}
             paidOnline={paidOnline}
             downgraded={downgraded}
             tenantName={tenantName}
+            demo={demo}
+            demoCard={demo && method === "online"}
           />
         )}
       </div>
@@ -507,6 +574,7 @@ function Footer({
   method,
   order,
   embed,
+  demo,
   onNext,
   onSubmit,
   onFinish,
@@ -521,6 +589,7 @@ function Footer({
   method: "online" | "counter";
   order: CreatedOrder | null;
   embed: boolean;
+  demo: boolean;
   onNext: (next: Step) => void;
   onSubmit: () => void;
   onFinish: () => void;
@@ -530,7 +599,10 @@ function Footer({
   if (step === "done") {
     return (
       <div className="flex flex-col gap-2.5">
-        {order && (
+        {/* Pas de lien de suivi en démonstration : la page `/t/:id` est un
+            autre document, et la commande fictive n’existe que dans la mémoire
+            de celui-ci. Le suivi se joue donc au-dessus, dans la frise. */}
+        {order && !demo && (
           <Link
             href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
@@ -1128,10 +1200,10 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 // ─────────────────────────────────────────────────────────────
 
 /** Les trois étapes que le client suit (le KDS en pilote la progression). */
-const TIMELINE = [
-  { label: "Reçue", hint: "La cuisine a votre commande" },
-  { label: "En préparation", hint: "Ça chauffe" },
-  { label: "Prête", hint: "À récupérer au comptoir" },
+const TIMELINE: { status: OrderStatus; label: string; hint: string }[] = [
+  { status: "new", label: "Reçue", hint: "La cuisine a votre commande" },
+  { status: "preparing", label: "En préparation", hint: "Ça chauffe" },
+  { status: "ready", label: "Prête", hint: "À récupérer au comptoir" },
 ];
 
 /**
@@ -1143,15 +1215,27 @@ const TIMELINE = [
  */
 function DoneStep({
   order,
+  status,
   paidOnline,
   downgraded,
   tenantName,
+  demo,
+  demoCard,
 }: {
   order: CreatedOrder;
+  /** Avancement en cuisine — n’avance que là où un suivi alimente l’écran. */
+  status: OrderStatus;
   paidOnline: boolean;
   downgraded: boolean;
   tenantName: string;
+  demo: boolean;
+  /** Démonstration où le visiteur avait choisi la carte bancaire. */
+  demoCard: boolean;
 }) {
+  const rank = Math.max(
+    0,
+    TIMELINE.findIndex((s) => s.status === status),
+  );
   return (
     <div className="pb-8">
       <div className="sm-grain relative overflow-hidden bg-accent px-6 pb-16 pt-9 text-center text-onaccent">
@@ -1168,7 +1252,9 @@ function DoneStep({
           C’est envoyé en cuisine
         </h3>
         <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
-          {tenantName} vous prévient par SMS dès que c’est prêt.
+          {demo
+            ? "Suivez la préparation juste en dessous, comme le ferait votre client."
+            : `${tenantName} vous prévient par SMS dès que c’est prêt.`}
         </p>
       </div>
 
@@ -1195,7 +1281,8 @@ function DoneStep({
         {/* Suivi : la première étape est acquise, les suivantes viennent du KDS. */}
         <ol className="mt-4 rounded-panel border border-white/8 bg-surface2 px-4 py-2">
           {TIMELINE.map((entry, i) => {
-            const reached = i === 0;
+            const reached = i <= rank;
+            const current = i === rank;
             return (
               <li
                 key={entry.label}
@@ -1210,10 +1297,15 @@ function DoneStep({
                     reached ? "bg-ok text-black" : "bg-white/12",
                   )}
                 >
-                  {reached ? (
+                  {i < rank ? (
                     <Icon name="check" size={14} stroke={3} />
                   ) : (
-                    <span className="size-2 rounded-full bg-white/50" />
+                    <span
+                      className={cx(
+                        "size-2 rounded-full",
+                        reached ? "bg-black" : "bg-white/50",
+                      )}
+                    />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -1222,14 +1314,21 @@ function DoneStep({
                   </span>
                   <span className="block text-[13px] text-mut">{entry.hint}</span>
                 </span>
-                {reached && <Badge tone="ok">En cours</Badge>}
+                {current && <Badge tone="ok">En cours</Badge>}
               </li>
             );
           })}
         </ol>
 
-        <div className="mt-4">
-          {downgraded ? (
+        <div className="mt-4 flex flex-col gap-2.5">
+          {demoCard ? (
+            <Banner tone="prep" icon="euro" title="Paiement par carte — hors démonstration">
+              En service réel, le paiement sécurisé s’ouvrirait ici et la
+              commande arriverait déjà réglée en cuisine. La démonstration
+              n’appelle aucun prestataire de paiement : {euros(order.totals?.total ?? 0)}{" "}
+              resteraient dus au comptoir.
+            </Banner>
+          ) : downgraded ? (
             <Banner tone="prep" icon="euro" title="À régler au comptoir">
               Le paiement en ligne n’était pas disponible. Votre commande est bien
               enregistrée : réglez sur place au moment du retrait.
@@ -1243,6 +1342,13 @@ function DoneStep({
             <Banner icon="euro" title="À régler au comptoir">
               {euros(order.totals?.total ?? 0)} à régler au moment du retrait.
             </Banner>
+          )}
+
+          {demo && (
+            <p className="text-center text-[12px] leading-relaxed text-mut">
+              Démonstration&nbsp;: aucune commande n’est partie en cuisine et
+              aucun SMS n’a été envoyé. Rechargez la page pour repartir de zéro.
+            </p>
           )}
         </div>
       </div>
