@@ -325,10 +325,20 @@ export function MtReseau({ size = 34 }: { size?: number }) {
 }
 
 /** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
-export function CmpCross() {
+/**
+ * L'HORLOGE DE LA COLONNE « AUJOURD'HUI ».
+ *
+ * Elle remplace `CmpCross`, un sablier plein qui, posé face à un éclair,
+ * transformait la ligne en jugement. Ici les deux pastilles nomment deux
+ * MOMENTS — aujourd'hui, lundi prochain — et pas un bon et un mauvais camp.
+ * D'où un trait creux plutôt qu'une forme pleine : la colonne de gauche est
+ * l'état éteint, elle ne doit pas peser autant que celle qui s'allume.
+ */
+export function CmpToday() {
   return (
-    <svg width={14} height={14} viewBox="0 0 14 14" fill="var(--white)" aria-hidden="true">
-      <path d="M3.6 1.6h6.8v1.2L7.9 7l2.5 4.2v1.2H3.6v-1.2L6.1 7 3.6 2.8V1.6z" />
+    <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M7 4.1V7l2 1.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }

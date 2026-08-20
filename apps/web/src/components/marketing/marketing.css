@@ -2823,28 +2823,23 @@ html:has(.mk) {
     box-shadow: 0 0 18px 2px rgba(201, 161, 90, 0.22);
   }
 }
-/* Le trait court sous les pastilles jusqu'au bas du miroir : c'est lui qui
-   fait l'affrontement, et il remplace le disque « VS » — l'étiquette d'hier
-   contredirait le titre d'aujourd'hui, qui oppose deux dates et non deux
-   camps. */
-.mk .cmp-divider {
-  position: absolute;
-  top: 52px;
-  bottom: 4px;
-  left: 50%;
-  width: 1px;
-  background: var(--border-10);
-}
 .mk .cmp-rows {
   margin-top: 10px;
   display: flex;
   flex-direction: column;
 }
+/* TROIS COLONNES, ET CELLE DU MILIEU EST LE SUJET.
+ *
+ * Le trait vertical unique qui séparait les deux camps a disparu avec la
+ * sémaphore : il disait « d'un côté, de l'autre », alors que la section
+ * raconte un PASSAGE. Chaque ligne porte maintenant son propre rail, et le
+ * rail va quelque part. */
 .mk .cmp-row {
+  --rail: 76px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 48px;
-  align-items: start;
+  grid-template-columns: 1fr var(--rail) 1fr;
+  gap: 0 20px;
+  align-items: center;
   padding: 15px 0;
   border-bottom: 1px solid var(--surface-6);
 }
@@ -2852,29 +2847,129 @@ html:has(.mk) {
   border-bottom: none;
 }
 .mk .cmp-cell {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 20px;
-  transition: opacity 0.3s;
+  text-wrap: pretty;
 }
-.mk .cmp-cell svg {
-  flex-shrink: 0;
-  margin-top: 3px;
-}
+/* L'état éteint. Aligné à DROITE : la colonne pousse vers le rail au lieu de
+   s'en éloigner, et les six douleurs forment un bord net contre lui. */
 .mk .cmp-cell.left {
   color: var(--gray);
+  text-align: right;
+  opacity: 0.62;
 }
 .mk .cmp-cell.right {
-  color: var(--white-80);
+  color: var(--white);
 }
-/* Au survol du miroir, aujourd'hui s'efface. Le geste dit ce qu'aucune phrase
-   ne dirait sans se vanter. */
-.mk .cmp-mirror:hover .cmp-cell.left {
-  opacity: 0.45;
+
+/* ── Le rail et sa lueur ──
+ *
+ * La flèche du rail est peinte en dur (`::after`) et ne dépend d'aucune
+ * animation : la direction du passage doit se lire sur une capture d'écran,
+ * dans un courriel, ou chez quelqu'un qui a désactivé les animations. */
+.mk .cmp-flow {
+  position: relative;
+  height: 20px;
+  align-self: center;
+}
+.mk .cmp-flow::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 7px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-10), rgba(201, 161, 90, 0.55));
+}
+.mk .cmp-flow::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-top: 1px solid rgba(201, 161, 90, 0.75);
+  border-right: 1px solid rgba(201, 161, 90, 0.75);
+  transform: rotate(45deg);
+}
+.mk .cmp-spark {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 161, 90, 0.95), rgba(201, 161, 90, 0) 68%);
+  opacity: 0;
+}
+
+/* ── La cascade ──
+ *
+ * Elle ne part QU'UNE FOIS LA SECTION RÉVÉLÉE. Sans le `.in`, les six lignes
+ * joueraient leur animation pendant que le visiteur est encore trois écrans
+ * plus haut, et il arriverait devant un tableau déjà figé — c'est-à-dire
+ * devant rien.
+ *
+ * `--i` est le rang de la ligne, posé par le composant. 150 ms d'écart : en
+ * dessous la cascade se lit comme un scintillement, au-dessus la dernière
+ * ligne s'allume trop tard pour qu'on fasse le lien avec la première. */
+.mk .cmp-mirror.in .cmp-spark {
+  animation: cmp-travel 1s calc(var(--i) * 150ms) cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes cmp-travel {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(var(--rail));
+    opacity: 0;
+  }
+}
+/* La réponse s'allume À L'ARRIVÉE de la lueur, jamais avant : c'est tout le
+   propos. 0,72 s, soit le moment où la lueur touche le bout du rail. */
+.mk .cmp-mirror.in .cmp-cell.right {
+  animation: cmp-arrive 0.45s calc(var(--i) * 150ms + 0.72s) ease-out both;
+}
+@keyframes cmp-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Tant que la section n'est pas révélée, la réponse est déjà là pour qui ne
+   verra jamais l'animation — moteur de recherche, lecteur d'écran, capture. */
+.mk .cmp-mirror:not(.in) .cmp-cell.right {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mk .cmp-mirror.in .cmp-spark {
+    animation: none;
+    opacity: 0;
+  }
+  .mk .cmp-mirror.in .cmp-cell.right {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .mk .cmp-headpill.right {
+    animation: none;
+  }
 }
 @media (max-width: 809.98px) {
   .mk .cmp-section {
@@ -2894,23 +2989,80 @@ html:has(.mk) {
     line-height: 1.25em;
     white-space: normal;
   }
-  .mk .cmp-divider {
-    display: none;
-  }
-  /* La paire se lit alors de haut en bas — la douleur, puis sa réponse juste
-     dessous. L'appariement survit à la colonne unique, c'est lui qui compte. */
+  /* LE FLUX BASCULE À LA VERTICALE, il ne disparaît pas.
+     La paire se lit de haut en bas — la douleur, le rail, la réponse. C'est le
+     même récit tourné d'un quart de tour, et c'est la seule mise en page où
+     les six passages tiennent dans 390 px sans que le texte se hache. */
   .mk .cmp-row {
+    --rail: 26px;
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 6px;
     padding: 14px 0;
+    align-items: stretch;
   }
   .mk .cmp-cell {
     font-size: 14px;
   }
-  /* Au doigt, il n'y a pas de survol : un simple appui laisserait la colonne
-     d'aujourd'hui éteinte pour de bon. */
-  .mk .cmp-mirror:hover .cmp-cell.left {
-    opacity: 1;
+  /* L'alignement à droite n'a de sens que face à un rail horizontal. */
+  .mk .cmp-cell.left {
+    text-align: left;
+  }
+  .mk .cmp-flow {
+    height: var(--rail);
+    width: 14px;
+    margin-left: 4px;
+  }
+  .mk .cmp-flow::before {
+    top: 0;
+    bottom: 6px;
+    left: 50%;
+    right: auto;
+    width: 1px;
+    height: auto;
+    background: linear-gradient(180deg, var(--border-10), rgba(201, 161, 90, 0.55));
+  }
+  .mk .cmp-flow::after {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: 50%;
+    margin: 0 0 0 -3px;
+    transform: rotate(135deg);
+  }
+  .mk .cmp-spark {
+    left: 50%;
+  }
+  .mk .cmp-mirror.in .cmp-spark {
+    animation-name: cmp-travel-y;
+  }
+  @keyframes cmp-travel-y {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    18% {
+      opacity: 1;
+    }
+    82% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(var(--rail));
+      opacity: 0;
+    }
+  }
+  .mk .cmp-mirror.in .cmp-cell.right {
+    animation-name: cmp-arrive-y;
+  }
+  @keyframes cmp-arrive-y {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
 }
 

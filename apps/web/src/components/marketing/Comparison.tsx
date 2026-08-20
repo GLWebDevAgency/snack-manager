@@ -1,5 +1,6 @@
+import type { CSSProperties } from "react";
 import { VS_WITH, VS_WITHOUT, section } from "./content";
-import { CmpBolt, CmpCross, CrossDot, TickDot } from "./icons";
+import { CmpBolt, CmpToday } from "./icons";
 
 /**
  * LE MIROIR N'A DE SENS QUE SI LES DEUX COLONNES ONT LE MÊME NOMBRE DE LIGNES.
@@ -33,19 +34,33 @@ const HEADS = section("votre-service")
  * LA SECTION A CHANGÉ DE MÉTIER : elle ne conclut plus la page, elle l'ouvre.
  * Un lecteur qui vient d'arriver ne compare pas deux inventaires posés côte à
  * côte — il cherche sa journée dans la colonne de gauche, et la réponse doit
- * être EN FACE, sur la même ligne, pas quelque part dans la liste voisine.
- * D'où le tableau ligne à ligne : `VS_WITHOUT[i]` répond à `VS_WITH[i]`, et
- * c'est un contrat que le contenu tient (voir le garde-fou ci-dessus).
+ * être EN FACE, sur la même ligne. D'où le tableau ligne à ligne :
+ * `VS_WITHOUT[i]` répond à `VS_WITH[i]`, et c'est un contrat que le contenu
+ * tient (voir le garde-fou ci-dessus).
  *
- * AUCUNE CARTE, et c'est un arbitrage. Deux plateaux encadrés se liraient
- * comme deux offres à choisir ; ici il n'y a rien à choisir, il y a un avant
- * et un après. C'est aussi ce qui distingue cette section de la grille
- * tarifaire, quatre écrans plus bas, où il y a vraiment trois colonnes à
- * comparer.
+ * ═══ LA SÉMAPHORE ROUGE/VERT EST PARTIE, ET CE N'EST PAS COSMÉTIQUE ═══
  *
- * C'est le SEUL endroit de la page où la douleur est écrite. Au survol du
- * miroir, la colonne d'aujourd'hui s'éteint : le geste dit ce qu'aucune phrase
- * ne dirait sans se vanter.
+ * Chaque ligne portait une croix rouge à gauche et une coche verte à droite.
+ * Deux défauts, dont le second est le vrai :
+ *
+ *  1. le rouge et le vert sont les couleurs de SENS de la direction artistique
+ *     — « alerte » et « prêt », dans la caisse et dans la cuisine. Les dépenser
+ *     ici pour décorer un argumentaire les use là où elles portent un état ;
+ *  2. surtout, une croix face à une coche est une COMPARAISON — deux choses
+ *     qu'on met côte à côte pour choisir. Or il n'y a rien à choisir : il y a
+ *     un avant et un après, et le lecteur est censé se voir PASSER de l'un à
+ *     l'autre.
+ *
+ * D'où le flux. La douleur reste éteinte à gauche, une lueur parcourt le rail
+ * qui traverse la ligne, et la réponse s'allume À SON ARRIVÉE — pas avant. Les
+ * six lignes se déclenchent en cascade, chacune décalée sur la précédente
+ * (`--i`), ce qui donne à lire un processus qui s'exécute plutôt qu'un tableau
+ * qui s'affiche. Tout est en CSS : aucun état React, aucun temporisateur, rien
+ * qui puisse se désynchroniser.
+ *
+ * L'animation ne part qu'une fois la section révélée (`.cmp-mirror.in`), sinon
+ * la cascade se jouerait pendant que le visiteur est encore trois écrans plus
+ * haut. Sous `prefers-reduced-motion`, l'état final est posé d'emblée.
  */
 export function Comparison() {
   const { badge, title } = section("votre-service");
@@ -60,7 +75,7 @@ export function Comparison() {
       <div className="cmp-mirror rv">
         <div className="cmp-heads">
           <span className="cmp-headpill left">
-            <CmpCross />
+            <CmpToday />
             <span>{HEADS[0]}</span>
           </span>
           <span className="cmp-headpill right">
@@ -68,19 +83,23 @@ export function Comparison() {
             <span>{HEADS[1]}</span>
           </span>
         </div>
-        <span className="cmp-divider" aria-hidden="true" />
 
         <ul className="cmp-rows">
           {VS_WITHOUT.map((pain, i) => (
-            <li className="cmp-row" key={pain}>
-              <span className="cmp-cell left">
-                <CrossDot />
-                <span>{pain}</span>
+            /* `--i` porte le rang de la ligne : c'est lui, et lui seul, qui
+               décale la cascade. Le CSS n'a aucun autre moyen de savoir qu'il
+               est la quatrième ligne d'une liste. */
+            <li className="cmp-row" key={pain} style={{ "--i": i } as CSSProperties}>
+              <span className="cmp-cell left">{pain}</span>
+
+              {/* Le rail et sa lueur. Purement décoratif : la relation entre
+                  les deux cellules est déjà portée par leur voisinage dans la
+                  même ligne de liste. */}
+              <span className="cmp-flow" aria-hidden="true">
+                <span className="cmp-spark" />
               </span>
-              <span className="cmp-cell right">
-                <TickDot />
-                <span>{VS_WITH[i]}</span>
-              </span>
+
+              <span className="cmp-cell right">{VS_WITH[i]}</span>
             </li>
           ))}
         </ul>
