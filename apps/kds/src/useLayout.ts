@@ -76,7 +76,25 @@ const half = (value: number) => Math.round(value * 2) / 2;
  * Calcul pur — testable et utilisable hors React (le hook n'en est que
  * l'emballage mémoïsé).
  */
-export function computeLayout(width: number, height: number): Layout {
+/**
+ * @param pinAllDay Le cuisinier a ÉPINGLÉ le panneau « À lancer ».
+ *
+ * Le repli automatique sous `ALLDAY_MIN_SCREEN` est une heuristique de
+ * confort : elle protège la largeur des colonnes quand personne n'a rien
+ * demandé. Elle ne doit pas primer sur une décision explicite.
+ *
+ * Le défaut réparé : sous ce seuil, le panneau disparaissait ET sa bascule
+ * avec lui. Le cuisinier n'avait donc AUCUN moyen de rappeler la vue qui lui
+ * dit, d'un coup d'œil, tout ce qu'il a à lancer — c'est-à-dire la seule qui
+ * agrège les commandes au lieu de les lister. Sur une tablette en portrait ou
+ * un écran de comptoir un peu étroit, la fonction n'existait tout simplement
+ * plus, sans explication.
+ *
+ * Épinglé, le panneau s'affiche donc même à l'étroit : les colonnes se
+ * resserrent, ce qui est un arbitrage que le cuisinier a le droit de faire.
+ * Seul le régime COMPACT y échappe — là, le panneau est déjà un onglet.
+ */
+export function computeLayout(width: number, height: number, pinAllDay = false): Layout {
   const w = Math.max(1, width);
   const h = Math.max(1, height);
   const short = Math.min(w, h);
@@ -89,11 +107,16 @@ export function computeLayout(width: number, height: number): Layout {
   const probePad = Math.round(clamp(14 * byDevice, 12, 26));
   const probeGap = Math.round(clamp(12 * byDevice, 10, 20));
 
-  // Le panneau « À lancer » se replie EN PREMIER : les colonnes priment.
-  const allDayW =
-    compact || w < ALLDAY_MIN_SCREEN
-      ? 0
-      : Math.round(clamp(w * ALLDAY_PANEL.ratio, ALLDAY_PANEL.min, ALLDAY_PANEL.max));
+  // Le panneau « À lancer » se replie EN PREMIER : les colonnes priment —
+  // sauf s'il est épinglé, auquel cas il prend sa largeur MINIMALE pour rendre
+  // le moins de place possible aux colonnes tout en restant lisible.
+  const allDayFits = !compact && w >= ALLDAY_MIN_SCREEN;
+  const allDayPinned = !compact && pinAllDay;
+  const allDayW = allDayFits
+    ? Math.round(clamp(w * ALLDAY_PANEL.ratio, ALLDAY_PANEL.min, ALLDAY_PANEL.max))
+    : allDayPinned
+      ? ALLDAY_PANEL.pinnedMin
+      : 0;
 
   const cols = compact ? 1 : 3;
   const stage = w - probePad * 2 - (allDayW > 0 ? allDayW + probeGap : 0);
@@ -130,13 +153,18 @@ export function computeLayout(width: number, height: number): Layout {
     touch: Math.max(TOUCH_MIN, Math.round(TOUCH_MIN * scale)),
     fs: (size: number) => half(size * scale),
     far: (size: number) => half(size * farScale),
-    key: `${scale}${compact ? 'c' : 'w'}`,
+    // L'épinglage change la largeur des colonnes : il doit donc entrer dans la
+    // clé, sinon les feuilles de style mémoïsées resteraient sur l'ancienne.
+    key: `${scale}${compact ? 'c' : 'w'}${allDayW ? 'a' : ''}`,
   };
 }
 
-export function useLayout(): Layout {
+export function useLayout(pinAllDay = false): Layout {
   const { width, height } = useWindowDimensions();
-  return useMemo(() => computeLayout(width, height), [width, height]);
+  return useMemo(
+    () => computeLayout(width, height, pinAllDay),
+    [width, height, pinAllDay],
+  );
 }
 
 /**

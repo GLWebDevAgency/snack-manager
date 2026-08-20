@@ -50,6 +50,16 @@ export interface BoardProps {
   pendingIds: Set<string>;
   soundOn: boolean;
   onToggleSound: () => void;
+  /**
+   * Panneau « À lancer » épinglé — décidé par `App`, pas ici.
+   *
+   * Cet état ne pilote pas seulement un affichage : il entre dans le calcul de
+   * mise en page (`useLayout`), qui rend au panneau sa largeur et retire
+   * d'autant aux colonnes. Le garder dans le tableau le privait de tout effet
+   * dès que la fenêtre passait sous le seuil de repli.
+   */
+  allDayOn: boolean;
+  onToggleAllDay: () => void;
   onAdvance: (order: Order) => void;
   reducedMotion: boolean;
   layout: Layout;
@@ -61,7 +71,6 @@ export function Board(props: BoardProps) {
   const { orders, layout } = props;
   const styles = boardStyles(layout);
   const [filter, setFilter] = useState<ChannelFilter>('all');
-  const [allDay, setAllDay] = useState(true);
   const [tab, setTab] = useState<CompactTab>('new');
 
   const visible = useMemo(
@@ -190,10 +199,12 @@ export function Board(props: BoardProps) {
   }
 
   // ─── Régime colonnes ───
-  // `layout.allDayW === 0` = la fenêtre ne peut plus loger le panneau à côté
-  // des colonnes : il se replie de lui-même, la préférence est conservée pour
-  // le jour où l'écran retrouve de la place.
-  const showAllDay = allDay && layout.allDayW > 0;
+  //
+  // `layout.allDayW` vaut 0 quand le panneau ne doit pas s'afficher — soit
+  // parce que le cuisinier l'a décroché, soit parce que la fenêtre est trop
+  // étroite ET qu'il ne l'a pas épinglé. La décision est prise dans
+  // `computeLayout`, qui connaît la préférence : ici on ne fait que la lire.
+  const showAllDay = props.allDayOn && layout.allDayW > 0;
 
   return (
     <View style={styles.root}>
@@ -208,8 +219,8 @@ export function Board(props: BoardProps) {
         onFilter={setFilter}
         soundOn={props.soundOn}
         onToggleSound={props.onToggleSound}
-        allDayOn={allDay}
-        onToggleAllDay={() => setAllDay((v) => !v)}
+        allDayOn={props.allDayOn}
+        onToggleAllDay={props.onToggleAllDay}
         reducedMotion={props.reducedMotion}
         layout={layout}
       />

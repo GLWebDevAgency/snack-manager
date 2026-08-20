@@ -37,15 +37,36 @@ import { ink, palette, type } from './src/ui';
 
 interface Prefs {
   sound: boolean;
+  /**
+   * Panneau « À lancer » épinglé par le cuisinier.
+   *
+   * Absent = on laisse la place décider, comme avant. Présent = sa décision
+   * prime sur le repli automatique, y compris sur un écran étroit.
+   */
+  allDay?: boolean;
 }
 
 export default function App() {
   // Une cuisine ne doit jamais voir l'écran s'éteindre en plein coup de feu.
   useStayAwake();
 
+  /**
+   * Panneau « À lancer » épinglé.
+   *
+   * Déclaré AVANT `useLayout`, qui en dépend : cet état ne décide pas d'un
+   * affichage, il décide d'une MISE EN PAGE — la largeur rendue au panneau, et
+   * donc celle qui reste aux colonnes.
+   *
+   * Il vivait auparavant dans le tableau, sous `useLayout`, et n'avait donc
+   * aucune prise sur elle : sous le seuil de repli automatique, le bouton
+   * disparaissait purement et simplement, laissant le cuisinier sans moyen de
+   * rappeler la seule vue qui AGRÈGE ce qu'il a à lancer au lieu de le lister.
+   */
+  const [allDayOn, setAllDayOn] = useState(true);
+
   // Toutes les dimensions de l'écran — colonnes, panneau, échelle typo, cibles
   // tactiles — sortent d'ici et de nulle part ailleurs.
-  const layout = useLayout();
+  const layout = useLayout(allDayOn);
 
   const reducedMotion = useReducedMotion();
   const now = useNow(1000);
@@ -60,26 +81,46 @@ export default function App() {
 
   const board = useBoard(client, session !== null, onUnauthorized);
 
-  // ─── Préférences locales (son) ───
+  // ─── Préférences locales (son, panneau « À lancer ») ───
 
   const [soundOn, setSoundOn] = useState(true);
+
+  /** Vrai une fois les préférences relues : avant, on n'écrase rien. */
+  const prefsLoaded = useRef(false);
+
   useEffect(() => {
     void (async () => {
       const raw = await getStore().getItem(KEY_PREFS);
-      if (!raw) return;
       try {
-        const prefs = JSON.parse(raw) as Prefs;
-        if (typeof prefs.sound === 'boolean') setSoundOn(prefs.sound);
+        if (raw) {
+          const prefs = JSON.parse(raw) as Prefs;
+          if (typeof prefs.sound === 'boolean') setSoundOn(prefs.sound);
+          if (typeof prefs.allDay === 'boolean') setAllDayOn(prefs.allDay);
+        }
       } catch {
         /* préférences illisibles : on garde les valeurs par défaut */
+      } finally {
+        prefsLoaded.current = true;
       }
     })();
   }, []);
 
+  // Une seule écriture pour toutes les préférences : chaque bascule n'a pas à
+  // connaître l'état des autres, et aucune ne peut en effacer une en écrivant
+  // un objet partiel.
+  useEffect(() => {
+    if (!prefsLoaded.current) return;
+    void getStore().setItem(
+      KEY_PREFS,
+      JSON.stringify({ sound: soundOn, allDay: allDayOn } satisfies Prefs),
+    );
+  }, [soundOn, allDayOn]);
+
+  const toggleAllDay = useCallback(() => setAllDayOn((v) => !v), []);
+
   const toggleSound = useCallback(() => {
     setSoundOn((current) => {
       const next = !current;
-      void getStore().setItem(KEY_PREFS, JSON.stringify({ sound: next } satisfies Prefs));
       // Le geste sert aussi à débloquer le contexte audio du navigateur.
       if (next) {
         sound.unlock();
@@ -193,6 +234,8 @@ export default function App() {
         pendingIds={pendingIds}
         soundOn={soundOn && soundSupported}
         onToggleSound={toggleSound}
+        allDayOn={allDayOn}
+        onToggleAllDay={toggleAllDay}
         onAdvance={board.advance}
         reducedMotion={reducedMotion}
         layout={layout}

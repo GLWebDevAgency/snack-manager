@@ -229,7 +229,24 @@ export const BrandCreateSchema = z.object({
 });
 export type BrandCreate = z.infer<typeof BrandCreateSchema>;
 
-export const BrandUpdateSchema = BrandCreateSchema.partial();
+/**
+ * Mise à jour PARTIELLE — surtout pas `BrandCreateSchema.partial()`.
+ *
+ * `.partial()` rend les champs facultatifs mais CONSERVE leurs `.default()`.
+ * `preferred` porte `.default(false)` : une requête qui ne l'envoie pas se
+ * verrait donc réécrire à `false` par la validation elle-même. Corriger le nom
+ * d'une marque aurait silencieusement retiré son statut de marque préférée, et
+ * le gérant l'aurait découvert à la commande suivante, au mauvais prix.
+ *
+ * C'est le défaut EXACT qui avait effacé les prix et les groupes d'options de
+ * trois produits (cf. `ProductUpdateSchema`). On écrit donc les champs à la
+ * main, sans aucune valeur par défaut.
+ */
+export const BrandUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  preferred: z.boolean().optional(),
+  notes: z.string().max(300).optional(),
+});
 export type BrandUpdate = z.infer<typeof BrandUpdateSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -249,7 +266,22 @@ export const SupplierCreateSchema = z.object({
 });
 export type SupplierCreate = z.infer<typeof SupplierCreateSchema>;
 
-export const SupplierUpdateSchema = SupplierCreateSchema.partial().extend({
+/**
+ * Écrit à la main pour la même raison que `BrandUpdateSchema`.
+ *
+ * `SupplierCreateSchema` ne porte aujourd'hui aucun `.default()`, donc
+ * `.partial()` serait inoffensif — MAIS il s'armerait tout seul le jour où
+ * quelqu'un ajoute une valeur par défaut à la création, sans que rien ne le
+ * signale. Le défaut ne se verrait qu'en production, sur un champ écrasé.
+ */
+export const SupplierUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  contactName: z.string().max(120).optional(),
+  phone: z.string().max(30).optional(),
+  email: z.email().optional(),
+  paymentTerms: z.string().max(200).optional(),
+  deliveryDays: z.string().max(100).optional(),
+  notes: z.string().max(500).optional(),
   active: z.boolean().optional(),
 });
 export type SupplierUpdate = z.infer<typeof SupplierUpdateSchema>;
