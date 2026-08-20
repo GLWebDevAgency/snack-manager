@@ -1,0 +1,370 @@
+name: Bout en bout
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CE QUE CE FICHIER AJOUTE, ET QUI MANQUAIT
+#
+# `scripts/smoke.mjs` (§ 11 de docs/CI-CD.md) vérifie que les quatre surfaces
+# RÉPONDENT : un 200, le bon titre dans le HTML. C'est nécessaire, et c'est très
+# loin d'être suffisant.
+#
+# Une régression qui casse la prise de commande — un supplément qui n'entre plus
+# dans le total, une option obligatoire devenue facultative, un ticket qui
+# n'avance plus en cuisine, une suspension qui ne suspend rien — sert des pages
+# 200 avec le bon titre. Elle passe le typage, l'analyse statique, les tests
+# unitaires, la compilation, le déploiement ET le contrôle de santé. Puis elle
+# arrive chez un restaurant en plein service.
+#
+# Ce workflow joue les cinq parcours dont la panne coûte de l'argent à un
+# commerçant, dans un vrai navigateur, sur les surfaces RÉELLEMENT DÉPLOYÉES.
+#
+# ─── LES DEUX SÉRIES, ET POURQUOI ELLES NE SE RESSEMBLENT PAS ───
+#
+#   · « Démonstrations » tourne sur les démos `?demo=1`, entièrement dans le
+#     navigateur, sur une fixture figée. Aucun compte, aucune base, aucun état
+#     partagé entre exécutions — donc aucune fragilité, et AUCUN SECRET : ce job
+#     n'en reçoit pas un seul, comme le contrôle de santé. C'est la preuve
+#     structurelle qu'il ne peut rien faire fuiter dans un journal public.
+#
+#   · « Parc réel » exige une vraie API : suspendre un établissement et voir un
+#     prix ressortir côté client ne se simulent pas. Ce job écrit donc dans une
+#     vraie base, il ne tourne QUE sur staging, et il remet le parc en état —
+#     avec un filet sur disque si le runner meurt en cours de route
+#     (`e2e/socle/parc.mjs`).
+#
+# ─── COMMENT IL SE DÉCLENCHE, ET LA LIMITE À CONNAÎTRE ───
+#
+# `workflow_run` : dès que « Déploiement » a fini, en vert, sur `develop` ou
+# `main`. Les quatre pièges de ce déclencheur, listés en tête de `deploy.yml`,
+# sont désamorcés un par un plus bas — en particulier le filtre sur la branche,
+# sans lequel n'importe quelle branche déclencherait ce workflow.
+#
+# ⚠️ CE FICHIER NE FAIT PAS ÉCHOUER LE DÉPLOIEMENT. Il tourne à côté, après.
+# Un rouge ici se lit dans l'onglet Actions, il ne bloque rien. Le rendre
+# bloquant tient en trois lignes dans `deploy.yml`, à côté de `verification` et
+# `secrets` — c'est pour cela que `workflow_call` est déclaré ci-dessous :
+#
+#     bout-en-bout:
+#       needs: [cible, sante]
+#       uses: ./.github/workflows/e2e.yml
+#       with: { environnement: '${{ needs.cible.outputs.environnement }}' }
+#       secrets: inherit
+#
+# `deploy.yml` n'appartient pas au périmètre de ce travail ; l'ajout est
+# volontairement laissé à qui le relira. Voir la section « travail restant ».
+#
+# ⚠️ Comme `deploy.yml`, ce fichier ne se déclenche que dans sa version présente
+# sur la branche par défaut : tant qu'il n'est pas fusionné dans `main`,
+# `workflow_run` n'existe pour personne. Utilisez `workflow_dispatch` d'ici là.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_run:
+    workflows: ['Déploiement']
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      environnement:
+        description: 'Parc visé'
+        type: choice
+        options: [staging, production]
+        default: staging
+      serie:
+        description: 'Séries à jouer'
+        type: choice
+        options: [tout, demo, reel]
+        default: tout
+
+  workflow_call:
+    inputs:
+      environnement:
+        description: 'Parc visé — « staging » ou « production »'
+        type: string
+        required: true
+      serie:
+        description: '« tout », « demo » ou « reel »'
+        type: string
+        default: tout
+    secrets:
+      # Déclarés FACULTATIFS à dessein. Absents, les scénarios « parc réel »
+      # s'annoncent IGNORÉS avec leur raison et le job reste vert : un dépôt
+      # sans ces secrets doit pouvoir jouer les démonstrations, qui n'en ont
+      # aucun besoin. `secrets: inherit` chez l'appelant les transmet aussi.
+      SM_E2E_MDP_EQUIPE:
+        required: false
+      SM_E2E_MDP_GERANT:
+        required: false
+
+# Le parc réel n'accepte pas deux exécutions simultanées : l'une suspendrait un
+# établissement pendant que l'autre lui change un prix, et les deux rougiraient
+# sans désigner la moindre panne. `cancel-in-progress: false` est VOLONTAIRE —
+# couper une exécution en vol, c'est exactement le cas que le filet de
+# `socle/parc.mjs` doit rattraper. On préfère faire la queue.
+concurrency:
+  group: bout-en-bout-${{ inputs.environnement || github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1 · La cible
+  #
+  # Même principe que dans `deploy.yml` : un seul endroit décide où l'on tape,
+  # et s'il refuse de trancher, rien ne tourne. Fermé par défaut.
+  #
+  # C'est ici que les pièges de `workflow_run` sont désamorcés :
+  #   · on refuse toute branche autre que `develop` et `main` — sans ce filtre,
+  #     une exécution de « Déploiement » sur une branche quelconque ferait
+  #     tourner ce workflow, et le job « parc réel » écrirait dans staging ;
+  #   · on refuse un déploiement qui n'a pas fini en vert : jouer un parcours
+  #     contre une mise en ligne ratée ne produit qu'un second rouge, qui
+  #     n'apprend rien de plus que le premier ;
+  #   · on refuse un dépôt qui n'est pas le nôtre.
+  # ───────────────────────────────────────────────────────────────────────────
+  cible:
+    name: Cible des parcours
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.repository == 'GLWebDevAgency/snack-manager'
+    outputs:
+      environnement: ${{ steps.resoudre.outputs.environnement }}
+      serie: ${{ steps.resoudre.outputs.serie }}
+      jouable: ${{ steps.resoudre.outputs.jouable }}
+    steps:
+      - name: Résoudre le parc à contrôler
+        id: resoudre
+        # Rien ne passe par interpolation directe dans le script : une branche
+        # est une donnée d'entrée, jamais du code shell.
+        env:
+          DECLENCHEUR: ${{ github.event_name }}
+          ENTREE_ENV: ${{ inputs.environnement }}
+          ENTREE_SERIE: ${{ inputs.serie }}
+          BRANCHE: ${{ github.event.workflow_run.head_branch }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          jouable=oui
+          serie="${ENTREE_SERIE:-tout}"
+
+          if [ "$DECLENCHEUR" = 'workflow_run' ]; then
+            if [ "$CONCLUSION" != 'success' ]; then
+              echo "::notice title=Déploiement non vert::« $CONCLUSION » — rien à contrôler, le code en ligne n'a pas changé comme prévu."
+              jouable=non
+              environnement=aucun
+            else
+              case "$BRANCHE" in
+                main)
+                  # ⚠️ PRODUCTION N'EST PAS CONTRÔLÉE AUTOMATIQUEMENT, ET CE
+                  # N'EST PAS UN OUBLI. Au 20 août 2026, `main` ne porte pas
+                  # encore le mode démonstration (`?demo=1`) : la caisse de
+                  # production répond son écran d'appairage, `/r/demo` répond
+                  # 404, et les quatre parcours seraient rouges pour une raison
+                  # qui n'est pas une panne — exactement ce qui apprend à
+                  # ignorer le rouge. Le parc réel, lui, n'a aucun
+                  # établissement depuis la remise à blanc de la base.
+                  #
+                  # LE JOUR OÙ `develop` EST FUSIONNÉE DANS `main` : remplacer
+                  # ces quatre lignes par `environnement=production`, et
+                  # vérifier d'abord d'un coup de `workflow_dispatch`.
+                  echo "::notice title=Production non contrôlée::« main » ne porte pas encore les démonstrations (?demo=1). Lancez ce workflow à la main sur « production » pour vérifier où en est cette version."
+                  jouable=non
+                  environnement=aucun
+                  ;;
+                develop) environnement=staging ;;
+                *)
+                  echo "::notice title=Branche hors parc::« $BRANCHE » ne déploie nulle part — rien à contrôler."
+                  jouable=non
+                  environnement=aucun
+                  ;;
+              esac
+            fi
+          else
+            environnement="${ENTREE_ENV:-staging}"
+          fi
+
+          {
+            echo "environnement=$environnement"
+            echo "serie=$serie"
+            echo "jouable=$jouable"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$jouable" = 'oui' ]; then
+            {
+              echo "## Parcours de bout en bout — \`$environnement\`"
+              echo
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Déclencheur | \`$DECLENCHEUR\` |"
+              echo "| Séries | \`$serie\` |"
+              echo "| Parc réel | staging uniquement |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "→ $environnement (séries : $serie, jouable : $jouable)"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2 · Les démonstrations
+  #
+  # CE JOB NE REÇOIT AUCUN SECRET, et c'est la même preuve structurelle que
+  # pour le contrôle de santé : les démos tournent sur une fixture, dans le
+  # navigateur du visiteur. S'il lui fallait un identifiant, il échouerait ici.
+  #
+  # Il tourne sur les DEUX parcs, production comprise : une démonstration
+  # n'écrit nulle part, elle ne peut donc rien abîmer.
+  # ───────────────────────────────────────────────────────────────────────────
+  demonstrations:
+    name: Parcours sur démonstration
+    needs: cible
+    if: needs.cible.outputs.jouable == 'oui' && needs.cible.outputs.serie != 'reel'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+        with:
+          # ⚠️ Piège nº 3 de `workflow_run` (voir l'en-tête de `deploy.yml`) :
+          # `github.sha` y désigne la branche PAR DÉFAUT, pas le commit déployé.
+          # Sans cette ligne, on contrôlerait le parc avec les scénarios d'une
+          # autre version du dépôt. Sur les autres déclencheurs, l'expression
+          # est vide et `checkout` reprend son comportement normal.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      # Le binaire de Chromium pèse plus que tout le reste réuni : le cacher
+      # fait la différence entre un job d'une minute et un job de trois.
+      - name: Restaurer le navigateur
+        id: cache-navigateur
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Toujours exécuté, même quand le cache a touché : le téléchargement est
+      # alors sauté (l'installation est idempotente), mais les BIBLIOTHÈQUES
+      # SYSTÈME, elles, ne sont pas dans le cache — et un Chromium restauré
+      # sans elles ne démarre pas. Le cache fait gagner le téléchargement, pas
+      # le droit de sauter l'étape.
+      - name: Installer Chromium
+        run: pnpm e2e:navigateur
+
+      - name: Jouer les parcours
+        env:
+          SM_E2E_CIBLE: ${{ needs.cible.outputs.environnement }}
+        run: pnpm e2e:demo
+
+      - name: Conserver les traces d'échec
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: traces-demonstration-${{ needs.cible.outputs.environnement }}
+          path: e2e/rapports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Annoncer la panne
+        if: failure()
+        env:
+          ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+        run: |
+          echo "::error title=Un parcours client est cassé::$ENVIRONNEMENT répond, mais un des parcours ne marche plus. Captures et arbres d'accessibilité dans les artefacts de cette exécution."
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3 · Le parc réel
+  #
+  # STAGING UNIQUEMENT, et le garde-fou est écrit deux fois plutôt qu'une :
+  #   · ici, par ce `if:` — la production ne peut même pas lancer le job ;
+  #   · dans `e2e/socle/cibles.mjs`, où le slug de production est vide, ce qui
+  #     fait s'annoncer les scénarios « IGNORÉS » plutôt que de tourner.
+  # Suspendre un vrai restaurant en service pour vérifier qu'on sait le
+  # suspendre est exactement le genre d'idée qui ne doit pas dépendre d'une
+  # seule condition.
+  #
+  # `needs: demonstrations` n'est pas décoratif : si les parcours qui n'écrivent
+  # nulle part sont déjà rouges, il n'y a aucune raison d'aller écrire dans une
+  # vraie base pour l'apprendre une seconde fois.
+  #
+  # Sans les deux secrets, les scénarios s'annoncent IGNORÉS avec la raison, et
+  # le job reste VERT. C'est voulu : un rouge qui ne désigne pas une panne
+  # apprend à ignorer le rouge.
+  # ───────────────────────────────────────────────────────────────────────────
+  parc-reel:
+    name: Parcours sur le parc réel
+    needs: [cible, demonstrations]
+    if: |
+      always()
+      && needs.cible.outputs.jouable == 'oui'
+      && needs.cible.outputs.environnement == 'staging'
+      && needs.cible.outputs.serie != 'demo'
+      && needs.demonstrations.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Restaurer le navigateur
+        id: cache-navigateur
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # Toujours exécuté, même quand le cache a touché : le téléchargement est
+      # alors sauté (l'installation est idempotente), mais les BIBLIOTHÈQUES
+      # SYSTÈME, elles, ne sont pas dans le cache — et un Chromium restauré
+      # sans elles ne démarre pas. Le cache fait gagner le téléchargement, pas
+      # le droit de sauter l'étape.
+      - name: Installer Chromium
+        run: pnpm e2e:navigateur
+
+      - name: Jouer les parcours
+        env:
+          SM_E2E_CIBLE: staging
+          # Les identifiants ne touchent JAMAIS le disque et n'apparaissent dans
+          # aucune commande : ils transitent par l'environnement, et `socle/api.mjs`
+          # n'imprime jamais un corps de requête ni un en-tête d'autorisation.
+          SM_E2E_MDP_EQUIPE: ${{ secrets.SM_E2E_MDP_EQUIPE }}
+          SM_E2E_MDP_GERANT: ${{ secrets.SM_E2E_MDP_GERANT }}
+          SM_E2E_EMAIL_EQUIPE: ${{ vars.SM_E2E_EMAIL_EQUIPE }}
+          SM_E2E_EMAIL_GERANT: ${{ vars.SM_E2E_EMAIL_GERANT }}
+        run: pnpm e2e:reel
+
+      - name: Conserver les traces d'échec
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: traces-parc-reel
+          path: e2e/rapports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Annoncer la panne
+        if: failure()
+        run: |
+          echo "::error title=Le parc réel n'a pas passé les parcours::Vérifiez d'abord que staging n'est pas resté dans un état modifié — le message d'échec le dit explicitement quand la remise en état a elle aussi échoué."

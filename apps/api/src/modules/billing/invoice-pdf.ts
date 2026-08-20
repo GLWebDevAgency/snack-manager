@@ -29,6 +29,15 @@ import {
  * exactement la même chose. Sur une pièce comptable, deux versions qui divergent
  * d'un centime, c'est un litige.
  *
+ * ─── CE QUE CE DOCUMENT NE PRÉTEND PAS ÊTRE ───
+ *
+ * Il PORTE les mentions énumérées par le Code de commerce et le CGI. Ce n'est
+ * pas la même chose qu'être CONFORME, et rien ici — pas une ligne de texte
+ * imprimée, pas un nom de fonction — ne doit laisser croire le contraire. La
+ * validation d'une facture appartient à un expert-comptable ; personne dans ce
+ * dépôt n'en est un. Ce que le code garantit s'arrête à : les mentions
+ * attendues figurent, celles qui manquent se voient.
+ *
  * ─── ACCENTS ───
  *
  * Les polices standard PDF sont déclarées en `WinAnsiEncoding` (CP1252), qui
@@ -233,7 +242,17 @@ const or = (value: string | null, hint = ''): string => {
   return hint === '' ? INVOICE_LEGAL_PLACEHOLDER : `${INVOICE_LEGAL_PLACEHOLDER} ${hint}`;
 };
 
-/** Bloc d'identité d'une partie, ligne par ligne — les vides sont sautés. */
+/**
+ * Bloc d'identité d'une partie, ligne par ligne — les vides sont sautés.
+ *
+ * L'ÉMETTEUR et le CLIENT ne sont pas traités pareil, et ce n'est pas une
+ * asymétrie de mise en page. Les mentions de l'émetteur sont OBLIGATOIRES :
+ * absentes, elles s'impriment en emplacement vide, parce que leur absence est
+ * un défaut de la facture. Celles du client sont FACULTATIVES — c'est le SIRET
+ * de celui qui facture que la loi exige — et s'impriment donc seulement quand
+ * il nous les a données : un « SIRET : [À COMPLÉTER] » sous le nom du
+ * restaurant lui ferait croire qu'il a mal fait quelque chose.
+ */
 function partyLines(party: InvoiceParty, required: 'issuer' | 'customer'): string[] {
   const lines: string[] = [];
   if (party.legalForm) lines.push(party.legalForm);
@@ -244,8 +263,9 @@ function partyLines(party: InvoiceParty, required: 'issuer' | 'customer'): strin
     if (party.rcs) lines.push(party.rcs);
     const contact = [party.email, party.phone].filter(Boolean).join(' · ');
     if (contact) lines.push(contact);
-  } else if (party.siret) {
-    lines.push(`SIRET : ${party.siret}`);
+  } else {
+    if (party.siret) lines.push(`SIRET : ${party.siret}`);
+    if (party.vatNumber) lines.push(`TVA intracommunautaire : ${party.vatNumber}`);
   }
   return lines;
 }
@@ -311,7 +331,7 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
   // ── Ligne de prestation ──
   c.text('DÉSIGNATION', MARGIN, y, 8, true, 'mut');
   c.text('PÉRIODE', 330, y, 8, true, 'mut');
-  c.rightLabel('MONTANT', RIGHT, y, 8, true, 'mut');
+  c.rightLabel('MONTANT HT', RIGHT, y, 8, true, 'mut');
   y -= 8;
   c.rule(MARGIN, y, CONTENT_W, 0.9, 0.35);
   y -= 18;
@@ -320,7 +340,10 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
     c.text(line, MARGIN, y - index * 12, 10);
   }
   c.text(doc.periodLabel, 330, y, 10, false, 'mut');
-  c.money(formatEuros(doc.amountCents), RIGHT, y, 10);
+  // La colonne « Montant » d'une ligne de prestation s'écrit HORS TAXES : c'est
+  // la base sur laquelle la TVA du bas est calculée, et une ligne en TTC
+  // au-dessus d'un « Total hors taxes » plus petit se lit comme une remise.
+  c.money(formatEuros(doc.totals.htCents), RIGHT, y, 10);
   y -= Math.max(wrap(doc.designation, 10, false, 260).length * 12, 12) + 10;
 
   c.rule(MARGIN, y, CONTENT_W);
@@ -352,7 +375,10 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
   }
 
   // Le montant réellement facturé, sous son vrai nom, tant que le régime de TVA
-  // n'est pas déclaré : c'est la seule somme dont on soit certain.
+  // n'est pas déclaré : c'est la seule somme dont on soit certain. Le cas ne
+  // devrait plus se produire — toute pièce porte son régime, et les anciennes
+  // ont un défaut documenté — mais la ligne reste : le jour où l'invariante
+  // céderait, mieux vaut une facture qui le dit qu'une facture muette.
   if (!doc.vat.known) {
     c.text(
       `Montant facturé : ${formatEuros(doc.amountCents)} — la ventilation hors taxes / TVA reste à compléter.`,
@@ -367,12 +393,16 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
 
   // ── Règlement ──
   y -= 8;
+  // TOUTES TAXES COMPRISES : c'est la somme que le client vire. L'annoncer hors
+  // taxes ferait arriver un virement inférieur d'un cinquième, et une facture
+  // resterait éternellement « partiellement réglée » pour une raison que
+  // personne ne comprendrait.
   const paid =
     doc.status === 'payee'
       ? `Facture réglée${doc.paidAt ? ` le ${formatFrDate(doc.paidAt)}` : ''}${doc.methodLabel ? ` par ${doc.methodLabel.toLowerCase()}` : ''}.`
       : doc.status === 'annulee'
         ? `Facture annulée${doc.cancelReason ? ` — ${doc.cancelReason}` : ''}. Aucun règlement n’est dû.`
-        : `Reste à régler : ${formatEuros(doc.amountCents)}.`;
+        : `Reste à régler : ${doc.totals.ttcLabel} TTC.`;
   c.text(paid, MARGIN, y, 10, true);
   y -= 18;
 

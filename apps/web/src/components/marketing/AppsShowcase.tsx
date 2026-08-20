@@ -17,7 +17,7 @@ function slot(index: number, current: number, total: number) {
 }
 
 /**
- * En dessous de cette largeur, une caisse conçue pour une tablette de 1024 px
+ * En dessous de cette largeur, une caisse conçue pour une tablette de 1280 px
  * n'est plus lisible : on garde l'affiche et on propose le plein écran.
  * Même seuil que la bascule CSS de la section — les deux doivent bouger
  * ensemble, sinon le bouton disparaît sans que l'iframe se démonte.
@@ -77,7 +77,23 @@ export function AppsShowcase() {
   const [current, setCurrent] = useState(0);
   /** Identifiant de l'application actuellement MONTÉE. Une seule à la fois. */
   const [live, setLive] = useState<string | null>(null);
-  const stageRef = useRef<HTMLElement>(null);
+  /**
+   * Où le lecteur doit atterrir : SUR L'APPAREIL, pas sur le chapeau.
+   *
+   * La ref était posée sur la `<section>` et visait son DÉBUT. Le lien
+   * « Essayer la caisse en démo → » amenait donc le lecteur en haut du
+   * chapeau — badge, titre, paragraphe, pastilles — et l'appareil commençait
+   * 590 px plus bas, hors champ. Celui qui venait de cliquer sur « essayer »
+   * devait chercher ce qu'il avait demandé.
+   *
+   * L'appareil occupe désormais presque toute la hauteur de fenêtre (voir
+   * `--card-h` dans marketing.css) : on le CENTRE, et il tient alors en entier
+   * à l'écran, bouton « Essayer » compris — celui-ci est posé en bas de
+   * l'affiche, et un cadrage par le haut le laisserait sous la barre collante
+   * de l'offre fondateur. Les pastilles passent au-dessus du champ, mais on ne
+   * perd pas la navigation : les flèches ‹ › vivent dans la scène elle-même.
+   */
+  const stageRef = useRef<HTMLDivElement>(null);
   const total = DEMO_APPS.length;
 
   const go = useCallback(
@@ -95,7 +111,7 @@ export function AppsShowcase() {
       go(i);
       stageRef.current?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
+        block: "center",
       });
     },
     [go],
@@ -104,7 +120,7 @@ export function AppsShowcase() {
   /*
    * Passage en petit écran alors qu'une démo tourne : on démonte. Le bouton
    * « Essayer » est masqué en CSS sous ce seuil, mais une fenêtre qu'on rétrécit
-   * laisserait sinon une caisse de 1024 px écrasée dans 375 px.
+   * laisserait sinon une caisse de 1280 px écrasée dans 375 px.
    */
   useEffect(() => {
     const mq = window.matchMedia(NARROW);
@@ -157,7 +173,7 @@ export function AppsShowcase() {
         </div>
       </section>
 
-      <section className="section demo-section" id="demo" ref={stageRef}>
+      <section className="section demo-section" id="demo">
         <span className="badge">La démo</span>
         <h2 className="h2 center-h2" style={{ maxWidth: 640 }}>
           Explorez les applications, en démo
@@ -189,7 +205,7 @@ export function AppsShowcase() {
          * dimensionnée pour le plus grand des deux laisserait un trou noir
          * sous l'autre. Sur grand écran la scène garde une hauteur unique.
          */}
-        <div className="demo-stage rv" data-device={app.device}>
+        <div className="demo-stage rv" data-device={app.device} ref={stageRef}>
           <div className="demo-track">
             {DEMO_APPS.map((a, i) => {
               const position = slot(i, current, total);
@@ -238,7 +254,11 @@ export function AppsShowcase() {
                     ) : (
                       <Photo
                         shot={a.shot}
-                        sizes={a.device === "phone" ? "(max-width: 810px) 40vw, 300px" : "(max-width: 810px) 92vw, min(880px, 78vw)"}
+                        sizes={
+                          a.device === "phone"
+                            ? "(max-width: 810px) 40vw, 360px"
+                            : "(max-width: 810px) 92vw, min(1160px, 92vw)"
+                        }
                       />
                     )}
 
@@ -248,9 +268,16 @@ export function AppsShowcase() {
                           {a.live.cta}
                         </button>
                         {/*
-                         * Petit écran : on renonce proprement. Une caisse de
-                         * tablette pliée dans 375 px ne se lit pas — le plein
-                         * écran, lui, se manipule vraiment.
+                         * LE PLEIN ÉCRAN EST PROPOSÉ D'EMBLÉE, À TOUTE LARGEUR.
+                         *
+                         * Il ne servait qu'en dessous de 810 px, quand la démo
+                         * dans la page devenait impossible. Mais l'application
+                         * embarquée est maintenant RÉDUITE — la cuisine tourne
+                         * en 1920 px dans un cadre de ~1130 — donc son texte
+                         * courant est plus petit qu'il ne l'est sur le mural.
+                         * Le visiteur qui veut LIRE doit trouver la sortie sans
+                         * la deviner : elle est là, à côté d'« Essayer », et à
+                         * nouveau sous le cadre pendant que la démo tourne.
                          */}
                         <a className="demo-trybtn demo-tryout" href={a.live.href} target="_blank" rel="noopener noreferrer">
                           {a.live.ctaOut}
@@ -294,9 +321,25 @@ export function AppsShowcase() {
                         <span className="demo-hintdot" aria-hidden="true" />
                         <span className="demo-hinttext">{a.live.hint}</span>
                         {isLive ? (
-                          <button type="button" className="demo-stop" onClick={() => setLive(null)}>
-                            Arrêter la démo
-                          </button>
+                          <>
+                            {/*
+                             * L'application tourne à sa vraie résolution, mais
+                             * RÉDUITE pour tenir dans le cadre. Ce lien la rend
+                             * à sa taille réelle — c'est le geste de celui qui
+                             * veut lire, pas seulement regarder.
+                             */}
+                            <a
+                              className="demo-hintfull"
+                              href={a.live.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Voir en vraie grandeur ↗
+                            </a>
+                            <button type="button" className="demo-stop" onClick={() => setLive(null)}>
+                              Arrêter la démo
+                            </button>
+                          </>
                         ) : null}
                       </>
                     ) : null}

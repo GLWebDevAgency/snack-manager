@@ -18,15 +18,40 @@
  * remet le service à neuf, parce qu'il n'y a rien à remettre à neuf.
  */
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { BandeauDemo } from "@/lib/demo/BandeauDemo";
 import { orderingApi, type Site } from "../api";
 import { Storefront } from "../Storefront";
+import { isDemoStorefront } from "./mode";
 import { demoTransport } from "./transport";
+
+/** Aucun abonnement : l'adresse d'entrée ne change pas en cours de page. */
+const sansAbonnement = () => () => {};
+const adresseCourante = () =>
+  isDemoStorefront(
+    typeof window === "undefined" ? null : window.location.href,
+  );
+const rienAuServeur = () => false;
 
 export function DemoStorefront({ site }: { site: Site }) {
   // `useState` et non `useMemo` : React peut rejouer un `useMemo` quand il le
   // décide, et le service repartirait à zéro sous les doigts du visiteur — sa
   // commande passée disparaîtrait de l'écran de suivi.
   const [api] = useState(() => orderingApi(demoTransport()));
-  return <Storefront site={site} api={api} demo />;
+
+  /**
+   * Le bandeau de retour se dessine sur la foi de l'ADRESSE, relue dans le
+   * navigateur, et pas seulement sur le fait d'avoir été monté ici. La route
+   * répond déjà 404 sans `?demo=1` ; cette seconde vérification garantit
+   * qu'aucun lien vers notre site commercial ne peut apparaître sur la page
+   * d'un vrai restaurant, servie sur son propre domaine.
+   */
+  const demo = useSyncExternalStore(sansAbonnement, adresseCourante, rienAuServeur);
+
+  return (
+    <>
+      <BandeauDemo actif={demo} />
+      <Storefront site={site} api={api} demo />
+    </>
+  );
 }

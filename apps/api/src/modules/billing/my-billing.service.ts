@@ -1,11 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
-  EMPTY_PARTY,
   TENANT_ACCOUNT_STATUS_LABELS,
+  billingIdentityMismatch,
+  billingIdentityOf,
   buildInvoiceDocument,
+  customerParty,
   formatEuros,
+  invoiceTotals,
   invoiceView,
   isAccessBlocked,
   isTenantVisibleInvoice,
@@ -22,6 +25,7 @@ import {
   type MyBilling,
   type StoredInvoice,
   type TenantAccountStatus,
+  type TenantBillingIdentity,
 } from '@sm/contracts';
 import type { Invoice, Tenant } from '@sm/db';
 import { IssuerConfig } from './issuer.config';
@@ -127,13 +131,56 @@ export class MyBillingService {
       nextDue: nextInvoiceDue(due, plan, billable, now),
       outstanding: summarizeOutstanding(due, now),
       invoices,
-      // Les manques ne dépendent que de l'émetteur, du client et du régime de
-      // TVA — jamais du montant d'une pièce. Ils se calculent donc même quand
-      // le client n'a encore aucune facture : c'est justement le moment où il
-      // reste du temps pour les collecter.
+      // Les manques ne dépendent que de l'émetteur et du client — jamais du
+      // montant d'une pièce. Ils se calculent donc même quand le client n'a
+      // encore aucune facture : c'est justement le moment où il reste du temps
+      // pour les collecter.
       legalGaps: [...this.documentFor(BLANK_INVOICE, tenant).gaps],
+      identity: billingIdentityOf(tenant.billing),
+      // Écrire passe par le garde GLOBAL, qui refuse un compte suspendu. Le
+      // dire ici évite au formulaire de proposer un bouton qui répondrait 403.
+      identityEditable: !isAccessBlocked(status),
       generatedAt: now.toISOString(),
     };
+  }
+
+  /**
+   * LE GÉRANT SAISIT SA PROPRE IDENTITÉ DE FACTURATION.
+   *
+   * C'est LUI qui connaît son SIRET, sa forme juridique et l'adresse de son
+   * siège — nous ne les avons jamais demandés à l'inscription, et les chercher
+   * à sa place reviendrait à se tromper à sa place sur une pièce qu'il
+   * présentera à son comptable.
+   *
+   * ÉCRITURE CHIRURGICALE (`$set` champ par champ) plutôt qu'un remplacement du
+   * sous-document : `tenants` porte le menu, les horaires, les domaines et le
+   * statut de compte, et une écriture large sur ce document-là est exactement
+   * la façon dont on perd un réglage sans s'en apercevoir.
+   *
+   * Aucune ligne au journal d'administration : ce registre consigne NOS gestes
+   * sur le compte d'un client. Y écrire les siens mêlerait, dans le seul
+   * document qu'on relit en cas de litige, ses saisies et nos suspensions.
+   */
+  async updateIdentity(
+    tenantId: string,
+    identity: TenantBillingIdentity,
+  ): Promise<TenantBillingIdentity> {
+    const tenant = await this.requireTenant(tenantId);
+
+    // La cohérence SIRET ↔ TVA porte sur DEUX champs : `zod` valide chacun
+    // séparément, cette règle-ci les confronte. Un SIREN différent entre les
+    // deux, c'est un copier-coller depuis le dossier d'un autre — invisible à
+    // l'œil nu sur une facture, et faux pour toujours.
+    const mismatch = billingIdentityMismatch(identity);
+    if (mismatch) throw new BadRequestException(mismatch);
+
+    const $set: Record<string, string> = {};
+    for (const [key, value] of Object.entries(identity)) {
+      $set[`billing.${key}`] = value;
+    }
+    await this.tenants.updateOne({ _id: tenant._id }, { $set });
+
+    return identity;
   }
 
   /**
@@ -164,13 +211,12 @@ export class MyBillingService {
     return this.documentFor(invoice, tenant as RawTenant);
   }
 
+  /**
+   * Le régime de TVA n'est PAS un paramètre : il est porté par la pièce
+   * elle-même (`invoice.totals`, figé à l'émission). Voir `buildInvoiceDocument`.
+   */
   private documentFor(invoice: CrmInvoice, tenant: RawTenant): InvoiceDocument {
-    return buildInvoiceDocument(
-      invoice,
-      this.issuerConfig.issuer(),
-      customerOf(tenant),
-      this.issuerConfig.vat(),
-    );
+    return buildInvoiceDocument(invoice, this.issuerConfig.issuer(), customerOf(tenant));
   }
 
   private async requireTenant(tenantId: string): Promise<RawTenant> {
@@ -201,22 +247,22 @@ function accountStatusOf(tenant: RawTenant): TenantAccountStatus {
 }
 
 /**
- * LE CLIENT, TEL QUE LA BASE LE CONNAÎT — c'est-à-dire mal.
+ * LE CLIENT, TEL QU'IL S'EST DÉCLARÉ.
  *
- * `tenants` ne porte ni SIRET, ni adresse de FACTURATION distincte de l'adresse
- * de l'établissement, ni forme juridique. Ce qui manque reste `null` et
- * s'imprimera en emplacement vide ; `address` est reprise telle quelle parce
- * qu'elle est, à ce jour, la seule adresse que le restaurateur nous ait donnée
- * — et parce qu'une adresse d'établissement juste vaut mieux qu'une adresse de
- * siège inventée. Ce qu'il faut collecter est remonté dans `legalGaps`.
+ * Ce qu'il a saisi (`tenants.billing` : raison sociale, forme juridique, SIRET,
+ * TVA, adresse de facturation) l'emporte sur ce que nous savions de lui. À
+ * défaut, on retombe sur son ENSEIGNE et l'adresse de son ÉTABLISSEMENT : elles
+ * sont exactes, simplement moins précises qu'un siège social — et une adresse
+ * d'établissement juste vaut mieux qu'un emplacement vide.
+ *
+ * Ce qu'il n'a pas saisi et que nous ne savons pas reste `null`, s'imprime en
+ * emplacement et remonte dans `legalGaps`. Rien n'est comblé.
  */
 function customerOf(tenant: RawTenant): InvoiceParty {
-  const address = String(tenant.address ?? '').trim();
-  return {
-    ...EMPTY_PARTY,
-    name: String(tenant.name ?? '').trim() || null,
-    address: address === '' ? null : address,
-  };
+  return customerParty(billingIdentityOf(tenant.billing), {
+    name: String(tenant.name ?? ''),
+    address: String(tenant.address ?? ''),
+  });
 }
 
 /**
@@ -235,6 +281,7 @@ const BLANK_INVOICE: CrmInvoice = {
   period: { key: '1970-01', start: '', end: '', label: '' },
   amountCents: 0,
   amountLabel: formatEuros(0),
+  totals: invoiceTotals(0, null),
   status: 'brouillon',
   statusLabel: 'Brouillon',
   storedStatus: 'brouillon',
@@ -247,4 +294,5 @@ const BLANK_INVOICE: CrmInvoice = {
   cancelReason: '',
   overdueDays: 0,
   dueCents: 0,
+  dueTtcCents: 0,
 };

@@ -31,6 +31,7 @@ import {
   type PairedDevice,
   type Session,
 } from './src/client';
+import { DemoBanner } from './src/DemoBanner';
 import { PairingScreen, PinScreen } from './src/PinScreen';
 import { PosScreen } from './src/PosScreen';
 import { Loading } from './src/ui';
@@ -154,6 +155,17 @@ export default function App() {
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
       <StatusBar style="light" hidden />
+      {/*
+        Le retour à la vitrine, en démonstration UNIQUEMENT.
+
+        Il est posé ici, au-dessus des trois écrans, pour deux raisons. D'abord
+        il ne dépend d'aucun d'eux : le visiteur doit pouvoir repartir depuis
+        l'écran de vente comme depuis un chargement. Ensuite les surcouches de
+        la caisse (tiroir du ticket, modales d'encaissement) se positionnent en
+        absolu DANS `PosScreen` — elles ne peuvent donc pas venir couvrir la
+        barre, et le retour reste atteignable même une modale ouverte.
+      */}
+      <DemoBanner />
       {!restored ? (
         <Loading label="Ouverture du poste…" />
       ) : !device ? (

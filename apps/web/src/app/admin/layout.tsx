@@ -19,6 +19,7 @@ import {
 import type { OrderStatus } from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
+import { BandeauDemo } from "@/lib/demo/BandeauDemo";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
@@ -115,6 +116,16 @@ function Shell({ children }: { children: ReactNode }) {
     () => Boolean(getToken()) || isDemoActive(),
     () => false,
   );
+
+  /**
+   * Démonstration : le bandeau de retour vers la vitrine, et rien d'autre.
+   *
+   * Lu séparément de `hasToken`, qui mélange volontairement les deux cas (un
+   * jeton OU la démonstration ouvrent la coque). Ici il faut la démonstration
+   * SEULE : un gérant connecté avec son vrai compte ne doit jamais voir de
+   * porte de sortie vers notre site commercial au-dessus de son back-office.
+   */
+  const demo = useSyncExternalStore(emptySubscribe, isDemoActive, () => false);
 
   // ── Sidebar ouverte/fermée — persistée dans localStorage["sm-bo-nav"] ──
   const open = useSyncExternalStore(
@@ -252,202 +263,218 @@ function Shell({ children }: { children: ReactNode }) {
   if (!hasToken) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
-      {/* ── Sidebar : rail 66px dans le flux, panneau absolu en OVERLAY ── */}
-      <div className="relative z-[45] shrink-0" style={{ width: RAIL }}>
-        <aside
-          className="absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-fill px-3 py-[18px]"
-          style={{
-            width: open ? PANEL : RAIL,
-            transition:
-              "width .28s var(--sm-ease), box-shadow .28s var(--sm-ease)",
-            boxShadow: open ? "18px 0 44px rgba(0,0,0,0.45)" : "none",
-          }}
-        >
-          {/* En-tête : logo tuile accent + nom tenant */}
-          <div className="mb-3 flex items-center gap-2.5 px-1">
-            <div
-              className="grid size-[30px] shrink-0 place-items-center rounded-xs bg-accent text-[15px] font-extrabold text-onaccent"
-              aria-hidden
-            >
-              {initial}
-            </div>
-            <div
-              className="min-w-0 truncate whitespace-nowrap text-lg font-semibold text-ink transition-opacity duration-200 ease-sm"
-              style={{ opacity: open ? 1 : 0 }}
-            >
-              {tenant?.name ?? "…"}
-            </div>
-          </div>
+    /*
+      La coque est désormais une COLONNE : le bandeau de démonstration en tête,
+      la coque du back-office en dessous. C'est ce qui garantit qu'il ne
+      recouvre jamais rien — ni la barre de titre, ni la pilule Ouvert/Fermé,
+      ni la navigation — puisqu'il prend sa place au lieu de la voler. Et comme
+      la colonne fait exactement la hauteur de la fenêtre, il reste visible
+      quelle que soit la page ouverte et quel que soit le défilement.
 
-          {/* Intitulé de section : 11px, 600, capitales, .06em, gris #999 (DA §2). */}
-          {open ? (
-            <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-              Gestion
-            </div>
-          ) : (
-            <div className="mx-1 mb-2.5 h-px shrink-0 bg-line" aria-hidden />
-          )}
+      Hors démonstration, `BandeauDemo` rend `null` : la colonne n'ajoute alors
+      aucun pixel, et le back-office d'un vrai gérant est strictement celui
+      qu'il connaît.
+    */
+    <div className="flex h-screen flex-col overflow-hidden bg-bg">
+      <BandeauDemo actif={demo} />
 
-          {/* Navigation */}
-          <nav
-            className="cf-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden"
-            aria-label="Navigation principale"
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* ── Sidebar : rail 66px dans le flux, panneau absolu en OVERLAY ── */}
+        <div className="relative z-[45] shrink-0" style={{ width: RAIL }}>
+          <aside
+            className="absolute inset-y-0 left-0 flex flex-col overflow-hidden border-r border-line bg-fill px-3 py-[18px]"
+            style={{
+              width: open ? PANEL : RAIL,
+              transition:
+                "width .28s var(--sm-ease), box-shadow .28s var(--sm-ease)",
+              boxShadow: open ? "18px 0 44px rgba(0,0,0,0.45)" : "none",
+            }}
           >
-            {NAV.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              const badge = item.id === "orders" && newCount > 0;
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  title={item.label}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cx(
-                    "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
-                    open ? "px-3" : "justify-center px-0",
-                    isActive
-                      ? "bg-accent font-extrabold text-onaccent shadow-card"
-                      : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
-                  )}
-                >
-                  <Icon
-                    name={item.icon}
-                    size={18}
-                    stroke={isActive ? 2.3 : 2}
-                    className="shrink-0"
-                  />
-                  {open && (
-                    <span className="min-w-0 flex-1 truncate whitespace-nowrap">
-                      {item.label}
-                    </span>
-                  )}
-                  {badge &&
-                    (open ? (
-                      <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
-                        {newCount}
-                        <span className="sr-only"> nouvelles commandes</span>
-                      </span>
-                    ) : (
-                      <span
-                        className="absolute right-3 top-[7px] size-2 rounded-full border-2 border-fill bg-gold"
-                        aria-hidden
-                      />
-                    ))}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Pied : gérant + réglages + réduire */}
-          <div
-            className={cx(
-              "mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3",
-              !open && "flex-col",
-            )}
-          >
-            <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
-              aria-hidden
-            >
-              M
-            </div>
-            {open && (
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold text-ink">
-                  Le Gérant
-                </div>
-                <div className="truncate text-xs text-mut">{city}</div>
+            {/* En-tête : logo tuile accent + nom tenant */}
+            <div className="mb-3 flex items-center gap-2.5 px-1">
+              <div
+                className="grid size-[30px] shrink-0 place-items-center rounded-xs bg-accent text-[15px] font-extrabold text-onaccent"
+                aria-hidden
+              >
+                {initial}
               </div>
-            )}
-            <button
-              type="button"
-              title="Paramètres"
-              aria-label="Paramètres"
-              className="cf-press shrink-0 text-mut hover:text-white"
-            >
-              <Icon name="gear" size={17} />
-            </button>
-            <button
-              type="button"
-              onClick={toggleNav}
-              title={open ? "Réduire le menu" : "Développer le menu"}
-              aria-label={open ? "Réduire le menu" : "Développer le menu"}
-              aria-expanded={open}
-              className="cf-press grid size-7 shrink-0 place-items-center rounded-xs border border-white/12 bg-white/6 text-ink hover:border-white/25 hover:bg-white/12"
-            >
-              <Icon name={open ? "back" : "arrow"} size={14} />
-            </button>
-          </div>
-        </aside>
-      </div>
-
-      {/* ── Colonne topbar + contenu ── */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/*
-          La topbar est une SURFACE À PART : #111 au-dessus du canevas noir.
-          Deux surfaces adjacentes ne portent jamais la même valeur (DA §1) —
-          la barre ne peut pas se contenter d'un filet pour se détacher.
-        */}
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
-              {active?.label ?? "Back-office"}
-            </h1>
-            <p className="truncate text-sm text-mut" suppressHydrationWarning>
-              {subtitle}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            {/* Recherche globale — présente, non câblée en v1 */}
-            <div className="relative">
-              <Icon
-                name="search"
-                size={16}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut"
-              />
-              <input
-                type="search"
-                placeholder="Rechercher…"
-                aria-label="Recherche globale"
-                className="w-[220px] rounded-ctrl border border-white/8 bg-white/5 py-2.5 pl-9 pr-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8"
-              />
+              <div
+                className="min-w-0 truncate whitespace-nowrap text-lg font-semibold text-ink transition-opacity duration-200 ease-sm"
+                style={{ opacity: open ? 1 : 0 }}
+              >
+                {tenant?.name ?? "…"}
+              </div>
             </div>
 
-            {/* Pilule Ouvert/Fermé ↔ commande en ligne (vert/rouge fonctionnels) */}
-            <button
-              type="button"
-              onClick={toggleOnline}
-              disabled={!tenant || togglingOnline}
-              aria-pressed={!paused}
-              title={
-                paused
-                  ? "Commande en ligne en pause — cliquer pour rouvrir"
-                  : "Commande en ligne active — cliquer pour mettre en pause"
-              }
+            {/* Intitulé de section : 11px, 600, capitales, .06em, gris #999 (DA §2). */}
+            {open ? (
+              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+                Gestion
+              </div>
+            ) : (
+              <div className="mx-1 mb-2.5 h-px shrink-0 bg-line" aria-hidden />
+            )}
+
+            {/* Navigation */}
+            <nav
+              className="cf-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden"
+              aria-label="Navigation principale"
+            >
+              {NAV.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                const badge = item.id === "orders" && newCount > 0;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    title={item.label}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cx(
+                      "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
+                      open ? "px-3" : "justify-center px-0",
+                      isActive
+                        ? "bg-accent font-extrabold text-onaccent shadow-card"
+                        : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
+                    )}
+                  >
+                    <Icon
+                      name={item.icon}
+                      size={18}
+                      stroke={isActive ? 2.3 : 2}
+                      className="shrink-0"
+                    />
+                    {open && (
+                      <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+                        {item.label}
+                      </span>
+                    )}
+                    {badge &&
+                      (open ? (
+                        <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
+                          {newCount}
+                          <span className="sr-only"> nouvelles commandes</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="absolute right-3 top-[7px] size-2 rounded-full border-2 border-fill bg-gold"
+                          aria-hidden
+                        />
+                      ))}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Pied : gérant + réglages + réduire */}
+            <div
               className={cx(
-                "cf-press flex items-center gap-2 rounded-pill border-2 bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-sm font-bold text-ink disabled:cursor-not-allowed disabled:opacity-40",
-                paused ? "border-alert" : "border-ok",
+                "mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3",
+                !open && "flex-col",
               )}
             >
-              <span
-                className={cx(
-                  "size-[9px] rounded-full",
-                  paused ? "bg-alert" : "bg-ok",
-                )}
+              <div
+                className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
                 aria-hidden
-              />
-              {paused ? "Fermé" : "Ouvert"}
-            </button>
+              >
+                M
+              </div>
+              {open && (
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-ink">
+                    Le Gérant
+                  </div>
+                  <div className="truncate text-xs text-mut">{city}</div>
+                </div>
+              )}
+              <button
+                type="button"
+                title="Paramètres"
+                aria-label="Paramètres"
+                className="cf-press shrink-0 text-mut hover:text-white"
+              >
+                <Icon name="gear" size={17} />
+              </button>
+              <button
+                type="button"
+                onClick={toggleNav}
+                title={open ? "Réduire le menu" : "Développer le menu"}
+                aria-label={open ? "Réduire le menu" : "Développer le menu"}
+                aria-expanded={open}
+                className="cf-press grid size-7 shrink-0 place-items-center rounded-xs border border-white/12 bg-white/6 text-ink hover:border-white/25 hover:bg-white/12"
+              >
+                <Icon name={open ? "back" : "arrow"} size={14} />
+              </button>
+            </div>
+          </aside>
+        </div>
 
-            <IconBtn icon="bell" label="Notifications" />
-          </div>
-        </header>
+        {/* ── Colonne topbar + contenu ── */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/*
+            La topbar est une SURFACE À PART : #111 au-dessus du canevas noir.
+            Deux surfaces adjacentes ne portent jamais la même valeur (DA §1) —
+            la barre ne peut pas se contenter d'un filet pour se détacher.
+          */}
+          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4">
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
+                {active?.label ?? "Back-office"}
+              </h1>
+              <p className="truncate text-sm text-mut" suppressHydrationWarning>
+                {subtitle}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              {/* Recherche globale — présente, non câblée en v1 */}
+              <div className="relative">
+                <Icon
+                  name="search"
+                  size={16}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut"
+                />
+                <input
+                  type="search"
+                  placeholder="Rechercher…"
+                  aria-label="Recherche globale"
+                  className="w-[220px] rounded-ctrl border border-white/8 bg-white/5 py-2.5 pl-9 pr-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8"
+                />
+              </div>
 
-        {/* Zone de contenu — `relative` : les Drawer s'y positionnent en absolu */}
-        <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto bg-bg">
-          {children}
-        </main>
+              {/* Pilule Ouvert/Fermé ↔ commande en ligne (vert/rouge fonctionnels) */}
+              <button
+                type="button"
+                onClick={toggleOnline}
+                disabled={!tenant || togglingOnline}
+                aria-pressed={!paused}
+                title={
+                  paused
+                    ? "Commande en ligne en pause — cliquer pour rouvrir"
+                    : "Commande en ligne active — cliquer pour mettre en pause"
+                }
+                className={cx(
+                  "cf-press flex items-center gap-2 rounded-pill border-2 bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-sm font-bold text-ink disabled:cursor-not-allowed disabled:opacity-40",
+                  paused ? "border-alert" : "border-ok",
+                )}
+              >
+                <span
+                  className={cx(
+                    "size-[9px] rounded-full",
+                    paused ? "bg-alert" : "bg-ok",
+                  )}
+                  aria-hidden
+                />
+                {paused ? "Fermé" : "Ouvert"}
+              </button>
+
+              <IconBtn icon="bell" label="Notifications" />
+            </div>
+          </header>
+
+          {/* Zone de contenu — `relative` : les Drawer s'y positionnent en absolu */}
+          <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto bg-bg">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );

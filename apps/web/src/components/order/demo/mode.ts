@@ -69,6 +69,33 @@ export function isDemoRequested(slug: string, params: unknown): boolean {
 }
 
 /**
+ * La page COURANTE est-elle la démonstration de la commande en ligne ?
+ *
+ * `isDemoRequested` répond à la question du serveur, qui tient déjà le slug de
+ * l'adresse. Celle-ci répond à la question du NAVIGATEUR, qui n'a qu'une URL :
+ * elle sert au bandeau de retour, qui se dessine après hydratation et ne doit
+ * exister que sur cette page-là.
+ *
+ * C'est une ceinture par-dessus des bretelles — la route répond déjà 404 sans
+ * `?demo=1` — et c'est délibéré : si ce composant se retrouvait un jour monté
+ * ailleurs, aucun lien vers notre site commercial n'apparaîtrait sur la page
+ * d'un vrai restaurant, servie sur SON domaine.
+ */
+export function isDemoStorefront(href: string | null | undefined): boolean {
+  if (!href) return false;
+  // Le fragment tombe d'abord : il n'est pas envoyé au serveur et ne désigne
+  // pas la page.
+  const sansFragment = href.split("#")[0] ?? "";
+  const marque = sansFragment.indexOf("?");
+  const chemin = (marque === -1 ? sansFragment : sansFragment.slice(0, marque))
+    // Retire le schéma et l'hôte s'ils sont là ; une URL relative passe telle quelle.
+    .replace(/^[a-z]+:\/\/[^/]*/i, "");
+  const normalise = chemin.replace(/\/+$/, "") || "/";
+  if (normalise !== `/r/${DEMO_SLUG}`) return false;
+  return demoParamOf(marque === -1 ? "" : sansFragment.slice(marque + 1)) === DEMO_VALUE;
+}
+
+/**
  * Valeur du paramètre `demo`, ou `null`.
  *
  * Un paramètre RÉPÉTÉ (`?demo=1&demo=0`) ne vaut rien : on ne devine pas

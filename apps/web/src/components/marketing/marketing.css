@@ -2174,16 +2174,34 @@ html:has(.mk) {
  * La hauteur laissée à l'appareil s'en déduit (`--dv-h` sur la carte), et c'est
  * elle qui permet de calculer la taille de l'écran SANS jamais le déformer :
  * voir le châssis plus bas. Changer la hauteur de la scène, c'est changer
- * `--card-h` — rien d'autre ne bouge.
+ * `--card-h` — rien d'autre ne bouge, le facteur de réduction des applications
+ * embarquées étant mesuré et non écrit (voir `DeviceFrame`).
+ *
+ * ─── POURQUOI LA SCÈNE A GRANDI (640 → 800 px) ───
+ *
+ * L'application embarquée reçoit désormais sa VRAIE résolution puis est réduite
+ * dans le cadre. La réduction est donc le prix de la vérité de la mise en page,
+ * et c'est la LISIBILITÉ qui le paie : le back-office rend son menu de gauche
+ * en 14 px ; réduit dans le cadre de 856 px d'avant, il tombait à 8,3 px —
+ * illisible. Il faut 1 136 px de cadre pour le tenir à 11 px, donc 800 px de
+ * hauteur de carte en 16/10. C'est le premier des deux leviers, et on l'épuise
+ * avant de songer à baisser une résolution cible.
+ *
+ * `100svh` borne le tout : un appareil plus haut que la fenêtre ne se regarde
+ * pas. Sur un écran court la scène se referme d'elle-même — la démo devient
+ * moins lisible, et c'est précisément là que le bouton plein écran, présent à
+ * côté d'« Essayer », prend le relais.
  */
 .mk .demo-stage {
-  --card-h: 640px;
+  --card-h: clamp(460px, calc(100svh - 96px), 800px);
   --dv-hint: 40px;
   /* Respiration sous la carte : la profondeur 3D des cartes de côté y déborde. */
   --stage-gap: 40px;
   position: relative;
   width: 100%;
-  max-width: 1154px;
+  /* Toute la largeur utile en 1440 px : 1440 − 2 × 40 de `--section-pad-x`,
+   * moins de quoi laisser les flèches respirer sur les bords. */
+  max-width: 1340px;
   height: calc(var(--card-h) + var(--stage-gap));
   perspective: 1600px;
 }
@@ -2197,11 +2215,30 @@ html:has(.mk) {
   position: absolute;
   top: 0;
   left: 50%;
-  width: min(880px, 78%);
+  /*
+   * ─── 1 240 px : LA LARGEUR EST UN SEUIL DE LISIBILITÉ, PAS UN GOÛT ───
+   *
+   * L'application embarquée est réduite ; la largeur du cadre fixe donc la
+   * taille à laquelle son texte arrive à l'œil. Deux mesures commandent :
+   *
+   *   · l'écran cuisine rend ses modificateurs (« SANS OIGNONS ») en 18 px et
+   *     le titre du panneau « À lancer » en 17,5 px, à 1920 px de large ;
+   *   · le back-office rend son menu de gauche en 14 px, à 1440 px de large.
+   *
+   * À 1 160 px de carte, les deux premiers tombaient à 10,6 et 10,3 px — sous
+   * le seuil de lisibilité. À 1 240 ils remontent à 11,4 et 11,1, et le menu
+   * du back-office à 11,1. C'est la mesure qui a fixé ce nombre, relevée dans
+   * l'iframe et non supposée. Élargir encore ferait déborder les appareils de
+   * côté hors de la fenêtre en 1440 px.
+   *
+   * La marge négative reste la MOITIÉ de cette largeur, sous les DEUX formes :
+   * la carte est positionnée à `left: 50%`, elle ne se recentre pas seule.
+   */
+  width: min(1240px, 93%);
   height: var(--card-h);
   /* Hauteur laissée à l'appareil : le reste de la carte, consigne déduite. */
   --dv-h: calc(var(--card-h) - var(--dv-hint));
-  margin-left: max(-440px, -39%);
+  margin-left: max(-620px, -46.5%);
   /*
    * Colonne : l'appareil occupe `--dv-h`, la consigne (« par où commencer »)
    * se pose dessous dans sa hauteur réservée. Rien ne bouge quand la démo
@@ -2221,20 +2258,30 @@ html:has(.mk) {
   z-index: 3;
   filter: none;
 }
+/*
+ * Les appareils de côté sont RENTRÉS d'autant que la carte a grandi.
+ *
+ * Ils étaient posés à ±46 % / −340 px pour une carte de 880 px. La même règle
+ * appliquée à 1 240 px projetterait leur bord extérieur à ±930 px du centre —
+ * près de 1 900 px de scène, coupés net par les bords d'une fenêtre de 1 440.
+ * On les recule donc (−560 px : la perspective les rétrécit d'autant) et on
+ * les rapproche (32 %). Le trio tient alors dans la fenêtre, et la pile se lit
+ * toujours comme un deck d'appareils plutôt que comme deux moitiés coupées.
+ */
 .mk .demo-card.is-left {
-  transform: translateX(-46%) translateZ(-340px) rotateY(26deg);
+  transform: translateX(-32%) translateZ(-560px) rotateY(28deg);
   opacity: 0.45;
   z-index: 2;
   filter: saturate(0.6) brightness(0.7);
 }
 .mk .demo-card.is-right {
-  transform: translateX(46%) translateZ(-340px) rotateY(-26deg);
+  transform: translateX(32%) translateZ(-560px) rotateY(-28deg);
   opacity: 0.45;
   z-index: 2;
   filter: saturate(0.6) brightness(0.7);
 }
 .mk .demo-card.is-hidden {
-  transform: translateZ(-620px);
+  transform: translateZ(-820px);
   opacity: 0;
   z-index: 1;
   pointer-events: none;
@@ -2260,11 +2307,21 @@ html:has(.mk) {
  * les bordures ENSUITE, autour. Le châssis n'a plus de forme propre — il a
  * celle que son écran lui impose, comme un vrai appareil.
  *
- * Chaque appareil déclare cinq mesures, et le calcul en découle :
- *   --dv-ar    rapport de l'écran (largeur / hauteur) ;
+ * ─── ET LE RAPPORT DE L'ÉCRAN VIENT DE L'APPAREIL, PAS D'UNE CONSTANTE ───
+ *
+ * `--dv-ar` était saisi à la main, appareil par appareil, avec en commentaire
+ * le rapport de la capture qu'il devait suivre. Deux vérités indépendantes qui
+ * devaient rester d'accord : le genre de duo qui tient jusqu'au jour où l'on
+ * recapture une affiche. Il est désormais DÉDUIT de la résolution de
+ * l'appareil, que `DeviceFrame` descend en `--dv-app-w` / `--dv-app-h` depuis
+ * `DEVICE_SCREEN` — la même paire de nombres à laquelle `capture-shots.mjs`
+ * photographie l'affiche, et que l'iframe reçoit en dur. Cadre, affiche et
+ * application ne peuvent plus diverger : ils lisent la même source.
+ *
+ * Chaque appareil déclare donc quatre mesures, et le calcul en découle :
  *   --dv-px    bordure gauche et droite ;
  *   --dv-pt    bordure haute ;      --dv-pb   bordure basse (menton) ;
- *   --dv-extra ce que l'appareil occupe EN DEHORS du châssis (le pied).
+ *   --dv-extra ce que l'appareil occupe EN DEHORS du châssis (pied, patte).
  *
  * La largeur du châssis est alors la plus petite des deux contraintes : la
  * largeur disponible, ou celle qu'autorise la hauteur disponible. L'écran
@@ -2272,10 +2329,13 @@ html:has(.mk) {
  */
 .mk .dv {
   --dv-extra: 0px;
+  /* Rapport de l'écran : une conséquence de la résolution de l'appareil. */
+  --dv-ar: calc(var(--dv-app-w) / var(--dv-app-h));
   /*
-   * Grossissement de l'application embarquée. Voir `.dv-live` : à 1, l'app
-   * voit exactement la largeur de l'écran dessiné ; en dessous, elle croit
-   * disposer d'un écran plus large et se met en page comme sur l'appareil réel.
+   * Réduction optique de l'application embarquée. Valeur de repli seulement :
+   * `DeviceFrame` la RELÈVE sur l'écran réellement dessiné (largeur dessinée /
+   * `--dv-app-w`) et la réécrit ici. Ce repli n'est jamais observé — l'iframe
+   * ne se monte qu'au clic, donc bien après le premier effet.
    */
   --dv-zoom: 1;
   position: relative;
@@ -2329,38 +2389,45 @@ html:has(.mk) {
 .mk .dv-screen .ph img {
   object-position: top center;
 }
+/*
+ * ═══ L'APPLICATION EST RENDUE EN VRAIE GRANDEUR, PUIS RÉDUITE ═══
+ *
+ * L'iframe reçoit la résolution de l'appareil EN PIXELS ABSOLUS — 1 920 × 1 080
+ * pour le mural de la cuisine, 1 440 × 900 pour l'ordinateur du gérant — et
+ * c'est `transform: scale()` qui la fait tenir dans le cadre. L'application se
+ * met donc en page comme sur l'appareil réel, et le visiteur la voit en
+ * réduction, comme un écran regardé de loin.
+ *
+ * `100%` ne conviendrait pas, et la nuance est la raison d'être de tout ceci :
+ * en pourcentage, la résolution vue par l'application suit la largeur du cadre,
+ * qui suit celle de la fenêtre. Elle passerait donc sous les seuils de mise en
+ * page (900 px pour les colonnes de la cuisine, ~1 150 px pour la rangée de
+ * cartes du back-office) dès que la fenêtre rétrécit, sans que rien ne le
+ * signale. En pixels absolus, l'appareil embarqué a TOUJOURS la résolution
+ * qu'il a sur le terrain ; seule la réduction bouge, et `DeviceFrame` la
+ * recalcule à chaque changement de taille.
+ *
+ * `overflow: hidden` est sur `.dv-screen` : les 1 920 px de large de l'iframe
+ * ne débordent donc pas du châssis pendant que le facteur se met à jour.
+ */
 .mk .dv-live {
   display: block;
   border: 0;
   background: #0b0b0b;
   overscroll-behavior: contain;
-  /*
-   * L'application est rendue plus grande que l'écran, puis réduite. Elle croit
-   * donc disposer de `largeur / --dv-zoom` pixels — c'est ce qui rend au
-   * téléphone la mise en page d'un vrai téléphone plutôt que celle d'un écran
-   * de 268 px, largeur qu'aucun client n'a jamais eue dans la poche.
-   */
-  width: calc(100% / var(--dv-zoom));
-  height: calc(100% / var(--dv-zoom));
+  width: calc(var(--dv-app-w) * 1px);
+  height: calc(var(--dv-app-h) * 1px);
   transform: scale(var(--dv-zoom));
   transform-origin: top left;
 }
 
-/* Tablette en paysage — la caisse et l'écran cuisine, posés au comptoir.
- * 16/10 : le rapport EXACT de pos.png et kds.png (2560 × 1600). */
+/* Tablette 10 pouces en paysage — la caisse, posée au comptoir.
+ * 1280 × 800, « la référence » d'apps/kds/src/config.ts, et le format auquel
+ * pos.png est capturée (2560 × 1600 @2x). */
 .mk .dv-tablet {
-  --dv-ar: 1.6;
   --dv-px: 17px;
   --dv-pt: 13px;
   --dv-pb: 13px;
-  /*
-   * 844 / 1024 : l'écran dessiné fait 844 px, la tablette du comptoir en fait
-   * 1024. Sans ce rapport, la caisse embarquée se replie sur sa mise en page
-   * étroite — ticket ramené en bas, panneau de droite escamoté — et le
-   * visiteur voit une caisse qui ne ressemble pas à l'affiche juste au-dessus.
-   * Avec, il manipule EXACTEMENT l'écran de 1024 px du comptoir.
-   */
-  --dv-zoom: 0.824;
 }
 .mk .dv-tablet .dv-chassis {
   border-radius: 24px;
@@ -2381,20 +2448,12 @@ html:has(.mk) {
 }
 
 /* Téléphone — la commande client, prise à une main.
- * 0,4614 : le rapport EXACT de commande.png (860 × 1864), soit le 9/19,5 d'un
- * téléphone d'aujourd'hui à 0,04 % près. */
+ * 390 × 844 : un téléphone courant, et le format auquel commande.png est
+ * capturée (780 × 1688 @2x). */
 .mk .dv-phone {
-  --dv-ar: 0.4614;
   --dv-px: 9px;
   --dv-pt: 9px;
   --dv-pb: 9px;
-  /*
-   * ~390 px de large côté application, la largeur d'un téléphone courant :
-   * l'écran dessiné fait 268 px, et la commande en ligne y serait à l'étroit
-   * — titres coupés, bouton sur deux lignes — alors qu'elle tient sur un vrai
-   * téléphone. On lui rend sa largeur logique, on réduit l'image ensuite.
-   */
-  --dv-zoom: 0.69;
 }
 .mk .dv-phone .dv-chassis {
   border-radius: 38px;
@@ -2426,24 +2485,82 @@ html:has(.mk) {
   background: linear-gradient(180deg, #3d3d3d, #171717);
 }
 
-/* Écran large sur pied — le back-office du gérant (et l'écran de salle).
- * 16/10 : le rapport EXACT de backoffice.png (2880 × 1800), et celui d'un
- * écran d'ordinateur portable. Le menton (26 px) et le pied (24 px) prennent
- * de la hauteur : c'est `--dv-extra` qui les déclare au calcul. */
+/* ===== Moniteur mural 24 pouces — l'écran cuisine, au-dessus du piano =====
+ *
+ * IL A SON PROPRE CHÂSSIS, ET CE N'EST PAS UNE COQUETTERIE. La cuisine
+ * partageait celui de la tablette : elle héritait donc du 16/10, alors qu'un
+ * mural du commerce est en 16/9. La faire tourner en 1920 × 1080 dans un cadre
+ * en 16/10 aurait rendu deux bandes noires ou une affiche rognée — le rognage
+ * qu'on venait justement de ramener à 0,0 %.
+ *
+ * Un mural s'ACCROCHE : bordure fine et régulière (pas de menton de tablette),
+ * pas de pied, une patte de fixation (`.dv-mount`) et une ombre portée plus
+ * franche — il flotte devant le mur au lieu d'être posé.
+ */
+.mk .dv-wall {
+  --dv-px: 12px;
+  --dv-pt: 12px;
+  --dv-pb: 18px;
+  --dv-extra: 12px;
+}
+.mk .dv-wall .dv-chassis {
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(0, 0, 0, 0.3),
+    0 40px 90px rgba(0, 0, 0, 0.68);
+}
+.mk .dv-wall .dv-screen {
+  border-radius: 3px;
+}
+/* Témoin d'alimentation sur la bordure basse — un mural n'a pas d'objectif. */
+.mk .dv-wall .dv-cam {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.5;
+  box-shadow: 0 0 7px rgba(201, 161, 90, 0.55);
+}
+/* Patte de fixation : ce qui distingue « accroché » de « posé ». */
+.mk .dv-wall .dv-mount {
+  position: relative;
+  flex: none;
+  width: 100%;
+  height: var(--dv-extra);
+}
+.mk .dv-wall .dv-mount::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 116px;
+  height: 100%;
+  border-radius: 0 0 5px 5px;
+  background: linear-gradient(180deg, #232323, #0e0e0e);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5);
+}
+
+/* Écran d'ordinateur sur pied — le back-office du gérant.
+ * 1440 × 900 : l'écran du gérant, 16/10, et le format auquel backoffice.png
+ * est capturée (2880 × 1800 @2x). Le menton et le pied prennent de la
+ * hauteur : c'est `--dv-extra` qui déclare le pied au calcul.
+ *
+ * Menton et pied ont MAIGRI (26 → 18 px, 24 → 16 px), et c'est une décision de
+ * lisibilité, pas de dessin : ces 16 px rendus à l'écran valent 1,6 % de
+ * réduction en moins sur un back-office qui joue son menu de gauche à 11 px
+ * près. Le châssis reste reconnaissable, le texte reste lisible. */
 .mk .dv-wide {
-  --dv-ar: 1.6;
   --dv-px: 11px;
   --dv-pt: 11px;
-  --dv-pb: 26px;
-  --dv-extra: 24px;
-  /*
-   * Pas de grossissement ici, contrairement à la tablette et au téléphone, et
-   * ce n'est pas un oubli : ces deux-là ont une largeur logique canonique
-   * (1024 px au comptoir, ~390 px en poche) qu'il fallait leur rendre. Un
-   * ordinateur n'en a pas. Les 856 px de cet écran sont ceux d'un portable, le
-   * back-office y est chez lui — et réduire encore le texte pour gagner de la
-   * largeur rendrait illisible ce que le gérant est venu lire.
-   */
+  --dv-pb: 18px;
+  --dv-extra: 16px;
 }
 .mk .dv-wide .dv-chassis {
   border-radius: 13px 13px 9px 9px;
@@ -2454,7 +2571,7 @@ html:has(.mk) {
 /* Témoin de veille sur le menton, laiton de marque, discret. */
 .mk .dv-wide .dv-cam {
   position: absolute;
-  bottom: 10px;
+  bottom: 7px;
   left: 50%;
   transform: translateX(-50%);
   width: 4px;
@@ -2472,6 +2589,10 @@ html:has(.mk) {
    * pas diverger, et un pied plus haut rétrécit l'écran comme il se doit. */
   height: var(--dv-extra);
 }
+/* Col et socle se partagent exactement `--dv-extra` : 10 + 6 = 16. Un total
+ * plus grand ferait chevaucher les deux pièces, un plus petit laisserait un
+ * vide sous le socle — dans les deux cas le pied cesserait de ressembler à un
+ * pied, et le calcul de l'écran ne serait plus celui du dessin. */
 .mk .dv-wide .dv-stand::before {
   content: "";
   position: absolute;
@@ -2479,7 +2600,7 @@ html:has(.mk) {
   left: 50%;
   transform: translateX(-50%);
   width: 92px;
-  height: 17px;
+  height: 10px;
   clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%);
   background: linear-gradient(180deg, #262626, #131313);
 }
@@ -2490,7 +2611,7 @@ html:has(.mk) {
   left: 50%;
   transform: translateX(-50%);
   width: 196px;
-  height: 7px;
+  height: 6px;
   border-radius: 4px;
   background: linear-gradient(180deg, #2e2e2e, #101010);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.55);
@@ -2505,10 +2626,16 @@ html:has(.mk) {
   position: absolute;
   inset: auto 0 0 0;
   z-index: 3;
+  /*
+   * Deux boutons sur une ligne, la note en dessous (`flex-basis: 100%`).
+   * Aucun conteneur intermédiaire : c'est le `wrap` qui fait la rupture, donc
+   * une ligne de CSS plutôt qu'un `<div>` de plus dans quatre cartes.
+   */
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 9px;
+  justify-content: center;
+  gap: 9px 10px;
   padding: 56px 16px 20px;
   text-align: center;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.58) 44%, rgba(0, 0, 0, 0.9) 100%);
@@ -2550,11 +2677,41 @@ html:has(.mk) {
   outline: 2px solid var(--white);
   outline-offset: 3px;
 }
-/* Le repli plein écran n'existe que sous le seuil de lisibilité (voir plus bas). */
+/*
+ * ═══ LE PLEIN ÉCRAN EST UN RECOURS DE PREMIER RANG, PAS UN REPLI ═══
+ *
+ * Il ne s'affichait qu'en dessous de 810 px, quand la démo dans la page
+ * devenait impossible. C'était trop tard d'un cran : l'application embarquée
+ * est désormais RÉDUITE (1 920 px de cuisine dans ~1 130 px de cadre), donc
+ * son texte courant est plus petit que sur l'appareil réel. Le visiteur qui
+ * veut LIRE — la carte du back-office, les modificateurs d'un ticket — n'a
+ * aucune raison de deviner qu'un onglet lui rendrait la taille réelle.
+ *
+ * Il est donc là dès le premier regard, à côté d'« Essayer », en second rôle
+ * assumé : fond sombre contre le laiton du bouton principal. En dessous de
+ * 810 px il reste seul et redevient l'action principale (voir plus bas).
+ */
 .mk .demo-tryout {
-  display: none;
+  color: var(--white);
+  background: rgba(18, 18, 18, 0.82);
+  border-color: var(--border-10);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+.mk .demo-tryout:hover {
+  color: var(--white);
+  background: var(--btn-dark);
+  border-color: var(--white-30);
+}
+/* Flèche de sortie : le lien ouvre un onglet, ça se dit avant le clic. */
+.mk .demo-tryout::after {
+  content: "↗";
+  font-size: 0.95em;
+  line-height: 1;
+  opacity: 0.75;
 }
 .mk .demo-ctanote {
+  flex-basis: 100%;
   font-size: 11.5px;
   letter-spacing: 0.01em;
   color: var(--white-70);
@@ -2604,7 +2761,14 @@ html:has(.mk) {
     opacity: 1;
   }
 }
-.mk .demo-stop {
+/*
+ * Deux sorties, sous le cadre, pendant que la démo tourne : rendre la page
+ * (« Arrêter »), ou passer l'application en vraie grandeur dans un onglet.
+ * La seconde compte autant que la première ici : ce qu'on regarde est réduit,
+ * et c'est le seul endroit où le visiteur peut lire le produit à sa taille.
+ */
+.mk .demo-stop,
+.mk .demo-hintfull {
   font-family: inherit;
   font-size: 12px;
   color: var(--gray);
@@ -2613,12 +2777,19 @@ html:has(.mk) {
   border-radius: 16px;
   padding: 5px 12px;
   cursor: pointer;
+  text-decoration: none;
   transition: color 0.2s;
 }
-.mk .demo-stop:hover {
+.mk .demo-hintfull {
+  color: var(--accent);
+  border-color: rgba(201, 161, 90, 0.3);
+}
+.mk .demo-stop:hover,
+.mk .demo-hintfull:hover {
   color: var(--white);
 }
-.mk .demo-stop:focus-visible {
+.mk .demo-stop:focus-visible,
+.mk .demo-hintfull:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -2688,13 +2859,18 @@ html:has(.mk) {
   padding: 4px 11px;
 }
 @media (max-width: 1199.98px) {
+  /*
+   * La scène se referme, mais les applications embarquées gardent LEUR
+   * résolution : il n'y a plus de facteur de réduction à corriger ici — il est
+   * mesuré sur l'écran dessiné (voir `DeviceFrame`), donc juste à toute largeur
+   * de fenêtre, y compris entre deux points de rupture.
+   *
+   * Ce qui se dégrade alors, c'est la lisibilité de la démo dans la page, pas
+   * sa fidélité. C'est le rôle du bouton plein écran, présent dès le premier
+   * regard à côté d'« Essayer ».
+   */
   .mk .demo-stage {
-    --card-h: 520px;
-  }
-  /* Même intention qu'au-dessus : rendre à la caisse ses 1024 px de tablette,
-   * sur un écran dessiné qui n'en fait plus que ~723. */
-  .mk .dv-tablet {
-    --dv-zoom: 0.706;
+    --card-h: clamp(400px, calc(100svh - 96px), 560px);
   }
 }
 @media (max-width: 809.98px) {
@@ -2710,10 +2886,14 @@ html:has(.mk) {
     perspective: 1000px;
     transition: height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  /* Appareils couchés : la scène se referme sur eux au lieu de flotter. */
+  /* Appareils couchés : la scène se referme sur eux au lieu de flotter.
+   * Le mural est encore plus plat (16/9) : 20 px de moins suffisent. */
   .mk .demo-stage[data-device="tablet"],
   .mk .demo-stage[data-device="wide"] {
     --card-h: 280px;
+  }
+  .mk .demo-stage[data-device="wall"] {
+    --card-h: 260px;
   }
   .mk .demo-hint {
     display: none;
@@ -2740,11 +2920,26 @@ html:has(.mk) {
   .mk .dv-tablet .dv-chassis {
     border-radius: 16px;
   }
+  .mk .dv-wall {
+    --dv-px: 7px;
+    --dv-pt: 7px;
+    --dv-pb: 12px;
+    --dv-extra: 8px;
+  }
+  .mk .dv-wall .dv-chassis {
+    border-radius: 7px;
+  }
+  .mk .dv-wall .dv-cam {
+    bottom: 4px;
+  }
+  .mk .dv-wall .dv-mount::before {
+    width: 74px;
+  }
   .mk .dv-wide {
     --dv-px: 8px;
     --dv-pt: 8px;
-    --dv-pb: 18px;
-    --dv-extra: 18px;
+    --dv-pb: 14px;
+    --dv-extra: 12px;
   }
   .mk .dv-wide .dv-chassis {
     border-radius: 10px 10px 7px 7px;
@@ -2776,18 +2971,30 @@ html:has(.mk) {
   /*
    * PETIT ÉCRAN : ON RENONCE PROPREMENT.
    *
-   * Une caisse dessinée pour une tablette de 1024 px, pliée dans 375 px, ne se
+   * Une caisse dessinée pour une tablette de 1280 px, pliée dans 375 px, ne se
    * lit pas et ne se manipule pas — elle donnerait au patron du snack l'exacte
    * impression inverse de celle qu'on cherche. On garde donc l'affiche, et on
    * propose la vraie application en plein écran, dans un onglet à elle.
    * `AppsShowcase` démonte toute iframe déjà montée au passage sous ce seuil :
    * les deux bascules partagent la constante `NARROW`.
+   *
+   * Le lien plein écran, second rôle plus haut, redevient ici l'action
+   * PRINCIPALE et reprend le laiton : il n'a plus de bouton devant lui à qui
+   * céder la vedette.
    */
   .mk .demo-try {
     display: none;
   }
   .mk .demo-tryout {
-    display: inline-flex;
+    color: var(--black);
+    background: var(--accent);
+    border-color: var(--accent);
+    backdrop-filter: none;
+  }
+  .mk .demo-tryout:hover {
+    color: var(--black);
+    background: var(--link-hover);
+    border-color: var(--link-hover);
   }
   /* Le dégradé ne doit pas avaler une affiche déjà petite. */
   .mk .demo-cta {

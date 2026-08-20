@@ -1,0 +1,4 @@
+# Traces d’échec et notes de remise en état : produites à l’exécution,
+# jamais versionnées. Le dossier, lui, reste dans le dépôt.
+*
+!.gitignore

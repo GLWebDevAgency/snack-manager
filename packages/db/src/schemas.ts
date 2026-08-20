@@ -1,4 +1,5 @@
 import { Schema, type InferSchemaType } from 'mongoose';
+import { SM_INVOICE_VAT } from '@sm/contracts';
 
 // Conventions : prix en centimes (int), tenantId indexé en tête de chaque
 // collection tenant-scoped, timestamps automatiques partout.
@@ -102,6 +103,53 @@ export const TenantSchema = new Schema(
         { _id: false },
       ),
       default: () => ({ status: 'trial', since: new Date(), reason: '', suspendedAt: null }),
+    },
+    /**
+     * IDENTITÉ DE FACTURATION — celle qui s'imprime sur NOS factures.
+     *
+     * Distincte de `name` et `address`, qui décrivent l'ENSEIGNE et le
+     * COMPTOIR : « CLASS'FOOD » et l'adresse où l'on mange. Une facture, elle,
+     * s'adresse à une personne morale — « CLASS'FOOD SARL », à son siège, avec
+     * son SIRET. Les deux coïncident souvent et diffèrent parfois ; les
+     * confondre revient à envoyer au comptable du restaurant une pièce qu'il ne
+     * peut pas rattacher.
+     *
+     * TOUT EST FACULTATIF, et c'est délibéré : exiger un SIRET à l'inscription
+     * arrêterait net un restaurateur qui veut d'abord essayer. Ce qui manque
+     * s'imprime en emplacement vide et remonte au gérant sur son écran
+     * « Abonnement », où il le saisit lui-même — c'est LUI qui le connaît, et
+     * le chercher à sa place serait se tromper à sa place.
+     *
+     * Sous-schéma explicite (et non objet imbriqué implicite) pour que Mongoose
+     * infère des champs NON nullables côté TypeScript — même raison que pour
+     * `account` et `totals`.
+     */
+    billing: {
+      type: new Schema(
+        {
+          /** Raison sociale, si elle diffère du nom commercial. */
+          legalName: { type: String, default: '' },
+          /** Forme juridique et capital — « SARL au capital de 10 000 € ». */
+          legalForm: { type: String, default: '' },
+          /** 14 chiffres, sans espaces. Vide = pas encore renseigné. */
+          siret: { type: String, default: '' },
+          /** TVA intracommunautaire — `FR…`. */
+          vatNumber: { type: String, default: '' },
+          /** Adresse de FACTURATION — le siège, s'il diffère de l'établissement. */
+          address: { type: String, default: '' },
+          /** Où envoyer les factures, si ce n'est pas l'adresse du compte. */
+          email: { type: String, default: '' },
+        },
+        { _id: false },
+      ),
+      default: () => ({
+        legalName: '',
+        legalForm: '',
+        siret: '',
+        vatNumber: '',
+        address: '',
+        email: '',
+      }),
     },
     settings: {
       slotIntervalMin: { type: Number, default: 10 },
@@ -825,8 +873,51 @@ export const InvoiceSchema = new Schema(
       ),
       required: true,
     },
-    /** Montant en CENTIMES, comme partout ailleurs. */
+    /**
+     * Montant en CENTIMES, comme partout ailleurs.
+     *
+     * NE SE LIT JAMAIS SEUL : c'est `vat.amountsAre` qui dit s'il est hors
+     * taxes ou toutes taxes comprises. Un montant nu dans une collection de
+     * factures est exactement l'ambiguïté qui produit une erreur de
+     * déclaration — celle qu'on ne découvre qu'au contrôle.
+     */
     amountCents: { type: Number, required: true, min: 0 },
+    /**
+     * LE RÉGIME DE TVA DE LA PIÈCE, FIGÉ À SON ÉMISSION.
+     *
+     * Il est stocké SUR LA FACTURE, et non lu dans la configuration au moment
+     * de l'impression, pour une raison qui tient en une phrase : une facture de
+     * l'an dernier ne se recalcule pas au taux de cette année. Le jour où le
+     * taux change — ou celui où l'éditeur bascule en franchise en base —, les
+     * pièces déjà émises continuent de dire ce qu'elles ont dit au client, et
+     * seules les suivantes portent le nouveau régime.
+     *
+     * ─── LES PIÈCES ÉMISES AVANT CE CHAMP ───
+     *
+     * Elles ne portent RIEN : la collection ne stockait qu'un montant. Elles
+     * sont lues au défaut documenté `LEGACY_INVOICE_VAT` (@sm/contracts), qui
+     * décrit le régime sous lequel elles ont réellement été facturées, et la
+     * lecture le signale (`InvoiceTotals.stamped` vaut alors `false`). Aucune
+     * migration n'écrit à leur place : réécrire une pièce comptable pour lui
+     * faire dire ce qu'un défaut sait déjà déduire n'ajouterait pas une
+     * information, seulement une écriture qu'on ne pourrait plus distinguer
+     * d'une émission d'époque.
+     */
+    vat: {
+      type: new Schema(
+        {
+          /** Taux en POURCENT — `20`, `10`, `5.5`, `0` (franchise en base). */
+          ratePercent: { type: Number, required: true, min: 0 },
+          /** Ce que vaut `amountCents` : hors taxes chez nous. */
+          amountsAre: { type: String, enum: ['ht', 'ttc'], required: true },
+        },
+        { _id: false },
+      ),
+      // Le défaut vient de @sm/contracts, jamais recopié ici : deux endroits
+      // qui décident du taux, c'est un jour où ils diffèrent.
+      default: () => ({ ...SM_INVOICE_VAT }),
+      required: true,
+    },
     status: {
       type: String,
       enum: ['brouillon', 'envoyee', 'en_retard', 'payee', 'annulee'],

@@ -13,13 +13,33 @@
  *
  * Ce qu'il vérifie, dans l'ordre où ça compte pour un service en cours :
  *   1. l'API répond            → sans elle, ni caisse ni cuisine ;
- *   2. la carte publique sort  → c'est la seule lecture qui traverse
+ *   2. l'API sert LA RÉVISION ATTENDUE → voir plus bas, c'est le seul contrôle
+ *                                qui AFFIRME quelque chose sur le déploiement
+ *                                plutôt que sur l'environnement ;
+ *   3. la carte publique sort  → c'est la seule lecture qui traverse
  *                                Mongo de bout en bout ; si elle sort, la base
  *                                est jointe et le multi-établissement résout ;
- *   3. les trois interfaces servent leur page — et la bonne :
+ *   4. les trois interfaces servent leur page — et la bonne :
  *      on ne se contente pas d'un 200, on cherche le titre attendu, sinon un
  *      « 200 » servi par une page d'erreur d'infrastructure passerait pour un
  *      succès.
+ *
+ * ── « Ça répond » n'est pas « c'est ma version » ─────────────────────────────
+ *
+ * Un contrôle qui constate qu'il y a quelque chose qui répond ne distingue pas
+ * un déploiement réussi d'un déploiement raté dont l'ANCIENNE version continue
+ * de servir — le cas le plus fréquent chez Railway, et le plus trompeur.
+ *
+ * Depuis que `GET /health` publie son SHA (`apps/api/src/modules/health/`), on
+ * peut trancher. Renseignez `SM_REVISION_ATTENDUE` :
+ *
+ *     SM_REVISION_ATTENDUE=$(git rev-parse HEAD) node scripts/smoke.mjs staging
+ *
+ * `deploy.yml` la pose à `github.sha`, et SEULEMENT si la mise en ligne a
+ * réussi : quand elle a échoué, l'ancienne version sert forcément, et rougir
+ * là-dessus masquerait la seule information utile du moment — « le restaurant
+ * peut-il encaisser ? ». Sans la variable, le contrôle s'annonce IGNORÉ, la
+ * révision servie reste AFFICHÉE, et rien n'est affirmé.
  *
  * Aucune dépendance : `fetch` et `node:crypto` suffisent (Node ≥ 20).
  *
@@ -74,6 +94,10 @@ const TENTATIVES = Number(process.env.SM_TENTATIVES ?? 8);
 const ATTENTE_MS = Number(process.env.SM_ATTENTE_MS ?? 8000);
 const DELAI_REQUETE_MS = Number(process.env.SM_DELAI_REQUETE_MS ?? 15000);
 
+// La révision qu'on s'attend à voir servie — un SHA de commit, jamais une
+// valeur confidentielle. Vide = on n'affirme rien (voir l'en-tête).
+const REVISION_ATTENDUE = (process.env.SM_REVISION_ATTENDUE ?? '').trim();
+
 const DANS_ACTIONS = process.env.GITHUB_ACTIONS === 'true';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,8 +108,9 @@ function usage(message) {
 Usage :
     node scripts/smoke.mjs <staging|production>
 
-Surcharges facultatives (aucune n'est un secret) :
+Surcharges facultatives (aucune n'est confidentielle) :
     SM_URL_API   SM_URL_WEB   SM_URL_POS   SM_URL_KDS   SM_SLUG_CARTE
+    SM_REVISION_ATTENDUE — le SHA que l'API doit servir ; vide = on n'affirme rien
     SM_TENTATIVES (${TENTATIVES})   SM_ATTENTE_MS (${ATTENTE_MS})   SM_DELAI_REQUETE_MS (${DELAI_REQUETE_MS})
 `);
   process.exit(2);
@@ -148,23 +173,94 @@ async function avecReessais(verifier) {
 
 // ─── Les contrôles ───────────────────────────────────────────────────────────
 
+/**
+ * Lit `GET /health` et rend `{ charge, ms }`, ou `{ defaut }` décrivant ce qui
+ * cloche. Les deux contrôles qui suivent partent de là — deux appels distincts,
+ * volontairement : chacun réessaie pour son propre compte, et une API qui
+ * répond une fois sur deux doit se voir.
+ */
+async function lireSante(url) {
+  const { statut, corps, ms } = await requete(url);
+  if (statut !== 200) return { defaut: `HTTP ${statut}` };
+  let charge;
+  try {
+    charge = JSON.parse(corps);
+  } catch {
+    return { defaut: `réponse non-JSON : ${corps.slice(0, 120)}` };
+  }
+  if (charge.ok !== true) return { defaut: `charge inattendue : ${corps.slice(0, 120)}` };
+  if (charge.service !== 'snack-manager-api') return { defaut: `ce n'est pas notre API : service=${charge.service}` };
+  return { charge, ms };
+}
+
+/** Le SHA publié par l'API, ou '' — une valeur vide compte comme absente. */
+function revisionDe(charge) {
+  return typeof charge.revision === 'string' ? charge.revision.trim() : '';
+}
+
 function controleApi(cible) {
   const url = `${cible.api}/health`;
   return {
     nom: "L'API répond",
     url,
     executer: async (detail) => {
-      const { statut, corps, ms } = await requete(url);
-      if (statut !== 200) return `HTTP ${statut}`;
-      let charge;
-      try {
-        charge = JSON.parse(corps);
-      } catch {
-        return `réponse non-JSON : ${corps.slice(0, 120)}`;
-      }
-      if (charge.ok !== true) return `charge inattendue : ${corps.slice(0, 120)}`;
-      if (charge.service !== 'snack-manager-api') return `ce n'est pas notre API : service=${charge.service}`;
+      const { defaut, charge, ms } = await lireSante(url);
+      if (defaut) return defaut;
       detail.push(`${ms} ms`);
+      // Affichée dans TOUS les cas, même quand on n'a rien à comparer : le jour
+      // où une mise en ligne échoue, c'est cette ligne qui dit ce qui sert.
+      const servie = revisionDe(charge);
+      detail.push(servie ? `révision ${servie.slice(0, 7)}` : '⚠ aucune révision publiée');
+      if (charge.deploiement) detail.push(`déploiement ${String(charge.deploiement).slice(0, 8)}`);
+      return null;
+    },
+  };
+}
+
+/**
+ * LE SEUL CONTRÔLE QUI PARLE DU DÉPLOIEMENT.
+ *
+ * Tous les autres décrivent l'environnement : ils seraient verts avec la
+ * version d'avant en ligne. Celui-ci compare le SHA servi à celui qu'on vient
+ * de pousser, et c'est ce qui transforme « il y a quelque chose qui répond » en
+ * « c'est bien ma révision qui répond ».
+ */
+function controleRevision(cible) {
+  const url = `${cible.api}/health`;
+  const nom = "L'API sert la révision attendue";
+
+  if (!REVISION_ATTENDUE) {
+    return {
+      nom,
+      url,
+      ignore:
+        "aucune révision attendue (SM_REVISION_ATTENDUE vide) — sans elle ce contrôle " +
+        'ne peut qu\'observer, pas affirmer ; la révision servie reste affichée ci-dessus',
+    };
+  }
+
+  return {
+    nom,
+    url,
+    executer: async (detail) => {
+      const { defaut, charge } = await lireSante(url);
+      if (defaut) return defaut;
+
+      const servie = revisionDe(charge);
+      if (!servie) {
+        return (
+          "l'API ne publie aucune révision : SM_REVISION n'est pas posée sur le service " +
+          'Railway, ou le conteneur en service est antérieur à la route qui la publie ' +
+          '(voir docs/CI-CD.md § 11)'
+        );
+      }
+      if (servie !== REVISION_ATTENDUE) {
+        return (
+          `révision servie ${servie.slice(0, 7)} ≠ attendue ${REVISION_ATTENDUE.slice(0, 7)} — ` +
+          "la mise en ligne n'a pas pris : c'est une AUTRE version qui sert"
+        );
+      }
+      detail.push(`${servie.slice(0, 7)} — c'est bien la révision poussée`);
       return null;
     },
   };
@@ -234,6 +330,7 @@ async function principal() {
 
   const controles = [
     controleApi(cible),
+    controleRevision(cible),
     controleCarte(cible),
     ...CONTROLES_INTERFACES.map((i) => controleInterface(cible, i)),
   ];

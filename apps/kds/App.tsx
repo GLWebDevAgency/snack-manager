@@ -11,6 +11,7 @@ import {
 } from '@sm/client-core';
 import { client } from './src/client';
 import { Board } from './src/Board';
+import { DemoBanner } from './src/components/DemoBanner';
 import { PinScreen } from './src/components/PinScreen';
 import { useBoard } from './src/useBoard';
 import { useLayout } from './src/useLayout';
@@ -191,21 +192,25 @@ export default function App() {
   }, []);
 
   // ─── Écrans ───
+  //
+  // Les trois états partagent désormais une seule coque, et ce n'est pas de la
+  // cosmétique : le bandeau de démonstration doit être présent DÈS l'ouverture
+  // du service et jusqu'au tableau. Un visiteur qui tombe sur le chargement ou
+  // sur le clavier de code n'est pas moins perdu qu'un autre — il l'est plus.
 
-  if (restoring) {
-    return (
-      <View style={styles.boot}>
-        <StatusBar style="light" />
-        <ActivityIndicator color={palette.mut} />
-        <Text style={styles.bootText}>Ouverture du service…</Text>
-      </View>
-    );
-  }
+  const accent = session ? session.tenant.brandColor || palette.gold : palette.gold;
 
-  if (!session) {
-    return (
-      <View style={styles.root}>
-        <StatusBar style="light" />
+  return (
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      {/* Le retour à la vitrine, en démonstration UNIQUEMENT. */}
+      <DemoBanner />
+      {restoring ? (
+        <View style={styles.boot}>
+          <ActivityIndicator color={palette.mut} />
+          <Text style={styles.bootText}>Ouverture du service…</Text>
+        </View>
+      ) : !session ? (
         <PinScreen
           accent={palette.gold}
           tenantName="Snack Manager"
@@ -213,33 +218,26 @@ export default function App() {
           reducedMotion={reducedMotion}
           layout={layout}
         />
-      </View>
-    );
-  }
-
-  const accent = session.tenant.brandColor || palette.gold;
-
-  return (
-    <View style={styles.root}>
-      <StatusBar style="light" />
-      <Board
-        orders={board.orders}
-        now={now}
-        accent={accent}
-        tenantName={session.tenant.name}
-        online={!board.offline}
-        loading={board.loading}
-        error={board.offline ? board.error : null}
-        pending={sync.pending}
-        pendingIds={pendingIds}
-        soundOn={soundOn && soundSupported}
-        onToggleSound={toggleSound}
-        allDayOn={allDayOn}
-        onToggleAllDay={toggleAllDay}
-        onAdvance={board.advance}
-        reducedMotion={reducedMotion}
-        layout={layout}
-      />
+      ) : (
+        <Board
+          orders={board.orders}
+          now={now}
+          accent={accent}
+          tenantName={session.tenant.name}
+          online={!board.offline}
+          loading={board.loading}
+          error={board.offline ? board.error : null}
+          pending={sync.pending}
+          pendingIds={pendingIds}
+          soundOn={soundOn && soundSupported}
+          onToggleSound={toggleSound}
+          allDayOn={allDayOn}
+          onToggleAllDay={toggleAllDay}
+          onAdvance={board.advance}
+          reducedMotion={reducedMotion}
+          layout={layout}
+        />
+      )}
     </View>
   );
 }

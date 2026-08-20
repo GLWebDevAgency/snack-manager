@@ -222,9 +222,57 @@ export const CATALOGUE: CatalogueColumn[] = [
  * Châssis dans lequel l'application est présentée. C'est l'appareil RÉEL du
  * terrain, pas une préférence graphique : une caisse se tient sur une tablette
  * posée en paysage au comptoir, la commande client se prend au téléphone, le
- * back-office et l'écran de salle vivent sur un écran large.
+ * back-office vit sur un écran d'ordinateur, et l'écran cuisine est un moniteur
+ * ACCROCHÉ AU MUR au-dessus du piano.
+ *
+ * `wall` n'est pas une coquetterie : un mural 24 pouces est en 16/9 quand une
+ * tablette est en 16/10. Tant que la cuisine partageait le châssis `tablet`,
+ * elle héritait de son rapport — donc d'une affiche rognée et d'une iframe qui
+ * ne pouvait pas recevoir 1920 × 1080 sans bande noire.
  */
-export type DemoDevice = "tablet" | "phone" | "wide";
+export type DemoDevice = "tablet" | "phone" | "wide" | "wall";
+
+/**
+ * ═══ LA RÉSOLUTION LOGIQUE DE CHAQUE APPAREIL — LA SOURCE UNIQUE ═══
+ *
+ * C'est le nombre de pixels CSS que l'application EMBARQUÉE croit avoir. Rien
+ * à voir avec la place qu'elle occupe sur la page : le cadre l'affiche en
+ * réduction (voir `DeviceFrame`), exactement comme on regarde un écran de loin.
+ *
+ * POURQUOI CE MODULE EST NÉCESSAIRE. Sans lui, l'iframe reçoit la taille du
+ * cadre dessiné — 844 px pour la tablette, 856 pour l'écran large — et
+ * l'application se met en page pour un petit écran :
+ *
+ *   · la cuisine, sous les 900 px de `TABS_MAX_WIDTH` (apps/kds/src/config.ts),
+ *     bascule en mode COMPACT : une seule liste, des onglets par statut, et le
+ *     panneau « À lancer » évaporé. C'est le défaut qui a déclenché ce
+ *     chantier — le visiteur ne voyait pas le produit qu'on lui vend ;
+ *   · le back-office sous ~1150 px replie sa rangée de cartes (« Prévisions du
+ *     service » passe sous « Objectif du jour ») : la mise en page d'un petit
+ *     portable, pas celle de l'ordinateur du gérant.
+ *
+ * CHAQUE VALEUR EST CELLE D'UN APPAREIL RÉEL, ET CELLE DE SON AFFICHE.
+ * Les deux ne peuvent pas diverger : `scripts/capture-shots.mjs` photographie
+ * chaque surface À CES DIMENSIONS. Le cadre porte donc le rapport exact de la
+ * capture (aucun rognage) ET celui de l'application (aucune bande noire), et
+ * le passage de l'affiche à la démo au clic ne fait bouger aucun pixel.
+ * Changer un nombre ici, c'est recapturer l'affiche correspondante.
+ *
+ *   · tablet 1280 × 800 — la tablette 10 pouces du comptoir, nommée
+ *     « la référence » par apps/kds/src/config.ts ;
+ *   · wall   1920 × 1080 — le mural 24 pouces de la cuisine. Au-dessus de
+ *     `ALLDAY_MIN_SCREEN` (1240) : trois colonnes ET le panneau « À lancer ».
+ *     Petit côté 1080 → échelle typographique 1,28 dans le KDS, celle qui rend
+ *     l'écran lisible depuis la friteuse ;
+ *   · wide   1440 × 900 — l'ordinateur du gérant, 16/10 comme son châssis ;
+ *   · phone  390 × 844 — un téléphone courant, celui du client dans la file.
+ */
+export const DEVICE_SCREEN: Record<DemoDevice, { w: number; h: number }> = {
+  tablet: { w: 1280, h: 800 },
+  wall: { w: 1920, h: 1080 },
+  wide: { w: 1440, h: 900 },
+  phone: { w: 390, h: 844 },
+};
 
 /**
  * Origines des applications DE TERRAIN embarquées dans la vitrine.
@@ -295,9 +343,22 @@ export type DemoLive = {
    * `AppsShowcase`.
    */
   href: string;
-  /** Bouton posé sur l'affiche, sur grand écran. */
+  /** Bouton posé sur l'affiche, sur grand écran. Monte la démo dans le cadre. */
   cta: string;
-  /** Même promesse en petit écran, où la démo s'ouvre dans un onglet. */
+  /**
+   * Ouverture dans un onglet, À TOUTE LARGEUR — plus un repli de petit écran.
+   *
+   * L'application embarquée est réduite pour tenir dans le cadre (1920 px de
+   * cuisine dans ~1130 px), donc son texte est plus petit que sur l'appareil
+   * réel. Ce lien est la seule façon de la lire à sa taille : il est proposé
+   * dès le premier regard, à côté de `cta`, et de nouveau sous le cadre
+   * pendant que la démo tourne.
+   *
+   * Le libellé ne nomme donc plus l'application (« Ouvrir la caisse en plein
+   * écran ») : côte à côte avec « Essayer la caisse », il la nommait deux fois
+   * et débordait de la ligne. En dessous de 810 px, où il reste seul, la
+   * pastille active au-dessus du cadre dit déjà de quelle app il s'agit.
+   */
   ctaOut: string;
   /**
    * Par où commencer — UNE phrase, propre à l'application.
@@ -348,7 +409,7 @@ export const DEMO_APPS: DemoApp[] = [
     live: {
       href: demoHref(DEMO_ORIGINS.pos),
       cta: "Essayer la caisse",
-      ctaOut: "Ouvrir la caisse en plein écran",
+      ctaOut: "Ouvrir en plein écran",
       hint: "Touchez un produit pour composer une commande, puis encaissez.",
       title: "Caisse Snack Manager en démonstration",
     },
@@ -356,7 +417,10 @@ export const DEMO_APPS: DemoApp[] = [
   {
     id: "kds",
     label: "Cuisine (KDS)",
-    device: "tablet",
+    // Un mural, pas une tablette : 16/9, et 1920 × 1080 dans le cadre. Voir
+    // `DEVICE_SCREEN` — en dessous de 900 px l'app bascule en mode onglets et
+    // le panneau « À lancer » disparaît, c'est-à-dire tout ce qu'on montre ici.
+    device: "wall",
     shot: { src: "/shots/kds.png", alt: "App cuisine : colonnes Nouveau, En préparation, Prêt avec minuteurs" },
     lead: "Cuisine.",
     body: " Les commandes arrivent seules, « 3 frites à lancer » en un coup d'œil, statuts Nouveau → En prépa → Prêt, minuteurs et alerte sonore.",
@@ -364,7 +428,7 @@ export const DEMO_APPS: DemoApp[] = [
     live: {
       href: demoHref(DEMO_ORIGINS.kds),
       cta: "Essayer l'écran cuisine",
-      ctaOut: "Ouvrir la cuisine en plein écran",
+      ctaOut: "Ouvrir en plein écran",
       hint: "Ouvrez « Nouveau » et touchez « Accepter » : le ticket part en préparation.",
       title: "Écran cuisine Snack Manager en démonstration",
     },
@@ -380,7 +444,7 @@ export const DEMO_APPS: DemoApp[] = [
     live: {
       href: DEMO_PATHS.order,
       cta: "Essayer la commande en ligne",
-      ctaOut: "Ouvrir la commande en ligne",
+      ctaOut: "Ouvrir en plein écran",
       hint: "Composez un tacos, ajoutez-le au panier, choisissez votre créneau.",
       title: "Commande en ligne Snack Manager en démonstration",
     },
@@ -396,7 +460,7 @@ export const DEMO_APPS: DemoApp[] = [
     live: {
       href: DEMO_PATHS.bo,
       cta: "Essayer le back-office",
-      ctaOut: "Ouvrir le back-office en plein écran",
+      ctaOut: "Ouvrir en plein écran",
       // L'enjeu du back-office n'est pas un geste, c'est l'ÉTENDUE : on invite
       // donc explicitement à ouvrir les écrans les uns après les autres.
       hint: "Promenez-vous dans le menu de gauche : tout est là, écran par écran.",

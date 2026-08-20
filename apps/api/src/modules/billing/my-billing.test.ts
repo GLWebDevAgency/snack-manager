@@ -1,18 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { Types, type Model } from 'mongoose';
-import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import type { ConfigService } from '@nestjs/config';
 import {
+  EMPTY_BILLING_IDENTITY,
   EMPTY_PARTY,
   INVOICE_DISCOUNT_MENTION,
   INVOICE_LATE_PENALTY_MENTION,
   INVOICE_LEGAL_PLACEHOLDER,
   INVOICE_RECOVERY_FEE_MENTION,
   INVOICE_VAT_EXEMPT_MENTION,
+  LEGACY_INVOICE_VAT,
   PLAN_MRR_CENTS,
+  TenantBillingIdentitySchema,
+  billingIdentityMismatch,
   buildInvoiceDocument,
+  isFrenchVatShape,
   invoiceVat,
   invoiceView,
   isTenantVisibleInvoice,
@@ -110,6 +120,25 @@ class FakeTenants {
   findById(id: unknown): FakeOne {
     const row = this.rows.find((r) => same(r._id, id));
     return new FakeOne(row ? { ...row } : null);
+  }
+  /**
+   * `$set` À CHEMINS POINTÉS, comme Mongo — et surtout PAS un remplacement du
+   * document. C'est la seule façon de faire échouer ici un service qui
+   * écraserait `settings` ou `hours` en écrivant l'identité de facturation : la
+   * doublure doit refuser ce que la production refuserait.
+   */
+  async updateOne(filter: Row, update: { $set: Record<string, unknown> }): Promise<void> {
+    const row = this.rows.find((r) => matches(r, filter));
+    if (!row) return;
+    for (const [path, value] of Object.entries(update.$set)) {
+      const keys = path.split('.');
+      let target = row as Record<string, unknown>;
+      for (const key of keys.slice(0, -1)) {
+        if (typeof target[key] !== 'object' || target[key] === null) target[key] = {};
+        target = target[key] as Record<string, unknown>;
+      }
+      target[keys[keys.length - 1]!] = value;
+    }
   }
   asModel(): Model<Tenant> {
     return this as unknown as Model<Tenant>;
@@ -375,15 +404,21 @@ describe('Mentions légales', () => {
     expect(fields).toContain('issuer.vatNumber');
     expect(fields).toContain('issuer.address');
     expect(fields).toContain('customer.address');
-    expect(fields).toContain('vat.regime');
     expect(fields).not.toContain('customer.name');
+    // Le SIRET du CLIENT n'est pas une mention obligatoire : c'est celui de
+    // l'émetteur que la loi exige. Le réclamer ferait croire au restaurateur
+    // qu'il a mal rempli quelque chose.
+    expect(fields).not.toContain('customer.siret');
   });
 
+  /**
+   * LE RÉGIME DE TVA N'EST PLUS UN TROU. Il fut un temps où il figurait dans
+   * les manques, faute d'être stocké nulle part : la base ne portait qu'un
+   * montant nu. Il est désormais décidé (`SM_INVOICE_VAT`) et figé sur chaque
+   * pièce — il n'y a plus rien à collecter.
+   */
   it('ne signale plus rien quand tout est renseigné', () => {
-    const doc = buildInvoiceDocument(facture, ISSUER_COMPLET, CUSTOMER, {
-      ratePercent: 20,
-      amountsAre: 'ht',
-    });
+    const doc = buildInvoiceDocument(facture, ISSUER_COMPLET, CUSTOMER);
     expect(doc.gaps).toEqual([]);
     expect(doc.vat.baseCents).toBe(13_900);
     expect(doc.vat.vatCents).toBe(2_780);
@@ -442,23 +477,22 @@ describe('Mentions légales', () => {
     expect(mine.legalGaps.map((g) => g.field)).not.toContain('customer.address');
   });
 
-  it('lit le régime de TVA et l’identité de l’émetteur dans l’environnement', () => {
+  it('lit l’identité de l’émetteur dans l’environnement, et rien de plus', () => {
     const config = new IssuerConfig(
       fakeConfig({
         SM_BILLING_ISSUER_NAME: 'SNACK MANAGER',
         SM_BILLING_ISSUER_SIRET: '90000000000012',
-        SM_BILLING_VAT_RATE: '20',
-        SM_BILLING_AMOUNTS: 'HT',
       }),
     );
     expect(config.issuer().name).toBe('SNACK MANAGER');
+    // Ce qui n'est pas fourni vaut `null` et s'imprimera en emplacement vide —
+    // jamais une valeur plausible.
     expect(config.issuer().rcs).toBeNull();
-    expect(config.vat()).toEqual({ ratePercent: 20, amountsAre: 'ht' });
+    expect(config.issuer().vatNumber).toBeNull();
 
-    // Une valeur illisible vaut une absence : jamais un zéro silencieux, qui
-    // ferait passer une entreprise assujettie pour une franchise en base.
-    const bancal = new IssuerConfig(fakeConfig({ SM_BILLING_VAT_RATE: 'vingt pour cent' }));
-    expect(bancal.vat().ratePercent).toBeNull();
+    // Une chaîne vide n'est pas une identité : elle vaut absence.
+    const vide = new IssuerConfig(fakeConfig({ SM_BILLING_ISSUER_NAME: '   ' }));
+    expect(vide.issuer().name).toBeNull();
   });
 });
 
@@ -473,7 +507,6 @@ describe('Rendu PDF', () => {
       vatNumber: 'FR00900000000',
     },
     { ...EMPTY_PARTY, name: "CLASS'FOOD", address: 'Perriers-sur-Andelle' },
-    { ratePercent: 20, amountsAre: 'ht' },
   );
 
   const pdf = renderInvoicePdf(doc);
@@ -521,7 +554,12 @@ describe('Rendu PDF', () => {
     expect(text).toContain(''); // € — 0x80 en CP1252
     expect(text).not.toContain('Ã©');
     // L'espace fine des milliers ne doit jamais sortir en « ? » dans un montant.
-    const milliers = renderInvoicePdf({ ...doc, amountCents: 139_000 }).toString('latin1');
+    const gros = buildInvoiceDocument(
+      invoiceView(invoiceRow({ amountCents: 139_000 }) as never, NOW),
+      EMPTY_PARTY,
+      EMPTY_PARTY,
+    );
+    const milliers = renderInvoicePdf(gros).toString('latin1');
     expect(milliers).toContain('1 390,00 ');
   });
 
@@ -534,7 +572,334 @@ describe('Rendu PDF', () => {
     const rendu = renderInvoicePdf(incomplet).toString('latin1');
     expect(rendu).toContain('COMPL');
     expect(rendu).toContain('Mentions obligatoires');
-    // Aucun montant hors taxes n'est fabriqué tant que le régime est inconnu.
-    expect(incomplet.vat.baseCents).toBeNull();
+    expect(incomplet.gaps.map((g) => g.field)).toContain('issuer.siret');
+    /*
+     * L'IDENTITÉ DE L'ÉMETTEUR MANQUE, PAS LE RÉGIME DE TVA — et les deux ne se
+     * traitent pas pareil. Le SIRET se CONSTATE : tant qu'il n'est pas fourni,
+     * la facture porte un emplacement vide, parce qu'inventer un numéro
+     * d'entreprise sur une pièce comptable est un faux. Le taux, lui, se
+     * DÉCIDE, et la pièce le porte depuis son émission. Une facture peut donc
+     * être ventilée juste tout en restant incomplète.
+     */
+    expect(incomplet.vat.baseCents).toBe(13_900);
+    expect(incomplet.vat.totalCents).toBe(16_680);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// LE MONTANT DIT CE QU'IL EST
+//
+// C'est la réparation qui compte le plus dans ce module : `amountCents` était
+// un nombre nu, et personne — ni le code, ni le PDF, ni le comptable — ne
+// pouvait dire s'il était hors taxes. Les tests ci-dessous verrouillent les
+// deux moitiés de la réponse : ce que porte une pièce émise depuis, et ce
+// qu'on décide des pièces émises avant.
+// ─────────────────────────────────────────────────────────────
+
+describe('Hors taxes, TVA, toutes taxes comprises', () => {
+  it('lit le taux FIGÉ SUR LA PIÈCE et ventile à partir de lui', () => {
+    const vue = invoiceView(
+      invoiceRow({ amountCents: 13_900, vat: { ratePercent: 20, amountsAre: 'ht' } }) as never,
+      NOW,
+    );
+    expect(vue.totals.stamped).toBe(true);
+    expect(vue.totals.basis).toBe('ht');
+    expect([vue.totals.htCents, vue.totals.vatCents, vue.totals.ttcCents]).toEqual([
+      13_900, 2_780, 16_680,
+    ]);
+    expect(vue.totals.ttcLabel).toBe('166,80 €');
+  });
+
+  /**
+   * LE TAUX D'ÉPOQUE L'EMPORTE SUR LE TAUX COURANT. Une facture de 2025 émise
+   * à 10 % reste à 10 % : la réimprimer au taux d'aujourd'hui fabriquerait une
+   * seconde version d'une pièce déjà envoyée, peut-être payée, sûrement
+   * déclarée.
+   */
+  it('n’applique JAMAIS le taux courant à une pièce qui en porte un autre', () => {
+    const vue = invoiceView(
+      invoiceRow({ amountCents: 10_000, vat: { ratePercent: 10, amountsAre: 'ht' } }) as never,
+      NOW,
+    );
+    expect(vue.totals.ratePercent).toBe(10);
+    expect(vue.totals.ttcCents).toBe(11_000);
+  });
+
+  /**
+   * LES FACTURES DÉJÀ ÉMISES. Elles ne portent aucun taux — la base n'en
+   * stockait pas. Le défaut documenté (`LEGACY_INVOICE_VAT`) dit sous quel
+   * régime elles ont réellement été facturées, et la lecture SIGNALE qu'il
+   * s'agit d'une reconstitution : `stamped` vaut `false`, un audit sait donc
+   * toujours distinguer un taux lu d'un taux déduit.
+   */
+  it('traite les factures antérieures au champ par un défaut documenté, et le dit', () => {
+    const ancienne = invoiceView(invoiceRow({ amountCents: 29_000 }) as never, NOW);
+    expect(ancienne.totals.stamped).toBe(false);
+    expect(ancienne.totals.ratePercent).toBe(LEGACY_INVOICE_VAT.ratePercent);
+    expect(ancienne.totals.basis).toBe('ht');
+    // 290 € de mise en place : du HT, donc 348 € réellement dus.
+    expect(ancienne.totals.ttcCents).toBe(34_800);
+  });
+
+  /**
+   * Un demi-marquage ne dit pas ce qu'est le montant : un taux sans assiette
+   * laisse entière la question « 139 €, HT ou TTC ? ». Il vaut donc une
+   * absence — et l'absence, elle, a une règle écrite.
+   */
+  it('refuse un marquage incomplet et retombe sur la règle écrite', () => {
+    const bancale = invoiceView(
+      invoiceRow({ vat: { ratePercent: 20, amountsAre: null } }) as never,
+      NOW,
+    );
+    expect(bancale.totals.stamped).toBe(false);
+    expect(bancale.totals.ratePercent).toBe(LEGACY_INVOICE_VAT.ratePercent);
+  });
+
+  it('ventile aussi un montant stocké TTC, sans perdre un centime', () => {
+    const vue = invoiceView(
+      invoiceRow({ amountCents: 9_999, vat: { ratePercent: 5.5, amountsAre: 'ttc' } }) as never,
+      NOW,
+    );
+    expect(vue.totals.htCents + vue.totals.vatCents).toBe(9_999);
+    expect(vue.totals.ttcCents).toBe(9_999);
+  });
+
+  /**
+   * DEUX CHIFFRES, DEUX QUESTIONS. « Combien avons-nous gagné » se compte hors
+   * taxes — la TVA n'est pas un revenu, elle est collectée pour l'État.
+   * « Combien doit-il virer » se compte TTC. Les confondre, c'est soit gonfler
+   * le chiffre d'affaires d'un cinquième, soit réclamer une somme qui ne solde
+   * pas la facture.
+   */
+  it('sépare le reste dû HT (le revenu) du reste dû TTC (le virement)', async () => {
+    const { invoices, tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD));
+    invoices.seed(
+      invoiceRow({
+        number: 'SM-2026-0001',
+        status: 'envoyee',
+        paidAt: null,
+        method: null,
+        dueAt: new Date('2026-09-01T00:00:00.000Z'),
+        vat: { ratePercent: 20, amountsAre: 'ht' },
+      }),
+    );
+
+    const mine = await service.mine(CLASSFOOD, TOUT, NOW);
+
+    expect(mine.outstanding.totalDueCents).toBe(13_900);
+    expect(mine.outstanding.totalDueTtcCents).toBe(16_680);
+    expect(mine.outstanding.totalDueTtcLabel).toBe('166,80 €');
+    expect(mine.nextDue?.amountCents).toBe(13_900);
+    expect(mine.nextDue?.amountTtcCents).toBe(16_680);
+  });
+
+  it('projette l’échéance théorique au régime COURANT, TVA comprise', async () => {
+    const { tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD));
+    const mine = await service.mine(CLASSFOOD, TOUT, NOW);
+    // Aucune facture : le prochain prélèvement est une projection, sans numéro.
+    expect(mine.nextDue?.invoiceNumber).toBeNull();
+    expect(mine.nextDue?.amountCents).toBe(PLAN_MRR_CENTS.complet);
+    expect(mine.nextDue?.amountTtcCents).toBe(16_680);
+  });
+
+  it('imprime les trois lignes sur le PDF, chiffrées', () => {
+    const doc = buildInvoiceDocument(
+      invoiceView(invoiceRow({ vat: { ratePercent: 20, amountsAre: 'ht' } }) as never, NOW),
+      { ...EMPTY_PARTY, name: 'SNACK MANAGER' },
+      { ...EMPTY_PARTY, name: "CLASS'FOOD" },
+    );
+    const rendu = renderInvoicePdf(doc).toString('latin1');
+    expect(rendu).toContain('Total hors taxes');
+    expect(rendu).toContain('139,00');
+    // Les parenthèses sont ÉCHAPPÉES dans une chaîne littérale PDF — sans quoi
+    // le lecteur croirait la chaîne terminée au milieu du taux.
+    expect(rendu).toContain('TVA \\(TVA 20 %\\)');
+    expect(rendu).toContain('27,80');
+    expect(rendu).toContain('Total toutes taxes comprises');
+    expect(rendu).toContain('166,80');
+  });
+
+  /**
+   * CE QUE LE CLIENT VIRE, C'EST LE TTC. Annoncer « reste à régler 139,00 € »
+   * ferait arriver un virement inférieur d'un cinquième, et la facture
+   * resterait éternellement « partiellement réglée » pour une raison que
+   * personne ne comprendrait au téléphone.
+   */
+  it('annonce le reste à régler en TTC, pas en HT', () => {
+    const impayee = buildInvoiceDocument(
+      invoiceView(
+        invoiceRow({
+          status: 'envoyee',
+          paidAt: null,
+          method: null,
+          vat: { ratePercent: 20, amountsAre: 'ht' },
+        }) as never,
+        NOW,
+      ),
+      { ...EMPTY_PARTY, name: 'SNACK MANAGER' },
+      { ...EMPTY_PARTY, name: "CLASS'FOOD" },
+    );
+    const rendu = renderInvoicePdf(impayee).toString('latin1');
+    expect(rendu).toContain('Reste à régler : 166,80');
+    expect(rendu).toContain('TTC');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// L'IDENTITÉ DE FACTURATION DU CLIENT
+// ─────────────────────────────────────────────────────────────
+
+describe('Identité de facturation du client', () => {
+  const IDENTITE = {
+    legalName: "CLASS'FOOD SARL",
+    legalForm: 'SARL au capital de 10 000 €',
+    // SIRET de démonstration, clé de Luhn valide.
+    siret: '73282932000074',
+    vatNumber: 'FR44732829320',
+    address: '12 rue du Siège — 27000 Évreux',
+    email: 'compta@classfood.fr',
+  };
+
+  const valide = (over: Partial<typeof IDENTITE> = {}) =>
+    TenantBillingIdentitySchema.safeParse({ ...IDENTITE, ...over });
+
+  it('accepte un SIRET et un numéro de TVA bien formés', () => {
+    const parsed = valide();
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.siret).toBe('73282932000074');
+  });
+
+  it('refuse un SIRET dont la clé de contrôle ne tombe pas juste', () => {
+    // Deux chiffres inversés : la forme reste bonne, la clé de Luhn non. C'est
+    // exactement ce qui arrive à un numéro recopié depuis un Kbis.
+    expect(valide({ siret: '73282932000047' }).success).toBe(false);
+    expect(valide({ siret: '7328293200007' }).success).toBe(false);
+    // Vide = « pas encore renseigné », jamais une erreur : on ne bloque pas un
+    // restaurateur qui veut d'abord essayer le produit.
+    expect(valide({ siret: '', vatNumber: '' }).success).toBe(true);
+  });
+
+  it('normalise les espaces d’un SIRET et la casse d’un numéro de TVA', () => {
+    const parsed = valide({ siret: '732 829 320 00074', vatNumber: 'fr44 732829320' });
+    expect(parsed.data?.siret).toBe('73282932000074');
+    expect(parsed.data?.vatNumber).toBe('FR44732829320');
+  });
+
+  it('refuse un numéro de TVA dont la clé ne correspond pas au SIREN', () => {
+    expect(valide({ vatNumber: 'FR99732829320' }).success).toBe(false);
+    expect(isFrenchVatShape('FR44732829320')).toBe(true);
+    // Les clés anciennes contiennent des lettres et ne se recalculent pas : on
+    // vérifie la forme plutôt que de refuser un numéro valide.
+    expect(isFrenchVatShape('FRK7732829320')).toBe(true);
+  });
+
+  /**
+   * LA RÈGLE QUI SE VOIT LE MOINS À L'ŒIL NU. Un SIRET et un numéro de TVA qui
+   * ne portent pas le même SIREN, c'est un copier-coller depuis le dossier d'un
+   * autre client — et sur une facture, personne ne le remarquera jamais.
+   */
+  it('refuse un SIRET et un numéro de TVA qui ne désignent pas la même entreprise', async () => {
+    const { tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD));
+    const parsed = TenantBillingIdentitySchema.parse({
+      ...IDENTITE,
+      vatNumber: 'FR40123456824',
+    });
+    expect(billingIdentityMismatch(parsed)).toMatch(/SIREN/);
+    await expect(service.updateIdentity(CLASSFOOD, parsed)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('écrit champ par champ, sans toucher au reste de l’établissement', async () => {
+    const { tenants, service } = build();
+    const tenant = tenants.seed(tenantRow(CLASSFOOD));
+    const parsed = TenantBillingIdentitySchema.parse(IDENTITE);
+
+    await service.updateIdentity(CLASSFOOD, parsed);
+
+    expect((tenant.billing as Record<string, unknown>).siret).toBe('73282932000074');
+    // Le compte, la formule et l'adresse de l'établissement sont intacts : une
+    // écriture large sur `tenants` est la façon dont on perd un réglage sans
+    // s'en apercevoir.
+    expect(tenant.plan).toBe('complet');
+    expect(tenant.address).toContain('Perriers-sur-Andelle');
+    expect((tenant.account as Record<string, unknown>).status).toBe('active');
+  });
+
+  it('rend l’identité saisie sur l’écran du gérant, et la dit modifiable', async () => {
+    const { tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD, { billing: { ...IDENTITE } }));
+    const mine = await service.mine(CLASSFOOD, TOUT, NOW);
+    expect(mine.identity.siret).toBe('73282932000074');
+    expect(mine.identityEditable).toBe(true);
+  });
+
+  /**
+   * Le compte suspendu garde l'ÉCRAN — c'est sa seule porte pour régulariser —
+   * mais l'écriture repasse par le garde global, qui la refuse. L'écran le
+   * sait d'avance plutôt que d'envoyer le gérant contre un 403 muet.
+   */
+  it('annonce le formulaire en lecture seule quand le compte est suspendu', async () => {
+    const { tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD, { account: { status: 'suspended', since: NOW } }));
+    const mine = await service.mine(CLASSFOOD, TOUT, NOW);
+    expect(mine.identityEditable).toBe(false);
+  });
+
+  it('n’invente rien : un établissement sans identité saisie n’en a pas', async () => {
+    const { tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD));
+    const mine = await service.mine(CLASSFOOD, TOUT, NOW);
+    expect(mine.identity).toEqual(EMPTY_BILLING_IDENTITY);
+  });
+
+  /**
+   * LA RAISON SOCIALE SAISIE L'EMPORTE SUR L'ENSEIGNE, et l'adresse de
+   * facturation sur celle du comptoir : c'est le gérant qui sait laquelle des
+   * deux son comptable attend.
+   */
+  it('préfère ce que le gérant a saisi à ce que nous savions de lui', async () => {
+    const { invoices, tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD, { billing: { ...IDENTITE } }));
+    const facture = invoices.seed(invoiceRow({ number: 'SM-2026-0001' }));
+
+    const doc = await service.document(CLASSFOOD, String(facture._id), NOW);
+
+    expect(doc.customer.name).toBe("CLASS'FOOD SARL");
+    expect(doc.customer.address).toContain('rue du Siège');
+    expect(doc.customer.siret).toBe('73282932000074');
+    expect(doc.customer.vatNumber).toBe('FR44732829320');
+
+    const rendu = renderInvoicePdf(doc).toString('latin1');
+    expect(rendu).toContain('73282932000074');
+    expect(rendu).toContain('FR44732829320');
+  });
+
+  /**
+   * TANT QU'IL N'A RIEN SAISI, on imprime ce qu'on SAIT — son enseigne et
+   * l'adresse de son établissement — et rien de plus. Une adresse
+   * d'établissement exacte vaut mieux qu'un emplacement vide ; un SIRET
+   * inventé ne vaut rien du tout.
+   */
+  it('retombe sur l’enseigne et l’adresse de l’établissement, sans combler le reste', async () => {
+    const { invoices, tenants, service } = build();
+    tenants.seed(tenantRow(CLASSFOOD));
+    const facture = invoices.seed(invoiceRow({ number: 'SM-2026-0001' }));
+
+    const doc = await service.document(CLASSFOOD, String(facture._id), NOW);
+
+    expect(doc.customer.name).toBe("CLASS'FOOD");
+    expect(doc.customer.address).toContain('Perriers-sur-Andelle');
+    expect(doc.customer.siret).toBeNull();
+    expect(doc.customer.vatNumber).toBeNull();
+    // Et le PDF ne réclame RIEN au client : ce sont les mentions de l'ÉMETTEUR
+    // qui sont obligatoires. Le seul « SIRET : [À COMPLÉTER] » de la page est
+    // donc celui du bloc émetteur — le bloc client n'en ajoute pas un second,
+    // qui ferait croire au restaurateur qu'il a mal rempli quelque chose.
+    const rendu = renderInvoicePdf(doc).toString('latin1');
+    expect(rendu.split('SIRET : [')).toHaveLength(2);
   });
 });

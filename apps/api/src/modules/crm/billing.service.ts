@@ -9,21 +9,17 @@ import { Model, Types } from 'mongoose';
 import {
   BILLING_JOURNAL,
   INSTALL_FEE_CENTS,
-  INVOICE_KIND_LABELS,
-  INVOICE_PAYMENT_METHOD_LABELS,
-  INVOICE_STATUS_LABELS,
+  SM_INVOICE_VAT,
   TENANT_ACCOUNT_STATUS_LABELS,
   billingPeriod,
-  daysBetween,
-  daysLate,
   defaultInvoiceLabel,
-  effectiveInvoiceStatus,
   formatEuros,
   invoiceCounterId,
+  invoiceView,
   isAccessBlocked,
-  isDueInvoiceStatus,
   formatInvoiceNumber,
   monthKey,
+  nextInvoiceDue,
   planLabel,
   planMrrCents,
   shiftMonthKey,
@@ -32,7 +28,6 @@ import {
   type BillingPlan,
   type CrmBillingOverdue,
   type CrmInvoice,
-  type CrmNextDue,
   type CrmOutstanding,
   type CrmOverdueInvoice,
   type CrmTenantBilling,
@@ -43,6 +38,7 @@ import {
   type InvoicePaymentMethod,
   type InvoiceStatus,
   type JwtPayload,
+  type StoredInvoice,
   type TenantAccountStatus,
 } from '@sm/contracts';
 import type { Counter, Invoice, Tenant } from '@sm/db';
@@ -508,6 +504,12 @@ export class BillingService {
         label: input.label,
         period: { start: input.period.start, end: input.period.end },
         amountCents: input.amountCents,
+        // LE RÉGIME EST FIGÉ SUR LA PIÈCE, ici et nulle part ailleurs. Écrit à
+        // l'émission plutôt que relu à l'impression : une facture de l'an
+        // dernier ne se recalcule pas au taux de cette année. `SM_INVOICE_VAT`
+        // dit que nos tarifs sont HORS TAXES et que la TVA est de 20 % ; le
+        // montant ci-dessus est donc un montant HT, et la facture le dira.
+        vat: { ...SM_INVOICE_VAT },
         status: input.status,
         issuedAt: input.issuedAt,
         dueAt: input.dueAt,
@@ -718,90 +720,20 @@ function accountStatusOf(tenant: RawTenant): TenantAccountStatus {
 const isBillable = (status: TenantAccountStatus): boolean =>
   status === 'active' || status === 'suspended';
 
-/** Document Mongo → forme d'API, statut effectif recalculé à l'instant `now`. */
-function toInvoiceView(raw: RawInvoice, now: Date): CrmInvoice {
-  const storedStatus = (raw.status ?? 'brouillon') as InvoiceStatus;
-  const dueAt = raw.dueAt ? new Date(raw.dueAt) : new Date(0);
-  const status = effectiveInvoiceStatus(storedStatus, dueAt, now);
-  const amountCents = Number(raw.amountCents ?? 0);
-  const kind = (raw.kind ?? 'abonnement') as InvoiceKind;
-  const method = (raw.method ?? null) as InvoicePaymentMethod | null;
-  const start = raw.period?.start ? new Date(raw.period.start) : dueAt;
-  const end = raw.period?.end ? new Date(raw.period.end) : dueAt;
-  const key = monthKey(start);
-
-  return {
-    _id: String(raw._id),
-    tenantId: String(raw.tenantId ?? ''),
-    number: String(raw.number ?? ''),
-    kind,
-    kindLabel: INVOICE_KIND_LABELS[kind] ?? kind,
-    label: String(raw.label ?? ''),
-    period: {
-      key,
-      start: start.toISOString(),
-      end: end.toISOString(),
-      label: billingPeriod(key).label,
-    },
-    amountCents,
-    amountLabel: formatEuros(amountCents),
-    status,
-    statusLabel: INVOICE_STATUS_LABELS[status] ?? status,
-    storedStatus,
-    issuedAt: iso(raw.issuedAt),
-    dueAt: dueAt.toISOString(),
-    paidAt: iso(raw.paidAt),
-    method,
-    methodLabel: method ? INVOICE_PAYMENT_METHOD_LABELS[method] : null,
-    cancelledAt: iso(raw.cancelledAt),
-    cancelReason: String(raw.cancelReason ?? ''),
-    overdueDays: status === 'en_retard' ? daysLate(dueAt, now) : 0,
-    dueCents: isDueInvoiceStatus(status) ? amountCents : 0,
-  };
-}
+/**
+ * Document Mongo → forme d'API, statut effectif recalculé à l'instant `now`.
+ *
+ * Simple alias d'`invoiceView` (@sm/contracts). Cette conversion vivait ici en
+ * double, recopiée à l'identique de la surface du gérant ; les deux ont
+ * désormais une seule source. Ce n'est pas de la coquetterie : le jour où le
+ * gérant lirait « Payée » là où l'équipe lit « En retard » — ou 139 € là où
+ * l'équipe lit 166,80 € —, la conversation ne serait plus rattrapable.
+ */
+const toInvoiceView = (raw: RawInvoice, now: Date): CrmInvoice =>
+  invoiceView(raw as StoredInvoice, now);
 
 /**
- * La prochaine échéance.
- *
- * Trois cas, dans cet ordre :
- *  · rien à facturer (essai, client parti) → `null`, il n'y a pas de prochain
- *    prélèvement à annoncer ;
- *  · une facture due existe → c'est ELLE, avec son numéro : une créance réelle
- *    prime toujours sur une projection ;
- *  · sinon → l'échéance THÉORIQUE du 1er du mois prochain, sans numéro. Le
- *    `null` de `invoiceNumber` dit que la pièce n'existe pas encore, et évite
- *    d'annoncer au client un montant dû introuvable dans son historique.
+ * La prochaine échéance — même fonction que celle du gérant (`nextInvoiceDue`),
+ * pour la même raison que ci-dessus.
  */
-function nextDueFor(
-  due: readonly CrmInvoice[],
-  plan: BillingPlan,
-  billable: boolean,
-  now: Date,
-): CrmNextDue | null {
-  if (!billable) return null;
-
-  // `due` arrive trié par échéance croissante : la première est la prochaine.
-  const first = due[0];
-  if (first) {
-    return {
-      at: first.dueAt,
-      amountCents: first.dueCents,
-      amountLabel: formatEuros(first.dueCents),
-      // Une échéance dépassée compte en NÉGATIF le même nombre de jours que
-      // `overdueDays` : deux arrondis indépendants afficheraient « −80 jours »
-      // à côté de « 79 jours de retard » sur la même facture.
-      daysUntil: first.overdueDays > 0 ? -first.overdueDays : daysBetween(now, first.dueAt),
-      invoiceNumber: first.number,
-    };
-  }
-
-  const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
-  const amountCents = planMrrCents(plan);
-  return {
-    at: at.toISOString(),
-    amountCents,
-    amountLabel: formatEuros(amountCents),
-    daysUntil: daysBetween(now, at),
-    invoiceNumber: null,
-  };
-}
+const nextDueFor = nextInvoiceDue;
