@@ -550,6 +550,21 @@ html:has(.mk) {
   object-fit: cover;
   object-position: top center;
 }
+/* LA CARTE TÉLÉPHONE — la seule du deck qui n'est pas un paysage.
+ *
+ * Le deck imposait 16/10 à tout le monde, si bien que la commande en ligne y
+ * était représentée par une capture d'ordinateur : le visiteur voyait cinq
+ * écrans larges et pas un seul appareil que ses clients tiennent en main.
+ * Elle garde la hauteur des autres et rétrécit en largeur — un téléphone
+ * posé entre deux tablettes, ce qui se lit tout de suite. */
+.mk .hero-democard.hd-portrait {
+  width: min(280px, 24%);
+  aspect-ratio: 390 / 844;
+  border-radius: 26px;
+}
+.mk .hero-democard.hd-portrait img {
+  object-position: top center;
+}
 .mk .hero-democard.hd-center {
   transform: translate(-50%, -50%) translateZ(0) rotateY(0);
   opacity: 0.85;

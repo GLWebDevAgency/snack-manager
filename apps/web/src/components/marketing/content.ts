@@ -182,7 +182,18 @@ export const HERO_SHOTS: Shot[] = [
   { src: "/shots/backoffice.png", alt: "Back-office Snack Manager : chiffre d'affaires du jour et commandes en direct" },
   { src: "/shots/pos.png", alt: "Caisse Snack Manager sur tablette, en cours de prise de commande" },
   { src: "/shots/kds.png", alt: "App cuisine Snack Manager : colonnes Nouveau, En préparation, Prêt" },
-  { src: "/shots/menu.png", alt: "Commande en ligne Snack Manager, carte à la couleur du restaurant" },
+  // `menu.png` MONTRE LE BACK-OFFICE, et son texte alternatif annonçait « Commande
+  // en ligne » : le deck représentait donc l'application que les CLIENTS du
+  // restaurateur utilisent par une page de gestion, sur un écran d'ordinateur.
+  // Le libellé dit maintenant ce que l'image montre.
+  { src: "/shots/menu.png", alt: "Back-office Snack Manager : carte et prix, disponibilités en un geste" },
+  // Et la vraie commande en ligne entre dans le deck, en PORTRAIT — c'est le
+  // seul appareil de la rangée que le client du restaurateur tient en main.
+  {
+    src: "/shots/commande.png",
+    alt: "Commande en ligne Snack Manager sur téléphone : carte du restaurant et click and collect",
+    portrait: true,
+  },
   { src: "/shots/board.png", alt: "Écran d'appel client Snack Manager : numéros prêts au retrait" },
 ];
 

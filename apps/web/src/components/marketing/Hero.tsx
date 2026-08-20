@@ -52,7 +52,10 @@ export function Hero() {
         <div className="hero-demo" aria-hidden="true">
           <div className="hero-demotrack">
             {HERO_SHOTS.map((shot, i) => (
-              <div className={`hero-democard ${slot(i, current, total)}`} key={shot.src}>
+              <div
+                className={`hero-democard ${slot(i, current, total)}${shot.portrait ? " hd-portrait" : ""}`}
+                key={shot.src}
+              >
                 <Photo shot={shot} eager={i === 0} sizes="(max-width: 810px) 130vw, min(900px, 74vw)" />
               </div>
             ))}

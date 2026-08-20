@@ -601,23 +601,62 @@ async function main() {
    */
   await shoot({
     name: 'commande',
-    url: `${WEB}/r/${TENANT_SLUG}`,
+    // La MÊME adresse que `DEMO_PATHS.order` de la vitrine : l'affiche et le
+    // cadre vivant doivent montrer la même page, sinon le clic « Essayer »
+    // change de restaurant sous les yeux du visiteur.
+    url: `${WEB}/r/demo?demo=1`,
     width: 390,
     height: 844,
-    ready: hasText('Commander en ligne', 'Sandwichs'),
+    ready: hasText('Commandez.', 'Commander maintenant'),
     prepare: async (page) => {
       /**
-       * Le client choisit un rayon dans la barre d'onglets, et la carte s'y
-       * rend. On ouvre « Gourmets Burgers » : c'est la catégorie dont les
-       * fiches portent de vraies photos produit détourées.
+       * ON PHOTOGRAPHIE LA PAGE D'ACCUEIL, DEPUIS LE HAUT, EN MODE DÉMO.
        *
-       * Le haut de page (enseigne, bouton « Commander en ligne ») serait un
-       * plus beau portrait de marque, mais la moitié des sandwichs y sont
-       * illustrés par le cliché du panneau mural, invendable en vitrine.
+       * Deux corrections, et la seconde est la moins évidente.
+       *
+       * LE CADRAGE. Cette capture ouvrait « Gourmets Burgers » et
+       * photographiait la carte EN PLEIN DÉFILEMENT : une fiche coupée au
+       * bord supérieur, aucun en-tête, aucune marque — le visiteur de la
+       * vitrine voyait une liste, pas une application. La justification
+       * d'alors (« la moitié des sandwichs sont illustrés par le cliché du
+       * panneau mural ») ne tient plus : les fiches portent des photos
+       * produit détourées. Le haut de page est ce que le CLIENT du
+       * restaurateur voit en premier, et c'est le meilleur portrait qu'on
+       * ait.
+       *
+       * LA SOURCE. On vise `/r/demo?demo=1` et non la carte de Class'Food,
+       * pour deux raisons qui vont dans le même sens. D'abord l'affiche doit
+       * montrer ce que le clic « Essayer » fera apparaître : c'est CETTE
+       * page-là que la vitrine embarque dans son cadre. Ensuite la démo a une
+       * horloge figée en plein service — la vraie carte photographiée un soir
+       * après 22h30 affiche « Fermé · réouvre demain à 18h00 », et une
+       * vitrine ne montre pas le produit endormi.
+       *
+       * Les deux bandeaux de démonstration sont masqués LE TEMPS DE LA PHOTO :
+       * ce sont des habillages de la page hôte, pas du contenu, et ils
+       * mangeraient 111 px sur 844. Ils restent évidemment présents dans le
+       * cadre vivant, dès la première interaction.
        */
-      await hasText('Gourmets Burgers')(page);
-      await page.getByText('Gourmets Burgers', { exact: true }).first().click();
-      await page.waitForTimeout(2000);
+      /*
+       * UNE FEUILLE DE STYLE, ET UN CIBLAGE PAR CLASSE — pas par texte.
+       *
+       * Deux essais ont échoué avant celui-ci, et chacun apprend quelque chose.
+       * Le premier posait `el.style.display = 'none'` : React réhydrate pendant
+       * le `settle` qui suit et RECRÉE ces nœuds, emportant l'attribut. Une
+       * règle CSS, elle, s'applique aussi au nœud qui n'existe pas encore.
+       * Le second cherchait les bandeaux par leur TEXTE, et les deux libellés
+       * mentent dans le DOM : la barre de retour vaut « ←Retour au site » sans
+       * espace après la flèche, et « DÉMONSTRATION » s'écrit « Démonstration »
+       * — les capitales viennent du CSS. On cible donc les classes, qui, elles,
+       * disent la vérité.
+       */
+      await page.addStyleTag({
+        content:
+          '[class*="border-accent/25"], [class*="justify-between"][class*="border-b"]' +
+          ' { display: none !important; }',
+      });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(600);
     },
     settle: 2000,
   });
