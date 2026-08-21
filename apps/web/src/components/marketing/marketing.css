@@ -3193,55 +3193,106 @@ html:has(.mk) {
     line-height: 1.25em;
     white-space: normal;
   }
-  /* LE FLUX BASCULE À LA VERTICALE, il ne disparaît pas.
-     La paire se lit de haut en bas — la douleur, le rail, la réponse. C'est le
-     même récit tourné d'un quart de tour, et c'est la seule mise en page où
-     les six passages tiennent dans 390 px sans que le texte se hache. */
+  /* ═══ LE FLUX DEVIENT UNE GOUTTIÈRE, ET C'EST TOUT CE QUI CHANGE ═══
+   *
+   * Première version mobile : la douleur, PUIS un rail de 26 px collé sous
+   * elle, PUIS la réponse — les trois alignés sur le même bord gauche. Verdict
+   * du fondateur, capture à l'appui : « tout est collé sur la gauche de
+   * l'écran ». La marge de section était pourtant là, 20 px comme partout : le
+   * défaut n'était pas l'espacement, c'était que RIEN NE DISTINGUAIT les trois
+   * blocs. Trois paragraphes de gris inégal empilés à la même abscisse se
+   * lisent comme une liste, pas comme un passage — soit exactement ce que la
+   * version bureau existe pour éviter.
+   *
+   * Le rail passe donc en GOUTTIÈRE : une colonne de 26 px à gauche, tenue par
+   * la ligne entière, avec la douleur et la réponse toutes deux en retrait
+   * derrière elle. Le trait ne sépare plus deux paragraphes, il les PORTE — et
+   * c'est le motif que tout le monde sait lire d'instinct, celui d'une frise.
+   *
+   * La lueur y descend sur toute la hauteur de la paire, et la pastille pleine
+   * marque son arrivée à hauteur de la réponse. Plus de chevron : à 5 px, une
+   * flèche n'est plus une flèche, c'est un artefact. */
   .mk .cmp-row {
-    --rail: 26px;
-    grid-template-columns: 1fr;
-    gap: 6px;
-    padding: 14px 0;
-    align-items: stretch;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 0 4px;
+    padding: 15px 0 17px;
+    align-items: start;
   }
-  .mk .cmp-cell {
-    font-size: 14px;
-  }
-  /* L'alignement à droite n'a de sens que face à un rail horizontal. */
+  /* Placement explicite : le DOM sort la douleur, le rail, puis la réponse —
+     la gouttière doit remonter à gauche et tenir les deux lignes. */
   .mk .cmp-cell.left {
+    grid-column: 2;
+    grid-row: 1;
     text-align: left;
+    font-size: 13.5px;
+    padding-bottom: 10px;
   }
   .mk .cmp-flow {
-    height: var(--rail);
-    width: 14px;
-    margin-left: 4px;
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: auto;
+    height: 100%;
+    margin: 0;
+    align-self: stretch;
   }
+  .mk .cmp-cell.right {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 14.5px;
+  }
+  /* Le trait court du haut de la douleur au bas de la réponse, en s'éclairant
+     vers le bas : le gris est l'état d'aujourd'hui, le laiton celui d'après. */
   .mk .cmp-flow::before {
-    top: 0;
-    bottom: 6px;
-    left: 50%;
+    top: 4px;
+    bottom: 4px;
+    left: 9px;
     right: auto;
     width: 1px;
     height: auto;
-    background: linear-gradient(180deg, var(--border-10), rgba(201, 161, 90, 0.55));
+    background: linear-gradient(180deg, var(--border-10) 0%, rgba(201, 161, 90, 0.6) 100%);
   }
+  /* La pastille d'arrivée est portée par LA RÉPONSE, pas par le rail.
+     Posée sur le rail, sa hauteur dépendrait de la longueur de la douleur —
+     une phrase sur deux lignes la décalerait de vingt pixels. Portée par la
+     réponse, elle tombe sur sa première ligne par construction, quelle que
+     soit la longueur de ce qui précède. */
   .mk .cmp-flow::after {
-    top: auto;
-    right: auto;
-    bottom: 0;
-    left: 50%;
-    margin: 0 0 0 -3px;
-    transform: rotate(135deg);
+    display: none;
+  }
+  .mk .cmp-cell.right {
+    position: relative;
+  }
+  .mk .cmp-cell.right::before {
+    content: "";
+    position: absolute;
+    /* −30 px : la largeur de la gouttière (26) plus l'écart de grille (4),
+       donc le centre du rail. La mi-hauteur de la première ligne vaut la
+       moitié de son interligne. */
+    left: -21px;
+    top: calc(0.5em * 1.4 - 3.5px);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--bg, #000);
   }
   .mk .cmp-spark {
-    left: 50%;
+    left: 9px;
+    width: 15px;
+    height: 15px;
+    margin: -7px 0 0 -7px;
   }
+  /* La lueur descend le rail sur TOUTE sa hauteur, laquelle dépend de la
+     longueur des deux textes. `top` en pourcentage se résout sur la hauteur du
+     parent, ce qu'un `translateY` ne sait pas faire — il se résoudrait sur les
+     15 px de la lueur elle-même. Six animations d'une seconde : le coût de
+     peinture est sans commune mesure avec le défaut qu'on éviterait. */
   .mk .cmp-mirror.in .cmp-spark {
-    animation-name: cmp-travel-y;
+    animation-name: cmp-travel-gouttiere;
   }
-  @keyframes cmp-travel-y {
+  @keyframes cmp-travel-gouttiere {
     0% {
-      transform: translateY(0);
+      top: 0;
       opacity: 0;
     }
     18% {
@@ -3251,7 +3302,7 @@ html:has(.mk) {
       opacity: 1;
     }
     100% {
-      transform: translateY(var(--rail));
+      top: 100%;
       opacity: 0;
     }
   }
