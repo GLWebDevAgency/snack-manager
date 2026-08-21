@@ -21,10 +21,17 @@ import { OffresBody } from "./sections";
  *
  * Ce n'est pas la landing en plus long. La vitrine CONVAINC en onze sections ;
  * cette page DÉTAILLE pour qui est déjà convaincu et vient vérifier ce qu'il
- * achète. D'où un ton de devis plutôt que d'argumentaire, des titres alignés à
- * gauche comme un document, et une section entière consacrée à ce que nous ne
- * faisons PAS — la seule chose qu'une page de vente ne dit jamais et qu'une page
- * de vérification doit dire.
+ * achète. D'où des montants écrits partout où une question de prix se pose,
+ * plutôt que renvoyés à un devis.
+ *
+ * CE COMMENTAIRE PLAIDAIT ENCORE POUR UNE SECTION QUI N'EXISTE PLUS. Il vantait
+ * « une section entière consacrée à ce que nous ne faisons PAS — la seule chose
+ * qu'une page de vente ne dit jamais ». Le fondateur l'a fait tomber : « tu en
+ * dis trop, tu veux trop faire honnête au dépens du marketing et de la vente ».
+ * Il avait raison, et la démonstration est dans les quatre entrées de cette
+ * section : trois répétaient ce que la page dit déjà à sa place, et la
+ * quatrième — aucun matériel propriétaire — était un ARGUMENT DE VENTE rangé
+ * dans un inventaire de refus. Voir le détail dans `offres/content.ts`.
  *
  * ═══ POURQUOI L'EN-TÊTE ET LE PIED DE PAGE SONT RENDUS ICI ═══
  *

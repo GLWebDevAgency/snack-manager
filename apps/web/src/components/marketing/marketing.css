@@ -4808,10 +4808,36 @@ html:has(.mk) {
 /* ===== Ossature commune ===== */
 
 /*
- * Le conteneur de chaque section. `.section` (marketing.css) centre ses enfants
- * et pose la gouttière horizontale ; `.of-wrap` reprend la largeur de contenu du
- * site et ALIGNE À GAUCHE — c'est le seul écart de composition assumé vis-à-vis
- * de la landing, dont les têtes de section sont centrées.
+ * ═══ LA PAGE A DEUX OSSATURES, ET C'EST TOUTE LA RÉVISION DU 21/08/2026 ═══
+ *
+ * Elle n'en avait qu'une. Huit sections, huit fois `.of-wrap` à 1 200 px : un
+ * écart-type de largeur NUL sur 6 900 px de haut, soit 83 % de l'écran à 1 440 et
+ * 62 % à 1 920, sans un seul fond perdu. Le fondateur l'a dit avant qu'on le
+ * mesure : « c'est vraiment fade, ça manque de couleur, de largeur. On prend
+ * toute la largeur de l'écran avec des images. »
+ *
+ * D'où deux familles qui alternent :
+ *
+ *   `.of-section` + `.of-wrap` — le bloc CONTENU, 1 200 px, aligné à gauche.
+ *                                Les formules, les services, les conditions.
+ *   `.of-band`                 — la BANDE, pleine largeur, image à fond perdu
+ *                                sous voile. L'ouverture, le matériel, ce qui
+ *                                est compris, l'appel final.
+ *
+ * Et un hybride, `.of-modulegrid`, qui aligne sa colonne de texte sur la
+ * gouttière de 1 200 px mais laisse son image sortir jusqu'au bord de l'écran.
+ *
+ * LA CHARTE N'A PAS BOUGÉ D'UN JETON. « Manque de couleur » ne veut pas dire
+ * « ajoute des couleurs » : la charte sombre et dorée tient la caisse, la
+ * cuisine, le back-office et les écrans de salle, et une page d'offres bariolée
+ * ne serait pas plus vivante, elle serait étrangère. Ce qui change, c'est la
+ * photographie, l'échelle et la largeur — pas la palette.
+ */
+
+/*
+ * `.of-wrap` reprend la largeur de contenu du site et ALIGNE À GAUCHE — c'est le
+ * seul écart de composition assumé vis-à-vis de la landing, dont les têtes de
+ * section sont centrées.
  *
  * Ce n'est pas une préférence : la vitrine ADRESSE un lecteur, cette page se
  * FEUILLETTE. Un titre centré au-dessus d'une liste de prix se lit comme une
@@ -4829,9 +4855,12 @@ html:has(.mk) {
 }
 
 /*
- * Le fond teinté ne décore pas, il RYTHME : il tombe sur la section du module et
- * sur celle qui dit non, c'est-à-dire les deux endroits où le lecteur doit
- * ralentir. Deux sections teintées ne se suivent jamais.
+ * Le fond teinté ne décore pas, il RYTHME. Il ne tombe plus que sur UNE section,
+ * celle du module : l'autre teintée était « ce que nous ne faisons pas », qui
+ * n'existe plus. Trois bandes photographiques portent désormais le contraste de
+ * fond que 3 % de blanc ne pouvait pas donner — c'était l'écart mesuré entre
+ * `--surface-3` et le noir de la page, invisible à l'œil sur un écran non
+ * calibré.
  */
 .mk .of-section.is-tinted {
   background: var(--surface-3);
@@ -4862,78 +4891,193 @@ html:has(.mk) {
   white-space: nowrap;
 }
 
-/* ===== En-tête de page ===== */
+/* ===== Les bandes pleine largeur ===== */
 
-/* L'en-tête du site est FIXE (57 px de haut au repos) : sans ce dégagement, le
-   `h1` naîtrait sous l'encoche. */
-.mk .of-head {
-  padding-top: 132px;
-  padding-bottom: 24px;
+/*
+ * ═══ TROIS COUCHES, TOUJOURS DANS CET ORDRE ═══
+ *
+ *   `.of-bandmedia`  la photo, à fond perdu, en `object-fit: cover` ;
+ *   `.of-bandveil`   le voile — dégradés noirs, JAMAIS une teinte ;
+ *   `.of-bandinner`  le texte, aligné sur la même gouttière que `.of-wrap`.
+ *
+ * `isolation: isolate` crée le contexte d'empilement : sans lui, le `z-index`
+ * des trois couches se compare à celui de l'en-tête fixe du site.
+ *
+ * LE VOILE EST MESURÉ, PAS SUPPOSÉ. La charte est sombre ; une photo de plat en
+ * pleine lumière sous un titre blanc ne l'est pas. Chaque bande compose donc son
+ * voile pour que le blanc conserve au moins 8:1 sur les pixels les PLUS CLAIRS
+ * de son image — le calcul est écrit dans le commentaire de chacune.
+ */
+.mk .of-band {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--black);
 }
-/* PAS de `max-width` propre à l'en-tête : `.of-wrap` est centré, donc toute
-   largeur plus étroite décalerait le bord gauche du `h1` par rapport à celui de
-   toutes les sections en dessous. C'est le titre et l'accroche qui portent leur
-   propre mesure de lecture, jamais leur conteneur. */
-.mk .of-headwrap {
-  gap: 22px;
+.mk .of-bandmedia {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
 }
-.mk .of-title {
-  max-width: 780px;
+.mk .of-bandveil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+/*
+ * La gouttière des bandes est CALCULÉE pour tomber sur celle de `.of-wrap` :
+ * `.section` pose 40 px de marge et `.of-wrap` se centre à 1 200 px, donc le
+ * bord gauche du texte est à `max(40, (100% - 1200) / 2)`. Sans ce calcul, les
+ * titres des bandes seraient décalés de quelques pixels par rapport à ceux des
+ * blocs contenus — l'œil le voit avant de savoir pourquoi.
+ */
+.mk .of-bandinner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: calc(var(--content-width) + var(--section-pad-x) * 2);
+  margin: 0 auto;
+  padding-inline: var(--section-pad-x);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* Le raccord d'un bord d'image sur le fond de la page. Une capture qui s'arrête
+   net sur une arête verticale au milieu d'une page qui n'en a aucune autre se
+   voit immédiatement. */
+.mk .of-mediafeather {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ===== En-tête de page — la bande d'ouverture ===== */
+
+/*
+ * L'en-tête du site est FIXE (57 px au repos) : `padding-top` dégage le `h1` de
+ * l'encoche. La bande fait ~620 px, contre 592 px pour l'ancienne colonne de
+ * texte — 28 px pour la première image de la page.
+ */
+.mk .of-hero {
+  display: flex;
+  align-items: flex-end;
+  min-height: 580px;
+}
+.mk .of-heromedia .ph img {
+  /* `tacos-hero.png` est un portrait de 1086 × 1448 : le cadrage remonte pour
+     garder les deux wraps dans le tiers droit, là où le voile est le plus
+     clair. */
+  object-position: 60% 42%;
+}
+/*
+ * LE VOILE DE L'OUVERTURE — deux couches, et la seconde est la vraie.
+ *
+ * Le dégradé vertical ferme la bande sur le NOIR de la page (`#000`, pas
+ * `--card`) : la section des formules naît dedans au lieu de commencer après un
+ * trait. La lueur radiale calée à 8 % assombrit la moitié gauche, sous le texte.
+ *
+ * Mesure : sur le pixel le plus clair de la photo (le fromage grillé, ≈ 230,200,
+ * 150), la troisième vignette le bord droit, où la
+ * photo bloomait au point de tirer l'œil hors du prix.
+ *
+ * MESURE EN NAVIGATEUR, pas estimation : on rend la photo dans un canevas avec
+ * son `object-position`, on applique l'alpha du voile pixel par pixel, et on
+ * prend le PIRE pixel sous chaque boîte de texte. Titre à 72 px : 8,0:1. Prix
+ * doré à 49 px : 6,5:1. Accroche à 18 px : 14,1:1. Sommaire : 17,3:1. Le seuil
+ * AA d'un grand texte est 3:1 — on en est loin, et sur le pire pixel.
+ */
+.mk .of-hero .of-bandveil {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.66) 38%, rgba(0, 0, 0, 0.94) 72%, #000 88%),
+    radial-gradient(120% 110% at 4% 50%, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 66%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.38) 100%);
+}
+.mk .of-heroinner {
+  gap: 18px;
+  padding-top: 150px;
+  padding-bottom: 60px;
+}
+/*
+ * LE TITRE MONTE À ~84 px CONTRE 70. L'amplitude affichée de l'ancienne page
+ * était de 5,8× (70/12), mais l'amplitude de son CORPS de texte valait 1,07×
+ * (15/14) : 128 de ses 177 nœuds de texte étaient à 14 ou 15 px. C'est ça, la
+ * fadeur typographique — la page n'avait pas de deuxième voix. Le `clamp` en
+ * donne une au titre, la classe `.of-heroamt` en donne une au prix.
+ */
+.mk .of-hero .of-title {
+  max-width: 940px;
+  font-size: clamp(38px, 5.6vw, 84px);
+  line-height: 0.98em;
 }
 .mk .of-lead {
   max-width: 640px;
-  color: var(--white-70);
+  color: var(--white-80);
   text-wrap: pretty;
 }
 
-/* Trois faits, trois pastilles. Aucune ne parle d'engagement : la clause ne
-   s'écrit qu'en entier, et une pastille de trois mots ne peut pas la porter. */
-.mk .of-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+/*
+ * ═══ LE PREMIER CHIFFRE DE LA PAGE, ET LE PREMIER DORÉ FRANC ═══
+ *
+ * `PRICE_RANGE` vivait dans une pastille de 13,5 px, coincée entre deux autres.
+ * Sur les cinquante occurrences de #c9a15a que portait l'ancienne page,
+ * trente-quatre mesuraient MOINS DE 20 px de côté — vingt-cinq pastilles de 9 px
+ * et neuf coches de 18 px — et le plus grand doré de toute la page était un
+ * « 79 € » de 47 × 33 px. La charte a une couleur d'accent et la page la
+ * dépensait en confettis.
+ *
+ * Elle se pose donc seule, sur sa ligne, à ~52 px, en or. `tabular-nums` pour
+ * que les trois montants de la fourchette aient la même chasse.
+ */
+.mk .of-heroprice {
+  margin-top: 8px;
 }
-.mk .of-fact {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border-10);
-  background: var(--surface-3);
-  font-size: 13.5px;
+.mk .of-heroamt {
+  display: block;
+  max-width: 940px;
+  font-size: clamp(26px, 3.8vw, 52px);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.05em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  text-wrap: balance;
+}
+/* Ce qui reste des trois pastilles de faits : une ligne. Deux rangées de
+   pastilles (les faits, puis le sommaire) faisaient de l'ouverture de la page
+   une collection de gélules. */
+.mk .of-heroclaim {
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.02em;
-  color: var(--white-80);
-}
-.mk .of-fact::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
+  line-height: 1.5em;
+  color: var(--white-70);
 }
 
 /*
  * LE SOMMAIRE. La page fait plus de trois écrans ; sans lui, celui qui vient
- * pour « ce qui n'est pas compris » défile à l'aveugle sur toute la grille
- * tarifaire. Il n'est PAS collant : une barre de plus sous une en-tête déjà
- * fixe mange trente pixels de hauteur utile sur un téléphone, et le lecteur d'une
- * page de vérification revient en haut, il ne saute pas de section en section.
+ * pour les conditions défile à l'aveugle sur toute la grille tarifaire. Il n'est
+ * PAS collant : une barre de plus sous une en-tête déjà fixe mange trente pixels
+ * de hauteur utile sur un téléphone, et le lecteur d'une page de vérification
+ * revient en haut, il ne saute pas de section en section.
  */
 .mk .of-toc {
   width: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 12px;
   padding-top: 26px;
-  border-top: 1px solid var(--border-10);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 .mk .of-tocitem {
   padding: 9px 15px;
   border-radius: 999px;
-  background: var(--surface-6);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(6px);
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -4993,23 +5137,35 @@ html:has(.mk) {
   text-transform: uppercase;
 }
 .mk .of-planname {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.3em;
+  color: var(--white-70);
 }
 .mk .of-price {
-  margin-top: 14px;
+  margin-top: 6px;
   display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
 }
+/*
+ * ═══ LES TROIS MONTANTS PASSENT DE 42 px BLANCS À 68 px DORÉS ═══
+ *
+ * Mesuré sur l'ancienne page : `.of-amt { color: rgb(255,255,255) }`. Trois
+ * cartes de onze lignes de modules chacune, et rien dedans que l'œil doive
+ * attraper en premier — alors que le prix est LA raison pour laquelle le lecteur
+ * a ouvert cette route. Le nom de la formule descend d'un cran (20 → 18 px, en
+ * `--white-70`) pour lui laisser la place : dans une carte de tarif, le nom
+ * s'étiquette, le prix se lit.
+ */
 .mk .of-amt {
-  font-size: 42px;
+  font-size: 68px;
   font-weight: 600;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.045em;
   line-height: 1em;
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 .mk .of-per {
@@ -5029,7 +5185,7 @@ html:has(.mk) {
  * l'équivalent ramené au mois, seul chiffre qui se compare au tarif du dessus.
  */
 .mk .of-year {
-  margin-top: 12px;
+  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -5068,7 +5224,7 @@ html:has(.mk) {
 }
 
 .mk .of-plandesc {
-  margin-top: 16px;
+  margin-top: 13px;
   font-size: 14.5px;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -5082,8 +5238,8 @@ html:has(.mk) {
    listes de longueurs différentes. */
 .mk .of-mods {
   flex: 1;
-  margin-top: 20px;
-  padding-top: 20px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--border-10);
   display: flex;
   flex-direction: column;
@@ -5119,8 +5275,8 @@ html:has(.mk) {
    ligne, elle coûte combien en plus ? ». La grille de la vitrine ne peut pas la
    porter, elle a déjà onze lignes par colonne. */
 .mk .of-plannote {
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 16px;
+  padding-top: 13px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 12.5px;
   font-weight: 500;
@@ -5134,31 +5290,77 @@ html:has(.mk) {
   font-weight: 600;
 }
 
-/* ===== 2. Le module Commande en ligne & fidélité ===== */
+/*
+ * `PRICING_FOOTNOTE` A CHANGÉ DE SECTION, ET C'EST UNE CORRECTION DE FOND.
+ *
+ * Elle fermait « ce que nous ne faisons pas », qui n'existe plus — et elle n'y
+ * était rendue qu'UNE fois sur toute la page. Supprimer la section sans la
+ * déplacer aurait fait disparaître du site la mention des frais d'encaissement,
+ * c'est-à-dire la seule chose qu'un restaurateur découvrirait autrement sur son
+ * premier relevé. Elle se pose donc sous la grille, sous les trois « 0 % de
+ * commission » dont elle est l'astérisque : discrète par sa taille, jamais par
+ * son emplacement.
+ */
+.mk .of-fineprint {
+  max-width: 900px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.6em;
+  color: var(--white-50);
+  text-wrap: pretty;
+}
+
+/* ===== 2. Le module — le panneau qui déborde à droite ===== */
 
 /*
- * DEUX COLONNES, ET SURTOUT PAS UNE QUATRIÈME CARTE DE PRIX. Alignée sous les
- * trois autres, elle ferait lire le module comme une formule de plus — donc
- * comme un choix À LA PLACE de Boost, alors que c'est un supplément qui se
- * branche SUR Essentiel ou Complet. Le détail tient la largeur, le prix s'isole
- * dans un encart qui ne ressemble à aucune des trois cartes du dessus.
+ * ═══ LE SEUL BLOC QUI CASSE LA GRILLE SANS ÊTRE UNE BANDE ═══
+ *
+ * La colonne de texte reste calée sur la gouttière de 1 200 px à gauche ; la
+ * capture sort du conteneur à droite et VA TOUCHER LE BORD DE L'ÉCRAN, sur toute
+ * la hauteur de la section. La section garde donc son fond teinté et sa
+ * respiration verticale, mais plus sa largeur : c'est le troisième gabarit de la
+ * page, et il tombe exactement entre deux blocs contenus.
+ *
+ * `padding-inline: 0` sur la section, la gouttière est reportée sur la grille —
+ * sinon `.section` maintiendrait 40 px de marge à droite et l'image s'arrêterait
+ * avant le bord.
+ *
+ * `commande.png` fait 780 × 1688 : affichée à 520 px de large, elle est rendue à
+ * 0,67× de sa définition native. Plus nette que la source, jamais agrandie.
  */
-.mk .of-module {
+/* La section rend 18 px de respiration verticale : c'est la plus haute de la
+   page, et elle est la seule à porter une image aussi longue — plus la colonne
+   de texte est haute, plus la capture portrait est recadrée pour la suivre. */
+.mk .of-modulesec {
+  padding-inline: 0;
+  padding-block: 72px;
+}
+.mk .of-modulegrid {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 44px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
+  gap: 56px;
+  align-items: stretch;
+  padding-left: max(var(--section-pad-x), calc((100% - var(--content-width)) / 2));
+}
+.mk .of-modulecol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 26px;
+  max-width: 760px;
 }
 
 .mk .of-points {
+  width: 100%;
   counter-reset: of-point;
   display: flex;
   flex-direction: column;
 }
 .mk .of-point {
   position: relative;
-  padding: 20px 0 20px 46px;
+  padding: 15px 0 15px 46px;
   border-top: 1px solid var(--border-10);
 }
 .mk .of-point:first-child {
@@ -5173,7 +5375,7 @@ html:has(.mk) {
   content: counter(of-point, decimal-leading-zero);
   position: absolute;
   left: 0;
-  top: 20px;
+  top: 15px;
   font-size: 12px;
   font-weight: 600;
   line-height: 23px;
@@ -5200,60 +5402,49 @@ html:has(.mk) {
   text-wrap: pretty;
 }
 
-.mk .of-modulecard {
-  padding: 26px 24px;
-  border: 1px solid var(--border-10);
-  border-radius: 20px;
-  background: var(--card-gradient);
+/*
+ * LES DEUX MONTANTS À PLAT, ET SURTOUT PAS UNE QUATRIÈME CARTE DE PRIX.
+ *
+ * L'encart latéral de 340 px alignait le module sous les trois formules : il se
+ * lisait comme une formule de plus, donc comme un choix À LA PLACE de Boost,
+ * alors que c'est un supplément qui se branche SUR Essentiel ou Complet. Deux
+ * chiffres posés à plat sous les points ne ressemblent à aucune carte — et ils
+ * peuvent être trois fois plus gros.
+ */
+.mk .of-modulefigs {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 56px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border-10);
 }
-.mk .of-modulename {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.35em;
-}
-.mk .of-modulerows {
-  margin-top: 20px;
+.mk .of-modulefig {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
-.mk .of-modulerow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-10);
-}
-.mk .of-modulerow dt {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: var(--white-70);
-}
-.mk .of-modulerow dd {
-  font-size: 22px;
+.mk .of-modulenum {
+  font-size: 42px;
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.045em;
+  line-height: 1em;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
-.mk .of-modulenote {
-  margin-top: 16px;
+.mk .of-modulelabel {
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: -0.02em;
-  line-height: 1.5em;
-  color: var(--gray);
-  text-wrap: pretty;
+  line-height: 1.4em;
+  color: var(--white-70);
 }
 /* L'addition, écrite franchement plutôt que laissée à découvrir : quelqu'un qui
    la fait tout seul et trouve Boost moins cher se demande pourquoi on ne le lui
    a pas dit. */
 .mk .of-modulemath {
-  margin-top: 18px;
-  padding: 14px 15px;
+  max-width: 720px;
+  padding: 14px 16px;
   border: 1px solid rgba(201, 161, 90, 0.22);
   border-radius: 12px;
   background: rgba(201, 161, 90, 0.08);
@@ -5265,7 +5456,157 @@ html:has(.mk) {
   text-wrap: pretty;
 }
 
-/* ===== 3. Les services ===== */
+/*
+ * LA CAPTURE GARDE SON FORMAT EXACT, ELLE NE S'ÉTIRE PAS SUR LA HAUTEUR DE LA
+ * COLONNE.
+ *
+ * `align-self: stretch` la portait à la hauteur du texte d'à côté (~1 150 px),
+ * et `cover` compensait en rognant 70 px de CHAQUE CÔTÉ d'une capture qui fait
+ * 780 px de large : le bouton et les cartes produit y passaient. `aspect-ratio`
+ * lui rend son rapport natif (780 × 1358) et `align-self: center` la pose au
+ * milieu de la section — un panneau haut, arrondi à gauche, à fond perdu à
+ * droite. Aucun pixel n'est rogné, à aucune largeur.
+ */
+.mk .of-modulemedia {
+  position: relative;
+  overflow: hidden;
+  align-self: center;
+  /*
+   * RECADRÉE UNE SECONDE FOIS, ET LE RAPPORT SUIT — 780 × 763.
+   *
+   * La capture portait encore, en clair et sans voile, trois choses qu'aucun
+   * audit de TEXTE ne pouvait voir puisqu'elles vivaient dans un `.webp` :
+   * « prêt en ~20 min » (une promesse de délai chiffrée, que cette page
+   * s'interdit), les horaires, et « 14 rue des Halles — 76000 Rouen ». Une
+   * adresse postale lisible à côté d'un argumentaire commercial se lit comme
+   * un client en exploitation, et la règle « aucun client hors du pilote »
+   * n'interdit pas que les noms.
+   *
+   * Les 595 px du bloc d'en-tête sont donc sortis DU FICHIER, pas masqués par
+   * un voile : ce qui n'est pas dans l'image ne peut pas ressortir le jour où
+   * quelqu'un touche au CSS. Reste ce que la section a vraiment à montrer —
+   * une carte, des photos de plats, la recherche, les rayons.
+   */
+  aspect-ratio: 780 / 763;
+  border-radius: 22px 0 0 22px;
+}
+.mk .of-modulemedia .ph {
+  position: absolute;
+  inset: 0;
+}
+.mk .of-modulemedia .ph img {
+  object-position: 50% 0;
+}
+/* Le bord gauche est fondu vers le fond de la section : sans lui, la capture
+   s'arrête sur une arête verticale nette au milieu d'une page qui n'en a aucune
+   autre. C'est le SEUL voile dont cette image ait besoin — la fiche du
+   restaurant de démonstration et sa note ne sont plus dans le fichier (voir
+   `OFFRE_SHOTS` dans `offres/content.ts`). */
+.mk .of-modulemedia .of-mediafeather {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.28) 16%, rgba(0, 0, 0, 0) 40%);
+}
+
+/* ===== 3. Le matériel — la bande en diptyque ===== */
+
+/*
+ * ═══ QUATRIÈME GABARIT : NI CARTE, NI RANGÉE, NI LISTE ═══
+ *
+ * Un aplat sombre à gauche qui porte l'argument, la photo à fond perdu jusqu'au
+ * bord de l'écran à droite. La bande est PLEINE LARGEUR mais son texte reste sur
+ * la gouttière commune — même calcul que `.of-bandinner`.
+ *
+ * `crousty-riz.png` fait 1254 × 1254 : sur la moitié droite d'un écran de
+ * 1 920 px, soit ~880 px, elle est affichée à 0,70× de sa définition. Aucune
+ * perte, jamais d'agrandissement.
+ */
+.mk .of-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
+  align-items: stretch;
+  gap: 56px;
+  min-height: 480px;
+  padding-left: max(var(--section-pad-x), calc((100% - var(--content-width)) / 2));
+  border-top: 1px solid var(--border-10);
+  border-bottom: 1px solid var(--border-10);
+}
+.mk .of-splitcopy {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 620px;
+  padding: 78px 0;
+}
+.mk .of-splitline {
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.65em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+/*
+ * LE SEUL « 0 € » DE LA PAGE, ET LE SEUL ENDROIT DU SITE OÙ UN ZÉRO VEND.
+ *
+ * Il est LU dans `HARDWARE_PATHS` (`euros(0)`), donc il porte la même espace
+ * insécable que les trois tarifs de la grille. Il monte à ~88 px : c'est le plus
+ * gros chiffre de la page, et il est en face du seul argument que la concurrence
+ * installée ne peut pas reprendre.
+ */
+.mk .of-splitfig {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+}
+.mk .of-splitnum {
+  font-size: clamp(54px, 6vw, 88px);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mk .of-splitnote {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.4em;
+  color: var(--white);
+}
+/* L'autre voie, en petit : son détail et son montant sont dans la section
+   services, juste en dessous. Deux tarifs à la même hauteur feraient lire deux
+   chantiers pour un seul. */
+.mk .of-splitalt {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--white-50);
+}
+
+.mk .of-splitmedia {
+  position: relative;
+  overflow: hidden;
+  align-self: stretch;
+}
+.mk .of-splitmedia .ph {
+  position: absolute;
+  inset: 0;
+}
+.mk .of-splitmedia .ph img {
+  object-position: 50% 46%;
+}
+/* Le bord gauche fondu vers le noir, et un voile plat de 18 % sur tout le reste :
+   la photo est là pour la texture et la profondeur, pas pour se faire lire. */
+.mk .of-splitmedia .of-mediafeather {
+  background:
+    linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.35) 22%, rgba(0, 0, 0, 0) 48%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
+}
+
+/* ===== 4. Les services ===== */
 
 /* Des RANGÉES, jamais trois cartes : une carte ferait lire la fiche Google
    comme un troisième choix parmi trois, alors qu'elle est comprise dans la mise
@@ -5278,10 +5619,10 @@ html:has(.mk) {
 }
 .mk .of-row {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 190px;
+  grid-template-columns: 280px minmax(0, 1fr) 230px;
   gap: 28px;
   align-items: baseline;
-  padding: 24px 0 26px;
+  padding: 22px 0 24px;
   border-bottom: 1px solid var(--border-10);
 }
 .mk .of-row:first-child {
@@ -5310,48 +5651,107 @@ html:has(.mk) {
   color: var(--gray);
   text-wrap: pretty;
 }
+/*
+ * LE PRIX PASSE DE 17 À 32 px, ET C'EST LE MÊME GESTE QUE SUR LES FORMULES.
+ *
+ * À 17 px, les trois montants se lisaient APRÈS les rangées. À 32 px, ils
+ * forment une colonne qu'on lit SANS lire les rangées — ce qui est précisément
+ * ce qu'on fait devant un devis, et la seule raison pour laquelle on ouvre une
+ * section « voici le reste, et son prix ».
+ */
 .mk .of-rowprice {
   text-align: right;
-  font-size: 17px;
+  font-size: 32px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.4em;
+  letter-spacing: -0.04em;
+  line-height: 1.1em;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   text-wrap: pretty;
 }
-/* La fiche Google dit « compris dans la mise en route » : la dorer ferait lire
-   les trois rangées comme trois dépenses, l'inverse exact de ce qu'on dit. */
+/* La fiche Google dit « compris dans la mise en route » : la dorer et la grossir
+   ferait lire les trois rangées comme trois dépenses, l'inverse exact de ce
+   qu'on dit d'elle. */
 .mk .of-row:first-child .of-rowprice {
-  font-size: 14.5px;
+  font-size: 16px;
+  letter-spacing: -0.02em;
   color: var(--white-50);
 }
 .mk .of-rowpricenote {
   display: block;
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12.5px;
   font-weight: 500;
+  letter-spacing: -0.01em;
   line-height: 1.4em;
   color: var(--white-50);
 }
 
-/* ===== 4. Toujours compris ===== */
+/* ===== 5. Toujours compris — la bande sur capture voilée ===== */
 
-/* Neuf lignes cochées sur deux colonnes, sans un seul cadre : neuf encadrés à
-   la suite d'une section qui en portait déjà trois referaient le mur de
-   vignettes que la refonte de la landing a démonté. */
+/*
+ * ═══ LA SEULE RESPIRATION HORIZONTALE DE LA PAGE ═══
+ *
+ * Neuf lignes cochées sur DEUX colonnes de 1 200 px, c'est cinq rangées et
+ * 754 px de haut dans la même largeur que les sept autres sections. Sur TROIS
+ * colonnes portées à 1 560 px, c'est trois rangées, une gouttière très large, et
+ * deux cents pixels de moins. La section GAGNE en largeur ce qu'elle PERD en
+ * hauteur : c'est exactement l'échange que la refonte cherche partout — une page
+ * plus riche n'est pas une page plus longue.
+ *
+ * C'est aussi le seul endroit de la page qui dépasse `--content-width`, et c'est
+ * voulu : une liste de neuf lignes courtes est le seul contenu qui supporte
+ * 1 560 px sans devenir illisible.
+ */
+.mk .of-texture {
+  padding: 88px 0;
+  border-top: 1px solid var(--border-10);
+  border-bottom: 1px solid var(--border-10);
+}
+/*
+ * LA CAPTURE EST NOYÉE, PAS AFFICHÉE. À 30 % d'opacité puis sous un voile qui ne
+ * descend jamais sous 28 %, le pixel le plus clair de `menu.png` (du texte
+ * blanc d'interface, ≈ 230) est rendu à 230 × 0,30 × 0,72 ≈ 50 : une luminance
+ * relative de 0,032, sur laquelle le blanc conserve plus de 12:1. Elle donne du
+ * fond et de la profondeur, elle ne s'offre pas à la lecture.
+ */
+.mk .of-texturemedia {
+  opacity: 0.22;
+}
+/*
+ * LE FLOU N'EST PAS UN EFFET, C'EST CE QUI FAIT LA DIFFÉRENCE ENTRE UNE TEXTURE
+ * ET UNE CAPTURE.
+ *
+ * Sans lui, on LISAIT les prix de démonstration de la carte — « 7,50 € »,
+ * « 5,30 € » — derrière neuf lignes de ce qui est compris dans l'abonnement.
+ * Deux jeux de montants sur le même écran, dont un qui n'est pas le nôtre : sur
+ * une page de tarifs, c'est le pire fond possible. Le `scale(1.04)` compense le
+ * bord transparent que tout flou creuse sur les quatre côtés.
+ */
+.mk .of-texturemedia .ph img {
+  object-position: 50% 28%;
+  filter: blur(3px);
+  transform: scale(1.04);
+}
+.mk .of-texture .of-bandveil {
+  background: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.28) 30%, rgba(0, 0, 0, 0.28) 70%, #000 100%);
+}
+.mk .of-textureinner {
+  max-width: calc(1560px + var(--section-pad-x) * 2);
+  gap: 44px;
+}
 .mk .of-checks {
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 44px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 64px;
 }
 .mk .of-check {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 13px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -5365,137 +5765,146 @@ html:has(.mk) {
 .mk .of-tick {
   position: relative;
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  border: 1px solid rgba(201, 161, 90, 0.35);
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 1px solid rgba(201, 161, 90, 0.4);
   border-radius: 50%;
-  background: rgba(201, 161, 90, 0.14);
+  background: rgba(201, 161, 90, 0.16);
 }
 .mk .of-tick::after {
   content: "";
   position: absolute;
-  left: 5px;
-  top: 3px;
-  width: 5px;
-  height: 9px;
-  border-right: 1.6px solid var(--accent);
-  border-bottom: 1.6px solid var(--accent);
+  left: 6px;
+  top: 4px;
+  width: 6px;
+  height: 11px;
+  border-right: 1.8px solid var(--accent);
+  border-bottom: 1.8px solid var(--accent);
   transform: rotate(45deg);
 }
 
-/* ===== 5. Ce qui n'est pas compris ===== */
+/* ===== 6. Conditions — la colonne étroite ===== */
 
-.mk .of-limits {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+/*
+ * LE CONTREPOINT, ET IL N'A PAS UN SEUL CADRE.
+ *
+ * La section arrive juste après une bande pleine largeur sur photo. Lui laisser
+ * son encadré de 900 px sur fond teinté — ce qu'elle avait — reviendrait à poser
+ * une neuvième boîte dans une page qui en comptait vingt-six de plus de
+ * 150 × 60 px. Une mesure de 780 px, aucune bordure, aucun fond, aucune image.
+ * C'est la respiration : après six écrans, la page se tait un instant avant de
+ * demander quelque chose.
+ */
+.mk .of-condwrap {
+  max-width: 780px;
+  gap: 32px;
 }
-/* Le filet doré est posé en ombre INTÉRIEURE et non en `border-left` : une
-   bordure de 2 px face à trois bordures de 1 px produit un coin de travers là
-   où le rayon les raccorde. */
-.mk .of-limit {
-  padding: 24px 26px;
-  border: 1px solid var(--border-10);
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.4);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.mk .of-limittitle {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.35em;
-  color: var(--white);
-}
-.mk .of-limitline {
-  margin-top: 9px;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.6em;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-/* Discrète par sa taille, pas par son emplacement : elle ferme la section qui
-   dit non, personne ne peut prétendre ne pas l'avoir vue. */
-.mk .of-fineprint {
-  max-width: 900px;
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.6em;
-  color: var(--white-50);
-  text-wrap: pretty;
-}
-
-/* ===== 6. Conditions ===== */
-
 .mk .of-conditions {
   width: 100%;
-  max-width: 900px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 30px 32px;
-  border: 1px solid var(--border-10);
-  border-radius: 20px;
-  background: var(--surface-3);
+  gap: 24px;
 }
-/* `ENGAGEMENT` est affichée telle quelle et en tête : c'est la phrase que la
-   vitrine et la FAQ affichent déjà mot pour mot, et la reformuler ici ferait de
-   cette page la troisième occasion de se contredire. */
+/*
+ * `ENGAGEMENT` PASSE DE 15 À 26 px, ET C'EST LE PLUS GROS TEXTE NON-TITRE DE LA
+ * PAGE.
+ *
+ * Elle est affichée telle quelle et en tête : c'est la phrase que la vitrine et
+ * la FAQ affichent déjà mot pour mot, et la reformuler ici ferait de cette page
+ * la troisième occasion de se contredire. Le texte que le site a le DEVOIR de ne
+ * pas réécrire mérite l'échelle qui va avec — c'est le seul endroit de la page
+ * où la typographie sert la confiance plutôt que la vente.
+ */
 .mk .of-engagement {
-  font-size: 19px;
+  font-size: 26px;
   font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.5em;
+  letter-spacing: -0.035em;
+  line-height: 1.45em;
   color: var(--white);
   text-wrap: pretty;
 }
 .mk .of-condition {
-  padding-top: 18px;
-  border-top: 1px solid var(--border-10);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.02em;
-  line-height: 1.6em;
+  line-height: 1.65em;
   color: var(--gray);
   text-wrap: pretty;
 }
+/* `FOUNDER_POLICY` ferme la section, seule sur sa ligne et en or. */
 .mk .of-policy {
-  color: var(--accent);
+  padding-top: 22px;
+  border-top: 1px solid var(--border-10);
+  font-size: 17px;
   font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.5em;
+  color: var(--accent);
 }
 
-/* ===== 7. L'appel de pied de page ===== */
+/* ===== 7. L'appel final — la bande letterbox ===== */
 
-.mk .of-ctasection {
-  padding-bottom: 110px;
-}
-.mk .of-cta {
-  width: 100%;
+/*
+ * LA PAGE FERME SUR LE PRODUIT, PLUS SUR UNE CARTE.
+ *
+ * L'appel tenait dans une `.spot` de 1 200 × 338 : la huitième boîte bordée de
+ * la page, et la cinquième à porter exactement le même dégradé noir — les cinq
+ * seules `background-image` que l'ancienne page comptait étaient ce dégradé,
+ * répété. `board.png` est DÉJÀ une composition noire et dorée pleine largeur :
+ * posée à fond perdu, elle montre ce qu'on vend au moment précis où l'on demande
+ * un rendez-vous.
+ *
+ * Mesure du voile : l'or de l'écran de salle (201,161,90) sous un alpha
+ * composite de 0,89 tombe à ≈ (22,18,10), soit une luminance de 0,007. Mesuré au
+ * canevas sur le pire pixel de la capture, le blanc du titre conserve 12,9:1 —
+ * le seuil AA d'un grand texte est 3:1.
+ */
+.mk .of-ctaband {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  min-height: 420px;
+  border-top: 1px solid var(--border-10);
+}
+/*
+ * MÊME RAISON QU'AU-DESSUS, ET ELLE EST PLUS GRAVE ICI. `board.png` affiche huit
+ * burgers avec leurs prix EN DORÉ — « 9,50 € », « 12,50 € ». Posés nets derrière
+ * l'appel final d'une page dont TOUS les montants sont dorés, ils se lisent
+ * comme nos tarifs. Le flou seul ne suffisait pas : à 1 270 px de large, une
+ * capture de 2 560 px rend son texte à 20 px, et 3,5 px de flou le laissaient
+ * déchiffrable. Il faut les deux — 6 px de flou ET 42 % d'opacité. Ce
+ * qui reste est ce qu'on voulait : une lueur noire et dorée, et rien à lire.
+ */
+.mk .of-ctamedia {
+  opacity: 0.42;
+}
+.mk .of-ctamedia .ph img {
+  object-position: 50% 38%;
+  filter: blur(6px);
+  transform: scale(1.06);
+}
+.mk .of-ctaband .of-bandveil {
+  background:
+    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.76) 28%, rgba(0, 0, 0, 0.76) 72%, #000 100%),
+    radial-gradient(95% 130% at 50% 50%, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.12) 72%);
+}
+.mk .of-ctainner {
   align-items: center;
   text-align: center;
   gap: 18px;
-  padding: 54px 32px;
-  border: 1px solid var(--border-10);
-  border-radius: 26px;
-  background: var(--card-gradient);
+  padding-top: 92px;
+  padding-bottom: 100px;
 }
 .mk .of-ctatitle {
-  max-width: 680px;
+  max-width: 760px;
 }
 .mk .of-ctaline {
   max-width: 580px;
-  color: var(--white-70);
+  color: var(--white-80);
   text-wrap: pretty;
 }
 .mk .of-ctabtns {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -5516,9 +5925,10 @@ html:has(.mk) {
  * ~350 px. Les onze lignes doublent alors de hauteur dans les trois colonnes à
  * la fois, et la comparaison, qui est TOUT ce que cette grille sert, se perd.
  *
- * On gagne donc les pixels sur les gouttières et sur la graisse avant de
- * renoncer aux colonnes. 1199.98px est le seuil intermédiaire déjà utilisé par
- * `marketing.css` pour les titres : on n'en invente pas un douzième.
+ * On gagne donc les pixels sur les gouttières, sur la graisse et sur l'échelle
+ * des chiffres avant de renoncer aux colonnes. 1199.98px est le seuil
+ * intermédiaire déjà utilisé par `marketing.css` pour les titres : on n'en
+ * invente pas un douzième.
  */
 @media (max-width: 1199.98px) {
   .mk .of-plans {
@@ -5528,7 +5938,7 @@ html:has(.mk) {
     padding: 28px 18px 20px;
   }
   .mk .of-amt {
-    font-size: 38px;
+    font-size: 52px;
   }
   .mk .of-year {
     padding: 10px 12px;
@@ -5537,43 +5947,101 @@ html:has(.mk) {
     font-size: 13px;
     line-height: 17px;
   }
+  .mk .of-modulegrid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+    gap: 40px;
+  }
+  .mk .of-modulenum {
+    font-size: 40px;
+  }
+  .mk .of-rowprice {
+    font-size: 27px;
+  }
+  .mk .of-checks {
+    gap: 0 40px;
+  }
 }
 
-/* En dessous, plus rien à gratter : la grille s'empile en une colonne mesurée
-   pour la lecture. Le panneau du module et les rangées de services suivent —
-   à 1 000 px, un encart de prix de 340 px laisse au détail moins de place qu'à
-   sa propre gouttière. */
+/*
+ * En dessous, plus rien à gratter : les grilles s'empilent en une colonne
+ * mesurée pour la lecture. LES DEUX IMAGES DÉBORDANTES CESSENT DE DÉBORDER — le
+ * panneau du module et la bande matériel passent en pile, et leur image devient
+ * une bande horizontale contenue dans la gouttière. Un débord de bord d'écran n'a
+ * de sens que s'il reste une colonne de texte à côté.
+ */
 @media (max-width: 1023.98px) {
   .mk .of-plans {
     grid-template-columns: minmax(0, 1fr);
     max-width: 520px;
     margin-inline: auto;
   }
-  .mk .of-module {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
+  .mk .of-modulesec {
+    padding-inline: var(--section-pad-x);
   }
-  .mk .of-modulecard {
-    max-width: 460px;
+  .mk .of-modulegrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding-left: 0;
+  }
+  .mk .of-modulecol {
+    max-width: none;
+  }
+  /* Empilée, la capture garde encore son rapport natif : une bande horizontale
+     de 460 px dans une capture de téléphone ne montre qu'une tranche arbitraire
+     d'un écran vertical. */
+  .mk .of-modulemedia {
+    width: 100%;
+    max-width: 340px;
+    margin-inline: auto;
+    border-radius: 20px;
+  }
+  .mk .of-modulemedia .of-mediafeather {
+    background: none;
+  }
+  .mk .of-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    min-height: 0;
+    padding-left: 0;
+  }
+  .mk .of-splitcopy {
+    max-width: none;
+    padding: 72px var(--section-pad-x) 56px;
+  }
+  .mk .of-splitmedia {
+    height: 320px;
+  }
+  .mk .of-splitmedia .of-mediafeather {
+    background: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.2) 26%, rgba(0, 0, 0, 0.2) 100%);
   }
   .mk .of-row {
-    grid-template-columns: 240px minmax(0, 1fr) 170px;
+    grid-template-columns: 240px minmax(0, 1fr) 190px;
     gap: 22px;
+  }
+  .mk .of-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 36px;
   }
 }
 
 /* ===== Téléphone — le seuil du dépôt, 809.98px ===== */
 
 @media (max-width: 809.98px) {
-  .mk .of-head {
-    padding-top: 104px;
-    padding-bottom: 12px;
-  }
-  .mk .of-headwrap {
-    gap: 18px;
-  }
   .mk .of-wrap {
     gap: 32px;
+  }
+  .mk .of-hero {
+    min-height: 0;
+  }
+  .mk .of-heroinner {
+    gap: 18px;
+    padding-top: 116px;
+    padding-bottom: 52px;
+  }
+  /* Sur un écran étroit, la lueur radiale calée à 6 % ne couvre plus la largeur
+     du texte : le voile redevient un aplat vertical franc. */
+  .mk .of-hero .of-bandveil {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.74) 0%, rgba(0, 0, 0, 0.82) 55%, #000 100%);
   }
   .mk .of-toc {
     gap: 7px;
@@ -5587,14 +6055,23 @@ html:has(.mk) {
     padding: 28px 20px 22px;
   }
   .mk .of-amt {
-    font-size: 38px;
+    font-size: 56px;
   }
   .mk .of-point {
     padding-left: 38px;
   }
-  .mk .of-modulecard {
-    max-width: none;
-    padding: 22px 20px;
+  .mk .of-modulefigs {
+    gap: 18px 32px;
+  }
+  .mk .of-modulenum {
+    font-size: 38px;
+  }
+  .mk .of-splitcopy {
+    padding: 56px var(--section-pad-x) 44px;
+    gap: 22px;
+  }
+  .mk .of-splitmedia {
+    height: 240px;
   }
   /* Les trois colonnes de la rangée s'empilent : titre, accroche, détail, puis
      le prix — qui repasse à gauche. Aligné à droite sur une pleine largeur de
@@ -5606,31 +6083,30 @@ html:has(.mk) {
   }
   .mk .of-rowprice {
     text-align: left;
+    font-size: 26px;
+  }
+  .mk .of-texture {
+    padding: 70px 0;
+  }
+  .mk .of-textureinner {
+    gap: 32px;
   }
   .mk .of-checks {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
-  .mk .of-limits {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
-  }
-  .mk .of-limit {
-    padding: 20px 20px;
-  }
-  .mk .of-conditions {
-    padding: 24px 20px;
-    gap: 16px;
+  .mk .of-condwrap {
+    gap: 28px;
   }
   .mk .of-engagement {
-    font-size: 17px;
+    font-size: 20px;
   }
-  .mk .of-ctasection {
+  .mk .of-ctaband {
+    min-height: 0;
+  }
+  .mk .of-ctainner {
+    padding-top: 72px;
     padding-bottom: 80px;
-  }
-  .mk .of-cta {
-    padding: 40px 20px;
-    border-radius: 20px;
   }
   .mk .of-ctabtns {
     width: 100%;
