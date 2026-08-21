@@ -728,18 +728,30 @@ export const DEVICE_SCREEN: Record<DemoDevice, { w: number; h: number }> = {
 /**
  * Origines des applications DE TERRAIN embarquées dans la vitrine.
  *
- * PRODUCTION, et ce n'est plus un détail d'exploitation : toute la page repose
- * désormais sur ces adresses. Elles pointaient sur des déploiements de STAGING
- * (`pos-staging-7f92`, `kds-staging-90da`) — un cadre blanc en troisième
- * section détruit la page entière, là où seize autres sections continuaient
- * hier de vendre sans que personne s'en aperçoive.
+ * ═══ ELLES SUIVENT L'ENVIRONNEMENT, ET C'EST UNE LEÇON PAYÉE DEUX FOIS ═══
+ *
+ * Elles ont été codées en dur dans les deux sens en une seule journée. D'abord
+ * sur STAGING, ce qui faisait embarquer des déploiements de test dans la
+ * vitrine de production. Puis sur PRODUCTION pour corriger ce défaut — et la
+ * vitrine de staging s'est mise à embarquer la production, ce qui est pire :
+ * les compilations de production sont en retard sur le mode démonstration, si
+ * bien que le visiteur tombait sur L'ÉCRAN D'APPAIRAGE au lieu d'une caisse.
+ * Constaté en comptant les marqueurs de démonstration dans les paquets servis :
+ * un côté production, cinq côté staging.
+ *
+ * Une adresse figée est fausse dans un environnement sur deux. Chaque
+ * déploiement porte donc les siennes, et le repli est la PRODUCTION — parce
+ * qu'un environnement mal configuré doit dégrader vers le public et jamais vers
+ * un déploiement interne.
  *
  * Corollaire à assumer côté exploitation : ces démonstrations sont un SERVICE
- * à surveiller, pas une image qu'on dépose et qu'on oublie.
+ * à surveiller, pas une image qu'on dépose et qu'on oublie. Et un déploiement
+ * de la vitrine sans déploiement correspondant du POS et du KDS laisse un cadre
+ * qui ne joue plus la démonstration.
  */
 export const DEMO_ORIGINS = {
-  pos: "https://pos-production-a9d8.up.railway.app",
-  kds: "https://kds-production-8991.up.railway.app",
+  pos: process.env.NEXT_PUBLIC_DEMO_POS_URL ?? "https://pos-production-a9d8.up.railway.app",
+  kds: process.env.NEXT_PUBLIC_DEMO_KDS_URL ?? "https://kds-production-8991.up.railway.app",
 } as const;
 
 /**
