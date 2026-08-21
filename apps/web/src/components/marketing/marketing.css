@@ -437,12 +437,56 @@ html:has(.mk) {
       max-height 0.35s ease,
       padding-bottom 0.35s ease;
   }
+  /*
+   * ═══ LE SOMMAIRE DU BURGER NE TENAIT PLUS DANS 320 px ═══
+   *
+   * 320 px avait été taillé pour les cinq entrées de l'ancienne barre.
+   * `NAV_MOBILE` en porte DIX, plus les deux routes sous leur filet : mesuré à
+   * 528 px sur un 375×812. L'`overflow: hidden` de l'état fermé amputait donc
+   * 208 px — « Contact », « Offres » et « Blog » compris — SANS RIEN DIRE, et
+   * les entrées invisibles restaient tabulables : même le clavier ne signalait
+   * pas la troncature.
+   *
+   * On plafonne en `svh` plutôt qu'en pixels : sur un téléphone en paysage
+   * (740×380 vérifié), un 640 px fixe déborderait sous l'écran et « Blog »
+   * serait aussi inatteignable qu'avant ; à 78svh le menu se cale à 296 px,
+   * reste dans la fenêtre et se déroule. `overflow-y: auto` est posé sur
+   * l'état OUVERT seulement — sur l'état fermé, il ferait clignoter une barre
+   * de défilement pendant l'ouverture.
+   */
   .mk .hd-mobilemenu.open {
-    max-height: 320px;
+    max-height: min(78svh, 640px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding-bottom: 24px;
   }
   .mk .hd-mobilemenu a {
     font-size: 18px;
+  }
+
+  /*
+   * LE FILET DIT « ICI ON QUITTE LA PAGE ».
+   *
+   * `/offres` et `/blog` sont des ROUTES au milieu de dix ancres. Sans
+   * séparation elles se lisent comme deux sections de plus, et le lecteur qui
+   * les prend pour telles ne comprend pas pourquoi le document a changé sous
+   * lui. Un trait et un peu d'air suffisent — un intertitre serait un mot de
+   * trop dans un menu qui en compte déjà douze.
+   */
+  .mk .hd-mobilepages {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 4px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-10);
+  }
+  .mk .hd-mobilepage {
+    font-size: 18px;
+    color: var(--white-70);
+  }
+  .mk .hd-mobilepage:hover {
+    color: var(--link-hover);
   }
 }
 
@@ -4551,6 +4595,19 @@ html:has(.mk) {
   letter-spacing: -0.02em;
   color: var(--gray);
 }
+/*
+ * `.foot-legals` est une rangée en `space-between` : à deux enfants, le crédit
+ * et le lien FAQ se collent aux deux bords. La mention d'éditeur fait ~80
+ * caractères — glissée entre eux, elle écrase les deux autres sur les écrans
+ * moyens. `flex-basis: 100%` lui donne sa propre ligne, `order: 3` la place
+ * SOUS les deux autres et non entre elles.
+ */
+.mk .foot-editeur {
+  order: 3;
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--white-50);
+}
 @media (max-width: 809.98px) {
   .mk .foot-wrap {
     padding: 20px;
@@ -4561,12 +4618,1542 @@ html:has(.mk) {
   .mk .foot-notchtab {
     left: 24px;
   }
+  /*
+   * `flex-wrap: nowrap` N'EST PAS DÉCORATIF, IL RÉPARE UN TRONCAGE.
+   *
+   * La règle de base est `row` + `wrap`, ce qui va très bien tant que l'axe
+   * principal est horizontal. Ici on bascule en `column` SANS retirer le
+   * `wrap`, et c'est là que le pied de page se casse : un conteneur flexible
+   * en colonne, autorisé à passer à la ligne et dont la hauteur est
+   * indéfinie, ne dimensionne pas sa ligne sur le conteneur mais sur SON
+   * ENFANT LE PLUS LARGE. `.foot-left` (420 px de max-width) et
+   * `.foot-linkcols` (432 px de contenu) imposaient donc leur propre largeur
+   * dans une carte qui n'en offre que 302 à 390 px de fenêtre — la baseline,
+   * le formulaire de newsletter et la troisième colonne de liens sortaient de
+   * la carte de 130 px et se faisaient couper.
+   *
+   * Rien ne se voyait à l'écran parce que `.mk { overflow-x: clip }` avale le
+   * dépassement : la page ne défilait pas latéralement, le contenu était
+   * simplement AMPUTÉ. C'est le pire des deux mondes, et la raison pour
+   * laquelle ce défaut a survécu à plusieurs relectures visuelles.
+   *
+   * En `nowrap`, la ligne unique reprend la largeur du conteneur et les deux
+   * blocs s'étirent à 302 px. Corollaire obligatoire ci-dessous : une fois
+   * ramené à 302 px, `.foot-linkcols` ne peut plus tenir ses trois colonnes
+   * côte à côte, il doit donc passer à la ligne à son tour.
+   */
   .mk .foot-columns {
     flex-direction: column;
+    flex-wrap: nowrap;
     gap: 40px;
   }
+  /*
+   * Trois colonnes de liens = 312 px de texte + les gouttières. Elles tenaient
+   * sur une ligne tant que `.foot-linkcols` s'auto-dimensionnait ; contraint à
+   * la largeur de la carte, il lui faut le droit de replier. La gouttière
+   * verticale (`row-gap`) est plus serrée que l'horizontale : deux colonnes
+   * empilées se lisent comme deux blocs, pas comme deux sections.
+   */
   .mk .foot-linkcols {
-    gap: 60px;
+    flex-wrap: wrap;
+    column-gap: 40px;
+    row-gap: 32px;
+  }
+}
+
+/* ===== Réseaux sociaux ===== */
+/*
+ * Un seul jeu de règles pour les deux emplacements (`Reseaux.tsx`), et deux
+ * variantes qui ne changent QUE le poids visuel : le pied de page assume, le
+ * hero s'efface. Rien ici n'est rendu tant qu'aucune ligne de `RESEAUX` n'a
+ * d'URL — le composant sort `null` avant d'atteindre ces sélecteurs.
+ */
+.mk .rs-row {
+  display: flex;
+  align-items: center;
+}
+.mk .rs-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--white-50);
+  transition:
+    color 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+.mk .rs-link:hover {
+  color: var(--link-hover);
+}
+.mk .rs-link:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+
+/*
+ * HERO — SOUS LES BOUTONS ET SANS CHROME.
+ *
+ * Le hero est centré (`.hero-content` est en `align-items: center`), la rangée
+ * l'est donc aussi. Pas de pastille, pas de bord : un cercle dessiné autour de
+ * chaque icône en ferait quatre boutons de plus, face à deux vrais appels à
+ * l'action — c'est précisément ce qu'on refuse. Seule la surface cliquable est
+ * portée à 36 px ; le dessin, lui, reste à 17.
+ */
+.mk .rs-hero {
+  justify-content: center;
+  gap: 2px;
+  margin-top: 22px;
+}
+.mk .rs-hero .rs-link {
+  width: 36px;
+  height: 36px;
+}
+
+/*
+ * PIED DE PAGE — CERCLÉ, parce qu'il n'y a plus rien à lui voler. La pastille
+ * reprend `--surface-3` / `--border-10`, les mêmes jetons que les cartes de la
+ * page : la rangée se lit comme un élément de la charte et pas comme un
+ * greffon.
+ */
+.mk .rs-pied {
+  gap: 10px;
+}
+.mk .rs-pied .rs-link {
+  width: 40px;
+  height: 40px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-10);
+}
+.mk .rs-pied .rs-link:hover {
+  background: var(--surface-6);
+  border-color: var(--link-hover);
+}
+
+@media (max-width: 809.98px) {
+  .mk .rs-hero {
+    margin-top: 18px;
+  }
+  /* Le pied de page passe en colonne : la rangée reste alignée à gauche avec
+     le reste de `.foot-left`, elle n'a rien à recentrer. */
+  .mk .rs-pied {
+    gap: 8px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OFFRES — route `/offres`
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ═══ POURQUOI CES RÈGLES SONT ICI ET PAS DANS UNE FEUILLE DE ROUTE ═══
+
+   Elles ont d'abord vécu dans `app/(marketing)/offres/offres.css`, importée par
+   son `page.tsx` — pour éviter un conflit de fusion sur ce fichier pendant que
+   deux mains y écrivaient dans le même cycle. Ce cycle est clos, et l'argument
+   avec lui. Restait alors une feuille par route et une feuille commune, c'est-à-
+   dire la question « où va ce sélecteur ? » à trancher à chaque ajout : le blog
+   la posait déjà. Une seule feuille de vitrine, chargée une fois par le layout
+   du groupe, et la question ne se pose plus.
+
+   ═══ TOUT EST PRÉFIXÉ `.mk`, SANS EXCEPTION ═══
+
+   Cette feuille est chargée en même temps que `globals.css` et que la feuille du
+   back-office : un sélecteur nu (`.section`, `.badge`, `.of-row`) fuirait sur la
+   caisse et sur la commande client. `.mk` est le conteneur posé par
+   `app/(marketing)/layout.tsx` — c'est aussi la raison pour laquelle rien de
+   cette page ne peut vivre hors de lui.
+
+   ═══ CE QU'ON RÉUTILISE PLUTÔT QUE DE LE REDESSINER ═══
+
+   `.section`, `.badge`, `.h1`, `.h2`, `.subheading`, `.btn`, `.rv` (révélation
+   au défilement) et `.spot` (projecteur au survol) sont définis plus haut dans
+   ce fichier et ne sont jamais redéfinis ici : la charte est sombre, dorée
+   (#c9a15a), sobre, et elle ne bouge pas. Les jetons (`--accent`,
+   `--card-gradient`, `--border-10`, `--white-70`…) sont lus, jamais recopiés en
+   dur — à une exception près, les teintes dorées translucides, que la charte
+   n'expose pas en jeton et qui sont écrites en toutes lettres avec leur
+   intention.
+
+   Le point de rupture mobile du dépôt est 809.98px — pas 768. Deux seuils
+   intermédiaires le précèdent : 1199.98px (celui que les titres utilisent déjà)
+   resserre les trois colonnes, 1023.98px les empile avant qu'elles ne
+   deviennent illisibles. Les valeurs sont mesurées en navigateur, pas devinées
+   — voir le commentaire de chaque bloc.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ===== Ossature commune ===== */
+
+/*
+ * Le conteneur de chaque section. `.section` (marketing.css) centre ses enfants
+ * et pose la gouttière horizontale ; `.of-wrap` reprend la largeur de contenu du
+ * site et ALIGNE À GAUCHE — c'est le seul écart de composition assumé vis-à-vis
+ * de la landing, dont les têtes de section sont centrées.
+ *
+ * Ce n'est pas une préférence : la vitrine ADRESSE un lecteur, cette page se
+ * FEUILLETTE. Un titre centré au-dessus d'une liste de prix se lit comme une
+ * affiche ; aligné à gauche, il se lit comme un document qu'on vérifie, ce que
+ * cette page est.
+ */
+.mk .of-wrap {
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 40px;
+}
+
+/*
+ * Le fond teinté ne décore pas, il RYTHME : il tombe sur la section du module et
+ * sur celle qui dit non, c'est-à-dire les deux endroits où le lecteur doit
+ * ralentir. Deux sections teintées ne se suivent jamais.
+ */
+.mk .of-section.is-tinted {
+  background: var(--surface-3);
+  border-top: 1px solid var(--border-10);
+  border-bottom: 1px solid var(--border-10);
+}
+
+.mk .of-sechead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 720px;
+}
+.mk .of-seclead {
+  color: var(--white-70);
+  text-wrap: pretty;
+}
+
+/* Le mot que la pastille ne dit pas — même procédé que `.pr-sr` : hors de
+   l'écran, jamais hors du texte. */
+.mk .of-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ===== En-tête de page ===== */
+
+/* L'en-tête du site est FIXE (57 px de haut au repos) : sans ce dégagement, le
+   `h1` naîtrait sous l'encoche. */
+.mk .of-head {
+  padding-top: 132px;
+  padding-bottom: 24px;
+}
+/* PAS de `max-width` propre à l'en-tête : `.of-wrap` est centré, donc toute
+   largeur plus étroite décalerait le bord gauche du `h1` par rapport à celui de
+   toutes les sections en dessous. C'est le titre et l'accroche qui portent leur
+   propre mesure de lecture, jamais leur conteneur. */
+.mk .of-headwrap {
+  gap: 22px;
+}
+.mk .of-title {
+  max-width: 780px;
+}
+.mk .of-lead {
+  max-width: 640px;
+  color: var(--white-70);
+  text-wrap: pretty;
+}
+
+/* Trois faits, trois pastilles. Aucune ne parle d'engagement : la clause ne
+   s'écrit qu'en entier, et une pastille de trois mots ne peut pas la porter. */
+.mk .of-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mk .of-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-10);
+  background: var(--surface-3);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--white-80);
+}
+.mk .of-fact::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/*
+ * LE SOMMAIRE. La page fait plus de trois écrans ; sans lui, celui qui vient
+ * pour « ce qui n'est pas compris » défile à l'aveugle sur toute la grille
+ * tarifaire. Il n'est PAS collant : une barre de plus sous une en-tête déjà
+ * fixe mange trente pixels de hauteur utile sur un téléphone, et le lecteur d'une
+ * page de vérification revient en haut, il ne saute pas de section en section.
+ */
+.mk .of-toc {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border-10);
+}
+.mk .of-tocitem {
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: var(--surface-6);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2em;
+  color: var(--white-80);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.mk .of-tocitem:hover,
+.mk .of-tocitem:focus-visible {
+  background: var(--accent);
+  color: var(--black);
+}
+
+/* ===== 1. Les trois formules ===== */
+
+.mk .of-plans {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+/* L'enveloppe de révélation porte le retard ; la carte, elle, doit remplir sa
+   colonne sur toute la hauteur pour que les trois pieds s'alignent. */
+.mk .of-plans > .rv {
+  display: flex;
+}
+.mk .of-plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 30px 26px 26px;
+  border: 1px solid var(--border-10);
+  border-radius: 22px;
+  background: var(--card-gradient);
+}
+/* La formule la plus vendue se distingue par son CADRE, pas par sa taille : une
+   carte surélevée casserait l'alignement des trois listes de modules, or c'est
+   précisément cet alignement qui rend la comparaison lisible d'un regard. */
+.mk .of-plan.is-popular {
+  border-color: rgba(201, 161, 90, 0.45);
+  box-shadow: 0 24px 60px -34px rgba(201, 161, 90, 0.55);
+}
+.mk .of-planbadge {
+  position: absolute;
+  top: -11px;
+  left: 26px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--black);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.mk .of-planname {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+}
+.mk .of-price {
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mk .of-amt {
+  font-size: 42px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1em;
+  font-variant-numeric: tabular-nums;
+}
+.mk .of-per {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--white-50);
+}
+
+/*
+ * L'ANNÉE EST AFFICHÉE, PAS CACHÉE DERRIÈRE UN ONGLET.
+ *
+ * La vitrine a un sélecteur « Par mois / Par an » parce qu'elle doit tenir en un
+ * regard. Ici le lecteur VÉRIFIE : masquer la moitié des montants derrière un
+ * clic transformerait la page de détail en devinette. L'encart porte donc les
+ * deux informations que « 1 590 € » seul ne donne pas — la période, et
+ * l'équivalent ramené au mois, seul chiffre qui se compare au tarif du dessus.
+ */
+.mk .of-year {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-10);
+  border-radius: 12px;
+  background: var(--surface-3);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.4em;
+  color: var(--white-70);
+}
+.mk .of-yearamt {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+.mk .of-yearhint {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(201, 161, 90, 0.16);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+/* L'équivalent mensuel prend sa propre ligne : accolé aux deux autres, il se
+   lisait comme un troisième prix. */
+.mk .of-yearmonth {
+  flex-basis: 100%;
+  color: var(--white-50);
+}
+
+.mk .of-plandesc {
+  margin-top: 16px;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+
+/* La MÊME liste dans les trois colonnes, pastille pleine ou vide. Une ligne
+   éteinte reste à sa place : la retirer obligerait de nouveau à comparer des
+   listes de longueurs différentes. */
+.mk .of-mods {
+  flex: 1;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-10);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.mk .of-mod {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 18px;
+  color: var(--white-80);
+}
+.mk .of-mod.is-off {
+  color: rgba(255, 255, 255, 0.3);
+}
+.mk .of-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.mk .of-mod.is-off .of-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+/* La première question de qui compare Essentiel et Boost : « et la commande en
+   ligne, elle coûte combien en plus ? ». La grille de la vitrine ne peut pas la
+   porter, elle a déjà onze lignes par colonne. */
+.mk .of-plannote {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.5em;
+  color: var(--white-50);
+  text-wrap: pretty;
+}
+.mk .of-plannote.is-inclus {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== 2. Le module Commande en ligne & fidélité ===== */
+
+/*
+ * DEUX COLONNES, ET SURTOUT PAS UNE QUATRIÈME CARTE DE PRIX. Alignée sous les
+ * trois autres, elle ferait lire le module comme une formule de plus — donc
+ * comme un choix À LA PLACE de Boost, alors que c'est un supplément qui se
+ * branche SUR Essentiel ou Complet. Le détail tient la largeur, le prix s'isole
+ * dans un encart qui ne ressemble à aucune des trois cartes du dessus.
+ */
+.mk .of-module {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 44px;
+  align-items: start;
+}
+
+.mk .of-points {
+  counter-reset: of-point;
+  display: flex;
+  flex-direction: column;
+}
+.mk .of-point {
+  position: relative;
+  padding: 20px 0 20px 46px;
+  border-top: 1px solid var(--border-10);
+}
+.mk .of-point:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+/* Le numéro plutôt qu'une puce : six capacités qui se lisent dans l'ordre du
+   parcours d'un client, du panier au retrait. `line-height` cale le chiffre sur
+   la première ligne du titre, pas sur le haut de la boîte. */
+.mk .of-point::before {
+  counter-increment: of-point;
+  content: counter(of-point, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 23px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mk .of-point:first-child::before {
+  top: 0;
+}
+.mk .of-pointtitle {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 23px;
+}
+.mk .of-pointline {
+  margin-top: 7px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.55em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+
+.mk .of-modulecard {
+  padding: 26px 24px;
+  border: 1px solid var(--border-10);
+  border-radius: 20px;
+  background: var(--card-gradient);
+}
+.mk .of-modulename {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.35em;
+}
+.mk .of-modulerows {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mk .of-modulerow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-10);
+}
+.mk .of-modulerow dt {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--white-70);
+}
+.mk .of-modulerow dd {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mk .of-modulenote {
+  margin-top: 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+/* L'addition, écrite franchement plutôt que laissée à découvrir : quelqu'un qui
+   la fait tout seul et trouve Boost moins cher se demande pourquoi on ne le lui
+   a pas dit. */
+.mk .of-modulemath {
+  margin-top: 18px;
+  padding: 14px 15px;
+  border: 1px solid rgba(201, 161, 90, 0.22);
+  border-radius: 12px;
+  background: rgba(201, 161, 90, 0.08);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--white-80);
+  text-wrap: pretty;
+}
+
+/* ===== 3. Les services ===== */
+
+/* Des RANGÉES, jamais trois cartes : une carte ferait lire la fiche Google
+   comme un troisième choix parmi trois, alors qu'elle est comprise dans la mise
+   en route et n'est en concurrence avec rien. Une rangée se lit comme une ligne
+   de devis — ce que cette page est. */
+.mk .of-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.mk .of-row {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 190px;
+  gap: 28px;
+  align-items: baseline;
+  padding: 24px 0 26px;
+  border-bottom: 1px solid var(--border-10);
+}
+.mk .of-row:first-child {
+  border-top: 1px solid var(--border-10);
+}
+.mk .of-rowtitle {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+}
+.mk .of-rowlead {
+  margin-top: 7px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.45em;
+  color: var(--white-80);
+  text-wrap: pretty;
+}
+.mk .of-rowline {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .of-rowprice {
+  text-align: right;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.4em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  text-wrap: pretty;
+}
+/* La fiche Google dit « compris dans la mise en route » : la dorer ferait lire
+   les trois rangées comme trois dépenses, l'inverse exact de ce qu'on dit. */
+.mk .of-row:first-child .of-rowprice {
+  font-size: 14.5px;
+  color: var(--white-50);
+}
+.mk .of-rowpricenote {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4em;
+  color: var(--white-50);
+}
+
+/* ===== 4. Toujours compris ===== */
+
+/* Neuf lignes cochées sur deux colonnes, sans un seul cadre : neuf encadrés à
+   la suite d'une section qui en portait déjà trois referaient le mur de
+   vignettes que la refonte de la landing a démonté. */
+.mk .of-checks {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 44px;
+}
+.mk .of-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--white-80);
+  text-wrap: pretty;
+}
+/* Une coche dorée dessinée en CSS plutôt que la pastille verte de `TickDot` :
+   le vert est le langage du comparatif « avec / sans » de la vitrine, et neuf
+   pastilles vertes d'affilée le rejoueraient ici sans qu'il y ait de « sans ». */
+.mk .of-tick {
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 1px solid rgba(201, 161, 90, 0.35);
+  border-radius: 50%;
+  background: rgba(201, 161, 90, 0.14);
+}
+.mk .of-tick::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 3px;
+  width: 5px;
+  height: 9px;
+  border-right: 1.6px solid var(--accent);
+  border-bottom: 1.6px solid var(--accent);
+  transform: rotate(45deg);
+}
+
+/* ===== 5. Ce qui n'est pas compris ===== */
+
+.mk .of-limits {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+/* Le filet doré est posé en ombre INTÉRIEURE et non en `border-left` : une
+   bordure de 2 px face à trois bordures de 1 px produit un coin de travers là
+   où le rayon les raccorde. */
+.mk .of-limit {
+  padding: 24px 26px;
+  border: 1px solid var(--border-10);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.mk .of-limittitle {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.35em;
+  color: var(--white);
+}
+.mk .of-limitline {
+  margin-top: 9px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+/* Discrète par sa taille, pas par son emplacement : elle ferme la section qui
+   dit non, personne ne peut prétendre ne pas l'avoir vue. */
+.mk .of-fineprint {
+  max-width: 900px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.6em;
+  color: var(--white-50);
+  text-wrap: pretty;
+}
+
+/* ===== 6. Conditions ===== */
+
+.mk .of-conditions {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 30px 32px;
+  border: 1px solid var(--border-10);
+  border-radius: 20px;
+  background: var(--surface-3);
+}
+/* `ENGAGEMENT` est affichée telle quelle et en tête : c'est la phrase que la
+   vitrine et la FAQ affichent déjà mot pour mot, et la reformuler ici ferait de
+   cette page la troisième occasion de se contredire. */
+.mk .of-engagement {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.5em;
+  color: var(--white);
+  text-wrap: pretty;
+}
+.mk .of-condition {
+  padding-top: 18px;
+  border-top: 1px solid var(--border-10);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.6em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+.mk .of-policy {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== 7. L'appel de pied de page ===== */
+
+.mk .of-ctasection {
+  padding-bottom: 110px;
+}
+.mk .of-cta {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 18px;
+  padding: 54px 32px;
+  border: 1px solid var(--border-10);
+  border-radius: 26px;
+  background: var(--card-gradient);
+}
+.mk .of-ctatitle {
+  max-width: 680px;
+}
+.mk .of-ctaline {
+  max-width: 580px;
+  color: var(--white-70);
+  text-wrap: pretty;
+}
+.mk .of-ctabtns {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.mk .of-ctabtns .btn {
+  padding: 13px 22px;
+  font-size: 15px;
+}
+
+/* ===== Écrans intermédiaires ===== */
+
+/*
+ * LES TROIS COLONNES SE RESSERRENT AVANT DE TOMBER, et c'est mesuré, pas
+ * décoré : ce qui casse la grille, ce sont les libellés de `PLAN_MODULES` —
+ * « Back-office : CA, commandes, exports CSV », « Planning, pointage & coût de
+ * la semaine » — qui passent à deux lignes dès que la colonne descend sous
+ * ~350 px. Les onze lignes doublent alors de hauteur dans les trois colonnes à
+ * la fois, et la comparaison, qui est TOUT ce que cette grille sert, se perd.
+ *
+ * On gagne donc les pixels sur les gouttières et sur la graisse avant de
+ * renoncer aux colonnes. 1199.98px est le seuil intermédiaire déjà utilisé par
+ * `marketing.css` pour les titres : on n'en invente pas un douzième.
+ */
+@media (max-width: 1199.98px) {
+  .mk .of-plans {
+    gap: 14px;
+  }
+  .mk .of-plan {
+    padding: 28px 18px 20px;
+  }
+  .mk .of-amt {
+    font-size: 38px;
+  }
+  .mk .of-year {
+    padding: 10px 12px;
+  }
+  .mk .of-mod {
+    font-size: 13px;
+    line-height: 17px;
+  }
+}
+
+/* En dessous, plus rien à gratter : la grille s'empile en une colonne mesurée
+   pour la lecture. Le panneau du module et les rangées de services suivent —
+   à 1 000 px, un encart de prix de 340 px laisse au détail moins de place qu'à
+   sa propre gouttière. */
+@media (max-width: 1023.98px) {
+  .mk .of-plans {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 520px;
+    margin-inline: auto;
+  }
+  .mk .of-module {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+  .mk .of-modulecard {
+    max-width: 460px;
+  }
+  .mk .of-row {
+    grid-template-columns: 240px minmax(0, 1fr) 170px;
+    gap: 22px;
+  }
+}
+
+/* ===== Téléphone — le seuil du dépôt, 809.98px ===== */
+
+@media (max-width: 809.98px) {
+  .mk .of-head {
+    padding-top: 104px;
+    padding-bottom: 12px;
+  }
+  .mk .of-headwrap {
+    gap: 18px;
+  }
+  .mk .of-wrap {
+    gap: 32px;
+  }
+  .mk .of-toc {
+    gap: 7px;
+    padding-top: 22px;
+  }
+  .mk .of-tocitem {
+    padding: 8px 13px;
+    font-size: 13px;
+  }
+  .mk .of-plan {
+    padding: 28px 20px 22px;
+  }
+  .mk .of-amt {
+    font-size: 38px;
+  }
+  .mk .of-point {
+    padding-left: 38px;
+  }
+  .mk .of-modulecard {
+    max-width: none;
+    padding: 22px 20px;
+  }
+  /* Les trois colonnes de la rangée s'empilent : titre, accroche, détail, puis
+     le prix — qui repasse à gauche. Aligné à droite sur une pleine largeur de
+     téléphone, il se retrouvait seul à l'autre bout de l'écran. */
+  .mk .of-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 22px 0 24px;
+  }
+  .mk .of-rowprice {
+    text-align: left;
+  }
+  .mk .of-checks {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .mk .of-limits {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .mk .of-limit {
+    padding: 20px 20px;
+  }
+  .mk .of-conditions {
+    padding: 24px 20px;
+    gap: 16px;
+  }
+  .mk .of-engagement {
+    font-size: 17px;
+  }
+  .mk .of-ctasection {
+    padding-bottom: 80px;
+  }
+  .mk .of-cta {
+    padding: 40px 20px;
+    border-radius: 20px;
+  }
+  .mk .of-ctabtns {
+    width: 100%;
+    flex-direction: column;
+  }
+  .mk .of-ctabtns .btn {
+    width: 100%;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BLOG — /blog et /blog/[slug]
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Tout est préfixé `.mk`, comme le reste de la feuille : les pages du blog
+   vivent dans le groupe `(marketing)`, donc sous le conteneur posé par
+   `app/(marketing)/layout.tsx`, et aucun de ces noms génériques ne doit fuir
+   sur la caisse ou le back-office.
+
+   La charte ne bouge pas : fond noir, laiton #c9a15a, aucune couleur nouvelle.
+   Tout ce qui suit ne fait que composer les jetons existants.
+
+   LE POINT DE RUPTURE EST 809.98px, celui du dépôt — pas 768.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── La colonne de lecture ────────────────────────────────────────────────
+   Une seule largeur par surface, et elles diffèrent pour une raison : sur
+   l'index on parcourt des cartes (780 px, on balaie), sur un article on LIT
+   (720 px, soit une soixantaine de signes par ligne — au-delà, l'œil perd la
+   ligne suivante en revenant à la marge).                                  */
+.mk .bl-index .bl-cards,
+.mk .bl-index .bl-outro {
+  max-width: 780px;
+}
+.mk .bl-article .bl-head,
+.mk .bl-article .bl-corps,
+.mk .bl-article .bl-outro,
+.mk .bl-article .bl-autres {
+  max-width: 720px;
+}
+
+/* ── Index : la liste d'articles ─────────────────────────────────────── */
+.mk .bl-cards {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mk .bl-card {
+  background: var(--card-gradient);
+  border: 1px solid var(--border-10);
+  border-radius: 24px;
+  transition:
+    border-color 0.3s,
+    transform 0.3s;
+}
+.mk .bl-card:hover {
+  border-color: rgba(201, 161, 90, 0.35);
+  transform: translateY(-2px);
+}
+/* Le lien couvre la carte entière : la cible de clic est la carte, pas les
+   trois mots de « Lire l'article ». */
+.mk .bl-cardlink {
+  display: block;
+  padding: 30px;
+  border-radius: 24px;
+}
+.mk .bl-cardlink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.mk .bl-meta {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2em;
+  color: var(--white-50);
+}
+.mk .bl-cardtitre {
+  margin-top: 12px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.18em;
+  text-wrap: balance;
+  transition: color 0.3s;
+}
+.mk .bl-card:hover .bl-cardtitre {
+  color: var(--accent);
+}
+.mk .bl-cardchapo {
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.55em;
+  color: var(--gray);
+}
+.mk .bl-cardcta {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  transition: color 0.3s;
+}
+.mk .bl-card:hover .bl-cardcta {
+  color: var(--link-hover);
+}
+
+/* ── Le renvoi vers la landing, en pied de page et de section ─────────── */
+.mk .bl-outro {
+  width: 100%;
+  background: var(--surface-3);
+  border: 1px solid var(--border-10);
+  border-radius: 24px;
+  padding: 34px 32px;
+  text-align: center;
+}
+.mk .bl-outrotitre {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.3em;
+  text-wrap: balance;
+}
+.mk .bl-outroline {
+  margin: 10px auto 0;
+  max-width: 52ch;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.55em;
+  color: var(--gray);
+}
+.mk .bl-outroctas {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+/* ── Article : l'en-tête ─────────────────────────────────────────────── */
+.mk .bl-article {
+  gap: 44px;
+}
+.mk .bl-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  text-align: left;
+}
+.mk .bl-retour {
+  color: var(--white-50);
+  transition: color 0.2s;
+}
+.mk .bl-retour:hover {
+  color: var(--accent);
+}
+.mk .bl-titre {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.06em;
+  text-wrap: balance;
+}
+.mk .bl-chapo {
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--white-70);
+}
+/* Le filet laiton sépare le chapô du corps sans qu'on ait à écrire un titre
+   « Introduction » que personne ne lit. */
+.mk .bl-head::after {
+  content: "";
+  display: block;
+  width: 72px;
+  height: 1px;
+  margin-top: 6px;
+  background: var(--accent);
+}
+
+/* ── Article : le corps ──────────────────────────────────────────────── */
+.mk .bl-corps {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  text-align: left;
+}
+.mk .bl-p {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.72em;
+  color: var(--white-70);
+}
+.mk .bl-p strong,
+.mk .bl-liste strong,
+.mk .bl-notecorps strong {
+  color: var(--white);
+  font-weight: 600;
+}
+.mk .bl-p em {
+  font-style: italic;
+  color: var(--white-80);
+}
+.mk .bl-h2 {
+  margin-top: 20px;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.2em;
+  text-wrap: balance;
+}
+
+/* Les listes — la feuille remet `list-style: none` sur tout `.mk ul`, on
+   redessine donc la puce nous-mêmes plutôt que de la ranimer. */
+.mk .bl-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mk .bl-liste > li {
+  position: relative;
+  padding-left: 24px;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.65em;
+  color: var(--white-70);
+}
+.mk .bl-liste > li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.72em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* La liste à cocher d'avant-ouverture : une case vide, parce qu'on demande au
+   lecteur de la cocher lui-même, sur son papier. */
+.mk .bl-check > li::before {
+  top: 0.62em;
+  left: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid var(--accent);
+  background: none;
+}
+
+/* Les modes d'emploi numérotés. `.mk ol` n'a plus de compteur natif : on en
+   pose un, ce qui a l'avantage de laisser dessiner la pastille. */
+.mk .bl-etapes {
+  counter-reset: bl-etape;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.mk .bl-etape {
+  counter-increment: bl-etape;
+  position: relative;
+  padding-left: 52px;
+  min-height: 34px;
+}
+.mk .bl-etape::before {
+  content: counter(bl-etape);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-6);
+  border: 1px solid var(--border-10);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.mk .bl-etapetitre {
+  padding-top: 5px;
+  margin-bottom: 6px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35em;
+  color: var(--white);
+}
+/* Variante sans titre d'étape : le texte commence en haut, la pastille aussi. */
+.mk .bl-etapes-simple .bl-etape {
+  padding-top: 3px;
+}
+
+/* ── L'encadré « à retenir » ─────────────────────────────────────────── */
+.mk .bl-note {
+  background: var(--surface-3);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 16px 16px 0;
+  padding: 20px 24px;
+}
+.mk .bl-notetitre {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.mk .bl-notecorps {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.62em;
+  color: var(--white-80);
+}
+
+/* ── Les libellés d'interface recopiés verbatim ──────────────────────── */
+.mk .bl-ui {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--badge-bg);
+  border: 1px solid var(--border-10);
+  font-size: 0.92em;
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+/* ── Le renvoi interne (composant `Renvoi`) ──────────────────────────── */
+.mk .bl-renvoi {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(201, 161, 90, 0.4);
+  transition: color 0.2s;
+}
+.mk .bl-renvoi:hover {
+  color: var(--link-hover);
+  text-decoration-color: currentColor;
+}
+
+/* ── Le tableau des taux ─────────────────────────────────────────────── */
+.mk .bl-tablewrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.mk .bl-table {
+  width: 100%;
+  min-width: 460px;
+  border-collapse: collapse;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.mk .bl-table th,
+.mk .bl-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-10);
+}
+.mk .bl-table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--white-50);
+}
+.mk .bl-table tbody th {
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+}
+.mk .bl-table td {
+  color: var(--gray);
+  line-height: 1.5em;
+}
+.mk .bl-table td.bl-taux {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Les sources ─────────────────────────────────────────────────────── */
+.mk .bl-sources {
+  margin-top: 18px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-10);
+}
+.mk .bl-sourcestitre {
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--white-50);
+}
+.mk .bl-sourceslist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mk .bl-source {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mk .bl-sourcelink {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.4em;
+  color: var(--white-80);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-10);
+  transition: color 0.2s;
+}
+.mk .bl-sourcelink:hover {
+  color: var(--accent);
+}
+.mk .bl-sourcedate {
+  font-size: 13px;
+  color: var(--white-30);
+}
+
+/* ── « À lire aussi » ────────────────────────────────────────────────── */
+.mk .bl-autres {
+  width: 100%;
+  text-align: left;
+}
+.mk .bl-autrestitre {
+  margin-bottom: 16px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.2em;
+}
+.mk .bl-autreslist {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.mk .bl-autre {
+  background: var(--surface-3);
+  border: 1px solid var(--border-10);
+  border-radius: 18px;
+  transition: border-color 0.3s;
+}
+.mk .bl-autre:hover {
+  border-color: rgba(201, 161, 90, 0.35);
+}
+.mk .bl-autre .bl-cardlink {
+  padding: 22px;
+  border-radius: 18px;
+}
+.mk .bl-autretitre {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3em;
+  transition: color 0.3s;
+}
+.mk .bl-autre:hover .bl-autretitre {
+  color: var(--accent);
+}
+.mk .bl-autre .bl-cardcta {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+/* ── Téléphone ───────────────────────────────────────────────────────── */
+@media (max-width: 809.98px) {
+  .mk .bl-article {
+    gap: 34px;
+  }
+  .mk .bl-titre {
+    font-size: 31px;
+    line-height: 1.1em;
+  }
+  .mk .bl-chapo {
+    font-size: 17px;
+  }
+  .mk .bl-h2 {
+    margin-top: 14px;
+    font-size: 22px;
+  }
+  .mk .bl-p,
+  .mk .bl-liste > li,
+  .mk .bl-notecorps {
+    font-size: 16px;
+  }
+  .mk .bl-corps {
+    gap: 18px;
+  }
+  .mk .bl-cardlink {
+    padding: 22px;
+  }
+  .mk .bl-cardtitre {
+    font-size: 21px;
+  }
+  .mk .bl-cardchapo {
+    font-size: 15px;
+  }
+  .mk .bl-outro {
+    padding: 26px 20px;
+  }
+  .mk .bl-outrotitre {
+    font-size: 19px;
+  }
+  /* Deux boutons côte à côte sous 360 px se coupent au milieu d'un mot :
+     `.btn` interdit le retour à la ligne (`white-space: nowrap`). */
+  .mk .bl-outroctas {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .mk .bl-etape {
+    padding-left: 44px;
+  }
+  .mk .bl-etape::before {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+  .mk .bl-etapetitre {
+    padding-top: 3px;
+    font-size: 17px;
+  }
+  .mk .bl-note {
+    padding: 16px 18px;
+  }
+  .mk .bl-autreslist {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -4648,5 +6235,10 @@ html:has(.mk) {
   .mk .fd-card::before,
   .mk .pr-card.popular {
     animation: none !important;
+  }
+  /* La rangée de réseaux fond sa couleur au survol. C'est le seul fondu que
+     le réglage système ne couvrait pas encore. */
+  .mk .rs-link {
+    transition: none;
   }
 }

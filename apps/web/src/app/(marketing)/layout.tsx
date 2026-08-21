@@ -1,9 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { ADLaM_Display } from "next/font/google";
 import { PRICE_RANGE } from "@/components/marketing/content";
+import { SITE_URL } from "@/lib/site";
 import "@/components/marketing/marketing.css";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://snackmanager.fr";
 
 const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
 /**

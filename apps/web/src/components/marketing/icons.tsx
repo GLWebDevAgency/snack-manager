@@ -324,6 +324,74 @@ export function MtReseau({ size = 34 }: { size?: number }) {
   );
 }
 
+/* ── Réseaux sociaux ─────────────────────────────────────────── */
+
+/*
+ * QUATRE MARQUES, UN SEUL POIDS VISUEL.
+ *
+ * Ce sont les seuls pictogrammes du fichier qu'on ne dessine pas librement :
+ * un logo de réseau n'est reconnu que s'il est reproduit, et un Instagram
+ * « réinterprété » ne se lit plus du tout à 18 px. On reprend donc les tracés
+ * canoniques, simplifiés, en `currentColor` — jamais les couleurs de marque,
+ * qui feraient quatre taches dans une charte sombre et dorée.
+ *
+ * PLEINS ET NON EN TRAIT, contrairement aux pictos de section (`line24`) :
+ * `IcoPhone` a déjà posé le 24×24 plein dans ce fichier, et à la taille où ces
+ * marques s'affichent un trait de 1,4 les rendrait illisibles. La seule
+ * exception est Instagram, dont le mot-symbole EST un contour — on le garde
+ * creux, sinon ce n'est plus Instagram.
+ *
+ * `fillRule="evenodd"` sur LinkedIn : le « in » et le carré vivent dans le
+ * même tracé, et c'est la règle pair-impair qui évide les lettres.
+ *
+ * `aria-hidden` comme partout ailleurs : le nom du réseau est porté par le
+ * `aria-label` du lien qui les enveloppe, pas par le dessin.
+ */
+
+type Picto = { size?: number };
+
+export function IcoInstagram({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M8.2 3h7.6A5.2 5.2 0 0 1 21 8.2v7.6A5.2 5.2 0 0 1 15.8 21H8.2A5.2 5.2 0 0 1 3 15.8V8.2A5.2 5.2 0 0 1 8.2 3Zm0 1.9A3.3 3.3 0 0 0 4.9 8.2v7.6a3.3 3.3 0 0 0 3.3 3.3h7.6a3.3 3.3 0 0 0 3.3-3.3V8.2a3.3 3.3 0 0 0-3.3-3.3H8.2Z" />
+      <path d="M12 7.4a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Zm0 1.9a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z" />
+      <circle cx="16.9" cy="7.1" r="1.1" />
+    </svg>
+  );
+}
+
+export function IcoTikTok({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M13.1 2.6h2.7c.2 1.5.9 2.7 2.1 3.5.7.5 1.5.8 2.4.9v2.7a7.8 7.8 0 0 1-4.4-1.5v5.9a5.7 5.7 0 1 1-5.7-5.7c.3 0 .6 0 .9.1v2.8a2.9 2.9 0 1 0 2 2.8V2.6Z" />
+    </svg>
+  );
+}
+
+export function IcoFacebook({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 0-10.4 8.9v-6.3H8.3V12h2.3v-1.8c0-2.3 1.4-3.5 3.4-3.5 1 0 2 .2 2 .2v2.2h-1.1c-1.1 0-1.5.7-1.5 1.4V12h2.5l-.4 2.6h-2.1v6.3A9 9 0 0 0 21 12Z" />
+    </svg>
+  );
+}
+
+export function IcoLinkedIn({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M4.6 3h14.8A1.6 1.6 0 0 1 21 4.6v14.8a1.6 1.6 0 0 1-1.6 1.6H4.6A1.6 1.6 0 0 1 3 19.4V4.6A1.6 1.6 0 0 1 4.6 3ZM5.9 9.9v8.2h2.6V9.9H5.9Zm1.3-1.3a1.5 1.5 0 1 0 0-3.1 1.5 1.5 0 0 0 0 3.1Zm3.9 1.3v8.2h2.6v-4.3c0-1.2.6-1.9 1.5-1.9s1.5.7 1.5 1.9v4.3h2.6v-4.8c0-2.3-1.2-3.6-3-3.6-1.2 0-2 .5-2.4 1.3V9.9h-2.8Z" />
+    </svg>
+  );
+}
+
+/** Le pictogramme d'un réseau, retrouvé par l'`id` de sa ligne dans `RESEAUX`. */
+export const RESEAU_ICONS = {
+  instagram: IcoInstagram,
+  tiktok: IcoTikTok,
+  facebook: IcoFacebook,
+  linkedin: IcoLinkedIn,
+} as const;
+
 /** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
 /**
  * L'HORLOGE DE LA COLONNE « AUJOURD'HUI ».

@@ -103,6 +103,29 @@ export const MODULE_MONTHLY_CENTS = 7_900;
 export const MODULE_SETUP_CENTS = 5_500;
 
 /**
+ * LES DEUX PRESTATIONS AU DEVIS — ET ELLES SONT DES NOMBRES, MAINTENANT.
+ *
+ * L'identité visuelle et l'installation du matériel ne vivaient QUE dans deux
+ * chaînes libres : `"À partir de 250 €"` dans `SERVICES`, `"À partir de 290 €"`
+ * dans `HARDWARE_PATHS`. C'est-à-dire les deux derniers prix de la vitrine
+ * qu'une révision de grille menée ici laissait intacts — la faute même que ce
+ * bloc de constantes existe pour empêcher, simplement rangée mille lignes plus
+ * bas où personne ne la cherchait.
+ *
+ * Elle avait déjà une conséquence visible : `euros()` compose avec une espace
+ * INSÉCABLE devant le symbole, quand ces deux chaînes portaient une espace
+ * ordinaire. La même page affichait donc « 99 € » qui ne se coupe jamais en fin
+ * de ligne et « 250 € » qui pouvait laisser le symbole seul sur la ligne
+ * suivante.
+ *
+ * Ce n'est PAS une troisième grille : la grille, ce sont les trois abonnements
+ * et le module, et elle ne bouge pas. Ce sont deux prestations facturées une
+ * fois, sur devis — d'où « à partir de », qui est un plancher et non un tarif.
+ */
+export const IDENTITE_FROM_CENTS = 25_000;
+export const INSTALL_FROM_CENTS = 29_000;
+
+/**
  * L'ENGAGEMENT ANNUEL — douze mois payés dix.
  *
  * Même règle que les contrats (`YEARLY_MONTHS_BILLED`, `crm.ts`), et l'annuel
@@ -128,8 +151,22 @@ export const yearlyCents = (monthlyCents: number): number => monthlyCents * YEAR
  * prix, « 132,50 € » quand l'année ramenée au mois tombe sur un demi-euro.
  * « 159,00 € » a l'air d'une facture, pas d'un tarif.
  */
-const NARROW_NBSP = " "; // milliers : « 2 911 € » ne se coupe pas en fin de ligne
-const NBSP = " "; // devant le symbole — typographie française
+/*
+ * EXPORTÉES, PARCE QUE LES REDÉCLARER A DÉJÀ COÛTÉ LA TYPOGRAPHIE DU
+ * SIMULATEUR.
+ *
+ * `Simulator.tsx` portait sa propre paire, sous les mêmes noms, avec deux
+ * espaces ORDINAIRES dedans : à l'œil, une insécable et une espace normale
+ * sont le même caractère. La faute a donc traversé toutes les relectures, et
+ * tous les montants du simulateur sortaient sécables — un « 505 € » qui se
+ * coupe en fin de ligne, un « 6 065 » coupé entre le millier et les centaines.
+ *
+ * Un seul endroit les déclare maintenant, et le simulateur les importe. Ce
+ * n'est pas de l'économie de lignes : c'est le seul moyen qu'une divergence
+ * invisible redevienne impossible.
+ */
+export const NARROW_NBSP = " "; // milliers : « 2 911 € » ne se coupe pas en fin de ligne
+export const NBSP = " "; // devant le symbole — typographie française
 
 export function euros(cents: number): string {
   const rounded = Math.round(cents);
@@ -140,6 +177,17 @@ export function euros(cents: number): string {
   // une économie affichée en gros, le tiret court se lit comme une puce.
   return `${rounded < 0 ? "−" : ""}${units}${decimals ? `,${String(decimals).padStart(2, "0")}` : ""}${NBSP}€`;
 }
+
+/**
+ * « À partir de 250 € » — le libellé d'un PLANCHER, composé et jamais recopié.
+ *
+ * Deux prestations se chiffrent ainsi (`IDENTITE_FROM_CENTS`,
+ * `INSTALL_FROM_CENTS`), et elles s'affichent sur deux surfaces : la landing et
+ * la page Offres. Quatre endroits, une seule formulation possible — écrire
+ * « Dès 250 € » ici et « À partir de 250 € » là ferait douter que ce soit le
+ * même prix.
+ */
+export const aPartirDe = (cents: number): string => `À partir de ${euros(cents)}`;
 
 /**
  * LA FOURCHETTE EN UNE LIGNE — « 99, 159 ou 199 € par mois ».
@@ -281,37 +329,194 @@ export function section(id: string): SectionMeta {
 
 /* ── Navigation ──────────────────────────────────────────────── */
 
-/**
- * L'encoche s'ouvre en deux groupes symétriques autour du logo.
- *
- * Les trois ancres d'hier étaient MORTES ou le devenaient : `#pourquoi`
- * (Process, supprimé), `#revenus` (Revenue, éclaté), et `#produit` qui
- * désignait six maquettes inventées — il désigne désormais la démonstration
- * manipulable, ce qui est un progrès pour le lien d'évitement « Aller au
- * contenu » : il atterrit sur le produit et non sur des captures dessinées.
- */
-export const NAV_LEFT = [
-  { href: "#produit", label: "Produit" },
-  { href: "#commander", label: "Commander" },
-] as const;
+export type NavLink = { readonly href: string; readonly label: string };
 
-export const NAV_RIGHT = [
-  { href: "#tarifs", label: "Tarifs" },
-  { href: "#faq", label: "Questions" },
-  { href: "#contact", label: "Contact" },
-] as const;
+/**
+ * ═══ LE SITE N'EST PLUS UNE PAGE, DONC UNE ANCRE N'EST PLUS UNE ANCRE ═══
+ *
+ * Tant que la vitrine tenait sur `/`, `href="#tarifs"` marchait partout parce
+ * qu'il n'y avait qu'un « partout ». Deux routes s'ajoutent — `/offres` et
+ * `/blog` — et le même lien, écrit depuis un article, résout en
+ * `/blog/mon-article#tarifs` : le navigateur cherche l'élément dans la page où
+ * l'on est, ne le trouve pas, ET NE FAIT RIEN. Pas d'erreur, pas de 404, pas
+ * une ligne de console. Le lien du menu devient un lien qui ne fait rien, et
+ * personne ne le voit avant un prospect.
+ *
+ * Toute ancre de la landing s'écrit donc en chemin ABSOLU, et par cette
+ * fonction. Depuis `/` le navigateur reconnaît une navigation de même document
+ * et se contente de faire défiler (`scroll-behavior: smooth` s'applique,
+ * `scroll-padding-top` aussi) ; depuis `/blog` il revient sur la landing et
+ * atterrit à la bonne section. Un seul énoncé, les deux cas couverts.
+ *
+ * `section(id)` LÈVE si l'ancre n'existe plus dans `SECTIONS` : le jour où une
+ * section est supprimée, le typecheck passe mais le rendu casse net au lieu de
+ * livrer un menu silencieusement mort. C'est le comportement voulu — c'est
+ * exactement ainsi qu'« Expertise → #pourquoi » a survécu des semaines au
+ * composant qu'il désignait.
+ */
+export const ancre = (id: string): NavLink => ({ href: `/#${id}`, label: section(id).nav });
+
+/** Le sommet de la landing — cible du logo, depuis n'importe quelle route. */
+export const LANDING_TOP = "/#top";
+
+/**
+ * LES DEUX ROUTES QUI NE SONT PAS LA LANDING.
+ *
+ * La refonte a ramené la vitrine de dix-sept sections à onze : environ 1 200
+ * mots de surface de référencement en moins. Ces deux pages les rendent, mais
+ * en répondant à des recherches réelles au lieu de répéter la vitrine — d'où
+ * des ROUTES et pas des sections de plus.
+ *
+ * Elles vivent dans le groupe `(marketing)`, donc sous le conteneur `.mk` et
+ * ses jetons de charte : `app/(marketing)/offres/page.tsx` et
+ * `app/(marketing)/blog/…`. Le chemin public ne porte PAS le nom du groupe.
+ */
+export const NAV_PAGES: readonly NavLink[] = [
+  { href: "/offres", label: "Offres" },
+  { href: "/blog", label: "Blog" },
+];
+
+/**
+ * L'encoche s'ouvre en deux groupes SYMÉTRIQUES autour du logo — `SiteHeader`
+ * mesure le plus large des deux et le double. Trois et trois : un groupe de
+ * deux face à un groupe de quatre ouvrirait une encoche taillée pour quatre et
+ * laisserait un blanc à gauche.
+ *
+ * Le partage n'est pas décoratif. À GAUCHE on découvre (ce que c'est, ce qu'on
+ * vend, ce qu'on écrit) ; à DROITE on décide (le prix, les objections, le
+ * numéro). Le lecteur descend la page dans cet ordre-là.
+ *
+ * « Commander » (`#commander`) quitte l'encoche pour faire place aux deux
+ * routes : cinq entrées tenaient, sept la rendraient illisible. La section
+ * n'est pas perdue pour autant — le sommaire du burger et le pied de page la
+ * portent tous les deux.
+ */
+export const NAV_LEFT: readonly NavLink[] = [ancre("produit"), ...NAV_PAGES];
+
+export const NAV_RIGHT: readonly NavLink[] = [ancre("tarifs"), ancre("faq"), ancre("contact")];
 
 /**
  * LE SOMMAIRE DU MENU BURGER — pas la même chose que l'encoche.
  *
  * La barre collante disparaît ; sur téléphone, le burger devient la SEULE
- * navigation de la page. Il doit donc être un sommaire complet, pas un
- * raccourci de cinq entrées. Le hero est exclu : on y est déjà.
+ * navigation du site. Il doit donc être un sommaire complet, pas un raccourci
+ * de cinq entrées. Le hero est exclu : on y est déjà.
+ *
+ * Les deux routes sont tenues à part (`NAV_PAGES`, rendues sous un filet) :
+ * fondues dans la liste, « Offres » et « Blog » se lisaient comme deux
+ * sections de la landing, et un lecteur qui les prend pour des ancres ne
+ * comprend pas pourquoi la page change.
  */
-export const NAV_MOBILE = SECTIONS.filter((s) => s.id !== "hero").map((s) => ({
-  href: `#${s.id}`,
-  label: s.nav,
-}));
+export const NAV_MOBILE: readonly NavLink[] = SECTIONS.filter((s) => s.id !== "hero").map((s) => ancre(s.id));
+
+/* ── Réseaux sociaux ─────────────────────────────────────────── */
+
+export type Reseau = {
+  readonly id: "instagram" | "tiktok" | "facebook" | "linkedin";
+  readonly nom: string;
+  /**
+   * `null` tant que le compte n'existe pas. L'entrée n'est alors PAS rendue —
+   * ni dans le hero, ni dans le pied de page.
+   */
+  readonly url: string | null;
+};
+
+/**
+ * ═══ UN RÉSEAU SANS ADRESSE NE S'AFFICHE PAS ═══
+ *
+ * Le fondateur veut ses réseaux en vitrine ; aucun des quatre comptes n'existe
+ * encore. Les deux façons de s'en sortir mal sont connues : une icône sans
+ * lien, qu'on clique et qui ne fait rien, et — pire — une icône qui mène à un
+ * compte créé la veille, vide, que le prospect découvre à l'instant précis où
+ * il cherchait à se rassurer sur notre sérieux. Un profil à zéro publication
+ * en dit plus long qu'une absence de profil.
+ *
+ * D'où la seule règle de cette table : L'URL EST LA CONDITION D'AFFICHAGE.
+ * Aujourd'hui les quatre valent `null`, donc rien ne sort — le hero et le pied
+ * de page rendent exactement ce qu'ils rendaient hier. Le jour où un compte
+ * est prêt, on renseigne UNE ligne et le lien apparaît aux deux endroits à la
+ * fois, dans le bon ordre, avec le bon libellé accessible. Aucun composant à
+ * rouvrir.
+ *
+ * L'ordre est celui de leur utilité pour un éditeur qui vise des
+ * restaurateurs : la cuisine et le service se montrent (Instagram, TikTok), le
+ * commerce de proximité se fait sur Facebook, et LinkedIn ne sert qu'à ceux
+ * qui vérifient qui nous sommes — il est donc dernier, pas absent.
+ */
+export const RESEAUX: readonly Reseau[] = [
+  // Pour vérifier le rendu en développement : remplacer UN `null` par une URL,
+  // regarder, puis REMETTRE `null`. Une adresse d'essai oubliée ici sort en
+  // production sans que rien ne la signale — ni le typecheck, ni le rendu, qui
+  // affichera un lien parfaitement normal vers nulle part.
+  { id: "instagram", nom: "Instagram", url: null },
+  { id: "tiktok", nom: "TikTok", url: null },
+  { id: "facebook", nom: "Facebook", url: null },
+  { id: "linkedin", nom: "LinkedIn", url: null },
+];
+
+/** Un réseau dont l'adresse est renseignée — le seul type qu'on sait rendre. */
+export type ReseauPublié = Reseau & { readonly url: string };
+
+/**
+ * La liste réellement affichable. Le prédicat de type est ce qui permet aux
+ * composants d'écrire `r.url` sans point d'exclamation : le filtre PROUVE au
+ * compilateur ce que la table promet à la lecture.
+ */
+export const RESEAUX_PUBLIÉS: readonly ReseauPublié[] = RESEAUX.filter(
+  (r): r is ReseauPublié => typeof r.url === "string" && r.url.trim() !== "",
+);
+
+/* ── Pied de page ────────────────────────────────────────────── */
+
+export type FooterColumn = { readonly title: string; readonly links: readonly NavLink[] };
+
+/**
+ * LE PIED DE PAGE EST DEVENU LA NAVIGATION SECONDAIRE DU SITE.
+ *
+ * Tant qu'il n'y avait qu'une page, il pouvait se contenter de recopier
+ * l'encoche — et il en dérivait ses liens, ce qui était la bonne idée pour la
+ * mauvaise raison : ça évitait les ancres mortes, mais ça condamnait le pied
+ * de page à ne jamais montrer plus que le menu. Or l'encoche ne peut pas
+ * porter sept entrées, et le pied de page, lui, le peut.
+ *
+ * Il porte donc ce que l'encoche a dû laisser tomber : la section « Services »
+ * évincée du menu, et les deux routes que la landing n'a aucune raison
+ * d'annoncer dans son corps.
+ *
+ * Toutes les ancres passent par `ancre()`, qui les résout contre `SECTIONS` :
+ * une section supprimée fait tomber le rendu au lieu de laisser un lien mort.
+ */
+export const FOOTER_COLUMNS: readonly FooterColumn[] = [
+  {
+    title: "La plateforme",
+    links: [ancre("produit"), ancre("commander"), ancre("materiel"), ancre("tarifs")],
+  },
+  {
+    title: "En savoir plus",
+    // Le libellé s'allonge (« Questions » → « Questions fréquentes ») mais
+    // l'adresse reste dérivée : on ne recopie jamais un `/#`.
+    links: [...NAV_PAGES, { ...ancre("faq"), label: "Questions fréquentes" }],
+  },
+  {
+    title: "Nous joindre",
+    links: [
+      { ...ancre("contact"), label: CTA_CALLBACK },
+      { href: `mailto:${CONTACT_EMAIL}`, label: CONTACT_EMAIL },
+    ],
+  },
+];
+
+/**
+ * LA MENTION D'ÉDITEUR, EN TEXTE ET PAS EN LIEN.
+ *
+ * Un pied de page français appelle « Mentions légales » et « Politique de
+ * confidentialité » ; ces deux pages n'existent pas. Les annoncer maintenant
+ * reviendrait à refaire, en bas de page, exactement la faute que la table des
+ * réseaux existe pour empêcher : promettre une destination qu'on n'a pas. On
+ * dit donc en clair ce qu'on peut dire — qui édite, où l'on écrit — et le lien
+ * viendra avec la page, pas avant.
+ */
+export const FOOTER_EDITEUR = `Snack Manager — édité en France. Une question sur vos données : ${CONTACT_EMAIL}.`;
 
 /* ── 1. Hero — captures réelles des applications ─────────────── */
 
@@ -753,7 +958,11 @@ export type Service = {
   lead: string;
   /** Le détail, deux ou trois phrases. C'est ici que l'avantage se chiffre. */
   line: string;
-  /** Le montant, seul. « 79 € / mois », « À partir de 250 € ». Jamais vide. */
+  /**
+   * Le montant, seul. « 79 € / mois », « À partir de 250 € ». Jamais vide, et
+   * jamais saisi : il se compose par `euros()` ou `aPartirDe()` depuis les
+   * constantes en centimes du haut de ce fichier.
+   */
   price: string;
   /**
    * La condition, sous le montant : mise en service, sur devis, formule qui
@@ -814,7 +1023,7 @@ export const SERVICES: readonly Service[] = [
     title: "Votre identité visuelle",
     lead: "Une enseigne qui a l'air de ce qu'elle vaut.",
     line: "Logo, palette, carte remise en forme et photographiée : on reprend votre identité et on la pose partout — page de commande, écrans de salle, sacs, réseaux. Beaucoup de très bons snacks se vendent moins bien que leur cuisine, et ça se corrige.",
-    price: "À partir de 250 €",
+    price: aPartirDe(IDENTITE_FROM_CENTS),
     priceNote: "Sur devis, une fois",
   },
   {
@@ -902,13 +1111,16 @@ export const HARDWARE_PATHS = [
     id: "vous",
     title: "Vous avez déjà le matériel",
     line: "Vous branchez, vous appairez avec un code à six caractères, et vous ouvrez le service. On reste au téléphone le temps qu'il faut.",
-    price: "0 €",
+    // `euros(0)` et pas « 0 € » écrit à la main : c'est la même espace
+    // insécable que les trois tarifs de la grille, face à laquelle ce zéro est
+    // affiché.
+    price: euros(0),
   },
   {
     id: "nous",
     title: "On vous équipe et on installe",
     line: "On fournit les tablettes et l'imprimante, on les configure à votre carte et à votre façon de travailler, et on pose tout sur place. Vous ouvrez le lendemain sans rien avoir à comprendre.",
-    price: "À partir de 290 €",
+    price: aPartirDe(INSTALL_FROM_CENTS),
   },
 ] as const;
 

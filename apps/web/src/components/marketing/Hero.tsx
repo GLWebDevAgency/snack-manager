@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS } from "./content";
+import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS, ancre } from "./content";
 import { Photo } from "./Photo";
+import { Reseaux } from "./Reseaux";
 
 /** Position d'une carte dans le deck : centre, gauche, droite, ou hors-champ. */
 function slot(index: number, current: number, total: number) {
@@ -79,14 +80,44 @@ export function Hero() {
             — <span className="kw">à vos couleurs</span>, pensée par des gens qui ont{" "}
             <span className="kw-w">tenu le comptoir</span>.
           </p>
+          {/*
+           * LES DEUX APPELS PASSENT PAR `ancre()`, COMME TOUT LE RESTE DU SITE.
+           *
+           * Ils étaient écrits `href="#produit"` / `href="#contact"`, au motif
+           * que le hero n'existe que sur `/` — ce qui est vrai aujourd'hui et
+           * ne protège de rien. Une ancre nue ne coûte rien tant que le
+           * composant reste sur sa page ; le jour où il en bouge, elle ne
+           * déclenche ni 404 ni erreur de console, elle NE FAIT RIEN. C'est la
+           * panne la moins visible du site, et elle se répare avant, pas après.
+           *
+           * `ancre()` rend `/#produit` : depuis `/`, le navigateur y reconnaît
+           * une navigation de même document et se contente de faire défiler —
+           * comportement identique au fragment nu, `scroll-padding-top`
+           * compris. Et elle LÈVE si la section quitte `SECTIONS`, ce qu'un
+           * fragment écrit à la main ne saura jamais faire.
+           */}
           <div className="hero-actions">
-            <a className="btn light" href="#produit">
+            <a className="btn light" href={ancre("produit").href}>
               {CTA_DEMO}
             </a>
-            <a className="btn dark" href="#contact">
+            <a className="btn dark" href={ancre("contact").href}>
               {CTA_CALLBACK}
             </a>
           </div>
+          {/*
+           * LES RÉSEAUX PASSENT APRÈS LES BOUTONS, ET C'EST TOUT L'ARBITRAGE.
+           *
+           * Le fondateur les veut dans le hero ; le hero n'a qu'un travail,
+           * ouvrir une porte. Posés à la hauteur des appels, quatre
+           * pictogrammes ronds gagnent contre deux rectangles de texte — c'est
+           * l'œil qui tranche, pas la hiérarchie qu'on avait prévue. Sous eux,
+           * sans libellé, au demi-blanc, ils sont trouvés par qui les cherche
+           * et invisibles pour qui lit le titre.
+           *
+           * Aujourd'hui aucun compte n'a d'adresse : `Reseaux` rend `null` et
+           * le hero sort exactement le balisage d'hier.
+           */}
+          <Reseaux variant="hero" />
         </div>
 
         <div className="hero-live" aria-hidden="true">

@@ -14,6 +14,7 @@ import {
   PLAN_MODULES,
   PRICING_FOOTNOTE,
   PRICING_MATH,
+  ancre,
   euros,
   section,
   type BillingCycleId,
@@ -343,7 +344,8 @@ export function Pricing() {
         ))}
       </div>
 
-      <a className="btn light pr-cta" href="#contact">
+      {/* `ancre()` et pas `#contact` : voir le hero. */}
+      <a className="btn light pr-cta" href={ancre("contact").href}>
         {CTA_CALLBACK}
       </a>
 

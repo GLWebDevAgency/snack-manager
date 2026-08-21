@@ -1,14 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  CTA_CALLBACK,
-  SIM_CTA_NOTE,
-  SIM_ESC,
-  SIM_LEAD,
-  SIM_NOTES,
-  section,
-} from "./content";
+import { CTA_CALLBACK, NARROW_NBSP, NBSP, SIM_CTA_NOTE, SIM_ESC, SIM_LEAD, SIM_NOTES, ancre, section } from "./content";
 
 /* ── Hypothèses (identiques à la maquette, § « sim ») ───────────────── */
 const HOURLY = 13; // coût horaire chargé, €/h
@@ -21,8 +14,21 @@ const FULLTIME = 151.67; // heures d'un temps plein mensuel
  * l'ICU français a changé d'espace selon les versions, et un écart entre le
  * rendu serveur et le rendu navigateur casserait l'hydratation.
  */
-const NARROW_NBSP = " ";
-const NBSP = " ";
+/*
+ * LES DEUX ESPACES VIENNENT DE `content.ts`, ET C'EST LE CORRECTIF LUI-MÊME.
+ *
+ * Ce fichier redéclarait la paire sous les mêmes noms, avec deux espaces
+ * ORDINAIRES dedans. À l'œil, une insécable et une espace normale sont le même
+ * caractère : la faute était invisible au diff comme à la relecture, et TOUS
+ * les montants du simulateur sortaient sécables — « ≈ 5,75 € », « 505 € »,
+ * « 6 065 € », « 13 €/h », « 35 h » — pendant que la grille de prix, elle,
+ * composait juste. Deux déclarations du même caractère invisible, c'est deux
+ * déclarations qui finissent par diverger sans que personne le voie.
+ *
+ * On les importe donc au lieu de les réécrire. Le formatage, lui, reste local
+ * pour la raison ci-dessus : le simulateur compte en euros et non en centimes,
+ * `euros()` ne lui conviendrait pas.
+ */
 
 function group(n: number): string {
   return Math.round(n)
@@ -235,7 +241,8 @@ export function Simulator() {
           <p className="sim-equiv">
             ≈ {r.fulltime} % d&apos;un temps plein récupéré — hors gain des erreurs évitées.
           </p>
-          <a className="btn light sim-cta" href="#contact">
+          {/* `ancre()` et pas `#contact` : voir le hero. */}
+          <a className="btn light sim-cta" href={ancre("contact").href}>
             {CTA_CALLBACK}
           </a>
           {/* La couture : ce chiffre-là ne meurt pas au défilement, il part avec nous. */}

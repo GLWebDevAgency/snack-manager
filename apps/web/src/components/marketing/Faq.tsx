@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { CTA_CALLBACK, FAQ, section } from "./content";
+import { CTA_CALLBACK, FAQ, ancre, section } from "./content";
 import { FaqChevron } from "./icons";
 
 /**
@@ -36,7 +36,10 @@ export function Faq() {
           {/* Un seul lien, et il dit ce que disent les quatre autres appels de la page. */}
           <p className="body-text faq-help">
             Une question précise ?{" "}
-            <a href="#contact" className="faq-helplink">
+            {/* `ancre()` et pas `#contact` : voir le hero — une ancre nue est
+                juste au moment où on l'écrit, et muette le jour où le composant
+                change de page. */}
+            <a href={ancre("contact").href} className="faq-helplink">
               {CTA_CALLBACK}
             </a>
           </p>
