@@ -8,6 +8,8 @@ import { CrmService } from './crm.service';
 import { HealthController } from './health.controller';
 import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
+import { PlatformController, PublicPlatformController } from './platform.controller';
+import { PlatformService } from './platform.service';
 import { SignalsService } from './signals.service';
 
 /**
@@ -17,8 +19,23 @@ import { SignalsService } from './signals.service';
  * Surface TRANS-TENANT réservée au rôle `sm_admin`. Les modèles Mongoose
  * (Lead, Tenant, Order) viennent du DatabaseModule global.
  */
+/**
+ * Les réglages de PLATEFORME entrent dans ce module plutôt que dans un module
+ * neuf : `CrmModule` est déjà déclaré dans `app.module.ts`, et l'oubli d'un
+ * enregistrement s'est produit DEUX FOIS sur ce projet (ordering, screens) —
+ * routes silencieusement absentes, aucun message, aucune erreur au démarrage.
+ * Le contrôleur public y figure au même titre : c'est le même service, avec
+ * deux régimes d'accès.
+ */
 @Module({
-  controllers: [CrmController, AdminController, HealthController, BillingController],
+  controllers: [
+    CrmController,
+    AdminController,
+    HealthController,
+    BillingController,
+    PlatformController,
+    PublicPlatformController,
+  ],
   providers: [
     CrmService,
     AdminService,
@@ -26,6 +43,7 @@ import { SignalsService } from './signals.service';
     InsightsService,
     BillingService,
     SignalsService,
+    PlatformService,
   ],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal

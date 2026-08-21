@@ -1,5 +1,10 @@
 import { Schema, type InferSchemaType } from 'mongoose';
-import { SM_INVOICE_VAT } from '@sm/contracts';
+import {
+  PLATFORM_SETTINGS_ID,
+  SM_INVOICE_VAT,
+  isPlatformLogAction,
+  type SocialNetwork,
+} from '@sm/contracts';
 
 // Conventions : prix en centimes (int), tenantId indexé en tête de chaque
 // collection tenant-scoped, timestamps automatiques partout.
@@ -555,6 +560,84 @@ export const LeadSchema = new Schema(
 export type Lead = InferSchemaType<typeof LeadSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// platformSettings — les réglages de NOTRE plateforme (document unique)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Les quatre liens, un par réseau.
+ *
+ * `satisfies Record<SocialNetwork, …>` n'est pas décoratif : c'est ce qui fait
+ * échouer la compilation le jour où un cinquième réseau entre dans
+ * `SOCIAL_NETWORKS` sans que le modèle le suive. Sans lui, le contrat
+ * accepterait le nouveau lien et la base le jetterait en silence (`strict`
+ * mode de Mongoose supprime les clés inconnues) — un lien saisi, enregistré
+ * « avec succès », et introuvable au rechargement.
+ *
+ * `default: null` et non `''` : `null` est la valeur qui signifie « pas de
+ * compte », et c'est elle seule que la vitrine sait ne pas afficher.
+ */
+const socialLinkFields = {
+  instagram: { type: String, default: null },
+  tiktok: { type: String, default: null },
+  facebook: { type: String, default: null },
+  linkedin: { type: String, default: null },
+} satisfies Record<SocialNetwork, { type: StringConstructor; default: null }>;
+
+/**
+ * ═══ UN RÉGLAGE DE PLATEFORME EST UN DOCUMENT, PAS UNE COLLECTION DE LIGNES ═══
+ *
+ * Il n'existe qu'une seule Snack Manager : ces réglages n'ont ni `tenantId`,
+ * ni raison d'exister en plusieurs exemplaires. Encore faut-il que le
+ * deuxième exemplaire soit IMPOSSIBLE et non simplement improbable — sinon un
+ * `create()` écrit à la place d'un `updateOne(…, { upsert: true })`, un jour
+ * de correction rapide, laisse deux documents en base. À partir de là tout
+ * dépend de celui que la lecture ramène en premier : la vitrine affiche les
+ * anciens liens, l'écran du CRM montre les nouveaux, et personne ne comprend
+ * pourquoi la modification « n'a pas pris ».
+ *
+ * D'où la forme retenue : LA CLÉ PRIMAIRE EST UNE CONSTANTE. `_id` vaut
+ * `PLATFORM_SETTINGS_ID` (`'platform'`), imposé par `default` et verrouillé
+ * par `enum`. MongoDB garantit l'unicité de `_id` par construction — sans
+ * index supplémentaire à créer, sans `partialFilterExpression` à régler, et
+ * sans qu'aucun chemin d'écriture puisse y échapper : une seconde insertion
+ * lève une erreur de clé dupliquée, et un `_id` inventé est refusé par la
+ * validation Mongoose avant même de partir.
+ *
+ * Les alternatives, et pourquoi elles perdent :
+ *   · un champ `key` avec index unique → un index de plus, et un document
+ *     sans `key` passe quand même (`sparse` n'exclut que les champs absents) ;
+ *   · un singleton porté par le tenant → faux : ces réglages n'appartiennent
+ *     à aucun restaurant, les rattacher à l'un d'eux serait un contresens que
+ *     la première migration multi-tenant paierait ;
+ *   · une collection libre avec « on lit le plus récent » → c'est la version
+ *     déguisée du bug ci-dessus.
+ *
+ * ═══ ET POURQUOI DES RUBRIQUES ═══
+ *
+ * `social` est un sous-objet nommé, pas quatre champs à la racine. D'autres
+ * réglages de plateforme viendront (nom affiché, adresse de contact) : ils
+ * arriveront comme `brand`, `contact`… chacun dans sa rubrique. Le document
+ * reste lisible, et le PATCH d'une rubrique ne peut pas toucher aux autres.
+ * Ce qui n'en fait pas un fourre-tout : n'entre ici que ce qui concerne la
+ * PLATEFORME elle-même. Tout ce qui appartient à un restaurant reste dans
+ * `TenantSchema`, tout ce qui relève de l'environnement (clés d'API, URL de
+ * service) reste dans les variables d'environnement — ce sont des secrets de
+ * déploiement, pas des réglages qu'on édite depuis un écran.
+ */
+export const PlatformSettingsSchema = new Schema(
+  {
+    _id: {
+      type: String,
+      default: PLATFORM_SETTINGS_ID,
+      enum: [PLATFORM_SETTINGS_ID],
+    },
+    social: { type: new Schema(socialLinkFields, { _id: false }), default: () => ({}) },
+  },
+  { timestamps: true, versionKey: false },
+);
+export type PlatformSettingsDoc = InferSchemaType<typeof PlatformSettingsSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // reviews — avis clients
 // ─────────────────────────────────────────────────────────────
 
@@ -767,10 +850,33 @@ export const AdminLogSchema = new Schema(
         'invoice.issue',
         'invoice.pay',
         'invoice.cancel',
+        'platform.social_change',
       ],
       required: true,
     },
-    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /**
+     * L'ÉTABLISSEMENT VISÉ — exigé, SAUF pour une action de plateforme.
+     *
+     * Les actions `platform.*` portent sur Snack Manager elle-même (les liens
+     * de réseaux sociaux affichés sur notre vitrine) : elles ne visent aucun
+     * restaurant, et leur en inventer un serait un mensonge dans le seul
+     * registre qu'on ouvre en cas de litige.
+     *
+     * `required` est donc une FONCTION plutôt qu'un `false` généreux. La
+     * différence est tout l'intérêt du champ : une suspension écrite sans
+     * `tenantId` — un identifiant perdu en chemin, un appel mal câblé — reste
+     * refusée à l'écriture, comme avant. Passer le champ à `required: false`
+     * pour faire de la place à la plateforme aurait ouvert la porte à des
+     * lignes « compte suspendu » qui ne disent pas de quel compte il s'agit.
+     */
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
+      required: function (this: { action?: unknown }): boolean {
+        return !isPlatformLogAction(this.action);
+      },
+    },
     /** Cible secondaire : identifiant d'appareil ou d'écran. */
     targetId: { type: String, default: null },
     reason: { type: String, default: '' },
@@ -975,4 +1081,12 @@ export const MODELS = {
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },
   Device: { name: 'Device', schema: DeviceSchema, collection: 'devices' },
+  // Document unique, hors tenant : l'enregistrer ici suffit à le rendre
+  // injectable partout (`DatabaseModule` déclare tout `MODELS`), il n'y a donc
+  // aucun `MongooseModule.forFeature` à ajouter dans le module qui l'utilisera.
+  PlatformSettings: {
+    name: 'PlatformSettings',
+    schema: PlatformSettingsSchema,
+    collection: 'platformsettings',
+  },
 } as const;

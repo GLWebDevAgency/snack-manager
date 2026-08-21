@@ -208,6 +208,9 @@ export const ADMIN_LOG_ACTIONS = [
   'invoice.issue',
   'invoice.pay',
   'invoice.cancel',
+  // Réglage de PLATEFORME : il ne vise aucun établissement. Voir
+  // `PLATFORM_LOG_ACTIONS` ci-dessous pour ce que ce préfixe implique.
+  'platform.social_change',
 ] as const;
 export const AdminLogActionSchema = z.enum(ADMIN_LOG_ACTIONS);
 export type AdminLogAction = z.infer<typeof AdminLogActionSchema>;
@@ -225,7 +228,56 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'invoice.issue': 'Émission d’une facture',
   'invoice.pay': 'Encaissement d’une facture',
   'invoice.cancel': 'Annulation d’une facture',
+  // Ce qui change ici part sur NOTRE page d'accueil, sans relecture : le
+  // libellé nomme donc la conséquence (la vitrine), pas le formulaire.
+  'platform.social_change': 'Réseaux sociaux de la vitrine',
 };
+
+/**
+ * ═══ DEUX FAMILLES D'ACTIONS DANS UN SEUL JOURNAL ═══
+ *
+ * Toutes les actions ci-dessus visaient jusqu'ici un ÉTABLISSEMENT : suspendre
+ * un compte, couper une tablette, encaisser une facture. `platform.*` est
+ * d'une autre nature — elle porte sur Snack Manager elle-même (les liens
+ * affichés sur notre vitrine), et n'a donc aucun `tenantId` à porter.
+ *
+ * POURQUOI LE MÊME JOURNAL, ALORS. Parce que c'est le même registre qui
+ * répond à la même question : « qui, dans l'équipe, a changé quoi, et quand ».
+ * Un second journal parallèle obligerait à ouvrir deux écrans pour reconstituer
+ * une matinée de travail, et le second — celui qu'on regarde une fois par
+ * trimestre — serait le premier à cesser d'être alimenté.
+ *
+ * CE QUE LE PRÉFIXE COMMANDE, concrètement :
+ *   · `adminLogs.tenantId` n'est exigé que pour les actions NON préfixées
+ *     `platform.` (packages/db/src/schemas.ts) — une suspension sans
+ *     établissement reste refusée à l'écriture ;
+ *   · `GET /crm/tenants/:id/logs` filtre par tenant : une ligne de plateforme
+ *     n'apparaît donc jamais dans le journal d'un client, ce qui est juste —
+ *     elle ne le concerne pas. Elle se lit dans le journal du parc
+ *     (`GET /crm/admin-logs`).
+ */
+export const PLATFORM_LOG_ACTION_PREFIX = 'platform.';
+
+export const PLATFORM_LOG_ACTIONS = [
+  'platform.social_change',
+] as const satisfies readonly AdminLogAction[];
+export type PlatformLogAction = (typeof PLATFORM_LOG_ACTIONS)[number];
+
+/**
+ * Cette action porte-t-elle sur la plateforme plutôt que sur un client ?
+ *
+ * Testé sur le PRÉFIXE et non sur l'appartenance à `PLATFORM_LOG_ACTIONS` :
+ * la règle doit valoir pour l'action de plateforme qu'on ajoutera demain sans
+ * penser à l'inscrire dans une seconde liste. Accepte `unknown` parce que le
+ * modèle Mongoose l'appelle sur un champ non encore validé.
+ */
+export const isPlatformLogAction = (action: unknown): boolean =>
+  typeof action === 'string' && action.startsWith(PLATFORM_LOG_ACTION_PREFIX);
+
+/** Les actions qui visent un établissement — le journal d'un client. */
+export const TENANT_LOG_ACTIONS = ADMIN_LOG_ACTIONS.filter(
+  (action) => !isPlatformLogAction(action),
+);
 
 /**
  * LES TROIS GESTES DE FACTURATION, tracés sous leur vrai nom.
@@ -313,7 +365,13 @@ export type AdminLogEntry = {
   actor: { id: string; email: string };
   action: AdminLogAction;
   actionLabel: string;
-  tenantId: string;
+  /**
+   * L'établissement visé — `null` pour une action de PLATEFORME
+   * (`platform.*`), qui n'en vise aucun. Le distinguer d'une chaîne vide n'est
+   * pas de la coquetterie : `''` se lit « identifiant manquant », `null` se lit
+   * « cette action ne concerne pas un client », et seule la seconde est vraie.
+   */
+  tenantId: string | null;
   /** Cible secondaire : identifiant d'appareil ou d'écran, sinon `null`. */
   targetId: string | null;
   reason: string;

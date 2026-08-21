@@ -10,6 +10,7 @@ import {
   PLANS,
   PUBLIC_ORDERING_SUSPENDED_MESSAGE,
   TENANT_ACCOUNT_STATUSES,
+  TENANT_LOG_ACTIONS,
   TenantSuspendSchema,
   isAccessBlocked,
   isPairingCodeShape,
@@ -391,9 +392,15 @@ describe('Administration client', () => {
 
       // Nous agissons sur l'outil de travail d'un commerçant : aucun geste ne
       // doit pouvoir être fait sans laisser de trace.
+      //
+      // La liste de référence est celle des actions qui visent un CLIENT, pas
+      // `ADMIN_LOG_ACTIONS` en entier : les actions `platform.*` (réglages de
+      // notre propre vitrine) partagent ce journal mais ne visent aucun
+      // établissement, et n'ont donc rien à faire dans le journal d'un
+      // restaurant. Elles sont couvertes par `platform.test.ts`.
       const actions = (await admin.journal(CLASSFOOD, TOUT)).map((e) => e.action);
-      expect(new Set(actions)).toEqual(new Set(ADMIN_LOG_ACTIONS));
-      expect(actions).toHaveLength(ADMIN_LOG_ACTIONS.length);
+      expect(new Set(actions)).toEqual(new Set(TENANT_LOG_ACTIONS));
+      expect(actions).toHaveLength(TENANT_LOG_ACTIONS.length);
     });
 
     it('rend le journal du plus récent au plus ancien', async () => {
