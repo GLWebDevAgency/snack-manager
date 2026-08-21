@@ -382,18 +382,32 @@ export const NAV_PAGES: readonly NavLink[] = [
  * deux face à un groupe de quatre ouvrirait une encoche taillée pour quatre et
  * laisserait un blanc à gauche.
  *
- * Le partage n'est pas décoratif. À GAUCHE on découvre (ce que c'est, ce qu'on
- * vend, ce qu'on écrit) ; à DROITE on décide (le prix, les objections, le
- * numéro). Le lecteur descend la page dans cet ordre-là.
+ * ═══ CE QUI SÉPARE LES DEUX GROUPES : CE QUE LE CLIC FAIT ═══
  *
- * « Commander » (`#commander`) quitte l'encoche pour faire place aux deux
- * routes : cinq entrées tenaient, sept la rendraient illisible. La section
- * n'est pas perdue pour autant — le sommaire du burger et le pied de page la
- * portent tous les deux.
+ * L'encoche mélangeait les deux natures — « Produit » (une ancre), puis
+ * « Offres » et « Blog » (deux routes), puis « Tarifs » et « Questions » (des
+ * ancres à nouveau). Les deux routes étaient donc PLANTÉES AU MILIEU de la
+ * séquence d'ancres. Le visiteur clique « Produit », la page défile ; il clique
+ * « Offres » juste à côté, la page CHANGE ; il clique « Tarifs », la page
+ * défile de nouveau. Rien ne l'a prévenu, et c'est ce qui désoriente.
+ *
+ * Le partage porte maintenant cette distinction, et rien d'autre :
+ *   · À GAUCHE, LES ANCRES DE CETTE PAGE, dans l'ordre du défilement. La barre
+ *     devient un sommaire — ce qui est à gauche dans l'encoche est au-dessus
+ *     dans le document. Une navigation prévisible sans avoir à l'apprendre.
+ *   · À DROITE, CE QUI QUITTE LA PAGE, puis l'action. « Contact » ferme la
+ *     barre parce que c'est le geste qu'on veut, pas une destination parmi
+ *     d'autres.
+ *
+ * « Questions » (`#faq`) sort de l'encoche. Personne, en haut d'une page, ne
+ * saute à la FAQ : elle se rencontre dans le parcours. Un en-tête qui dépense
+ * un créneau sur six pour une destination que personne ne vise depuis le haut
+ * gaspille son créneau le plus cher. Elle reste dans le sommaire du burger et
+ * dans le pied de page.
  */
-export const NAV_LEFT: readonly NavLink[] = [ancre("produit"), ...NAV_PAGES];
+export const NAV_LEFT: readonly NavLink[] = [ancre("produit"), ancre("commander"), ancre("tarifs")];
 
-export const NAV_RIGHT: readonly NavLink[] = [ancre("tarifs"), ancre("faq"), ancre("contact")];
+export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
 
 /**
  * LE SOMMAIRE DU MENU BURGER — pas la même chose que l'encoche.
@@ -413,30 +427,31 @@ export const NAV_MOBILE: readonly NavLink[] = SECTIONS.filter((s) => s.id !== "h
 
 export type Reseau = {
   readonly id: "instagram" | "tiktok" | "facebook" | "linkedin";
+  /** Le libellé accessible — « Snack Manager sur Instagram ». */
   readonly nom: string;
-  /**
-   * `null` tant que le compte n'existe pas. L'entrée n'est alors PAS rendue —
-   * ni dans le hero, ni dans le pied de page.
-   */
-  readonly url: string | null;
 };
 
 /**
  * ═══ UN RÉSEAU SANS ADRESSE NE S'AFFICHE PAS ═══
  *
- * Le fondateur veut ses réseaux en vitrine ; aucun des quatre comptes n'existe
- * encore. Les deux façons de s'en sortir mal sont connues : une icône sans
- * lien, qu'on clique et qui ne fait rien, et — pire — une icône qui mène à un
- * compte créé la veille, vide, que le prospect découvre à l'instant précis où
- * il cherchait à se rassurer sur notre sérieux. Un profil à zéro publication
- * en dit plus long qu'une absence de profil.
+ * Deux façons de se tromper, et la seconde est la pire : une icône sans lien
+ * qu'on clique et qui ne fait rien ; ou une icône qui mène à un compte créé la
+ * veille, vide, que le prospect découvre à l'instant précis où il cherchait à
+ * se rassurer sur notre sérieux. Un profil à zéro publication en dit plus long
+ * qu'une absence de profil.
  *
- * D'où la seule règle de cette table : L'URL EST LA CONDITION D'AFFICHAGE.
- * Aujourd'hui les quatre valent `null`, donc rien ne sort — le hero et le pied
- * de page rendent exactement ce qu'ils rendaient hier. Le jour où un compte
- * est prêt, on renseigne UNE ligne et le lien apparaît aux deux endroits à la
- * fois, dans le bon ordre, avec le bon libellé accessible. Aucun composant à
- * rouvrir.
+ * La règle est donc que L'URL EST LA CONDITION D'AFFICHAGE, et elle est tenue
+ * en deux endroits : l'API n'enregistre jamais de chaîne vide (une saisie vidée
+ * devient `null`), et `lireReseaux` (lib/reseaux.ts) revérifie à la lecture.
+ *
+ * ═══ CETTE TABLE NE PORTE PLUS D'ADRESSES ═══
+ *
+ * Elle en portait, à `null`, avec un commentaire expliquant comment en glisser
+ * une le temps d'un essai « puis REMETTRE null » — c'est-à-dire une procédure
+ * manuelle dont l'oubli publiait une adresse d'essai sans que rien ne le
+ * signale. Les adresses vivent maintenant en base et se saisissent dans
+ * `/sm/reseaux` ; ce qui reste ici est ce qui n'a rien à faire dans une base :
+ * le libellé accessible et L'ORDRE. Ce sont des décisions éditoriales.
  *
  * L'ordre est celui de leur utilité pour un éditeur qui vise des
  * restaurateurs : la cuisine et le service se montrent (Instagram, TikTok), le
@@ -444,27 +459,21 @@ export type Reseau = {
  * qui vérifient qui nous sommes — il est donc dernier, pas absent.
  */
 export const RESEAUX: readonly Reseau[] = [
-  // Pour vérifier le rendu en développement : remplacer UN `null` par une URL,
-  // regarder, puis REMETTRE `null`. Une adresse d'essai oubliée ici sort en
-  // production sans que rien ne la signale — ni le typecheck, ni le rendu, qui
-  // affichera un lien parfaitement normal vers nulle part.
-  { id: "instagram", nom: "Instagram", url: null },
-  { id: "tiktok", nom: "TikTok", url: null },
-  { id: "facebook", nom: "Facebook", url: null },
-  { id: "linkedin", nom: "LinkedIn", url: null },
+  { id: "instagram", nom: "Instagram" },
+  { id: "tiktok", nom: "TikTok" },
+  { id: "facebook", nom: "Facebook" },
+  { id: "linkedin", nom: "LinkedIn" },
 ];
 
-/** Un réseau dont l'adresse est renseignée — le seul type qu'on sait rendre. */
-export type ReseauPublié = Reseau & { readonly url: string };
-
 /**
- * La liste réellement affichable. Le prédicat de type est ce qui permet aux
- * composants d'écrire `r.url` sans point d'exclamation : le filtre PROUVE au
- * compilateur ce que la table promet à la lecture.
+ * Un réseau dont l'adresse est renseignée — le seul type qu'on sait rendre.
+ *
+ * `RESEAUX_PUBLIÉS` a disparu avec la table en dur : c'était un filtre calculé
+ * à la portée du module, donc à la COMPILATION, et il ne pouvait par
+ * construction jamais voir une adresse saisie au back-office. `lireReseaux()`
+ * le remplace.
  */
-export const RESEAUX_PUBLIÉS: readonly ReseauPublié[] = RESEAUX.filter(
-  (r): r is ReseauPublié => typeof r.url === "string" && r.url.trim() !== "",
-);
+export type ReseauPublié = Reseau & { readonly url: string };
 
 /* ── Pied de page ────────────────────────────────────────────── */
 

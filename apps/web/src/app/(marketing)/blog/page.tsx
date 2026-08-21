@@ -14,6 +14,7 @@ import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { CTA_CALLBACK, CTA_DEMO, ancre } from "@/components/marketing/content";
 import { urlAbsolue } from "@/lib/site";
 import { ARTICLES, BLOG_PATH, cheminArticle, dateEnClair } from "./_articles/registre";
+import { lireReseaux } from "@/lib/reseaux";
 
 /**
  * L'INDEX DU BLOG (`/blog`).
@@ -60,7 +61,12 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function BlogIndexPage() {
+export default async function BlogIndexPage() {
+  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
+  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
+  // vide et la rangée disparaît — la page, elle, s'affiche.
+  const reseaux = await lireReseaux();
+
   return (
     <>
       {/*
@@ -131,7 +137,7 @@ export default function BlogIndexPage() {
         </section>
       </main>
 
-      <SiteFooter />
+      <SiteFooter reseaux={reseaux} />
       <RevealObserver />
 
       <script

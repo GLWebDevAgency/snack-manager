@@ -13,6 +13,7 @@ import {
 import { urlAbsolue } from "@/lib/site";
 import { OFFRE_SECTIONS } from "./content";
 import { OffresBody } from "./sections";
+import { lireReseaux } from "@/lib/reseaux";
 
 /**
  * Page Offres — route `/offres`.
@@ -108,7 +109,12 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function OffresPage() {
+export default async function OffresPage() {
+  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
+  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
+  // vide et la rangée disparaît — la page, elle, s'affiche.
+  const reseaux = await lireReseaux();
+
   return (
     <>
       {/*
@@ -127,7 +133,7 @@ export default function OffresPage() {
         <OffresBody />
       </main>
 
-      <SiteFooter />
+      <SiteFooter reseaux={reseaux} />
       <RevealObserver />
 
       <script

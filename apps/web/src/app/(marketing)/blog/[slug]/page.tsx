@@ -14,6 +14,7 @@ import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { CTA_CALLBACK, CTA_DEMO, ancre } from "@/components/marketing/content";
 import { urlAbsolue } from "@/lib/site";
+import { lireReseaux } from "@/lib/reseaux";
 import {
   ARTICLES,
   BLOG_PATH,
@@ -90,6 +91,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ArticlePage({ params }: Props) {
+  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
+  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
+  // vide et la rangée disparaît — la page, elle, s'affiche.
+  const reseaux = await lireReseaux();
+
   const { slug } = await params;
   const article = articleParSlug(slug);
   if (!article) notFound();
@@ -173,7 +179,7 @@ export default async function ArticlePage({ params }: Props) {
         </article>
       </main>
 
-      <SiteFooter />
+      <SiteFooter reseaux={reseaux} />
       <RevealObserver />
 
       <script

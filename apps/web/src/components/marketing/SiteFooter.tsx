@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Reseaux } from "./Reseaux";
-import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre } from "./content";
+import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre, type ReseauPublié } from "./content";
 import { LogoMark, SmallFillet } from "./icons";
 
 /**
@@ -31,7 +31,13 @@ import { LogoMark, SmallFillet } from "./icons";
  * L'inscription à la liste n'a pas de back-end : on le dit, plutôt que de faire
  * semblant — le formulaire renvoie vers le rappel téléphonique.
  */
-export function SiteFooter() {
+/**
+ * Comme `Hero`, ce pied de page est un îlot CLIENT : il reçoit les réseaux au
+ * lieu de les lire. Les quatre pages du site le montent, et les quatre doivent
+ * donc passer la liste — en oublier une la ferait disparaître de cette page-là
+ * seulement, sans qu'aucune vérification ne s'en aperçoive.
+ */
+export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
   const [sent, setSent] = useState(false);
   const year = new Date().getFullYear();
 
@@ -101,7 +107,7 @@ export function SiteFooter() {
                * Tant qu'aucune URL n'est renseignée dans `RESEAUX`, `Reseaux`
                * rend `null` : ni rangée vide, ni titre orphelin.
                */}
-              <Reseaux variant="pied" />
+              <Reseaux reseaux={reseaux} variant="pied" />
             </div>
 
             <div className="foot-linkcols">

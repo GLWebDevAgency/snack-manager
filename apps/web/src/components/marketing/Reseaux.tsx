@@ -1,4 +1,4 @@
-import { RESEAUX_PUBLIÉS } from "./content";
+import type { ReseauPublié } from "./content";
 import { RESEAU_ICONS } from "./icons";
 
 /**
@@ -6,16 +6,19 @@ import { RESEAU_ICONS } from "./icons";
  * elle apparaît.
  *
  * Elle est écrite une fois parce qu'elle a une règle à ne pas oublier deux
- * fois : ON NE REND QUE LES COMPTES QUI EXISTENT. `RESEAUX_PUBLIÉS` (content.ts)
- * ne contient que les lignes dont l'URL est renseignée ; aujourd'hui elle est
- * vide, et ce composant rend alors `null` — pas une rangée vide, pas un filet
- * orphelin, RIEN. Le hero et le pied de page sortent exactement le balisage
- * qu'ils sortaient avant l'existence de ce fichier.
+ * fois : ON NE REND QUE LES COMPTES QUI EXISTENT. La liste vide rend `null` —
+ * pas une rangée vide, pas un filet orphelin, RIEN. Le hero et le pied de page
+ * sortent alors exactement le balisage qu'ils sortaient avant l'existence de ce
+ * fichier.
  *
- * Conséquence à garder en tête en relecture : tant que le fondateur n'a pas
- * donné une adresse, ce composant est invisible en développement comme en
- * production. Il ne se vérifie qu'en renseignant temporairement une URL dans
- * `RESEAUX`.
+ * ═══ LA LISTE ARRIVE EN PROPRIÉTÉ, ET C'EST UNE CONTRAINTE, PAS UN GOÛT ═══
+ *
+ * Elle était lue d'une constante de module (`RESEAUX_PUBLIÉS`), donc figée à la
+ * compilation : ajouter un compte demandait un déploiement. Les adresses vivent
+ * maintenant en base et se saisissent dans `/sm/reseaux`, d'où un appel réseau
+ * — que les DEUX porteurs de ce composant sont incapables de faire, `Hero` et
+ * `SiteFooter` étant des îlots clients. Ce sont donc les pages serveur qui
+ * lisent (`lib/reseaux.ts`) et qui font descendre la liste.
  *
  * ═══ POURQUOI LA VARIANTE « hero » EXISTE, ET POURQUOI ELLE EST DISCRÈTE ═══
  *
@@ -35,12 +38,18 @@ import { RESEAU_ICONS } from "./icons";
  * la vérification croisée des profils, ce qui est précisément la raison pour
  * laquelle on affiche ces liens.
  */
-export function Reseaux({ variant }: { variant: "hero" | "pied" }) {
-  if (RESEAUX_PUBLIÉS.length === 0) return null;
+export function Reseaux({
+  reseaux,
+  variant,
+}: {
+  reseaux: readonly ReseauPublié[];
+  variant: "hero" | "pied";
+}) {
+  if (reseaux.length === 0) return null;
 
   return (
     <ul className={variant === "hero" ? "rs-row rs-hero" : "rs-row rs-pied"}>
-      {RESEAUX_PUBLIÉS.map((reseau) => {
+      {reseaux.map((reseau) => {
         const Picto = RESEAU_ICONS[reseau.id];
         return (
           <li key={reseau.id}>

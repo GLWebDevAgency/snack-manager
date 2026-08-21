@@ -13,6 +13,7 @@ import { Simulator } from "@/components/marketing/Simulator";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
+import { lireReseaux } from "@/lib/reseaux";
 
 /**
  * Landing commerciale Snack Manager (route `/`).
@@ -43,7 +44,12 @@ import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
  * du hero, la scène de démonstration, le simulateur, la FAQ, le formulaire et
  * les deux observateurs sont des îlots clients.
  */
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
+  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
+  // vide et la rangée disparaît — la page, elle, s'affiche.
+  const reseaux = await lireReseaux();
+
   return (
     <>
       {/*
@@ -58,7 +64,7 @@ export default function LandingPage() {
       <SiteHeader />
 
       <main id="top">
-        <Hero />
+        <Hero reseaux={reseaux} />
         <Comparison />
         <AppsShowcase />
         <Canaux />
@@ -71,7 +77,7 @@ export default function LandingPage() {
         <ContactSection />
       </main>
 
-      <SiteFooter />
+      <SiteFooter reseaux={reseaux} />
       <RevealObserver />
 
       <script

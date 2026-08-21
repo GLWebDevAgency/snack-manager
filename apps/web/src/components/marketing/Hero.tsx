@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS, ancre } from "./content";
+import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS, ancre, type ReseauPublié } from "./content";
 import { Photo } from "./Photo";
 import { Reseaux } from "./Reseaux";
 
@@ -37,7 +37,12 @@ function slot(index: number, current: number, total: number) {
  * sous la grille tarifaire et dans la FAQ ; le délai d'installation est la
  * frise du lancement ; le service réel est la section du pilote.
  */
-export function Hero() {
+/**
+ * `reseaux` traverse ce composant sans qu'il s'en serve : il est un îlot
+ * CLIENT et ne peut donc pas lire l'API lui-même. C'est la page serveur qui
+ * lit (`lib/reseaux.ts`) et qui fait descendre la liste jusqu'ici.
+ */
+export function Hero({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
   const total = HERO_SHOTS.length;
   const [current, setCurrent] = useState(0);
 
@@ -114,10 +119,10 @@ export function Hero() {
            * sans libellé, au demi-blanc, ils sont trouvés par qui les cherche
            * et invisibles pour qui lit le titre.
            *
-           * Aujourd'hui aucun compte n'a d'adresse : `Reseaux` rend `null` et
-           * le hero sort exactement le balisage d'hier.
+           * Tant qu'aucun compte n'a d'adresse en base, `Reseaux` rend `null`
+           * et le hero sort exactement le balisage d'hier.
            */}
-          <Reseaux variant="hero" />
+          <Reseaux reseaux={reseaux} variant="hero" />
         </div>
 
         <div className="hero-live" aria-hidden="true">
