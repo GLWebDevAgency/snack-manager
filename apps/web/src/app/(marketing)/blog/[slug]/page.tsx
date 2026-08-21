@@ -9,6 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Photo } from "@/components/marketing/Photo";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
@@ -117,7 +118,43 @@ export default async function ArticlePage({ params }: Props) {
 
       <main id="top">
         <article className="section bl-article" id="article">
+          {/*
+           * ═══ L'EN-TÊTE EST UN PANNEAU PHOTOGRAPHIQUE, PAS UN BANDEAU ═══
+           *
+           * La photo est POSÉE DERRIÈRE le bloc de titre, pas au-dessus de lui.
+           * Un bandeau de 720 × 360 ajouté sous le titre aurait coûté 360 px à
+           * une page qui en fait déjà 5 947 ; le fond, lui, occupe une place qui
+           * existait — les 321 px du bloc de titre. Le solde mesuré tient dans
+           * les marges internes du panneau, et la section les rend en réduisant
+           * d'autant sa marge haute : le panneau porte sa propre masse, 90 px de
+           * noir au-dessus de lui n'avaient plus de raison d'être.
+           *
+           * Trois couches, dans l'ordre des bandes de `/offres` : la photo, le
+           * voile, le texte. La photo est DÉCORATIVE — le chapô dit le sujet
+           * deux lignes plus bas, et le faire dire une deuxième fois par une
+           * image allongerait le trajet vers le texte.
+           */}
           <header className="bl-head rv">
+            <span className="bl-headmedia">
+              <Photo shot={article.photo} decorative eager sizes="(max-width: 809.98px) 100vw, 720px" />
+            </span>
+            {/*
+             * VOILE MESURÉ SUR LE PIRE PIXEL DU CADRAGE RÉEL, jamais sur la
+             * moyenne : on rend la photo dans son cadrage `cover` (720 × 386 au
+             * bureau, 350 × 424 au téléphone), on applique l'alpha canal par
+             * canal, et on prend le pixel le plus clair du cadre.
+             *
+             * Il est à 70 % et non à 84 %, et le chiffre a été RÉVISÉ À LA
+             * MESURE : à 84 % le contraste passait partout et la photo ne se
+             * voyait plus du tout — ces trois scènes sont nocturnes, leur
+             * médiane est quasi noire, et seuls leurs points chauds portent
+             * l'image. À 70 %, le pire pixel vaut 71 en sRGB : le titre blanc de
+             * 44 px conserve 9,25:1 et le chapô 5,52:1, au-dessus des 4,5:1
+             * exigés en AA. Le détail du calcul est dans `marketing.css`, sur
+             * `.bl-headveil`.
+             */}
+            <span className="bl-headveil" aria-hidden="true" />
+
             <Link className="ui-link bl-retour" href={BLOG_PATH}>
               <span aria-hidden="true">← </span>
               Le blog

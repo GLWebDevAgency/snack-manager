@@ -8,6 +8,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Photo } from "@/components/marketing/Photo";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
@@ -94,17 +95,40 @@ export default async function BlogIndexPage() {
             {ARTICLES.map((article) => (
               <li className="bl-card spot" key={article.slug}>
                 <Link className="bl-cardlink" href={cheminArticle(article.slug)}>
-                  <p className="bl-meta">
-                    <time dateTime={article.publieLe}>{dateEnClair(article.publieLe)}</time>
-                    <span aria-hidden="true"> · </span>
-                    <span>{article.minutes} min de lecture</span>
-                  </p>
-                  <h2 className="bl-cardtitre">{article.titre}</h2>
-                  <p className="bl-cardchapo">{article.chapo}</p>
-                  <span className="bl-cardcta">
-                    Lire l'article
-                    <span aria-hidden="true"> →</span>
+                  {/*
+                   * LA VIGNETTE OCCUPE LA HAUTEUR DE LA CARTE, ELLE N'EN AJOUTE
+                   * PAS. Elle prend une colonne à gauche et s'étire sur la
+                   * hauteur que le texte fixe déjà : c'est la seule forme qui
+                   * distingue les trois cartes d'un coup d'œil sans allonger un
+                   * index qui ne mesure que 1 932 px. Un bandeau en tête de
+                   * carte aurait coûté trois fois 390 px, soit un cinquième de
+                   * page pour un besoin que le brief classe lui-même dernier.
+                   *
+                   * Décorative : le titre et le chapô sont juste à côté, dans le
+                   * même lien. Une image annoncée ici ferait entendre deux fois
+                   * le même article à qui navigue au lecteur d'écran.
+                   */}
+                  <span className="bl-cardmedia">
+                    <Photo shot={article.photo} decorative sizes="214px" />
+                    {/* Le raccord du bord droit sur le fond de la carte : sans
+                        lui, la vignette s'arrête sur une arête verticale nette
+                        contre le texte. Même procédé que `.of-mediafeather`. */}
+                    <span className="bl-cardfeather" aria-hidden="true" />
                   </span>
+
+                  <div className="bl-cardbody">
+                    <p className="bl-meta">
+                      <time dateTime={article.publieLe}>{dateEnClair(article.publieLe)}</time>
+                      <span aria-hidden="true"> · </span>
+                      <span>{article.minutes} min de lecture</span>
+                    </p>
+                    <h2 className="bl-cardtitre">{article.titre}</h2>
+                    <p className="bl-cardchapo">{article.chapo}</p>
+                    <span className="bl-cardcta">
+                      Lire l'article
+                      <span aria-hidden="true"> →</span>
+                    </span>
+                  </div>
                 </Link>
               </li>
             ))}

@@ -1066,6 +1066,33 @@ export const DIRECT_DELIVERY = {
   line: "Vous continuez comme aujourd'hui — vos tournées, vos horaires. Personne ne s'intercale entre votre cuisine et votre client.",
 } as const;
 
+/**
+ * LA PHOTOGRAPHIE DE FOND DE LA SECTION, ET ELLE NE COÛTE PAS UN PIXEL DE HAUT.
+ *
+ * `#commander` vend les trois prestations — dont « votre visibilité sur Google »
+ * en rangée de tête — et ne portait AUCUNE image sur 794 px. Elle en porte une
+ * désormais, mais À FOND PERDU, DERRIÈRE les rangées : la photo occupe une place
+ * qui existait déjà (le fond noir de la section) au lieu d'en réclamer une
+ * nouvelle. Mesuré : la section fait exactement la même hauteur qu'avant.
+ *
+ * ═══ CE QUE LA PHOTO EST, ET CE QU'ELLE N'EST PAS ═══
+ *
+ * C'est une salle photographiée ENTIÈREMENT HORS MISE AU POINT — des pastilles
+ * de bokeh ambrées, la masse sombre d'une suspension, un comptoir deviné. Rien à
+ * lire à aucune définition : aucun texte, aucun visage, aucune enseigne, aucun
+ * prix. C'est ce qui la rend admissible ici, où l'on affiche NOS tarifs : une
+ * devanture reconnaissable derrière une grille de prix se lirait comme une
+ * référence client, et nous n'en avons qu'une, nommée ailleurs.
+ *
+ * Elle est donc DÉCORATIVE au sens strict — `alt=""` ET `aria-hidden` (voir
+ * `Photo.tsx`) : elle pose une ambiance derrière un texte qui dit déjà tout, et
+ * la faire annoncer allongerait le trajet vers les trois prix sans rien ajouter.
+ *
+ * Source : Pexels (usage commercial, sans attribution) — voir
+ * `public/photos/libre/PROVENANCE.md`, qui est le seul registre des licences.
+ */
+export const SERVICES_BAND: Shot = { src: "/photos/libre/ambiance-salle-nuit-bokeh.webp", alt: "" };
+
 /* ── 5. Matériel — ce qu'on ne rachète pas ───────────────────── */
 
 export type HardwareItem = {

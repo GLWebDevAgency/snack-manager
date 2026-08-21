@@ -2317,6 +2317,73 @@ html:has(.mk) {
 .mk .ch-section {
   padding-block: 54px;
   gap: 28px;
+  /*
+   * LES TROIS PROPRIÉTÉS QUI FONT DE CETTE SECTION UNE BANDE, ET RIEN D'AUTRE.
+   *
+   * `position: relative` sert de référence aux deux couches absolues ;
+   * `isolation: isolate` crée le contexte d'empilement — sans lui, le `z-index`
+   * de la photo se compare à celui de l'en-tête FIXE du site, qui passerait
+   * dessous au défilement ; `overflow: hidden` retient l'image au bord de la
+   * section, y compris quand `cover` la déborde en hauteur.
+   *
+   * Aucune de ces trois lignes n'ajoute un pixel de hauteur, et c'est le point :
+   * la section mesure exactement ce qu'elle mesurait avant la photo (794 px à
+   * 1 440, 1 340 à 390).
+   */
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--black);
+}
+/*
+ * La photo, à fond perdu. `inset: 0` la cale sur la section entière, y compris
+ * sous ses 54 px de marge haute et basse : une bande qui s'arrêterait au bord du
+ * texte laisserait deux bandeaux noirs et se lirait comme une carte.
+ */
+.mk .ch-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+}
+/*
+ * LE VOILE — 82 % DE NOIR, ET C'EST UNE MESURE, PAS UN GOÛT.
+ *
+ * Le calcul est écrit en toutes lettres dans `Canaux.tsx`, au-dessus de la
+ * couche qui porte cette classe. En deux lignes : le pixel le plus clair du
+ * cadrage réel vaut 245 en sRGB, il retombe à 45 sous 82 % de noir, et à 45 le
+ * plus petit texte de la section (12,5 px en blanc à 50 %) conserve 4,64:1 —
+ * au-dessus des 4,5:1 exigés en AA pour un texte courant.
+ *
+ * L'alpha ne descend donc JAMAIS sous 0,82 entre 12 % et 88 % de la hauteur,
+ * c'est-à-dire partout où il y a du texte. Aux deux extrémités il monte à
+ * l'opaque pour SOUDER la bande au noir de la page : sans ça, la section
+ * commencerait et finirait sur deux arêtes horizontales nettes, au milieu d'une
+ * landing qui n'en a aucune autre.
+ *
+ * La lueur radiale calée à gauche assombrit la colonne des intitulés, qui porte
+ * le plus gros texte de la section — elle ne fait qu'AJOUTER de l'opacité, donc
+ * elle ne peut pas défaire la mesure ci-dessus.
+ */
+.mk .ch-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.82) 12%, rgba(0, 0, 0, 0.82) 88%, #000 100%),
+    radial-gradient(85% 120% at 6% 46%, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0) 68%);
+}
+/*
+ * Le contenu remonte au-dessus des deux couches. Il est STATIQUE dans le flux —
+ * donc peint sous n'importe quel élément positionné — et il faut le dire
+ * explicitement, sinon la photo passe par-dessus les trois rangées.
+ */
+.mk .ch-head,
+.mk .ch-rows,
+.mk .ch-delivery {
+  position: relative;
+  z-index: 2;
 }
 
 /*
@@ -2461,6 +2528,25 @@ html:has(.mk) {
   .mk .ch-section {
     padding-block: 52px;
     gap: 26px;
+  }
+  /*
+   * LE VOILE MONTE À 87 % AU TÉLÉPHONE, ET CE N'EST PAS UNE QUESTION DE
+   * CONTRASTE — celui-ci passait déjà.
+   *
+   * C'est le CADRAGE qui change tout : la bande passe de 1 430 × 794 à
+   * 390 × 1 340, donc `cover` agrandit la photo jusqu'à n'en montrer qu'un
+   * sixième de largeur. Une pastille de bokeh qui mesurait quarante pixels au
+   * bureau en couvre deux cents ici, et un disque clair posé derrière un
+   * paragraphe de quinze pixels tire l'œil hors de la phrase — même à 4,6:1.
+   *
+   * Cinq points d'opacité en plus ramènent ce disque de 45 à 32 en sRGB : il
+   * reste une lueur chaude, il cesse d'être une forme. Le contraste ne fait que
+   * monter, aucune des quatre mesures de la bande n'est remise en cause.
+   */
+  .mk .ch-veil {
+    background:
+      linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.87) 8%, rgba(0, 0, 0, 0.87) 92%, #000 100%),
+      radial-gradient(85% 120% at 6% 46%, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0) 68%);
   }
   /* La colonne d'intitulé disparaît, le filet reste : c'est lui qui porte la
      forme « rangée » une fois le titre passé au-dessus de sa phrase. */
@@ -6204,7 +6290,9 @@ html:has(.mk) {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  /* 14 et non 16 : deux pixels par gouttière rendus à la page en échange des
+     lignes que le chapô gagne en passant de 720 à 462 px de large. */
+  gap: 14px;
 }
 .mk .bl-card {
   background: var(--card-gradient);
@@ -6228,6 +6316,74 @@ html:has(.mk) {
 .mk .bl-cardlink:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+/*
+ * ═══ LA CARTE D'INDEX PASSE EN DEUX COLONNES, ET ELLE SEULE ═══
+ *
+ * La règle est portée par `.bl-index` parce que `.bl-cardlink` sert AUSSI aux
+ * deux cartes « À lire aussi » du pied d'article, qui n'ont pas de vignette :
+ * poser la grille sur la classe nue leur creuserait une colonne vide de 214 px.
+ *
+ * LA VIGNETTE NE DICTE PAS LA HAUTEUR. Elle s'étire sur celle que le TEXTE fixe
+ * (`align-items: stretch`, défaut d'une grille) : elle occupe une place qui
+ * existait déjà. Un bandeau en tête de carte aurait ajouté 390 px par carte à un
+ * index qui n'en mesure que 1 932 — un cinquième de page pour le besoin que le
+ * brief classe lui-même en dernier.
+ *
+ * La colonne de texte rétrécit malgré tout, donc le chapô gagne des lignes : les
+ * marges internes tombent de 30 à 24/26 px et la gouttière entre cartes de 16 à
+ * 14 pour rendre ce que le retour à la ligne prend. Solde MESURÉ en navigateur,
+ * pas estimé : 1 932 → 1 972 px à 1 440, soit deux pour cent pour trois images.
+ *
+ * 214 px et pas 236 : entre les deux, le nombre de lignes du chapô ne change pas
+ * — la page mesure 1 972 px dans les deux cas — donc on prend la vignette la
+ * plus large qui ne coûte rien. Au-delà, une ligne tombe et la page paie 68 px.
+ */
+.mk .bl-index .bl-cardlink {
+  display: grid;
+  grid-template-columns: 214px minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+}
+.mk .bl-cardbody {
+  padding: 24px 26px;
+}
+/*
+ * LA VIGNETTE, ET LE SEUL ENDROIT DU BLOG OÙ UNE PHOTO N'EST PAS VOILÉE POUR
+ * DU TEXTE — parce qu'il n'y a pas de texte dessus.
+ *
+ * Elle garde tout de même un voile léger : les trois fichiers sont des scènes
+ * sombres et chaudes, mais un cornet de frites en pleine lumière à côté d'un
+ * titre de 26 px prendrait le regard avant lui. 26 % de noir suffisent à le
+ * remettre derrière le titre sans éteindre la photo.
+ */
+.mk .bl-cardmedia {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--black);
+}
+.mk .bl-cardmedia .ph img {
+  /* Les trois sources sont en 2:1 rendues dans une colonne PORTRAIT : le
+     cadrage se cale au tiers haut, où se trouve le sujet des trois (les mains,
+     le burger, la fenêtre) — un `cover` centré leur coupait la tête. */
+  object-position: 50% 38%;
+}
+.mk .bl-cardmedia::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.26);
+  pointer-events: none;
+}
+/* Le raccord sur le fond de la carte, à droite et sur les deux tranches : sans
+   lui la vignette s'arrête sur une arête nette contre le texte, et la carte
+   cesse de se lire comme une carte. */
+.mk .bl-cardfeather {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0) 55%, rgba(10, 10, 10, 0.75) 100%);
 }
 .mk .bl-meta {
   font-size: 13px;
@@ -6305,7 +6461,33 @@ html:has(.mk) {
 /* ── Article : l'en-tête ─────────────────────────────────────────────── */
 .mk .bl-article {
   gap: 44px;
+  /*
+   * LA MARGE HAUTE TOMBE DE 90 À 54 px, ET C'EST LA CONTREPARTIE DU PANNEAU.
+   *
+   * L'en-tête est devenu un panneau photographique : il porte sa propre masse,
+   * et 90 px de noir au-dessus de lui ne composaient plus rien — ils
+   * repoussaient simplement l'image sous la ligne de flottaison.
+   *
+   * Le panneau réclame 64 px (30 et 32 px de marge interne, plus ses deux
+   * filets) ; les 36 px rendus ici en absorbent plus de la moitié. Solde MESURÉ
+   * sur les trois articles à 1 440 : + 28, + 56 et + 28 px sur 5 947, 5 790 et
+   * 6 719 — moins d'un pour cent, pour la première image de la surface.
+   *
+   * 54 px dégagent toujours l'en-tête FIXE du site (57 px au repos, en position
+   * `fixed` donc hors flux) : le titre n'est pas mangé au chargement.
+   */
+  padding-top: 54px;
 }
+/*
+ * ═══ LE PANNEAU D'EN-TÊTE — TROIS COUCHES, L'ORDRE DES BANDES DE `/offres` ═══
+ *
+ * `isolation: isolate` crée le contexte d'empilement (sans lui, le `z-index` de
+ * la photo se compare à celui de l'en-tête fixe du site) ; `overflow: hidden`
+ * plus le rayon retiennent l'image dans le panneau.
+ *
+ * Le rayon est celui des cartes du site (24 px, comme `.bl-card` et `.spot`) :
+ * le blog n'introduit pas une deuxième géométrie pour une seule surface.
+ */
 .mk .bl-head {
   width: 100%;
   display: flex;
@@ -6313,6 +6495,89 @@ html:has(.mk) {
   align-items: flex-start;
   gap: 14px;
   text-align: left;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid var(--border-10);
+  background: var(--black);
+  padding: 30px 32px 32px;
+}
+.mk .bl-headmedia {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+}
+.mk .bl-headmedia .ph img {
+  /* Les trois sources sont en 2:1 pour un panneau plus haut que large au
+     téléphone : le cadrage se cale au tiers haut, là où est le sujet. */
+  object-position: 50% 38%;
+}
+/*
+ * ═══ LE VOILE — 70 % DE NOIR, ET LE CHIFFRE A ÉTÉ RÉVISÉ À LA MESURE ═══
+ *
+ * Premier essai à 84 % : le contraste passait partout, et la photo ne se voyait
+ * plus du tout. Les trois fichiers sont des scènes NOCTURNES dont la médiane est
+ * quasi noire (16 en sRGB pour le téléphone) ; seuls leurs points chauds portent
+ * l'image, et 84 % les ramenaient à 40 — c'est-à-dire à rien, vérifié à l'œil
+ * sur les trois articles. Un voile qui efface la photo qu'il protège ne protège
+ * plus rien, il coûte un fichier.
+ *
+ * À 70 %, MESURÉ DANS LE NAVIGATEUR sur le cadrage que le panneau rend vraiment
+ * (720 × 385 au bureau, 350 × 399 à 467 au téléphone selon l'article, l'image
+ * redessinée dans un canevas avec son `object-position`, l'alpha du dégradé
+ * appliqué ligne par ligne), le pire pixel des trois fichiers vaut 71 en sRGB.
+ * Sur 71 :
+ *
+ *   blanc (`.bl-titre`, 44 px) .......................... 9,25:1
+ *   blanc 70 % (`.bl-chapo` 19 px, `.bl-meta` 13 px) .... 5,52:1
+ *   laiton #c9a15a (le filet, élément non textuel) ...... 3,84:1
+ *
+ * Le seuil AA d'un texte courant est 4,5:1, celui d'un élément non textuel 3:1.
+ *
+ * C'EST CE VOILE QUI OBLIGE `.bl-meta` ET `.bl-retour` À MONTER DE 50 À 70 % —
+ * voir la règle juste dessous. Un texte de 13 px posé sur une photo demande plus
+ * de poids que le même texte posé sur un aplat noir : à 50 %, il tombait à
+ * 3,67:1 sur le point chaud, et la seule façon de le sauver sans le toucher
+ * était de remonter le voile à 84, donc d'éteindre l'image.
+ */
+.mk .bl-headveil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0.78) 100%),
+    radial-gradient(90% 120% at 4% 50%, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0) 72%);
+}
+/*
+ * LES DEUX TEXTES DE 13 ET 15 px PASSENT DE 50 À 70 % DE BLANC, DANS CE PANNEAU
+ * SEULEMENT. Ce n'est pas une correction de charte : c'est la même intention
+ * (« ce texte est subordonné au titre ») rendue sur un fond qui n'est plus un
+ * aplat noir. Face à un titre de 44 px en blanc plein, deux dixièmes d'opacité
+ * ne changent rien à la hiérarchie et font passer la ligne de 3,5:1 à 5,3:1.
+ *
+ * Et le survol du lien de retour n'est PAS doré ici : le laiton sur le point
+ * chaud d'une photo tombe à 3,6:1, ce qui suffit à un filet mais pas à un lien.
+ * Il éclaircit vers le blanc — même geste, même sens, contraste tenu.
+ */
+.mk .bl-head .bl-meta,
+.mk .bl-head .bl-retour {
+  color: var(--white-70);
+}
+.mk .bl-head .bl-retour:hover {
+  color: var(--white);
+}
+/* Le texte remonte au-dessus des deux couches : il est statique dans le flux,
+   donc peint sous n'importe quel élément positionné tant qu'on ne le dit pas. */
+.mk .bl-head > .bl-retour,
+.mk .bl-head > .bl-meta,
+.mk .bl-head > .bl-titre,
+.mk .bl-head > .bl-chapo,
+.mk .bl-head::after {
+  position: relative;
+  z-index: 2;
 }
 .mk .bl-retour {
   color: var(--white-50);
@@ -6705,6 +6970,50 @@ html:has(.mk) {
   }
   .mk .bl-autreslist {
     grid-template-columns: 1fr;
+  }
+  /*
+   * ═══ LA VIGNETTE DISPARAÎT AU TÉLÉPHONE, ET C'EST UN CHOIX MESURÉ ═══
+   *
+   * À 350 px de carte, les deux seules formes possibles coûtent toutes les deux
+   * de la hauteur, et beaucoup :
+   *
+   *   · colonne latérale — il reste 90 px au texte, le chapô part sur douze
+   *     lignes et la carte double ;
+   *   · bandeau en tête de carte — 175 px par carte en 2:1, soit 525 px sur un
+   *     index qui n'en mesure que 2 538, un cinquième de page.
+   *
+   * Et l'index mobile n'a pas le défaut que la vignette corrige : à cette
+   * largeur les trois cartes ne sont JAMAIS à l'écran ensemble, donc elles n'ont
+   * pas à se distinguer d'un coup d'œil — c'était tout l'argument du besoin, et
+   * il tombe ici. Le brief classait déjà ce besoin en dernier ; on ne paye pas
+   * un cinquième de page pour le tenir à une largeur où il ne se pose pas.
+   *
+   * `display: none` la sort de la mise en page, et comme `Photo` la déclare en
+   * chargement paresseux elle n'entre jamais dans le champ : le navigateur n'a
+   * pas de raison d'aller la chercher. Elle est décorative, donc rien ne se perd
+   * pour un lecteur d'écran non plus.
+   */
+  .mk .bl-index .bl-cardlink {
+    display: block;
+    padding: 22px;
+  }
+  .mk .bl-cardmedia {
+    display: none;
+  }
+  .mk .bl-cardbody {
+    padding: 0;
+  }
+  /* Le panneau d'en-tête resserre ses marges : à 350 px, 32 px de chaque côté
+     mangent un cinquième de la mesure du titre. */
+  .mk .bl-article {
+    padding-top: 44px;
+  }
+  .mk .bl-head {
+    /* 16 px de marge latérale et pas 20 : à 350 px de colonne, chaque pixel
+       retiré au titre lui coûte une ligne de 31 px un peu plus tôt, et c'est
+       cette ligne-là, pas le panneau, qui allonge la page au téléphone. */
+    padding: 20px 16px 22px;
+    border-radius: 20px;
   }
 }
 

@@ -1,4 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
+// Type seul : `Shot` décrit déjà `{ src, alt }` pour toute la vitrine, et le
+// blog n'a aucune raison d'en redéclarer un jumeau. L'import ne coûte rien au
+// paquet — il disparaît à la compilation.
+import type { Shot } from "@/components/marketing/content";
 import { corps as corpsClickCollect } from "./ouvrir-le-click-and-collect-sans-se-tromper";
 import { corps as corpsFicheGoogle } from "./lien-de-commande-sur-votre-fiche-google";
 import { corps as corpsPrixApplis } from "./pourquoi-les-prix-sont-plus-chers-sur-les-applis";
@@ -42,6 +46,33 @@ export type Article = {
   readonly publieLe: string;
   /** Mots-clés de la page. Ils décrivent l'article, ils ne répètent pas ceux de la vitrine. */
   readonly motsCles: readonly string[];
+  /**
+   * LA PHOTOGRAPHIE DE L'ARTICLE — UNE PAR SUJET, DEUX EMPLOIS.
+   *
+   * Elle sert de fond à l'en-tête de l'article ET de vignette à sa carte dans
+   * l'index : un seul fichier, deux usages, et surtout un seul endroit où le
+   * choix se décide. Une image déclarée dans la page d'index et une autre dans
+   * la page d'article, ce serait la faute que ce registre existe pour empêcher —
+   * deux tables qui finissent par ne plus dire la même chose.
+   *
+   * ═══ TOUTES DÉCORATIVES, ET C'EST UNE RÈGLE, PAS UN OUBLI ═══
+   *
+   * `alt` vaut `""` sur les trois, et les composants passent `decorative` (qui
+   * ajoute `aria-hidden` sur l'enveloppe, voir `Photo.tsx`). Aucune ne PORTE
+   * l'information de l'article : le chapô la porte, deux lignes plus bas, et il
+   * est déjà lu. Décrire un burger à voix haute avant le titre de l'article,
+   * c'est allonger le trajet vers le texte sans rien apprendre à personne.
+   *
+   * ═══ ET AUCUNE N'EST LÉGENDÉE COMME UN CLIENT ═══
+   *
+   * Ce sont des photographies libres (Pexels, usage commercial sans
+   * attribution — le registre des licences est `public/photos/libre/
+   * PROVENANCE.md`). Aucune ne montre un établissement que nous servons, aucune
+   * n'est présentée comme une référence, un résultat ni un cas. Elles ne sont
+   * pas non plus documentaires : ce sont des ambiances, sombres et chaudes, et
+   * la seule chose qu'elles ont à faire est de ne rien affirmer.
+   */
+  readonly photo: Shot;
   /** Le corps, en composant serveur. Appelé une fois par rendu. */
   readonly corps: () => ReactElement;
 };
@@ -81,6 +112,14 @@ const SOURCES: readonly Article[] = [
       "commande en ligne restaurant",
       "click and collect Google",
     ],
+    // Deux mains la nuit, un téléphone tenu, l'index prêt à toucher l'écran.
+    // L'écran est un APLAT BLANC VIERGE : aucune interface, aucune application
+    // reconnaissable, aucun logo sur l'appareil. C'est ce qui la rend
+    // admissible sous un article qui explique où cliquer dans Google — une
+    // capture de la vraie fiche daterait le jour où Google redessine son
+    // interface, et prêterait à notre page une copie d'écran qui n'est pas à
+    // nous.
+    photo: { src: "/photos/libre/blog-telephone-main-nuit.webp", alt: "" },
     corps: corpsFicheGoogle,
   },
   {
@@ -96,6 +135,14 @@ const SOURCES: readonly Article[] = [
       "commande en direct restaurant",
       "marge restaurant livraison",
     ],
+    // RÉSERVE ASSUMÉE : l'article parle de kebab, la photo montre un burger.
+    // Les scènes de kebab libres ouvertes pour ce sujet portaient toutes une
+    // broche, une enseigne ou une carte étrangère dans le cadre, et une
+    // enseigne lisible sous un article intitulé « pourquoi c'est plus cher sur
+    // l'appli » désignerait un établissement nommé. Celle-ci ne désigne
+    // personne : un burger et un cornet de frites sur fond noir plein, aucun
+    // emballage, aucune marque, aucun texte.
+    photo: { src: "/photos/libre/blog-burger-frites-fond-noir.webp", alt: "" },
     corps: corpsPrixApplis,
   },
   {
@@ -111,6 +158,13 @@ const SOURCES: readonly Article[] = [
       "ouvrir la commande en ligne",
       "snack à emporter",
     ],
+    // Le guichet de retrait, éclairé, en service, vu de l'extérieur la nuit :
+    // c'est exactement le moment dont l'article parle. RÉSERVE : c'est un
+    // camion et pas une devanture fixe — le cadrage est serré sur la fenêtre
+    // (ni roue, ni hayon, ni plaque), mais le sujet reste reconnaissable. La
+    // personne à l'intérieur est de profil, tête baissée, et occupe moins d'un
+    // dixième du cadre ; aucune enseigne, aucun prix, aucun logo.
+    photo: { src: "/photos/libre/blog-fenetre-service-nuit.webp", alt: "" },
     corps: corpsClickCollect,
   },
 ];
