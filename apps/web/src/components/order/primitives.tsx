@@ -872,6 +872,7 @@ export function Sheet({
   useEffect(() => {
     if (open) {
       restoreRef.current = document.activeElement as HTMLElement | null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- `mounted` et `shown` sont deux temps d'animation pilotés par requestAnimationFrame et un setTimeout de SHEET_MS : le démontage doit attendre la fin de la transition de sortie, ce qu'aucun calcul au rendu ne peut exprimer.
       setMounted(true);
       setDrag(0);
       const raf = requestAnimationFrame(() => setShown(true));

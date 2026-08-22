@@ -111,6 +111,7 @@ export function SuppliersTab({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone en deux temps : la liste des fournisseurs, PUIS un Promise.all des derniers prix par article. Sans lui, la colonne « prix précédent » et le filtre « prix en hausse » n'auraient aucune donnée.
     void load();
   }, [load]);
 
@@ -780,7 +781,7 @@ function SupplierDrawer({
         }
       >
         <p className="text-mut">
-          Le fournisseur sera retiré des listes. Son catalogue et l'historique
+          Le fournisseur sera retiré des listes. Son catalogue et l’historique
           de prix restent archivés (suppression douce).
         </p>
       </Modal>

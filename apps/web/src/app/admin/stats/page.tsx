@@ -175,6 +175,7 @@ export default function StatsPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone porteur de la garde `seq.current` contre les réponses croisées. Le voile « refreshing » est volontairement posé dans `changePeriod` et non ici : déplacer l'appel romprait cet équilibre et laisserait une réponse lente écraser la période réellement sélectionnée.
     void load(period);
   }, [load, period]);
 

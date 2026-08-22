@@ -14,7 +14,7 @@
  * personne ou de jour sans refermer.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { PlanningPosition, PlanningService, PlanningShiftView } from "@sm/contracts";
 import { PLANNING_POSITIONS, PLANNING_POSITION_LABELS, PLANNING_SERVICE_LABELS } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
@@ -98,11 +98,20 @@ export function ShiftEditor({
 
   /** Le poste suit le rôle tant que le gérant ne l'a pas décidé lui-même. */
   const [positionTouched, setPositionTouched] = useState(false);
-  useEffect(() => {
-    if (positionTouched || isEdit) return;
-    const role = rows.find((r) => r.staffId === staffId)?.role;
-    if (role) setPosition(POSITION_FOR_ROLE[role as StaffRole]);
-  }, [staffId, rows, positionTouched, isEdit]);
+  // Le poste par défaut ne dépend que de `rows` et du salarié sélectionné, tous
+  // deux disponibles au rendu : l'ajuster ici plutôt que dans un effet évite le
+  // rendu intermédiaire pendant lequel le panneau affichait — et un
+  // enregistrement immédiat aurait retenu — le poste du salarié précédent.
+  // Les trois gardes reproduisent exactement celles de l'effet : un choix
+  // manuel prime, le mode édition ne dérive jamais, et un rôle introuvable
+  // laisse le poste inchangé au lieu de le rabattre sur un repli.
+  const roleDefault =
+    positionTouched || isEdit
+      ? undefined
+      : rows.find((r) => r.staffId === staffId)?.role;
+  if (roleDefault && POSITION_FOR_ROLE[roleDefault as StaffRole] !== position) {
+    setPosition(POSITION_FOR_ROLE[roleDefault as StaffRole]);
+  }
 
   const hours = useMemo(() => shiftHours(start, end), [start, end]);
   const rate = hourlyCosts.get(staffId) ?? null;

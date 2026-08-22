@@ -109,6 +109,7 @@ export default function AbonnementPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `load` est la seule source des factures, elles viennent du réseau et aucun rendu ne peut les calculer. Appelée au rendu, la requête repartirait à chaque téléchargement de facture, qui provoque lui-même un rendu.
     void load();
   }, [load]);
 

@@ -61,6 +61,7 @@ export default function IngredientsPage() {
   }, [fetchAll]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `load` remet stocks et alertes au squelette puis interroge le réseau. Il sert aussi de « réessayer » ; hors de l'effet, la page resterait bloquée sur son message d'échec après une coupure.
     void load();
   }, [load]);
 

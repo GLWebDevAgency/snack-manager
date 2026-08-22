@@ -396,31 +396,35 @@ pas cette règle — c'est vous qui décidez du moment où vous poussez.
 - **Pas de tests de bout en bout.** `playwright` est présent à la racine mais
   aucun scénario n'est joué en CI. La caisse, l'écran cuisine et la commande en
   ligne se vérifient à la main.
-- **L'étape « Analyse statique » ne bloque pas la fusion.** C'est le
-  compromis le plus important de ce pipeline, et il est temporaire.
+- ~~L'étape « Analyse statique » ne bloque pas la fusion.~~ **Réglé le 22 août
+  2026.** L'étape barre désormais la route comme le typage et les tests.
 
-  `lint` est un `echo ok` dans presque tous les paquets ; seul `@sm/web` lance
-  réellement ESLint, et il sort **42 erreurs préexistantes**, essentiellement
-  `react-hooks/set-state-in-effect` — une règle que `eslint-config-next` érige
-  en erreur depuis Next 16, sur du code écrit avant qu'aucune CI ne le
-  regarde (`Checkout.tsx`, `cart.ts`, `primitives.tsx`…).
+  Ce qu'il a fallu solder : `lint` est un `echo ok` dans presque tous les
+  paquets ; seul `@sm/web` lance réellement ESLint, et il sortait **45 erreurs
+  préexistantes**, essentiellement `react-hooks/set-state-in-effect` — une
+  règle que `eslint-config-next` érige en erreur depuis Next 16, sur du code
+  écrit avant qu'aucune CI ne le regarde.
 
-  Rendre l'étape bloquante le jour de sa mise en place aurait interdit *toute*
-  fusion, y compris un correctif de production un vendredi soir. L'étape tourne
-  donc, échoue **visiblement** — annotation jaune sur l'exécution et encart
-  dans le résumé — mais laisse passer.
+  **Comment elles ont été soldées, et pourquoi le compte importe.** Douze
+  écritures d'état ont été sorties des effets pour être *calculées au rendu* :
+  ce sont de vraies corrections, et l'une d'elles supprimait un défaut réel —
+  le tableau de bord affichait un objectif de repli le temps que `tenant.data`
+  arrive, et un clic dans cette fenêtre enregistrait une valeur fausse.
 
-  **Pour la rendre bloquante** (c'est l'objectif) : solder les 42 erreurs, puis
-  retirer de `.github/workflows/ci.yml` le `continue-on-error: true` de l'étape
-  « Analyse statique » ainsi que l'étape « Signaler la dette d'analyse
-  statique ». Le critère est net :
+  Les **33 autres sont des `eslint-disable-next-line` motivés**, pas des
+  réécritures, et il faut le savoir en lisant une CI verte. Ce sont les cas où
+  la règle a tort : drapeau d'hydratation dont la valeur *doit* différer entre
+  serveur et client, chargement réseau qu'aucun rendu ne peut produire,
+  relecture du panier persisté après montage. Chacun porte en commentaire la
+  raison **et ce qui casserait** si on « corrigeait » — c'est la seule forme de
+  suppression acceptée ici. Une suppression nue, sans motif, doit être refusée
+  en revue : elle rendrait à nouveau l'étape muette.
+
+  Le critère de bascule était :
 
   ```bash
   pnpm exec turbo run lint   # doit sortir en 0
   ```
-
-  Tant que ce n'est pas fait, **une CI verte ne dit rien de l'analyse
-  statique** : allez lire l'annotation.
 - **Angle mort assumé du balayage : un mot de passe générique en dur dans un
   fichier de test.** Les deux règles *génériques* — `secret-en-dur` et la règle
   gitleaks `generic-api-key`, celles qui raisonnent par forme et par entropie —

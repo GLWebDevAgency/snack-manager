@@ -381,7 +381,7 @@ export function IngredientDrawer({
             />
           ) : (
             <p className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3.5 py-3 text-[13px] text-mut">
-              Enregistrez l'ingrédient pour gérer ses marques.
+              Enregistrez l’ingrédient pour gérer ses marques.
             </p>
           )}
         </form>
@@ -404,7 +404,7 @@ export function IngredientDrawer({
         }
       >
         <p className="text-mut">
-          L'ingrédient sera retiré des listes. Les recettes et l'historique de
+          L’ingrédient sera retiré des listes. Les recettes et l’historique de
           prix le conservent (suppression douce).
         </p>
       </Modal>

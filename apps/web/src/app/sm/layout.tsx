@@ -94,6 +94,7 @@ function HqShell({ children }: { children: ReactNode }) {
     () => null,
   );
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau d'hydratation : `token` vaut null au rendu serveur par construction, la valeur doit donc différer entre hydratation et suite. Sans lui, la garde de session renverrait vers /sm/login au premier rendu client et l'aperçu HQ ne se déclencherait jamais.
   useEffect(() => setMounted(true), []);
 
   const [overview, setOverview] = useState<CrmOverview | null>(null);
@@ -120,6 +121,7 @@ function HqShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!mounted || !allowed) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- état de chargement posé avant l'appel réseau, il dépend de la requête en vol et non du rendu. Le retirer laisserait le bandeau HQ afficher des compteurs vides comme s'ils étaient réels, et un rechargement ne montrerait plus aucun signe d'activité.
     setLoading(true);
     crm
       .overview()

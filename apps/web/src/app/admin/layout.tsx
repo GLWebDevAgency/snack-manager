@@ -143,6 +143,7 @@ function Shell({ children }: { children: ReactNode }) {
   // `mounted` évite de rediriger sur le rendu d'hydratation : localStorage
   // n'existe pas côté serveur, donc `hasToken` y vaut toujours false.
   const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau d'hydratation : sa valeur DOIT différer entre le rendu serveur et le client, aucun calcul au rendu ne peut donc le produire. Dérivé, la garde lirait `hasToken === false` au premier rendu et renverrait vers /admin/login un gérant pourtant connecté.
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {

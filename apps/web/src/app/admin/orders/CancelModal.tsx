@@ -31,6 +31,7 @@ export function CancelModal({
 
   // Champs remis à zéro à chaque nouvelle cible (le PIN ne persiste jamais).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- PIN et motif sont saisis à la main : aucun rendu ne peut les recalculer. Sans cette remise à zéro, le PIN tapé pour annuler la commande A resterait pré-rempli à l'ouverture de la commande B — une annulation définitive de la mauvaise commande, journalisée NF525, à un clic.
     setPin("");
     setReason("");
     setSubmitting(false);
@@ -87,7 +88,7 @@ export function CancelModal({
         <form onSubmit={submit} className="flex flex-col gap-4">
           <p className="text-[13px] leading-relaxed text-mut">
             La commande de <strong className="text-ink">{customerName(order)}</strong>{" "}
-            sera annulée définitivement. L'opération est journalisée (NF525) —
+            sera annulée définitivement. L’opération est journalisée (NF525) —
             saisissez votre PIN pour confirmer.
           </p>
           <Field label="Raison de l'annulation" htmlFor="cancel-reason">

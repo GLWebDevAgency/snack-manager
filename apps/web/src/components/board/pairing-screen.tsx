@@ -67,7 +67,18 @@ export function PairingScreen() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [code, setCode] = useState("");
-  const [phase, setPhase] = useState<Phase>("entry");
+  const [phaseState, setPhaseState] = useState<Phase>("entry");
+  // La bascule « code complet → tentative d'appairage » ne dépend que de la
+  // longueur du code et de la phase enregistrée, toutes deux connues au rendu :
+  // la calculer ici supprime le rendu pendant lequel un code pourtant complet
+  // paraissait encore en cours de saisie devant le client.
+  // Sûr parce que tout retour à « entry » (reprise de saisie, effacement)
+  // réécrit `code` dans la même passe : un code complet ne peut jamais rester
+  // bloqué en phase de saisie, ni relancer la boucle de tentatives.
+  const phase: Phase =
+    phaseState === "entry" && code.length === PAIRING_CODE_LENGTH
+      ? "pairing"
+      : phaseState;
   const [status, setStatus] = useState<Status | null>(null);
   const [paired, setPaired] = useState<ScreenPaired | null>(null);
   const [brandName, setBrandName] = useState<string | null>(null);
@@ -83,8 +94,9 @@ export function PairingScreen() {
     }
     const fromUrl = codeFromUrl();
     if (fromUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- le code pré-rempli vient de l'URL et le jeton du stockage local : ni l'un ni l'autre n'existe au rendu serveur, les lire au rendu provoquerait une divergence d'hydratation sur la télévision de la salle.
       setCode(fromUrl);
-      setPhase("pairing");
+      setPhaseState("pairing");
     }
     setReady(true);
   }, [router]);
@@ -96,7 +108,7 @@ export function PairingScreen() {
       // On retape par-dessus une tentative en cours ou un refus : le gérant
       // corrige sa saisie, il ne doit pas avoir à chercher un bouton « annuler ».
       if (phase === "pairing" || phase === "stopped") {
-        setPhase("entry");
+        setPhaseState("entry");
         setCode(char);
         return;
       }
@@ -108,14 +120,14 @@ export function PairingScreen() {
   const eraseChar = useCallback(() => {
     if (phase === "paired") return;
     setStatus(null);
-    setPhase("entry");
+    setPhaseState("entry");
     setCode((value) => value.slice(0, -1));
   }, [phase]);
 
   const eraseAll = useCallback(() => {
     if (phase === "paired") return;
     setStatus(null);
-    setPhase("entry");
+    setPhaseState("entry");
     setCode("");
   }, [phase]);
 
@@ -143,11 +155,8 @@ export function PairingScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pushChar, eraseChar, eraseAll]);
 
-  // Six caractères : on lance les tentatives.
-  useEffect(() => {
-    if (code.length === PAIRING_CODE_LENGTH && phase === "entry") setPhase("pairing");
-  }, [code, phase]);
-
+  // Six caractères : on lance les tentatives (bascule calculée au rendu
+  // plus haut, `phase`).
   useEffect(() => {
     if (phase !== "pairing" || code.length !== PAIRING_CODE_LENGTH) return;
 
@@ -165,7 +174,7 @@ export function PairingScreen() {
         if (!alive) return;
         savePairing(result);
         setPaired(result);
-        setPhase("paired");
+        setPhaseState("paired");
 
         // On profite du jeton tout neuf pour remplir le cache : l'affichage
         // s'ouvrira sur la carte, pas sur un écran d'attente.
@@ -185,7 +194,7 @@ export function PairingScreen() {
           // Expiré, déjà utilisé, mal formé : réessayer n'y changerait rien,
           // et le message de l'API dit exactement quoi faire.
           if (error.status === 400 || error.status === 409 || error.status === 410) {
-            setPhase("stopped");
+            setPhaseState("stopped");
             setStatus({ tone: "error", text: error.message });
             return;
           }

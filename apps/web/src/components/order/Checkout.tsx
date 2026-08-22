@@ -176,6 +176,7 @@ export function Checkout({
   // ── Coordonnées et disponibilité du paiement, relues à l’ouverture ──
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- `readCustomer()` lit la mémoire de session du navigateur, absente au rendu serveur, et la garde protège une saisie déjà commencée. Recalculé au rendu, ce prérenseignement écraserait le nom et le téléphone que le client est en train de taper.
     setCustomer((prev) => (prev.name || prev.phone ? prev : readCustomer()));
     // La démonstration ne consulte ni n’écrit la mémoire de session : elle
     // propose toujours les deux moyens de paiement, puisque c’est justement
@@ -210,6 +211,7 @@ export function Checkout({
   useEffect(() => {
     if (!open || step !== "slot") return;
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- appel réseau : la capacité des créneaux est vivante, elle doit être relue à chaque entrée dans l'étape et à chaque changement de date. Figée, le client choisirait un créneau déjà complet — commande acceptée puis impossible à honorer.
     fetchSlots(date, controller.signal);
     return () => controller.abort();
   }, [open, step, date, fetchSlots]);

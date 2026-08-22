@@ -246,6 +246,7 @@ export function LeadDrawer({
 
   useEffect(() => {
     if (!lead) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon d'édition : dès que le commercial tape, ces six champs divergent volontairement de `lead` et ne sont plus calculables au rendu. Sans cette resynchronisation à l'ouverture, le tiroir afficherait les coordonnées du lead précédent et un enregistrement écraserait la fiche du nouveau.
     setName(lead.restaurantName);
     setContactName(lead.contact.name);
     setPhone(lead.contact.phone);
@@ -620,6 +621,7 @@ export function NewLeadDrawer({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- remise à zéro d'un formulaire de saisie : les champs viennent de la frappe, rien ne les recalcule. Sans elle, rouvrir « Nouveau lead » après une création réafficherait les valeurs précédentes et créerait un doublon du restaurant qu'on vient d'enregistrer.
     setName("");
     setContactName("");
     setPhone("");

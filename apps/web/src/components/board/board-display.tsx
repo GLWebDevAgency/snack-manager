@@ -50,6 +50,7 @@ export function BoardDisplay() {
   // localStorage, et une divergence d'hydratation ferait clignoter l'écran.
   useEffect(() => {
     const stored = readDeviceToken();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- le jeton vient de localStorage, illisible au rendu serveur : le lire pendant le rendu provoquerait une divergence d'hydratation sur la télévision de la salle, au mieux un clignotement, au pire l'écran d'appairage montré aux clients en plein service.
     setToken(stored);
     setChecked(true);
     if (!stored) router.replace("/board");

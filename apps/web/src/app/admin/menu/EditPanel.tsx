@@ -144,6 +144,7 @@ export function EditPanel({
   }, [mode, product, loadIngredients]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `loadBom` pose la recette, `origSerialized` (référence du calcul « modifié »), les allergènes d'options et `bomState`. Poser `origSerialized` ailleurs qu'immédiatement après `lines` ferait passer une fiche intacte pour modifiée, ou laisserait enregistrer une recette vide.
     void loadBom();
   }, [loadBom]);
 

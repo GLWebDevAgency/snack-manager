@@ -133,6 +133,7 @@ export default function PromosPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : sans cet appel `promos` reste null, aucune promotion n'est affichée et les bascules optimistes de `toggleActive` retombent sur `?? null`, donc sans effet visible.
     void load();
   }, [load]);
 

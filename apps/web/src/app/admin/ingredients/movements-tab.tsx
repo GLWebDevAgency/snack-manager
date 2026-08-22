@@ -62,6 +62,7 @@ export function MovementsTab({
   }, [ingredientId, limit]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone dépendant de `ingredientId` et `limit` : le journal doit être rejoué quand le filtre change, sans quoi il afficherait les mouvements d'un AUTRE ingrédient sous le bon titre.
     void load();
   }, [load]);
 

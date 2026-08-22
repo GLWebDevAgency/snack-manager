@@ -123,6 +123,10 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => {
+    // Amorce la liste que les événements temps réel viendront compléter :
+    // sans cet appel, l'écran s'ouvre vide en plein service et ne se remplit
+    // qu'à la commande suivante.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : les commandes du jour viennent du réseau, aucun rendu ne peut les produire.
     void load();
   }, [load]);
 
@@ -180,7 +184,17 @@ export default function OrdersPage() {
     return rows;
   }, [orders, filter, q]);
 
-  useEffect(() => setLimit(PAGE_SIZE), [filter, q]);
+  // Le retour à PAGE_SIZE ne dépend que de `filter` et `q`, tous deux connus au
+  // rendu : l'ajustement se fait ici plutôt que dans un effet, pour qu'aucune
+  // image intermédiaire n'affiche la liste précédente encore dépliée sous le
+  // nouveau filtre. `pagedFor` mémorise le couple pour lequel `limit` a été
+  // remis à zéro — les deux valeurs sont comparées séparément, aucune
+  // concaténation ne peut donc confondre deux filtres différents.
+  const [pagedFor, setPagedFor] = useState({ filter, q });
+  if (pagedFor.filter !== filter || pagedFor.q !== q) {
+    setPagedFor({ filter, q });
+    setLimit(PAGE_SIZE);
+  }
   const visible = filtered.slice(0, limit);
 
   const selected = useMemo(
