@@ -81,6 +81,18 @@ export default function ScreensPage() {
   // comme en démo, on donne l'origine réellement servie plutôt qu'une constante
   // qui finirait par mentir. Lue comme un store externe (même procédé que le
   // shell admin pour le jeton) : vide côté serveur, sans écart d'hydratation.
+  //
+  // ⚠️ CECI DÉPEND DU PROXY, ET LA DÉPENDANCE EST INVISIBLE D'ICI. Depuis le
+  // 22/08/2026, `src/proxy.ts` refuse `/admin` ET `/board` sur un domaine de
+  // restaurant : cette page ne s'affiche donc QUE sur une origine de la
+  // plateforme, et l'adresse qu'on imprime ici est forcément servie.
+  //
+  // Rouvrir `/admin` sur les domaines clients sans rouvrir `/board` produirait
+  // une panne sourde : le gérant lirait « ouvrez laclassfood.fr/board » sur sa
+  // télévision, et l'adresse répondrait par une redirection vers la carte.
+  // Pire, l'appairage étant rangé dans le `localStorage` DE L'ORIGINE
+  // (`board-store.ts`), un écran appairé sur un domaine ne l'est pas sur
+  // l'autre — le rebranchement se ferait en plein service.
   const origin = useSyncExternalStore(
     NEVER_CHANGES,
     () => window.location.origin,
