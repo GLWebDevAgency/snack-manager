@@ -226,6 +226,7 @@ export default function HoursPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `load` pose d'un seul bloc `days`, `savedHours` (la ligne de base du calcul « modifié »), `closures`, `settings` et `msgDraft`. Dissocier ces écritures désynchroniserait `savedHours` de `days` et fausserait l'état du bouton Enregistrer.
     void load();
   }, [load]);
 
@@ -500,7 +501,7 @@ export default function HoursPage() {
         </p>
         {!valid && (
           <p role="alert" className="mt-2 text-[13px] font-semibold text-alertt">
-            Vérifiez les heures en rouge : l'ouverture doit précéder la
+            Vérifiez les heures en rouge : l’ouverture doit précéder la
             fermeture.
           </p>
         )}

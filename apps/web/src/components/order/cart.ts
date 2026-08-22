@@ -451,6 +451,7 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
     if (loadedFor === slug) return;
     const stored = readCart(slug);
     const result = reconcile(stored.lines, index);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- relecture du panier persisté APRÈS le montage, volontairement : lue au rendu elle divergerait entre serveur et client. `loadedFor` sert de drapeau « hydraté » qui autorise l'écriture de l'effet suivant ; inverser cet ordre ferait réécrire le panier vide du premier rendu par-dessus la commande en cours du client.
     setLines(result.lines);
     setNoteState(stored.note);
     setDropped(result.dropped);

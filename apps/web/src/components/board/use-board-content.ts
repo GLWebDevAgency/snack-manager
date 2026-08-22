@@ -70,6 +70,7 @@ export function useBoardContent(token: string | null): BoardFeed {
     const cached = readCachedContent();
     if (cached) {
       hashRef.current = cached.contentHash;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- lecture du cache local, indisponible au rendu serveur, dans l'effet qui arme aussi la boucle de rafraîchissement. Sans elle l'écran client resterait noir jusqu'à la première réponse réseau — et indéfiniment si la box du restaurant est hors ligne, ce que ce cache existe justement pour éviter.
       setContent(cached);
     }
 

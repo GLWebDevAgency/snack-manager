@@ -111,6 +111,7 @@ export default function DevicesPage() {
   }, [loadDevices]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : la liste des caisses vient du réseau. C'est aussi ce `load` qui fait passer `loadState` à « ready », donc qui arme le rafraîchissement silencieux ci-dessous ; hors de l'effet, les indicateurs « hors ligne depuis N min » se figeraient.
     void load();
   }, [load]);
 

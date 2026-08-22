@@ -191,6 +191,11 @@ function useApi<T>(path: string) {
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    // Le voile de chargement et l'effacement de l'erreur précédente doivent
+    // suivre `path` : sans cette écriture, un changement de période laisserait
+    // les chiffres de la période précédente affichés comme s'ils étaient à
+    // jour, sous une erreur devenue caduque.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- état de chargement posé avant l'appel réseau, il n'est pas calculable au rendu : il dépend de la requête en vol.
     setState((s) => ({ ...s, loading: true, error: null }));
     api.get<T>(path).then(
       (data) => {
@@ -266,24 +271,31 @@ export default function DashboardPage() {
   const tenant = useApi<TenantMe>("/tenants/me");
 
   // ── Objectif du jour (settings.dailyGoalCents, optimiste) ──
-  const [goalCents, setGoalCents] = useState<number | null>(null);
+  // Seul l'ajustement manuel est un état : la valeur du serveur est déjà
+  // disponible au rendu, la dériver évite le rendu supplémentaire et la fenêtre
+  // pendant laquelle la carte affichait un objectif de repli avant l'arrivée de
+  // `tenant.data` — un clic dans cette fenêtre enregistrait un objectif faux.
+  // `goalOverride` reste prioritaire pour que les boutons +/− ne soient pas
+  // réécrits par la valeur du serveur au rendu suivant.
+  const [goalOverride, setGoalOverride] = useState<number | null>(null);
   const [savingGoal, setSavingGoal] = useState(false);
-  useEffect(() => {
-    if (tenant.data && goalCents == null)
-      setGoalCents(tenant.data.settings.dailyGoalCents ?? GOAL_DEFAULT);
-  }, [tenant.data, goalCents]);
+  const goalCents =
+    goalOverride ??
+    (tenant.data
+      ? (tenant.data.settings.dailyGoalCents ?? GOAL_DEFAULT)
+      : null);
 
   async function adjustGoal(dir: -1 | 1) {
     if (goalCents == null || savingGoal) return;
     const next = Math.max(GOAL_FLOOR, goalCents + dir * GOAL_STEP);
     if (next === goalCents) return;
     const prev = goalCents;
-    setGoalCents(next); // optimiste
+    setGoalOverride(next); // optimiste
     setSavingGoal(true);
     try {
       await api.patch("/tenants/me/settings", { dailyGoalCents: next });
     } catch {
-      setGoalCents(prev);
+      setGoalOverride(prev);
       toast("Impossible d'enregistrer l'objectif — réessayez");
     } finally {
       setSavingGoal(false);
@@ -305,6 +317,10 @@ export default function DashboardPage() {
     }
   }, []);
   useEffect(() => {
+    // Amorce la carte « commandes en direct » avant que le WebSocket ne prenne
+    // le relais ; sans ce premier appel elle resterait sur son squelette
+    // jusqu'à la prochaine commande créée.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `orders` vient du réseau, aucune valeur calculable au rendu ne peut le remplacer.
     void loadOrders();
   }, [loadOrders]);
 
@@ -577,7 +593,7 @@ export default function DashboardPage() {
             </div>
           ) : rush == null ? (
             <p className="mt-3 text-[13.5px] text-mut">
-              Pas encore assez d'historique pour estimer le service — les
+              Pas encore assez d’historique pour estimer le service — les
               prévisions apparaîtront après quelques jours de commandes.
             </p>
           ) : (
@@ -608,7 +624,7 @@ export default function DashboardPage() {
                   className="mt-0.5 shrink-0 text-mut"
                 />
                 <span>
-                  Volume attendu aujourd'hui : ≈{" "}
+                  Volume attendu aujourd’hui : ≈{" "}
                   <span className="cf-fig font-extrabold">
                     {int(rush.avgDay)}
                   </span>{" "}

@@ -27,17 +27,22 @@ export function Founder() {
       <article className="fd-card fd-pilote rv spot">
         {/*
          * Un collage, pas une galerie : trois cadres figés, aucun défilement,
-         * aucune flèche. Le visuel signature occupe la rangée haute, les deux
-         * autres la rangée basse — c'est une illustration de citation, elle ne
-         * demande aucun geste au lecteur.
+         * aucune flèche. Deux scènes de service — le comptoir, la salle — et
+         * c'est une illustration de citation : elle ne demande aucun geste au
+         * lecteur.
+         *
+         * `decorative` sur les deux : ce sont des photographies de banque, pas
+         * le restaurant pilote. Un lecteur d'écran qui les annoncerait entre la
+         * citation et la signature ferait croire à une preuve qu'elles ne sont
+         * pas — la preuve, c'est la commune nommée et la démonstration.
          */}
         <div className="fd-collage">
           <div className="fd-shot lead">
-            <Photo shot={FOUNDER_PHOTO} sizes="(max-width: 810px) 90vw, 440px" />
+            <Photo shot={FOUNDER_PHOTO} decorative sizes="(max-width: 810px) 90vw, 440px" />
           </div>
           {PILOTE_PHOTOS.map((shot) => (
             <div className="fd-shot" key={shot.src}>
-              <Photo shot={shot} sizes="(max-width: 810px) 45vw, 215px" />
+              <Photo shot={shot} decorative sizes="(max-width: 810px) 90vw, 440px" />
             </div>
           ))}
         </div>

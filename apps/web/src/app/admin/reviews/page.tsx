@@ -79,6 +79,7 @@ export default function ReviewsPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone dépendant du filtre : il doit être rejoué au passage « tous » → « en attente ». Figé, la liste complète resterait affichée sous le libellé du filtre restreint et le gérant se croirait à jour de ses réponses.
     void load(filter);
   }, [load, filter]);
 

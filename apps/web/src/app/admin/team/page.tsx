@@ -168,10 +168,12 @@ export default function TeamPage() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : sans lui aucun salarié n'est listé, le badgeage et les actions CRUD n'ont plus de cible, et `refresh` rechargerait une liste jamais initialisée.
     void loadMembers();
   }, [loadMembers]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone rejoué à chaque navigation de semaine ; `loadWeek` n'actualise le KPI `currentTotal` que si `off === 0`. Perdre cette condition afficherait les heures d'une semaine passée comme total de la semaine EN COURS.
     void loadWeek(offset);
   }, [offset, loadWeek]);
 

@@ -161,6 +161,7 @@ export default function PlanningPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone rejoué à chaque changement de semaine, protégé par le ticket `reqRef` contre les réponses croisées. Hors de l'effet, l'appariement ticket/réponse serait rompu et une réponse en retard écraserait la semaine réellement affichée.
     void load(anchor);
   }, [anchor, load]);
 

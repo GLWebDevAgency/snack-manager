@@ -123,6 +123,7 @@ export function useRestaurantClock(timezone: string | null | undefined): string 
   const [label, setLabel] = useState(() => formatter.format(new Date()));
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- l'heure vient d'un minuteur : `new Date()` au rendu le rendrait impur (divergence d'hydratation garantie) et l'horloge suivrait les rendus du parent au lieu du tick. Cette écriture resynchronise aussi l'affichage quand le fuseau du restaurant arrive après coup.
     setLabel(formatter.format(new Date()));
     const timer = setInterval(() => {
       const next = formatter.format(new Date());

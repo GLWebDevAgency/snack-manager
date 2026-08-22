@@ -79,6 +79,7 @@ export default function SitePage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : les domaines viennent du réseau (« loading » est déjà l'état initial, justement pour éviter une écriture au montage). Sans cet appel, la page reste sur son squelette et `retry`, qui repose sur le même `load`, ne relance plus rien.
     void load();
   }, [load]);
 

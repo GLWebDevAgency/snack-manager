@@ -136,6 +136,7 @@ export default function MenuPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `load` normalise la réponse /menu vers la forme interne (catégories + non rattachés). Sans lui `menu` reste null, la carte est vide et `activeSel` — pourtant dérivé — n'a rien à sélectionner.
     void load();
   }, [load]);
 

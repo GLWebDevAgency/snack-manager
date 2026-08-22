@@ -143,6 +143,7 @@ export default function ScreensPage() {
   }, [loadScreens]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : écrans et carte viennent du réseau, et c'est `load` qui fait passer `loadState` à « ready », donc qui arme le rafraîchissement silencieux ci-dessous. Le casser figerait les compteurs « hors ligne depuis N min ».
     void load();
   }, [load]);
 
