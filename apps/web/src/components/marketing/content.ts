@@ -1710,21 +1710,38 @@ export const FOUNDER_QUOTE =
  * que personne s'en aperçoive. `public/photos` contient dix-sept images
  * réelles ; on repointe au lieu de supprimer.
  *
- * ATTENTION — CE QUE CES PHOTOS SONT, ET CE QU'ELLES NE SONT PAS. Ce sont les visuels de
- * la CARTE du restaurant pilote, pas des photos de sa salle ni de son équipe.
- * Les textes alternatifs le disent exactement, et aucune légende de composant
- * ne doit les présenter comme une preuve d'exploitation : la preuve, c'est la
- * commune nommée et la démonstration manipulable, pas un plat photographié.
+ * ═══ DES SCÈNES DE SERVICE, PLUS DES ASSIETTES ═══
+ *
+ * Le collage montrait trois visuels de la CARTE du pilote — un tacos gratiné,
+ * un smash burger, un panini. Verdict du fondateur : « ce n’est pas pro, ce
+ * n’est pas ce que je veux ». Il a raison, et pour une raison qui dépasse le
+ * goût : la section s’appelle désormais « Un expert de la tech, un
+ * restaurateur, et le logiciel qui leur manquait ». Des assiettes n’illustrent
+ * pas une rencontre entre deux personnes. Un comptoir, un service, si.
+ *
+ * ═══ ET ELLES NE PEUVENT PLUS ÊTRE LÉGENDÉES « CLASS’FOOD » ═══
+ *
+ * Les anciennes étaient de vraies photos du pilote, et leurs textes alternatifs
+ * le disaient. Celles-ci sont des photographies de banque libres de droits :
+ * les présenter comme le restaurant pilote serait exactement le défaut qu’on
+ * traque depuis le début. Elles sont donc DÉCORATIVES — `alt` vide et
+ * `aria-hidden`. La preuve du pilote reste ce qu’elle a toujours été : la
+ * commune nommée, la citation, et une démonstration qu’on manipule.
+ *
+ * Deux images plutôt que trois : je n’en ai trouvé que deux qui tiennent la
+ * charte sans marque tierce ni texte étranger, et un collage de deux justes
+ * vaut mieux qu’un de trois dont le dernier est faible.
+ *
+ * Provenance et licences : `public/photos/libre/PROVENANCE.md`.
  */
 export const FOUNDER_PHOTO: Shot = {
-  src: "/photos/tacos-gratine-hero.png",
-  alt: "Le tacos gratiné, produit signature de la carte du restaurant pilote Class'Food",
+  src: "/photos/libre/service-sous-lampe.webp",
+  alt: "",
 };
 
-/** Le collage qui accompagne la citation — deux visuels de la carte du pilote. */
+/** La vignette qui accompagne la citation — un comptoir en service. */
 export const PILOTE_PHOTOS: Shot[] = [
-  { src: "/photos/smash-burger.png", alt: "Le smash burger de la carte du restaurant pilote Class'Food" },
-  { src: "/photos/panini-menu.png", alt: "Le panini en formule menu, sur la carte du restaurant pilote Class'Food" },
+  { src: "/photos/libre/comptoir-vignette.webp", alt: "" },
 ];
 
 /**

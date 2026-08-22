@@ -66,7 +66,7 @@ rangées et pas seulement dans un angle.
 
 ---
 
-### `comptoir-lampes-chauffantes.webp`
+### `comptoir-vignette.webp`
 
 | | |
 |---|---|

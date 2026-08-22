@@ -2994,11 +2994,19 @@ html:has(.mk) {
   gap: 22px;
   align-items: center;
 }
+/* DEUX IMAGES, PLUS TROIS — et la grille suit.
+ *
+ * La rangée basse tenait DEUX vignettes de la carte du pilote. Le collage
+ * montre désormais des scènes de service, et il n'en existe que deux qui
+ * tiennent la charte sans marque tierce : la vignette restante prend donc toute
+ * la largeur. Laisser `1fr 1fr` avec un seul enfant aurait posé une image sur
+ * la moitié gauche et un trou de 10 px à droite — un défaut qu'aucun typecheck
+ * ne voit et que tout le monde voit. */
 .mk .fd-collage {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   grid-template-rows: 210px 148px;
   gap: 10px;
 }
