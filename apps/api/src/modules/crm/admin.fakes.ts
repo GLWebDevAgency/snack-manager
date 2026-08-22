@@ -37,6 +37,26 @@ function clone<T>(value: T): T {
 /** Compare des identifiants venus tantôt d'un ObjectId, tantôt d'une chaîne. */
 const same = (a: unknown, b: unknown): boolean => String(a) === String(b);
 
+/**
+ * Applique un `$set` comme Mongo : un chemin pointé écrit DANS le sous-objet
+ * au lieu de le remplacer. Partagé par `updateOne` et `findOneAndUpdate` — les
+ * deux écritures doivent se comporter pareil, sans quoi le choix de l'une ou
+ * l'autre dans un service changerait le résultat pour une raison invisible.
+ */
+function applySet(row: Row, $set: Row): void {
+  for (const [path, value] of Object.entries($set)) {
+    const segments = path.split('.');
+    let target = row;
+    for (const segment of segments.slice(0, -1)) {
+      if (target[segment] === null || typeof target[segment] !== 'object') {
+        target[segment] = {};
+      }
+      target = target[segment] as Row;
+    }
+    target[segments[segments.length - 1]!] = clone(value);
+  }
+}
+
 function matches(row: Row, filter: Row): boolean {
   return Object.entries(filter).every(([key, expected]) => same(row[key], expected));
 }
@@ -122,20 +142,95 @@ export class FakeCollection {
     return new FakeDocQuery(row ? clone(row) : null);
   }
 
+  /**
+   * `findOneAndUpdate(filter, { $set }, options)`.
+   *
+   * Trois comportements de Mongo sont rejoués parce que des appelants réels en
+   * dépendent :
+   *
+   * 1. `new: true` rend le document D'APRÈS (les révocations d'appareil et les
+   *    modifications de tenant relisent ce qu'elles viennent d'écrire) ;
+   *    `returnDocument: 'before'` rend celui d'AVANT. C'est cette seconde
+   *    forme qui donne au journal des réglages de plateforme une image du
+   *    passé prise AU MOMENT de l'écriture, et non un `findById` antérieur
+   *    qu'une requête concurrente aurait pu périmer entre-temps.
+   *
+   * 2. L'UPSERT crée le document manquant, à partir des égalités du filtre —
+   *    l'état du tout premier enregistrement des réglages.
+   *
+   * 3. LES CHEMINS POINTÉS écrivent DANS le sous-objet sans le remplacer,
+   *    exactement comme dans `updateOne` : c'est toute la différence entre
+   *    modifier un réseau et effacer les trois autres.
+   */
   findOneAndUpdate(
     filter: Row,
     update: { $set?: Row },
-    _options?: unknown,
+    options?: { new?: boolean; returnDocument?: 'before' | 'after'; upsert?: boolean },
   ): FakeDocQuery<Row> {
-    const row = this.rows.find((r) => matches(r, filter));
-    if (!row) return new FakeDocQuery<Row>(null);
-    for (const [key, value] of Object.entries(update.$set ?? {})) {
-      if (key.includes('.')) {
-        throw new Error(`Chemin pointé non géré par la doublure : ${key}`);
-      }
-      row[key] = clone(value);
+    let row = this.rows.find((r) => matches(r, filter));
+    let inserted = false;
+    if (!row) {
+      if (!options?.upsert) return new FakeDocQuery<Row>(null);
+      row = { ...clone(filter) };
+      this.rows.push(row);
+      inserted = true;
     }
+
+    const before = clone(row);
+    applySet(row, update.$set ?? {});
+    row.updatedAt = new Date();
+
+    const wantsBefore = options?.returnDocument === 'before' || options?.new === false;
+    // Sur un upsert qui INSÈRE, Mongo n'a pas d'état d'avant à rendre : c'est
+    // `null`, et non le squelette issu du filtre. Rendre le squelette ferait
+    // passer un premier enregistrement pour la modification d'un document
+    // préexistant.
+    if (wantsBefore) return new FakeDocQuery(inserted ? null : before);
     return new FakeDocQuery(clone(row));
+  }
+
+  /**
+   * `updateOne(filter, { $set }, { upsert })` — la seule écriture des réglages
+   * de plateforme.
+   *
+   * Deux comportements de Mongo sont rejoués ici parce que le service en
+   * dépend, et qu'une doublure qui les ignorerait rendrait ses tests muets :
+   *
+   * 1. LES CHEMINS POINTÉS écrivent DANS le sous-objet sans le remplacer.
+   *    `{ 'social.instagram': … }` ne doit toucher qu'Instagram ; c'est toute
+   *    la différence entre modifier un réseau et effacer les trois autres.
+   *    (`findOneAndUpdate` les refuse au contraire : les appelants de cette
+   *    méthode-là écrivent des blocs entiers, un chemin pointé y serait une
+   *    erreur de frappe silencieuse.)
+   *
+   * 2. L'UPSERT crée le document quand il n'existe pas — l'état normal au
+   *    tout premier enregistrement, celui où un `create()` marcherait et où
+   *    tous les suivants échoueraient.
+   *
+   * `updatedAt` est posé comme le ferait l'option `timestamps` du schéma.
+   */
+  async updateOne(
+    filter: Row,
+    update: { $set?: Row },
+    options?: { upsert?: boolean },
+  ): Promise<{ acknowledged: true; matchedCount: number; upsertedCount: number }> {
+    let row = this.rows.find((r) => matches(r, filter));
+    let upserted = 0;
+    if (!row) {
+      if (!options?.upsert) {
+        return { acknowledged: true, matchedCount: 0, upsertedCount: 0 };
+      }
+      // L'upsert part des égalités du filtre, comme Mongo : c'est ce qui donne
+      // son `_id` au document créé.
+      row = { ...clone(filter) };
+      this.rows.push(row);
+      upserted = 1;
+    }
+
+    applySet(row, update.$set ?? {});
+    row.updatedAt = new Date();
+
+    return { acknowledged: true, matchedCount: upserted ? 0 : 1, upsertedCount: upserted };
   }
 
   find(filter: Row = {}): FakeListQuery {

@@ -14,6 +14,21 @@
  *   POST /public/orders/:id/payment-intent     paiement Stripe (optionnel)
  *   GET  /public/orders/:id                    suivi (statut)
  *   GET  /public/orders/:id/ticket             récapitulatif du suivi
+ *
+ * ─── UN PORT, DEUX BRANCHEMENTS ───
+ *
+ * Tout passe par un `Transport` : un objet qui reçoit une méthode, un chemin
+ * et un corps, et rend un statut et un corps. Le branchement normal est
+ * `httpTransport` (fetch). La démonstration de la vitrine en fournit un autre,
+ * qui répond aux mêmes routes depuis une fixture, en mémoire (voir
+ * `demo/transport.ts`) — ni ce module, ni le tunnel, ni le panier ne savent
+ * lequel des deux ils ont sous les pieds. C’est le même patron que le port de
+ * transport de `packages/client-core` (ADR 0001), appliqué ici à la couche
+ * réseau du site public.
+ *
+ * Le transport RÉSEAU reste le défaut, partout : aucune adresse, aucune
+ * variable d’environnement ne peut faire basculer un client vers la fixture —
+ * il faut qu’une route ait explicitement construit l’autre.
  */
 
 import type {
@@ -46,34 +61,44 @@ type FetchOptions = {
   signal?: AbortSignal;
 };
 
-async function getJson<T>(path: string, opts: FetchOptions = {}): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { Accept: "application/json" },
-    signal: opts.signal,
-    ...(opts.revalidate === undefined || opts.revalidate === 0
-      ? { cache: "no-store" as const }
-      : { next: { revalidate: opts.revalidate } }),
-  });
-  const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new PublicApiError(res.status, messageOf(body, res.status));
-  }
-  return body as T;
+// ─────────────────────────────────────────────────────────────
+// Port de transport
+// ─────────────────────────────────────────────────────────────
+
+export type TransportRequest = {
+  method: "GET" | "POST";
+  /** Chemin d’API, query comprise (« /public/tenants/x/slots?date=… »). */
+  path: string;
+  body?: unknown;
+  signal?: AbortSignal | undefined;
+  /** Cache serveur en secondes ; `0` ou absent ⇒ toujours frais. */
+  revalidate?: number | undefined;
+};
+
+export type TransportResponse = { status: number; body: unknown };
+
+export interface Transport {
+  send(request: TransportRequest): Promise<TransportResponse>;
 }
 
-async function postJson<T>(path: string, payload: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
-  const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new PublicApiError(res.status, messageOf(body, res.status));
-  }
-  return body as T;
-}
+/** Le vrai réseau — le seul branchement par défaut. */
+export const httpTransport: Transport = {
+  async send({ method, path, body, signal, revalidate }) {
+    const res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers:
+        method === "POST"
+          ? { "Content-Type": "application/json", Accept: "application/json" }
+          : { Accept: "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal,
+      ...(revalidate === undefined || revalidate === 0
+        ? { cache: "no-store" as const }
+        : { next: { revalidate } }),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  },
+};
 
 /** Message d’erreur lisible : l’API renvoie `{ message }` (string ou tableau Zod). */
 function messageOf(body: unknown, status: number): string {
@@ -286,8 +311,9 @@ function toCategories(raw: unknown): MenuCategory[] {
     .filter((c) => c.id !== "" && c.products.length > 0);
 }
 
+
 // ─────────────────────────────────────────────────────────────
-// Chargement de la page publique
+// Formes échangées
 // ─────────────────────────────────────────────────────────────
 
 /** Forme du repli `GET /public/tenants/:slug` (API antérieure à `/site`). */
@@ -304,118 +330,6 @@ type PublicTenantLegacy = {
 };
 
 const SITE_TTL = 60; // secondes — SEO et vitesse d’affichage, fraîcheur suffisante
-
-/**
- * Charge tout ce qu’il faut pour afficher un restaurant.
- *
- * Chemin nominal : `GET /public/tenants/:slug/site` (un seul aller-retour).
- * Repli : une API plus ancienne n’expose pas encore `/site` — on recompose
- * l’agrégat à partir de `/public/tenants/:slug` + `/menu` (+ `/slots` si
- * disponible). Un déploiement d’API en retard ne doit pas éteindre la vitrine
- * du client : c’est sa page Google.
- */
-export async function loadSite(slug: string): Promise<Site | null> {
-  try {
-    const site = await getJson<PublicSiteResponse>(
-      `/public/tenants/${encodeURIComponent(slug)}/site`,
-      { revalidate: SITE_TTL },
-    );
-    return {
-      tenant: {
-        slug: site.tenant.slug,
-        name: site.tenant.name,
-        logoUrl: site.tenant.logoUrl,
-        brandColor: site.tenant.brandColor,
-        address: site.tenant.address,
-        phones: site.tenant.phones ?? [],
-        hours: site.tenant.hours ?? [],
-      },
-      categories: toCategories(site.menu),
-      slots: site.slots ?? null,
-      reviews: site.reviews ?? { avg: 0, count: 0, latest: [] },
-      ordering: site.ordering ?? { paused: false, message: null },
-      openNow: site.openNow === true,
-      todayHours: site.todayHours ?? null,
-      timezone: site.timezone ?? "Europe/Paris",
-    };
-  } catch (err) {
-    if (err instanceof PublicApiError && err.status === 404) {
-      return loadSiteLegacy(slug);
-    }
-    throw err;
-  }
-}
-
-async function loadSiteLegacy(slug: string): Promise<Site | null> {
-  const base = `/public/tenants/${encodeURIComponent(slug)}`;
-  const [tenant, menu, slots] = await Promise.all([
-    getJson<PublicTenantLegacy>(base, { revalidate: SITE_TTL }).catch(
-      (err: unknown) => {
-        if (err instanceof PublicApiError && err.status === 404) return null;
-        throw err;
-      },
-    ),
-    getJson<unknown>(`${base}/menu`, { revalidate: SITE_TTL }).catch(() => null),
-    getJson<SlotsResponse>(`${base}/slots`).catch(() => null),
-  ]);
-  if (!tenant) return null; // slug inconnu : 404 franc
-
-  const hours = tenant.hours ?? [];
-  const paused = tenant.onlineOrderingPaused === true;
-
-  return {
-    tenant: {
-      slug: tenant.slug,
-      name: tenant.name,
-      logoUrl: tenant.logoUrl ?? null,
-      brandColor: tenant.brandColor ?? "#c9a15a",
-      address: tenant.address ?? "",
-      phones: tenant.phones ?? [],
-      hours,
-    },
-    categories: toCategories(menu),
-    slots,
-    // Les avis ne sont pas exposés par l’API historique : section masquée.
-    reviews: { avg: 0, count: 0, latest: [] },
-    ordering: { paused, message: paused ? (tenant.pauseMessage ?? null) : null },
-    openNow: isOpenAt(hours),
-    todayHours: hoursOfDay(hours, parisParts().weekday),
-    timezone: "Europe/Paris",
-  };
-}
-
-/**
- * Accent de marque seul (page de suivi : le ticket ne porte pas la couleur).
- * Un échec retombe sur l’accent par défaut — jamais sur une page cassée.
- */
-export async function loadBrandColor(slug: string): Promise<string> {
-  try {
-    const tenant = await getJson<{ brandColor?: string }>(
-      `/public/tenants/${encodeURIComponent(slug)}`,
-      { revalidate: SITE_TTL },
-    );
-    return tenant.brandColor ?? "#c9a15a";
-  } catch {
-    return "#c9a15a";
-  }
-}
-
-/** Créneaux frais (appelé au moment du choix, jamais servi depuis le cache). */
-export function loadSlots(
-  slug: string,
-  date?: string,
-  signal?: AbortSignal,
-): Promise<SlotsResponse> {
-  const query = date ? `?date=${encodeURIComponent(date)}` : "";
-  return getJson<SlotsResponse>(
-    `/public/tenants/${encodeURIComponent(slug)}/slots${query}`,
-    { signal },
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Commande
-// ─────────────────────────────────────────────────────────────
 
 export type OrderLinePayload = {
   productId: string;
@@ -461,29 +375,6 @@ export function isPaused(
   return (res as PausedResponse).paused === true;
 }
 
-export function createOrder(
-  slug: string,
-  payload: CreateOrderPayload,
-): Promise<CreatedOrder | PausedResponse> {
-  return postJson<CreatedOrder | PausedResponse>(
-    `/public/tenants/${encodeURIComponent(slug)}/orders`,
-    payload,
-  );
-}
-
-export function createPaymentIntent(
-  orderId: string,
-): Promise<PaymentIntentResponse> {
-  return postJson<PaymentIntentResponse>(
-    `/public/orders/${encodeURIComponent(orderId)}/payment-intent`,
-    {},
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Suivi
-// ─────────────────────────────────────────────────────────────
-
 export type TrackingState = {
   _id: string;
   number: number;
@@ -496,20 +387,207 @@ export type TrackingState = {
 const withToken = (path: string, token: string) =>
   `${path}?t=${encodeURIComponent(token)}`;
 
-export function loadTracking(
-  id: string,
-  token: string,
-  signal?: AbortSignal,
-): Promise<TrackingState> {
-  return getJson<TrackingState>(
-    withToken(`/public/orders/${encodeURIComponent(id)}`, token),
-    { signal },
-  );
+// ─────────────────────────────────────────────────────────────
+// Le client, branché sur un transport
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Client des routes publiques.
+ *
+ * Sans argument, il parle au RÉSEAU : c’est le seul comportement par défaut, et
+ * les fonctions exportées plus bas (`loadSite`, `createOrder`, …) en sont les
+ * raccourcis. La démonstration de la vitrine en construit un second sur son
+ * transport en mémoire — explicitement, depuis sa propre route.
+ */
+export function orderingApi(transport: Transport = httpTransport) {
+  async function getJson<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+    const res = await transport.send({
+      method: "GET",
+      path,
+      signal: opts.signal,
+      revalidate: opts.revalidate,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      throw new PublicApiError(res.status, messageOf(res.body, res.status));
+    }
+    return res.body as T;
+  }
+
+  async function postJson<T>(path: string, payload: unknown): Promise<T> {
+    const res = await transport.send({ method: "POST", path, body: payload });
+    if (res.status < 200 || res.status >= 300) {
+      throw new PublicApiError(res.status, messageOf(res.body, res.status));
+    }
+    return res.body as T;
+  }
+
+  /**
+   * Charge tout ce qu’il faut pour afficher un restaurant.
+   *
+   * Chemin nominal : `GET /public/tenants/:slug/site` (un seul aller-retour).
+   * Repli : une API plus ancienne n’expose pas encore `/site` — on recompose
+   * l’agrégat à partir de `/public/tenants/:slug` + `/menu` (+ `/slots` si
+   * disponible). Un déploiement d’API en retard ne doit pas éteindre la vitrine
+   * du client : c’est sa page Google.
+   */
+  async function loadSite(slug: string): Promise<Site | null> {
+    try {
+      const site = await getJson<PublicSiteResponse>(
+        `/public/tenants/${encodeURIComponent(slug)}/site`,
+        { revalidate: SITE_TTL },
+      );
+      return {
+        tenant: {
+          slug: site.tenant.slug,
+          name: site.tenant.name,
+          logoUrl: site.tenant.logoUrl,
+          brandColor: site.tenant.brandColor,
+          address: site.tenant.address,
+          phones: site.tenant.phones ?? [],
+          hours: site.tenant.hours ?? [],
+        },
+        categories: toCategories(site.menu),
+        slots: site.slots ?? null,
+        reviews: site.reviews ?? { avg: 0, count: 0, latest: [] },
+        ordering: site.ordering ?? { paused: false, message: null },
+        openNow: site.openNow === true,
+        todayHours: site.todayHours ?? null,
+        timezone: site.timezone ?? "Europe/Paris",
+      };
+    } catch (err) {
+      if (err instanceof PublicApiError && err.status === 404) {
+        return loadSiteLegacy(slug);
+      }
+      throw err;
+    }
+  }
+
+  async function loadSiteLegacy(slug: string): Promise<Site | null> {
+    const base = `/public/tenants/${encodeURIComponent(slug)}`;
+    const [tenant, menu, slots] = await Promise.all([
+      getJson<PublicTenantLegacy>(base, { revalidate: SITE_TTL }).catch(
+        (err: unknown) => {
+          if (err instanceof PublicApiError && err.status === 404) return null;
+          throw err;
+        },
+      ),
+      getJson<unknown>(`${base}/menu`, { revalidate: SITE_TTL }).catch(() => null),
+      getJson<SlotsResponse>(`${base}/slots`).catch(() => null),
+    ]);
+    if (!tenant) return null; // slug inconnu : 404 franc
+
+    const hours = tenant.hours ?? [];
+    const paused = tenant.onlineOrderingPaused === true;
+
+    return {
+      tenant: {
+        slug: tenant.slug,
+        name: tenant.name,
+        logoUrl: tenant.logoUrl ?? null,
+        brandColor: tenant.brandColor ?? "#c9a15a",
+        address: tenant.address ?? "",
+        phones: tenant.phones ?? [],
+        hours,
+      },
+      categories: toCategories(menu),
+      slots,
+      // Les avis ne sont pas exposés par l’API historique : section masquée.
+      reviews: { avg: 0, count: 0, latest: [] },
+      ordering: { paused, message: paused ? (tenant.pauseMessage ?? null) : null },
+      openNow: isOpenAt(hours),
+      todayHours: hoursOfDay(hours, parisParts().weekday),
+      timezone: "Europe/Paris",
+    };
+  }
+
+  /**
+   * Accent de marque seul (page de suivi : le ticket ne porte pas la couleur).
+   * Un échec retombe sur l’accent par défaut — jamais sur une page cassée.
+   */
+  async function loadBrandColor(slug: string): Promise<string> {
+    try {
+      const tenant = await getJson<{ brandColor?: string }>(
+        `/public/tenants/${encodeURIComponent(slug)}`,
+        { revalidate: SITE_TTL },
+      );
+      return tenant.brandColor ?? "#c9a15a";
+    } catch {
+      return "#c9a15a";
+    }
+  }
+
+  /** Créneaux frais (appelé au moment du choix, jamais servi depuis le cache). */
+  function loadSlots(
+    slug: string,
+    date?: string,
+    signal?: AbortSignal,
+  ): Promise<SlotsResponse> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    return getJson<SlotsResponse>(
+      `/public/tenants/${encodeURIComponent(slug)}/slots${query}`,
+      { signal },
+    );
+  }
+
+  function createOrder(
+    slug: string,
+    payload: CreateOrderPayload,
+  ): Promise<CreatedOrder | PausedResponse> {
+    return postJson<CreatedOrder | PausedResponse>(
+      `/public/tenants/${encodeURIComponent(slug)}/orders`,
+      payload,
+    );
+  }
+
+  function createPaymentIntent(orderId: string): Promise<PaymentIntentResponse> {
+    return postJson<PaymentIntentResponse>(
+      `/public/orders/${encodeURIComponent(orderId)}/payment-intent`,
+      {},
+    );
+  }
+
+  function loadTracking(
+    id: string,
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<TrackingState> {
+    return getJson<TrackingState>(
+      withToken(`/public/orders/${encodeURIComponent(id)}`, token),
+      { signal },
+    );
+  }
+
+  /** Récapitulatif complet de la commande (lignes, totaux, restaurant). */
+  function loadTicket(id: string, token: string): Promise<OrderTicket> {
+    return getJson<OrderTicket>(
+      withToken(`/public/orders/${encodeURIComponent(id)}/ticket`, token),
+    );
+  }
+
+  return {
+    loadSite,
+    loadBrandColor,
+    loadSlots,
+    createOrder,
+    createPaymentIntent,
+    loadTracking,
+    loadTicket,
+  };
 }
 
-/** Récapitulatif complet de la commande (lignes, totaux, restaurant). */
-export function loadTicket(id: string, token: string): Promise<OrderTicket> {
-  return getJson<OrderTicket>(
-    withToken(`/public/orders/${encodeURIComponent(id)}/ticket`, token),
-  );
-}
+export type OrderingApi = ReturnType<typeof orderingApi>;
+
+// ─────────────────────────────────────────────────────────────
+// Raccourcis réseau — ce que consomment les pages et le tunnel
+// ─────────────────────────────────────────────────────────────
+
+/** Le client réseau, unique et partagé. */
+export const networkApi: OrderingApi = orderingApi();
+
+export const loadSite = networkApi.loadSite;
+export const loadBrandColor = networkApi.loadBrandColor;
+export const loadSlots = networkApi.loadSlots;
+export const createOrder = networkApi.createOrder;
+export const createPaymentIntent = networkApi.createPaymentIntent;
+export const loadTracking = networkApi.loadTracking;
+export const loadTicket = networkApi.loadTicket;

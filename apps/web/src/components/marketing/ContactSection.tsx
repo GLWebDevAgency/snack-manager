@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CALLBACK_SLOTS, CONTACT_EMAIL, FOUNDER_SEATS_LEFT } from "./content";
+import { CALLBACK_SLOTS, CONTACT_EMAIL, CONTACT_PLATFORMS, CONTACT_POINTS, CTA_CALLBACK, section } from "./content";
 import { LogoMark, TickDot } from "./icons";
 
 type Status = "idle" | "loading" | "done" | "error";
@@ -15,9 +15,22 @@ const PHONE_RE = /^[+0-9][0-9\s.\-()]{7,19}$/;
  * Contrairement à la maquette (qui ne faisait que basculer un état visuel), le
  * formulaire poste réellement sur `/api/contact` — validation côté client
  * doublée côté serveur, honeypot invisible (`company`), états chargement /
- * succès / erreur explicites.
+ * succès / erreur explicites. CETTE MÉCANIQUE NE BOUGE PAS.
+ *
+ * TROIS RETOUCHES, ET UNE SEULE AJOUTE QUELQUE CHOSE. Le titre cesse
+ * d'interroger — le message de succès dit déjà ce qu'on fait, autant l'annoncer
+ * dans le `h2`. Le décompte de places est parti : il affirmait trois
+ * clients signés que nous n'avons pas, c'était le seul énoncé de la page qu'un
+ * prospect pouvait vérifier d'un coup de téléphone. Et une case à cocher entre,
+ * qui est l'atterrissage du service d'optimisation des pages de plateformes :
+ * ce n'est PAS une question que le visiteur se pose sur cette page, mais le
+ * formulaire est le seul endroit où c'est NOUS qui posons les questions — et
+ * une question qu'on pose devient légitime. Sa ligne d'aide n'est pas
+ * décorative : une case sans motif est une friction, une case avec sa phrase
+ * est une question.
  */
 export function ContactSection() {
+  const { title } = section("contact");
   const [status, setStatus] = useState<Status>("idle");
   const [errors, setErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [message, setMessage] = useState("");
@@ -34,6 +47,13 @@ export function ContactSection() {
       email: "",
       callbackSlot: String(data.get("callbackSlot") ?? ""),
       message: String(data.get("message") ?? "").trim(),
+      /*
+       * Une case décochée n'apparaît pas du tout dans un `FormData` : on ne
+       * peut pas lire sa valeur, seulement son absence. La normalisation en
+       * booléen EST la validation de ce champ — côté serveur, `route.ts` refait
+       * exactement le même test (`=== true`) sans faire confiance à celui-ci.
+       */
+      platforms: data.get(CONTACT_PLATFORMS.name) === "on",
       company: String(data.get("company") ?? ""),
     };
 
@@ -81,7 +101,7 @@ export function ContactSection() {
             Snack Manager
           </span>
         </div>
-        <h2 className="h2 cta-heading">Prêt à reprendre le contrôle de votre service ?</h2>
+        <h2 className="h2 cta-heading">{title}</h2>
 
         <div className="ct-card rv">
           <div className="ct-left">
@@ -91,18 +111,12 @@ export function ContactSection() {
               restaurant ou en visio.
             </p>
             <div className="ct-points">
-              <span className="ct-point">
-                <TickDot size={13} />
-                Sans engagement, sans carte bancaire
-              </span>
-              <span className="ct-point">
-                <TickDot size={13} />
-                On repart avec vos chiffres du simulateur
-              </span>
-              <span className="ct-point">
-                <TickDot size={13} />
-                Offre fondateur : {FOUNDER_SEATS_LEFT} places restantes
-              </span>
+              {CONTACT_POINTS.map((point) => (
+                <span className="ct-point" key={point}>
+                  <TickDot size={13} />
+                  {point}
+                </span>
+              ))}
             </div>
             <p className="ct-alt">
               Vous préférez écrire ?{" "}
@@ -181,6 +195,22 @@ export function ContactSection() {
                 />
               </Field>
 
+              {/* La case à cocher, et sa raison d'être écrite juste dessous. */}
+              <div className="ct-check">
+                <label className="ct-checkrow" htmlFor="ct-platforms">
+                  <input
+                    id="ct-platforms"
+                    name={CONTACT_PLATFORMS.name}
+                    type="checkbox"
+                    aria-describedby="ct-platforms-help"
+                  />
+                  <span className="ct-checklabel">{CONTACT_PLATFORMS.label}</span>
+                </label>
+                <p className="ct-checkhelp" id="ct-platforms-help">
+                  {CONTACT_PLATFORMS.help}
+                </p>
+              </div>
+
               {/* Honeypot : masqué visuellement, hors de l'ordre de tabulation. */}
               <div className="ct-hp" aria-hidden="true">
                 <label htmlFor="ct-company">Ne remplissez pas ce champ</label>
@@ -194,7 +224,7 @@ export function ContactSection() {
               ) : null}
 
               <button type="submit" className="btn light ct-submit" disabled={status === "loading"}>
-                {status === "loading" ? "Envoi en cours…" : "Être rappelé"}
+                {status === "loading" ? "Envoi en cours…" : CTA_CALLBACK}
               </button>
               <p className="ct-privacy">Vos coordonnées servent uniquement à ce rappel — jamais revendues.</p>
             </form>

@@ -1,41 +1,62 @@
 import { AppsShowcase } from "@/components/marketing/AppsShowcase";
-import { Benefits } from "@/components/marketing/Benefits";
-import { CaseStudy } from "@/components/marketing/CaseStudy";
+import { Canaux } from "@/components/marketing/Canaux";
 import { Comparison } from "@/components/marketing/Comparison";
 import { ContactSection } from "@/components/marketing/ContactSection";
 import { Faq } from "@/components/marketing/Faq";
 import { Founder } from "@/components/marketing/Founder";
 import { Hero } from "@/components/marketing/Hero";
-import { Intro } from "@/components/marketing/Intro";
-import { Platform } from "@/components/marketing/Platform";
+import { Jalons } from "@/components/marketing/Jalons";
+import { Materiel } from "@/components/marketing/Materiel";
 import { Pricing } from "@/components/marketing/Pricing";
-import { Process } from "@/components/marketing/Process";
-import { ProofBand } from "@/components/marketing/ProofBand";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
-import { Revenue } from "@/components/marketing/Revenue";
 import { Simulator } from "@/components/marketing/Simulator";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
-import { StickyBar } from "@/components/marketing/StickyBar";
-import { Ticker } from "@/components/marketing/Ticker";
-import { Vignettes } from "@/components/marketing/Vignettes";
-import { CONTACT_EMAIL, FAQ } from "@/components/marketing/content";
+import { CONTACT_EMAIL, FAQ, PLANS } from "@/components/marketing/content";
+import { lireReseaux } from "@/lib/reseaux";
 
 /**
  * Landing commerciale Snack Manager (route `/`).
  *
- * L'ordre des sections est celui de la maquette « Snack Manager - Site
- * Vitrine » : hero + bandeau de confiance, manifeste, preuve chiffrée,
- * simulateur, méthode, plateforme, catalogue + démo 3D, revenus, avant/après,
- * bénéfices, quotidien, fondateur, comparatif, tarifs, FAQ, contact.
+ * ONZE SECTIONS, ET L'ORDRE EST CELUI DES QUESTIONS QUE SE POSE UN PATRON DE
+ * SNACK, dans l'ordre où il se les pose. Ce n'est plus l'ordre de la maquette
+ * d'origine — elle empilait dix-sept sections, décrivait six fois la même
+ * journée et rangeait la seule preuve manipulable en huitième position.
  *
- * Tout ce qui peut rester statique reste un composant serveur ; seuls les
- * carrousels, le simulateur, la FAQ, le formulaire et les deux observateurs
- * sont des îlots clients.
+ *  1. Hero ............ suis-je au bon endroit ?
+ *  2. Comparison ...... est-ce que ça me parle ?
+ *  3. AppsShowcase .... est-ce que ça existe vraiment ?  ← la preuve, et elle
+ *                       porte l'ancre #produit, cible du lien d'évitement.
+ *  4. Canaux .......... mes clients commandent comment ?
+ *  5. Materiel ........ est-ce que ça marche dans MA cuisine ?
+ *  6. Pricing ......... combien ?
+ *  7. Simulator ....... et par rapport à ce que je paie déjà ?
+ *  8. Jalons .......... si je dis oui, il se passe quoi ?
+ *  9. Faq ............. qu'est-ce que je risque ?
+ * 10. Founder ......... à qui je donne mon numéro ?
+ * 11. ContactSection .. le seul point de conversion de la page.
+ *
+ * Chaque question est posée UNE fois : une section qui redit le travail d'une
+ * autre n'a pas sa place ici. `SECTIONS` (content.ts) porte le même ordre et
+ * sert de sommaire au menu burger — les deux listes doivent rester d'accord.
+ *
+ * Tout ce qui peut rester statique reste un composant serveur ; seuls le deck
+ * du hero, la scène de démonstration, le simulateur, la FAQ, le formulaire et
+ * les deux observateurs sont des îlots clients.
  */
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Les réseaux sont lus ICI plutôt que dans le pied de page : `SiteFooter`
+  // est un îlot client. Si l'API ne répond pas, `lireReseaux` rend une liste
+  // vide et la rangée disparaît — la page, elle, s'affiche.
+  const reseaux = await lireReseaux();
+
   return (
     <>
+      {/*
+       * « Aller au contenu » atterrit sur la démonstration manipulable. Elle a
+       * repris l'ancre #produit, qui désignait hier six maquettes inventées :
+       * le lien d'évitement mène désormais au produit lui-même.
+       */}
       <a href="#produit" className="mk-skip">
         Aller au contenu
       </a>
@@ -43,27 +64,20 @@ export default function LandingPage() {
       <SiteHeader />
 
       <main id="top">
-        <Hero />
-        <Ticker />
-        <Intro />
-        <ProofBand />
-        <Simulator />
-        <Process />
-        <Platform />
-        <AppsShowcase />
-        <Revenue />
-        <CaseStudy />
-        <Benefits />
-        <Vignettes />
-        <Founder />
+        <Hero reseaux={reseaux} />
         <Comparison />
+        <AppsShowcase />
+        <Canaux />
+        <Materiel />
         <Pricing />
+        <Simulator />
+        <Jalons />
         <Faq />
+        <Founder />
         <ContactSection />
       </main>
 
-      <SiteFooter />
-      <StickyBar />
+      <SiteFooter reseaux={reseaux} />
       <RevealObserver />
 
       <script
@@ -73,6 +87,22 @@ export default function LandingPage() {
       />
     </>
   );
+}
+
+/**
+ * Le prix affiché, en nombre. `PLANS[i].price` est écrit pour un lecteur
+ * humain (« 99 € », symbole compris) quand schema.org veut un nombre nu. On le
+ * dérive plutôt que de le recopier — deux endroits où vit le même prix, c'est
+ * deux endroits qui finissent par diverger.
+ *
+ * `parseInt` s'arrête à la première espace, ce qui suffit tant que la grille
+ * mensuelle tient en trois chiffres. Un tarif à quatre chiffres porterait un
+ * séparateur de milliers et ne se lirait plus ainsi — c'est le cas des prix
+ * ANNUELS (`priceYearly`), qu'on ne passe donc jamais ici : `plan.monthlyCents`
+ * et `plan.yearlyCents` existent pour ça.
+ */
+function priceOf(plan: (typeof PLANS)[number]) {
+  return String(Number.parseInt(plan.price, 10));
 }
 
 function structuredData() {
@@ -86,18 +116,50 @@ function structuredData() {
       description:
         "Suite de gestion pour snacks et fast-foods indépendants : caisse, cuisine (KDS), commande en ligne et back-office.",
       inLanguage: "fr-FR",
-      // Les tarifs publics sont « sur devis » : on ne fabrique pas de prix pour Google.
+      /*
+       * LES TROIS PRIX SONT PUBLICS, DONC ILS SONT ICI. La page disait
+       * « sur devis » et l'offre structurée le répétait ; elle affiche
+       * maintenant les trois tarifs mensuels de `PLANS`, et un extrait enrichi
+       * qui porte un prix vaut mieux qu'un extrait qui n'en porte aucun. La
+       * fourchette est déclarée en `AggregateOffer` parce qu'il y a bien trois
+       * offres à comparer, pas une seule à négocier.
+       *
+       * Aucun montant n'est recopié ici : les trois se lisent dans la grille,
+       * qui est le seul endroit de la vitrine où ils s'écrivent.
+       */
       offers: {
-        "@type": "Offer",
+        "@type": "AggregateOffer",
         priceCurrency: "EUR",
-        availability: "https://schema.org/LimitedAvailability",
-        description: "Lancement accompagné — tarif préférentiel à vie pour les 10 premiers restaurants.",
+        lowPrice: priceOf(PLANS[0]),
+        highPrice: priceOf(PLANS[PLANS.length - 1]),
+        offerCount: PLANS.length,
+        offers: PLANS.map((plan) => ({
+          "@type": "Offer",
+          name: plan.name,
+          description: plan.desc,
+          price: priceOf(plan),
+          priceCurrency: "EUR",
+          availability: "https://schema.org/InStock",
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: priceOf(plan),
+            priceCurrency: "EUR",
+            // UN/CEFACT : « MON » = le mois. `plan.period` dit « par mois ».
+            unitCode: "MON",
+          },
+        })),
       },
       email: CONTACT_EMAIL,
     },
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
+      /*
+       * Cinq entrées et non plus huit : trois questions sont montées dans la
+       * section où elles se posent (matériel, hors-ligne, délai de mise en
+       * route), une est absorbée par les canaux, une part avec les marques
+       * blanches. Le tri est fait dans `FAQ` — ce bloc suit tout seul.
+       */
       mainEntity: FAQ.map((f) => ({
         "@type": "Question",
         name: f.q,

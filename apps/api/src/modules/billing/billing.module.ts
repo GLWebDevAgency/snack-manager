@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BillingIdentityController } from './billing-identity.controller';
 import { IssuerConfig } from './issuer.config';
 import { MyBillingController } from './my-billing.controller';
 import { MyBillingService } from './my-billing.service';
@@ -19,8 +20,17 @@ import { TenantSessionGuard } from './tenant-session.guard';
  * (@Global), `JwtService` du `JwtModule` global d'`AuthModule`, et
  * `ConfigService` du `ConfigModule` global.
  */
+/**
+ * DEUX CONTRÔLEURS, DEUX RÉGIMES D'ACCÈS, ET C'EST VOULU.
+ *
+ * `MyBillingController` LIT, sous un garde dédié qui laisse passer un compte
+ * suspendu ; `BillingIdentityController` ÉCRIT, sous le garde global qui le
+ * refuse. Les fusionner obligerait à porter l'exception au niveau de la classe,
+ * et la première route d'écriture ajoutée par distraction hériterait d'une
+ * ouverture que personne n'aurait décidée.
+ */
 @Module({
-  controllers: [MyBillingController],
+  controllers: [MyBillingController, BillingIdentityController],
   providers: [MyBillingService, IssuerConfig, TenantSessionGuard],
 })
 export class BillingModule {}

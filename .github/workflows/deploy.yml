@@ -21,11 +21,11 @@ name: Déploiement
 # `workflow_run` (« quand la CI a fini, déploie ») paraît le montage évident.
 # Il est ici INAPPLICABLE, et dangereux si on l'applique quand même :
 #
-#   1. RÉDHIBITOIRE — `ci.yml` ne tourne PAS sur un push vers `develop` : son
-#      déclencheur est `pull_request` + `push: branches: [main]`. Aucune
-#      exécution de CI n'existe donc pour `develop`, et `workflow_run` n'aurait
-#      jamais rien à quoi s'accrocher : staging ne serait JAMAIS déployé. On ne
-#      corrige pas ça ici — `ci.yml` ne nous appartient pas.
+#   1. RÉDHIBITOIRE — `ci.yml` ne tourne pas tout seul sur un push vers
+#      `develop` : ses déclencheurs sont `pull_request` et `workflow_call`.
+#      Aucune exécution de CI n'existerait donc pour `develop`, et
+#      `workflow_run` n'aurait rien à quoi s'accrocher : staging ne serait
+#      JAMAIS déployé.
 #   2. `workflow_run` se déclenche pour les exécutions de N'IMPORTE QUELLE
 #      branche, y compris une branche de pull request. Sans filtre explicite
 #      sur `head_branch` ET sur `event`, du code non relu part en production.
@@ -46,9 +46,8 @@ name: Déploiement
 #   · le graphe `needs:` rend le déploiement structurellement inatteignable
 #     tant que la vérification ou le balayage est rouge.
 #
-# Le prix : la vérification tourne deux fois sur `main` (ici et dans `ci.yml`).
-# C'est le coût assumé de ne pas toucher à `ci.yml`. La sortie propre est
-# notée dans docs/CI-CD.md § 13.
+# `workflow_call` (§ 2 ci-dessous) lui enlève son dernier défaut : la
+# vérification n'est plus recopiée ici, elle est APPELÉE. Une seule définition.
 
 on:
   push:
@@ -67,10 +66,11 @@ permissions:
   contents: read
 
 env:
-  TURBO_FLAGS: '--cache=local:rw,remote: --output-logs=new-only'
-  TURBO_TELEMETRY_DISABLED: 1
-  NEXT_TELEMETRY_DISABLED: 1
-  DO_NOT_TRACK: 1
+  # Plus aucun réglage Turborepo ici : la vérification ne s'exécute plus dans ce
+  # fichier, elle est appelée (§ 2). Ses réglages vivent dans `ci.yml`, et un
+  # `env:` d'appelant ne traverse de toute façon PAS vers un workflow appelé —
+  # les laisser aurait été du décor trompeur.
+  #
   # Version figée, même raison que gitleaks dans secrets.yml : un outil de
   # déploiement qui change de comportement tout seul n'est pas un outil de
   # déploiement. À relever volontairement.
@@ -126,96 +126,42 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   # 2 · Les deux garde-fous, sur CE commit
   #
-  # Ils reproduisent volontairement `ci.yml` et `secrets.yml` : c'est le seul
-  # moyen de conditionner le déploiement sans modifier ces deux fichiers, qui
-  # ne nous appartiennent pas. Toute divergence se corrige ICI, en recopiant
-  # ce qu'ils font. Le remède définitif est en § 13 de docs/CI-CD.md.
+  # CES DEUX JOBS N'ONT PLUS D'ÉTAPES, ET C'EST TOUT L'INTÉRÊT.
+  #
+  # Ils recopiaient `ci.yml` et `secrets.yml`, faute de pouvoir les conditionner
+  # autrement. Le prix était une DÉRIVE SILENCIEUSE : une étape ajoutée là-bas
+  # et oubliée ici, et l'on déployait en croyant avoir vérifié. Rien ne l'aurait
+  # signalé — ni erreur, ni avertissement, juste deux fichiers qui ne disent plus
+  # la même chose.
+  #
+  # `uses:` supprime la copie. Ce qui tourne ici EST le fichier de la CI, à la
+  # ligne près, y compris son `timeout-minutes` et ses versions d'actions —
+  # d'où l'absence de `runs-on` et de `timeout-minutes` ci-dessous, que GitHub
+  # refuse d'ailleurs sur un job qui en appelle un autre.
+  #
+  # Deux choses à savoir, et elles sont volontaires :
+  #   · AUCUN `secrets:` n'est passé. Un workflow appelé n'hérite de rien
+  #     (hormis GITHUB_TOKEN) tant qu'on ne l'a pas écrit. La vérification et le
+  #     balayage n'ont donc, structurellement, aucun accès aux jetons Railway.
+  #   · `permissions:` est déclaré ICI parce qu'il plafonne ce que le workflow
+  #     appelé pourra obtenir : `pull-requests: read` est indispensable à
+  #     `gitleaks-action`, qui interroge l'API pour délimiter la plage à
+  #     balayer. Sans cette ligne : 403, et le balayage tombe avant de balayer.
+  #
+  # Voir docs/CI-CD.md § 13.
   # ───────────────────────────────────────────────────────────────────────────
   verification:
-    name: Vérification du monorepo
     needs: cible
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v7
-
-      - name: Installer pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Installer Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Restaurer le cache Turborepo
-        uses: actions/cache@v6
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-node22-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-node22-
-
-      - name: Installer les dépendances
-        run: pnpm install --frozen-lockfile
-
-      - name: Typage
-        run: pnpm exec turbo run typecheck $TURBO_FLAGS
-
-      # NON BLOQUANT, exactement comme dans ci.yml et pour la même raison :
-      # apps/web traîne 42 erreurs ESLint préexistantes (Next 16). Rendre
-      # l'étape bloquante ici interdirait tout déploiement, y compris un
-      # correctif de production. Voir docs/CI-CD.md § 9.
-      - name: Analyse statique
-        id: analyse
-        continue-on-error: true
-        run: pnpm exec turbo run lint $TURBO_FLAGS
-
-      - name: Signaler la dette d'analyse statique
-        if: steps.analyse.outcome == 'failure'
-        run: |
-          echo "::warning title=Analyse statique::turbo run lint échoue sur une dette préexistante d'apps/web — non bloquant, voir docs/CI-CD.md § 9"
-
-      - name: Tests
-        run: pnpm exec turbo run test $TURBO_FLAGS
-
-      - name: Compilation
-        run: pnpm exec turbo run build $TURBO_FLAGS
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
 
   secrets:
-    name: Balayage des secrets
     needs: cible
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      VERSION_GITLEAKS: 8.30.1
-    steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v7
-
-      - name: Installer gitleaks
-        run: |
-          set -euo pipefail
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION_GITLEAKS}/gitleaks_${VERSION_GITLEAKS}_linux_x64.tar.gz" \
-            | tar -xz -C /usr/local/bin gitleaks
-          gitleaks version
-
-      # On balaie L'ARBRE, pas le diff. Avant une mise en ligne la question
-      # n'est pas « ce commit ajoute-t-il un secret ? » mais « l'arbre qu'on
-      # s'apprête à téléverser chez Railway en contient-il un ? ».
-      # --redact : le journal d'exécution ne doit pas devenir le deuxième
-      # endroit d'où le secret fuite.
-      - name: Balayer l'arbre déployé
-        run: |
-          set -euo pipefail
-          gitleaks dir . \
-            --config .github/gitleaks.toml \
-            --verbose \
-            --redact \
-            --no-banner \
-            --exit-code 1
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/secrets.yml
 
   # ───────────────────────────────────────────────────────────────────────────
   # 3 · Le déploiement
@@ -284,6 +230,41 @@ jobs:
               "$(printf '%s' "$sortie" | jq -r '.[0].id // "aucun"')" \
               "$(printf '%s' "$sortie" | jq -r '.[0].status // "—"')"
           done
+
+      # ── Dire au conteneur quelle révision il sert ─────────────────────────
+      #
+      # Railway ne le sait pas tout seul. La famille `RAILWAY_GIT_*` n'est
+      # renseignée que pour un service branché sur un dépôt GitHub ; ici on
+      # téléverse avec `railway up`, et le relevé du 20 août 2026 dans le
+      # conteneur `api` de staging est net : pas de `RAILWAY_GIT_COMMIT_SHA`,
+      # et `RAILWAY_GIT_REPO_OWNER` présente mais VIDE. Lire cette variable
+      # aurait donné une route qui répond « inconnue » pour toujours.
+      #
+      # On pose donc nous-mêmes la valeur, juste AVANT le téléversement :
+      # `--skip-deploys` évite de déclencher un déploiement supplémentaire
+      # (qui repartirait de l'ancien code, et que l'attente plus bas prendrait
+      # pour le nôtre), et le déploiement créé à l'étape suivante la sert.
+      #
+      # Si la mise en ligne échoue ensuite, le conteneur en service garde son
+      # ancien environnement : `/health` continue d'annoncer l'ANCIENNE
+      # révision — exactement ce qu'on veut lire dans ce cas-là.
+      #
+      # ⚠️ La sortie est écartée en totalité, y compris en cas d'échec :
+      # `railway variables` réaffiche TOUTES les variables du service, mots de
+      # passe compris. Un journal d'exécution ne doit pas devenir le deuxième
+      # endroit d'où un secret fuite.
+      - name: Publier la révision déployée sur le service api
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! railway variables --service api --skip-deploys --set "SM_REVISION=$SHA" \
+               > "$RUNNER_TEMP/variables.log" 2>&1; then
+            echo "::error title=Révision non publiée::railway variables a échoué (sortie masquée : elle contient les variables du service). Rien ne part."
+            exit 1
+          fi
+          echo "SM_REVISION posée sur « api » → $SHA"
+          echo "Le déploiement créé à l'étape suivante la servira sur GET /health."
 
       # La procédure de déploiement est écrite une fois, dans un fichier, puis
       # sourcée par les deux étapes qui suivent — plutôt que recopiée.
@@ -473,6 +454,19 @@ jobs:
       - name: Vérifier les surfaces publiques
         env:
           ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+          # ── Ce qui fait passer le contrôle de « ça répond » à « c'est MA
+          # révision qui répond » ──────────────────────────────────────────
+          # Le script compare ce SHA à celui que `GET /health` publie. Sans
+          # cette ligne il ne pourrait que constater qu'une API est vivante —
+          # ce qu'elle serait tout autant avec la version d'avant en ligne.
+          #
+          # Renseignée SEULEMENT si la mise en ligne a réussi. Quand elle a
+          # échoué, l'ancienne version sert forcément : exiger la nouvelle
+          # rendrait rouge un contrôle dont la seule question utile, ce
+          # soir-là, est « le restaurant peut-il encaisser ? ». Le contrôle
+          # s'annonce alors IGNORÉ, et la révision réellement servie reste
+          # affichée dans le contrôle précédent.
+          SM_REVISION_ATTENDUE: ${{ needs.deploiement.result == 'success' && github.sha || '' }}
         run: node scripts/smoke.mjs "$ENVIRONNEMENT"
 
       - name: Annoncer la panne

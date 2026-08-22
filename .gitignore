@@ -20,3 +20,22 @@ boilerplate-main.zip
 # Bundles web exportés (Expo)
 apps/*/dist/
 .env.production.backup
+
+# Artefacts de vérification des agents
+pos-demo.png
+.playwright-mcp/
+
+# ─── Bibliothèque de références du fondateur — JAMAIS versionnée ───
+#
+# `design_handoff_snack_manager/photo-base/` contient 24 fichiers dont la
+# provenance a été vérifiée le 21/08/2026 : 21 aperçus Getty en 612×612, une
+# image récupérée sur Facebook, l'image promotionnelle filigranée d'un vendeur
+# d'affichage, et la vidéo de démonstration d'un prestataire Fiverr. Aucun n'est
+# sous licence.
+#
+# Ils gardent une valeur — le fondateur y a choisi les SCÈNES, ce qui en fait un
+# plan de prises de vue — mais les versionner reviendrait à publier des images
+# non licenciées dans un dépôt distant, c'est-à-dire à déplacer le problème au
+# lieu de le régler. Les équivalents libres vivent dans
+# `apps/web/public/photos/libre/`, avec leur manifeste de provenance.
+design_handoff_snack_manager/photo-base/

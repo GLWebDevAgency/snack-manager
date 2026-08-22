@@ -1,11 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  EMPTY_PARTY,
-  UNKNOWN_VAT,
-  type InvoiceParty,
-  type InvoiceVatConfig,
-} from '@sm/contracts';
+import { EMPTY_PARTY, type InvoiceParty } from '@sm/contracts';
 
 /**
  * L'IDENTITÉ LÉGALE DE L'ÉMETTEUR — la nôtre.
@@ -31,14 +26,25 @@ import {
  *   SM_BILLING_ISSUER_RCS         Greffe d'immatriculation
  *   SM_BILLING_ISSUER_EMAIL       Contact facturation
  *   SM_BILLING_ISSUER_PHONE       Téléphone
- *   SM_BILLING_VAT_RATE           Taux en pourcent : « 20 », « 0 » (franchise)…
- *   SM_BILLING_AMOUNTS            « ht » ou « ttc » — ce que vaut `amountCents`
  *
- * `SM_BILLING_AMOUNTS` mérite un mot : la collection `invoices` ne stocke qu'UN
- * montant, sans jamais dire s'il est hors taxes. Tant que l'exploitant ne l'a
- * pas déclaré, la ventilation HT / TVA / TTC reste vide plutôt que devinée —
- * diviser par 1,2 « parce que c'est le taux courant » produirait une base
- * imposable inventée sur une pièce comptable.
+ * ─── CE QUI N'EST PLUS ICI : LE TAUX DE TVA ───
+ *
+ * Deux variables `SM_BILLING_VAT_RATE` et `SM_BILLING_AMOUNTS` décidaient
+ * naguère du régime, faute de mieux — la base ne portait aucun taux. Elles ont
+ * disparu, et pas par simplification : un taux de TVA n'est pas un secret de
+ * déploiement mais une DÉCISION COMMERCIALE. En variable d'environnement, il
+ * valait 20 en production et rien ailleurs, si bien que la même facture rendue
+ * depuis deux environnements sortait avec deux ventilations différentes — sur
+ * une pièce comptable, c'est la définition d'un litige.
+ *
+ * Le régime vit désormais à deux endroits, tous deux sous relecture : la
+ * DÉCISION dans `SM_INVOICE_VAT` (@sm/contracts), et le taux RÉELLEMENT
+ * APPLIQUÉ figé sur chaque facture à son émission (`invoices.vat`, @sm/db).
+ * Une facture ancienne garde donc son taux d'époque, quoi qu'il arrive ensuite.
+ *
+ * Ce qui reste dans l'environnement est ce qui se CONSTATE et non ce qui se
+ * décide : l'identité légale de l'entreprise. Tant qu'elle manque, la facture
+ * porte un emplacement vide.
  */
 @Injectable()
 export class IssuerConfig {
@@ -64,23 +70,5 @@ export class IssuerConfig {
       email: this.text('SM_BILLING_ISSUER_EMAIL'),
       phone: this.text('SM_BILLING_ISSUER_PHONE'),
     };
-  }
-
-  /**
-   * Le régime de TVA déclaré. Une valeur illisible (« vingt pour cent ») est
-   * traitée comme une absence : mieux vaut un emplacement vide qu'un taux
-   * silencieusement remplacé par zéro, qui ferait passer une entreprise
-   * assujettie pour une franchise en base.
-   */
-  vat(): InvoiceVatConfig {
-    const rawRate = this.text('SM_BILLING_VAT_RATE');
-    const rate = rawRate === null ? null : Number(rawRate.replace(',', '.'));
-    const ratePercent = rate !== null && Number.isFinite(rate) && rate >= 0 ? rate : null;
-
-    const rawBasis = this.text('SM_BILLING_AMOUNTS')?.toLowerCase() ?? null;
-    const amountsAre = rawBasis === 'ht' || rawBasis === 'ttc' ? rawBasis : null;
-
-    if (ratePercent === null && amountsAre === null) return UNKNOWN_VAT;
-    return { ratePercent, amountsAre };
   }
 }

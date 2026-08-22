@@ -59,6 +59,72 @@ export type BillingPlan = keyof typeof PLAN_MRR_CENTS;
  */
 export const INSTALL_FEE_CENTS = 29_000;
 
+// ─── LA CONVENTION DE PRIX : TOUT EST HORS TAXES ───
+
+/**
+ * NOS TARIFS SONT EXPRIMÉS HORS TAXES, TVA EN SUS.
+ *
+ * Les 290 € de mise en place et les 159 € mensuels de la formule Complet sont
+ * donc du HT : le client règle 348 € et 190,80 €, et récupère la TVA. Les
+ * montants cités viennent de `PLAN_MRR_CENTS`, jamais l'inverse — cette phrase
+ * illustre la convention, elle ne fixe aucun tarif. C'est le standard du B2B — le
+ * prix HT est celui qui lui coûte réellement — et c'est une DÉCISION, pas une
+ * déduction : elle est écrite ici une fois, en toutes lettres, parce que toute
+ * la ventilation d'une facture en découle.
+ *
+ * ─── POURQUOI CE N'EST PAS UNE VARIABLE D'ENVIRONNEMENT ───
+ *
+ * Un taux de TVA n'est pas un secret de déploiement, c'est une décision
+ * commerciale. En variable d'environnement, il vaudrait 20 en production, rien
+ * en préproduction et autre chose sur le poste d'un développeur : le même
+ * client recevrait deux factures incohérentes selon l'endroit d'où elles ont
+ * été rendues, et personne ne saurait dire laquelle fait foi. Le jour où le
+ * régime change, c'est une modification de code, relue et déployée — et les
+ * pièces déjà émises gardent le taux qu'elles portent (voir `invoice.vat`),
+ * parce qu'une facture de l'an dernier ne se recalcule pas au taux de cette
+ * année.
+ *
+ * Ce qui reste, lui, dans l'environnement : l'IDENTITÉ LÉGALE de l'émetteur
+ * (SIRET, TVA intracommunautaire, adresse). Elle n'est pas décidée, elle est
+ * constatée — et tant qu'elle manque, la facture porte un emplacement vide.
+ */
+export const SM_VAT_RATE_PERCENT = 20;
+
+/** Ce que valent les tarifs affichés, et donc ce que vaut `amountCents`. */
+export const SM_AMOUNTS_ARE = 'ht' as const;
+
+/**
+ * Le régime appliqué à toute facture ÉMISE À PARTIR DE MAINTENANT — figé sur
+ * la pièce à l'émission, jamais relu depuis cette constante ensuite.
+ */
+export const SM_INVOICE_VAT = {
+  ratePercent: SM_VAT_RATE_PERCENT,
+  amountsAre: SM_AMOUNTS_ARE,
+} as const;
+
+/**
+ * CE QU'ON APPLIQUE AUX FACTURES DÉJÀ ÉMISES — le défaut documenté.
+ *
+ * Les pièces écrites avant que le champ `vat` existe ne portent AUCUN taux :
+ * la base ne stockait qu'un montant nu. Les laisser sans ventilation ferait
+ * imprimer « TVA [À COMPLÉTER] » sur des factures que le client a déjà reçues,
+ * et les traiter comme un régime inconnu reviendrait à dire qu'on ignore
+ * quelque chose que le fondateur, lui, sait : ces montants ont TOUJOURS été des
+ * montants hors taxes, au tarif catalogue, sous le même régime qu'aujourd'hui.
+ *
+ * Elles sont donc lues au régime ci-dessous — identique au régime courant — et
+ * la lecture le DIT : `InvoiceTotals.stamped` vaut `false` sur ces pièces-là,
+ * si bien qu'un audit sait toujours distinguer un taux lu sur la facture d'un
+ * taux reconstitué par cette règle. Rien n'est inventé en silence.
+ *
+ * Le jour où le régime changerait, cette constante ne suivrait PAS
+ * `SM_INVOICE_VAT` : elle décrit le passé, pas le présent.
+ */
+export const LEGACY_INVOICE_VAT = {
+  ratePercent: 20,
+  amountsAre: 'ht',
+} as const;
+
 // ─── Nature d'une facture ───
 
 /**
@@ -310,8 +376,15 @@ export type CrmInvoice = {
   /** Libellé lisible : « Abonnement Complet — septembre 2026 ». */
   label: string;
   period: { key: string; start: string; end: string; label: string };
+  /**
+   * Le montant STOCKÉ, tel qu'il a été saisi. Sa nature — hors taxes ou toutes
+   * taxes comprises — n'est PAS devinable ici : elle se lit dans `totals.basis`.
+   * Pour afficher une somme à un être humain, préférer `totals`.
+   */
   amountCents: number;
   amountLabel: string;
+  /** HT, TVA et TTC, ventilés au taux porté par la pièce. */
+  totals: InvoiceTotals;
   /** Statut EFFECTIF à l'instant de la lecture — « en retard » y est calculé. */
   status: InvoiceStatus;
   statusLabel: string;
@@ -330,8 +403,25 @@ export type CrmInvoice = {
   cancelReason: string;
   /** Jours pleins de retard — 0 si l'échéance n'est pas dépassée. */
   overdueDays: number;
-  /** Reste dû SUR CETTE PIÈCE : 0 dès qu'elle est réglée, annulée ou au brouillon. */
+  /**
+   * Reste dû SUR CETTE PIÈCE, dans l'unité du montant stocké (donc HORS TAXES
+   * avec nos tarifs) : 0 dès qu'elle est réglée, annulée ou au brouillon.
+   *
+   * C'est le chiffre du CHIFFRE D'AFFAIRES : c'est lui qu'additionnent le MRR,
+   * l'ardoise du parc et l'axe « paiement » du score de santé, et il doit le
+   * rester — un revenu comptabilisé TVA comprise serait faux d'un cinquième.
+   */
   dueCents: number;
+  /**
+   * Reste dû TOUTES TAXES COMPRISES — le chiffre de la TRÉSORERIE, celui que
+   * le client vire réellement.
+   *
+   * Les deux existent côte à côte parce qu'ils ne répondent pas à la même
+   * question : « combien avons-nous gagné » se compte HT, « combien doit-il
+   * virer » se compte TTC. Confondre les deux, c'est soit gonfler le revenu de
+   * 20 %, soit réclamer au client une somme qui ne solde pas sa facture.
+   */
+  dueTtcCents: number;
 };
 
 /**
@@ -344,11 +434,17 @@ export type CrmInvoice = {
  * `oldestOverdueDays`.
  */
 export type CrmOutstanding = {
+  /** Total dû HORS TAXES — la mesure du revenu. */
   totalDueCents: number;
   totalDueLabel: string;
+  /** Total dû TOUTES TAXES COMPRISES — la somme que le client doit virer. */
+  totalDueTtcCents: number;
+  totalDueTtcLabel: string;
   invoices: number;
   overdueCents: number;
   overdueLabel: string;
+  overdueTtcCents: number;
+  overdueTtcLabel: string;
   overdueInvoices: number;
   oldestOverdueAt: string | null;
   oldestOverdueDays: number;
@@ -358,9 +454,13 @@ export type CrmOutstanding = {
 export const NO_OUTSTANDING: CrmOutstanding = {
   totalDueCents: 0,
   totalDueLabel: formatEuros(0),
+  totalDueTtcCents: 0,
+  totalDueTtcLabel: formatEuros(0),
   invoices: 0,
   overdueCents: 0,
   overdueLabel: formatEuros(0),
+  overdueTtcCents: 0,
+  overdueTtcLabel: formatEuros(0),
   overdueInvoices: 0,
   oldestOverdueAt: null,
   oldestOverdueDays: 0,
@@ -373,22 +473,39 @@ export const NO_OUTSTANDING: CrmOutstanding = {
  * l'axe « paiement » du score de santé sans qu'aucun des deux n'ait à
  * reproduire la règle.
  */
+/** Reste dû TTC d'une pièce, avec repli documenté (cf. `summarizeOutstanding`). */
+const ttcOf = (invoice: CrmInvoice): number =>
+  Number.isFinite(invoice.dueTtcCents) ? invoice.dueTtcCents : invoice.dueCents;
+
 export function summarizeOutstanding(
   invoices: readonly CrmInvoice[],
   now: Date | string = new Date(),
 ): CrmOutstanding {
   let totalDueCents = 0;
+  let totalDueTtcCents = 0;
   let count = 0;
   let overdueCents = 0;
+  let overdueTtcCents = 0;
   let overdueInvoices = 0;
   let oldest: CrmInvoice | null = null;
 
   for (const invoice of invoices) {
     if (invoice.dueCents <= 0) continue;
     totalDueCents += invoice.dueCents;
+    // Le TTC s'additionne pièce par pièce, jamais en appliquant le taux à la
+    // somme : deux factures à des taux différents (le jour où une option
+    // relèverait d'un autre régime) donneraient un total faux, et l'arrondi de
+    // chaque pièce est celui qui figure sur le document que le client tient.
+    //
+    // Le repli sur `dueCents` couvre les charges utiles construites AVANT ce
+    // champ — instantané de démonstration figé, réponse d'une API plus
+    // ancienne. Elles valent un total sous-évalué, jamais un « NaN € » affiché
+    // à un gérant qui essaie de savoir ce qu'il doit.
+    totalDueTtcCents += ttcOf(invoice);
     count += 1;
     if (invoice.status !== 'en_retard') continue;
     overdueCents += invoice.dueCents;
+    overdueTtcCents += ttcOf(invoice);
     overdueInvoices += 1;
     // Comparaison lexicographique d'ISO : c'est aussi une comparaison chronologique.
     if (oldest === null || invoice.dueAt < oldest.dueAt) oldest = invoice;
@@ -397,9 +514,13 @@ export function summarizeOutstanding(
   return {
     totalDueCents,
     totalDueLabel: formatEuros(totalDueCents),
+    totalDueTtcCents,
+    totalDueTtcLabel: formatEuros(totalDueTtcCents),
     invoices: count,
     overdueCents,
     overdueLabel: formatEuros(overdueCents),
+    overdueTtcCents,
+    overdueTtcLabel: formatEuros(overdueTtcCents),
     overdueInvoices,
     oldestOverdueAt: oldest ? oldest.dueAt : null,
     oldestOverdueDays: oldest ? daysLate(oldest.dueAt, now) : 0,
@@ -506,8 +627,12 @@ export type CrmSubscription = {
  */
 export type CrmNextDue = {
   at: string;
+  /** Montant HORS TAXES de l'échéance. */
   amountCents: number;
   amountLabel: string;
+  /** Ce qui sera réellement prélevé — TVA comprise. */
+  amountTtcCents: number;
+  amountTtcLabel: string;
   daysUntil: number;
   invoiceNumber: string | null;
 };
@@ -707,6 +832,8 @@ export type StoredInvoice = {
   label?: string | null;
   period?: { start?: Date | string | null; end?: Date | string | null } | null;
   amountCents?: number | null;
+  /** Régime figé à l'émission — absent sur les pièces antérieures au champ. */
+  vat?: StoredInvoiceVat;
   status?: string | null;
   issuedAt?: Date | string | null;
   dueAt?: Date | string | null;
@@ -742,6 +869,7 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
   const start = raw.period?.start ? new Date(raw.period.start) : dueAt;
   const end = raw.period?.end ? new Date(raw.period.end) : dueAt;
   const key = monthKey(start);
+  const totals = invoiceTotals(amountCents, raw.vat ?? null);
 
   return {
     _id: String(raw._id),
@@ -753,6 +881,7 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
     period: { key, start: start.toISOString(), end: end.toISOString(), label: billingPeriod(key).label },
     amountCents,
     amountLabel: formatEuros(amountCents),
+    totals,
     status,
     statusLabel: INVOICE_STATUS_LABELS[status] ?? status,
     storedStatus,
@@ -765,6 +894,7 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
     cancelReason: String(raw.cancelReason ?? ''),
     overdueDays: status === 'en_retard' ? daysLate(dueAt, now) : 0,
     dueCents: isDueInvoiceStatus(status) ? amountCents : 0,
+    dueTtcCents: isDueInvoiceStatus(status) ? totals.ttcCents : 0,
   };
 }
 
@@ -791,6 +921,8 @@ export function nextInvoiceDue(
       at: first.dueAt,
       amountCents: first.dueCents,
       amountLabel: formatEuros(first.dueCents),
+      amountTtcCents: ttcOf(first),
+      amountTtcLabel: formatEuros(ttcOf(first)),
       // Un retard compte en NÉGATIF le même nombre de jours qu'`overdueDays` :
       // deux arrondis indépendants afficheraient « −80 jours » à côté de
       // « 79 jours de retard » sur la même pièce.
@@ -801,10 +933,17 @@ export function nextInvoiceDue(
 
   const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
   const amountCents = planMrrCents(plan);
+  // Échéance THÉORIQUE : la pièce n'existe pas encore, donc aucun taux n'y est
+  // figé. Elle est projetée au régime COURANT — c'est celui sous lequel elle
+  // sera émise. Les tarifs de `PLAN_MRR_CENTS` sont hors taxes (cf.
+  // `SM_AMOUNTS_ARE`), le prélèvement annoncé est donc leur TTC.
+  const projected = invoiceTotals(amountCents, SM_INVOICE_VAT);
   return {
     at: at.toISOString(),
     amountCents,
     amountLabel: formatEuros(amountCents),
+    amountTtcCents: projected.ttcCents,
+    amountTtcLabel: projected.ttcLabel,
     daysUntil: daysBetween(now, at),
     invoiceNumber: null,
   };
@@ -893,14 +1032,16 @@ export const EMPTY_PARTY: InvoiceParty = {
 /**
  * CE QUE `amountCents` REPRÉSENTE, ET À QUEL TAUX.
  *
- * La base ne stocke qu'UN montant, sans dire s'il est hors taxes ou toutes
- * taxes comprises, et aucun taux n'y figure. Une facture française doit
+ * La base ne stockait qu'UN montant, sans dire s'il était hors taxes ou toutes
+ * taxes comprises, et aucun taux n'y figurait. Une facture française doit
  * pourtant montrer les trois : HT, taux et montant de TVA, TTC.
  *
- * On ne DEVINE donc pas. Tant que l'exploitant n'a pas déclaré son régime, les
- * trois lignes restent des emplacements et le montant réellement facturé est
- * imprimé tel quel, sous son vrai nom. Le jour où le régime est renseigné, la
- * ventilation devient exacte sans qu'une ligne de code change.
+ * C'est réparé DANS LA BASE : chaque facture porte désormais son régime, figé à
+ * l'émission (`invoices.vat`, @sm/db). Ce type reste la forme sous laquelle ce
+ * régime circule, et il garde ses `null` : ils décrivent une pièce dont le
+ * régime n'est pas lisible, cas que les fonctions ci-dessous refusent de
+ * combler par un calcul plausible. Une base imposable inventée sur une pièce
+ * comptable est un faux ; un emplacement vide est un travail à finir.
  */
 export type InvoiceVatConfig = {
   /** Taux en POURCENT (`20`, `10`, `5.5`, `0`). `null` = régime non déclaré. */
@@ -1001,6 +1142,113 @@ export function invoiceVat(
   };
 }
 
+// ─── Le régime PORTÉ PAR LA PIÈCE ───
+
+/** Ce que vaut un montant stocké. */
+export type InvoiceAmountBasis = 'ht' | 'ttc';
+
+/**
+ * Le sous-document `vat` d'une facture, tel que Mongo le rend — c'est-à-dire
+ * peut-être absent (pièces émises avant ce champ), peut-être mal typé.
+ */
+export type StoredInvoiceVat = {
+  ratePercent?: number | null;
+  /**
+   * Le champ porte le MÊME nom qu'en base et que dans `InvoiceVatConfig` :
+   * « les montants sont … ». Un renommage entre les trois couches serait la
+   * meilleure façon d'écrire un jour `ttc` là où la base dit `ht`.
+   */
+  amountsAre?: string | null;
+} | null;
+
+/**
+ * HT, TVA, TTC — les trois montants d'une facture, et d'où sort le taux.
+ *
+ * Toujours calculés, jamais `null` : contrairement à `InvoiceVatBreakdown`, qui
+ * décrit une ventilation POSSIBLEMENT inconnue, celle-ci décrit une facture
+ * dont le régime est TOUJOURS déterminé — soit parce que la pièce le porte,
+ * soit par le défaut documenté des pièces anciennes (`LEGACY_INVOICE_VAT`).
+ * C'est `stamped` qui dit lequel des deux, et c'est la seule chose qu'un audit
+ * ait besoin de savoir pour refaire le calcul à la main.
+ */
+export type InvoiceTotals = {
+  basis: InvoiceAmountBasis;
+  ratePercent: number;
+  /** « 20 % » — le taux tel qu'il s'imprime. */
+  rateLabel: string;
+  htCents: number;
+  htLabel: string;
+  vatCents: number;
+  vatLabel: string;
+  ttcCents: number;
+  ttcLabel: string;
+  /**
+   * `true` : le taux et l'assiette sont LUS SUR LA PIÈCE, figés à son émission.
+   * `false` : ils sont reconstitués depuis `LEGACY_INVOICE_VAT` parce que la
+   * pièce est antérieure au champ. Jamais deviné, toujours traçable.
+   */
+  stamped: boolean;
+};
+
+/**
+ * LE RÉGIME D'UNE PIÈCE : celui qu'elle porte, ou le défaut documenté.
+ *
+ * Le taux figé à l'émission l'emporte TOUJOURS sur le taux courant. Une facture
+ * de l'an dernier ne se recalcule pas au taux de cette année : elle a été
+ * envoyée, peut-être payée, et sûrement déclarée — la réémettre autrement
+ * fabriquerait deux versions d'une même pièce comptable.
+ */
+export function invoiceVatOf(stored: StoredInvoiceVat): {
+  config: InvoiceVatConfig;
+  stamped: boolean;
+} {
+  const basis = stored?.amountsAre;
+  const rate = stored?.ratePercent;
+  const basisOk = basis === 'ht' || basis === 'ttc';
+  const rateOk = typeof rate === 'number' && Number.isFinite(rate) && rate >= 0;
+
+  // Un demi-marquage (taux sans assiette, ou l'inverse) n'est pas exploitable :
+  // il ne dit pas ce qu'est le montant. Il vaut une absence, et l'absence a une
+  // règle écrite — c'est mieux qu'une moitié de règle appliquée en silence.
+  if (basisOk && rateOk) {
+    return { config: { ratePercent: rate, amountsAre: basis }, stamped: true };
+  }
+  return { config: { ...LEGACY_INVOICE_VAT }, stamped: false };
+}
+
+/**
+ * VENTILE UNE PIÈCE — la seule porte par laquelle un montant devient trois.
+ *
+ * Aucun écran, aucun PDF, aucun total ne refait ce calcul pour son compte :
+ * c'est la garantie que la somme lue par le gérant, celle imprimée sur le PDF
+ * et celle additionnée dans l'ardoise sont le MÊME nombre, au centime.
+ */
+export function invoiceTotals(amountCents: number, stored: StoredInvoiceVat): InvoiceTotals {
+  const { config, stamped } = invoiceVatOf(stored);
+  const vat = invoiceVat(amountCents, config);
+
+  // `invoiceVat` ne rend des `null` que sur un régime indéterminé, ce que
+  // `invoiceVatOf` ne produit jamais. Le repli garde malgré tout un chiffre
+  // affichable si cette invariante venait à céder : le montant stocké, sous son
+  // vrai nom, plutôt qu'un écran vide.
+  const htCents = vat.baseCents ?? amountCents;
+  const vatCents = vat.vatCents ?? 0;
+  const ttcCents = vat.totalCents ?? amountCents;
+
+  return {
+    basis: config.amountsAre ?? 'ht',
+    ratePercent: config.ratePercent ?? 0,
+    rateLabel: formatVatRate(config.ratePercent ?? 0),
+    htCents,
+    htLabel: formatEuros(htCents),
+    vatCents,
+    vatLabel: formatEuros(vatCents),
+    ttcCents,
+    ttcLabel: formatEuros(ttcCents),
+    stamped,
+  };
+}
+
 /**
  * LES MENTIONS DE RÈGLEMENT, obligatoires sur toute facture entre
  * professionnels (art. L. 441-9 et L. 441-10 du Code de commerce).
@@ -1031,6 +1279,18 @@ export const invoiceTermsMention = (dueAt: Date | string): string =>
  * (courriel, aperçu HTML, archive) dise EXACTEMENT la même chose que le
  * premier — sur une pièce comptable, deux versions qui divergent d'un centime
  * ou d'une mention, c'est un litige.
+ *
+ * ─── CE QUE CE TYPE NE PRÉTEND PAS ÊTRE ───
+ *
+ * Il PORTE les mentions énumérées par le Code de commerce et le CGI. Ce n'est
+ * pas la même chose qu'être CONFORME : la conformité d'une facture dépend aussi
+ * du régime réel de l'émetteur, de la nature de l'opération, du lieu
+ * d'établissement du client et de règles qui changent (la facturation
+ * électronique obligatoire, entre autres). Personne dans ce dépôt n'est
+ * expert-comptable, et aucune ligne de code ne doit donner à penser le
+ * contraire : nulle part il n'est écrit qu'une facture rendue ici est valide.
+ * Elle est COMPLÈTE au sens de la liste ci-dessous — le reste appartient au
+ * comptable de l'éditeur, et cette relecture-là reste à faire.
  */
 export type InvoiceDocument = {
   number: string;
@@ -1042,8 +1302,10 @@ export type InvoiceDocument = {
   /** Période de la prestation — « septembre 2026 ». */
   periodLabel: string;
   designation: string;
-  /** Montant STOCKÉ, celui qui a réellement circulé. */
+  /** Montant STOCKÉ, celui qui a réellement circulé. Sa nature est dans `totals`. */
   amountCents: number;
+  /** HT, TVA, TTC — et si le taux vient de la pièce ou du défaut documenté. */
+  totals: InvoiceTotals;
   vat: InvoiceVatBreakdown;
   status: InvoiceStatus;
   statusLabel: string;
@@ -1094,21 +1356,18 @@ export function buildInvoiceDocument(
   invoice: CrmInvoice,
   issuer: InvoiceParty,
   customer: InvoiceParty,
-  vatConfig: InvoiceVatConfig = UNKNOWN_VAT,
 ): InvoiceDocument {
-  const vat = invoiceVat(invoice.amountCents, vatConfig);
+  // Le régime vient de la PIÈCE, jamais d'un paramètre : un appelant qui
+  // pourrait imposer un taux pourrait réimprimer une facture de l'an dernier
+  // au taux de cette année, et deux versions d'une même pièce comptable
+  // circuleraient. Voir `invoiceTotals`.
+  const vat = invoiceVat(invoice.amountCents, {
+    ratePercent: invoice.totals.ratePercent,
+    amountsAre: invoice.totals.basis,
+  });
   const gaps = [
     ...partyGaps(issuer, REQUIRED_ISSUER, 'issuer'),
     ...partyGaps(customer, REQUIRED_CUSTOMER, 'customer'),
-    ...(vat.known
-      ? []
-      : [
-          {
-            field: 'vat.regime',
-            label: 'Régime de TVA de l’émetteur',
-            hint: 'Taux applicable, et si les montants en base sont HT ou TTC. Sans lui, la ventilation HT / TVA / TTC ne peut pas être calculée.',
-          },
-        ]),
   ];
 
   return {
@@ -1120,6 +1379,7 @@ export function buildInvoiceDocument(
     periodLabel: invoice.period.label,
     designation: invoice.label || `${invoice.kindLabel} — ${invoice.period.label}`,
     amountCents: invoice.amountCents,
+    totals: invoice.totals,
     vat,
     status: invoice.status,
     statusLabel: invoice.statusLabel,
@@ -1139,6 +1399,216 @@ export function buildInvoiceDocument(
 /** Nom du fichier PDF proposé au gérant — « facture-SM-2026-0004.pdf ». */
 export const invoicePdfFilename = (number: string): string =>
   `facture-${(number || 'sans-numero').replace(/[^A-Za-z0-9._-]/g, '-')}.pdf`;
+
+// ═════════════════════════════════════════════════════════════
+// L'IDENTITÉ DE FACTURATION DU CLIENT — saisie par CELUI QUI LA CONNAÎT
+//
+// `tenants` ne portait ni SIRET, ni numéro de TVA, ni forme juridique, ni
+// adresse de facturation distincte de celle de l'établissement. Une facture
+// adressée à « CLASS'FOOD, 63 rue du Général de Gaulle » n'identifie pourtant
+// pas une personne morale : le comptable du restaurant a besoin du SIRET pour
+// la rattacher, et l'adresse du comptoir n'est pas toujours celle du siège.
+//
+// CES DONNÉES NE PEUVENT PAS VENIR DE NOUS. Nous ne connaissons ni la forme
+// juridique du restaurant, ni son siège, ni son numéro de TVA — les chercher à
+// sa place, c'est se tromper à sa place, sur une pièce qu'il présentera à
+// l'administration. Elles sont donc SAISIES PAR LE GÉRANT, et tant qu'il ne
+// les a pas saisies, la facture porte ce qu'on sait (sa raison commerciale,
+// l'adresse de son établissement) et rien de plus.
+//
+// VALIDATION : on vérifie la FORME, jamais l'existence. Un SIRET à treize
+// chiffres est une faute de frappe certaine et se refuse ; un SIRET à quatorze
+// chiffres bien formé mais attribué à quelqu'un d'autre ne se détecte qu'en
+// interrogeant l'INSEE, ce qu'aucune saisie de formulaire ne doit attendre.
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Clé de contrôle de Luhn — celle du SIRET, comme celle d'une carte bancaire.
+ *
+ * Elle attrape la faute de frappe et l'inversion de deux chiffres, c'est-à-dire
+ * l'essentiel de ce qui arrive à un numéro recopié depuis un Kbis.
+ */
+function luhnOk(digits: string): boolean {
+  let sum = 0;
+  for (let i = digits.length - 1, rank = 0; i >= 0; i -= 1, rank += 1) {
+    let value = Number(digits[i]);
+    if (rank % 2 === 1) {
+      value *= 2;
+      if (value > 9) value -= 9;
+    }
+    sum += value;
+  }
+  return sum % 10 === 0;
+}
+
+/**
+ * LA POSTE NE PASSE PAS LE TEST DE LUHN, et c'est réglementaire : ses
+ * établissements portent des SIRET dont la somme des chiffres est un multiple
+ * de 5. Sans cette exception, un bureau de poste client se verrait refuser son
+ * propre numéro — le genre de refus qu'on ne comprend qu'après une heure.
+ */
+const LA_POSTE_SIREN = '356000000';
+
+/** SIRET plausible : 14 chiffres, clé de Luhn valide (exception La Poste). */
+export function isSiretShape(value: string): boolean {
+  const digits = value.replace(/\s/g, '');
+  if (!/^\d{14}$/.test(digits)) return false;
+  if (digits.startsWith(LA_POSTE_SIREN)) {
+    return [...digits].reduce((sum, d) => sum + Number(d), 0) % 5 === 0;
+  }
+  return luhnOk(digits);
+}
+
+/**
+ * TVA intracommunautaire française : `FR` + clé sur deux caractères + SIREN.
+ *
+ * Quand la clé est NUMÉRIQUE, elle se recalcule : `(12 + 3 × (SIREN mod 97))
+ * mod 97`. Les clés anciennes contiennent des lettres et ne se vérifient pas —
+ * on se contente alors de la forme, plutôt que de refuser un numéro valide.
+ */
+export function isFrenchVatShape(value: string): boolean {
+  const clean = value.replace(/\s/g, '').toUpperCase();
+  const match = /^FR([0-9A-Z]{2})(\d{9})$/.exec(clean);
+  if (!match) return false;
+  const [, key, siren] = match;
+  if (!/^\d{2}$/.test(key!)) return true;
+  return Number(key) === (12 + 3 * (Number(siren) % 97)) % 97;
+}
+
+/** Les neuf premiers chiffres d'un SIRET — le SIREN de l'entreprise. */
+export const sirenOfSiret = (siret: string): string => siret.replace(/\s/g, '').slice(0, 9);
+
+/** Le SIREN porté par un numéro de TVA français. */
+export const sirenOfVatNumber = (vat: string): string =>
+  vat.replace(/\s/g, '').toUpperCase().slice(4);
+
+/**
+ * L'IDENTITÉ DE FACTURATION D'UN CLIENT, telle qu'il la saisit.
+ *
+ * Tout est FACULTATIF et vaut `''` par défaut : exiger un SIRET à
+ * l'inscription bloquerait un restaurateur qui veut d'abord essayer le
+ * produit, et une facture sans SIRET du client reste une facture — c'est celui
+ * de l'ÉMETTEUR qui est obligatoire. La chaîne vide dit « pas encore
+ * renseigné », jamais « vide exprès » : c'est le même état, et il n'y a rien à
+ * distinguer.
+ */
+export const TenantBillingIdentitySchema = z.object({
+  /** Raison sociale — « CLASS'FOOD SARL », si elle diffère du nom commercial. */
+  legalName: z.string().trim().max(160).default(''),
+  /** Forme juridique et capital — « SARL au capital de 10 000 € ». */
+  legalForm: z.string().trim().max(120).default(''),
+  siret: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((v) => v.replace(/\s/g, ''))
+    .refine((v) => v === '' || isSiretShape(v), {
+      message: 'SIRET invalide : 14 chiffres, clé de contrôle comprise.',
+    })
+    .default(''),
+  vatNumber: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((v) => v.replace(/\s/g, '').toUpperCase())
+    .refine((v) => v === '' || isFrenchVatShape(v), {
+      message: 'Numéro de TVA invalide : format FR + clé + 9 chiffres (ex. FR40123456824).',
+    })
+    .default(''),
+  /** Adresse de FACTURATION — le siège, s'il diffère de l'établissement. */
+  address: z.string().trim().max(300).default(''),
+  /** Où envoyer les factures, si ce n'est pas l'adresse du compte. */
+  email: z
+    .string()
+    .trim()
+    .max(160)
+    .refine((v) => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v), {
+      message: 'Adresse e-mail invalide.',
+    })
+    .default(''),
+});
+export type TenantBillingIdentity = z.infer<typeof TenantBillingIdentitySchema>;
+
+/** Identité vierge — l'état d'un client qui n'a encore rien saisi. */
+export const EMPTY_BILLING_IDENTITY: TenantBillingIdentity = {
+  legalName: '',
+  legalForm: '',
+  siret: '',
+  vatNumber: '',
+  address: '',
+  email: '',
+};
+
+/**
+ * LE SIRET ET LE NUMÉRO DE TVA DOIVENT PARLER DE LA MÊME ENTREPRISE.
+ *
+ * Les deux portent le même SIREN — les neuf premiers chiffres du SIRET, les
+ * neuf derniers du numéro de TVA. Deux SIREN différents sur une même facture,
+ * c'est un copier-coller depuis le dossier d'un autre, et personne ne le verra
+ * jamais à l'œil nu. Rendu à part de `zod` parce que la règle porte sur DEUX
+ * champs : un `refine` d'objet rendrait l'erreur non localisable dans le
+ * formulaire.
+ */
+export function billingIdentityMismatch(identity: TenantBillingIdentity): string | null {
+  if (identity.siret === '' || identity.vatNumber === '') return null;
+  if (sirenOfSiret(identity.siret) === sirenOfVatNumber(identity.vatNumber)) return null;
+  return 'Le SIRET et le numéro de TVA ne désignent pas la même entreprise (SIREN différent).';
+}
+
+/**
+ * L'identité saisie, TRADUITE en partie de facture.
+ *
+ * `fallback` porte ce que nous savons déjà de l'établissement — son nom
+ * commercial et l'adresse de son comptoir. Ils servent tant que le gérant n'a
+ * pas saisi mieux : une adresse d'établissement exacte vaut mieux qu'un
+ * emplacement vide, et c'est bien LUI que nous facturons. Ce qu'il n'a pas
+ * saisi et que nous ne savons pas reste `null` — jamais comblé.
+ */
+export function customerParty(
+  identity: TenantBillingIdentity,
+  fallback: { name?: string | null; address?: string | null } = {},
+): InvoiceParty {
+  const pick = (...values: (string | null | undefined)[]): string | null => {
+    for (const value of values) {
+      const text = (value ?? '').trim();
+      if (text !== '') return text;
+    }
+    return null;
+  };
+
+  return {
+    ...EMPTY_PARTY,
+    name: pick(identity.legalName, fallback.name),
+    legalForm: pick(identity.legalForm),
+    address: pick(identity.address, fallback.address),
+    siret: pick(identity.siret),
+    vatNumber: pick(identity.vatNumber),
+    email: pick(identity.email),
+  };
+}
+
+/**
+ * Lecture DÉFENSIVE d'un sous-document `billing` sorti de Mongo.
+ *
+ * `.lean()` ne matérialise pas les défauts Mongoose : sur un établissement créé
+ * avant ce champ, `billing` est simplement absent. L'absence vaut identité
+ * vierge — jamais une anomalie, jamais un écran d'erreur.
+ */
+export function billingIdentityOf(raw: unknown): TenantBillingIdentity {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const text = (key: keyof TenantBillingIdentity): string => {
+    const value = source[key];
+    return typeof value === 'string' ? value.trim() : '';
+  };
+  return {
+    legalName: text('legalName'),
+    legalForm: text('legalForm'),
+    siret: text('siret'),
+    vatNumber: text('vatNumber'),
+    address: text('address'),
+    email: text('email'),
+  };
+}
 
 // ─── L'écran « Abonnement » du gérant ───
 
@@ -1164,5 +1634,21 @@ export type MyBilling = {
    * comptable.
    */
   legalGaps: InvoiceLegalGap[];
+  /**
+   * SON identité de facturation, telle qu'il l'a saisie — le formulaire de
+   * l'écran s'ouvre dessus.
+   *
+   * Rendue avec la facturation et non sur une route à part : c'est le même
+   * écran, la même question (« qu'y a-t-il sur mes factures ? »), et un second
+   * appel ferait apparaître le formulaire une demi-seconde après le reste.
+   */
+  identity: TenantBillingIdentity;
+  /**
+   * `false` quand le compte est suspendu : l'écran reste lisible — c'est sa
+   * raison d'être — mais toute écriture repasse par le garde global, qui la
+   * refuse. Le formulaire se montre alors en lecture seule plutôt que
+   * d'envoyer le gérant contre un 403 muet.
+   */
+  identityEditable: boolean;
   generatedAt: string;
 };

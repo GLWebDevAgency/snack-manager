@@ -26,15 +26,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  EMPTY_BILLING_IDENTITY,
+  TenantBillingIdentitySchema,
+  billingIdentityMismatch,
   invoicePdfFilename,
   type CrmInvoice,
   type InvoiceStatus,
   type MyBilling,
+  type TenantBillingIdentity,
 } from "@sm/contracts";
 import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
-import { Btn, Card, EmptyState, Panel, Pill, Skeleton, useToast } from "@/components/ui";
+import {
+  Btn,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Panel,
+  Pill,
+  Skeleton,
+  useToast,
+} from "@/components/ui";
 
 /** `2026-09-01T…` → « 01/09/2026 » — en UTC, comme les échéances côté API. */
 function fmtJour(iso: string | null | undefined): string {
@@ -67,6 +81,17 @@ function echeance(daysUntil: number): string {
   if (daysUntil === 1) return "demain";
   return `dans ${daysUntil} jours`;
 }
+
+/**
+ * MONTANT TTC D'UNE PIÈCE, avec repli sur le montant stocké.
+ *
+ * Le repli n'est pas de la superstition : la démonstration hors ligne rejoue un
+ * instantané figé AVANT que la ventilation existe (`lib/demo`), et un « NaN € »
+ * sur un écran de facturation est la pire chose qu'on puisse afficher à
+ * quelqu'un qui essaie de savoir ce qu'il doit.
+ */
+const ttc = (f: CrmInvoice): number => f.totals?.ttcCents ?? f.amountCents;
+const ht = (f: CrmInvoice): number => f.totals?.htCents ?? f.amountCents;
 
 export default function AbonnementPage() {
   const toast = useToast();
@@ -130,6 +155,22 @@ export default function AbonnementPage() {
 
   const { subscription: sub, nextDue, outstanding, invoices, legalGaps } = data;
 
+  /*
+   * TOUT CE QUI S'AFFICHE ICI EST TTC, ET C'EST DÉLIBÉRÉ.
+   *
+   * Nos tarifs sont annoncés hors taxes — c'est le prix qui coûte réellement à
+   * un professionnel, qui récupère la TVA — mais ce que le gérant PRÉLÈVE sur
+   * son compte, lui, est TTC. Afficher 159 € là où 190,80 € partent du compte
+   * en banque, c'est le rendez-vous téléphonique assuré. La formule reste donc
+   * annoncée en HT (c'est le prix du contrat) et les ÉCHÉANCES en TTC (c'est le
+   * mouvement bancaire), chacune disant laquelle elle est.
+   *
+   * Le repli sur les champs hors taxes couvre l'instantané de démonstration,
+   * figé avant que la ventilation existe.
+   */
+  const totalDuTtc = outstanding.totalDueTtcCents ?? outstanding.totalDueCents;
+  const enRetardTtc = outstanding.overdueTtcCents ?? outstanding.overdueCents;
+
   return (
     <div className="flex flex-col gap-4 p-[26px]">
       <div>
@@ -150,7 +191,8 @@ export default function AbonnementPage() {
             régulariser.{" "}
             {outstanding.totalDueCents > 0 ? (
               <>
-                Il reste <strong>{fmtEuro(outstanding.totalDueCents)}</strong> à régler
+                {/* TTC : c'est la somme à virer, pas celle du chiffre d'affaires. */}
+                Il reste <strong>{fmtEuro(totalDuTtc)}</strong> à régler
                 {outstanding.overdueInvoices > 0
                   ? ` sur ${outstanding.overdueInvoices} facture${outstanding.overdueInvoices > 1 ? "s" : ""} échue${outstanding.overdueInvoices > 1 ? "s" : ""}`
                   : ""}
@@ -180,7 +222,7 @@ export default function AbonnementPage() {
             )}
           </div>
           <p className="cf-fig mt-1 text-[13px] text-mut">
-            {fmtEuro(sub.mrrCents)} par mois · client depuis le {fmtJour(sub.since)}
+            {fmtEuro(sub.mrrCents)} HT par mois · client depuis le {fmtJour(sub.since)}
           </p>
         </Card>
 
@@ -189,12 +231,16 @@ export default function AbonnementPage() {
             Prochaine échéance
           </div>
           <div className="cf-fig mt-2 text-[30px] font-extrabold leading-[1.1] text-ink">
-            {nextDue ? fmtEuro(nextDue.amountCents) : "—"}
+            {nextDue ? fmtEuro(nextDue.amountTtcCents ?? nextDue.amountCents) : "—"}
           </div>
           <p className="cf-fig mt-1 text-[13px] text-mut">
             {nextDue ? (
               <>
-                le {fmtJour(nextDue.at)} · {echeance(nextDue.daysUntil)}
+                {/* Le montant du dessus est celui qui part du compte. Le HT est
+                    rappelé dessous : c'est celui du contrat, et celui que son
+                    comptable réintègre. */}
+                TTC ({fmtEuro(nextDue.amountCents)} HT) · le {fmtJour(nextDue.at)} ·{" "}
+                {echeance(nextDue.daysUntil)}
                 {/* Une échéance sans numéro n'est pas encore une créance : la
                     pièce n'existe pas, inutile de la chercher plus bas. */}
                 {nextDue.invoiceNumber ? ` · ${nextDue.invoiceNumber}` : " · à émettre"}
@@ -215,13 +261,13 @@ export default function AbonnementPage() {
               outstanding.overdueCents > 0 ? "text-alertt" : "text-ink",
             )}
           >
-            {fmtEuro(outstanding.totalDueCents)}
+            {fmtEuro(totalDuTtc)}
           </div>
           <p className="cf-fig mt-1 text-[13px] text-mut">
             {outstanding.overdueInvoices > 0
-              ? `${outstanding.overdueLabel} en retard — la plus ancienne depuis ${outstanding.oldestOverdueDays} jour(s)`
+              ? `${fmtEuro(enRetardTtc)} TTC en retard — la plus ancienne depuis ${outstanding.oldestOverdueDays} jour(s)`
               : outstanding.invoices > 0
-                ? `${outstanding.invoices} facture(s) en cours, échéance non dépassée`
+                ? `TTC · ${outstanding.invoices} facture(s) en cours, échéance non dépassée`
                 : "Tout est réglé."}
           </p>
         </Card>
@@ -245,7 +291,7 @@ export default function AbonnementPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left">
+            <table className="w-full min-w-[900px] border-collapse text-left">
               <thead>
                 <tr className="border-y border-line text-[11px] uppercase tracking-[0.06em] text-mut">
                   <th scope="col" className="px-[18px] py-2.5 font-semibold">
@@ -261,7 +307,13 @@ export default function AbonnementPage() {
                     Statut
                   </th>
                   <th scope="col" className="px-3 py-2.5 text-right font-semibold">
-                    Montant
+                    Montant HT
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-semibold">
+                    TVA
+                  </th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-semibold">
+                    Total TTC
                   </th>
                   <th scope="col" className="px-[18px] py-2.5 text-right font-semibold">
                     <span className="sr-only">Télécharger</span>
@@ -301,8 +353,19 @@ export default function AbonnementPage() {
                         </span>
                       )}
                     </td>
+                    <td className="cf-fig whitespace-nowrap px-3 py-3 text-right text-sm text-mut">
+                      {fmtEuro(ht(f))}
+                    </td>
+                    <td className="cf-fig whitespace-nowrap px-3 py-3 text-right text-sm text-mut">
+                      {fmtEuro(f.totals?.vatCents ?? 0)}
+                      {f.totals && (
+                        <span className="ml-1 text-[11px]">({f.totals.rateLabel})</span>
+                      )}
+                    </td>
+                    {/* Le TTC en gras : c'est le montant du relevé bancaire,
+                        celui que le gérant cherche quand il rapproche. */}
                     <td className="cf-fig whitespace-nowrap px-3 py-3 text-right text-sm font-bold text-ink">
-                      {fmtEuro(f.amountCents)}
+                      {fmtEuro(ttc(f))}
                     </td>
                     <td className="whitespace-nowrap px-[18px] py-3 text-right">
                       <Btn
@@ -324,6 +387,12 @@ export default function AbonnementPage() {
         )}
       </Panel>
 
+      <PanelIdentite
+        identity={data.identity ?? EMPTY_BILLING_IDENTITY}
+        editable={data.identityEditable !== false}
+        onSaved={() => void load()}
+      />
+
       {/*
         Mentions légales incomplètes — dit AU GÉRANT, pas seulement à notre
         équipe. S'il télécharge une facture qui porte des emplacements vides, il
@@ -340,5 +409,233 @@ export default function AbonnementPage() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * « VOS INFORMATIONS DE FACTURATION » — ce que le gérant, et lui seul, sait.
+ *
+ * Sa raison sociale, sa forme juridique, son SIRET, son numéro de TVA et
+ * l'adresse de son siège ne figurent nulle part chez nous : on ne les a jamais
+ * demandés à l'inscription, et les chercher à sa place reviendrait à se tromper
+ * à sa place sur une pièce qu'il présentera à son comptable. Il les saisit ici,
+ * et elles s'impriment sur toutes ses factures — les prochaines comme les
+ * anciennes, puisque le PDF est rendu à la demande.
+ *
+ * ─── LA VALIDATION EST CELLE DU SERVEUR, PAS UNE COPIE ───
+ *
+ * `TenantBillingIdentitySchema` et `billingIdentityMismatch` viennent de
+ * @sm/contracts : ce sont EXACTEMENT les règles que l'API appliquera. Une
+ * validation de formulaire réécrite à la main finit toujours par diverger, et
+ * le jour où elle diverge, le gérant voit un champ vert refusé par le serveur
+ * sans comprendre pourquoi. Ici, ce qui passe ici passe là-bas.
+ *
+ * La vérification reste FORMELLE : on contrôle la clé de Luhn d'un SIRET et la
+ * clé d'un numéro de TVA — ce qui attrape la faute de frappe — mais jamais
+ * l'existence de l'entreprise, qui demanderait d'interroger l'INSEE et de faire
+ * attendre une saisie derrière un appel réseau.
+ */
+function PanelIdentite({
+  identity,
+  editable,
+  onSaved,
+}: {
+  identity: TenantBillingIdentity;
+  editable: boolean;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [form, setForm] = useState<TenantBillingIdentity>(identity);
+  const [errors, setErrors] = useState<Partial<Record<keyof TenantBillingIdentity, string>>>({});
+  const [global, setGlobal] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const set = (key: keyof TenantBillingIdentity) => (e: { target: { value: string } }) => {
+    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setGlobal(null);
+  };
+
+  // Rien à enregistrer tant que rien n'a bougé : un bouton actif sur un
+  // formulaire intact invite à cliquer pour rien.
+  const modifie = JSON.stringify(form) !== JSON.stringify(identity);
+
+  async function enregistrer() {
+    if (saving) return;
+
+    const parsed = TenantBillingIdentitySchema.safeParse(form);
+    if (!parsed.success) {
+      const champs: Partial<Record<keyof TenantBillingIdentity, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const champ = issue.path[0] as keyof TenantBillingIdentity | undefined;
+        if (champ && !champs[champ]) champs[champ] = issue.message;
+      }
+      setErrors(champs);
+      return;
+    }
+
+    // La cohérence SIRET ↔ TVA porte sur DEUX champs : elle ne s'affiche donc
+    // sous aucun des deux, mais au-dessus du bouton.
+    const coherence = billingIdentityMismatch(parsed.data);
+    if (coherence) {
+      setGlobal(coherence);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const enregistre = await api.put<TenantBillingIdentity>(
+        "/billing/me/identity",
+        parsed.data,
+      );
+      // On repart de ce que le SERVEUR a retenu, espaces du SIRET normalisés
+      // compris : afficher la saisie brute laisserait croire qu'elle a été
+      // stockée telle quelle.
+      setForm(enregistre ?? parsed.data);
+      setErrors({});
+      toast("Informations de facturation enregistrées");
+      onSaved();
+    } catch (e) {
+      setGlobal(e instanceof Error ? e.message : "Enregistrement impossible");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="Vos informations de facturation"
+      sub="Ce que nous imprimons sur vos factures. Vous seul les connaissez — nous ne les devinons jamais."
+      actions={
+        editable ? (
+          <Btn
+            variant="primary"
+            size="sm"
+            disabled={!modifie || saving}
+            onClick={() => void enregistrer()}
+          >
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </Btn>
+        ) : undefined
+      }
+    >
+      {!editable && (
+        <p className="mb-3.5 text-[13px] leading-[1.5] text-mut">
+          Votre compte est suspendu : ces informations restent consultables mais ne
+          peuvent pas être modifiées tant que l’accès n’est pas rétabli.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+        <Field
+          label="Raison sociale"
+          htmlFor="fact-nom"
+          hint="Le nom juridique, s’il diffère de l’enseigne. Vide = nous gardons votre enseigne."
+          error={errors.legalName}
+        >
+          <Input
+            id="fact-nom"
+            value={form.legalName}
+            onChange={set("legalName")}
+            disabled={!editable}
+            placeholder="MON RESTAURANT SARL"
+            autoComplete="organization"
+          />
+        </Field>
+
+        <Field
+          label="Forme juridique et capital"
+          htmlFor="fact-forme"
+          error={errors.legalForm}
+        >
+          <Input
+            id="fact-forme"
+            value={form.legalForm}
+            onChange={set("legalForm")}
+            disabled={!editable}
+            placeholder="SARL au capital de 10 000 €"
+          />
+        </Field>
+
+        <Field
+          label="SIRET"
+          htmlFor="fact-siret"
+          hint="14 chiffres, tels qu’ils figurent sur votre Kbis."
+          error={errors.siret}
+        >
+          <Input
+            id="fact-siret"
+            value={form.siret}
+            onChange={set("siret")}
+            disabled={!editable}
+            /*
+             * Exemple volontairement INVALIDE au sens de la clé de Luhn.
+             * Un SIRET bien formé désigne une vraie entreprise : en publier un
+             * comme exemple, sur une page que n'importe qui peut ouvrir en
+             * démonstration, revient à exposer l'identifiant d'un tiers qui
+             * n'a rien demandé. Celui-ci enseigne le format sans désigner
+             * personne.
+             */
+            placeholder="123 456 789 00012"
+            inputMode="numeric"
+          />
+        </Field>
+
+        <Field
+          label="TVA intracommunautaire"
+          htmlFor="fact-tva"
+          hint="Format FR + clé + les 9 chiffres de votre SIREN."
+          error={errors.vatNumber}
+        >
+          <Input
+            id="fact-tva"
+            value={form.vatNumber}
+            onChange={set("vatNumber")}
+            disabled={!editable}
+            placeholder="FR00123456789"
+          />
+        </Field>
+
+        <Field
+          label="Adresse de facturation"
+          htmlFor="fact-adresse"
+          hint="Votre siège, s’il diffère de l’adresse de l’établissement."
+          error={errors.address}
+          className="md:col-span-2"
+        >
+          <Input
+            id="fact-adresse"
+            value={form.address}
+            onChange={set("address")}
+            disabled={!editable}
+            placeholder="12 rue du Siège — 27000 Évreux"
+          />
+        </Field>
+
+        <Field
+          label="E-mail de facturation"
+          htmlFor="fact-email"
+          hint="Où envoyer vos factures, si ce n’est pas l’adresse de votre compte."
+          error={errors.email}
+          className="md:col-span-2"
+        >
+          <Input
+            id="fact-email"
+            type="email"
+            value={form.email}
+            onChange={set("email")}
+            disabled={!editable}
+            placeholder="compta@votre-restaurant.fr"
+            autoComplete="email"
+          />
+        </Field>
+      </div>
+
+      {global && (
+        <p className="mt-3.5 text-[13px] text-alertt" role="alert">
+          {global}
+        </p>
+      )}
+    </Panel>
   );
 }

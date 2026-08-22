@@ -259,11 +259,154 @@ export function BfBars() {
   );
 }
 
-/** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
-export function CmpCross() {
+/* ── Pictos 24×24 de la section « Matériel » ── */
+
+/*
+ * Quatre traits, aucun emoji : la charte sombre et dorée ne bouge pas, et une
+ * section qui dit « rien à racheter » ne peut pas le dire avec des vignettes de
+ * catalogue. Ils sont dessinés plus grands que les pictos de tuiles (34 px au
+ * rendu contre 18) parce qu'ils portent la section à eux seuls — il n'y a pas
+ * une phrase autour d'eux.
+ *
+ * Le trait est plus épais que celui des maquettes internes : à 34 px, 1,3
+ * disparaît.
+ */
+const line24 = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.4,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+/** Tablette Android ou iPad — la vôtre, aucun matériel propriétaire. */
+export function MtTablette({ size = 34 }: { size?: number }) {
   return (
-    <svg width={14} height={14} viewBox="0 0 14 14" fill="var(--white)" aria-hidden="true">
-      <path d="M3.6 1.6h6.8v1.2L7.9 7l2.5 4.2v1.2H3.6v-1.2L6.1 7 3.6 2.8V1.6z" />
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <rect x="5" y="2.8" width="14" height="18.4" rx="2.4" />
+      <path d="M10.4 18.5h3.2" />
+    </svg>
+  );
+}
+
+/** Imprimante ticket 80 mm — le ticket sort par le bas, c'est ce qu'on regarde. */
+export function MtImprimante({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <path d="M7.2 8.4V4.2h9.6v4.2" />
+      <rect x="3.2" y="8.4" width="17.6" height="6.4" rx="1.6" />
+      <path d="M7.2 12.4h9.6v7.4H7.2z" />
+      <path d="M9.6 15.4h4.8M9.6 17.6h3.2" />
+      <circle cx="17.9" cy="10.9" r="0.55" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Écran cuisine — une TV ou un moniteur mural, rien de spécifique. */
+export function MtEcran({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <rect x="2.8" y="4" width="18.4" height="12.6" rx="1.8" />
+      <path d="M12 16.6v3.6" />
+      <path d="M8.5 20.2h7" />
+    </svg>
+  );
+}
+
+/** Connexion internet — une box suffit, la fibre n'est pas requise. */
+export function MtReseau({ size = 34 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...line24} aria-hidden="true">
+      <path d="M3.6 10.4a11.4 11.4 0 0 1 16.8 0" />
+      <path d="M7.2 14a6.6 6.6 0 0 1 9.6 0" />
+      <circle cx="12" cy="18.4" r="1.05" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/* ── Réseaux sociaux ─────────────────────────────────────────── */
+
+/*
+ * QUATRE MARQUES, UN SEUL POIDS VISUEL.
+ *
+ * Ce sont les seuls pictogrammes du fichier qu'on ne dessine pas librement :
+ * un logo de réseau n'est reconnu que s'il est reproduit, et un Instagram
+ * « réinterprété » ne se lit plus du tout à 18 px. On reprend donc les tracés
+ * canoniques, simplifiés, en `currentColor` — jamais les couleurs de marque,
+ * qui feraient quatre taches dans une charte sombre et dorée.
+ *
+ * PLEINS ET NON EN TRAIT, contrairement aux pictos de section (`line24`) :
+ * `IcoPhone` a déjà posé le 24×24 plein dans ce fichier, et à la taille où ces
+ * marques s'affichent un trait de 1,4 les rendrait illisibles. La seule
+ * exception est Instagram, dont le mot-symbole EST un contour — on le garde
+ * creux, sinon ce n'est plus Instagram.
+ *
+ * `fillRule="evenodd"` sur LinkedIn : le « in » et le carré vivent dans le
+ * même tracé, et c'est la règle pair-impair qui évide les lettres.
+ *
+ * `aria-hidden` comme partout ailleurs : le nom du réseau est porté par le
+ * `aria-label` du lien qui les enveloppe, pas par le dessin.
+ */
+
+type Picto = { size?: number };
+
+export function IcoInstagram({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M8.2 3h7.6A5.2 5.2 0 0 1 21 8.2v7.6A5.2 5.2 0 0 1 15.8 21H8.2A5.2 5.2 0 0 1 3 15.8V8.2A5.2 5.2 0 0 1 8.2 3Zm0 1.9A3.3 3.3 0 0 0 4.9 8.2v7.6a3.3 3.3 0 0 0 3.3 3.3h7.6a3.3 3.3 0 0 0 3.3-3.3V8.2a3.3 3.3 0 0 0-3.3-3.3H8.2Z" />
+      <path d="M12 7.4a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Zm0 1.9a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z" />
+      <circle cx="16.9" cy="7.1" r="1.1" />
+    </svg>
+  );
+}
+
+export function IcoTikTok({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M13.1 2.6h2.7c.2 1.5.9 2.7 2.1 3.5.7.5 1.5.8 2.4.9v2.7a7.8 7.8 0 0 1-4.4-1.5v5.9a5.7 5.7 0 1 1-5.7-5.7c.3 0 .6 0 .9.1v2.8a2.9 2.9 0 1 0 2 2.8V2.6Z" />
+    </svg>
+  );
+}
+
+export function IcoFacebook({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 0-10.4 8.9v-6.3H8.3V12h2.3v-1.8c0-2.3 1.4-3.5 3.4-3.5 1 0 2 .2 2 .2v2.2h-1.1c-1.1 0-1.5.7-1.5 1.4V12h2.5l-.4 2.6h-2.1v6.3A9 9 0 0 0 21 12Z" />
+    </svg>
+  );
+}
+
+export function IcoLinkedIn({ size = 18 }: Picto) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M4.6 3h14.8A1.6 1.6 0 0 1 21 4.6v14.8a1.6 1.6 0 0 1-1.6 1.6H4.6A1.6 1.6 0 0 1 3 19.4V4.6A1.6 1.6 0 0 1 4.6 3ZM5.9 9.9v8.2h2.6V9.9H5.9Zm1.3-1.3a1.5 1.5 0 1 0 0-3.1 1.5 1.5 0 0 0 0 3.1Zm3.9 1.3v8.2h2.6v-4.3c0-1.2.6-1.9 1.5-1.9s1.5.7 1.5 1.9v4.3h2.6v-4.8c0-2.3-1.2-3.6-3-3.6-1.2 0-2 .5-2.4 1.3V9.9h-2.8Z" />
+    </svg>
+  );
+}
+
+/** Le pictogramme d'un réseau, retrouvé par l'`id` de sa ligne dans `RESEAUX`. */
+export const RESEAU_ICONS = {
+  instagram: IcoInstagram,
+  tiktok: IcoTikTok,
+  facebook: IcoFacebook,
+  linkedin: IcoLinkedIn,
+} as const;
+
+/** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
+/**
+ * L'HORLOGE DE LA COLONNE « AUJOURD'HUI ».
+ *
+ * Elle remplace `CmpCross`, un sablier plein qui, posé face à un éclair,
+ * transformait la ligne en jugement. Ici les deux pastilles nomment deux
+ * MOMENTS — aujourd'hui, lundi prochain — et pas un bon et un mauvais camp.
+ * D'où un trait creux plutôt qu'une forme pleine : la colonne de gauche est
+ * l'état éteint, elle ne doit pas peser autant que celle qui s'allume.
+ */
+export function CmpToday() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden="true">
+      <circle cx="7" cy="7" r="5.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M7 4.1V7l2 1.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }

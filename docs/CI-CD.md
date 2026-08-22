@@ -35,18 +35,51 @@ Puis un troisième risque s'est matérialisé, et il a fallu l'ajouter :
 
 | Fichier | Contrôle affiché | Déclenché sur | Ce qu'il fait |
 |---|---|---|---|
-| `.github/workflows/ci.yml` | **Vérification du monorepo** | pull request · push sur `main` | `typecheck`, `lint`, `test`, `build` sur tout le monorepo via Turborepo |
-| `.github/workflows/secrets.yml` | **Balayage des secrets** | pull request · push sur `main` | gitleaks sur les commits apportés, puis sur l'arbre complet |
-| `.github/workflows/deploy.yml` | **Déploiement** | push sur `develop` · push sur `main` | vérifie, puis met en ligne les quatre services sur Railway, puis contrôle la santé (§ 10) |
+| `.github/workflows/ci.yml` | **Vérification du monorepo** | pull request · **appel** par `deploy.yml` | `typecheck`, `lint`, `test`, `build` sur tout le monorepo via Turborepo |
+| `.github/workflows/secrets.yml` | **Balayage des secrets** | pull request · **appel** par `deploy.yml` | gitleaks sur les commits apportés, puis sur l'arbre complet |
+| `.github/workflows/deploy.yml` | **Déploiement** | push sur `develop` · push sur `main` | appelle les deux ci-dessus, puis met en ligne les quatre services sur Railway, puis contrôle la santé (§ 10) |
 
 Les deux premiers tournent en parallèle. Sur une pull request, la précédente
-exécution est annulée à chaque nouveau push (`concurrency`) ; sur `main`,
-jamais — chaque commit livré mérite son verdict.
+exécution est annulée à chaque nouveau push (`concurrency`) ; appelés par
+`deploy.yml`, jamais — couper une vérification en route déclarerait en échec un
+déploiement qui n'a rien fait de mal.
 
-> ⚠️ **`ci.yml` et `secrets.yml` ne tournent PAS sur un push vers `develop`.**
-> Leurs déclencheurs sont `pull_request` et `push` sur `main`. C'est un fait
-> structurant : il interdit de chaîner le déploiement sur eux, et c'est pour
-> cela que `deploy.yml` refait la vérification lui-même (§ 10).
+### Une seule définition, appelée deux fois
+
+`ci.yml` et `secrets.yml` déclarent `on: workflow_call`. `deploy.yml` ne les
+recopie pas, il les **appelle** :
+
+```yaml
+  verification:
+    needs: cible
+    permissions: { contents: read }
+    uses: ./.github/workflows/ci.yml       # ← pas d'étapes : c'est LE fichier de la CI
+```
+
+C'est la réponse à la dette la plus dangereuse qu'ait portée ce pipeline : tant
+que `deploy.yml` recopiait les étapes, une modification faite dans `ci.yml` et
+oubliée là-bas passait **inaperçue** — pas d'erreur, pas d'avertissement, juste
+deux fichiers qui ne disent plus la même chose, et un déploiement qu'on croit
+vérifié. Aujourd'hui, modifier `ci.yml` modifie ce que le déploiement exige, à
+la ligne près, `timeout-minutes` et versions d'actions comprises.
+
+Deux propriétés à connaître :
+
+- **Aucun secret n'est passé aux workflows appelés.** Un workflow appelé
+  n'hérite de rien (hormis `GITHUB_TOKEN`) tant qu'on ne l'a pas écrit, et on ne
+  l'a pas écrit. La vérification et le balayage n'ont donc, structurellement,
+  aucun accès aux jetons Railway.
+- **`permissions:` se déclare chez l'appelant**, parce qu'il plafonne ce que
+  l'appelé pourra obtenir. D'où `pull-requests: read` sur le job `secrets` de
+  `deploy.yml` : sans lui, `gitleaks-action` reçoit un `403` en interrogeant
+  l'API pour délimiter la plage à balayer, et tombe avant d'avoir balayé.
+
+> ⚠️ **`ci.yml` et `secrets.yml` ne se déclenchent pas d'eux-mêmes sur un push.**
+> Leurs déclencheurs sont `pull_request` et `workflow_call`. Sur `develop`
+> comme sur `main`, c'est `deploy.yml` qui les fait tourner, dans SON exécution.
+> Conséquence à ne pas perdre de vue : **si `deploy.yml` disparaissait de
+> `main`, un push sur `main` ne vérifierait plus rien.** Les trois fichiers
+> voyagent ensemble (§ 13).
 
 ### Vérification du monorepo
 
@@ -96,8 +129,11 @@ existante, donc une clé fixe ne serait sauvegardée qu'une seule fois puis
 figée pour toujours.
 
 Les caches d'une pull request sont isolés mais peuvent **lire** ceux de `main`.
-C'est pour cela que `ci.yml` tourne aussi sur `main` : chaque fusion réchauffe
-le cache dont profiteront les pull requests suivantes.
+Il faut donc que quelque chose tourne sur `main` pour réchauffer ce cache :
+c'est l'appel de `ci.yml` depuis `deploy.yml`, qui s'exécute sur la référence
+`main` et écrit donc dans la même portée de cache qu'avant. Le déclencheur
+`push: branches: [main]` de `ci.yml` a été retiré (il aurait fait tourner la
+vérification deux fois par commit) sans rien coûter à ce réchauffage.
 
 **Purger le cache** si vous soupçonnez un artefact corrompu :
 `gh cache delete --all` (ou `gh cache list` pour regarder d'abord).
@@ -111,6 +147,11 @@ Deux passes, parce qu'elles ne répondent pas à la même question :
 2. **L'arbre courant** (`gitleaks dir .`) — répond à « y a-t-il un secret dans
    le dépôt aujourd'hui ? », y compris entré avant la mise en place de cette
    CI. Cette passe est la seule qui protège rétroactivement.
+
+Les **deux** tournent aussi sur le chemin de déploiement. Ce n'était pas le cas
+avant : la copie qui vivait dans `deploy.yml` ne balayait que l'arbre. Unifier
+les définitions a donc ajouté la passe sur le diff avant chaque mise en ligne —
+c'est plus, jamais moins, et cette différence-là ne peut plus réapparaître.
 
 Les règles sont dans **`.github/gitleaks.toml`** : les règles fournies par
 gitleaks (clés AWS, jetons GitHub, clés Stripe, clés privées PEM…) plus trois
@@ -337,6 +378,10 @@ pas cette règle — c'est vous qui décidez du moment où vous poussez.
 | Version de gitleaks | `secrets.yml` → `VERSION_GITLEAKS` | de temps en temps, pour bénéficier des nouvelles règles |
 | Budget de temps | `ci.yml` → `timeout-minutes: 20` | si la CI approche les dix minutes, découper le job avant qu'elle devienne un obstacle |
 
+> **Une modification de `ci.yml` ou de `secrets.yml` change aussi ce que le
+> déploiement exige** — `deploy.yml` les appelle (§ 2). C'est le but : il n'y a
+> plus qu'un endroit à modifier. Il n'y a plus non plus d'endroit où oublier.
+
 ---
 
 ## 9 · Limites connues
@@ -466,10 +511,14 @@ gh pr merge --squash --delete-branch   # ← déclenche le déploiement producti
 | # | Job | Ce qu'il fait | Ce qui se passe s'il échoue |
 |---|---|---|---|
 | 1 | **Cible du déploiement** | traduit la branche en environnement (`main`→production, `develop`→staging) | une référence inconnue arrête tout, immédiatement |
-| 2 | **Vérification du monorepo** | `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
-| 3 | **Balayage des secrets** | `gitleaks dir .` sur l'arbre qui allait être téléversé | rien ne part |
-| 4 | **Mise en ligne** | `api` seul d'abord (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
-| 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
+| 2 | `verification` | **appelle `ci.yml`** : `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
+| 3 | `secrets` | **appelle `secrets.yml`** : gitleaks sur le diff puis sur l'arbre qui allait être téléversé | rien ne part |
+| 4 | **Mise en ligne** | pose `SM_REVISION` sur `api`, puis déploie `api` seul (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
+| 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
+
+Les jobs 2 et 3 n'ont **aucune étape** : ce sont des appels. Dans l'interface
+GitHub ils apparaissent sous le nom du fichier appelé — `verification /
+Vérification du monorepo` et `secrets / Balayage des secrets`.
 
 Le job 5 tourne **aussi quand le job 4 a échoué** (`always()`). Un vendredi
 soir, la première question n'est pas « le déploiement est-il passé ? » mais
@@ -527,7 +576,7 @@ l'`api` **en service**, pas seulement construite.
 premier. Il a été écarté, et le raisonnement complet est en tête de
 `.github/workflows/deploy.yml`. En bref :
 
-1. **Rédhibitoire** — `ci.yml` ne tourne pas sur un push vers `develop` (§ 2).
+1. **Rédhibitoire** — `ci.yml` ne se déclenche pas de lui-même sur un push (§ 2).
    Il n'y a donc aucune exécution à laquelle s'accrocher : **staging ne serait
    jamais déployé**. Vérifiable : après un push sur `develop`, `gh run list
    --branch develop` ne montre que `Déploiement`.
@@ -589,6 +638,36 @@ Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
 | Migrations en pré-déploiement | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
 | Retour arrière | § 12 — mesuré dans les deux sens, 29 s et 24 s |
 
+**Bascule vers les workflows appelés — 20 août 2026**, pull request d'essai
+`#8`, ouverte puis fermée sans fusion. `deploy.yml` ne se déclenchant que sur
+un push, ses deux `uses:` ont été reproduits à l'identique (`permissions`
+comprises) dans un workflow jetable déclenché sur `pull_request` : même
+mécanisme, mêmes fichiers.
+
+| Vérification | Résultat |
+|---|---|
+| `ci.yml` se déclenche toujours sur une pull request | exécution `32359203463` — `CI` verte en **1 min 56** |
+| `secrets.yml` aussi | exécution `32359203352` — `Secrets` verte en **12 s** |
+| Les deux `uses:` résolvent et tournent | exécution `32359203629` — verte en **1 min 55**, jobs `verification / Vérification du monorepo` (1 min 51) et `secrets / Balayage des secrets` (13 s) |
+| L'appel exécute bien TOUTES les étapes du fichier appelé | les onze étapes de `ci.yml` — jusqu'à `Compilation` — apparaissent dans le job imbriqué, et les deux passes de `secrets.yml` (`Balayer les commits apportés`, `Balayer l'arbre courant`) |
+| `pull-requests: read` déclarée chez l'appelant suffit à `gitleaks-action` | l'étape `Balayer les commits apportés` passe dans le job appelé — c'est elle qui aurait rendu 403 sans la permission |
+| Les groupes `concurrency` ne se marchent pas dessus | `CI` directe et l'appel imbriqué ont tourné **en parallèle sans s'annuler** — le `github` context d'un workflow appelé étant celui de l'APPELANT, `github.workflow` diffère, donc le groupe aussi |
+| `--skip-deploys` ne déclenche pas de déploiement | mesuré sur le service `api` de staging : déploiement en tête `bbe5e37a` **identique avant et après** la pose d'une variable. C'était le vrai danger — un déploiement surnuméraire serait reparti de l'ancien code, et l'attente de `deploy.yml` l'aurait pris pour le sien |
+| `GET /health` sans aucune variable | 200, `revision: null` — vérifié sur la route réelle, pas seulement en test unitaire |
+| `GET /health` avec `SM_REVISION` | 200, `revision` et `revisionCourte` renseignées |
+| Variable présente mais VIDE (le cas Railway) | 200, `revision: null` — pas de chaîne vide qui se comparerait avec succès |
+| `smoke.mjs` affirme la bonne révision | contrôle vert quand le SHA correspond |
+| `smoke.mjs` refuse la mauvaise | `✗ révision servie … ≠ attendue …`, **code de sortie 1** |
+| `smoke.mjs` sans expectation | contrôle `IGNORÉ`, révision servie tout de même affichée ; les cinq autres contrôles restent verts sur staging |
+
+**Ce qui n'a pas pu être vérifié en pull request :** `deploy.yml` lui-même, qui
+ne se déclenche que sur un push vers `develop` ou `main` — donc la pose réelle
+de `SM_REVISION` par le job de mise en ligne, avec le jeton de projet Railway
+(et non la session utilisateur). La première poussée sur `develop` est le
+premier essai réel ; c'est aussi elle qui rendra `GET /health` bavard sur
+staging. Regardez le job `Santé après déploiement` jusqu'au bout : c'est là que
+la révision est affirmée pour la première fois.
+
 **Le déploiement vers `main` n'a volontairement pas été déclenché.** Le chemin
 est le même à deux valeurs près (le jeton et le nom d'environnement), tous deux
 choisis par la garde plus haut.
@@ -638,12 +717,98 @@ depuis un poste que dans la CI.
 | Contrôle | Ce qu'il prouve |
 |---|---|
 | `GET /health` | l'API répond, et c'est bien **notre** API (`service: snack-manager-api`) |
+| `GET /health` → **révision** | c'est bien **la révision qu'on vient de pousser** qui sert, pas celle d'avant |
 | `GET /public/tenants/<slug>/menu` | la lecture traverse Mongo de bout en bout et le multi-établissement résout |
 | `GET /` sur `web`, `pos`, `kds` | chaque interface sert **sa** page — le titre attendu est vérifié |
 
 **Un 200 ne suffit pas.** Une page d'erreur d'infrastructure en renvoie un
 aussi. C'est pourquoi chaque interface est reconnue à son titre : si `kds`
 servait la page de `web`, le contrôle serait rouge.
+
+### La révision servie — le seul contrôle qui parle du DÉPLOIEMENT
+
+Tous les autres contrôles décrivent l'**environnement** : ils seraient verts
+avec la version d'avant en ligne. C'est précisément le cas le plus fréquent
+chez Railway, et le plus trompeur — une mise en service refusée laisse
+l'ancien conteneur servir, et tout répond.
+
+`GET /health` publie désormais son SHA :
+
+```json
+{
+  "ok": true,
+  "service": "snack-manager-api",
+  "revision": "e4eb6b7b26baebe8ee4066f9ee33d7dd1d533608",
+  "revisionCourte": "e4eb6b7",
+  "environnement": "staging",
+  "deploiement": "bbe5e37a-5dc5-4702-a0d1-71d607a306e3",
+  "demarreLe": "2026-08-20T10:20:35.565Z"
+}
+```
+
+`ok` et `service` n'ont pas bougé : un ancien script qui les lit continue de
+fonctionner. Le reste s'ajoute.
+
+**D'où vient le SHA — la variable a été cherchée, pas devinée.** Le réflexe est
+de lire `RAILWAY_GIT_COMMIT_SHA`. Sur ce projet elle **n'existe pas**. Relevé
+dans le conteneur `api` de staging le 20 août 2026 :
+
+```bash
+$ railway ssh --service api --environment staging "printenv" | grep -E 'RAILWAY_(GIT|DEPLOYMENT)'
+RAILWAY_DEPLOYMENT_ID=bbe5e37a-5dc5-4702-a0d1-71d607a306e3
+RAILWAY_GIT_REPO_OWNER=            # ← présente, et VIDE. Aucune RAILWAY_GIT_COMMIT_SHA.
+```
+
+La famille `RAILWAY_GIT_*` n'est renseignée que pour un service **branché sur un
+dépôt GitHub**. Ici les mises en ligne partent de `railway up` : Railway ne
+connaît aucun commit. Une route qui aurait lu cette variable seule aurait
+répondu « inconnue » pour toujours, sans que rien ne le signale.
+
+C'est donc `deploy.yml` qui pose la valeur, juste **avant** le téléversement :
+
+```yaml
+railway variables --service api --skip-deploys --set "SM_REVISION=$SHA"
+```
+
+`--skip-deploys` est indispensable : sans lui, poser la variable déclenche un
+déploiement supplémentaire — qui repartirait de l'**ancien** code, et que
+l'attente de `deploy.yml` prendrait pour le nôtre. La sortie de la commande est
+**intégralement écartée**, y compris en cas d'échec : `railway variables`
+réaffiche toutes les variables du service, mots de passe compris.
+
+`apps/api/src/modules/health/revision.ts` lit, dans l'ordre :
+
+1. `SM_REVISION` — celle qu'on pose ;
+2. `RAILWAY_GIT_COMMIT_SHA` — si le service est un jour rebranché sur GitHub,
+   elle prendra le relais toute seule ;
+3. rien — `revision` vaut `null` et **la route répond quand même 200**. Un
+   contrôle de santé qui tombe parce qu'on travaille sur son poste n'est pas un
+   contrôle de santé. Une valeur *vide* compte comme absente : c'est le cas réel
+   de `RAILWAY_GIT_REPO_OWNER=` ci-dessus.
+
+**Côté contrôle**, `SM_REVISION_ATTENDUE` porte le SHA exigé :
+
+```bash
+SM_REVISION_ATTENDUE=$(git rev-parse HEAD) node scripts/smoke.mjs staging
+```
+
+`deploy.yml` la renseigne à `github.sha`, **et seulement si la mise en ligne a
+réussi**. Quand elle a échoué, l'ancienne version sert forcément : rougir
+là-dessus masquerait la seule question qui compte ce soir-là — « le restaurant
+peut-il encaisser ? ». Le contrôle s'annonce alors `IGNORÉ`, et la révision
+réellement servie **reste affichée** par le contrôle précédent. Sans expectation,
+le script observe ; avec, il affirme.
+
+| Ce que le script affiche | Ce que ça veut dire |
+|---|---|
+| `✓ … — e4eb6b7 — c'est bien la révision poussée` | le déploiement a pris |
+| `✗ … — révision servie 3e48d02 ≠ attendue e4eb6b7` | **c'est une autre version qui sert** — § 12 |
+| `✗ … — l'API ne publie aucune révision` | `SM_REVISION` n'est pas posée, ou le conteneur est antérieur à cette route |
+| `◌ … — IGNORÉ : aucune révision attendue` | on observe, on n'affirme rien |
+
+> **Les trois interfaces ne publient pas leur révision**, seule l'API le fait.
+> Pour `web`, `pos` et `kds`, l'empreinte du corps servi (plus bas) reste le
+> seul indice. C'est une lacune connue, notée au § 13.
 
 Le script **ne reçoit aucun secret** — le job qui l'exécute n'en déclare aucun.
 C'est volontaire et c'est structurel : s'il avait besoin d'un jeton, il
@@ -656,6 +821,8 @@ confidentiel :
 - `SM_URL_API`, `SM_URL_WEB`, `SM_URL_POS`, `SM_URL_KDS` — viser d'autres
   adresses, un domaine personnalisé par exemple ;
 - `SM_SLUG_CARTE` — l'établissement dont on vérifie la carte ;
+- `SM_REVISION_ATTENDUE` — le SHA que l'API doit servir ; vide, le contrôle de
+  révision s'annonce `IGNORÉ` ;
 - `SM_TENTATIVES`, `SM_ATTENTE_MS`, `SM_DELAI_REQUETE_MS` — la patience du
   script face à une interface qui vient de redémarrer.
 
@@ -792,15 +959,30 @@ avant vous.
 
 ## 13 · Limites du déploiement automatique
 
-- **La vérification tourne deux fois sur `main`** — une fois dans `ci.yml`
-  (déclenché par le push), une fois dans `deploy.yml`. C'est le coût assumé de
-  ne pas toucher à `ci.yml` et `secrets.yml`. **La sortie propre**, le jour où
-  l'on accepte de les modifier : leur ajouter `on: workflow_call`, puis
-  remplacer dans `deploy.yml` les jobs `verification` et `secrets` par
-  `uses: ./.github/workflows/ci.yml` et `uses: ./.github/workflows/secrets.yml`.
-  Une seule définition, plus de dérive possible. **En attendant : toute
-  modification de `ci.yml` doit être recopiée dans `deploy.yml`.** C'est la
-  dette la plus dangereuse de ce fichier, parce qu'elle est silencieuse.
+- ~~**La vérification tourne deux fois sur `main`**, et `deploy.yml` recopie
+  `ci.yml` et `secrets.yml`.~~ **Réglé le 20 août 2026.** Les deux fichiers
+  déclarent `on: workflow_call` et `deploy.yml` les appelle (§ 2). Une seule
+  définition : la dérive silencieuse n'est plus possible, et la vérification ne
+  tourne plus qu'une fois par commit de `main`.
+
+  **Ce que ça impose désormais.** `ci.yml` et `secrets.yml` ne se déclenchent
+  plus sur un push : sur `main` comme sur `develop`, c'est `deploy.yml` qui les
+  fait tourner. Les trois fichiers forment donc **un tout** —
+
+  > ⚠️ **Ne fusionnez jamais `ci.yml` dans `main` sans `deploy.yml`.** Pour un
+  > événement `push`, GitHub exécute les workflows tels qu'ils sont **sur la
+  > branche poussée** : un `main` qui aurait le nouveau `ci.yml` mais pas
+  > `deploy.yml` ne vérifierait plus rien du tout. Aujourd'hui `deploy.yml`
+  > n'est pas encore sur `main` (§ 10) : la fusion qui l'y emmènera doit
+  > emporter les trois fichiers ensemble. À contrôler avant de fusionner :
+  > ```bash
+  > git diff --name-only origin/main...HEAD -- .github/workflows/
+  > # doit lister ci.yml, secrets.yml ET deploy.yml, ou aucun des trois
+  > ```
+
+  Vérification de non-régression après la bascule : `gh run list --branch main
+  --limit 5` ne doit plus montrer qu'une exécution `Déploiement` par commit, là
+  où l'on voyait `CI` + `Secrets` + `Déploiement`.
 
 - **`main` n'est toujours pas protégée** (§ 3). Un `git push` direct sur `main`
   déclenche maintenant un **déploiement en production**. Le garde-fou local
@@ -827,11 +1009,22 @@ avant vous.
   main, sur staging, avant `main`. Il n'y a toujours pas de test de bout en
   bout (§ 9).
 
-- **Aucune surface ne publie sa révision.** On ne peut pas demander à l'API
-  quel commit elle sert ; on le déduit de l'identifiant de déploiement Railway
-  et de l'empreinte des interfaces (§ 11). Un `GET /health` qui renverrait le
-  SHA déployé rendrait la question triviale — c'est un changement applicatif,
-  pas un changement de pipeline.
+- ~~**Aucune surface ne publie sa révision.**~~ **Réglé pour l'API le 20 août
+  2026** : `GET /health` renvoie le SHA servi, et le contrôle de santé
+  **affirme** que c'est celui qu'on vient de pousser (§ 11).
+
+  **Ce qui reste.** `web`, `pos` et `kds` ne publient toujours rien : pour eux,
+  l'empreinte du corps servi reste le seul indice, et elle ne dit pas *quel*
+  commit, seulement *un autre* commit. Trois façons de solder ça, par ordre de
+  coût : exposer `SM_REVISION` dans une balise `<meta>` du gabarit Next, servir
+  un `/version.json`, ou brancher les services Railway sur le dépôt GitHub —
+  auquel cas `RAILWAY_GIT_COMMIT_SHA` apparaîtrait partout toute seule, et
+  `revision.ts` la lirait sans modification (elle est déjà la seconde source).
+
+  **Angle mort assumé du contrôle actuel :** `SM_REVISION` est posée sur le
+  service `api` seul. Un déploiement où `api` réussit et où `pos` échoue passe
+  donc le contrôle de révision — c'est le job `Mise en ligne` qui échoue alors,
+  et lui seul, ce qui suffit à rendre l'exécution rouge.
 
 - **Le déploiement de `main` n'a jamais été exécuté, et n'est pas encore
   armé** — `deploy.yml` n'est pas sur `main` (§ 10). Le chemin est identique à

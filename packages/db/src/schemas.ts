@@ -1,4 +1,10 @@
 import { Schema, type InferSchemaType } from 'mongoose';
+import {
+  PLATFORM_SETTINGS_ID,
+  SM_INVOICE_VAT,
+  isPlatformLogAction,
+  type SocialNetwork,
+} from '@sm/contracts';
 
 // Conventions : prix en centimes (int), tenantId indexé en tête de chaque
 // collection tenant-scoped, timestamps automatiques partout.
@@ -103,6 +109,53 @@ export const TenantSchema = new Schema(
       ),
       default: () => ({ status: 'trial', since: new Date(), reason: '', suspendedAt: null }),
     },
+    /**
+     * IDENTITÉ DE FACTURATION — celle qui s'imprime sur NOS factures.
+     *
+     * Distincte de `name` et `address`, qui décrivent l'ENSEIGNE et le
+     * COMPTOIR : « CLASS'FOOD » et l'adresse où l'on mange. Une facture, elle,
+     * s'adresse à une personne morale — « CLASS'FOOD SARL », à son siège, avec
+     * son SIRET. Les deux coïncident souvent et diffèrent parfois ; les
+     * confondre revient à envoyer au comptable du restaurant une pièce qu'il ne
+     * peut pas rattacher.
+     *
+     * TOUT EST FACULTATIF, et c'est délibéré : exiger un SIRET à l'inscription
+     * arrêterait net un restaurateur qui veut d'abord essayer. Ce qui manque
+     * s'imprime en emplacement vide et remonte au gérant sur son écran
+     * « Abonnement », où il le saisit lui-même — c'est LUI qui le connaît, et
+     * le chercher à sa place serait se tromper à sa place.
+     *
+     * Sous-schéma explicite (et non objet imbriqué implicite) pour que Mongoose
+     * infère des champs NON nullables côté TypeScript — même raison que pour
+     * `account` et `totals`.
+     */
+    billing: {
+      type: new Schema(
+        {
+          /** Raison sociale, si elle diffère du nom commercial. */
+          legalName: { type: String, default: '' },
+          /** Forme juridique et capital — « SARL au capital de 10 000 € ». */
+          legalForm: { type: String, default: '' },
+          /** 14 chiffres, sans espaces. Vide = pas encore renseigné. */
+          siret: { type: String, default: '' },
+          /** TVA intracommunautaire — `FR…`. */
+          vatNumber: { type: String, default: '' },
+          /** Adresse de FACTURATION — le siège, s'il diffère de l'établissement. */
+          address: { type: String, default: '' },
+          /** Où envoyer les factures, si ce n'est pas l'adresse du compte. */
+          email: { type: String, default: '' },
+        },
+        { _id: false },
+      ),
+      default: () => ({
+        legalName: '',
+        legalForm: '',
+        siret: '',
+        vatNumber: '',
+        address: '',
+        email: '',
+      }),
+    },
     settings: {
       slotIntervalMin: { type: Number, default: 10 },
       slotCapacity: { type: Number, default: 4 },
@@ -147,6 +200,21 @@ export const StaffSchema = new Schema(
     role: { type: String, enum: ['gerant', 'caisse', 'cuisine'], required: true },
     pinHash: { type: String, required: true },
     active: { type: Boolean, default: true },
+    /**
+     * Coût horaire employeur, en CENTIMES — sans lui aucune projection de masse
+     * salariale n'est possible.
+     *
+     * DONNÉE PERSONNELLE. Une rémunération ne doit jamais transiter vers une
+     * session ouverte au PIN sur la tablette du comptoir : un équipier lirait
+     * le salaire de son collègue en tapotant l'écran. La lecture est réservée
+     * au compte propriétaire (cf. `canReadPayroll`, module planning) — au même
+     * titre que `pinHash`, ce champ ne part JAMAIS dans une réponse par défaut.
+     *
+     * `null` = non renseigné, à distinguer de `0` : une projection qui compte
+     * un salarié non tarifé comme gratuit est un chiffre faux, pas un chiffre
+     * prudent. Le module planning remonte explicitement les manquants.
+     */
+    hourlyCostCents: { type: Number, default: null, min: 0 },
   },
   { timestamps: true },
 );
@@ -168,6 +236,59 @@ export const ShiftSchema = new Schema(
 );
 ShiftSchema.index({ tenantId: 1, staffId: 1, clockIn: -1 });
 export type Shift = InferSchemaType<typeof ShiftSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// plannedshifts — services PRÉVUS (planning du gérant)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Un service prévu, à ne pas confondre avec le pointage (`Shift`) : celui-ci
+ * dit ce que le gérant a DÉCIDÉ, celui-là ce qui s'est RÉELLEMENT passé. Les
+ * confronter est tout l'intérêt du module.
+ *
+ * POURQUOI DES CHAÎNES ET NON DES `Date`. « Samedi, 18:00 → 23:30 » est une
+ * heure MURALE : c'est l'heure de la pendule du snack, pas un instant. Stocké
+ * en `Date`, un planning posé en août se décalerait d'une heure au passage à
+ * l'heure d'hiver — l'équipe recevrait un planning faux deux fois par an. Le
+ * jour reste donc `AAAA-MM-JJ` et les heures `HH:MM` ; la conversion en
+ * instants n'a lieu qu'au moment de croiser avec les pointages.
+ *
+ * `end` peut être INFÉRIEUR à `start` : un snack qui ferme à 00:30 saisit
+ * « 18:00 → 00:30 ». La durée se calcule en ajoutant 24 h dans ce cas.
+ */
+export const PlannedShiftSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    staffId: { type: Schema.Types.ObjectId, ref: 'Staff', required: true },
+    /** Jour calendaire parisien, `AAAA-MM-JJ`. */
+    date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    /** Heure murale de début, `HH:MM`. */
+    start: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    /** Heure murale de fin, `HH:MM` — peut précéder `start` (service de nuit). */
+    end: { type: String, required: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    position: {
+      type: String,
+      enum: ['caisse', 'cuisine', 'polyvalent'],
+      default: 'polyvalent',
+      required: true,
+    },
+    note: { type: String, default: '' },
+    /**
+     * Un gérant construit son planning en plusieurs fois, entre deux services.
+     * Le BROUILLON est ce qui rend l'outil utilisable : tant qu'il n'a pas
+     * publié, son équipe ne doit voir aucun jet intermédiaire.
+     */
+    status: { type: String, enum: ['brouillon', 'publie'], default: 'brouillon', required: true },
+    /** Horodatage de la publication — `null` tant que le service est brouillon. */
+    publishedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+/** Lecture d'une semaine : le tri chronologique sort directement de l'index. */
+PlannedShiftSchema.index({ tenantId: 1, date: 1, start: 1 });
+/** Totaux par personne sur une période (projection de coût, confrontation). */
+PlannedShiftSchema.index({ tenantId: 1, staffId: 1, date: 1 });
+export type PlannedShift = InferSchemaType<typeof PlannedShiftSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // categories
@@ -439,6 +560,84 @@ export const LeadSchema = new Schema(
 export type Lead = InferSchemaType<typeof LeadSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// platformSettings — les réglages de NOTRE plateforme (document unique)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Les quatre liens, un par réseau.
+ *
+ * `satisfies Record<SocialNetwork, …>` n'est pas décoratif : c'est ce qui fait
+ * échouer la compilation le jour où un cinquième réseau entre dans
+ * `SOCIAL_NETWORKS` sans que le modèle le suive. Sans lui, le contrat
+ * accepterait le nouveau lien et la base le jetterait en silence (`strict`
+ * mode de Mongoose supprime les clés inconnues) — un lien saisi, enregistré
+ * « avec succès », et introuvable au rechargement.
+ *
+ * `default: null` et non `''` : `null` est la valeur qui signifie « pas de
+ * compte », et c'est elle seule que la vitrine sait ne pas afficher.
+ */
+const socialLinkFields = {
+  instagram: { type: String, default: null },
+  tiktok: { type: String, default: null },
+  facebook: { type: String, default: null },
+  linkedin: { type: String, default: null },
+} satisfies Record<SocialNetwork, { type: StringConstructor; default: null }>;
+
+/**
+ * ═══ UN RÉGLAGE DE PLATEFORME EST UN DOCUMENT, PAS UNE COLLECTION DE LIGNES ═══
+ *
+ * Il n'existe qu'une seule Snack Manager : ces réglages n'ont ni `tenantId`,
+ * ni raison d'exister en plusieurs exemplaires. Encore faut-il que le
+ * deuxième exemplaire soit IMPOSSIBLE et non simplement improbable — sinon un
+ * `create()` écrit à la place d'un `updateOne(…, { upsert: true })`, un jour
+ * de correction rapide, laisse deux documents en base. À partir de là tout
+ * dépend de celui que la lecture ramène en premier : la vitrine affiche les
+ * anciens liens, l'écran du CRM montre les nouveaux, et personne ne comprend
+ * pourquoi la modification « n'a pas pris ».
+ *
+ * D'où la forme retenue : LA CLÉ PRIMAIRE EST UNE CONSTANTE. `_id` vaut
+ * `PLATFORM_SETTINGS_ID` (`'platform'`), imposé par `default` et verrouillé
+ * par `enum`. MongoDB garantit l'unicité de `_id` par construction — sans
+ * index supplémentaire à créer, sans `partialFilterExpression` à régler, et
+ * sans qu'aucun chemin d'écriture puisse y échapper : une seconde insertion
+ * lève une erreur de clé dupliquée, et un `_id` inventé est refusé par la
+ * validation Mongoose avant même de partir.
+ *
+ * Les alternatives, et pourquoi elles perdent :
+ *   · un champ `key` avec index unique → un index de plus, et un document
+ *     sans `key` passe quand même (`sparse` n'exclut que les champs absents) ;
+ *   · un singleton porté par le tenant → faux : ces réglages n'appartiennent
+ *     à aucun restaurant, les rattacher à l'un d'eux serait un contresens que
+ *     la première migration multi-tenant paierait ;
+ *   · une collection libre avec « on lit le plus récent » → c'est la version
+ *     déguisée du bug ci-dessus.
+ *
+ * ═══ ET POURQUOI DES RUBRIQUES ═══
+ *
+ * `social` est un sous-objet nommé, pas quatre champs à la racine. D'autres
+ * réglages de plateforme viendront (nom affiché, adresse de contact) : ils
+ * arriveront comme `brand`, `contact`… chacun dans sa rubrique. Le document
+ * reste lisible, et le PATCH d'une rubrique ne peut pas toucher aux autres.
+ * Ce qui n'en fait pas un fourre-tout : n'entre ici que ce qui concerne la
+ * PLATEFORME elle-même. Tout ce qui appartient à un restaurant reste dans
+ * `TenantSchema`, tout ce qui relève de l'environnement (clés d'API, URL de
+ * service) reste dans les variables d'environnement — ce sont des secrets de
+ * déploiement, pas des réglages qu'on édite depuis un écran.
+ */
+export const PlatformSettingsSchema = new Schema(
+  {
+    _id: {
+      type: String,
+      default: PLATFORM_SETTINGS_ID,
+      enum: [PLATFORM_SETTINGS_ID],
+    },
+    social: { type: new Schema(socialLinkFields, { _id: false }), default: () => ({}) },
+  },
+  { timestamps: true, versionKey: false },
+);
+export type PlatformSettingsDoc = InferSchemaType<typeof PlatformSettingsSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // reviews — avis clients
 // ─────────────────────────────────────────────────────────────
 
@@ -651,10 +850,33 @@ export const AdminLogSchema = new Schema(
         'invoice.issue',
         'invoice.pay',
         'invoice.cancel',
+        'platform.social_change',
       ],
       required: true,
     },
-    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /**
+     * L'ÉTABLISSEMENT VISÉ — exigé, SAUF pour une action de plateforme.
+     *
+     * Les actions `platform.*` portent sur Snack Manager elle-même (les liens
+     * de réseaux sociaux affichés sur notre vitrine) : elles ne visent aucun
+     * restaurant, et leur en inventer un serait un mensonge dans le seul
+     * registre qu'on ouvre en cas de litige.
+     *
+     * `required` est donc une FONCTION plutôt qu'un `false` généreux. La
+     * différence est tout l'intérêt du champ : une suspension écrite sans
+     * `tenantId` — un identifiant perdu en chemin, un appel mal câblé — reste
+     * refusée à l'écriture, comme avant. Passer le champ à `required: false`
+     * pour faire de la place à la plateforme aurait ouvert la porte à des
+     * lignes « compte suspendu » qui ne disent pas de quel compte il s'agit.
+     */
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
+      required: function (this: { action?: unknown }): boolean {
+        return !isPlatformLogAction(this.action);
+      },
+    },
     /** Cible secondaire : identifiant d'appareil ou d'écran. */
     targetId: { type: String, default: null },
     reason: { type: String, default: '' },
@@ -757,8 +979,51 @@ export const InvoiceSchema = new Schema(
       ),
       required: true,
     },
-    /** Montant en CENTIMES, comme partout ailleurs. */
+    /**
+     * Montant en CENTIMES, comme partout ailleurs.
+     *
+     * NE SE LIT JAMAIS SEUL : c'est `vat.amountsAre` qui dit s'il est hors
+     * taxes ou toutes taxes comprises. Un montant nu dans une collection de
+     * factures est exactement l'ambiguïté qui produit une erreur de
+     * déclaration — celle qu'on ne découvre qu'au contrôle.
+     */
     amountCents: { type: Number, required: true, min: 0 },
+    /**
+     * LE RÉGIME DE TVA DE LA PIÈCE, FIGÉ À SON ÉMISSION.
+     *
+     * Il est stocké SUR LA FACTURE, et non lu dans la configuration au moment
+     * de l'impression, pour une raison qui tient en une phrase : une facture de
+     * l'an dernier ne se recalcule pas au taux de cette année. Le jour où le
+     * taux change — ou celui où l'éditeur bascule en franchise en base —, les
+     * pièces déjà émises continuent de dire ce qu'elles ont dit au client, et
+     * seules les suivantes portent le nouveau régime.
+     *
+     * ─── LES PIÈCES ÉMISES AVANT CE CHAMP ───
+     *
+     * Elles ne portent RIEN : la collection ne stockait qu'un montant. Elles
+     * sont lues au défaut documenté `LEGACY_INVOICE_VAT` (@sm/contracts), qui
+     * décrit le régime sous lequel elles ont réellement été facturées, et la
+     * lecture le signale (`InvoiceTotals.stamped` vaut alors `false`). Aucune
+     * migration n'écrit à leur place : réécrire une pièce comptable pour lui
+     * faire dire ce qu'un défaut sait déjà déduire n'ajouterait pas une
+     * information, seulement une écriture qu'on ne pourrait plus distinguer
+     * d'une émission d'époque.
+     */
+    vat: {
+      type: new Schema(
+        {
+          /** Taux en POURCENT — `20`, `10`, `5.5`, `0` (franchise en base). */
+          ratePercent: { type: Number, required: true, min: 0 },
+          /** Ce que vaut `amountCents` : hors taxes chez nous. */
+          amountsAre: { type: String, enum: ['ht', 'ttc'], required: true },
+        },
+        { _id: false },
+      ),
+      // Le défaut vient de @sm/contracts, jamais recopié ici : deux endroits
+      // qui décident du taux, c'est un jour où ils diffèrent.
+      default: () => ({ ...SM_INVOICE_VAT }),
+      required: true,
+    },
     status: {
       type: String,
       enum: ['brouillon', 'envoyee', 'en_retard', 'payee', 'annulee'],
@@ -799,6 +1064,11 @@ export const MODELS = {
   User: { name: 'User', schema: UserSchema, collection: 'users' },
   Staff: { name: 'Staff', schema: StaffSchema, collection: 'staff' },
   Shift: { name: 'Shift', schema: ShiftSchema, collection: 'shifts' },
+  PlannedShift: {
+    name: 'PlannedShift',
+    schema: PlannedShiftSchema,
+    collection: 'plannedshifts',
+  },
   Category: { name: 'Category', schema: CategorySchema, collection: 'categories' },
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
@@ -811,4 +1081,12 @@ export const MODELS = {
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },
   Device: { name: 'Device', schema: DeviceSchema, collection: 'devices' },
+  // Document unique, hors tenant : l'enregistrer ici suffit à le rendre
+  // injectable partout (`DatabaseModule` déclare tout `MODELS`), il n'y a donc
+  // aucun `MongooseModule.forFeature` à ajouter dans le module qui l'utilisera.
+  PlatformSettings: {
+    name: 'PlatformSettings',
+    schema: PlatformSettingsSchema,
+    collection: 'platformsettings',
+  },
 } as const;

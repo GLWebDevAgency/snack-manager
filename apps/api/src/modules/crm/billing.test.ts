@@ -181,6 +181,16 @@ const SM: JwtPayload = {
 };
 
 const TOUT = { limit: 200 } satisfies BillingHistoryQuery;
+/**
+ * Le tarif de Class'Food, LU DANS LA GRILLE et jamais recopié.
+ *
+ * Les phrases attendues plus bas s'écrivent donc `formatEuros(MRR)` et non
+ * « 159,00 € » : la révision du 21/08/2026 (89/139/189 → 99/159/199) a fait
+ * tomber une douzaine de cas qui ne disaient pourtant rien de faux, et un test
+ * qui casse à chaque revision de prix est un test qu'on désactive un jour de
+ * rush. Que `formatEuros` écrive bien « 159,00 € » se vérifie une fois pour
+ * toutes dans « Rédaction », sur un montant arbitraire.
+ */
 const MRR = PLAN_MRR_CENTS.complet;
 
 /** Corps d'émission par défaut — ce que la validation zod produit d'un `{}`. */
@@ -342,7 +352,7 @@ describe('Facturation', () => {
       const invoice = await billing.issue(SM, CLASSFOOD, emission(), LE_19_AOUT);
 
       expect(invoice.amountCents).toBe(MRR);
-      expect(invoice.amountLabel).toBe('139,00 €');
+      expect(invoice.amountLabel).toBe(formatEuros(MRR));
       expect(invoice.period.key).toBe('2026-08');
       expect(invoice.period.label).toBe('août 2026');
       expect(invoice.label).toBe('Abonnement Complet — août 2026');
@@ -407,7 +417,7 @@ describe('Facturation', () => {
         LE_19_AOUT,
       );
       expect(billingLines()).toEqual([
-        `Facture ${invoice.number} émise — 139,00 €, Abonnement Complet — septembre 2026, échéance le 01/09/2026.`,
+        `Facture ${invoice.number} émise — ${formatEuros(MRR)}, Abonnement Complet — septembre 2026, échéance le 01/09/2026.`,
       ]);
       // Le geste tombe dans le MÊME journal que les suspensions.
       expect(logs.rows.every((r) => String(r.tenantId) === CLASSFOOD)).toBe(true);
@@ -508,7 +518,7 @@ describe('Facturation', () => {
         LE_19_AOUT,
       );
       expect(billingLines()).toEqual([
-        `Facture ${invoice.number} encaissée — 139,00 € par chèque le 14/08/2026. Chèque n° 004512.`,
+        `Facture ${invoice.number} encaissée — ${formatEuros(MRR)} par chèque le 14/08/2026. Chèque n° 004512.`,
       ]);
 
       const entry = logs.rows[0]!;
@@ -520,7 +530,7 @@ describe('Facturation', () => {
         method: 'cheque',
         paidAt: '2026-08-14T00:00:00.000Z',
       });
-      // 139 € encaissés ne doivent PLUS pouvoir se lire « Note interne ».
+      // Un encaissement ne doit PLUS pouvoir se lire « Note interne ».
       expect(notes()).toEqual([]);
     });
   });
@@ -550,7 +560,7 @@ describe('Facturation', () => {
       expect(cancelled.dueCents).toBe(0);
       expect(invoices.rows).toHaveLength(1);
       expect(billingLines()).toContain(
-        `Facture ${invoice.number} annulée — 139,00 €. Motif : Période facturée en double`,
+        `Facture ${invoice.number} annulée — ${formatEuros(MRR)}. Motif : Période facturée en double`,
       );
 
       const entry = logs.rows.find((r) => r.action === 'invoice.cancel')!;
@@ -656,7 +666,7 @@ describe('Facturation', () => {
       const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
 
       expect(fiche.outstanding.totalDueCents).toBe(MRR * 2);
-      expect(fiche.outstanding.totalDueLabel).toBe('278,00 €');
+      expect(fiche.outstanding.totalDueLabel).toBe(formatEuros(MRR * 2));
       expect(fiche.outstanding.overdueInvoices).toBe(2);
       expect(fiche.outstanding.oldestOverdueAt).toBe('2026-06-01T00:00:00.000Z');
       // 1er juin → 19 août : 79 jours pleins. C'est CE chiffre qui déclenche l'appel.
@@ -846,7 +856,7 @@ describe('Facturation', () => {
       expect(axe.measured).toBe(true);
       expect(axe.score).toBe(0); // 79 jours de retard
       expect(axe.detail).toBe(
-        '1 facture en retard, 139,00 € — la plus ancienne depuis 79 jour(s).',
+        `1 facture en retard, ${formatEuros(MRR)} — la plus ancienne depuis 79 jour(s).`,
       );
     });
   });

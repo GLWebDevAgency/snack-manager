@@ -17,6 +17,7 @@ import {
   type AdminTenantAccount,
   type DeviceRevoke,
   type JwtPayload,
+  type PlatformLogAction,
   type RevocableDeviceKind,
   type TenantAccount,
   type TenantAccountStatus,
@@ -333,6 +334,36 @@ export class AdminService {
 
   // ─── Journal ───
 
+  /**
+   * Trace une action de PLATEFORME — un réglage de Snack Manager elle-même.
+   *
+   * Point d'entrée réservé aux surfaces qui n'agissent sur AUCUN client :
+   * aujourd'hui les liens de réseaux sociaux affichés sur notre vitrine
+   * (`PlatformService`), demain le nom affiché ou l'adresse de contact. La
+   * séparation est la même qu'avec `recordInvoiceGesture` : l'appelant rédige
+   * la phrase et connaît la rubrique, ce service tient le registre.
+   *
+   * POURQUOI CETTE LIGNE EXISTE. Ce qui est enregistré depuis cet écran part
+   * sur la page d'accueil de l'entreprise, sans relecture et sans validation
+   * d'un tiers. C'est exactement le geste qu'on veut pouvoir dater et
+   * attribuer six mois plus tard — « depuis quand ce lien LinkedIn pointe-t-il
+   * là, et qui l'a mis ? ». Le journal est append-only, la réponse ne se
+   * réécrit pas.
+   *
+   * Aucun `tenantId` : cette action ne vise pas un restaurant, et lui en
+   * attribuer un au hasard fausserait le journal de ce restaurant.
+   */
+  recordPlatformAction(
+    actor: JwtPayload,
+    entry: {
+      action: PlatformLogAction;
+      reason: string;
+      meta?: Record<string, unknown> | null;
+    },
+  ): Promise<AdminLogEntry> {
+    return this.record(actor, { ...entry, tenantId: null });
+  }
+
   /** Journal d'un établissement, du plus récent au plus ancien. */
   async journal(tenantId: string, query: AdminLogQuery): Promise<AdminLogEntry[]> {
     const oid = toObjectId(tenantId, 'Établissement introuvable');
@@ -404,7 +435,8 @@ export class AdminService {
     actor: JwtPayload,
     entry: {
       action: AdminLogAction;
-      tenantId: string;
+      /** `null` UNIQUEMENT pour une action de plateforme — voir ci-dessous. */
+      tenantId: string | null;
       targetId?: string | null;
       reason?: string;
       meta?: Record<string, unknown> | null;
@@ -418,7 +450,13 @@ export class AdminService {
       // compte d'équipe est renommé ou supprimé.
       actorEmail: await this.actorEmail(actor.sub),
       action: entry.action,
-      tenantId: toObjectId(entry.tenantId, 'Établissement introuvable'),
+      // `null` traverse tel quel : le modèle n'exige un établissement que pour
+      // les actions qui en visent un (`required` conditionnel, @sm/db). Une
+      // suspension sans tenant reste donc refusée à l'écriture.
+      tenantId:
+        entry.tenantId === null
+          ? null
+          : toObjectId(entry.tenantId, 'Établissement introuvable'),
       targetId: entry.targetId ?? null,
       reason: entry.reason ?? '',
       meta: entry.meta ?? null,
@@ -513,7 +551,9 @@ function toLogEntry(raw: RawLog): AdminLogEntry {
     actor: { id: String(raw.actorId ?? ''), email: raw.actorEmail ?? '' },
     action,
     actionLabel: ADMIN_LOG_ACTION_LABELS[action] ?? action,
-    tenantId: String(raw.tenantId ?? ''),
+    // `null` et non `''` : une action de plateforme ne vise aucun
+    // établissement, ce qui n'est pas la même chose qu'un identifiant perdu.
+    tenantId: raw.tenantId ? String(raw.tenantId) : null,
     targetId: raw.targetId ?? null,
     reason: raw.reason ?? '',
     meta: (raw.meta as Record<string, unknown> | null) ?? null,

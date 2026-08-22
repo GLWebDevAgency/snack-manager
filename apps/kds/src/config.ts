@@ -85,8 +85,15 @@ export const TABS_MAX_WIDTH = 900;
  */
 export const ALLDAY_MIN_SCREEN = 1240;
 
-/** Largeur du panneau « À lancer » : proportion de la fenêtre, entre bornes. */
-export const ALLDAY_PANEL = { ratio: 0.175, min: 216, max: 340 } as const;
+/**
+ * Largeur du panneau « À lancer » : proportion de la fenêtre, entre bornes.
+ *
+ * `pinnedMin` sert quand le cuisinier l'ÉPINGLE sur un écran trop étroit pour
+ * l'affichage confortable : le panneau se contente alors du strict nécessaire
+ * — un nombre et un nom de produit — plutôt que de disparaître. C'est un
+ * arbitrage assumé contre la largeur des colonnes, et c'est LUI qui le fait.
+ */
+export const ALLDAY_PANEL = { ratio: 0.175, min: 216, max: 340, pinnedMin: 168 } as const;
 
 /**
  * En dessous : barre haute allégée. Les trois compteurs colorés cèdent la place

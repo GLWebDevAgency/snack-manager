@@ -1,21 +1,52 @@
 name: CI
 
+# ─────────────────────────────────────────────────────────────────────────────
+# CE FICHIER EST LA DÉFINITION UNIQUE DE LA VÉRIFICATION.
+#
+# Il ne l'a pas toujours été : `deploy.yml` en RECOPIAIT les étapes, faute de
+# pouvoir conditionner un déploiement sans y toucher. Toute modification faite
+# ici devait donc être reportée à la main là-bas, et les deux définitions
+# pouvaient diverger SANS QUE RIEN NE LE SIGNALE — on croyait déployer du code
+# vérifié par ce fichier alors qu'on le vérifiait avec une copie périmée.
+#
+# `workflow_call` supprime la copie : `deploy.yml` APPELLE ce fichier
+# (`uses: ./.github/workflows/ci.yml`). Une seule définition, une seule chose à
+# modifier, plus de dérive possible. Voir docs/CI-CD.md § 13.
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Deux déclencheurs, deux rôles :
 #   · pull_request → vérifier AVANT de fusionner (c'est ce contrôle que la
-#     protection de « main » exige) ;
-#   · push sur main → vérifier ce qui est réellement en ligne, et alimenter le
-#     cache Turborepo dont profiteront les pull requests suivantes.
+#     protection de « main » exige, sous le nom « Vérification du monorepo ») ;
+#   · workflow_call → être appelé par `deploy.yml`, sur `develop` comme sur
+#     `main`, pour vérifier LE COMMIT QU'ON S'APPRÊTE À METTRE EN LIGNE.
+#
+# ⚠️ `push: branches: [main]` a été RETIRÉ, et ce n'est pas un oubli.
+# `deploy.yml` se déclenche déjà sur ce même push et appelle ce fichier : le
+# garder aurait fait tourner la vérification DEUX FOIS sur chaque commit de
+# main — deux exécutions du même travail, deux fois le temps, deux fois la
+# facture, pour un seul verdict utile. Ce qu'on perdait à le retirer — le
+# réchauffage du cache Turborepo de `main`, dont vivent les pull requests — est
+# conservé : l'appel depuis `deploy.yml` tourne sur la référence `main`, donc
+# `actions/cache` y écrit dans la même portée qu'avant.
+#
+# ⚠️ Contrepartie à connaître : sur un push vers `main`, la vérification ne
+# tourne plus que si `deploy.yml` est présent sur `main`. Les deux fichiers
+# voyagent ensemble dans la même fusion — ne les séparez pas. Voir § 13.
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_call:
 
 # Une PR qu'on repousse trois fois de suite n'a pas besoin de trois CI : on
-# annule la précédente. Sur main on ne cancel pas — chaque commit livré mérite
-# son verdict.
+# annule la précédente.
+#
+# Appelé par `deploy.yml`, en revanche, on n'annule JAMAIS : `github.event_name`
+# vaut alors `push`, et une vérification coupée en cours de route déclarerait en
+# échec un déploiement qui n'a rien fait de mal. Le groupe reste distinct de
+# celui de `deploy.yml` (`deploiement-…`) : deux groupes identiques entre
+# appelant et appelé se bloqueraient mutuellement, pour toujours.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HERO_SHOTS } from "./content";
+import { CTA_CALLBACK, CTA_DEMO, HERO_SHOTS, ancre, type ReseauPublié } from "./content";
 import { Photo } from "./Photo";
+import { Reseaux } from "./Reseaux";
 
 /** Position d'une carte dans le deck : centre, gauche, droite, ou hors-champ. */
 function slot(index: number, current: number, total: number) {
@@ -22,8 +23,26 @@ function slot(index: number, current: number, total: number) {
  *
  * La maquette y plaçait des iframes de démonstration ; on affiche les VRAIES
  * captures de nos applications (`public/shots/`).
+ *
+ * LE HERO N'OUVRE QU'UNE PORTE, ET CE N'EST PAS LE FORMULAIRE. Son appel
+ * principal mène à la démonstration manipulable, un écran plus bas : c'est la
+ * seule inversion de hiérarchie de la page, et elle est le corollaire de la
+ * thèse — le seul actif que personne d'autre n'a, c'est que nos applications
+ * se touchent. « Être rappelé » reste offert juste à côté, en second.
+ *
+ * LA RANGÉE DE GAGES EST PARTIE (« Sans engagement », « Installé en quelques
+ * jours », « Testé en service réel »). Elle répondait ici à trois questions
+ * que le visiteur ne se pose pas encore, et les usait avant qu'elles ne
+ * comptent : l'engagement se dit une fois, dans les termes exacts du socle,
+ * sous la grille tarifaire et dans la FAQ ; le délai d'installation est la
+ * frise du lancement ; le service réel est la section du pilote.
  */
-export function Hero() {
+/**
+ * `reseaux` traverse ce composant sans qu'il s'en serve : il est un îlot
+ * CLIENT et ne peut donc pas lire l'API lui-même. C'est la page serveur qui
+ * lit (`lib/reseaux.ts`) et qui fait descendre la liste jusqu'ici.
+ */
+export function Hero({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
   const total = HERO_SHOTS.length;
   const [current, setCurrent] = useState(0);
 
@@ -34,12 +53,15 @@ export function Hero() {
   }, [total]);
 
   return (
-    <section className="hero">
+    <section className="hero" id="hero">
       <div className="hero-frame">
         <div className="hero-demo" aria-hidden="true">
           <div className="hero-demotrack">
             {HERO_SHOTS.map((shot, i) => (
-              <div className={`hero-democard ${slot(i, current, total)}`} key={shot.src}>
+              <div
+                className={`hero-democard ${slot(i, current, total)}${shot.portrait ? " hd-portrait" : ""}`}
+                key={shot.src}
+              >
                 <Photo shot={shot} eager={i === 0} sizes="(max-width: 810px) 130vw, min(900px, 74vw)" />
               </div>
             ))}
@@ -63,21 +85,44 @@ export function Hero() {
             — <span className="kw">à vos couleurs</span>, pensée par des gens qui ont{" "}
             <span className="kw-w">tenu le comptoir</span>.
           </p>
+          {/*
+           * LES DEUX APPELS PASSENT PAR `ancre()`, COMME TOUT LE RESTE DU SITE.
+           *
+           * Ils étaient écrits `href="#produit"` / `href="#contact"`, au motif
+           * que le hero n'existe que sur `/` — ce qui est vrai aujourd'hui et
+           * ne protège de rien. Une ancre nue ne coûte rien tant que le
+           * composant reste sur sa page ; le jour où il en bouge, elle ne
+           * déclenche ni 404 ni erreur de console, elle NE FAIT RIEN. C'est la
+           * panne la moins visible du site, et elle se répare avant, pas après.
+           *
+           * `ancre()` rend `/#produit` : depuis `/`, le navigateur y reconnaît
+           * une navigation de même document et se contente de faire défiler —
+           * comportement identique au fragment nu, `scroll-padding-top`
+           * compris. Et elle LÈVE si la section quitte `SECTIONS`, ce qu'un
+           * fragment écrit à la main ne saura jamais faire.
+           */}
           <div className="hero-actions">
-            <a className="btn light" href="#contact">
-              Demander une démo
+            <a className="btn light" href={ancre("produit").href}>
+              {CTA_DEMO}
             </a>
-            <a className="btn dark" href="#demo">
-              Explorer la démo
+            <a className="btn dark" href={ancre("contact").href}>
+              {CTA_CALLBACK}
             </a>
           </div>
-          <div className="hero-trust">
-            <span>Sans engagement</span>
-            <i />
-            <span>Installé en quelques jours</span>
-            <i />
-            <span>Testé en service réel 7 j/7</span>
-          </div>
+          {/*
+           * LES RÉSEAUX PASSENT APRÈS LES BOUTONS, ET C'EST TOUT L'ARBITRAGE.
+           *
+           * Le fondateur les veut dans le hero ; le hero n'a qu'un travail,
+           * ouvrir une porte. Posés à la hauteur des appels, quatre
+           * pictogrammes ronds gagnent contre deux rectangles de texte — c'est
+           * l'œil qui tranche, pas la hiérarchie qu'on avait prévue. Sous eux,
+           * sans libellé, au demi-blanc, ils sont trouvés par qui les cherche
+           * et invisibles pour qui lit le titre.
+           *
+           * Tant qu'aucun compte n'a d'adresse en base, `Reseaux` rend `null`
+           * et le hero sort exactement le balisage d'hier.
+           */}
+          <Reseaux reseaux={reseaux} variant="hero" />
         </div>
 
         <div className="hero-live" aria-hidden="true">

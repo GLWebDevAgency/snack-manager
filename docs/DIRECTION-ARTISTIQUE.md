@@ -4,7 +4,7 @@
 
 ## L'intention
 
-Un **noir premium stratifié**, pas un gris administratif. L'utilisateur doit sentir qu'il tient un outil qui vaut 139 €/mois — dense mais aéré, soigné, jamais tape-à-l'œil. La référence mentale : le matériel professionnel de cuisine (inox, noir mat, gestes francs), pas le tableau de bord SaaS générique.
+Un **noir premium stratifié**, pas un gris administratif. L'utilisateur doit sentir qu'il tient un outil qui vaut 159 €/mois — dense mais aéré, soigné, jamais tape-à-l'œil. La référence mentale : le matériel professionnel de cuisine (inox, noir mat, gestes francs), pas le tableau de bord SaaS générique.
 
 ## Les sept principes
 

@@ -8,7 +8,17 @@ import {
   type DevicePinSession,
   type DeviceTenantBrand,
 } from '@sm/contracts';
-import { SmClient, getStore, setStore, webStore, type KeyValueStore } from '@sm/client-core';
+import {
+  DEMO_TENANT,
+  SmClient,
+  demoStore,
+  demoTransport,
+  getStore,
+  isDemoRequested,
+  setStore,
+  webStore,
+  type KeyValueStore,
+} from '@sm/client-core';
 import { API_URL, KEY_SESSION } from './config';
 
 /**
@@ -24,6 +34,15 @@ import { API_URL, KEY_SESSION } from './config';
  * build. La tablette apprend désormais chez qui elle travaille exactement
  * comme les téléviseurs de salle — un code à six caractères saisi une fois,
  * contre un JETON D'APPAREIL qu'elle conserve et qui porte l'établissement.
+ *
+ * ─── LE MODE DÉMONSTRATION ───
+ *
+ * Avec `?demo=1` — et seulement ainsi — l'écran cuisine tourne entièrement dans
+ * le navigateur du visiteur : transport en mémoire, tickets issus d'une
+ * fixture, aucune base de données touchée. Ce module est le seul endroit qui le
+ * sache ; `App.tsx`, `useSession` et le tableau n'ont pas une ligne de
+ * conditionnel. L'appairage et la session sont pré-remplis, si bien que le
+ * visiteur tombe sur un service en cours et non sur un clavier de code.
  */
 
 /** AsyncStorage enveloppé dans le contrat KeyValueStore du noyau. */
@@ -35,14 +54,66 @@ function nativeStore(): KeyValueStore {
   };
 }
 
-// À faire AVANT toute lecture/écriture : sinon le noyau retombe sur un store
-// mémoire qui ne survit pas au redémarrage de la tablette.
-setStore(Platform.OS === 'web' ? webStore() : nativeStore());
-
-export const client = new SmClient({ baseUrl: API_URL });
-
 /** Appairage de l'appareil — survit à la déconnexion de l'équipe. */
 export const KEY_DEVICE = 'sm.kds.device.v1';
+
+// ─────────────────────────────────────────────────────────────
+// Démonstration
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Cet écran est-il une démonstration ?
+ *
+ * Lu UNE fois, au chargement du module, depuis l'URL et rien d'autre. Ni
+ * variable d'environnement, ni valeur par défaut : une tablette de cuisine ne
+ * peut pas y basculer par accident (cf. `client-core/src/demo/mode.ts`).
+ */
+export const DEMO = isDemoRequested();
+
+const DEMO_PAIRED = {
+  deviceToken: 'demo',
+  tenant: {
+    slug: DEMO_TENANT.slug,
+    name: DEMO_TENANT.name,
+    brandColor: DEMO_TENANT.brandColor,
+    logoUrl: DEMO_TENANT.logoUrl ?? null,
+  },
+  device: { id: 'demo-kds', name: 'Écran cuisine', kind: 'kds', kindLabel: 'Écran cuisine' },
+} satisfies PairedDevice;
+
+/**
+ * L'écran de démonstration s'ouvre DÉJÀ appairé et DÉJÀ en service.
+ *
+ * `useSession` restaure l'appairage puis la session au montage : les deux sont
+ * semées ici, avant qu'aucun écran ne se peigne.
+ */
+function demoSeed(): Record<string, string> {
+  return {
+    [KEY_DEVICE]: JSON.stringify(DEMO_PAIRED),
+    [KEY_SESSION]: JSON.stringify({
+      token: 'demo',
+      staff: { name: 'Équipe', role: 'cuisine' },
+      tenant: {
+        slug: DEMO_TENANT.slug,
+        name: DEMO_TENANT.name,
+        brandColor: DEMO_TENANT.brandColor,
+      },
+    }),
+  };
+}
+
+// À faire AVANT toute lecture/écriture : sinon le noyau retombe sur un store
+// mémoire qui ne survit pas au redémarrage de la tablette. En démonstration le
+// magasin est volatil PAR CONSTRUCTION : rien n'atterrit dans le navigateur du
+// visiteur, et un rechargement lui rend un service neuf.
+setStore(
+  DEMO ? demoStore(demoSeed()) : Platform.OS === 'web' ? webStore() : nativeStore(),
+);
+
+export const client = new SmClient({
+  baseUrl: API_URL,
+  ...(DEMO ? { transport: demoTransport() } : null),
+});
 
 // ─────────────────────────────────────────────────────────────
 // Appareil appairé
@@ -161,6 +232,11 @@ export class DeviceError extends Error {
  * routes `/public/devices/*`, qui sont publiques (aucun Bearer à joindre).
  */
 async function deviceFetch<T>(path: string, body: unknown, deviceToken?: string): Promise<T> {
+  // En démonstration, ces trois routes n'ont pas de correspondant : l'appareil
+  // n'existe pas. Laisser passer l'appel serait pire qu'inutile — le serveur
+  // répondrait 401 sur un jeton « demo », `useSession` en conclurait une
+  // révocation et fermerait la session en pleine démonstration.
+  if (DEMO) throw new DeviceError('Route indisponible en démonstration', 503);
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: {

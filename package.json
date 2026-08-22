@@ -12,7 +12,12 @@
     "typecheck": "turbo typecheck",
     "seed": "pnpm --filter @sm/db seed",
     "test": "turbo test",
-    "verify": "turbo run typecheck lint test build --cache=local:rw,remote:"
+    "verify": "turbo run typecheck lint test build --cache=local:rw,remote:",
+    "e2e": "node e2e/lancer.mjs",
+    "e2e:demo": "node e2e/lancer.mjs --demo",
+    "e2e:reel": "node e2e/lancer.mjs --reel",
+    "e2e:local": "node e2e/lancer.mjs --local",
+    "e2e:navigateur": "node e2e/lancer.mjs --navigateur"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

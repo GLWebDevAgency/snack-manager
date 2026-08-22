@@ -57,6 +57,15 @@ const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
     icon: "euro",
     title: "Facturation et recouvrement",
   },
+  // En DERNIER, et c'est voulu : la vitrine n'est pas un geste de la journée
+  // de travail, c'est un réglage de la maison. Il se visite quand un compte
+  // ouvre ou ferme, pas tous les matins.
+  {
+    href: "/sm/reseaux",
+    label: "Vitrine",
+    icon: "gear",
+    title: "Réseaux sociaux de la vitrine",
+  },
 ];
 
 export default function SmLayout({ children }: Readonly<{ children: ReactNode }>) {

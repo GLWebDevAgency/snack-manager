@@ -210,19 +210,29 @@ export function Toolbar({
 
         <SyncBadge online={online} pending={pending} layout={layout} />
 
-        {/* Sous ALLDAY_MIN_SCREEN, le panneau ne tient plus à côté des colonnes :
-            la bascule disparaît avec lui plutôt que de mentir sur son effet. */}
-        {layout.allDayW > 0 ? (
-          <Chip
-            text="À lancer"
-            active={allDayOn}
-            onPress={onToggleAllDay}
-            accent={accent}
-            reducedMotion={reducedMotion}
-            tone={{ bg: accent, fg: contrastOn(accent) }}
-            layout={layout}
-          />
-        ) : null}
+        {/*
+          LA BASCULE RESTE TOUJOURS LÀ, en régime colonnes.
+
+          Elle disparaissait auparavant sous `ALLDAY_MIN_SCREEN`, « plutôt que
+          de mentir sur son effet ». L'intention était juste, la conclusion
+          inversée : un bouton qui ne peut rien doit être RENDU CAPABLE, pas
+          effacé. Sur une tablette en portrait ou un écran de comptoir un peu
+          étroit, le cuisinier perdait la seule vue qui agrège ce qu'il a à
+          lancer — sans explication et sans recours.
+
+          Épinglé, le panneau prend maintenant sa largeur minimale et les
+          colonnes se resserrent. C'est un arbitrage, et il lui appartient.
+          En régime compact, il reste un onglet : le bouton n'aurait pas de sens.
+        */}
+        <Chip
+          text="À lancer"
+          active={allDayOn}
+          onPress={onToggleAllDay}
+          accent={accent}
+          reducedMotion={reducedMotion}
+          tone={{ bg: accent, fg: contrastOn(accent) }}
+          layout={layout}
+        />
         <Chip
           text={soundOn ? 'Son' : 'Muet'}
           active={soundOn}

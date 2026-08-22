@@ -1,12 +1,38 @@
 import type { Metadata, Viewport } from "next";
 import { ADLaM_Display } from "next/font/google";
+import { PRICE_RANGE } from "@/components/marketing/content";
+import { SITE_URL } from "@/lib/site";
 import "@/components/marketing/marketing.css";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://snackmanager.fr";
-
 const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
-const DESCRIPTION =
-  "Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. À vos couleurs, sans engagement, lancement accompagné — jusqu'à 1 à 2 postes économisés par mois.";
+/**
+ * LA DESCRIPTION EST DU TEXTE AFFICHÉ, ET ELLE OBÉIT AUX MÊMES RÈGLES QUE LA
+ * PAGE — c'est elle que Google met sous le lien et que les messageries collent
+ * dans l'aperçu.
+ *
+ * Elle portait deux énoncés que la refonte a chassés du corps de la page et
+ * qui avaient survécu ici. « Jusqu'à 1 à 2 postes économisés par mois » est un
+ * chiffre de RÉSULTAT alors que nous n'avons qu'un restaurant pilote : c'est
+ * la phrase d'`Intro.tsx` (« parfois deux ») que le plan a fait tomber parce
+ * qu'aucun calcul ne la produit, et le simulateur dit désormais « on vous rend
+ * les heures », jamais « on enlève un poste ». Et « sans engagement » servi
+ * seul est exactement la contradiction que le fondateur a tranchée : la clause
+ * ne s'écrit qu'en entier (`ENGAGEMENT`, content.ts), forfait de mise en route
+ * compris, ou elle ne s'écrit pas — un aperçu de 160 signes ne peut pas la
+ * porter en entier, donc il ne la porte pas du tout.
+ *
+ * Ne restent que des affirmations vérifiables au premier écran : les quatre
+ * applications, le zéro commission de la section 6, la personnalisation
+ * annoncée par le hero, l'accompagnement daté de la section 8 et les trois
+ * tarifs affichés.
+ *
+ * LES TROIS TARIFS NE SONT PLUS RECOPIÉS ICI. Ce fichier vit hors de
+ * `components/marketing/`, donc une révision de grille menée dans `content.ts`
+ * le laissait intact : le résultat Google a annoncé l'ancienne grille pendant
+ * que la page affichait la nouvelle — un prix périmé lisible sans même ouvrir
+ * le site. La fourchette est désormais dérivée (`PRICE_RANGE`, content.ts).
+ */
+const DESCRIPTION = `Caisse, cuisine, commande en ligne et back-office pour snacks indépendants. Zéro commission, à vos couleurs, lancement accompagné. ${PRICE_RANGE}.`;
 
 /**
  * Le logotype « Snack Manager » de la maquette est composé en ADLaM Display.

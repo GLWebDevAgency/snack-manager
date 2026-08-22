@@ -12,7 +12,11 @@ import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
   LeadUpdateSchema,
+  MODULE_ORDERING_CENTS,
+  MODULE_ORDERING_SETUP_CENTS,
   PLAN_MRR_CENTS,
+  YEARLY_MONTHS_BILLED,
+  yearlyCents,
 } from '@sm/contracts';
 import { buildSeedLeads, SEED_LEADS } from './crm.seed';
 
@@ -103,16 +107,59 @@ describe('MRR estimé', () => {
       expect(Number.isInteger(cents)).toBe(true);
       expect(cents).toBeGreaterThan(0);
     }
-    // « MRR de référence » du tableau d'impact (contraintes-business §6.2).
-    expect(PLAN_MRR_CENTS.complet).toBe(13_900);
+    // LE SEUL LITTÉRAL LÉGITIME DE TOUTE LA FACTURATION : la formule pivot,
+    // recopiée ici exprès pour qu'une révision de grille passe par une
+    // relecture humaine. Partout ailleurs, l'attente se DÉRIVE de la table.
+    // Grille arrêtée par le fondateur le 21/08/2026.
+    expect(PLAN_MRR_CENTS.complet).toBe(15_900);
   });
 
-  it('reste dans la fourchette officielle 89–189 €/mois', () => {
+  it('reste dans la fourchette officielle 99–199 €/mois', () => {
     // Un plan chiffré hors fourchette fausserait tout le MRR affiché en HQ
     // sans qu'aucun écran ne le signale.
     for (const cents of Object.values(PLAN_MRR_CENTS)) {
-      expect(cents).toBeGreaterThanOrEqual(8_900);
-      expect(cents).toBeLessThanOrEqual(18_900);
+      expect(cents).toBeGreaterThanOrEqual(9_900);
+      expect(cents).toBeLessThanOrEqual(19_900);
+    }
+  });
+
+  /**
+   * L'ÉCART QUI FAIT CHOISIR BOOST — vérifié, pas espéré.
+   *
+   * La carte tarifaire raconte une soustraction : Complet plus le module de
+   * commande en ligne coûtent plus cher que Boost, qui les comprend. Ces
+   * chiffres-là sont annoncés au prospect ; si quelqu'un remonte Complet ou
+   * baisse Boost sans y penser, l'argument s'inverse en silence et la page
+   * continue de promettre une économie qui n'existe plus.
+   */
+  it('garde Boost moins cher que Complet plus le module', () => {
+    const attele = PLAN_MRR_CENTS.complet + MODULE_ORDERING_CENTS;
+    expect(attele).toBeGreaterThan(PLAN_MRR_CENTS.boost);
+
+    // Le premier mois porte en plus la mise en service, comprise dans Boost.
+    const premierMois = attele + MODULE_ORDERING_SETUP_CENTS - PLAN_MRR_CENTS.boost;
+    const moisSuivants = attele - PLAN_MRR_CENTS.boost;
+    expect(premierMois).toBe(9_400); // 94 €
+    expect(moisSuivants).toBe(3_900); // 39 € par mois
+
+    // Sur un an d'abonnement mensuel : 2 911 € contre 2 388 €.
+    expect(premierMois + 11 * moisSuivants).toBe(52_300); // 523 €
+  });
+
+  /**
+   * DEUX MOIS OFFERTS : douze mois payés dix, et le montant annuel se DÉDUIT
+   * toujours du mensuel. Deux grilles saisies à la main finiraient par
+   * diverger, et c'est la moins relue qui partirait en facture.
+   */
+  it('déduit l’engagement annuel du mensuel, sans seconde grille', () => {
+    expect(YEARLY_MONTHS_BILLED).toBe(10);
+    expect(yearlyCents(PLAN_MRR_CENTS.essentiel)).toBe(99_000); // 990 €
+    expect(yearlyCents(PLAN_MRR_CENTS.complet)).toBe(159_000); // 1 590 €
+    expect(yearlyCents(PLAN_MRR_CENTS.boost)).toBe(199_000); // 1 990 €
+
+    for (const cents of Object.values(PLAN_MRR_CENTS)) {
+      // Deux mois offerts, donc exactement deux mensualités économisées.
+      expect(12 * cents - yearlyCents(cents)).toBe(2 * cents);
     }
   });
 });

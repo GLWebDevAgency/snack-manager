@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { SIM_FLOW, SIM_NOTES } from "./content";
+import { useMemo, useState } from "react";
+import { CTA_CALLBACK, NARROW_NBSP, NBSP, SIM_CTA_NOTE, SIM_ESC, SIM_LEAD, SIM_NOTES, ancre, section } from "./content";
 
 /* ── Hypothèses (identiques à la maquette, § « sim ») ───────────────── */
 const HOURLY = 13; // coût horaire chargé, €/h
@@ -14,8 +14,21 @@ const FULLTIME = 151.67; // heures d'un temps plein mensuel
  * l'ICU français a changé d'espace selon les versions, et un écart entre le
  * rendu serveur et le rendu navigateur casserait l'hydratation.
  */
-const NARROW_NBSP = " ";
-const NBSP = " ";
+/*
+ * LES DEUX ESPACES VIENNENT DE `content.ts`, ET C'EST LE CORRECTIF LUI-MÊME.
+ *
+ * Ce fichier redéclarait la paire sous les mêmes noms, avec deux espaces
+ * ORDINAIRES dedans. À l'œil, une insécable et une espace normale sont le même
+ * caractère : la faute était invisible au diff comme à la relecture, et TOUS
+ * les montants du simulateur sortaient sécables — « ≈ 5,75 € », « 505 € »,
+ * « 6 065 € », « 13 €/h », « 35 h » — pendant que la grille de prix, elle,
+ * composait juste. Deux déclarations du même caractère invisible, c'est deux
+ * déclarations qui finissent par diverger sans que personne le voie.
+ *
+ * On les importe donc au lieu de les réécrire. Le formatage, lui, reste local
+ * pour la raison ci-dessus : le simulateur compte en euros et non en centimes,
+ * `euros()` ne lui conviendrait pas.
+ */
 
 function group(n: number): string {
   return Math.round(n)
@@ -61,11 +74,25 @@ const FIELDS: Field[] = [
 ];
 
 /**
- * Simulateur de ROI de la maquette : cinq curseurs, un panneau de résultats
- * recalculé à chaque `input`. Les formules sont reprises telles quelles du
- * script de la maquette — on ne « corrige » pas les hypothèses du fondateur.
+ * Le calcul — cinq curseurs, un panneau de résultats recalculé à chaque
+ * `input`. Les formules sont reprises telles quelles du script de la maquette :
+ * on ne « corrige » pas les hypothèses du fondateur, on les rend consultables
+ * dans le dépliable de pied de section — disponibles, jamais annoncées.
+ *
+ * LA SECTION A CHANGÉ DE MÉTIER SANS CHANGER D'UNE FORMULE. Elle passait avant
+ * les tarifs : cinq curseurs à bouger au pouce entre deux services, juste avant
+ * la seule chose que le visiteur cherche, c'est un péage — il défile, il rate
+ * les hypothèses et il arrive au prix de mauvaise humeur. Posée APRÈS le prix,
+ * elle répond à l'objection qui naît exactement là : « d'accord pour ce
+ * tarif-là, et ce que je paie déjà, c'est combien ? » — le titre de la section
+ * (`SECTIONS`, content.ts) cite le montant, et il le DÉRIVE de la grille
+ * plutôt que de le recopier, ce commentaire compris. Le seul chiffre de
+ * résultat de toute la page est celui que le visiteur fabrique lui-même — il
+ * ne peut pas être notre mensonge.
  */
 export function Simulator() {
+  const { badge, title } = section("simulateur");
+
   const [cmd, setCmd] = useState(80);
   const [panier, setPanier] = useState(11.5);
   const [err, setErr] = useState(6);
@@ -84,20 +111,29 @@ export function Simulator() {
     const phoneMigrated = phone * 0.6;
     const phoneHours = (phoneMigrated * 4 * DAYS) / 60;
     const phoneSave = phoneHours * HOURLY;
-    // CA additionnel : les commandes migrées + 10 % du comptoir, à +15 % de panier.
-    const online = phoneMigrated + cmd * 0.1;
-    const revenue = online * DAYS * panier * 0.15;
-
+    /*
+     * LE CA ADDITIONNEL A ÉTÉ RETIRÉ DU CALCUL, ET C'EST DÉLIBÉRÉ.
+     *
+     * Une ligne « panier en ligne +15 % » pesait ici 61 % du chiffre annuel
+     * affiché — et la page avouait elle-même, sous les curseurs, ne tenir ce
+     * taux d'aucune étude qu'elle puisse nommer. Les seules sources qui
+     * l'annoncent (15 à 30 %) sont des éditeurs qui vendent la même chose que
+     * nous : citer un vendeur pour appuyer une vente ne prouve rien.
+     *
+     * Tout ce qui reste se déduit des chiffres que le restaurateur a saisis
+     * lui-même. Un montant plus petit qu'il peut refaire de tête vaut mieux
+     * qu'un montant deux fois plus gros qu'il peut contester d'une question.
+     * Le taux survit en NOTE sous le résultat, jamais dans le total.
+     */
     const monthly = errSave + coordSave + phoneSave;
     const hours = coordHours + phoneHours;
 
     return {
       monthly,
-      yearly: (monthly + revenue) * 12,
+      yearly: monthly * 12,
       errSave,
       coordSave,
       phoneSave,
-      revenue,
       hours,
       fulltime: Math.round((hours / FULLTIME) * 100),
     };
@@ -121,16 +157,33 @@ export function Simulator() {
 
   return (
     <section className="section sim-section" id="simulateur">
-      <span className="badge">Le calcul</span>
-      <h2 className="h2 center-h2" style={{ maxWidth: 620 }}>
-        Combien vous coûte votre organisation actuelle ?
+      {badge ? <span className="badge">{badge}</span> : null}
+      <h2 className="h2 center-h2" style={{ maxWidth: 760 }}>
+        {title}
       </h2>
-      <p className="body-text sim-esc rv">
-        Sans vrai POS, tout repose sur des feuilles griffonnées et des totaux calculés de tête. Une commande mal relue,
-        c&apos;est un plat refait : <strong>≈ 5,75 €</strong> à la poubelle. Deux par service, midi et soir, 7 j/7 :{" "}
-        <strong>≈ 700 € par mois</strong> — sans compter les heures passées à former chaque nouvelle recrue à « votre »
-        caisse. Faites le calcul avec vos chiffres :
-      </p>
+
+      {/*
+       * Ce qui reste d'Intro : la phrase la plus forte de la page était posée
+       * seule sur un filigrane géant « ×2 », sans une preuve à portée de regard.
+       * Elle devient l'affirmation immédiatement suivie du calcul qui la produit.
+       */}
+      <div className="sim-lead rv">
+        <p className="sim-leadtitle">{SIM_LEAD.title}</p>
+        <p className="sim-leadline">{SIM_LEAD.line}</p>
+      </div>
+
+      {/* L'amorce, ramenée de soixante mots à une ligne + deux cases de chiffres. */}
+      <div className="sim-escbox rv">
+        <p className="sim-escline">{SIM_ESC.line}</p>
+        <div className="sim-figs">
+          {SIM_ESC.figures.map((f) => (
+            <div className="sim-fig" key={f.fig}>
+              <p className="sim-fignum">{f.fig}</p>
+              <p className="sim-figlabel">{f.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="sim-board rv">
         <div className="sim-controls spot">
@@ -162,7 +215,7 @@ export function Simulator() {
             {euro(r.monthly)}
           </p>
           <p className="sim-resyear">
-            soit <b>{euro(r.yearly)}</b> par an, CA additionnel du panier en ligne inclus
+            soit <b>{euro(r.yearly)}</b> par an, uniquement à partir de vos chiffres
           </p>
           <div className="sim-resrows">
             <div className="sim-resrow">
@@ -177,10 +230,6 @@ export function Simulator() {
               <span>Téléphone déchargé — appels + interruptions de poste</span>
               <b>{euro(r.phoneSave)}</b>
             </div>
-            <div className="sim-resrow accent">
-              <span>CA additionnel — panier en ligne +15 %</span>
-              <b>+ {euro(r.revenue)}</b>
-            </div>
             <div className="sim-resrow">
               <span>Heures d&apos;équipe libérées</span>
               <b>
@@ -192,30 +241,34 @@ export function Simulator() {
           <p className="sim-equiv">
             ≈ {r.fulltime} % d&apos;un temps plein récupéré — hors gain des erreurs évitées.
           </p>
-          <a className="btn light sim-cta" href="#contact">
-            Vérifier ces chiffres avec nous
+          {/* `ancre()` et pas `#contact` : voir le hero. */}
+          <a className="btn light sim-cta" href={ancre("contact").href}>
+            {CTA_CALLBACK}
           </a>
+          {/* La couture : ce chiffre-là ne meurt pas au défilement, il part avec nous. */}
+          <p className="sim-ctanote">{SIM_CTA_NOTE}</p>
         </div>
       </div>
 
-      <div className="sim-flow rv">
-        <p className="sim-flowtitle">Pourquoi ça tient : la commande en ligne ne passe plus par la caisse</p>
-        <div className="sim-flowsteps">
-          {/* Fragment (et non un span) : `.sim-flowstep:last-child` doit rester vrai. */}
-          {SIM_FLOW.map((step, i) => (
-            <Fragment key={step}>
-              {i > 0 ? <span className="sim-flowarrow">→</span> : null}
-              <span className="sim-flowstep">{step}</span>
-            </Fragment>
-          ))}
-        </div>
-        <p className="sim-flownote">
-          Pendant ce temps, la personne en caisse reste avec les clients physiques — personne ne quitte son poste en
-          cuisine pour décrocher, personne ne fait patienter la file.
-        </p>
-      </div>
-
-      <p className="sim-notes rv">{SIM_NOTES}</p>
+      {/*
+       * LA MÉTHODE EST DISPONIBLE. ELLE N'EST PAS ANNONCÉE.
+       *
+       * Il y avait ici un bloc ouvert qui titrait « le seul chiffre que nous
+       * n'avons pas mesuré nous-mêmes », affichait sa source, puis expliquait ce
+       * qu'on avait refusé de compter. Chaque phrase était exacte et l'ensemble
+       * sonnait faux : une page qui devance une objection que personne n'a
+       * formulée s'accuse toute seule. Le lecteur n'y lit pas de la rigueur, il
+       * y lit un doute.
+       *
+       * Le dépliable dit la même chose sans la crier. Qui veut savoir d'où
+       * sortent les taux ouvre et trouve tout, source et année comprises ; les
+       * autres voient un montant qui s'assume. `details` reste ouvrable sans
+       * JavaScript.
+       */}
+      <details className="sim-fold rv">
+        <summary className="sim-foldsum">Nos hypothèses</summary>
+        <p className="sim-foldtext">{SIM_NOTES}</p>
+      </details>
     </section>
   );
 }

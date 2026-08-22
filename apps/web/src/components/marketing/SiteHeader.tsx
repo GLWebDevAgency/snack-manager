@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { NAV_LEFT, NAV_RIGHT } from "./content";
+import { LANDING_TOP, NAV_LEFT, NAV_MOBILE, NAV_PAGES, NAV_RIGHT } from "./content";
 import { LogoMark, NotchFillet } from "./icons";
 
 /** `useLayoutEffect` côté client, `useEffect` au rendu serveur (pas d'avertissement). */
@@ -15,6 +16,17 @@ const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayout
  * liens réels, parce que les libellés français sont plus longs que ceux du
  * gabarit d'origine. C'est la fonction `fitNotch` du JS de maquette, portée en
  * hook : mesure via refs + ResizeObserver, jamais d'écriture DOM manuelle.
+ *
+ * ═══ POURQUOI `next/link` ET PLUS `<a>` ═══
+ *
+ * L'en-tête sert désormais TROIS routes — `/`, `/offres`, `/blog` — et les
+ * hrefs sont absolus (`/#tarifs`, voir `ancre()` dans content.ts). Avec une
+ * balise `<a>` nue, chaque passage d'un article à la landing rechargerait le
+ * document entier : police retéléchargée, deck du hero rejoué, défilement
+ * perdu. `Link` fait la même chose sans quitter le document, et se comporte
+ * comme un `<a>` quand seul le fragment change — la mesure de l'encoche, qui
+ * lit `offsetWidth` sur les enfants, n'y voit que du feu puisqu'il rend bien
+ * un `<a>`.
  */
 export function SiteHeader() {
   const [openWidth, setOpenWidth] = useState<number | null>(null);
@@ -68,19 +80,19 @@ export function SiteHeader() {
             <div className="hd-midc">
               <div className="hd-links" ref={leftRef}>
                 {NAV_LEFT.map((l) => (
-                  <a className="ui-link" href={l.href} key={l.href}>
+                  <Link className="ui-link" href={l.href} key={l.href}>
                     {l.label}
-                  </a>
+                  </Link>
                 ))}
               </div>
-              <a className="hd-logolink" href="#top" aria-label="Accueil" ref={logoRef}>
+              <Link className="hd-logolink" href={LANDING_TOP} aria-label="Accueil" ref={logoRef}>
                 <LogoMark />
-              </a>
+              </Link>
               <div className="hd-links" ref={rightRef}>
                 {NAV_RIGHT.map((l) => (
-                  <a className="ui-link" href={l.href} key={l.href}>
+                  <Link className="ui-link" href={l.href} key={l.href}>
                     {l.label}
-                  </a>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -91,9 +103,9 @@ export function SiteHeader() {
 
       <div className="hd-mobile">
         <div className="hd-mobilebar">
-          <a href="#top" aria-label="Accueil">
+          <Link href={LANDING_TOP} aria-label="Accueil">
             <LogoMark />
-          </a>
+          </Link>
           <button
             type="button"
             className={menuOpen ? "hd-burger open" : "hd-burger"}
@@ -107,13 +119,26 @@ export function SiteHeader() {
             <span />
           </button>
         </div>
+        {/*
+         * LE BURGER EST DEVENU LE SOMMAIRE DU SITE, ET IL N'AVAIT PAS LE
+         * CHOIX. La barre collante a disparu : sur téléphone, ce menu est
+         * désormais la SEULE navigation, et le seul raccourci vers le prix.
+         * Les cinq entrées de l'encoche n'y suffisaient plus — il déroule les
+         * dix sections de `NAV_MOBILE` (tout sauf le hero, où l'on est déjà).
+         *
+         * LES DEUX ROUTES SONT SOUS UN FILET, ET PAS DANS LA LISTE. Fondues au
+         * milieu des sections, « Offres » et « Blog » se lisent comme deux
+         * ancres de plus ; le lecteur qui les prend pour telles ne comprend pas
+         * pourquoi la page a changé sous lui. Le filet dit « ici on quitte
+         * cette page » sans avoir à l'écrire.
+         */}
         <nav
           id="hd-mobilemenu"
           className={menuOpen ? "hd-mobilemenu open" : "hd-mobilemenu"}
           aria-hidden={!menuOpen}
         >
-          {[...NAV_LEFT, ...NAV_RIGHT].map((l) => (
-            <a
+          {NAV_MOBILE.map((l) => (
+            <Link
               className="ui-link"
               href={l.href}
               key={l.href}
@@ -121,8 +146,21 @@ export function SiteHeader() {
               onClick={() => setMenuOpen(false)}
             >
               {l.label}
-            </a>
+            </Link>
           ))}
+          <div className="hd-mobilepages">
+            {NAV_PAGES.map((l) => (
+              <Link
+                className="ui-link hd-mobilepage"
+                href={l.href}
+                key={l.href}
+                tabIndex={menuOpen ? undefined : -1}
+                onClick={() => setMenuOpen(false)}
+              >
+                {l.label}
+              </Link>
+            ))}
+          </div>
         </nav>
       </div>
     </header>
