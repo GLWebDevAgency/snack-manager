@@ -1,0 +1,29 @@
+:root{--black:#000;--card:#0b0b0c;--surf:#141416;--line:rgba(255,255,255,.1);--white:#fff;--mut:rgba(255,255,255,.55);--brass:#c9a15a}
+*{box-sizing:border-box;margin:0}
+body{background:var(--black);color:var(--white);font-family:Inter,system-ui,sans-serif;padding:44px 40px 64px}
+a{color:var(--brass)}a:hover{color:#e0bd7e}
+.wrap{max-width:840px;margin:0 auto}
+.kick{font-size:11px;font-weight:800;letter-spacing:.18em;color:var(--brass)}
+h1{font-size:31px;font-weight:900;letter-spacing:-.025em;margin-top:12px}
+.desc{font-size:14.5px;color:var(--mut);line-height:1.6;margin-top:14px;max-width:640px}
+.desc b{color:var(--white);font-weight:600}
+.desc em{font-style:normal;color:var(--brass);font-weight:600}
+.sec{margin-top:38px;padding-top:22px;border-top:1px solid var(--line)}
+.lab{font-size:10.5px;font-weight:800;letter-spacing:.16em;color:var(--mut)}
+.head{margin-top:16px;height:34px;display:flex;align-items:center;justify-content:center;gap:16px;background:var(--black);border:1px solid var(--line);border-radius:0 0 16px 16px;width:420px;max-width:100%}
+.head a{font-size:13px;font-weight:500;color:var(--white);text-decoration:none;letter-spacing:-.02em}
+.ladder{margin-top:20px;display:flex;align-items:flex-end;gap:36px;flex-wrap:wrap}
+.li{display:flex;flex-direction:column;align-items:center;gap:10px}
+.li span{font-size:10px;color:var(--mut);font-weight:600}
+.lock{margin-top:18px;display:flex;gap:24px;flex-wrap:wrap}
+.lockcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 26px;display:flex;align-items:center;gap:14px}
+.wm{font-size:21px;font-weight:800;letter-spacing:-.03em}
+.wm i{font-style:normal;font-weight:500;color:var(--mut)}
+.tiles{margin-top:18px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.tile{display:grid;place-items:center;width:66px;height:66px;border-radius:18px;background:var(--surf);border:1px solid var(--line);color:var(--white)}
+.tile.inv{background:var(--white);color:#000}
+.tile.br{background:var(--brass);color:#000}
+.tile.gold{background:#0b0b0c;border-color:rgba(201,161,90,.4);color:var(--brass)}
+.duo .accent{fill:var(--brass)}
+.tile.inv .duo .accent,.tile.br .duo .accent{fill:#000}
+.note{margin-top:14px;font-size:12.5px;color:var(--mut);line-height:1.5;max-width:600px}

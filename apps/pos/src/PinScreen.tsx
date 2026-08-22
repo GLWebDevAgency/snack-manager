@@ -14,7 +14,7 @@
  * endroit, sur la même tablette. Seul l'alphabet change.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Text, View } from 'react-native';
+import { Animated, Easing, Image, Platform, Text, View } from 'react-native';
 import { PAIRING_CODE_ALPHABET, PAIRING_CODE_LENGTH } from '@sm/contracts';
 import { TOUCH_MIN, palette } from '@sm/client-core';
 import {
@@ -157,6 +157,22 @@ export function PairingScreen({ onPaired }: { onPaired: (device: PairedDevice) =
   );
   const padW = keySize * cols + gap * (cols - 1) + 36 + 2;
 
+  // Le signe se lit à bout de bras sur une tablette posée au comptoir : 84 px
+  // à la référence, borné à [72 ; 96].
+  const markSize = Math.min(96, Math.max(72, L.sp(84)));
+  // …mais il ne passe JAMAIS avant le pavé. Cet écran ne défile pas : sur une
+  // tablette courte, un signe imposé pousserait les dernières touches hors de
+  // la fenêtre. On mesure donc la place réellement libre avant de le servir.
+  // Hauteur du pavé : exacte, c'est la même grille que celle rendue plus bas.
+  const padRows = Math.ceil(ALPHABET.length / cols);
+  const padH = padRows * keySize + gap * (padRows - 1) + 38;
+  // Tout ce qui n'est pas le pavé, poste par poste et aux mêmes échelles que
+  // le rendu : bandeau, titre, phrase d'aide (deux lignes), tuiles de saisie,
+  // ligne de message, gouttière du pavé, boutons.
+  const restH =
+    L.fs(14) * 1.3 + 10 + L.fs(26) * 1.3 + 8 + L.fs(20) * 2 + 24 + L.sp(58) + 34 + 6 + 12 + 44;
+  const showMark = L.height - padH - restH - 16 >= markSize;
+
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg, alignItems: 'center', justifyContent: 'center' }}>
       {/* Filet d'accent : le poste n'a pas encore de marque — c'est l'or de la
@@ -174,6 +190,20 @@ export function PairingScreen({ onPaired }: { onPaired: (device: PairedDevice) =
       />
 
       <Animated.View style={{ alignItems: 'center', transform }}>
+        {/* NOTRE marque, et UNIQUEMENT ici : tant que le poste n'est appairé à
+            personne, il n'a pas d'établissement à représenter — c'est le
+            logiciel qui se présente. Dès l'appairage, l'écran de code équipier
+            porte la marque du RESTAURANT, jamais la nôtre.
+            Le signe est posé sur l'aplat de fond : son éclair est un VIDE, il
+            exige un fond uni derrière lui. */}
+        {showMark && (
+          <Image
+            source={require('../assets/mark.png')}
+            style={{ width: markSize, height: markSize, marginBottom: 16 }}
+            resizeMode="contain"
+            accessibilityLabel="Snack Manager"
+          />
+        )}
         <Text style={[type.eyebrow, { color: palette.gold }]}>Snack Manager · Caisse</Text>
         <Text style={[type.h1, { fontSize: L.fs(26), marginTop: 10, textAlign: 'center' }]}>
           Appairer cet appareil

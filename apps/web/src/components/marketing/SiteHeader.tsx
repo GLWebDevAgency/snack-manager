@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LANDING_TOP, NAV_LEFT, NAV_MOBILE, NAV_PAGES, NAV_RIGHT } from "./content";
-import { LogoMark, NotchFillet } from "./icons";
+import { LogoMark } from "../brand/Logo";
+import { NotchFillet } from "./icons";
 
 /** `useLayoutEffect` côté client, `useEffect` au rendu serveur (pas d'avertissement). */
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;

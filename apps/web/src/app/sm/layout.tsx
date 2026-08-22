@@ -28,6 +28,7 @@ import { ApiError, clearToken, getToken } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { Icon, ToastProvider, type IconName } from "@/components/ui";
+import { LogoLockup } from "@/components/brand/Logo";
 import { crm, euroRound, HqContext, isHqSession } from "./crm";
 
 /** Accent de la maison — jamais thémable par un restaurant (spec crm-sm §2.4). */
@@ -167,16 +168,28 @@ function HqShell({ children }: { children: ReactNode }) {
       <div className="flex h-screen overflow-hidden bg-bg">
         {/* ── Colonne de navigation (232px, fixe : outil de bureau interne) ── */}
         <aside className="flex w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-[18px]">
-          <div className="flex items-center gap-2.5 px-2">
-            <div
-              className="grid size-[30px] shrink-0 place-items-center rounded-xs bg-accent text-[15px] font-extrabold text-onaccent"
-              aria-hidden
-            >
-              S
-            </div>
-            <div className="min-w-0 truncate text-lg font-extrabold tracking-[-0.02em] text-ink">
-              Snack Manager
-            </div>
+          {/*
+            LE SIGNE EN TÊTE DE COLONNE — pas une décoration, le TITRE de
+            l'outil. Contrairement au back-office restaurant, rien n'oblige ici
+            à la discrétion : le CRM est notre maison, personne ne peut prendre
+            notre marque pour celle d'un commerce.
+
+            Le verrouillage remplace la tuile-lettre ET le nom composé à la
+            main : le mark et le mot ne peuvent plus se désaccorder, et le
+            libellé accessible « Snack Manager » vient du composant.
+
+            28 px : au-dessus du seuil micro (20 px), donc la gravure standard,
+            éclair évidé compris. Le nom en découle à ~17 px, soit le corps de
+            l'ancien titre, et le groupe mesure ~158 px dans les 192 px utiles
+            de la colonne. `tone` reste `mono` — la garniture laiton n'est
+            admise qu'à partir de 52 px.
+
+            L'encre vient du conteneur (`text-ink`), jamais d'un `fill` : le
+            mark suit `currentColor`. Et l'éclair étant un VIDE, il prend le
+            fond — l'aplat `bg-surface` de la colonne, uni, le lui donne.
+          */}
+          <div className="px-2 text-ink">
+            <LogoLockup size={28} />
           </div>
           <div className="px-2 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
             Interne · HQ

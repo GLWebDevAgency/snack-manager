@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { CALLBACK_SLOTS, CONTACT_EMAIL, CONTACT_PLATFORMS, CONTACT_POINTS, CTA_CALLBACK, section } from "./content";
-import { LogoMark, TickDot } from "./icons";
+import { LogoMark } from "../brand/Logo";
+import { TickDot } from "./icons";
 
 type Status = "idle" | "loading" | "done" | "error";
 type FieldName = "name" | "phone";
@@ -96,7 +97,7 @@ export function ContactSection() {
       <div className="cta-line" aria-hidden="true" />
       <div className="cta-inner rv">
         <div className="cta-logochip">
-          <LogoMark width={18} height={18} />
+          <LogoMark size={18} />
           <span className="logo-wordmark" style={{ fontSize: 19 }}>
             Snack Manager
           </span>

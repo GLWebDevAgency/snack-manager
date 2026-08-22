@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { PAIRING_CODE_ALPHABET, PAIRING_CODE_LENGTH } from '@sm/contracts';
 import {
   alpha,
@@ -37,6 +37,30 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const ALPHABET = PAIRING_CODE_ALPHABET.split('');
 const MIN_PIN = 4;
 const MAX_PIN = 6;
+
+/**
+ * Le signe Snack Manager sur l'écran d'appairage — sa taille, et la place
+ * qu'il exige.
+ *
+ * 80 px à la référence, borné à [72 ; 96] : assez pour être lu à bout de bras
+ * sur une tablette posée au passe. Mais le panneau d'appairage ne défile pas,
+ * et son pavé de 32 touches tient déjà tout juste sur un écran court — le
+ * signe ne passe donc JAMAIS avant les touches. `fits` mesure la place
+ * réellement libre avant de l'autoriser.
+ */
+function markFor(l: Layout) {
+  const size = Math.min(96, Math.max(72, Math.round(80 * l.scale)));
+  // Même grille que `alphaPad` plus bas : 8 colonnes sur tablette, 6 étroit.
+  const cols = l.width < 620 ? 6 : 8;
+  const key = Math.max(TOUCH_MIN, Math.round(58 * l.scale));
+  const rows = Math.ceil(ALPHABET.length / cols);
+  const padH = rows * key + 10 * (rows - 1);
+  // Titre, sous-titre, phrase d'aide, tuiles, ligne de message, boutons et
+  // marges du panneau : environ 320 px à l'échelle 1. Les 48 px retranchés de
+  // la hauteur sont le padding de l'écran.
+  const fits = l.height - 48 - padH - Math.round(320 * l.scale) >= size + 4;
+  return { size, fits };
+}
 
 export function PinScreen({
   accent,
@@ -158,9 +182,21 @@ function PairingView({
         <Sheen height={160} radius={radius.xl} />
 
         <View style={styles.head}>
-          <View style={[styles.brand, { backgroundColor: palette.gold }]}>
-            <Text style={[styles.brandLetter, { color: contrastOn(palette.gold) }]}>S</Text>
-          </View>
+          {/* NOTRE marque, et UNIQUEMENT ici : tant que l'écran n'est appairé à
+              personne, il n'a pas d'établissement à représenter — c'est le
+              logiciel qui se présente. La tuile générique portait un « S » de
+              repli qui ne voulait rien dire. Dès l'appairage, `CodeView`
+              reprend la tuile avec l'initiale et l'accent du RESTAURANT.
+              Le signe est posé sur l'aplat du panneau : son éclair est un
+              VIDE, il exige un fond uni derrière lui. */}
+          {markFor(layout).fits && (
+            <Image
+              source={require('../../assets/mark.png')}
+              style={styles.mark}
+              resizeMode="contain"
+              accessibilityLabel="Snack Manager"
+            />
+          )}
           <Text style={styles.title}>Appairer cet appareil</Text>
           <Text style={styles.subtitle}>Snack Manager · Cuisine</Text>
         </View>
@@ -506,6 +542,7 @@ const pinStyles = scaledStyles((l: Layout) => {
   // + 2 × 1 de bordure. Le `+ 2` n'est pas cosmétique — sans lui la dernière
   // colonne de touches passe à la ligne, et le pavé perd sa grille.
   const wideWidth = alphaKey * alphaCols + gap * (alphaCols - 1) + 40 + 2;
+  const markSize = markFor(l).size;
   return StyleSheet.create({
     screen: {
       flex: 1,
@@ -549,6 +586,12 @@ const pinStyles = scaledStyles((l: Layout) => {
       borderRadius: Math.round(15 * l.scale),
       alignItems: 'center',
       justifyContent: 'center',
+      marginBottom: 4,
+    },
+    /** Le signe Snack Manager — écran d'appairage seulement. */
+    mark: {
+      width: markSize,
+      height: markSize,
       marginBottom: 4,
     },
     brandLetter: {

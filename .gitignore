@@ -12,6 +12,11 @@ coverage/
 
 # Référence design complète (assets lourds, hors git — voir design_handoff_snack_manager/ pour le handoff)
 Menu Trivolet Redesign (1)/
+# Même nature, déposé le 22/08/2026 : 65 Mo de maquettes. La SOURCE DU LOGO
+# en est extraite et suivie — design_handoff_snack_manager/logos/ — parce que
+# c'est la provenance du dessin, et qu'elle ne doit pas dépendre d'un dossier
+# hors git sur une seule machine.
+Menu Trivolet Redesign/
 
 # Boilerplate tiers sous AGPL-3.0 — consulté comme référence de conventions,
 # JAMAIS copié dans ce code propriétaire (voir ARCHITECTURE.md)

@@ -319,3 +319,66 @@ a {
     transform: none !important;
   }
 }
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * MARQUE — LE TICKET-BURGER
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La géométrie du signe vit dans `components/brand/Logo.tsx`. Ici : seulement
+ * ce que le CSS doit gouverner — le verrouillage avec le nom, et les deux
+ * couleurs que le signe emprunte à son fond.
+ *
+ * ═══ L'ACCENT DU LOGO N'EST PAS L'ACCENT DU TENANT ═══
+ *
+ * `--sm-logo-accent` retombe sur `--cf-gold`, le laiton FIXE de la marque, et
+ * jamais sur `--cf-accent`, qui est remplacé au runtime par la couleur du
+ * restaurant (voir l'en-tête de ce fichier). Les brancher ensemble suffirait à
+ * faire virer le logo Snack Manager au rouge chez un client qui a choisi le
+ * rouge — notre marque repeinte aux couleurs d'un autre, sur nos propres
+ * surfaces. La séparation est déjà dans les jetons ; elle doit le rester.
+ */
+:root {
+  --sm-logo-accent: var(--cf-gold);
+  --sm-logo-mut: var(--cf-white-50);
+}
+
+/*
+ * Fond clair ou fond laiton : la garniture bichrome et le second mot doivent
+ * s'inverser, sinon ils disparaissent — une garniture laiton sur une tuile
+ * laiton ne se voit pas. La planche d'origine prévoyait cette inversion sans
+ * jamais la brancher ; on la pose ici, à porter sur le conteneur.
+ */
+.sm-on-light,
+.sm-on-accent {
+  --sm-logo-accent: currentColor;
+  --sm-logo-mut: #6b6455;
+}
+
+.sm-lockup {
+  display: inline-flex;
+  align-items: center;
+  /* Gouttière et graisse dérivées du mark : le groupe reste juste à toutes
+     les échelles au lieu d'être accordé pour une seule taille. */
+  gap: calc(var(--sm-lockup-size, 34px) * 0.41);
+  color: inherit;
+}
+
+.sm-lockup-nom {
+  font-size: calc(var(--sm-lockup-size, 34px) * 0.62);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/*
+ * « Snack » porte le poids, « Manager » s'efface. C'est ce contraste qui fait
+ * lire UN nom et non deux mots — sans lui, le verrouillage se coupe en deux à
+ * la lecture.
+ */
+.sm-lockup-nom i {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--sm-logo-mut);
+}
