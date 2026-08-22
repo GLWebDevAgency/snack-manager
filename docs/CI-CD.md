@@ -88,7 +88,7 @@ l'interface GitHub :
 
 ```
 Typage             → turbo run typecheck        bloquant
-Analyse statique   → turbo run lint             NON bloquant (§ 9)
+Analyse statique   → turbo run lint             bloquant (depuis le 22/08/2026, § 9)
 Tests              → turbo run test             bloquant
 Compilation        → turbo run build            bloquant
 ```
@@ -226,9 +226,10 @@ public — ce dernier est exclu, le code est propriétaire.
   le propriétaire du dépôt (`bypass_actors` est volontairement vide : sinon la
   protection ne protège de rien).
 - **Les deux contrôles verts** avant que la fusion s'active :
-  `Vérification du monorepo` et `Balayage des secrets`. Attention : au sein du
-  premier, l'étape « Analyse statique » ne bloque pas (§ 9) — le contrôle peut
-  être vert avec ESLint en échec, signalé par une annotation jaune.
+  `Vérification du monorepo` et `Balayage des secrets`. Les quatre étapes du
+  premier bloquent, « Analyse statique » comprise depuis le 22 août 2026
+  (§ 9) : un contrôle vert signifie désormais qu'ESLint est passé, ce qui
+  n'était pas vrai avant cette date.
 - **La branche à jour** avec `main` avant fusion
   (`strict_required_status_checks_policy`).
 - **Ni force-push ni suppression** de `main`.
