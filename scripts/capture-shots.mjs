@@ -56,11 +56,27 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(root, 'apps/web/public/shots');
 
+/*
+ * TROIS CIBLES, ET UNE RAISON DE LES DISTINGUER.
+ *
+ * `--local` photographie ce qu'on est en train d'écrire ; sans rien, la
+ * production ; `--staging` la préproduction.
+ *
+ * Cette troisième cible n'est pas un confort : une affiche doit montrer ce qui
+ * est RÉELLEMENT servi, et un changement d'interface arrive toujours sur
+ * staging avant la production. Photographier la production juste après avoir
+ * modifié un écran produit une affiche périmée — et personne ne la regarde
+ * assez pour s'en apercevoir. On photographie donc là où le changement est
+ * déjà déployé, puis on promeut l'affiche avec le reste.
+ */
 const local = process.argv.includes('--local');
-const API = local ? 'http://localhost:3001' : 'https://api-production-8949.up.railway.app';
-const WEB = local ? 'http://localhost:3000' : 'https://web-production-99b58c.up.railway.app';
-const POS = local ? 'http://localhost:8082' : 'https://pos-production-a9d8.up.railway.app';
-const KDS = local ? 'http://localhost:8083' : 'https://kds-production-8991.up.railway.app';
+const staging = process.argv.includes('--staging');
+const cible = (locale, prepro, prod) => (local ? locale : staging ? prepro : prod);
+
+const API = cible('http://localhost:3001', 'https://api-staging-a5e8.up.railway.app', 'https://api-production-8949.up.railway.app');
+const WEB = cible('http://localhost:3000', 'https://web-staging-6f5f.up.railway.app', 'https://web-production-99b58c.up.railway.app');
+const POS = cible('http://localhost:8082', 'https://pos-staging-7f92.up.railway.app', 'https://pos-production-a9d8.up.railway.app');
+const KDS = cible('http://localhost:8083', 'https://kds-staging-90da.up.railway.app', 'https://kds-production-8991.up.railway.app');
 
 /**
  * L'écran cuisine EN MODE DÉMONSTRATION — la source de son affiche.
