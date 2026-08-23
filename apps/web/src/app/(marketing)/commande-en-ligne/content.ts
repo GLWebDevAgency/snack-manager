@@ -73,9 +73,17 @@ export const COMMANDE_SOMMAIRE: readonly { href: string; label: string }[] = COM
 
 /* ── Les images ──────────────────────────────────────────────── */
 
+/**
+ * LE HERO N'EST PLUS LA CAPTURE DU TUNNEL. `commande-tunnel.webp` fait
+ * 780 × 763 : presque carrée et minuscule, étirée sur une bande de pleine
+ * largeur elle sortait floue et mal cadrée — constaté en production par le
+ * fondateur (23/08). La capture reste à sa place sur `/offres`, en panneau
+ * CONTENU, où son format lui va. Ici, la bande porte une photographie
+ * paysage (1560 × 780) : un téléphone en main, la scène exacte de la page.
+ */
 export const COMMANDE_SHOTS = {
-  hero: { src: "/shots/commande-tunnel.webp", alt: "" },
-  cta: { src: "/photos/libre/blog-telephone-main-nuit.webp", alt: "" },
+  hero: { src: "/photos/libre/blog-telephone-main-nuit.webp", alt: "" },
+  cta: { src: "/photos/libre/ambiance-salle-nuit-bokeh.webp", alt: "" },
 } satisfies Record<string, Shot>;
 
 /* ── En-tête de page ─────────────────────────────────────────── */
