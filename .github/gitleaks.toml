@@ -122,4 +122,8 @@ paths = [
   '''(^|/)pnpm-lock\.yaml$''',
   # Cette configuration elle-même contient les gabarits ci-dessus.
   '''(^|/)\.github/gitleaks\.toml$''',
+  # Le registre d'exemptions décrit des trouvailles : même en évitant de
+  # citer les formes fautives, il restera toujours à un commentaire près de
+  # se signaler lui-même.
+  '''(^|/)\.gitleaksignore$''',
 ]
