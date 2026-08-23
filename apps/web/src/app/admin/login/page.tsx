@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, setToken } from "@/lib/api";
 import { Btn, Card, Field, Input } from "@/components/ui";
 import { LogoMark } from "@/components/brand/Logo";
+import { armerSplashDeTransition } from "@/components/brand/SplashAuPremierPassage";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,6 +24,15 @@ export default function LoginPage() {
         password,
       });
       setToken(token);
+      /*
+       * ON ARME L'OUVERTURE AVANT DE NAVIGUER, pas après.
+       *
+       * Cette page disparaît au `replace` : un calque monté ici partirait avec
+       * elle, précisément pendant la seconde qu'il est censé couvrir. Le
+       * drapeau traverse la navigation, et c'est la coque `/admin` qui le
+       * consomme — voir `SplashAuPremierPassage`.
+       */
+      armerSplashDeTransition();
       router.replace("/admin/dashboard");
     } catch {
       setError("Identifiants invalides");

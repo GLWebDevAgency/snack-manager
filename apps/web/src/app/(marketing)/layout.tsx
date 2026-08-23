@@ -3,6 +3,7 @@ import { ADLaM_Display } from "next/font/google";
 import { PRICE_RANGE } from "@/components/marketing/content";
 import { SITE_URL } from "@/lib/site";
 import "@/components/marketing/marketing.css";
+import { SplashAuPremierPassage } from "@/components/brand/SplashAuPremierPassage";
 
 const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
 /**
@@ -88,5 +89,17 @@ export const viewport: Viewport = {
  * — jamais l'accent d'un tenant, qui n'est injecté que sous /admin.
  */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
-  return <div className={`mk ${adlam.variable}`}>{children}</div>;
+  return (
+    <div className={`mk ${adlam.variable}`}>
+      {/*
+        L'ÉCRAN D'OUVERTURE — POSÉ ICI, DONC SUR LES QUATRE ROUTES PUBLIQUES.
+        Il ne se joue qu'UNE FOIS par session : le visiteur qui passe de la
+        landing aux tarifs puis au blog ne le subit pas trois fois. Et il ne
+        bloque rien — la page est rendue dessous, il n'est qu'un calque qui
+        s'efface. Voir `SplashAuPremierPassage` pour les trois gardes.
+      */}
+      <SplashAuPremierPassage duree={3.6} />
+      {children}
+    </div>
+  );
 }
