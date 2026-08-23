@@ -435,7 +435,7 @@ export const OrderSchema = new Schema(
           // AVEC QUOI le client a payé. `null` = rien n'a encore été perçu.
           // Sans ce champ, une carte passée à la caisse est indiscernable d'un
           // « à encaisser au retrait » et la clôture de caisse (Z) est fausse.
-          tender: { type: String, enum: ['cash', 'card', 'online', null], default: null },
+          tender: { type: String, enum: ['cash', 'card', 'meal_voucher', 'online', null], default: null },
           status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
           // Rendu monnaie, en CENTIMES. Calculés par le serveur à la création :
           // changeGiven = cashReceived − totals.total.

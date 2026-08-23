@@ -18,6 +18,16 @@ describe('Modèle de paiement à la création', () => {
     expect(payment.method).toBe('counter');
   });
 
+  it('un titre-restaurant encaisse sur-le-champ, sans rendu monnaie', () => {
+    const payment = resolvePayment('pos', { method: 'counter', tender: 'meal_voucher' }, 1250);
+
+    expect(payment.status).toBe('paid');
+    expect(payment.tender).toBe('meal_voucher');
+    // Le rendu monnaie n'existe que pour les espèces : un titre ne rend rien.
+    expect(payment.cashReceived).toBeNull();
+    expect(payment.changeGiven).toBeNull();
+  });
+
   it('un encaissement espèces calcule le rendu monnaie', () => {
     const payment = resolvePayment(
       'pos',

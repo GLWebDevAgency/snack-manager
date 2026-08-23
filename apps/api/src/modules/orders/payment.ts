@@ -17,11 +17,11 @@ import type {
  *
  * Deux notions distinctes, longtemps confondues :
  *  - `method` : OÙ l'argent est encaissé (`online` | `counter`) ;
- *  - `tender` : AVEC QUOI le client a payé (`cash` | `card` | `online`).
+ *  - `tender` : AVEC QUOI le client a payé (`cash` | `card` | `meal_voucher` | `online`).
  *
  * Règle métier : au comptoir (canal `pos` ou `phone`), l'argent est perçu au
- * moment de l'encaissement, pas à la remise du plat — un tender espèces ou
- * carte rend donc la commande `paid` immédiatement. Le paiement en ligne, lui,
+ * moment de l'encaissement, pas à la remise du plat — un tender espèces,
+ * carte ou titre-restaurant rend donc la commande `paid` immédiatement. Le paiement en ligne, lui,
  * reste `pending` jusqu'à confirmation Stripe : tant que la banque n'a pas
  * répondu, rien n'est encaissé.
  */
@@ -30,7 +30,7 @@ import type {
 const COUNTER_CHANNELS: readonly OrderChannel[] = ['pos', 'phone'];
 
 /** Tenders réglés sur-le-champ face au client. */
-const IMMEDIATE_TENDERS: readonly PaymentTender[] = ['cash', 'card'];
+const IMMEDIATE_TENDERS: readonly PaymentTender[] = ['cash', 'card', 'meal_voucher'];
 
 export interface ResolvedPayment {
   method: PaymentMethod;

@@ -6,7 +6,7 @@ import "@/components/marketing/marketing.css";
 import { SplashAuPremierPassage } from "@/components/brand/SplashAuPremierPassage";
 import { RemonterAuChangementDePage } from "@/components/marketing/RemonterAuChangementDePage";
 
-const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
+const TITLE = "Snack Manager — Plus de commandes, moins de galère, zéro commission";
 /**
  * LA DESCRIPTION EST DU TEXTE AFFICHÉ, ET ELLE OBÉIT AUX MÊMES RÈGLES QUE LA
  * PAGE — c'est elle que Google met sous le lien et que les messageries collent

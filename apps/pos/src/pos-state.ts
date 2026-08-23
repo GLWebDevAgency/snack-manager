@@ -17,11 +17,12 @@ export const MODE_LABEL: Record<Mode, string> = {
   tel: 'Téléphone',
 };
 
-export type PayMethod = 'cb' | 'especes' | 'retrait';
+export type PayMethod = 'cb' | 'especes' | 'tr' | 'retrait';
 
 export const PAY_LABEL: Record<PayMethod, string> = {
   cb: PAYMENT_TENDER_LABELS.card,
   especes: PAYMENT_TENDER_LABELS.cash,
+  tr: PAYMENT_TENDER_LABELS.meal_voucher,
   retrait: PAYMENT_DUE_LABEL,
 };
 
@@ -36,6 +37,7 @@ export const PAY_LABEL: Record<PayMethod, string> = {
 export const PAY_TENDER: Record<PayMethod, PaymentTender | null> = {
   cb: 'card',
   especes: 'cash',
+  tr: 'meal_voucher',
   retrait: null,
 };
 
@@ -236,8 +238,9 @@ export function buildOrderBody(params: {
  * Ventilation du service par moyen de paiement.
  *
  * Ce que compte réellement un gérant le soir : les espèces du tiroir, le
- * bordereau du TPE, ce qui est déjà tombé sur le compte via la vente en ligne,
- * et ce qui reste dû. Un total unique ne se recoupe avec rien.
+ * bordereau du TPE, la télécollecte des titres-restaurant, ce qui est déjà
+ * tombé sur le compte via la vente en ligne, et ce qui reste dû. Un total
+ * unique ne se recoupe avec rien.
  */
 export interface ServiceZ {
   orders: number;
@@ -245,6 +248,8 @@ export interface ServiceZ {
   ca: number;
   cash: number;
   card: number;
+  /** Titres-restaurant — à recouper avec la télécollecte du terminal TR. */
+  mealVoucher: number;
   online: number;
   /** Commandes parties sans encaissement (« à encaisser au retrait »). */
   due: number;
@@ -263,6 +268,7 @@ const EMPTY_Z: Omit<ServiceZ, 'source'> = {
   ca: 0,
   cash: 0,
   card: 0,
+  mealVoucher: 0,
   online: 0,
   due: 0,
   unspecified: 0,
@@ -304,6 +310,7 @@ export function zFromServer(rows: ServiceOrderRow[], since: number): ServiceZ {
     const tender = row.payment.tender ?? null;
     if (tender === 'cash') z.cash += total;
     else if (tender === 'card') z.card += total;
+    else if (tender === 'meal_voucher') z.mealVoucher += total;
     else if (tender === 'online') z.online += total;
     else z.unspecified += total;
   }
@@ -332,6 +339,7 @@ export function zFromJournal(entries: DayEntry[]): ServiceZ {
     const tender = PAY_TENDER[entry.method];
     if (tender === 'cash') z.cash += net;
     else if (tender === 'card') z.card += net;
+    else if (tender === 'meal_voucher') z.mealVoucher += net;
     else z.unspecified += net;
   }
   return z;

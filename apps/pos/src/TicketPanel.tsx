@@ -53,7 +53,7 @@ export function TicketPanel({
   onEdit: (line: CartLine) => void;
   onPark: () => void;
   onClear: () => void;
-  onPay: (method: 'cb' | 'especes' | 'retrait') => void;
+  onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
   busy: boolean;
   /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
   onCollapse?: () => void;
@@ -230,6 +230,18 @@ export function TicketPanel({
               style={{ flex: 1 }}
             />
           </View>
+          {/* Le déjeuner d'un snack se règle souvent en titre-restaurant —
+              encaissé sur le terminal TR du restaurant, pas par nous. Le
+              bouton existe pour que le Z du midi soit juste ; en fantôme,
+              car il pèse moins que les deux gestes dominants. */}
+          <Btn
+            label="Titre-restaurant"
+            kind="ghost"
+            size="md"
+            disabled={!canSend}
+            onPress={() => onPay('tr')}
+            block
+          />
           {mode === 'tel' ? (
             <Btn
               label="Payer au retrait"
@@ -416,7 +428,7 @@ export function TicketDock({
   customerName: string;
   customerPhone: string;
   onOpen: () => void;
-  onPay: (method: 'cb' | 'especes' | 'retrait') => void;
+  onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
 }) {
   const L = useLayout();
   const subtotal = cartTotal(lines);
@@ -468,6 +480,9 @@ export function TicketDock({
         </Text>
       </Press>
 
+      {/* La barre compacte garde les deux gestes dominants ; le
+          titre-restaurant s'encaisse depuis le tiroir du ticket, où la
+          place ne manque pas. */}
       <Btn
         label="Carte"
         kind="primary"

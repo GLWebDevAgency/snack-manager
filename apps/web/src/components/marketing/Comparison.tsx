@@ -20,16 +20,16 @@ if (VS_WITHOUT.length !== VS_WITH.length) {
  * Les réécrire à la main ferait vivre le même texte à deux endroits, ce que
  * `SECTIONS` existe précisément pour empêcher : le jour où le titre bouge, les
  * en-têtes bougent avec lui au lieu de le contredire à dix pixels d'écart. Le
- * titre est écrit en deux phrases pour cette raison — « Votre service
- * aujourd'hui. Votre service lundi prochain. » — et le point final de la
- * seconde n'a rien à faire dans une pastille.
+ * titre est écrit en deux phrases pour cette raison — « Votre journée
+ * sans. Votre journée avec. » — et le point final de la seconde n'a rien à
+ * faire dans une pastille.
  */
 const HEADS = section("votre-service")
   .title.split(". ")
   .map((half) => half.replace(/\.$/, ""));
 
 /**
- * « Votre service aujourd'hui. Votre service lundi prochain. »
+ * « Votre journée sans. Votre journée avec. »
  *
  * LA SECTION A CHANGÉ DE MÉTIER : elle ne conclut plus la page, elle l'ouvre.
  * Un lecteur qui vient d'arriver ne compare pas deux inventaires posés côte à

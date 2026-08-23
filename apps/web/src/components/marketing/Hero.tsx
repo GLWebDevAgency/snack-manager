@@ -75,14 +75,19 @@ export function Hero({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
           <span className="badge">
             <span className="accent">Nouveau</span>Conçu par des restaurateurs
           </span>
+          {/* Trois segments, trois promesses : le titre se lit en diagonale,
+              même quand le français n'est pas la langue forte du lecteur. Le
+              sous-titre porte l'énergie (« marche déjà → cartonner ») et la
+              liste concrète — le bénéfice d'abord, l'outil ensuite. */}
           <h1 className="h1 hero-title">
-            On fait tourner votre restaurant.
+            Plus de commandes. Moins de galère.
             <br />
-            Pas l&apos;inverse.
+            Zéro commission.
           </h1>
           <p className="subheading hero-sub">
-            Caisse, cuisine, back-office et commande en ligne réunis dans <span className="kw-w">une seule plateforme</span>{" "}
-            — <span className="kw">à vos couleurs</span>, pensée par des gens qui ont{" "}
+            Votre restaurant marche déjà. On va le faire <span className="kw">cartonner</span> : caisse, cuisine
+            et commande en ligne dans <span className="kw-w">un seul outil</span>,{" "}
+            <span className="kw">à vos couleurs</span>, installé par des gens qui ont{" "}
             <span className="kw-w">tenu le comptoir</span>.
           </p>
           {/*

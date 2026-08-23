@@ -179,7 +179,7 @@ export default async function ArticlePage({ params }: Props) {
            * même raison — la page en portait six pour deux destinations.
            */}
           <aside className="bl-outro rv">
-            <p className="bl-outrotitre">On fait tourner votre restaurant. Pas l'inverse.</p>
+            <p className="bl-outrotitre">Plus de commandes. Moins de galère. Zéro commission.</p>
             <p className="bl-outroline">
               Caisse, cuisine, commande en ligne et back-office, réunis. Les quatre applications sont manipulables sur la
               page d'accueil, sans compte et sans rendez-vous.

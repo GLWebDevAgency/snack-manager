@@ -263,12 +263,20 @@ export type SectionMeta = {
  * citent (voir `SIM_CTA_NOTE` et `PILOTE_SIGNATURE`).
  */
 export const SECTIONS: readonly SectionMeta[] = [
-  { id: "hero", nav: "Accueil", badge: null, title: "On fait tourner votre restaurant. Pas l'inverse." },
+  // Le registre du hero est une décision du fondateur (23/08/2026) : dire ce
+  // que le client veut entendre, en mots de comptoir, lisible en diagonale par
+  // un lecteur dont le français n'est pas la langue forte. Trois segments,
+  // trois promesses — et « zéro commission » est un fait, pas une image.
+  { id: "hero", nav: "Accueil", badge: null, title: "Plus de commandes. Moins de galère. Zéro commission." },
   {
     id: "votre-service",
     nav: "Votre service",
     badge: "Comparatif",
-    title: "Votre service aujourd'hui. Votre service lundi prochain.",
+    // « Avec ou sans ? » est la question qu'un comptoir pose cent fois par
+    // jour : le titre parle la langue du lieu. Deux propositions découpées au
+    // point — les en-têtes du miroir en descendent (Comparison.tsx), le titre
+    // ne peut donc pas être une phrase unique.
+    title: "Votre journée sans. Votre journée avec.",
   },
   { id: "produit", nav: "Produit", badge: "Le produit", title: "Ne nous croyez pas sur parole. Prenez une commande." },
   // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
@@ -293,7 +301,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     // à la main : à la révision de grille, la section qui compare nos prix à
     // ceux de l'organisation actuelle a continué d'annoncer un montant que la
     // section juste au-dessus démentait. Il se dérive maintenant.
-    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et votre organisation actuelle, elle vous coûte combien ?`,
+    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et là, aujourd'hui, vous perdez combien ?`,
   },
   {
     id: "lancement",
@@ -315,7 +323,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     // « Ce logiciel a un restaurant. Il s'appelle Class'Food. » mettait l'outil
     // au centre au moment précis où le lecteur cherche des gens. Ce qu'il veut
     // savoir avant de laisser son numéro, c'est à QUI il le laisse.
-    title: "Un expert de la tech, un restaurateur, et le logiciel qui leur manquait.",
+    title: "Construit derrière un vrai comptoir, avec un vrai patron de snack.",
   },
   { id: "contact", nav: "Contact", badge: null, title: "Laissez-nous votre numéro. On rappelle sous 24 h." },
 ] as const;
@@ -405,7 +413,26 @@ export const NAV_PAGES: readonly NavLink[] = [
  * gaspille son créneau le plus cher. Elle reste dans le sommaire du burger et
  * dans le pied de page.
  */
-export const NAV_LEFT: readonly NavLink[] = [ancre("produit"), ancre("commander"), ancre("tarifs")];
+/**
+ * LE DÉROULANT « PLATEFORME » — décision du fondateur (23/08/2026).
+ *
+ * Les trois pages par application ne pouvaient pas entrer à plat dans
+ * l'encoche : son ouverture est mesurée sur des groupes SYMÉTRIQUES de trois,
+ * et six entrées d'un côté l'auraient déséquilibrée. Le déroulant compte pour
+ * UNE entrée dans la mesure, et porte les trois routes — plus « La démo »,
+ * l'ancre produit qu'il remplace en tête de groupe : le visiteur qui cherchait
+ * « Produit » trouve désormais la famille entière au même endroit.
+ */
+export const NAV_PLATEFORME: readonly NavLink[] = [
+  { href: "/caisse", label: "La caisse" },
+  { href: "/cuisine", label: "L'écran cuisine" },
+  { href: "/commande-en-ligne", label: "La commande en ligne" },
+  { ...ancre("produit"), label: "La démo en direct" },
+];
+
+export const NAV_PLATEFORME_LABEL = "Plateforme";
+
+export const NAV_LEFT: readonly NavLink[] = [ancre("commander"), ancre("tarifs")];
 
 export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
 
@@ -498,7 +525,19 @@ export type FooterColumn = { readonly title: string; readonly links: readonly Na
 export const FOOTER_COLUMNS: readonly FooterColumn[] = [
   {
     title: "La plateforme",
-    links: [ancre("produit"), ancre("commander"), ancre("materiel"), ancre("tarifs")],
+    // Les trois premières entrées sont des ROUTES, pas des ancres : les pages
+    // par application. La famille est complète — leur entrée dans l'encoche
+    // reste une décision de design à part (l'équilibre trois/trois du menu) ;
+    // le pied de page, lui, les annonce toutes.
+    links: [
+      { href: "/caisse", label: "La caisse" },
+      { href: "/cuisine", label: "L'écran cuisine" },
+      { href: "/commande-en-ligne", label: "La commande en ligne" },
+      ancre("produit"),
+      ancre("commander"),
+      ancre("materiel"),
+      ancre("tarifs"),
+    ],
   },
   {
     title: "En savoir plus",
@@ -1130,10 +1169,17 @@ export type HardwareItem = {
  * de vocabulaire : un patron de snack qui lit « écran » comprend « il me faut
  * un écran de plus », c'est-à-dire un achat et un mur à percer. Une tablette,
  * il en a déjà une, ou il sait ce que ça coûte.
+ *
+ * L'IMPRIMANTE DIT « REQUISE », ET LE TIROIR-CAISSE VIT SUR SA LIGNE. Elle
+ * était présentée comme un élément parmi d'autres alors que trois promesses de
+ * la page reposent sur elle : le ticket cuisine, le mode hors-ligne (elle doit
+ * être joignable en local, sans internet) et le tiroir, qui s'ouvre par son
+ * port. Un matériel découvert le jour de l'installation coûte la confiance
+ * entière — la ligne dépasse les six mots, et c'est le prix de l'honnêteté.
  */
 export const HARDWARE: readonly HardwareItem[] = [
   { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad. Aucun matériel propriétaire." },
-  { id: "imprimante", label: "Imprimante ticket 80 mm", line: "En réseau. Ticket cuisine et sticker." },
+  { id: "imprimante", label: "Imprimante ticket 80 mm", line: "Requise, en réseau. Elle ouvre le tiroir-caisse." },
   { id: "ecran", label: "Tablette pour la cuisine", line: "Ou un moniteur mural, si vous préférez." },
   { id: "reseau", label: "Connexion internet", line: "Une box suffit. Fibre non requise." },
 ] as const;
@@ -1187,7 +1233,7 @@ export const HARDWARE_OFFLINE = {
 /* ── 6. Tarifs — les commissions, puis la grille ─────────────── */
 
 /**
- * LE TABLEAU DES COMMISSIONS, EN TÊTE DE SECTION — trois lignes, et AUCUNE
+ * LE TABLEAU DES COMMISSIONS, EN TÊTE DE SECTION — quatre lignes, et AUCUNE
  * phrase de plaidoyer autour. L'adjacence fait tout le travail.
  *
  * « Jusqu'à 30 % » et non « 30 % » : les taux varient selon le contrat et selon
@@ -1199,12 +1245,63 @@ export const HARDWARE_OFFLINE = {
  * NOUS-MÊMES, au même rang que les deux autres, prouve qu'on ne dissimule
  * rien : un restaurateur qui compare 1,5 % à 30 % se convainc tout seul. Une
  * note qu'on soupçonne d'être cachée vend contre nous.
+ *
+ * LA QUATRIÈME LIGNE NOMME LA « CAISSE GRATUITE » : l'offre d'un prestataire
+ * de paiement qui donne le logiciel et se paie sur chaque encaissement. Les
+ * frais fixes par transaction y pèsent d'autant plus que le ticket est petit —
+ * c'est l'arithmétique d'un snack, et elle se vérifie sur les grilles
+ * publiques de ces acteurs. Sans cette ligne, le prospect qui nous compare à
+ * une caisse « gratuite » ne trouvait rien, et concluait seul — contre nous.
  */
 export const COMMISSIONS = [
   { who: "Snack Manager", rate: "0 %", note: "un abonnement mensuel, rien de prélevé sur vos commandes" },
   { who: "Les plateformes", rate: "jusqu'à 30 %", note: "sur chaque commande livrée, et le client reste le leur" },
   { who: "Encaissement carte", rate: "≈ 1,5 %", note: "votre prestataire de paiement — cet argent ne nous revient pas" },
+  { who: "Les caisses « gratuites »", rate: "1 à 2 % + frais fixes", note: "sur chaque encaissement carte — plus le ticket est petit, plus le taux réel monte" },
 ] as const;
+
+/**
+ * LE PÉRIMÈTRE AVANT LE PRIX — la phrase qui referme la section.
+ *
+ * Un prospect qui compare 199 € à un prix d'appel compare une pile complète à
+ * sa première brique : ailleurs, le planning est un deuxième abonnement et la
+ * commande en ligne un troisième. On le dit sans citer un montant concurrent —
+ * leurs grilles bougent, la nôtre ne doit jamais afficher un chiffre périmé.
+ */
+export const PRICING_PERIMETER =
+  "Avant de comparer les prix, comparez les périmètres : ailleurs, la caisse, l'écran cuisine, le planning et la commande en ligne s'additionnent souvent en deux ou trois abonnements séparés. Ici, une formule les couvre — comparez les totaux, pas les prix d'appel.";
+
+/**
+ * LE COMPARATEUR DE LA « CAISSE GRATUITE » — la quatrième ligne du tableau,
+ * rendue manipulable.
+ *
+ * Même contrat d'honnêteté que le simulateur : le seul chiffre de résultat est
+ * celui que le visiteur fabrique de ses propres curseurs. Le taux comparé
+ * n'est pas une hypothèse maison — c'est la grille publique type des caisses à
+ * commission (1,3 % + 0,20 € par encaissement), remplaçable en démo par celle
+ * que le prospect s'est réellement vu proposer.
+ *
+ * LES FRAIS FIXES SONT TOUTE L'HISTOIRE. 0,20 € sur une addition de 60 € ne se
+ * voient pas ; sur un kebab à 8 €, c'est 2,5 points de plus. Un snack fait
+ * beaucoup de passages pour de petits montants : la « gratuité » se paie
+ * précisément là. D'où le taux réel affiché sous le montant — c'est lui que le
+ * restaurateur retient, parce qu'il peut le refaire de tête.
+ */
+export const COMPARE_RATE = 0.013;
+export const COMPARE_FIXED_CENTS = 20;
+
+export const COMPARE = {
+  lead: "Et la caisse « gratuite », elle coûte combien ?",
+  line: "Vos encaissements carte, votre ticket moyen — et la commission devient un montant par an, posé en face de l'abonnement.",
+  fields: {
+    volume: { label: "Encaissements carte par mois", min: 5_000, max: 60_000, step: 1_000 },
+    ticket: { label: "Ticket moyen", min: 6, max: 30, step: 0.5 },
+  },
+  resLabel: "Prélevé chaque année par une caisse à commission",
+  rateRow: "Taux réel sur un ticket",
+  boostRow: "Boost, tout compris, à l'année",
+  note: "Taux type des caisses à commission : 1,3 % + 0,20 € par encaissement, relevé sur leurs grilles publiques — en démo, on le remplace par celui qu'on vous a proposé. Avec nous, vos encaissements restent sur votre TPE actuel, aux conditions déjà négociées avec votre banque : nous n'y touchons pas.",
+} as const;
 
 /**
  * LA LISTE DE MODULES EST UNIQUE, ET C'EST TOUTE LA REFONTE DE LA GRILLE.
@@ -1673,6 +1770,18 @@ export const FAQ = [
     a: ENGAGEMENT,
   },
   {
+    q: "Mes clients paient-ils des frais en plus ?",
+    // La peur existe dans le marché — des solutions de paiement refacturent
+    // des « frais de service » au client final, et ça se sait. La question se
+    // pose donc chez nous aussi ; y répondre avant qu'elle soit posée vaut
+    // mieux que laisser le prospect supposer.
+    a: "Non, jamais. Ni frais de service, ni frais d'application, ni majoration en ligne : le prix affiché sur votre carte est celui que paie votre client. Nous ne prélevons rien sur vos ventes — nos revenus sont l'abonnement et les prestations affichées.",
+  },
+  {
+    q: "Acceptez-vous les titres-restaurant ?",
+    a: "Oui. Vous encaissez le titre comme aujourd'hui — papier ou carte, sur votre terminal habituel — et la caisse l'enregistre comme moyen de paiement à part entière : votre clôture de service ventile le midi correctement.",
+  },
+  {
     q: "Est-ce que vous livrez ?",
     a: "Non, et nous n'avons jamais eu l'intention de le faire. Le tunnel de commande s'arrête au créneau de retrait. La livraison, quand il y en a une, reste la vôtre — vos tournées, vos horaires.",
   },
@@ -1715,8 +1824,8 @@ export const FOUNDER_QUOTE =
  * Le collage montrait trois visuels de la CARTE du pilote — un tacos gratiné,
  * un smash burger, un panini. Verdict du fondateur : « ce n’est pas pro, ce
  * n’est pas ce que je veux ». Il a raison, et pour une raison qui dépasse le
- * goût : la section s’appelle désormais « Un expert de la tech, un
- * restaurateur, et le logiciel qui leur manquait ». Des assiettes n’illustrent
+ * goût : la section s’appelle désormais « Construit derrière un vrai
+ * comptoir, avec un vrai patron de snack ». Des assiettes n’illustrent
  * pas une rencontre entre deux personnes. Un comptoir, un service, si.
  *
  * ═══ ET ELLES NE PEUVENT PLUS ÊTRE LÉGENDÉES « CLASS’FOOD » ═══

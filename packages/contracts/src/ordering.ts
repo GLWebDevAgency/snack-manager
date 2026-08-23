@@ -178,6 +178,7 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 export const PAYMENT_TENDER_LABELS: Record<PaymentTender, string> = {
   cash: 'Espèces',
   card: 'Carte bancaire',
+  meal_voucher: 'Titre-restaurant',
   online: 'En ligne',
 };
 
