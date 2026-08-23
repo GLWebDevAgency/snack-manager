@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LANDING_TOP, NAV_LEFT, NAV_MOBILE, NAV_PAGES, NAV_RIGHT } from "./content";
+import {
+  LANDING_TOP,
+  NAV_LEFT,
+  NAV_MOBILE,
+  NAV_PAGES,
+  NAV_PLATEFORME,
+  NAV_PLATEFORME_LABEL,
+  NAV_RIGHT,
+} from "./content";
 import { LogoMark } from "../brand/Logo";
 import { NotchFillet } from "./icons";
 
@@ -32,6 +40,35 @@ const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayout
 export function SiteHeader() {
   const [openWidth, setOpenWidth] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  /*
+   * LE DÉROULANT « PLATEFORME ».
+   *
+   * Son panneau ne peut pas vivre dans `.hd-links` : le groupe est clippé
+   * (`overflow: hidden`, nécessaire à l'animation d'ouverture de l'encoche).
+   * Il est donc rendu en frère de `.hd-midc`, sur `.hd-mid` qui, lui, laisse
+   * déborder — et positionné sous la barre. Le survol du déclencheur OU du
+   * panneau le tient ouvert ; un délai de fermeture évite qu'il claque
+   * pendant le trajet de la souris entre les deux.
+   */
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropClose = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropButton = useRef<HTMLButtonElement>(null);
+
+  const dropEnter = useCallback(() => {
+    if (dropClose.current) clearTimeout(dropClose.current);
+    setDropOpen(true);
+  }, []);
+  const dropLeave = useCallback(() => {
+    if (dropClose.current) clearTimeout(dropClose.current);
+    dropClose.current = setTimeout(() => setDropOpen(false), 160);
+  }, []);
+  const dropEscape = useCallback((ev: React.KeyboardEvent) => {
+    if (ev.key === "Escape") {
+      setDropOpen(false);
+      dropButton.current?.focus();
+    }
+  }, []);
 
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
@@ -80,6 +117,23 @@ export function SiteHeader() {
           >
             <div className="hd-midc">
               <div className="hd-links" ref={leftRef}>
+                {/* Le déclencheur compte pour UN enfant dans la mesure de
+                    l'encoche — la symétrie trois/trois tient. */}
+                <button
+                  type="button"
+                  className="ui-link hd-droptrigger"
+                  ref={dropButton}
+                  aria-haspopup="true"
+                  aria-expanded={dropOpen}
+                  aria-controls="hd-droppanel"
+                  onClick={() => setDropOpen((v) => !v)}
+                  onMouseEnter={dropEnter}
+                  onMouseLeave={dropLeave}
+                  onKeyDown={dropEscape}
+                >
+                  {NAV_PLATEFORME_LABEL}
+                  <span className="hd-dropchev" aria-hidden="true">▾</span>
+                </button>
                 {NAV_LEFT.map((l) => (
                   <Link className="ui-link" href={l.href} key={l.href}>
                     {l.label}
@@ -96,6 +150,27 @@ export function SiteHeader() {
                   </Link>
                 ))}
               </div>
+            </div>
+
+            {/* Le panneau — frère du contenu clippé, jamais son enfant. */}
+            <div
+              id="hd-droppanel"
+              className={dropOpen ? "hd-droppanel open" : "hd-droppanel"}
+              onMouseEnter={dropEnter}
+              onMouseLeave={dropLeave}
+              onKeyDown={dropEscape}
+            >
+              {NAV_PLATEFORME.map((l) => (
+                <Link
+                  className="ui-link"
+                  href={l.href}
+                  key={l.href}
+                  tabIndex={dropOpen ? undefined : -1}
+                  onClick={() => setDropOpen(false)}
+                >
+                  {l.label}
+                </Link>
+              ))}
             </div>
           </div>
           <NotchFillet className="notch-fillet" flip />
@@ -150,7 +225,7 @@ export function SiteHeader() {
             </Link>
           ))}
           <div className="hd-mobilepages">
-            {NAV_PAGES.map((l) => (
+            {[...NAV_PLATEFORME, ...NAV_PAGES].map((l) => (
               <Link
                 className="ui-link hd-mobilepage"
                 href={l.href}

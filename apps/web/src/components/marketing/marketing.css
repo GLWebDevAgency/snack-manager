@@ -321,6 +321,9 @@ html:has(.mk) {
   margin-top: -1px;
 }
 .mk .hd-mid {
+  /* `relative` : le panneau du déroulant « Plateforme » se positionne sur
+     cette boîte — la seule de l'encoche qui laisse déborder. */
+  position: relative;
   height: 34px;
   background: var(--black);
   box-shadow:
@@ -330,6 +333,55 @@ html:has(.mk) {
   overflow: visible;
   width: 48px;
   transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Le déroulant « Plateforme » ──
+   Le déclencheur est un bouton habillé en lien : il compte pour un enfant
+   dans la mesure de l'encoche, la symétrie trois/trois tient. Le panneau vit
+   en frère du contenu clippé (voir SiteHeader.tsx) et pend sous la barre. */
+.mk .hd-droptrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.mk .hd-dropchev {
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+.mk .hd-droptrigger[aria-expanded="true"] .hd-dropchev {
+  transform: rotate(180deg);
+}
+.mk .hd-droppanel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translate(-50%, -4px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--black);
+  border: 1px solid var(--border-10);
+  border-radius: 12px;
+  white-space: nowrap;
+  color: var(--white);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+.mk .hd-droppanel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
 }
 .mk .hd-desktop:hover .hd-mid,
 .mk .hd-desktop:focus-within .hd-mid {

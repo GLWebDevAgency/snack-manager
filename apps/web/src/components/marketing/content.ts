@@ -413,7 +413,26 @@ export const NAV_PAGES: readonly NavLink[] = [
  * gaspille son créneau le plus cher. Elle reste dans le sommaire du burger et
  * dans le pied de page.
  */
-export const NAV_LEFT: readonly NavLink[] = [ancre("produit"), ancre("commander"), ancre("tarifs")];
+/**
+ * LE DÉROULANT « PLATEFORME » — décision du fondateur (23/08/2026).
+ *
+ * Les trois pages par application ne pouvaient pas entrer à plat dans
+ * l'encoche : son ouverture est mesurée sur des groupes SYMÉTRIQUES de trois,
+ * et six entrées d'un côté l'auraient déséquilibrée. Le déroulant compte pour
+ * UNE entrée dans la mesure, et porte les trois routes — plus « La démo »,
+ * l'ancre produit qu'il remplace en tête de groupe : le visiteur qui cherchait
+ * « Produit » trouve désormais la famille entière au même endroit.
+ */
+export const NAV_PLATEFORME: readonly NavLink[] = [
+  { href: "/caisse", label: "La caisse" },
+  { href: "/cuisine", label: "L'écran cuisine" },
+  { href: "/commande-en-ligne", label: "La commande en ligne" },
+  { ...ancre("produit"), label: "La démo en direct" },
+];
+
+export const NAV_PLATEFORME_LABEL = "Plateforme";
+
+export const NAV_LEFT: readonly NavLink[] = [ancre("commander"), ancre("tarifs")];
 
 export const NAV_RIGHT: readonly NavLink[] = [...NAV_PAGES, ancre("contact")];
 
