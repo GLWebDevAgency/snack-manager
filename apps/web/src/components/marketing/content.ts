@@ -506,12 +506,14 @@ export type FooterColumn = { readonly title: string; readonly links: readonly Na
 export const FOOTER_COLUMNS: readonly FooterColumn[] = [
   {
     title: "La plateforme",
-    // « La caisse » est une ROUTE, pas une ancre : première page par
-    // application (le modèle des suivantes — cuisine, commande en ligne).
-    // Elle n'entre pas dans l'encoche tant que la famille n'est pas complète ;
-    // le pied de page, lui, peut l'annoncer dès aujourd'hui.
+    // Les trois premières entrées sont des ROUTES, pas des ancres : les pages
+    // par application. La famille est complète — leur entrée dans l'encoche
+    // reste une décision de design à part (l'équilibre trois/trois du menu) ;
+    // le pied de page, lui, les annonce toutes.
     links: [
       { href: "/caisse", label: "La caisse" },
+      { href: "/cuisine", label: "L'écran cuisine" },
+      { href: "/commande-en-ligne", label: "La commande en ligne" },
       ancre("produit"),
       ancre("commander"),
       ancre("materiel"),
