@@ -49,6 +49,7 @@ import {
   type TenantActivityRow,
 } from './health.service';
 import { buildSeedLeads } from './crm.seed';
+import { buildProspectionOps } from './crm.prospection';
 import { demoSeedEnabled } from '../../common/demo-seed';
 
 /** Fenêtre d'activité d'un client : 30 jours glissants. */
@@ -71,6 +72,7 @@ export class CrmService {
 
   async listLeads(stage?: LeadStage): Promise<CrmLead[]> {
     await this.ensureSeeded();
+    await this.ensureProspected();
     const docs = await this.leads
       .find(stage ? { stage } : {})
       .sort({ updatedAt: -1 })
@@ -167,6 +169,7 @@ export class CrmService {
 
   async overview(now: Date = new Date()): Promise<CrmOverview> {
     await this.ensureSeeded();
+    await this.ensureProspected();
 
     const [stageRows, leadDocs, clients] = await Promise.all([
       this.leads.aggregate<{ _id: LeadStage; n: number }>([
@@ -401,6 +404,39 @@ export class CrmService {
       this.seeding = null;
     });
     return this.seeding;
+  }
+
+  // ─── Import de prospection (les vrais leads) ───
+
+  /**
+   * Écrit la liste de prospection RÉELLE (`crm.prospection.ts`) — mais
+   * seulement là où le seed de démonstration est COUPÉ, c'est-à-dire en
+   * production et sur tout environnement « réel ». Là où la démo est active
+   * (staging, postes de travail), le pipeline montre sa fiction : y mélanger
+   * de vrais restaurants et de vrais numéros ferait le piège inverse de celui
+   * que `demoSeedEnabled` évite déjà.
+   *
+   * Chaque passage est sans danger : l'écriture est un upsert `$setOnInsert`
+   * par nom d'établissement — un lead déjà présent n'est JAMAIS retouché, ni
+   * son étape, ni ses relances, ni ses notes. Enrichir la liste plus tard ne
+   * réécrit donc que les nouveaux venus. (Revers assumé : renommer un lead
+   * importé le fait revenir sous son nom d'origine au prochain démarrage —
+   * on le repère à son étape « nouveau » et on le pose « perdu ».)
+   */
+  private prospecting: Promise<void> | null = null;
+
+  private ensureProspected(): Promise<void> {
+    if (demoSeedEnabled()) return Promise.resolve();
+    this.prospecting ??= (async () => {
+      const ops = buildProspectionOps();
+      if (ops.length === 0) return;
+      await this.leads.bulkWrite(ops, { ordered: false });
+    })().catch(() => {
+      // Même contrat que l'amorce : un import raté n'abat pas la vue, et se
+      // retentera au prochain appel.
+      this.prospecting = null;
+    });
+    return this.prospecting;
   }
 }
 
