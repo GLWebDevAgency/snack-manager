@@ -263,7 +263,11 @@ export type SectionMeta = {
  * citent (voir `SIM_CTA_NOTE` et `PILOTE_SIGNATURE`).
  */
 export const SECTIONS: readonly SectionMeta[] = [
-  { id: "hero", nav: "Accueil", badge: null, title: "On fait tourner votre restaurant. Pas l'inverse." },
+  // Le registre du hero est une décision du fondateur (23/08/2026) : dire ce
+  // que le client veut entendre, en mots de comptoir, lisible en diagonale par
+  // un lecteur dont le français n'est pas la langue forte. Trois segments,
+  // trois promesses — et « zéro commission » est un fait, pas une image.
+  { id: "hero", nav: "Accueil", badge: null, title: "Plus de commandes. Moins de galère. Zéro commission." },
   {
     id: "votre-service",
     nav: "Votre service",
