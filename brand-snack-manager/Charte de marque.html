@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snack Manager — Charte de marque</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23000'/><path d='M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linejoin='round' stroke-linecap='round'/><path d='M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z' fill='%23fff'/><rect x='8.6' y='13.8' width='14.8' height='6.4' rx='2.2' fill='%23fff'/><path d='M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z' fill='%23fff'/></svg>">
+<meta name="theme-color" content="#000000">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--card:#0d0d0e;--card2:#111112;--line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.16);--txt:#fff;--mut:rgba(255,255,255,.56);--mut2:rgba(255,255,255,.34);--gold:#c9a15a;--white:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:Inter,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.5}
+a{color:var(--gold);text-decoration:none}a:hover{color:#e0bd7d}
+.wrap{max-width:1080px;margin:0 auto;padding:56px 28px 120px}
+.kick{display:inline-flex;align-items:center;gap:9px;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--gold);text-transform:uppercase}
+h1{font-size:clamp(34px,5.5vw,60px);font-weight:900;letter-spacing:-.03em;line-height:1.02;margin:14px 0 0}
+.lead{margin-top:16px;font-size:16.5px;color:var(--mut);max-width:660px;text-wrap:pretty}
+.sec{margin-top:66px}
+.lab{display:block;font-size:10.5px;font-weight:800;letter-spacing:.16em;color:var(--mut2);text-transform:uppercase;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:26px}
+h2{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
+h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+p.b{font-size:14.5px;color:var(--mut);max-width:720px;text-wrap:pretty}
+.grid{display:grid;gap:16px}.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}.g3{grid-template-columns:repeat(auto-fit,minmax(216px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(164px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+.card p{font-size:13px;color:var(--mut);margin-top:7px;line-height:1.5}
+.hero{display:grid;place-items:center;padding:64px 0 58px;background:radial-gradient(620px 320px at 50% 34%,rgba(201,161,90,.14),transparent 66%),var(--card);border:1px solid var(--line);border-radius:22px;position:relative;overflow:hidden}
+.hero:after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.055) 1px,transparent 1px);background-size:26px 26px;pointer-events:none}
+.spec{display:grid;place-items:center;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px 16px;text-align:center}
+.spec b{font-size:11.5px;font-weight:800;letter-spacing:.05em}
+.spec span{font-size:11.5px;color:var(--mut);line-height:1.45}
+.tile{aspect-ratio:1;display:grid;place-items:center;border-radius:16px;border:1px solid var(--line);background:var(--card)}
+.tile.inv{background:var(--white);color:#000;border-color:transparent}
+.tile.gold{background:var(--gold);color:#000;border-color:transparent}
+.tile.photo{background:linear-gradient(135deg,#3a2a1c,#1a1512 60%,#0e0c0a);border-color:rgba(201,161,90,.25)}
+.tcap{font-size:11px;color:var(--mut2);text-align:center;margin-top:9px;letter-spacing:.02em}
+.ladder{display:flex;align-items:flex-end;gap:30px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 26px}
+.li{display:flex;flex-direction:column;align-items:center;gap:11px}.li span{font-size:10.5px;color:var(--mut2);white-space:nowrap}
+.lock{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(268px,1fr))}
+.lockcard{display:flex;align-items:center;gap:13px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;font-weight:800;font-size:19px;letter-spacing:-.025em}
+.lockcard.v{flex-direction:column;gap:11px;text-align:center;padding:30px 24px}
+.swatch{border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.swatch .chip{height:88px}.swatch .meta{padding:12px 14px;background:var(--card)}
+.swatch b{display:block;font-size:12.5px}.swatch code{display:block;font-size:11px;color:var(--mut2);margin-top:3px;font-family:ui-monospace,monospace}
+.rules{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.rule{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.rule .ico{flex:0 0 22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:13px;font-weight:900}
+.rule.no .ico{background:rgba(224,72,60,.16);color:#e0483c}
+.rule.ok .ico{background:rgba(74,168,110,.16);color:#4aa86e}
+.rule b{font-size:12.5px;display:block}
+.rule p{font-size:12px;color:var(--mut);margin-top:3px;line-height:1.45}
+.clear{position:relative;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:44px}
+.clearbox{position:relative;padding:36px}
+.clearbox:before{content:"";position:absolute;inset:0;border:1px dashed rgba(201,161,90,.45);border-radius:8px}
+.clearbox:after{content:"×1 hauteur du ticket ÷ 3";position:absolute;left:50%;bottom:-26px;transform:translateX(-50%);font-size:10.5px;color:var(--gold);white-space:nowrap;letter-spacing:.04em}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut2)}
+td code{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--gold)}
+.note{font-size:12.5px;color:var(--mut2);margin-top:14px;line-height:1.55;max-width:760px}
+.foot{margin-top:80px;padding-top:26px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--mut2)}
+@media print{body{background:#fff;color:#000}.wrap{padding:0}.card,.hero,.ladder,.clear,.spec,.lockcard,.rule{background:#fff;border-color:#ddd}.hero:after{display:none}}
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#000000">
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" fill="#000"/><path d="M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z" fill="none" stroke="#fff" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round"/><path d="M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z" fill="#fff"/><path d="M 10.8 13.5 L 21.2 13.5 C 22.4 13.5 23.4 14.5 23.4 15.7 L 23.4 18.3 C 23.4 19.5 22.4 20.5 21.2 20.5 L 10.8 20.5 C 9.6 20.5 8.6 19.5 8.6 18.3 L 8.6 15.7 C 8.6 14.5 9.6 13.5 10.8 13.5 Z" fill="#c9a15a"/><path d="M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z" fill="#fff"/></svg>
+</template>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs><mask id="bolt" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32"><rect width="32" height="32" fill="#fff"></rect><path d="M 16.9 8.6 L 12.5 16.4 L 15.5 16.4 L 14.5 22.6 L 19.3 15 L 16.3 15 Z" fill="#000" stroke="#000" stroke-width="0.45" stroke-linejoin="round"></path></mask></defs>
+<symbol id="m" viewBox="0 0 32 32"><path d="M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round"></path><g mask="url(#bolt)"><path d="M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z" fill="currentColor"></path><path d="M 10.8 13.5 L 21.2 13.5 C 22.4 13.5 23.4 14.5 23.4 15.7 L 23.4 18.3 C 23.4 19.5 22.4 20.5 21.2 20.5 L 10.8 20.5 C 9.6 20.5 8.6 19.5 8.6 18.3 L 8.6 15.7 C 8.6 14.5 9.6 13.5 10.8 13.5 Z" fill="currentColor"></path><path d="M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z" fill="currentColor"></path></g></symbol>
+<symbol id="mduo" viewBox="0 0 32 32"><path d="M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round" stroke-linecap="round"></path><g mask="url(#bolt)"><path d="M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z" fill="currentColor"></path><path d="M 10.8 13.5 L 21.2 13.5 C 22.4 13.5 23.4 14.5 23.4 15.7 L 23.4 18.3 C 23.4 19.5 22.4 20.5 21.2 20.5 L 10.8 20.5 C 9.6 20.5 8.6 19.5 8.6 18.3 L 8.6 15.7 C 8.6 14.5 9.6 13.5 10.8 13.5 Z" fill="#c9a15a"></path><path d="M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z" fill="currentColor"></path></g></symbol>
+<symbol id="mmicro" viewBox="0 0 32 32"><path d="M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"></path><path d="M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z" fill="currentColor"></path><rect x="8.6" y="13.8" width="14.8" height="6.4" rx="2.2" fill="currentColor"></rect><path d="M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z" fill="currentColor"></path></symbol>
+</svg>
+
+<div class="wrap">
+<span class="kick"><svg width="15" height="15"><use href="#m"></use></svg> Charte de marque · v1.0</span>
+<h1>Snack Manager</h1>
+<p class="lead">Un seul signe, trois lectures : le <b>ticket</b> qu'on griffonnait avant nous, le <b>burger</b> qui est aussi l'icône menu du logiciel, et <b>l'éclair évidé</b> — la commande qui fend le rush. Ce document est la référence : rien d'autre ne fait autorité.</p>
+
+<div class="hero"><svg width="196" height="196"><use href="#mduo"></use></svg></div>
+
+<div class="sec"><span class="lab">01 · Anatomie — ce que chaque couche dit</span>
+<div class="grid g3">
+<div class="spec"><svg width="60" height="60" viewBox="0 0 32 32"><path d="M 8.2 1.6 L 23.8 1.6 C 25.6 1.6 27 3 27 4.8 L 27 29.8 L 24.3 28.1 L 21.6 29.8 L 18.9 28.1 L 16.2 29.8 L 13.5 28.1 L 10.8 29.8 L 8.1 28.1 L 5 29.8 L 5 4.8 C 5 3 6.4 1.6 8.2 1.6 Z" fill="none" stroke="#fff" stroke-width="2.1" stroke-linejoin="round"></path></svg><b>LE CADRE</b><span>Le ticket au bord déchiré. L'objet du métier, celui qu'on remplace.</span></div>
+<div class="spec"><svg width="60" height="60" viewBox="0 0 32 32"><path d="M 8.6 11 C 8.6 7.4 11.9 5 16 5 C 20.1 5 23.4 7.4 23.4 11 L 23.4 11.3 C 23.4 11.9 22.9 12.4 22.3 12.4 L 9.7 12.4 C 9.1 12.4 8.6 11.9 8.6 11.3 Z" fill="#fff"></path><rect x="8.6" y="13.5" width="14.8" height="7" rx="2.2" fill="#fff"></rect><path d="M 9.7 21.8 L 22.3 21.8 C 22.9 21.8 23.4 22.3 23.4 22.9 C 23.4 24.3 20.1 25.3 16 25.3 C 11.9 25.3 8.6 24.3 8.6 22.9 C 8.6 22.3 9.1 21.8 9.7 21.8 Z" fill="#fff"></path></svg><b>LE BURGER</b><span>Trois barres : le produit vendu, et l'icône menu de l'interface.</span></div>
+<div class="spec"><svg width="60" height="60" viewBox="0 0 32 32"><path d="M 16.9 8.6 L 12.5 16.4 L 15.5 16.4 L 14.5 22.6 L 19.3 15 L 16.3 15 Z" fill="#c9a15a"></path></svg><b>L'ÉCLAIR</b><span>Évidé, jamais coloré : c'est du vide, il prend toujours le fond.</span></div>
+</div>
+<p class="note"><b>Règle de construction :</b> le mark vit dans une grille de 32 × 32. Le ticket occupe 22 unités de large, l'éclair 14 de haut. Ne redessinez rien à la main — partez toujours des fichiers vectoriels livrés.</p></div>
+
+<div class="sec"><span class="lab">02 · Les trois gravures</span>
+<div class="grid g3">
+<div class="card"><svg width="46" height="46"><use href="#m"></use></svg><h3 style="margin-top:14px">Monochrome</h3><p>La version par défaut. Interfaces, navigation, documents, tampons, sérigraphie. Une seule couleur, toujours <code style="color:var(--gold)">currentColor</code>.</p></div>
+<div class="card"><svg width="46" height="46"><use href="#mduo"></use></svg><h3 style="margin-top:14px">Duo · steak laiton</h3><p>Réservée aux grandes tailles (≥ 48 px) et aux moments de marque : couverture de deck, page d'accueil, packaging, goodies.</p></div>
+<div class="card"><svg width="46" height="46"><use href="#mmicro"></use></svg><h3 style="margin-top:14px">Micro</h3><p>Sous 20 px, l'éclair se referme optiquement : cette gravure le supprime et épaissit le trait. Favicon, badge, avatar 16–20 px.</p></div>
+</div></div>
+
+<div class="sec"><span class="lab">03 · Tenue aux tailles réelles</span>
+<div class="ladder">
+<div class="li"><svg width="16" height="16"><use href="#mmicro"></use></svg><span>16 px · micro</span></div>
+<div class="li"><svg width="20" height="20"><use href="#mmicro"></use></svg><span>20 px · micro</span></div>
+<div class="li"><svg width="25" height="25"><use href="#m"></use></svg><span>25 px · nav</span></div>
+<div class="li"><svg width="48" height="48"><use href="#mduo"></use></svg><span>48 px · duo</span></div>
+<div class="li"><svg width="96" height="96"><use href="#mduo"></use></svg><span>96 px · duo</span></div>
+</div>
+<p class="note"><b>Taille minimale absolue :</b> 14 px à l'écran, 5 mm à l'impression — en gravure micro. En dessous, utilisez le lockup textuel seul.</p></div>
+
+<div class="sec"><span class="lab">04 · Zone de respiration</span>
+<div class="clear"><div class="clearbox"><svg width="104" height="104"><use href="#mduo"></use></svg></div></div>
+<p class="note">Aucun élément — texte, filet, bord de page, autre logo — n'entre dans la zone égale au tiers de la hauteur du mark, sur les quatre côtés. C'est le minimum ; doublez-le sur une couverture.</p></div>
+
+<div class="sec"><span class="lab">05 · Fonds autorisés</span>
+<div class="grid g4">
+<div><div class="tile"><svg width="52" height="52"><use href="#mduo"></use></svg></div><div class="tcap">Noir · duo (référence)</div></div>
+<div><div class="tile inv"><svg width="52" height="52"><use href="#m"></use></svg></div><div class="tcap">Blanc · monochrome noir</div></div>
+<div><div class="tile gold"><svg width="52" height="52"><use href="#m"></use></svg></div><div class="tcap">Laiton · mono noir</div></div>
+<div><div class="tile photo"><svg width="52" height="52"><use href="#m"></use></svg></div><div class="tcap">Photo sombre · mono blanc</div></div>
+</div>
+<p class="note">L'éclair étant un évidement, il prend la couleur du support : noir sur fond noir, doré sur fond laiton, blanc sur fond blanc. Sur photo, n'utilisez que la gravure monochrome, sur une zone calme et suffisamment contrastée.</p></div>
+
+<div class="sec"><span class="lab">06 · Lockups</span>
+<div class="lock">
+<div class="lockcard"><svg width="32" height="32"><use href="#mduo"></use></svg> Snack Manager</div>
+<div class="lockcard" style="background:var(--white);color:#000;border-color:transparent"><svg width="32" height="32"><use href="#m"></use></svg> Snack Manager</div>
+<div class="lockcard v"><svg width="46" height="46"><use href="#mduo"></use></svg><span>Snack Manager</span></div>
+</div>
+<p class="note"><b>Construction :</b> Inter 800, interlettrage −0,025 em, hauteur de casse alignée sur le corps du ticket. L'écart mark ↔ texte vaut 40 % de la hauteur du mark. Le nom s'écrit toujours <b>Snack Manager</b> — jamais SnackManager, jamais SNACK MANAGER en corps de texte, jamais « SM » face à un client.</p></div>
+
+<div class="sec"><span class="lab">07 · Palette</span>
+<div class="grid g4">
+<div class="swatch"><div class="chip" style="background:#000"></div><div class="meta"><b>Noir comptoir</b><code>#000000</code></div></div>
+<div class="swatch"><div class="chip" style="background:#c9a15a"></div><div class="meta"><b>Laiton</b><code>#C9A15A</code></div></div>
+<div class="swatch"><div class="chip" style="background:#fff"></div><div class="meta"><b>Blanc</b><code>#FFFFFF</code></div></div>
+<div class="swatch"><div class="chip" style="background:#0d0d0e"></div><div class="meta"><b>Carte</b><code>#0D0D0E</code></div></div>
+</div>
+<p class="note">Le laiton est un <b>accent</b> : il ne dépasse jamais 10 % d'une surface. Les couleurs d'état (vert prêt, orange en préparation, rouge retard) appartiennent aux applications, pas à la marque — elles ne sont jamais personnalisables par un client, pour raison de sécurité opérationnelle.</p></div>
+
+<div class="sec"><span class="lab">08 · Typographie</span>
+<div class="grid g2">
+<div class="card"><div style="font-size:38px;font-weight:900;letter-spacing:-.03em;line-height:1">Aa</div><h3 style="margin-top:12px">Inter · titres</h3><p>800–900, interlettrage serré (−0,02 à −0,03 em). Jamais en majuscules au-delà de 5 mots.</p></div>
+<div class="card"><div style="font-size:38px;font-weight:400;letter-spacing:-.01em;line-height:1">Aa</div><h3 style="margin-top:12px">Inter · courant</h3><p>400–500, corps 14–16 px, interligne 1,5. Les micro-labels : 700, 10–11 px, +0,14 em, capitales.</p></div>
+</div></div>
+
+<div class="sec"><span class="lab">09 · Interdits</span>
+<div class="rules">
+<div class="rule no"><span class="ico">✕</span><span><b>Colorer l'éclair</b><p>C'est un évidement. Le remplir casse le sens du signe.</p></span></div>
+<div class="rule no"><span class="ico">✕</span><span><b>Déformer, incliner, faire pivoter</b><p>Le mark reste d'aplomb, à proportions verrouillées.</p></span></div>
+<div class="rule no"><span class="ico">✕</span><span><b>Ombre portée, contour, dégradé</b><p>Aucun effet. Le halo laiton du site est un décor de fond, pas un traitement du logo.</p></span></div>
+<div class="rule no"><span class="ico">✕</span><span><b>Redessiner ou vectoriser depuis un PNG</b><p>Partez des SVG livrés, toujours.</p></span></div>
+<div class="rule no"><span class="ico">✕</span><span><b>Duo sous 48 px</b><p>Le steak laiton devient une bavure. Passez en monochrome ou micro.</p></span></div>
+<div class="rule no"><span class="ico">✕</span><span><b>Enfermer le mark dans une autre forme</b><p>Le ticket EST le contenant. Pas de cercle, pas de carré ajouté — sauf l'icône applicative.</p></span></div>
+</div></div>
+
+<div class="sec"><span class="lab">10 · Marque blanche — la règle qui compte</span>
+<div class="grid g2">
+<div class="card"><h3>Dans les applications d'un client</h3><p>Le logo affiché est celui du restaurant, à ses couleurs. Le mark Snack Manager n'apparaît qu'une fois, en pied d'écran de connexion, à 60 % d'opacité, avec la mention <b>« Propulsé par Snack Manager »</b>. Jamais dans le KDS en service, jamais sur un ticket client.</p></div>
+<div class="card"><h3>Sur nos propres supports</h3><p>Site, deck, propositions, réseaux, factures : le mark est au premier plan, gravure duo sur fond noir. C'est la seule situation où le laiton s'affiche pleinement.</p></div>
+</div>
+<p class="note">Raison : le restaurateur vend son enseigne, pas la nôtre. Notre visibilité se joue sur nos supports commerciaux et sur le bouche-à-oreille entre gérants — jamais au détriment de la marque du client.</p></div>
+
+<div class="sec"><span class="lab">11 · Fichiers livrés</span>
+<table>
+<tr><th>Fichier</th><th>Usage</th></tr>
+<tr><td><code>logos/svg/sm-mark-black.svg</code></td><td>Mono noir — documents, fonds clairs</td></tr>
+<tr><td><code>logos/svg/sm-mark-white.svg</code></td><td>Mono blanc — fonds sombres, photo</td></tr>
+<tr><td><code>logos/svg/sm-mark-gold.svg</code></td><td>Mono laiton — cas de marque uniquement</td></tr>
+<tr><td><code>logos/svg/sm-mark-duo-white-gold.svg</code></td><td>Duo sur fond sombre (référence)</td></tr>
+<tr><td><code>logos/svg/sm-mark-duo-black-gold.svg</code></td><td>Duo sur fond clair</td></tr>
+<tr><td><code>logos/svg/sm-mark-micro-black.svg</code> · <code>-white.svg</code></td><td>Gravure micro, sous 20 px</td></tr>
+<tr><td><code>logos/svg/sm-lockup-white.svg</code> · <code>-black.svg</code></td><td>Lockup horizontal mark + nom</td></tr>
+<tr><td><code>logos/svg/sm-favicon.svg</code></td><td>Favicon / icône applicative (fond noir arrondi)</td></tr>
+</table>
+<p class="note">Tous les SVG sont en couleurs figées pour l'export. En code, préférez le <code>&lt;symbol&gt;</code> avec <code>currentColor</code> : un seul mark, la couleur héritée du contexte. Le bloc de définitions est en tête de ce document et du site.</p></div>
+
+<div class="foot"><span>Snack Manager — charte de marque v1.0 · document interne</span><span><a href="Snack Manager - Site Vitrine.html">Site vitrine</a> · <a href="SM - Design System.html">Design system</a> · <a href="logos/Logo SM - Piste G - Ticket-Burger.html">Planche d'origine</a></span></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,31 @@
+SNACK MANAGER — KIT DE MARQUE
+=============================
+
+CHARTE COMPLETE
+  Charte de marque.html ....... a ouvrir dans un navigateur (regles d'usage,
+                                echelle, zone de respiration, interdits)
+
+mark/ ......... le symbole seul (ticket + burger + eclair evide), 512x512, vectoriel
+  sm-mark-mono-blanc ........ fonds sombres et photos (usage par defaut)
+  sm-mark-mono-noir ......... fonds clairs, papier, fax, tampon
+  sm-mark-duo-*-laiton ...... steak en laiton — supports premium (deck, print)
+  sm-mark-micro-* ........... eclair epaissi — a utiliser SOUS 24 px
+
+favicon/ ...... versions avec fond plein, pour onglets et app icons
+lockup/ ....... symbole + nom, horizontal et vertical
+social/ ....... avatar 1:1 et banniere 1500x500
+
+REGLES ESSENTIELLES
+  - L'eclair est un VIDE, jamais une couleur : il prend toujours le fond.
+  - Zone de respiration : la hauteur d'une dent de ticket sur les 4 cotes.
+  - Minimum absolu : 16 px (utiliser la version micro sous 24 px).
+  - Ne jamais : deformer, incliner, ajouter d'ombre portee, changer les couleurs
+    du steak, poser la version duo sur un fond laiton.
+
+COULEURS
+  Noir      #000000
+  Blanc     #FFFFFF
+  Laiton    #C9A15A
+
+TYPOGRAPHIE
+  Inter — 800/900 pour les titres, 400/500 pour le texte courant.

@@ -3,6 +3,8 @@ import { ADLaM_Display } from "next/font/google";
 import { PRICE_RANGE } from "@/components/marketing/content";
 import { SITE_URL } from "@/lib/site";
 import "@/components/marketing/marketing.css";
+import { SplashAuPremierPassage } from "@/components/brand/SplashAuPremierPassage";
+import { RemonterAuChangementDePage } from "@/components/marketing/RemonterAuChangementDePage";
 
 const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
 /**
@@ -88,5 +90,36 @@ export const viewport: Viewport = {
  * — jamais l'accent d'un tenant, qui n'est injecté que sous /admin.
  */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
-  return <div className={`mk ${adlam.variable}`}>{children}</div>;
+  return (
+    <div className={`mk ${adlam.variable}`}>
+      {/*
+        L'ÉCRAN D'OUVERTURE — POSÉ ICI, DONC SUR LES QUATRE ROUTES PUBLIQUES.
+
+        `toujours` : il se rejoue À CHAQUE CHARGEMENT DE PAGE. J'avais d'abord
+        posé « une fois par session », pour ne pas l'imposer au visiteur qui
+        navigue. C'était le mauvais arbitrage : sur un rechargement, l'animation
+        semblait avoir disparu, et une ouverture qu'on ne peut pas revoir n'est
+        pas une ouverture.
+
+        Ce que `toujours` ne fait PAS, et c'est ce qui rend le choix tenable :
+        la navigation interne (`next/link`) ne remonte pas ce layout. Passer de
+        la landing aux tarifs puis au blog ne le rejoue donc pas — seuls un
+        rechargement ou une arrivée directe le déclenchent. C'est exactement la
+        frontière qu'on veut.
+
+        Il ne bloque rien : la page est rendue dessous, ce n'est qu'un calque
+        qui s'efface. Voir `SplashAuPremierPassage` pour les trois gardes.
+      */}
+      <SplashAuPremierPassage duree={3.6} toujours />
+      {/*
+        Remonte en haut au changement de route. Sans lui, cliquer sur « Offres »
+        depuis la landing déposait le visiteur au BAS de la page — le
+        `scroll-behavior: smooth` des ancres s'appliquant aussi au
+        repositionnement que Next opère à chaque navigation. Voir le fichier,
+        qui documente la cause et l'expérience qui l'a isolée.
+      */}
+      <RemonterAuChangementDePage />
+      {children}
+    </div>
+  );
 }

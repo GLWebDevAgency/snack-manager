@@ -22,6 +22,8 @@ import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
 import { BandeauDemo } from "@/lib/demo/BandeauDemo";
 import { LogoMark } from "@/components/brand/Logo";
+import { Splash } from "@/components/brand/Splash";
+import { consommerSplashDeTransition } from "@/components/brand/SplashAuPremierPassage";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
@@ -84,9 +86,36 @@ export default function AdminLayout({
   if (pathname === "/admin/login") return <>{children}</>;
   return (
     <ToastProvider>
+      {/*
+        L'OUVERTURE D'APRÈS-CONNEXION — montée ICI, et pas sur la page de
+        connexion, parce que celle-ci disparaît au moment même où le calque
+        devrait couvrir l'attente. Le drapeau posé par `login/page.tsx`
+        traverse la navigation ; cette coque le consomme, une seule fois.
+
+        `toujours` : ce n'est pas l'ouverture d'une visite mais celle d'une
+        TRANSITION. Elle se joue à chaque connexion validée, jamais autrement —
+        le drapeau est effacé à la lecture.
+      */}
+      <SplashApresConnexion />
       <Shell>{children}</Shell>
     </ToastProvider>
   );
+}
+
+/**
+ * Ne monte l'ouverture que si une connexion vient d'être validée.
+ *
+ * Le drapeau est lu et effacé au même instant : recharger le tableau de bord
+ * ne la rejoue pas, et un second onglet ne la vole pas.
+ */
+function SplashApresConnexion() {
+  const [entree, setEntree] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau de session : `sessionStorage` n'existe pas au rendu serveur, aucune valeur calculée au rendu ne peut donc le remplacer. Lu au rendu, il provoquerait un écart d'hydratation ; lu ici, il est consommé APRÈS le montage, une seule fois. Le supprimer rendrait l'ouverture d'après-connexion muette.
+    if (consommerSplashDeTransition()) setEntree(true);
+  }, []);
+  if (!entree) return null;
+  return <Splash duree={3.6} annonce="Ouverture de votre back-office" onFini={() => setEntree(false)} />;
 }
 
 /** Store minimal pour lire un état navigateur sans mismatch d'hydratation. */
