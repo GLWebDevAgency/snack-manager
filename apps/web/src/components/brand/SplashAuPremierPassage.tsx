@@ -102,6 +102,44 @@ export function SplashAuPremierPassage({
   toujours = false,
   onFini,
 }: SplashAuPremierPassageProps) {
+  /*
+   * ═══ EN MODE `toujours`, LE CALQUE EST RENDU CÔTÉ SERVEUR ═══
+   *
+   * C'était le défaut le plus visible, et le plus embarrassant pour un écran
+   * d'ouverture : on voyait le héros de la landing, PUIS l'animation, PUIS la
+   * landing à nouveau. Une ouverture qui arrive après la page n'ouvre rien.
+   *
+   * La cause tenait à la solution du problème précédent. `useLayoutEffect`
+   * s'exécute avant la PEINTURE, oui — mais après l'HYDRATATION, donc après
+   * que le HTML du serveur a déjà été peint. Le calque ne pouvait pas exister
+   * dans la première image.
+   *
+   * En mode `toujours` il n'y a plus rien à décider côté client : pas de
+   * mémoire de session à consulter, donc pas d'écart d'hydratation possible.
+   * Le calque part avec le HTML, il est là dès la première image, et le JS ne
+   * fait plus que l'animer.
+   *
+   * LE FILET EST DANS LA CSS, et il est indispensable : un calque noir rendu
+   * par le serveur masquerait le site pour toujours si le JS ne prenait jamais
+   * la main. `.sm-splash` porte donc une animation CSS qui l'efface d'elle-même
+   * — sans JS, le site apparaît quand même. Voir `globals.css`.
+   */
+  if (toujours) return <Splash duree={duree} onFini={onFini} />;
+
+  return <SplashUneFoisParSession duree={duree} onFini={onFini} />;
+}
+
+/**
+ * Le mode « une fois par session » — client seulement, par nécessité.
+ *
+ * Lui DOIT attendre le client : `sessionStorage` n'existe pas au rendu serveur.
+ * Il accepte donc le scintillement que le mode `toujours` évite, parce qu'il
+ * n'a pas le choix. Ce n'est pas le mode de la vitrine.
+ */
+function SplashUneFoisParSession({
+  duree = 3.6,
+  onFini,
+}: Omit<SplashAuPremierPassageProps, "toujours">) {
   const [visible, setVisible] = useState(false);
 
   useAvantPeinture(() => {
@@ -109,18 +147,15 @@ export function SplashAuPremierPassage({
     if (SURFACES_CLIENT.some((p) => chemin === p.replace(/\/$/, "") || chemin.startsWith(p))) {
       return;
     }
-
-    if (!toujours) {
-      try {
-        if (sessionStorage.getItem(CLE)) return;
-        sessionStorage.setItem(CLE, "1");
-      } catch {
-        // Navigation privée, stockage refusé : on joue l'ouverture. Mieux vaut
-        // la rejouer une fois de trop que de la devoir à un `try` silencieux.
-      }
+    try {
+      if (sessionStorage.getItem(CLE)) return;
+      sessionStorage.setItem(CLE, "1");
+    } catch {
+      // Navigation privée, stockage refusé : on joue l'ouverture.
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- `sessionStorage` n'existe pas au rendu serveur : aucune valeur calculée au rendu ne peut décider ceci, et le lire au rendu provoquerait un écart d'hydratation. Le supprimer rendrait ce mode inerte.
     setVisible(true);
-  }, [toujours]);
+  }, []);
 
   const fini = useCallback(() => {
     setVisible(false);
