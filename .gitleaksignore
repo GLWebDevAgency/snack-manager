@@ -1,0 +1,16 @@
+# Exemptions PAR EMPREINTE — le pendant historique des allowlists de
+# .github/gitleaks.toml : quand un commit déjà fusionné déclenche une règle
+# sans porter de valeur réelle, on exempte CE commit, jamais la règle ni le
+# fichier. Une empreinte par ligne, toujours accompagnée de sa raison.
+#
+# On ne CITE jamais ici le texte fautif : ce fichier est balayé comme les
+# autres, et recopier la forme qui déclenche la règle la déclencherait une
+# seconde fois — c'est arrivé à la première rédaction de ce commentaire.
+
+# docs/CI-CD.md, commit b0c6014 (19/08/2026) : une phrase de la doc qui NIE
+# l'existence d'un secret, suivie d'un nom de variable d'environnement entre
+# accents graves, a la forme exacte que la règle secret-en-dur traque — le
+# mot-clé, deux-points, une valeur encadrée. Aucune valeur réelle ; vérifié
+# en rejouant gitleaks 8.30.1 sur ce commit seul. Le texte du fichier a
+# changé depuis, mais l'historique, lui, ne change pas — d'où l'empreinte.
+b0c6014567af9f0270d9b2ec491c8d01fb704880:docs/CI-CD.md:secret-en-dur:616
