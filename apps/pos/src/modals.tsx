@@ -761,6 +761,7 @@ export function CloseModal({
           <View style={{ gap: 2 }}>
             <StatRow label="Espèces" value={euros(z.cash)} />
             <StatRow label="Carte bancaire" value={euros(z.card)} />
+            <StatRow label="Titres-restaurant" value={euros(z.mealVoucher)} />
             <StatRow label="En ligne" value={euros(z.online)} />
             <StatRow label="À encaisser au retrait" value={euros(z.due)} tone={palette.amber} />
             {z.unspecified > 0 ? (

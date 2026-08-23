@@ -20,7 +20,7 @@ const LINE: CartLine = {
   unitPrice: 1250,
 };
 
-function body(method: 'cb' | 'especes' | 'retrait', cash?: { received: number; change: number }) {
+function body(method: 'cb' | 'especes' | 'tr' | 'retrait', cash?: { received: number; change: number }) {
   return buildOrderBody({
     clientId: 'c1',
     mode: 'surplace',
@@ -48,6 +48,12 @@ describe('Corps de commande — moyen réellement encaissé', () => {
       cashReceived: 2000,
       changeGiven: 750,
     });
+  });
+
+  it('le titre-restaurant part comme un encaissement à part entière', () => {
+    // Sans lui, le déjeuner passait en « carte » ou en « à encaisser » : la
+    // télécollecte TR du soir ne se recoupait avec rien.
+    expect(body('tr').payment).toEqual({ method: 'counter', tender: 'meal_voucher' });
   });
 
   it("« à encaisser au retrait » ne déclare aucun encaissement", () => {
@@ -78,6 +84,19 @@ describe('Z — ventilation par moyen de paiement', () => {
     expect(z.ca).toBe(1250 + 900 + 1800 + 700);
     expect(z.orders).toBe(4);
     expect(z.source).toBe('server');
+  });
+
+  it('ventile les titres-restaurant à part', () => {
+    const z = zFromServer(
+      [
+        ...rows,
+        { ...at('2026-08-18T12:00:00Z'), totals: { total: 1150 }, payment: { status: 'paid', tender: 'meal_voucher' } },
+      ],
+      since,
+    );
+
+    expect(z.mealVoucher).toBe(1150);
+    expect(z.cash).toBe(1250); // rien ne fuit d'une colonne à l'autre
   });
 
   it('écarte les commandes annulées et celles du service précédent', () => {
@@ -116,12 +135,14 @@ describe('Z — ventilation par moyen de paiement', () => {
       { clientId: 'a', localNumber: 1, serverId: null, serverNumber: null, mode: 'surplace', method: 'cb', paid: true, total: 900, items: 1, at: 1 },
       { clientId: 'b', localNumber: 2, serverId: null, serverNumber: null, mode: 'emporter', method: 'especes', paid: true, total: 1250, items: 2, at: 2 },
       { clientId: 'c', localNumber: 3, serverId: null, serverNumber: null, mode: 'tel', method: 'retrait', paid: false, total: 700, items: 1, at: 3 },
+      { clientId: 'd', localNumber: 4, serverId: null, serverNumber: null, mode: 'surplace', method: 'tr', paid: true, total: 1150, items: 1, at: 4 },
     ];
 
     const z = zFromJournal(entries);
 
     expect(z.card).toBe(900);
     expect(z.cash).toBe(1250);
+    expect(z.mealVoucher).toBe(1150);
     expect(z.due).toBe(700);
     expect(z.online).toBe(0);
     // `local` doit rester visible à l'écran : ce zéro « en ligne » est une

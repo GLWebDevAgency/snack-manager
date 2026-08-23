@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { LAITON, markSvg } from "@/components/brand/geometry";
 
-export const alt = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
+export const alt = "Snack Manager — Plus de commandes, moins de galère, zéro commission";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -74,7 +74,7 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ fontSize: 68, fontWeight: 800, letterSpacing: -2.5, lineHeight: 1.05, maxWidth: 900 }}>
-            On fait tourner votre restaurant. Pas l&apos;inverse.
+            Plus de commandes. Moins de galère. Zéro commission.
           </div>
           <div style={{ fontSize: 28, color: "#999", maxWidth: 820, lineHeight: 1.4 }}>
             Caisse, cuisine, commande en ligne et back-office — 0 % de commission, à vos couleurs.
