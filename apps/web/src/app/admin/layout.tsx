@@ -111,6 +111,7 @@ export default function AdminLayout({
 function SplashApresConnexion() {
   const [entree, setEntree] = useState(false);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau de session : `sessionStorage` n'existe pas au rendu serveur, aucune valeur calculée au rendu ne peut donc le remplacer. Lu au rendu, il provoquerait un écart d'hydratation ; lu ici, il est consommé APRÈS le montage, une seule fois. Le supprimer rendrait l'ouverture d'après-connexion muette.
     if (consommerSplashDeTransition()) setEntree(true);
   }, []);
   if (!entree) return null;
