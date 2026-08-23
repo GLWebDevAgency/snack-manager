@@ -21,6 +21,7 @@ import type { OrderStatus } from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
 import { BandeauDemo } from "@/lib/demo/BandeauDemo";
+import { LogoMark } from "@/components/brand/Logo";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
@@ -437,21 +438,49 @@ function Shell({ children }: { children: ReactNode }) {
             </div>
 
             {/*
-              ═══ PAS DE SIGNATURE ICI, ET C'EST LA CHARTE QUI LE DIT ═══
+              ═══ LA SIGNATURE DE L'ÉDITEUR — RÉTABLIE, ET POURQUOI ═══
 
-              Un mark Snack Manager de 14 px tenait en pied de cette barre, en
-              gris sourd. L'intention était bonne — permettre au gérant de
-              nommer le logiciel qu'il a sous les yeux quand il appelle le
-              support — mais la charte §10 est explicite : dans l'application
-              d'un client, notre mark « n'apparaît QU'UNE FOIS, en pied
-              d'écran de CONNEXION ». Pas deux, et pas ailleurs.
+              Je l'avais retirée en lisant la charte §10 au pied de la lettre :
+              « le mark n'apparaît qu'une fois, en pied d'écran de connexion ».
+              Le fondateur a tranché autrement, et son arbitrage prime — c'est
+              sa marque.
 
-              La raison est commerciale : « le restaurateur vend son enseigne,
-              pas la nôtre ». Cette barre est sa maison, il y travaille toute
-              la journée, et sa marque doit y régner seule. Notre signature vit
-              désormais sur `admin/login`, à 60 % d'opacité — voir la charte
-              §10 et `login/page.tsx`.
+              Il a aussi raison sur le fond, et la charte le dit elle-même en
+              donnant sa raison : « le restaurateur vend son enseigne, pas la
+              nôtre ». Ce que §10 protège, c'est ce que voit LE MANGEUR — le
+              site de commande, le ticket, l'écran de salle. Or cette barre
+              n'est jamais vue par un client du restaurant : c'est l'outil de
+              travail du gérant, et il doit pouvoir NOMMER le logiciel qu'il a
+              sous les yeux quand il appelle le support.
+
+              Ce qui reste vrai de §10, et qui gouverne la forme :
+
+              · DISCRÈTE. 14 px, gris sourd à 70 %, en PIED de barre — jamais
+                en tête, où règnent la tuile d'accent et le nom du restaurant.
+                Elle identifie, elle ne titre pas.
+              · MUETTE. Aucun lien vers la vitrine : une porte de sortie
+                commerciale au-dessus du back-office d'un client n'a rien à y
+                faire.
+              · SANS COULEUR PROPRE. Elle suit `currentColor`, donc le gris de
+                la barre. Jamais `--cf-accent`, qui porte la couleur du
+                restaurant : notre signe repeint en rouge chez un client qui a
+                choisi le rouge serait notre marque vendue à un autre.
+
+              À 14 px le composant sert seul la gravure micro. Barre repliée,
+              le nom passe en `sr-only` : l'oreille garde ce que l'œil n'a plus
+              la place de lire.
             */}
+            <div
+              className={cx(
+                "mt-3 flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-mut/70",
+                open ? "px-1" : "justify-center",
+              )}
+            >
+              <LogoMark size={14} className="shrink-0" />
+              <span className={cx("min-w-0 truncate whitespace-nowrap", !open && "sr-only")}>
+                Snack Manager
+              </span>
+            </div>
           </aside>
         </div>
 
