@@ -83,9 +83,15 @@ export type SplashAuPremierPassageProps = {
   /** Durée totale, en secondes. */
   duree?: number;
   /**
-   * Rejouer à chaque montage plutôt qu'une fois par session. C'est le mode des
-   * TRANSITIONS — après une connexion validée, par exemple, où l'ouverture
-   * couvre un vrai chargement et doit se jouer à chaque fois.
+   * Rejouer à chaque montage plutôt qu'une fois par session.
+   *
+   * C'est le mode de la VITRINE — une ouverture qu'on ne peut pas revoir en
+   * rechargeant n'est pas une ouverture — et celui des TRANSITIONS, après une
+   * connexion validée.
+   *
+   * Le montage n'a lieu qu'au chargement d'un DOCUMENT : la navigation interne
+   * de Next ne remonte pas un layout partagé. Passer de la landing aux tarifs
+   * ne rejoue donc rien ; recharger, si.
    */
   toujours?: boolean;
   onFini?: () => void;

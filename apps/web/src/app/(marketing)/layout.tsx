@@ -93,12 +93,23 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
     <div className={`mk ${adlam.variable}`}>
       {/*
         L'ÉCRAN D'OUVERTURE — POSÉ ICI, DONC SUR LES QUATRE ROUTES PUBLIQUES.
-        Il ne se joue qu'UNE FOIS par session : le visiteur qui passe de la
-        landing aux tarifs puis au blog ne le subit pas trois fois. Et il ne
-        bloque rien — la page est rendue dessous, il n'est qu'un calque qui
-        s'efface. Voir `SplashAuPremierPassage` pour les trois gardes.
+
+        `toujours` : il se rejoue À CHAQUE CHARGEMENT DE PAGE. J'avais d'abord
+        posé « une fois par session », pour ne pas l'imposer au visiteur qui
+        navigue. C'était le mauvais arbitrage : sur un rechargement, l'animation
+        semblait avoir disparu, et une ouverture qu'on ne peut pas revoir n'est
+        pas une ouverture.
+
+        Ce que `toujours` ne fait PAS, et c'est ce qui rend le choix tenable :
+        la navigation interne (`next/link`) ne remonte pas ce layout. Passer de
+        la landing aux tarifs puis au blog ne le rejoue donc pas — seuls un
+        rechargement ou une arrivée directe le déclenchent. C'est exactement la
+        frontière qu'on veut.
+
+        Il ne bloque rien : la page est rendue dessous, ce n'est qu'un calque
+        qui s'efface. Voir `SplashAuPremierPassage` pour les trois gardes.
       */}
-      <SplashAuPremierPassage duree={3.6} />
+      <SplashAuPremierPassage duree={3.6} toujours />
       {children}
     </div>
   );
