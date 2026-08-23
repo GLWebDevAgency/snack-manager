@@ -3,16 +3,17 @@
 import { useId } from "react";
 import {
   DECOUPE_ECLAIR,
+  DECOUPE_ECLAIR_MICRO,
   ECLAIR,
+  ECLAIR_MICRO,
   GARNITURE,
-  GARNITURE_MICRO,
   LAITON,
   PAIN_BAS,
   PAIN_HAUT,
   SEUIL_MICRO,
   TICKET,
-  TRAIT_MICRO,
-  TRAIT_STANDARD,
+  PLANCHER_DUO,
+  TRAIT_CADRE,
 } from "./geometry";
 
 export { LAITON, SEUIL_MICRO } from "./geometry";
@@ -66,11 +67,11 @@ export { LAITON, SEUIL_MICRO } from "./geometry";
  *
  * ═══ DEUX GRAVURES SELON LA TAILLE ═══
  *
- * Sous 20 px, l'éclair se referme : ses contre-formes deviennent plus fines
- * qu'un pixel et le signe tourne à la tache. La version micro garde le ticket
- * et le burger, supprime l'évidement, et ÉPAISSIT le trait du cadre (2,4 au
- * lieu de 2,1) pour qu'il tienne encore. C'est le réflexe des grandes marques :
- * un seul mark, deux gravures.
+ * Sous 20 px, les contre-formes de l'éclair deviennent plus fines qu'un pixel.
+ * La gravure micro n'y répond PAS en supprimant l'éclair — j'avais fait cette
+ * erreur, d'après une planche périmée — mais en le RAMASSANT et en ÉLARGISSANT
+ * sa découpe (0,7 au lieu de 0,45). Le cadre et les trois couches du burger
+ * sont identiques dans les deux gravures.
  *
  * Ce choix n'est PAS laissé à l'appelant. `<LogoMark size={16} />` sert la
  * micro tout seul. Un `variant` explicite existe pour les cas délibérés —
@@ -87,8 +88,10 @@ export type LogoMarkProps = {
   /**
    * `mono` — tout le signe en `currentColor`. C'est le défaut, et le cas le
    * plus fréquent : barre de navigation, pied de page, favicon, tampon.
-   * `duo` — la garniture passe au laiton. Réservé aux tailles où le détail se
-   * voit (≥ 52 px) : héros, planche de marque, écran d'accueil.
+   * `duo` — la garniture passe au laiton. La charte le RÉSERVE aux tailles
+   * d'au moins 48 px (§09 : « Duo sous 48 px — le steak laiton devient une
+   * bavure »). En dessous, le composant retombe SEUL en monochrome : une règle
+   * qu'aucun code n'applique est une règle qu'on enfreint sans le voir.
    */
   tone?: LogoTone;
   /** Forcer une gravure. À n'employer que délibérément — voir l'en-tête. */
@@ -131,9 +134,17 @@ export function LogoMark({
   const masqueId = useId();
   const micro = variant === "micro" || (variant === "auto" && size < SEUIL_MICRO);
 
+  /*
+   * LE PLANCHER DU DUO EST APPLIQUÉ, PAS SEULEMENT DOCUMENTÉ. Sous 48 px la
+   * garniture laiton n'est plus un accent mais une bavure brune ; on retombe
+   * donc en monochrome sans rien demander à l'appelant. C'était jusqu'ici une
+   * phrase dans un commentaire — et `<LogoMark size={14} tone="duo" />`
+   * compilait sans broncher.
+   */
+  const duoLisible = tone === "duo" && size >= PLANCHER_DUO;
+
   // La garniture est le seul élément qui puisse quitter `currentColor`.
-  const remplissageGarniture =
-    tone === "duo" ? `var(--sm-logo-accent, ${LAITON})` : "currentColor";
+  const remplissageGarniture = duoLisible ? `var(--sm-logo-accent, ${LAITON})` : "currentColor";
 
   const accessibilite = label
     ? ({ role: "img" as const, "aria-label": label })
@@ -149,45 +160,41 @@ export function LogoMark({
       {...accessibilite}
     >
       {/*
-       * LE CADRE EST TRACÉ, PAS REMPLI. `stroke-linejoin: round` adoucit les
-       * dents du bord déchiré — anguleuses, elles se lisent comme un défaut de
-       * rendu plutôt que comme une déchirure.
+       * LE MASQUE ENVELOPPE TOUT, cadre du ticket compris — comme le fait le
+       * fichier officiel du kit. L'éclair n'atteint jamais le cadre en
+       * pratique, mais c'est cette forme qui reste fidèle si le tracé bouge.
        */}
-      <path
-        d={TICKET}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={micro ? TRAIT_MICRO : TRAIT_STANDARD}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <mask id={masqueId} maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
+        {/* Blanc = on garde, noir = on creuse. */}
+        <rect width="32" height="32" fill="#fff" />
+        <path
+          d={micro ? ECLAIR_MICRO : ECLAIR}
+          fill="#000"
+          stroke="#000"
+          strokeWidth={micro ? DECOUPE_ECLAIR_MICRO : DECOUPE_ECLAIR}
+          strokeLinejoin="round"
+        />
+      </mask>
 
-      {micro ? (
-        <>
-          <path d={PAIN_HAUT} fill="currentColor" />
-          <path d={GARNITURE_MICRO} fill={remplissageGarniture} />
-          <path d={PAIN_BAS} fill="currentColor" />
-        </>
-      ) : (
-        <>
-          <mask id={masqueId} maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">
-            {/* Blanc = on garde, noir = on creuse. */}
-            <rect width="32" height="32" fill="#fff" />
-            <path
-              d={ECLAIR}
-              fill="#000"
-              stroke="#000"
-              strokeWidth={DECOUPE_ECLAIR}
-              strokeLinejoin="round"
-            />
-          </mask>
-          <g mask={`url(#${masqueId})`}>
-            <path d={PAIN_HAUT} fill="currentColor" />
-            <path d={GARNITURE} fill={remplissageGarniture} />
-            <path d={PAIN_BAS} fill="currentColor" />
-          </g>
-        </>
-      )}
+      <g mask={`url(#${masqueId})`}>
+        {/*
+         * LE CADRE EST TRACÉ, PAS REMPLI. `stroke-linejoin: round` adoucit les
+         * dents du bord déchiré — anguleuses, elles se lisent comme un défaut
+         * de rendu plutôt que comme une déchirure. Son épaisseur ne change PAS
+         * avec la gravure : seule la découpe de l'éclair s'élargit.
+         */}
+        <path
+          d={TICKET}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={TRAIT_CADRE}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <path d={PAIN_HAUT} fill="currentColor" />
+        <path d={GARNITURE} fill={remplissageGarniture} />
+        <path d={PAIN_BAS} fill="currentColor" />
+      </g>
     </svg>
   );
 }
@@ -200,10 +207,10 @@ export type LogoLockupProps = Omit<LogoMarkProps, "label"> & {
 /**
  * Le verrouillage : le mark et le nom, solidaires.
  *
- * « Snack » porte le poids, « Manager » s'efface — c'est ce contraste qui fait
- * lire un nom et non deux mots. Le second suit `--sm-logo-mut` pour pouvoir
- * s'adapter au fond : sur fond sombre un blanc à 55 %, sur fond clair un gris
- * chaud. Sans cette variable, « Manager » posé sur blanc resterait blanc.
+ * « Manager » prend le laiton, les deux mots gardent la même graisse. C'est le
+ * traitement des six verrouillages du kit officiel, sans exception : le
+ * contraste est chromatique, jamais typographique. Voir `.sm-lockup-nom i`
+ * dans `globals.css` — j'y avais fait exactement l'inverse.
  *
  * LES PROPORTIONS SONT DÉRIVÉES DE LA TAILLE DU MARK, pas fixées. La planche
  * verrouille un mark de 34 px avec un nom de 21 px : c'est ce rapport de 0,62

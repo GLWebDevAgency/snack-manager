@@ -41,18 +41,15 @@ export const PAIN_HAUT =
 /**
  * La garniture — c'est ELLE qui prend le laiton dans la version bichrome.
  *
- * Deux tracés et non un : la gravure micro l'amincit (6,4 au lieu de 7 de haut,
- * recentrée). Sans cet amincissement, le cadre épaissi à 2,4 et la garniture se
- * touchent presque, et à 16 px le filet de fond entre les deux disparaît.
+ * UN SEUL TRACÉ, et c'est une correction. J'en avais dessiné un second,
+ * aminci, pour la gravure micro. Le kit officiel n'en a pas : les trois
+ * couches du burger et le cadre du ticket sont IDENTIQUES dans les deux
+ * gravures. Seul l'éclair change (voir plus bas).
  */
 export const GARNITURE =
   "M 10.8 13.5 L 21.2 13.5 C 22.4 13.5 23.4 14.5 23.4 15.7 L 23.4 18.3 " +
   "C 23.4 19.5 22.4 20.5 21.2 20.5 L 10.8 20.5 C 9.6 20.5 8.6 19.5 8.6 18.3 " +
   "L 8.6 15.7 C 8.6 14.5 9.6 13.5 10.8 13.5 Z";
-export const GARNITURE_MICRO =
-  "M 10.8 13.8 L 21.2 13.8 C 22.4 13.8 23.4 14.8 23.4 16 L 23.4 18 " +
-  "C 23.4 19.2 22.4 20.2 21.2 20.2 L 10.8 20.2 C 9.6 20.2 8.6 19.2 8.6 18 " +
-  "L 8.6 16 C 8.6 14.8 9.6 13.8 10.8 13.8 Z";
 
 /** Pain du bas : la courbe plate. */
 export const PAIN_BAS =
@@ -61,6 +58,27 @@ export const PAIN_BAS =
 
 /** L'éclair. Jamais peint : il ne sert que de découpe dans le masque. */
 export const ECLAIR = "M 16.9 8.6 L 12.5 16.4 L 15.5 16.4 L 14.5 22.6 L 19.3 15 L 16.3 15 Z";
+
+/**
+ * L'ÉCLAIR DE LA GRAVURE MICRO — plus court, et découpé plus large.
+ *
+ * ═══ CE QUE J'AVAIS FAIT, ET POURQUOI C'ÉTAIT FAUX ═══
+ *
+ * Je supprimais purement l'éclair sous le seuil, et j'épaississais le cadre du
+ * ticket pour compenser. C'était la lettre de la charte HTML (§02 : « cette
+ * gravure le supprime et épaissit le trait ») — mais PAS ce que fait le
+ * fichier livré, `brand-snack-manager/mark/sm-mark-micro-blanc.svg`, qui
+ * conserve un éclair raccourci et laisse le cadre à 2,1.
+ *
+ * Les deux se contredisent ; le fondateur a tranché pour le fichier. Il a
+ * raison sur le fond : l'éclair est un des trois signes du dessin, le
+ * supprimer fait perdre un tiers du sens là où l'élargir suffit à le sauver.
+ *
+ * La micro ne diffère donc du standard QUE par ces deux valeurs — tracé plus
+ * ramassé (il monte moins haut, descend moins bas) et découpe portée de 0,45 à
+ * 0,7, ce qui écarte les contre-formes assez pour qu'elles survivent au pixel.
+ */
+export const ECLAIR_MICRO = "M 16.9 9.4 L 13.2 16.2 L 15.7 16.2 L 14.9 21.6 L 18.8 15 L 16.3 15 Z";
 
 /**
  * Le trait de découpe qui creuse l'éclair.
@@ -73,18 +91,39 @@ export const ECLAIR = "M 16.9 8.6 L 12.5 16.4 L 15.5 16.4 L 14.5 22.6 L 19.3 15 
  */
 export const DECOUPE_ECLAIR = 0.45;
 
-/** Épaisseur du trait du cadre, par gravure. */
-export const TRAIT_STANDARD = 2.1;
-export const TRAIT_MICRO = 2.4;
+/** Découpe élargie de la gravure micro — voir `ECLAIR_MICRO`. */
+export const DECOUPE_ECLAIR_MICRO = 0.7;
+
+/**
+ * Épaisseur du trait du cadre — LA MÊME DANS LES DEUX GRAVURES.
+ *
+ * J'avais posé 2,4 en micro. Le kit officiel garde 2,1 partout : c'est la
+ * découpe de l'éclair qui s'élargit, pas le cadre qui s'épaissit.
+ */
+export const TRAIT_CADRE = 2.1;
 
 /**
  * Seuil de bascule vers la gravure micro, en pixels de rendu.
  *
  * Sous 20 px, les contre-formes de l'éclair passent sous le pixel et le signe
- * tourne à la tache. La micro garde ticket et burger, ferme l'évidement, et
- * épaissit le cadre pour compenser.
+ * tourne à la tache. La micro emploie alors un éclair plus ramassé et une
+ * découpe élargie — voir `ECLAIR_MICRO`.
+ *
+ * ⚠️ 20 ET NON 24. Le LISEZ-MOI du kit dit « sous 24 px », la charte HTML dit
+ * « sous 20 px » — et c'est elle qui fait foi, elle le déclare elle-même :
+ * « Ce document est la référence : rien d'autre ne fait autorité. » Les deux
+ * documents divergent aussi sur le minimum absolu (14 contre 16) et sur la
+ * zone de respiration. En cas de doute, la charte.
  */
 export const SEUIL_MICRO = 20;
+
+/**
+ * Taille en dessous de laquelle la gravure bichrome est INTERDITE.
+ *
+ * Charte §09 : « Duo sous 48 px — Le steak laiton devient une bavure. Passez en
+ * monochrome ou micro. » Le composant y retombe tout seul.
+ */
+export const PLANCHER_DUO = 48;
 
 /** Le laiton de la marque. Identique à `--cf-gold` (JAMAIS `--cf-accent`). */
 export const LAITON = "#c9a15a";
@@ -115,25 +154,26 @@ export function markSvg(options: {
 }): string {
   const { micro = false, encre, garniture = encre, masqueId = "eclair" } = options;
 
-  const cadre =
-    `<path d="${TICKET}" fill="none" stroke="${encre}" ` +
-    `stroke-width="${micro ? TRAIT_MICRO : TRAIT_STANDARD}" ` +
-    `stroke-linejoin="round" stroke-linecap="round"/>`;
-
-  const couches =
-    `<path d="${PAIN_HAUT}" fill="${encre}"/>` +
-    `<path d="${micro ? GARNITURE_MICRO : GARNITURE}" fill="${garniture}"/>` +
-    `<path d="${PAIN_BAS}" fill="${encre}"/>`;
-
-  if (micro) return cadre + couches;
-
-  // Blanc = on garde, noir = on creuse.
+  /*
+   * LE MASQUE ENVELOPPE TOUT LE GROUPE, cadre du ticket compris — c'est ainsi
+   * que le fait le fichier officiel. En pratique l'éclair n'atteint jamais le
+   * cadre (il vit entre x 12,5 et 19,3, le cadre entre 5 et 27), donc le rendu
+   * est le même ; mais le jour où le tracé bougerait, c'est cette forme-ci qui
+   * resterait fidèle au kit.
+   */
   const masque =
     `<mask id="${masqueId}" maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="32">` +
     `<rect width="32" height="32" fill="#fff"/>` +
-    `<path d="${ECLAIR}" fill="#000" stroke="#000" stroke-width="${DECOUPE_ECLAIR}" ` +
-    `stroke-linejoin="round"/>` +
+    `<path d="${micro ? ECLAIR_MICRO : ECLAIR}" fill="#000" stroke="#000" ` +
+    `stroke-width="${micro ? DECOUPE_ECLAIR_MICRO : DECOUPE_ECLAIR}" stroke-linejoin="round"/>` +
     `</mask>`;
 
-  return `${masque}${cadre}<g mask="url(#${masqueId})">${couches}</g>`;
+  const contenu =
+    `<path d="${TICKET}" fill="none" stroke="${encre}" stroke-width="${TRAIT_CADRE}" ` +
+    `stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<path d="${PAIN_HAUT}" fill="${encre}"/>` +
+    `<path d="${GARNITURE}" fill="${garniture}"/>` +
+    `<path d="${PAIN_BAS}" fill="${encre}"/>`;
+
+  return `${masque}<g mask="url(#${masqueId})">${contenu}</g>`;
 }

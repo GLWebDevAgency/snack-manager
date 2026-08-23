@@ -340,19 +340,18 @@ a {
  */
 :root {
   --sm-logo-accent: var(--cf-gold);
-  --sm-logo-mut: var(--cf-white-50);
 }
 
 /*
- * Fond clair ou fond laiton : la garniture bichrome et le second mot doivent
- * s'inverser, sinon ils disparaissent — une garniture laiton sur une tuile
- * laiton ne se voit pas. La planche d'origine prévoyait cette inversion sans
- * jamais la brancher ; on la pose ici, à porter sur le conteneur.
+ * FOND LAITON : la garniture bichrome doit s'inverser, sinon elle disparaît —
+ * un steak laiton sur une tuile laiton ne se voit pas. La charte tranche plus
+ * radicalement (« ne jamais poser la version duo sur un fond laiton ») ; cette
+ * classe est le filet de sécurité pour le jour où quelqu'un le fait quand même.
+ *
+ * À porter sur le CONTENEUR, pas sur le logo.
  */
-.sm-on-light,
 .sm-on-accent {
   --sm-logo-accent: currentColor;
-  --sm-logo-mut: #6b6455;
 }
 
 .sm-lockup {
@@ -373,12 +372,19 @@ a {
 }
 
 /*
- * « Snack » porte le poids, « Manager » s'efface. C'est ce contraste qui fait
- * lire UN nom et non deux mots — sans lui, le verrouillage se coupe en deux à
- * la lecture.
+ * ═══ « MANAGER » PREND LE LAITON, ET LES DEUX MOTS GARDENT LA MÊME GRAISSE ═══
+ *
+ * J'avais fait l'inverse : « Snack » appuyé en 800, « Manager » en 500 et
+ * grisé. Les six verrouillages du kit officiel disent le contraire, sans
+ * exception — « Snack » dans la teinte neutre du fond, « Manager » en
+ * `#c9a15a`, et `font-weight="800"` sur les DEUX, même corps, même
+ * interlettrage. Le contraste est chromatique, jamais typographique.
+ *
+ * La nuance n'est pas décorative : accentuer « Manager » met en avant ce que
+ * le produit FAIT, là où accentuer « Snack » ne nommait que son secteur.
  */
 .sm-lockup-nom i {
   font-style: normal;
-  font-weight: 500;
-  color: var(--sm-logo-mut);
+  font-weight: inherit;
+  color: var(--sm-logo-accent, #c9a15a);
 }
