@@ -4,6 +4,7 @@ import { PRICE_RANGE } from "@/components/marketing/content";
 import { SITE_URL } from "@/lib/site";
 import "@/components/marketing/marketing.css";
 import { SplashAuPremierPassage } from "@/components/brand/SplashAuPremierPassage";
+import { RemonterAuChangementDePage } from "@/components/marketing/RemonterAuChangementDePage";
 
 const TITLE = "Snack Manager — On fait tourner votre restaurant. Pas l'inverse.";
 /**
@@ -110,6 +111,14 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         qui s'efface. Voir `SplashAuPremierPassage` pour les trois gardes.
       */}
       <SplashAuPremierPassage duree={3.6} toujours />
+      {/*
+        Remonte en haut au changement de route. Sans lui, cliquer sur « Offres »
+        depuis la landing déposait le visiteur au BAS de la page — le
+        `scroll-behavior: smooth` des ancres s'appliquant aussi au
+        repositionnement que Next opère à chaque navigation. Voir le fichier,
+        qui documente la cause et l'expérience qui l'a isolée.
+      */}
+      <RemonterAuChangementDePage />
       {children}
     </div>
   );
