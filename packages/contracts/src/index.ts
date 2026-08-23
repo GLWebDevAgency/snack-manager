@@ -78,9 +78,15 @@ export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
  * bancaire passée à la caisse est indiscernable d'un « à encaisser au
  * retrait » — et la clôture de caisse (Z) devient fausse.
  *
+ * `meal_voucher` : le titre-restaurant, papier ou carte (Edenred, Swile…),
+ * encaissé sur le terminal TR que le restaurant possède déjà — la caisse ne
+ * traite pas le titre, elle enregistre AVEC QUOI le déjeuner a été réglé.
+ * Sans cette valeur, le midi d'un snack se ventilait en « carte » ou en
+ * « à encaisser » : la télécollecte TR du soir ne se recoupait avec rien.
+ *
  * `null` = pas encore encaissé (commande à régler à la remise).
  */
-export const PAYMENT_TENDERS = ['cash', 'card', 'online'] as const;
+export const PAYMENT_TENDERS = ['cash', 'card', 'meal_voucher', 'online'] as const;
 export const PaymentTenderSchema = z.enum(PAYMENT_TENDERS);
 export type PaymentTender = z.infer<typeof PaymentTenderSchema>;
 

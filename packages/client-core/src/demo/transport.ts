@@ -53,7 +53,7 @@ interface CreateOrderBody {
   lines: LineInput[];
   payment?: {
     method?: 'counter' | 'online';
-    tender?: 'cash' | 'card' | 'online' | null;
+    tender?: 'cash' | 'card' | 'meal_voucher' | 'online' | null;
     cashReceived?: number;
   };
   pickup?: { slot?: string; customerName?: string; customerPhone?: string };
@@ -202,7 +202,7 @@ function trackingOf(order: Order) {
 
 /** Ticket client — mêmes libellés que l'API, tirés des contrats partagés. */
 function ticketOf(order: Order, at: number) {
-  const tender = (order.payment as { tender?: 'cash' | 'card' | 'online' | null }).tender ?? null;
+  const tender = (order.payment as { tender?: 'cash' | 'card' | 'meal_voucher' | 'online' | null }).tender ?? null;
   const cash = order.payment as { cashReceived?: number | null; changeGiven?: number | null };
   return {
     orderId: order._id,
@@ -266,7 +266,7 @@ const hhmm = (iso: string): string => {
 /** Canaux où l'argent est perçu au comptoir, à la commande. */
 const COUNTER_CHANNELS = ['pos', 'phone'] as const;
 /** Tenders réglés sur-le-champ face au client. */
-const IMMEDIATE_TENDERS = ['cash', 'card'] as const;
+const IMMEDIATE_TENDERS = ['cash', 'card', 'meal_voucher'] as const;
 
 function createOrder(state: DemoState, body: CreateOrderBody, at: number): Order {
   if (!body?.clientId || !Array.isArray(body.lines) || body.lines.length === 0) {
