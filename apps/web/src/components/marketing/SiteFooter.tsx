@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Reseaux } from "./Reseaux";
 import { FOOTER_COLUMNS, FOOTER_EDITEUR, LANDING_TOP, ancre, type ReseauPublié } from "./content";
-import { LogoMark, SmallFillet } from "./icons";
+import { LogoMark } from "../brand/Logo";
+import { SmallFillet } from "./icons";
 
 /**
  * Pied de page en carte, avec l'onglet-encoche du logo posé sur son bord haut
@@ -47,7 +48,7 @@ export function SiteFooter({ reseaux }: { reseaux: readonly ReseauPublié[] }) {
         <div className="foot-card">
           <div className="foot-notchtab">
             <Link className="foot-notchcontent" href={LANDING_TOP} aria-label="Accueil">
-              <LogoMark width={19} height={19} />
+              <LogoMark size={19} />
               <span className="logo-wordmark" style={{ fontSize: 18 }}>
                 Snack Manager
               </span>

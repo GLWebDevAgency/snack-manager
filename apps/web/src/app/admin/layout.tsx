@@ -25,6 +25,7 @@ import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
 import { IconBtn, Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
+import { LogoMark } from "@/components/brand/Logo";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -434,6 +435,53 @@ function Shell({ children }: { children: ReactNode }) {
               >
                 <Icon name={open ? "back" : "arrow"} size={14} />
               </button>
+            </div>
+
+            {/*
+              ═══ SIGNATURE DE L'ÉDITEUR — ET RIEN DE PLUS ═══
+
+              La tête de barre appartient au RESTAURATEUR : sa tuile d'accent,
+              son nom. C'est chez lui qu'il travaille toute la journée, et rien
+              ne doit contester ce titre. Notre marque ne prend donc pas la
+              tête ; elle prend le pied, sous le bloc du gérant, à la place
+              qu'occupe la mention d'éditeur dans n'importe quel logiciel
+              métier.
+
+              Pourquoi elle a quand même sa place ici : /admin est NOTRE
+              produit, et le gérant qui appelle le support doit pouvoir nommer
+              le logiciel qu'il a sous les yeux. C'est la seule chose que cette
+              ligne fait — elle identifie l'éditeur, elle ne titre pas
+              l'application.
+
+              Ce qu'elle n'est pas : ni un lien vers notre vitrine (une porte
+              de sortie commerciale au-dessus du back-office d'un client n'a
+              rien à y faire — la démonstration a déjà son bandeau), ni une
+              couleur. Le signe suit `currentColor`, donc le gris sourd de
+              `text-mut/70`, et surtout PAS `--cf-accent` : cette variable
+              porte ici la couleur du restaurant, et notre logo repeint en
+              rouge chez un client qui a choisi le rouge serait notre marque
+              vendue à un autre.
+
+              À 14 px, le composant sert seul la gravure micro (éclair fermé,
+              trait épaissi) — c'est la taille où le signe tient encore.
+              Barre repliée, le nom passe en `sr-only` : l'oreille garde ce
+              que l'œil n'a plus la place de lire.
+            */}
+            <div
+              className={cx(
+                "mt-3 flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-mut/70",
+                open ? "px-1" : "justify-center",
+              )}
+            >
+              <LogoMark size={14} className="shrink-0" />
+              <span
+                className={cx(
+                  "min-w-0 truncate whitespace-nowrap",
+                  !open && "sr-only",
+                )}
+              >
+                Snack Manager
+              </span>
             </div>
           </aside>
         </div>

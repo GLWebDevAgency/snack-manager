@@ -32,7 +32,9 @@ export * from './ports';
  * plat. Ils sont consommés directement par le module « site » de l'API, et
  * leur nom est déjà sans ambiguïté.
  */
-export { PublicDomain, TenantSlug } from './tenancy/public-domain';
+// RESERVED_LABELS voyage avec eux : le proxy du site en a besoin pour ne pas
+// prendre `hq.snackmanager.fr` ou `tv.snackmanager.fr` pour des restaurants.
+export { PublicDomain, RESERVED_LABELS, TenantSlug } from './tenancy/public-domain';
 
 // ─── Contextes bornés ───
 export * as menu from './menu';

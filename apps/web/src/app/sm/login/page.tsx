@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, clearToken, setToken } from "@/lib/api";
 import { Btn, Card, Field, Icon, Input } from "@/components/ui";
+import { LogoLockup } from "@/components/brand/Logo";
 import { HQ_ROLE } from "../crm";
 
 type LoginResponse = {
@@ -69,21 +70,37 @@ export default function HqLoginPage() {
             "radial-gradient(760px 420px at 50% -8%, rgba(201,161,90,.13), transparent 62%)",
         }}
       />
-      <Card className="relative w-full max-w-sm shadow-deep">
+      {/*
+        La carte passe de `max-w-sm` à `max-w-md` (448 px) : le verrouillage
+        posé à 52 px mesure ~295 px, et les 320 px utiles d'une carte `sm` ne
+        lui laissaient qu'une marge de 8 % — le nom est en `white-space: nowrap`,
+        une police de repli un peu plus large suffisait à le faire déborder.
+        448 px reste très en deçà des 760 px du halo qui la porte.
+      */}
+      <Card className="relative w-full max-w-md shadow-deep">
         <form onSubmit={submit} className="flex flex-col gap-4 p-8">
-          <div className="mb-2 flex items-center gap-3">
-            <div
-              className="grid size-11 place-items-center rounded-card border border-white/8 bg-[image:var(--cf-elev-gradient)] text-lg font-extrabold text-gold"
-              aria-hidden
-            >
-              S
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold leading-tight tracking-[-0.03em] text-ink">
-                Back-office interne
-              </h1>
-              <p className="text-sm text-mut">Snack Manager · HQ</p>
-            </div>
+          {/*
+            L'ENTRÉE DE NOTRE PROPRE MAISON — donc le signe en entier.
+
+            Aucun client de restaurant ne verra jamais cet écran : le
+            verrouillage complet (mark + nom) est ici légitime, et il porte à
+            lui seul l'identité — d'où la disparition du sous-titre
+            « Snack Manager · HQ », qui répétait ce que le nom dit déjà.
+
+            52 px : le seuil exact à partir duquel `tone="duo"` est admis. La
+            garniture au laiton se lit enfin à cette échelle, et c'est le seul
+            endroit du CRM où le signe a la place de se montrer entièrement.
+            En dessous elle virerait à la tache brune sur le fond sombre.
+
+            Le titre reste en 18 px SOUS le signe : la marque domine, le nom de
+            la porte suit. L'éclair est un vide — le fond de la carte est un
+            aplat (voile blanc à 4 %, invariant sur 52 px), il tient.
+          */}
+          <div className="mb-2 flex flex-col items-center gap-5 text-center">
+            <LogoLockup size={52} tone="duo" />
+            <h1 className="text-lg font-extrabold leading-tight tracking-[-0.03em] text-ink">
+              Back-office interne · HQ
+            </h1>
           </div>
 
           <Field label="E-mail" htmlFor="hq-email">

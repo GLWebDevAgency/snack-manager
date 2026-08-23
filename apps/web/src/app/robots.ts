@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { urlAbsolue } from "@/lib/site";
+import { SITE_URL, urlAbsolue } from "@/lib/site";
 
 /**
  * `/robots.txt` — CE QU'UN MOTEUR A LE DROIT D'ALLER CHERCHER.
@@ -29,15 +29,44 @@ import { urlAbsolue } from "@/lib/site";
  * délibérément indexable (`robots: { index: true }`, avec sa canonique propre) :
  * c'est la page de commande de notre client, on ne la cache pas.
  *
- * ═══ UNE PARTICULARITÉ DES DOMAINES CLIENTS ═══
+ * ═══ SUR LE DOMAINE D'UN CLIENT, CE FICHIER CHANGE ═══
  *
- * Un domaine personnalisé (« laclassfood.fr ») est réécrit vers `/r/[slug]` par
- * `src/proxy.ts`, et sert donc CE fichier-ci. La ligne `Sitemap:` porte une URL
- * absolue vers snackmanager.fr, ce qui lève l'ambiguïté ; et le proxy ne
- * réécrit que la racine, jamais un chemin — les règles ci-dessous ne peuvent
- * donc bloquer aucune page du restaurateur.
+ * Un domaine personnalisé (« laclassfood.fr ») sert CE fichier-ci. Le
+ * commentaire qui tenait ici affirmait que la ligne `Sitemap:`, portant une URL
+ * absolue vers snackmanager.fr, « levait l'ambiguïté ». C'était l'inverse : sur
+ * le domaine du restaurant, ce fichier annonçait NOTRE plan de site — donc nos
+ * pages tarifs et notre blog — à tout moteur qui venait l'y lire.
+ *
+ * Deux versions sont donc servies, décidées par l'en-tête `Host` :
+ *
+ *   · plateforme  → règles complètes, et la ligne `Sitemap:` qui est la moitié
+ *                   utile du fichier ;
+ *   · restaurant  → AUCUN plan de site (le sien n'existe pas encore, et le
+ *                   nôtre ne le regarde pas), et les refus réduits aux seules
+ *                   surfaces que son domaine sert encore. Depuis le 22/08/2026
+ *                   le proxy y ferme déjà `/admin`, `/sm` et `/board` en amont :
+ *                   les répéter ici laisserait croire que ces adresses existent
+ *                   sur son domaine.
+ *
+ * Lire l'en-tête bascule cette route en rendu dynamique. C'est le prix, et il
+ * est juste : un `robots.txt` mis en cache à la construction ne PEUT pas dire
+ * deux choses différentes selon le domaine qui le demande.
  */
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const { headers } = await import("next/headers");
+  const hote = (await headers()).get("host") ?? "";
+  const domainePlateforme = new URL(SITE_URL).host.replace(/^www\./, "");
+  const surLaPlateforme =
+    hote.toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "") === domainePlateforme ||
+    // Les hôtes de développement et de prévisualisation servent la plateforme.
+    /localhost|127\.0\.0\.1|\.up\.railway\.app$|\.vercel\.app$/.test(hote);
+
+  if (!surLaPlateforme) {
+    return {
+      rules: { userAgent: "*", allow: "/" },
+    };
+  }
+
   return {
     rules: {
       userAgent: "*",

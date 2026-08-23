@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, setToken } from "@/lib/api";
 import { Btn, Card, Field, Input } from "@/components/ui";
+import { LogoLockup } from "@/components/brand/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,22 +35,34 @@ export default function LoginPage() {
     <main className="grid min-h-screen place-items-center bg-bg px-4">
       <Card className="w-full max-w-sm shadow-deep">
         <form onSubmit={submit} className="flex flex-col gap-4 p-8">
-          <div className="mb-2 flex items-center gap-3">
-            <div
-              // Tuile de niveau « élément » posée sur la carte, comme partout
-              // ailleurs : un aplat noir creuserait un trou dans la carte au
-              // lieu de l'élever (DA §1).
-              className="grid size-11 place-items-center rounded-card border border-white/8 bg-[image:var(--cf-elev-gradient)] text-lg font-extrabold text-gold"
-              aria-hidden
-            >
-              S
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold leading-tight tracking-[-0.03em] text-ink">
-                Back-office
-              </h1>
-              <p className="text-sm text-mut">Snack Manager</p>
-            </div>
+          {/*
+            ═══ LA SEULE SURFACE PUREMENT SNACK MANAGER DE /admin ═══
+
+            Avant la connexion, aucun tenant n'est connu : le layout ne peut
+            pas appeler /tenants/me sans jeton, donc `--cf-accent` porte encore
+            le laiton par défaut et non la couleur du restaurant. À cet instant
+            précis, l'écran n'appartient à personne d'autre qu'au logiciel —
+            c'est LUI qui se présente, exactement comme un écran d'appairage.
+            D'où le verrouillage complet plutôt que le signe seul : le nom
+            doit être lu, pas deviné.
+
+            Le verrouillage remplace la tuile « S » générique, qui ne disait
+            rien et occupait la place de la marque. Il porte le `<h1>` : le
+            titre accessible de la page devient « Snack Manager », ce qui est
+            juste, et « Back-office » redevient ce qu'il est — la surface, pas
+            le produit.
+
+            L'encre suit `text-ink` posé sur le conteneur (le signe lit
+            `currentColor`) ; le laiton bichrome est écarté, il ne se lit
+            qu'à partir de 52 px. Le fond est celui de la carte : un voile
+            blanc à 5 % qui s'éteint, assez uni pour que l'éclair — qui est un
+            VIDE — se découpe proprement.
+          */}
+          <div className="mb-2 flex flex-col gap-1.5 text-ink">
+            <h1 className="flex leading-none">
+              <LogoLockup size={31} />
+            </h1>
+            <p className="text-sm text-mut">Back-office</p>
           </div>
 
           <Field label="E-mail" htmlFor="login-email">

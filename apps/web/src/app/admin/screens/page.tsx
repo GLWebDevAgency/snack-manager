@@ -68,6 +68,21 @@ const REFRESH_MS = 30_000;
 /** Store qui n'émet jamais : l'origine du navigateur ne change pas de la session. */
 const NEVER_CHANGES = () => () => {};
 
+/**
+ * ORIGINE DE L'ÉCRAN DE SALLE — UNE CONSTANTE DE DÉPLOIEMENT, PAS UNE DÉDUCTION.
+ *
+ * Inlinée AU BUILD par Next (préfixe `NEXT_PUBLIC_`), sans barre oblique finale :
+ * une valeur copiée depuis une barre d'adresse (« https://tv.snackmanager.fr/ »)
+ * produirait sinon `https://tv.snackmanager.fr//board`, une adresse que le
+ * gérant recopierait telle quelle sur son téléviseur.
+ *
+ * Vide = non renseignée : on retombe alors sur l'origine courante (voir plus
+ * bas). Ce repli sert le développement et les aperçus, pas la production.
+ */
+const BOARD_ORIGIN = (process.env.NEXT_PUBLIC_BOARD_ORIGIN ?? "")
+  .trim()
+  .replace(/\/+$/, "");
+
 export default function ScreensPage() {
   const toast = useToast();
   const now = useNow(REFRESH_MS);
@@ -77,16 +92,51 @@ export default function ScreensPage() {
   /** `null` = carte non chargée (l'échec n'est pas bloquant, il est dit). */
   const [menu, setMenu] = useState<MenuData | null>(null);
 
-  // L'adresse à ouvrir sur la TV est celle DE CETTE INSTANCE : en production
-  // comme en démo, on donne l'origine réellement servie plutôt qu'une constante
-  // qui finirait par mentir. Lue comme un store externe (même procédé que le
-  // shell admin pour le jeton) : vide côté serveur, sans écart d'hydratation.
-  const origin = useSyncExternalStore(
+  // ── L'ADRESSE QUE LA TÉLÉVISION RECEVRA ────────────────────────────────
+  //
+  // Elle vient d'une VARIABLE D'ENVIRONNEMENT, et non de la barre d'adresse
+  // que le gérant a sous les yeux. C'est tout le sujet : cette adresse est
+  // GRAVÉE DANS DU MATÉRIEL. Une clé HDMI la reçoit une fois, à l'installation,
+  // escabeau sorti — puis plus jamais. Ce qui est imprimé ici a la durée de vie
+  // du téléviseur, pas celle de la session du navigateur.
+  //
+  // Deux choses cassent le jour où l'on déduit cette adresse de l'origine
+  // courante, et elles cassent ensemble :
+  //
+  //  — le back-office et l'écran de salle N'ONT AUCUNE RAISON de rester sur la
+  //    même origine. Quand l'administration passera sur `app.snackmanager.fr`
+  //    alors que l'écran doit vivre sur `tv.snackmanager.fr`,
+  //    `window.location.origin` imprimera l'adresse du back-office sur la
+  //    télévision — une adresse qui ne sert pas le Menu Board ;
+  //  — l'appairage est rangé dans le `localStorage` DE L'ORIGINE
+  //    (`components/board/board-store.ts`). Un écran appairé sur une origine
+  //    ne l'est PAS sur une autre. Ça ne se rattrape pas d'un rafraîchissement :
+  //    ça se rattrape en ressortant l'escabeau et en ressaisissant un code, en
+  //    plein service.
+  //
+  // Cette variable doit donc rester CONSTANTE dans le temps pour un
+  // déploiement donné, même si le back-office déménage : la changer revient à
+  // révoquer tous les écrans déjà installés.
+  //
+  // REPLI — l'origine courante, pour le développement et les aperçus, où
+  // aucune valeur n'est renseignée. Lue comme un store externe (même procédé
+  // que le shell admin pour le jeton) : vide côté serveur, sans écart
+  // d'hydratation.
+  //
+  // ⚠️ CE REPLI DÉPEND DU PROXY, ET LA DÉPENDANCE EST INVISIBLE D'ICI. Depuis
+  // le 22/08/2026, `src/proxy.ts` refuse `/admin` ET `/board` sur un domaine de
+  // restaurant : cette page ne s'affiche donc QUE sur une origine de la
+  // plateforme, et l'adresse qu'on y replie est forcément servie.
+  //
+  // Rouvrir `/admin` sur les domaines clients sans rouvrir `/board` produirait
+  // une panne sourde : le gérant lirait « ouvrez laclassfood.fr/board » sur sa
+  // télévision, et l'adresse répondrait par une redirection vers la carte.
+  const currentOrigin = useSyncExternalStore(
     NEVER_CHANGES,
     () => window.location.origin,
     () => "",
   );
-  const boardUrl = `${origin}/board`;
+  const boardUrl = `${BOARD_ORIGIN || currentOrigin}/board`;
 
   // ── Dialogues ──
   const [creating, setCreating] = useState(false);

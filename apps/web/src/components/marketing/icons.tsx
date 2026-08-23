@@ -3,23 +3,18 @@
  * « Snack Manager - Site Vitrine.html » (mêmes tracés, mêmes viewBox).
  */
 
-type Sized = { width?: number; height?: number; className?: string; style?: React.CSSProperties };
-
-/** Le monogramme Snack Manager (deux tracés, blanc plein). */
-export function LogoMark({ width = 25, height = 25, className, style }: Sized) {
-  return (
-    <svg viewBox="0 0 24.958 24.991" width={width} height={height} className={className} style={style} aria-hidden="true">
-      <path
-        d="M 21.12 22.771 C 26.27 17.529 26.232 9.117 21.036 3.921 C 15.84 -1.275 7.428 -1.311 2.187 3.838 L 6.605 8.256 C 7.302 8.953 8.427 8.918 9.315 8.488 C 11.368 7.49 13.828 7.903 15.442 9.517 C 17.056 11.132 17.469 13.592 16.471 15.645 C 16.04 16.532 16.005 17.657 16.702 18.354 L 21.12 22.771 Z"
-        fill="#fff"
-      />
-      <path
-        d="M 18.743 24.991 L 12.189 24.991 C 11.242 24.991 10.335 24.614 9.665 23.945 L 1.045 15.326 C 0.376 14.657 0 13.748 0 12.801 L 0 6.248 Z M 6.694 24.991 L 2.678 24.991 C 1.199 24.991 0 23.792 0 22.313 L 0 18.297 Z"
-        fill="#fff"
-      />
-    </svg>
-  );
-}
+/*
+ * LE MONOGRAMME N'EST PLUS ICI. Il a sa propre demeure —
+ * `components/brand/Logo.tsx` — parce qu'il n'appartient plus au seul site
+ * vitrine : le back-office, le CRM, la caisse et la cuisine le servent aussi,
+ * et un logo importé depuis `marketing/icons` par le CRM interne aurait été un
+ * mensonge de rangement.
+ *
+ * L'ancien signe (deux tracés pleins, `fill="#fff"` en dur) a été remplacé par
+ * le Ticket-Burger. Son blanc codé en dur était d'ailleurs un défaut latent :
+ * posé sur un fond clair, il devenait invisible. Le nouveau suit
+ * `currentColor`.
+ */
 
 /** Congé de l'encoche (barre de navigation, bandeau de fonctionnalités). */
 export function NotchFillet({ flip, flipY, className }: { flip?: boolean; flipY?: boolean; className?: string }) {
