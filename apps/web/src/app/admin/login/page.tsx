@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, setToken } from "@/lib/api";
 import { Btn, Card, Field, Input } from "@/components/ui";
-import { LogoLockup } from "@/components/brand/Logo";
+import { LogoMark } from "@/components/brand/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,33 +36,27 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm shadow-deep">
         <form onSubmit={submit} className="flex flex-col gap-4 p-8">
           {/*
-            ═══ LA SEULE SURFACE PUREMENT SNACK MANAGER DE /admin ═══
+            ═══ LE TITRE PORTE LA SURFACE, PAS NOTRE MARQUE ═══
 
-            Avant la connexion, aucun tenant n'est connu : le layout ne peut
-            pas appeler /tenants/me sans jeton, donc `--cf-accent` porte encore
-            le laiton par défaut et non la couleur du restaurant. À cet instant
-            précis, l'écran n'appartient à personne d'autre qu'au logiciel —
-            c'est LUI qui se présente, exactement comme un écran d'appairage.
-            D'où le verrouillage complet plutôt que le signe seul : le nom
-            doit être lu, pas deviné.
+            Le verrouillage Snack Manager tenait ici, en `<h1>`. La charte §10
+            dit l'inverse, et sa raison est commerciale avant d'être
+            esthétique : « le restaurateur vend son enseigne, pas la nôtre ».
 
-            Le verrouillage remplace la tuile « S » générique, qui ne disait
-            rien et occupait la place de la marque. Il porte le `<h1>` : le
-            titre accessible de la page devient « Snack Manager », ce qui est
-            juste, et « Back-office » redevient ce qu'il est — la surface, pas
-            le produit.
+            Dans l'application d'un client, notre mark « n'apparaît QU'UNE
+            FOIS, en pied d'écran de connexion, à 60 % d'opacité, avec la
+            mention "Propulsé par Snack Manager" ». En tête et à pleine encre,
+            il faisait de notre nom le titre du back-office d'un restaurant.
 
-            L'encre suit `text-ink` posé sur le conteneur (le signe lit
-            `currentColor`) ; le laiton bichrome est écarté, il ne se lit
-            qu'à partir de 52 px. Le fond est celui de la carte : un voile
-            blanc à 5 % qui s'éteint, assez uni pour que l'éclair — qui est un
-            VIDE — se découpe proprement.
+            Le titre redevient donc ce que le gérant vient chercher — la porte
+            de SON back-office. Notre signature descend en pied de carte.
           */}
           <div className="mb-2 flex flex-col gap-1.5 text-ink">
-            <h1 className="flex leading-none">
-              <LogoLockup size={31} />
+            <h1 className="text-[22px] font-extrabold leading-none tracking-[-0.03em]">
+              Back-office
             </h1>
-            <p className="text-sm text-mut">Back-office</p>
+            <p className="text-sm text-mut">
+              Connectez-vous pour gérer votre restaurant.
+            </p>
           </div>
 
           <Field label="E-mail" htmlFor="login-email">
@@ -100,6 +94,18 @@ export default function LoginPage() {
           <Btn type="submit" variant="primary" block disabled={loading}>
             {loading ? "Connexion…" : "Se connecter"}
           </Btn>
+
+          {/*
+            LA SIGNATURE D'ÉDITEUR — et c'est le SEUL endroit de /admin où
+            notre marque paraît. Charte §10 : en pied d'écran de connexion, à
+            60 % d'opacité, avec la mention. L'opacité n'est pas une coquetterie :
+            elle dit que cette ligne n'est pas au même plan que ce qui la
+            précède. Le signe suit `currentColor`, donc le gris de la mention.
+          */}
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-medium text-mut opacity-60">
+            <LogoMark size={14} className="shrink-0" />
+            Propulsé par Snack&nbsp;Manager
+          </p>
         </form>
       </Card>
     </main>
