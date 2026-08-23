@@ -399,10 +399,41 @@ a {
  * l'utilisateur ne s'aperçoit de rien. C'est la différence entre un écran de
  * chargement et une porte fermée.
  *
- * `pointer-events: none` dès la sortie amorcée : le calque s'efface encore que
- * l'on peut déjà cliquer au travers.
+ * ═══ LE FILET DE SÉCURITÉ, ET POURQUOI IL EST INDISPENSABLE ═══
+ *
+ * Le calque est rendu CÔTÉ SERVEUR : c'est la seule façon qu'il soit là dès la
+ * première image, au lieu d'apparaître après le héros de la page. Mais cela
+ * crée un risque qui n'existait pas quand il était monté par le JS — si le JS
+ * ne prend JAMAIS la main (script bloqué, erreur d'hydratation, réseau coupé
+ * au mauvais moment), un rectangle noir masquerait le site pour toujours.
+ *
+ * L'animation ci-dessous l'efface d'elle-même. Elle tient l'opacité pleine
+ * pendant 92 % de sa durée — assez pour que l'animation JS se déroule sans
+ * être ternie — puis retire le calque. En marche normale, React l'a démonté
+ * bien avant. C'est une ceinture qu'on ne voit jamais servir, et qui évite un
+ * site entièrement noir le jour où quelque chose casse.
+ *
+ * SA DURÉE EST PLUS LONGUE QUE CELLE DE L'ANIMATION (6 s contre 3,6) : le
+ * filet doit se déclencher APRÈS, jamais pendant.
+ *
+ * Et sous `prefers-reduced-motion`, la règle globale de ce fichier ramène
+ * toute animation à 0,01 ms — le calque disparaît donc immédiatement, ce qui
+ * est exactement le comportement voulu.
  */
+@keyframes sm-splash-secours {
+  0%,
+  92% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
 .sm-splash {
+  animation: sm-splash-secours 6s linear forwards;
   position: fixed;
   inset: 0;
   z-index: 9999;
