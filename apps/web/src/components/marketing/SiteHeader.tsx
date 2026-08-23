@@ -54,11 +54,29 @@ export function SiteHeader() {
   const [dropOpen, setDropOpen] = useState(false);
   const dropClose = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropButton = useRef<HTMLButtonElement>(null);
+  const midRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * LE PANNEAU PEND SOUS SON DÉCLENCHEUR, PAS SOUS LE MILIEU DE L'ENCOCHE.
+   * Centré sur `.hd-mid`, il s'ouvrait au milieu de l'écran, loin du mot
+   * « Plateforme » (constaté en production, 23/08). La position se MESURE —
+   * l'encoche s'ouvre en s'animant, le x du bouton n'est pas connaissable en
+   * CSS — à l'ouverture, puis une seconde fois l'animation posée (0,45 s),
+   * pour rattraper une mesure prise en vol.
+   */
+  const [dropLeft, setDropLeft] = useState<number | null>(null);
+  const measureDrop = useCallback(() => {
+    const b = dropButton.current?.getBoundingClientRect();
+    const m = midRef.current?.getBoundingClientRect();
+    if (b && m) setDropLeft(b.left - m.left);
+  }, []);
 
   const dropEnter = useCallback(() => {
     if (dropClose.current) clearTimeout(dropClose.current);
+    measureDrop();
+    setTimeout(measureDrop, 500);
     setDropOpen(true);
-  }, []);
+  }, [measureDrop]);
   const dropLeave = useCallback(() => {
     if (dropClose.current) clearTimeout(dropClose.current);
     dropClose.current = setTimeout(() => setDropOpen(false), 160);
@@ -113,6 +131,7 @@ export function SiteHeader() {
           <NotchFillet className="notch-fillet" />
           <div
             className="hd-mid"
+            ref={midRef}
             style={openWidth ? ({ "--hd-open-w": `${openWidth}px` } as React.CSSProperties) : undefined}
           >
             <div className="hd-midc">
@@ -126,7 +145,10 @@ export function SiteHeader() {
                   aria-haspopup="true"
                   aria-expanded={dropOpen}
                   aria-controls="hd-droppanel"
-                  onClick={() => setDropOpen((v) => !v)}
+                  onClick={() => {
+                    measureDrop();
+                    setDropOpen((v) => !v);
+                  }}
                   onMouseEnter={dropEnter}
                   onMouseLeave={dropLeave}
                   onKeyDown={dropEscape}
@@ -156,6 +178,7 @@ export function SiteHeader() {
             <div
               id="hd-droppanel"
               className={dropOpen ? "hd-droppanel open" : "hd-droppanel"}
+              style={dropLeft !== null ? { left: `${dropLeft}px` } : undefined}
               onMouseEnter={dropEnter}
               onMouseLeave={dropLeave}
               onKeyDown={dropEscape}
