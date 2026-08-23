@@ -272,7 +272,11 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: "votre-service",
     nav: "Votre service",
     badge: "Comparatif",
-    title: "Votre service aujourd'hui. Votre service lundi prochain.",
+    // « Avec ou sans ? » est la question qu'un comptoir pose cent fois par
+    // jour : le titre parle la langue du lieu. Deux propositions découpées au
+    // point — les en-têtes du miroir en descendent (Comparison.tsx), le titre
+    // ne peut donc pas être une phrase unique.
+    title: "Votre journée sans. Votre journée avec.",
   },
   { id: "produit", nav: "Produit", badge: "Le produit", title: "Ne nous croyez pas sur parole. Prenez une commande." },
   // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
@@ -297,7 +301,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     // à la main : à la révision de grille, la section qui compare nos prix à
     // ceux de l'organisation actuelle a continué d'annoncer un montant que la
     // section juste au-dessus démentait. Il se dérive maintenant.
-    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et votre organisation actuelle, elle vous coûte combien ?`,
+    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et là, aujourd'hui, vous perdez combien ?`,
   },
   {
     id: "lancement",
@@ -319,7 +323,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     // « Ce logiciel a un restaurant. Il s'appelle Class'Food. » mettait l'outil
     // au centre au moment précis où le lecteur cherche des gens. Ce qu'il veut
     // savoir avant de laisser son numéro, c'est à QUI il le laisse.
-    title: "Un expert de la tech, un restaurateur, et le logiciel qui leur manquait.",
+    title: "Construit derrière un vrai comptoir, avec un vrai patron de snack.",
   },
   { id: "contact", nav: "Contact", badge: null, title: "Laissez-nous votre numéro. On rappelle sous 24 h." },
 ] as const;
@@ -1789,8 +1793,8 @@ export const FOUNDER_QUOTE =
  * Le collage montrait trois visuels de la CARTE du pilote — un tacos gratiné,
  * un smash burger, un panini. Verdict du fondateur : « ce n’est pas pro, ce
  * n’est pas ce que je veux ». Il a raison, et pour une raison qui dépasse le
- * goût : la section s’appelle désormais « Un expert de la tech, un
- * restaurateur, et le logiciel qui leur manquait ». Des assiettes n’illustrent
+ * goût : la section s’appelle désormais « Construit derrière un vrai
+ * comptoir, avec un vrai patron de snack ». Des assiettes n’illustrent
  * pas une rencontre entre deux personnes. Un comptoir, un service, si.
  *
  * ═══ ET ELLES NE PEUVENT PLUS ÊTRE LÉGENDÉES « CLASS’FOOD » ═══

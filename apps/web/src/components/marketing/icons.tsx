@@ -389,11 +389,12 @@ export const RESEAU_ICONS = {
 
 /** Croix « sans Snack Manager » / éclair « Snack Manager » du comparatif. */
 /**
- * L'HORLOGE DE LA COLONNE « AUJOURD'HUI ».
+ * L'HORLOGE DE LA COLONNE « SANS ».
  *
  * Elle remplace `CmpCross`, un sablier plein qui, posé face à un éclair,
  * transformait la ligne en jugement. Ici les deux pastilles nomment deux
- * MOMENTS — aujourd'hui, lundi prochain — et pas un bon et un mauvais camp.
+ * ÉTATS de la même journée — sans, avec, la question que le comptoir pose
+ * cent fois par jour — et pas un bon et un mauvais camp.
  * D'où un trait creux plutôt qu'une forme pleine : la colonne de gauche est
  * l'état éteint, elle ne doit pas peser autant que celle qui s'allume.
  */
