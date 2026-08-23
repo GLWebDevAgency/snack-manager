@@ -11,6 +11,13 @@ import { PROSPECTION_LEADS, buildProspectionOps } from './crm.prospection';
 const NOW = new Date('2026-08-23T12:00:00.000Z');
 
 describe('Liste de prospection', () => {
+  it('embarque la cinquantaine arrêtée le 23/08/2026', () => {
+    // LITTÉRAL DÉLIBÉRÉ, comme le pivot de la grille tarifaire : 53 fiches
+    // relevées, 1 réfutée en contre-vérification (liquidation judiciaire).
+    // Toute retouche de la liste passe par une relecture de ce nombre.
+    expect(PROSPECTION_LEADS.length).toBe(52);
+  });
+
   it('passe le contrat de création de lead, fiche par fiche', () => {
     for (const lead of PROSPECTION_LEADS) {
       // Le même zod que `POST /crm/leads` : ce qui n'entrerait pas par
