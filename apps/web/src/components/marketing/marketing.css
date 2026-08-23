@@ -361,8 +361,10 @@ html:has(.mk) {
 .mk .hd-droppanel {
   position: absolute;
   top: calc(100% + 10px);
-  left: 50%;
-  transform: translate(-50%, -4px);
+  /* `left` est posé en ligne par SiteHeader — mesuré sous le déclencheur ;
+     cette valeur n'est que le repli avant la première mesure. */
+  left: 24px;
+  transform: translateY(-4px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -381,7 +383,7 @@ html:has(.mk) {
 .mk .hd-droppanel.open {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
 }
 .mk .hd-desktop:hover .hd-mid,
 .mk .hd-desktop:focus-within .hd-mid {
