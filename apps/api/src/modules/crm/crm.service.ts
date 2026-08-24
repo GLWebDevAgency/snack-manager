@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, type OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -56,7 +56,22 @@ import { demoSeedEnabled } from '../../common/demo-seed';
 const ACTIVITY_WINDOW_DAYS = 30;
 
 @Injectable()
-export class CrmService {
+export class CrmService implements OnApplicationBootstrap {
+  /**
+   * L'import de prospection court AU DÉMARRAGE, plus seulement au premier
+   * clic. Les 52 leads réels ont été demandés « en production, en base » —
+   * or l'import ne se déclenchait qu'à la première requête CRM, et personne
+   * n'avait encore ouvert /sm contre la production (le pipeline se travaille
+   * sur staging) : le premier exercice de restauration (24/08/2026) a relu
+   * une sauvegarde de production SANS leads, et il a eu raison de la refuser.
+   * Fire-and-forget qui ne lève jamais : un import raté n'empêche pas l'API
+   * de servir, et le premier appel CRM le retente (la promesse mémorisée
+   * repasse à null en cas d'échec).
+   */
+  onApplicationBootstrap(): void {
+    void this.ensureProspected();
+  }
+
   constructor(
     @InjectModel('Lead') private readonly leads: Model<Lead>,
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
