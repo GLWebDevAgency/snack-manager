@@ -14,6 +14,7 @@ import {
   demoStore,
   demoTransport,
   getStore,
+  installClientErrorReporter,
   isDemoRequested,
   setStore,
   webStore,
@@ -124,6 +125,12 @@ export interface PairedDevice {
   deviceToken: string;
   tenant: DeviceTenantBrand;
   device: DeviceIdentity;
+  /**
+   * Abonnement suspendu côté Snack Manager. Porté par le battement de cœur :
+   * c'est l'ÉCRAN qui se verrouille (contrat `DeviceHeartbeatResult`), pas
+   * la cuisine qui découvre des tickets fantômes.
+   */
+  suspended?: boolean;
 }
 
 /**
@@ -178,6 +185,9 @@ function sameDevice(a: PairedDevice | null, b: PairedDevice): boolean {
   return (
     a !== null &&
     a.deviceToken === b.deviceToken &&
+    // `?? false` : les appairages persistés avant ce champ n'en ont pas, et
+    // « absent » veut dire « pas suspendu » — pas « différent à chaque fois ».
+    (a.suspended ?? false) === (b.suspended ?? false) &&
     a.tenant.slug === b.tenant.slug &&
     a.tenant.name === b.tenant.name &&
     a.tenant.brandColor === b.tenant.brandColor &&
@@ -202,11 +212,36 @@ async function persist(next: PairedDevice): Promise<PairedDevice> {
  * La session de l'équipe part avec : un jeton émis pour un établissement n'a
  * aucun sens sur le suivant.
  */
+/**
+ * Branche le rapporteur d'erreurs sur le guichet public — voir
+ * `client-core/error-report`. Pas en démonstration : les erreurs du visiteur
+ * n'ont pas d'établissement, et la vitrine n'est pas une cuisine en service.
+ */
+export function installErrorReporting(): () => void {
+  if (DEMO) return () => {};
+  return installClientErrorReporter({
+    source: 'kds',
+    post: (body) => {
+      void fetch(`${API_URL}/public/client-errors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        keepalive: true,
+      }).catch(() => {});
+    },
+  });
+}
+
 export async function forgetPairedDevice(): Promise<void> {
   adopt(null);
   client.setToken(null);
   await getStore().removeItem(KEY_DEVICE);
   await getStore().removeItem(KEY_SESSION);
+  // La file hors-ligne part avec l'appairage : non cloisonnée par
+  // établissement, elle rejouerait sinon les gestes de l'établissement A
+  // sous l'établissement B après ré-appairage. Perte assumée et visible
+  // (compteur « N en attente ») avant le geste, jamais silencieuse après.
+  await client.queue.clear();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -283,7 +318,12 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
     if (e instanceof DeviceError && e.status === 401) throw e;
     return null;
   }
-  return persist({ ...device, tenant: beat.tenant, device: beat.device });
+  return persist({
+    ...device,
+    tenant: beat.tenant,
+    device: beat.device,
+    suspended: beat.suspended === true,
+  });
 }
 
 /**

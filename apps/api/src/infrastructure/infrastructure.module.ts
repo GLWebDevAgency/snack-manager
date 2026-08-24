@@ -1,13 +1,22 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { createTeamAlerter } from './alerts/team-alerter.factory';
+import { createSentryForwarder } from './alerts/sentry-forwarder.factory';
+import { ERROR_FORWARDER } from './alerts/error-forwarder';
 import { configSourceOf } from './config-source';
 import { createDomainRegistrar } from './domains/domain-registrar.factory';
 import { RedisEventPublisher } from './events/redis-event-publisher';
 import { MongoTenantIdLookup, TENANT_ID_LOOKUP } from './events/tenant-id-lookup';
 import { createPaymentGateway } from './payments/payment-gateway.factory';
 import { Argon2SecretHasher } from './security/argon2-secret-hasher';
-import { DOMAIN_REGISTRAR, EVENT_PUBLISHER, PAYMENT_GATEWAY, SECRET_HASHER } from './tokens';
+import {
+  DOMAIN_REGISTRAR,
+  EVENT_PUBLISHER,
+  PAYMENT_GATEWAY,
+  SECRET_HASHER,
+  TEAM_ALERTER,
+} from './tokens';
 
 /**
  * L'autre moitié de l'hexagone : les adaptateurs, et rien d'autre.
@@ -42,10 +51,28 @@ import { DOMAIN_REGISTRAR, EVENT_PUBLISHER, PAYMENT_GATEWAY, SECRET_HASHER } fro
       inject: [ConfigService],
       useFactory: (config: ConfigService) => createPaymentGateway(configSourceOf(config)),
     },
+    {
+      provide: TEAM_ALERTER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => createTeamAlerter(configSourceOf(config)),
+    },
+    {
+      provide: ERROR_FORWARDER,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => createSentryForwarder(configSourceOf(config)),
+    },
     { provide: TENANT_ID_LOOKUP, useClass: MongoTenantIdLookup },
     { provide: EVENT_PUBLISHER, useClass: RedisEventPublisher },
     { provide: SECRET_HASHER, useClass: Argon2SecretHasher },
   ],
-  exports: [DOMAIN_REGISTRAR, PAYMENT_GATEWAY, EVENT_PUBLISHER, SECRET_HASHER, TENANT_ID_LOOKUP],
+  exports: [
+    DOMAIN_REGISTRAR,
+    PAYMENT_GATEWAY,
+    EVENT_PUBLISHER,
+    SECRET_HASHER,
+    TENANT_ID_LOOKUP,
+    TEAM_ALERTER,
+    ERROR_FORWARDER,
+  ],
 })
 export class InfrastructureModule {}

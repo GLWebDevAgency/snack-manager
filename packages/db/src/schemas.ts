@@ -560,6 +560,51 @@ export const LeadSchema = new Schema(
 export type Lead = InferSchemaType<typeof LeadSchema>;
 
 // ─────────────────────────────────────────────────────────────
+// errorEvents — le journal d'erreurs de la plateforme (exploitation)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Une ligne PAR EMPREINTE, jamais par occurrence : la même panne qui frappe
+ * mille fois pèse un document avec `count: 1000`, pas mille documents. C'est
+ * ce qui rend la collection lisible à l'écran ET insubmersible — une boucle
+ * d'erreurs ne peut pas remplir la base plus vite qu'elle n'incrémente.
+ */
+export const ErrorEventSchema = new Schema(
+  {
+    source: { type: String, enum: ['api', 'web', 'pos', 'kds'], required: true },
+    hash: { type: String, required: true },
+    message: { type: String, required: true },
+    stack: { type: String, default: '' },
+    url: { type: String, default: '' },
+    appVersion: { type: String, default: '' },
+    count: { type: Number, default: 1 },
+    firstAt: { type: Date, required: true },
+    lastAt: { type: Date, required: true },
+    // null = jamais vue : c'est la valeur qui fait remonter le groupe en tête
+    // de l'écran (null trie avant toute date).
+    seenAt: { type: Date, default: null },
+  },
+  { timestamps: false },
+);
+ErrorEventSchema.index({ source: 1, hash: 1 }, { unique: true });
+ErrorEventSchema.index({ lastAt: -1 });
+export type ErrorEvent = InferSchemaType<typeof ErrorEventSchema>;
+
+/**
+ * Mémoire du veilleur d'alertes : quand chaque clé a sonné pour la dernière
+ * fois. C'est elle qui transforme « une caisse muette » en UNE alerte toutes
+ * les six heures, et pas une par passage du veilleur.
+ */
+export const AlertLogSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    sentAt: { type: Date, required: true },
+  },
+  { timestamps: false },
+);
+export type AlertLog = InferSchemaType<typeof AlertLogSchema>;
+
+// ─────────────────────────────────────────────────────────────
 // platformSettings — les réglages de NOTRE plateforme (document unique)
 // ─────────────────────────────────────────────────────────────
 
@@ -1077,6 +1122,8 @@ export const MODELS = {
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
   Invoice: { name: 'Invoice', schema: InvoiceSchema, collection: 'invoices' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
+  ErrorEvent: { name: 'ErrorEvent', schema: ErrorEventSchema, collection: 'errorevents' },
+  AlertLog: { name: 'AlertLog', schema: AlertLogSchema, collection: 'alertlogs' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },

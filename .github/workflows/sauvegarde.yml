@@ -1,0 +1,87 @@
+name: Sauvegarde
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pourquoi ce fichier existe
+#
+# « Ni GitHub ni Railway ne restaurent des données » (docs/CI-CD.md § 12) — et
+# jusqu'au 24/08/2026, la seule sauvegarde était un dump manuel sur le disque
+# de l'opérateur, Mongo seulement. Ce travail nocturne appelle l'export de
+# l'API (`GET /ops/export`, module ops) qui rend TOUTE la base : collections
+# Mongo en EJSON canonique restaurable, tables PostgreSQL en lignes.
+#
+# Destination, dans l'ordre :
+#   1. le bucket R2 `sm-sauvegardes` (créé le 24/08/2026), si les secrets
+#      Cloudflare sont posés — hors de Railway ET hors de GitHub, c'est le
+#      but d'une sauvegarde ;
+#   2. à défaut, un artefact GitHub (90 jours) — mieux que rien, et le
+#      travail le dit clairement au lieu de le taire.
+#
+# Secrets attendus (Réglages → Secrets → Actions) :
+#   SM_BACKUP_URL          l'export, p. ex. https://api-…railway.app/ops/export
+#   SM_BACKUP_TOKEN        le même que la variable Railway du même nom
+#   CLOUDFLARE_API_TOKEN   jeton R2 (Object Read & Write sur sm-sauvegardes)
+#   CLOUDFLARE_ACCOUNT_ID  l'identifiant de compte Cloudflare
+#
+# Sans les deux premiers, le travail s'arrête en le DISANT (pas d'échec rouge :
+# un dépôt pas encore configuré n'est pas une panne). La rotation côté R2 se
+# règle par une règle de cycle de vie sur le bucket (30–90 jours), pas ici.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    name: Exporter la production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Exporter la base
+        id: export
+        env:
+          URL: ${{ secrets.SM_BACKUP_URL }}
+          TOKEN: ${{ secrets.SM_BACKUP_TOKEN }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "::notice::Sauvegarde non configurée — poser SM_BACKUP_URL et SM_BACKUP_TOKEN (voir l'en-tête du fichier)."
+            echo "configure=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FICHIER="sm-$(date -u +%Y-%m-%d).json"
+          curl -fsS --max-time 300 -H "authorization: Bearer $TOKEN" "$URL" -o "$FICHIER"
+          # Un export qui n'est pas du JSON du bon format est un échec, pas une
+          # sauvegarde : mieux vaut une nuit rouge qu'un faux sentiment de filet.
+          node -e "const d=require('./$FICHIER'); if (d.format!=='sm-sauvegarde-v1'||!d.mongo) process.exit(1); if (d.partial) console.log('::warning::Export partiel — PostgreSQL manquant');"
+          gzip -9 "$FICHIER"
+          echo "configure=true" >> "$GITHUB_OUTPUT"
+          echo "fichier=$FICHIER.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Déposer sur R2
+        id: r2
+        if: steps.export.outputs.configure == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FICHIER: ${{ steps.export.outputs.fichier }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Secrets Cloudflare absents — repli sur un artefact GitHub."
+            echo "depose=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx --yes wrangler@4 r2 object put "sm-sauvegardes/$FICHIER" --file "$FICHIER" --remote
+          echo "depose=true" >> "$GITHUB_OUTPUT"
+
+      - name: Artefact de repli (90 jours)
+        if: steps.export.outputs.configure == 'true' && steps.r2.outputs.depose != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-${{ github.run_id }}
+          path: ${{ steps.export.outputs.fichier }}
+          retention-days: 90
+          if-no-files-found: error
