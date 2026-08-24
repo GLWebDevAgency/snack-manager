@@ -1,10 +1,9 @@
-import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
-import { stdin, stdout } from 'node:process';
 import { config as dotenv } from 'dotenv';
 import * as argon2 from 'argon2';
 import mongoose from 'mongoose';
 import { MODELS } from './schemas';
+import { askHidden, complain } from './password-prompt';
 
 // Même .env racine que les autres scripts du paquet (cf. `seed.ts`).
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -30,50 +29,6 @@ dotenv({ path: resolve(__dirname, '../../../.env') });
  * manifestement devinable, exige la confirmation, et n'écrit que si le compte
  * existe déjà — il ne crée personne.
  */
-
-/** Longueur en dessous de laquelle un mot de passe d'administration ne vaut rien. */
-const MIN_LENGTH = 12;
-
-/**
- * Refus des mots de passe construits sur le produit lui-même.
- *
- * C'est exactement la faute qu'on répare : le mot de passe d'amorçage était le
- * nom du produit suivi de l'année. Interdire ce motif évite de le remplacer
- * par son cousin.
- */
-const FORBIDDEN = [/snack/i, /manager/i, /classfood/i, /class.?food/i, /motdepasse/i, /password/i];
-
-/** Saisie masquée — rien ne s'affiche, pas même des étoiles (longueur non révélée). */
-function askHidden(question: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: stdin, output: stdout, terminal: true });
-    const output = stdout as NodeJS.WriteStream & { muted?: boolean };
-    const write = output.write.bind(output);
-    // On intercepte l'écho du terminal le temps de la saisie.
-    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
-      if (!output.muted) write(s);
-    };
-    write(question);
-    output.muted = true;
-    rl.question('', (answer) => {
-      output.muted = false;
-      write('\n');
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
-function complain(password: string): string | null {
-  if (password.length < MIN_LENGTH) {
-    return `Trop court : ${MIN_LENGTH} caractères au minimum (celui-ci en fait ${password.length}).`;
-  }
-  const hit = FORBIDDEN.find((pattern) => pattern.test(password));
-  if (hit) {
-    return "Ce mot de passe contient le nom du produit ou d'un client : c'est précisément le défaut qu'on corrige.";
-  }
-  return null;
-}
 
 async function main(): Promise<void> {
   const email = process.argv[2]?.trim().toLowerCase();
