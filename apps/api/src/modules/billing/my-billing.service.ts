@@ -292,6 +292,7 @@ const BLANK_INVOICE: CrmInvoice = {
   methodLabel: null,
   cancelledAt: null,
   cancelReason: '',
+  reminders: { count: 0, last: null },
   overdueDays: 0,
   dueCents: 0,
   dueTtcCents: 0,

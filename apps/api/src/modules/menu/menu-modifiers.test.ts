@@ -74,7 +74,14 @@ function menu(options: { fail?: boolean; produits?: number } = {}) {
     products as never,
     { publish: () => {} } as never,
   );
-  return new MenuService(categories as never, products as never, { publish: () => {} } as never, supply);
+  // Le journal NF525 n'est pas le sujet de ces tests : une doublure muette suffit.
+  return new MenuService(
+    categories as never,
+    products as never,
+    { publish: () => {} } as never,
+    supply,
+    { log: async () => {} } as never,
+  );
 }
 
 /** Premier produit de la première catégorie — son absence est un échec de test. */

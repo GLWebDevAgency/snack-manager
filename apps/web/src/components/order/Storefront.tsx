@@ -47,6 +47,7 @@ import {
   weekSchedule,
 } from "./helpers";
 import { Checkout } from "./Checkout";
+import { armeFunnel, jalonFunnel } from "./funnel";
 import { Highlights, MenuBoard } from "./MenuBoard";
 import { ProductSheet } from "./ProductSheet";
 import {
@@ -103,6 +104,16 @@ export function Storefront({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // ── L'entonnoir : la visite au montage, le panier au premier article. ──
+  // (Les deux jalons suivants partent du tunnel lui-même — voir Checkout.)
+  useEffect(() => {
+    armeFunnel(site.tenant.slug, mode, demo);
+    jalonFunnel("visite");
+  }, [site.tenant.slug, mode, demo]);
+  useEffect(() => {
+    if (cart.lines.length > 0) jalonFunnel("panier");
+  }, [cart.lines.length]);
 
   const paused = site.ordering.paused;
   const blocked = paused || site.categories.length === 0;

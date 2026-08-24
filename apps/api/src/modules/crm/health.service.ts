@@ -13,7 +13,18 @@ import {
   daysSince,
   isAccessBlocked,
   paiementAxis,
-  type CrmClientHealth,
+  type CrmActivityWindow,
+  type CrmFleet,
+  type CrmFleetUnit,
+  type CrmHealthAxis,
+  type CrmHealthAxisKey,
+  type CrmHealthScore,
+  type CrmHealthVerdict,
+  type CrmModuleAdoption,
+  type CrmModuleKey,
+  type CrmSupplyHealth,
+  type CrmSupplyPriceIncrease,
+  type CrmTenantHealth,
   type JwtPayload,
   type RevocableDeviceKind,
   type TenantAccountStatus,
@@ -143,159 +154,35 @@ export const trendFloorFor = (days: number): number =>
 
 // ─── Types de sortie ───
 
-export type CrmHealthAxisKey = 'activite' | 'adoption' | 'technique' | 'paiement';
-
-export type CrmHealthAxis = {
-  key: CrmHealthAxisKey;
-  label: string;
-  /** Poids de l'axe dans le score composite (somme des quatre = 100). */
-  weight: number;
-  /** `false` quand la donnée manque : l'axe est alors RETIRÉ du calcul. */
-  measured: boolean;
-  /** Note de l'axe sur 100 — `null` si non mesuré. */
-  score: number | null;
-  /** Une phrase qui explique la note, chiffres à l'appui. */
-  detail: string;
-};
-
-export type CrmHealthVerdict = 'solide' | 'correct' | 'fragile' | 'critique';
-
-export type CrmHealthScore = {
-  /** Score composite sur 100 — la moyenne pondérée, sans correctif. */
-  value: number;
-  verdict: CrmHealthVerdict;
-  verdictLabel: string;
-  /**
-   * Axe qui a PLAFONNÉ le verdict, quand la moyenne était plus flatteuse que
-   * lui. `null` la plupart du temps. Renvoyé pour que l'écran puisse écrire
-   * « correct sur la moyenne, mais l'activité le tire vers le bas » plutôt que
-   * de laisser l'équipe se demander pourquoi 66 donne « fragile ».
-   */
-  cappedBy: CrmHealthAxisKey | null;
-  axes: CrmHealthAxis[];
-};
-
-export type CrmActivityWindow = {
-  days: number;
-  orders: number;
-  revenueCents: number;
-  avgBasketCents: number;
-  /** Même durée, juste avant — la seule comparaison honnête. */
-  previousOrders: number;
-  previousRevenueCents: number;
-  ordersDeltaPct: number | null;
-  revenueDeltaPct: number | null;
-};
-
 /**
- * Les modules que la fiche sait regarder.
+ * LA FORME DE LA FICHE EST PUBLIÉE, elle ne vit plus ici.
  *
- * `stocks` est arrivé en dernier, et par la file de signaux : elle sait dire
- * « Suivi des stocks ouvert et jamais utilisé » depuis qu'elle lit le contexte
- * appro, alors que la fiche n'en avait jamais entendu parler. Un chargé de
- * compte qui cliquait sur ce signal atterrissait sur un dossier où le module
- * n'existait pas — le pire endroit pour douter de son outil, celui où l'on
- * vérifie avant d'appeler.
+ * `CrmTenantHealth` et toutes ses briques (axes, score, fenêtres d'activité,
+ * modules, parc, appro) sont désormais dans `@sm/contracts` (`health.ts`) : ce
+ * fichier n'en est plus que le PRODUCTEUR — même bascule que `signals.service`
+ * pour `CrmQueueSignal`, et pour la même raison. L'écran devinait cette forme
+ * avec des lecteurs défensifs (activité cherchée à plat alors qu'elle est
+ * imbriquée, appro attendue en listes alors qu'elle est comptée) et des
+ * sections entières de la fiche client restaient vides sans qu'aucun typecheck
+ * ne le dise.
+ *
+ * Les types sont réexportés tels quels : les consommateurs internes
+ * (`crm.service`, `signals.service`, les tests) ne changent pas d'import.
  */
-export type CrmModuleKey =
-  | 'caisse'
-  | 'cuisine'
-  | 'commande_en_ligne'
-  | 'ecrans_salle'
-  | 'stocks';
-
-export type CrmModuleAdoption = {
-  key: CrmModuleKey;
-  label: string;
-  /**
-   * Le module est-il OUVERT chez ce client (matériel appairé, surface en
-   * service) ? Un module ouvert et jamais utilisé, c'est de la formation à
-   * prévoir — ou une ligne de facture à justifier.
-   */
-  provisioned: boolean;
-  used: boolean;
-  lastUsedAt: string | null;
-  detail: string;
-};
-
-export type CrmFleetUnit = {
-  id: string;
-  name: string;
-  kind: RevocableDeviceKind;
-  kindLabel: string;
-  paired: boolean;
-  online: boolean;
-  lastSeenAt: string | null;
-  statusLabel: string;
-};
-
-export type CrmFleet = {
-  units: CrmFleetUnit[];
-  total: number;
-  online: number;
-  offline: number;
-  /** Appairés mais jamais vus : installés puis abandonnés. */
-  neverSeen: number;
-};
-
-export type CrmSupplyPriceIncrease = {
-  ingredientName: string;
-  supplierName: string;
-  previousPriceCents: number;
-  packPriceCents: number;
-  increasePct: number;
-};
-
-export type CrmSupplyHealth = {
-  /**
-   * `false` quand le contexte supply (PostgreSQL) est injoignable. La fiche
-   * doit rester lisible : une panne d'appro ne justifie pas de refuser
-   * l'activité, la santé et le parc.
-   */
-  available: boolean;
-  belowPar: number;
-  ruptures: number;
-  priceIncreases30d: number;
-  topPriceIncreases: CrmSupplyPriceIncrease[];
-  /** Ingrédients ACTIFS suivis par ce restaurant — le registre est-il monté ? */
-  ingredients: number;
-  suppliers: number;
-  /** Mouvements de stock enregistrés depuis toujours — le registre vit-il ? */
-  movements: number;
-  movements30d: number;
-  lastMovementAt: string | null;
-};
-
-export type CrmTenantHealth = {
-  tenantId: string;
-  name: string;
-  slug: string;
-  plan: 'essentiel' | 'complet' | 'boost';
-  planLabel: string;
-  founderSeat: boolean;
-  /** Entrée dans le parc. */
-  since: string;
-  account: {
-    status: TenantAccountStatus;
-    statusLabel: string;
-    accessBlocked: boolean;
-    since: string;
-    reason: string;
-  };
-  activity: {
-    last7d: CrmActivityWindow;
-    last30d: CrmActivityWindow;
-    lastOrderAt: string | null;
-    daysSinceLastOrder: number | null;
-    health: CrmClientHealth;
-    healthLabel: string;
-  };
-  score: CrmHealthScore;
-  modules: CrmModuleAdoption[];
-  fleet: CrmFleet;
-  supply: CrmSupplyHealth;
-  computedAt: string;
-};
+export type {
+  CrmActivityWindow,
+  CrmFleet,
+  CrmFleetUnit,
+  CrmHealthAxis,
+  CrmHealthAxisKey,
+  CrmHealthScore,
+  CrmHealthVerdict,
+  CrmModuleAdoption,
+  CrmModuleKey,
+  CrmSupplyHealth,
+  CrmSupplyPriceIncrease,
+  CrmTenantHealth,
+} from '@sm/contracts';
 
 // ─── Barème du score composite ───
 
@@ -675,6 +562,9 @@ export function toFleetUnit(
     paired?: boolean | null;
     lastSeenAt?: Date | null;
     revokedAt?: Date | null;
+    appVersion?: string | null;
+    queueDepth?: number | null;
+    lastError?: string | null;
   },
   kind: RevocableDeviceKind,
   offlineAfterMs: number,
@@ -701,6 +591,9 @@ export function toFleetUnit(
     online,
     lastSeenAt: iso(lastSeenAt),
     statusLabel,
+    appVersion: String(raw.appVersion ?? ''),
+    queueDepth: typeof raw.queueDepth === 'number' ? raw.queueDepth : null,
+    lastError: String(raw.lastError ?? ''),
   };
 }
 
@@ -1243,6 +1136,10 @@ export const DEVICE_FIELDS = {
   revokedAt: 1,
   tenantId: 1,
   createdAt: 1,
+  // Télémétrie du battement — voir `DeviceHeartbeatBody` (@sm/contracts).
+  appVersion: 1,
+  queueDepth: 1,
+  lastError: 1,
 } as const;
 
 export const SCREEN_FIELDS = {

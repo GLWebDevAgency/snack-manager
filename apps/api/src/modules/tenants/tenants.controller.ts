@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import { TenantIdentityUpdateSchema, type TenantIdentityUpdate } from '@sm/contracts';
 import { Public, Roles, TenantId } from '../../common/auth';
+import { zod } from '../../common/zod.pipe';
 import { TenantsService } from './tenants.service';
 
 @Controller()
@@ -15,6 +17,20 @@ export class TenantsController {
   @Patch('tenants/me/settings')
   updateSettings(@TenantId() tenantId: string, @Body() body: Record<string, unknown>) {
     return this.tenants.updateSettings(tenantId, body);
+  }
+
+  /**
+   * L'identité de l'enseigne — nom, couleur, adresse, téléphones. Le nom et
+   * la couleur repartent vers les tablettes AU BATTEMENT SUIVANT (heartbeat) :
+   * aucune ré-installation, aucun geste d'équipe SM.
+   */
+  @Roles('owner', 'gerant')
+  @Patch('tenants/me/identity')
+  updateIdentity(
+    @TenantId() tenantId: string,
+    @Body(zod(TenantIdentityUpdateSchema)) body: TenantIdentityUpdate,
+  ) {
+    return this.tenants.updateIdentity(tenantId, body);
   }
 
   @Roles('owner', 'gerant')

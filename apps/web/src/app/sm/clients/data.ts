@@ -19,16 +19,20 @@
  * pas les lire.
  *
  * ─── Ce qui est TYPÉ et ce qui reste lu défensivement ───
- * `/crm/signals` EST publié : `CrmQueueSignal` vit dans `@sm/contracts`, la file
- * est donc lue avec ce type et plus une ligne de devinette. Une famille ajoutée
- * ou renommée casse maintenant le typecheck des deux côtés — c'est exactement le
- * but, et c'est ce qui manquait quand `action`, `href` et `severity` sont
- * apparus sans que personne ne les affiche.
+ * `/crm/signals`, `/crm/tenants/:id/health` et `/crm/tenants/:id/insights` SONT
+ * publiés : `CrmQueueSignal`, `CrmTenantHealth` et `CrmTenantInsights` vivent
+ * dans `@sm/contracts` et ces trois routes se lisent avec leurs types, plus une
+ * ligne de devinette. C'est la leçon de l'audit du 24/08/2026 : les lecteurs
+ * défensifs de `/health` et `/insights` DEVINAIENT une forme que l'API ne
+ * rendait pas (activité cherchée à plat, appro attendue en listes, champs
+ * `included`/`benchmark` jamais envoyés) et des sections entières restaient
+ * vides sans qu'aucun typecheck ne le dise. Un champ ajouté ou renommé casse
+ * maintenant la compilation des deux côtés — c'est exactement le but.
  *
- * `/crm/tenants/:id/health` et `/insights` n'ont pas encore de type publié :
- * eux restent lus défensivement — plusieurs noms plausibles acceptés, section
- * ABSENTE plutôt qu'écran blanc, jamais d'exception jusqu'au rendu. Ces
- * lecteurs-là disparaîtront à leur tour le jour où leurs contrats sortiront.
+ * Seules les routes SANS contrat (`/crm/tenants`, `/account`, `/logs`) restent
+ * lues défensivement. La règle de tolérance, elle, ne change pas : une réponse
+ * absente ou méconnaissable vaut section INDISPONIBLE — jamais un écran blanc,
+ * jamais une exception jusqu'au rendu.
  *
  * Rappel de convention : tous les montants circulent en CENTIMES (int).
  */
@@ -39,18 +43,26 @@ import {
   CRM_SIGNAL_SEVERITIES,
   CRM_SIGNAL_SEVERITY_LABELS,
   CRM_SIGNAL_SEVERITY_RANK,
-  DEVICE_OFFLINE_AFTER_MS,
-  REVOCABLE_DEVICE_KIND_LABELS,
-  SCREEN_OFFLINE_AFTER_MS,
   clientHealth,
   type AdminLogEntry,
   type AdminPlan,
   type AdminTenantAccount,
+  type CrmActivityWindow,
   type CrmClient,
   type CrmClientHealth,
+  type CrmFleetUnit,
+  type CrmHealthAxis,
+  type CrmInsight,
+  type CrmInsightSeverity,
+  type CrmInsightUnit,
+  type CrmModuleAdoption,
   type CrmQueueSignal,
   type CrmSignalSeverity,
   type CrmSignalUnit,
+  type CrmSupplyHealth,
+  type CrmTenantActivity,
+  type CrmTenantHealth,
+  type CrmTenantInsights,
   type DeviceRevoke,
   type RevocableDeviceKind,
   type TenantAccountStatus,
@@ -123,8 +135,8 @@ function dig(source: unknown, ...path: string[]): unknown {
 /**
  * Première branche non vide parmi plusieurs chemins.
  *
- * L'adoption des modules peut arriver sous `/health` comme sous `/insights` :
- * on ne veut pas d'un écran qui dépend du service qui a gagné la course.
+ * Réservé aux routes SANS contrat (liste des clients, journal), dont la racine
+ * a porté plusieurs noms au fil des versions (`items`, `clients`, `entries`…).
  */
 function firstList(...candidates: unknown[]): unknown[] {
   for (const c of candidates) {
@@ -165,34 +177,19 @@ export const SIGNAL_SEVERITY_HINTS: Record<SignalSeverity, string> = {
 };
 
 /**
- * Repli pour les surfaces SANS contrat.
+ * Projection de la gravité de `/insights` vers les trois bandes de la charte.
  *
- * `/crm/signals` est publié : sa gravité est lue telle quelle. `/insights`, lui,
- * ne l'est pas encore et parle tantôt anglais, tantôt par niveaux — on ramène
- * ses recommandations aux trois mêmes bandes plutôt que d'inventer une échelle
- * de plus. À supprimer le jour où `/insights` aura son type.
+ * Le contrat du conseil parle le vocabulaire de son producteur (`urgent`,
+ * `attention`, `info`) — on publie ce que la route REND, pas ce qu'un écran
+ * préférerait lire. La traduction vers les bandes de la file de travail se
+ * fait ici, en un seul endroit, plutôt que d'inventer une quatrième échelle.
+ * L'ancien dictionnaire d'alias multi-langues a disparu avec le contrat.
+ *
+ * Le repli `info` n'est pas décoratif : une valeur inattendue à l'exécution
+ * doit donner une pastille discrète, jamais une exception jusqu'au rendu.
  */
-const SEVERITY_ALIASES: Record<string, SignalSeverity> = {
-  critique: "critique",
-  critical: "critique",
-  urgent: "critique",
-  high: "critique",
-  danger: "critique",
-  risque: "critique",
-  error: "critique",
-  attention: "attention",
-  warning: "attention",
-  warn: "attention",
-  medium: "attention",
-  moyen: "attention",
-  info: "info",
-  low: "info",
-  faible: "info",
-  notice: "info",
-};
-
-export const readSeverity = (v: unknown): SignalSeverity =>
-  SEVERITY_ALIASES[String(v ?? "").toLowerCase()] ?? "info";
+export const readInsightSeverity = (v: CrmInsightSeverity): SignalSeverity =>
+  v === "urgent" ? "critique" : v === "attention" ? "attention" : "info";
 
 /**
  * ORDRE D'APPEL — celui du contrat, donc celui de l'API.
@@ -243,46 +240,41 @@ export type ClientRow = Omit<
   openSignals: number | null;
 };
 
-export type Comparison = {
-  current: number;
-  /** `null` = l'API ne fournit pas de période précédente : pas de tendance inventée. */
-  previous: number | null;
-};
+/**
+ * L'ACTIVITÉ COMPARÉE — la forme du contrat, telle quelle.
+ *
+ * Deux fenêtres IMBRIQUÉES (`last7d`, `last30d`), pas de compteurs à plat et
+ * PAS de série jour par jour : la route ne la calcule pas. C'était le défaut
+ * n° 1 de l'audit — l'ancien lecteur cherchait `orders`/`revenue`/`series` à la
+ * racine de `h.activity` et le bloc restait vide à jamais.
+ *
+ * Les `ordersDeltaPct`/`revenueDeltaPct` à `null` sont un REFUS de l'API (la
+ * période de référence ne pesait pas assez pour qu'un pourcentage veuille dire
+ * quelque chose), pas une absence : on ne les recalcule JAMAIS localement —
+ * même règle que `trendPct` sur la liste.
+ */
+export type TenantActivity = CrmTenantActivity;
+export type ActivityWindow = CrmActivityWindow;
 
-export type HealthComponent = {
-  key: string;
-  label: string;
-  /** Note du critère, 0–100. */
-  score: number;
-  /** Poids dans le score global, en % — `null` si l'API ne le pondère pas. */
-  weight: number | null;
-  detail: string;
-};
+/**
+ * Un axe du score composite — le contrat, sans transformation. `score` est
+ * `null` quand l'axe n'a pas pu être MESURÉ (`measured: false`) : ce n'est pas
+ * une mauvaise note, c'est une donnée qui manque, et l'écran doit le dire.
+ */
+export type HealthComponent = CrmHealthAxis;
 
-export type ActivityPoint = { label: string; value: number; previous: number | null };
-
-export type TenantActivity = {
-  /** Longueur de la fenêtre comparée, en jours. */
-  days: number;
-  orders: Comparison;
-  revenueCents: Comparison;
-  /** Panier moyen — agrégat, jamais un ticket nominatif. */
-  ticketCents: Comparison | null;
-  series: ActivityPoint[];
-};
-
-export type ModuleAdoption = {
-  key: string;
-  label: string;
-  /** Le restaurant s'en sert réellement sur la période. */
-  used: boolean;
-  /** Sa formule le lui facture. `included && !used` = le sujet d'appel. */
-  included: boolean;
-  detail: string;
-  lastUsedAt: string | null;
-  /** Volume d'usage sur la période (commandes, tickets, envois…). */
-  usage: number | null;
-};
+/**
+ * ADOPTION D'UN MODULE — le contrat, sans transformation.
+ *
+ * `provisioned` dit OUVERT chez ce client, jamais FACTURÉ : aucune
+ * correspondance formule → modules n'existe (limite documentée en tête de
+ * `signals.service.ts` et publiée dans `CRM_SIGNAL_LIMITS`). C'était le défaut
+ * n° 3 de l'audit : l'écran lisait un `included` jamais envoyé (défaut `true`)
+ * et affichait « Facturé, jamais utilisé » — une affirmation que l'API refuse
+ * précisément de faire. `provisioned && !used` reste LE sujet d'appel, mais il
+ * se dit « ouvert, jamais utilisé », rien de plus.
+ */
+export type ModuleAdoption = CrmModuleAdoption;
 
 export type ParkDevice = {
   id: string;
@@ -293,8 +285,25 @@ export type ParkDevice = {
   lastSeenAt: string | null;
   /** Appairé : un appareil révoqué repart en attente de code. */
   paired: boolean;
+  /** Télémétrie du battement — vides tant que la tablette n'envoie rien. */
+  appVersion: string;
+  queueDepth: number | null;
+  lastError: string;
 };
 
+/**
+ * APPROVISIONNEMENT — des COMPTEURS, pas des listes d'alertes.
+ *
+ * C'était le défaut n° 2 de l'audit : l'ancien lecteur attendait trois listes
+ * nommées et affichait « aucune rupture » devant des compteurs pleins
+ * (`belowPar`, `ruptures`…) — `topPriceIncreases`, la seule vraie liste du
+ * contrat, n'était même pas parmi les clés lues. `available: false` signifie
+ * que le contexte appro (PostgreSQL) n'a pas répondu : la section doit alors
+ * se dire INDISPONIBLE, jamais « rien à signaler ».
+ */
+export type SupplyHealth = CrmSupplyHealth;
+
+/** Les trois familles de lignes de la section appro — pour les pastilles. */
 export type SupplyAlertKind = "rupture" | "seuil" | "prix";
 
 export const SUPPLY_ALERT_LABELS: Record<SupplyAlertKind, string> = {
@@ -303,29 +312,19 @@ export const SUPPLY_ALERT_LABELS: Record<SupplyAlertKind, string> = {
   prix: "Hausse de prix",
 };
 
-export type SupplyAlert = {
-  key: string;
-  name: string;
-  kind: SupplyAlertKind;
-  detail: string;
-};
-
 /**
- * Une recommandation de `/insights`, telle qu'on la dit au téléphone.
+ * Une recommandation de `/insights`, ramenée aux trois bandes de la charte.
  *
- * `value` et `benchmark` sont des CHAÎNES déjà formatées par l'API (« 35 % »,
- * « 28 % de médiane réseau ») : le calcul d'un food cost n'a rien à faire dans
- * un composant, et l'unité change d'une recommandation à l'autre.
+ * Le contrat rend un CHIFFRE (`value` numérique + `unit`), jamais une chaîne
+ * pré-formatée ; la médiane du réseau et les montants sont DANS `detail`,
+ * rédigés par l'API qui seule connaît le panel. C'était le défaut n° 4 de
+ * l'audit : l'écran attendait `benchmark` (chaîne) et `gainCentsPerMonth`, deux
+ * champs que `CrmInsight` n'a jamais portés — la mise côte à côte et le
+ * « ≈ X €/mois » ne s'affichaient jamais. On affiche ce que l'API dit, rien de
+ * plus : le chiffre se met en mots avec `fmtInsightFigure`.
  */
-export type Recommendation = {
-  key: string;
-  title: string;
-  detail: string;
-  value: string;
-  benchmark: string;
+export type Recommendation = Omit<CrmInsight, "severity"> & {
   severity: SignalSeverity;
-  /** Gain mensuel estimé, en CENTIMES — `null` si l'API ne le chiffre pas. */
-  gainCentsPerMonth: number | null;
 };
 
 /**
@@ -381,7 +380,8 @@ export type ClientFile = {
   activity: TenantActivity | null;
   modules: ModuleAdoption[];
   devices: ParkDevice[];
-  supply: SupplyAlert[];
+  /** `null` = `/health` n'a pas répondu. `available: false` = appro en panne. */
+  supply: SupplyHealth | null;
   recommendations: Recommendation[];
   signals: ClientSignal[];
   journal: AdminLogEntry[];
@@ -551,230 +551,95 @@ export const readClientRows = (raw: unknown): ClientRow[] =>
     .map(readClientRow)
     .filter((c) => c._id !== "");
 
-function readComparison(raw: unknown, ...keys: string[]): Comparison | null {
-  // Deux formes acceptées : { current, previous } ou un nombre plat doublé
-  // d'un champ « …Prev » à côté.
-  const direct = bag(raw);
-  const current = num(direct, "current", "value", "now", ...keys);
-  if (current === null) return null;
-  return {
-    current,
-    previous: num(direct, "previous", "prev", "before"),
-  };
-}
-
-function readActivity(raw: unknown): TenantActivity | null {
-  const a = bag(raw);
-  if (Object.keys(a).length === 0) return null;
-
-  const orders =
-    readComparison(a.orders) ??
-    (num(a, "orders", "orders30d") !== null
-      ? {
-          current: num(a, "orders", "orders30d") as number,
-          previous: num(a, "ordersPrevious", "ordersPrev", "ordersPrev30d"),
-        }
-      : null);
-
-  const revenue =
-    readComparison(a.revenue ?? a.revenueCents) ??
-    (num(a, "revenueCents", "revenue30dCents") !== null
-      ? {
-          current: num(a, "revenueCents", "revenue30dCents") as number,
-          previous: num(a, "revenuePreviousCents", "revenuePrevCents"),
-        }
-      : null);
-
-  const ticket =
-    readComparison(a.ticket ?? a.ticketCents ?? a.averageTicket) ??
-    (num(a, "ticketCents", "averageTicketCents") !== null
-      ? {
-          current: num(a, "ticketCents", "averageTicketCents") as number,
-          previous: num(a, "ticketPreviousCents", "ticketPrevCents"),
-        }
-      : null);
-
-  const series = firstList(a.series, a.points, a.days, a.buckets).map((p, i) => {
-    const b = bag(p);
-    return {
-      label: str(b, "label", "day", "date", "week") || `J${i + 1}`,
-      value: num(b, "value", "orders", "count", "revenueCents") ?? 0,
-      previous: num(b, "previous", "prev"),
-    };
-  });
-
-  if (!orders && !revenue && series.length === 0) return null;
-
-  return {
-    days: num(a, "days", "windowDays", "period") ?? 30,
-    orders: orders ?? { current: 0, previous: null },
-    revenueCents: revenue ?? { current: 0, previous: null },
-    ticketCents: ticket,
-    series,
-  };
-}
-
-function readComponents(raw: unknown): HealthComponent[] {
-  return firstList(raw).map((c, i) => {
-    const o = bag(c);
-    return {
-      key: str(o, "key", "id") || `c${i}`,
-      label: str(o, "label", "name", "title") || "Critère",
-      score: Math.max(0, Math.min(100, num(o, "score", "value") ?? 0)),
-      // Un poids donné entre 0 et 1 se lit en pourcentage comme les autres.
-      weight: (() => {
-        const w = num(o, "weight", "poids");
-        if (w === null) return null;
-        return w > 0 && w <= 1 ? Math.round(w * 100) : Math.round(w);
-      })(),
-      detail: str(o, "detail", "hint", "description", "reason"),
-    };
-  });
-}
-
-function readModules(raw: unknown): ModuleAdoption[] {
-  return firstList(raw).map((m, i) => {
-    const o = bag(m);
-    return {
-      key: str(o, "key", "id", "module") || `m${i}`,
-      label: str(o, "label", "name", "title") || "Module",
-      used: bool(o, "used", "adopted", "active") ?? (num(o, "usage", "count") ?? 0) > 0,
-      // Par défaut inclus : un module listé sur la fiche d'un client est un
-      // module qu'il paie — c'est l'hypothèse qui déclenche l'appel utile.
-      included: bool(o, "included", "includedInPlan", "billed", "inPlan") ?? true,
-      detail: str(o, "detail", "hint", "description"),
-      lastUsedAt: iso(o, "lastUsedAt", "lastAt", "lastSeenAt"),
-      usage: num(o, "usage", "count", "events"),
-    };
-  });
-}
-
-const DEVICE_KINDS: RevocableDeviceKind[] = ["pos", "kds", "screen"];
-
-function readDevices(raw: unknown): ParkDevice[] {
-  return firstList(raw).map((d, i) => {
-    const o = bag(d);
-    // Genre inconnu → « pos » : une tablette de caisse est le cas courant, et
-    // se tromper de pictogramme est moins grave que de perdre l'appareil de la
-    // liste — un appareil qui n'apparaît pas est un appareil qu'on ne révoque
-    // pas.
-    const kind = readEnum(o.kind ?? o.type, DEVICE_KINDS) ?? "pos";
-    const lastSeenAt = iso(o, "lastSeenAt", "lastHeartbeatAt", "lastPingAt", "at");
-    const declared = bool(o, "online");
-    return {
-      id: str(o, "id", "_id", "deviceId") || `d${i}`,
-      name: str(o, "name", "label") || REVOCABLE_DEVICE_KIND_LABELS[kind],
-      kind,
-      kindLabel: str(o, "kindLabel") || REVOCABLE_DEVICE_KIND_LABELS[kind],
-      // L'API tranche si elle le dit ; sinon la règle des contrats s'applique,
-      // avec le délai propre à chaque support (5 min tablette, 15 min écran).
-      online: declared ?? isDeviceOnline(kind, lastSeenAt),
-      lastSeenAt,
-      paired: bool(o, "paired") ?? true,
-    };
-  });
-}
-
-/** Un appareil est « en ligne » tant qu'il a battu récemment. */
-export function isDeviceOnline(
-  kind: RevocableDeviceKind,
-  lastSeenAt: string | null,
-): boolean {
-  if (!lastSeenAt) return false;
-  const limit = kind === "screen" ? SCREEN_OFFLINE_AFTER_MS : DEVICE_OFFLINE_AFTER_MS;
-  return Date.now() - new Date(lastSeenAt).getTime() < limit;
-}
-
-const SUPPLY_KIND_ALIASES: Record<string, SupplyAlertKind> = {
-  rupture: "rupture",
-  out: "rupture",
-  out_of_stock: "rupture",
-  outofstock: "rupture",
-  empty: "rupture",
-  seuil: "seuil",
-  low: "seuil",
-  low_stock: "seuil",
-  below: "seuil",
-  threshold: "seuil",
-  prix: "prix",
-  price: "prix",
-  price_increase: "prix",
-  cost: "prix",
-};
-
-function readSupply(raw: unknown): SupplyAlert[] {
+/**
+ * `CrmTenantHealth` si la réponse en a la tête, sinon `null`.
+ *
+ * Le contrat fait foi — plus une seule devinette de clé — mais une fiche ne
+ * tombe pas pour une réponse méconnaissable (proxy bavard, environnement en
+ * retard d'une version) : on vérifie le SQUELETTE, les blocs que les sections
+ * lisent, et une réponse qui ne l'a pas vaut section indisponible. Même
+ * facture que `readSignals`, qui ne garde que le tableau.
+ */
+function readHealth(raw: unknown): CrmTenantHealth | null {
   const o = bag(raw);
-  // Deux formes : une liste plate étiquetée, ou trois listes nommées.
-  const grouped: [SupplyAlertKind, unknown][] = [
-    ["rupture", o.outOfStock ?? o.ruptures ?? o.out],
-    ["seuil", o.belowThreshold ?? o.lowStock ?? o.low ?? o.underThreshold],
-    ["prix", o.priceIncreases ?? o.priceUp ?? o.prices],
-  ];
-
-  const fromGroups = grouped.flatMap(([kind, source]) =>
-    list(source).map((x, i) => toSupplyAlert(x, kind, i)),
-  );
-  if (fromGroups.length > 0) return fromGroups;
-
-  return firstList(raw, o.items, o.alerts).map((x, i) => {
-    const b = bag(x);
-    const kind =
-      SUPPLY_KIND_ALIASES[str(b, "kind", "type", "severity").toLowerCase()] ?? "seuil";
-    return toSupplyAlert(x, kind, i);
-  });
+  const ok =
+    typeof o.tenantId === "string" &&
+    Array.isArray(bag(o.score).axes) &&
+    bag(o.activity).last30d !== undefined &&
+    Array.isArray(bag(o.fleet).units) &&
+    Array.isArray(o.modules) &&
+    typeof bag(o.supply).available === "boolean";
+  return ok ? (raw as CrmTenantHealth) : null;
 }
 
-function toSupplyAlert(raw: unknown, kind: SupplyAlertKind, i: number): SupplyAlert {
+/** `CrmTenantInsights` si la réponse en a la tête, sinon `null`. */
+function readInsights(raw: unknown): CrmTenantInsights | null {
   const o = bag(raw);
-  const name = str(o, "name", "label", "ingredient", "title") || "Ingrédient";
-  const unit = str(o, "unit");
-  const stock = num(o, "stock", "quantity", "qty");
-  const threshold = num(o, "threshold", "min", "seuil");
-  const deltaPct = num(o, "deltaPct", "changePct", "variationPct", "increasePct");
-
-  // Détail reconstruit si l'API n'en fournit pas : au téléphone, « 1,2 kg pour
-  // un seuil à 5 kg » vaut mieux que « stock bas ».
-  const fallback =
-    kind === "prix"
-      ? deltaPct !== null
-        ? `+${Math.round(deltaPct)} % sur le dernier réapprovisionnement`
-        : "Hausse relevée au dernier réapprovisionnement"
-      : stock !== null && threshold !== null
-        ? `${fmtQty(stock)}${unit ? ` ${unit}` : ""} en stock · seuil ${fmtQty(threshold)}${unit ? ` ${unit}` : ""}`
-        : kind === "rupture"
-          ? "Stock épuisé"
-          : "Sous le seuil de réappro";
-
-  return {
-    key: str(o, "key", "id", "_id") || `${kind}-${i}-${name}`,
-    name,
-    kind,
-    detail: str(o, "detail", "hint", "description") || fallback,
-  };
+  return typeof o.tenantId === "string" && Array.isArray(o.recommendations)
+    ? (raw as CrmTenantInsights)
+    : null;
 }
 
-const fmtQty = (n: number): string =>
-  n.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+/**
+ * Le parc, depuis `fleet.units` du contrat.
+ *
+ * `ParkDevice` garde sa forme d'écran, télémétrie du battement comprise
+ * (`appVersion`, `queueDepth`, `lastError`). Le seul repli conservé est celui
+ * du nom : un appareil sans nom s'affiche par son genre plutôt que par une
+ * ligne vide — un appareil qu'on ne voit pas est un appareil qu'on ne révoque
+ * pas. L'état en ligne, lui, est TRANCHÉ par l'API (elle connaît le délai
+ * propre à chaque support) : le recalcul local a disparu avec le contrat.
+ */
+function readDevices(units: readonly CrmFleetUnit[]): ParkDevice[] {
+  return units.map((u) => ({
+    id: u.id,
+    name: u.name || u.kindLabel,
+    kind: u.kind,
+    kindLabel: u.kindLabel,
+    online: u.online,
+    lastSeenAt: u.lastSeenAt,
+    paired: u.paired,
+    appVersion: u.appVersion,
+    queueDepth: u.queueDepth,
+    lastError: u.lastError,
+  }));
+}
 
-function readRecommendations(raw: unknown): Recommendation[] {
-  return firstList(raw).map((r, i) => {
-    const o = bag(r);
-    return {
-      key: str(o, "key", "id") || `r${i}`,
-      title: str(o, "title", "label", "headline") || "Recommandation",
-      detail: str(o, "detail", "message", "description", "argument", "hint"),
-      value: str(o, "value", "current", "clientValue"),
-      benchmark: str(o, "benchmark", "median", "networkMedian", "reference"),
-      severity: readSeverity(o.severity ?? o.level ?? o.priority),
-      gainCentsPerMonth: num(
-        o,
-        "gainCentsPerMonth",
-        "gainCents",
-        "impactCents",
-        "monthlyGainCents",
-      ),
-    };
-  });
+/** Une recommandation du contrat, projetée sur les bandes de la charte. */
+export const readRecommendation = (raw: CrmInsight): Recommendation => ({
+  ...raw,
+  severity: readInsightSeverity(raw.severity),
+});
+
+/**
+ * LE CHIFFRE D'UNE RECOMMANDATION, écrit court : « 6,4 pts », « 31 % »,
+ * « 45 € » — à la française, une décimale au plus.
+ *
+ * `centimes` arrive en ENTIER de centimes (convention maison) et s'affiche en
+ * euros ARRONDIS, même règle que `eurosLabel` côté API : le `detail` rédigé
+ * porte déjà le montant exact, la pastille n'a pas à le répéter au centime.
+ * Une unité inconnue à l'exécution rend le nombre nu plutôt qu'un affichage
+ * faux — la phrase de l'API reste la source du sens.
+ */
+export function fmtInsightFigure(insight: {
+  value: number;
+  unit: CrmInsightUnit;
+}): string {
+  const n = insight.value.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  switch (insight.unit) {
+    case "pourcent":
+      return `${n} %`;
+    case "points":
+      return `${n} pts`;
+    case "centimes":
+      return `${Math.round(insight.value / 100).toLocaleString("fr-FR")} €`;
+    case "commandes":
+      return `${n} cmd`;
+    case "produits":
+      return `${n} produits`;
+    default:
+      return n;
+  }
 }
 
 /**
@@ -939,7 +804,7 @@ function readAccount(raw: unknown): AdminTenantAccount | null {
  * de l'outil demandé. Chaque section manquante est signalée telle quelle.
  */
 export async function loadClientFile(id: string): Promise<ClientFile> {
-  const [rows, account, health, insights, signals, journal] = await Promise.all([
+  const [rows, account, healthRaw, insightsRaw, signals, journal] = await Promise.all([
     soft(clientsApi.list()),
     soft(clientsApi.account(id)),
     soft(clientsApi.health(id)),
@@ -947,6 +812,12 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     soft(clientsApi.signals()),
     soft(clientsApi.journal(id)),
   ]);
+
+  // `/health` et `/insights` sont CONTRACTUALISÉS : une réponse qui n'a pas le
+  // squelette du contrat vaut la même chose qu'une route muette — la section
+  // se dit indisponible, elle n'affiche pas des miettes devinées.
+  const health = readHealth(healthRaw);
+  const insights = readInsights(insightsRaw);
 
   const offline = new Set<Section>();
   if (rows === null) offline.add("row");
@@ -959,58 +830,33 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
   const row = readClientRows(rows).find((c) => c._id === id) ?? null;
   if (rows !== null && !row) offline.add("row");
 
-  const h = bag(health);
-  const ins = bag(insights);
-
-  // Adoption, parc et appro peuvent tomber d'un service comme de l'autre : on
-  // prend la première branche renseignée plutôt que de parier.
-  const modules = readModules(
-    firstList(h.modules, h.adoption, ins.modules, ins.adoption),
-  );
-  // `/health` rend le parc COMPTÉ : `fleet` est un objet de totaux dont les
-  // appareils vivent dans `units`. On lit l'unité avant l'agrégat, sinon la
-  // section se croit vide alors que le compteur affiche cinq appareils.
-  const devices = readDevices(
-    firstList(bag(h.fleet).units, h.devices, h.park, h.fleet, ins.devices, ins.park),
-  );
-  const supply = readSupply(ins.supply ?? ins.stock ?? h.supply ?? h.stock ?? {});
-  const recommendations = readRecommendations(
-    firstList(
-      ins.recommendations,
-      ins.advice,
-      ins.items,
-      ins.insights,
-      Array.isArray(insights) ? insights : undefined,
-      h.recommendations,
-    ),
-  );
-
-  // `/crm/tenants/:id/health` rend le score COMPOSÉ : un objet qui porte la
-  // note, son verdict rédigé et les axes qui l'expliquent. On accepte aussi le
-  // score nu, au cas où une surface plus ancienne n'enverrait qu'un nombre.
-  const scoreBag = bag(h.score);
-  const score = num(scoreBag, "value") ?? num(h, "score", "healthScore") ?? row?.score ?? null;
+  // Le score composé vient de `/health` ; le score nu de la liste sert de
+  // repli pour que la pastille tienne debout quand la fiche de santé est en
+  // panne.
+  const score = health?.score.value ?? row?.score ?? null;
 
   return {
     id,
     row,
     account: readAccount(account),
-    city: str(bag(account), "city", "ville") || str(h, "city") || row?.city || "",
-    contact: readContact(account, health, rows === null ? null : row),
+    city: str(bag(account), "city", "ville") || row?.city || "",
+    contact: readContact(account, rows === null ? null : row),
     score,
-    // La pastille suit le score chiffré quand il existe : l'API rend un verdict
-    // rédigé (« solide », « à surveiller »…) qui n'est pas l'énuméré de la
-    // charte, et le traduire mot à mot créerait deux vocabulaires à maintenir.
+    // La pastille suit le score chiffré quand il existe : le verdict rédigé de
+    // l'API (« solide », « fragile »…) n'est pas l'énuméré de la charte, et le
+    // traduire mot à mot créerait deux vocabulaires à maintenir. À défaut, la
+    // santé « commande » du contrat, puis celle de la liste.
     health:
-      scoreHealth(score) ?? readEnum(h.health, HEALTHS) ?? row?.health ?? "attention",
-    components: readComponents(
-      firstList(scoreBag.axes, h.axes, h.components, h.breakdown, h.criteria, h.parts),
-    ),
-    activity: readActivity(h.activity ?? h.trend ?? h.orders ?? {}),
-    modules,
-    devices,
-    supply,
-    recommendations,
+      scoreHealth(score) ?? health?.activity.health ?? row?.health ?? "attention",
+    components: health?.score.axes ?? [],
+    activity: health?.activity ?? null,
+    // Adoption, parc et appro ne tombent QUE de `/health` — l'ancien pari
+    // « premier service qui répond » lisait des clés que `/insights` n'a
+    // jamais portées.
+    modules: health?.modules ?? [],
+    devices: health ? readDevices(health.fleet.units) : [],
+    supply: health?.supply ?? null,
+    recommendations: insights?.recommendations.map(readRecommendation) ?? [],
     signals: readSignals(signals).filter((s) => s.tenantId === id),
     journal: readJournal(journal),
     offline,
@@ -1059,11 +905,16 @@ export const SEVERITY_BORDER: Record<SignalSeverity, string> = {
   info: "border-line bg-white/4 text-mut",
 };
 
-/** « +18 % » / « −4 % » / « — » quand il n'y a pas de période précédente. */
+/**
+ * « +18 % » / « −4,9 % » / « — » quand il n'y a pas de période précédente.
+ * Les deltas du contrat portent une décimale : elle s'écrit à la française
+ * (« 4,9 »), jamais « 4.9 » au milieu d'une phrase française.
+ */
 export function fmtTrend(pct: number | null): string {
   if (pct === null) return "—";
   if (pct === 0) return "stable";
-  return `${pct > 0 ? "+" : "−"}${Math.abs(pct)} %`;
+  const abs = Math.abs(pct).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return `${pct > 0 ? "+" : "−"}${abs} %`;
 }
 
 /**

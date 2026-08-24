@@ -55,6 +55,10 @@ function matches(row: Row, filter: Row): boolean {
       const list = (expected as { $in: unknown[] }).$in;
       return list.some((candidate) => same(actual, candidate));
     }
+    // `$ne` : le filtre des créances écarte les avoirs (`kind: { $ne: 'avoir' }`).
+    if (expected && typeof expected === 'object' && '$ne' in (expected as object)) {
+      return !same(actual, (expected as { $ne: unknown }).$ne);
+    }
     return same(actual, expected);
   });
 }
@@ -116,10 +120,18 @@ class FakeInvoices {
     return new FakeOne(row ? { ...row } : null);
   }
 
-  findOneAndUpdate(filter: Row, update: { $set?: Row }): FakeOne {
+  findOneAndUpdate(filter: Row, update: { $set?: Row; $push?: Row }): FakeOne {
     const row = this.rows.find((r) => matches(r, filter));
     if (!row) return new FakeOne(null);
     Object.assign(row, update.$set ?? {});
+    // `$push` ajoute en fin de tableau, comme Mongo — c'est l'écriture des
+    // relances, et une doublure qui l'écraserait masquerait la perte d'une
+    // relance concurrente.
+    for (const [key, value] of Object.entries(update.$push ?? {})) {
+      const list = Array.isArray(row[key]) ? (row[key] as unknown[]) : [];
+      list.push(value);
+      row[key] = list;
+    }
     return new FakeOne({ ...row });
   }
 
@@ -441,6 +453,178 @@ describe('Facturation', () => {
     });
   });
 
+  // ─── Envoi d'un brouillon ───
+
+  describe('Envoyer un brouillon', () => {
+    const brouillon = () =>
+      billing.issue(SM, CLASSFOOD, emission({ period: '2026-09', draft: true }), LE_19_AOUT);
+
+    it('fait passer la pièce « brouillon » → « envoyée », datée du jour du départ', async () => {
+      await sansAmorce();
+      const draft = await brouillon();
+      const sent = await billing.send(SM, CLASSFOOD, draft._id, LE_19_AOUT);
+
+      expect(sent.storedStatus).toBe('envoyee');
+      expect(sent.status).toBe('envoyee'); // échéance au 1er septembre : rien d'échu le 19 août
+      // `issuedAt` est la date où la pièce PART, pas celle où elle a été préparée.
+      expect(sent.issuedAt).toBe(LE_19_AOUT.toISOString());
+      // Même pièce, même numéro : l'envoi ne consomme pas la séquence.
+      expect(sent.number).toBe(draft.number);
+      expect(invoices.rows).toHaveLength(1);
+
+      // La créance existe désormais — le brouillon ne devait rien.
+      expect(sent.dueCents).toBe(MRR);
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.outstanding.totalDueCents).toBe(MRR);
+    });
+
+    it('journalise l’envoi sous son nom, rattaché à la pièce', async () => {
+      await sansAmorce();
+      const draft = await brouillon();
+      logs.rows.length = 0;
+      const sent = await billing.send(SM, CLASSFOOD, draft._id, LE_19_AOUT);
+
+      expect(billingLines()).toEqual([
+        `Facture ${sent.number} envoyée — ${formatEuros(MRR)}, Abonnement Complet — septembre 2026, échéance le 01/09/2026.`,
+      ]);
+      const entry = logs.rows[0]!;
+      expect(entry.action).toBe('invoice.send');
+      expect(entry.targetId).toBe(sent._id);
+      expect(entry.meta).toMatchObject({ number: sent.number, amountCents: MRR, dueAt: sent.dueAt });
+      expect(notes()).toEqual([]);
+    });
+
+    it('refuse explicitement tout autre statut que « brouillon »', async () => {
+      await sansAmorce();
+      const emise = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      await expect(billing.send(SM, CLASSFOOD, emise._id, LE_19_AOUT)).rejects.toThrow(
+        /déjà émise/,
+      );
+
+      await billing.pay(SM, CLASSFOOD, emise._id, { method: 'virement', note: '' }, LE_19_AOUT);
+      await expect(billing.send(SM, CLASSFOOD, emise._id, LE_19_AOUT)).rejects.toThrow(
+        /déjà réglée/,
+      );
+
+      const annulee = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-10' }), LE_19_AOUT);
+      await billing.cancel(SM, CLASSFOOD, annulee._id, { reason: 'Doublon' }, LE_19_AOUT);
+      await expect(billing.send(SM, CLASSFOOD, annulee._id, LE_19_AOUT)).rejects.toThrow(
+        /annulée/,
+      );
+    });
+  });
+
+  // ─── Relance ───
+
+  describe('Relancer', () => {
+    /** Une créance échue depuis 79 jours — le cœur de cible de la relance. */
+    const echue = () => billing.issue(SM, CLASSFOOD, emission({ period: '2026-06' }), LE_19_AOUT);
+
+    it('pousse la relance sur la PIÈCE et rend la dernière relance', async () => {
+      await sansAmorce();
+      const invoice = await echue();
+      const view = await billing.remind(
+        SM,
+        CLASSFOOD,
+        invoice._id,
+        { channel: 'appel', note: 'Le gérant promet de régler vendredi.' },
+        LE_19_AOUT,
+      );
+
+      expect(view.reminders.count).toBe(1);
+      expect(view.reminders.last).toEqual({
+        at: LE_19_AOUT.toISOString(),
+        channel: 'appel',
+        channelLabel: 'Appel',
+        note: 'Le gérant promet de régler vendredi.',
+      });
+      // Sur la pièce elle-même, pas dans une collection parallèle : la file de
+      // recouvrement doit relire « déjà relancé ? » sans jointure.
+      expect(invoices.rows[0]!.reminders as unknown[]).toHaveLength(1);
+    });
+
+    it('journalise la relance sous son nom, avec le canal et l’ancienneté', async () => {
+      await sansAmorce();
+      const invoice = await echue();
+      logs.rows.length = 0;
+      await billing.remind(
+        SM,
+        CLASSFOOD,
+        invoice._id,
+        { channel: 'sms', note: 'Relance avant l’écrit.' },
+        LE_19_AOUT,
+      );
+
+      expect(billingLines()).toEqual([
+        `Facture ${invoice.number} relancée par SMS — ${formatEuros(MRR)} dus, 79 jour(s) de retard. Relance avant l’écrit.`,
+      ]);
+      const entry = logs.rows[0]!;
+      expect(entry.action).toBe('invoice.remind');
+      expect(entry.targetId).toBe(invoice._id);
+      expect(entry.meta).toMatchObject({ number: invoice.number, channel: 'sms', amountCents: MRR });
+      // Une relance n'est pas une « Note interne » : c'est tout l'objet du geste.
+      expect(notes()).toEqual([]);
+    });
+
+    it('cumule les relances — la vue rend la DERNIÈRE', async () => {
+      await sansAmorce();
+      const invoice = await echue();
+      await billing.remind(SM, CLASSFOOD, invoice._id, { channel: 'appel', note: '' }, LE_19_AOUT);
+      const plusTard = new Date('2026-08-27T09:00:00Z');
+      const view = await billing.remind(
+        SM,
+        CLASSFOOD,
+        invoice._id,
+        { channel: 'courrier', note: 'Mise en demeure envoyée.' },
+        plusTard,
+      );
+
+      expect(view.reminders.count).toBe(2);
+      expect(view.reminders.last?.channel).toBe('courrier');
+      expect(view.reminders.last?.at).toBe(plusTard.toISOString());
+      expect(invoices.rows[0]!.reminders as unknown[]).toHaveLength(2);
+    });
+
+    it('refuse de relancer une facture réglée, annulée ou au brouillon', async () => {
+      await sansAmorce();
+      const reglee = await echue();
+      await billing.pay(SM, CLASSFOOD, reglee._id, { method: 'virement', note: '' }, LE_19_AOUT);
+      await expect(
+        billing.remind(SM, CLASSFOOD, reglee._id, { channel: 'appel', note: '' }, LE_19_AOUT),
+      ).rejects.toThrow(/plus rien à relancer/);
+
+      const annulee = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-07' }), LE_19_AOUT);
+      await billing.cancel(SM, CLASSFOOD, annulee._id, { reason: 'Doublon' }, LE_19_AOUT);
+      await expect(
+        billing.remind(SM, CLASSFOOD, annulee._id, { channel: 'appel', note: '' }, LE_19_AOUT),
+      ).rejects.toThrow(/ne se relance pas/);
+
+      // Un brouillon n'est jamais parti chez le client : on ne relance pas une
+      // somme qu'on n'a pas demandée.
+      const brouillon = await billing.issue(
+        SM,
+        CLASSFOOD,
+        emission({ period: '2026-05', draft: true }),
+        LE_19_AOUT,
+      );
+      await expect(
+        billing.remind(SM, CLASSFOOD, brouillon._id, { channel: 'appel', note: '' }, LE_19_AOUT),
+      ).rejects.toThrow(/brouillon/);
+    });
+
+    it('expose la dernière relance dans la file des impayés du parc', async () => {
+      await sansAmorce();
+      const invoice = await echue();
+      await billing.remind(SM, CLASSFOOD, invoice._id, { channel: 'email', note: '' }, LE_19_AOUT);
+
+      const file = await billing.overdue(LE_19_AOUT);
+      expect(file.invoices[0]!.reminders).toMatchObject({
+        count: 1,
+        last: { channel: 'email', channelLabel: 'E-mail', at: LE_19_AOUT.toISOString() },
+      });
+    });
+  });
+
   // ─── Encaissement ───
 
   describe('Encaisser', () => {
@@ -623,6 +807,143 @@ describe('Facturation', () => {
       await expect(
         billing.cancel(SM, CLASSFOOD, invoice._id, { reason: 'Erreur' }, LE_19_AOUT),
       ).rejects.toThrow(/avoir/);
+    });
+  });
+
+  // ─── L'avoir ───
+
+  describe('Avoir', () => {
+    /** Une facture réglée — la seule pièce qui appelle un avoir. */
+    const reglee = async () => {
+      const invoice = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-06' }), LE_19_AOUT);
+      await billing.pay(SM, CLASSFOOD, invoice._id, { method: 'prelevement', note: '' }, LE_19_AOUT);
+      return invoice;
+    };
+
+    it('crée une pièce NÉGATIVE, numérotée dans la même séquence annuelle', async () => {
+      await sansAmorce();
+      const origine = await reglee();
+      const avoir = await billing.credit(
+        SM,
+        CLASSFOOD,
+        origine._id,
+        { reason: 'Service interrompu deux semaines' },
+        LE_19_AOUT,
+      );
+
+      expect(avoir.kind).toBe('avoir');
+      expect(avoir.kindLabel).toBe('Avoir');
+      // MÊME séquence que les factures : l'origine a pris 0001, l'avoir prend
+      // 0002 — pas de registre parallèle à défendre au contrôle.
+      expect(avoir.number).toBe('SM-2026-0002');
+      expect(avoir.amountCents).toBe(-MRR);
+      expect(avoir.amountLabel).toBe(formatEuros(-MRR));
+      expect(avoir.label).toBe(`Avoir sur ${origine.number} — Service interrompu deux semaines`);
+      // ÉMIS, pas « payé » : un avoir n'est soldé que remboursé ou imputé.
+      expect(avoir.status).toBe('envoyee');
+      expect(avoir.storedStatus).toBe('envoyee');
+      // La période CORRIGÉE est celle de l'origine.
+      expect(avoir.period.key).toBe('2026-06');
+      // Le régime de TVA de l'origine, figé sur l'avoir, ventilé en négatif.
+      expect(avoir.totals.stamped).toBe(true);
+      expect(avoir.totals.ratePercent).toBe(20);
+      expect(avoir.totals.htCents).toBe(-MRR);
+
+      // L'origine n'est PAS touchée : deux pièces, aucune gomme.
+      expect(invoices.rows).toHaveLength(2);
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.invoices.find((i) => i._id === origine._id)?.status).toBe('payee');
+    });
+
+    it('se journalise sous « invoice.credit », lié au numéro d’origine', async () => {
+      await sansAmorce();
+      const origine = await reglee();
+      logs.rows.length = 0;
+      const avoir = await billing.credit(
+        SM,
+        CLASSFOOD,
+        origine._id,
+        { reason: 'Geste commercial' },
+        LE_19_AOUT,
+      );
+
+      expect(billingLines()).toEqual([
+        `Avoir ${avoir.number} émis sur la facture ${origine.number} — ${formatEuros(-MRR)}. Motif : Geste commercial`,
+      ]);
+      const entry = logs.rows[0]!;
+      expect(entry.action).toBe('invoice.credit');
+      // Rattaché à la NOUVELLE pièce ; l'origine se lit dans `meta`.
+      expect(entry.targetId).toBe(avoir._id);
+      expect(entry.meta).toEqual({
+        number: avoir.number,
+        kind: 'avoir',
+        period: '2026-06',
+        amountCents: -MRR,
+        originNumber: origine.number,
+      });
+      expect(notes()).toEqual([]);
+    });
+
+    it('refuse l’avoir sur tout ce qui n’est pas RÉGLÉ — là, c’est l’annulation', async () => {
+      await sansAmorce();
+      const envoyee = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-07' }), LE_19_AOUT);
+      await expect(
+        billing.credit(SM, CLASSFOOD, envoyee._id, { reason: 'Erreur' }, LE_19_AOUT),
+      ).rejects.toThrow(/pas réglée/);
+
+      const brouillon = await billing.issue(
+        SM,
+        CLASSFOOD,
+        emission({ period: '2026-05', draft: true }),
+        LE_19_AOUT,
+      );
+      await expect(
+        billing.credit(SM, CLASSFOOD, brouillon._id, { reason: 'Erreur' }, LE_19_AOUT),
+      ).rejects.toThrow(/pas réglée/);
+
+      await billing.cancel(SM, CLASSFOOD, envoyee._id, { reason: 'Doublon' }, LE_19_AOUT);
+      await expect(
+        billing.credit(SM, CLASSFOOD, envoyee._id, { reason: 'Erreur' }, LE_19_AOUT),
+      ).rejects.toThrow(/pas réglée/);
+
+      // Aucun refus n'a écrit quoi que ce soit : ni pièce, ni numéro consommé.
+      expect(invoices.rows).toHaveLength(2);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(2);
+    });
+
+    it('refuse un avoir sur un avoir', async () => {
+      await sansAmorce();
+      const origine = await reglee();
+      const avoir = await billing.credit(SM, CLASSFOOD, origine._id, { reason: 'Remboursement' }, LE_19_AOUT);
+      // Le remboursement de l'avoir s'enregistre avec le geste d'encaissement
+      // existant — et même soldé, un avoir ne se « corrige » pas par un second.
+      await billing.pay(SM, CLASSFOOD, avoir._id, { method: 'virement', note: '' }, LE_19_AOUT);
+      await expect(
+        billing.credit(SM, CLASSFOOD, avoir._id, { reason: 'Erreur' }, LE_19_AOUT),
+      ).rejects.toThrow(/déjà un avoir/);
+    });
+
+    it('n’entre JAMAIS dans la file des impayés ni dans l’ardoise', async () => {
+      await sansAmorce();
+      const origine = await reglee();
+      await billing.credit(SM, CLASSFOOD, origine._id, { reason: 'Trop-perçu' }, LE_19_AOUT);
+
+      // Des mois plus tard, la date de l'avoir est passée depuis longtemps : il
+      // ne bascule pas « en retard » pour autant — rien n'est à recouvrer dessus,
+      // c'est NOUS qui devons.
+      const enNovembre = new Date('2026-11-15T00:00:00Z');
+      const file = await billing.overdue(enNovembre);
+      expect(file.count).toBe(0);
+      expect(file.totalCents).toBe(0);
+
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, enNovembre);
+      const avoir = fiche.invoices.find((i) => i.kind === 'avoir')!;
+      expect(avoir.status).toBe('envoyee');
+      expect(avoir.overdueDays).toBe(0);
+      expect(avoir.dueCents).toBe(0);
+      expect(fiche.outstanding.totalDueCents).toBe(0);
+      // Et la « prochaine échéance » annoncée n'est jamais l'avoir.
+      expect(fiche.nextDue?.invoiceNumber ?? null).not.toBe(avoir.number);
     });
   });
 

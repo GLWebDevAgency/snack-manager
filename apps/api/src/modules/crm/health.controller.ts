@@ -1,5 +1,13 @@
 import { Controller, Get, Param, Post } from '@nestjs/common';
-import type { JwtPayload } from '@sm/contracts';
+// Les retours sont ANNOTÉS avec les contrats publiés : si un service dérive de
+// la forme promise au web, c'est cette signature qui casse — pas la fiche
+// client un lundi matin.
+import type {
+  CrmQueueSignal,
+  CrmTenantHealth,
+  CrmTenantInsights,
+  JwtPayload,
+} from '@sm/contracts';
 import { CurrentUser, Roles } from '../../common/auth';
 import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
@@ -74,7 +82,7 @@ export class HealthController {
    * qu'est un module utilisé ou une semaine.
    */
   @Get('signals')
-  signals() {
+  signals(): Promise<CrmQueueSignal[]> {
     return this.signalsQueue.queue();
   }
 
@@ -99,7 +107,10 @@ export class HealthController {
    * un geste neutre — même règle que la fiche « compte ».
    */
   @Get('tenants/:id/health')
-  tenantHealth(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
+  tenantHealth(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+  ): Promise<CrmTenantHealth> {
     return this.health.tenantHealth(actor, id);
   }
 
@@ -112,7 +123,10 @@ export class HealthController {
    * comportement voulu : quand la donnée manque, on ne dit rien.
    */
   @Get('tenants/:id/insights')
-  tenantInsights(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
+  tenantInsights(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+  ): Promise<CrmTenantInsights> {
     return this.insights.tenantInsights(actor, id);
   }
 }

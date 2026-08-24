@@ -2,8 +2,9 @@
 
 /**
  * Vue « Promos » (spec backoffice-restaurant §8) : codes promo CRUD branchés
- * sur l'API /promotions + colonne « À la une » / « Menu du moment » (statique,
- * sélection réelle à définir — spec §8.2/§8.3).
+ * sur l'API /promotions. La colonne « À la une / Menu du moment » (démo figée
+ * de la spec §8.2/§8.3) a été retirée le 24/08/2026 — voir le commentaire à
+ * son ancien emplacement.
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -58,8 +59,6 @@ const KIND_LABELS: Record<PromoKind, string> = {
   offered_item: "Produit offert",
 };
 
-/** Produits « À la une » — démo figée, sélection réelle à définir (spec §8.2). */
-const FEATURED = ["Le Boss", "Tacos sur-mesure", "Family Box", "Le Smash"];
 
 // ─── Formatage ───
 
@@ -371,51 +370,15 @@ export default function PromosPage() {
         </Panel>
       </div>
 
-      {/* ── Colonne droite : À la une + Menu du moment (démo figée, spec §8.2/§8.3) ── */}
-      <div className="w-full min-w-0 lg:flex-1">
-        <Panel title="À la une" sub="Produits mis en avant sur l'accueil">
-          <div className="flex flex-col gap-2">
-            {FEATURED.map((name) => (
-              <div
-                key={name}
-                className="flex items-center gap-2.5 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2.5"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  width={17}
-                  height={17}
-                  aria-hidden="true"
-                  fill="var(--cf-gold)"
-                  stroke="var(--cf-gold)"
-                  strokeWidth={1}
-                  strokeLinejoin="round"
-                  className="shrink-0"
-                >
-                  <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" />
-                </svg>
-                <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">
-                  {name}
-                </span>
-                {/* Sélection réelle à définir — toggle figé « on » (spec §8.2) */}
-                <Toggle on label={`${name} à la une`} />
-              </div>
-            ))}
-          </div>
-
-          {/* Encart « Menu du moment » (spec §8.3) */}
-          <div className="mt-4 rounded-card border border-gold/25 bg-[image:var(--cf-elev-gradient)] p-3.5">
-            <div className="text-[15px] font-extrabold text-gold">
-              Menu du moment
-            </div>
-            <div className="mt-1 flex items-center gap-3">
-              <p className="min-w-0 flex-1 text-sm text-mut">
-                Bandeau « Passe en menu +2,50 € » sur l&apos;accueil client
-              </p>
-              <Toggle on label="Bandeau menu du moment" />
-            </div>
-          </div>
-        </Panel>
-      </div>
+      {/*
+        La colonne « À la une / Menu du moment » a été RETIRÉE (24/08/2026) :
+        c'était une démo figée — des toggles « on » qui n'écrivaient rien
+        (spec §8.2/§8.3, « sélection réelle à définir »). Un réglage qui a
+        l'air de marcher et ne fait rien est pire qu'un réglage absent : le
+        gérant croit avoir mis son burger en avant, le client ne le voit pas,
+        et c'est nous qu'on appelle. La colonne reviendra le jour où la
+        sélection s'écrit en base et s'affiche réellement sur l'accueil.
+      */}
 
       {/* ── Modale création / édition ── */}
       <Modal

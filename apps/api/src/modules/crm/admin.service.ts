@@ -21,6 +21,7 @@ import {
   type RevocableDeviceKind,
   type TenantAccount,
   type TenantAccountStatus,
+  type TenantChurn,
   type TenantNote,
   type TenantPlanChange,
   type TenantReactivate,
@@ -150,6 +151,49 @@ export class AdminService {
     });
     await this.record(actor, {
       action: 'tenant.reactivate',
+      tenantId: String(tenant._id),
+      reason: body.reason,
+      at,
+    });
+    return toAccountView(tenant);
+  }
+
+  /**
+   * Acte le DÉPART d'un client — il nous quitte, avec un motif.
+   *
+   * `churned` était le seul statut du cycle de vie qu'aucune route n'écrivait :
+   * un client parti restait « actif » dans le parc, comptait dans le MRR, et le
+   * motif de son départ vivait dans une conversation Slack. Ce geste ferme ce
+   * trou, à côté de `suspend` et `reactivate` parce que c'est la même famille —
+   * une décision sur le statut d'un compte, motivée et journalisée.
+   *
+   * CE QUE `churned` IMPLIQUE POUR L'ACCÈS : RIEN. `isAccessBlocked`
+   * (@sm/contracts) ne bloque QUE `suspended`, et c'est délibéré — un client
+   * qui nous quitte n'est pas un client à qui l'on claque la porte au nez : son
+   * back-office, sa caisse et son site restent ouverts, ses données restent
+   * entières. Fermer l'accès demeure un geste EXPLICITE (`suspend`), motivé et
+   * journalisé, jamais un effet de bord du départ. Côté facturation, en
+   * revanche, `churned` sort le compte du facturable (`isBillable`,
+   * billing.service) : on ne prélève plus un client parti.
+   *
+   * `suspendedAt` est remis à `null` si le compte partait d'une suspension :
+   * le statut courant n'est plus « suspendu », et la trace de l'épisode reste
+   * au journal — qui, lui, ne s'efface pas.
+   */
+  async churn(
+    actor: JwtPayload,
+    tenantId: string,
+    body: TenantChurn,
+  ): Promise<AdminTenantAccount> {
+    const at = new Date();
+    const tenant = await this.setAccount(tenantId, {
+      status: 'churned',
+      since: at,
+      reason: body.reason,
+      suspendedAt: null,
+    });
+    await this.record(actor, {
+      action: 'tenant.churn',
       tenantId: String(tenant._id),
       reason: body.reason,
       at,

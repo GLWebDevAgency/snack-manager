@@ -111,6 +111,36 @@ export const DeviceTokenBodySchema = z.object({
 export type DeviceTokenBody = z.infer<typeof DeviceTokenBodySchema>;
 
 /**
+ * Corps du battement de cœur — la télémétrie qui manquait au support.
+ *
+ * Jusqu'au 24/08/2026, le battement partait VIDE : au téléphone, l'équipe
+ * savait « en ligne / muet » et rien d'autre (diagnostic quatre casquettes,
+ * P2). Trois champs, tous optionnels — un vieux client qui bat sans corps
+ * reste un battement valide :
+ *
+ *  · `appVersion`  — quel bundle tourne ; une tablette jamais rechargée se
+ *    voit enfin ;
+ *  · `queueDepth`  — la file hors-ligne s'accumule ? C'est « le réseau du
+ *    restaurant est malade », pas « il n'y a pas de commandes » ;
+ *  · `lastError`   — la dernière erreur de synchronisation, en clair.
+ *
+ * Rien de personnel, rien de métier : de l'état de machine, pour dépanner.
+ */
+export const DeviceHeartbeatBodySchema = DeviceTokenBodySchema.extend({
+  appVersion: z.string().trim().max(40).default(''),
+  queueDepth: z.number().int().min(0).max(100_000).nullable().default(null),
+  lastError: z.string().trim().max(300).default(''),
+});
+export type DeviceHeartbeatBody = z.infer<typeof DeviceHeartbeatBodySchema>;
+
+/** La même télémétrie, côté lecture et écriture serveur. */
+export type DeviceTelemetry = {
+  appVersion: string;
+  queueDepth: number | null;
+  lastError: string;
+};
+
+/**
  * Connexion par PIN DEPUIS un appareil appairé.
  *
  * Aucun `tenantSlug` : l'établissement est déduit du jeton d'appareil, jamais
@@ -209,6 +239,10 @@ export interface DeviceView {
   /** « En ligne », « Hors ligne depuis 12 min », « En attente d'appairage ». */
   statusLabel: string;
   active: boolean;
+  /** Télémétrie du dernier battement — vide tant qu'un client ne l'envoie pas. */
+  appVersion: string;
+  queueDepth: number | null;
+  lastError: string;
 }
 
 /**

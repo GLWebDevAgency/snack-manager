@@ -104,6 +104,26 @@ export function DeviceCard({
           </span>
         </div>
 
+        {/* ── Télémétrie du battement — n'apparaît que si la tablette parle.
+             C'est la ligne qu'on lit au téléphone avec le support : version du
+             bundle, file d'envois en attente, dernière erreur. ── */}
+        {(device.appVersion || (device.queueDepth ?? 0) > 0 || device.lastError) && (
+          <div className="mt-2 text-xs leading-snug text-mut">
+            {device.appVersion && <span>v{device.appVersion}</span>}
+            {(device.queueDepth ?? 0) > 0 && (
+              <span>
+                {device.appVersion && " · "}
+                {device.queueDepth} envoi{(device.queueDepth ?? 0) > 1 ? "s" : ""} en attente
+              </span>
+            )}
+            {device.lastError && (
+              <div className="mt-0.5 truncate font-semibold text-alertt" title={device.lastError}>
+                Dernière erreur : {device.lastError}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Actions — collées en bas : dans une grille, les cartes d'une même
              rangée s'étirent, et des boutons alignés se cliquent sans viser. ── */}
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3.5">

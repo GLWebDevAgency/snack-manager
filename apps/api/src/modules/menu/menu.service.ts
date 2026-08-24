@@ -6,6 +6,7 @@ import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS } from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
+import { AuditService } from '../audit/audit.module';
 
 @Injectable()
 export class MenuService {
@@ -14,6 +15,7 @@ export class MenuService {
     @InjectModel('Product') private readonly products: Model<Product>,
     @Inject(REDIS_PUB) private readonly redis: Redis,
     private readonly supply: SupplyService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -154,12 +156,29 @@ export class MenuService {
       const cat = await this.categories.findOne({ _id: dto.categoryId, tenantId });
       if (!cat) throw new NotFoundException('Catégorie introuvable');
     }
+    // Le prix d'AVANT, lu avant l'écriture : le journal NF525 doit porter la
+    // transition, pas l'état final — « 9,50 € → 8,90 € » se défend en
+    // contrôle, « 8,90 € » ne prouve rien. Cette lecture ne coûte que si un
+    // prix change ; l'en-tête du journal annonçait cette couverture depuis le
+    // premier jour sans que personne ne l'écrive (diagnostic 24/08, P3).
+    const avant =
+      dto.price !== undefined
+        ? await this.products.findOne({ _id: id, tenantId }, { price: 1 }).lean()
+        : null;
     const prod = await this.products.findOneAndUpdate(
       { _id: id, tenantId },
       { $set: dto },
       { new: true },
     );
     if (!prod) throw new NotFoundException('Produit introuvable');
+    if (avant && typeof dto.price === 'number' && avant.price !== dto.price) {
+      await this.audit.log({
+        tenantId,
+        action: 'price.change',
+        targetId: id,
+        meta: { name: prod.name, fromCents: avant.price, toCents: dto.price },
+      });
+    }
     this.publishMenuUpdated(tenantId, { scope: 'product', id });
     return prod;
   }

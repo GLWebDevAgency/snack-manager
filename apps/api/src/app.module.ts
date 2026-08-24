@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { MongooseModule } from '@nestjs/mongoose';
 import { join } from 'node:path';
 
@@ -40,6 +41,16 @@ import { OpsModule } from './modules/ops/ops.module';
         uri: config.getOrThrow<string>('MONGO_URL'),
       }),
     }),
+    /**
+     * Limitation de débit — RÉGLAGE global, application CIBLÉE.
+     *
+     * Pas d'APP_GUARD : la file hors-ligne d'une caisse rejoue ses mutations
+     * en rafale au retour du réseau, et un plafond global l'aurait punie pour
+     * avoir fait exactement ce qu'on lui demande. Le garde est posé route par
+     * route, uniquement là où la force brute paie : connexions, saisie de PIN,
+     * codes d'appairage, création de commande publique.
+     */
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 30 }]),
     DatabaseModule,
     RedisModule,
     // Adaptateurs des ports (@Global) : DOMAIN_REGISTRAR, PAYMENT_GATEWAY…

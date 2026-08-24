@@ -62,5 +62,8 @@ export function toDeviceView(device: StoredDevice, now: Date): DeviceView {
     online,
     statusLabel,
     active: device.active,
+    appVersion: device.appVersion,
+    queueDepth: device.queueDepth,
+    lastError: device.lastError,
   };
 }

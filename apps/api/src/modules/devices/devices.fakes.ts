@@ -1,5 +1,5 @@
 import type { Clock } from '@sm/domain';
-import type { DeviceTenantBrand, TenantAccountStatus } from '@sm/contracts';
+import type { DeviceTelemetry, DeviceTenantBrand, TenantAccountStatus } from '@sm/contracts';
 import type {
   DevicePatch,
   DevicesRepository,
@@ -51,6 +51,9 @@ export function storedDevice(patch: Partial<StoredDevice> = {}): StoredDevice {
     paired: true,
     lastSeenAt: null,
     active: true,
+    appVersion: '',
+    queueDepth: null,
+    lastError: '',
     ...patch,
   };
 }
@@ -156,9 +159,9 @@ export class FakeDevicesRepository {
     return row?.paired ? row : null;
   }
 
-  async touch(id: string, at: Date): Promise<void> {
+  async touch(id: string, at: Date, telemetry?: DeviceTelemetry): Promise<void> {
     const row = this.rows.get(id);
-    if (row) this.rows.set(id, { ...row, lastSeenAt: at });
+    if (row) this.rows.set(id, { ...row, lastSeenAt: at, ...(telemetry ?? {}) });
   }
 
   asRepository(): DevicesRepository {

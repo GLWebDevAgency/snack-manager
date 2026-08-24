@@ -1,5 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { isAccessBlocked, type DeviceHeartbeatResult } from '@sm/contracts';
+import {
+  isAccessBlocked,
+  type DeviceHeartbeatResult,
+  type DeviceTelemetry,
+} from '@sm/contracts';
 import { CLOCK, type Clock } from './devices.tokens';
 import { requirePairedDevice } from './device-access';
 import { DevicesRepository } from './devices.repository';
@@ -27,11 +31,14 @@ export class HeartbeatDevice {
     private readonly tenants: TenantBrandRepository,
   ) {}
 
-  async execute(deviceToken: string | null): Promise<DeviceHeartbeatResult> {
+  async execute(
+    deviceToken: string | null,
+    telemetry?: DeviceTelemetry,
+  ): Promise<DeviceHeartbeatResult> {
     const device = await requirePairedDevice(this.devices, deviceToken);
     const now = this.clock.now();
 
-    await this.devices.touch(device.id, now);
+    await this.devices.touch(device.id, now, telemetry);
 
     const [tenant, status] = await Promise.all([
       this.tenants.byId(device.tenantId),
