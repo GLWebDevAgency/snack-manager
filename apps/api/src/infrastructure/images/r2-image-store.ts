@@ -1,3 +1,4 @@
+import { fetchV4 } from '../http-v4';
 import type { ImageStore } from './image-store';
 
 /**
@@ -25,7 +26,9 @@ export class R2ImageStore implements ImageStore {
     private readonly apiToken: string,
     private readonly accountId: string,
     private readonly bucket: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    // IPv4 forcé : api.cloudflare.com publie une IPv6 que Railway ne sait
+    // pas joindre — même mal que ntfy et Brevo, voir `http-v4.ts`.
+    private readonly fetchImpl: typeof fetch = fetchV4,
   ) {}
 
   private urlOf(key: string): string {
