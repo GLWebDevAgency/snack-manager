@@ -1,3 +1,4 @@
+import { detailErreur, fetchV4 } from '../http-v4';
 import type { TeamAlert, TeamAlerter, TeamAlertResult } from './team-alerter';
 
 type FetchFn = typeof fetch;
@@ -18,7 +19,9 @@ export class BrevoTeamAlerter implements TeamAlerter {
     private readonly apiKey: string,
     private readonly from: string,
     private readonly to: string,
-    private readonly fetchFn: FetchFn = fetch,
+    // IPv4 forcé : api.brevo.com publie une IPv6 que Railway ne sait pas
+    // joindre — même mal que ntfy, voir `http-v4.ts`.
+    private readonly fetchFn: FetchFn = fetchV4,
   ) {}
 
   async send(alert: TeamAlert): Promise<TeamAlertResult> {
@@ -37,7 +40,7 @@ export class BrevoTeamAlerter implements TeamAlerter {
       if (!res.ok) return { sent: false, reason: `Brevo : HTTP ${res.status}` };
       return { sent: true };
     } catch (cause) {
-      return { sent: false, reason: `Brevo injoignable (${String(cause).slice(0, 120)})` };
+      return { sent: false, reason: `Brevo injoignable (${detailErreur(cause).slice(0, 160)})` };
     }
   }
 }

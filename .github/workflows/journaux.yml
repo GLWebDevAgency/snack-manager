@@ -1,0 +1,73 @@
+name: Journaux Railway
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lire les DERNIÈRES LIGNES de journal d'un service Railway, depuis GitHub.
+#
+# Pourquoi : quand une alerte dit « webhook injoignable » ou qu'un envoi de
+# logo répond 502, la cause exacte est dans le journal du conteneur — et le
+# tableau de bord Railway n'est pas toujours sous la main (ni accessible à
+# l'agent qui assiste l'équipe). Ce workflow réutilise le jeton de projet
+# déjà en secret, comme le déploiement.
+#
+# ⚠️ Les journaux d'application peuvent citer des données d'exploitation
+# (identifiants de documents, URL, messages d'erreur). Le dépôt est privé et
+# l'application ne journalise ni mot de passe ni jeton — c'est une règle de
+# code, pas une garantie mécanique : si un secret fuitait dans un journal,
+# le faire tourner ET nettoyer l'exécution ici (bouton « … » → Delete logs).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      environnement:
+        description: 'Environnement'
+        required: true
+        type: choice
+        options: [production, staging]
+      service:
+        description: 'Service Railway'
+        required: true
+        type: choice
+        options: [api, web, pos, kds]
+      lignes:
+        description: 'Nombre de lignes (défaut 200)'
+        required: false
+        default: '200'
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  VERSION_RAILWAY: 4.16.1
+
+jobs:
+  lire:
+    name: Dernières lignes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_TOKEN: >-
+        ${{ inputs.environnement == 'production' && secrets.RAILWAY_TOKEN_PRODUCTION
+        || secrets.RAILWAY_TOKEN_STAGING }}
+    steps:
+      - name: Installer la CLI Railway
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin railway
+          railway --version
+
+      - name: Lire le journal
+        env:
+          SERVICE: ${{ inputs.service }}
+          LIGNES: ${{ inputs.lignes }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            echo "::error title=Aucun jeton Railway::pas de jeton pour « ${{ inputs.environnement }} »."
+            exit 1
+          fi
+          railway logs --service "$SERVICE" --lines "${LIGNES:-200}" || \
+            railway logs --service "$SERVICE" | tail -n "${LIGNES:-200}"
