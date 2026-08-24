@@ -52,6 +52,7 @@ const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
   { href: "/sm/pipeline", label: "Pipeline", icon: "grid", title: "Pipeline commercial" },
   { href: "/sm/clients", label: "Clients", icon: "user", title: "Restaurants clients" },
   { href: "/sm/signals", label: "Signaux", icon: "bell", title: "File de travail" },
+  { href: "/sm/erreurs", label: "Erreurs", icon: "gear", title: "Journal d'erreurs" },
   {
     href: "/sm/facturation",
     label: "Facturation",

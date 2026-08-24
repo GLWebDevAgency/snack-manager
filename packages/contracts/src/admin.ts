@@ -198,11 +198,13 @@ export const REVOCABLE_DEVICE_KIND_LABELS: Record<RevocableDeviceKind, string> =
  * pouvoir être reconstituée six mois plus tard.
  */
 export const ADMIN_LOG_ACTIONS = [
+  'tenant.create',
   'tenant.suspend',
   'tenant.reactivate',
   'tenant.plan_change',
   'tenant.note',
   'tenant.detail_view',
+  'tenant.owner_reset',
   'device.revoke',
   'screen.revoke',
   'invoice.issue',
@@ -216,11 +218,13 @@ export const AdminLogActionSchema = z.enum(ADMIN_LOG_ACTIONS);
 export type AdminLogAction = z.infer<typeof AdminLogActionSchema>;
 
 export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
+  'tenant.create': 'Création du restaurant',
   'tenant.suspend': 'Suspension du compte',
   'tenant.reactivate': 'Réactivation du compte',
   'tenant.plan_change': 'Changement de formule',
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
+  'tenant.owner_reset': 'Réinitialisation du mot de passe gérant',
   // Apostrophe TYPOGRAPHIQUE (’) et non droite : ces libellés s'affichent tels
   // quels dans la fiche d'un client, à côté de phrases qui l'emploient déjà.
   'device.revoke': 'Révocation d’un appareil',

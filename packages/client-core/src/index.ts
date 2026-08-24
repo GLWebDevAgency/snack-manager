@@ -7,3 +7,4 @@ export * from './pricing';
 export * from './theme';
 export * from './hooks';
 export * from './demo';
+export * from './error-report';

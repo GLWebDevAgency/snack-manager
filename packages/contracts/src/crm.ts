@@ -283,6 +283,81 @@ export const LeadListQuerySchema = z.object({
 });
 export type LeadListQuery = z.infer<typeof LeadListQuerySchema>;
 
+/**
+ * SIGNER : convertir un lead en restaurant, en un geste.
+ *
+ * Jusqu'au 24/08/2026, il n'existait AUCUNE route pour créer un tenant : une
+ * signature se soldait par des écritures Mongo à la main et un script CLI
+ * contre la production (diagnostic quatre casquettes, P1). Ce contrat est la
+ * chaîne entière d'une installation : le restaurant, le compte gérant, la
+ * place fondateur, l'échéance d'essai — et un mot de passe remis UNE fois.
+ */
+export const LeadConvertSchema = z.object({
+  /** Le slug public — `<slug>.snackmanager.app`, la carte, la caisse. */
+  slug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
+  ownerEmail: z.email().max(160),
+  ownerName: z.string().trim().max(120).default(''),
+  plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
+  founderSeat: z.boolean().default(false),
+});
+export type LeadConvert = z.infer<typeof LeadConvertSchema>;
+
+/* ── « Qui je relance aujourd'hui ? » ─────────────────────────── */
+
+/**
+ * Cadence de relance par séquence — le délai au-delà duquel un lead SANS
+ * nouvelle touche est « à relancer ». Dérivée des séquences elles-mêmes :
+ * A appelle à J+3 (le pas le plus serré après la démo), B revient à J+7,
+ * C est un nurture mensuel. Sans séquence, la semaine est la bonne unité
+ * d'un pipeline de terrain.
+ *
+ * Volontairement une CADENCE et pas un suivi d'étapes : le modèle ne sait
+ * pas quelle étape de séquence est faite (les touches ne pointent pas les
+ * étapes), et prétendre le savoir afficherait des échéances fausses. Une
+ * cadence dit une chose vraie : « ça fait N jours qu'on n'a rien fait ».
+ */
+export const RELANCE_CADENCE_DAYS: Record<LeadSequence, number> = { A: 3, B: 7, C: 30 };
+export const RELANCE_DEFAULT_DAYS = 7;
+
+export type RelanceDue = {
+  due: boolean;
+  /** Jours AU-DELÀ de la cadence — 0 le jour même de l'échéance. */
+  retardJours: number;
+};
+
+export function relanceDue(
+  lead: Pick<CrmLead, 'stage' | 'sequence' | 'lastTouchAt' | 'createdAt'>,
+  now: Date,
+): RelanceDue {
+  // Signé ou perdu : plus rien à relancer, quel que soit le silence.
+  if (!isOpenLeadStage(lead.stage)) return { due: false, retardJours: 0 };
+  const cadence = lead.sequence ? RELANCE_CADENCE_DAYS[lead.sequence] : RELANCE_DEFAULT_DAYS;
+  // Jamais touché : l'horloge court depuis l'entrée au pipeline.
+  const reference = new Date(lead.lastTouchAt ?? lead.createdAt).getTime();
+  if (Number.isNaN(reference)) return { due: false, retardJours: 0 };
+  const silence = Math.floor((now.getTime() - reference) / 86_400_000);
+  return { due: silence >= cadence, retardJours: Math.max(0, silence - cadence) };
+}
+
+export type LeadConversion = {
+  tenantId: string;
+  slug: string;
+  name: string;
+  ownerEmail: string;
+  /**
+   * Remis UNE SEULE FOIS, à l'écran, au moment de la conversion. Il n'est
+   * stocké qu'en empreinte : aucune route ne sait le relire. Perdu = geste
+   * « réinitialiser le mot de passe » sur la fiche client.
+   */
+  password: string;
+  /** ISO 8601 — posée à J+30, lue par le signal de fin d'essai. */
+  trialEndsAt: string;
+};
+
 // ─── Sorties d'API ───
 
 export type CrmLeadTouch = {

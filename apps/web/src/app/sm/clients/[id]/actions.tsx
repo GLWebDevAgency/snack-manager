@@ -43,7 +43,7 @@ import {
   Toggle,
   useToast,
 } from "@/components/ui";
-import { euroRound } from "../../crm";
+import { crm, euroRound } from "../../crm";
 import { clientsApi, type ParkDevice } from "../data";
 
 /** Longueur minimale d'un motif — alignée sur le schéma zod de l'API. */
@@ -548,5 +548,97 @@ function Consequences({
         ))}
       </ul>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mot de passe gérant
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * L'oubli de mot de passe était le dernier geste qui exigeait un terminal :
+ * un script CLI contre la base de production, à chaque appel. Ici : un
+ * nouveau mot de passe fabriqué côté API (l'ancien cesse à l'instant), REMIS
+ * UNE FOIS dans cette modale, et le geste au journal. Fermer sans noter =
+ * recommencer — il n'existe aucun moyen de le relire.
+ */
+export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Common) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [fait, setFait] = useState<{ ownerEmail: string; password: string } | null>(null);
+
+  async function run() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      setFait(await crm.resetOwner(tenantId));
+      onDone();
+    } catch (e) {
+      toast(errText(e, "Réinitialisation impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Mot de passe gérant — ${tenantName}`}
+      footer={
+        fait ? (
+          <Btn size="sm" icon="check" onClick={onClose}>
+            C&apos;est noté
+          </Btn>
+        ) : (
+          <>
+            <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+              Annuler
+            </Btn>
+            <Btn size="sm" icon="edit" disabled={busy} onClick={() => void run()}>
+              {busy ? "Fabrication…" : "Fabriquer un nouveau mot de passe"}
+            </Btn>
+          </>
+        )
+      }
+    >
+      {fait ? (
+        <div>
+          <p className="text-[13px] text-mut">
+            À dicter ou copier MAINTENANT pour <b className="text-ink">{fait.ownerEmail}</b> —
+            il ne sera jamais réaffiché.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">
+              {fait.password}
+            </code>
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard
+                  ?.writeText(fait.password)
+                  .then(() => toast("Mot de passe copié", { icon: "check" }));
+              }}
+            >
+              Copier
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <Consequences
+          tone="alert"
+          does={[
+            "Un nouveau mot de passe est fabriqué et remis UNE fois, ici.",
+            "L'ancien cesse de fonctionner à l'instant même.",
+            "Le geste s'inscrit au journal de l'établissement.",
+          ]}
+          doesNot={[
+            "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
+            "Personne n'est prévenu automatiquement — c'est vous qui remettez le mot de passe au gérant.",
+          ]}
+        />
+      )}
+    </Modal>
   );
 }

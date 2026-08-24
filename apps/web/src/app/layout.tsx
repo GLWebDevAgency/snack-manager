@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ErrorReporter } from "@/components/ErrorReporter";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,7 +19,12 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
-      <body className={`${inter.variable} font-sans antialiased`}>{children}</body>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        {/* Les erreurs de TOUTES les surfaces web remontent au journal
+            /sm/erreurs — actif en production seulement. */}
+        <ErrorReporter />
+        {children}
+      </body>
     </html>
   );
 }

@@ -17,6 +17,7 @@ import {
 import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Roles } from '../../common/auth';
 import { AdminService } from './admin.service';
+import { ConversionService } from './conversion.service';
 
 /**
  * ADMINISTRATION CLIENT — « gérer un client de A à Z ».
@@ -42,7 +43,10 @@ import { AdminService } from './admin.service';
 @Roles('sm_admin')
 @Controller('crm')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly conversion: ConversionService,
+  ) {}
 
   // ─── Statut de compte ───
 
@@ -121,6 +125,17 @@ export class AdminController {
     @Body(zod(DeviceRevokeSchema)) body: DeviceRevoke,
   ) {
     return this.admin.revokeScreen(actor, id, screenId, body);
+  }
+
+  /**
+   * Mot de passe gérant perdu : un NOUVEAU est fabriqué, remis une fois dans
+   * la réponse, et le geste s'écrit au journal. Remplace le script CLI lancé
+   * contre la production à chaque oubli.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/owner-reset')
+  resetOwner(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
+    return this.conversion.resetOwnerPassword(actor, id);
   }
 
   // ─── Journal ───

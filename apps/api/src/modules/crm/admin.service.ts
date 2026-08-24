@@ -237,6 +237,41 @@ export class AdminService {
     });
   }
 
+  // ─── Naissance et clés d'un restaurant ───
+
+  /**
+   * La ligne « ce restaurant existe depuis le … , créé par … , depuis le
+   * lead … » — écrite par `ConversionService` au moment de la signature.
+   * Pas de `requireTenant` : le tenant vient d'être créé par l'appelant.
+   */
+  async recordTenantCreation(
+    actor: JwtPayload,
+    tenantId: string,
+    meta: { slug: string; plan: string; founderSeat: boolean; leadId: string; ownerEmail: string },
+  ): Promise<AdminLogEntry> {
+    return this.record(actor, {
+      action: 'tenant.create',
+      tenantId,
+      reason: `Créé depuis le pipeline (${meta.slug})`,
+      meta,
+    });
+  }
+
+  /** Un mot de passe gérant réinitialisé se lit dans le journal — jamais sa valeur. */
+  async recordOwnerReset(
+    actor: JwtPayload,
+    tenantId: string,
+    ownerEmail: string,
+  ): Promise<AdminLogEntry> {
+    const tenant = await this.requireTenant(tenantId);
+    return this.record(actor, {
+      action: 'tenant.owner_reset',
+      tenantId: String(tenant._id),
+      reason: `Nouveau mot de passe remis pour ${ownerEmail}`,
+      meta: { ownerEmail },
+    });
+  }
+
   // ─── Révocation d'appareil ───
 
   /**
