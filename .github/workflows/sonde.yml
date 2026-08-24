@@ -53,17 +53,40 @@ jobs:
       - name: Contrôle de santé
         run: node scripts/smoke.mjs production
 
+      # Le canal se cherche à DEUX endroits : le secret GitHub s'il existe,
+      # sinon LA MÊME variable que le veilleur de l'API, lue sur le service
+      # `api` de production avec le jeton Railway du déploiement. Une seule
+      # source de vérité : poser SM_ALERT_WEBHOOK sur Railway arme l'API ET
+      # la sonde — plus deux endroits à maintenir. La sortie de `railway
+      # variables` n'est jamais affichée (elle contient tous les secrets du
+      # service) : seul le champ voulu en sort, via jq.
       - name: Alerte webhook (si configurée)
         if: failure()
         env:
           HOOK: ${{ secrets.SM_ALERT_WEBHOOK }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PRODUCTION }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$HOOK" ] && [ -n "${RAILWAY_TOKEN:-}" ]; then
+            curl -sSfL \
+              "https://github.com/railwayapp/cli/releases/download/v4.16.1/railway-v4.16.1-x86_64-unknown-linux-musl.tar.gz" \
+              | sudo tar -xz -C /usr/local/bin railway || true
+            HOOK="$(railway variables --service api --json 2>/dev/null \
+              | jq -r '.SM_ALERT_WEBHOOK // empty' || true)"
+          fi
           if [ -z "$HOOK" ]; then
-            echo "Pas de SM_ALERT_WEBHOOK — l'e-mail d'échec GitHub reste le canal."
+            echo "Pas de SM_ALERT_WEBHOOK (ni secret, ni variable Railway) — l'e-mail d'échec GitHub reste le canal."
             exit 0
           fi
           TEXTE="⚠ Sonde : la production ne répond pas correctement. Détail : $RUN_URL"
-          curl -sS -X POST -H 'content-type: application/json' \
-            --data "$(printf '{"text":"%s","content":"%s"}' "$TEXTE" "$TEXTE")" \
-            "$HOOK" || true
+          case "$HOOK" in
+            https://ntfy.sh/*)
+              # ntfy attend du texte brut — du JSON s'afficherait tel quel.
+              curl -sS -X POST -H 'content-type: text/plain' \
+                -H 'x-tags: rotating_light' -H 'x-priority: urgent' \
+                --data "$TEXTE" "$HOOK" > /dev/null || true ;;
+            *)
+              curl -sS -X POST -H 'content-type: application/json' \
+                --data "$(printf '{"text":"%s","content":"%s"}' "$TEXTE" "$TEXTE")" \
+                "$HOOK" > /dev/null || true ;;
+          esac
