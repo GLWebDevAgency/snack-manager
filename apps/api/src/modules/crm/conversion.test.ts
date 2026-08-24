@@ -30,6 +30,7 @@ function build(over: {
   slugTaken?: boolean;
   emailTaken?: boolean;
   userCreateFails?: boolean;
+  failIssue?: boolean;
   lead?: ReturnType<typeof leadDoc> | null;
 } = {}) {
   const tenantId = new Types.ObjectId();
@@ -58,14 +59,22 @@ function build(over: {
     recordTenantCreation: vi.fn().mockResolvedValue({}),
     recordOwnerReset: vi.fn().mockResolvedValue({}),
   };
+  // La facturation ne sait faire qu'ÉMETTRE — c'est tout ce que la signature
+  // lui demande. `failIssue` simule la panne : la signature doit y survivre.
+  const billing = {
+    issue: over.failIssue
+      ? vi.fn().mockRejectedValue(new Error('facturation en panne'))
+      : vi.fn().mockResolvedValue({}),
+  };
   const service = new ConversionService(
     leads as unknown as Model<Lead>,
     tenants as unknown as Model<Tenant>,
     users as unknown as Model<User>,
     hasher,
     admin as unknown as AdminService,
+    billing as unknown as import('./billing.service').BillingService,
   );
-  return { service, leads, tenants, users, admin, tenantId };
+  return { service, leads, tenants, users, admin, billing, tenantId };
 }
 
 const BODY = {
@@ -74,6 +83,8 @@ const BODY = {
   ownerName: 'Nicolas',
   plan: 'complet' as const,
   founderSeat: true,
+  onlineOrdering: true,
+  billing: 'mensuel' as const,
 };
 
 describe('Mot de passe généré', () => {
@@ -140,6 +151,49 @@ describe('Convertir un lead en restaurant', () => {
     const { service, tenants } = build({ userCreateFails: true });
     await expect(service.convert(ACTOR, LEAD_ID, BODY)).rejects.toThrow('duplicate key');
     expect(tenants.deleteOne).toHaveBeenCalledOnce();
+  });
+
+  it('pose les brouillons de facture dérivés des termes signés — abonnement + mise en service', async () => {
+    const { service, billing, tenantId } = build();
+    const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
+
+    // Complet (159 €) + module (79 €) = 238 € HT par mois ; mise en service 55 €.
+    const [abonnement, mise] = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
+    expect(billing.issue.mock.calls[0]?.[1]).toBe(String(tenantId));
+    expect(abonnement).toMatchObject({
+      kind: 'abonnement',
+      draft: true,
+      amountCents: 23_800,
+      period: '2026-09', // le mois de la fin d'essai — rien n'est dû avant
+    });
+    expect(abonnement?.dueAt).toEqual(new Date('2026-09-23T12:00:00.000Z'));
+    expect(abonnement?.label).toContain('commande en ligne');
+    expect(mise).toMatchObject({ kind: 'mise_en_place', draft: true, amountCents: 5_500 });
+    expect(result.draftInvoices).toBe(2);
+  });
+
+  it('facture l’annuel douze mois payés dix, sans mise en service hors module', async () => {
+    const { service, billing } = build();
+    const result = await service.convert(
+      ACTOR,
+      LEAD_ID,
+      { ...BODY, plan: 'boost', onlineOrdering: false, billing: 'annuel' },
+      NOW,
+    );
+    // Boost 199 € — module compris, donc pas de mise en service ; annuel = ×10.
+    expect(billing.issue).toHaveBeenCalledOnce();
+    const corps = billing.issue.mock.calls[0]?.[2] as Record<string, any>;
+    expect(corps.amountCents).toBe(199_000);
+    expect(corps.label).toContain('annuel');
+    expect(result.draftInvoices).toBe(1);
+  });
+
+  it('la signature SURVIT à une facturation en panne — draftInvoices le dit', async () => {
+    const { service, users } = build({ failIssue: true });
+    const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
+    expect(users.create).toHaveBeenCalledOnce();
+    expect(result.password).toMatch(/-/);
+    expect(result.draftInvoices).toBe(0);
   });
 });
 

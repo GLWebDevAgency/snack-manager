@@ -171,6 +171,20 @@ describe('Canaux d’alerte', () => {
     expect(body.content).toContain('Corps');
   });
 
+  it('ntfy : texte brut, en-têtes ASCII — jamais l’enveloppe JSON en notification', async () => {
+    const fetchFn = vi.fn(reponse(200));
+    const result = await new WebhookTeamAlerter('https://ntfy.sh/sm-alertes-abc', fetchFn).send({
+      title: 'Caisse muette',
+      text: 'Chez Nour, 12 min',
+    });
+    expect(result.sent).toBe(true);
+    const init = fetchFn.mock.calls.at(0)?.[1];
+    expect(String(init?.body)).toBe('⚠ Caisse muette\nChez Nour, 12 min');
+    const headers = init?.headers as Record<string, string>;
+    expect(headers['content-type']).toContain('text/plain');
+    expect(headers['x-priority']).toBe('high');
+  });
+
   it('brevo : porte la clé en en-tête et l’alerte en objet', async () => {
     const fetchFn = vi.fn(reponse(200));
     await new BrevoTeamAlerter('cle', 'de@sm.fr', 'a@sm.fr', fetchFn).send({ title: 'T', text: 'x' });

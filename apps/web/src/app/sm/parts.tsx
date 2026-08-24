@@ -18,8 +18,12 @@ import {
   LEAD_TOUCH_TYPES,
   PLAN_LABELS,
   PLANS,
+  PROPOSAL_BILLINGS,
+  PROPOSAL_BILLING_LABELS,
   nextLeadStage,
   previousLeadStage,
+  proposalCents,
+  yearlyCents,
   type CrmClientHealth,
   type CrmLead,
   type LeadConversion,
@@ -27,9 +31,11 @@ import {
   type LeadStage,
   type LeadTouchType,
   type LeadUpdate,
+  type ProposalBilling,
 } from "@sm/contracts";
+import { csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
-import { timeAgo } from "@/lib/format";
+import { fmtEuro, timeAgo } from "@/lib/format";
 import {
   Btn,
   Field,
@@ -411,6 +417,8 @@ export function LeadDrawer({
 
       {lead.stage !== "perdu" && (
         <>
+          <Rule />
+          <ProposalPanel lead={lead} onChanged={onChanged} />
           <Rule />
           <ConvertPanel lead={lead} onConverted={(updated) => onChanged(updated)} />
         </>
@@ -795,6 +803,190 @@ function slugifie(name: string): string {
  * fois, à noter pendant qu'il est à l'écran. Fermer le panneau ne le
  * réaffichera pas : c'est le contrat de `LeadConversion`.
  */
+/** Le chiffrage d'une proposition, en une phrase — toujours dérivé de la grille. */
+function phrasePrix(p: { plan: (typeof PLANS)[number]; onlineOrdering: boolean; billing: ProposalBilling }): string {
+  const { monthlyCents, setupOnceCents } = proposalCents(p);
+  const mois = `${fmtEuro(monthlyCents)}/mois`;
+  const setup = setupOnceCents > 0 ? ` · mise en service ${fmtEuro(setupOnceCents)} (une fois)` : "";
+  const annee = p.billing === "annuel" ? ` · soit ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)` : "";
+  return mois + setup + annee;
+}
+
+/**
+ * LA PROPOSITION SUR LA TABLE — le maillon qui manquait entre « Proposition »
+ * et « Signé » : l'étape disait qu'une offre existait, jamais laquelle. Posée
+ * ici, elle s'affiche sur la carte du pipeline, se relit à chaque appel, et
+ * pré-remplit le panneau de signature.
+ */
+function ProposalPanel({
+  lead,
+  onChanged,
+}: {
+  lead: CrmLead;
+  onChanged: (lead: CrmLead) => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState(false);
+  const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
+  const [module, setModule] = useState(false);
+  const [billing, setBilling] = useState<ProposalBilling>("mensuel");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire, re-synchronisé à chaque lead ouvert : mêmes raisons que le brouillon d'édition du tiroir.
+    setPlan(lead.proposal?.plan ?? "complet");
+    setModule(lead.proposal?.onlineOrdering ?? false);
+    setBilling(lead.proposal?.billing ?? "mensuel");
+    setNote(lead.proposal?.note ?? "");
+    setEdit(false);
+  }, [lead]);
+
+  async function poser() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const updated = await crm.updateLead(lead._id, {
+        proposal: { plan, onlineOrdering: module, billing, note: note.trim() },
+      });
+      onChanged(updated);
+      setEdit(false);
+      toast("Proposition posée — elle pré-remplira la signature", { icon: "check" });
+    } catch {
+      toast("Enregistrement impossible — réessayez");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (lead.proposal && !edit) {
+    const p = lead.proposal;
+    return (
+      <div className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <Eyebrow>Proposition</Eyebrow>
+          <span className="cf-fig shrink-0 text-[11px] text-mut">
+            posée le {new Date(p.at).toLocaleDateString("fr-FR")}
+          </span>
+        </div>
+        <div className="mt-1 text-sm font-bold text-ink">
+          {PLAN_LABELS[p.plan]}
+          {p.plan === "boost"
+            ? " — commande en ligne comprise"
+            : p.onlineOrdering
+              ? " + commande en ligne"
+              : ""}
+          {" · "}
+          {PROPOSAL_BILLING_LABELS[p.billing]}
+        </div>
+        <div className="mt-0.5 text-xs text-mut">{phrasePrix(p)}</div>
+        {p.note && <p className="mt-1.5 text-xs italic text-mut">« {p.note} »</p>}
+        <div className="mt-2 flex items-center gap-2">
+          <Btn
+            variant="ink"
+            size="sm"
+            icon="print"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              // La note interne ne s'imprime pas — le PDF ne porte que l'offre.
+              // Le nom est FORCÉ en .pdf : le repli de `csvDownload` (deviner
+              // depuis l'URL) fabriquait un « devis.csv » avec des octets PDF
+              // dedans quand Content-Disposition n'était pas exposé.
+              csvDownload(`/crm/leads/${lead._id}/devis`, `devis-${slugifie(lead.restaurantName)}.pdf`)
+                .then(() => toast("Devis téléchargé — à envoyer au prospect", { icon: "check" }))
+                .catch(() => toast("Devis indisponible — réessayez"))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Devis PDF
+          </Btn>
+          <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setEdit(true)}>
+            Modifier
+          </Btn>
+        </div>
+      </div>
+    );
+  }
+
+  if (!lead.proposal && !edit) {
+    return (
+      <Btn variant="ghost" size="sm" icon="euro" onClick={() => setEdit(true)}>
+        Poser la proposition — plan, module, engagement
+      </Btn>
+    );
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-3 rounded-card border border-white/12 p-3.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void poser();
+      }}
+    >
+      <Eyebrow>La proposition</Eyebrow>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Formule" htmlFor="prop-plan">
+          <Select
+            id="prop-plan"
+            value={plan}
+            onChange={(e) => setPlan(e.target.value as (typeof PLANS)[number])}
+          >
+            {PLANS.map((p) => (
+              <option key={p} value={p}>
+                {PLAN_LABELS[p]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Engagement" htmlFor="prop-billing">
+          <Select
+            id="prop-billing"
+            value={billing}
+            onChange={(e) => setBilling(e.target.value as ProposalBilling)}
+          >
+            {PROPOSAL_BILLINGS.map((b) => (
+              <option key={b} value={b}>
+                {PROPOSAL_BILLING_LABELS[b]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          {plan === "boost"
+            ? "Commande en ligne comprise dans Boost — rien à ajouter."
+            : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
+        </div>
+        {plan !== "boost" && (
+          <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
+        )}
+      </div>
+      <Field label="Note (ce qui s'est dit)" htmlFor="prop-note">
+        <Input
+          id="prop-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="attend son associé, veut démarrer en septembre…"
+        />
+      </Field>
+      <div className="text-xs font-semibold text-accent">
+        {phrasePrix({ plan, onlineOrdering: module, billing })}
+      </div>
+      <div className="flex gap-2">
+        <Btn type="submit" variant="ink" size="sm" disabled={busy}>
+          {busy ? "Enregistrement…" : lead.proposal ? "Mettre à jour" : "Poser la proposition"}
+        </Btn>
+        <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setEdit(false)}>
+          Annuler
+        </Btn>
+      </div>
+    </form>
+  );
+}
+
 function ConvertPanel({
   lead,
   onConverted,
@@ -814,15 +1006,21 @@ function ConvertPanel({
   const [ownerName, setOwnerName] = useState("");
   const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
   const [founderSeat, setFounderSeat] = useState(false);
+  const [onlineOrdering, setOnlineOrdering] = useState(false);
+  const [billing, setBilling] = useState<ProposalBilling>("mensuel");
 
   // Re-proposé à chaque lead ouvert — un tiroir réutilisé ne doit pas garder
-  // le slug du restaurant précédent.
+  // le slug du restaurant précédent. Les termes partent de la PROPOSITION :
+  // ce qui a été négocié n'a pas à se re-saisir, seulement à se confirmer.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire : mêmes raisons que le brouillon d'édition du tiroir.
     setSlug(slugifie(lead.restaurantName));
     setOwnerEmail(lead.contact.email);
     setOwnerName(lead.contact.name);
     setFounderSeat(lead.founderSeatReserved);
+    setPlan(lead.proposal?.plan ?? "essentiel");
+    setOnlineOrdering(lead.proposal?.onlineOrdering ?? false);
+    setBilling(lead.proposal?.billing ?? "mensuel");
     setFait(null);
     setErreur(null);
     setOpen(false);
@@ -838,6 +1036,8 @@ function ConvertPanel({
         ownerName,
         plan,
         founderSeat,
+        onlineOrdering,
+        billing,
       });
       setFait(done);
       // Le lead local suit ce que l'API vient d'écrire : signé, réservation
@@ -859,6 +1059,11 @@ function ConvertPanel({
         <div className="mt-1 text-xs text-mut">
           Il ne sera JAMAIS réaffiché. Compte gérant : {fait.ownerEmail} · essai jusqu&apos;au{" "}
           {new Date(fait.trialEndsAt).toLocaleDateString("fr-FR")}.
+        </div>
+        <div className="mt-1 text-xs text-mut">
+          {fait.draftInvoices > 0
+            ? `${fait.draftInvoices} brouillon${fait.draftInvoices > 1 ? "s" : ""} de facture posé${fait.draftInvoices > 1 ? "s" : ""} dans Facturation — à émettre à la fin de l'essai.`
+            : "Aucun brouillon de facture posé — préparez-les dans Facturation."}
         </div>
         <div className="mt-3 flex items-center gap-2">
           <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">

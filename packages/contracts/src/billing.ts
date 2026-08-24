@@ -1510,6 +1510,15 @@ function partyGaps(
 }
 
 /**
+ * Les mentions ÉMETTEUR manquantes, seules — pour les documents commerciaux
+ * qui ne sont pas des factures (le devis du pipeline) : le prospect n'a pas
+ * encore d'adresse de facturation à exiger, notre identité légale, si.
+ */
+export function issuerGaps(issuer: InvoiceParty): InvoiceLegalGap[] {
+  return partyGaps(issuer, REQUIRED_ISSUER, 'issuer');
+}
+
+/**
  * ASSEMBLE LA PIÈCE, et dit franchement ce qui lui manque.
  *
  * Rien n'est deviné : ce que la base ne porte pas ressort dans `gaps` et

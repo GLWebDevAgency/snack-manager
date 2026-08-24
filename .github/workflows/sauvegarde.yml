@@ -19,7 +19,13 @@ name: Sauvegarde
 # Secrets attendus (Réglages → Secrets → Actions) :
 #   SM_BACKUP_URL          l'export, p. ex. https://api-…railway.app/ops/export
 #   SM_BACKUP_TOKEN        le même que la variable Railway du même nom
-#   CLOUDFLARE_API_TOKEN   jeton R2 (Object Read & Write sur sm-sauvegardes)
+#   CLOUDFLARE_API_TOKEN   jeton de COMPTE avec « Workers R2 Storage : Edit »
+#                          — PAS un jeton R2 « Object Read & Write » : ces
+#                          jetons-là n'authentifient que l'API S3, et wrangler
+#                          passe par l'API REST (api.cloudflare.com), qui les
+#                          refuse en 401. Même jeton pour l'hébergement
+#                          d'images de l'API (bucket sm-images) : le poser
+#                          une fois arme les deux.
 #   CLOUDFLARE_ACCOUNT_ID  l'identifiant de compte Cloudflare
 #
 # Sans les deux premiers, le travail s'arrête en le DISANT (pas d'échec rouge :

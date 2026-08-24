@@ -19,7 +19,15 @@ async function bootstrap() {
     'trust proxy',
     1,
   );
-  app.enableCors({ origin: true, credentials: true });
+  // `exposedHeaders` : sans lui, un fetch inter-origines ne PEUT PAS lire
+  // Content-Disposition — les téléchargements (devis PDF, exports CSV)
+  // retombaient sur un nom deviné depuis l'URL, et un PDF partait en
+  // « devis.csv » illisible. L'en-tête est là, il faut le déclarer visible.
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: ['Content-Disposition'],
+  });
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');

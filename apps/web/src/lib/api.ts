@@ -174,6 +174,36 @@ export async function csvDownload(
   saveBlob(blob, name);
 }
 
+/**
+ * Envoie UN fichier en multipart (champ `fichier`) — le logo de l'enseigne.
+ * Hors de `request()` : pas de Content-Type à poser (le navigateur écrit
+ * lui-même la frontière multipart), pas de JSON.stringify du corps.
+ * En démonstration, on refuse franchement : un faux succès fabriquerait un
+ * logo que personne n'a stocké — exactement le mensonge qu'on évite partout.
+ */
+export async function envoiFichier<T>(
+  method: "PUT" | "POST",
+  path: string,
+  file: File,
+): Promise<T> {
+  if (isDemoActive()) {
+    throw new ApiError(400, {
+      message: "La démonstration n'envoie pas de fichiers — sur un vrai compte, si.",
+    });
+  }
+  const token = getToken();
+  const corps = new FormData();
+  corps.append("fichier", file);
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: corps,
+  });
+  const data = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(res.status, data);
+  return data as T;
+}
+
 /** Déclenche l'enregistrement navigateur d'un contenu déjà en mémoire. */
 function saveBlob(blob: Blob, name: string): void {
   const url = URL.createObjectURL(blob);
