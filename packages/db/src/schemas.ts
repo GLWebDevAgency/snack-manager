@@ -178,6 +178,13 @@ export const TenantSchema = new Schema(
   },
   { timestamps: true },
 );
+// La résolution d'un domaine personnalisé (public/resolve) cherche le tenant
+// par `domains.hostname` À CHAQUE visite d'un site client dont le cache a
+// expiré : sans index, c'est un balayage de la collection entière, alimenté
+// en prime par le bruit des scans d'hôtes inconnus. Multiclé : un index par
+// domaine rattaché, pas par tenant.
+TenantSchema.index({ 'domains.hostname': 1 });
+
 export type Tenant = InferSchemaType<typeof TenantSchema>;
 
 // ─────────────────────────────────────────────────────────────
