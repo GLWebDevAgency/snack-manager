@@ -1096,12 +1096,18 @@ function ProposalPanel({
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-xs text-mut">
           Commande en ligne greffée sur SON site existant.{" "}
-          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)} (une fois) — module en sus.
+          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)} (une fois), mise en service comprise —
+          le module s&apos;active avec.
         </div>
         <Toggle
           on={services.integrationCommande}
           label="Intégration sur site existant"
-          onChange={(on) => setServices({ ...services, integrationCommande: on })}
+          onChange={(on) => {
+            setServices({ ...services, integrationCommande: on });
+            // L'intégration sans le module serait un devis incohérent — le
+            // schéma la refuse ; l'écran la rend simplement impossible.
+            if (on && plan !== "boost") setModule(true);
+          }}
         />
       </div>
 

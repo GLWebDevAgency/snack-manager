@@ -55,6 +55,28 @@ describe('proposalCents avec services', () => {
   });
 });
 
+describe('l’intégration sur site existant', () => {
+  it('exige le module : la proposition sans lui est refusée, Boost suffit', () => {
+    const services = { ...EMPTY_SERVICES, integrationCommande: true };
+    expect(
+      LeadProposalSchema.safeParse({ plan: 'essentiel', services }).success,
+    ).toBe(false);
+    expect(
+      LeadProposalSchema.safeParse({ plan: 'essentiel', onlineOrdering: true, services }).success,
+    ).toBe(true);
+    expect(LeadProposalSchema.safeParse({ plan: 'boost', services }).success).toBe(true);
+  });
+
+  it('comprend la mise en service : les 55 € ne se comptent pas en plus des 190 €', () => {
+    const prix = proposalCents({
+      plan: 'essentiel',
+      onlineOrdering: true,
+      services: { ...EMPTY_SERVICES, integrationCommande: true },
+    });
+    expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.integrationCommande);
+  });
+});
+
 describe('LeadServicesSchema', () => {
   it('refuse site neuf ET refonte sur la même proposition', () => {
     expect(

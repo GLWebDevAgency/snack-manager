@@ -95,7 +95,9 @@ export function buildDevisDocument(
       montantHtCents: SOCIAL_CADENCE_CENTS[services.reseauxSociaux],
     });
   }
-  if (moduleFacture) {
+  // L'intégration sur site existant COMPREND la mise en service : jamais les
+  // deux lignes sur le même devis.
+  if (moduleFacture && !services.integrationCommande) {
     lignes.push({
       designation: 'Mise en service du module commande en ligne',
       recurrence: 'une fois',

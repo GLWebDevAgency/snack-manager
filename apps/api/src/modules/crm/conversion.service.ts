@@ -216,7 +216,9 @@ export class ConversionService {
         poses += 1;
       }
 
-      if (moduleFacture) {
+      // L'intégration sur site existant COMPREND la mise en service — la
+      // pièce de 55 € ne se pose que quand le module vit sur NOTRE page.
+      if (moduleFacture && !body.services.integrationCommande) {
         await this.billing.issue(actor, tenantId, {
           kind: 'mise_en_place',
           period,

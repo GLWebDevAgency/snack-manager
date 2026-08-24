@@ -208,7 +208,8 @@ export const ATELIER_ONCE_LABELS: Record<AtelierOnceKey, string> = {
   siteVitrine: 'Site vitrine clé en main — maquette sur mesure, contenus, référencement local',
   refonteSite: 'Refonte du site existant — reprise complète, maquette validée avant chantier',
   identiteVisuelle: 'Identité visuelle — logo, couleurs, déclinaisons (tickets, vitrine, réseaux)',
-  integrationCommande: 'Intégration de la commande en ligne sur votre site existant',
+  integrationCommande:
+    'Intégration de la commande en ligne sur votre site existant — mise en service du module comprise',
 };
 
 /** Présence internet : fiche Google tenue, avis répondus, rapport mensuel. */
@@ -287,16 +288,37 @@ export const EMPTY_SERVICES: LeadServices = {
   reseauxSociaux: null,
 };
 
-export const LeadProposalSchema = z.object({
-  plan: z.enum(['essentiel', 'complet', 'boost']),
-  /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
-  onlineOrdering: z.boolean().default(false),
-  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-  /** L'Atelier — les services retenus en plus du logiciel. */
-  services: LeadServicesSchema.default(EMPTY_SERVICES),
-  /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
-  note: z.string().trim().max(500).default(''),
-});
+/**
+ * L'intégration sur site existant greffe NOTRE module : la vendre sans le
+ * module mensuel qui la fait vivre serait un devis incohérent — 190 € pour
+ * brancher un service auquel le client ne serait pas abonné. Vérifié ici,
+ * à la proposition COMME à la signature.
+ */
+const integrationExigeLeModule = (
+  p: { plan: string; onlineOrdering: boolean; services: LeadServices },
+  ctx: z.RefinementCtx,
+): void => {
+  if (p.services.integrationCommande && !p.onlineOrdering && p.plan !== 'boost') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['services', 'integrationCommande'],
+      message: 'L’intégration sur site existant exige le module commande en ligne (ou Boost).',
+    });
+  }
+};
+
+export const LeadProposalSchema = z
+  .object({
+    plan: z.enum(['essentiel', 'complet', 'boost']),
+    /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    /** L'Atelier — les services retenus en plus du logiciel. */
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+    /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
+    note: z.string().trim().max(500).default(''),
+  })
+  .superRefine(integrationExigeLeModule);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
 /** La proposition telle que servie — datée du jour où elle a été posée. */
@@ -333,12 +355,16 @@ export function proposalCents(
   servicesMonthlyCents: number;
   setupOnceCents: number;
 } {
+  const services = p.services ?? EMPTY_SERVICES;
   const moduleFacture = p.onlineOrdering && p.plan !== 'boost';
-  const atelier = servicesCents(p.services ?? EMPTY_SERVICES);
+  // L'intégration sur site existant COMPREND la mise en service du module :
+  // facturer les deux serait payer deux fois le même branchement.
+  const miseEnService = moduleFacture && !services.integrationCommande;
+  const atelier = servicesCents(services);
   return {
     monthlyCents: PLAN_MRR_CENTS[p.plan] + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
     servicesMonthlyCents: atelier.monthlyCents,
-    setupOnceCents: (moduleFacture ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
+    setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
   };
 }
 
@@ -463,28 +489,30 @@ export type LeadListQuery = z.infer<typeof LeadListQuerySchema>;
  * chaîne entière d'une installation : le restaurant, le compte gérant, la
  * place fondateur, l'échéance d'essai — et un mot de passe remis UNE fois.
  */
-export const LeadConvertSchema = z.object({
-  /** Le slug public — `<slug>.snackmanager.app`, la carte, la caisse. */
-  slug: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
-  ownerEmail: z.email().max(160),
-  ownerName: z.string().trim().max(120).default(''),
-  plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
-  founderSeat: z.boolean().default(false),
-  /**
-   * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
-   * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
-   * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
-   * avait été proposé. Les premières factures s'en dérivent.
-   */
-  onlineOrdering: z.boolean().default(false),
-  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-  /** L'Atelier signé — mêmes règles que la proposition, même primauté du signé. */
-  services: LeadServicesSchema.default(EMPTY_SERVICES),
-});
+export const LeadConvertSchema = z
+  .object({
+    /** Le slug public — `<slug>.snackmanager.app`, la carte, la caisse. */
+    slug: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
+    ownerEmail: z.email().max(160),
+    ownerName: z.string().trim().max(120).default(''),
+    plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
+    founderSeat: z.boolean().default(false),
+    /**
+     * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
+     * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
+     * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
+     * avait été proposé. Les premières factures s'en dérivent.
+     */
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    /** L'Atelier signé — mêmes règles que la proposition, même primauté du signé. */
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+  })
+  .superRefine(integrationExigeLeModule);
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 
 /* ── « Qui je relance aujourd'hui ? » ─────────────────────────── */

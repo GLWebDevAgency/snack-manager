@@ -95,12 +95,12 @@ describe('composition du devis', () => {
     expect(conditions).toContain('maquette');
   });
 
-  it('refonte seule : une ligne une fois, pas de conditions de site neuf en double', () => {
+  it('intégration sur site existant : la mise en service du module est COMPRISE, jamais doublée', () => {
     const doc = buildDevisDocument(
       LEAD,
       {
         plan: 'essentiel',
-        onlineOrdering: false,
+        onlineOrdering: true,
         billing: 'mensuel',
         services: { ...EMPTY_SERVICES, refonteSite: true, integrationCommande: true },
         note: '',
@@ -108,8 +108,11 @@ describe('composition du devis', () => {
       ISSUER,
       NOW,
     );
+    // Essentiel + module au mois ; refonte + intégration une fois — et AUCUNE
+    // ligne de mise en service à 55 € : les 190 € d'intégration la comprennent.
     expect(doc.lignes.map((l) => [l.recurrence, l.montantHtCents])).toEqual([
       ['par mois', 9_900],
+      ['par mois', 7_900],
       ['une fois', 99_000],
       ['une fois', 19_000],
     ]);
