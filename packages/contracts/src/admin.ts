@@ -201,6 +201,8 @@ export const ADMIN_LOG_ACTIONS = [
   'tenant.create',
   'tenant.suspend',
   'tenant.reactivate',
+  // Le DÉPART d'un client — il nous quitte, on garde tout, on ne coupe rien.
+  'tenant.churn',
   'tenant.plan_change',
   'tenant.note',
   'tenant.detail_view',
@@ -208,8 +210,11 @@ export const ADMIN_LOG_ACTIONS = [
   'device.revoke',
   'screen.revoke',
   'invoice.issue',
+  'invoice.send',
+  'invoice.remind',
   'invoice.pay',
   'invoice.cancel',
+  'invoice.credit',
   // Réglage de PLATEFORME : il ne vise aucun établissement. Voir
   // `PLATFORM_LOG_ACTIONS` ci-dessous pour ce que ce préfixe implique.
   'platform.social_change',
@@ -221,6 +226,7 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.create': 'Création du restaurant',
   'tenant.suspend': 'Suspension du compte',
   'tenant.reactivate': 'Réactivation du compte',
+  'tenant.churn': 'Départ du client',
   'tenant.plan_change': 'Changement de formule',
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
@@ -230,8 +236,11 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'device.revoke': 'Révocation d’un appareil',
   'screen.revoke': 'Révocation d’un écran',
   'invoice.issue': 'Émission d’une facture',
+  'invoice.send': 'Envoi d’un brouillon de facture',
+  'invoice.remind': 'Relance d’une facture',
   'invoice.pay': 'Encaissement d’une facture',
   'invoice.cancel': 'Annulation d’une facture',
+  'invoice.credit': 'Émission d’un avoir',
   // Ce qui change ici part sur NOTRE page d'accueil, sans relecture : le
   // libellé nomme donc la conséquence (la vitrine), pas le formulaire.
   'platform.social_change': 'Réseaux sociaux de la vitrine',
@@ -284,7 +293,7 @@ export const TENANT_LOG_ACTIONS = ADMIN_LOG_ACTIONS.filter(
 );
 
 /**
- * LES TROIS GESTES DE FACTURATION, tracés sous leur vrai nom.
+ * LES GESTES DE FACTURATION, tracés sous leur vrai nom.
  *
  * Ils partagent le journal des suspensions et des révocations — c'est la même
  * histoire qui se raconte, et « relancé le 3, facture émise le 5, encaissée le
@@ -294,17 +303,26 @@ export const TENANT_LOG_ACTIONS = ADMIN_LOG_ACTIONS.filter(
  * journal qui se trompe sur la NATURE du geste est exactement ce qu'on regarde
  * en cas de litige, et c'est le moment où il ne doit pas mentir.
  *
- * Trois conséquences concrètes, toutes acquises par ces trois valeurs :
+ * Trois conséquences concrètes, toutes acquises par ces valeurs :
  *  · le filtre `?action=` de `GET /crm/tenants/:id/logs` isole les gestes
  *    comptables des commentaires d'équipe ;
  *  · `targetId` porte l'identifiant de la PIÈCE, ce qu'une note ne portait pas ;
  *  · `meta` porte le numéro, le montant et le moyen de règlement, relisibles
  *    par une machine — la phrase française, elle, reste dans `reason`.
+ *
+ * La RELANCE (`invoice.remind`) en fait partie au même titre : elle ne change
+ * pas le statut de la pièce, mais c'est bien un geste de facturation rattaché à
+ * une facture précise — « relancé le 3 » doit se relire dans le même fil et sous
+ * le même `targetId` que « encaissée le 12 ». Tout ce qui passe par
+ * `recordInvoiceGesture` porte une action de cette liste.
  */
 export const INVOICE_LOG_ACTIONS = [
   'invoice.issue',
+  'invoice.send',
+  'invoice.remind',
   'invoice.pay',
   'invoice.cancel',
+  'invoice.credit',
 ] as const satisfies readonly AdminLogAction[];
 export type InvoiceLogAction = (typeof INVOICE_LOG_ACTIONS)[number];
 
@@ -339,6 +357,14 @@ export type AdminInvoiceLogMeta = {
   paidAt?: string;
   /** Motif — annulation. */
   cancelReason?: string;
+  /** Canal de relance (`appel`, `sms`…) — relance. */
+  channel?: string;
+  /**
+   * Numéro de la facture d'ORIGINE — avoir. C'est ce champ qui lie l'avoir à la
+   * pièce qu'il corrige : la ligne de journal doit permettre de remonter du
+   * « SM-2026-0009 » négatif au « SM-2026-0004 » réglé qu'il rembourse.
+   */
+  originNumber?: string;
 };
 
 /**
@@ -400,6 +426,18 @@ export const TenantReactivateSchema = z.object({
   reason: z.string().trim().max(500).default(''),
 });
 export type TenantReactivate = z.infer<typeof TenantReactivateSchema>;
+
+/**
+ * Acter le DÉPART d'un client exige un motif, comme la suspension : « pourquoi
+ * nous a-t-il quittés ? » est la question qu'on se posera à chaque bilan, et la
+ * réponse doit se lire dans le journal — pas se reconstituer de mémoire. Le
+ * départ ne coupe pas l'accès (cf. `isAccessBlocked`) : ce n'est pas une
+ * sanction, c'est un constat.
+ */
+export const TenantChurnSchema = z.object({
+  reason: z.string().trim().min(3, 'Indiquez le motif du départ').max(500),
+});
+export type TenantChurn = z.infer<typeof TenantChurnSchema>;
 
 export const TenantPlanChangeSchema = z.object({
   plan: z.enum(ADMIN_PLANS),

@@ -32,6 +32,7 @@ import { Btn, Icon, Input, Panel, useToast } from "@/components/ui";
 import { euroRound, fmtDay, int } from "../../crm";
 import {
   clientsApi,
+  fmtInsightFigure,
   fmtSignalAge,
   fmtSignalFigure,
   fmtSignalSince,
@@ -41,18 +42,17 @@ import {
   SEVERITY_BORDER,
   SEVERITY_RANK,
   SUPPLY_ALERT_LABELS,
-  trend,
+  type ActivityWindow,
   type ClientFile,
   type ClientSignal,
-  type Comparison,
   type HealthComponent,
   type ModuleAdoption,
   type ParkDevice,
   type Recommendation,
-  type SupplyAlert,
+  type SupplyAlertKind,
   type TenantActivity,
 } from "../data";
-import { ActivityBars, Eyebrow, Meter, ScorePill, Trend, Unavailable } from "../ui";
+import { Eyebrow, Meter, ScorePill, Trend, Unavailable } from "../ui";
 
 // ─────────────────────────────────────────────────────────────
 // Santé
@@ -126,17 +126,37 @@ export function HealthSection({ file }: { file: ClientFile }) {
 }
 
 function ComponentRow({ component: c }: { component: HealthComponent }) {
+  // Axe NON MESURÉ : la donnée manque, ce n'est pas une mauvaise note. Ni
+  // chiffre ni jauge — une jauge à zéro se lirait « critique » sur un client
+  // signé hier ; la phrase de l'API dit ce qui manquait.
+  if (!c.measured || c.score === null) {
+    return (
+      <li>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="min-w-0 truncate text-[13px] font-bold text-ink">
+            {c.label}
+            <span className="ml-1.5 cf-fig text-[11px] font-semibold text-mut">
+              {c.weight} %
+            </span>
+          </span>
+          <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.04em] text-mut/70">
+            non mesuré
+          </span>
+        </div>
+        {c.detail && <p className="mt-1 text-xs leading-[1.4] text-mut">{c.detail}</p>}
+      </li>
+    );
+  }
+
   const tone = scoreHealth(c.score) ?? "attention";
   return (
     <li>
       <div className="flex items-baseline justify-between gap-2">
         <span className="min-w-0 truncate text-[13px] font-bold text-ink">
           {c.label}
-          {c.weight !== null && (
-            <span className="ml-1.5 cf-fig text-[11px] font-semibold text-mut">
-              {c.weight} %
-            </span>
-          )}
+          <span className="ml-1.5 cf-fig text-[11px] font-semibold text-mut">
+            {c.weight} %
+          </span>
         </span>
         <span className={cx("cf-fig shrink-0 text-[13px] font-extrabold", HEALTH_TEXT[tone])}>
           {c.score}
@@ -148,64 +168,107 @@ function ComponentRow({ component: c }: { component: HealthComponent }) {
   );
 }
 
-/** L'activité comparée à la période précédente — trois chiffres et une courbe. */
+/**
+ * L'ACTIVITÉ COMPARÉE — les deux fenêtres du contrat, 7 jours puis 30.
+ *
+ * Le graphique de série journalière a DISPARU avec l'ancien lecteur : la route
+ * ne rend pas de série (`CrmTenantActivity` n'en porte pas), et un graphique
+ * qui attend une donnée jamais envoyée est un bloc vide déguisé en graphique.
+ * S'il revient un jour, ce sera par le contrat.
+ */
 function ActivityBlock({ activity }: { activity: TenantActivity }) {
   return (
     <div className="mt-4 border-t border-line pt-4">
-      <Eyebrow>Activité sur {activity.days} jours, comparée aux {activity.days} précédents</Eyebrow>
+      <ActivityWindowBlock window={activity.last7d} />
+      <ActivityWindowBlock window={activity.last30d} className="mt-3.5" />
+    </div>
+  );
+}
+
+function ActivityWindowBlock({
+  window: w,
+  className,
+}: {
+  window: ActivityWindow;
+  className?: string;
+}) {
+  // Le panier moyen de la période PRÉCÉDENTE se déduit des deux champs que
+  // l'API rend (même division que son `avgBasketCents`) — c'est une mise en
+  // forme, pas une tendance inventée : aucun pourcentage n'en est tiré.
+  const previousBasket =
+    w.previousOrders > 0
+      ? Math.round(w.previousRevenueCents / w.previousOrders)
+      : null;
+
+  return (
+    <div className={className}>
+      <Eyebrow>
+        Activité sur {w.days} jours, comparée aux {w.days} précédents
+      </Eyebrow>
       <div className="mt-2.5 flex items-stretch gap-3">
-        <Compare label="Commandes" value={activity.orders} format={(n) => int(n)} />
+        <Compare
+          label="Commandes"
+          current={w.orders}
+          previous={w.previousOrders}
+          deltaPct={w.ordersDeltaPct}
+          format={(n) => int(n)}
+        />
         <Compare
           label="Chiffre d'affaires"
-          value={activity.revenueCents}
+          current={w.revenueCents}
+          previous={w.previousRevenueCents}
+          deltaPct={w.revenueDeltaPct}
           format={euroRound}
         />
-        {activity.ticketCents && (
-          <Compare
-            label="Panier moyen"
-            value={activity.ticketCents}
-            format={(n) => fmtEuro(n)}
-          />
-        )}
+        <Compare
+          label="Panier moyen"
+          current={w.avgBasketCents}
+          previous={previousBasket}
+          format={(n) => fmtEuro(n)}
+        />
       </div>
-      {activity.series.length > 0 && (
-        <div className="mt-3.5">
-          <ActivityBars
-            points={activity.series}
-            label={`Activité sur ${activity.days} jours ; le trait pointillé marque la période précédente`}
-          />
-          <p className="mt-2 text-xs text-mut">
-            Le trait pointillé marque la même journée de la période précédente.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
 
 function Compare({
   label,
-  value,
+  current,
+  previous,
+  deltaPct,
   format,
 }: {
   label: string;
-  value: Comparison;
+  current: number;
+  /** `null` = pas de période de référence à montrer. */
+  previous: number | null;
+  /**
+   * La variation TELLE QUE L'API la rend. `null` est un REFUS (période de
+   * référence trop faible pour qu'un pourcentage veuille dire quelque chose) —
+   * on l'écrit, on ne recalcule JAMAIS le chiffre que l'API a refusé d'écrire.
+   * Absent = la mesure n'a pas de tendance (panier moyen).
+   */
+  deltaPct?: number | null;
   format: (n: number) => string;
 }) {
-  const pct = trend(value.current, value.previous);
   return (
     <div className="min-w-0 flex-1 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
       <div className="truncate text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
         {label}
       </div>
       <div className="cf-fig mt-1 text-xl font-extrabold text-ink">
-        {format(value.current)}
+        {format(current)}
       </div>
-      <div className="mt-0.5 flex items-baseline gap-1.5">
-        <Trend pct={pct} />
-        {value.previous !== null && (
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+        {deltaPct !== undefined &&
+          (deltaPct === null ? (
+            <span className="text-[11px] text-mut/60">tendance non mesurable</span>
+          ) : (
+            <Trend pct={deltaPct} />
+          ))}
+        {previous !== null && (
           <span className="cf-fig truncate text-[11px] text-mut">
-            contre {format(value.previous)}
+            contre {format(previous)}
           </span>
         )}
       </div>
@@ -218,32 +281,39 @@ function Compare({
 // ─────────────────────────────────────────────────────────────
 
 /**
- * CE QU'IL PAIE SANS S'EN SERVIR — le sujet d'appel le plus utile.
+ * CE QUI EST OUVERT SANS SERVIR — le sujet d'appel le plus utile.
  *
  * Ces modules-là remontent EN TÊTE et portent la seule couleur de la section :
- * un client qui paie la fidélité sans l'avoir jamais activée est soit un client
- * à former, soit un client qui résiliera. Les deux se règlent par un appel, et
- * cet appel commence ici.
+ * un module ouvert et jamais utilisé, c'est de la formation à prévoir, ou un
+ * client qui résiliera. Les deux se règlent par un appel, et cet appel
+ * commence ici.
+ *
+ * JAMAIS « facturé » : `provisioned` dit qu'un module est OUVERT (matériel
+ * appairé, surface en service), pas que la formule le facture — aucune
+ * correspondance formule → modules n'existe (limite documentée en tête de
+ * `signals.service.ts`, publiée dans `CRM_SIGNAL_LIMITS`). L'écran affirmait
+ * ici une facturation que l'API refuse précisément d'affirmer, sur la foi d'un
+ * champ `included` qu'elle n'a jamais envoyé.
  */
 export function AdoptionSection({ file }: { file: ClientFile }) {
   const modules = [...file.modules].sort((a, b) => {
-    const wasted = (m: ModuleAdoption) => (m.included && !m.used ? 0 : m.used ? 1 : 2);
+    const wasted = (m: ModuleAdoption) => (m.provisioned && !m.used ? 0 : m.used ? 1 : 2);
     return wasted(a) - wasted(b) || a.label.localeCompare(b.label, "fr");
   });
-  const unused = modules.filter((m) => m.included && !m.used);
+  const unused = modules.filter((m) => m.provisioned && !m.used);
 
   return (
     <Panel
       title="Adoption des modules"
       sub={
         modules.length === 0
-          ? "Ce qu'il utilise, ce qu'il paie sans s'en servir"
+          ? "Ce qu'il utilise, ce qu'il a ouvert sans s'en servir"
           : `${modules.filter((m) => m.used).length} module${modules.filter((m) => m.used).length > 1 ? "s" : ""} utilisé${modules.filter((m) => m.used).length > 1 ? "s" : ""} sur ${modules.length}`
       }
       actions={
         unused.length > 0 ? (
           <span className="rounded-pill border-[1.5px] border-prep/55 px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em] text-prept">
-            {unused.length} payé{unused.length > 1 ? "s" : ""} non utilisé
+            {unused.length} ouvert{unused.length > 1 ? "s" : ""} jamais utilisé
             {unused.length > 1 ? "s" : ""}
           </span>
         ) : undefined
@@ -254,9 +324,9 @@ export function AdoptionSection({ file }: { file: ClientFile }) {
           icon="grid"
           title="Adoption indisponible"
           hint={
-            file.offline.has("health") && file.offline.has("insights")
-              ? "Ni /health ni /insights n'ont répondu : impossible de dire ce que ce client utilise."
-              : "L'API n'a pas encore renvoyé le détail d'usage des modules."
+            file.offline.has("health")
+              ? "La route /crm/tenants/:id/health n'a pas répondu : impossible de dire ce que ce client utilise."
+              : "L'API n'a renvoyé aucun module pour ce client."
           }
         />
       ) : (
@@ -271,7 +341,7 @@ export function AdoptionSection({ file }: { file: ClientFile }) {
 }
 
 function ModuleTile({ module: m }: { module: ModuleAdoption }) {
-  const wasted = m.included && !m.used;
+  const wasted = m.provisioned && !m.used;
   return (
     <li
       className={cx(
@@ -298,13 +368,10 @@ function ModuleTile({ module: m }: { module: ModuleAdoption }) {
               m.used ? "text-mut" : wasted ? "text-prept" : "text-mut/70",
             )}
           >
-            {m.used
-              ? m.usage !== null
-                ? `${int(m.usage)} sur la période`
-                : "Utilisé"
-              : wasted
-                ? "Facturé, jamais utilisé"
-                : "Hors formule"}
+            {/* « Ouvert, jamais utilisé » — jamais « facturé » : voir l'en-tête
+                de la section. Les volumes vivent dans `detail`, rédigé par
+                l'API. */}
+            {m.used ? "Utilisé" : wasted ? "Ouvert, jamais utilisé" : "Non ouvert"}
             {m.used && m.lastUsedAt && ` · ${fmtSince(m.lastUsedAt)}`}
           </div>
           {m.detail && (
@@ -407,7 +474,17 @@ function DeviceRow({
         <div className="truncate text-xs text-mut">
           {d.kindLabel}
           {!d.paired && " · en attente d'appairage"}
+          {/* La télémétrie du battement, quand la tablette l'envoie : c'est
+              elle qui remplace « fermez et rouvrez l'application » au
+              téléphone par un diagnostic. */}
+          {d.appVersion && ` · v${d.appVersion}`}
+          {d.queueDepth !== null && d.queueDepth > 0 && ` · file : ${d.queueDepth}`}
         </div>
+        {d.lastError && (
+          <div className="truncate text-xs font-semibold text-alertt" title={d.lastError}>
+            Dernière erreur : {d.lastError}
+          </div>
+        )}
       </div>
 
       <span
@@ -454,64 +531,136 @@ function DeviceRow({
 // Approvisionnement
 // ─────────────────────────────────────────────────────────────
 
-const SUPPLY_STYLE: Record<SupplyAlert["kind"], string> = {
+const SUPPLY_STYLE: Record<SupplyAlertKind, string> = {
   rupture: "border-alert/60 text-alertt",
   seuil: "border-prep/55 text-prept",
   prix: "border-white/20 text-mut",
 };
 
-/** Ce qui va manquer, ce qui manque déjà, ce qui coûte plus cher qu'avant. */
+/** Une ligne de la section, construite depuis les COMPTEURS du contrat. */
+type SupplyRow = { key: string; kind: SupplyAlertKind; name: string; detail: string };
+
+const plural = (n: number) => (n > 1 ? "s" : "");
+const fmtPct1 = (n: number) =>
+  n.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+
+/**
+ * Ce qui manque déjà, ce qui va manquer, ce qui coûte plus cher qu'avant.
+ *
+ * `/health` rend l'appro COMPTÉE (`ruptures`, `belowPar`, `priceIncreases30d`)
+ * et ne nomme que les trois plus fortes hausses de prix : la section dit les
+ * nombres et nomme ce que l'API nomme — rien de plus. L'ancien lecteur
+ * attendait des LISTES d'alertes et affichait « aucune rupture » devant des
+ * compteurs pleins.
+ *
+ * `available: false` = le contexte appro (PostgreSQL) n'a pas répondu. Les
+ * compteurs valent alors zéro SANS rien dire du stock réel : la section se dit
+ * indisponible — annoncer un stock sain pendant une panne, c'est mentir au
+ * client.
+ */
 export function SupplySection({ file }: { file: ClientFile }) {
-  const order: SupplyAlert["kind"][] = ["rupture", "seuil", "prix"];
-  const alerts = [...file.supply].sort(
-    (a, b) => order.indexOf(a.kind) - order.indexOf(b.kind),
-  );
+  const supply = file.supply;
+
+  if (supply === null || !supply.available) {
+    return (
+      <Panel title="Approvisionnement" sub="Ruptures, seuils franchis, hausses de prix">
+        <Unavailable
+          icon="tag"
+          title="Stock indisponible"
+          hint={
+            supply === null
+              ? "La route /crm/tenants/:id/health n'a pas répondu — ne dites pas au gérant que son stock est bon."
+              : "Le contexte appro n'a pas répondu : la fiche est servie sans le volet stocks — ne dites pas au gérant que son stock est bon."
+          }
+        />
+      </Panel>
+    );
+  }
+
+  const rows: SupplyRow[] = [];
+  if (supply.ruptures > 0) {
+    rows.push({
+      key: "ruptures",
+      kind: "rupture",
+      name: `${int(supply.ruptures)} ingrédient${plural(supply.ruptures)}`,
+      detail: "stock épuisé — la carte se ferme produit par produit",
+    });
+  }
+  if (supply.belowPar > 0) {
+    rows.push({
+      key: "seuil",
+      kind: "seuil",
+      name: `${int(supply.belowPar)} ingrédient${plural(supply.belowPar)}`,
+      detail: "sous le seuil de réappro",
+    });
+  }
+  for (const p of supply.topPriceIncreases) {
+    rows.push({
+      key: `prix-${p.supplierName}-${p.ingredientName}`,
+      kind: "prix",
+      name: p.ingredientName,
+      detail: `${p.supplierName} · ${fmtEuro(p.previousPriceCents)} → ${fmtEuro(p.packPriceCents)} (+${fmtPct1(p.increasePct)} %)`,
+    });
+  }
+  // L'API ne nomme que le trio de tête : le reste se dit en nombre, pas en
+  // silence — sinon la section minimise ce que la fiche santé compte.
+  const extraIncreases = supply.priceIncreases30d - supply.topPriceIncreases.length;
+  const total = supply.ruptures + supply.belowPar + supply.priceIncreases30d;
 
   return (
     <Panel
       title="Approvisionnement"
       sub="Ruptures, seuils franchis, hausses de prix"
       actions={
-        alerts.length > 0 ? (
-          <span className="cf-fig text-[13px] font-extrabold text-ink">
-            {alerts.length}
-          </span>
+        total > 0 ? (
+          <span className="cf-fig text-[13px] font-extrabold text-ink">{total}</span>
         ) : undefined
       }
     >
-      {alerts.length === 0 ? (
-        file.offline.has("insights") ? (
-          <Unavailable
-            icon="tag"
-            title="Stock indisponible"
-            hint="La route /crm/tenants/:id/insights n'a pas répondu — ne dites pas au gérant que son stock est bon."
-          />
+      {rows.length === 0 ? (
+        supply.ingredients === 0 ? (
+          /* Pas de registre ≠ stock sain : sans un seul ingrédient suivi,
+             « rien à signaler » ne voudrait rien dire. */
+          <p className="text-[13px] text-mut">
+            Aucun ingrédient suivi — le registre d&apos;appro n&apos;est pas
+            monté chez ce client.
+          </p>
         ) : (
           <p className="text-[13px] text-mut">
-            Aucun ingrédient sous seuil, aucune rupture, aucune hausse relevée.
+            Aucun ingrédient sous seuil, aucune rupture, aucune hausse relevée
+            sur 30 jours — {int(supply.ingredients)} ingrédient
+            {plural(supply.ingredients)} suivi{plural(supply.ingredients)}.
           </p>
         )
       ) : (
-        <ul className="flex flex-col gap-1.5">
-          {alerts.map((a) => (
-            <li key={a.key} className="flex items-center gap-2.5">
-              <span
-                className={cx(
-                  "w-[104px] shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-center text-[10px] font-extrabold uppercase tracking-[0.06em]",
-                  SUPPLY_STYLE[a.kind],
-                )}
-              >
-                {SUPPLY_ALERT_LABELS[a.kind]}
-              </span>
-              <span className="min-w-0 shrink-0 truncate text-[13px] font-bold text-ink">
-                {a.name}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-right text-xs text-mut">
-                {a.detail}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-1.5">
+            {rows.map((a) => (
+              <li key={a.key} className="flex items-center gap-2.5">
+                <span
+                  className={cx(
+                    "w-[104px] shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-center text-[10px] font-extrabold uppercase tracking-[0.06em]",
+                    SUPPLY_STYLE[a.kind],
+                  )}
+                >
+                  {SUPPLY_ALERT_LABELS[a.kind]}
+                </span>
+                <span className="min-w-0 shrink-0 truncate text-[13px] font-bold text-ink">
+                  {a.name}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-right text-xs text-mut">
+                  {a.detail}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {extraIncreases > 0 && (
+            <p className="mt-2 text-xs text-mut">
+              … et {int(extraIncreases)} autre{plural(extraIncreases)} hausse
+              {plural(extraIncreases)} de prix sur 30 jours.
+            </p>
+          )}
+        </>
       )}
     </Panel>
   );
@@ -693,11 +842,12 @@ function SignalCard({ signal: s }: { signal: ClientSignal }) {
 /**
  * LES ARGUMENTS D'APPEL.
  *
- * Une recommandation n'est utile que CHIFFRÉE et COMPARÉE : « son food cost
- * tacos est à 35 % contre 28 % de médiane réseau » se dit au téléphone, « son
- * food cost est élevé » ne se dit pas. La valeur du client et la référence
- * réseau sont donc mises côte à côte, et le gain mensuel estimé — quand l'API
- * le calcule — ferme l'argument.
+ * Une recommandation n'est utile que CHIFFRÉE : le contrat rend UN chiffre
+ * (`value` + `unit`) et UNE phrase (`detail`) qui porte déjà la comparaison —
+ * « 34 % contre 29 % pour la médiane de 5 restaurants » est rédigé par l'API,
+ * qui seule connaît le panel. La carte affiche donc la phrase et met le
+ * chiffre en pastille ; elle n'attend plus le `benchmark` ni le gain mensuel
+ * que l'API n'a jamais envoyés — c'est ce qui laissait ces lignes vides.
  */
 export function AdviceSection({ file }: { file: ClientFile }) {
   const advice = [...file.recommendations].sort(
@@ -738,6 +888,7 @@ export function AdviceSection({ file }: { file: ClientFile }) {
 }
 
 function AdviceCard({ advice: r }: { advice: Recommendation }) {
+  const figure = fmtInsightFigure(r);
   return (
     <li className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
       <div className="flex items-start gap-2.5">
@@ -750,28 +901,21 @@ function AdviceCard({ advice: r }: { advice: Recommendation }) {
           {r.severity === "critique" ? "Priorité" : r.severity === "attention" ? "À voir" : "Idée"}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] font-bold text-ink">{r.title}</div>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
+            <span className="min-w-0 text-[13.5px] font-bold text-ink">{r.title}</span>
+            {/* LE chiffre du conseil, mis en mots depuis `value` + `unit` —
+                l'infobulle garde la valeur brute pour vérifier au téléphone. */}
+            {figure && (
+              <span
+                className="cf-fig shrink-0 whitespace-nowrap text-lg font-extrabold text-ink"
+                title={`${r.value} ${r.unit}`}
+              >
+                {figure}
+              </span>
+            )}
+          </div>
           {r.detail && (
             <p className="mt-1 text-[13px] leading-[1.45] text-mut">{r.detail}</p>
-          )}
-          {(r.value || r.benchmark) && (
-            <div className="mt-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              {r.value && (
-                <span className="cf-fig text-lg font-extrabold text-ink">{r.value}</span>
-              )}
-              {r.benchmark && (
-                <span className="text-[13px] text-mut">
-                  contre{" "}
-                  <span className="cf-fig font-bold text-ink">{r.benchmark}</span>{" "}
-                  de médiane réseau
-                </span>
-              )}
-            </div>
-          )}
-          {r.gainCentsPerMonth !== null && r.gainCentsPerMonth > 0 && (
-            <div className="cf-fig mt-1.5 text-[13px] font-extrabold text-accent">
-              ≈ {euroRound(r.gainCentsPerMonth)} par mois à la clé
-            </div>
           )}
         </div>
       </div>

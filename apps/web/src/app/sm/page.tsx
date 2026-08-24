@@ -25,7 +25,9 @@ import {
   relanceDue,
   type CrmClient,
   type CrmLead,
+  type OpsFunnelRow,
 } from "@sm/contracts";
+import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
 import { Card, EmptyState, Icon, Kpi, Panel, Skeleton } from "@/components/ui";
@@ -40,9 +42,18 @@ export default function HqDashboard() {
   const [clients, setClients] = useState<CrmClient[] | null>(null);
   const [signals, setSignals] = useState<WorkSignal[] | null>(null);
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
+  const [funnel, setFunnel] = useState<OpsFunnelRow[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    api
+      .get<{ rows: OpsFunnelRow[] }>("/crm/ops/funnel")
+      .then((r) => {
+        if (!cancelled) setFunnel(r.rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFunnel([]);
+      });
     crm
       .clients()
       .then((c) => {
@@ -457,6 +468,44 @@ export default function HqDashboard() {
           )}
         </Panel>
       </div>
+
+      {/* ── L'entonnoir de la commande en ligne ── */}
+      <Panel
+        title="Commande en ligne — l'entonnoir (30 j)"
+        sub={
+          funnel === null
+            ? "Lecture des jalons…"
+            : funnel.length === 0
+              ? "Aucun jalon sur 30 jours — l'entonnoir se remplit dès que des clients visitent une page de commande"
+              : "Visites → paniers → coordonnées → commandes, par établissement"
+        }
+        bodyClassName="flex flex-col gap-1.5"
+      >
+        {funnel === null ? (
+          <Skeleton className="h-[48px]" />
+        ) : (
+          funnel.map((row) => (
+            <div
+              key={row.slug}
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-card border border-white/6 bg-white/3 px-3.5 py-2.5"
+            >
+              <span className="min-w-[120px] flex-1 truncate text-[14px] font-bold text-ink">
+                {row.slug}
+              </span>
+              <span className="cf-fig text-[13px] text-mut">
+                {row.steps.visite} visites → {row.steps.panier} paniers →{" "}
+                {row.steps.coordonnees} coordonnées →{" "}
+                <b className="text-ink">{row.steps.commande} commandes</b>
+              </span>
+              {row.conversionPct !== null && (
+                <span className="cf-fig shrink-0 rounded-pill border border-white/12 px-2 py-px text-[12px] font-extrabold text-accent">
+                  {row.conversionPct} %
+                </span>
+              )}
+            </div>
+          ))
+        )}
+      </Panel>
 
       <Eyebrow className="pt-1">
         MRR estimé d&apos;après le plan de chaque restaurant actif · source de vérité

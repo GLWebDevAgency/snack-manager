@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   PairScreenSchema,
   ScreenCreateSchema,
@@ -9,6 +9,7 @@ import {
   type ScreenTokenQuery,
   type ScreenUpdate,
 } from '@sm/contracts';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { zod } from '../../common/zod.pipe';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { BuildScreenContent } from './build-screen-content.usecase';
@@ -84,6 +85,10 @@ export class ScreensController {
   // ─── Écrans (jeton d'appareil) ───
 
   @Public()
+  // Même serrure que l'appairage des tablettes : un code court se devine,
+  // 10 essais/minute l'en empêchent.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('public/screens/pair')
   pairDevice(@Body(zod(PairScreenSchema)) body: unknown) {
     return this.pair.execute((body as PairScreen).pairingCode);

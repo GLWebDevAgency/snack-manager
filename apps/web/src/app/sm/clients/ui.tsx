@@ -27,7 +27,6 @@ import {
   SIGNAL_SEVERITY_LABELS,
   fmtTrend,
   scoreHealth,
-  type ActivityPoint,
   type SignalSeverity,
 } from "./data";
 
@@ -313,81 +312,14 @@ export function Meter({
   );
 }
 
-/**
- * Barres d'activité comparées à la période précédente.
- *
- * La période précédente est un FILET en retrait derrière la barre courante,
- * jamais une seconde barre côte à côte : ce qu'on lit, c'est « au-dessus ou
- * en dessous de la dernière fois », pas deux séries à comparer une à une.
- * Baseline zéro toujours (DA — graphiques sobres).
+/*
+ * `ActivityBars` (barres jour par jour) a été SUPPRIMÉ avec la publication du
+ * contrat `/health` : la route ne rend AUCUNE série journalière
+ * (`CrmTenantActivity` porte deux fenêtres comparées, rien de plus), et un
+ * graphique qui attend une donnée jamais envoyée est un bloc vide déguisé en
+ * graphique — c'est ce que l'audit a constaté. S'il revient, ce sera par le
+ * contrat, pas par une devinette d'écran.
  */
-export function ActivityBars({
-  points,
-  height = 96,
-  label,
-}: {
-  points: ActivityPoint[];
-  height?: number;
-  label: string;
-}) {
-  if (points.length === 0) {
-    return (
-      <div
-        className="grid place-items-center text-[13px] text-mut"
-        style={{ height }}
-      >
-        Aucune donnée sur la période
-      </div>
-    );
-  }
-
-  const max = Math.max(
-    1,
-    ...points.map((p) => Math.max(p.value, p.previous ?? 0)),
-  );
-  // Au-delà d'une trentaine de barres, un libellé sur deux suffit à situer la
-  // période sans transformer l'axe en pâté gris.
-  const step = Math.ceil(points.length / 12);
-
-  return (
-    <div>
-      <div
-        role="img"
-        aria-label={label}
-        className="flex items-end gap-[3px] border-b border-line2"
-        style={{ height }}
-      >
-        {points.map((p, i) => (
-          <div key={`${p.label}-${i}`} className="relative flex-1" title={`${p.label} · ${p.value}`}>
-            {p.previous !== null && p.previous > 0 && (
-              <span
-                className="absolute inset-x-0 border-t border-dashed border-white/30"
-                style={{ bottom: `${(p.previous / max) * (height - 8)}px` }}
-                aria-hidden
-              />
-            )}
-            <div
-              className="w-full rounded-t-[3px] bg-accent/85"
-              style={{
-                height: Math.max(p.value > 0 ? 3 : 0, (p.value / max) * (height - 8)),
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="mt-1.5 flex gap-[3px]">
-        {points.map((p, i) => (
-          <div
-            key={`l-${p.label}-${i}`}
-            className="min-w-0 flex-1 truncate text-center text-[10px] text-mut"
-          >
-            {i % step === 0 ? p.label : ""}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── États dégradés ───
 

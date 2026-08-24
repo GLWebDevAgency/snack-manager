@@ -38,6 +38,9 @@ Puis un troisième risque s'est matérialisé, et il a fallu l'ajouter :
 | `.github/workflows/ci.yml` | **Vérification du monorepo** | pull request · **appel** par `deploy.yml` | `typecheck`, `lint`, `test`, `build` sur tout le monorepo via Turborepo |
 | `.github/workflows/secrets.yml` | **Balayage des secrets** | pull request · **appel** par `deploy.yml` | gitleaks sur les commits apportés, puis sur l'arbre complet |
 | `.github/workflows/deploy.yml` | **Déploiement** | push sur `develop` · push sur `main` | appelle les deux ci-dessus, puis met en ligne les quatre services sur Railway, puis contrôle la santé (§ 10) |
+| `.github/workflows/e2e.yml` | **Bout en bout** | fin verte d'un **Déploiement** (`workflow_run`) | joue les parcours critiques (commande, cuisine, suspension) dans un vrai navigateur sur les surfaces déployées — ne bloque pas le déploiement (§ 9) |
+| `.github/workflows/sonde.yml` | **Sonde** | cron, deux fois par heure | `scripts/smoke.mjs` sur la production ; alerte sur le webhook d'équipe si `SM_ALERT_WEBHOOK` est posé en secret, sinon le rouge se lit dans l'onglet Actions |
+| `.github/workflows/sauvegarde.yml` | **Sauvegarde** | cron, chaque nuit | tire l'export `GET /ops/export` de la production et le dépose sur Cloudflare R2 (artefact GitHub 90 j en repli) ; sans secrets posés, s'arrête proprement sans rien faire |
 
 Les deux premiers tournent en parallèle. Sur une pull request, la précédente
 exécution est annulée à chaque nouveau push (`concurrency`) ; appelés par
@@ -290,8 +293,11 @@ La troisième est celle qu'on est tenté de sauter, et c'est celle qui sert le
 jour du retour arrière.
 
 **Une CI verte prouve que ça compile et que les tests passent. Elle ne prouve
-pas que ça marche.** Le monorepo n'a pas de tests de bout en bout sur les
-surfaces terrain : la caisse et l'écran cuisine se vérifient à la main.
+pas que ça marche.** Depuis le 20 août 2026, le workflow **Bout en bout**
+(`e2e.yml`) joue les parcours qui coûtent de l'argent — commande, cuisine,
+suspension — dans un vrai navigateur, après chaque déploiement. Mais il tourne
+*après* la mise en ligne et ne bloque rien (§ 9) : la vérification à la main
+sur staging avant `main` reste la règle.
 
 Ce paragraphe décrit le trajet jusqu'à `main`. **La suite — de `main` jusqu'au
 restaurant en service — est au § 10**, et elle est automatique : la fusion
@@ -394,9 +400,18 @@ pas cette règle — c'est vous qui décidez du moment où vous poussez.
 
 - ~~Le déploiement reste manuel.~~ **Réglé le 19 août 2026** — voir §§ 10 à 13.
   Les limites propres au déploiement sont au § 13.
-- **Pas de tests de bout en bout.** `playwright` est présent à la racine mais
-  aucun scénario n'est joué en CI. La caisse, l'écran cuisine et la commande en
-  ligne se vérifient à la main.
+- ~~Pas de tests de bout en bout.~~ **Réglé le 20 août 2026.** Le workflow
+  **Bout en bout** (`.github/workflows/e2e.yml`, documenté en tête du fichier
+  et dans `e2e/README.md`) joue les cinq parcours dont la panne coûte de
+  l'argent à un commerçant, dans un vrai navigateur, sur les surfaces
+  réellement déployées : il se déclenche par `workflow_run` dès que
+  « Déploiement » finit en vert, sur `develop` comme sur `main`.
+
+  **La limite qui reste :** il tourne *après* la mise en ligne et **ne fait pas
+  échouer le déploiement**. Un rouge se lit dans l'onglet Actions, il ne barre
+  pas la route — le rendre bloquant tient en trois lignes dans `deploy.yml`,
+  écrites en commentaire de `e2e.yml`, volontairement laissées à qui décidera
+  d'accepter le délai supplémentaire avant chaque mise en ligne.
 - ~~L'étape « Analyse statique » ne bloque pas la fusion.~~ **Réglé le 22 août
   2026.** L'étape barre désormais la route comme le typage et les tests.
 
@@ -665,44 +680,30 @@ mécanisme, mêmes fichiers.
 | `smoke.mjs` refuse la mauvaise | `✗ révision servie … ≠ attendue …`, **code de sortie 1** |
 | `smoke.mjs` sans expectation | contrôle `IGNORÉ`, révision servie tout de même affichée ; les cinq autres contrôles restent verts sur staging |
 
-**Ce qui n'a pas pu être vérifié en pull request :** `deploy.yml` lui-même, qui
-ne se déclenche que sur un push vers `develop` ou `main` — donc la pose réelle
-de `SM_REVISION` par le job de mise en ligne, avec le jeton de projet Railway
-(et non la session utilisateur). La première poussée sur `develop` est le
-premier essai réel ; c'est aussi elle qui rendra `GET /health` bavard sur
-staging. Regardez le job `Santé après déploiement` jusqu'au bout : c'est là que
-la révision est affirmée pour la première fois.
+**Ce qui n'avait pas pu être vérifié en pull request :** `deploy.yml` lui-même,
+qui ne se déclenche que sur un push vers `develop` ou `main` — donc la pose
+réelle de `SM_REVISION` par le job de mise en ligne, avec le jeton de projet
+Railway (et non la session utilisateur). **Vérifié depuis** : les poussées sur
+`develop` déploient staging et le job `Santé après déploiement` affirme la
+révision servie à chaque passage.
 
-**Le déploiement vers `main` n'a volontairement pas été déclenché.** Le chemin
-est le même à deux valeurs près (le jeton et le nom d'environnement), tous deux
-choisis par la garde plus haut.
-
-> ### ⚠️ Le chemin production n'est pas encore ARMÉ
+> ### ✅ Le chemin production est ARMÉ depuis le 23 août 2026
 >
-> Pour un événement `push`, GitHub exécute les workflows **tels qu'ils sont sur
-> la branche poussée**. C'est ce qui a permis de mettre `deploy.yml` au point
-> sur `develop` sans jamais risquer la production — et c'est aussi ce qui fait
-> qu'aujourd'hui :
+> Longtemps, ce document portait ici un avertissement : pour un événement
+> `push`, GitHub exécute les workflows **tels qu'ils sont sur la branche
+> poussée**, et `deploy.yml` n'était pas encore dans `main` — un push sur
+> `main` ne déployait donc rien. C'est ce qui a permis de mettre le pipeline
+> au point sur `develop` sans jamais risquer la production.
 >
-> ```bash
-> $ git ls-tree -r --name-only origin/main -- .github/workflows/
-> .github/workflows/ci.yml
-> .github/workflows/secrets.yml      # ← pas de deploy.yml
-> ```
+> La fusion `develop` → `main` du 23 août 2026 a emporté les trois fichiers
+> ensemble et armé le chemin : depuis, **chaque fusion vers `main` déploie en
+> production**, et plusieurs déploiements ont fini verts le jour même —
+> vérification, balayage, mise en ligne Railway et contrôle de santé compris
+> (onglet Actions, exécutions « Déploiement » n° 45 et suivantes sur `main`).
 >
-> **Tant que `deploy.yml` n'est pas dans `main`, un push sur `main` ne déploie
-> rien.** Le chemin production existe, il est écrit et conditionné, mais il ne
-> s'armera qu'à la fusion :
->
-> ```bash
-> gh pr create --base main --head develop --fill
-> gh pr checks --watch
-> gh pr merge --squash        # ← cette fusion déploie EN PRODUCTION
-> ```
->
-> Cette fusion emporte aussi le correctif `@sm/supply` décrit plus haut. Elle
-> se fait un jour de semaine, en début de journée, et on regarde le contrôle de
-> santé jusqu'au bout.
+> Ce qui ne change pas : la promotion se fait par pull request `develop` →
+> `main` (§ 4), un jour où quelqu'un peut regarder le job `Santé après
+> déploiement` jusqu'au bout — car la fusion, elle, n'attend personne.
 
 ---
 
@@ -977,9 +978,9 @@ avant vous.
   > ⚠️ **Ne fusionnez jamais `ci.yml` dans `main` sans `deploy.yml`.** Pour un
   > événement `push`, GitHub exécute les workflows tels qu'ils sont **sur la
   > branche poussée** : un `main` qui aurait le nouveau `ci.yml` mais pas
-  > `deploy.yml` ne vérifierait plus rien du tout. Aujourd'hui `deploy.yml`
-  > n'est pas encore sur `main` (§ 10) : la fusion qui l'y emmènera doit
-  > emporter les trois fichiers ensemble. À contrôler avant de fusionner :
+  > `deploy.yml` ne vérifierait plus rien du tout. Les trois fichiers sont sur
+  > `main` ensemble depuis le 23 août 2026 (§ 10) ; la règle vaut pour chaque
+  > retouche future de l'un d'eux. À contrôler avant de fusionner :
   > ```bash
   > git diff --name-only origin/main...HEAD -- .github/workflows/
   > # doit lister ci.yml, secrets.yml ET deploy.yml, ou aucun des trois
@@ -1009,10 +1010,12 @@ avant vous.
   retour automatique après une migration additive peut faire plus de mal que
   la panne.
 
-- **Le contrôle de santé ne dit pas que ça marche.** Il dit que ça répond. La
-  caisse, l'écran cuisine et une commande en ligne complète se vérifient à la
-  main, sur staging, avant `main`. Il n'y a toujours pas de test de bout en
-  bout (§ 9).
+- **Le contrôle de santé ne dit pas que ça marche.** Il dit que ça répond. Le
+  workflow **Bout en bout** (§ 9) joue les parcours critiques dans un vrai
+  navigateur après chaque déploiement — mais il ne bloque rien : un rouge se
+  lit dans l'onglet Actions, après coup. La vérification à la main sur staging
+  avant `main` reste donc de rigueur pour tout changement qui touche la prise
+  de commande.
 
 - ~~**Aucune surface ne publie sa révision.**~~ **Réglé pour l'API le 20 août
   2026** : `GET /health` renvoie le SHA servi, et le contrôle de santé

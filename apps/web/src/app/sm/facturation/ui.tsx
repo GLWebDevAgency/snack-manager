@@ -34,17 +34,22 @@ import {
 } from "@/components/ui";
 import {
   DEFAULT_PAYMENT_METHOD,
+  DEFAULT_REMINDER_CHANNEL,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
+  REMINDER_CHANNELS,
+  REMINDER_CHANNEL_LABELS,
   billingApi,
   errText,
   euros,
   fmtDays,
   fmtDueDate,
+  fmtReminderAge,
   paidAtIso,
   recoveryStep,
   todayInput,
   type InvoicePaymentMethod,
+  type InvoiceReminderChannel,
   type OverdueRow,
   type Tone,
 } from "./data";
@@ -250,21 +255,29 @@ export function Unavailable({
  *
  * Ordre de lecture imposé de gauche à droite : DEPUIS QUAND (le chiffre qui
  * décide), QUI (le client, sa formule, l'état de son compte), QUOI (la pièce),
- * COMBIEN, puis les deux gestes. La ligne n'est pas un lien — elle porte des
+ * COMBIEN, puis les gestes. La ligne n'est pas un lien — elle porte des
  * boutons, et un lien qui enveloppe des boutons finit par ouvrir une fiche
  * quand on voulait encaisser. Le nom du client, lui, l'est.
+ *
+ * Sous le geste que l'échelle impose, la ligne dit ce qui a DÉJÀ été fait :
+ * « relancé il y a 2 j ». C'est ce qui évite que deux personnes rappellent le
+ * même gérant à un jour d'écart — et rien ne s'affiche tant qu'aucune relance
+ * n'existe, une mention « jamais relancé » sur chaque ligne ne guiderait plus.
  */
 export function OverdueLine({
   row,
+  onRemind,
   onPay,
   onCancel,
 }: {
   row: OverdueRow;
+  onRemind: (row: OverdueRow) => void;
   onPay: (row: OverdueRow) => void;
   onCancel: (row: OverdueRow) => void;
 }) {
   const step = recoveryStep(row.overdueDays);
   const tone: Tone = step?.tone ?? "mut";
+  const reminded = fmtReminderAge(row.lastReminderAt);
 
   return (
     <li
@@ -273,7 +286,7 @@ export function OverdueLine({
         tone === "alert" && "bg-alert/6",
       )}
     >
-      {/* ── Depuis quand : le chiffre qui décide ── */}
+      {/* ── Depuis quand : le chiffre qui décide — et ce qui a déjà été fait ── */}
       <div className="flex w-[104px] shrink-0 flex-col">
         <span className={cx("cf-fig text-[22px] font-extrabold leading-none", TONE_TEXT[tone])}>
           {fmtDays(row.overdueDays)}
@@ -282,6 +295,17 @@ export function OverdueLine({
         <span className={cx("mt-1 text-[11px] font-bold leading-tight", TONE_TEXT[tone])}>
           {step?.geste ?? "À surveiller"}
         </span>
+        {reminded && (
+          <span
+            className="mt-1 text-[11px] font-semibold leading-tight text-mut"
+            title={
+              `Dernière relance : ${row.lastReminderChannelLabel || "canal inconnu"}` +
+              (row.reminderCount > 1 ? ` — ${row.reminderCount} relances au total` : "")
+            }
+          >
+            {reminded}
+          </span>
+        )}
       </div>
 
       {/* ── Qui ── */}
@@ -331,8 +355,13 @@ export function OverdueLine({
         {row.amountLabel}
       </div>
 
-      {/* ── Les deux gestes, et la sortie ── */}
+      {/* ── Les gestes, et la sortie ── */}
       <div className="flex shrink-0 items-center gap-2">
+        {/* La relance d'abord : c'est le geste de l'échelle, celui qu'on vient
+            de faire au téléphone — l'encaissement n'arrive qu'après. */}
+        <Btn variant="ghost" size="sm" icon="phone" onClick={() => onRemind(row)}>
+          Relance faite
+        </Btn>
         <Btn variant="ink" size="sm" icon="euro" onClick={() => onPay(row)}>
           Encaisser
         </Btn>
@@ -358,7 +387,7 @@ export function OverdueLine({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Les deux gestes
+// Les gestes
 // ─────────────────────────────────────────────────────────────
 
 /**
@@ -420,6 +449,127 @@ function InvoiceRecap({ row }: { row: OverdueRow }) {
       </div>
       {row.label && <div className="mt-1 text-xs text-mut/80">{row.label}</div>}
     </div>
+  );
+}
+
+/**
+ * RELANCE FAITE.
+ *
+ * On TRACE un geste déjà accompli — l'appel vient d'être passé, le courrier
+ * vient de partir. Rien ne part vers le client depuis cette modale : c'est le
+ * registre qu'on met à jour, sur la pièce et au journal, sous le compte de
+ * l'opérateur. Sans cette trace, l'échelle affichée à gauche (« rappeler à
+ * J+8, relancer par écrit à J+15 ») restait un conseil : personne ne savait où
+ * l'on en était, et deux personnes rappelaient le même gérant à un jour
+ * d'écart.
+ *
+ * Le canal par défaut est l'APPEL — le geste réel de l'échelle à J+8. La note
+ * est libre et facultative : « promet de régler vendredi » est exactement ce
+ * qu'on veut relire avant le prochain coup de fil, mais une relance sans mot
+ * vaut mieux qu'une relance non tracée.
+ */
+export function RemindModal({ row, onClose, onDone }: GestureProps) {
+  const toast = useToast();
+  const [channel, setChannel] = useState<InvoiceReminderChannel>(DEFAULT_REMINDER_CHANNEL);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  async function run() {
+    if (busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await billingApi.remind(row.tenantId, row.id, {
+        channel,
+        ...(note.trim() ? { note: note.trim() } : {}),
+      });
+      toast(`${row.number} — relance tracée`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Relance non tracée — réessayez."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      width={480}
+      title={`Relance faite — ${row.number}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Fermer
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Enregistrement…" : "Tracer la relance"}
+          </Btn>
+        </>
+      }
+    >
+      <InvoiceRecap row={row} />
+
+      <Consequences
+        className="mt-4"
+        tone="ok"
+        does={[
+          "La relance s'écrit sur la pièce — la file affichera « relancé il y a N j » — et au journal du client, sous votre compte.",
+        ]}
+        doesNot={[
+          "Rien n'est envoyé au client : on trace un geste déjà fait (l'appel passé, le courrier parti), on ne le déclenche pas.",
+          "La facture ne change pas de statut : elle reste due, et reste dans la file jusqu'à l'encaissement.",
+        ]}
+      />
+
+      <Field
+        className="mt-4"
+        label="Canal"
+        htmlFor="remind-channel"
+        hint="Liste fermée — pour savoir, à J+15, si le client a déjà été relancé par écrit."
+      >
+        <Select
+          id="remind-channel"
+          autoFocus
+          value={channel}
+          disabled={busy}
+          onChange={(e) => setChannel(e.target.value as InvoiceReminderChannel)}
+        >
+          {REMINDER_CHANNELS.map((c) => (
+            <option key={c} value={c}>
+              {REMINDER_CHANNEL_LABELS[c]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <Field
+        className="mt-3"
+        label="Note"
+        htmlFor="remind-note"
+        hint="Facultative — ce que le gérant a répondu, c'est ce qu'on relira avant le prochain appel."
+      >
+        <Textarea
+          id="remind-note"
+          rows={3}
+          placeholder="Le gérant promet de régler vendredi par virement."
+          value={note}
+          disabled={busy}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </Field>
+
+      {refusal && <Refusal message={refusal} />}
+    </Modal>
   );
 }
 

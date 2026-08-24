@@ -55,6 +55,15 @@ import {
 
 const DEFAULT_API = 'https://api-production-8949.up.railway.app';
 
+/**
+ * Version du bundle, rapportée par le battement de cœur. La source est le
+ * `package.json` de l'app : la bumper fait partie d'une livraison qui change
+ * le comportement du poste — c'est elle qui permet de répondre « cette
+ * tablette tourne sur un vieux bundle » sans se déplacer.
+ */
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- lecture de la version au build, hors graphe ES
+const APP_VERSION: string = (require('../package.json') as { version: string }).version;
+
 /** Le poste peut être pointé vers une API locale sans rebuild (clé `sm.apiUrl`). */
 function resolveBaseUrl(): string {
   if (Platform.OS === 'web') {
@@ -369,11 +378,19 @@ export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
 export async function deviceHeartbeat(): Promise<PairedDevice | null> {
   const device = current;
   if (!device) return null;
+  // La télémétrie qui manquait au support : version du bundle, profondeur de
+  // la file hors-ligne, dernière erreur de synchronisation. De l'état de
+  // machine — jamais une vente, jamais un client.
+  const queue = client.queue.getState();
   let beat: DeviceHeartbeatResult;
   try {
     beat = await deviceFetch<DeviceHeartbeatResult>(
       '/public/devices/heartbeat',
-      {},
+      {
+        appVersion: APP_VERSION,
+        queueDepth: queue.pending,
+        lastError: (queue.lastError ?? '').slice(0, 300),
+      },
       device.deviceToken,
     );
   } catch (e) {

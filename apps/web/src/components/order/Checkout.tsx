@@ -49,6 +49,7 @@ import {
   type CartLine,
   type Customer,
 } from "./cart";
+import { jalonFunnel } from "./funnel";
 import { euros, hhmm, parisParts, phoneOk, uid } from "./helpers";
 import {
   Badge,
@@ -280,6 +281,13 @@ export function Checkout({
     };
   }, [api, demo, step, order, status]);
 
+  // ── Jalon d'entonnoir : le client vient d'entrer dans le tunnel. ──
+  // (En démonstration, `armeFunnel` n'a posé aucun contexte : ce jalon est
+  // alors un no-op par construction.)
+  useEffect(() => {
+    if (open) jalonFunnel("coordonnees");
+  }, [open]);
+
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
     if (busy || !slotIso || !contactOk || cart.lines.length === 0) return;
@@ -311,6 +319,7 @@ export function Checkout({
       }
 
       setOrder(created);
+      jalonFunnel("commande");
       cart.clear(); // la commande existe : le panier ne doit plus pouvoir repartir
       if (typeof navigator !== "undefined" && "vibrate" in navigator) {
         navigator.vibrate(60);

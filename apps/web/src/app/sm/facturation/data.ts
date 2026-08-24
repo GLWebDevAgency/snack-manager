@@ -49,10 +49,13 @@
 import {
   INVOICE_PAYMENT_METHODS,
   INVOICE_PAYMENT_METHOD_LABELS,
+  INVOICE_REMINDER_CHANNELS,
+  INVOICE_REMINDER_CHANNEL_LABELS,
   TENANT_ACCOUNT_STATUS_LABELS,
   formatEuros,
   type BillingPlan,
   type InvoicePaymentMethod,
+  type InvoiceReminderChannel,
   type TenantAccountStatus,
 } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
@@ -200,6 +203,13 @@ export type OverdueRow = {
   /** Accès DÉJÀ coupé : la relance n'est plus le geste, la réactivation l'est. */
   accessBlocked: boolean;
 
+  /** Dernière relance tracée sur la pièce — `null` si jamais relancée. */
+  lastReminderAt: string | null;
+  /** Canal de cette dernière relance, en français (« Appel », « Courrier »…). */
+  lastReminderChannelLabel: string;
+  /** Nombre de relances déjà faites sur cette pièce. */
+  reminderCount: number;
+
   /** Rang de cette créance parmi celles du MÊME client (1 = la plus vieille). */
   rank: number;
   /** Nombre de créances échues de ce client — deux factures font UN appel. */
@@ -266,6 +276,21 @@ export const billingApi = {
     api.post<unknown>(`/crm/tenants/${tenantId}/invoices/${invoiceId}/cancel`, {
       reason,
     }),
+
+  /**
+   * RELANCE FAITE : le canal (défaut « appel ») et une note libre. Le geste
+   * s'écrit sur la pièce ET au journal, sous le compte de l'opérateur — c'est
+   * ce qui transforme l'échelle affichée en recouvrement réellement tracé.
+   */
+  remind: (
+    tenantId: string,
+    invoiceId: string,
+    body: { channel: InvoiceReminderChannel; note?: string },
+  ) =>
+    api.post<unknown>(
+      `/crm/tenants/${tenantId}/invoices/${invoiceId}/remind`,
+      body,
+    ),
 };
 
 /**
@@ -300,6 +325,11 @@ function readInvoice(raw: unknown): Omit<OverdueRow, "rank" | "tenantInvoices" |
   // facial. Les deux sont égaux pour une facture échue, mais c'est le reste dû
   // qui s'additionne — c'est lui que l'API totalise dans `totalCents`.
   const amountCents = num(o, "dueCents", "amountCents") ?? 0;
+  // Le résumé des relances tel que l'API le rend : { count, last }. Une pièce
+  // jamais relancée — ou une réponse d'avant le champ — vaut simplement
+  // « aucune relance », jamais un affichage cassé.
+  const reminders = bag(o.reminders);
+  const lastReminder = bag(reminders.last);
 
   return {
     id: str(o, "_id", "id", "invoiceId"),
@@ -323,6 +353,11 @@ function readInvoice(raw: unknown): Omit<OverdueRow, "rank" | "tenantInvoices" |
     // Un compte suspendu l'est TOUJOURS, quoi que renvoie le drapeau : on prend
     // le drapeau de l'API quand il existe, le statut sinon.
     accessBlocked: bool(tenant, "accessBlocked") ?? status === "suspended",
+
+    lastReminderAt: iso(lastReminder, "at"),
+    lastReminderChannelLabel:
+      str(lastReminder, "channelLabel") || str(lastReminder, "channel"),
+    reminderCount: Math.max(0, Math.round(num(reminders, "count") ?? 0)),
   };
 }
 
@@ -501,11 +536,39 @@ export const PAYMENT_METHOD_LABELS = INVOICE_PAYMENT_METHOD_LABELS;
 export const DEFAULT_PAYMENT_METHOD: InvoicePaymentMethod = "prelevement";
 
 // ─────────────────────────────────────────────────────────────
+// Canaux de relance
+// ─────────────────────────────────────────────────────────────
+
+/** Liste fermée, reprise du contrat — même raison que les moyens de règlement. */
+export const REMINDER_CHANNELS = INVOICE_REMINDER_CHANNELS;
+export const REMINDER_CHANNEL_LABELS = INVOICE_REMINDER_CHANNEL_LABELS;
+
+/**
+ * L'appel est le canal par défaut : c'est le geste réel de l'échelle à J+8
+ * (« Rappeler le gérant »), et neuf relances sur dix se font au téléphone.
+ */
+export const DEFAULT_REMINDER_CHANNEL: InvoiceReminderChannel = "appel";
+
+// ─────────────────────────────────────────────────────────────
 // Formatage propre à cette surface
 // ─────────────────────────────────────────────────────────────
 
 /** « 65 j » — l'unité colle au chiffre, la file se balaie en colonne. */
 export const fmtDays = (days: number): string => `${Math.max(0, Math.round(days))} j`;
+
+/**
+ * « relancé il y a 3 j » — ou « relancé aujourd'hui », parce que « il y a 0 j »
+ * ne se dit pas. `null` quand la pièce n'a jamais été relancée : la ligne
+ * n'affiche alors RIEN — une mention « jamais relancé » sur chaque ligne
+ * noierait la seule information qui compte, celle qui existe.
+ */
+export function fmtReminderAge(at: string | null, now: Date = new Date()): string | null {
+  if (!at) return null;
+  const t = new Date(at).getTime();
+  if (Number.isNaN(t)) return null;
+  const days = Math.max(0, Math.floor((now.getTime() - t) / 86_400_000));
+  return days === 0 ? "relancé aujourd'hui" : `relancé il y a ${days} j`;
+}
 
 /** `2026-06-15T00:00:00.000Z` → `15/06/2026`, en UTC comme l'API et le journal. */
 export function fmtDueDate(value: string | null): string {
@@ -552,4 +615,4 @@ export function paidAtIso(value: string, now: Date = new Date()): string | null 
 export const euros = (cents: number): string => formatEuros(cents);
 
 /** Réexporté pour que la surface se lise sans remonter aux contrats. */
-export type { InvoicePaymentMethod };
+export type { InvoicePaymentMethod, InvoiceReminderChannel };

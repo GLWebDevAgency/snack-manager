@@ -11,6 +11,14 @@ async function bootstrap() {
   // donc un webhook rejeté à chaque appel. Voir
   // `modules/ordering/stripe-webhook.controller.ts`.
   const app = await NestFactory.create(AppModule, { rawBody: true });
+  // Derrière le proxy Railway, `req.ip` serait l'adresse DU PROXY pour tout le
+  // monde : la limitation de débit et le limiteur du guichet d'erreurs
+  // puniraient la planète entière pour un seul abuseur. `trust proxy` fait
+  // lire la vraie adresse dans X-Forwarded-For (premier saut uniquement).
+  (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
+    'trust proxy',
+    1,
+  );
   app.enableCors({ origin: true, credentials: true });
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3001);

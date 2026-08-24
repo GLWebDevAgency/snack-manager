@@ -369,3 +369,33 @@ export interface PublicSiteResponse {
   todayHours: PublicSiteHours | null;
   timezone: string;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Journal NF525 — les gestes sensibles, lisibles
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Les actions du journal d'audit (collection `auditlogs`). Écrit depuis le
+ * premier jour, LISIBLE nulle part jusqu'au 24/08/2026 : un journal de
+ * traçabilité qu'aucun écran ne sait montrer ne protège personne au contrôle
+ * (diagnostic quatre casquettes, P3). `price.change` entre au journal le même
+ * jour — l'en-tête du module l'annonçait sans que personne ne l'écrive.
+ */
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  'order.cancel': 'Annulation de commande',
+  'order.discount': 'Remise',
+  'order.refund': 'Remboursement',
+  'price.change': 'Changement de prix',
+};
+
+/** Une ligne du journal telle que l'écran du gérant la lit. */
+export type AuditEntryView = {
+  _id: string;
+  at: string;
+  action: string;
+  /** Rédigé — jamais un code machine devant un gérant. */
+  actionLabel: string;
+  /** L'équipier dont le PIN a validé le geste — '' pour un geste sans PIN. */
+  staffName: string;
+  meta: Record<string, unknown>;
+};

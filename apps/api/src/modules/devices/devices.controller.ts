@@ -1,11 +1,24 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   DeviceCreateSchema,
+  DeviceHeartbeatBodySchema,
   DevicePinLoginSchema,
   DeviceTokenBodySchema,
   DeviceUpdateSchema,
   PairDeviceSchema,
   type DeviceCreate,
+  type DeviceHeartbeatBody,
   type DevicePinLogin as DevicePinLoginDto,
   type DeviceTokenBody,
   type DeviceUpdate,
@@ -15,6 +28,7 @@ import { zod } from '../../common/zod.pipe';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { readDeviceToken } from './device-access';
 import { DevicePinLogin } from './device-pin-login.usecase';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { HeartbeatDevice } from './heartbeat-device.usecase';
 import { ManageDevices } from './manage-devices.usecase';
 import { PairDeviceUseCase } from './pair-device.usecase';
@@ -87,6 +101,10 @@ export class DevicesController {
 
   // ─── Appareils (jeton d'appareil) ───
 
+  // Un code d'appairage fait 6 caractères sur 31 possibles et vit 15 minutes :
+  // sans limite, il se devine ; à 10 essais/minute, jamais.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Public()
   @HttpCode(200)
   @Post('public/devices/pair')
@@ -99,9 +117,13 @@ export class DevicesController {
   @Post('public/devices/heartbeat')
   beat(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body(zod(DeviceTokenBodySchema)) body: DeviceTokenBody,
+    @Body(zod(DeviceHeartbeatBodySchema)) body: DeviceHeartbeatBody,
   ) {
-    return this.heartbeat.execute(readDeviceToken(headers, body.deviceToken));
+    return this.heartbeat.execute(readDeviceToken(headers, body.deviceToken), {
+      appVersion: body.appVersion,
+      queueDepth: body.queueDepth,
+      lastError: body.lastError,
+    });
   }
 
   /**
@@ -111,6 +133,10 @@ export class DevicesController {
    * corps quand la file hors ligne rejoue une requête persistée. Jamais du
    * corps sous forme de slug : c'est précisément ce qu'on remplace ici.
    */
+  // Un PIN à 4-6 chiffres est LE gibier de la force brute. 15/min laisse un
+  // équipier fébrile retenter, pas un script énumérer.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 15, ttl: 60_000 } })
   @Public()
   @HttpCode(200)
   @Post('public/devices/pin')

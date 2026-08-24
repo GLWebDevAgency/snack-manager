@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   CreateOrderSchema,
   type CreateOrder,
@@ -9,6 +9,7 @@ import {
   type TrackingTokenQuery,
   UpdateOrderStatusSchema,
 } from '@sm/contracts';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Public, TenantId } from '../../common/auth';
 import { OrdersService } from './orders.service';
@@ -85,6 +86,10 @@ export class OrdersController {
   // ─── Public (commande en ligne, sans compte) ───
 
   @Public()
+  // 20 commandes/minute par adresse : aucun client réel n'y touche, un
+  // script qui rembourrerait la cuisine de fausses commandes, si.
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('public/tenants/:slug/orders')
   async createOnline(@Param('slug') slug: string, @Body(zod(CreateOrderSchema)) body: CreateOrder) {
     const tenant = await this.tenants.bySlug(slug);

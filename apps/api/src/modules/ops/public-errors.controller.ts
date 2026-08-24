@@ -1,6 +1,11 @@
 import { Body, Controller, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import { ClientErrorReportSchema, type ClientErrorReport } from '@sm/contracts';
+import {
+  ClientErrorReportSchema,
+  FunnelEventSchema,
+  type ClientErrorReport,
+  type FunnelEvent,
+} from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
 import { Public } from '../../common/auth';
 import { OpsService } from './ops.service';
@@ -19,6 +24,8 @@ import { ReportThrottle } from './report-throttle';
 @Controller('public')
 export class PublicErrorsController {
   private readonly throttle = new ReportThrottle();
+  /** Un client normal émet 4 jalons par commande — 60/min est déjà large. */
+  private readonly funnelThrottle = new ReportThrottle(60);
 
   constructor(private readonly ops: OpsService) {}
 
@@ -30,6 +37,18 @@ export class PublicErrorsController {
     const key = clientKey(req);
     if (this.throttle.allow(key, Date.now())) {
       await this.ops.record(body);
+    }
+    return { ok: true };
+  }
+
+  /** Un jalon du tunnel — même posture que les erreurs : toujours `{ok}`. */
+  @Post('funnel')
+  async funnel(
+    @Body(zod(FunnelEventSchema)) body: FunnelEvent,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    if (this.funnelThrottle.allow(clientKey(req), Date.now())) {
+      await this.ops.recordFunnel(body);
     }
     return { ok: true };
   }

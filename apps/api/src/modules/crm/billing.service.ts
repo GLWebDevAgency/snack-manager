@@ -15,9 +15,11 @@ import {
   defaultInvoiceLabel,
   formatEuros,
   invoiceCounterId,
+  invoiceVatOf,
   invoiceView,
   isAccessBlocked,
   formatInvoiceNumber,
+  LEGACY_INVOICE_VAT,
   monthKey,
   nextInvoiceDue,
   planLabel,
@@ -31,14 +33,18 @@ import {
   type CrmOutstanding,
   type CrmOverdueInvoice,
   type CrmTenantBilling,
+  type InvoiceAmountBasis,
   type InvoiceCancel,
+  type InvoiceCredit,
   type InvoiceIssue,
   type InvoiceKind,
   type InvoicePay,
   type InvoicePaymentMethod,
+  type InvoiceReminderCreate,
   type InvoiceStatus,
   type JwtPayload,
   type StoredInvoice,
+  type StoredInvoiceVat,
   type TenantAccountStatus,
 } from '@sm/contracts';
 import type { Counter, Invoice, Tenant } from '@sm/db';
@@ -60,6 +66,20 @@ const RECOVERY_ORDER = { dueAt: 1, _id: 1 } as const;
 
 /** Statuts stockés d'une facture qui reste à encaisser. */
 const DUE_STATUSES: readonly InvoiceStatus[] = ['envoyee', 'en_retard'];
+
+/**
+ * Filtre des CRÉANCES : émises, ni réglées ni annulées — et JAMAIS un avoir.
+ *
+ * Un avoir porte le statut stocké « envoyée » (émis, pas encore remboursé ni
+ * imputé), mais ce n'est pas une créance : personne ne nous le doit, c'est nous
+ * qui le devons. Le laisser passer ici, c'est une pièce négative dans l'ardoise,
+ * un « prochain prélèvement » absurde sur la fiche, et une ligne de la file de
+ * recouvrement qui ferait décrocher le téléphone pour rembourser plus vite.
+ */
+const DUE_FILTER = {
+  status: { $in: DUE_STATUSES },
+  kind: { $ne: 'avoir' },
+} as const;
 
 /**
  * Tolérance sur une date de règlement « dans le futur » : cinq minutes.
@@ -159,7 +179,7 @@ export class BillingService {
         .limit(query.limit)
         .lean(),
       this.invoices
-        .find({ tenantId: tenant._id, status: { $in: DUE_STATUSES } })
+        .find({ tenantId: tenant._id, ...DUE_FILTER })
         .sort(RECOVERY_ORDER)
         .lean(),
     ]);
@@ -212,7 +232,7 @@ export class BillingService {
     await this.ensureSeeded();
     const oid = toObjectId(tenantId, 'Établissement introuvable');
     const rows = await this.invoices
-      .find({ tenantId: oid, status: { $in: DUE_STATUSES } })
+      .find({ tenantId: oid, ...DUE_FILTER })
       .sort(RECOVERY_ORDER)
       .lean();
     return summarizeOutstanding(
@@ -240,7 +260,7 @@ export class BillingService {
     await this.ensureSeeded();
 
     const [rows, tenants] = await Promise.all([
-      this.invoices.find({ status: { $in: DUE_STATUSES } }).sort(RECOVERY_ORDER).lean(),
+      this.invoices.find({ ...DUE_FILTER }).sort(RECOVERY_ORDER).lean(),
       // Le parc tient en quelques centaines de lignes : une passe complète coûte
       // moins qu'un `$in` reconstruit à chaque appel, et `listClients` fait déjà
       // le même choix.
@@ -286,7 +306,7 @@ export class BillingService {
     };
   }
 
-  // ─── Écritures : les trois gestes ───
+  // ─── Écritures : les gestes ───
 
   /**
    * ÉMETTRE une facture.
@@ -352,6 +372,130 @@ export class BillingService {
         // Le statut STOCKÉ, pas l'effectif : un brouillon préparé le 19 août
         // pour janvier ne s'est pas « émis en retard », il n'est pas parti.
         storedStatus: view.storedStatus,
+      },
+    });
+    return view;
+  }
+
+  /**
+   * ÉMETTRE UN BROUILLON — le faire passer chez le client.
+   *
+   * Un brouillon était une impasse : préparé, il n'avait aucune route pour
+   * partir — l'équipe le laissait mourir ou le recréait en émission directe,
+   * consommant un SECOND numéro de la séquence pour la même prestation. Ce
+   * geste ferme l'impasse : la pièce garde son numéro et passe « envoyée »,
+   * datée du jour où elle part réellement (`issuedAt`), pas du jour où elle a
+   * été préparée.
+   *
+   * SEUL un brouillon s'envoie. Les refus nomment l'état réel de la pièce :
+   * l'équipe doit comprendre ce qui s'est passé (quelqu'un l'a déjà émise ?
+   * réglée ?), pas relire un « statut invalide » générique.
+   */
+  async send(
+    actor: JwtPayload,
+    tenantId: string,
+    invoiceId: string,
+    now: Date = new Date(),
+  ): Promise<CrmInvoice> {
+    const tenant = await this.requireTenant(tenantId);
+    const current = await this.requireInvoice(tenant._id, invoiceId);
+
+    if (current.status === 'payee') {
+      throw new ConflictException(
+        `La facture ${current.number} est déjà réglée : elle n’a plus rien d’un brouillon.`,
+      );
+    }
+    if (current.status === 'annulee') {
+      throw new ConflictException(
+        `La facture ${current.number} est annulée : elle ne s’émet plus.`,
+      );
+    }
+    if (current.status !== 'brouillon') {
+      throw new ConflictException(`La facture ${current.number} est déjà émise.`);
+    }
+
+    const raw = await this.update(current._id, { status: 'envoyee', issuedAt: now });
+
+    const view = toInvoiceView(raw, now);
+    await this.admin.recordInvoiceGesture(actor, String(tenant._id), {
+      action: 'invoice.send',
+      invoiceId: view._id,
+      summary: BILLING_JOURNAL.sent(view),
+      meta: {
+        number: view.number,
+        kind: view.kind,
+        period: view.period.key,
+        amountCents: view.amountCents,
+        dueAt: view.dueAt,
+      },
+    });
+    return view;
+  }
+
+  /**
+   * RELANCER — tracer le geste de recouvrement, sur la PIÈCE et au journal.
+   *
+   * L'échelle de relance que l'écran affiche (rappeler à J+8, relancer par
+   * écrit à J+15, mettre en demeure à J+30) ne valait rien tant que « déjà
+   * relancé ? » se répondait de mémoire : deux personnes rappelaient le même
+   * gérant à un jour d'écart, et un litige ne pouvait pas prouver la relance.
+   * La relance s'écrit donc DEUX fois, comme tout geste de cette surface : sur
+   * la facture (ce que la file relit vite) et au journal (`invoice.remind`,
+   * avec l'auteur — ce qu'un litige relit lentement).
+   *
+   * Une facture réglée ou annulée ne se relance pas : il n'y a plus rien à
+   * réclamer. Un brouillon non plus — rien n'est parti chez le client, on ne
+   * relance pas une somme qu'on n'a jamais demandée.
+   */
+  async remind(
+    actor: JwtPayload,
+    tenantId: string,
+    invoiceId: string,
+    body: InvoiceReminderCreate,
+    now: Date = new Date(),
+  ): Promise<CrmInvoice> {
+    const tenant = await this.requireTenant(tenantId);
+    const current = await this.requireInvoice(tenant._id, invoiceId);
+
+    if (current.status === 'payee') {
+      throw new ConflictException(
+        `La facture ${current.number} est réglée : il n’y a plus rien à relancer.`,
+      );
+    }
+    if (current.status === 'annulee') {
+      throw new ConflictException(
+        `La facture ${current.number} est annulée : elle ne se relance pas.`,
+      );
+    }
+    if (current.status === 'brouillon') {
+      throw new ConflictException(
+        `La facture ${current.number} est un brouillon : émettez-la avant de la relancer.`,
+      );
+    }
+
+    // `$push`, jamais une réécriture du tableau : deux relances simultanées
+    // (deux membres de l'équipe sur le même dossier) doivent survivre toutes
+    // les deux, pas s'écraser l'une l'autre.
+    const raw = await this.invoices
+      .findOneAndUpdate(
+        { _id: current._id },
+        { $push: { reminders: { at: now, channel: body.channel, note: body.note } } },
+        { new: true },
+      )
+      .lean();
+    if (!raw) throw new NotFoundException('Facture introuvable');
+
+    const view = toInvoiceView(raw as RawInvoice, now);
+    await this.admin.recordInvoiceGesture(actor, String(tenant._id), {
+      action: 'invoice.remind',
+      invoiceId: view._id,
+      summary: BILLING_JOURNAL.reminded(view, body.channel, body.note),
+      meta: {
+        number: view.number,
+        kind: view.kind,
+        period: view.period.key,
+        amountCents: view.amountCents,
+        channel: body.channel,
       },
     });
     return view;
@@ -465,6 +609,97 @@ export class BillingService {
     return view;
   }
 
+  /**
+   * L'AVOIR — corriger une facture RÉGLÉE, sans jamais la toucher.
+   *
+   * C'est le geste vers lequel le refus d'annulation renvoyait sans qu'il
+   * existe (« elle se corrige par un avoir, pas par une annulation ») : le
+   * non-payé s'annule, le payé s'avoise. L'argent est encaissé, la pièce est
+   * partie en comptabilité — la correction est donc une NOUVELLE pièce, qui
+   * porte tout ce que la première a dit, en négatif :
+   *
+   *  · un numéro de la MÊME séquence annuelle — un avoir est une pièce
+   *    comptable comme une autre, une seconde numérotation serait un second
+   *    registre à défendre au contrôle ;
+   *  · le montant OPPOSÉ, au MÊME régime de TVA que l'origine — un avoir au
+   *    taux du jour sur une facture au taux d'hier ne solderait pas la TVA
+   *    déclarée ;
+   *  · la MÊME période — c'est cette prestation-là qu'on rembourse.
+   *
+   * STATUT « ENVOYÉE », PAS « PAYÉE » : un avoir émis est une dette de NOTRE
+   * côté. Il ne devient « payé » que remboursé au client ou imputé sur une
+   * facture suivante — l'encaissement existant (`pay`) sait déjà le marquer.
+   * Et il n'entre jamais dans la file de recouvrement : voir `DUE_FILTER`.
+   */
+  async credit(
+    actor: JwtPayload,
+    tenantId: string,
+    invoiceId: string,
+    body: InvoiceCredit,
+    now: Date = new Date(),
+  ): Promise<CrmInvoice> {
+    const tenant = await this.requireTenant(tenantId);
+    const origin = await this.requireInvoice(tenant._id, invoiceId);
+
+    if (origin.kind === 'avoir') {
+      throw new ConflictException(
+        `${origin.number} est déjà un avoir : il ne se corrige pas par un second avoir.`,
+      );
+    }
+    if (origin.status !== 'payee') {
+      throw new ConflictException(
+        `La facture ${origin.number} n’est pas réglée : c’est une annulation qu’il lui faut — l’avoir est réservé aux factures réglées.`,
+      );
+    }
+
+    // Le régime de TVA est LU SUR L'ORIGINE, jamais sur la constante du jour.
+    // Une pièce d'avant le champ `vat` est lue au défaut documenté
+    // (`LEGACY_INVOICE_VAT`) — le régime sous lequel elle a réellement été
+    // facturée. Les `??` sont une formalité de type : `invoiceVatOf` ne rend
+    // jamais de moitié de régime.
+    const { config } = invoiceVatOf((origin.vat ?? null) as StoredInvoiceVat);
+    const vat = {
+      ratePercent: config.ratePercent ?? LEGACY_INVOICE_VAT.ratePercent,
+      amountsAre: (config.amountsAre ?? LEGACY_INVOICE_VAT.amountsAre) as InvoiceAmountBasis,
+    };
+
+    const raw = await this.writeInvoice({
+      tenantId: tenant._id as Types.ObjectId,
+      kind: 'avoir',
+      label: `Avoir sur ${String(origin.number)} — ${body.reason}`,
+      period: {
+        start: new Date(origin.period.start),
+        end: new Date(origin.period.end),
+      },
+      amountCents: -Number(origin.amountCents ?? 0),
+      status: 'envoyee',
+      issuedAt: now,
+      // L'« échéance » d'un avoir n'est pas une créance à dater : elle sert à
+      // situer la pièce dans le temps — et c'est elle qui choisit l'ANNÉE de la
+      // séquence de numérotation. Un avoir émis aujourd'hui se numérote dans la
+      // séquence d'aujourd'hui, même s'il rembourse un mois de l'an dernier.
+      dueAt: now,
+      vat,
+    });
+
+    const view = toInvoiceView(raw, now);
+    await this.admin.recordInvoiceGesture(actor, String(tenant._id), {
+      action: 'invoice.credit',
+      invoiceId: view._id,
+      summary: BILLING_JOURNAL.credited(view, String(origin.number), body.reason),
+      meta: {
+        number: view.number,
+        kind: view.kind,
+        period: view.period.key,
+        amountCents: view.amountCents,
+        // Le lien machine vers la pièce corrigée : c'est lui qui permet de
+        // remonter du négatif au réglé six mois plus tard.
+        originNumber: String(origin.number),
+      },
+    });
+    return view;
+  }
+
   // ─── Numérotation ───
 
   /**
@@ -491,6 +726,8 @@ export class BillingService {
     dueAt: Date;
     paidAt?: Date | null;
     method?: InvoicePaymentMethod | null;
+    /** Régime imposé — l'AVOIR recopie celui de sa pièce d'origine. */
+    vat?: { ratePercent: number; amountsAre: InvoiceAmountBasis };
   }): Promise<RawInvoice> {
     const year = input.dueAt.getUTCFullYear();
     const counterId = invoiceCounterId(year);
@@ -509,7 +746,8 @@ export class BillingService {
         // dernier ne se recalcule pas au taux de cette année. `SM_INVOICE_VAT`
         // dit que nos tarifs sont HORS TAXES et que la TVA est de 20 % ; le
         // montant ci-dessus est donc un montant HT, et la facture le dira.
-        vat: { ...SM_INVOICE_VAT },
+        // Seul l'AVOIR impose un régime : celui de sa pièce d'origine.
+        vat: input.vat ?? { ...SM_INVOICE_VAT },
         status: input.status,
         issuedAt: input.issuedAt,
         dueAt: input.dueAt,

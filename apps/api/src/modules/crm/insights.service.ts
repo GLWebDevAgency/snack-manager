@@ -1,7 +1,15 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, type PipelineStage } from 'mongoose';
-import type { JwtPayload } from '@sm/contracts';
+import type {
+  CrmFoodCostBenchmark,
+  CrmInsight,
+  CrmProductMargin,
+  CrmQuietSlot,
+  CrmStockoutLoss,
+  CrmTenantInsights,
+  JwtPayload,
+} from '@sm/contracts';
 import type { Order, Product, Tenant } from '@sm/db';
 import { lineCostCents, type SupplyDb } from '@sm/supply';
 import { SUPPLY_DB } from '../../supply-db.module';
@@ -107,96 +115,30 @@ export const MIN_ORDERS_FOR_SLOTS = 30;
 
 // ─── Types de sortie ───
 
-export type CrmInsightUnit = 'pourcent' | 'points' | 'centimes' | 'commandes' | 'produits';
-export type CrmInsightSeverity = 'info' | 'attention' | 'urgent';
-
 /**
- * Une recommandation : un intitulé court, une explication d'une phrase, un
- * chiffre. Les trois sont obligatoires — un conseil sans chiffre n'est pas un
- * conseil, c'est une impression.
+ * LA FORME DU CONSEIL EST PUBLIÉE, elle ne vit plus ici.
+ *
+ * `CrmTenantInsights` et ses briques (`CrmInsight`, benchmark, créneaux,
+ * marges, pertes) sont désormais dans `@sm/contracts` (`health.ts`, avec la
+ * fiche de santé) : ce fichier n'en est plus que le PRODUCTEUR — même bascule
+ * que `signals.service` pour `CrmQueueSignal`. L'écran attendait ici des
+ * champs jamais rendus (`benchmark` en chaîne, un gain mensuel estimé) et la
+ * mise côte à côte du conseil ne s'affichait jamais ; le contrat partagé rend
+ * ce genre de divergence visible au typecheck, pas à l'écran.
+ *
+ * Les types sont réexportés tels quels : les consommateurs internes (les
+ * tests notamment) ne changent pas d'import.
  */
-export type CrmInsight = {
-  /** Clé stable, pour que le web puisse cibler un conseil sans lire le texte. */
-  key: string;
-  title: string;
-  detail: string;
-  value: number;
-  unit: CrmInsightUnit;
-  severity: CrmInsightSeverity;
-};
-
-export type CrmFoodCostBenchmark = {
-  /** `false` = donnée insuffisante ; aucun conseil n'en est tiré. */
-  available: boolean;
-  /** Coût matière du restaurant, en % du CA des lignes couvertes. */
-  tenantPct: number | null;
-  /** Médiane du réseau, anonymisée. `null` si le panel est trop petit. */
-  networkMedianPct: number | null;
-  /** Taille du panel — le seul chiffre qu'on dit du réseau. */
-  panel: number;
-  /** Écart en POINTS de pourcentage (positif = ce client coûte plus cher). */
-  deltaPoints: number | null;
-  costCents: number;
-  revenueCents: number;
-  /** Part du CA couverte par une recette saisie. */
-  coveragePct: number;
-};
-
-export type CrmQuietSlot = {
-  hour: number;
-  label: string;
-  orders: number;
-  /** Moyenne du restaurant sur sa propre amplitude de service. */
-  averageOrders: number;
-  /** De combien de % cette heure est en dessous de cette moyenne. */
-  gapPct: number;
-};
-
-export type CrmProductMargin = {
-  productId: string;
-  name: string;
-  qty: number;
-  revenueCents: number;
-  costCents: number;
-  /** Marge matière sur toute la fenêtre — la base de « marge faible ». */
-  marginPct: number;
-  /** Marge de la quinzaine récente — `null` si le volume était trop faible. */
-  recentMarginPct: number | null;
-  /** Marge de la quinzaine précédente, mêmes conditions de volume. */
-  previousMarginPct: number | null;
-  /** Points de marge perdus d'une quinzaine à l'autre (positif = recul). */
-  marginDropPoints: number | null;
-};
-
-export type CrmStockoutLoss = {
-  productId: string;
-  name: string;
-  /** Unités vendues par jour de service, avant la coupure. */
-  qtyPerDay: number;
-  /** Manque à gagner estimé par jour de rupture, en CENTIMES. */
-  lossPerDayCents: number;
-  /** Ce qui a coupé le produit : rupture d'ingrédient, ou coupure au comptoir. */
-  cause: 'ingredient' | 'manuel';
-};
-
-export type CrmTenantInsights = {
-  tenantId: string;
-  name: string;
-  windowDays: number;
-  /** Jours où le restaurant a réellement servi sur la fenêtre. */
-  serviceDays: number;
-  foodCost: CrmFoodCostBenchmark;
-  quietSlots: CrmQuietSlot[];
-  lowMarginProducts: CrmProductMargin[];
-  fallingMarginProducts: CrmProductMargin[];
-  stockoutLosses: {
-    products: CrmStockoutLoss[];
-    totalPerDayCents: number;
-  };
-  /** Ce qu'on dit au restaurateur. Vide si la donnée ne permet rien. */
-  recommendations: CrmInsight[];
-  computedAt: string;
-};
+export type {
+  CrmFoodCostBenchmark,
+  CrmInsight,
+  CrmInsightSeverity,
+  CrmInsightUnit,
+  CrmProductMargin,
+  CrmQuietSlot,
+  CrmStockoutLoss,
+  CrmTenantInsights,
+} from '@sm/contracts';
 
 // ─── Fonctions pures ───
 

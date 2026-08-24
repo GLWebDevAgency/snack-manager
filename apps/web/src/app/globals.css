@@ -407,14 +407,26 @@ a {
  * ne prend JAMAIS la main (script bloqué, erreur d'hydratation, réseau coupé
  * au mauvais moment), un rectangle noir masquerait le site pour toujours.
  *
- * L'animation ci-dessous l'efface d'elle-même. Elle tient l'opacité pleine
- * pendant 92 % de sa durée — assez pour que l'animation JS se déroule sans
- * être ternie — puis retire le calque. En marche normale, React l'a démonté
- * bien avant. C'est une ceinture qu'on ne voit jamais servir, et qui évite un
- * site entièrement noir le jour où quelque chose casse.
+ * L'animation ci-dessous l'efface d'elle-même : opacité pleine pendant 92 %
+ * de sa durée, puis retrait. C'est une ceinture qu'on ne voit jamais servir,
+ * et qui évite un site entièrement noir le jour où quelque chose casse.
  *
- * SA DURÉE EST PLUS LONGUE QUE CELLE DE L'ANIMATION (6 s contre 3,6) : le
- * filet doit se déclencher APRÈS, jamais pendant.
+ * ═══ LE FILET SE RETIRE DÈS QUE LE JS A LA MAIN ═══
+ *
+ * Dans la cascade, une animation CSS en cours l'emporte sur le style inline.
+ * Tant que le filet tournait, le `opacity` que `Splash.tsx` écrit sur ce même
+ * nœud était donc ignoré : l'animation JS finissait à 3,6 s, mais le calque
+ * restait noir jusqu'à 92 % des 6 s du filet — le trou noir d'une à deux
+ * secondes constaté en production sur la vitrine, où le calque, rendu serveur
+ * en mode `toujours`, n'est jamais démonté. « Plus long que l'animation pour
+ * se déclencher après, jamais pendant » était le mauvais raisonnement : plus
+ * long ou pas, le filet écrasait la sortie pendant toute sa course.
+ *
+ * D'où la règle `[data-js-actif]` : au premier tour de sa boucle, le
+ * composant pose l'attribut, le filet se retire et la sortie redevient celle
+ * du dessin. Sans JS — script bloqué, hydratation qui échoue — l'attribut
+ * n'apparaît jamais et le filet garde ses 6 s, plus longues que l'animation
+ * pour ne pas écourter un chargement simplement lent à prendre la main.
  *
  * Et sous `prefers-reduced-motion`, la règle globale de ce fichier ramène
  * toute animation à 0,01 ms — le calque disparaît donc immédiatement, ce qui
@@ -445,6 +457,12 @@ a {
   /* Le fond du splash est le noir de carte de la charte, pas le noir pur du
      canevas : il se distingue d'un cheveu du fond de page, ce qui évite le
      raccord invisible au moment où il s'efface. */
+}
+
+/* Le JS pilote : le filet doit lâcher, sinon son opacité animée écrase la
+   sortie inline pendant toute sa course — voir le bloc ci-dessus. */
+.sm-splash[data-js-actif] {
+  animation: none;
 }
 
 .sm-splash-halo {

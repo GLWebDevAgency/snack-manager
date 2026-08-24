@@ -1,8 +1,15 @@
 import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { ErrorReport, ErrorSource, OpsErrorGroup } from '@sm/contracts';
-import type { ErrorEvent } from '@sm/db';
+import type {
+  ErrorReport,
+  ErrorSource,
+  FunnelEvent as FunnelEventBody,
+  OpsErrorGroup,
+  OpsFunnelRow,
+} from '@sm/contracts';
+import type { ErrorEvent, FunnelEvent } from '@sm/db';
+import { composeFunnel } from './funnel-compose';
 import { ERROR_FORWARDER, type ErrorForwarder } from '../../infrastructure/alerts/error-forwarder';
 import { errorFingerprint } from './fingerprint';
 
@@ -29,11 +36,32 @@ export class OpsService {
 
   constructor(
     @InjectModel('ErrorEvent') private readonly errors: Model<ErrorEvent>,
+    @InjectModel('FunnelEvent') private readonly funnel: Model<FunnelEvent>,
     // Optionnel deux fois : au sens de Nest (les tests construisent sans lui)
     // et au sens du produit (sans SENTRY_DSN, le relais est un noop).
     @Optional() @Inject(ERROR_FORWARDER) forwarder?: ErrorForwarder,
   ) {
     this.forwarder = forwarder?.enabled ? forwarder : null;
+  }
+
+  /** Un jalon du tunnel — même contrat que `record` : n'échoue JAMAIS. */
+  async recordFunnel(event: FunnelEventBody, now: Date = new Date()): Promise<void> {
+    try {
+      await this.funnel.create({ ...event, at: now });
+    } catch (cause) {
+      // eslint-disable-next-line no-console
+      console.error('jalon de tunnel perdu :', cause);
+    }
+  }
+
+  /** L'entonnoir par établissement sur la fenêtre demandée. */
+  async funnelRows(days = 30, now: Date = new Date()): Promise<OpsFunnelRow[]> {
+    const floor = new Date(now.getTime() - days * 86_400_000);
+    const rows = await this.funnel.aggregate<{ _id: { slug: string; step: string }; n: number }>([
+      { $match: { at: { $gte: floor } } },
+      { $group: { _id: { slug: '$slug', step: '$step' }, n: { $sum: 1 } } },
+    ]);
+    return composeFunnel(rows.map((r) => ({ slug: r._id.slug, step: r._id.step, n: r.n })));
   }
 
   async record(entry: ErrorReport, now: Date = new Date()): Promise<void> {

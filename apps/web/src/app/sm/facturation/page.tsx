@@ -25,8 +25,9 @@
  * ─── Ce que l'écran ne fait pas ───
  *
  * Il n'émet pas de facture. L'émission appartient à un client précis (période,
- * nature, montant) et se joue sur sa fiche ; ici on ne fait que RECOUVRER ce qui
- * est déjà échu. Deux gestes, pas trois : encaisser, annuler.
+ * nature, montant) et se joue sur sa fiche ; ici on ne fait que RECOUVRER ce
+ * qui est déjà échu. Trois gestes, pas quatre : relancer (et le tracer),
+ * encaisser, annuler.
  *
  * Cloisonnement : les deux routes lues traversent le parc entier et exigent
  * `sm_admin` côté API. Respect des clients de nos clients : aucun consommateur
@@ -58,11 +59,12 @@ import {
   CancelModal,
   OverdueLine,
   PayModal,
+  RemindModal,
   Unavailable,
 } from "./ui";
 
 /** Le geste ouvert sur une créance — une seule modale à la fois. */
-type Gesture = { row: OverdueRow; kind: "encaisser" | "annuler" };
+type Gesture = { row: OverdueRow; kind: "relancer" | "encaisser" | "annuler" };
 
 export default function FacturationPage() {
   const [queue, setQueue] = useState<BillingQueue | null>(null);
@@ -277,11 +279,15 @@ export default function FacturationPage() {
             TABLE dont les colonnes se lisent l'une en face de l'autre — une
             ancienneté qui passe sous le nom du client ne se balaie plus.
           */}
-          <ul className="cf-scroll overflow-x-auto [&>li]:min-w-[900px]">
+          {/* 1000 px : la ligne porte désormais TROIS gestes — en dessous, les
+              boutons passeraient sous le montant et la table ne se balaierait
+              plus en colonnes. */}
+          <ul className="cf-scroll overflow-x-auto [&>li]:min-w-[1000px]">
             {rows.map((row) => (
               <OverdueLine
                 key={row.id}
                 row={row}
+                onRemind={(r) => setGesture({ row: r, kind: "relancer" })}
                 onPay={(r) => setGesture({ row: r, kind: "encaisser" })}
                 onCancel={(r) => setGesture({ row: r, kind: "annuler" })}
               />
@@ -303,6 +309,14 @@ export default function FacturationPage() {
       </p>
 
       {/* ── Les gestes ── */}
+      {gesture?.kind === "relancer" && (
+        <RemindModal
+          key={`remind-${gesture.row.id}`}
+          row={gesture.row}
+          onClose={() => setGesture(null)}
+          onDone={reload}
+        />
+      )}
       {gesture?.kind === "encaisser" && (
         <PayModal
           key={`pay-${gesture.row.id}`}

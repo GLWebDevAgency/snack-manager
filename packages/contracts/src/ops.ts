@@ -47,6 +47,46 @@ export type ErrorReport = {
   appVersion?: string;
 };
 
+/* ── Le tunnel de commande, en chiffres ───────────────────────── */
+
+/**
+ * QUATRE JALONS, PAS UN DE PLUS — le tunnel était totalement aveugle : on
+ * vendait un module de commande en ligne sans pouvoir dire s'il convertit ni
+ * où il perd les clients (diagnostic quatre casquettes, P2).
+ *
+ * Un jalon est ANONYME par construction : un slug d'établissement, une étape,
+ * un canal. Ni identifiant de commande, ni panier, ni cookie — ce n'est pas
+ * de la mesure d'audience, c'est un entonnoir de produit.
+ */
+export const FUNNEL_STEPS = ['visite', 'panier', 'coordonnees', 'commande'] as const;
+export type FunnelStep = (typeof FUNNEL_STEPS)[number];
+
+export const FUNNEL_STEP_LABELS: Record<FunnelStep, string> = {
+  visite: 'Visites',
+  panier: 'Paniers commencés',
+  coordonnees: 'Coordonnées saisies',
+  commande: 'Commandes passées',
+};
+
+/** Par où le client est entré — la page, le widget, ou un domaine propre. */
+export const FUNNEL_CANALS = ['page', 'embed', 'domaine'] as const;
+export type FunnelCanal = (typeof FUNNEL_CANALS)[number];
+
+export const FunnelEventSchema = z.object({
+  slug: z.string().trim().min(1).max(60),
+  step: z.enum(FUNNEL_STEPS),
+  canal: z.enum(FUNNEL_CANALS),
+});
+export type FunnelEvent = z.infer<typeof FunnelEventSchema>;
+
+/** L'entonnoir d'un établissement, tel que l'écran le lit. */
+export type OpsFunnelRow = {
+  slug: string;
+  steps: Record<FunnelStep, number>;
+  /** commandes / visites, en pourcentage entier — null sans visite. */
+  conversionPct: number | null;
+};
+
 /** Un groupe d'erreurs tel que l'écran /sm/erreurs le lit. */
 export type OpsErrorGroup = {
   _id: string;
