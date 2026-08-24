@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   classerUrlsMongo,
+  construireUrlProxy,
   extraireNomsServices,
   grefferCheminBase,
+  grefferRequete,
   masquerUrl,
+  trouverProxyTcp,
 } from './railway';
 
 /**
@@ -27,6 +30,16 @@ describe('extraireNomsServices', () => {
     expect(
       extraireNomsServices({ services: { edges: [{ node: { name: 'web' } }, { node: { name: 'mongo' } }] } }),
     ).toEqual(['web', 'mongo']);
+  });
+
+  it('ramasse les name en profondeur, dédoublonnés — un vrai service ne doit jamais manquer', () => {
+    expect(
+      extraireNomsServices({
+        project: { name: 'snack-manager' },
+        environments: [{ name: 'production', serviceInstances: [{ service: { name: 'Mongo' } }] }],
+        services: [{ name: 'Mongo' }],
+      }),
+    ).toEqual(['snack-manager', 'production', 'Mongo']);
   });
 
   it('rend une liste vide sur un JSON inattendu, sans lever', () => {
@@ -61,6 +74,78 @@ describe('classerUrlsMongo', () => {
       api: { REDIS_URL: 'redis://default:password@host:6379', SM_REVISION: 'abc' },
     });
     expect(resultat).toEqual({ publique: undefined, interne: undefined });
+  });
+
+  it('entre deux internes, garde celle qui porte le chemin de base — celle de l’API', () => {
+    const sansChemin = 'mongodb://user:password@mongo.railway.internal:27017';
+    const avecChemin = 'mongodb://user:password@mongo.railway.internal:27017/snack?authSource=admin';
+    expect(classerUrlsMongo({ Mongo: { MONGO_URL: sansChemin }, api: { MONGO_URL: avecChemin } }).interne).toBe(avecChemin);
+    expect(classerUrlsMongo({ api: { MONGO_URL: avecChemin }, Mongo: { MONGO_URL: sansChemin } }).interne).toBe(avecChemin);
+  });
+});
+
+describe('trouverProxyTcp', () => {
+  const interne = 'mongodb://user:password@mongo.railway.internal:27017';
+
+  it('trouve le service qui porte À LA FOIS le proxy TCP et une URL Mongo interne', () => {
+    expect(
+      trouverProxyTcp({
+        api: { MONGO_URL: interne },
+        Mongo: {
+          MONGO_URL: interne,
+          RAILWAY_TCP_PROXY_DOMAIN: 'tramway.proxy.rlwy.net',
+          RAILWAY_TCP_PROXY_PORT: '16828',
+        },
+      }),
+    ).toEqual({ interne, domaine: 'tramway.proxy.rlwy.net', port: '16828', service: 'Mongo' });
+  });
+
+  it('ignore un proxy TCP qui ne dessert pas Mongo (Postgres, Redis…)', () => {
+    expect(
+      trouverProxyTcp({
+        Postgres: {
+          DATABASE_URL: 'postgresql://user:password@pg.railway.internal:5432/sm',
+          RAILWAY_TCP_PROXY_DOMAIN: 'tramway.proxy.rlwy.net',
+          RAILWAY_TCP_PROXY_PORT: '5000',
+        },
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('construireUrlProxy', () => {
+  it('remplace l’hôte interne par le proxy, en gardant identifiants, chemin et requête', () => {
+    expect(
+      construireUrlProxy(
+        'mongodb://user:password@mongo.railway.internal:27017/snack?authSource=admin',
+        'tramway.proxy.rlwy.net',
+        '16828',
+      ),
+    ).toBe('mongodb://user:password@tramway.proxy.rlwy.net:16828/snack?authSource=admin');
+  });
+
+  it('fonctionne aussi sans identifiants ni chemin', () => {
+    expect(construireUrlProxy('mongodb://mongo.railway.internal:27017', 'hote.net', '1234')).toBe(
+      'mongodb://hote.net:1234',
+    );
+  });
+});
+
+describe('grefferRequete', () => {
+  const publique = 'mongodb://default:password@tramway.proxy.rlwy.net:33017/snack';
+
+  it('greffe la requête de l’interne — authSource=admin en tête — quand la publique n’en a pas', () => {
+    expect(
+      grefferRequete(publique, 'mongodb://user:password@mongo.railway.internal:27017/snack?authSource=admin'),
+    ).toBe(`${publique}?authSource=admin`);
+  });
+
+  it('respecte une requête déjà présente, et une interne muette ne change rien', () => {
+    expect(grefferRequete(`${publique}?w=majority`, 'mongodb://mongo.railway.internal:27017?authSource=admin')).toBe(
+      `${publique}?w=majority`,
+    );
+    expect(grefferRequete(publique, 'mongodb://mongo.railway.internal:27017/snack')).toBe(publique);
+    expect(grefferRequete(publique)).toBe(publique);
   });
 });
 

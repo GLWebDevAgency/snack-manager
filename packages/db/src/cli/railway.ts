@@ -26,23 +26,30 @@ export type CarteVariables = Record<string, string>;
 /**
  * Les noms de services d'un `railway status --json`, quelle que soit la forme
  * — la CLI a déjà changé entre un tableau plat et des `edges` façon GraphQL,
- * et un JSON illisible ne doit pas faire tomber la console : liste vide, la
- * liste de repli prendra le relais.
+ * et un JSON illisible ne doit pas faire tomber la console. On balaie donc le
+ * document EN PROFONDEUR et on ramasse tout champ `name` : quelques faux noms
+ * de service au pire (un `railway variables` de plus qui échoue en silence),
+ * jamais un vrai nom manqué — c'est le manqué qui a coûté au premier essai
+ * terrain.
  */
 export function extraireNomsServices(statut: unknown): string[] {
-  const services = (statut as { services?: unknown } | null)?.services;
-  const noms = (xs: unknown[]): string[] =>
-    xs
-      .map((x) => {
-        const direct = (x as { name?: unknown }).name;
-        const parNoeud = (x as { node?: { name?: unknown } }).node?.name;
-        return typeof direct === 'string' ? direct : parNoeud;
-      })
-      .filter((n): n is string => typeof n === 'string');
-  if (Array.isArray(services)) return noms(services);
-  const edges = (services as { edges?: unknown } | null)?.edges;
-  if (Array.isArray(edges)) return noms(edges);
-  return [];
+  const noms = new Set<string>();
+  const parcourir = (valeur: unknown): void => {
+    if (Array.isArray(valeur)) {
+      for (const element of valeur) parcourir(element);
+      return;
+    }
+    if (valeur === null || typeof valeur !== 'object') return;
+    for (const [cle, contenu] of Object.entries(valeur)) {
+      if (cle === 'name' && typeof contenu === 'string' && contenu.trim() !== '') {
+        noms.add(contenu);
+      } else {
+        parcourir(contenu);
+      }
+    }
+  };
+  parcourir(statut);
+  return [...noms];
 }
 
 /**
@@ -60,12 +67,53 @@ export function classerUrlsMongo(parService: Record<string, CarteVariables>): {
   for (const variables of Object.values(parService)) {
     for (const [nom, valeur] of Object.entries(variables)) {
       if (typeof valeur !== 'string' || !/^mongodb(\+srv)?:\/\//.test(valeur)) continue;
-      if (valeur.includes('.railway.internal')) interne ??= valeur;
-      else candidates.push({ nom, valeur });
+      if (valeur.includes('.railway.internal')) {
+        // Entre deux URL internes, celle qui PORTE un chemin de base gagne :
+        // c'est elle (celle de l'API, en pratique) qui dit où l'API lit.
+        if (interne === undefined || (cheminDeBase(interne) === '' && cheminDeBase(valeur) !== '')) {
+          interne = valeur;
+        }
+      } else {
+        candidates.push({ nom, valeur });
+      }
     }
   }
   const publique = (candidates.find((c) => /PUBLIC/i.test(c.nom)) ?? candidates[0])?.valeur;
   return { publique, interne };
+}
+
+/**
+ * L'URL publique d'un service Mongo SANS `MONGO_PUBLIC_URL` : Railway pose le
+ * proxy TCP en deux variables (`RAILWAY_TCP_PROXY_DOMAIN` et `…_PORT`) sur le
+ * service — l'essai terrain du 24/08 n'avait QUE ça. On rebâtit l'URL de
+ * l'interne en remplaçant l'hôte : identifiants, chemin de base et requête
+ * (dont `authSource=admin`, sans lequel Mongo refuse l'utilisateur) suivent.
+ */
+export function trouverProxyTcp(
+  parService: Record<string, CarteVariables>,
+): { interne: string; domaine: string; port: string; service: string } | undefined {
+  for (const [service, variables] of Object.entries(parService)) {
+    const domaine = variables.RAILWAY_TCP_PROXY_DOMAIN;
+    const port = variables.RAILWAY_TCP_PROXY_PORT;
+    if (!domaine || !port) continue;
+    const interne = Object.values(variables).find(
+      (valeur) =>
+        typeof valeur === 'string' &&
+        /^mongodb(\+srv)?:\/\//.test(valeur) &&
+        valeur.includes('.railway.internal'),
+    );
+    if (interne) return { interne, domaine, port, service };
+  }
+  return undefined;
+}
+
+/** L'URL interne, ré-adressée sur le proxy TCP — tout le reste est conservé. */
+export function construireUrlProxy(interne: string, domaine: string, port: string): string {
+  return interne.replace(
+    /^(mongodb(?:\+srv)?:\/\/)(?:([^@/]*)@)?([^/?]+)/,
+    (_, scheme: string, identifiants: string | undefined) =>
+      `${scheme}${identifiants ? `${identifiants}@` : ''}${domaine}:${port}`,
+  );
 }
 
 /** Le chemin de base d'une URL Mongo — '' quand elle n'en désigne aucune. */
@@ -87,6 +135,17 @@ export function grefferCheminBase(publique: string, interne?: string): string {
   const [avant, requete] =
     coupure === -1 ? [publique, ''] : [publique.slice(0, coupure), publique.slice(coupure)];
   return avant.replace(/\/+$/, '') + base + requete;
+}
+
+/**
+ * Greffe la chaîne de requête de l'interne quand la publique n'en a pas —
+ * `authSource=admin` en tête : sans lui, Mongo cherche l'utilisateur dans la
+ * base du chemin et refuse des identifiants pourtant justes.
+ */
+export function grefferRequete(publique: string, interne?: string): string {
+  if (publique.includes('?') || !interne) return publique;
+  const coupure = interne.indexOf('?');
+  return coupure === -1 ? publique : publique + interne.slice(coupure);
 }
 
 /**
@@ -150,12 +209,18 @@ export function resoudreUrlMongo(environnement: Environnement): {
     }
   }
   const { publique, interne } = classerUrlsMongo(parService);
-  if (!publique) {
+  // 1. Une URL publique publiée telle quelle (MONGO_PUBLIC_URL) ; 2. sinon,
+  // le proxy TCP du service Mongo, ré-adressage de l'URL interne — c'est le
+  // cas réel rencontré le 24/08, où seule l'interne était publiée.
+  const proxy = publique === undefined ? trouverProxyTcp(parService) : undefined;
+  const retenue = publique ?? (proxy ? construireUrlProxy(proxy.interne, proxy.domaine, proxy.port) : undefined);
+  if (retenue === undefined) {
     if (interne) {
       throw new Error(
         'Seule l’URL Mongo INTERNE (….railway.internal) existe dans les variables — elle est ' +
-          'injoignable depuis ce poste. Activez le proxy TCP du service Mongo sur Railway ' +
-          '(il pose MONGO_PUBLIC_URL), puis relancez.',
+          'injoignable depuis ce poste, et aucun proxy TCP (RAILWAY_TCP_PROXY_DOMAIN) n’est posé ' +
+          'sur le service Mongo. Activez le proxy TCP du service Mongo sur Railway (onglet ' +
+          'Settings → Networking), puis relancez.',
       );
     }
     throw new Error(
@@ -163,9 +228,9 @@ export function resoudreUrlMongo(environnement: Environnement): {
         `Services interrogés : ${candidats.join(', ')}.`,
     );
   }
-  const url = grefferCheminBase(publique, interne);
-  const service = Object.entries(parService).find(([, variables]) =>
-    Object.values(variables).includes(publique),
-  )?.[0];
+  const url = grefferRequete(grefferCheminBase(retenue, interne), interne);
+  const service =
+    proxy?.service ??
+    Object.entries(parService).find(([, variables]) => Object.values(variables).includes(retenue))?.[0];
   return { url, masquee: masquerUrl(url), service };
 }
