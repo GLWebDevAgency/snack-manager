@@ -34,6 +34,19 @@ const PANEL = 232;
 const NAV_STORE = "sm-bo-nav";
 
 /**
+ * Barre basse mobile : les trois pages que le gérant ouvre CHAQUE JOUR depuis
+ * son téléphone (lire le service, suivre les commandes, mettre un produit en
+ * rupture) — tout le reste vit derrière « Plus ». Les libellés sont courts à
+ * dessein : quatre cases de ±97 px à 390 px de large ne logent pas
+ * « Tableau de bord » sans écraser le corps de texte sous les 11 px lisibles.
+ */
+const MOBILE_BAR: { id: string; short: string }[] = [
+  { id: "dashboard", short: "Accueil" },
+  { id: "orders", short: "Commandes" },
+  { id: "menu", short: "Carte" },
+];
+
+/**
  * Texte lisible sur l'accent tenant — même règle que `readableOn()` côté
  * caisse : un accent clair (laiton #c9a15a) réclame du texte sombre, le blanc
  * y tombe à 2,4:1, très en dessous du seuil WCAG.
@@ -168,6 +181,22 @@ function Shell({ children }: { children: ReactNode }) {
     localStorage.setItem(NAV_STORE, open ? "closed" : "open");
     window.dispatchEvent(new Event(NAV_STORE));
   };
+
+  // ── Volet de navigation mobile — ouvert depuis « Plus », jamais persisté ──
+  //
+  // Contrairement à la barre latérale de bureau (mémorisée dans localStorage),
+  // ce volet est un GESTE : on l'ouvre pour choisir une page, il se referme
+  // au choix, au clic sur le voile ou à Échap. Le mémoriser rouvrirait un
+  // panneau plein écran par-dessus chaque retour dans l'application.
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
 
   // ── Garde session + redirection /admin → /admin/dashboard ──
   // `mounted` évite de rediriger sur le rendu d'hydratation : localStorage
@@ -307,7 +336,32 @@ function Shell({ children }: { children: ReactNode }) {
       aucun pixel, et le back-office d'un vrai gérant est strictement celui
       qu'il connaît.
     */
-    <div className="flex h-screen flex-col overflow-hidden bg-bg">
+    // `h-dvh` et non `h-screen` : sur téléphone, 100vh déborde derrière la
+    // barre d'adresse et la barre basse perdrait ses derniers pixels sous elle.
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg">
+      {/*
+        Anti-zoom iOS : Safari zoome toute la page au focus d'un champ dont le
+        corps est sous 16 px. Les contrôles du DS sont à 14 px — très bien à la
+        souris, piège au doigt. La règle vit ICI plutôt que dans chaque page :
+        elle couvre d'un coup les formulaires, tiroirs et modales du
+        back-office, sans toucher aux composants partagés avec /sm.
+      */}
+      {/*
+        Deuxième règle — les MODALES sur petit écran : le panneau centré du DS
+        n'a pas de défilement interne ; sur un téléphone court, un formulaire
+        haut (promo, membre d'équipe) sortirait de l'écran, boutons compris.
+        Le sélecteur vise le panneau de `Modal` (fils `.w-full` d'un dialogue
+        en grille) et épargne les tiroirs, dont le panneau est ancré aux bords.
+      */}
+      <style>{`@media (max-width: 767px) {
+        main input:not([type="checkbox"]):not([type="radio"]),
+        main select,
+        main textarea { font-size: 16px; }
+        main [role="dialog"].grid > .w-full {
+          max-height: calc(100dvh - 32px);
+          overflow-y: auto;
+        }
+      }`}</style>
       <BandeauDemo actif={demo} />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -332,9 +386,14 @@ function Shell({ children }: { children: ReactNode }) {
           L'ombre portée disparaît quand la barre pousse : une ombre dit « je
           flotte au-dessus », ce qui devient un mensonge dès qu'elle occupe sa
           propre place.
+
+          Sous `md`, la barre disparaît entièrement (`max-md:hidden`) : même le
+          rail de 66 px mangerait un sixième d'un écran de 390 px. La
+          navigation passe alors dans la barre basse et son volet « Plus »,
+          rendus en fin de coque.
         */}
         <div
-          className="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] motion-reduce:transition-none xl:w-[var(--sm-panel)]"
+          className="relative z-[45] w-[var(--sm-rail)] shrink-0 transition-[width] duration-[280ms] ease-[var(--sm-ease)] max-md:hidden motion-reduce:transition-none xl:w-[var(--sm-panel)]"
           style={
             {
               "--sm-rail": `${RAIL}px`,
@@ -522,9 +581,9 @@ function Shell({ children }: { children: ReactNode }) {
             Deux surfaces adjacentes ne portent jamais la même valeur (DA §1) —
             la barre ne peut pas se contenter d'un filet pour se détacher.
           */}
-          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-4 py-3 md:gap-4 md:px-[26px] md:py-4">
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
+              <h1 className="truncate text-xl font-extrabold tracking-[-0.03em] text-ink md:text-2xl">
                 {active?.label ?? "Back-office"}
               </h1>
               <p className="truncate text-sm text-mut" suppressHydrationWarning>
@@ -569,12 +628,198 @@ function Shell({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          {/* Zone de contenu — `relative` : les Drawer s'y positionnent en absolu */}
-          <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto bg-bg">
+          {/* Zone de contenu — `relative` : les Drawer s'y positionnent en absolu.
+              `overflow-x-hidden` : garde-fou mobile — un tableau qui déborde
+              défile dans SON conteneur, jamais en panoramique sur la page. */}
+          <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg">
             {children}
           </main>
         </div>
       </div>
+
+      {/*
+        ── Barre basse mobile : les gestes quotidiens sous le pouce ──
+
+        Sous `md` seulement. EN FLUX dans la colonne — pas en `fixed` — pour ne
+        jamais recouvrir la fin du contenu : la zone de défilement s'arrête
+        au-dessus d'elle par construction. Le dégagement d'encoche
+        (`safe-area-inset-bottom`) s'ajoute SOUS les boutons, qui gardent leurs
+        52 px de zone tactile pleine.
+      */}
+      <nav
+        aria-label="Navigation rapide"
+        className="z-[45] flex shrink-0 border-t border-line2 bg-[image:var(--cf-card-gradient)] pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        {MOBILE_BAR.map(({ id, short }) => {
+          const item = NAV.find((n) => n.id === id);
+          if (!item) return null;
+          const isActive = pathname.startsWith(item.href);
+          const badge = item.id === "orders" && newCount > 0;
+          return (
+            <Link
+              key={id}
+              href={item.href}
+              aria-current={isActive ? "page" : undefined}
+              className={cx(
+                "cf-press flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px]",
+                isActive ? "font-extrabold text-accent" : "font-semibold text-mut",
+              )}
+            >
+              <span className="relative">
+                <Icon name={item.icon} size={20} stroke={isActive ? 2.3 : 2} />
+                {badge && (
+                  <span className="cf-fig absolute -right-2.5 -top-1.5 rounded-pill bg-gold px-[5px] text-[10px] font-extrabold leading-[15px] text-[#1C1612]">
+                    {newCount}
+                    <span className="sr-only"> nouvelles commandes</span>
+                  </span>
+                )}
+              </span>
+              <span className="max-w-full truncate">{short}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          aria-expanded={moreOpen}
+          aria-haspopup="dialog"
+          className={cx(
+            "cf-press flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px]",
+            // « Plus » s'allume quand la page ouverte n'est PAS dans la barre :
+            // le gérant sur « Avis clients » doit voir d'où il est venu.
+            active && !MOBILE_BAR.some((b) => b.id === active.id)
+              ? "font-extrabold text-accent"
+              : "font-semibold text-mut",
+          )}
+        >
+          <span aria-hidden className="grid h-5 place-items-center text-[19px] font-extrabold leading-none tracking-[0.1em]">
+            ⋯
+          </span>
+          <span className="max-w-full truncate">Plus</span>
+        </button>
+      </nav>
+
+      {/*
+        ── Volet « Plus » : la navigation complète, en surimpression ──
+
+        La sœur mobile de la barre latérale : mêmes entrées, mêmes badges,
+        même pied. Elle glisse depuis la droite — le pouce est déjà sur
+        « Plus », en bas à droite — et se referme au voile, à Échap, ou au
+        choix d'une page (chaque lien referme dans son onClick : pas d'effet
+        sur `pathname`, la fermeture appartient au geste).
+      */}
+      {moreOpen && (
+        <div
+          className="fixed inset-0 z-[70] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation principale"
+        >
+          <div
+            className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/55"
+            onClick={() => setMoreOpen(false)}
+            aria-hidden
+          />
+          <aside className="absolute inset-y-0 right-0 flex w-[290px] max-w-[86vw] animate-[cf-slide-in_.26s_var(--sm-ease)_both] flex-col overflow-hidden border-l border-line bg-fill px-3 pb-[max(14px,env(safe-area-inset-bottom))] pt-[18px]">
+            <div className="mb-3 flex items-center gap-2.5 px-1">
+              <div
+                className="grid size-[30px] shrink-0 place-items-center rounded-xs bg-accent text-[15px] font-extrabold text-onaccent"
+                aria-hidden
+              >
+                {initial}
+              </div>
+              <div className="min-w-0 flex-1 truncate text-lg font-semibold text-ink">
+                {tenant?.name ?? "…"}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoreOpen(false)}
+                aria-label="Fermer le menu"
+                className="cf-press grid size-11 shrink-0 place-items-center rounded-xs text-mut hover:text-white"
+              >
+                <Icon name="close" size={17} />
+              </button>
+            </div>
+
+            <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+              Gestion
+            </div>
+
+            <nav
+              className="cf-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden"
+              aria-label="Navigation principale"
+            >
+              {NAV.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                const badge = item.id === "orders" && newCount > 0;
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    onClick={() => setMoreOpen(false)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cx(
+                      "cf-press-row flex shrink-0 items-center gap-2.5 rounded-ctrl px-3 py-3 text-sm",
+                      isActive
+                        ? "bg-accent font-extrabold text-onaccent shadow-card"
+                        : "font-semibold text-white/70",
+                    )}
+                  >
+                    <Icon
+                      name={item.icon}
+                      size={18}
+                      stroke={isActive ? 2.3 : 2}
+                      className="shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+                      {item.label}
+                    </span>
+                    {badge && (
+                      <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
+                        {newCount}
+                        <span className="sr-only"> nouvelles commandes</span>
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3">
+              <div
+                className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
+                aria-hidden
+              >
+                M
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-bold text-ink">
+                  Le Gérant
+                </div>
+                <div className="truncate text-xs text-mut">{city}</div>
+              </div>
+              <Link
+                href="/admin/settings"
+                onClick={() => setMoreOpen(false)}
+                title="Paramètres"
+                aria-label="Paramètres"
+                className="cf-press grid size-11 shrink-0 place-items-center text-mut hover:text-white"
+              >
+                <Icon name="gear" size={17} />
+              </Link>
+            </div>
+
+            {/* Même signature discrète que la barre de bureau — voir le
+                plaidoyer complet au-dessus de sa jumelle. */}
+            <div className="mt-3 flex shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-mut/70">
+              <LogoMark size={14} className="shrink-0" />
+              <span className="min-w-0 truncate whitespace-nowrap">
+                Snack Manager
+              </span>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

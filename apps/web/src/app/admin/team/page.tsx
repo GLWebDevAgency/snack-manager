@@ -265,8 +265,39 @@ export default function TeamPage() {
 
   // ── Rendu ──
 
+  /**
+   * Navigation de semaine — rendue DEUX fois : dans l'en-tête du panneau à
+   * partir de `md`, sous le titre en dessous. À 390 px, ses ±310 px écrasaient
+   * le titre « Pointages de la semaine » à une lettre par ligne.
+   */
+  const weekNav = (
+    <>
+      <IconBtn
+        icon="back"
+        label="Semaine précédente"
+        size={34}
+        iconSize={15}
+        onClick={() => setOffset((o) => o - 1)}
+      />
+      <span
+        className="min-w-[230px] text-center text-[13px] font-semibold text-ink max-md:min-w-0 max-md:flex-1"
+        aria-live="polite"
+      >
+        {weekLabel}
+      </span>
+      <IconBtn
+        icon="arrow"
+        label="Semaine suivante"
+        size={34}
+        iconSize={15}
+        disabled={offset >= 0}
+        onClick={() => setOffset((o) => o + 1)}
+      />
+    </>
+  );
+
   return (
-    <div className="space-y-4 p-[26px]">
+    <div className="space-y-4 p-4 md:p-[26px]">
       {/* ── Rangée KPI (spec §12.1 — absences : modèle à définir §12.3) ── */}
       <div className="flex flex-wrap gap-4">
         {members === null && !membersError ? (
@@ -296,7 +327,10 @@ export default function TeamPage() {
         sub="Membres, rôles et codes PIN — badge arrivée/départ en 1 clic"
         actions={
           <Btn size="sm" icon="plus" onClick={() => setModal({ mode: "add" })}>
-            Ajouter un membre
+            {/* Libellé court sous `sm` : l'en-tête du panneau ne laisse au
+                sous-titre que ce que le bouton ne prend pas. */}
+            <span className="max-sm:hidden">Ajouter un membre</span>
+            <span className="sm:hidden">Ajouter</span>
           </Btn>
         }
       >
@@ -350,32 +384,12 @@ export default function TeamPage() {
       <Panel
         title="Pointages de la semaine"
         sub="Badge à l'arrivée et au départ — heures cumulées automatiquement"
-        actions={
-          <>
-            <IconBtn
-              icon="back"
-              label="Semaine précédente"
-              size={34}
-              iconSize={15}
-              onClick={() => setOffset((o) => o - 1)}
-            />
-            <span
-              className="min-w-[230px] text-center text-[13px] font-semibold text-ink"
-              aria-live="polite"
-            >
-              {weekLabel}
-            </span>
-            <IconBtn
-              icon="arrow"
-              label="Semaine suivante"
-              size={34}
-              iconSize={15}
-              disabled={offset >= 0}
-              onClick={() => setOffset((o) => o + 1)}
-            />
-          </>
-        }
+        // `md:contents` : à partir de `md` le span s'efface et ses enfants
+        // deviennent les items flex de l'en-tête ; en dessous, tout disparaît
+        // au profit de la copie rendue sous le titre.
+        actions={<span className="hidden md:contents">{weekNav}</span>}
       >
+        <div className="mb-3 flex items-center gap-2 md:hidden">{weekNav}</div>
         {weekLoading ? (
           <Skeleton className="h-56" />
         ) : weekError ? (
@@ -388,7 +402,10 @@ export default function TeamPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            {/* `min-w` : neuf colonnes (employé + 7 jours + total) écrasées à
+                390 px devenaient illisibles — la table garde sa largeur de
+                lecture et défile dans SON cadre. */}
+            <table className="w-full min-w-[640px] border-collapse text-sm">
               <caption className="sr-only">
                 Heures pointées par membre et par jour, {weekLabel.toLowerCase()} —
                 arrondies à la demi-heure par pointage au départ

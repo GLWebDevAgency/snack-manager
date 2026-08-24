@@ -157,7 +157,7 @@ export default function SettingsPage() {
 
   if (indisponible) {
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <Panel title="Paramètres">
           <p className="text-[13px] text-mut">
             La fiche de l&apos;établissement n&apos;a pas répondu. Rechargez la page ; si ça
@@ -169,7 +169,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex max-w-[720px] flex-col gap-4 p-[26px]">
+    <div className="flex max-w-[720px] flex-col gap-4 p-4 md:p-[26px]">
       <Panel
         title="L'identité de l'enseigne"
         sub="Le nom et la couleur s'appliquent partout : caisse, cuisine, tickets, page de commande."
@@ -256,7 +256,9 @@ export default function SettingsPage() {
           <Skeleton className="h-[64px]" />
         ) : (
           <>
-            <div className="flex items-center gap-4">
+            {/* `flex-wrap` : aperçu (160 px) + « Remplacer » + « Retirer »
+                dépassent un écran de téléphone — les boutons passent dessous. */}
+            <div className="flex flex-wrap items-center gap-4">
               {me.logoUrl ? (
                 // Un logo clair comme un logo sombre doit se voir : fond neutre.
                 // eslint-disable-next-line @next/next/no-img-element -- l'image vient de notre API, pas du build Next : next/image n'a rien à optimiser ici.

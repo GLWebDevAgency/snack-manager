@@ -54,14 +54,18 @@ const CHIP_DEFS: { key: "all" | OrderStatus; label: string }[] = [
   { key: "delivered", label: "Remises" },
 ];
 
-/** Largeurs de colonnes exactes de la spec §6.2 (le reste en flex). */
+/**
+ * Largeurs de colonnes exactes de la spec §6.2 (le reste en flex) — à partir
+ * de `lg` seulement : la ligne complète réclame ±800 px, en dessous elle
+ * devient une carte empilée et chaque cellule reprend sa taille naturelle.
+ */
 const COLS = {
-  num: "w-[50px] shrink-0",
-  channel: "w-[120px] shrink-0",
-  slot: "w-[100px] shrink-0",
-  status: "w-[110px] shrink-0",
-  total: "w-[90px] shrink-0 text-right",
-  actions: "w-[190px] shrink-0 text-right",
+  num: "shrink-0 lg:w-[50px]",
+  channel: "shrink-0 lg:w-[120px]",
+  slot: "shrink-0 lg:w-[100px]",
+  status: "shrink-0 lg:w-[110px]",
+  total: "shrink-0 lg:w-[90px] lg:text-right",
+  actions: "shrink-0 lg:w-[190px] lg:text-right",
 } as const;
 
 /**
@@ -241,18 +245,25 @@ export default function OrdersPage() {
 
   // ── Rendu ──
   return (
-    <div ref={rootRef} className="p-[26px]">
+    <div ref={rootRef} className="p-4 md:p-[26px]">
       {/* ── Filtres & recherche (§6.1) ── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {CHIP_DEFS.map((c) => (
-          <Chip key={c.key} on={filter === c.key} onClick={() => setFilter(c.key)}>
+          <Chip
+            key={c.key}
+            on={filter === c.key}
+            onClick={() => setFilter(c.key)}
+            className="max-md:min-h-11"
+          >
             {c.label} ·{" "}
             <span className="cf-fig">
               {orders === null ? "—" : counts[c.key]}
             </span>
           </Chip>
         ))}
-        <div className="ml-auto flex items-center gap-3">
+        {/* Recherche pleine largeur sous `md` : un champ de 250 px coincé à
+            droite des chips serait plus étroit qu'un pouce. */}
+        <div className="ml-auto flex items-center gap-3 max-md:w-full">
           <span
             title={
               connected ? "Temps réel actif" : "Temps réel interrompu — reconnexion…"
@@ -273,14 +284,16 @@ export default function OrdersPage() {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Client, n° commande, n° retrait…"
             aria-label="Rechercher une commande"
-            className="w-[250px] px-3 py-2"
+            className="w-[250px] px-3 py-2 max-md:flex-1"
           />
         </div>
       </div>
 
-      {/* ── Table des commandes (§6.2) ── */}
+      {/* ── Table des commandes (§6.2) — cartes empilées sous `lg` ── */}
       <Card>
-        <div className="flex items-center gap-3 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut">
+        {/* L'en-tête de colonnes n'existe qu'avec les colonnes : en carte,
+            chaque valeur porte sa propre étiquette visuelle (pilule, badge). */}
+        <div className="hidden items-center gap-3 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut lg:flex">
           <span className={COLS.num}>N°</span>
           <span className="min-w-0 flex-1">Client</span>
           <span className={COLS.channel}>Canal</span>
@@ -345,20 +358,26 @@ export default function OrdersPage() {
                     openDrawer(o);
                   }
                 }}
-                className="cf-press-row flex cursor-pointer items-center gap-3 border-t border-line2 px-[18px] py-3 hover:bg-white/4"
+                className="cf-press-row flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-t border-line2 p-4 hover:bg-white/4 lg:flex-nowrap lg:px-[18px] lg:py-3"
               >
+                {/*
+                  Sous `lg`, la ligne devient une CARTE : n° + client + total
+                  en tête, puis canal / créneau / statut, puis les actions —
+                  l'ordre du DOM suit la carte, les `lg:order-*` restaurent
+                  les colonnes de la spec §6.2 sur grand écran.
+                */}
                 {/* N° retrait */}
                 <span
                   className={cx(
                     COLS.num,
-                    "cf-fig text-xl font-extrabold text-accent",
+                    "cf-fig text-xl font-extrabold text-accent lg:order-1",
                   )}
                 >
                   {o.number}
                 </span>
 
                 {/* Client + résumé articles */}
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 lg:order-2">
                   <div className="truncate text-[15px] font-bold text-ink">
                     {customerName(o)}
                   </div>
@@ -367,6 +386,16 @@ export default function OrdersPage() {
                   </div>
                 </div>
 
+                {/* Total */}
+                <span
+                  className={cx(COLS.total, "cf-fig text-[15px] font-extrabold text-ink lg:order-6")}
+                >
+                  {fmtEuro(o.totals.total)}
+                </span>
+
+                {/* Saut de ligne de la carte : canal/créneau/statut en dessous. */}
+                <span className="h-0 basis-full lg:hidden" aria-hidden />
+
                 {/* Canal (+ « à payer » si non payée) */}
                 {/*
                   Canal : plein (niveau élément) pour « En ligne », contour pour
@@ -374,7 +403,12 @@ export default function OrdersPage() {
                   l'ancien fond #999 + texte blanc tombait sous le seuil de
                   contraste.
                 */}
-                <div className={cx(COLS.channel, "flex flex-col items-start gap-0.5")}>
+                <div
+                  className={cx(
+                    COLS.channel,
+                    "flex items-center gap-1.5 lg:order-3 lg:flex-col lg:items-start lg:gap-0.5",
+                  )}
+                >
                   <Pill variant={o.channel === "online" ? "solid" : "out"}>
                     {CHANNEL_LABELS[o.channel]}
                   </Pill>
@@ -383,32 +417,38 @@ export default function OrdersPage() {
                   )}
                 </div>
 
-                {/* Créneau de retrait */}
-                <span className={cx(COLS.slot, "cf-fig text-sm font-semibold text-ink")}>
+                {/* Créneau de retrait — le tiret des commandes sans créneau
+                    n'apporte rien en carte, il reste une affaire de colonne */}
+                <span
+                  className={cx(
+                    COLS.slot,
+                    "cf-fig text-sm font-semibold text-ink lg:order-4",
+                    slotHHMM(o) == null && "max-lg:hidden",
+                  )}
+                >
                   {slotHHMM(o) ?? "—"}
                 </span>
 
                 {/* Statut */}
-                <div className={COLS.status}>
+                <div className={cx(COLS.status, "lg:order-5")}>
                   <StatusBadge status={o.status} />
                 </div>
 
-                {/* Total */}
-                <span
-                  className={cx(COLS.total, "cf-fig text-[15px] font-extrabold text-ink")}
-                >
-                  {fmtEuro(o.totals.total)}
-                </span>
-
-                {/* Actions */}
+                {/* Actions — pleine largeur en carte, alignées à droite */}
                 <div
-                  className={cx(COLS.actions, "flex items-center justify-end gap-1.5")}
+                  className={cx(
+                    COLS.actions,
+                    "flex items-center justify-end gap-1.5 max-lg:w-full lg:order-7",
+                  )}
                 >
                   <IconBtn
                     icon="print"
                     label={`Imprimer le ticket n°${o.number}`}
                     size={34}
                     iconSize={16}
+                    /* `!` : IconBtn fige son côté en style inline — seule une
+                       classe importante ramène la cible aux 44 px tactiles. */
+                    className="max-lg:!size-11"
                     onClick={(e) => {
                       e.stopPropagation();
                       printTicket(o);
@@ -419,6 +459,7 @@ export default function OrdersPage() {
                       variant="ink"
                       size="sm"
                       disabled={pending.has(o._id)}
+                      className="max-lg:min-h-11 max-lg:px-5"
                       onClick={(e) => {
                         e.stopPropagation();
                         void advance(o);

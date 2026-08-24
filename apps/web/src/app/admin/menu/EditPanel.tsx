@@ -263,7 +263,9 @@ export function EditPanel({
      * on ne voyait plus quelle ligne était dépliée (DA §1 et §3).
      */
     <div className="border-l-[3px] border-l-accent bg-[image:var(--cf-elev-gradient)] px-[18px] pb-3.5 pt-2.5 shadow-[inset_0_10px_18px_-12px_rgba(0,0,0,.9)]">
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* Une colonne sous `md` : deux champs côte à côte à 170 px chacun
+          rendraient les libellés illisibles au doigt. */}
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         <Field label="Nom" htmlFor={`edit-name-${product?._id ?? "new"}`}>
           <Input
             id={`edit-name-${product?._id ?? "new"}`}

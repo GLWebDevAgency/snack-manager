@@ -244,7 +244,7 @@ export default function PlanningPage() {
 
   if (!week) {
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         {error ? (
           <Card className="p-[18px]">
             <EmptyState
@@ -271,7 +271,7 @@ export default function PlanningPage() {
   return (
     <div className="pb-[26px]">
       {/* ── Bandeau épinglé : la semaine, son coût, ses gestes ────────────── */}
-      <header className="sticky top-0 z-40 border-b border-line bg-bg px-[26px] py-3.5">
+      <header className="sticky top-0 z-40 border-b border-line bg-bg px-4 py-3.5 md:px-[26px]">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <div className="flex shrink-0 items-center gap-1.5">
             <IconBtn
@@ -387,7 +387,10 @@ export default function PlanningPage() {
             est sorti. « Tout est publié » n'est pas un geste — c'est un état,
             et il est déjà écrit à gauche.
           */}
-          <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+          {/* `max-w-full` : l'item flex vaut sinon sa largeur max-content —
+              trois boutons côte à côte débordaient l'écran d'un téléphone au
+              lieu de replier grâce à leur propre `flex-wrap`. */}
+          <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
             <Btn
               variant="ghost"
               size="sm"
@@ -426,7 +429,7 @@ export default function PlanningPage() {
         </div>
       </header>
 
-      <div className="space-y-4 px-[26px] pt-4">
+      <div className="space-y-4 px-4 pt-4 md:px-[26px]">
         {error && (
           <Card
             flat

@@ -130,7 +130,7 @@ export default function ReviewsPage() {
 
   if (error)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <div className="flex flex-col items-start gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
           <p className="text-sm text-alertt">{error}</p>
           <Btn variant="ghost" size="sm" onClick={() => void load(filter)}>
@@ -143,11 +143,11 @@ export default function ReviewsPage() {
   const replyLabel = `Réponse de ${tenantName ?? "l'établissement"}`;
 
   return (
-    <div className="p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {/* ── Bandeau résumé (spec §11.1) ── */}
       {summary === null ? (
-        <div className="mb-4 flex gap-4">
-          <Skeleton className="h-[150px] w-[200px] shrink-0" />
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row">
+          <Skeleton className="h-[150px] shrink-0 sm:w-[200px]" />
           <Skeleton className="h-[150px] flex-1" />
         </div>
       ) : (
@@ -213,10 +213,18 @@ export default function ReviewsPage() {
 
       {/* ── Filtres ── */}
       <div className="mb-4 flex gap-2" role="group" aria-label="Filtrer les avis">
-        <Chip on={filter === "all"} onClick={() => changeFilter("all")}>
+        <Chip
+          on={filter === "all"}
+          onClick={() => changeFilter("all")}
+          className="max-md:min-h-11"
+        >
           Tous
         </Chip>
-        <Chip on={filter === "pending"} onClick={() => changeFilter("pending")}>
+        <Chip
+          on={filter === "pending"}
+          onClick={() => changeFilter("pending")}
+          className="max-md:min-h-11"
+        >
           Sans réponse
           {summary && summary.pending > 0 && (
             <span className="cf-fig text-mut">({summary.pending})</span>
@@ -273,8 +281,13 @@ export default function ReviewsPage() {
                   <p className="mt-0.5 text-sm text-ink">{r.reply.text}</p>
                 </div>
               ) : (
+                /*
+                  Sous `sm`, champ pleine largeur et bouton en dessous : côte à
+                  côte, le champ tombait à ±230 px et l'invite « Répondre
+                  publiquement… » se repliait sur une 2e ligne rognée.
+                */
                 <form
-                  className="mt-2.5 flex items-end gap-2"
+                  className="mt-2.5 flex items-end gap-2 max-sm:flex-col max-sm:items-stretch"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void sendReply(r);
@@ -303,7 +316,7 @@ export default function ReviewsPage() {
                     size="sm"
                     type="submit"
                     disabled={!(drafts[r._id] ?? "").trim() || replyingId === r._id}
-                    className="py-[11px]"
+                    className="py-[11px] max-sm:self-end"
                   >
                     {replyingId === r._id ? "Envoi…" : "Répondre"}
                   </Btn>

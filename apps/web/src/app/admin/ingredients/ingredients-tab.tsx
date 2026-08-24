@@ -139,9 +139,9 @@ export function IngredientsTab({
 
   return (
     <div>
-      {/* ── Barre d'outils ── */}
+      {/* ── Barre d'outils — champs pleine largeur sous `md` ── */}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
-        <div className="relative">
+        <div className="relative max-md:w-full">
           <Icon
             name="search"
             size={16}
@@ -153,7 +153,7 @@ export function IngredientsTab({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un ingrédient ou une marque…"
             aria-label="Rechercher un ingrédient ou une marque"
-            className="w-[280px] pl-9"
+            className="w-[280px] pl-9 max-md:w-full"
           />
         </div>
         <Select
@@ -162,7 +162,7 @@ export function IngredientsTab({
             setCategory(e.target.value as IngredientCategory | "")
           }
           aria-label="Filtrer par catégorie"
-          className="w-[190px]"
+          className="w-[190px] max-md:flex-1"
         >
           <option value="">Toutes les catégories</option>
           {INGREDIENT_CATEGORIES.map((c) => (
@@ -222,7 +222,89 @@ export function IngredientsTab({
           )
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/*
+              ── Cartes empilées (sous `lg`) ──
+
+              La table de sept colonnes réclame 900 px : sur un téléphone elle
+              cacherait la bascule Rupture — LE geste pour lequel un gérant
+              ouvre cette page depuis la salle — à deux écrans de défilement
+              horizontal. Mêmes données, mêmes actions, aucune de plus.
+            */}
+            <div className="lg:hidden">
+              {filtered.map((ing) => (
+                <div
+                  key={ing.id}
+                  className="border-b border-line2 p-4 last:border-b-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div
+                        className={cx(
+                          "truncate text-[15px] font-bold",
+                          ing.isOut ? "text-alertt" : "text-ink",
+                        )}
+                      >
+                        {ing.name}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-mut">
+                        <CategoryPill category={ing.category} />
+                        {STORAGE_LABELS[ing.storage]}
+                      </div>
+                    </div>
+                    <div className="cf-fig shrink-0 whitespace-nowrap text-right">
+                      <span className="text-[15px] font-extrabold text-ink">
+                        {fmtEuro(ing.costPerUnitCents)}
+                      </span>
+                      <span className="text-mut"> / {UNIT_LABELS[ing.unit]}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5">
+                    <StockGauge
+                      stock={ing.currentStock}
+                      par={ing.parLevel}
+                      unit={ing.unit}
+                      isOut={ing.isOut}
+                    />
+                  </div>
+
+                  {ing.allergens.length > 0 && (
+                    <div className="mt-2">
+                      <AllergenChips allergens={ing.allergens} />
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-mut">
+                        Rupture
+                      </span>
+                      <Toggle
+                        danger
+                        on={ing.isOut}
+                        disabled={pendingOutId === ing.id}
+                        label={
+                          ing.isOut
+                            ? `Lever la rupture de ${ing.name}`
+                            : `Déclarer ${ing.name} en rupture`
+                        }
+                        onChange={() => void toggleOut(ing)}
+                      />
+                    </div>
+                    <QuickActions
+                      ing={ing}
+                      size={44}
+                      iconSize={17}
+                      onMovement={(type) => setMovement({ ing, type })}
+                      onEdit={() => setDrawer({ mode: "edit", ing })}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Table (dès `lg`) ── */}
+            <div className="hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-line">
@@ -309,45 +391,20 @@ export function IngredientsTab({
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <IconBtn
-                            icon="plus"
-                            label={`Réception — ${ing.name}`}
-                            size={30}
-                            iconSize={14}
-                            onClick={() =>
-                              setMovement({ ing, type: "purchase" })
-                            }
-                          />
-                          <IconBtn
-                            icon="minus"
-                            label={`Perte — ${ing.name}`}
-                            size={30}
-                            iconSize={14}
-                            onClick={() => setMovement({ ing, type: "waste" })}
-                          />
-                          <IconBtn
-                            icon="check"
-                            label={`Inventaire — ${ing.name}`}
-                            size={30}
-                            iconSize={14}
-                            onClick={() => setMovement({ ing, type: "count" })}
-                          />
-                          <IconBtn
-                            icon="edit"
-                            label={`Modifier ${ing.name}`}
-                            size={30}
-                            iconSize={14}
-                            onClick={() => setDrawer({ mode: "edit", ing })}
-                          />
-                        </div>
+                        <QuickActions
+                          ing={ing}
+                          size={30}
+                          iconSize={14}
+                          onMovement={(type) => setMovement({ ing, type })}
+                          onEdit={() => setDrawer({ mode: "edit", ing })}
+                        />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="cf-fig flex items-center justify-between gap-3 border-t border-line2 bg-black/20 px-4 py-3 text-[13px] text-mut">
+            <div className="cf-fig flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line2 bg-black/20 px-4 py-3 text-[13px] text-mut">
               <span>
                 {filtered.length} ingrédient{filtered.length > 1 ? "s" : ""}
                 {filtered.length !== ingredients.length &&
@@ -390,6 +447,59 @@ export function IngredientsTab({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Les quatre actions rapides d'un ingrédient (réception, perte, inventaire,
+ * édition) — partagées entre la ligne de table (30 px, densité bureau) et la
+ * carte mobile (44 px, la taille minimale d'une cible tactile). Un seul
+ * endroit à modifier le jour où une cinquième action apparaît.
+ */
+function QuickActions({
+  ing,
+  size,
+  iconSize,
+  onMovement,
+  onEdit,
+}: {
+  ing: SupplyIngredient;
+  size: number;
+  iconSize: number;
+  onMovement: (type: MovementInputType) => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <IconBtn
+        icon="plus"
+        label={`Réception — ${ing.name}`}
+        size={size}
+        iconSize={iconSize}
+        onClick={() => onMovement("purchase")}
+      />
+      <IconBtn
+        icon="minus"
+        label={`Perte — ${ing.name}`}
+        size={size}
+        iconSize={iconSize}
+        onClick={() => onMovement("waste")}
+      />
+      <IconBtn
+        icon="check"
+        label={`Inventaire — ${ing.name}`}
+        size={size}
+        iconSize={iconSize}
+        onClick={() => onMovement("count")}
+      />
+      <IconBtn
+        icon="edit"
+        label={`Modifier ${ing.name}`}
+        size={size}
+        iconSize={iconSize}
+        onClick={onEdit}
+      />
     </div>
   );
 }
