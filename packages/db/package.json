@@ -14,7 +14,8 @@
     "photos": "tsx src/seed-photos.ts",
     "backfill:tracking": "tsx src/backfill-tracking.ts",
     "repair:options": "tsx src/repair-options.ts",
-    "set:password": "tsx src/set-password.ts"
+    "set:password": "tsx src/set-password.ts",
+    "create:admin": "tsx src/create-admin.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",
