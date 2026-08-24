@@ -42,7 +42,11 @@ export class LogoController {
    */
   @Roles('owner', 'gerant')
   @Put('tenants/me/logo')
-  @UseInterceptors(FileInterceptor('fichier', { limits: { fileSize: LOGO_MAX_OCTETS } }))
+  // `files: 1, fields: 0` : la route ne lit qu'un fichier — multer n'a pas à
+  // bufferiser des champs qu'aucun code ne consommera.
+  @UseInterceptors(
+    FileInterceptor('fichier', { limits: { fileSize: LOGO_MAX_OCTETS, files: 1, fields: 0 } }),
+  )
   async poser(
     @TenantId() tenantId: string,
     @UploadedFile() fichier: FichierRecu | undefined,
@@ -56,10 +60,13 @@ export class LogoController {
     if (!fichier?.buffer?.length) {
       throw new BadRequestException('Aucun fichier reçu — choisissez une image.');
     }
-    // L'hôte public vient de la requête elle-même (`trust proxy` posé dans
-    // main.ts) : l'URL suit le domaine réellement servi, sans variable à
-    // maintenir par environnement.
-    const origin = `${req.protocol}://${req.get('host')}`;
+    // L'hôte public vient de la requête elle-même : l'URL suit le domaine
+    // réellement servi, sans variable à maintenir par environnement. Note :
+    // `trust proxy` ne résout que le protocole ; l'hôte se lit d'abord dans
+    // X-Forwarded-Host (si le proxy le pose), sinon dans Host — que Railway
+    // préserve.
+    const forwardedHost = String(req.headers['x-forwarded-host'] ?? '').split(',')[0]?.trim();
+    const origin = `${req.protocol}://${forwardedHost || req.get('host')}`;
     return this.logo.poser(tenantId, origin, fichier.buffer);
   }
 
@@ -82,6 +89,8 @@ export class LogoController {
     res.setHeader('content-type', logo.type);
     res.setHeader('content-length', String(logo.corps.length));
     res.setHeader('cache-control', 'public, max-age=31536000, immutable');
+    // Un polyglotte PNG/HTML servi image/* ne doit jamais être « deviné » HTML.
+    res.setHeader('x-content-type-options', 'nosniff');
     return new StreamableFile(logo.corps);
   }
 }

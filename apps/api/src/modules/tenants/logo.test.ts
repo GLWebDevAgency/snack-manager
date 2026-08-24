@@ -93,13 +93,26 @@ function service(store: ImageStore, tenants: ReturnType<typeof fakeTenants>) {
 }
 
 describe('poser un logo', () => {
-  it("stocke les octets sous le type détecté puis fige l'URL versionnée", async () => {
+  it("stocke les octets sous une clef VERSIONNÉE puis fige l'URL assortie", async () => {
     const { store, objets } = fakeStore();
     const tenants = fakeTenants({ slug: 'chez-nour', logoUrl: null });
     const doc = await service(store, tenants).poser(TENANT, ORIGIN, WEBP, () => 1724500000000);
 
-    expect(objets.get(`logo-${TENANT}`)?.type).toBe('image/webp');
+    // La clef porte la version : deux envois concurrents écrivent chacun LEUR
+    // objet, la base tranche — jamais les octets de l'un sous le ?v= de l'autre.
+    expect(objets.get(`logo-${TENANT}-1724500000000`)?.type).toBe('image/webp');
     expect(doc?.logoUrl).toBe(`${ORIGIN}/public/tenants/chez-nour/logo?v=1724500000000`);
+  });
+
+  it('un nouvel envoi remplace le précédent — et fait le ménage de son objet', async () => {
+    const { store, objets } = fakeStore();
+    const tenants = fakeTenants({ slug: 'chez-nour', logoUrl: null });
+    const svc = service(store, tenants);
+    await svc.poser(TENANT, ORIGIN, PNG, () => 1000);
+    await svc.poser(TENANT, ORIGIN, JPEG, () => 2000);
+
+    expect([...objets.keys()]).toEqual([`logo-${TENANT}-2000`]);
+    expect(tenants.etat()?.logoUrl).toContain('?v=2000');
   });
 
   it("refuse un fichier qui n'est pas une image, sans rien écrire", async () => {
@@ -115,8 +128,10 @@ describe('poser un logo', () => {
   it("n'écrit JAMAIS l'URL si le stockage échoue — pas de lien mort", async () => {
     const { store } = fakeStore({ failPut: true });
     const tenants = fakeTenants({ slug: 'chez-nour', logoUrl: null });
+    // Le refus ressort en phrase pour le gérant (502), jamais en « Internal
+    // server error » — le vrai motif, lui, reste dans les journaux.
     await expect(service(store, tenants).poser(TENANT, ORIGIN, PNG)).rejects.toThrow(
-      'R2 indisponible',
+      /hébergement d'images/,
     );
     expect(tenants.sets).toHaveLength(0);
   });
@@ -148,7 +163,7 @@ describe('servir un logo', () => {
 
   it('relit R2 au premier service après redémarrage, puis sert du cache', async () => {
     const { store, objets, lectures } = fakeStore();
-    objets.set(`logo-${TENANT}`, { corps: JPEG, type: 'image/jpeg' });
+    objets.set(`logo-${TENANT}-1`, { corps: JPEG, type: 'image/jpeg' });
     const tenants = fakeTenants({ slug: 'chez-nour', logoUrl: `${ORIGIN}/public/tenants/chez-nour/logo?v=1` });
 
     const svc = service(store, tenants); // cache vide : simule un redémarrage

@@ -128,7 +128,15 @@ export default function SettingsPage() {
       setMe(await envoiFichier<TenantMe>("PUT", "/tenants/me/logo", f));
       toast("Logo en place — vos écrans suivent au prochain battement", { icon: "check" });
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Envoi impossible — réessayez");
+      // Le 413 vient de multer, en anglais — la borne ayant déjà été vérifiée
+      // ici, il ne se voit qu'en la contournant ; on le traduit quand même.
+      toast(
+        e instanceof ApiError
+          ? e.status === 413
+            ? "Fichier trop lourd — 512 Ko maximum"
+            : e.message
+          : "Envoi impossible — réessayez",
+      );
     } finally {
       setLogoBusy(false);
     }
