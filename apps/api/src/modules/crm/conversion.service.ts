@@ -2,11 +2,19 @@ import { randomInt } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { JwtPayload, LeadConvert, LeadConversion } from '@sm/contracts';
+import {
+  PLAN_LABELS,
+  proposalCents,
+  yearlyCents,
+  type JwtPayload,
+  type LeadConvert,
+  type LeadConversion,
+} from '@sm/contracts';
 import type { Lead, Tenant, User } from '@sm/db';
 import type { SecretHasher } from '@sm/domain/src/ports';
 import { SECRET_HASHER } from '../../infrastructure/tokens';
 import { AdminService } from './admin.service';
+import { BillingService } from './billing.service';
 import { TRIAL_DAYS } from './signals.service';
 
 /**
@@ -48,6 +56,7 @@ export class ConversionService {
     @InjectModel('User') private readonly users: Model<User>,
     @Inject(SECRET_HASHER) private readonly hasher: SecretHasher,
     private readonly admin: AdminService,
+    private readonly billing: BillingService,
   ) {}
 
   async convert(
@@ -124,6 +133,8 @@ export class ConversionService {
       ownerEmail: email,
     });
 
+    const draftInvoices = await this.draftFirstInvoices(actor, String(tenant._id), body, trialEndsAt);
+
     return {
       tenantId: String(tenant._id),
       slug: body.slug,
@@ -131,7 +142,64 @@ export class ConversionService {
       ownerEmail: email,
       password,
       trialEndsAt: trialEndsAt.toISOString(),
+      draftInvoices,
     };
+  }
+
+  /**
+   * Les premières factures, EN BROUILLON, dérivées des termes signés — plus
+   * personne ne les recompose de tête dans Facturation. Datées de la fin
+   * d'essai : rien n'est dû pendant les TRIAL_DAYS jours, et un brouillon ne
+   * crée pas de créance ; l'équipe l'émet d'un geste le moment venu (ou
+   * l'annule si l'essai ne se confirme pas).
+   *
+   * Best-effort ASSUMÉ : le tenant existe, le mot de passe est affiché — un
+   * pépin de facturation ne doit pas faire croire que la signature a échoué.
+   * `draftInvoices: 0` le dit à l'écran, et les brouillons se posent alors à
+   * la main, comme avant.
+   */
+  private async draftFirstInvoices(
+    actor: JwtPayload,
+    tenantId: string,
+    body: LeadConvert,
+    trialEndsAt: Date,
+  ): Promise<number> {
+    const prix = proposalCents({ plan: body.plan, onlineOrdering: body.onlineOrdering });
+    const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
+    const moduleSigne = body.onlineOrdering || body.plan === 'boost';
+
+    let poses = 0;
+    try {
+      await this.billing.issue(actor, tenantId, {
+        kind: 'abonnement',
+        period,
+        draft: true,
+        dueAt: trialEndsAt,
+        amountCents:
+          body.billing === 'annuel' ? yearlyCents(prix.monthlyCents) : prix.monthlyCents,
+        label:
+          `Abonnement ${PLAN_LABELS[body.plan]}` +
+          (moduleSigne && body.plan !== 'boost' ? ' + commande en ligne' : '') +
+          (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : ''),
+      });
+      poses += 1;
+
+      if (prix.setupOnceCents > 0) {
+        await this.billing.issue(actor, tenantId, {
+          kind: 'mise_en_place',
+          period,
+          draft: true,
+          dueAt: trialEndsAt,
+          amountCents: prix.setupOnceCents,
+          label: 'Mise en service — module commande en ligne',
+        });
+        poses += 1;
+      }
+    } catch {
+      // Journalisé par la facturation quand elle a pu ; l'écran affichera
+      // le compte réellement posé.
+    }
+    return poses;
   }
 
   /**

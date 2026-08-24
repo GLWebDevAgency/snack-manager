@@ -173,6 +173,60 @@ export const PLAN_LABELS: Record<'essentiel' | 'complet' | 'boost', string> = {
   boost: 'Boost',
 };
 
+/* ── La proposition — ce qu'on a réellement mis sur la table ──── */
+
+/**
+ * L'étape « Proposition » du pipeline disait qu'UNE proposition existait,
+ * jamais LAQUELLE : le plan, le module et l'engagement discutés ne vivaient
+ * que dans la mémoire du commercial (et nous sommes deux). La proposition
+ * devient un objet du lead : posée à l'étape, relue à chaque appel, et
+ * reprise telle quelle au moment de signer — le panneau de conversion s'en
+ * pré-remplit au lieu de redemander ce qui a déjà été négocié.
+ *
+ * Les PRIX ne s'y stockent pas : ils se DÉRIVENT de la grille
+ * (`PLAN_MRR_CENTS`, `MODULE_ORDERING_CENTS`) par `proposalCents`. Une
+ * proposition qui figerait ses montants divergerait de la grille au premier
+ * changement de tarif — et on ne saurait plus laquelle des deux ment.
+ * Le jour où une remise libre se négocie vraiment, elle entrera ici comme
+ * un champ explicite, pas comme un prix recopié.
+ */
+export const PROPOSAL_BILLINGS = ['mensuel', 'annuel'] as const;
+export type ProposalBilling = (typeof PROPOSAL_BILLINGS)[number];
+
+export const PROPOSAL_BILLING_LABELS: Record<ProposalBilling, string> = {
+  mensuel: 'Mensuel',
+  annuel: 'Annuel — deux mois offerts',
+};
+
+export const LeadProposalSchema = z.object({
+  plan: z.enum(['essentiel', 'complet', 'boost']),
+  /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
+  onlineOrdering: z.boolean().default(false),
+  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+  /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
+  note: z.string().trim().max(500).default(''),
+});
+export type LeadProposal = z.infer<typeof LeadProposalSchema>;
+
+/** La proposition telle que servie — datée du jour où elle a été posée. */
+export type CrmLeadProposal = LeadProposal & { at: string };
+
+/**
+ * Le chiffrage d'une proposition, depuis la grille — jamais saisi à la main.
+ * Sur Boost le module est compris : ni mensualité ni mise en service en plus,
+ * même si la case a été cochée par réflexe.
+ */
+export function proposalCents(p: Pick<LeadProposal, 'plan' | 'onlineOrdering'>): {
+  monthlyCents: number;
+  setupOnceCents: number;
+} {
+  const moduleFacture = p.onlineOrdering && p.plan !== 'boost';
+  return {
+    monthlyCents: PLAN_MRR_CENTS[p.plan] + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
+    setupOnceCents: moduleFacture ? MODULE_ORDERING_SETUP_CENTS : 0,
+  };
+}
+
 /** Places restantes sur les 10 — jamais négatif, même si on a survendu. */
 export const founderSeatsRemaining = (taken: number): number =>
   Math.max(0, FOUNDER_SEATS_TOTAL - taken);
@@ -264,6 +318,8 @@ export const LeadUpdateSchema = z.object({
   sequence: LeadSequenceSchema.nullable().optional(),
   notes: z.string().trim().max(2_000).optional(),
   founderSeatReserved: z.boolean().optional(),
+  /** Poser ou remplacer la proposition ; `null` la retire. Datée côté API. */
+  proposal: LeadProposalSchema.nullable().optional(),
 });
 export type LeadUpdate = z.infer<typeof LeadUpdateSchema>;
 
@@ -303,6 +359,14 @@ export const LeadConvertSchema = z.object({
   ownerName: z.string().trim().max(120).default(''),
   plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
   founderSeat: z.boolean().default(false),
+  /**
+   * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
+   * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
+   * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
+   * avait été proposé. Les premières factures s'en dérivent.
+   */
+  onlineOrdering: z.boolean().default(false),
+  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
 });
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 
@@ -356,6 +420,13 @@ export type LeadConversion = {
   password: string;
   /** ISO 8601 — posée à J+30, lue par le signal de fin d'essai. */
   trialEndsAt: string;
+  /**
+   * Brouillons de facture posés dans Facturation à partir des termes signés
+   * (abonnement, et mise en service du module le cas échéant) — datés de la
+   * fin d'essai, à émettre d'un geste le moment venu. `0` si la facturation
+   * n'a pas pu les poser : la signature, elle, n'échoue jamais pour ça.
+   */
+  draftInvoices: number;
 };
 
 // ─── Sorties d'API ───
@@ -375,6 +446,8 @@ export type CrmLead = {
   touches: CrmLeadTouch[];
   founderSeatReserved: boolean;
   notes: string;
+  /** La proposition sur la table — `null` tant que rien n'a été posé. */
+  proposal: CrmLeadProposal | null;
   createdAt: string;
   updatedAt: string;
   /** Dernière relance tracée — `null` si le lead n'a jamais été touché. */

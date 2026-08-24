@@ -561,6 +561,25 @@ export const LeadSchema = new Schema(
     },
     founderSeatReserved: { type: Boolean, default: false },
     notes: { type: String, default: '' },
+    /**
+     * La proposition sur la table — quel plan, quel module, quel engagement.
+     * Posée à l'étape « proposition », reprise au moment de signer. `null`
+     * tant que rien n'a été mis par écrit ; les PRIX ne s'y stockent pas,
+     * ils se dérivent de la grille (@sm/contracts, `proposalCents`).
+     */
+    proposal: {
+      type: new Schema(
+        {
+          plan: { type: String, enum: ['essentiel', 'complet', 'boost'], required: true },
+          onlineOrdering: { type: Boolean, default: false },
+          billing: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
+          note: { type: String, default: '' },
+          at: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
   },
   { timestamps: true },
 );

@@ -48,11 +48,11 @@ import {
 
 // ─── Géométrie (A4, en points typographiques) ───
 
-const PAGE_W = 595.28;
-const PAGE_H = 841.89;
-const MARGIN = 56;
-const RIGHT = PAGE_W - MARGIN;
-const CONTENT_W = RIGHT - MARGIN;
+export const PAGE_W = 595.28;
+export const PAGE_H = 841.89;
+export const MARGIN = 56;
+export const RIGHT = PAGE_W - MARGIN;
+export const CONTENT_W = RIGHT - MARGIN;
 
 // ─── Conversion du texte vers CP1252 ───
 
@@ -169,7 +169,7 @@ function approxWidth(text: string, size: number, bold: boolean): number {
 }
 
 /** Découpe un paragraphe en lignes qui tiennent dans `maxWidth`. */
-function wrap(text: string, size: number, bold: boolean, maxWidth: number): string[] {
+export function wrap(text: string, size: number, bold: boolean, maxWidth: number): string[] {
   const lines: string[] = [];
   let current = '';
   for (const word of text.split(/\s+/).filter(Boolean)) {
@@ -191,7 +191,7 @@ type Ink = 'ink' | 'mut';
 /** Encre : noir pour ce qui engage, gris pour ce qui accompagne. */
 const INKS: Record<Ink, string> = { ink: '0.09 0.08 0.06 rg', mut: '0.42 0.40 0.36 rg' };
 
-class Content {
+export class Content {
   private readonly ops: string[] = [];
 
   text(value: string, x: number, y: number, size: number, bold = false, ink: Ink = 'ink'): void {
@@ -237,7 +237,7 @@ class Content {
  * partout où le libellé voisin le dit déjà : un emplacement bavard déborderait
  * de sa colonne et recouvrirait le bloc d'à côté.
  */
-const or = (value: string | null, hint = ''): string => {
+export const or = (value: string | null, hint = ''): string => {
   if (value && value.trim() !== '') return value;
   return hint === '' ? INVOICE_LEGAL_PLACEHOLDER : `${INVOICE_LEGAL_PLACEHOLDER} ${hint}`;
 };
@@ -253,7 +253,7 @@ const or = (value: string | null, hint = ''): string => {
  * il nous les a données : un « SIRET : [À COMPLÉTER] » sous le nom du
  * restaurant lui ferait croire qu'il a mal fait quelque chose.
  */
-function partyLines(party: InvoiceParty, required: 'issuer' | 'customer'): string[] {
+export function partyLines(party: InvoiceParty, required: 'issuer' | 'customer'): string[] {
   const lines: string[] = [];
   if (party.legalForm) lines.push(party.legalForm);
   lines.push(or(party.address, '— adresse postale'));
@@ -441,7 +441,7 @@ export function renderInvoicePdf(doc: InvoiceDocument): Buffer {
 }
 
 /** Objets, table de références croisées, remorque — le squelette d'un PDF 1.4. */
-function assemble(stream: Buffer, title: string): Buffer {
+export function assemble(stream: Buffer, title: string): Buffer {
   const chunks: Buffer[] = [];
   let offset = 0;
   const offsets: number[] = [];

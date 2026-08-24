@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, StreamableFile } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   LeadConvertSchema,
   LeadCreateSchema,
@@ -18,6 +19,7 @@ import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Roles } from '../../common/auth';
 import { ConversionService } from './conversion.service';
 import { CrmService } from './crm.service';
+import { DevisService } from './devis.service';
 
 /**
  * CRM interne Snack Manager — NOTRE société, pas celle du client.
@@ -36,6 +38,7 @@ export class CrmController {
   constructor(
     private readonly crm: CrmService,
     private readonly conversion: ConversionService,
+    private readonly devis: DevisService,
   ) {}
 
   /** Compteurs de pipeline, places fondateur, MRR estimé, santé du parc. */
@@ -110,5 +113,19 @@ export class CrmController {
     @Body(zod(LeadConvertSchema)) body: LeadConvert,
   ) {
     return this.conversion.convert(actor, id, body);
+  }
+
+  /**
+   * Le devis de la proposition posée — le document que l'étape « Proposition »
+   * promettait sans le tenir. `attachment` : il se télécharge pour partir en
+   * pièce jointe ou s'imprimer, il ne se lit pas dans un onglet d'admin.
+   */
+  @Get('leads/:id/devis')
+  async devisPdf(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
+    const { buffer, number } = await this.devis.pdf(id);
+    res.setHeader('content-type', 'application/pdf');
+    res.setHeader('content-length', String(buffer.length));
+    res.setHeader('content-disposition', `attachment; filename="${number}.pdf"`);
+    return new StreamableFile(buffer);
   }
 }
