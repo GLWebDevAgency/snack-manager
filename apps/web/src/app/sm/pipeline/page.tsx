@@ -11,7 +11,7 @@
  * s'interposer entre l'intention et l'affichage.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
@@ -36,6 +36,53 @@ export default function PipelinePage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [moving, setMoving] = useState<string | null>(null);
+
+  // ── Navigation d'étapes sur mobile ──
+  // Sous `md`, les colonnes défilent horizontalement avec magnétisme ; la
+  // rangée de pastilles dit OÙ l'on est (`stageVu`) et permet de SAUTER à une
+  // étape. Les refs pointent les colonnes pour le `scrollIntoView`.
+  const [stageVu, setStageVu] = useState<LeadStage>(LEAD_STAGES[0]);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const colRefs = useRef(new Map<LeadStage, HTMLElement | null>());
+  const pillRefs = useRef(new Map<LeadStage, HTMLButtonElement | null>());
+
+  // La pastille active SUIT le balayage des colonnes : sans ça, arriver en fin
+  // de pipeline au pouce laisse la rangée bloquée sur « Nouveau » et elle ne
+  // dit plus où l'on est. Aucun état n'est écrit ici — pur défilement DOM.
+  useEffect(() => {
+    pillRefs.current
+      .get(stageVu)
+      ?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  }, [stageVu]);
+
+  /** L'étape dont la colonne est la plus proche du centre du défilement. */
+  function surDefilement() {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const centre = scroller.scrollLeft + scroller.clientWidth / 2;
+    let plusProche: LeadStage | null = null;
+    let distance = Infinity;
+    for (const stage of LEAD_STAGES) {
+      const el = colRefs.current.get(stage);
+      if (!el) continue;
+      const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - centre);
+      if (d < distance) {
+        distance = d;
+        plusProche = stage;
+      }
+    }
+    // React n'émet pas de rendu quand la valeur ne change pas : ce setState
+    // par événement de défilement reste gratuit tant qu'on reste sur place.
+    if (plusProche) setStageVu(plusProche);
+  }
+
+  function sauterVers(stage: LeadStage) {
+    colRefs.current
+      .get(stage)
+      // `block` au plus proche : seul l'axe horizontal doit bouger, la page
+      // ne doit pas sursauter verticalement pour centrer la colonne.
+      ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +137,8 @@ export default function PipelinePage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ── Barre d'outils ── */}
-      <div className="flex shrink-0 items-center gap-3 px-[26px] pb-3 pt-[26px]">
-        <div className="relative">
+      <div className="flex shrink-0 items-center gap-3 px-[26px] pb-3 pt-[26px] max-md:flex-wrap max-md:gap-2 max-md:px-4 max-md:pb-2 max-md:pt-4">
+        <div className="relative max-md:order-last max-md:w-full">
           <Icon
             name="search"
             size={16}
@@ -99,7 +146,7 @@ export default function PipelinePage() {
           />
           <Input
             type="search"
-            className="w-[280px] py-2.5 pl-9"
+            className="w-[280px] py-2.5 pl-9 max-md:w-full"
             placeholder="Rechercher un prospect…"
             aria-label="Rechercher un prospect"
             value={query}
@@ -112,7 +159,7 @@ export default function PipelinePage() {
             : `${filtered.length} lead${filtered.length > 1 ? "s" : ""}${query ? " trouvés" : ""}`}
         </span>
         <Btn
-          className="ml-auto"
+          className="ml-auto max-md:min-h-11"
           variant="primary"
           size="sm"
           icon="plus"
@@ -122,8 +169,60 @@ export default function PipelinePage() {
         </Btn>
       </div>
 
+      {/*
+        ── Pastilles d'étapes — mobile seulement ──
+        Elles disent OÙ l'on est dans le défilement magnétique (pastille à
+        l'accent) et permettent de SAUTER à une étape sans balayer cinq
+        colonnes. Le compteur par étape donne la silhouette du pipeline sans
+        le parcourir — c'est la vue d'ensemble que la grille de bureau offre
+        gratuitement et que le téléphone doit reconstruire.
+      */}
+      <div className="cf-scroll flex shrink-0 gap-1.5 overflow-x-auto px-4 pb-2.5 md:hidden">
+        {LEAD_STAGES.map((stage) => {
+          const n = filtered.filter((l) => l.stage === stage).length;
+          const on = stage === stageVu;
+          return (
+            <button
+              key={stage}
+              type="button"
+              ref={(el) => {
+                pillRefs.current.set(stage, el);
+              }}
+              onClick={() => sauterVers(stage)}
+              aria-current={on ? "true" : undefined}
+              className={cx(
+                "cf-press flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-3 text-[12px] font-bold",
+                on
+                  ? "border-accent/60 bg-accent/12 text-accent"
+                  : "border-line bg-white/3 text-mut",
+              )}
+            >
+              {LEAD_STAGE_LABELS[stage]}
+              <span
+                className={cx(
+                  "cf-fig rounded-pill px-1.5 text-[11px] font-extrabold",
+                  on ? "bg-accent/20 text-accent" : "bg-white/10 text-mut",
+                )}
+              >
+                {n}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Colonnes ── */}
-      <div className="cf-scroll min-h-0 flex-1 overflow-auto px-[26px] pb-[26px]">
+      {/*
+        Sous `md` : UN SEUL axe de défilement ici (horizontal, magnétisé
+        colonne par colonne) — la liste de cartes de chaque colonne défile
+        verticalement chez elle, comme dans tout kanban mobile qui se
+        respecte. Au-dessus : la grille historique, intacte.
+      */}
+      <div
+        ref={scrollerRef}
+        onScroll={surDefilement}
+        className="cf-scroll relative min-h-0 flex-1 overflow-auto px-[26px] pb-[26px] max-md:snap-x max-md:snap-mandatory max-md:overflow-y-hidden max-md:px-4 max-md:pb-3"
+      >
         {/*
           `w-full` EN PLUS de la largeur minimale : dans un conteneur qui
           défile, une rangée flex se dimensionne sur son contenu et restait
@@ -132,20 +231,26 @@ export default function PipelinePage() {
           Avec les deux, la rangée occupe l'écran quand il y a la place et ne
           défile qu'en dessous — six colonnes lisibles réclament 1320 px.
         */}
-        <div className="flex w-full min-w-[1320px] items-start gap-3">
+        <div className="flex w-full min-w-[1320px] items-start gap-3 max-md:h-full max-md:min-w-0 max-md:items-stretch">
           {LEAD_STAGES.map((stage) => {
             const column = filtered.filter((l) => l.stage === stage);
             return (
               <section
                 key={stage}
+                ref={(el) => {
+                  colRefs.current.set(stage, el);
+                }}
                 aria-label={LEAD_STAGE_LABELS[stage]}
                 className={cx(
                   "flex-1 overflow-hidden rounded-panel border bg-surface",
+                  // ~85vw : la colonne voisine dépasse du bord — l'indice
+                  // visuel qu'il y a une suite, sans lequel on ne balaie pas.
+                  "max-md:flex max-md:h-full max-md:w-[85vw] max-md:flex-none max-md:snap-center max-md:flex-col",
                   // La sortie de route ne pèse pas autant que le pipeline vivant.
                   stage === "perdu" ? "border-white/6 opacity-75" : "border-line",
                 )}
               >
-                <header className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-2.5">
+                <header className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3.5 py-2.5">
                   <span
                     className={cx(
                       "truncate text-[13.5px] font-bold",
@@ -159,7 +264,7 @@ export default function PipelinePage() {
                   </span>
                 </header>
 
-                <div className="flex min-h-[120px] flex-col gap-2.5 p-2.5">
+                <div className="cf-scroll flex min-h-[120px] flex-col gap-2.5 p-2.5 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto">
                   {leads === null ? (
                     <>
                       <Skeleton className="h-[104px]" />
@@ -284,7 +389,7 @@ function LeadCard({
             onClick={() => onMove(back)}
             title={`Reculer sur « ${LEAD_STAGE_LABELS[back]} »`}
             aria-label={`Reculer ${lead.restaurantName} sur « ${LEAD_STAGE_LABELS[back]} »`}
-            className="cf-press grid size-[30px] shrink-0 place-items-center rounded-pill border border-line bg-white/3 text-mut hover:border-white/25 hover:text-white disabled:opacity-40"
+            className="cf-press grid size-[30px] shrink-0 place-items-center rounded-pill border border-line bg-white/3 text-mut hover:border-white/25 hover:text-white disabled:opacity-40 max-md:size-11"
           >
             <Icon name="back" size={14} />
           </button>
@@ -295,7 +400,7 @@ function LeadCard({
             disabled={busy}
             onClick={() => onMove(forward)}
             aria-label={`Avancer ${lead.restaurantName} sur « ${LEAD_STAGE_LABELS[forward]} »`}
-            className="cf-press inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-pill bg-btndark px-3 py-[7px] text-xs font-bold text-white hover:bg-[#333] disabled:opacity-40"
+            className="cf-press inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-pill bg-btndark px-3 py-[7px] text-xs font-bold text-white hover:bg-[#333] disabled:opacity-40 max-md:min-h-11"
           >
             <span className="truncate">Avancer</span>
             <Icon name="arrow" size={14} className="shrink-0" />

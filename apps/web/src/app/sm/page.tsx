@@ -102,13 +102,13 @@ export default function HqDashboard() {
 
   if (loading && !overview) {
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
-        <div className="flex gap-4">
+      <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
+        <div className="grid grid-cols-2 gap-3 md:flex md:gap-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[124px] flex-1" />
+            <Skeleton key={i} className="h-[124px] md:flex-1" />
           ))}
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 max-md:flex-col">
           <Skeleton className="h-[280px] flex-[1.4]" />
           <Skeleton className="h-[280px] flex-1" />
         </div>
@@ -118,7 +118,7 @@ export default function HqDashboard() {
 
   if (!overview) {
     return (
-      <div className="p-[26px]">
+      <div className="p-[26px] max-md:p-4">
         <Card>
           <EmptyState
             icon="bell"
@@ -135,7 +135,7 @@ export default function HqDashboard() {
   const atRisk = (clients ?? []).filter((c) => c.health === "risque");
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/* ── Les gestes du jour ── */}
       <Panel
         title="Les gestes du jour"
@@ -229,9 +229,11 @@ export default function HqDashboard() {
                 </span>
               </div>
               {lead.contact.phone && (
+                // ≥ 44 px sous `md` : ce lien `tel:` EST le geste de la
+                // liste — il doit se toucher du pouce sans viser.
                 <a
                   href={`tel:${lead.contact.phone.replace(/\s/g, "")}`}
-                  className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white"
+                  className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white max-md:min-h-11 max-md:px-3.5 max-md:text-[13px] max-md:font-bold max-md:text-white"
                 >
                   <Icon name="phone" size={13} />
                   {lead.contact.phone}
@@ -247,8 +249,9 @@ export default function HqDashboard() {
         )}
       </Panel>
 
-      {/* ── Les quatre chiffres ── */}
-      <div className="flex items-stretch gap-4">
+      {/* ── Les quatre chiffres — 2 × 2 sous `md` : quatre cartes de front
+          dans 390 px écraseraient les valeurs sous le seuil de lecture ── */}
+      <div className="grid grid-cols-2 items-stretch gap-3 md:flex md:gap-4">
         <Kpi
           label="Places fondateur"
           value={`${seats.remaining} / ${seats.total}`}
@@ -271,8 +274,8 @@ export default function HqDashboard() {
         <Kpi label="Leads en cours" value={int(overview.leadsOpen)} icon="grid" />
       </div>
 
-      {/* ── Pipeline + places fondateur ── */}
-      <div className="flex items-start gap-4">
+      {/* ── Pipeline + places fondateur — empilés sous `md` ── */}
+      <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
         <Panel
           className="flex-[1.4]"
           title="Pipeline en un coup d'œil"
@@ -377,8 +380,8 @@ export default function HqDashboard() {
         </Panel>
       </div>
 
-      {/* ── Parc client + relances ── */}
-      <div className="flex items-start gap-4">
+      {/* ── Parc client + relances — empilés sous `md` ── */}
+      <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
         <Panel
           className="flex-[1.4]"
           title="Santé du parc"
