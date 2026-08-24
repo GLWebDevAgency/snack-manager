@@ -182,6 +182,14 @@ function Shell({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event(NAV_STORE));
   };
 
+  // Avant le 24/08/2026, la seule « déconnexion » était de fermer l'onglet :
+  // le jeton restait douze heures dans le navigateur — gênant sur un poste
+  // partagé (un équipier qui emprunte la tablette du comptoir).
+  const logout = () => {
+    clearToken();
+    router.replace("/admin/login");
+  };
+
   // ── Volet de navigation mobile — ouvert depuis « Plus », jamais persisté ──
   //
   // Contrairement à la barre latérale de bureau (mémorisée dans localStorage),
@@ -515,6 +523,17 @@ function Shell({ children }: { children: ReactNode }) {
               >
                 <Icon name="gear" size={17} />
               </Link>
+              {/* La sortie teinte vers l'alerte au survol : voisine du rouage,
+                  elle ne doit pas s'y confondre sous un clic pressé. */}
+              <button
+                type="button"
+                onClick={logout}
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
+                className="cf-press shrink-0 text-mut hover:text-alertt"
+              >
+                <Icon name="logout" size={17} />
+              </button>
               <button
                 type="button"
                 onClick={toggleNav}
@@ -807,6 +826,15 @@ function Shell({ children }: { children: ReactNode }) {
               >
                 <Icon name="gear" size={17} />
               </Link>
+              <button
+                type="button"
+                onClick={logout}
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
+                className="cf-press grid size-11 shrink-0 place-items-center text-mut hover:text-alertt"
+              >
+                <Icon name="logout" size={17} />
+              </button>
             </div>
 
             {/* Même signature discrète que la barre de bureau — voir le

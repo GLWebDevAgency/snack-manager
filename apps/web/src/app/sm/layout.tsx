@@ -293,7 +293,7 @@ function HqShell({ children }: { children: ReactNode }) {
               aria-label="Se déconnecter"
               className="cf-press grid size-8 shrink-0 place-items-center rounded-xs border border-white/12 bg-white/6 text-mut hover:border-white/25 hover:bg-white/12 hover:text-white"
             >
-              <Icon name="back" size={15} />
+              <Icon name="logout" size={15} />
             </button>
           </div>
         </aside>
@@ -453,7 +453,7 @@ function HqShell({ children }: { children: ReactNode }) {
               onClick={logout}
               className="cf-press flex min-h-11 items-center gap-2 rounded-pill border border-white/12 bg-white/6 px-3.5 text-[13px] font-bold text-mut hover:border-white/25 hover:bg-white/12 hover:text-white"
             >
-              <Icon name="back" size={15} />
+              <Icon name="logout" size={15} />
               Se déconnecter
             </button>
           </div>
