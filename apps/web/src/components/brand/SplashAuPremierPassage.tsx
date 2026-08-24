@@ -153,7 +153,12 @@ function SplashUneFoisParSession({
     } catch {
       // Navigation privée, stockage refusé : on joue l'ouverture.
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- `sessionStorage` n'existe pas au rendu serveur : aucune valeur calculée au rendu ne peut décider ceci, et le lire au rendu provoquerait un écart d'hydratation. Le supprimer rendrait ce mode inerte.
+    // `setState` dans un effet, et c'est voulu : `sessionStorage` n'existe pas
+    // au rendu serveur, donc aucune valeur calculée au rendu ne peut décider
+    // ceci — la lire au rendu provoquerait un écart d'hydratation. La règle
+    // `react-hooks/set-state-in-effect` ne voit pas cet effet derrière l'alias
+    // `useAvantPeinture`, donc aucune directive n'est à poser tant que l'alias
+    // existe ; si l'alias disparaît un jour, elle se remettra à râler ici.
     setVisible(true);
   }, []);
 
