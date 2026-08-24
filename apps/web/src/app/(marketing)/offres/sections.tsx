@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Photo } from "@/components/marketing/Photo";
 import {
+  ATELIER_PORTE,
   BILLING_YEARLY_NOTE,
   CTA_CALLBACK,
   CTA_DEMO,
@@ -17,6 +18,7 @@ import {
 } from "@/components/marketing/content";
 import {
   ANNUEL_HINT,
+  ATELIER_STRIP,
   MATERIEL,
   MODULE_POINTS,
   OFFRE_CTA,
@@ -249,6 +251,50 @@ function Formules() {
   );
 }
 
+/* ── 1 bis. L'Atelier — la bande compacte ────────────────────── */
+
+/**
+ * SIX LIGNES, UN MONTANT PAR LIGNE — le gabarit du tableau des commissions de
+ * la landing (`.pr-commissions`), et surtout pas une deuxième grille de
+ * cartes : la section précédente vient d'en poser trois, et l'Atelier n'est
+ * pas une quatrième formule. La bande RÉSUME et renvoie ; la page `/atelier`
+ * porte la démarche (la maquette avant l'engagement), les détails et les
+ * conditions.
+ *
+ * Le renvoi est un lien de NAVIGATION en habit de bouton, pas un troisième
+ * verbe d'appel : les deux gestes du site restent `CTA_CALLBACK` et
+ * `CTA_DEMO`, et « Découvrir » n'engage à rien — il ouvre une page.
+ */
+function Atelier() {
+  const { id, badge, title, lead } = offreSection("atelier");
+
+  return (
+    <section className="section of-section" id={id}>
+      <div className="of-wrap">
+        <div className="of-sechead rv">
+          <span className="badge">{badge}</span>
+          <h2 className="h2">{title}</h2>
+          <p className="subheading of-seclead">{lead}</p>
+        </div>
+
+        <dl className="pr-commissions rv">
+          {ATELIER_STRIP.map((row) => (
+            <div className="pr-commission" key={row.id}>
+              <dt className="pr-cwho">{row.who}</dt>
+              <dd className="pr-crate">{row.rate}</dd>
+              <dd className="pr-cnote">{row.note}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <Link className="btn light rv" href={ATELIER_PORTE.href}>
+          {ATELIER_PORTE.cta}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 /* ── 2. Le module Commande en ligne & fidélité ───────────────── */
 
 /**
@@ -420,7 +466,9 @@ function Services() {
 
         <ol className="of-rows">
           {OFFRE_SERVICES.map((s, i) => (
-            <li className="of-row rv" key={s.id} style={{ transitionDelay: `${i * 0.08}s` }}>
+            // `is-compris` suit la donnée : le « montant » de la fiche Google
+            // n'est pas un chiffre, la rangée l'affiche discret plutôt que doré.
+            <li className={s.compris ? "of-row is-compris rv" : "of-row rv"} key={s.id} style={{ transitionDelay: `${i * 0.08}s` }}>
               <div className="of-rowhead">
                 <h3 className="of-rowtitle">{s.title}</h3>
                 <p className="of-rowlead">{s.lead}</p>
@@ -576,22 +624,26 @@ function AppelFinal() {
 
 /**
  * La page, dans l'ordre d'une vérification : ce que contient une formule → ce
- * qui se vend à part → ce que le matériel ne coûte pas → ce qu'on fait autour →
- * ce qui est toujours compris → à quoi l'on s'engage → comment nous joindre.
+ * que l'Atelier facture autour → ce qui se vend à part → ce que le matériel ne
+ * coûte pas → ce qu'on fait autour → ce qui est toujours compris → à quoi l'on
+ * s'engage → comment nous joindre. L'Atelier suit les formules parce que c'est
+ * là que le lecteur compare des mensualités — sa bande dit les montants, sa
+ * page dit le reste.
  *
  * L'INVENTAIRE DES REFUS A DISPARU D'ENTRE « toujours compris » ET LE POINT DE
  * CONVERSION. La dernière chose que le lecteur lisait avant qu'on lui demande
  * son numéro était quatre paragraphes commençant par une négation.
  *
  * Deux gabarits de même forme ne se suivent jamais, et cette fois c'est
- * vérifiable : bande / grille / panneau débordant / bande / rangées / bande /
- * colonne nue / bande.
+ * vérifiable : bande / grille / tableau compact / panneau débordant / bande /
+ * rangées / bande / colonne nue / bande.
  */
 export function OffresBody() {
   return (
     <>
       <PageHead />
       <Formules />
+      <Atelier />
       <Module />
       <Materiel />
       <Services />

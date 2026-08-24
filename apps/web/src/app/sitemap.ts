@@ -63,6 +63,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
       // recherche d'acheteur, et c'est cette page-là qui y répond en entier.
       priority: 0.9,
     },
+    // Les pages de la plateforme et l'Atelier : chacune répond à une recherche
+    // d'acheteur précise (« logiciel caisse snack », « écran cuisine », « site
+    // internet restaurant »…). Absentes du plan, elles ne vivaient que des
+    // liens du menu — le travail de référencement fait, et l'effet jeté.
+    ...["/caisse", "/cuisine", "/commande-en-ligne", "/atelier"].map((chemin) => ({
+      url: urlAbsolue(chemin),
+      changeFrequency: "monthly" as const,
+      priority: 0.8,
+    })),
     {
       url: urlAbsolue(BLOG_PATH),
       lastModified: dernierArticle,

@@ -11,6 +11,7 @@ import {
   DEVICE_OFFLINE_AFTER_MS,
   FOUNDER_SEATS_TOTAL,
   LEAD_STAGES,
+  LeadServicesSchema,
   PLAN_MRR_CENTS,
   SCREEN_OFFLINE_AFTER_MS,
   type CrmClient,
@@ -514,6 +515,9 @@ function toLead(doc: Record<string, unknown>): CrmLead {
           plan: raw.proposal.plan as 'essentiel' | 'complet' | 'boost',
           onlineOrdering: Boolean(raw.proposal.onlineOrdering),
           billing: (raw.proposal.billing ?? 'mensuel') as 'mensuel' | 'annuel',
+          // Les propositions posées avant l'Atelier n'ont pas de services :
+          // le schéma remplit les défauts (tout à faux, aucune cadence).
+          services: LeadServicesSchema.parse(raw.proposal.services ?? {}),
           note: raw.proposal.note ?? '',
           at: iso(raw.proposal.at) ?? new Date(0).toISOString(),
         }

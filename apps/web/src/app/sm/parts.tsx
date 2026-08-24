@@ -17,9 +17,13 @@ import {
   LEAD_TOUCH_LABELS,
   LEAD_TOUCH_TYPES,
   PLAN_LABELS,
+  ATELIER_ONCE_CENTS,
+  ATELIER_PRESENCE_CENTS,
+  EMPTY_SERVICES,
   PLANS,
   PROPOSAL_BILLINGS,
   PROPOSAL_BILLING_LABELS,
+  SOCIAL_CADENCE_CENTS,
   nextLeadStage,
   previousLeadStage,
   proposalCents,
@@ -28,6 +32,7 @@ import {
   type CrmLead,
   type LeadConversion,
   type LeadSequence,
+  type LeadServices,
   type LeadStage,
   type LeadTouchType,
   type LeadUpdate,
@@ -827,12 +832,37 @@ function slugifie(name: string): string {
  * réaffichera pas : c'est le contrat de `LeadConversion`.
  */
 /** Le chiffrage d'une proposition, en une phrase — toujours dérivé de la grille. */
-function phrasePrix(p: { plan: (typeof PLANS)[number]; onlineOrdering: boolean; billing: ProposalBilling }): string {
-  const { monthlyCents, setupOnceCents } = proposalCents(p);
-  const mois = `${fmtEuro(monthlyCents)}/mois`;
-  const setup = setupOnceCents > 0 ? ` · mise en service ${fmtEuro(setupOnceCents)} (une fois)` : "";
-  const annee = p.billing === "annuel" ? ` · soit ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)` : "";
-  return mois + setup + annee;
+function phrasePrix(p: {
+  plan: (typeof PLANS)[number];
+  onlineOrdering: boolean;
+  billing: ProposalBilling;
+  services?: LeadServices;
+}): string {
+  const { monthlyCents, servicesMonthlyCents, setupOnceCents } = proposalCents(p);
+  const morceaux = [`${fmtEuro(monthlyCents)}/mois`];
+  if (servicesMonthlyCents > 0)
+    morceaux.push(`atelier ${fmtEuro(servicesMonthlyCents)}/mois (sans engagement)`);
+  if (setupOnceCents > 0) morceaux.push(`${fmtEuro(setupOnceCents)} une fois`);
+  const annee =
+    p.billing === "annuel"
+      ? ` · logiciel ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)`
+      : "";
+  return morceaux.join(" + ") + annee;
+}
+
+/** Les services retenus, en toutes lettres courtes — pour la carte et le panneau. */
+function resumeAtelier(s: LeadServices): string {
+  return [
+    s.siteVitrine && "site clé en main",
+    s.refonteSite && "refonte du site",
+    s.identiteVisuelle && "identité visuelle",
+    s.integrationCommande && "intégration commande",
+    s.presenceInternet && "présence internet",
+    s.reseauxSociaux === "hebdo" && "réseaux 1 pub/sem",
+    s.reseauxSociaux === "bihebdo" && "réseaux 2 pubs/sem",
+  ]
+    .filter((x): x is string => Boolean(x))
+    .join(" · ");
 }
 
 /**
@@ -854,6 +884,7 @@ function ProposalPanel({
   const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
   const [module, setModule] = useState(false);
   const [billing, setBilling] = useState<ProposalBilling>("mensuel");
+  const [services, setServices] = useState<LeadServices>(EMPTY_SERVICES);
   const [note, setNote] = useState("");
 
   useEffect(() => {
@@ -861,6 +892,7 @@ function ProposalPanel({
     setPlan(lead.proposal?.plan ?? "complet");
     setModule(lead.proposal?.onlineOrdering ?? false);
     setBilling(lead.proposal?.billing ?? "mensuel");
+    setServices(lead.proposal?.services ?? EMPTY_SERVICES);
     setNote(lead.proposal?.note ?? "");
     setEdit(false);
   }, [lead]);
@@ -870,7 +902,7 @@ function ProposalPanel({
     setBusy(true);
     try {
       const updated = await crm.updateLead(lead._id, {
-        proposal: { plan, onlineOrdering: module, billing, note: note.trim() },
+        proposal: { plan, onlineOrdering: module, billing, services, note: note.trim() },
       });
       onChanged(updated);
       setEdit(false);
@@ -903,6 +935,9 @@ function ProposalPanel({
           {PROPOSAL_BILLING_LABELS[p.billing]}
         </div>
         <div className="mt-0.5 text-xs text-mut">{phrasePrix(p)}</div>
+        {resumeAtelier(p.services) && (
+          <div className="mt-0.5 text-xs text-mut">Atelier : {resumeAtelier(p.services)}</div>
+        )}
         {p.note && <p className="mt-1.5 text-xs italic text-mut">« {p.note} »</p>}
         <div className="mt-2 flex items-center gap-2">
           <Btn
@@ -935,7 +970,7 @@ function ProposalPanel({
   if (!lead.proposal && !edit) {
     return (
       <Btn variant="ghost" size="sm" icon="euro" onClick={() => setEdit(true)}>
-        Poser la proposition — plan, module, engagement
+        Poser la proposition — plan, services, engagement
       </Btn>
     );
   }
@@ -987,6 +1022,95 @@ function ProposalPanel({
           <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
         )}
       </div>
+
+      {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
+          libellés sortent de la grille : changer un tarif ne réécrit pas cet
+          écran. */}
+      <Eyebrow>L&apos;Atelier — les services</Eyebrow>
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        <Field label="Site web" htmlFor="prop-site">
+          <Select
+            id="prop-site"
+            value={services.siteVitrine ? "creation" : services.refonteSite ? "refonte" : "aucun"}
+            onChange={(e) =>
+              setServices({
+                ...services,
+                siteVitrine: e.target.value === "creation",
+                refonteSite: e.target.value === "refonte",
+              })
+            }
+          >
+            <option value="aucun">Aucun</option>
+            <option value="creation">
+              Création clé en main — {fmtEuro(ATELIER_ONCE_CENTS.siteVitrine)} (une fois)
+            </option>
+            <option value="refonte">
+              Refonte de l&apos;existant — {fmtEuro(ATELIER_ONCE_CENTS.refonteSite)} (une fois)
+            </option>
+          </Select>
+        </Field>
+        <Field label="Réseaux sociaux" htmlFor="prop-social">
+          <Select
+            id="prop-social"
+            value={services.reseauxSociaux ?? "aucun"}
+            onChange={(e) =>
+              setServices({
+                ...services,
+                reseauxSociaux:
+                  e.target.value === "aucun" ? null : (e.target.value as "hebdo" | "bihebdo"),
+              })
+            }
+          >
+            <option value="aucun">Aucun</option>
+            <option value="hebdo">
+              1 publication/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.hebdo)}/mois
+            </option>
+            <option value="bihebdo">
+              2 publications/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.bihebdo)}/mois
+            </option>
+          </Select>
+        </Field>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Présence internet — fiche Google tenue, avis répondus, rapport mensuel.{" "}
+          {fmtEuro(ATELIER_PRESENCE_CENTS)}/mois, sans engagement.
+        </div>
+        <Toggle
+          on={services.presenceInternet}
+          label="Présence internet"
+          onChange={(on) => setServices({ ...services, presenceInternet: on })}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Identité visuelle — logo, couleurs, déclinaisons.{" "}
+          {fmtEuro(ATELIER_ONCE_CENTS.identiteVisuelle)} (une fois).
+        </div>
+        <Toggle
+          on={services.identiteVisuelle}
+          label="Identité visuelle"
+          onChange={(on) => setServices({ ...services, identiteVisuelle: on })}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Commande en ligne greffée sur SON site existant.{" "}
+          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)} (une fois), mise en service comprise —
+          le module s&apos;active avec.
+        </div>
+        <Toggle
+          on={services.integrationCommande}
+          label="Intégration sur site existant"
+          onChange={(on) => {
+            setServices({ ...services, integrationCommande: on });
+            // L'intégration sans le module serait un devis incohérent — le
+            // schéma la refuse ; l'écran la rend simplement impossible.
+            if (on && plan !== "boost") setModule(true);
+          }}
+        />
+      </div>
+
       <Field label="Note (ce qui s'est dit)" htmlFor="prop-note">
         <Input
           id="prop-note"
@@ -996,7 +1120,7 @@ function ProposalPanel({
         />
       </Field>
       <div className="text-xs font-semibold text-accent">
-        {phrasePrix({ plan, onlineOrdering: module, billing })}
+        {phrasePrix({ plan, onlineOrdering: module, billing, services })}
       </div>
       <div className="flex gap-2">
         <Btn type="submit" variant="ink" size="sm" disabled={busy}>
@@ -1031,6 +1155,7 @@ function ConvertPanel({
   const [founderSeat, setFounderSeat] = useState(false);
   const [onlineOrdering, setOnlineOrdering] = useState(false);
   const [billing, setBilling] = useState<ProposalBilling>("mensuel");
+  const [services, setServices] = useState<LeadServices>(EMPTY_SERVICES);
 
   // Re-proposé à chaque lead ouvert — un tiroir réutilisé ne doit pas garder
   // le slug du restaurant précédent. Les termes partent de la PROPOSITION :
@@ -1044,6 +1169,7 @@ function ConvertPanel({
     setPlan(lead.proposal?.plan ?? "essentiel");
     setOnlineOrdering(lead.proposal?.onlineOrdering ?? false);
     setBilling(lead.proposal?.billing ?? "mensuel");
+    setServices(lead.proposal?.services ?? EMPTY_SERVICES);
     setFait(null);
     setErreur(null);
     setOpen(false);
@@ -1061,6 +1187,7 @@ function ConvertPanel({
         founderSeat,
         onlineOrdering,
         billing,
+        services,
       });
       setFait(done);
       // Le lead local suit ce que l'API vient d'écrire : signé, réservation
@@ -1178,6 +1305,13 @@ function ConvertPanel({
           Place fondateur — le tarif gelé suit le restaurant, plus le pipeline.
         </div>
         <Toggle on={founderSeat} label="Place fondateur" onChange={setFounderSeat} />
+      </div>
+      {/* Les termes signés partent de la proposition (module, engagement,
+          Atelier) — on les CHIFFRE sous les yeux de l'opérateur : c'est ce
+          montant-là que les brouillons de factures vont porter. */}
+      <div className="text-xs font-semibold text-accent">
+        {phrasePrix({ plan, onlineOrdering, billing, services })}
+        {resumeAtelier(services) ? ` · Atelier : ${resumeAtelier(services)}` : ""}
       </div>
       {erreur && <div className="text-xs font-semibold text-alertt">{erreur}</div>}
       <div className="flex gap-2">

@@ -58,6 +58,8 @@
  */
 
 import {
+  ATELIER_CENTS,
+  ATELIER_SERVICES,
   BILLING_CYCLES,
   HARDWARE_PATHS,
   MODULE_ADDON,
@@ -70,7 +72,7 @@ import {
   type Shot,
 } from "@/components/marketing/content";
 
-/* ── Les six sections, et leur sommaire ──────────────────────── */
+/* ── Les sept sections, et leur sommaire ─────────────────────── */
 
 export type OffreSectionMeta = {
   /** Ancre réelle dans le DOM. Le sommaire de la page ne vise que celles-là. */
@@ -111,6 +113,16 @@ export const OFFRE_SECTIONS: readonly OffreSectionMeta[] = [
     badge: "Trois formules",
     title: "Ce que contient chaque formule, ligne par ligne.",
     lead: "La même liste de modules dans les trois colonnes, pastille pleine ou vide. Vous n'avez qu'une seule chose à chercher : où s'arrête la vôtre.",
+  },
+  {
+    id: "atelier",
+    nav: "L’Atelier",
+    badge: "L’Atelier",
+    title: "L’Atelier : le site, Google, les réseaux — et leurs prix.",
+    // La bande RÉSUME, la page `/atelier` détaille : même partage de travail
+    // qu'entre la landing et cette page. Les mensuels ne s'annoncent jamais
+    // « sans engagement » tout court — la leçon de la constante `ENGAGEMENT`.
+    lead: "Nos services d’agence, résumés ici avec leurs montants — les mensuels sans engagement, résiliables à tout moment. La maquette de votre site est montrée avant tout engagement : le détail est sur la page de l’Atelier.",
   },
   {
     id: "module",
@@ -322,7 +334,7 @@ export const OFFRE_HERO = {
   // « — et la liste de ce qui n'est pas compris » est tombé avec la section
   // qu'il annonçait. Une page qui ouvre en promettant l'inventaire de ses refus
   // se vend contre elle-même dès la deuxième phrase.
-  lead: "Trois formules affichées, un module vendu à part, trois services chiffrés. Chaque montant de cette page est écrit noir sur blanc.",
+  lead: "Trois formules affichées, un module vendu à part, les services de l’Atelier et trois chantiers chiffrés. Chaque montant de cette page est écrit noir sur blanc.",
   price: PRICE_RANGE,
   claim: "Zéro commission sur vos ventes. Deux mois offerts à l'année.",
 } as const;
@@ -361,6 +373,73 @@ export const PLAN_MODULE_NOTE = {
     MODULE_SETUP_CENTS,
   )} de mise en service la première fois.`,
 } as const;
+
+/* ── 1 bis. L'Atelier — la bande compacte ────────────────────── */
+
+/** Retrouve un service de l'Atelier par son `id`, et lève s'il a disparu. */
+function atelierService(id: string): Service {
+  const found = ATELIER_SERVICES.find((s) => s.id === id);
+  if (!found) throw new Error(`Service inconnu dans ATELIER_SERVICES : ${id}`);
+  return found;
+}
+
+/**
+ * LA BANDE NE RÉÉCRIT RIEN : les intitulés et les accroches sont LUS dans
+ * `ATELIER_SERVICES`, et chaque montant recomposé depuis `ATELIER_CENTS` — la
+ * périodicité collée au chiffre, parce qu'une bande compacte n'a pas la
+ * colonne de conditions de la page de l'Atelier. Deux lignes réécrivent leur
+ * note, et seulement parce que leur prix est double : les réseaux (deux
+ * cadences) et l'intégration (un abonnement plus un forfait) — les montants,
+ * eux, descendent toujours des mêmes constantes.
+ */
+export type AtelierStripRow = {
+  id: string;
+  /** L'intitulé du service — lu dans `ATELIER_SERVICES`. */
+  who: string;
+  /** Le montant et sa périodicité, en un souffle — « 690 € une fois ». */
+  rate: string;
+  /** Ce que le service produit, en une ligne. */
+  note: string;
+};
+
+export const ATELIER_STRIP: readonly AtelierStripRow[] = [
+  {
+    id: "site",
+    who: atelierService("site").title,
+    rate: `${euros(ATELIER_CENTS.site)} une fois`,
+    note: atelierService("site").lead,
+  },
+  {
+    id: "refonte",
+    who: atelierService("refonte").title,
+    rate: `${euros(ATELIER_CENTS.refonte)} une fois`,
+    note: atelierService("refonte").lead,
+  },
+  {
+    id: "identite",
+    who: atelierService("identite").title,
+    rate: `${euros(ATELIER_CENTS.identite)} une fois`,
+    note: atelierService("identite").lead,
+  },
+  {
+    id: "presence",
+    who: atelierService("presence").title,
+    rate: `${euros(ATELIER_CENTS.presence)} / mois`,
+    note: atelierService("presence").lead,
+  },
+  {
+    id: "reseaux",
+    who: atelierService("reseaux").title,
+    rate: `dès ${euros(ATELIER_CENTS.social1)} / mois`,
+    note: `1 publication par semaine — ${euros(ATELIER_CENTS.social2)} / mois pour 2. Le calendrier est validé par vous.`,
+  },
+  {
+    id: "integration",
+    who: atelierService("integration").title,
+    rate: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
+    note: `${atelierService("integration").lead} Plus ${euros(ATELIER_CENTS.integration)} d’intégration, une fois.`,
+  },
+];
 
 /* ── 2. Le module Commande en ligne & fidélité ───────────────── */
 
@@ -486,6 +565,13 @@ export type OffreService = {
   price: string;
   /** La condition sous le montant — devis, unicité, cas à zéro euro. */
   priceNote?: string;
+  /**
+   * Le « montant » n'est pas un chiffre (« Compris dans la mise en route ») :
+   * la rangée l'affiche discret et blanc, pas doré — le dorer ferait lire les
+   * rangées comme autant de dépenses. Porté par la DONNÉE et plus par le rang :
+   * la page de l'Atelier réutilise ces rangées, et sa première a un vrai prix.
+   */
+  compris?: boolean;
 };
 
 /** Retrouve un service de la vitrine par son `id`, et lève s'il a disparu. */
@@ -521,6 +607,7 @@ export const OFFRE_SERVICES: readonly OffreService[] = [
     lead: service("google").lead,
     line: service("google").line,
     price: service("google").price,
+    compris: true,
   },
   {
     id: "identite",

@@ -2448,6 +2448,7 @@ html:has(.mk) {
  * perdus dans des sections dont tout l'intérêt est d'être des respirations.
  */
 .mk .ch-head,
+.mk .at-head,
 .mk .mt-head,
 .mk .jl-head {
   align-items: flex-start;
@@ -2635,6 +2636,91 @@ html:has(.mk) {
     margin-top: 2px;
     font-size: 15px;
     text-align: left;
+  }
+}
+
+/* ===== L'Atelier — la porte, pas l'étalage =====
+ *
+ * Trois cartes-liens vers /atelier, sans un montant : les prix vivent sur la
+ * page de l'Atelier, et la grille tarifaire est deux sections plus bas. Les
+ * jetons sont ceux des cartes du site — fond `--card-gradient`, filet
+ * `--border-10`, rayon 24 px comme `.bl-card` et `.spot` : une section de
+ * plus ne coûte pas une couleur de plus.
+ */
+.mk .at-section {
+  gap: 26px;
+}
+.mk .at-cards {
+  width: 100%;
+  max-width: var(--content-width);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+/* La carte ENTIÈRE est le lien — même contrat que `.bl-card` : la cible de
+   clic est la surface, le doré du bas n'est qu'une flèche. */
+.mk .at-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 26px 28px;
+  background: var(--card-gradient);
+  border: 1px solid var(--border-10);
+  border-radius: 24px;
+  transition:
+    border-color 0.3s,
+    transform 0.3s;
+}
+.mk .at-card:hover {
+  border-color: rgba(201, 161, 90, 0.35);
+  transform: translateY(-2px);
+}
+.mk .at-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.mk .at-cardtitle {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.3em;
+  color: var(--white);
+}
+.mk .at-cardline {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.5em;
+  color: var(--gray);
+  text-wrap: pretty;
+}
+/* `margin-top: auto` : les trois libellés s'alignent sur le bas des cartes,
+   quelle que soit la longueur des lignes au-dessus. */
+.mk .at-cardcta {
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.mk .at-note {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.45em;
+  color: var(--white-50);
+  text-align: center;
+}
+@media (max-width: 809.98px) {
+  /* Une colonne, jamais un défilement horizontal : les trois portes se lisent
+     l'une sous l'autre, à la largeur qu'un pouce sait viser. */
+  .mk .at-cards {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .mk .at-card {
+    padding: 22px 24px;
   }
 }
 
@@ -5870,8 +5956,9 @@ html:has(.mk) {
 }
 /* La fiche Google dit « compris dans la mise en route » : la dorer et la grossir
    ferait lire les trois rangées comme trois dépenses, l'inverse exact de ce
-   qu'on dit d'elle. */
-.mk .of-row:first-child .of-rowprice {
+   qu'on dit d'elle. La règle suit une CLASSE et plus le premier rang : la page
+   de l'Atelier réutilise ces rangées, et sa première porte un vrai montant. */
+.mk .of-row.is-compris .of-rowprice {
   font-size: 16px;
   letter-spacing: -0.02em;
   color: var(--white-50);

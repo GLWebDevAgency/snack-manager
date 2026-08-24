@@ -2,12 +2,20 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
+  ATELIER_ONCE_CENTS,
+  ATELIER_ONCE_KEYS,
+  ATELIER_ONCE_LABELS,
+  ATELIER_PRESENCE_CENTS,
+  ATELIER_PRESENCE_LABEL,
   EMPTY_PARTY,
+  LeadServicesSchema,
   MODULE_ORDERING_CENTS,
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
   PLAN_MRR_CENTS,
   SM_VAT_RATE_PERCENT,
+  SOCIAL_CADENCE_CENTS,
+  SOCIAL_CADENCE_LABELS,
   issuerGaps,
   yearlyCents,
   type InvoiceParty,
@@ -70,11 +78,38 @@ export function buildDevisDocument(
       });
     }
   }
-  if (moduleFacture) {
+  // L'Atelier — les mensuels d'abord, jamais annualisés : sans engagement,
+  // ils restent « par mois » même quand le logiciel part à l'année.
+  const services = proposal.services;
+  if (services.presenceInternet) {
+    lignes.push({
+      designation: ATELIER_PRESENCE_LABEL,
+      recurrence: 'par mois',
+      montantHtCents: ATELIER_PRESENCE_CENTS,
+    });
+  }
+  if (services.reseauxSociaux) {
+    lignes.push({
+      designation: SOCIAL_CADENCE_LABELS[services.reseauxSociaux],
+      recurrence: 'par mois',
+      montantHtCents: SOCIAL_CADENCE_CENTS[services.reseauxSociaux],
+    });
+  }
+  // L'intégration sur site existant COMPREND la mise en service : jamais les
+  // deux lignes sur le même devis.
+  if (moduleFacture && !services.integrationCommande) {
     lignes.push({
       designation: 'Mise en service du module commande en ligne',
       recurrence: 'une fois',
       montantHtCents: MODULE_ORDERING_SETUP_CENTS,
+    });
+  }
+  for (const cle of ATELIER_ONCE_KEYS) {
+    if (!services[cle]) continue;
+    lignes.push({
+      designation: ATELIER_ONCE_LABELS[cle],
+      recurrence: 'une fois',
+      montantHtCents: ATELIER_ONCE_CENTS[cle],
     });
   }
 
@@ -99,6 +134,12 @@ export function buildDevisDocument(
       `Essai de ${TRIAL_DAYS} jours offert à l'ouverture du compte — la facturation démarre à l'issue de l'essai.`,
       ...(proposal.billing === 'annuel'
         ? ['Engagement annuel : douze mois de service, dix facturés — deux mois offerts.']
+        : []),
+      ...(services.presenceInternet || services.reseauxSociaux
+        ? ['Services de l’Atelier : sans engagement, résiliables à tout moment, jamais facturés d’avance.']
+        : []),
+      ...(services.siteVitrine || services.refonteSite
+        ? ['Site : la maquette est présentée et validée AVANT la mise en chantier — rien ne part sans votre accord sur pièce.']
         : []),
       'Matériel non compris — l’application fonctionne sur vos tablettes et votre imprimante.',
     ],
@@ -128,6 +169,8 @@ export class DevisService {
         plan: lead.proposal.plan as LeadProposal['plan'],
         onlineOrdering: Boolean(lead.proposal.onlineOrdering),
         billing: (lead.proposal.billing ?? 'mensuel') as LeadProposal['billing'],
+        // Les propositions d'avant l'Atelier : le schéma pose les défauts.
+        services: LeadServicesSchema.parse(lead.proposal.services ?? {}),
         note: lead.proposal.note ?? '',
       },
       this.issuer.issuer(),
