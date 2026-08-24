@@ -1,0 +1,92 @@
+name: Variable Railway
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Poser UNE variable d'environnement sur un service Railway, depuis GitHub.
+#
+# Pourquoi ce détour existe : l'équipe (et l'agent qui l'assiste) n'a pas
+# toujours un poste avec la CLI Railway et le jeton sous la main — le jeton de
+# projet, lui, vit déjà dans les secrets de ce dépôt pour le déploiement. Ce
+# workflow le réutilise : on pose une variable depuis l'onglet Actions, y
+# compris depuis un téléphone.
+#
+# ⚠️ CE QUE ÇA IMPLIQUE, à savoir avant de s'en servir :
+#   · La VALEUR saisie apparaît dans le récapitulatif de l'exécution — le
+#     dépôt est privé, mais toute personne qui le lit la voit. Pour une URL
+#     d'alerte, c'est un compromis assumé et rotatif ; pour un VRAI secret
+#     (clé Brevo, jeton Sentry), préférez le tableau de bord Railway, ou
+#     rotez la valeur si elle est passée par ici.
+#   · Sans `--skip-deploys`, Railway REDÉPLOIE le service depuis son build
+#     courant : la variable prend effet tout de suite. C'est le comportement
+#     voulu ici — une variable posée qui n'agit qu'au prochain déploiement
+#     surprend tout le monde. Le contrôle de santé du prochain passage de la
+#     sonde vérifiera que le service est bien revenu.
+#   · La sortie de `railway variables` est ÉCARTÉE en totalité : elle
+#     réaffiche toutes les variables du service, mots de passe compris
+#     (même règle que deploy.yml).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      environnement:
+        description: 'Environnement visé'
+        required: true
+        type: choice
+        options: [production, staging]
+      service:
+        description: 'Service Railway'
+        required: true
+        type: choice
+        options: [api, web, pos, kds]
+      nom:
+        description: 'Nom de la variable (SM_ALERT_WEBHOOK, SM_BACKUP_TOKEN…)'
+        required: true
+        type: string
+      valeur:
+        description: 'Valeur (visible dans ce dépôt privé — voir l’en-tête)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  VERSION_RAILWAY: 4.16.1
+
+jobs:
+  poser:
+    name: Poser la variable
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RAILWAY_TOKEN: >-
+        ${{ inputs.environnement == 'production' && secrets.RAILWAY_TOKEN_PRODUCTION
+        || secrets.RAILWAY_TOKEN_STAGING }}
+    steps:
+      - name: Installer la CLI Railway
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin railway
+          railway --version
+
+      - name: Poser
+        env:
+          NOM: ${{ inputs.nom }}
+          VALEUR: ${{ inputs.valeur }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            echo "::error title=Aucun jeton Railway::pas de jeton pour « ${{ inputs.environnement }} ». Rien n'est posé."
+            exit 1
+          fi
+          # Le nom seul est journalisé — jamais la valeur, ni la sortie de la
+          # CLI (elle réafficherait toutes les variables du service).
+          if ! railway variables --service "$SERVICE" --set "${NOM}=${VALEUR}" \
+               > /dev/null 2>&1; then
+            echo "::error title=Variable non posée::railway variables a échoué (sortie masquée)."
+            exit 1
+          fi
+          echo "« ${NOM} » posée sur ${SERVICE} (${{ inputs.environnement }}) — le service redéploie et la sert dans ~2 minutes."
