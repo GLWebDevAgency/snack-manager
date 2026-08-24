@@ -143,8 +143,8 @@ export default function SignalsPage() {
 
   if (signals === null) {
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
-        <div className="flex gap-4">
+      <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
+        <div className="flex gap-4 max-md:hidden">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-[124px] flex-1" />
           ))}
@@ -160,7 +160,7 @@ export default function SignalsPage() {
   const shown = SIGNAL_SEVERITIES.filter((s) => only === "tous" || only === s);
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/*
         La coquille `/sm` titre d'après sa propre table de navigation, qui ne
         connaît pas encore cette page : on repose donc un titre ici plutôt que
@@ -187,7 +187,11 @@ export default function SignalsPage() {
         </Link>
       </div>
 
-      <div className="flex items-stretch gap-4">
+      {/* Cartes de chiffres — bureau seulement : sous `md`, les pastilles de
+          filtre juste en dessous portent DÉJÀ les trois mêmes compteurs, et
+          elles sont tapables. Répéter les chiffres en trois cartes écrasées
+          serait du remplissage, pas de l'information. */}
+      <div className="flex items-stretch gap-4 max-md:hidden">
         {SIGNAL_SEVERITIES.map((s) => (
           <Kpi
             key={s}
@@ -378,7 +382,9 @@ function SeverityGroup({
         descend sous la largeur où les deux colonnes cessent d'être lisibles
         côte à côte.
       */}
-      <ul className="cf-scroll overflow-x-auto [&>li]:min-w-[560px]">
+      {/* Largeur minimale au-dessus de `md` seulement : sous le seuil, la
+          ligne s'empile (voir `SignalRow`) au lieu de défiler de côté. */}
+      <ul className="cf-scroll overflow-x-auto md:[&>li]:min-w-[560px]">
         {signals.map((s) => (
           <SignalRow
             key={s.key}
@@ -437,9 +443,11 @@ function SignalRow({
           />
         )}
 
-        <div className="flex items-start gap-3.5">
+        {/* Sous `md`, les trois colonnes s'empilent : qui, quoi, puis le
+            chiffre et les gestes sur une rangée — rien ne se tronque. */}
+        <div className="flex items-start gap-3.5 max-md:flex-col max-md:gap-2.5">
           {/* ── Qui, et de quelle famille ── */}
-          <div className="flex min-w-0 basis-[230px] items-start gap-2.5">
+          <div className="flex min-w-0 basis-[230px] items-start gap-2.5 max-md:basis-auto">
             <Icon
               name={SIGNAL_KIND_ICONS[s.kind]}
               size={17}
@@ -463,7 +471,7 @@ function SignalRow({
           </div>
 
           {/* ── Le chiffre, l'ancienneté, la sortie ── */}
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="flex shrink-0 flex-col items-end gap-1.5 max-md:w-full max-md:flex-row max-md:flex-wrap max-md:items-center max-md:gap-2.5">
             {figure && (
               <span
                 className={cx(
@@ -499,7 +507,7 @@ function SignalRow({
                 e.stopPropagation();
                 onDone(s);
               }}
-              className="cf-press inline-flex items-center gap-1 rounded-pill border border-white/12 bg-white/6 px-2.5 py-1 text-[11.5px] font-semibold text-mut hover:text-white"
+              className="cf-press inline-flex items-center gap-1 rounded-pill border border-white/12 bg-white/6 px-2.5 py-1 text-[11.5px] font-semibold text-mut hover:text-white max-md:ml-auto max-md:min-h-10 max-md:px-3.5 max-md:text-[12.5px]"
             >
               <Icon name="check" size={12} />
               Traité

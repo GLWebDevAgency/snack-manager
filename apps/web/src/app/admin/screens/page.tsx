@@ -314,7 +314,7 @@ export default function ScreensPage() {
 
   if (loadState === "loading")
     return (
-      <div className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
         <div className="grid gap-4 md:grid-cols-2">
           <Skeleton className="h-[260px]" />
           <Skeleton className="h-[260px]" />
@@ -328,7 +328,7 @@ export default function ScreensPage() {
 
   if (loadState === "error")
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <Card>
           <EmptyState
             icon="search"
@@ -347,7 +347,7 @@ export default function ScreensPage() {
   return (
     <div
       ref={rootRef}
-      className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.25fr_0.75fr]"
+      className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]"
     >
       {/* ── Colonne principale : les écrans ── */}
       <section className="flex min-w-0 flex-col gap-3.5">

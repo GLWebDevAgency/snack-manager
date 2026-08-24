@@ -111,15 +111,15 @@ export default function IngredientsPage() {
 
   if (error && ingredients === null)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <ErrorState message={error} onRetry={() => void load()} />
       </div>
     );
 
   if (!ingredients || !alerts)
     return (
-      <div className="p-[26px]">
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="p-4 md:p-[26px]">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-[68px]" />
           <Skeleton className="h-[68px]" />
           <Skeleton className="h-[68px]" />
@@ -148,7 +148,7 @@ export default function IngredientsPage() {
   const activePriceUp = priceUp && priceUpCount > 0;
 
   return (
-    <div className="p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {/* ── Bandeau d'alertes (chaque tuile filtre la table) ── */}
       <div className="mb-4" aria-live="polite">
         {totalAlerts === 0 ? (
@@ -158,7 +158,9 @@ export default function IngredientsPage() {
             aucune hausse de prix relevée sur les 30 derniers jours.
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          // `grid-cols-1` explicite : une piste implicite se dimensionne au
+          // CONTENU, et l'aperçu d'alerte le plus long débordait de l'écran.
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <AlertTile
               tone="alert"
               label="Ruptures"
@@ -322,7 +324,7 @@ function AlertTile({
       >
         {count}
       </span>
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-bold text-ink">{label}</span>
         <span className="block truncate text-xs text-mut">
           {empty ? "Rien à signaler" : hint}

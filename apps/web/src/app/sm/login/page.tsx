@@ -57,7 +57,10 @@ export default function HqLoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-bg px-4">
+    // `min-h-dvh` : 100vh déborde derrière les barres mobiles. Les règles
+    // descendantes posent 16 px sur les champs sous `md` — en dessous, iOS
+    // zoome la carte au focus et ne la relâche plus.
+    <main className="grid min-h-dvh place-items-center bg-bg px-4 max-md:[&_input]:text-[16px]">
       {/*
         Halo laiton très large derrière la carte : la seule licence décorative
         de la surface, posée sur le noir plutôt que sur un élément (DA §1).

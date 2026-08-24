@@ -294,10 +294,10 @@ export default function ClientsPage() {
 
   if (clients === null) {
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
-        <div className="flex gap-4">
+      <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
+        <div className="grid grid-cols-2 gap-3 md:flex md:gap-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-[124px] flex-1" />
+            <Skeleton key={i} className="h-[124px] md:flex-1" />
           ))}
         </div>
         <Skeleton className="h-[320px]" />
@@ -314,9 +314,10 @@ export default function ClientsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
-      {/* ── Les quatre chiffres du parc ── */}
-      <div className="flex items-stretch gap-4">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
+      {/* ── Les quatre chiffres du parc — 2 × 2 sous `md` (DA §7 : rien ne
+          descend sous 13 px, donc jamais quatre cartes écrasées de front) ── */}
+      <div className="grid grid-cols-2 items-stretch gap-3 md:flex md:gap-4">
         <Kpi label="Restaurants clients" value={int(rows.length)} icon="user" />
         <Kpi
           label="Actifs sur 30 jours"
@@ -374,7 +375,7 @@ export default function ClientsPage() {
           );
         })}
 
-        <div className="relative ml-auto">
+        <div className="relative ml-auto max-md:order-first max-md:ml-0 max-md:w-full">
           <Icon
             name="search"
             size={15}
@@ -383,7 +384,7 @@ export default function ClientsPage() {
           <Input
             aria-label="Rechercher un restaurant"
             placeholder="Rechercher — nom ou ville…"
-            className="w-[260px] !py-[9px] pl-9 text-[13px]"
+            className="w-[260px] !py-[9px] pl-9 text-[13px] max-md:w-full"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -391,7 +392,7 @@ export default function ClientsPage() {
 
         <Link
           href="/sm/signals"
-          className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+          className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8 max-md:min-h-10"
         >
           <Icon name="bell" size={15} />
           File de travail
@@ -426,10 +427,15 @@ export default function ClientsPage() {
           Le défilement reste enfermé dans la carte — la page, elle, ne part
           jamais de travers.
         */}
+        {/*
+          Sous `md`, la table DISPARAÎT au profit d'une pile de cartes (voir
+          `ClientLine`) : ni table écrasée, ni défilement horizontal de page.
+          La largeur minimale ne vaut donc qu'au-dessus de `md`.
+        */}
         <div className="cf-scroll overflow-x-auto">
-          <div className="min-w-[940px]">
+          <div className="md:min-w-[940px]">
             {/* En-tête de table : niveau « élément » sur la carte (DA §1). */}
-            <div className="flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut">
+            <div className="flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut max-md:hidden">
               <span className="min-w-0 flex-1">Restaurant</span>
               <span className="w-[78px] shrink-0">Formule</span>
               <span className="w-[86px] shrink-0">Statut</span>
@@ -490,7 +496,9 @@ function ClientLine({ row: r }: { row: Row }) {
     <Link
       href={`/sm/clients/${c._id}`}
       className={cx(
-        "cf-press-row relative flex items-center gap-2.5 border-t border-line px-[18px] py-3 hover:bg-white/4",
+        // Sous `md`, la ligne s'EMPILE en carte : identité en tête, pastilles
+        // et chiffres en dessous — jamais une rangée de colonnes écrasées.
+        "cf-press-row relative flex items-center gap-2.5 border-t border-line px-[18px] py-3 hover:bg-white/4 max-md:flex-wrap max-md:gap-y-2 max-md:px-4 max-md:py-3.5",
         r.callBack && "bg-alert/6",
       )}
       title={c.city ? `${c.name} — ${c.city}` : c.name}
@@ -564,69 +572,123 @@ function ClientLine({ row: r }: { row: Row }) {
         </div>
       </div>
 
-      <span className="w-[78px] shrink-0">
-        <PlanPill plan={c.plan} />
-      </span>
+      {/* ── Les colonnes calées au pixel — bureau seulement ── */}
+      <div className="hidden shrink-0 items-center gap-2.5 md:flex">
+        <span className="w-[78px] shrink-0">
+          <PlanPill plan={c.plan} />
+        </span>
 
-      <span className="w-[86px] shrink-0">
-        <AccountPill status={r.accountStatus} />
-      </span>
+        <span className="w-[86px] shrink-0">
+          <AccountPill status={r.accountStatus} />
+        </span>
 
-      <span className="flex w-[74px] shrink-0 justify-center">
+        <span className="flex w-[74px] shrink-0 justify-center">
+          <ScorePill
+            score={r.score}
+            health={c.health}
+            pending={r.pending}
+            verdict={r.verdict}
+          />
+        </span>
+
+        <span className="w-[124px] shrink-0 text-right">
+          <span
+            className={cx(
+              "cf-fig block text-sm font-extrabold leading-tight",
+              c.orders30d === 0 ? "text-alertt" : "text-ink",
+            )}
+          >
+            {int(c.orders30d)}
+          </span>
+          {/*
+            La fenêtre est DITE quand elle n'est pas celle de la colonne : un
+            client entré il y a six semaines n'a pas de 30 jours précédents à
+            comparer, l'API bascule alors sur 7 jours. Afficher « −10 % » sans
+            préciser la période ferait discuter deux chiffres différents.
+          */}
+          <Trend
+            pct={r.trendPct}
+            className="justify-end"
+            suffix={r.trendPct !== null && r.trendDays !== 30 ? `sur ${r.trendDays} j` : undefined}
+          />
+        </span>
+
+        {/* CA agrégé : arrondi à l'euro, les centimes n'apportent rien ici. */}
+        <span className="cf-fig w-[92px] shrink-0 text-right text-sm font-bold text-ink">
+          {euroRound(c.revenue30dCents)}
+        </span>
+
+        <span
+          className={cx(
+            "w-[112px] shrink-0 truncate text-right text-[13px]",
+            r.tone === "risque" ? "font-bold text-alertt" : "text-mut",
+          )}
+          title={
+            r.lastActivityAt
+              ? new Date(r.lastActivityAt).toLocaleString("fr-FR")
+              : "Aucune activité enregistrée"
+          }
+        >
+          {fmtSince(r.lastActivityAt)}
+        </span>
+
+        <span className="cf-fig w-[72px] shrink-0 text-right text-sm font-extrabold text-accent">
+          {euroRound(c.mrrCents)}
+        </span>
+
+        <Icon name="arrow" size={16} className="w-[16px] shrink-0 text-mut" />
+      </div>
+
+      {/*
+        ── La même information, EMPILÉE — mobile seulement ──
+        Pastilles d'état d'abord (elles décident de l'appel), chiffres ensuite,
+        alignés sous le nom (retrait = avatar 30 px + espace 12 px). Aucune
+        colonne : ce bloc se LIT, il ne se balaie pas.
+      */}
+      <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-1.5 gap-y-1.5 pl-[42px] md:hidden">
         <ScorePill
           score={r.score}
           health={c.health}
           pending={r.pending}
           verdict={r.verdict}
         />
-      </span>
-
-      <span className="w-[124px] shrink-0 text-right">
+        <PlanPill plan={c.plan} />
+        <AccountPill status={r.accountStatus} />
+      </div>
+      <div className="flex min-w-0 basis-full flex-wrap items-baseline gap-x-3 gap-y-1 pl-[42px] text-[12.5px] md:hidden">
+        <span className="inline-flex items-baseline gap-1.5">
+          <span
+            className={cx(
+              "cf-fig font-extrabold",
+              c.orders30d === 0 ? "text-alertt" : "text-ink",
+            )}
+          >
+            {int(c.orders30d)} <span className="font-semibold text-mut">cmd / 30 j</span>
+          </span>
+          <Trend
+            pct={r.trendPct}
+            suffix={r.trendPct !== null && r.trendDays !== 30 ? `sur ${r.trendDays} j` : undefined}
+          />
+        </span>
+        <span className="cf-fig font-bold text-ink">
+          {euroRound(c.revenue30dCents)} <span className="font-semibold text-mut">de CA</span>
+        </span>
+        <span className="cf-fig font-extrabold text-accent">
+          {euroRound(c.mrrCents)} <span className="font-semibold text-accent/70">MRR</span>
+        </span>
+        {/* L'horloge dit « dernière activité » sans en-tête de colonne : un
+            « 6 j » nu, hors table, ne se rattache à rien. */}
         <span
           className={cx(
-            "cf-fig block text-sm font-extrabold leading-tight",
-            c.orders30d === 0 ? "text-alertt" : "text-ink",
+            "inline-flex items-center gap-1",
+            r.tone === "risque" ? "font-bold text-alertt" : "text-mut",
           )}
         >
-          {int(c.orders30d)}
+          <Icon name="clock" size={12} aria-hidden />
+          {fmtSince(r.lastActivityAt)}
+          <span className="sr-only"> depuis la dernière activité</span>
         </span>
-        {/*
-          La fenêtre est DITE quand elle n'est pas celle de la colonne : un
-          client entré il y a six semaines n'a pas de 30 jours précédents à
-          comparer, l'API bascule alors sur 7 jours. Afficher « −10 % » sans
-          préciser la période ferait discuter deux chiffres différents.
-        */}
-        <Trend
-          pct={r.trendPct}
-          className="justify-end"
-          suffix={r.trendPct !== null && r.trendDays !== 30 ? `sur ${r.trendDays} j` : undefined}
-        />
-      </span>
-
-      {/* CA agrégé : arrondi à l'euro, les centimes n'apportent rien ici. */}
-      <span className="cf-fig w-[92px] shrink-0 text-right text-sm font-bold text-ink">
-        {euroRound(c.revenue30dCents)}
-      </span>
-
-      <span
-        className={cx(
-          "w-[112px] shrink-0 truncate text-right text-[13px]",
-          r.tone === "risque" ? "font-bold text-alertt" : "text-mut",
-        )}
-        title={
-          r.lastActivityAt
-            ? new Date(r.lastActivityAt).toLocaleString("fr-FR")
-            : "Aucune activité enregistrée"
-        }
-      >
-        {fmtSince(r.lastActivityAt)}
-      </span>
-
-      <span className="cf-fig w-[72px] shrink-0 text-right text-sm font-extrabold text-accent">
-        {euroRound(c.mrrCents)}
-      </span>
-
-      <Icon name="arrow" size={16} className="w-[16px] shrink-0 text-mut" />
+      </div>
     </Link>
   );
 }

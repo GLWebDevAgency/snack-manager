@@ -213,7 +213,7 @@ export default function StatsPage() {
   }
 
   return (
-    <div className="p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {/* ── Sélecteur de période (état local, non persisté — spec §5.1) ── */}
       <div
         className="mb-4 flex gap-2"
@@ -246,10 +246,10 @@ export default function StatsPage() {
       {/* ── Chargement initial : squelettes calqués sur la mise en page ── */}
       {!data && !error && (
         <div className="space-y-4" aria-hidden>
-          <div className="flex flex-col gap-4 md:flex-row">
-            <Skeleton className="h-[118px] flex-1" />
-            <Skeleton className="h-[118px] flex-1" />
-            <Skeleton className="h-[118px] flex-1" />
+          <div className="grid grid-cols-2 gap-3 md:flex md:gap-4">
+            <Skeleton className="h-[118px] md:flex-1" />
+            <Skeleton className="h-[118px] md:flex-1" />
+            <Skeleton className="h-[118px] max-md:col-span-2 md:flex-1" />
           </div>
           <div className="flex flex-col gap-4 xl:flex-row">
             <Skeleton className="h-[290px] min-w-0 xl:flex-[1.4]" />
@@ -401,8 +401,11 @@ function KpiRow({
   period: StatsPeriod;
 }) {
   return (
-    <div className="flex flex-col gap-4 md:flex-row">
+    /* Grille 2 colonnes sous `md` (le CA, chiffre roi, s'étale en pleine
+       largeur) : trois cartes empilées repoussaient les graphiques hors vue. */
+    <div className="grid grid-cols-2 gap-3 md:flex md:gap-4">
       <Kpi
+        className="max-md:col-span-2"
         label="Chiffre d'affaires"
         value={fmtEuro(overview.caCents)}
         icon="euro"
@@ -617,13 +620,18 @@ function TopProducts({ top }: { top: StatsTopProduct[] }) {
       {top.map((t, i) => (
         <li
           key={`${t.name}-${i}`}
+          /*
+            Sous `sm`, quantité et CA s'empilent à droite : côte à côte, leurs
+            158 px ne laissaient au nom du produit qu'une dizaine de lettres.
+            Placement explicite : l'auto-placement pousserait le CA au 2e rang.
+          */
           className={cx(
-            "flex items-center gap-3 py-2",
+            "grid grid-cols-[22px_1fr_auto] items-center gap-x-3 gap-y-0.5 py-2 sm:flex",
             i > 0 && "border-t border-line2",
           )}
         >
           <span
-            className="cf-fig w-[22px] shrink-0 text-[15px] font-extrabold text-mut"
+            className="cf-fig w-[22px] shrink-0 text-[15px] font-extrabold text-mut max-sm:row-span-2"
             aria-hidden
           >
             {i + 1}
@@ -642,10 +650,10 @@ function TopProducts({ top }: { top: StatsTopProduct[] }) {
               />
             </div>
           </div>
-          <span className="cf-fig w-[74px] shrink-0 text-right text-sm text-mut">
+          <span className="cf-fig shrink-0 text-right text-sm text-mut max-sm:col-start-3 max-sm:row-start-2 sm:w-[74px]">
             {int(t.qty)} vendus
           </span>
-          <span className="cf-fig w-[84px] shrink-0 text-right text-sm font-extrabold text-ink">
+          <span className="cf-fig shrink-0 text-right text-sm font-extrabold text-ink max-sm:col-start-3 max-sm:row-start-1 sm:w-[84px]">
             {fmtEuro(t.caCents)}
           </span>
         </li>

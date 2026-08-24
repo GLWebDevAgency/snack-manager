@@ -50,12 +50,18 @@ import {
   type Product,
 } from "./types";
 
-/** Largeurs de colonnes exactes de la spec §7.3 (le titre prend le reste). */
+/**
+ * Largeurs de colonnes exactes de la spec §7.3 (le titre prend le reste) —
+ * colonnes à partir de `lg` seulement : en dessous, la ligne produit passe
+ * sur deux étages et chaque cellule reprend sa taille naturelle.
+ */
 const COL = {
-  price: "w-[110px] shrink-0",
-  avail: "w-[86px] shrink-0 text-center",
-  out: "w-[86px] shrink-0 text-center",
-  edit: "w-11 shrink-0",
+  // 96 px sous `lg` : avec les bascules étiquetées, 110 px faisaient sauter
+  // « Rupture » à la ligne sur un écran de 390 px.
+  price: "w-[96px] shrink-0 lg:w-[110px]",
+  avail: "shrink-0 lg:w-[86px] lg:text-center",
+  out: "shrink-0 lg:w-[86px] lg:text-center",
+  edit: "shrink-0 lg:w-11",
 } as const;
 
 /** Panneau d'édition ouvert : produit existant ou création dans une catégorie. */
@@ -414,11 +420,11 @@ export default function MenuPage() {
   // ─── États de page ───
   // Un échec de rechargement ne doit pas effacer une carte déjà affichée :
   // pleine page seulement tant qu'on n'a rien, bandeau au-dessus sinon.
-  if (error && !menu) return <div className="p-[26px]">{errorBox}</div>;
+  if (error && !menu) return <div className="p-4 md:p-[26px]">{errorBox}</div>;
 
   if (!menu)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <Skeleton className="mb-4 h-[46px] w-full" />
         <div className="flex items-start gap-4">
           <Skeleton className="h-[320px] w-[268px] shrink-0" />
@@ -428,11 +434,11 @@ export default function MenuPage() {
     );
 
   return (
-    <div className="p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {error && <div className="mb-4">{errorBox}</div>}
 
       {/* ── §7.1 Bandeau « prix à définir » + import ── */}
-      <div className="mb-4 flex items-center gap-3.5">
+      <div className="mb-4 flex flex-wrap items-center gap-3.5">
         {toDefine > 0 && (
           <div
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-card border border-gold px-3.5 py-2.5"
@@ -457,8 +463,9 @@ export default function MenuPage() {
         </Btn>
       </div>
 
-      {/* ── Deux colonnes : catégories 268 px + produits flex ── */}
-      <div className="flex items-start gap-4">
+      {/* ── Deux colonnes : catégories 268 px + produits flex — empilées
+          sous `lg`, où 268 px de catégories ne laisseraient rien aux produits ── */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <CategoriesCard
           categories={categories}
           uncategorizedCount={menu.uncategorized.length}
@@ -501,13 +508,14 @@ export default function MenuPage() {
             </Btn>
           </div>
 
-          {/* En-tête de colonnes (§7.3) */}
+          {/* En-tête de colonnes (§7.3) — sous `lg` seul le titre survit :
+              en carte, chaque bascule porte sa propre étiquette. */}
           <div className="mt-3 flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
             <span className="min-w-0 flex-1 truncate">{listTitle}</span>
-            <span className={COL.price}>Prix</span>
-            <span className={COL.avail}>Dispo</span>
-            <span className={COL.out}>Rupture</span>
-            <span className={COL.edit} aria-hidden />
+            <span className={cx(COL.price, "max-lg:hidden")}>Prix</span>
+            <span className={cx(COL.avail, "max-lg:hidden")}>Dispo</span>
+            <span className={cx(COL.out, "max-lg:hidden")}>Rupture</span>
+            <span className={cx(COL.edit, "max-lg:hidden")} aria-hidden />
           </div>
 
           <div className="cf-scroll max-h-[540px] overflow-y-auto">
@@ -562,14 +570,20 @@ export default function MenuPage() {
 
                 return (
                   <div key={p._id}>
+                    {/*
+                      Sous `lg`, la ligne devient une carte à deux étages :
+                      nom + bouton Modifier, puis prix / Dispo / Rupture avec
+                      leur étiquette. Les `lg:order-*` restaurent les colonnes
+                      de la spec §7.3 sur grand écran.
+                    */}
                     <div
                       className={cx(
-                        "flex items-center gap-2.5 border-t border-line2 px-[18px] py-2.5 transition-[opacity,background-color] duration-200 ease-sm hover:bg-white/3",
+                        "flex flex-wrap items-center gap-x-2.5 gap-y-2.5 border-t border-line2 px-[18px] py-3 transition-[opacity,background-color] duration-200 ease-sm hover:bg-white/3 lg:flex-nowrap lg:py-2.5",
                         p.outOfStock && "opacity-50",
                       )}
                     >
                       {/* Nom + pill de catégorie + composition */}
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 lg:order-1">
                         <div className="flex items-center gap-2">
                           <span className="min-w-0 truncate text-[15px] font-bold text-ink">
                             {p.name}
@@ -603,8 +617,34 @@ export default function MenuPage() {
                         )}
                       </div>
 
+                      {/* Édition inline — dans le coin de la carte sur mobile */}
+                      <div className={cx("flex justify-end", COL.edit, "lg:order-5")}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditor(
+                              isEditing ? null : { mode: "edit", productId: p._id },
+                            )
+                          }
+                          aria-label={`Modifier ${p.name}`}
+                          aria-expanded={isEditing}
+                          title="Modifier le produit"
+                          className={cx(
+                            "cf-press grid place-items-center rounded-xs border max-lg:size-11 lg:size-8",
+                            isEditing
+                              ? "border-accent bg-accent text-onaccent"
+                              : "border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
+                          )}
+                        >
+                          <Icon name="edit" size={15} />
+                        </button>
+                      </div>
+
+                      {/* Saut de ligne de la carte : prix et bascules en dessous. */}
+                      <span className="h-0 basis-full lg:hidden" aria-hidden />
+
                       {/* Prix — PATCH au blur ou Enter (§7.3) */}
-                      <div className={cx("relative", COL.price)}>
+                      <div className={cx("relative", COL.price, "lg:order-2")}>
                         <Input
                           value={drafts[p._id] ?? priceToInput(price)}
                           onChange={(e) =>
@@ -658,7 +698,16 @@ export default function MenuPage() {
                       </div>
 
                       {/* Dispo — l'affichage tient compte de la rupture, le clic non */}
-                      <div className={cx("flex justify-center", COL.avail)}>
+                      <div
+                        className={cx(
+                          "flex items-center gap-1.5 lg:justify-center",
+                          COL.avail,
+                          "lg:order-3",
+                        )}
+                      >
+                        <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-mut lg:hidden">
+                          Dispo
+                        </span>
                         <Toggle
                           on={p.active && !p.outOfStock}
                           onChange={() => void toggleAvailable(p)}
@@ -667,7 +716,16 @@ export default function MenuPage() {
                       </div>
 
                       {/* Rupture 1-tap — ou badge non togglable si cascade ingrédient */}
-                      <div className={cx("flex justify-center", COL.out)}>
+                      <div
+                        className={cx(
+                          "flex items-center gap-1.5 max-lg:ml-auto lg:justify-center",
+                          COL.out,
+                          "lg:order-4",
+                        )}
+                      >
+                        <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-mut lg:hidden">
+                          Rupture
+                        </span>
                         {ingredientOut ? (
                           <Pill
                             variant="out"
@@ -684,29 +742,6 @@ export default function MenuPage() {
                             label={`Rupture de ${p.name}`}
                           />
                         )}
-                      </div>
-
-                      {/* Édition inline */}
-                      <div className={cx("flex justify-end", COL.edit)}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditor(
-                              isEditing ? null : { mode: "edit", productId: p._id },
-                            )
-                          }
-                          aria-label={`Modifier ${p.name}`}
-                          aria-expanded={isEditing}
-                          title="Modifier le produit"
-                          className={cx(
-                            "cf-press grid size-8 place-items-center rounded-xs border",
-                            isEditing
-                              ? "border-accent bg-accent text-onaccent"
-                              : "border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
-                          )}
-                        >
-                          <Icon name="edit" size={15} />
-                        </button>
                       </div>
                     </div>
 

@@ -119,7 +119,7 @@ export default function ReseauxPage() {
 
   if (loadFailed) {
     return (
-      <div className="p-[26px]">
+      <div className="p-[26px] max-md:p-4">
         <Panel
           title="Réglages injoignables"
           sub="Les liens actuellement en ligne n’ont pas pu être lus."
@@ -140,7 +140,7 @@ export default function ReseauxPage() {
 
   if (!saved) {
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
+      <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
         <Skeleton className="h-[92px]" />
         <Skeleton className="h-[420px]" />
       </div>
@@ -151,7 +151,7 @@ export default function ReseauxPage() {
   const publies = SOCIAL_NETWORKS.filter((n) => saved[n] !== null);
 
   return (
-    <div className="flex max-w-[860px] flex-col gap-4 p-[26px]">
+    <div className="flex max-w-[860px] flex-col gap-4 p-[26px] max-md:p-4">
       {/* ── Ce qui est PUBLIC en ce moment : la première chose lue, la dernière retenue ── */}
       <EnLigne links={saved} updatedAt={updatedAt} count={publies.length} />
 

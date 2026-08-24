@@ -430,7 +430,7 @@ export default function DashboardPage() {
   const topMax = Math.max(...topRows.map((r) => r.qty), 1);
 
   return (
-    <div className="p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {/* ── §5.1 Sélecteur de période ── */}
       <div
         role="group"
@@ -456,15 +456,18 @@ export default function DashboardPage() {
           />
         </Card>
       ) : !overview.data ? (
-        <div className="flex flex-col gap-4 md:flex-row">
+        <div className="grid grid-cols-2 gap-3 md:flex md:gap-4">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-[122px] flex-1" />
+            <Skeleton key={i} className="h-[122px] md:flex-1" />
           ))}
         </div>
       ) : (
+        /* KPI en grille 2×2 sous `md` : quatre cartes empilées repousseraient
+           tout le reste sous deux écrans — le gérant vient lire QUATRE chiffres
+           d'un seul coup d'œil. */
         <div
           className={cx(
-            "flex flex-col gap-4 transition-opacity duration-200 ease-sm md:flex-row",
+            "grid grid-cols-2 gap-3 transition-opacity duration-200 ease-sm md:flex md:gap-4",
             overview.loading && "opacity-60",
           )}
         >
@@ -732,14 +735,22 @@ export default function DashboardPage() {
                 const items = o.lines.reduce((s, l) => s + l.qty, 0);
                 const name = o.pickup?.customerName || CHANNEL_FR[o.channel];
                 return (
+                  /*
+                    Sous `sm`, la ligne passe sur DEUX étages (nom + montant,
+                    puis badge de statut) : à 173 px de large pour le nom, tout
+                    sur un rang tronquait « Sarah · 2 articles » dès la 6e
+                    lettre. La grille est explicite case par case — l'auto-
+                    placement, après un badge posé en rang 2, enverrait le
+                    montant au mauvais étage.
+                  */
                   <li
                     key={o._id}
-                    className="flex items-center gap-3 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2.5"
+                    className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1.5 rounded-ctrl border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2.5 sm:flex"
                   >
-                    <span className="cf-fig min-w-[34px] text-xl font-extrabold text-accent">
+                    <span className="cf-fig min-w-[34px] text-xl font-extrabold text-accent max-sm:row-span-2">
                       {o.number}
                     </span>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 sm:flex-1">
                       <div className="truncate text-[15px] font-bold text-ink">
                         {name} · {items} article{items > 1 ? "s" : ""}
                       </div>
@@ -748,8 +759,11 @@ export default function DashboardPage() {
                         {timeAgo(o.createdAt)}
                       </div>
                     </div>
-                    <StatusBadge status={o.status} className="shrink-0" />
-                    <span className="cf-fig min-w-[62px] shrink-0 text-right text-[15px] font-extrabold text-ink">
+                    <StatusBadge
+                      status={o.status}
+                      className="shrink-0 max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-self-start"
+                    />
+                    <span className="cf-fig min-w-[62px] shrink-0 text-right text-[15px] font-extrabold text-ink max-sm:col-start-3 max-sm:row-start-1">
                       {fmtEuro(o.totals.total)}
                     </span>
                   </li>
@@ -769,18 +783,22 @@ export default function DashboardPage() {
           ) : !series.data ? (
             <Skeleton className="h-[170px]" />
           ) : (
+            /* Sous `md`, le graphique défile dans SON conteneur : 13 barres
+               horaires à 26 px l'une écrasaient les libellés en « 1… ». */
             <div
               className={cx(
-                "transition-opacity duration-200 ease-sm",
+                "cf-scroll transition-opacity duration-200 ease-sm max-md:overflow-x-auto",
                 series.loading && "opacity-60",
               )}
             >
-              <BarChart
-                data={chartData}
-                height={170}
-                formatValue={barValue}
-                title={`${CHART_TITLE[period]} — ${chartSub}`}
-              />
+              <div className="max-md:min-w-[520px]">
+                <BarChart
+                  data={chartData}
+                  height={170}
+                  formatValue={barValue}
+                  title={`${CHART_TITLE[period]} — ${chartSub}`}
+                />
+              </div>
             </div>
           )}
         </Panel>
@@ -807,15 +825,24 @@ export default function DashboardPage() {
         ) : (
           <ol className="flex flex-col gap-2.5">
             {topRows.map((r, i) => (
-              <li key={r.name} className="flex items-center gap-3">
-                <span className="cf-fig min-w-[22px] shrink-0 text-lg font-extrabold text-mut">
+              /*
+                Sous `sm`, deux étages : nom + CA, puis jauge + quantité — les
+                minima de colonnes (160 + 70 + 70 px) dépassaient la largeur
+                d'un téléphone et le CA sortait de l'écran. Placement explicite :
+                l'auto-placement décalerait le CA après la jauge posée en rang 2.
+              */
+              <li
+                key={r.name}
+                className="grid grid-cols-[22px_1fr_auto] items-center gap-x-3 gap-y-1.5 sm:flex"
+              >
+                <span className="cf-fig min-w-[22px] shrink-0 text-lg font-extrabold text-mut max-sm:row-span-2">
                   {i + 1}
                 </span>
-                <span className="min-w-[160px] max-w-[240px] truncate text-[15px] font-bold text-ink">
+                <span className="min-w-0 truncate text-[15px] font-bold text-ink sm:min-w-[160px] sm:max-w-[240px]">
                   {r.name}
                 </span>
                 <div
-                  className="h-3 min-w-0 flex-1 overflow-hidden rounded-pill border border-white/6 bg-surface2"
+                  className="h-3 min-w-0 flex-1 overflow-hidden rounded-pill border border-white/6 bg-surface2 max-sm:col-start-2 max-sm:row-start-2"
                   aria-hidden
                 >
                   <div
@@ -825,10 +852,10 @@ export default function DashboardPage() {
                     }}
                   />
                 </div>
-                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm text-mut">
+                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm text-mut max-sm:col-start-3 max-sm:row-start-2">
                   {int(r.qty)} vendus
                 </span>
-                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm font-extrabold text-ink">
+                <span className="cf-fig min-w-[70px] shrink-0 text-right text-sm font-extrabold text-ink max-sm:col-start-3 max-sm:row-start-1">
                   {euroRound(r.caCents)}
                 </span>
               </li>

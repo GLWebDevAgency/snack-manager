@@ -1,0 +1,95 @@
+name: Exercice de restauration
+
+# ─────────────────────────────────────────────────────────────────────────────
+# « Une sauvegarde jamais restaurée n'est pas une sauvegarde. »
+#
+# Cet exercice reprend l'objet déposé par `sauvegarde.yml` sur R2 et prouve
+# qu'il est RESTAURABLE : il se télécharge, se décompresse, se parse, porte le
+# bon format, et contient des données en quantité plausible. Les COMPTES
+# s'impriment (n documents par collection Mongo, n lignes par table Postgres),
+# jamais le CONTENU — un journal d'exécution n'est pas un endroit où étaler
+# la base de production.
+#
+# Ce que cet exercice ne prouve PAS, et qu'il dit en face : la ré-importation
+# dans une base vivante (mongorestore/INSERT). Ce geste-là se fait à la main,
+# sur une base jetable, le jour où on répète le scénario du pire — cet
+# exercice-ci garantit qu'on aura ce jour-là un fichier qui se lit.
+#
+# À lancer après la première sauvegarde, puis une fois par mois (main, ou le
+# cron ci-dessous — premier lundi du mois, 04:17 UTC, une heure après la
+# sauvegarde de la nuit).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '17 4 1-7 * 1'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date de la sauvegarde à vérifier (AAAA-MM-JJ, défaut : aujourd’hui UTC)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    name: Relire la sauvegarde
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Récupérer l'objet depuis R2
+        env:
+          DATE_DEMANDEE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error title=Secrets Cloudflare absents::rien à vérifier sans accès au bucket."
+            exit 1
+          fi
+          JOUR="${DATE_DEMANDEE:-$(date -u +%Y-%m-%d)}"
+          echo "Objet visé : sm-${JOUR}.json.gz"
+          npx --yes wrangler@4 r2 object get "sm-sauvegardes/sm-${JOUR}.json.gz" \
+            --file sauvegarde.json.gz --remote
+          gunzip sauvegarde.json.gz
+
+      - name: Valider la structure et compter — sans jamais imprimer les données
+        run: |
+          set -euo pipefail
+          node <<'NOEUD'
+          const d = require('./sauvegarde.json');
+          if (d.format !== 'sm-sauvegarde-v1') {
+            console.error('::error title=Format inconnu::' + String(d.format));
+            process.exit(1);
+          }
+          if (d.partial) console.log('::warning::Sauvegarde PARTIELLE — PostgreSQL manquant ce jour-là.');
+          let total = 0;
+          console.log('— Mongo —');
+          for (const [nom, docs] of Object.entries(d.mongo ?? {})) {
+            const n = Array.isArray(docs) ? docs.length : 0;
+            total += n;
+            console.log(`  ${nom}: ${n} document${n > 1 ? 's' : ''}`);
+          }
+          console.log('— PostgreSQL —');
+          for (const [table, lignes] of Object.entries(d.postgres ?? {})) {
+            const n = Array.isArray(lignes) ? lignes.length : 0;
+            total += n;
+            console.log(`  ${table}: ${n} ligne${n > 1 ? 's' : ''}`);
+          }
+          // Un export « valide » mais vide serait un filet troué : la prod
+          // porte au moins les 52 leads de prospection et le tenant pilote.
+          if (total < 50) {
+            console.error(`::error title=Sauvegarde suspecte::${total} enregistrements en tout — la production en porte davantage.`);
+            process.exit(1);
+          }
+          console.log(`Restaurable : ${total} enregistrements relus depuis R2.`);
+          NOEUD

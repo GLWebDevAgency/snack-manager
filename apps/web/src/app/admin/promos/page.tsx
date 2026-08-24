@@ -242,7 +242,7 @@ export default function PromosPage() {
 
   if (error)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <div className="flex flex-col items-start gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
           <p className="text-sm text-alertt">{error}</p>
           <Btn variant="ghost" size="sm" onClick={() => void load()}>
@@ -253,7 +253,7 @@ export default function PromosPage() {
     );
 
   return (
-    <div className="flex flex-col items-start gap-4 p-[26px] lg:flex-row">
+    <div className="flex flex-col items-start gap-4 p-4 md:p-[26px] lg:flex-row">
       {/* ── Colonne gauche : codes promo (CRUD) ── */}
       <div className="w-full min-w-0 lg:flex-[1.4]">
         <Panel
@@ -312,7 +312,12 @@ export default function PromosPage() {
                   !p.active && "opacity-50",
                 )}
               >
-                <div className="flex items-center gap-3">
+                {/*
+                  Sous `sm`, le bloc compteur + bascule + actions descend sous
+                  le code : sur la même ligne, il ne laissait au code —
+                  l'information no 1 de la tuile — que quelques pixels.
+                */}
+                <div className="flex flex-wrap items-center gap-3">
                   <div
                     className="grid size-11 shrink-0 place-items-center rounded-ctrl border border-white/8 bg-black/25 text-accent"
                     aria-hidden
@@ -329,8 +334,8 @@ export default function PromosPage() {
                       {p.description && ` · ${p.description}`}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2.5">
-                    <span className="cf-fig text-[13px] text-mut">
+                  <div className="flex shrink-0 items-center gap-2.5 max-sm:w-full max-sm:pl-[56px]">
+                    <span className="cf-fig text-[13px] text-mut max-sm:mr-auto">
                       {p.usageCount.toLocaleString("fr-FR")} utilisés
                     </span>
                     <Toggle
@@ -347,6 +352,9 @@ export default function PromosPage() {
                       label={`Modifier ${p.code ?? p.name}`}
                       size={32}
                       iconSize={15}
+                      /* `!` : IconBtn fige son côté en style inline — seule une
+                         classe importante ramène la cible aux 44 px tactiles. */
+                      className="max-lg:!size-11"
                       onClick={() => openEdit(p)}
                     />
                     <IconBtn
@@ -354,6 +362,7 @@ export default function PromosPage() {
                       label={`Supprimer ${p.code ?? p.name}`}
                       size={32}
                       iconSize={15}
+                      className="max-lg:!size-11"
                       onClick={() => setToDelete(p)}
                     />
                   </div>
@@ -399,7 +408,7 @@ export default function PromosPage() {
       >
         {draft && (
           <form id="promo-form" onSubmit={saveDraft} className="flex flex-col gap-3.5">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Nom" htmlFor="promo-name">
                 <Input
                   id="promo-name"
@@ -420,7 +429,7 @@ export default function PromosPage() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Type" htmlFor="promo-kind">
                 <Select
                   id="promo-kind"

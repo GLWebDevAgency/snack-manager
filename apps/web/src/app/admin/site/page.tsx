@@ -174,7 +174,7 @@ export default function SitePage() {
 
   if (loadState === "loading")
     return (
-      <div className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
+      <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
         <div className="flex flex-col gap-4">
           <Skeleton className="h-[180px]" />
           <Skeleton className="h-[340px]" />
@@ -185,7 +185,7 @@ export default function SitePage() {
 
   if (loadState === "error" || !data)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <EmptyState
           icon="search"
           title="Impossible de charger vos adresses"
@@ -200,7 +200,7 @@ export default function SitePage() {
     );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
+    <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
       <div className="flex min-w-0 flex-col gap-4">
         {/* ── Carte « Votre adresse » : toujours active ── */}
         <Panel
@@ -209,7 +209,9 @@ export default function SitePage() {
           actions={<Pill className="bg-ok text-white">Active</Pill>}
         >
           <div className="flex flex-wrap items-center gap-3 rounded-card border border-line2 bg-surface2 px-3.5 py-3">
-            <div className="min-w-0 flex-1">
+            {/* Minimum de 200 px : l'adresse est l'information no 1 — sur un
+                téléphone, les boutons passent dessous plutôt que la tronquer. */}
+            <div className="min-w-[200px] flex-1">
               <div className="truncate font-mono text-[17px] font-extrabold tracking-[-0.02em] text-ink">
                 {data.subdomain.hostname}
               </div>
@@ -249,8 +251,8 @@ export default function SitePage() {
                   className="rounded-card border border-line2 bg-surface p-3.5"
                 >
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
+                    <div className="min-w-[180px] flex-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="truncate font-mono text-[15px] font-bold text-ink">
                           {d.hostname}
                         </span>

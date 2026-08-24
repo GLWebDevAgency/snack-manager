@@ -37,12 +37,15 @@ import {
   Btn,
   Field,
   Icon,
-  Modal,
   Select,
   Textarea,
   Toggle,
   useToast,
 } from "@/components/ui";
+// La modale-feuille locale à `/sm` : la modale du design system au-dessus de
+// `md`, une feuille plein écran en dessous — un geste grave se confirme aussi
+// depuis un téléphone, sans panneau qui déborde.
+import { SheetModal } from "../../mobile";
 import { crm, euroRound } from "../../crm";
 import { clientsApi, type ParkDevice } from "../data";
 
@@ -97,7 +100,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       destructive
@@ -145,7 +148,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -176,7 +179,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       title={`Réactiver ${tenantName}`}
@@ -222,7 +225,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -261,7 +264,7 @@ export function PlanModal({
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       title={`Formule de ${tenantName}`}
@@ -328,7 +331,7 @@ export function PlanModal({
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -393,7 +396,7 @@ export function RevokeDeviceModal({
   // ── Après coup : le code à dicter ──
   if (code !== null) {
     return (
-      <Modal
+      <SheetModal
         open
         onClose={onClose}
         title={`${device.name} est coupé`}
@@ -416,12 +419,12 @@ export function RevokeDeviceModal({
             {code}
           </div>
         </div>
-      </Modal>
+      </SheetModal>
     );
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       destructive
@@ -501,7 +504,7 @@ export function RevokeDeviceModal({
           onChange={setConfirmed}
         />
       </div>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -581,7 +584,7 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       title={`Mot de passe gérant — ${tenantName}`}
@@ -639,6 +642,6 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
           ]}
         />
       )}
-    </Modal>
+    </SheetModal>
   );
 }

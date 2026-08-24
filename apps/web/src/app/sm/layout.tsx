@@ -30,6 +30,7 @@ import { fmtDateFr } from "@/lib/format";
 import { Icon, ToastProvider, type IconName } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
 import { crm, euroRound, HqContext, isHqSession } from "./crm";
+import { BottomSheet } from "./mobile";
 
 /** Accent de la maison — jamais thémable par un restaurant (spec crm-sm §2.4). */
 const HQ_ACCENT = "#c9a15a";
@@ -70,6 +71,20 @@ const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
   },
 ];
 
+/**
+ * LA BARRE BASSE ne porte que CINQ entrées — la règle des grandes applications
+ * mobiles, et elle n'est pas esthétique : à six, chaque cible passe sous les
+ * 44 px de pouce sur un écran de 390. Les quatre gestes quotidiens (regarder,
+ * vendre, suivre, encaisser) + « Plus » qui ouvre une feuille avec le reste.
+ * Les entrées sont TIRÉES de `NAV`, jamais recopiées : un intitulé qui change
+ * change aux deux endroits.
+ */
+const MOBILE_NAV_HREFS = ["/sm", "/sm/pipeline", "/sm/clients", "/sm/facturation"];
+const MOBILE_NAV = MOBILE_NAV_HREFS.map(
+  (href) => NAV.find((n) => n.href === href)!,
+);
+const MOBILE_MORE = NAV.filter((n) => !MOBILE_NAV_HREFS.includes(n.href));
+
 export default function SmLayout({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = usePathname();
   // La page de connexion vit hors de la coquille : elle est le seul écran
@@ -103,6 +118,10 @@ function HqShell({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
+  // Feuille « Plus » de la barre basse. Elle se referme au CLIC sur un lien,
+  // pas par un effet sur le chemin : un effet fermerait un rendu trop tard et
+  // laisserait la feuille clignoter sur la nouvelle page.
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // ── Accent de la maison, reposé à chaque montage ──
   useEffect(() => {
@@ -166,9 +185,20 @@ function HqShell({ children }: { children: ReactNode }) {
 
   return (
     <HqContext.Provider value={{ overview, loading, reload }}>
-      <div className="flex h-screen overflow-hidden bg-bg">
-        {/* ── Colonne de navigation (232px, fixe : outil de bureau interne) ── */}
-        <aside className="flex w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-[18px]">
+      {/*
+        `h-dvh` et non `h-screen` : sur téléphone, 100vh déborde derrière les
+        barres du navigateur et la barre basse finirait sous elles.
+
+        Les trois règles descendantes posent 16 px sur TOUTE saisie de la
+        surface sous `md` : en dessous, iOS zoome le champ au focus et l'écran
+        ne revient jamais tout à fait en place. Une règle ici plutôt qu'une
+        classe sur chacun des dizaines de champs — un champ ajouté demain est
+        couvert d'office.
+      */}
+      <div className="flex h-dvh overflow-hidden bg-bg max-md:[&_input]:text-[16px] max-md:[&_select]:text-[16px] max-md:[&_textarea]:text-[16px]">
+        {/* ── Colonne de navigation (232px) — bureau seulement : sous `md`,
+            la barre basse prend le relais ── */}
+        <aside className="flex w-[232px] shrink-0 flex-col border-r border-line bg-surface px-3 py-[18px] max-md:hidden">
           {/*
             LE SIGNE EN TÊTE DE COLONNE — pas une décoration, le TITRE de
             l'outil. Contrairement au back-office restaurant, rien n'oblige ici
@@ -270,16 +300,19 @@ function HqShell({ children }: { children: ReactNode }) {
 
         {/* ── Colonne titre + contenu ── */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4">
+          {/* Sous `md`, le bandeau se CONDENSE : titre plus petit, date
+              masquée (elle est sur le téléphone lui-même), pilule MRR
+              resserrée — rien ne doit pousser la ligne à déborder. */}
+          <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4 max-md:gap-2.5 max-md:px-4 max-md:py-2.5">
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
+              <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink max-md:text-lg">
                 {active.title}
               </h1>
-              <p className="truncate text-sm text-mut" suppressHydrationWarning>
+              <p className="truncate text-sm text-mut max-md:hidden" suppressHydrationWarning>
                 {fmtDateFr(new Date())} · interne Snack Manager
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex min-w-0 shrink-0 items-center gap-3 max-md:gap-2">
               <span
                 className="hidden items-center gap-2 rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] px-3.5 py-2 text-[13px] font-bold text-ink lg:inline-flex"
                 title="Restaurants clients actifs sur les 30 derniers jours"
@@ -287,17 +320,144 @@ function HqShell({ children }: { children: ReactNode }) {
                 <span className="size-[9px] rounded-full bg-ok" aria-hidden />
                 {overview ? `${overview.activeClients} client${overview.activeClients > 1 ? "s" : ""} actif${overview.activeClients > 1 ? "s" : ""}` : "…"}
               </span>
-              <span className="cf-fig rounded-pill border border-accent/40 bg-accent/10 px-3.5 py-2 text-[13px] font-extrabold text-accent">
+              <span className="cf-fig whitespace-nowrap rounded-pill border border-accent/40 bg-accent/10 px-3.5 py-2 text-[13px] font-extrabold text-accent max-md:px-2.5 max-md:py-1.5 max-md:text-[12px]">
                 {overview ? euroRound(overview.mrrCents) : "…"}
                 <span className="ml-1 font-semibold text-accent/70">MRR</span>
               </span>
             </div>
           </header>
 
-          <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto bg-bg">
+          {/* Le rembourrage bas mobile garde le contenu AU-DESSUS de la barre
+              basse (fixe) — sa hauteur + la marge des encoches. */}
+          <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto bg-bg max-md:pb-[calc(66px+env(safe-area-inset-bottom))]">
             {children}
           </main>
         </div>
+
+        {/* ── Barre de navigation basse — téléphone et petite tablette ── */}
+        <nav
+          aria-label="Navigation interne (mobile)"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        >
+          <div className="grid grid-cols-5">
+            {MOBILE_NAV.map((item) => {
+              const on = item.href === active.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={on ? "page" : undefined}
+                  className={cx(
+                    "cf-press flex min-h-[54px] flex-col items-center justify-center gap-1 px-1 pb-1.5 pt-2",
+                    on ? "text-accent" : "text-white/60",
+                  )}
+                >
+                  <span className="relative">
+                    <Icon name={item.icon} size={21} stroke={on ? 2.3 : 2} />
+                    {item.href === "/sm/pipeline" && openLeads > 0 && (
+                      <span className="cf-fig absolute -right-2.5 -top-1.5 rounded-pill bg-accent px-[5px] text-[9px] font-extrabold leading-[14px] text-onaccent">
+                        {openLeads}
+                        <span className="sr-only"> leads en cours</span>
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[10px] font-bold leading-none tracking-[-0.01em]">
+                    {item.label === "Tableau de bord" ? "Tableau" : item.label}
+                  </span>
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMoreOpen(true)}
+              aria-expanded={moreOpen}
+              aria-haspopup="dialog"
+              className={cx(
+                "cf-press flex min-h-[54px] flex-col items-center justify-center gap-1 px-1 pb-1.5 pt-2",
+                // « Plus » s'allume quand la page ACTIVE vit dans sa feuille :
+                // sinon Signaux ou Erreurs sembleraient n'exister nulle part.
+                MOBILE_MORE.some((n) => n.href === active.href)
+                  ? "text-accent"
+                  : "text-white/60",
+              )}
+            >
+              <span
+                className="grid h-[21px] place-items-center text-[19px] font-extrabold leading-none tracking-[0.08em]"
+                aria-hidden
+              >
+                ⋯
+              </span>
+              <span className="text-[10px] font-bold leading-none tracking-[-0.01em]">
+                Plus
+              </span>
+            </button>
+          </div>
+        </nav>
+
+        {/* ── La feuille « Plus » : le reste de la navigation, et la sortie ── */}
+        <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Plus">
+          <div className="flex flex-col gap-0.5">
+            {MOBILE_MORE.map((item) => {
+              const on = item.href === active.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={on ? "page" : undefined}
+                  onClick={() => setMoreOpen(false)}
+                  className={cx(
+                    "cf-press-row flex min-h-12 items-center gap-3 rounded-ctrl px-3 py-2.5 text-sm",
+                    on
+                      ? "bg-accent font-extrabold text-onaccent"
+                      : "font-semibold text-white/80 hover:bg-white/8",
+                  )}
+                >
+                  <Icon name={item.icon} size={19} stroke={on ? 2.3 : 2} />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <Icon name="arrow" size={15} className={on ? "" : "text-mut"} />
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Le chiffre que le fondateur regarde en premier suit la navigation
+              mobile : il vivait dans la colonne de bureau, désormais masquée. */}
+          <div className="mt-3 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+              Places fondateur
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="cf-fig text-2xl font-extrabold text-accent">
+                {seats ? seats.remaining : "—"}
+              </span>
+              <span className="text-[13px] font-semibold text-mut">
+                / {seats?.total ?? 10} libres
+              </span>
+            </div>
+            <SeatMeter taken={seats?.taken ?? 0} total={seats?.total ?? 10} />
+          </div>
+
+          <div className="mt-3 flex items-center gap-2.5 border-t border-line px-1 pt-3">
+            <div
+              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold text-accent"
+              aria-hidden
+            >
+              A
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-bold text-ink">Admin SM</div>
+              <div className="truncate text-xs text-mut">Fondateur</div>
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="cf-press flex min-h-11 items-center gap-2 rounded-pill border border-white/12 bg-white/6 px-3.5 text-[13px] font-bold text-mut hover:border-white/25 hover:bg-white/12 hover:text-white"
+            >
+              <Icon name="back" size={15} />
+              Se déconnecter
+            </button>
+          </div>
+        </BottomSheet>
       </div>
     </HqContext.Provider>
   );
