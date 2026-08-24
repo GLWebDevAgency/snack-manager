@@ -15,13 +15,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
+  PLAN_LABELS,
   nextLeadStage,
   previousLeadStage,
+  proposalCents,
   type CrmLead,
   type LeadStage,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
-import { timeAgo } from "@/lib/format";
+import { fmtEuro, timeAgo } from "@/lib/format";
 import { Btn, Card, Icon, Input, Skeleton, useToast } from "@/components/ui";
 import { crm, useHq } from "../crm";
 import { LeadDrawer, NewLeadDrawer, StagePill } from "../parts";
@@ -241,6 +243,18 @@ function LeadCard({
         {(lead.contact.name || lead.contact.phone) && (
           <div className="mt-0.5 truncate text-[12.5px] text-mut">
             {[lead.contact.name, lead.contact.phone].filter(Boolean).join(" · ")}
+          </div>
+        )}
+        {/* La proposition sur la table — la carte répond à « on lui a proposé quoi ? » sans ouvrir la fiche. */}
+        {lead.proposal && (
+          <div className="mt-1 truncate text-[12px] font-semibold text-accent">
+            {PLAN_LABELS[lead.proposal.plan]}
+            {lead.proposal.onlineOrdering && lead.proposal.plan !== "boost"
+              ? " + commande en ligne"
+              : ""}
+            {" · "}
+            {fmtEuro(proposalCents(lead.proposal).monthlyCents)}/mois
+            {lead.proposal.billing === "annuel" ? " · annuel" : ""}
           </div>
         )}
         {lead.notes && (

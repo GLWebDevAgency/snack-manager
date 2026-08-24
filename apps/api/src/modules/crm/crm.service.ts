@@ -114,6 +114,11 @@ export class CrmService {
     if (body.contact?.name !== undefined) set['contact.name'] = body.contact.name;
     if (body.contact?.phone !== undefined) set['contact.phone'] = body.contact.phone;
     if (body.contact?.email !== undefined) set['contact.email'] = body.contact.email;
+    if (body.proposal !== undefined) {
+      // Datée ICI et pas par le client : « proposée le … » doit dire quand
+      // elle a été posée chez nous, pas l'heure d'un poste mal réglé.
+      set.proposal = body.proposal === null ? null : { ...body.proposal, at: new Date() };
+    }
 
     const doc = await this.leads
       .findByIdAndUpdate(objectId(id), { $set: set }, { new: true })
@@ -474,6 +479,15 @@ function toLead(doc: Record<string, unknown>): CrmLead {
     touches,
     founderSeatReserved: Boolean(raw.founderSeatReserved),
     notes: raw.notes ?? '',
+    proposal: raw.proposal
+      ? {
+          plan: raw.proposal.plan as 'essentiel' | 'complet' | 'boost',
+          onlineOrdering: Boolean(raw.proposal.onlineOrdering),
+          billing: (raw.proposal.billing ?? 'mensuel') as 'mensuel' | 'annuel',
+          note: raw.proposal.note ?? '',
+          at: iso(raw.proposal.at) ?? new Date(0).toISOString(),
+        }
+      : null,
     createdAt: iso(raw.createdAt) ?? new Date(0).toISOString(),
     updatedAt: iso(raw.updatedAt) ?? new Date(0).toISOString(),
     lastTouchAt: touches[0]?.at ?? null,

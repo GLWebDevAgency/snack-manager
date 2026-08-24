@@ -6,6 +6,8 @@ import { BillingService } from './billing.service';
 import { ConversionService } from './conversion.service';
 import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
+import { DevisService } from './devis.service';
+import { IssuerConfig } from '../billing/issuer.config';
 import { HealthController } from './health.controller';
 import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
@@ -40,6 +42,11 @@ import { SignalsService } from './signals.service';
   providers: [
     CrmService,
     ConversionService,
+    DevisService,
+    // Le devis imprime la MÊME identité d'émetteur que les factures du gérant :
+    // `IssuerConfig` est sans état (huit lectures d'environnement), le fournir
+    // ici aussi coûte moins qu'un couplage de modules pour un singleton de plus.
+    IssuerConfig,
     AdminService,
     HealthService,
     InsightsService,
