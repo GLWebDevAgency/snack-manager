@@ -23,6 +23,9 @@ dotenv({ path: resolve(__dirname, '../../../.env') });
  *
  *   MONGO_URL='<URL de la base visée>' \
  *     pnpm --filter @sm/db exec tsx src/create-admin.ts <email> [nom]
+ *
+ * Sans URL sous la main, préférer la console interactive : `pnpm admin`
+ * (elle lit l'URL dans les variables Railway — voir `admin-cli.ts`).
  */
 async function main(): Promise<void> {
   const email = process.argv[2]?.trim().toLowerCase();
