@@ -11,6 +11,7 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "seed": "pnpm --filter @sm/db seed",
+    "admin": "pnpm --filter @sm/db run admin",
     "test": "turbo test",
     "verify": "turbo run typecheck lint test build --cache=local:rw,remote:",
     "e2e": "node e2e/lancer.mjs",
