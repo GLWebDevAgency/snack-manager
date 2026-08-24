@@ -90,13 +90,15 @@ export default function ErreursPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    // `p-[26px]` : le rembourrage de page commun à toutes les vues /sm — son
+    // absence collait les cartes aux bords (seule page du back-office sans lui).
+    <div className="flex flex-col gap-4 p-[26px]">
       {/* ── KPI ── */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-4">
         <Kpi label="Jamais vues" value={groups ? jamaisVues : "—"} icon="bell" />
         <Kpi label="Groupes au journal" value={groups ? groups.length : "—"} icon="grid" />
         <Kpi label="Occurrences cumulées" value={groups ? occurrences : "—"} icon="chart" />
-        <Card className="flex-1 p-[18px]">
+        <Card className="min-w-[260px] flex-1 p-[18px]">
           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
             Canal d’alerte
           </div>
@@ -114,8 +116,9 @@ export default function ErreursPage() {
             </button>
           ) : (
             <div className="mt-1 text-xs text-mut/80">
-              Poser SM_ALERT_WEBHOOK ou BREVO_API_KEY + SM_ALERT_EMAIL_TO sur Railway — le
-              veilleur dort tant qu’aucun canal n’existe.
+              Poser SM_ALERT_WEBHOOK ou BREVO_API_KEY + SM_ALERT_EMAIL_TO sur Railway — en deux
+              minutes via GitHub → Actions → « Variable Railway », téléphone compris. Le veilleur
+              dort tant qu’aucun canal n’existe.
             </div>
           )}
           {essai && <div className="mt-1.5 text-xs text-mut">{essai}</div>}
