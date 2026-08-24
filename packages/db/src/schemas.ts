@@ -573,6 +573,22 @@ export const LeadSchema = new Schema(
           plan: { type: String, enum: ['essentiel', 'complet', 'boost'], required: true },
           onlineOrdering: { type: Boolean, default: false },
           billing: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
+          // L'Atelier — les services retenus. Les prix ne se stockent pas :
+          // ils se dérivent de la grille (@sm/contracts), comme le plan.
+          services: {
+            type: new Schema(
+              {
+                siteVitrine: { type: Boolean, default: false },
+                refonteSite: { type: Boolean, default: false },
+                identiteVisuelle: { type: Boolean, default: false },
+                integrationCommande: { type: Boolean, default: false },
+                presenceInternet: { type: Boolean, default: false },
+                reseauxSociaux: { type: String, enum: ['hebdo', 'bihebdo', null], default: null },
+              },
+              { _id: false },
+            ),
+            default: null,
+          },
           note: { type: String, default: '' },
           at: { type: Date, required: true },
         },

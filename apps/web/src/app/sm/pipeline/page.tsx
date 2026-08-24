@@ -19,7 +19,9 @@ import {
   nextLeadStage,
   previousLeadStage,
   proposalCents,
+  servicesCents,
   type CrmLead,
+  type LeadServices,
   type LeadStage,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
@@ -300,6 +302,18 @@ export default function PipelinePage() {
   );
 }
 
+/** L'Atelier compte-t-il quelque chose — un ponctuel comme un mensuel ? */
+function atelierRetenu(services: LeadServices): boolean {
+  const cents = servicesCents(services);
+  return cents.monthlyCents > 0 || cents.onceCents > 0;
+}
+
+/** Le mensuel total de la proposition — logiciel + services de l'Atelier. */
+function totalMensuel(proposal: NonNullable<CrmLead["proposal"]>): number {
+  const prix = proposalCents(proposal);
+  return prix.monthlyCents + prix.servicesMonthlyCents;
+}
+
 function LeadCard({
   lead,
   busy,
@@ -357,8 +371,11 @@ function LeadCard({
             {lead.proposal.onlineOrdering && lead.proposal.plan !== "boost"
               ? " + commande en ligne"
               : ""}
+            {atelierRetenu(lead.proposal.services) ? " + atelier" : ""}
             {" · "}
-            {fmtEuro(proposalCents(lead.proposal).monthlyCents)}/mois
+            {/* Le mensuel TOTAL (logiciel + Atelier) : c'est le panier que la
+                carte doit annoncer, pas le seul abonnement. */}
+            {fmtEuro(totalMensuel(lead.proposal))}/mois
             {lead.proposal.billing === "annuel" ? " · annuel" : ""}
           </div>
         )}

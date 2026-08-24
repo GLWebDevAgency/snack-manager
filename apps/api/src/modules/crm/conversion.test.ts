@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import type { Model } from 'mongoose';
-import type { JwtPayload } from '@sm/contracts';
+import { EMPTY_SERVICES, type JwtPayload } from '@sm/contracts';
 import type { Lead, Tenant, User } from '@sm/db';
 import type { SecretHasher } from '@sm/domain/src/ports';
 import type { AdminService } from './admin.service';
@@ -85,6 +85,7 @@ const BODY = {
   founderSeat: true,
   onlineOrdering: true,
   billing: 'mensuel' as const,
+  services: EMPTY_SERVICES,
 };
 
 describe('Mot de passe généré', () => {
@@ -186,6 +187,38 @@ describe('Convertir un lead en restaurant', () => {
     expect(corps.amountCents).toBe(199_000);
     expect(corps.label).toContain('annuel');
     expect(result.draftInvoices).toBe(1);
+  });
+
+  it('l’Atelier signé : les mensuels sur leur pièce jamais annualisée, une pièce par ponctuel', async () => {
+    const { service, billing } = build();
+    const result = await service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        onlineOrdering: false,
+        billing: 'annuel',
+        services: {
+          ...EMPTY_SERVICES,
+          siteVitrine: true,
+          identiteVisuelle: true,
+          presenceInternet: true,
+          reseauxSociaux: 'hebdo',
+        },
+      },
+      NOW,
+    );
+    const corps = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
+    // Abonnement annuel ×10 (Complet seul) ; Atelier mensuel À PART, au mois ;
+    // puis une pièce PAR service ponctuel — le site se relance sans l'identité.
+    expect(corps.map((c) => [c.kind, c.amountCents])).toEqual([
+      ['abonnement', 159_000],
+      ['option', 6_900 + 14_900],
+      ['autre', 69_000],
+      ['autre', 39_000],
+    ]);
+    expect(corps[1]?.label).toContain('sans engagement');
+    expect(result.draftInvoices).toBe(4);
   });
 
   it('la signature SURVIT à une facturation en panne — draftInvoices le dit', async () => {

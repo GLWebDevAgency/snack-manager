@@ -3,7 +3,13 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  ATELIER_ONCE_CENTS,
+  ATELIER_ONCE_KEYS,
+  ATELIER_ONCE_LABELS,
+  ATELIER_PRESENCE_LABEL,
+  MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
+  SOCIAL_CADENCE_LABELS,
   proposalCents,
   yearlyCents,
   type JwtPayload,
@@ -164,9 +170,14 @@ export class ConversionService {
     body: LeadConvert,
     trialEndsAt: Date,
   ): Promise<number> {
-    const prix = proposalCents({ plan: body.plan, onlineOrdering: body.onlineOrdering });
+    const prix = proposalCents({
+      plan: body.plan,
+      onlineOrdering: body.onlineOrdering,
+      services: body.services,
+    });
     const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
     const moduleSigne = body.onlineOrdering || body.plan === 'boost';
+    const moduleFacture = body.onlineOrdering && body.plan !== 'boost';
 
     let poses = 0;
     try {
@@ -184,14 +195,51 @@ export class ConversionService {
       });
       poses += 1;
 
-      if (prix.setupOnceCents > 0) {
+      // Les mensuels de l'Atelier sur leur propre pièce, JAMAIS annualisés :
+      // sans engagement, un service humain ne se facture pas d'avance —
+      // les mêler à un abonnement annuel contredirait le devis.
+      if (prix.servicesMonthlyCents > 0) {
+        const libelles = [
+          ...(body.services.presenceInternet ? [ATELIER_PRESENCE_LABEL] : []),
+          ...(body.services.reseauxSociaux
+            ? [SOCIAL_CADENCE_LABELS[body.services.reseauxSociaux]]
+            : []),
+        ];
+        await this.billing.issue(actor, tenantId, {
+          kind: 'option',
+          period,
+          draft: true,
+          dueAt: trialEndsAt,
+          amountCents: prix.servicesMonthlyCents,
+          label: `Atelier (mensuel, sans engagement) — ${libelles.join(' ; ')}`,
+        });
+        poses += 1;
+      }
+
+      if (moduleFacture) {
         await this.billing.issue(actor, tenantId, {
           kind: 'mise_en_place',
           period,
           draft: true,
           dueAt: trialEndsAt,
-          amountCents: prix.setupOnceCents,
+          amountCents: MODULE_ORDERING_SETUP_CENTS,
           label: 'Mise en service — module commande en ligne',
+        });
+        poses += 1;
+      }
+
+      // Une pièce PAR service ponctuel : le site se suit (et se relance)
+      // indépendamment de l'identité visuelle — une somme unique les rendrait
+      // indistincts au premier impayé.
+      for (const cle of ATELIER_ONCE_KEYS) {
+        if (!body.services[cle]) continue;
+        await this.billing.issue(actor, tenantId, {
+          kind: 'autre',
+          period,
+          draft: true,
+          dueAt: trialEndsAt,
+          amountCents: ATELIER_ONCE_CENTS[cle],
+          label: ATELIER_ONCE_LABELS[cle],
         });
         poses += 1;
       }
