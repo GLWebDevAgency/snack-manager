@@ -173,6 +173,68 @@ export const PLAN_LABELS: Record<'essentiel' | 'complet' | 'boost', string> = {
   boost: 'Boost',
 };
 
+/* ── L'Atelier — les services d'agence, au catalogue ──── */
+
+/**
+ * Au-delà du logiciel, l'équipe vend du TRAVAIL : site vitrine maquetté,
+ * identité visuelle, fiche Google tenue, réseaux sociaux animés. Étalonnage
+ * du 24/08/2026 sur les prix publics du marché français (agences restauration
+ * 950-1 590 € le site, fiche Google gérée 49-150 €/mois, community management
+ * 250-600 €/mois) : nos prix se placent SOUS les agences et AU-DESSUS des
+ * robots, tenables parce que l'outillage est mutualisé avec le SaaS.
+ *
+ * Deux natures, deux règles :
+ * - les PONCTUELS se paient une fois, à la mise en chantier ;
+ * - les MENSUELS sont SANS ENGAGEMENT et ne sont jamais annualisés : la
+ *   remise « douze mois payés dix » ne porte que sur le logiciel — un
+ *   service humain résiliable à tout moment ne se paie pas d'avance.
+ */
+export const ATELIER_ONCE_KEYS = [
+  'siteVitrine',
+  'refonteSite',
+  'identiteVisuelle',
+  'integrationCommande',
+] as const;
+export type AtelierOnceKey = (typeof ATELIER_ONCE_KEYS)[number];
+
+export const ATELIER_ONCE_CENTS: Record<AtelierOnceKey, number> = {
+  siteVitrine: 69_000,
+  refonteSite: 99_000,
+  identiteVisuelle: 39_000,
+  integrationCommande: 19_000,
+};
+
+export const ATELIER_ONCE_LABELS: Record<AtelierOnceKey, string> = {
+  siteVitrine: 'Site vitrine clé en main — maquette sur mesure, contenus, référencement local',
+  refonteSite: 'Refonte du site existant — reprise complète, maquette validée avant chantier',
+  identiteVisuelle: 'Identité visuelle — logo, couleurs, déclinaisons (tickets, vitrine, réseaux)',
+  integrationCommande:
+    'Intégration de la commande en ligne sur votre site existant — mise en service du module comprise',
+};
+
+/** Présence internet : fiche Google tenue, avis répondus, rapport mensuel. */
+export const ATELIER_PRESENCE_CENTS = 6_900;
+export const ATELIER_PRESENCE_LABEL =
+  'Présence internet — fiche Google tenue, réponse aux avis, rapport mensuel';
+
+/**
+ * Réseaux sociaux : le prix est piloté par la CADENCE de publication — c'est
+ * la règle observée chez tous les prestataires. Au-delà de deux publications
+ * par semaine (vidéo, shooting sur place, campagnes) : sur devis, hors grille.
+ */
+export const SOCIAL_CADENCES = ['hebdo', 'bihebdo'] as const;
+export type SocialCadence = (typeof SOCIAL_CADENCES)[number];
+
+export const SOCIAL_CADENCE_CENTS: Record<SocialCadence, number> = {
+  hebdo: 14_900,
+  bihebdo: 24_900,
+};
+
+export const SOCIAL_CADENCE_LABELS: Record<SocialCadence, string> = {
+  hebdo: 'Réseaux sociaux — une publication par semaine, visuels compris',
+  bihebdo: 'Réseaux sociaux — deux publications par semaine, visuels compris',
+};
+
 /* ── La proposition — ce qu'on a réellement mis sur la table ──── */
 
 /**
@@ -198,32 +260,111 @@ export const PROPOSAL_BILLING_LABELS: Record<ProposalBilling, string> = {
   annuel: 'Annuel — deux mois offerts',
 };
 
-export const LeadProposalSchema = z.object({
-  plan: z.enum(['essentiel', 'complet', 'boost']),
-  /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
-  onlineOrdering: z.boolean().default(false),
-  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-  /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
-  note: z.string().trim().max(500).default(''),
-});
+/**
+ * Les services de l'Atelier retenus dans une proposition. Création et refonte
+ * de site s'excluent : on ne fabrique pas un site neuf ET une reprise de
+ * l'ancien pour le même établissement.
+ */
+export const LeadServicesSchema = z
+  .object({
+    siteVitrine: z.boolean().default(false),
+    refonteSite: z.boolean().default(false),
+    identiteVisuelle: z.boolean().default(false),
+    integrationCommande: z.boolean().default(false),
+    presenceInternet: z.boolean().default(false),
+    reseauxSociaux: z.enum(SOCIAL_CADENCES).nullable().default(null),
+  })
+  .refine((s) => !(s.siteVitrine && s.refonteSite), {
+    message: 'Site neuf OU refonte — pas les deux sur la même proposition.',
+  });
+export type LeadServices = z.infer<typeof LeadServicesSchema>;
+
+export const EMPTY_SERVICES: LeadServices = {
+  siteVitrine: false,
+  refonteSite: false,
+  identiteVisuelle: false,
+  integrationCommande: false,
+  presenceInternet: false,
+  reseauxSociaux: null,
+};
+
+/**
+ * L'intégration sur site existant greffe NOTRE module : la vendre sans le
+ * module mensuel qui la fait vivre serait un devis incohérent — 190 € pour
+ * brancher un service auquel le client ne serait pas abonné. Vérifié ici,
+ * à la proposition COMME à la signature.
+ */
+const integrationExigeLeModule = (
+  p: { plan: string; onlineOrdering: boolean; services: LeadServices },
+  ctx: z.RefinementCtx,
+): void => {
+  if (p.services.integrationCommande && !p.onlineOrdering && p.plan !== 'boost') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['services', 'integrationCommande'],
+      message: 'L’intégration sur site existant exige le module commande en ligne (ou Boost).',
+    });
+  }
+};
+
+export const LeadProposalSchema = z
+  .object({
+    plan: z.enum(['essentiel', 'complet', 'boost']),
+    /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    /** L'Atelier — les services retenus en plus du logiciel. */
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+    /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
+    note: z.string().trim().max(500).default(''),
+  })
+  .superRefine(integrationExigeLeModule);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
 /** La proposition telle que servie — datée du jour où elle a été posée. */
 export type CrmLeadProposal = LeadProposal & { at: string };
 
+/** Le chiffrage des seuls services de l'Atelier — composable et testable seul. */
+export function servicesCents(services: LeadServices): {
+  monthlyCents: number;
+  onceCents: number;
+} {
+  let monthly = services.presenceInternet ? ATELIER_PRESENCE_CENTS : 0;
+  if (services.reseauxSociaux) monthly += SOCIAL_CADENCE_CENTS[services.reseauxSociaux];
+  const once = ATELIER_ONCE_KEYS.reduce(
+    (somme, cle) => somme + (services[cle] ? ATELIER_ONCE_CENTS[cle] : 0),
+    0,
+  );
+  return { monthlyCents: monthly, onceCents: once };
+}
+
 /**
  * Le chiffrage d'une proposition, depuis la grille — jamais saisi à la main.
  * Sur Boost le module est compris : ni mensualité ni mise en service en plus,
  * même si la case a été cochée par réflexe.
+ *
+ * `monthlyCents` reste le LOGICIEL seul : c'est lui que l'engagement annuel
+ * remise (douze mois payés dix). Les services mensuels de l'Atelier sortent à
+ * part (`servicesMonthlyCents`) — sans engagement, ils ne s'annualisent
+ * jamais. Les ponctuels de l'Atelier rejoignent `setupOnceCents`.
  */
-export function proposalCents(p: Pick<LeadProposal, 'plan' | 'onlineOrdering'>): {
+export function proposalCents(
+  p: Pick<LeadProposal, 'plan' | 'onlineOrdering'> & { services?: LeadServices },
+): {
   monthlyCents: number;
+  servicesMonthlyCents: number;
   setupOnceCents: number;
 } {
+  const services = p.services ?? EMPTY_SERVICES;
   const moduleFacture = p.onlineOrdering && p.plan !== 'boost';
+  // L'intégration sur site existant COMPREND la mise en service du module :
+  // facturer les deux serait payer deux fois le même branchement.
+  const miseEnService = moduleFacture && !services.integrationCommande;
+  const atelier = servicesCents(services);
   return {
     monthlyCents: PLAN_MRR_CENTS[p.plan] + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
-    setupOnceCents: moduleFacture ? MODULE_ORDERING_SETUP_CENTS : 0,
+    servicesMonthlyCents: atelier.monthlyCents,
+    setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
   };
 }
 
@@ -348,26 +489,30 @@ export type LeadListQuery = z.infer<typeof LeadListQuerySchema>;
  * chaîne entière d'une installation : le restaurant, le compte gérant, la
  * place fondateur, l'échéance d'essai — et un mot de passe remis UNE fois.
  */
-export const LeadConvertSchema = z.object({
-  /** Le slug public — `<slug>.snackmanager.app`, la carte, la caisse. */
-  slug: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
-  ownerEmail: z.email().max(160),
-  ownerName: z.string().trim().max(120).default(''),
-  plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
-  founderSeat: z.boolean().default(false),
-  /**
-   * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
-   * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
-   * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
-   * avait été proposé. Les premières factures s'en dérivent.
-   */
-  onlineOrdering: z.boolean().default(false),
-  billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-});
+export const LeadConvertSchema = z
+  .object({
+    /** Le slug public — `<slug>.snackmanager.app`, la carte, la caisse. */
+    slug: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
+    ownerEmail: z.email().max(160),
+    ownerName: z.string().trim().max(120).default(''),
+    plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
+    founderSeat: z.boolean().default(false),
+    /**
+     * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
+     * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
+     * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
+     * avait été proposé. Les premières factures s'en dérivent.
+     */
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    /** L'Atelier signé — mêmes règles que la proposition, même primauté du signé. */
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+  })
+  .superRefine(integrationExigeLeModule);
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 
 /* ── « Qui je relance aujourd'hui ? » ─────────────────────────── */

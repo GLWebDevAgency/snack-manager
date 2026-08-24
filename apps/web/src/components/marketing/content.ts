@@ -9,7 +9,7 @@
  * un mot qui laisse entendre qu'on fournit des livreurs : le tunnel de
  * commande s'arrête au CRÉNEAU DE RETRAIT.
  *
- * La page est découpée en onze sections, une par question que se pose un
+ * La page est découpée en douze sections, une par question que se pose un
  * patron de snack, dans l'ordre où il se la pose. `SECTIONS` porte cet ordre
  * et sert à la fois de sommaire (menu burger) et de source des titres.
  */
@@ -103,27 +103,54 @@ export const MODULE_MONTHLY_CENTS = 7_900;
 export const MODULE_SETUP_CENTS = 5_500;
 
 /**
- * LES DEUX PRESTATIONS AU DEVIS — ET ELLES SONT DES NOMBRES, MAINTENANT.
+ * LA PRESTATION AU DEVIS — ET ELLE EST UN NOMBRE, MAINTENANT.
  *
- * L'identité visuelle et l'installation du matériel ne vivaient QUE dans deux
- * chaînes libres : `"À partir de 250 €"` dans `SERVICES`, `"À partir de 290 €"`
- * dans `HARDWARE_PATHS`. C'est-à-dire les deux derniers prix de la vitrine
- * qu'une révision de grille menée ici laissait intacts — la faute même que ce
- * bloc de constantes existe pour empêcher, simplement rangée mille lignes plus
- * bas où personne ne la cherchait.
- *
- * Elle avait déjà une conséquence visible : `euros()` compose avec une espace
- * INSÉCABLE devant le symbole, quand ces deux chaînes portaient une espace
- * ordinaire. La même page affichait donc « 99 € » qui ne se coupe jamais en fin
- * de ligne et « 250 € » qui pouvait laisser le symbole seul sur la ligne
- * suivante.
+ * L'installation du matériel ne vivait QUE dans une chaîne libre
+ * (`"À partir de 290 €"` dans `HARDWARE_PATHS`) — le dernier prix de la
+ * vitrine qu'une révision de grille menée ici laissait intact, et une espace
+ * ordinaire devant le symbole quand `euros()` compose une insécable.
  *
  * Ce n'est PAS une troisième grille : la grille, ce sont les trois abonnements
- * et le module, et elle ne bouge pas. Ce sont deux prestations facturées une
- * fois, sur devis — d'où « à partir de », qui est un plancher et non un tarif.
+ * et le module. C'est une prestation facturée une fois, sur devis — d'où
+ * « à partir de », qui est un plancher et non un tarif. (L'identité visuelle,
+ * elle, a rejoint le FORFAIT de l'Atelier : `ATELIER_CENTS.identite`.)
  */
-export const IDENTITE_FROM_CENTS = 25_000;
 export const INSTALL_FROM_CENTS = 29_000;
+
+/**
+ * ═══ LES PRIX DE L'ATELIER NAISSENT ICI, COMME TOUS LES AUTRES ═══
+ *
+ * Sept montants en CENTIMES, pour la même raison que `PLAN_MONTHLY_CENTS` :
+ * un prix ne s'écrit qu'une fois, et quatre surfaces le lisent — la page
+ * `/atelier`, la bande de `/offres`, la porte de la landing, la carte
+ * « identité visuelle » de `SERVICES`. La transparence est L'ARGUMENT de
+ * l'Atelier : une agence répond par un devis, nous affichons la grille. Une
+ * grille recopiée finirait par se contredire, et la contradiction tuerait
+ * précisément cet argument. (Déclaré AVANT `SERVICES`, qui le lit — l'ordre
+ * d'évaluation du module n'est pas décoratif.)
+ *
+ * `integration` N'EST PAS `MODULE_SETUP_CENTS` : les 55 € mettent en service
+ * le module sur NOTRE page de commande ; les 190 € le greffent sur le site
+ * EXISTANT du restaurateur — un chantier différent, chiffré à part.
+ * L'abonnement du module, lui, reste `MODULE_MONTHLY_CENTS` : même module,
+ * même prix, où qu'il soit posé.
+ */
+export const ATELIER_CENTS = {
+  /** Site vitrine clé en main, une fois — avec une formule Snack Manager. */
+  site: 69_000,
+  /** Refonte d'un site existant, reprise sur notre moteur, une fois. */
+  refonte: 99_000,
+  /** Identité visuelle : logo, couleurs, déclinaisons — une fois. */
+  identite: 39_000,
+  /** Présence internet : fiche Google gérée, par mois. */
+  presence: 6_900,
+  /** Réseaux sociaux, une publication par semaine, par mois. */
+  social1: 14_900,
+  /** Réseaux sociaux, deux publications par semaine, par mois. */
+  social2: 24_900,
+  /** Intégration de la commande en ligne sur le site du restaurateur, une fois. */
+  integration: 19_000,
+} as const;
 
 /**
  * L'ENGAGEMENT ANNUEL — douze mois payés dix.
@@ -179,13 +206,12 @@ export function euros(cents: number): string {
 }
 
 /**
- * « À partir de 250 € » — le libellé d'un PLANCHER, composé et jamais recopié.
+ * « À partir de 290 € » — le libellé d'un PLANCHER, composé et jamais recopié.
  *
- * Deux prestations se chiffrent ainsi (`IDENTITE_FROM_CENTS`,
- * `INSTALL_FROM_CENTS`), et elles s'affichent sur deux surfaces : la landing et
- * la page Offres. Quatre endroits, une seule formulation possible — écrire
- * « Dès 250 € » ici et « À partir de 250 € » là ferait douter que ce soit le
- * même prix.
+ * Une prestation se chiffre ainsi (`INSTALL_FROM_CENTS`), affichée sur deux
+ * surfaces : la landing et la page Offres. Une seule formulation possible —
+ * écrire « Dès 290 € » ici et « À partir de 290 € » là ferait douter que ce
+ * soit le même prix.
  */
 export const aPartirDe = (cents: number): string => `À partir de ${euros(cents)}`;
 
@@ -284,6 +310,10 @@ export const SECTIONS: readonly SectionMeta[] = [
   // l'avantage qu'il y a à commander chez le restaurateur. Une préférence
   // annoncée sans sa raison. La section dit maintenant ce qu'on FAIT.
   { id: "commander", nav: "Services", badge: "Nos services +", title: "Un logiciel ne suffit pas. On s'occupe du reste." },
+  // L'Atelier prolonge la question précédente — « et qui s'occupe du reste ? » —
+  // par une PORTE, pas un étalage : trois cartes sans un prix, et la page
+  // `/atelier` fait le travail. L'accueil reste vendeur du logiciel.
+  { id: "atelier", nav: "L’Atelier", badge: "L’Atelier", title: "Le site, la fiche Google, les réseaux : l’Atelier s’en occupe." },
   {
     id: "materiel",
     nav: "Matériel",
@@ -416,10 +446,11 @@ export const NAV_PAGES: readonly NavLink[] = [
 /**
  * LE DÉROULANT « PLATEFORME » — décision du fondateur (23/08/2026).
  *
- * Les trois pages par application ne pouvaient pas entrer à plat dans
+ * Les pages par application ne pouvaient pas entrer à plat dans
  * l'encoche : son ouverture est mesurée sur des groupes SYMÉTRIQUES de trois,
  * et six entrées d'un côté l'auraient déséquilibrée. Le déroulant compte pour
- * UNE entrée dans la mesure, et porte les trois routes — plus « La démo »,
+ * UNE entrée dans la mesure, et porte les quatre routes — les trois
+ * applications, puis l'Atelier, les services d'agence — plus « La démo »,
  * l'ancre produit qu'il remplace en tête de groupe : le visiteur qui cherchait
  * « Produit » trouve désormais la famille entière au même endroit.
  */
@@ -427,6 +458,7 @@ export const NAV_PLATEFORME: readonly NavLink[] = [
   { href: "/caisse", label: "La caisse" },
   { href: "/cuisine", label: "L'écran cuisine" },
   { href: "/commande-en-ligne", label: "La commande en ligne" },
+  { href: "/atelier", label: "L’Atelier" },
   { ...ancre("produit"), label: "La démo en direct" },
 ];
 
@@ -525,14 +557,15 @@ export type FooterColumn = { readonly title: string; readonly links: readonly Na
 export const FOOTER_COLUMNS: readonly FooterColumn[] = [
   {
     title: "La plateforme",
-    // Les trois premières entrées sont des ROUTES, pas des ancres : les pages
-    // par application. La famille est complète — leur entrée dans l'encoche
-    // reste une décision de design à part (l'équilibre trois/trois du menu) ;
-    // le pied de page, lui, les annonce toutes.
+    // Les quatre premières entrées sont des ROUTES, pas des ancres : les pages
+    // par application, puis l'Atelier. La famille est complète — leur entrée
+    // dans l'encoche reste une décision de design à part (l'équilibre
+    // trois/trois du menu) ; le pied de page, lui, les annonce toutes.
     links: [
       { href: "/caisse", label: "La caisse" },
       { href: "/cuisine", label: "L'écran cuisine" },
       { href: "/commande-en-ligne", label: "La commande en ligne" },
+      { href: "/atelier", label: "L’Atelier" },
       ancre("produit"),
       ancre("commander"),
       ancre("materiel"),
@@ -1083,8 +1116,10 @@ export const SERVICES: readonly Service[] = [
     title: "Votre identité visuelle",
     lead: "Une enseigne qui a l'air de ce qu'elle vaut.",
     line: "Logo, palette, carte remise en forme et photographiée : on reprend votre identité et on la pose partout — page de commande, écrans de salle, sacs, réseaux. Beaucoup de très bons snacks se vendent moins bien que leur cuisine, et ça se corrige.",
-    price: aPartirDe(IDENTITE_FROM_CENTS),
-    priceNote: "Sur devis, une fois",
+    // Le forfait de l'Atelier, pas un plancher « sur devis » : la vitrine ne
+    // doit vendre l'identité visuelle qu'à UN prix, où qu'on la lise.
+    price: euros(ATELIER_CENTS.identite),
+    priceNote: "Forfait, une fois — détaillé sur la page de l'Atelier",
   },
   {
     id: "commande",
@@ -1143,6 +1178,119 @@ export const DIRECT_DELIVERY = {
  * `public/photos/libre/PROVENANCE.md`, qui est le seul registre des licences.
  */
 export const SERVICES_BAND: Shot = { src: "/photos/libre/ambiance-salle-nuit-bokeh.webp", alt: "" };
+
+/* ── 4 bis. L'Atelier — les services d'agence ────────────────── */
+
+/**
+ * LES SIX SERVICES DE L'ATELIER — même contrat que `SERVICES` : chaque rangée
+ * dit ce qu'elle produit, et porte son prix. La page `/atelier` les détaille,
+ * la bande de `/offres` les résume — LE MÊME OBJET, lu deux fois, jamais
+ * réécrit.
+ *
+ * ═══ L'IDENTITÉ VISUELLE N'A QU'UN PRIX ═══
+ *
+ * La carte « Votre identité visuelle » de `SERVICES` lit le MÊME forfait
+ * (`ATELIER_CENTS.identite`) que la rangée ci-dessous : l'ancien plancher
+ * « à partir de 250 €, sur devis » a été retiré à l'arrivée de l'Atelier —
+ * deux prix pour la même prestation sur le même site auraient tué l'argument
+ * de transparence qui fonde toute cette grille.
+ *
+ * ═══ ET AUCUN ENGAGEMENT N'EST INVENTÉ ═══
+ *
+ * La maquette montrée avant tout engagement est LA promesse de l'Atelier ;
+ * « sans engagement » ne s'écrit jamais seul mais toujours avec « résiliable
+ * à tout moment » — la leçon de la constante `ENGAGEMENT`. Pas de délai
+ * garanti, pas de résultat chiffré : les règles de la vitrine ne bougent pas.
+ */
+export const ATELIER_SERVICES: readonly Service[] = [
+  {
+    id: "site",
+    title: "Site vitrine clé en main",
+    lead: "Votre site, dessiné pour vous — et la maquette est montrée avant tout engagement.",
+    line: "Maquette sur mesure, contenus posés, référencement local, mise en ligne. Avec une formule Snack Manager, qui héberge le site et le fait vivre : votre menu est déjà dedans, et il suit la caisse.",
+    price: euros(ATELIER_CENTS.site),
+    priceNote: "une fois, avec une formule Snack Manager",
+  },
+  {
+    id: "refonte",
+    title: "Refonte de votre site existant",
+    lead: "Vous avez déjà un site ? On le reprend en entier.",
+    line: "Reprise complète sur notre moteur : la maquette redessinée, vos contenus repris — et un site qui parle enfin à votre caisse, au lieu de vivre sa vie dans son coin.",
+    price: euros(ATELIER_CENTS.refonte),
+    priceNote: "une fois",
+  },
+  {
+    id: "identite",
+    title: "Identité visuelle",
+    lead: "Logo, couleurs — et toutes les déclinaisons.",
+    line: "On dessine ou on redessine votre identité, et on la décline là où vos clients la voient : les tickets, la vitrine, les réseaux.",
+    price: euros(ATELIER_CENTS.identite),
+    priceNote: "une fois",
+  },
+  {
+    id: "presence",
+    title: "Présence internet",
+    lead: "Votre fiche Google, tenue pour vous.",
+    line: "Publications, photos et horaires tenus à jour sur votre fiche, une réponse à tous les avis — les bons comme les mauvais —, et un rapport mensuel simple : les appels, les itinéraires, les vues.",
+    price: `${euros(ATELIER_CENTS.presence)} / mois`,
+    priceNote: "sans engagement, résiliable à tout moment",
+  },
+  {
+    id: "reseaux",
+    title: "Réseaux sociaux",
+    lead: "Facebook et Instagram, tenus pour vous — rien ne part sans votre accord.",
+    line: "On crée les visuels, on publie sur vos comptes Facebook et Instagram, et le calendrier est validé par vous avant de partir. Vidéo, shooting sur place, campagnes publicitaires : sur devis.",
+    price: `${euros(ATELIER_CENTS.social1)} / mois`,
+    priceNote: `1 publication par semaine · ${euros(ATELIER_CENTS.social2)} / mois pour 2 publications par semaine`,
+  },
+  {
+    id: "integration",
+    title: "Commande en ligne sur votre site",
+    lead: "Vous gardez votre site : on y greffe notre module, sans commission.",
+    line: "Votre site actuel reste en place ; on y intègre notre module de commande — le même configurateur que la caisse, le ticket droit en cuisine, et zéro commission sur vos ventes.",
+    price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
+    priceNote: `+ ${euros(ATELIER_CENTS.integration)} d’intégration, une fois — mise en service comprise`,
+  },
+];
+
+/**
+ * LA PORTE SUR LA LANDING — trois cartes, zéro étalage.
+ *
+ * L'accueil vend le LOGICIEL ; l'Atelier y tient en une section sobre qui
+ * renvoie vers `/atelier`, où chaque service est chiffré. Les cartes ne
+ * portent AUCUN montant : un prix posé ici concurrencerait la grille deux
+ * sections plus bas — la page de l'Atelier les affiche tous.
+ */
+export type AtelierCard = { id: string; title: string; line: string };
+
+export const ATELIER_CARDS: readonly AtelierCard[] = [
+  {
+    id: "site",
+    title: "Site web & maquette offerte",
+    line: "Votre site vitrine, dessiné et montré avant tout engagement — et votre menu est déjà dedans, branché sur la caisse.",
+  },
+  {
+    id: "google",
+    title: "Google & avis",
+    line: "Votre fiche Google tenue à jour — publications, photos, horaires — et une réponse à tous les avis, avec un rapport mensuel simple.",
+  },
+  {
+    id: "reseaux",
+    title: "Réseaux sociaux",
+    line: "Des visuels créés pour vous, publiés sur Facebook et Instagram, sur un calendrier que vous validez.",
+  },
+] as const;
+
+/**
+ * Le renvoi vers la page — un libellé de NAVIGATION, pas un troisième verbe
+ * d'appel : `CTA_CALLBACK` et `CTA_DEMO` restent les deux seuls gestes du
+ * site, et « Découvrir » ne demande rien, il ouvre une page.
+ */
+export const ATELIER_PORTE = {
+  href: "/atelier",
+  cta: "Découvrir l’Atelier",
+  note: "Chaque service et son prix, affichés sur la page de l’Atelier.",
+} as const;
 
 /* ── 5. Matériel — ce qu'on ne rachète pas ───────────────────── */
 

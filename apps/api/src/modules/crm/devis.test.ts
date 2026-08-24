@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
-import { EMPTY_PARTY, type InvoiceParty } from '@sm/contracts';
+import { EMPTY_PARTY, EMPTY_SERVICES, type InvoiceParty } from '@sm/contracts';
 import { renderDevisPdf } from '../billing/devis-pdf';
 import { buildDevisDocument } from './devis.service';
 
@@ -28,7 +28,7 @@ describe('composition du devis', () => {
   it('mensuel avec module : trois lignes, montants de la grille', () => {
     const doc = buildDevisDocument(
       LEAD,
-      { plan: 'complet', onlineOrdering: true, billing: 'mensuel', note: 'attend son associé' },
+      { plan: 'complet', onlineOrdering: true, billing: 'mensuel', services: EMPTY_SERVICES, note: 'attend son associé' },
       ISSUER,
       NOW,
     );
@@ -50,7 +50,7 @@ describe('composition du devis', () => {
   it('annuel : une ligne à dix mois ; Boost : jamais de module facturé', () => {
     const doc = buildDevisDocument(
       LEAD,
-      { plan: 'boost', onlineOrdering: true, billing: 'annuel', note: '' },
+      { plan: 'boost', onlineOrdering: true, billing: 'annuel', services: EMPTY_SERVICES, note: '' },
       ISSUER,
       NOW,
     );
@@ -61,10 +61,68 @@ describe('composition du devis', () => {
     expect(doc.conditions.join(' ')).toContain('deux mois offerts');
   });
 
+  it('atelier : les mensuels restent « par mois » même à l’annuel, les ponctuels en « une fois »', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: 'complet',
+        onlineOrdering: true,
+        billing: 'annuel',
+        services: {
+          ...EMPTY_SERVICES,
+          siteVitrine: true,
+          identiteVisuelle: true,
+          presenceInternet: true,
+          reseauxSociaux: 'hebdo',
+        },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+    );
+    // L'engagement annuel ne remise QUE le logiciel : (159 + 79) × 10 sur la
+    // ligne « par an » — les services humains, sans engagement, restent au mois.
+    expect(doc.lignes.map((l) => [l.recurrence, l.montantHtCents])).toEqual([
+      ['par an', 238_000],
+      ['par mois', 6_900],
+      ['par mois', 14_900],
+      ['une fois', 5_500],
+      ['une fois', 69_000],
+      ['une fois', 39_000],
+    ]);
+    const conditions = doc.conditions.join(' ');
+    expect(conditions).toContain('sans engagement');
+    expect(conditions).toContain('maquette');
+  });
+
+  it('intégration sur site existant : la mise en service du module est COMPRISE, jamais doublée', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: 'essentiel',
+        onlineOrdering: true,
+        billing: 'mensuel',
+        services: { ...EMPTY_SERVICES, refonteSite: true, integrationCommande: true },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+    );
+    // Essentiel + module au mois ; refonte + intégration une fois — et AUCUNE
+    // ligne de mise en service à 55 € : les 190 € d'intégration la comprennent.
+    expect(doc.lignes.map((l) => [l.recurrence, l.montantHtCents])).toEqual([
+      ['par mois', 9_900],
+      ['par mois', 7_900],
+      ['une fois', 99_000],
+      ['une fois', 19_000],
+    ]);
+    expect(doc.conditions.join(' ')).toContain('maquette');
+  });
+
   it('émetteur incomplet : les manques sont déclarés, rien n’est inventé', () => {
     const doc = buildDevisDocument(
       LEAD,
-      { plan: 'essentiel', onlineOrdering: false, billing: 'mensuel', note: '' },
+      { plan: 'essentiel', onlineOrdering: false, billing: 'mensuel', services: EMPTY_SERVICES, note: '' },
       EMPTY_PARTY,
       NOW,
     );
@@ -77,7 +135,7 @@ describe('rendu PDF', () => {
   it('produit un PDF d’une page qui porte le mot DEVIS et le bon pour accord', () => {
     const doc = buildDevisDocument(
       LEAD,
-      { plan: 'complet', onlineOrdering: true, billing: 'mensuel', note: '' },
+      { plan: 'complet', onlineOrdering: true, billing: 'mensuel', services: EMPTY_SERVICES, note: '' },
       ISSUER,
       NOW,
     );
