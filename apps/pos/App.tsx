@@ -16,7 +16,7 @@
  * vie du restaurant.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, View } from 'react-native';
+import { AppState, Platform, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { activateKeepAwakeAsync } from 'expo-keep-awake';
 import { DEVICE_HEARTBEAT_INTERVAL_MS } from '@sm/contracts';
@@ -27,6 +27,7 @@ import {
   client,
   deviceHeartbeat,
   forgetPairedDevice,
+  installErrorReporting,
   loadPairedDevice,
   type PairedDevice,
   type Session,
@@ -44,6 +45,9 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
   const [lockNotice, setLockNotice] = useState<string | null>(null);
+
+  // Le rapporteur d'erreurs, pour toute la vie du poste — voir `client.ts`.
+  useEffect(() => installErrorReporting(), []);
 
   /**
    * Restauration au démarrage : d'ABORD l'appairage, ensuite la session.
@@ -170,6 +174,12 @@ export default function App() {
         <Loading label="Ouverture du poste…" />
       ) : !device ? (
         <PairingScreen onPaired={setDevice} />
+      ) : device.suspended ? (
+        // Abonnement suspendu : l'écran se verrouille AVANT qu'une vente
+        // n'échoue devant un client (contrat `DeviceHeartbeatResult`). La
+        // tablette reste appairée et continue de battre — le support la voit
+        // vivante ; la réactivation la rouvre au battement suivant, seule.
+        <SuspendedScreen name={device.tenant.name} />
       ) : session ? (
         <PosScreen session={session} onLock={onLock} />
       ) : (
@@ -180,6 +190,26 @@ export default function App() {
           notice={lockNotice}
         />
       )}
+    </View>
+  );
+}
+
+/**
+ * L'écran d'un poste dont l'abonnement est suspendu.
+ *
+ * Le mot d'ordre : neutre et actionnable. Pas de rouge criard devant les
+ * clients de la salle, pas de jargon — qui appeler, et c'est tout.
+ */
+function SuspendedScreen({ name }: { name: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
+      <Text style={{ color: palette.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }}>
+        Caisse en pause
+      </Text>
+      <Text style={{ color: palette.mut, fontSize: 15, textAlign: 'center', maxWidth: 420 }}>
+        L’accès de {name} est suspendu. Contactez Snack Manager pour le rétablir — la caisse
+        rouvrira toute seule, sans réappairage.
+      </Text>
     </View>
   );
 }

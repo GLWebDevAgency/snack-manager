@@ -1,0 +1,69 @@
+name: Sonde
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pourquoi ce fichier existe
+#
+# Le contrôle de santé (`smoke.mjs`) ne tournait qu'au moment du déploiement :
+# entre deux mises en ligne, une production tombée un vendredi 21 h n'était vue
+# par personne avant l'appel du restaurateur (diagnostic quatre casquettes,
+# 24/08/2026, P0). Cette sonde rejoue le même contrôle toutes les 30 minutes.
+#
+# Toutes les 30 minutes et pas 15 : le dépôt est privé, chaque exécution
+# consomme du quota Actions (~1 min facturée), et 48 passages par jour font
+# ~1 500 minutes par mois — dans le forfait gratuit, sans l'assécher pour la
+# CI. Le jour où un service d'uptime externe (UptimeRobot et consorts, sondes
+# à 5 min sans quota) est branché, cette sonde devient une doublure qu'on
+# peut espacer, pas un doublon à supprimer : elle vérifie plus qu'un ping —
+# la carte traverse Mongo, les trois interfaces servent leur vraie page.
+#
+# En échec : l'exécution rougit (GitHub prévient par e-mail), et si le secret
+# `SM_ALERT_WEBHOOK` existe, le même canal que le veilleur de l'API sonne.
+# Aucun secret n'est REQUIS — la sonde ne teste que des surfaces publiques,
+# comme `smoke.mjs` l'exige en tête de fichier.
+#
+# NB : un `schedule:` ne tourne que depuis la branche PAR DÉFAUT (`main`) —
+# la sonde ne surveille donc que la production, et c'est très bien ainsi.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    name: Santé production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v7
+
+      - name: Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Sans SM_REVISION_ATTENDUE : le contrôle de révision s'annonce IGNORÉ
+      # (le script est fait pour) — entre deux déploiements, la question n'est
+      # pas « est-ce ma version ? » mais « le restaurant peut-il encaisser ? ».
+      - name: Contrôle de santé
+        run: node scripts/smoke.mjs production
+
+      - name: Alerte webhook (si configurée)
+        if: failure()
+        env:
+          HOOK: ${{ secrets.SM_ALERT_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "Pas de SM_ALERT_WEBHOOK — l'e-mail d'échec GitHub reste le canal."
+            exit 0
+          fi
+          TEXTE="⚠ Sonde : la production ne répond pas correctement. Détail : $RUN_URL"
+          curl -sS -X POST -H 'content-type: application/json' \
+            --data "$(printf '{"text":"%s","content":"%s"}' "$TEXTE" "$TEXTE")" \
+            "$HOOK" || true

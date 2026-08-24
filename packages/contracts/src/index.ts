@@ -11,6 +11,7 @@ export * from './billing';
 export * from './signals';
 export * from './planning';
 export * from './platform';
+export * from './ops';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

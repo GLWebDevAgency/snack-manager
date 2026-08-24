@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Promotion, Review } from '@sm/db';
+import { demoSeedEnabled } from '../../common/demo-seed';
 import type { PromotionCreate, PromotionUpdate } from './engage.dto';
 
 const DAY_MS = 86_400_000;
@@ -156,8 +157,18 @@ export class EngageService {
 
   // ─── Avis ───
 
-  /** Seed léger inline : ~12 avis français réalistes si la collection est vide. */
+  /**
+   * Seed léger inline : ~12 avis français réalistes si la collection est vide.
+   *
+   * GARDÉ PAR `demoSeedEnabled`, comme le pipeline CRM et la facturation — et
+   * ce garde-fou a une histoire : jusqu'au 24/08/2026, il manquait ICI, si
+   * bien qu'un VRAI restaurant en production aurait vu douze avis de fiction
+   * dans son onglet Avis à la première ouverture. C'est mot pour mot le piège
+   * que `common/demo-seed.ts` documente. Le correctif est une ligne ; qu'elle
+   * ne reparte jamais.
+   */
   private async ensureReviewSeed(tenantId: string) {
+    if (!demoSeedEnabled()) return;
     if (this.seededTenants.has(tenantId)) return;
     this.seededTenants.add(tenantId);
     const count = await this.reviews.countDocuments({ tenantId });

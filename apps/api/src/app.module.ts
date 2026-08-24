@@ -24,6 +24,7 @@ import { ScreensModule } from './modules/screens/screens.module';
 import { DevicesModule } from './modules/devices/devices.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { OpsModule } from './modules/ops/ops.module';
 
 @Module({
   imports: [
@@ -65,6 +66,9 @@ import { BillingModule } from './modules/billing/billing.module';
     // voit côté équipe. Déclarée APRÈS `CrmModule` sans que l'ordre compte :
     // les préfixes `/billing` et `/crm` ne se recouvrent pas.
     BillingModule,
+    // Exploitation : journal d'erreurs (filtre global + guichet public) et
+    // veilleur d'alertes — le filet P0 du diagnostic quatre casquettes.
+    OpsModule,
   ],
   controllers: [HealthController],
 })

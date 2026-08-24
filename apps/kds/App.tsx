@@ -9,7 +9,7 @@ import {
   useSyncState,
   type Order,
 } from '@sm/client-core';
-import { client } from './src/client';
+import { client, installErrorReporting } from './src/client';
 import { Board } from './src/Board';
 import { DemoBanner } from './src/components/DemoBanner';
 import { PinScreen } from './src/components/PinScreen';
@@ -72,9 +72,12 @@ export default function App() {
   const reducedMotion = useReducedMotion();
   const now = useNow(1000);
 
-  const { session, restoring, login, logout } = useSession(client);
+  const { session, restoring, login, logout, device } = useSession(client);
   const sync = useSyncState(client);
   useAutoSync(client, 15000);
+
+  // Le rapporteur d'erreurs, pour toute la vie de l'écran — voir `client.ts`.
+  useEffect(() => installErrorReporting(), []);
 
   const onUnauthorized = useCallback(() => {
     void logout();
@@ -209,6 +212,19 @@ export default function App() {
         <View style={styles.boot}>
           <ActivityIndicator color={palette.mut} />
           <Text style={styles.bootText}>Ouverture du service…</Text>
+        </View>
+      ) : device?.suspended ? (
+        // Abonnement suspendu : l'écran se verrouille (contrat
+        // `DeviceHeartbeatResult`) au lieu d'afficher un tableau qui ne
+        // recevra plus rien. Il rouvre seul au battement qui suit la
+        // réactivation — la coque et le battement, eux, continuent.
+        <View style={styles.boot}>
+          <Text style={[styles.bootText, { fontSize: 20, fontWeight: '800', color: palette.text }]}>
+            Écran en pause
+          </Text>
+          <Text style={styles.bootText}>
+            L’accès de l’établissement est suspendu. Contactez Snack Manager pour le rétablir.
+          </Text>
         </View>
       ) : !session ? (
         <PinScreen
