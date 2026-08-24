@@ -16,6 +16,7 @@ import {
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_MRR_CENTS,
   YEARLY_MONTHS_BILLED,
+  relanceDue,
   yearlyCents,
 } from '@sm/contracts';
 import { buildSeedLeads, SEED_LEADS } from './crm.seed';
@@ -57,6 +58,41 @@ describe('Étapes du pipeline', () => {
     for (const stage of LEAD_STAGES) {
       expect(LEAD_STAGE_LABELS[stage], stage).toMatch(/\S/);
     }
+  });
+});
+
+describe('« Qui je relance aujourd’hui ? »', () => {
+  const lead = (over: Partial<Parameters<typeof relanceDue>[0]> = {}) => ({
+    stage: 'contacte' as const,
+    sequence: 'A' as const,
+    lastTouchAt: daysAgo(0).toISOString(),
+    createdAt: daysAgo(10).toISOString(),
+    ...over,
+  });
+
+  it('suit la cadence de la séquence : A à J+3, B à J+7, C au mois', () => {
+    expect(relanceDue(lead({ lastTouchAt: daysAgo(2).toISOString() }), NOW).due).toBe(false);
+    expect(relanceDue(lead({ lastTouchAt: daysAgo(3).toISOString() }), NOW).due).toBe(true);
+    expect(relanceDue(lead({ sequence: 'B', lastTouchAt: daysAgo(6).toISOString() }), NOW).due).toBe(false);
+    expect(relanceDue(lead({ sequence: 'B', lastTouchAt: daysAgo(7).toISOString() }), NOW).due).toBe(true);
+    expect(relanceDue(lead({ sequence: 'C', lastTouchAt: daysAgo(29).toISOString() }), NOW).due).toBe(false);
+  });
+
+  it('sans séquence, la semaine ; jamais touché, l’horloge part de la création', () => {
+    expect(relanceDue(lead({ sequence: null, lastTouchAt: daysAgo(6).toISOString() }), NOW).due).toBe(false);
+    expect(relanceDue(lead({ sequence: null, lastTouchAt: daysAgo(8).toISOString() }), NOW).due).toBe(true);
+    const jamais = relanceDue(lead({ lastTouchAt: null, createdAt: daysAgo(5).toISOString() }), NOW);
+    expect(jamais).toEqual({ due: true, retardJours: 2 });
+  });
+
+  it('un lead signé ou perdu ne se relance pas — quel que soit le silence', () => {
+    expect(relanceDue(lead({ stage: 'signe', lastTouchAt: daysAgo(90).toISOString() }), NOW).due).toBe(false);
+    expect(relanceDue(lead({ stage: 'perdu', lastTouchAt: daysAgo(90).toISOString() }), NOW).due).toBe(false);
+  });
+
+  it('chiffre le retard au-delà de la cadence, jamais en dessous de zéro', () => {
+    expect(relanceDue(lead({ lastTouchAt: daysAgo(5).toISOString() }), NOW).retardJours).toBe(2);
+    expect(relanceDue(lead({ lastTouchAt: daysAgo(3).toISOString() }), NOW).retardJours).toBe(0);
   });
 });
 

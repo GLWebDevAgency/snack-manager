@@ -21,7 +21,10 @@ import {
   FOUNDER_SEATS_TOTAL,
   LEAD_PIPELINE,
   LEAD_STAGE_LABELS,
+  LEAD_SEQUENCE_LABELS,
+  relanceDue,
   type CrmClient,
+  type CrmLead,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { timeAgo } from "@/lib/format";
@@ -36,6 +39,7 @@ export default function HqDashboard() {
   const { overview, loading } = useHq();
   const [clients, setClients] = useState<CrmClient[] | null>(null);
   const [signals, setSignals] = useState<WorkSignal[] | null>(null);
+  const [leads, setLeads] = useState<CrmLead[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +50,16 @@ export default function HqDashboard() {
       })
       .catch(() => {
         if (!cancelled) setClients([]);
+      });
+    // Le pipeline entier, pour la file « à relancer » : la cadence se calcule
+    // au rendu (`relanceDue`), l'API n'a rien à savoir de l'heure qu'il est.
+    crm
+      .leads()
+      .then((l) => {
+        if (!cancelled) setLeads(l);
+      })
+      .catch(() => {
+        if (!cancelled) setLeads([]);
       });
     // La file de travail annote le tableau de bord ; son absence ne doit pas
     // l'empêcher de s'afficher. Une liste vide se lit « rien à traiter », et
@@ -65,6 +79,15 @@ export default function HqDashboard() {
 
   /** Un client, un geste : voir `todaysMoves`. */
   const moves = useMemo(() => todaysMoves(signals ?? [], 5), [signals]);
+
+  /** Les leads dont la cadence de relance est dépassée, les plus en retard d'abord. */
+  const aRelancer = useMemo(() => {
+    const now = new Date();
+    return (leads ?? [])
+      .map((lead) => ({ lead, ...relanceDue(lead, now) }))
+      .filter((x) => x.due)
+      .sort((a, b) => b.retardJours - a.retardJours);
+  }, [leads]);
 
   if (loading && !overview) {
     return (
@@ -137,6 +160,79 @@ export default function HqDashboard() {
           </p>
         ) : (
           moves.map((m, i) => <MoveRow key={m.key} move={m} rank={i + 1} />)
+        )}
+      </Panel>
+
+      {/* ── À relancer aujourd'hui ── */}
+      <Panel
+        title="À relancer aujourd'hui"
+        sub={
+          leads === null
+            ? "Lecture du pipeline…"
+            : aRelancer.length === 0
+              ? "Toutes les cadences de relance sont tenues"
+              : `${aRelancer.length} lead${aRelancer.length > 1 ? "s" : ""} au-delà de sa cadence — le plus en retard d'abord`
+        }
+        actions={
+          <Link
+            href="/sm/pipeline"
+            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+          >
+            Pipeline
+            <Icon name="arrow" size={15} />
+          </Link>
+        }
+        bodyClassName="flex flex-col gap-1.5"
+      >
+        {leads === null ? (
+          <Skeleton className="h-[52px]" />
+        ) : aRelancer.length === 0 ? (
+          <p className="text-[13px] text-mut">
+            Personne n&apos;attend : chaque lead ouvert a été touché dans les délais de sa
+            séquence (A à J+3, B à J+7, C au mois, une semaine sans séquence).
+          </p>
+        ) : (
+          aRelancer.slice(0, 8).map(({ lead, retardJours }) => (
+            <div
+              key={lead._id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-white/6 bg-white/3 px-3.5 py-2.5"
+            >
+              <span
+                className={cx(
+                  "cf-fig w-[64px] shrink-0 text-[13px] font-extrabold",
+                  retardJours >= 3 ? "text-alertt" : "text-prept",
+                )}
+              >
+                {retardJours === 0 ? "ce jour" : `+${retardJours} j`}
+              </span>
+              <div className="min-w-0 flex-1">
+                <span className="text-[14px] font-bold text-ink">{lead.restaurantName}</span>
+                <span className="ml-2 text-xs text-mut">
+                  {lead.sequence
+                    ? LEAD_SEQUENCE_LABELS[lead.sequence]
+                    : "sans séquence"}
+                  {" · "}
+                  {lead.lastTouchAt
+                    ? `relancé ${timeAgo(lead.lastTouchAt)}`
+                    : "jamais relancé"}
+                </span>
+              </div>
+              {lead.contact.phone && (
+                <a
+                  href={`tel:${lead.contact.phone.replace(/\s/g, "")}`}
+                  className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white"
+                >
+                  <Icon name="phone" size={13} />
+                  {lead.contact.phone}
+                </a>
+              )}
+            </div>
+          ))
+        )}
+        {aRelancer.length > 8 && (
+          <p className="text-xs text-mut">
+            … et {aRelancer.length - 8} de plus — le pipeline les liste tous.
+          </p>
         )}
       </Panel>
 

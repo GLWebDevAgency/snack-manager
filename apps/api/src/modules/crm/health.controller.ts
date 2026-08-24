@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Post } from '@nestjs/common';
 import type { JwtPayload } from '@sm/contracts';
 import { CurrentUser, Roles } from '../../common/auth';
 import { HealthService } from './health.service';
@@ -76,6 +76,17 @@ export class HealthController {
   @Get('signals')
   signals() {
     return this.signalsQueue.queue();
+  }
+
+  /**
+   * « Traité » : sort le signal de la file pour quelques jours — il revient
+   * si sa cause persiste. L'auteur du geste reste sur la trace.
+   */
+  @Post('signals/:id/dismiss')
+  dismissSignal(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
+    // Le jeton ne porte pas l'e-mail : `sub` suffit à la trace, le journal
+    // admin sait déjà résoudre un auteur par son identifiant.
+    return this.signalsQueue.dismiss(id, String(actor.sub)).then(() => ({ ok: true as const }));
   }
 
   /**

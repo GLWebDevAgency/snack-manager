@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NO_OUTSTANDING, summarizeOutstanding, type CrmOutstanding } from '@sm/contracts';
-import type { Device, Order, Screen, Tenant } from '@sm/db';
+import type { Device, Order, Screen, SignalDismissal, Tenant } from '@sm/db';
 import type { SupplyDb } from '@sm/supply';
 import { FakeCollection, type Row } from './admin.fakes';
 import type { BillingService } from './billing.service';
@@ -114,6 +114,7 @@ const client = (over: Partial<SignalClient> = {}): SignalClient => ({
   plan: 'complet',
   accountStatus: 'active',
   accountSince: daysAgo(1),
+  trialEndsAt: null,
   suspendedAt: null,
   since: daysAgo(1),
   activity: {
@@ -830,6 +831,13 @@ function fakeSupply(over?: { throws?: boolean; movements?: Row[] }): SupplyDb {
 }
 
 /** `BillingService`, réduit au seul verbe que la file emploie. */
+/** Aucun signal « traité » par défaut — la file sort entière. */
+const fakeDismissals = () =>
+  ({
+    find: () => ({ lean: () => Promise.resolve([]) }),
+    updateOne: () => Promise.resolve({}),
+  }) as unknown as import('mongoose').Model<SignalDismissal>;
+
 const fakeBilling = (invoices: Row[] = [], throws = false): BillingService =>
   ({
     overdue: async () => {
@@ -854,6 +862,7 @@ describe('La file, de bout en bout', () => {
       orders.asModel<Order>(),
       devices.asModel<Device>(),
       screens.asModel<Screen>(),
+      fakeDismissals(),
       opts.supply ?? fakeSupply(),
       opts.billing ?? fakeBilling(),
     );

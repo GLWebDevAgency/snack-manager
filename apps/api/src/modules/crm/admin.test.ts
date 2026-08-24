@@ -370,6 +370,14 @@ describe('Administration client', () => {
       screens.seed({ _id: ECRAN, tenantId: CLASSFOOD, name: 'Écran', paired: true });
 
       await admin.account(SM, CLASSFOOD);
+      await admin.recordTenantCreation(SM, CLASSFOOD, {
+        slug: 'classfood',
+        plan: 'complet',
+        founderSeat: true,
+        leadId: 'lead-1',
+        ownerEmail: 'gerant@classfood.fr',
+      });
+      await admin.recordOwnerReset(SM, CLASSFOOD, 'gerant@classfood.fr');
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
       await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
       await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });

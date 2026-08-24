@@ -104,6 +104,13 @@ export const TenantSchema = new Schema(
           reason: { type: String, default: '' },
           /** Horodatage de la suspension en cours — `null` dès la réactivation. */
           suspendedAt: { type: Date, default: null },
+          /**
+           * Fin de l'essai, posée à la CRÉATION du compte (conversion d'un
+           * lead). `null` sur les tenants d'avant ce champ : le signal de fin
+           * d'essai retombe alors sur l'ancienneté du statut (TRIAL_DAYS),
+           * comme avant — jamais une anomalie.
+           */
+          trialEndsAt: { type: Date, default: null },
         },
         { _id: false },
       ),
@@ -604,6 +611,21 @@ export const AlertLogSchema = new Schema(
 );
 export type AlertLog = InferSchemaType<typeof AlertLogSchema>;
 
+/**
+ * « Traité » sur un signal de la file de travail : la clé est l'id STABLE du
+ * signal, l'effet est temporaire (le signal réapparaît après quelques jours si
+ * la cause persiste — un impayé « traité » qui dure n'est pas traité).
+ */
+export const SignalDismissalSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    at: { type: Date, required: true },
+    actorEmail: { type: String, default: '' },
+  },
+  { timestamps: false },
+);
+export type SignalDismissal = InferSchemaType<typeof SignalDismissalSchema>;
+
 // ─────────────────────────────────────────────────────────────
 // platformSettings — les réglages de NOTRE plateforme (document unique)
 // ─────────────────────────────────────────────────────────────
@@ -885,11 +907,13 @@ export const AdminLogSchema = new Schema(
       // la mutation qu'elle devait tracer. `admin.test.ts` épingle l'égalité
       // des deux listes.
       enum: [
+        'tenant.create',
         'tenant.suspend',
         'tenant.reactivate',
         'tenant.plan_change',
         'tenant.note',
         'tenant.detail_view',
+        'tenant.owner_reset',
         'device.revoke',
         'screen.revoke',
         'invoice.issue',
@@ -1124,6 +1148,11 @@ export const MODELS = {
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   ErrorEvent: { name: 'ErrorEvent', schema: ErrorEventSchema, collection: 'errorevents' },
   AlertLog: { name: 'AlertLog', schema: AlertLogSchema, collection: 'alertlogs' },
+  SignalDismissal: {
+    name: 'SignalDismissal',
+    schema: SignalDismissalSchema,
+    collection: 'signaldismissals',
+  },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },
