@@ -17,10 +17,10 @@
  * repartent vers les tablettes au battement suivant, sans réappairage.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fmtEuro } from "@/lib/format";
-import type { AuditEntryView } from "@sm/contracts";
-import { api, type TenantMe } from "@/lib/api";
+import { LOGO_FORMATS_ADMIS, LOGO_MAX_OCTETS, type AuditEntryView } from "@sm/contracts";
+import { api, envoiFichier, ApiError, type TenantMe } from "@/lib/api";
 import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
 
 /** Sans dièse ni casse imposée à la saisie — on normalise à l'envoi. */
@@ -55,6 +55,8 @@ export default function SettingsPage() {
   const [address, setAddress] = useState("");
   const [phones, setPhones] = useState<string[]>(["", "", ""]);
   const [journal, setJournal] = useState<AuditEntryView[] | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const logoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api
@@ -68,7 +70,6 @@ export default function SettingsPage() {
       .get<TenantMe>("/tenants/me")
       .then((t) => {
         setMe(t);
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon d'édition : dès que le gérant tape, ces champs divergent volontairement de `me`.
         setName(t.name);
         setBrandColor(t.brandColor || "#c9a15a");
         setAddress(t.address ?? "");
@@ -104,6 +105,45 @@ export default function SettingsPage() {
       toast("Enregistrement impossible — réessayez");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Les bornes se vérifient AVANT d'envoyer (message immédiat, pas d'aller-
+   * retour) ET côté API (la limite qui fait foi) — mêmes nombres, partagés
+   * par @sm/contracts. Le refus serveur s'affiche tel quel : il est déjà
+   * écrit pour un gérant.
+   */
+  async function envoyerLogo(f: File) {
+    if (!(LOGO_FORMATS_ADMIS as readonly string[]).includes(f.type)) {
+      toast("Format non pris en charge — envoyez un PNG, un JPEG ou un WebP");
+      return;
+    }
+    if (f.size > LOGO_MAX_OCTETS) {
+      toast(`Fichier trop lourd (${Math.round(f.size / 1024)} Ko) — 512 Ko maximum`);
+      return;
+    }
+    setLogoBusy(true);
+    try {
+      setMe(await envoiFichier<TenantMe>("PUT", "/tenants/me/logo", f));
+      toast("Logo en place — vos écrans suivent au prochain battement", { icon: "check" });
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : "Envoi impossible — réessayez");
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function retirerLogo() {
+    if (logoBusy) return;
+    setLogoBusy(true);
+    try {
+      setMe(await api.del<TenantMe>("/tenants/me/logo"));
+      toast("Logo retiré", { icon: "check" });
+    } catch {
+      toast("Retrait impossible — réessayez");
+    } finally {
+      setLogoBusy(false);
     }
   }
 
@@ -200,6 +240,58 @@ export default function SettingsPage() {
       </Panel>
 
       <Panel
+        title="Le logo"
+        sub="En en-tête de votre page de commande et de vos écrans — PNG, JPEG ou WebP, 512 Ko maximum."
+        bodyClassName="flex flex-col gap-3"
+      >
+        {me === null ? (
+          <Skeleton className="h-[64px]" />
+        ) : (
+          <>
+            <div className="flex items-center gap-4">
+              {me.logoUrl ? (
+                // Un logo clair comme un logo sombre doit se voir : fond neutre.
+                // eslint-disable-next-line @next/next/no-img-element -- l'image vient de notre API, pas du build Next : next/image n'a rien à optimiser ici.
+                <img
+                  src={me.logoUrl}
+                  alt={`Logo de ${me.name}`}
+                  className="max-h-[64px] max-w-[160px] rounded-card border border-white/10 bg-white/90 p-2"
+                />
+              ) : (
+                <span className="text-[13px] text-mut">Aucun logo pour l&apos;instant.</span>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <Btn
+                  variant="ink"
+                  icon="plus"
+                  disabled={logoBusy}
+                  onClick={() => logoInput.current?.click()}
+                >
+                  {logoBusy ? "Envoi…" : me.logoUrl ? "Remplacer" : "Choisir une image"}
+                </Btn>
+                {me.logoUrl && (
+                  <Btn disabled={logoBusy} onClick={() => void retirerLogo()}>
+                    Retirer
+                  </Btn>
+                )}
+              </div>
+            </div>
+            <input
+              ref={logoInput}
+              type="file"
+              accept={LOGO_FORMATS_ADMIS.join(",")}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = ""; // re-choisir le même fichier doit re-déclencher
+                if (f) void envoyerLogo(f);
+              }}
+            />
+          </>
+        )}
+      </Panel>
+
+      <Panel
         title="Journal des gestes sensibles"
         sub="Annulations, remises, changements de prix — le registre NF525 de votre caisse"
         bodyClassName="flex flex-col gap-1.5"
@@ -233,10 +325,6 @@ export default function SettingsPage() {
           <b className="text-ink">L&apos;adresse publique</b> ({me ? `${me.slug}.snackmanager.app` : "votre-slug.snackmanager.app"})
           ne se change pas seul : elle casse la fiche Google et les QR imprimés. Un appel, et on
           la migre proprement avec vous.
-        </p>
-        <p className="text-[13px] leading-relaxed text-mut">
-          <b className="text-ink">Le logo</b> arrive bientôt — le temps de vous offrir un vrai
-          hébergement d&apos;images plutôt qu&apos;un champ à liens morts.
         </p>
       </Panel>
     </div>

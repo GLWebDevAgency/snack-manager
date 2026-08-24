@@ -27,7 +27,7 @@ import { consommerSplashDeTransition } from "@/components/brand/SplashAuPremierP
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { useTenantSocket } from "@/lib/ws";
-import { IconBtn, Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
+import { Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
 
 const RAIL = 66;
 const PANEL = 232;

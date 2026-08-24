@@ -6,6 +6,7 @@ import { createSentryForwarder } from './alerts/sentry-forwarder.factory';
 import { ERROR_FORWARDER } from './alerts/error-forwarder';
 import { configSourceOf } from './config-source';
 import { createDomainRegistrar } from './domains/domain-registrar.factory';
+import { createImageStore } from './images/image-store.factory';
 import { RedisEventPublisher } from './events/redis-event-publisher';
 import { MongoTenantIdLookup, TENANT_ID_LOOKUP } from './events/tenant-id-lookup';
 import { createPaymentGateway } from './payments/payment-gateway.factory';
@@ -13,6 +14,7 @@ import { Argon2SecretHasher } from './security/argon2-secret-hasher';
 import {
   DOMAIN_REGISTRAR,
   EVENT_PUBLISHER,
+  IMAGE_STORE,
   PAYMENT_GATEWAY,
   SECRET_HASHER,
   TEAM_ALERTER,
@@ -61,6 +63,11 @@ import {
       inject: [ConfigService],
       useFactory: (config: ConfigService) => createSentryForwarder(configSourceOf(config)),
     },
+    {
+      provide: IMAGE_STORE,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => createImageStore(configSourceOf(config)),
+    },
     { provide: TENANT_ID_LOOKUP, useClass: MongoTenantIdLookup },
     { provide: EVENT_PUBLISHER, useClass: RedisEventPublisher },
     { provide: SECRET_HASHER, useClass: Argon2SecretHasher },
@@ -73,6 +80,7 @@ import {
     TENANT_ID_LOOKUP,
     TEAM_ALERTER,
     ERROR_FORWARDER,
+    IMAGE_STORE,
   ],
 })
 export class InfrastructureModule {}
