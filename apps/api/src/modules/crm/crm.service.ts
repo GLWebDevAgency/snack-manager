@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, type OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, type OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -51,6 +51,7 @@ import {
 import { buildSeedLeads } from './crm.seed';
 import { buildProspectionOps } from './crm.prospection';
 import { demoSeedEnabled } from '../../common/demo-seed';
+import { detailErreur } from '../../infrastructure/http-v4';
 
 /** Fenêtre d'activité d'un client : 30 jours glissants. */
 const ACTIVITY_WINDOW_DAYS = 30;
@@ -69,8 +70,17 @@ export class CrmService implements OnApplicationBootstrap {
    * repasse à null en cas d'échec).
    */
   onApplicationBootstrap(): void {
+    // Une ligne par démarrage, quelle que soit l'issue : trois exercices de
+    // restauration ont échoué sans qu'aucun journal ne dise si l'import avait
+    // couru, été sauté (démo active) ou échoué. Plus jamais en silence.
+    if (demoSeedEnabled()) {
+      this.logger.log('Prospection : import sauté — amorçage de démonstration actif (SM_DEMO_SEED).');
+      return;
+    }
     void this.ensureProspected();
   }
+
+  private readonly logger = new Logger(CrmService.name);
 
   constructor(
     @InjectModel('Lead') private readonly leads: Model<Lead>,
@@ -418,7 +428,8 @@ export class CrmService implements OnApplicationBootstrap {
     this.seeding ??= (async () => {
       if ((await this.leads.countDocuments({})) > 0) return;
       await this.leads.insertMany(buildSeedLeads());
-    })().catch(() => {
+    })().catch((cause: unknown) => {
+      this.logger.warn(`Amorçage de démonstration : raté — ${detailErreur(cause)}`);
       // Une amorce ratée ne doit jamais faire tomber la vue : au pire le
       // pipeline s'affiche vide. On repasse à null pour retenter au prochain appel.
       this.seeding = null;
@@ -450,8 +461,12 @@ export class CrmService implements OnApplicationBootstrap {
     this.prospecting ??= (async () => {
       const ops = buildProspectionOps();
       if (ops.length === 0) return;
-      await this.leads.bulkWrite(ops, { ordered: false });
-    })().catch(() => {
+      const resultat = await this.leads.bulkWrite(ops, { ordered: false });
+      this.logger.log(
+        `Prospection : ${resultat.upsertedCount} lead(s) importé(s) sur ${ops.length} (le reste était déjà en base).`,
+      );
+    })().catch((cause: unknown) => {
+      this.logger.warn(`Prospection : import raté — ${detailErreur(cause)}`);
       // Même contrat que l'amorce : un import raté n'abat pas la vue, et se
       // retentera au prochain appel.
       this.prospecting = null;
