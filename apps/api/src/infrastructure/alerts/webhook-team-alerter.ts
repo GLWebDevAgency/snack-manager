@@ -1,3 +1,4 @@
+import { detailErreur, fetchV4 } from '../http-v4';
 import type { TeamAlert, TeamAlerter, TeamAlertResult } from './team-alerter';
 
 type FetchFn = typeof fetch;
@@ -21,7 +22,9 @@ export class WebhookTeamAlerter implements TeamAlerter {
 
   constructor(
     private readonly url: string,
-    private readonly fetchFn: FetchFn = fetch,
+    // IPv4 forcé : ntfy.sh publie une IPv6 que Railway ne sait pas joindre —
+    // voir `http-v4.ts`, c'est le « fetch failed » du 24/08 sur staging.
+    private readonly fetchFn: FetchFn = fetchV4,
   ) {}
 
   private get estNtfy(): boolean {
@@ -48,7 +51,7 @@ export class WebhookTeamAlerter implements TeamAlerter {
       if (!res.ok) return { sent: false, reason: `webhook : HTTP ${res.status}` };
       return { sent: true };
     } catch (cause) {
-      return { sent: false, reason: `webhook injoignable (${String(cause).slice(0, 120)})` };
+      return { sent: false, reason: `webhook injoignable (${detailErreur(cause).slice(0, 160)})` };
     }
   }
 }

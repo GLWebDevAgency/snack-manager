@@ -1,8 +1,15 @@
 import 'reflect-metadata';
+import { setDefaultAutoSelectFamily } from 'node:net';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // Repli IPv6 → IPv4 (« happy eyeballs ») imposé à TOUT le processus : les
+  // adaptateurs maison passent par `fetchV4` (voir infrastructure/http-v4.ts),
+  // mais les SDK tiers (Sentry…) gardent leur propre transport — sur un
+  // conteneur Railway sans sortie IPv6, un hôte en double pile les casserait
+  // du même « fetch failed » que ntfy le 24/08.
+  setDefaultAutoSelectFamily(true);
   // `rawBody: true` conserve les octets bruts de la requête dans `req.rawBody`,
   // EN PLUS du corps parsé habituel : aucune route existante ne change de
   // comportement. C'est la seule façon de vérifier une signature de webhook
