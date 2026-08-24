@@ -92,13 +92,13 @@ export default function ErreursPage() {
   return (
     // `p-[26px]` : le rembourrage de page commun à toutes les vues /sm — son
     // absence collait les cartes aux bords (seule page du back-office sans lui).
-    <div className="flex flex-col gap-4 p-[26px]">
-      {/* ── KPI ── */}
-      <div className="flex flex-wrap gap-4">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
+      {/* ── KPI — 2 × 2 sous `md`, la carte du canal sur sa propre rangée ── */}
+      <div className="grid grid-cols-2 gap-3 md:flex md:flex-wrap md:gap-4">
         <Kpi label="Jamais vues" value={groups ? jamaisVues : "—"} icon="bell" />
         <Kpi label="Groupes au journal" value={groups ? groups.length : "—"} icon="grid" />
         <Kpi label="Occurrences cumulées" value={groups ? occurrences : "—"} icon="chart" />
-        <Card className="min-w-[260px] flex-1 p-[18px]">
+        <Card className="min-w-[260px] flex-1 p-[18px] max-md:col-span-2 max-md:min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
             Canal d’alerte
           </div>
@@ -109,7 +109,7 @@ export default function ErreursPage() {
             <button
               type="button"
               onClick={() => void testerCanal()}
-              className="cf-press mt-2 inline-flex items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white"
+              className="cf-press mt-2 inline-flex items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white max-md:min-h-10 max-md:px-3.5"
             >
               <Icon name="arrow" size={13} />
               Tester le canal
@@ -194,7 +194,7 @@ export default function ErreursPage() {
                   <button
                     type="button"
                     onClick={() => void marquerVue(g._id)}
-                    className="cf-press inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white"
+                    className="cf-press inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-white/12 bg-white/6 px-3 py-1.5 text-[12px] font-semibold text-mut hover:text-white max-md:min-h-10 max-md:px-3.5"
                   >
                     <Icon name="check" size={13} />
                     Vu

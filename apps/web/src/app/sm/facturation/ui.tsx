@@ -26,12 +26,15 @@ import {
   Field,
   Icon,
   Input,
-  Modal,
   Select,
   Textarea,
   useToast,
   type IconName,
 } from "@/components/ui";
+// La modale-feuille locale à `/sm` remplace la modale du design system : même
+// contrat d'appel au-dessus de `md`, feuille plein écran en dessous — une
+// modale de 480 px centrée déborderait d'un écran de téléphone.
+import { SheetModal } from "../mobile";
 import {
   DEFAULT_PAYMENT_METHOD,
   DEFAULT_REMINDER_CHANNEL,
@@ -107,9 +110,15 @@ export function BillingKpi({
     // `basis` + `flex-wrap` côté bande : à quatre chiffres, la rangée devient
     // illisible sous ~1100 px (« TOTAL DÛ » se coupe en trois lignes). Deux
     // rangées de deux valent mieux qu'une rangée de quatre écrasés — DA §7,
-    // l'information utile ne descend pas sous 13 px.
+    // l'information utile ne descend pas sous 13 px. Sous `md`, le plancher de
+    // 184 px tombe pour tenir la même grille 2 × 2 que les autres écrans :
+    // quatre cartes empilées repousseraient la file — le contenu de l'écran —
+    // sous deux hauteurs de téléphone.
     <Card
-      className={cx("min-w-[184px] flex-1 basis-[184px] p-[18px]", TONE_CARD[tone])}
+      className={cx(
+        "min-w-[184px] flex-1 basis-[184px] p-[18px] max-md:min-w-0 max-md:basis-[calc(50%-6px)]",
+        TONE_CARD[tone],
+      )}
       title={title}
     >
       <div className="flex items-start justify-between gap-2">
@@ -130,7 +139,7 @@ export function BillingKpi({
       </div>
       <div
         className={cx(
-          "cf-fig mt-2 text-[30px] font-extrabold leading-[1.1]",
+          "cf-fig mt-2 text-[30px] font-extrabold leading-[1.1] max-md:text-2xl",
           tone === "mut" ? "text-ink" : TONE_TEXT[tone],
         )}
       >
@@ -280,14 +289,19 @@ export function OverdueLine({
   const reminded = fmtReminderAge(row.lastReminderAt);
 
   return (
+    // Sous `md`, la ligne devient une CARTE : « depuis quand » et « combien »
+    // se partagent la première ligne (les deux chiffres qui décident), le
+    // client et la pièce s'empilent, les gestes prennent une rangée pleine
+    // largeur à hauteur de pouce. Au-dessus de `md`, la table se balaie en
+    // colonnes exactement comme avant.
     <li
       className={cx(
-        "flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-t border-line px-[18px] py-3",
+        "flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-t border-line px-[18px] py-3 max-md:px-4 max-md:py-3.5",
         tone === "alert" && "bg-alert/6",
       )}
     >
       {/* ── Depuis quand : le chiffre qui décide — et ce qui a déjà été fait ── */}
-      <div className="flex w-[104px] shrink-0 flex-col">
+      <div className="flex w-[104px] shrink-0 flex-col max-md:w-auto max-md:min-w-0 max-md:flex-1">
         <span className={cx("cf-fig text-[22px] font-extrabold leading-none", TONE_TEXT[tone])}>
           {fmtDays(row.overdueDays)}
           <span className="sr-only"> de retard</span>
@@ -309,7 +323,7 @@ export function OverdueLine({
       </div>
 
       {/* ── Qui ── */}
-      <div className="min-w-[188px] flex-1 basis-[188px]">
+      <div className="min-w-[188px] flex-1 basis-[188px] max-md:order-2 max-md:min-w-0 max-md:basis-full">
         <Link
           href={`/sm/clients/${row.tenantId}`}
           className="cf-press-row inline-flex max-w-full items-center gap-1.5 truncate text-[14px] font-bold text-ink hover:text-accent"
@@ -330,7 +344,7 @@ export function OverdueLine({
       </div>
 
       {/* ── Quoi ── */}
-      <div className="min-w-[204px] flex-1 basis-[204px]">
+      <div className="min-w-[204px] flex-1 basis-[204px] max-md:order-3 max-md:min-w-0 max-md:basis-full">
         <div className="cf-fig truncate text-[13px] font-bold text-ink" title={row.number}>
           {row.number}
           {/* L'espace est DANS le texte, pas seulement dans la marge : une
@@ -351,12 +365,12 @@ export function OverdueLine({
       </div>
 
       {/* ── Combien ── */}
-      <div className="cf-fig w-[96px] shrink-0 text-right text-[15px] font-extrabold text-ink">
+      <div className="cf-fig w-[96px] shrink-0 text-right text-[15px] font-extrabold text-ink max-md:order-1 max-md:w-auto max-md:text-[17px]">
         {row.amountLabel}
       </div>
 
       {/* ── Les gestes, et la sortie ── */}
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 max-md:order-4 max-md:basis-full max-md:flex-wrap max-md:[&>a]:min-h-11 max-md:[&>a]:flex-1 max-md:[&>a]:justify-center max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
         {/* La relance d'abord : c'est le geste de l'échelle, celui qu'on vient
             de faire au téléphone — l'encaissement n'arrive qu'après. */}
         <Btn variant="ghost" size="sm" icon="phone" onClick={() => onRemind(row)}>
@@ -495,7 +509,7 @@ export function RemindModal({ row, onClose, onDone }: GestureProps) {
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       width={480}
@@ -569,7 +583,7 @@ export function RemindModal({ row, onClose, onDone }: GestureProps) {
       </Field>
 
       {refusal && <Refusal message={refusal} />}
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -617,7 +631,7 @@ export function PayModal({ row, onClose, onDone }: GestureProps) {
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       width={480}
@@ -704,7 +718,7 @@ export function PayModal({ row, onClose, onDone }: GestureProps) {
       </div>
 
       {refusal && <Refusal message={refusal} />}
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -747,7 +761,7 @@ export function CancelModal({ row, onClose, onDone }: GestureProps) {
   }
 
   return (
-    <Modal
+    <SheetModal
       open
       onClose={onClose}
       destructive
@@ -803,7 +817,7 @@ export function CancelModal({ row, onClose, onDone }: GestureProps) {
       </Field>
 
       {refusal && <Refusal message={refusal} />}
-    </Modal>
+    </SheetModal>
   );
 }
 

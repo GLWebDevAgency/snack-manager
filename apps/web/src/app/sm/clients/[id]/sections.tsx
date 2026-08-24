@@ -87,9 +87,11 @@ export function HealthSection({ file }: { file: ClientFile }) {
           }
         />
       ) : (
-        <div className="flex items-start gap-4">
+        // Sous `md`, le chiffre passe AU-DESSUS de sa décomposition : deux
+        // colonnes dans 358 px utiles écraseraient les jauges.
+        <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
           {/* ── Le chiffre ── */}
-          <div className="flex w-[124px] shrink-0 flex-col items-center gap-1 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3.5">
+          <div className="flex w-[124px] shrink-0 flex-col items-center gap-1 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3.5 max-md:w-full">
             <div className={cx("cf-fig text-[40px] font-extrabold leading-none", HEALTH_TEXT[tone])}>
               {file.score ?? "—"}
             </div>
@@ -205,7 +207,9 @@ function ActivityWindowBlock({
       <Eyebrow>
         Activité sur {w.days} jours, comparée aux {w.days} précédents
       </Eyebrow>
-      <div className="mt-2.5 flex items-stretch gap-3">
+      {/* Trois mesures empilées sous `md` — trois cartes de front y feraient
+          tenir « Chiffre d'affaires » sur 100 px. */}
+      <div className="mt-2.5 flex items-stretch gap-3 max-md:flex-col">
         <Compare
           label="Commandes"
           current={w.orders}
@@ -330,7 +334,7 @@ export function AdoptionSection({ file }: { file: ClientFile }) {
           }
         />
       ) : (
-        <ul className="grid grid-cols-2 gap-2.5">
+        <ul className="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
           {modules.map((m) => (
             <ModuleTile key={m.key} module={m} />
           ))}
@@ -518,7 +522,7 @@ function DeviceRow({
         variant="ghost"
         size="sm"
         icon="trash"
-        className="shrink-0 border-alert/40 text-alertt hover:border-alert hover:bg-alert/12"
+        className="shrink-0 border-alert/40 text-alertt hover:border-alert hover:bg-alert/12 max-md:min-h-11"
         onClick={() => onRevoke(d)}
       >
         Révoquer
@@ -636,7 +640,7 @@ export function SupplySection({ file }: { file: ClientFile }) {
         <>
           <ul className="flex flex-col gap-1.5">
             {rows.map((a) => (
-              <li key={a.key} className="flex items-center gap-2.5">
+              <li key={a.key} className="flex items-center gap-2.5 max-md:flex-wrap">
                 <span
                   className={cx(
                     "w-[104px] shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-center text-[10px] font-extrabold uppercase tracking-[0.06em]",
@@ -648,7 +652,9 @@ export function SupplySection({ file }: { file: ClientFile }) {
                 <span className="min-w-0 shrink-0 truncate text-[13px] font-bold text-ink">
                   {a.name}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-right text-xs text-mut">
+                {/* Le détail passe SOUS la ligne sur mobile, en entier : tronqué
+                    à droite, il perdait précisément le prix qui justifie l'appel. */}
+                <span className="min-w-0 flex-1 truncate text-right text-xs text-mut max-md:basis-full max-md:whitespace-normal max-md:text-left">
                   {a.detail}
                 </span>
               </li>
@@ -1006,6 +1012,7 @@ export function NotesSection({
           variant="ink"
           size="sm"
           icon="plus"
+          className="max-md:min-h-11"
           disabled={!note.trim() || busy}
         >
           {busy ? "…" : "Noter"}

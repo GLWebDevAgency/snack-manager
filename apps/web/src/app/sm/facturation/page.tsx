@@ -116,7 +116,7 @@ export default function FacturationPage() {
 
   if (queue === null) {
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
+      <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
         {/* Mêmes contraintes de largeur que la bande réelle : le squelette ne
             doit pas se réorganiser sous les yeux au moment où les chiffres
             arrivent. */}
@@ -141,9 +141,9 @@ export default function FacturationPage() {
   const parkKnown = park !== null && park.length > 0;
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/* ── Les quatre chiffres de tête ── */}
-      <div className="flex flex-wrap items-stretch gap-4">
+      <div className="flex flex-wrap items-stretch gap-4 max-md:gap-3">
         <BillingKpi
           label="MRR encaissé"
           icon="euro"
@@ -281,8 +281,10 @@ export default function FacturationPage() {
           */}
           {/* 1000 px : la ligne porte désormais TROIS gestes — en dessous, les
               boutons passeraient sous le montant et la table ne se balaierait
-              plus en colonnes. */}
-          <ul className="cf-scroll overflow-x-auto [&>li]:min-w-[1000px]">
+              plus en colonnes. Bureau seulement : sous `md`, chaque créance
+              devient une CARTE empilée (voir `OverdueLine`) — un téléphone ne
+              balaie pas des colonnes, il lit des fiches. */}
+          <ul className="cf-scroll overflow-x-auto md:[&>li]:min-w-[1000px]">
             {rows.map((row) => (
               <OverdueLine
                 key={row.id}

@@ -79,7 +79,9 @@ export function CategoriesCard({
   );
 
   return (
-    <Card className="w-[268px] shrink-0 p-2">
+    // Pleine largeur sous `lg` (colonne empilée au-dessus des produits) ;
+    // 268 px fixes dès que les deux colonnes tiennent côte à côte.
+    <Card className="w-full shrink-0 p-2 lg:w-[268px]">
       {/* En-tête : eyebrow + A→Z + création */}
       <div className="flex items-center justify-between px-1.5 pb-2 pt-1">
         <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-mut">
@@ -156,6 +158,10 @@ export function CategoriesCard({
         <div
           role="list"
           aria-label="Catégories de la carte"
+          // Sous `lg`, la liste défile dans son cadre : vingt catégories
+          // empilées repousseraient les produits — la raison d'être de la
+          // page — à deux écrans du pouce.
+          className="cf-scroll max-lg:max-h-[300px] max-lg:overflow-y-auto"
           onDragLeave={(e) => {
             // sortie réelle de la liste (pas un enfant)
             if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverSlot(null);

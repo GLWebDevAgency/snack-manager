@@ -117,11 +117,14 @@ function DnsRow({
   copy?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 border-t border-line2 py-2.5 first:border-t-0 first:pt-0">
+    // `flex-wrap` + minimum de 160 px : dans la fiche imbriquée d'un
+    // téléphone, la valeur passe SOUS l'étiquette au lieu de s'écraser à
+    // quelques caractères — c'est elle que le restaurateur doit recopier.
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line2 py-2.5 first:border-t-0 first:pt-0">
       <div className="w-[92px] shrink-0 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
         {label}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-[160px] flex-1">
         <div className="truncate font-mono text-[15px] font-bold text-ink">
           {value}
         </div>

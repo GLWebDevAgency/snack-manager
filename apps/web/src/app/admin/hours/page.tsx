@@ -172,7 +172,9 @@ function TimeInput({
       aria-label={label}
       aria-invalid={invalid || undefined}
       className={cx(
-        "cf-fig w-[92px] rounded-ctrl border bg-white/5 px-2 py-1.5 text-center text-[13px] font-bold text-white outline-none transition-colors duration-200 ease-sm [color-scheme:dark]",
+        // 96 px : à 16 px de corps (anti-zoom iOS), « 06:00 » plus l'horloge
+        // native débordaient des 92 px d'origine.
+        "cf-fig w-[96px] rounded-ctrl border bg-white/5 px-2 py-1.5 text-center text-[13px] font-bold text-white outline-none transition-colors duration-200 ease-sm [color-scheme:dark]",
         invalid
           ? "border-alert bg-alert/10"
           : "border-white/8 hover:border-white/16 focus:border-accent focus:bg-white/8",
@@ -381,7 +383,7 @@ export default function HoursPage() {
 
   if (loadState === "loading")
     return (
-      <div className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.3fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.3fr_1fr]">
         <Skeleton className="h-[520px]" />
         <div className="flex flex-col gap-4">
           <Skeleton className="h-[280px]" />
@@ -392,7 +394,7 @@ export default function HoursPage() {
 
   if (loadState === "error")
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <EmptyState
           icon="clock"
           title="Impossible de charger les horaires"
@@ -407,7 +409,7 @@ export default function HoursPage() {
     );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 p-[26px] xl:grid-cols-[1.3fr_1fr]">
+    <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.3fr_1fr]">
       {/* ── Panel « Horaires d'ouverture » (§9.1) ── */}
       <Panel
         title="Horaires d'ouverture"
@@ -436,8 +438,9 @@ export default function HoursPage() {
           </>
         }
       >
-        {/* En-tête de grille */}
-        <div className="flex items-center gap-2 px-1.5 pb-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
+        {/* En-tête de grille — dès `md` seulement : en dessous chaque
+            service porte sa propre étiquette Midi/Soir dans la ligne */}
+        <div className="hidden items-center gap-2 px-1.5 pb-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut md:flex">
           <div className="w-[110px]">Jour</div>
           {SERVICES.map((s) => (
             <div key={s.key} className="flex-1 text-center">
@@ -450,9 +453,9 @@ export default function HoursPage() {
         {days.map((d, i) => (
           <div
             key={d.day}
-            className="flex items-start gap-2 border-t border-line2 px-1.5 py-[9px]"
+            className="flex flex-col gap-2 border-t border-line2 px-1.5 py-[9px] md:flex-row md:items-start md:gap-2"
           >
-            <div className="w-[110px] pt-1.5 text-[15px] font-bold text-ink">
+            <div className="text-[15px] font-bold text-ink md:w-[110px] md:pt-1.5">
               {DAY_NAMES[i]}
             </div>
             {SERVICES.map(({ key, label }) => {
@@ -462,17 +465,28 @@ export default function HoursPage() {
               // de ButtonHTMLAttributes (non omis), le paramètre serait typé
               // boolean | ChangeEvent — on bascule donc depuis l'état local.
               return (
+                /*
+                  Sous `md`, le service tient sur SA ligne : étiquette Midi/Soir,
+                  bascule, heures à droite — les deux colonnes côte à côte
+                  poussaient les heures du soir hors de l'écran.
+                */
                 <div
                   key={key}
-                  className="flex flex-1 flex-col items-center gap-1.5"
+                  className="flex w-full items-center gap-2 max-md:flex-wrap md:w-auto md:flex-1 md:flex-col md:items-center md:gap-1.5"
                 >
+                  <span
+                    className="w-8 shrink-0 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut md:hidden"
+                    aria-hidden
+                  >
+                    {label}
+                  </span>
                   <SlotToggle
                     on={s.on}
                     onChange={() => patchService(d.day, key, { on: !s.on })}
                     aria-label={`${DAY_NAMES[i]} ${label.toLowerCase()} : ${s.on ? "ouvert" : "fermé"}`}
                   />
                   {s.on && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 max-md:ml-auto">
                       <TimeInput
                         value={s.open}
                         invalid={invalid}

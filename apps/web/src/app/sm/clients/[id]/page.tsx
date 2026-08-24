@@ -103,7 +103,7 @@ export default function ClientFilePage({
 
   if (error) {
     return (
-      <div className="p-[26px]">
+      <div className="p-[26px] max-md:p-4">
         <Card>
           <EmptyState
             icon="bell"
@@ -133,7 +133,7 @@ export default function ClientFilePage({
   // ou le restaurant a disparu du parc.
   if (!row && !account) {
     return (
-      <div className="p-[26px]">
+      <div className="p-[26px] max-md:p-4">
         <Card>
           <EmptyState
             icon="search"
@@ -151,7 +151,7 @@ export default function ClientFilePage({
   const blocked = account?.accessBlocked ?? isAccessBlocked(status);
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       <BackLink />
 
       {/* ── En-tête : qui c'est, où il en est, ce qu'on peut faire ── */}
@@ -210,8 +210,9 @@ export default function ClientFilePage({
             )}
           </div>
 
-          {/* ── Les actions ── */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* ── Les actions — pleine largeur sous `md`, « Appeler » en tête et
+              à hauteur de pouce : c'est le geste pour lequel la fiche s'ouvre ── */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&>a]:min-h-11 max-md:[&>a]:flex-1 max-md:[&>a]:justify-center max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
             {file.contact.phone && (
               <a
                 href={`tel:${file.contact.phone.replace(/\s/g, "")}`}
@@ -394,9 +395,9 @@ function BackLink() {
 
 function FileSkeleton() {
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       <Skeleton className="h-[108px]" />
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
         <div className="flex flex-[1.5] flex-col gap-4">
           <Skeleton className="h-[260px]" />
           <Skeleton className="h-[180px]" />

@@ -5,7 +5,7 @@
  * tiroir latéral de la surface, fiche lead, création de lead.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CLIENT_HEALTH_LABELS,
   LEAD_PIPELINE,
@@ -196,9 +196,17 @@ export function HqDrawer({
         onClick={onClose}
         aria-hidden
       />
+      {/*
+        Sous `md`, le tiroir devient une FEUILLE PLEIN ÉCRAN : 100 % de large,
+        `100dvh` de haut (jamais `100vh` — clavier et barres mobiles rognent la
+        fenêtre visible et le pied de gestes finirait dessous), en-tête et pied
+        collants, corps seul défilable. Au-dessus, rien ne change : panneau de
+        `width` px accroché à droite. La largeur passe par une variable CSS
+        parce qu'un style en ligne l'imposerait aussi au téléphone.
+      */}
       <div
-        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)]"
-        style={{ width }}
+        className="absolute flex flex-col bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] max-md:inset-x-0 max-md:top-0 max-md:h-dvh max-md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:inset-y-0 md:right-0 md:w-[min(var(--sm-tiroir-l),100vw)] md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:rounded-l-panel"
+        style={{ "--sm-tiroir-l": `${width}px` } as CSSProperties}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line2 px-[18px] py-3.5">
           <div className="min-w-0">
@@ -210,16 +218,22 @@ export function HqDrawer({
           <IconBtn
             icon="close"
             label="Fermer"
-            size={32}
+            size={36}
             iconSize={16}
             onClick={onClose}
           />
         </div>
-        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto px-[18px] py-4">
+        <div
+          className={cx(
+            "cf-scroll min-h-0 flex-1 overflow-y-auto px-[18px] py-4",
+            // Sans pied, c'est le corps qui prend la marge des encoches.
+            !footer && "max-md:pb-[calc(18px+env(safe-area-inset-bottom))]",
+          )}
+        >
           {children}
         </div>
         {footer && (
-          <div className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5">
+          <div className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5 max-md:pb-[calc(14px+env(safe-area-inset-bottom))]">
             {footer}
           </div>
         )}
@@ -320,7 +334,9 @@ export function LeadDrawer({
       title={lead.restaurantName}
       sub={`Créé le ${fmtDay(lead.createdAt)} · ${lead.touches.length} relance${lead.touches.length > 1 ? "s" : ""}`}
       footer={
-        <div className="flex items-center gap-2">
+        // Sur mobile, les trois gestes se partagent la largeur à ≥ 44 px de
+        // haut : le pied est la zone du pouce, pas une barre d'outils.
+        <div className="flex flex-wrap items-center gap-2 max-md:[&>*]:min-h-11 max-md:[&>*]:flex-1 max-md:[&>*]:justify-center">
           <Btn
             variant="primary"
             size="sm"
@@ -369,7 +385,9 @@ export function LeadDrawer({
                 )
               }
               className={cx(
-                "cf-press rounded-pill border-[1.5px] px-[11px] py-[5px] text-[11px] font-extrabold uppercase tracking-[0.06em] disabled:cursor-default",
+                // `py` élargi sous `md` : six pastilles serrées à 26 px de haut
+                // ne se visent pas au pouce.
+                "cf-press rounded-pill border-[1.5px] px-[11px] py-[5px] text-[11px] font-extrabold uppercase tracking-[0.06em] disabled:cursor-default max-md:px-3 max-md:py-2",
                 on
                   ? STAGE_STYLE[stage]
                   : "border-transparent bg-white/6 text-mut hover:bg-white/12 hover:text-white",
@@ -456,7 +474,7 @@ export function LeadDrawer({
         <Field label="Restaurant" htmlFor="lead-name">
           <Input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
           <Field label="Interlocuteur" htmlFor="lead-contact">
             <Input
               id="lead-contact"
@@ -532,8 +550,13 @@ export function LeadDrawer({
 
       {/* ── Relances tracées ── */}
       <Eyebrow>Historique des relances</Eyebrow>
+      {/*
+        Sur mobile, le message prend sa PROPRE ligne (`order-first` +
+        `basis-full`) : trois contrôles côte à côte dans 390 px laissaient
+        ~140 px au champ — trop court pour relire ce qu'on vient de taper.
+      */}
       <form
-        className="mt-2 flex gap-2"
+        className="mt-2 flex flex-wrap gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (busy) return;
@@ -547,7 +570,7 @@ export function LeadDrawer({
       >
         <Select
           aria-label="Canal de la relance"
-          className="w-[112px]"
+          className="w-[112px] max-md:w-auto max-md:flex-1"
           value={touchType}
           onChange={(e) => setTouchType(e.target.value as LeadTouchType)}
         >
@@ -559,7 +582,7 @@ export function LeadDrawer({
         </Select>
         <Input
           aria-label="Message de la relance"
-          className="min-w-0 flex-1"
+          className="min-w-0 flex-1 max-md:order-first max-md:basis-full"
           placeholder="A1 — SMS du soir même…"
           value={touchNote}
           onChange={(e) => setTouchNote(e.target.value)}
@@ -678,7 +701,7 @@ export function NewLeadDrawer({
       title="Nouveau lead"
       sub="Un prospect entre au pipeline"
       footer={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
           <Btn
             variant="primary"
             size="sm"
@@ -711,7 +734,7 @@ export function NewLeadDrawer({
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
           <Field label="Interlocuteur" htmlFor="new-contact">
             <Input
               id="new-contact"
@@ -926,7 +949,7 @@ function ProposalPanel({
       }}
     >
       <Eyebrow>La proposition</Eyebrow>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
         <Field label="Formule" htmlFor="prop-plan">
           <Select
             id="prop-plan"
@@ -1119,7 +1142,7 @@ function ConvertPanel({
           required
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
         <Field label="E-mail du gérant" htmlFor="convert-email">
           <Input
             id="convert-email"

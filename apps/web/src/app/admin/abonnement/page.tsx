@@ -136,7 +136,7 @@ export default function AbonnementPage() {
 
   if (error)
     return (
-      <div className="p-[26px]">
+      <div className="p-4 md:p-[26px]">
         <div className="flex flex-col items-start gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
           <p className="text-sm text-alertt">{error}</p>
           <Btn variant="ghost" size="sm" onClick={() => void load()}>
@@ -148,7 +148,7 @@ export default function AbonnementPage() {
 
   if (!data)
     return (
-      <div className="flex flex-col gap-4 p-[26px]">
+      <div className="flex flex-col gap-4 p-4 md:p-[26px]">
         <Skeleton className="h-[104px]" />
         <Skeleton className="h-[320px]" />
       </div>
@@ -173,7 +173,7 @@ export default function AbonnementPage() {
   const enRetardTtc = outstanding.overdueTtcCents ?? outstanding.overdueCents;
 
   return (
-    <div className="flex flex-col gap-4 p-[26px]">
+    <div className="flex flex-col gap-4 p-4 md:p-[26px]">
       <div>
         <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-ink">Abonnement</h1>
         <p className="mt-0.5 text-sm text-mut">
