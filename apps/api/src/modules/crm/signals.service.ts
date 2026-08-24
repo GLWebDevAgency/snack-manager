@@ -19,7 +19,7 @@ import {
   type RevocableDeviceKind,
   type TenantAccountStatus,
 } from '@sm/contracts';
-import type { Device, Order, Screen, Tenant } from '@sm/db';
+import type { Device, Order, Screen, SignalDismissal, Tenant } from '@sm/db';
 import { stockMovements, type SupplyDb } from '@sm/supply';
 import { sql } from 'drizzle-orm';
 import { SUPPLY_DB } from '../../supply-db.module';
@@ -164,6 +164,9 @@ export const TRIAL_WARNING_DAYS = 10;
 /** Sous trois jours restants, l'essai se joue : l'appel passe en critique. */
 export const TRIAL_CRITICAL_DAYS = 3;
 
+/** Répit d'un signal « traité » avant qu'il ne revienne si sa cause persiste. */
+export const DISMISS_DAYS = 7;
+
 /**
  * SILENCE MINIMAL D'UN APPAREIL avant qu'on en parle, quand le restaurant
  * tourne : une heure.
@@ -275,6 +278,12 @@ export type SignalClient = {
   accountStatus: TenantAccountStatus;
   /** Début du statut COURANT — c'est lui qui date une période d'essai. */
   accountSince: Date | null;
+  /**
+   * Fin d'essai POSÉE en base à la création du compte (24/08/2026). `null`
+   * sur les tenants d'avant : le signal retombe sur l'ancienneté du statut
+   * et la convention TRIAL_DAYS — le raisonnement annoncé en tête de fichier.
+   */
+  trialEndsAt: Date | null;
   suspendedAt: Date | null;
   /** Entrée dans le parc. */
   since: Date | null;
@@ -662,7 +671,15 @@ export function signalsForClient(client: SignalClient, now: Date): CrmQueueSigna
   // ─ Essai qui s'achève ─
   if (client.accountStatus === 'trial') {
     const inTrial = daysSince(client.accountSince ?? client.since, now);
-    const remaining = inTrial === null ? null : TRIAL_DAYS - inTrial;
+    // L'échéance RÉELLE quand elle est en base (comptes créés depuis le
+    // pipeline), la convention TRIAL_DAYS sinon — c'était le plan écrit plus
+    // haut : « le jour où le tenant porte un trialEndsAt, cette ligne change ».
+    const remaining =
+      client.trialEndsAt !== null
+        ? Math.ceil((client.trialEndsAt.getTime() - now.getTime()) / 86_400_000)
+        : inTrial === null
+          ? null
+          : TRIAL_DAYS - inTrial;
     if (inTrial !== null && remaining !== null && remaining <= TRIAL_WARNING_DAYS) {
       const used = client.activity.orders30d > 0;
       const late = remaining < 0;
@@ -872,14 +889,16 @@ type RawTenant = Tenant & { _id: unknown; createdAt?: Date };
 function readAccount(raw: RawTenant): {
   status: TenantAccountStatus;
   since: Date | null;
+  trialEndsAt: Date | null;
   suspendedAt: Date | null;
 } {
   const account = raw.account as
-    | { status?: string; since?: Date; suspendedAt?: Date | null }
+    | { status?: string; since?: Date; suspendedAt?: Date | null; trialEndsAt?: Date | null }
     | undefined;
   return {
     status: (account?.status ?? 'trial') as TenantAccountStatus,
     since: account?.since ?? null,
+    trialEndsAt: account?.trialEndsAt ?? null,
     suspendedAt: account?.suspendedAt ?? null,
   };
 }
@@ -895,9 +914,24 @@ export class SignalsService {
     @InjectModel('Order') private readonly orders: Model<Order>,
     @InjectModel('Device') private readonly devices: Model<Device>,
     @InjectModel('Screen') private readonly screens: Model<Screen>,
+    @InjectModel('SignalDismissal') private readonly dismissals: Model<SignalDismissal>,
     @Inject(SUPPLY_DB) private readonly db: SupplyDb,
     private readonly billing: BillingService,
   ) {}
+
+  /**
+   * « Traité » : le signal disparaît de la file — TEMPORAIREMENT. Il revient
+   * après `DISMISS_DAYS` si sa cause persiste : un impayé « traité » qui dure
+   * n'est pas traité, et un geste d'écran ne doit jamais pouvoir enterrer un
+   * problème réel pour de bon. L'auteur reste sur la trace.
+   */
+  async dismiss(signalId: string, actorEmail: string, now: Date = new Date()): Promise<void> {
+    await this.dismissals.updateOne(
+      { key: signalId },
+      { $set: { at: now, actorEmail } },
+      { upsert: true },
+    );
+  }
 
   /**
    * LA FILE DE TRAVAIL, tous clients confondus.
@@ -968,6 +1002,7 @@ export class SignalsService {
             plan: (tenant.plan ?? 'essentiel') as SignalClient['plan'],
             accountStatus: account.status,
             accountSince: account.since,
+            trialEndsAt: account.trialEndsAt ?? null,
             suspendedAt: account.suspendedAt,
             since: tenant.createdAt ?? null,
             activity: {
@@ -989,7 +1024,14 @@ export class SignalsService {
       );
     }
 
-    return sortQueue(signals);
+    // Les signaux « traités » sortent de la file le temps du répit — la
+    // petite collection se lit en entier, la file reste une seule vérité.
+    const floor = new Date(now.getTime() - DISMISS_DAYS * 86_400_000);
+    const dismissed = new Set(
+      (await this.dismissals.find({ at: { $gte: floor } }, { key: 1 }).lean()).map((d) => d.key),
+    );
+
+    return sortQueue(signals.filter((signal) => !dismissed.has(signal.id)));
   }
 
   // ─── Lectures annexes, dégradables ───

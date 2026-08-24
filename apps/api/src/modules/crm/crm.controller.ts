@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
+  LeadConvertSchema,
   LeadCreateSchema,
   LeadListQuerySchema,
   LeadStageChangeSchema,
   LeadTouchCreateSchema,
   LeadUpdateSchema,
+  type JwtPayload,
+  type LeadConvert,
   type LeadCreate,
   type LeadListQuery,
   type LeadStageChange,
@@ -12,7 +15,8 @@ import {
   type LeadUpdate,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
-import { Roles } from '../../common/auth';
+import { CurrentUser, Roles } from '../../common/auth';
+import { ConversionService } from './conversion.service';
 import { CrmService } from './crm.service';
 
 /**
@@ -29,7 +33,10 @@ import { CrmService } from './crm.service';
 @Roles('sm_admin')
 @Controller('crm')
 export class CrmController {
-  constructor(private readonly crm: CrmService) {}
+  constructor(
+    private readonly crm: CrmService,
+    private readonly conversion: ConversionService,
+  ) {}
 
   /** Compteurs de pipeline, places fondateur, MRR estimé, santé du parc. */
   @Get('overview')
@@ -89,5 +96,19 @@ export class CrmController {
   @Post('leads/:id/touches')
   addTouch(@Param('id') id: string, @Body(zod(LeadTouchCreateSchema)) body: LeadTouchCreate) {
     return this.crm.addTouch(id, body);
+  }
+
+  /**
+   * SIGNER : le lead devient un restaurant — tenant, compte gérant, place
+   * fondateur, échéance d'essai, journal. Le mot de passe de la réponse ne
+   * se relit jamais : il s'écrit sur un papier, maintenant.
+   */
+  @Post('leads/:id/convert')
+  convert(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body(zod(LeadConvertSchema)) body: LeadConvert,
+  ) {
+    return this.conversion.convert(actor, id, body);
   }
 }

@@ -13,6 +13,8 @@ import type {
   CrmClient,
   CrmLead,
   CrmOverview,
+  LeadConvert,
+  LeadConversion,
   LeadCreate,
   LeadStage,
   LeadTouchCreate,
@@ -64,6 +66,15 @@ export const crm = {
     api.patch<CrmLead>(`/crm/leads/${id}/stage`, { stage }),
   addTouch: (id: string, body: LeadTouchCreate) =>
     api.post<CrmLead>(`/crm/leads/${id}/touches`, body),
+  /** SIGNER : le lead devient un restaurant — le mot de passe ne se relit jamais. */
+  convertLead: (id: string, body: LeadConvert) =>
+    api.post<LeadConversion>(`/crm/leads/${id}/convert`, body),
+  /** Nouveau mot de passe gérant, remis une fois — remplace le script CLI. */
+  resetOwner: (tenantId: string) =>
+    api.post<{ ownerEmail: string; password: string }>(`/crm/tenants/${tenantId}/owner-reset`),
+  /** « Traité » : sort le signal de la file quelques jours. */
+  dismissSignal: (id: string) =>
+    api.post<{ ok: true }>(`/crm/signals/${encodeURIComponent(id)}/dismiss`),
 };
 
 // ─── État partagé de la coquille ───

@@ -45,6 +45,7 @@ import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import {
   PlanModal,
+  ResetOwnerModal,
   ReactivateModal,
   RevokeDeviceModal,
   SuspendModal,
@@ -74,7 +75,7 @@ export default function ClientFilePage({
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
-  const [modal, setModal] = useState<"suspend" | "reactivate" | "plan" | null>(null);
+  const [modal, setModal] = useState<"suspend" | "reactivate" | "plan" | "motdepasse" | null>(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
 
   useEffect(() => {
@@ -234,6 +235,15 @@ export default function ClientFilePage({
             >
               Formule
             </Btn>
+            <Btn
+              size="sm"
+              variant="ghost"
+              icon="edit"
+              onClick={() => setModal("motdepasse")}
+              title="Nouveau mot de passe gérant — remis une fois, jamais relu"
+            >
+              Mot de passe
+            </Btn>
             {blocked ? (
               <Btn
                 size="sm"
@@ -325,6 +335,14 @@ export default function ClientFilePage({
       )}
       {modal === "reactivate" && (
         <ReactivateModal
+          tenantId={id}
+          tenantName={name}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
+      {modal === "motdepasse" && (
+        <ResetOwnerModal
           tenantId={id}
           tenantName={name}
           onClose={() => setModal(null)}

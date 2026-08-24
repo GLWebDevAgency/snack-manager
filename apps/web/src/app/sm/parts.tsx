@@ -16,10 +16,13 @@ import {
   LEAD_STAGES,
   LEAD_TOUCH_LABELS,
   LEAD_TOUCH_TYPES,
+  PLAN_LABELS,
+  PLANS,
   nextLeadStage,
   previousLeadStage,
   type CrmClientHealth,
   type CrmLead,
+  type LeadConversion,
   type LeadSequence,
   type LeadStage,
   type LeadTouchType,
@@ -406,6 +409,13 @@ export function LeadDrawer({
         )}
       </div>
 
+      {lead.stage !== "perdu" && (
+        <>
+          <Rule />
+          <ConvertPanel lead={lead} onConverted={(updated) => onChanged(updated)} />
+        </>
+      )}
+
       <Rule />
 
       {/* ── Place fondateur ── */}
@@ -763,5 +773,193 @@ export function NewLeadDrawer({
         </button>
       </form>
     </HqDrawer>
+  );
+}
+
+/* ── Signer : le lead devient un restaurant ─────────────────── */
+
+/** « chez-nicolas » depuis « Chez Nicolas » — proposition, jamais imposition. */
+function slugifie(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+/**
+ * Le geste qui remplaçait des écritures Mongo à la main : tenant, compte
+ * gérant, place fondateur, échéance d'essai — et un mot de passe affiché UNE
+ * fois, à noter pendant qu'il est à l'écran. Fermer le panneau ne le
+ * réaffichera pas : c'est le contrat de `LeadConversion`.
+ */
+function ConvertPanel({
+  lead,
+  onConverted,
+}: {
+  lead: CrmLead;
+  onConverted: (lead: CrmLead) => void;
+}) {
+  const toast = useToast();
+  const { reload } = useHq();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [fait, setFait] = useState<LeadConversion | null>(null);
+
+  const [slug, setSlug] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
+  const [founderSeat, setFounderSeat] = useState(false);
+
+  // Re-proposé à chaque lead ouvert — un tiroir réutilisé ne doit pas garder
+  // le slug du restaurant précédent.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire : mêmes raisons que le brouillon d'édition du tiroir.
+    setSlug(slugifie(lead.restaurantName));
+    setOwnerEmail(lead.contact.email);
+    setOwnerName(lead.contact.name);
+    setFounderSeat(lead.founderSeatReserved);
+    setFait(null);
+    setErreur(null);
+    setOpen(false);
+  }, [lead]);
+
+  async function signer() {
+    setBusy(true);
+    setErreur(null);
+    try {
+      const done = await crm.convertLead(lead._id, {
+        slug,
+        ownerEmail,
+        ownerName,
+        plan,
+        founderSeat,
+      });
+      setFait(done);
+      // Le lead local suit ce que l'API vient d'écrire : signé, réservation
+      // éteinte (la place vit désormais sur le restaurant).
+      onConverted({ ...lead, stage: "signe", founderSeatReserved: false });
+      reload();
+      toast(`« ${done.name} » est né — notez le mot de passe`, { icon: "check" });
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : "Création impossible — réessayez");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (fait) {
+    return (
+      <div className="rounded-card border border-accent/40 bg-[image:var(--cf-elev-gradient)] p-4">
+        <div className="text-sm font-bold text-ink">Restaurant créé — notez le mot de passe</div>
+        <div className="mt-1 text-xs text-mut">
+          Il ne sera JAMAIS réaffiché. Compte gérant : {fait.ownerEmail} · essai jusqu&apos;au{" "}
+          {new Date(fait.trialEndsAt).toLocaleDateString("fr-FR")}.
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">
+            {fait.password}
+          </code>
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              void navigator.clipboard
+                ?.writeText(fait.password)
+                .then(() => toast("Mot de passe copié", { icon: "check" }));
+            }}
+          >
+            Copier
+          </Btn>
+        </div>
+        <div className="mt-3">
+          <a
+            className="text-xs font-semibold text-mut underline-offset-2 hover:text-white hover:underline"
+            href={`/sm/clients/${fait.tenantId}`}
+          >
+            Ouvrir la fiche client →
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Btn variant="ink" size="sm" icon="star" onClick={() => setOpen(true)}>
+        Signé ? Créer le restaurant
+      </Btn>
+    );
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-3 rounded-card border border-white/12 p-3.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void signer();
+      }}
+    >
+      <Eyebrow>Créer le restaurant</Eyebrow>
+      <Field label="Slug (l'adresse publique)" htmlFor="convert-slug">
+        <Input
+          id="convert-slug"
+          value={slug}
+          onChange={(e) => setSlug(e.target.value)}
+          placeholder="chez-nicolas"
+          required
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="E-mail du gérant" htmlFor="convert-email">
+          <Input
+            id="convert-email"
+            type="email"
+            value={ownerEmail}
+            onChange={(e) => setOwnerEmail(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Nom du gérant" htmlFor="convert-name">
+          <Input
+            id="convert-name"
+            value={ownerName}
+            onChange={(e) => setOwnerName(e.target.value)}
+          />
+        </Field>
+      </div>
+      <Field label="Formule" htmlFor="convert-plan">
+        <Select
+          id="convert-plan"
+          value={plan}
+          onChange={(e) => setPlan(e.target.value as (typeof PLANS)[number])}
+        >
+          {PLANS.map((p) => (
+            <option key={p} value={p}>
+              {PLAN_LABELS[p]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Place fondateur — le tarif gelé suit le restaurant, plus le pipeline.
+        </div>
+        <Toggle on={founderSeat} label="Place fondateur" onChange={setFounderSeat} />
+      </div>
+      {erreur && <div className="text-xs font-semibold text-alertt">{erreur}</div>}
+      <div className="flex gap-2">
+        <Btn type="submit" variant="ink" size="sm" disabled={busy || !slug || !ownerEmail}>
+          {busy ? "Création…" : "Créer — mot de passe remis une fois"}
+        </Btn>
+        <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>
+          Annuler
+        </Btn>
+      </div>
+    </form>
   );
 }

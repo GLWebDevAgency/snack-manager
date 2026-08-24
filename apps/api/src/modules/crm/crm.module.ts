@@ -3,6 +3,7 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
+import { ConversionService } from './conversion.service';
 import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
 import { HealthController } from './health.controller';
@@ -38,6 +39,7 @@ import { SignalsService } from './signals.service';
   ],
   providers: [
     CrmService,
+    ConversionService,
     AdminService,
     HealthService,
     InsightsService,

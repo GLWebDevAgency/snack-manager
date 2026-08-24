@@ -34,7 +34,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { cx } from "@/lib/cx";
 import { Card, Chip, Icon, Kpi, Skeleton } from "@/components/ui";
-import { int } from "../crm";
+import { crm, int } from "../crm";
 import {
   clientsApi,
   fmtSignalAge,
@@ -129,6 +129,17 @@ export default function SignalsPage() {
   );
 
   const grouped = useMemo(() => groupBySeverity(signals ?? []), [signals]);
+
+  /** Optimiste : la ligne sort au clic ; si l'API refuse, la file se recharge. */
+  const marquerTraite = (signal: WorkSignal) => {
+    setSignals((prev) => prev?.filter((x) => x.key !== signal.key) ?? prev);
+    void crm.dismissSignal(signal.id).catch(() => {
+      clientsApi
+        .signals()
+        .then((raw) => setSignals(readWorkSignals(raw)))
+        .catch(() => {});
+    });
+  };
 
   if (signals === null) {
     return (
@@ -246,6 +257,7 @@ export default function SignalsPage() {
               severity={severity}
               signals={rows}
               directory={directory}
+              onDone={marquerTraite}
             />
           );
         })
@@ -341,10 +353,12 @@ function SeverityGroup({
   severity,
   signals,
   directory,
+  onDone,
 }: {
   severity: SignalSeverity;
   signals: WorkSignal[];
   directory: Map<string, ClientRow>;
+  onDone: (signal: WorkSignal) => void;
 }) {
   return (
     <Card className="p-0">
@@ -366,7 +380,12 @@ function SeverityGroup({
       */}
       <ul className="cf-scroll overflow-x-auto [&>li]:min-w-[560px]">
         {signals.map((s) => (
-          <SignalRow key={s.key} signal={s} client={directory.get(s.tenantId)} />
+          <SignalRow
+            key={s.key}
+            signal={s}
+            client={directory.get(s.tenantId)}
+            onDone={onDone}
+          />
         ))}
       </ul>
     </Card>
@@ -388,9 +407,11 @@ function SeverityGroup({
 function SignalRow({
   signal: s,
   client,
+  onDone,
 }: {
   signal: WorkSignal;
   client: ClientRow | undefined;
+  onDone: (signal: WorkSignal) => void;
 }) {
   const name = s.tenantName || client?.name || "Restaurant inconnu";
   const tone = SEVERITY_TONE[s.severity];
@@ -466,6 +487,23 @@ function SignalRow({
               Ouvrir la fiche
               <Icon name="arrow" size={15} />
             </span>
+            {/*
+              « Traité » vit DANS le lien mais n'en est pas un : il avale le
+              clic avant la navigation. Le signal sort de la file pour sept
+              jours — il revient si sa cause persiste (API, `dismiss`).
+            */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDone(s);
+              }}
+              className="cf-press inline-flex items-center gap-1 rounded-pill border border-white/12 bg-white/6 px-2.5 py-1 text-[11.5px] font-semibold text-mut hover:text-white"
+            >
+              <Icon name="check" size={12} />
+              Traité
+            </button>
           </div>
         </div>
 
