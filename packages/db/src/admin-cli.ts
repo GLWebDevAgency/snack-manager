@@ -47,8 +47,13 @@ function utilisateurs(): Utilisateurs {
 
 type Cible = { titre: string; url: string; production: boolean };
 
-/** Choisir l'environnement, et en tirer l'URL — sans jamais la demander. */
-async function choisirCible(): Promise<Cible | null> {
+/**
+ * Choisir l'environnement, et en tirer l'URL — sans jamais la demander.
+ * `'reessayer'` : la résolution Railway a échoué, la raison est affichée, et
+ * on REVIENT au menu — une résolution ratée ne ferme pas la console alors
+ * qu'une autre entrée du menu peut encore servir.
+ */
+async function choisirCible(): Promise<Cible | null | 'reessayer'> {
   const choix: Array<{ titre: string; valeur: 'production' | 'staging' | 'shell' | 'quitter'; detail?: string }> = [
     { titre: rouge('Production'), valeur: 'production', detail: 'la vraie base — chaque écriture se confirme' },
     { titre: jaune('Staging'), valeur: 'staging', detail: 'la base de répétition' },
@@ -65,12 +70,20 @@ async function choisirCible(): Promise<Cible | null> {
   const reponse = await choisir('Quel environnement ?', choix);
   if (reponse === 'quitter') return null;
   if (reponse === 'shell') {
-    return { titre: 'MONGO_URL du shell', url: process.env.MONGO_URL as string, production: false };
+    // La console ne sait pas ce que désigne cette URL — c'est à l'opérateur
+    // de dire si le garde-fou de production doit s'armer.
+    const production = await confirmer('Traiter cette base comme la PRODUCTION (un feu vert avant chaque écriture) ?');
+    return { titre: 'MONGO_URL du shell', url: process.env.MONGO_URL as string, production };
   }
   console.log(gris(`\nLecture des variables Railway (${reponse})…`));
-  const { url, masquee, service } = resoudreUrlMongo(reponse as Environnement);
-  console.log(`${vert('✓')} URL retenue : ${masquee}${service ? gris(`  (service ${service})`) : ''}`);
-  return { titre: reponse, url, production: reponse === 'production' };
+  try {
+    const { url, masquee, service } = resoudreUrlMongo(reponse as Environnement);
+    console.log(`${vert('✓')} URL retenue : ${masquee}${service ? gris(`  (service ${service})`) : ''}`);
+    return { titre: reponse, url, production: reponse === 'production' };
+  } catch (cause) {
+    console.log(rouge(cause instanceof Error ? cause.message : String(cause)));
+    return 'reessayer';
+  }
 }
 
 /** Le dernier verrou avant d'écrire en production. Ailleurs : passage direct. */
@@ -174,6 +187,7 @@ async function main(): Promise<void> {
   for (;;) {
     const cible = await choisirCible();
     if (cible === null) break;
+    if (cible === 'reessayer') continue;
 
     try {
       // 8 s suffisent à dire « mauvaise URL » — les 30 s par défaut font douter.
