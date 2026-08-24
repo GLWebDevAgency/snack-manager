@@ -9,9 +9,11 @@ export * from './crm';
 export * from './admin';
 export * from './billing';
 export * from './signals';
+export * from './health';
 export * from './planning';
 export * from './platform';
 export * from './ops';
+export * from './tenant';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

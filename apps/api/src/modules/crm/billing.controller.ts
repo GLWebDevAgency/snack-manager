@@ -2,12 +2,16 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/com
 import {
   BillingHistoryQuerySchema,
   InvoiceCancelSchema,
+  InvoiceCreditSchema,
   InvoiceIssueSchema,
   InvoicePaySchema,
+  InvoiceReminderCreateSchema,
   type BillingHistoryQuery,
   type InvoiceCancel,
+  type InvoiceCredit,
   type InvoiceIssue,
   type InvoicePay,
+  type InvoiceReminderCreate,
   type JwtPayload,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
@@ -94,6 +98,35 @@ export class BillingController {
     return this.billing.issue(actor, id, body);
   }
 
+  /**
+   * ÉMETTRE UN BROUILLON : la pièce passe « envoyée », datée du jour. Aucun
+   * corps — il n'y a rien à décider, la facture est déjà écrite.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/invoices/:invoiceId/send')
+  send(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+  ) {
+    return this.billing.send(actor, id, invoiceId);
+  }
+
+  /**
+   * RELANCER : canal (défaut « appel ») et note libre. La relance s'écrit sur
+   * la pièce ET au journal — c'est un geste de recouvrement, pas un mémo.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/invoices/:invoiceId/remind')
+  remind(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+    @Body(zod(InvoiceReminderCreateSchema)) body: InvoiceReminderCreate,
+  ) {
+    return this.billing.remind(actor, id, invoiceId, body);
+  }
+
   /** ENCAISSER : moyen obligatoire, date facultative (défaut : maintenant). */
   @HttpCode(200)
   @Post('tenants/:id/invoices/:invoiceId/pay')
@@ -119,5 +152,21 @@ export class BillingController {
     @Body(zod(InvoiceCancelSchema)) body: InvoiceCancel,
   ) {
     return this.billing.cancel(actor, id, invoiceId, body);
+  }
+
+  /**
+   * ÉMETTRE UN AVOIR sur une facture RÉGLÉE — le pendant de l'annulation pour
+   * le payé. `:invoiceId` désigne la facture d'ORIGINE ; la réponse est la
+   * NOUVELLE pièce, négative, numérotée dans la même séquence.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/invoices/:invoiceId/credit')
+  credit(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Param('invoiceId') invoiceId: string,
+    @Body(zod(InvoiceCreditSchema)) body: InvoiceCredit,
+  ) {
+    return this.billing.credit(actor, id, invoiceId, body);
   }
 }

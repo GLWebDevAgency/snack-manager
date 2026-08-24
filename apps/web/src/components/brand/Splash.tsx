@@ -202,7 +202,32 @@ export function Splash({ duree = 3.6, onFini, annonce = "Chargement" }: SplashPr
   );
 
   return (
-    <div className="sm-splash" role="status" aria-live="polite" style={{ opacity: 1 - sortie }}>
+    /*
+     * ═══ LA PASSATION ENTRE LE FILET CSS ET LE JS — `data-js-actif` ═══
+     *
+     * Le filet de `globals.css` anime `opacity` sur CE nœud, et dans la
+     * cascade une animation CSS en cours l'emporte sur le style inline. Tant
+     * qu'elle tournait, le `opacity: 1 - sortie` ci-dessous était donc lettre
+     * morte : l'animation finissait à `duree`, mais le calque restait noir
+     * jusqu'à 92 % des 6 s du filet — le trou noir d'une à deux secondes vu
+     * en production. L'attribut, posé dès le premier tour de boucle, coupe le
+     * filet (voir la règle `[data-js-actif]` dans `globals.css`) et rend la
+     * main à la sortie pilotée ici. Avant ce premier tour — et si le JS ne
+     * vient jamais — le filet garde son rôle. `t > 0` vaut aussi côté serveur
+     * et au premier rendu client : pas d'écart d'hydratation possible.
+     *
+     * `visibility: hidden` une fois fini : en mode `toujours` le calque n'est
+     * jamais démonté, et c'était le `forwards` du filet qui le rendait
+     * intraversable aux clics après coup. Le filet coupé, c'est à nous de le
+     * faire — dès la fin réelle, pas à 6 s.
+     */
+    <div
+      className="sm-splash"
+      role="status"
+      aria-live="polite"
+      data-js-actif={t > 0 ? "" : undefined}
+      style={{ opacity: 1 - sortie, visibility: t >= 1 ? "hidden" : undefined }}
+    >
       <span className="sr-only">{pret ? "Prêt" : annonce}</span>
 
       {/* Le halo respire et tourne — un décor de fond, jamais un traitement du

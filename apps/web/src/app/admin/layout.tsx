@@ -446,14 +446,16 @@ function Shell({ children }: { children: ReactNode }) {
                   <div className="truncate text-xs text-mut">{city}</div>
                 </div>
               )}
-              <button
-                type="button"
+              {/* Longtemps inerte — une promesse à l'écran sans fonction est
+                  un appel au support en puissance. Câblé le 24/08/2026. */}
+              <Link
+                href="/admin/settings"
                 title="Paramètres"
                 aria-label="Paramètres"
                 className="cf-press shrink-0 text-mut hover:text-white"
               >
                 <Icon name="gear" size={17} />
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={toggleNav}
@@ -530,20 +532,9 @@ function Shell({ children }: { children: ReactNode }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              {/* Recherche globale — présente, non câblée en v1 */}
-              <div className="relative">
-                <Icon
-                  name="search"
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut"
-                />
-                <input
-                  type="search"
-                  placeholder="Rechercher…"
-                  aria-label="Recherche globale"
-                  className="w-[220px] rounded-ctrl border border-white/8 bg-white/5 py-2.5 pl-9 pr-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8"
-                />
-              </div>
+              {/* La recherche globale « présente, non câblée » a été RETIRÉE
+                  (24/08/2026) : un champ qui avale une requête sans répondre
+                  se lit comme une panne. Elle reviendra branchée. */}
 
               {/* Pilule Ouvert/Fermé ↔ commande en ligne (vert/rouge fonctionnels) */}
               <button
@@ -571,7 +562,10 @@ function Shell({ children }: { children: ReactNode }) {
                 {paused ? "Fermé" : "Ouvert"}
               </button>
 
-              <IconBtn icon="bell" label="Notifications" />
+              {/* La cloche « Notifications » a été RETIRÉE (24/08/2026) : elle
+                  ne faisait rien depuis la v1, et un bouton mort coûte plus
+                  cher qu'un bouton absent — il promet, il déçoit, il fait
+                  appeler. Elle reviendra portée par un vrai flux. */}
             </div>
           </header>
 

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { DeviceKind } from '@sm/contracts';
+import type { DeviceKind, DeviceTelemetry } from '@sm/contracts';
 import type { Device } from '@sm/db';
 
 /**
@@ -22,6 +22,10 @@ export interface StoredDevice {
   readonly paired: boolean;
   readonly lastSeenAt: Date | null;
   readonly active: boolean;
+  /** Télémétrie du dernier battement — vides tant qu'un client ne l'envoie pas. */
+  readonly appVersion: string;
+  readonly queueDepth: number | null;
+  readonly lastError: string;
 }
 
 export interface NewDevice {
@@ -50,6 +54,9 @@ function toStored(raw: RawDevice): StoredDevice {
     paired: raw.paired === true,
     lastSeenAt: raw.lastSeenAt ?? null,
     active: raw.active !== false,
+    appVersion: String(raw.appVersion ?? ''),
+    queueDepth: typeof raw.queueDepth === 'number' ? raw.queueDepth : null,
+    lastError: String(raw.lastError ?? ''),
   };
 }
 
@@ -162,8 +169,16 @@ export class DevicesRepository {
     return raw ? toStored(raw as RawDevice) : null;
   }
 
-  /** Battement de cœur — source du « hors ligne depuis 12 min » du back-office. */
-  async touch(id: string, at: Date): Promise<void> {
-    await this.devices.updateOne({ _id: id }, { $set: { lastSeenAt: at } });
+  /**
+   * Battement de cœur — source du « hors ligne depuis 12 min » du back-office,
+   * et désormais de la télémétrie (version, file, dernière erreur). Sans
+   * télémétrie (vieux client, corps vide), seule la date bouge : un battement
+   * pauvre n'efface pas ce qu'un battement riche a appris.
+   */
+  async touch(id: string, at: Date, telemetry?: DeviceTelemetry): Promise<void> {
+    await this.devices.updateOne(
+      { _id: id },
+      { $set: { lastSeenAt: at, ...(telemetry ?? {}) } },
+    );
   }
 }

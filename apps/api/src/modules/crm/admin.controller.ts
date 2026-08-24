@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nes
 import {
   AdminLogQuerySchema,
   DeviceRevokeSchema,
+  TenantChurnSchema,
   TenantNoteSchema,
   TenantPlanChangeSchema,
   TenantReactivateSchema,
@@ -9,6 +10,7 @@ import {
   type AdminLogQuery,
   type DeviceRevoke,
   type JwtPayload,
+  type TenantChurn,
   type TenantNote,
   type TenantPlanChange,
   type TenantReactivate,
@@ -76,6 +78,20 @@ export class AdminController {
     @Body(zod(TenantReactivateSchema)) body: TenantReactivate,
   ) {
     return this.admin.reactivate(actor, id, body);
+  }
+
+  /**
+   * Acte le DÉPART du client (il résilie, il ferme). Motif obligatoire.
+   * Ne coupe RIEN : `churned` ne bloque pas l'accès — voir `AdminService.churn`.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/churn')
+  churn(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body(zod(TenantChurnSchema)) body: TenantChurn,
+  ) {
+    return this.admin.churn(actor, id, body);
   }
 
   @Patch('tenants/:id/plan')

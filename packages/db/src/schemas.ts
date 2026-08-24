@@ -598,6 +598,29 @@ ErrorEventSchema.index({ lastAt: -1 });
 export type ErrorEvent = InferSchemaType<typeof ErrorEventSchema>;
 
 /**
+ * Jalons du tunnel de commande — un document par jalon, anonyme par
+ * construction (slug, étape, canal, date : RIEN d'autre, voir le contrat).
+ * Le TTL de 90 jours est la politique de rétention : un entonnoir se lit sur
+ * des semaines, pas des années, et la collection ne peut pas enfler sans fin.
+ */
+export const FunnelEventSchema = new Schema(
+  {
+    slug: { type: String, required: true },
+    step: {
+      type: String,
+      enum: ['visite', 'panier', 'coordonnees', 'commande'],
+      required: true,
+    },
+    canal: { type: String, enum: ['page', 'embed', 'domaine'], required: true },
+    at: { type: Date, required: true },
+  },
+  { timestamps: false },
+);
+// TTL : index ASCENDANT obligatoirement — Mongo n'expire que sur { champ: 1 }.
+FunnelEventSchema.index({ at: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
+export type FunnelEvent = InferSchemaType<typeof FunnelEventSchema>;
+
+/**
  * Mémoire du veilleur d'alertes : quand chaque clé a sonné pour la dernière
  * fois. C'est elle qui transforme « une caisse muette » en UNE alerte toutes
  * les six heures, et pas une par passage du veilleur.
@@ -847,6 +870,13 @@ export const DeviceSchema = new Schema(
     deviceToken: { type: String, default: null },
     // Dernier battement de cœur — source du « hors ligne depuis 12 min ».
     lastSeenAt: { type: Date, default: null },
+    // Télémétrie du dernier battement (contrat `DeviceHeartbeatBody`) : la
+    // version du bundle, la profondeur de la file hors-ligne, la dernière
+    // erreur de synchronisation. Écrasée à chaque battement — c'est un état
+    // PRÉSENT, pas un historique.
+    appVersion: { type: String, default: '' },
+    queueDepth: { type: Number, default: null },
+    lastError: { type: String, default: '' },
     active: { type: Boolean, default: true },
     // Dernière révocation prononcée depuis le back-office interne (tablette
     // perdue ou volée). Le détail « qui, quand, pourquoi » vit dans
@@ -910,6 +940,7 @@ export const AdminLogSchema = new Schema(
         'tenant.create',
         'tenant.suspend',
         'tenant.reactivate',
+        'tenant.churn',
         'tenant.plan_change',
         'tenant.note',
         'tenant.detail_view',
@@ -917,8 +948,11 @@ export const AdminLogSchema = new Schema(
         'device.revoke',
         'screen.revoke',
         'invoice.issue',
+        'invoice.send',
+        'invoice.remind',
         'invoice.pay',
         'invoice.cancel',
+        'invoice.credit',
         'platform.social_change',
       ],
       required: true,
@@ -1030,9 +1064,12 @@ export const InvoiceSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     /** `SM-2026-0004` — séquence annuelle, globale au parc, sans trou. */
     number: { type: String, required: true },
+    // `avoir` : la pièce NÉGATIVE qui corrige une facture réglée — même
+    // séquence de numérotation, même collection. Une facture réglée ne
+    // s'annule pas, elle s'avoise ; c'est cette nature qui porte le geste.
     kind: {
       type: String,
-      enum: ['abonnement', 'mise_en_place', 'option', 'autre'],
+      enum: ['abonnement', 'mise_en_place', 'option', 'autre', 'avoir'],
       default: 'abonnement',
       required: true,
     },
@@ -1055,8 +1092,14 @@ export const InvoiceSchema = new Schema(
      * taxes ou toutes taxes comprises. Un montant nu dans une collection de
      * factures est exactement l'ambiguïté qui produit une erreur de
      * déclaration — celle qu'on ne découvre qu'au contrôle.
+     *
+     * PAS DE `min: 0` : un AVOIR porte le montant NÉGATIF de la facture qu'il
+     * corrige — c'est sa définition, pas un accident de saisie. Le garde-fou
+     * contre un montant négatif saisi à la main est ailleurs : l'émission
+     * (`InvoiceIssueSchema`, @sm/contracts) refuse tout montant < 0, et seul
+     * le geste d'avoir écrit en négatif.
      */
-    amountCents: { type: Number, required: true, min: 0 },
+    amountCents: { type: Number, required: true },
     /**
      * LE RÉGIME DE TVA DE LA PIÈCE, FIGÉ À SON ÉMISSION.
      *
@@ -1111,6 +1154,33 @@ export const InvoiceSchema = new Schema(
     },
     cancelledAt: { type: Date, default: null },
     cancelReason: { type: String, default: '' },
+    /**
+     * LES RELANCES, tracées SUR LA PIÈCE.
+     *
+     * L'échelle de recouvrement (rappeler à J+8, relancer par écrit à J+15,
+     * mettre en demeure à J+30) ne vaut que si l'on sait où l'on en est : sans
+     * cette liste, « déjà relancé ? » se répondait de mémoire, et deux
+     * personnes rappelaient le même gérant à un jour d'écart. Chaque relance
+     * s'écrit AUSSI au journal d'administration (`invoice.remind`), avec son
+     * auteur — ici ne vit que ce que la file de recouvrement doit relire vite.
+     */
+    reminders: {
+      type: [
+        new Schema(
+          {
+            at: { type: Date, required: true },
+            channel: {
+              type: String,
+              enum: ['appel', 'sms', 'email', 'courrier', 'autre'],
+              required: true,
+            },
+            note: { type: String, default: '' },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );
@@ -1153,6 +1223,7 @@ export const MODELS = {
     schema: SignalDismissalSchema,
     collection: 'signaldismissals',
   },
+  FunnelEvent: { name: 'FunnelEvent', schema: FunnelEventSchema, collection: 'funnelevents' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },
   Screen: { name: 'Screen', schema: ScreenSchema, collection: 'screens' },

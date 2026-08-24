@@ -22,6 +22,10 @@ import {
 } from '@sm/client-core';
 import { API_URL, KEY_SESSION } from './config';
 
+/** Version du bundle, rapportée par le battement — même contrat que la caisse. */
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- lecture de la version au build, hors graphe ES
+const APP_VERSION: string = (require('../package.json') as { version: string }).version;
+
 /**
  * Client unique de l'app. Toute écriture (changement de statut) passe par
  * `client.patch`, donc par la file offline persistée : l'interface avance
@@ -306,11 +310,19 @@ export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
 export async function deviceHeartbeat(): Promise<PairedDevice | null> {
   const device = current;
   if (!device) return null;
+  // La télémétrie qui manquait au support : version du bundle, profondeur de
+  // la file hors-ligne, dernière erreur de synchronisation. De l'état de
+  // machine — jamais un ticket, jamais un client.
+  const queue = client.queue.getState();
   let beat: DeviceHeartbeatResult;
   try {
     beat = await deviceFetch<DeviceHeartbeatResult>(
       '/public/devices/heartbeat',
-      {},
+      {
+        appVersion: APP_VERSION,
+        queueDepth: queue.pending,
+        lastError: (queue.lastError ?? '').slice(0, 300),
+      },
       device.deviceToken,
     );
   } catch (e) {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpException, NotFoundException } from '@nestjs/common';
 import type { Model } from 'mongoose';
-import type { ErrorEvent } from '@sm/db';
+import type { ErrorEvent, FunnelEvent } from '@sm/db';
 import { errorFingerprint } from './fingerprint';
 import { ReportThrottle } from './report-throttle';
 import { toRecord } from './ops-exception.filter';
@@ -81,10 +81,12 @@ describe('OpsService.record', () => {
     const updateOne = vi.fn().mockResolvedValue({});
     return { model: { updateOne } as unknown as Model<ErrorEvent>, updateOne };
   };
+  const fakeFunnel = () =>
+    ({ create: vi.fn(), aggregate: vi.fn() }) as unknown as Model<FunnelEvent>;
 
   it('écrit un upsert par empreinte : l’avalanche incrémente, elle n’insère pas', async () => {
     const { model, updateOne } = makeErrors();
-    const ops = new OpsService(model);
+    const ops = new OpsService(model, fakeFunnel());
     await ops.record({ source: 'pos', message: 'Order 123 not found' }, NOW);
 
     const args = updateOne.mock.calls.at(0);
@@ -106,19 +108,19 @@ describe('OpsService.record', () => {
       updateOne: vi.fn().mockRejectedValue(new Error('base injoignable')),
     } as unknown as Model<ErrorEvent>;
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(new OpsService(model).record({ source: 'api', message: 'x' })).resolves.toBeUndefined();
+    await expect(new OpsService(model, fakeFunnel()).record({ source: 'api', message: 'x' })).resolves.toBeUndefined();
     spy.mockRestore();
   });
 
   it('relaie vers le collecteur externe seulement s’il est actif', async () => {
     const { model } = makeErrors();
     const forward = vi.fn();
-    const opsActif = new OpsService(model, { enabled: true, forward });
+    const opsActif = new OpsService(model, fakeFunnel(), { enabled: true, forward });
     await opsActif.record({ source: 'web', message: 'x' }, NOW);
     expect(forward).toHaveBeenCalledOnce();
 
     const forwardInactif = vi.fn();
-    const opsInactif = new OpsService(model, { enabled: false, forward: forwardInactif });
+    const opsInactif = new OpsService(model, fakeFunnel(), { enabled: false, forward: forwardInactif });
     await opsInactif.record({ source: 'web', message: 'x' }, NOW);
     expect(forwardInactif).not.toHaveBeenCalled();
   });
@@ -196,6 +198,24 @@ describe('Canaux d’alerte', () => {
     const result = await new CompositeTeamAlerter([bon, casse]).send({ title: 't', text: 'x' });
     expect(result.sent).toBe(true);
     expect(casse.send).toHaveBeenCalled();
+  });
+});
+
+describe('Entonnoir du tunnel', () => {
+  it('compose visites → commandes par établissement, plus gros trafic d’abord', async () => {
+    const { composeFunnel } = await import('./funnel-compose');
+    const rows = composeFunnel([
+      { slug: 'classfood', step: 'visite', n: 100 },
+      { slug: 'classfood', step: 'panier', n: 40 },
+      { slug: 'classfood', step: 'commande', n: 12 },
+      { slug: 'petit', step: 'visite', n: 3 },
+      { slug: 'classfood', step: 'inconnu', n: 999 }, // étape hors contrat : ignorée
+    ]);
+    expect(rows.map((r) => r.slug)).toEqual(['classfood', 'petit']);
+    expect(rows[0]?.steps).toEqual({ visite: 100, panier: 40, coordonnees: 0, commande: 12 });
+    expect(rows[0]?.conversionPct).toBe(12);
+    // Sans visite, pas de pourcentage — plutôt rien qu'un chiffre menteur.
+    expect(composeFunnel([{ slug: 'x', step: 'commande', n: 2 }])[0]?.conversionPct).toBeNull();
   });
 });
 

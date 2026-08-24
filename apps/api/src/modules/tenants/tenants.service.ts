@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { publicOrderingState } from '@sm/contracts';
+import { publicOrderingState, type TenantIdentityUpdate } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 
 @Injectable()
@@ -57,6 +57,21 @@ export class TenantsService {
     for (const k of allowed) {
       if (k in patch) $set[`settings.${k}`] = patch[k];
     }
+    return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+  }
+
+  /**
+   * Identité de l'enseigne — champs RACINE du tenant, par opposition aux
+   * réglages (`settings.*`). Seules les clés présentes s'écrivent : un PATCH
+   * qui corrige l'adresse ne doit pas pouvoir vider les téléphones.
+   */
+  async updateIdentity(tenantId: string, patch: TenantIdentityUpdate) {
+    const $set: Record<string, unknown> = {};
+    if (patch.name !== undefined) $set.name = patch.name;
+    if (patch.brandColor !== undefined) $set.brandColor = patch.brandColor;
+    if (patch.address !== undefined) $set.address = patch.address;
+    if (patch.phones !== undefined) $set.phones = patch.phones;
+    if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
   }
 

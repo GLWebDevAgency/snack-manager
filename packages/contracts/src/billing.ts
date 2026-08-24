@@ -128,15 +128,20 @@ export const LEGACY_INVOICE_VAT = {
 // ─── Nature d'une facture ───
 
 /**
- * Ce qu'une facture facture. Quatre natures, pas de texte libre.
+ * Ce qu'une facture facture. Cinq natures, pas de texte libre.
  *
  * La distinction n'est pas cosmétique : elle porte la règle « un seul
  * abonnement par mois et par client ». Sans elle, la mise en place et le
  * premier mois d'abonnement — émis le même jour, sur la même période —
  * seraient indiscernables, et le garde-fou anti-double-facturation refuserait
  * l'un des deux.
+ *
+ * L'AVOIR est la pièce qui corrige une facture RÉGLÉE — celle vers laquelle le
+ * refus d'annulation renvoie (« elle se corrige par un avoir »). Il porte un
+ * montant NÉGATIF, un numéro de la MÊME séquence annuelle, et n'est JAMAIS une
+ * créance : rien ne se recouvre sur un avoir, c'est nous qui devons.
  */
-export const INVOICE_KINDS = ['abonnement', 'mise_en_place', 'option', 'autre'] as const;
+export const INVOICE_KINDS = ['abonnement', 'mise_en_place', 'option', 'autre', 'avoir'] as const;
 export const InvoiceKindSchema = z.enum(INVOICE_KINDS);
 export type InvoiceKind = z.infer<typeof InvoiceKindSchema>;
 
@@ -145,7 +150,21 @@ export const INVOICE_KIND_LABELS: Record<InvoiceKind, string> = {
   mise_en_place: 'Mise en place',
   option: 'Option',
   autre: 'Autre',
+  avoir: 'Avoir',
 };
+
+/**
+ * Natures qu'on peut ÉMETTRE librement. L'avoir n'en fait pas partie : il naît
+ * TOUJOURS d'une facture réglée (route `…/credit`), avec le montant, la période
+ * et le régime de TVA de la pièce d'origine. Un avoir émis à la main, sans
+ * origine, serait un montant négatif inventé dans un registre comptable.
+ */
+export const ISSUABLE_INVOICE_KINDS = [
+  'abonnement',
+  'mise_en_place',
+  'option',
+  'autre',
+] as const satisfies readonly InvoiceKind[];
 
 // ─── Statuts ───
 
@@ -222,6 +241,39 @@ export const INVOICE_PAYMENT_METHOD_LABELS: Record<InvoicePaymentMethod, string>
   virement: 'Virement',
   carte: 'Carte bancaire',
   cheque: 'Chèque',
+};
+
+// ─── Relances ───
+
+/**
+ * Comment on a relancé. Liste fermée, pour la même raison que les moyens de
+ * règlement : l'échelle de recouvrement dit « rappeler à J+8, relancer par
+ * écrit à J+15, mettre en demeure à J+30 », et savoir si le client a déjà été
+ * relancé PAR ÉCRIT suppose que le canal soit une donnée, pas une phrase.
+ */
+export const INVOICE_REMINDER_CHANNELS = ['appel', 'sms', 'email', 'courrier', 'autre'] as const;
+export const InvoiceReminderChannelSchema = z.enum(INVOICE_REMINDER_CHANNELS);
+export type InvoiceReminderChannel = z.infer<typeof InvoiceReminderChannelSchema>;
+
+export const INVOICE_REMINDER_CHANNEL_LABELS: Record<InvoiceReminderChannel, string> = {
+  appel: 'Appel',
+  sms: 'SMS',
+  email: 'E-mail',
+  courrier: 'Courrier',
+  autre: 'Autre',
+};
+
+/**
+ * Le complément de phrase du journal — « relancée par téléphone », jamais
+ * « relancée (Appel) ». Distinct des libellés d'écran parce qu'une phrase se
+ * conjugue : « par autre » ne se dit pas, « hors canal habituel » se dit.
+ */
+export const INVOICE_REMINDER_CHANNEL_JOURNAL: Record<InvoiceReminderChannel, string> = {
+  appel: 'par téléphone',
+  sms: 'par SMS',
+  email: 'par e-mail',
+  courrier: 'par courrier',
+  autre: 'hors canal habituel',
 };
 
 // ─── Numérotation ───
@@ -365,6 +417,14 @@ export function effectiveInvoiceStatus(
 
 // ─── Formes rendues par l'API ───
 
+/** Une relance telle qu'elle circule (date ISO, canal fermé, note libre). */
+export type CrmInvoiceReminder = {
+  at: string;
+  channel: InvoiceReminderChannel;
+  channelLabel: string;
+  note: string;
+};
+
 /** Une facture telle qu'elle circule (dates ISO, montants en centimes). */
 export type CrmInvoice = {
   _id: string;
@@ -401,6 +461,15 @@ export type CrmInvoice = {
   methodLabel: string | null;
   cancelledAt: string | null;
   cancelReason: string;
+  /**
+   * LES RELANCES DÉJÀ FAITES, résumées : combien, et la DERNIÈRE.
+   *
+   * C'est ce que la file de recouvrement a besoin de savoir avant de décrocher
+   * — « relancé il y a 2 jours » change le geste du jour. Le détail complet
+   * reste sur la pièce en base ; la file du parc n'a pas à transporter chaque
+   * note de chaque relance de chaque client.
+   */
+  reminders: { count: number; last: CrmInvoiceReminder | null };
   /** Jours pleins de retard — 0 si l'échéance n'est pas dépassée. */
   overdueDays: number;
   /**
@@ -490,6 +559,10 @@ export function summarizeOutstanding(
   let oldest: CrmInvoice | null = null;
 
   for (const invoice of invoices) {
+    // Écarte ce qui ne doit rien — et donc, entre autres, tout AVOIR :
+    // `invoiceView` lui donne un reste dû de 0, jamais son montant négatif.
+    // Un total dû qui rétrécirait au passage d'un avoir confondrait « le
+    // client doit moins » avec « nous lui devons » — deux dettes différentes.
     if (invoice.dueCents <= 0) continue;
     totalDueCents += invoice.dueCents;
     // Le TTC s'additionne pièce par pièce, jamais en appliquant le taux à la
@@ -700,7 +773,9 @@ export const InvoiceIssueSchema = z.object({
     .trim()
     .regex(PERIOD_KEY_RE, 'Période attendue au format AAAA-MM')
     .optional(),
-  kind: InvoiceKindSchema.default('abonnement'),
+  // Les natures ÉMISSIBLES seulement : un avoir ne s'émet pas ici, il naît
+  // d'une facture réglée via la route dédiée (voir `ISSUABLE_INVOICE_KINDS`).
+  kind: z.enum(ISSUABLE_INVOICE_KINDS).default('abonnement'),
   /** Montant en CENTIMES. Défaut : le MRR de la formule en cours. */
   amountCents: z.coerce.number().int().min(0).max(100_000_000).optional(),
   /** Échéance. Défaut : le 1er jour de la période facturée. */
@@ -735,6 +810,31 @@ export const InvoiceCancelSchema = z.object({
 });
 export type InvoiceCancel = z.infer<typeof InvoiceCancelSchema>;
 
+/**
+ * Relancer. Le CANAL vaut « appel » par défaut — c'est le geste réel de
+ * l'échelle de recouvrement à J+8, et neuf relances sur dix se font au
+ * téléphone. La note est libre et facultative : « le gérant promet de régler
+ * vendredi » vaut d'être relu, mais exiger une phrase à chaque appel
+ * transformerait le traçage en corvée qu'on saute.
+ */
+export const InvoiceReminderCreateSchema = z.object({
+  channel: InvoiceReminderChannelSchema.default('appel'),
+  note: z.string().trim().max(500).default(''),
+});
+export type InvoiceReminderCreate = z.infer<typeof InvoiceReminderCreateSchema>;
+
+/**
+ * Émettre un AVOIR sur une facture réglée. Le motif est OBLIGATOIRE, comme
+ * pour une annulation et pour la même raison : une pièce négative sans
+ * explication est une question sans réponse le jour d'un contrôle. Tout le
+ * reste — montant, période, régime de TVA — vient de la pièce d'origine et ne
+ * se saisit pas : un avoir qui ne correspond pas à sa facture n'en est pas un.
+ */
+export const InvoiceCreditSchema = z.object({
+  reason: z.string().trim().min(3, 'Indiquez le motif de l’avoir').max(500),
+});
+export type InvoiceCredit = z.infer<typeof InvoiceCreditSchema>;
+
 export const BillingHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -767,6 +867,27 @@ export const BILLING_JOURNAL = {
 
   cancelled: (invoice: { number: string; amountLabel: string }, reason: string): string =>
     `Facture ${invoice.number} annulée — ${invoice.amountLabel}. Motif : ${reason}`,
+
+  // La phrase porte l'ANCIENNETÉ au moment du geste : « 12 jours de retard »
+  // relu six mois plus tard dit si la relance suivait l'échelle ou la traînait.
+  reminded: (
+    invoice: { number: string; amountLabel: string; overdueDays: number },
+    channel: InvoiceReminderChannel,
+    note: string,
+  ): string =>
+    `Facture ${invoice.number} relancée ${INVOICE_REMINDER_CHANNEL_JOURNAL[channel]} — ${invoice.amountLabel} dus, ${invoice.overdueDays} jour(s) de retard.${note ? ` ${note}` : ''}`,
+
+  sent: (invoice: { number: string; amountLabel: string; label: string; dueAt: string }): string =>
+    `Facture ${invoice.number} envoyée — ${invoice.amountLabel}, ${invoice.label}, échéance le ${formatFrDate(invoice.dueAt)}.`,
+
+  // L'avoir NOMME sa facture d'origine : la ligne doit se relire seule, et un
+  // montant négatif sans origine ne raconte rien.
+  credited: (
+    credit: { number: string; amountLabel: string },
+    originNumber: string,
+    reason: string,
+  ): string =>
+    `Avoir ${credit.number} émis sur la facture ${originNumber} — ${credit.amountLabel}. Motif : ${reason}`,
 } as const;
 
 /** Libellé par défaut d'une facture, quand l'équipe n'en saisit pas. */
@@ -841,10 +962,41 @@ export type StoredInvoice = {
   method?: string | null;
   cancelledAt?: Date | string | null;
   cancelReason?: string | null;
+  /** Relances tracées sur la pièce — absent sur les documents antérieurs. */
+  reminders?: { at?: Date | string | null; channel?: string | null; note?: string | null }[] | null;
 };
 
 const isoOrNull = (value: Date | string | null | undefined): string | null =>
   value ? new Date(value).toISOString() : null;
+
+/**
+ * Les relances stockées → le résumé rendu : combien, et la DERNIÈRE.
+ *
+ * La dernière se cherche par DATE et non par position : les relances sont
+ * poussées en fin de tableau, mais un résumé qui dépendrait de cet ordre
+ * mentirait le jour où une reprise de données les réécrit autrement. Un canal
+ * illisible retombe sur `autre` — jamais une clé de `Record` inconnue, qui
+ * rendrait `undefined` en plein libellé.
+ */
+function remindersView(stored: StoredInvoice['reminders']): CrmInvoice['reminders'] {
+  const rows = Array.isArray(stored) ? stored : [];
+  let last: CrmInvoiceReminder | null = null;
+  for (const row of rows) {
+    if (!row?.at) continue;
+    const channel = (INVOICE_REMINDER_CHANNELS as readonly string[]).includes(String(row.channel))
+      ? (row.channel as InvoiceReminderChannel)
+      : 'autre';
+    const view: CrmInvoiceReminder = {
+      at: new Date(row.at).toISOString(),
+      channel,
+      channelLabel: INVOICE_REMINDER_CHANNEL_LABELS[channel],
+      note: String(row.note ?? ''),
+    };
+    // Comparaison lexicographique d'ISO : c'est aussi une comparaison chronologique.
+    if (last === null || view.at >= last.at) last = view;
+  }
+  return { count: rows.length, last };
+}
 
 /**
  * DOCUMENT STOCKÉ → FACTURE D'API, statut effectif recalculé à l'instant `now`.
@@ -862,9 +1014,15 @@ const isoOrNull = (value: Date | string | null | undefined): string | null =>
 export function invoiceView(raw: StoredInvoice, now: Date | string = new Date()): CrmInvoice {
   const storedStatus = (raw.status ?? 'brouillon') as InvoiceStatus;
   const dueAt = raw.dueAt ? new Date(raw.dueAt) : new Date(0);
-  const status = effectiveInvoiceStatus(storedStatus, dueAt, now);
-  const amountCents = Number(raw.amountCents ?? 0);
   const kind = (raw.kind ?? 'abonnement') as InvoiceKind;
+  // Un AVOIR n'est JAMAIS « en retard » : personne ne nous doit rien dessus —
+  // c'est nous qui devons. Son statut effectif est son statut stocké (« envoyée »
+  // tant qu'il n'est ni remboursé ni imputé), et son échéance ne se compare pas
+  // à l'horloge : la mêler au calcul ferait sonner la file de recouvrement sur
+  // une pièce qui n'appelle aucun recouvrement.
+  const status =
+    kind === 'avoir' ? storedStatus : effectiveInvoiceStatus(storedStatus, dueAt, now);
+  const amountCents = Number(raw.amountCents ?? 0);
   const method = (raw.method ?? null) as InvoicePaymentMethod | null;
   const start = raw.period?.start ? new Date(raw.period.start) : dueAt;
   const end = raw.period?.end ? new Date(raw.period.end) : dueAt;
@@ -892,9 +1050,13 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
     methodLabel: method ? INVOICE_PAYMENT_METHOD_LABELS[method] : null,
     cancelledAt: isoOrNull(raw.cancelledAt),
     cancelReason: String(raw.cancelReason ?? ''),
+    reminders: remindersView(raw.reminders),
     overdueDays: status === 'en_retard' ? daysLate(dueAt, now) : 0,
-    dueCents: isDueInvoiceStatus(status) ? amountCents : 0,
-    dueTtcCents: isDueInvoiceStatus(status) ? totals.ttcCents : 0,
+    // Le reste dû d'un AVOIR est 0, pas son montant négatif : un avoir n'est
+    // pas une créance sur le client, et un montant négatif qui s'additionnerait
+    // à l'ardoise ferait rétrécir un impayé bien réel.
+    dueCents: kind !== 'avoir' && isDueInvoiceStatus(status) ? amountCents : 0,
+    dueTtcCents: kind !== 'avoir' && isDueInvoiceStatus(status) ? totals.ttcCents : 0,
   };
 }
 
@@ -915,7 +1077,10 @@ export function nextInvoiceDue(
 ): CrmNextDue | null {
   if (!billable) return null;
 
-  const first = due[0];
+  // Un AVOIR peut traîner dans une liste de pièces « dues » (son statut stocké
+  // est « envoyée ») : ce n'est jamais une échéance à annoncer — on ne promet
+  // pas au gérant un prélèvement négatif, ni un prélèvement de 0 €.
+  const first = due.find((invoice) => invoice.kind !== 'avoir');
   if (first) {
     return {
       at: first.dueAt,

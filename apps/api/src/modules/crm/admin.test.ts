@@ -11,6 +11,7 @@ import {
   PUBLIC_ORDERING_SUSPENDED_MESSAGE,
   TENANT_ACCOUNT_STATUSES,
   TENANT_LOG_ACTIONS,
+  TenantChurnSchema,
   TenantSuspendSchema,
   isAccessBlocked,
   isPairingCodeShape,
@@ -141,6 +142,54 @@ describe('Administration client', () => {
       // Fermer la porte d'un commerçant se justifie ; la rouvrir se raconte.
       expect(TenantSuspendSchema.safeParse({ reason: '' }).success).toBe(false);
       expect(TenantSuspendSchema.safeParse({ reason: 'Impayé' }).success).toBe(true);
+    });
+  });
+
+  describe('Départ d’un client', () => {
+    it('acte le départ avec son motif — SANS couper l’accès', async () => {
+      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Revend le fonds de commerce' });
+
+      expect(view.account.status).toBe('churned');
+      expect(view.statusLabel).toBe('Parti');
+      // `isAccessBlocked` ne bloque QUE `suspended` : partir n'est pas une
+      // sanction, la porte reste ouverte — couper resterait un geste explicite.
+      expect(view.accessBlocked).toBe(false);
+      expect(view.account.reason).toBe('Revend le fonds de commerce');
+
+      const entry = (await admin.journal(CLASSFOOD, TOUT))[0]!;
+      expect(entry.action).toBe('tenant.churn');
+      expect(entry.actionLabel).toBe('Départ du client');
+      expect(entry.reason).toBe('Revend le fonds de commerce');
+    });
+
+    it('ne détruit rien : le compte garde son nom, sa formule, ses données', async () => {
+      // « On garde tout, on ne coupe rien de force » — le départ est un
+      // constat commercial, pas une purge.
+      await admin.churn(SM, CLASSFOOD, { reason: 'Fermeture définitive' });
+      const row = tenants.rows.find((r) => r._id === CLASSFOOD)!;
+
+      expect(row.name).toBe("Class'Food");
+      expect(row.slug).toBe('classfood');
+      expect(row.plan).toBe('essentiel');
+      expect(row.founderSeat).toBe(true);
+    });
+
+    it('solde une suspension en cours — la trace reste au journal', async () => {
+      await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Ne règle pas, ferme boutique' });
+
+      // Le statut courant n'est plus « suspendu » : `suspendedAt` s'efface,
+      // l'épisode se relit au journal, qui ne s'efface pas.
+      expect(view.account.status).toBe('churned');
+      expect(view.account.suspendedAt).toBeNull();
+      const actions = (await admin.journal(CLASSFOOD, TOUT)).map((e) => e.action);
+      expect(actions).toContain('tenant.suspend');
+      expect(actions).toContain('tenant.churn');
+    });
+
+    it('exige un motif — « pourquoi est-il parti ? » doit se lire au journal', () => {
+      expect(TenantChurnSchema.safeParse({ reason: '' }).success).toBe(false);
+      expect(TenantChurnSchema.safeParse({ reason: 'Racheté par une chaîne' }).success).toBe(true);
     });
   });
 
@@ -380,6 +429,7 @@ describe('Administration client', () => {
       await admin.recordOwnerReset(SM, CLASSFOOD, 'gerant@classfood.fr');
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
       await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
+      await admin.churn(SM, CLASSFOOD, { reason: 'Ferme fin août' });
       await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });

@@ -2,5 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  // Sans `exclude`, tsc englobe `dist/` : sous turbo, l'export Expo (build)
+  // tourne en parallèle du typecheck et remplace les bundles à empreinte
+  // entre le glob et la lecture — TS6053 « File not found » aléatoire.
+  "exclude": ["node_modules", "dist", ".expo"]
 }

@@ -28,6 +28,12 @@ export class OpsController {
     return { ok: true };
   }
 
+  /** L'entonnoir du tunnel de commande, par établissement, sur 30 jours. */
+  @Get('funnel')
+  async funnel() {
+    return { rows: await this.ops.funnelRows() };
+  }
+
   /** L'état du canal d'alerte — l'écran dit la vérité sur ce qui sonnerait. */
   @Get('alerts')
   alertChannel() {
