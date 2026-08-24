@@ -28,6 +28,9 @@ dotenv({ path: resolve(__dirname, '../../../.env') });
  * La saisie est masquée. Le script refuse un mot de passe trop court ou
  * manifestement devinable, exige la confirmation, et n'écrit que si le compte
  * existe déjà — il ne crée personne.
+ *
+ * Sans URL sous la main, préférer la console interactive : `pnpm admin`
+ * (elle lit l'URL dans les variables Railway — voir `admin-cli.ts`).
  */
 
 async function main(): Promise<void> {
