@@ -890,7 +890,10 @@ function ProposalPanel({
             onClick={() => {
               setBusy(true);
               // La note interne ne s'imprime pas — le PDF ne porte que l'offre.
-              csvDownload(`/crm/leads/${lead._id}/devis`)
+              // Le nom est FORCÉ en .pdf : le repli de `csvDownload` (deviner
+              // depuis l'URL) fabriquait un « devis.csv » avec des octets PDF
+              // dedans quand Content-Disposition n'était pas exposé.
+              csvDownload(`/crm/leads/${lead._id}/devis`, `devis-${slugifie(lead.restaurantName)}.pdf`)
                 .then(() => toast("Devis téléchargé — à envoyer au prospect", { icon: "check" }))
                 .catch(() => toast("Devis indisponible — réessayez"))
                 .finally(() => setBusy(false));
