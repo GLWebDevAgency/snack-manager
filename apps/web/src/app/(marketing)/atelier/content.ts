@@ -58,6 +58,13 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
     lead: "On dessine votre site et on vous le montre : vous validez sur pièce, pas sur promesse — et votre menu est déjà dedans.",
   },
   {
+    id: "parcours",
+    nav: "La démarche",
+    badge: "Trois étapes",
+    title: "D’abord on regarde. Ensuite on dessine. Vous décidez en dernier.",
+    lead: "Aucune étape ne vous engage avant que vous ayez vu — c’est l’ordre entier de la démarche.",
+  },
+  {
     id: "services",
     nav: "Les services",
     badge: "Prix affichés",
@@ -120,9 +127,38 @@ export const ATELIER_HERO = {
   badge: "L’Atelier",
   title: "Votre présence en ligne, tenue par ceux qui font tourner votre caisse.",
   lead: "Le site, Google, les réseaux et la caisse : un seul interlocuteur — un artisan local, pas une plateforme. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
+  /** La pastille à pouls doré — LE renversement de risque, épinglé dès l'ouverture. */
+  chip: "Maquette offerte — vous voyez avant de payer",
   price: "des prix affichés, pas des devis",
   claim: "et la maquette de votre site, montrée avant tout engagement",
 } as const;
+
+/* ── 1 bis. La démarche — trois étapes ───────────────────────── */
+
+/**
+ * LA FRISE DES JALONS, APPLIQUÉE À LA VENTE : le même gabarit visuel que le
+ * lancement de la landing (`jl-`), parce que c'est le type le plus premium du
+ * site et qu'une démarche EST une frise. Trois étapes, et la troisième dit la
+ * seule chose qui compte : vous pouvez dire non, et vous ne devez rien —
+ * c'est vrai (la maquette est offerte), donc ça s'écrit.
+ */
+export const PARCOURS_STEPS: readonly { when: string; title: string; line: string }[] = [
+  {
+    when: "Étape 1",
+    title: "On regarde ensemble",
+    line: "Trente minutes, chez vous ou au téléphone : votre site s’il existe, votre fiche Google, vos réseaux. Ce qui marche, ce qui manque — dit simplement, sans jargon.",
+  },
+  {
+    when: "Étape 2",
+    title: "On dessine votre maquette",
+    line: "Votre enseigne, vos photos, votre carte déjà dedans. Offerte, sans engagement : c’est notre façon de prouver, pas de promettre.",
+  },
+  {
+    when: "Étape 3",
+    title: "Vous décidez devant elle",
+    line: "Elle vous plaît : on pose les contenus et on met en ligne. Elle ne vous plaît pas : on se serre la main, et vous ne devez rien.",
+  },
+] as const;
 
 /* ── 1. La maquette ──────────────────────────────────────────── */
 
@@ -177,4 +213,10 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
 export const ATELIER_CTA = {
   title: "On commence par la maquette.",
   line: "Laissez votre numéro : on regarde ensemble ce que vous avez déjà — site, fiche Google, réseaux — puis on dessine la maquette de votre site. Vous déciderez devant elle.",
+  /**
+   * La preuve, au moment de demander le numéro : le logiciel derrière
+   * l'Atelier tourne en service réel — un FAIT du site (la frise des jalons
+   * le date), jamais un chiffre inventé.
+   */
+  proof: "Le logiciel derrière l’Atelier tourne en service réel 7 j/7 — et les prix que vous venez de lire sont les vrais.",
 } as const;

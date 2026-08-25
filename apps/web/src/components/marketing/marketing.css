@@ -2448,7 +2448,6 @@ html:has(.mk) {
  * perdus dans des sections dont tout l'intérêt est d'être des respirations.
  */
 .mk .ch-head,
-.mk .at-head,
 .mk .mt-head,
 .mk .jl-head {
   align-items: flex-start;
@@ -2496,27 +2495,23 @@ html:has(.mk) {
   font-size: 16.5px;
   color: var(--white-80);
 }
-/* Le prix, aligné à droite et en chiffres tabulaires : les trois lignes se
-   comparent d'un coup d'œil vertical. Doré uniquement quand c'est un vrai
-   montant — « compris dans l'abonnement » n'est pas une dépense, le dorer
-   ferait croire à un supplément. */
+/* Le prix, aligné à droite et en chiffres tabulaires : les cinq lignes se
+   comparent d'un coup d'œil vertical — la colonne se lit comme un devis, et
+   depuis la fusion du 25/08 chaque rangée porte un vrai montant : la colonne
+   est dorée en entier. */
 .mk .ch-price {
-  font-size: 14.5px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.4em;
   text-align: right;
-  color: var(--white-50);
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
   text-wrap: pretty;
 }
-/* Les deux rangées qui portent un VRAI montant. La première dit « compris dans
-   la mise en route » : la dorer ferait lire les trois lignes comme trois
-   dépenses, l'inverse exact de ce qu'on veut dire. */
-.mk .ch-row:nth-child(2) .ch-price,
-.mk .ch-row:nth-child(3) .ch-price {
-  font-size: 17px;
-  color: var(--accent);
+/* La rangée de tête (la maquette) est la plus grosse : l'argument-signature. */
+.mk .ch-row.lead .ch-price {
+  font-size: 19px;
 }
 /* La condition sous le montant. Elle reprend le gris et redescend en taille :
    deux niveaux dans la même colonne, sinon « + 55 € de mise en service » se lit
@@ -2530,11 +2525,60 @@ html:has(.mk) {
   color: var(--white-50);
   text-wrap: pretty;
 }
+/* Le survol confirme que la rangée est une matière, pas une ligne de tableau :
+   glissement latéral court, voile qui s'éclaircit. Le glissement joue sur le
+   padding, jamais sur transform (que `.rv` pilote à la révélation) — et la
+   liste de transitions REPREND celles de `.rv` au lieu de les écraser : `.mk
+   .ch-rows .ch-row` bat `.mk .rv` en spécificité, une liste partielle
+   figerait la révélation des rangées. Cette règle vient AVANT l'étagement :
+   son raccourci remet les délais à zéro, l'ordre du fichier les rétablit. */
+.mk .ch-rows .ch-row {
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--rv-delay, 0s),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--rv-delay, 0s),
+    padding-left 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.3s ease;
+}
+.mk .ch-row:hover {
+  padding-left: 10px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 70%);
+}
+/* L'étagement de la révélation suit la lecture : une rangée après l'autre,
+   comme la frise des jalons. Le délai vit dans `--rv-delay` et ne porte QUE
+   sur la révélation (opacity/transform) : un `transition-delay` global aurait
+   aussi retardé le survol — 0,32 s de latence sur la cinquième rangée, le
+   contraire exact d'une page vivante. */
 .mk .ch-row:nth-child(2) {
-  transition-delay: 0.08s;
+  --rv-delay: 0.08s;
 }
 .mk .ch-row:nth-child(3) {
-  transition-delay: 0.16s;
+  --rv-delay: 0.16s;
+}
+.mk .ch-row:nth-child(4) {
+  --rv-delay: 0.24s;
+}
+.mk .ch-row:nth-child(5) {
+  --rv-delay: 0.32s;
+}
+
+/* Le seul appel de la section — la porte vers /atelier, remplaçant l'ancienne
+   section de trois cartes qui répétait celle-ci. */
+.mk .ch-cta {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: var(--content-width);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.mk .ch-ctanote {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.45em;
+  color: var(--white-50);
+  text-wrap: pretty;
 }
 /* La fiche Google est le meilleur argument de la page : elle doit se voir
    avant d'être lue, donc elle est la plus haute et la plus grosse. */
@@ -2636,91 +2680,6 @@ html:has(.mk) {
     margin-top: 2px;
     font-size: 15px;
     text-align: left;
-  }
-}
-
-/* ===== L'Atelier — la porte, pas l'étalage =====
- *
- * Trois cartes-liens vers /atelier, sans un montant : les prix vivent sur la
- * page de l'Atelier, et la grille tarifaire est deux sections plus bas. Les
- * jetons sont ceux des cartes du site — fond `--card-gradient`, filet
- * `--border-10`, rayon 24 px comme `.bl-card` et `.spot` : une section de
- * plus ne coûte pas une couleur de plus.
- */
-.mk .at-section {
-  gap: 26px;
-}
-.mk .at-cards {
-  width: 100%;
-  max-width: var(--content-width);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-}
-/* La carte ENTIÈRE est le lien — même contrat que `.bl-card` : la cible de
-   clic est la surface, le doré du bas n'est qu'une flèche. */
-.mk .at-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 26px 28px;
-  background: var(--card-gradient);
-  border: 1px solid var(--border-10);
-  border-radius: 24px;
-  transition:
-    border-color 0.3s,
-    transform 0.3s;
-}
-.mk .at-card:hover {
-  border-color: rgba(201, 161, 90, 0.35);
-  transform: translateY(-2px);
-}
-.mk .at-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
-.mk .at-cardtitle {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.3em;
-  color: var(--white);
-}
-.mk .at-cardline {
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.5em;
-  color: var(--gray);
-  text-wrap: pretty;
-}
-/* `margin-top: auto` : les trois libellés s'alignent sur le bas des cartes,
-   quelle que soit la longueur des lignes au-dessus. */
-.mk .at-cardcta {
-  margin-top: auto;
-  padding-top: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--accent);
-}
-.mk .at-note {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.45em;
-  color: var(--white-50);
-  text-align: center;
-}
-@media (max-width: 809.98px) {
-  /* Une colonne, jamais un défilement horizontal : les trois portes se lisent
-     l'une sous l'autre, à la largeur qu'un pouce sait viser. */
-  .mk .at-cards {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .mk .at-card {
-    padding: 22px 24px;
   }
 }
 
@@ -2924,6 +2883,11 @@ html:has(.mk) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+/* La démarche de l'Atelier tient en trois étapes — même frise, une colonne de
+   moins. Le rail par segments ne change pas : il s'arrête au troisième nœud. */
+.mk .jl-track.trois {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .mk .jl-step {
   position: relative;
   display: flex;
@@ -3020,8 +2984,11 @@ html:has(.mk) {
   }
   /* La frise bascule à la verticale : le rail passe de l'horizontale au bord
      gauche, les segments deviennent des hauteurs. Le principe ne change pas —
-     le dernier jalon n'en trace toujours aucun. */
-  .mk .jl-track {
+     le dernier jalon n'en trace toujours aucun. La variante `.trois` (la
+     démarche de l'Atelier) est nommée aussi : sa spécificité battrait la
+     bascule et laisserait trois colonnes écrasées sur un téléphone. */
+  .mk .jl-track,
+  .mk .jl-track.trois {
     grid-template-columns: minmax(0, 1fr);
   }
   .mk .jl-step {
@@ -5342,6 +5309,24 @@ html:has(.mk) {
   color: var(--white-70);
 }
 
+/* La pastille du hero de l'Atelier — le renversement de risque (« maquette
+   offerte ») épinglé dès l'ouverture, avec le pouls doré des pastilles du
+   hero de la landing (`.hero-chipdot.gold`). Une seule chose vit en continu
+   sur la page, et c'est elle. */
+.mk .of-herochip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border: 1px solid var(--border-10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--white);
+}
+
 /*
  * LE SOMMAIRE. La page fait plus de trois écrans ; sans lui, celui qui vient
  * pour les conditions défile à l'aveugle sur toute la grille tarifaire. Il n'est
@@ -6199,6 +6184,16 @@ html:has(.mk) {
 .mk .of-ctabtns .btn {
   padding: 13px 22px;
   font-size: 15px;
+}
+/* La preuve sous les deux boutons de l'appel final — un fait, à voix basse :
+   elle rassure sans concurrencer le geste qu'on vient de demander. */
+.mk .of-ctaproof {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5em;
+  color: var(--white-50);
+  text-wrap: pretty;
 }
 
 /* ===== Écrans intermédiaires ===== */

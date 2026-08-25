@@ -308,12 +308,15 @@ export const SECTIONS: readonly SectionMeta[] = [
   // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
   // sans le nommer — « chez eux », c'est qui ? — et n'expliquait nulle part
   // l'avantage qu'il y a à commander chez le restaurateur. Une préférence
-  // annoncée sans sa raison. La section dit maintenant ce qu'on FAIT.
-  { id: "commander", nav: "Services", badge: "Nos services +", title: "Un logiciel ne suffit pas. On s'occupe du reste." },
-  // L'Atelier prolonge la question précédente — « et qui s'occupe du reste ? » —
-  // par une PORTE, pas un étalage : trois cartes sans un prix, et la page
-  // `/atelier` fait le travail. L'accueil reste vendeur du logiciel.
-  { id: "atelier", nav: "L’Atelier", badge: "L’Atelier", title: "Le site, la fiche Google, les réseaux : l’Atelier s’en occupe." },
+  // annoncée sans sa raison. Puis, le 25/08, le fondateur a vu le défaut
+  // suivant : cette section et la porte de l'Atelier juste après vendaient LA
+  // MÊME CHOSE en deux gabarits — une redondance qui diluait le message. Il
+  // n'y a plus qu'UNE section : l'Atelier, ses services et ses prix, et la
+  // page `/atelier` en appel à l'action pour le détail.
+  // `nav` dit « Les services » quand le badge dit « L'Atelier » : le menu et
+  // le pied de page portent AUSSI le lien vers la page /atelier — deux entrées
+  // « L'Atelier » côte à côte, l'ancre et la page, se liraient comme un bug.
+  { id: "commander", nav: "Les services", badge: "L’Atelier", title: "Un logiciel ne suffit pas. On s’occupe du reste." },
   {
     id: "materiel",
     nav: "Matériel",
@@ -1105,13 +1108,45 @@ export type Service = {
  * LES PRIX SONT ÉCRITS ICI, pas renvoyés à un devis. Un service dont le prix se
  * demande est un service qu'on ne demande pas.
  */
+/**
+ * ═══ CETTE LISTE EST LA FUSION DU 25/08, ET VOICI SON HISTOIRE ═══
+ *
+ * La landing a porté DEUX sections de services : celle-ci (trois rangées
+ * chiffrées) et, juste après, une « porte » de trois cartes vers l'Atelier.
+ * Le fondateur a vu ce que le lecteur voyait : deux sections qui parlent de
+ * la même chose. La porte est morte ; ses arguments ont rejoint ces rangées.
+ * Une seule section, tous les prix, et la page `/atelier` en appel à
+ * l'action pour la démarche et le détail.
+ *
+ * L'ORDRE EST UN ARGUMENTAIRE : la maquette d'abord — c'est le renversement
+ * de risque que personne d'autre n'offre (vous VOYEZ avant de payer), donc la
+ * rangée de tête. Puis Google (le mécanisme du zéro commission), les réseaux,
+ * l'identité, la commande en ligne.
+ */
 export const SERVICES: readonly Service[] = [
+  {
+    id: "site",
+    title: "Votre site, maquette montrée d’abord",
+    lead: "Vous validez sur pièce, pas sur promesse.",
+    line: "On dessine la maquette de votre site et on vous la montre AVANT tout engagement. Contenus posés, référencement local, mise en ligne — et votre menu est déjà dedans, branché sur la caisse : un prix change au back-office, le site suit.",
+    price: euros(ATELIER_CENTS.site),
+    priceNote: `une fois, avec une formule · refonte de l’existant : ${euros(ATELIER_CENTS.refonte)}`,
+  },
   {
     id: "google",
     title: "Votre visibilité sur Google",
-    lead: "Vos clients vous trouvent sur Google. Offrez-leur aussi le choix de commander en direct.",
-    line: "On ajoute votre lien de commande sur votre fiche, à côté de ceux des plateformes et marqué « préféré par l'établissement ». Uber Eats et Deliveroo continuent de vous apporter des clients que vous n'auriez pas eus, et de porter les sacs. Votre page, elle, retient ceux qui reviennent.",
-    price: "Compris dans la mise en route",
+    lead: "Vos clients vous trouvent sur Google. Votre fiche peut travailler pour vous.",
+    line: "Le lien de commande directe est posé sur votre fiche à la mise en route, à côté de ceux des plateformes et marqué « préféré par l'établissement ». Et si vous voulez qu'on la tienne : publications, photos, horaires, une réponse à tous les avis — et un rapport mensuel simple, appels, itinéraires, vues.",
+    price: `${euros(ATELIER_CENTS.presence)} / mois`,
+    priceNote: "fiche tenue, sans engagement · le lien de commande : compris dans la mise en route",
+  },
+  {
+    id: "reseaux",
+    title: "Vos réseaux sociaux, tenus pour vous",
+    lead: "Des visuels créés, publiés sur un calendrier que vous validez.",
+    line: "Facebook et Instagram, une ou deux publications par semaine, visuels compris — rien ne part sans votre accord. Vidéo, shooting sur place, campagnes publicitaires : sur devis.",
+    price: `dès ${euros(ATELIER_CENTS.social1)} / mois`,
+    priceNote: `2 publications par semaine : ${euros(ATELIER_CENTS.social2)} / mois · sans engagement`,
   },
   {
     id: "identite",
@@ -1121,19 +1156,19 @@ export const SERVICES: readonly Service[] = [
     // Le forfait de l'Atelier, pas un plancher « sur devis » : la vitrine ne
     // doit vendre l'identité visuelle qu'à UN prix, où qu'on la lise.
     price: euros(ATELIER_CENTS.identite),
-    priceNote: "Forfait, une fois — détaillé sur la page de l'Atelier",
+    priceNote: "forfait, une fois — déclinaisons comprises",
   },
   {
     id: "commande",
     title: "Commande en ligne & fidélité",
     lead: "Le click and collect et la carte de fidélité, dans la même page.",
-    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Ses points se cumulent tout seuls à chaque commande, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs, sur votre nom de domaine si vous en avez un — ou branchée sur le site que vous avez déjà, avec une balise que nous collons pour vous.",
+    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Ses points se cumulent tout seuls à chaque commande, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs — ou greffée sur le site que vous avez déjà.",
     // Le module est vendu deux fois sur la page — ici, et sous la grille
     // (`MODULE_ADDON`). Les deux montants descendent des mêmes constantes :
     // c'est le seul service dont le prix est répété, donc le seul qui pouvait
     // se contredire d'une section à l'autre.
     price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
-    priceNote: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service · les deux compris dans Boost`,
+    priceNote: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, compris dans Boost · sur votre site : ${euros(ATELIER_CENTS.integration)} d’intégration, mise en service comprise`,
   },
 ];
 
@@ -1256,42 +1291,16 @@ export const ATELIER_SERVICES: readonly Service[] = [
 ];
 
 /**
- * LA PORTE SUR LA LANDING — trois cartes, zéro étalage.
- *
- * L'accueil vend le LOGICIEL ; l'Atelier y tient en une section sobre qui
- * renvoie vers `/atelier`, où chaque service est chiffré. Les cartes ne
- * portent AUCUN montant : un prix posé ici concurrencerait la grille deux
- * sections plus bas — la page de l'Atelier les affiche tous.
- */
-export type AtelierCard = { id: string; title: string; line: string };
-
-export const ATELIER_CARDS: readonly AtelierCard[] = [
-  {
-    id: "site",
-    title: "Site web & maquette offerte",
-    line: "Votre site vitrine, dessiné et montré avant tout engagement — et votre menu est déjà dedans, branché sur la caisse.",
-  },
-  {
-    id: "google",
-    title: "Google & avis",
-    line: "Votre fiche Google tenue à jour — publications, photos, horaires — et une réponse à tous les avis, avec un rapport mensuel simple.",
-  },
-  {
-    id: "reseaux",
-    title: "Réseaux sociaux",
-    line: "Des visuels créés pour vous, publiés sur Facebook et Instagram, sur un calendrier que vous validez.",
-  },
-] as const;
-
-/**
  * Le renvoi vers la page — un libellé de NAVIGATION, pas un troisième verbe
  * d'appel : `CTA_CALLBACK` et `CTA_DEMO` restent les deux seuls gestes du
- * site, et « Découvrir » ne demande rien, il ouvre une page.
+ * site, et « Découvrir » ne demande rien, il ouvre une page. (Les trois
+ * cartes-porte qui vivaient ici sont mortes le 25/08 : elles répétaient la
+ * section des services — le renvoi ferme désormais cette section-là.)
  */
 export const ATELIER_PORTE = {
   href: "/atelier",
   cta: "Découvrir l’Atelier",
-  note: "Chaque service et son prix, affichés sur la page de l’Atelier.",
+  note: "La démarche de la maquette et chaque service en détail, sur la page de l’Atelier.",
 } as const;
 
 /* ── 5. Matériel — ce qu'on ne rachète pas ───────────────────── */

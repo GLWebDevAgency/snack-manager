@@ -8,6 +8,7 @@ import {
   ATELIER_SHOTS,
   ATELIER_SOMMAIRE,
   MAQUETTE_POINTS,
+  PARCOURS_STEPS,
   atelierSection,
 } from "./content";
 
@@ -48,6 +49,14 @@ function PageHead() {
         <span className="badge">{ATELIER_HERO.badge}</span>
         <h1 className="h1 of-title">{ATELIER_HERO.title}</h1>
         <p className="subheading of-lead">{ATELIER_HERO.lead}</p>
+
+        {/* LE renversement de risque, épinglé dès l'ouverture, avec le pouls
+            doré des pastilles du hero de la landing : rien d'autre sur la
+            page ne bouge en continu — une seule chose vivante, la bonne. */}
+        <p className="of-herochip">
+          <span className="hero-chipdot gold" aria-hidden="true" />
+          {ATELIER_HERO.chip}
+        </p>
 
         {/* Le doré du hero est la promesse de transparence, pas un montant :
             les prix arrivent tous ensemble, deux écrans plus bas. */}
@@ -90,6 +99,42 @@ function Maquette() {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/* ── 1 bis. La démarche — la frise en trois étapes ───────────── */
+
+/**
+ * LE GABARIT DE LA FRISE DES JALONS (`jl-`), APPLIQUÉ À LA DÉMARCHE : le rail,
+ * les nœuds dorés, l'étagement — le type visuel le plus premium du site, et
+ * une démarche EST une frise. Trois colonnes au lieu de quatre (`.trois`),
+ * tous les nœuds pleins : rien n'est « à venir », chaque étape existe.
+ */
+function Parcours() {
+  const meta = atelierSection("parcours");
+  return (
+    <section className="section jl-section" id={meta.id}>
+      <span className="badge">{meta.badge}</span>
+      <h2 className="h2 center-h2" style={{ maxWidth: 760 }}>
+        {meta.title}
+      </h2>
+      <p className="subheading" style={{ maxWidth: 680 }}>
+        {meta.lead}
+      </p>
+
+      <ol className="jl-track trois">
+        {PARCOURS_STEPS.map((step) => (
+          <li className="jl-step rv" key={step.when}>
+            <span className="jl-node" aria-hidden="true" />
+            <p className="jl-when">{step.when}</p>
+            <h3 className="jl-title">{step.title}</h3>
+            <div className="jl-lines">
+              <p className="jl-line">{step.line}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -193,6 +238,9 @@ function AppelFinal() {
             {CTA_DEMO}
           </Link>
         </div>
+        {/* La preuve au moment de demander le numéro — un fait du site, pas
+            un chiffre inventé. */}
+        <p className="of-ctaproof">{ATELIER_CTA.proof}</p>
       </div>
     </section>
   );
@@ -208,6 +256,7 @@ export function AtelierBody() {
     <>
       <PageHead />
       <Maquette />
+      <Parcours />
       <Services />
       <Agence />
       <AppelFinal />
