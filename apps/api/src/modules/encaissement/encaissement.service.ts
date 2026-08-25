@@ -126,8 +126,17 @@ export class EncaissementService {
     const existant = lireCompte(tenant);
     const accountId = existant?.accountId ?? (await this.creerCompte(tenant));
 
-    const lien = await this.stripe.creerLien(accountId, this.config.retourUrl, this.config.retourUrl);
-    return { url: lien.url, expireLe: new Date(lien.expires_at * 1000).toISOString() };
+    try {
+      const lien = await this.stripe.creerLien(accountId, this.config.retourUrl, this.config.retourUrl);
+      return { url: lien.url, expireLe: new Date(lien.expires_at * 1000).toISOString() };
+    } catch (error) {
+      // Compte révoqué, clé invalide, panne : un message lisible plutôt qu'un
+      // 500 opaque devant lequel le gérant ne peut rien faire.
+      this.logger.warn(`Lien de raccordement impossible (${accountId}) : ${String(error)}`);
+      throw new ServiceUnavailableException(
+        'Stripe n’a pas pu ouvrir la page d’inscription — réessayez dans un instant.',
+      );
+    }
   }
 
   /**
@@ -147,8 +156,17 @@ export class EncaissementService {
       return;
     }
 
-    const compte = await this.stripe.lireCompte(accountId);
-    await this.ecrireDrapeaux(tenant._id, compte, now);
+    const existant = lireCompte(tenant);
+    const compte = await this.lireChezStripe(accountId);
+    if (!compte) {
+      // Stripe ne répond pas, ou le restaurateur nous a débranchés : on FERME
+      // l'encaissement plutôt que de laisser des drapeaux périmés ouverts.
+      await this.fermer(tenant._id, accountId, now, existant?.raccordeLe);
+      return;
+    }
+    await this.ecrireDrapeaux(tenant._id, compte, now, {
+      raccordeLe: existant ? new Date(existant.raccordeLe) : now,
+    });
   }
 
   /**
@@ -168,32 +186,148 @@ export class EncaissementService {
   private async creerCompte(tenant: RawTenant): Promise<string> {
     const email = (tenant as { billing?: { email?: string } }).billing?.email ?? null;
     const compte = await this.stripe.creerCompte(email && email.trim() !== '' ? email : null);
-    // Écrit AVANT de rendre le lien : si le restaurateur ferme l'onglet en
-    // cours d'inscription, sa prochaine visite reprend le MÊME compte au lieu
-    // d'en créer un second (deux comptes pour un restaurant, c'est un dossier
-    // de vérification perdu et un support incompréhensible).
-    await this.ecrireDrapeaux(tenant._id, compte, new Date(), { raccordement: true });
+    const now = new Date();
+
+    /*
+     * ÉCRITURE CONDITIONNELLE À L'ABSENCE, et pas un simple `updateOne`.
+     *
+     * Le gérant clique, la page rame, il rouvre l'écran sur son téléphone et
+     * reclique : deux requêtes lisent toutes deux « pas de compte » et
+     * créeraient deux comptes chez Stripe. La seconde écriture écraserait la
+     * première, et si le restaurateur termine son inscription par le PREMIER
+     * lien, l'événement de Stripe désignerait un compte que nous n'avons plus
+     * — son écran resterait « inscription à terminer » pour toujours.
+     *
+     * Le filtre `encaissement: null` fait donc arbitrer la base : le perdant
+     * relit le compte gagnant et poursuit avec lui.
+     */
+    const ecrit = await this.tenants.updateOne(
+      { _id: tenant._id, encaissement: null },
+      {
+        $set: {
+          encaissement: {
+            accountId: compte.id,
+            chargesEnabled: compte.charges_enabled === true,
+            payoutsEnabled: compte.payouts_enabled === true,
+            detailsSubmitted: compte.details_submitted === true,
+            raccordeLe: now,
+            synchroniseLe: now,
+          },
+        },
+      },
+    );
+
+    if (ecrit.modifiedCount === 0) {
+      // Une requête concurrente a gagné : on reprend SON compte. Le nôtre
+      // reste orphelin chez Stripe, sans dossier ni encaissement — inerte.
+      const relu = lireCompte(
+        (await this.tenants.findById(tenant._id).lean()) as RawTenant | null,
+      );
+      if (relu) {
+        this.logger.warn(
+          `Raccordement concurrent : ${compte.id} abandonné au profit de ${relu.accountId}.`,
+        );
+        return relu.accountId;
+      }
+    }
+
     this.logger.log(`Compte d’encaissement ${compte.id} créé pour ${String(tenant._id)}`);
     return compte.id;
   }
 
+  /**
+   * Écrit le sous-document ENTIER, jamais par chemins pointés — et ce n'est
+   * pas un choix de style.
+   *
+   * `tenant.encaissement` porte `default: null` : Mongoose matérialise ce
+   * défaut à la création, si bien que tout client créé depuis ce champ porte
+   * littéralement `encaissement: null` en base. Or MongoDB refuse de créer un
+   * champ sous un élément qui n'est pas un document — un
+   * `$set: { 'encaissement.accountId': … }` échoue alors en `PathNotViable`,
+   * et le raccordement devient impossible pour tout nouveau client. Écrire
+   * l'objet complet remplace le `null` au lieu d'essayer de le creuser.
+   *
+   * `raccordeLe` est préservé quand il existe : c'est la date d'engagement du
+   * restaurateur, elle ne doit pas se réécrire à chaque synchronisation.
+   */
   private async ecrireDrapeaux(
     tenantId: unknown,
     compte: StripeCompte,
     now: Date,
-    options: { raccordement?: boolean } = {},
+    options: { raccordeLe?: Date } = {},
   ): Promise<void> {
-    const $set: Record<string, unknown> = {
-      'encaissement.accountId': compte.id,
-      // `=== true` et non `?? false` : une réponse partielle de Stripe doit
-      // FERMER l'encaissement, jamais l'ouvrir par défaut.
-      'encaissement.chargesEnabled': compte.charges_enabled === true,
-      'encaissement.payoutsEnabled': compte.payouts_enabled === true,
-      'encaissement.detailsSubmitted': compte.details_submitted === true,
-      'encaissement.synchroniseLe': now,
-    };
-    if (options.raccordement) $set['encaissement.raccordeLe'] = now;
-    await this.tenants.updateOne({ _id: tenantId }, { $set });
+    await this.tenants.updateOne(
+      { _id: tenantId },
+      {
+        $set: {
+          encaissement: {
+            accountId: compte.id,
+            // `=== true` et non `?? false` : une réponse partielle de Stripe
+            // doit FERMER l'encaissement, jamais l'ouvrir par défaut.
+            chargesEnabled: compte.charges_enabled === true,
+            payoutsEnabled: compte.payouts_enabled === true,
+            detailsSubmitted: compte.details_submitted === true,
+            raccordeLe: options.raccordeLe ?? now,
+            synchroniseLe: now,
+          },
+        },
+      },
+    );
+  }
+
+  /**
+   * LE RESTAURATEUR NOUS A DÉBRANCHÉS — le seul événement que Stripe émette
+   * dans ce cas, et après lequel plus aucun `account.updated` n'arrive.
+   *
+   * Sans ce traitement, nos drapeaux resteraient « encaissement actif » pour
+   * toujours : chaque client se verrait proposer un formulaire de carte qui
+   * échouerait au dernier clic, et le gérant lirait « actif » sur un écran qui
+   * ment. On ferme, on garde la trace du compte, et le raccordement peut
+   * reprendre normalement.
+   */
+  async revoquer(accountId: string, now: Date = new Date()): Promise<void> {
+    const tenant = (await this.tenants
+      .findOne({ 'encaissement.accountId': accountId })
+      .lean()) as RawTenant | null;
+    if (!tenant) {
+      this.logger.warn(`Compte ${accountId} inconnu du parc — révocation ignorée.`);
+      return;
+    }
+    const existant = lireCompte(tenant);
+    await this.fermer(tenant._id, accountId, now, existant?.raccordeLe);
+    this.logger.log(`Compte ${accountId} débranché par le restaurateur — encaissement fermé.`);
+  }
+
+  /** Ferme l'encaissement en conservant l'identifiant : la reprise reste possible. */
+  private async fermer(
+    tenantId: unknown,
+    accountId: string,
+    now: Date,
+    raccordeLe: string | undefined,
+  ): Promise<void> {
+    await this.ecrireDrapeaux(
+      tenantId,
+      { id: accountId, charges_enabled: false, payouts_enabled: false, details_submitted: false },
+      now,
+      { raccordeLe: raccordeLe ? new Date(raccordeLe) : now },
+    );
+  }
+
+  /**
+   * Lecture TOLÉRANTE : `null` quand Stripe refuse ou ne répond pas.
+   *
+   * Un compte révoqué fait lever `accounts.retrieve` en permission_error. Sans
+   * cette capture, le webhook rendait 500 — donc Stripe rejouait trois jours
+   * durant — et le bouton « vérifier » du gérant tombait en erreur : il ne
+   * pouvait ni comprendre ni corriger son état.
+   */
+  private async lireChezStripe(accountId: string): Promise<StripeCompte | null> {
+    try {
+      return await this.stripe.lireCompte(accountId);
+    } catch (error) {
+      this.logger.warn(`Lecture du compte ${accountId} impossible : ${String(error)}`);
+      return null;
+    }
   }
 
   private async plateformeDisponible(): Promise<boolean> {

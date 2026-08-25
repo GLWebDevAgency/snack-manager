@@ -1072,6 +1072,42 @@ function dispatch(w: DemoWorld, method: string, rawPath: string, body?: unknown)
 
   if (path === "/billing/me" && method === "GET") return ok(w.billing);
 
+  // ─── Encaissement en ligne ───
+  //
+  // La démonstration montre un restaurant NON raccordé : c'est l'état de
+  // départ de tout nouveau client, et celui que l'écran doit savoir présenter
+  // sans que rien ne paraisse cassé. Le raccordement, lui, part chez Stripe —
+  // il n'a pas de sens hors ligne, d'où le refus explicite plutôt qu'une
+  // fausse page d'inscription.
+  if (path === "/encaissement/me" && (method === "GET" || method === "POST")) {
+    return ok({
+      etat: "absent",
+      etatLabel: "Non raccordé",
+      peutEncaisser: false,
+      raison:
+        "Raccordez votre compte pour encaisser les commandes en ligne. Vos clients règlent au comptoir en attendant.",
+      compte: null,
+      disponible: true,
+    });
+  }
+  if (path === "/encaissement/me/synchroniser" && method === "POST") {
+    return ok({
+      etat: "absent",
+      etatLabel: "Non raccordé",
+      peutEncaisser: false,
+      raison:
+        "Raccordez votre compte pour encaisser les commandes en ligne. Vos clients règlent au comptoir en attendant.",
+      compte: null,
+      disponible: true,
+    });
+  }
+  if (path === "/encaissement/me/raccordement" && method === "POST") {
+    return refuse(
+      503,
+      "Le raccordement d’un compte se fait chez Stripe : indisponible en démonstration.",
+    );
+  }
+
   return refuse(
     404,
     `Route absente de la démonstration : ${method} ${path}. Elle existe côté API — ajoutez-la à lib/demo/router.ts.`,

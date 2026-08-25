@@ -1,7 +1,7 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import type { EncaissementFiche, EncaissementLien } from '@sm/contracts';
 
-import { TenantId } from '../../common/auth';
+import { Roles, TenantId } from '../../common/auth';
 import { EncaissementService } from './encaissement.service';
 
 /**
@@ -19,7 +19,16 @@ import { EncaissementService } from './encaissement.service';
  * `@TenantId()` et JAMAIS un identifiant d'URL : un gérant ne raccorde que SON
  * établissement, et son jeton dit lequel. C'est l'exact inverse des routes
  * `/crm`, trans-tenant et réservées à l'équipe SM.
+ *
+ * `@Roles('owner')` sur la CLASSE, même règle que l'identité de facturation :
+ * le compte du gérant, jamais une session de tablette au PIN. Raccorder un
+ * compte marchand crée une entité bancaire au nom de l'établissement et rend
+ * un lien où l'on saisit un IBAN — sans ce garde, un équipier connecté au
+ * comptoir pouvait ouvrir ce compte et y déclarer SES coordonnées bancaires
+ * comme compte de versement du restaurant. Le garde global ne filtre que si
+ * l'annotation existe : son absence était une porte ouverte, pas un défaut.
  */
+@Roles('owner')
 @Controller('encaissement')
 export class EncaissementController {
   constructor(private readonly encaissement: EncaissementService) {}
@@ -49,8 +58,18 @@ export class EncaissementController {
    */
   @Post('me/synchroniser')
   async synchroniser(@TenantId() tenantId: string): Promise<EncaissementFiche> {
-    const compte = await this.encaissement.ficheDe(tenantId);
-    if (compte.compte) await this.encaissement.synchroniser(compte.compte.accountId);
+    const avant = await this.encaissement.ficheDe(tenantId);
+    // La relecture est un CONFORT : si elle échoue, l'écran doit tout de même
+    // s'afficher avec ce qu'on sait. La faire tomber en erreur donnerait un
+    // écran vide au gérant, précisément quand il cherche à comprendre où il
+    // en est — `synchroniser` ne lève pas, mais la garantie se pose ici aussi.
+    if (avant.compte) {
+      try {
+        await this.encaissement.synchroniser(avant.compte.accountId);
+      } catch {
+        return avant;
+      }
+    }
     return this.encaissement.ficheDe(tenantId);
   }
 }

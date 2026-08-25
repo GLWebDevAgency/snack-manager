@@ -120,3 +120,72 @@ describe('le paiement d’une commande en ligne', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('le webhook des comptes connectés — cloisonnement entre restaurants', () => {
+  /**
+   * LA FAILLE QUE CE BLOC FERME, ET ELLE A ÉTÉ REPRODUITE.
+   *
+   * Le point d'entrée « comptes connectés » reçoit par construction les
+   * événements de TOUS les restaurants raccordés, et leur contenu —
+   * métadonnées comprises — est sous le contrôle du marchand émetteur : il est
+   * titulaire d'un compte Stripe Standard, donc de ses propres clés.
+   *
+   * Sans confrontation du compte émetteur, un restaurateur pouvait commander
+   * chez un concurrent, relever l'identifiant de la commande, puis payer
+   * 0,50 € sur SON compte avec `metadata.orderId` pointant la commande de
+   * l'autre : la commande du concurrent basculait « payée en ligne », sa
+   * cuisine l'imprimait, et il servait 45 € de marchandise.
+   *
+   * La parade tient en une clé de filtre : la commande n'est encaissée que si
+   * elle a été créée SUR LE COMPTE qui émet l'événement.
+   */
+  const eventPaiement = (over: { account?: string; orderId?: string; amount?: number } = {}) =>
+    ({
+      id: 'evt_1',
+      type: 'payment_intent.succeeded',
+      ...(over.account !== undefined ? { account: over.account } : {}),
+      data: {
+        object: {
+          id: 'pi_attaque',
+          amount: over.amount ?? 50,
+          metadata: { orderId: over.orderId ?? ORDER_ID },
+        },
+      },
+    }) as never;
+
+  function bancWebhook(orderStripeAccountId: string | null) {
+    const trouve = { _id: ORDER_ID, tenantId: TENANT_ID, number: 7, totals: { total: 4500 }, payment: { status: 'pending' }, toObject: () => ({}) };
+    const findOneAndUpdate = vi.fn().mockResolvedValue(null);
+    const orders = {
+      findOneAndUpdate,
+      findById: vi.fn().mockReturnValue({ lean: () => Promise.resolve({ ...trouve, payment: { status: 'pending', stripeAccountId: orderStripeAccountId } }) }),
+    };
+    const service = new PaymentsService(
+      orders as unknown as Model<Order>,
+      { get: vi.fn() } as never,
+      { publish: vi.fn() } as never,
+      { compteActifDe: vi.fn() } as never,
+    );
+    return { service, findOneAndUpdate };
+  }
+
+  it('le filtre atomique EXIGE le compte émetteur — un autre restaurant ne peut rien payer', async () => {
+    const { service, findOneAndUpdate } = bancWebhook('acct_victime');
+    await service.handleWebhookEvent(eventPaiement({ account: 'acct_attaquant' }));
+
+    const filtre = findOneAndUpdate.mock.calls[0]?.[0] as Record<string, unknown>;
+    // Sans cette clé, la commande de la victime basculait « payée ».
+    expect(filtre['payment.stripeAccountId']).toBe('acct_attaquant');
+    expect(filtre['payment.status']).toBe('pending');
+  });
+
+  it('webhook de plateforme (sans compte) : ne vise QUE l’historique d’avant Connect', async () => {
+    const { service, findOneAndUpdate } = bancWebhook(null);
+    // Pas de champ `account` : c'est le point d'entrée plateforme.
+    await service.handleWebhookEvent(eventPaiement({}));
+    const filtre = findOneAndUpdate.mock.calls[0]?.[0] as Record<string, unknown>;
+    // `null` et non « absent » : une commande encaissée sur un compte connecté
+    // ne doit jamais être confirmée par un événement de plateforme.
+    expect(filtre['payment.stripeAccountId']).toBeNull();
+  });
+});

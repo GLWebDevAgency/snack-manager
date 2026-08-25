@@ -518,13 +518,13 @@ export const OrderSchema = new Schema(
           cashReceived: { type: Number, default: null },
           changeGiven: { type: Number, default: null },
           stripePaymentIntentId: { type: String, default: null },
-        /**
-         * Le compte Stripe qui a RÉELLEMENT encaissé (charges directes).
-         * `null` = encaissé avant Connect, sur le compte de la plateforme :
-         * c'est la seule porte par laquelle l'historique reste remboursable,
-         * et aucun chemin de création ne sait plus la fabriquer.
-         */
-        stripeAccountId: { type: String, default: null },
+          /**
+           * Le compte Stripe qui a RÉELLEMENT encaissé (charges directes).
+           * `null` = encaissé avant Connect, sur le compte de la plateforme :
+           * c'est la seule porte par laquelle l'historique reste remboursable,
+           * et aucun chemin de création ne sait plus la fabriquer.
+           */
+          stripeAccountId: { type: String, default: null },
         },
         { _id: false },
       ),

@@ -114,9 +114,13 @@ describe('le raccordement', () => {
     expect(lien.url).toContain('connect.stripe.com');
     // Le compte est écrit AVANT de rendre le lien : si le restaurateur ferme
     // l'onglet, on ne recrée pas un second compte à sa prochaine visite.
+    //
+    // Écriture du sous-document ENTIER, jamais par chemins pointés : le champ
+    // porte `default: null`, et MongoDB refuse de creuser un `null`
+    // (PathNotViable) — le raccordement échouait pour tout nouveau client.
     const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
-    expect(set.$set['encaissement.accountId']).toBe('acct_resto1');
-    expect(set.$set['encaissement.chargesEnabled']).toBe(false);
+    expect(set.$set.encaissement.accountId).toBe('acct_resto1');
+    expect(set.$set.encaissement.chargesEnabled).toBe(false);
   });
 
   it('compte déjà créé : aucun second compte, seulement un nouveau lien', async () => {
@@ -169,8 +173,11 @@ describe('la synchronisation des drapeaux', () => {
 
     await service.synchroniser('acct_resto1', NOW);
     const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
-    expect(set.$set['encaissement.chargesEnabled']).toBe(true);
-    expect(set.$set['encaissement.synchroniseLe']).toEqual(NOW);
+    expect(set.$set.encaissement.chargesEnabled).toBe(true);
+    expect(set.$set.encaissement.synchroniseLe).toEqual(NOW);
+    // La date d'ENGAGEMENT du restaurateur ne se réécrit pas à chaque
+    // synchronisation — c'est un fait daté, pas un horodatage technique.
+    expect(set.$set.encaissement.raccordeLe).toEqual(NOW);
   });
 
   it('drapeaux absents chez Stripe : on FERME, on n’ouvre pas', async () => {
@@ -184,7 +191,7 @@ describe('la synchronisation des drapeaux', () => {
     });
     await service.synchroniser('acct_resto1', NOW);
     const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
-    expect(set.$set['encaissement.chargesEnabled']).toBe(false);
+    expect(set.$set.encaissement.chargesEnabled).toBe(false);
   });
 
   it('compte inconnu de notre parc : ignoré sans lever — un webhook ne doit pas rejouer en boucle', async () => {
@@ -238,5 +245,53 @@ describe('le câblage Nest — un contrôleur non déclaré est une route 404 si
     const declares = Reflect.getMetadata('controllers', OrderingModule) as unknown[];
     expect(declares).toContain(StripeWebhookController);
     expect(declares).toContain(StripeConnectWebhookController);
+  });
+});
+
+describe('le cloisonnement du contrôleur', () => {
+  it('réserve TOUTES les routes au compte gérant — jamais une tablette au PIN', async () => {
+    // Raccorder crée une entité bancaire au nom de l'établissement et rend un
+    // lien où l'on saisit un IBAN : un équipier au comptoir pourrait y
+    // déclarer SES coordonnées. Le garde global ne filtre que si l'annotation
+    // existe — son absence serait une porte ouverte, pas un oubli anodin.
+    const { EncaissementController } = await import('./encaissement.controller');
+    expect(Reflect.getMetadata('roles', EncaissementController)).toEqual(['owner']);
+  });
+});
+
+describe('le restaurateur nous débranche', () => {
+  const raccorde = {
+    _id: TENANT,
+    encaissement: {
+      accountId: 'acct_resto1',
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      detailsSubmitted: true,
+      raccordeLe: NOW,
+      synchroniseLe: NOW,
+    },
+  };
+
+  it('ferme l’encaissement — sinon les drapeaux resteraient « actif » pour toujours', async () => {
+    // `account.application.deauthorized` est le SEUL événement émis quand le
+    // restaurateur révoque l'accès : plus aucun `account.updated` ne suivra.
+    const { service, tenants } = build({ tenant: raccorde });
+    await service.revoquer('acct_resto1', NOW);
+    const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
+    expect(set.$set.encaissement.chargesEnabled).toBe(false);
+    // L'identifiant est conservé : la reprise du raccordement reste possible.
+    expect(set.$set.encaissement.accountId).toBe('acct_resto1');
+  });
+
+  it('Stripe refuse de répondre : on FERME au lieu de laisser un drapeau périmé ouvert', async () => {
+    const { service, tenants } = build({
+      tenant: raccorde,
+      client: { lireCompte: vi.fn().mockRejectedValue(new Error('permission_error')) },
+    });
+    // Ne lève pas : un webhook en erreur serait rejoué trois jours durant, et
+    // le bouton « vérifier » du gérant tomberait en 500 sans qu'il comprenne.
+    await expect(service.synchroniser('acct_resto1', NOW)).resolves.toBeUndefined();
+    const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
+    expect(set.$set.encaissement.chargesEnabled).toBe(false);
   });
 });

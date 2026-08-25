@@ -90,21 +90,6 @@ const REUSABLE_STATUSES = new Set([
 
 // ─── Webhook Stripe ───
 
-/**
- * Tolérance d'horodatage de la signature, en secondes — la valeur par défaut de
- * Stripe. Elle borne la fenêtre pendant laquelle une requête interceptée peut
- * être rejouée telle quelle par un tiers ; au-delà, la signature reste
- * mathématiquement correcte mais l'événement est trop vieux pour être honnête.
- * Chaque nouvelle tentative de livraison de Stripe est resignée avec l'heure
- * courante : un vrai rejeu Stripe (jusqu'à 3 jours) passe donc toujours.
- */
-
-/**
- * Sous-ensemble d'un événement Stripe réellement exploité ici — même parti pris
- * que `StripePaymentIntent` plus haut : on décrit ce qu'on lit, pas l'API
- * entière, et on ne dépend d'aucun type du paquet `stripe` (absent du projet).
- */
-
 
 /**
  * Ce qui a été fait de l'événement. Renvoyé à Stripe en 200 : le tableau de bord
@@ -405,8 +390,33 @@ export class PaymentsService {
     };
     if (intentId) paid['payment.stripePaymentIntentId'] = intentId;
 
+    /*
+     * LE COMPTE ÉMETTEUR ENTRE DANS LE FILTRE, ET C'EST UNE BARRIÈRE DE
+     * SÉCURITÉ, PAS UNE PRÉCISION.
+     *
+     * Le point d'entrée « comptes connectés » reçoit par construction les
+     * événements de TOUS les restaurants raccordés, et leur contenu —
+     * métadonnées comprises — est sous le contrôle du marchand émetteur : il
+     * détient un compte Stripe Standard, donc ses propres clés.
+     *
+     * Sans cette clé, un restaurateur pouvait commander chez un concurrent,
+     * relever l'identifiant de la commande, puis payer cinquante centimes sur
+     * SON compte en pointant `metadata.orderId` sur la commande de l'autre :
+     * elle basculait « payée en ligne », la cuisine du concurrent l'imprimait,
+     * et il servait la marchandise. Reproduit avant correction.
+     *
+     * `?? null` traite l'historique : les événements du webhook de PLATEFORME
+     * ne portent pas de compte, et ne doivent viser que les commandes
+     * encaissées avant Connect (`stripeAccountId` absent). Une commande
+     * encaissée sur un compte connecté ne peut donc plus être confirmée par un
+     * événement de plateforme, ni l'inverse.
+     */
     const order = await this.orders.findOneAndUpdate(
-      { _id: orderId, 'payment.status': 'pending' },
+      {
+        _id: orderId,
+        'payment.status': 'pending',
+        'payment.stripeAccountId': event.account ?? null,
+      },
       { $set: paid },
       { new: true },
     );

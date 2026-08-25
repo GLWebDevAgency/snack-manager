@@ -37,6 +37,11 @@ import { PaymentsService, type WebhookResult } from './payments.service';
  *  · `account.updated` — Stripe a changé d'avis sur ce qu'un marchand peut
  *    faire (dossier accepté, pièce rejetée). C'est LA source de vérité de
  *    l'encaissement : on recopie ses drapeaux, on ne les devine jamais.
+ *  · `account.application.deauthorized` — le restaurateur nous a débranchés
+ *    depuis son tableau de bord. C'est le SEUL événement émis dans ce cas, et
+ *    plus aucun `account.updated` ne suivra : sans lui, nos drapeaux
+ *    resteraient « actif » pour toujours et chaque client verrait son paiement
+ *    échouer au dernier clic.
  *  · tout le reste (`payment_intent.*`) — c'est le paiement d'une commande :
  *    il repart dans la MÊME machine à états que les paiements de plateforme
  *    (`PaymentsService.handleWebhookEvent`), qui sait déjà être idempotente
@@ -47,7 +52,8 @@ import { PaymentsService, type WebhookResult } from './payments.service';
  *
  * Tableau de bord Stripe → Developers → Webhooks → **Connected accounts** →
  * `https://<api>/public/stripe/webhook/connect`, événements
- * `account.updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`,
+ * `account.updated`, `account.application.deauthorized`,
+ * `payment_intent.succeeded`, `payment_intent.payment_failed`,
  * puis reporter le secret dans `STRIPE_CONNECT_WEBHOOK_SECRET`.
  *
  * En local : `stripe listen --forward-connect-to localhost:3001/public/stripe/webhook/connect`
@@ -84,6 +90,17 @@ export class StripeConnectWebhookController {
     }
 
     const event = verifierEvenementStripe(request.rawBody, signature, secret);
+
+    if (event.type === 'account.application.deauthorized') {
+      if (event.account) await this.encaissement.revoquer(event.account);
+      return {
+        received: true,
+        outcome: 'ignoree',
+        message: event.account
+          ? `Compte ${event.account} débranché — encaissement fermé.`
+          : 'Révocation sans identifiant de compte — ignorée.',
+      };
+    }
 
     if (event.type === 'account.updated') {
       // `event.account` est l'identifiant du compte connecté concerné. Absent,
