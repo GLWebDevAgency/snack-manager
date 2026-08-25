@@ -1,0 +1,242 @@
+import { describe, expect, it, vi } from 'vitest';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Types } from 'mongoose';
+import type { Model } from 'mongoose';
+import type { Tenant } from '@sm/db';
+import { EncaissementService } from './encaissement.service';
+import type { StripeCompte, StripeConnectClient } from './stripe-connect.client';
+
+/**
+ * CE QUE CES TESTS PROTÈGENT, ET CHACUN VAUT UNE PANNE RÉELLE :
+ *
+ *  · l'argent d'un restaurant ne doit JAMAIS pouvoir être encaissé sur le
+ *    compte de la plateforme — un éditeur qui encaisse pour autrui exerce
+ *    illégalement un service de paiement (sanction pénale, pas fiscale) ;
+ *  · Stripe est SEUL juge de la capacité à encaisser : nos drapeaux ne sont
+ *    qu'une recopie, et une recopie périmée doit fermer, jamais ouvrir ;
+ *  · une plateforme non configurée ne casse rien — le comptoir continue.
+ */
+
+const TENANT = new Types.ObjectId();
+const NOW = new Date('2026-08-25T12:00:00.000Z');
+
+const compteStripe = (over: Partial<StripeCompte> = {}): StripeCompte => ({
+  id: 'acct_resto1',
+  charges_enabled: true,
+  payouts_enabled: true,
+  details_submitted: true,
+  ...over,
+});
+
+function build(
+  over: {
+    tenant?: Record<string, unknown> | null;
+    client?: Partial<StripeConnectClient> & { disponible?: () => Promise<boolean> };
+  } = {},
+) {
+  const doc =
+    over.tenant === undefined
+      ? { _id: TENANT, name: 'Chez Nicolas', billing: { email: 'nicolas@exemple.fr' }, encaissement: null }
+      : over.tenant;
+
+  const tenants = {
+    findById: vi.fn().mockReturnValue({ lean: () => Promise.resolve(doc) }),
+    updateOne: vi.fn().mockResolvedValue({}),
+    findOne: vi.fn().mockReturnValue({ lean: () => Promise.resolve(doc) }),
+  };
+
+  // La doublure ne sait faire QUE ce que le service appelle — règle maison.
+  const client = {
+    creerCompte: vi.fn().mockResolvedValue(compteStripe({ charges_enabled: false, details_submitted: false, payouts_enabled: false })),
+    lireCompte: vi.fn().mockResolvedValue(compteStripe()),
+    creerLien: vi.fn().mockResolvedValue({ url: 'https://connect.stripe.com/setup/x', expires_at: 1787000000 }),
+    disponible: vi.fn().mockResolvedValue(true),
+    ...over.client,
+  };
+
+  const service = new EncaissementService(
+    tenants as unknown as Model<Tenant>,
+    client as unknown as StripeConnectClient,
+    { retourUrl: 'https://app.snackmanager.fr/admin/encaissement' },
+  );
+  return { service, tenants, client };
+}
+
+describe('la fiche d’encaissement', () => {
+  it('sans compte raccordé : « absent », et le comptoir reste la voie', async () => {
+    const { service } = build();
+    const fiche = await service.ficheDe(String(TENANT));
+    expect(fiche.etat).toBe('absent');
+    expect(fiche.peutEncaisser).toBe(false);
+    expect(fiche.raison).toMatch(/comptoir/i);
+    expect(fiche.compte).toBeNull();
+  });
+
+  it('compte actif : « actif », sans raison à afficher', async () => {
+    const { service } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: {
+          accountId: 'acct_resto1',
+          chargesEnabled: true,
+          payoutsEnabled: true,
+          detailsSubmitted: true,
+          raccordeLe: NOW,
+          synchroniseLe: NOW,
+        },
+      },
+    });
+    const fiche = await service.ficheDe(String(TENANT));
+    expect(fiche.etat).toBe('actif');
+    expect(fiche.peutEncaisser).toBe(true);
+    expect(fiche.raison).toBeNull();
+  });
+
+  it('plateforme non configurée : la fiche le dit, et n’invite pas à un raccordement qui échouerait', async () => {
+    const { service } = build({ client: { disponible: vi.fn().mockResolvedValue(false) } });
+    const fiche = await service.ficheDe(String(TENANT));
+    expect(fiche.disponible).toBe(false);
+    expect(fiche.peutEncaisser).toBe(false);
+  });
+
+  it('établissement inconnu : 404, jamais une fiche vide qui mentirait', async () => {
+    const { service } = build({ tenant: null });
+    await expect(service.ficheDe(String(TENANT))).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('le raccordement', () => {
+  it('crée le compte à la première demande, le réutilise ensuite', async () => {
+    const { service, client, tenants } = build();
+    const lien = await service.demarrerRaccordement(String(TENANT));
+
+    expect(client.creerCompte).toHaveBeenCalledWith('nicolas@exemple.fr');
+    expect(lien.url).toContain('connect.stripe.com');
+    // Le compte est écrit AVANT de rendre le lien : si le restaurateur ferme
+    // l'onglet, on ne recrée pas un second compte à sa prochaine visite.
+    const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
+    expect(set.$set['encaissement.accountId']).toBe('acct_resto1');
+    expect(set.$set['encaissement.chargesEnabled']).toBe(false);
+  });
+
+  it('compte déjà créé : aucun second compte, seulement un nouveau lien', async () => {
+    const { service, client } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: {
+          accountId: 'acct_deja',
+          chargesEnabled: false,
+          payoutsEnabled: false,
+          detailsSubmitted: false,
+          raccordeLe: NOW,
+          synchroniseLe: NOW,
+        },
+      },
+    });
+    await service.demarrerRaccordement(String(TENANT));
+    expect(client.creerCompte).not.toHaveBeenCalled();
+    expect(client.creerLien).toHaveBeenCalledWith(
+      'acct_deja',
+      expect.stringContaining('/admin/encaissement'),
+      expect.stringContaining('/admin/encaissement'),
+    );
+  });
+
+  it('plateforme non configurée : refus explicite, pas une erreur technique', async () => {
+    const { service } = build({ client: { disponible: vi.fn().mockResolvedValue(false) } });
+    await expect(service.demarrerRaccordement(String(TENANT))).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+  });
+});
+
+describe('la synchronisation des drapeaux', () => {
+  it('recopie ce que dit Stripe — lui seul décide', async () => {
+    const { service, tenants } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: {
+          accountId: 'acct_resto1',
+          chargesEnabled: false,
+          payoutsEnabled: false,
+          detailsSubmitted: false,
+          raccordeLe: NOW,
+          synchroniseLe: NOW,
+        },
+      },
+      client: { lireCompte: vi.fn().mockResolvedValue(compteStripe()) },
+    });
+
+    await service.synchroniser('acct_resto1', NOW);
+    const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
+    expect(set.$set['encaissement.chargesEnabled']).toBe(true);
+    expect(set.$set['encaissement.synchroniseLe']).toEqual(NOW);
+  });
+
+  it('drapeaux absents chez Stripe : on FERME, on n’ouvre pas', async () => {
+    // Une réponse partielle ne doit jamais valoir autorisation d'encaisser.
+    const { service, tenants } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: { accountId: 'acct_resto1', chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, raccordeLe: NOW, synchroniseLe: NOW },
+      },
+      client: { lireCompte: vi.fn().mockResolvedValue({ id: 'acct_resto1' }) },
+    });
+    await service.synchroniser('acct_resto1', NOW);
+    const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
+    expect(set.$set['encaissement.chargesEnabled']).toBe(false);
+  });
+
+  it('compte inconnu de notre parc : ignoré sans lever — un webhook ne doit pas rejouer en boucle', async () => {
+    const { service, tenants } = build({ tenant: null });
+    await expect(service.synchroniser('acct_fantome', NOW)).resolves.toBeUndefined();
+    expect(tenants.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe('le compte sur lequel encaisser — l’interface étroite du module', () => {
+  it('rend l’identifiant quand Stripe autorise l’encaissement', async () => {
+    const { service } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: { accountId: 'acct_resto1', chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true, raccordeLe: NOW, synchroniseLe: NOW },
+      },
+    });
+    expect(await service.compteActifDe(String(TENANT))).toBe('acct_resto1');
+  });
+
+  it('rend null dès que Stripe n’autorise pas — JAMAIS le compte de la plateforme', async () => {
+    const { service } = build({
+      tenant: {
+        _id: TENANT,
+        encaissement: { accountId: 'acct_resto1', chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: true, raccordeLe: NOW, synchroniseLe: NOW },
+      },
+    });
+    expect(await service.compteActifDe(String(TENANT))).toBeNull();
+    // Sans compte du tout non plus : le paiement en ligne se ferme.
+    expect(await build().service.compteActifDe(String(TENANT))).toBeNull();
+  });
+
+  it('identifiant d’établissement invalide : null, sans lever', async () => {
+    const { service } = build();
+    expect(await service.compteActifDe('pas-un-id')).toBeNull();
+  });
+});
+
+describe('le câblage Nest — un contrôleur non déclaré est une route 404 silencieuse', () => {
+  it('les DEUX webhooks Stripe sont déclarés dans le module de commande', async () => {
+    // `StripeWebhookController` ne l'était pas : la route /public/stripe/webhook
+    // répondait 404 en production et les commandes payées en ligne restaient
+    // « en attente » sans le moindre message. Ce test empêche la récidive —
+    // pour les deux webhooks, celui de la plateforme et celui des comptes
+    // connectés (charges directes).
+    const { OrderingModule } = await import('../ordering/ordering.module');
+    const { StripeWebhookController } = await import('../ordering/stripe-webhook.controller');
+    const { StripeConnectWebhookController } = await import(
+      '../ordering/stripe-connect-webhook.controller'
+    );
+    const declares = Reflect.getMetadata('controllers', OrderingModule) as unknown[];
+    expect(declares).toContain(StripeWebhookController);
+    expect(declares).toContain(StripeConnectWebhookController);
+  });
+});

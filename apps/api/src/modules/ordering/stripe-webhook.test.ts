@@ -7,6 +7,7 @@ import type { Order } from '@sm/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { PaymentsService, type StripeWebhookEvent } from './payments.service';
+import type { EncaissementService } from '../encaissement/encaissement.service';
 
 /**
  * Ce qui est vérifié ici tient en trois phrases, et chacune correspond à une
@@ -126,7 +127,14 @@ let rows: FakeOrder[];
 let published: { channel: string; message: string }[];
 
 function service(env: Record<string, string | undefined> = { STRIPE_WEBHOOK_SECRET: SECRET }) {
-  return new PaymentsService(fakeOrders(rows), fakeConfig(env), fakeRedis(published));
+  // Le webhook ne consulte jamais le sous-domaine « encaissement » : il traite
+  // un paiement déjà encaissé, sur un compte déjà résolu à la création de
+  // l'intention. La doublure le prouve — toute lecture ici serait un appel de
+  // trop sur un chemin qui doit rester le plus court possible.
+  const encaissement = {
+    compteActifDe: () => Promise.reject(new Error('le webhook ne résout aucun compte')),
+  } as unknown as EncaissementService;
+  return new PaymentsService(fakeOrders(rows), fakeConfig(env), fakeRedis(published), encaissement);
 }
 
 beforeEach(() => {
