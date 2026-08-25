@@ -106,7 +106,13 @@ describe('la file d’une semaine', () => {
   });
 
   it('le rapport mensuel n’apparaît que sa semaine — celle qui contient un 1er', async () => {
-    const { service } = build({ rows: [parc()[0]] });
+    // Signé mi-juillet : le rapport de juillet est légitimement promis (un
+    // client signé LE 1er août tomberait sous la règle du rapport fantôme).
+    const kebab = {
+      ...parc()[0],
+      atelier: { presenceInternet: true, reseauxSociaux: null, signedAt: new Date('2026-07-10') },
+    };
+    const { service } = build({ rows: [kebab] });
     // Semaine du 3 août 2026 : pas de 1er dedans (le 1er août est un samedi
     // de la semaine d'avant) — les avis seuls.
     const w32 = await service.week('2026-W32', NOW);
@@ -127,9 +133,23 @@ describe('cocher une tâche', () => {
       done: true,
       note: '',
     }, NOW);
+    // Sans note fournie, la clef `note` ne s'écrit PAS : une coche muette ne
+    // doit jamais effacer la note qu'une coche précédente portait.
     expect(ticks.updateOne).toHaveBeenCalledWith(
       { tenantId: SNACK, week: '2026-W35', task: 'social_pub_2' },
-      { $set: { doneAt: NOW, doneBy: 'operateur-1', note: '' } },
+      { $set: { doneAt: NOW, doneBy: 'operateur-1' } },
+      { upsert: true },
+    );
+
+    await service.tick(ACTOR, String(SNACK), {
+      week: '2026-W35',
+      task: 'social_pub_1',
+      done: true,
+      note: 'lien du post',
+    }, NOW);
+    expect(ticks.updateOne).toHaveBeenLastCalledWith(
+      { tenantId: SNACK, week: '2026-W35', task: 'social_pub_1' },
+      { $set: { doneAt: NOW, doneBy: 'operateur-1', note: 'lien du post' } },
       { upsert: true },
     );
 
@@ -159,6 +179,57 @@ describe('cocher une tâche', () => {
     await expect(
       fantome.service.tick(ACTOR, String(SNACK), { week: '2026-W35', task: 'social_pub_1', done: true, note: '' }, NOW),
     ).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('les règles de dû, identiques en lecture et en coche', () => {
+  it('un client parti garde son historique : présent la semaine passée, absent la courante', async () => {
+    const rows = [
+      {
+        _id: KEBAB,
+        name: 'Kebab du Port',
+        slug: 'kebab-du-port',
+        account: { status: 'churned' },
+        atelier: { presenceInternet: true, reseauxSociaux: null, signedAt: new Date('2026-08-01') },
+      },
+    ];
+    const { service } = build({ rows });
+    expect((await service.week(undefined, NOW)).clients).toEqual([]);
+    // Ses promesses tenues d'avant le départ ne s'évaporent pas.
+    expect((await service.week('2026-W34', NOW)).clients).toHaveLength(1);
+  });
+
+  it('signé après le 1er contenu dans la semaine : le rapport du mois clos n’est pas dû', async () => {
+    // Signé le 3 septembre ; la semaine du 31 août au 6 septembre contient le
+    // 1er — mais août n'a jamais été promis : les avis seuls, pas de rapport.
+    const vendredi = new Date('2026-09-04T12:00:00.000Z');
+    const rows = [
+      {
+        _id: KEBAB,
+        name: 'Kebab du Port',
+        slug: 'kebab-du-port',
+        atelier: { presenceInternet: true, reseauxSociaux: null, signedAt: new Date('2026-09-03') },
+      },
+    ];
+    const { service } = build({ rows });
+    const file = await service.week(undefined, vendredi);
+    expect(file.clients[0]?.tasks.map((t) => t.key)).toEqual(['presence_avis']);
+  });
+
+  it('refuse la coche d’un client parti, et celle d’une semaine d’avant sa signature', async () => {
+    const parti = build({
+      tenant: { _id: SNACK, atelier: { reseauxSociaux: 'bihebdo' }, account: { status: 'churned' } },
+    });
+    await expect(
+      parti.service.tick(ACTOR, String(SNACK), { week: '2026-W35', task: 'social_pub_1', done: true, note: '' }, NOW),
+    ).rejects.toThrow(BadRequestException);
+
+    const tardif = build({
+      tenant: { _id: SNACK, atelier: { reseauxSociaux: 'bihebdo', signedAt: new Date('2026-08-27') } },
+    });
+    await expect(
+      tardif.service.tick(ACTOR, String(SNACK), { week: '2026-W34', task: 'social_pub_1', done: true, note: '' }, NOW),
+    ).rejects.toThrow(BadRequestException);
   });
 });
 

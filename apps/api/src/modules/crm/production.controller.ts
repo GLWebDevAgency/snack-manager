@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ProductionTickSchema,
+  ProductionWeekQuerySchema,
   type CrmProductionWeek,
   type JwtPayload,
   type ProductionTick,
+  type ProductionWeekQuery,
 } from '@sm/contracts';
 import { CurrentUser, Roles } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
@@ -32,8 +34,8 @@ export class ProductionController {
 
   /** La file d'une semaine — la courante sans paramètre, jamais la prochaine. */
   @Get('production')
-  week(@Query('week') week?: string): Promise<CrmProductionWeek> {
-    return this.production.week(week);
+  week(@Query(zod(ProductionWeekQuerySchema)) q: ProductionWeekQuery): Promise<CrmProductionWeek> {
+    return this.production.week(q.week);
   }
 
   /** Cocher/décocher une tâche due — l'auteur du geste reste sur la trace. */

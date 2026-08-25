@@ -21,6 +21,7 @@ import {
   ATELIER_ONCE_CENTS,
   ATELIER_PRESENCE_CENTS,
   EMPTY_SERVICES,
+  MODULE_ORDERING_CENTS,
   PLANS,
   PROPOSAL_BILLINGS,
   PROPOSAL_BILLING_LABELS,
@@ -997,11 +998,14 @@ function ProposalPanel({
           <Select
             id="prop-plan"
             value={plan ?? "aucune"}
-            onChange={(e) =>
-              setPlan(
-                e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]),
-              )
-            }
+            onChange={(e) => {
+              const suivant =
+                e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
+              setPlan(suivant);
+              // Sans formule, le module ne vit que greffé sur le site
+              // existant : coché « seul », il tombe avec la formule.
+              if (suivant === null && module && !services.integrationCommande) setModule(false);
+            }}
           >
             {/* Les services se citent seuls : la formule est un choix, pas un
                 préalable — un prospect peut ne vouloir QUE le site ou QUE les
@@ -1028,16 +1032,22 @@ function ProposalPanel({
           </Select>
         </Field>
       </div>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1 text-xs text-mut">
-          {plan === "boost"
-            ? "Commande en ligne comprise dans Boost — rien à ajouter."
-            : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
+      {/* SANS formule, ce module « seul » n'existe pas : la commande en ligne
+          se vend alors greffée sur le site existant (section Atelier, plus
+          bas) — 190 € de mise en service, puis 79 €/mois. Afficher les deux
+          ici ferait doublon (fondateur, 25/08). */}
+      {plan !== null && (
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 text-xs text-mut">
+            {plan === "boost"
+              ? "Commande en ligne comprise dans Boost — rien à ajouter."
+              : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
+          </div>
+          {plan !== "boost" && (
+            <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
+          )}
         </div>
-        {plan !== "boost" && (
-          <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
-        )}
-      </div>
+      )}
 
       {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
           libellés sortent de la grille : changer un tarif ne réécrit pas cet
@@ -1111,9 +1121,12 @@ function ProposalPanel({
       </div>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-xs text-mut">
-          Commande en ligne greffée sur SON site existant.{" "}
-          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)} (une fois), mise en service comprise —
-          le module s&apos;active avec.
+          {/* Les 190 € sont une MISE EN SERVICE (le branchement sur son
+              site), jamais « une fois » tout court — et le module se lit à
+              côté, au mois (fondateur, 25/08). */}
+          Commande en ligne greffée sur SON site existant — mise en service{" "}
+          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)}, puis le module{" "}
+          {fmtEuro(MODULE_ORDERING_CENTS)}/mois (il s&apos;active avec).
         </div>
         <Toggle
           on={services.integrationCommande}
@@ -1123,6 +1136,9 @@ function ProposalPanel({
             // L'intégration sans le module serait un devis incohérent — le
             // schéma la refuse ; l'écran la rend simplement impossible.
             if (on && plan !== "boost") setModule(true);
+            // Sans formule, le module n'existe qu'à travers l'intégration :
+            // décocher l'une décoche l'autre.
+            if (!on && plan === null) setModule(false);
           }}
         />
       </div>
@@ -1309,11 +1325,16 @@ function ConvertPanel({
         <Select
           id="convert-plan"
           value={plan ?? "aucune"}
-          onChange={(e) =>
-            setPlan(
-              e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]),
-            )
-          }
+          onChange={(e) => {
+            const suivant =
+              e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
+            setPlan(suivant);
+            // Sans formule, le module ne vit que greffé sur le site existant
+            // (même règle qu'à la proposition) : signé « seul », il tombe.
+            if (suivant === null && onlineOrdering && !services.integrationCommande) {
+              setOnlineOrdering(false);
+            }
+          }}
         >
           <option value="aucune">{PLAN_NONE_LABEL}</option>
           {PLANS.map((p) => (

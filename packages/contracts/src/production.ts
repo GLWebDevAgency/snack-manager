@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TenantAccountStatus } from './admin';
 import type { LeadServices } from './crm';
 
 // ─────────────────────────────────────────────────────────────
@@ -132,18 +133,28 @@ export type ProductionTaskKey = (typeof PRODUCTION_TASKS)[number];
 export type ProductionDueTask = { key: ProductionTaskKey; label: string };
 
 /**
+ * Le 1er du mois contenu dans la semaine, en `AAAA-MM-JJ` — `null` sinon.
+ * C'est lui qui déclenche le rapport mensuel, et c'est contre lui que le
+ * service compare la date de signature (un client signé APRÈS ce 1er n'a
+ * jamais promis le mois clos : pas de rapport fantôme sa semaine d'entrée).
+ */
+export function premierDuMoisDans(w: ProductionWeek): string | null {
+  for (let i = 0; i < 7; i += 1) {
+    const day = addDays(w.monday, i);
+    if (day.slice(8) === '01') return day;
+  }
+  return null;
+}
+
+/**
  * Le mois dont le RAPPORT se doit cette semaine — celui qui vient de se
  * clore, quand la semaine contient un 1er du mois. `null` sinon.
  */
 export function moisDuRapport(w: ProductionWeek): string | null {
-  for (let i = 0; i < 7; i += 1) {
-    const day = addDays(w.monday, i);
-    if (day.slice(8) === '01') {
-      // Le 1er de septembre ouvre la semaine du rapport… d'août.
-      return MOIS[(Number(day.slice(5, 7)) + 10) % 12] ?? null;
-    }
-  }
-  return null;
+  const premier = premierDuMoisDans(w);
+  if (!premier) return null;
+  // Le 1er de septembre ouvre la semaine du rapport… d'août.
+  return MOIS[(Number(premier.slice(5, 7)) + 10) % 12] ?? null;
 }
 
 /**
@@ -177,6 +188,15 @@ export function productionTasksFor(
 
 /* ── Entrée d'API ────────────────────────────────────────────── */
 
+/** La semaine demandée à la file — absente : la semaine courante. */
+export const ProductionWeekQuerySchema = z.object({
+  week: z
+    .string()
+    .regex(/^\d{4}-W\d{2}$/, 'Clef de semaine attendue : AAAA-Wss')
+    .optional(),
+});
+export type ProductionWeekQuery = z.infer<typeof ProductionWeekQuerySchema>;
+
 export const ProductionTickSchema = z.object({
   week: z.string().regex(/^\d{4}-W\d{2}$/, 'Clef de semaine attendue : AAAA-Wss'),
   task: z.enum(PRODUCTION_TASKS),
@@ -200,6 +220,13 @@ export type CrmProductionClient = {
   slug: string;
   /** La signature de l'Atelier — depuis quand la promesse court. */
   signedAt: string | null;
+  /**
+   * Statut du compte — un client SUSPENDU reste dans la file (continuer ou
+   * suspendre le travail est une décision humaine), mais l'écran doit le
+   * dire : la décision est impossible si le statut ne se lit pas là où le
+   * travail se fait.
+   */
+  accountStatus: TenantAccountStatus;
   tasks: CrmProductionTask[];
   done: number;
   total: number;

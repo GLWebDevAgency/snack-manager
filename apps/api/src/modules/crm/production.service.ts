@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import {
   nextWeekKey,
   parseWeekKey,
+  premierDuMoisDans,
   previousWeekKey,
   productionTasksFor,
   productionWeekLabel,
@@ -13,8 +14,10 @@ import {
   type CrmProductionWeek,
   type JwtPayload,
   type LeadServices,
+  type ProductionDueTask,
   type ProductionTick,
   type ProductionWeek,
+  type TenantAccountStatus,
 } from '@sm/contracts';
 import type { AtelierTick, Tenant } from '@sm/db';
 import { parisDateString } from '../ordering/paris-time';
@@ -27,7 +30,13 @@ import { parisDateString } from '../ordering/paris-time';
  * (`tenant.atelier`) et de la semaine regardée — même principe que le retard
  * d'une facture, recalculé à chaque lecture. Seules les COCHES s'écrivent
  * (`atelierticks`, unicité tenant+semaine+tâche) : décocher supprime, le
- * geste est idempotent, et une semaine passée reste juste rétroactivement.
+ * geste est idempotent.
+ *
+ * LIMITE ASSUMÉE : `tenant.atelier` ne porte pas d'historique — le dû des
+ * semaines passées est dérivé de ce qui est signé AUJOURD'HUI. Le premier
+ * avenant (un client qui passe d'hebdo à bihebdo) réécrira donc l'histoire
+ * affichée. Le jour où les avenants se signeront dans l'outil, c'est le
+ * champ `atelier` qui s'historisera — pas cette dérivation qui se stockera.
  *
  * La semaine « courante » est PARISIENNE : c'est le lundi du comptoir qui
  * ouvre la file, pas le lundi UTC. Et la semaine PROCHAINE est refusée en
@@ -64,6 +73,31 @@ type RawTick = AtelierTick & { _id: unknown };
 const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;
 
+const statusOf = (raw: RawTenant): TenantAccountStatus =>
+  ((raw.account as { status?: string } | undefined)?.status ?? 'trial') as TenantAccountStatus;
+
+const signedAtOf = (raw: RawTenant): Date | null =>
+  (raw.atelier as { signedAt?: Date | null } | null)?.signedAt ?? null;
+
+/**
+ * Ce qui est DÛ à ce client cette semaine-là — la SEULE définition, partagée
+ * par la lecture (`week`) et la coche (`tick`) : deux dérivations divergeraient
+ * un jour, et ce jour-là on pourrait cocher ce que la file n'affiche pas.
+ *
+ * Le rapport mensuel porte sur le mois CLOS : un client signé après le 1er
+ * contenu dans la semaine n'a jamais promis ce mois — pas de rapport fantôme
+ * sa semaine d'entrée.
+ */
+function duesPour(raw: RawTenant, week: ProductionWeek): ProductionDueTask[] {
+  const dues = productionTasksFor(lireRecurrents(raw.atelier), week);
+  const premier = premierDuMoisDans(week);
+  const signedAt = signedAtOf(raw);
+  if (premier && signedAt && parisDateString(new Date(signedAt)) >= premier) {
+    return dues.filter((t) => t.key !== 'presence_rapport');
+  }
+  return dues;
+}
+
 @Injectable()
 export class ProductionService {
   constructor(
@@ -89,9 +123,9 @@ export class ProductionService {
   async week(weekKey?: string, now: Date = new Date()): Promise<CrmProductionWeek> {
     const { week, current } = this.resolveWeek(weekKey, now);
 
-    // Le parc qui a signé du RÉCURRENT — un client parti (churned) sort de la
-    // file, un client suspendu y reste : la décision de continuer le travail
-    // est humaine, la file ne la prend pas à sa place.
+    // Le parc qui a signé du RÉCURRENT. Un client suspendu RESTE dans la
+    // file, statut affiché : continuer ou suspendre le travail est une
+    // décision humaine, et elle se prend là où le travail se lit.
     const rows = (await this.tenants
       .find(
         {
@@ -99,9 +133,8 @@ export class ProductionService {
             { 'atelier.presenceInternet': true },
             { 'atelier.reseauxSociaux': { $in: ['hebdo', 'bihebdo'] } },
           ],
-          'account.status': { $ne: 'churned' },
         },
-        { name: 1, slug: 1, atelier: 1 },
+        { name: 1, slug: 1, atelier: 1, 'account.status': 1 },
       )
       .sort({ name: 1 })
       .lean()) as RawTenant[];
@@ -111,12 +144,18 @@ export class ProductionService {
 
     const clients: CrmProductionClient[] = [];
     for (const row of rows) {
+      // Un client parti (churned) sort de la semaine COURANTE — plus rien ne
+      // lui est dû — mais reste dans les semaines passées : son historique de
+      // promesses tenues ne s'évapore pas avec son départ.
+      const accountStatus = statusOf(row);
+      if (accountStatus === 'churned' && week.key === current.key) continue;
+
       // Une promesse signée APRÈS la semaine regardée n'y était pas due — les
       // semaines passées d'avant la signature restent vides, pas « en retard ».
-      const signedAt = (row.atelier as { signedAt?: Date | null } | null)?.signedAt ?? null;
+      const signedAt = signedAtOf(row);
       if (signedAt && parisDateString(new Date(signedAt)) > week.sunday) continue;
 
-      const dues = productionTasksFor(lireRecurrents(row.atelier), week);
+      const dues = duesPour(row, week);
       if (dues.length === 0) continue;
 
       const id = String(row._id);
@@ -134,6 +173,7 @@ export class ProductionService {
         name: String(row.name ?? ''),
         slug: String(row.slug ?? ''),
         signedAt: iso(signedAt),
+        accountStatus,
         tasks,
         done: tasks.filter((t) => t.done).length,
         total: tasks.length,
@@ -166,29 +206,39 @@ export class ProductionService {
     now: Date = new Date(),
   ): Promise<{ done: boolean }> {
     if (!Types.ObjectId.isValid(tenantId)) throw new NotFoundException('Établissement introuvable');
-    const week = parseWeekKey(body.week);
-    if (!week) throw new BadRequestException('Clef de semaine invalide — attendu AAAA-Wss.');
-    const current = productionWeekOf(parisDateString(now));
-    if (week.monday > current.monday) {
-      throw new BadRequestException('Le travail de la semaine prochaine n’est pas encore dû.');
-    }
+    const { week } = this.resolveWeek(body.week, now);
 
     const tenant = (await this.tenants
-      .findById(tenantId, { atelier: 1 })
+      .findById(tenantId, { atelier: 1, 'account.status': 1 })
       .lean()) as RawTenant | null;
     if (!tenant) throw new NotFoundException('Établissement introuvable');
 
-    const dues = productionTasksFor(lireRecurrents(tenant.atelier), week);
-    if (!dues.some((t) => t.key === body.task)) {
+    // Les MÊMES règles de dû que la lecture (`duesPour` + les deux gardes de
+    // la file) : ce qui ne s'affiche pas ne se coche pas.
+    if (statusOf(tenant) === 'churned') {
+      throw new BadRequestException('Ce client a quitté le parc — plus rien ne lui est dû.');
+    }
+    const signedAt = signedAtOf(tenant);
+    if (signedAt && parisDateString(new Date(signedAt)) > week.sunday) {
+      throw new BadRequestException('La promesse ne courait pas encore cette semaine-là.');
+    }
+    if (!duesPour(tenant, week).some((t) => t.key === body.task)) {
       throw new BadRequestException('Cette tâche n’est pas due pour ce client cette semaine-là.');
     }
 
     if (body.done) {
+      // Le jeton ne porte pas l'e-mail : `sub` suffit à la trace — même
+      // convention que les signaux « traités ». La note ne s'écrit que
+      // FOURNIE : l'écran qui coche sans note ne doit pas effacer celle
+      // qu'une coche précédente portait.
+      const set: { doneAt: Date; doneBy: string; note?: string } = {
+        doneAt: now,
+        doneBy: String(actor.sub),
+      };
+      if (body.note) set.note = body.note;
       await this.ticks.updateOne(
         { tenantId: tenant._id, week: week.key, task: body.task },
-        // Le jeton ne porte pas l'e-mail : `sub` suffit à la trace — même
-        // convention que les signaux « traités ».
-        { $set: { doneAt: now, doneBy: String(actor.sub), note: body.note } },
+        { $set: set },
         { upsert: true },
       );
     } else {

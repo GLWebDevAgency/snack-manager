@@ -21,7 +21,7 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CrmProductionClient, CrmProductionWeek } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Btn, Card, EmptyState, Icon, Skeleton, useToast } from "@/components/ui";
@@ -33,18 +33,36 @@ export default function ProductionPage() {
   const [loading, setLoading] = useState(true);
   const [erreur, setErreur] = useState(false);
 
+  // Miroir de `data` pour les rappels qui ne doivent pas se réabonner à
+  // chaque réponse (rafraîchissement au retour d'onglet, repli d'erreur).
+  const dataRef = useRef<CrmProductionWeek | null>(null);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   // Depuis un GESTE (navigation de semaine, réessai) : l'état de chargement
   // bascule au clic. Le chargement INITIAL, lui, part déjà en « loading » —
   // l'effet ne pose donc aucun état en synchrone (règle set-state-in-effect).
-  const load = useCallback((week?: string) => {
-    setLoading(true);
-    setErreur(false);
-    crm
-      .production(week)
-      .then(setData)
-      .catch(() => setErreur(true))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(
+    (week?: string) => {
+      setLoading(true);
+      crm
+        .production(week)
+        .then((d) => {
+          setData(d);
+          setErreur(false);
+        })
+        .catch(() => {
+          // Une navigation qui échoue ne jette pas l'écran : la semaine déjà
+          // affichée reste — l'écran d'erreur plein est réservé au tout
+          // premier chargement, quand il n'y a rien d'autre à montrer.
+          if (dataRef.current) toast("Semaine indisponible — réessayez");
+          else setErreur(true);
+        })
+        .finally(() => setLoading(false));
+    },
+    [toast],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -64,20 +82,54 @@ export default function ProductionPage() {
     };
   }, []);
 
+  /*
+   * L'ONGLET LAISSÉ OUVERT DU VENDREDI AU LUNDI — le moment exact pour
+   * lequel cet écran existe : sans rafraîchissement, il dirait encore
+   * « Cette semaine, tout est fait » sur la semaine d'avant. Au retour sur
+   * l'onglet, si l'écran SUIVAIT la semaine courante, il se recale en
+   * silence (pas de squelette — rien ne doit clignoter sous une coche).
+   * Une semaine passée consultée exprès, elle, ne bouge pas sous le lecteur.
+   */
+  useEffect(() => {
+    const reveil = () => {
+      if (document.visibilityState !== "visible") return;
+      const d = dataRef.current;
+      if (d && d.week === d.current) {
+        crm
+          .production()
+          .then(setData)
+          .catch(() => {});
+      }
+    };
+    window.addEventListener("focus", reveil);
+    document.addEventListener("visibilitychange", reveil);
+    return () => {
+      window.removeEventListener("focus", reveil);
+      document.removeEventListener("visibilitychange", reveil);
+    };
+  }, []);
+
   async function basculer(client: CrmProductionClient, task: string, done: boolean) {
     if (!data) return;
+    const week = data.week;
     // Optimiste : la coche répond au doigt, le serveur confirme derrière.
-    const avant = data;
-    setData(appliquer(data, client.tenantId, task, done));
+    // La bascule ET son annulation s'appliquent à l'état COURANT — restaurer
+    // un instantané complet effacerait une coche voisine partie entre-temps.
+    setData((courant) => (courant ? appliquer(courant, client.tenantId, task, done) : courant));
     try {
       await crm.tickProduction(client.tenantId, {
-        week: data.week,
+        week,
         task: task as CrmProductionClient["tasks"][number]["key"],
         done,
         note: "",
       });
+      // La décoche est un geste rare et lourd de sens (la trace s'efface) :
+      // le dire évite qu'un doigt qui glisse passe inaperçu.
+      if (!done) toast("Coche retirée");
     } catch {
-      setData(avant);
+      setData((courant) =>
+        courant ? appliquer(courant, client.tenantId, task, !done) : courant,
+      );
       toast("Coche impossible — réessayez");
     }
   }
@@ -116,7 +168,9 @@ export default function ProductionPage() {
           <div className="mt-0.5 text-xs text-mut">
             {data.total > 0
               ? `${int(data.done)} sur ${int(data.total)} promesses tenues${data.done === data.total ? " — tout est fait" : ""}`
-              : "Rien de récurrent n'était dû cette semaine-là."}
+              : semaineCourante
+                ? "Rien de récurrent n'est dû cette semaine."
+                : "Rien de récurrent n'était dû cette semaine-là."}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -148,12 +202,21 @@ export default function ProductionPage() {
         data.clients.map((client) => (
           <Card key={client.tenantId} className="p-4">
             <div className="flex items-baseline justify-between gap-2">
-              <Link
-                href={`/sm/clients/${client.tenantId}`}
-                className="min-w-0 truncate text-sm font-bold text-ink underline-offset-2 hover:underline"
-              >
-                {client.name}
-              </Link>
+              <span className="flex min-w-0 items-baseline gap-2">
+                <Link
+                  href={`/sm/clients/${client.tenantId}`}
+                  className="min-w-0 truncate text-sm font-bold text-ink underline-offset-2 hover:underline"
+                >
+                  {client.name}
+                </Link>
+                {/* Un suspendu reste dans la file — mais la décision de
+                    continuer le travail exige de VOIR le statut ici. */}
+                {client.accountStatus === "suspended" && (
+                  <span className="shrink-0 rounded-pill border-[1.5px] border-alert/70 bg-alert/12 px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em] text-alertt">
+                    Suspendu
+                  </span>
+                )}
+              </span>
               <span
                 className={cx(
                   "cf-fig shrink-0 text-[11px]",
@@ -173,6 +236,10 @@ export default function ProductionPage() {
                 <button
                   key={task.key}
                   type="button"
+                  // La bascule s'annonce comme telle : la case dessinée est
+                  // décorative, l'état vit sur le bouton (même règle que
+                  // Toggle et Chip).
+                  aria-pressed={task.done}
                   onClick={() => void basculer(client, task.key, !task.done)}
                   className={cx(
                     "cf-press-row flex items-center gap-2.5 rounded-ctrl border px-3 py-2 text-left",
@@ -185,18 +252,25 @@ export default function ProductionPage() {
                     aria-hidden="true"
                     className={cx(
                       "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px]",
-                      task.done ? "border-accent bg-accent text-black" : "border-white/30",
+                      task.done ? "border-accent bg-accent text-onaccent" : "border-white/30",
                     )}
                   >
                     {task.done && <Icon name="check" size={12} />}
                   </span>
-                  <span
-                    className={cx(
-                      "min-w-0 flex-1 text-[13px]",
-                      task.done ? "text-mut" : "text-ink",
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cx(
+                        "block text-[13px]",
+                        task.done ? "text-mut" : "text-ink",
+                      )}
+                    >
+                      {task.label}
+                    </span>
+                    {task.note && (
+                      <span className="block truncate text-[11px] italic text-mut">
+                        « {task.note} »
+                      </span>
                     )}
-                  >
-                    {task.label}
                   </span>
                   {task.done && task.doneAt && (
                     <span className="cf-fig shrink-0 text-[11px] text-mut">
