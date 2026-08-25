@@ -41,6 +41,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { Btn, Card, EmptyState, Icon, Skeleton } from "@/components/ui";
 import { euroRound, fmtDay, fmtMonth, int } from "../../crm";
+import { resumeAtelier } from "../../parts";
 import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import {
@@ -196,6 +197,14 @@ export default function ClientFilePage({
               {file.contact.email && <Meta icon="edit">{file.contact.email}</Meta>}
               {row && (
                 <Meta icon="euro">{euroRound(row.mrrCents)} / mois estimés</Meta>
+              )}
+              {/* L'Atelier signé — « qui a quoi ? » se lit ici, pas dans la
+                  facturation : c'est le travail dû, présence à tenir comprise. */}
+              {account?.atelier && (
+                <Meta icon="gear">
+                  Atelier : {resumeAtelier(account.atelier)} — signé le{" "}
+                  {fmtDay(account.atelier.signedAt)}
+                </Meta>
               )}
             </div>
 
@@ -372,7 +381,7 @@ export default function ClientFilePage({
   );
 }
 
-function Meta({ icon, children }: { icon: "home" | "clock" | "phone" | "edit" | "euro"; children: React.ReactNode }) {
+function Meta({ icon, children }: { icon: "home" | "clock" | "phone" | "edit" | "euro" | "gear"; children: React.ReactNode }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       <Icon name={icon} size={14} className="shrink-0 text-mut" />

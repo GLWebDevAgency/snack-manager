@@ -850,8 +850,8 @@ function phrasePrix(p: {
   return morceaux.join(" + ") + annee;
 }
 
-/** Les services retenus, en toutes lettres courtes — pour la carte et le panneau. */
-function resumeAtelier(s: LeadServices): string {
+/** Les services retenus, en toutes lettres courtes — carte, panneau, fiche client. */
+export function resumeAtelier(s: LeadServices): string {
   return [
     s.siteVitrine && "site clé en main",
     s.refonteSite && "refonte du site",

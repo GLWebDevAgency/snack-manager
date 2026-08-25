@@ -11,6 +11,7 @@ import {
   PLAN_LABELS,
   SOCIAL_CADENCE_LABELS,
   proposalCents,
+  servicesCents,
   yearlyCents,
   type JwtPayload,
   type LeadConvert,
@@ -87,6 +88,7 @@ export class ConversionService {
     const passwordHash = await this.hasher.hash(password);
     const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * DAY_MS);
 
+    const { onceCents, monthlyCents } = servicesCents(body.services);
     const tenant = await this.tenants.create({
       slug: body.slug,
       name: lead.restaurantName,
@@ -99,6 +101,10 @@ export class ConversionService {
         suspendedAt: null,
         trialEndsAt,
       },
+      // L'Atelier signé vit sur le client : la fiche répond à « qui a quoi ? »
+      // sans fouiller la facturation. Rien de vendu → null, pas un sous-objet
+      // de faux — l'absence doit se lire comme une absence.
+      atelier: onceCents > 0 || monthlyCents > 0 ? { ...body.services, signedAt: now } : null,
     });
 
     try {

@@ -112,6 +112,8 @@ describe('Convertir un lead en restaurant', () => {
     expect(tenant.founderSeat).toBe(true);
     expect(tenant.account.status).toBe('trial');
     expect(tenant.account.trialEndsAt).toEqual(new Date('2026-09-23T12:00:00.000Z'));
+    // Rien de vendu à l'Atelier : l'absence s'écrit null, pas un objet de faux.
+    expect(tenant.atelier).toBeNull();
 
     // Le compte : e-mail abaissé, jamais le mot de passe en clair.
     const user = users.create.mock.calls[0]?.[0] as Record<string, any>;
@@ -190,7 +192,7 @@ describe('Convertir un lead en restaurant', () => {
   });
 
   it('l’Atelier signé : les mensuels sur leur pièce jamais annualisée, une pièce par ponctuel', async () => {
-    const { service, billing } = build();
+    const { service, billing, tenants } = build();
     const result = await service.convert(
       ACTOR,
       LEAD_ID,
@@ -219,6 +221,15 @@ describe('Convertir un lead en restaurant', () => {
     ]);
     expect(corps[1]?.label).toContain('sans engagement');
     expect(result.draftInvoices).toBe(4);
+    // Et l'Atelier vit sur le CLIENT : la fiche lira « qui a quoi » ici.
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.atelier).toMatchObject({
+      siteVitrine: true,
+      identiteVisuelle: true,
+      presenceInternet: true,
+      reseauxSociaux: 'hebdo',
+      signedAt: NOW,
+    });
   });
 
   it('la signature SURVIT à une facturation en panne — draftInvoices le dit', async () => {
