@@ -13,12 +13,14 @@ import type {
   CrmClient,
   CrmLead,
   CrmOverview,
+  CrmProductionWeek,
   LeadConvert,
   LeadConversion,
   LeadCreate,
   LeadStage,
   LeadTouchCreate,
   LeadUpdate,
+  ProductionTick,
 } from "@sm/contracts";
 import { api, getToken } from "@/lib/api";
 
@@ -75,6 +77,12 @@ export const crm = {
   /** « Traité » : sort le signal de la file quelques jours. */
   dismissSignal: (id: string) =>
     api.post<{ ok: true }>(`/crm/signals/${encodeURIComponent(id)}/dismiss`),
+  /** La file de production de l'Atelier — la semaine courante sans paramètre. */
+  production: (week?: string) =>
+    api.get<CrmProductionWeek>(`/crm/production${week ? `?week=${encodeURIComponent(week)}` : ""}`),
+  /** Cocher/décocher une tâche due de la file de production. */
+  tickProduction: (tenantId: string, body: ProductionTick) =>
+    api.post<{ done: boolean }>(`/crm/production/${tenantId}/tick`, body),
 };
 
 // ─── État partagé de la coquille ───

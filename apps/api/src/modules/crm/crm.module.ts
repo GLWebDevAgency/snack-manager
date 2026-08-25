@@ -13,6 +13,8 @@ import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
 import { PlatformController, PublicPlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
+import { ProductionController } from './production.controller';
+import { ProductionService } from './production.service';
 import { SignalsService } from './signals.service';
 
 /**
@@ -38,6 +40,7 @@ import { SignalsService } from './signals.service';
     BillingController,
     PlatformController,
     PublicPlatformController,
+    ProductionController,
   ],
   providers: [
     CrmService,
@@ -53,6 +56,7 @@ import { SignalsService } from './signals.service';
     BillingService,
     SignalsService,
     PlatformService,
+    ProductionService,
   ],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal

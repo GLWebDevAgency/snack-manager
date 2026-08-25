@@ -1177,7 +1177,9 @@ export const SERVICES: readonly Service[] = [
     // c'est le seul service dont le prix est répété, donc le seul qui pouvait
     // se contredire d'une section à l'autre.
     price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
-    priceNote: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, compris dans Boost · sur votre site : ${euros(ATELIER_CENTS.integration)} d’intégration, mise en service comprise`,
+    // Les 190 € SONT la mise en service sur son site — jamais « intégration »
+    // plus une mise en service par-dessus (fondateur, 25/08).
+    priceNote: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, compris dans Boost · sur votre site déjà en ligne : mise en service ${euros(ATELIER_CENTS.integration)}`,
   },
 ];
 
@@ -1295,7 +1297,7 @@ export const ATELIER_SERVICES: readonly Service[] = [
     lead: "Vous gardez votre site : on y greffe notre module, sans commission.",
     line: "Votre site actuel reste en place ; on y intègre notre module de commande — le même configurateur que la caisse, le ticket droit en cuisine, et zéro commission sur vos ventes.",
     price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
-    priceNote: `+ ${euros(ATELIER_CENTS.integration)} d’intégration, une fois — mise en service comprise`,
+    priceNote: `+ mise en service ${euros(ATELIER_CENTS.integration)}, une fois — tout compris`,
   },
 ];
 
