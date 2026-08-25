@@ -482,6 +482,7 @@ export function Checkout({
           <StripeCard
             publishableKey={intent.publishableKey}
             clientSecret={intent.clientSecret}
+            stripeAccount={intent.stripeAccount}
             amount={intent.amount}
             accent={accent}
             returnUrl={

@@ -89,6 +89,10 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
   // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
   // trouver seul — la FAQ lui promet mot pour mot d'y retrouver ses factures.
+  // Juste avant « Abonnement » : les deux parlent d'argent, mais dans deux
+  // sens opposés — ici c'est le CLIENT qui paie LE RESTAURANT, là c'est le
+  // restaurant qui nous paie. Les voisiner sans les confondre.
+  { id: "encaissement", href: "/admin/encaissement", label: "Encaissement en ligne", icon: "euro" },
   { id: "abonnement", href: "/admin/abonnement", label: "Abonnement", icon: "euro" },
 ];
 

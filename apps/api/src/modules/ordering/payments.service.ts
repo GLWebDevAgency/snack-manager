@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   BadRequestException,
   Inject,
@@ -20,6 +19,17 @@ import {
 } from '@sm/contracts';
 import type { Order } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+// Le sous-domaine qui sait SUR QUEL COMPTE encaisser. Dépendance à sens
+// unique : `ordering` l'interroge, `encaissement` ignore tout des commandes.
+import { EncaissementService } from '../encaissement/encaissement.service';
+// La vérification de signature est PARTAGÉE avec le webhook des comptes
+// connectés : deux secrets différents, un seul algorithme — le dupliquer
+// serait se condamner à ne corriger qu'une moitié le jour d'un correctif.
+import {
+  verifierEvenementStripe,
+  type StripeWebhookEvent,
+  type StripeWebhookObject,
+} from '../../common/stripe-signature';
 
 /**
  * Spécificateur passé par variable, et non en littéral, VOLONTAIREMENT :
@@ -45,11 +55,26 @@ interface StripePaymentIntent {
   amount: number;
 }
 
+/**
+ * Les OPTIONS PAR APPEL de Stripe — c'est `stripeAccount` qui fait la charge
+ * directe : la requête part alors avec l'en-tête `Stripe-Account`, et le
+ * paiement naît sur le compte du restaurant. Sans elles, l'argent tomberait
+ * sur le compte de la plateforme, ce qui constituerait un encaissement pour
+ * compte de tiers — réservé aux établissements agréés.
+ */
+interface StripeOptions {
+  stripeAccount: string;
+}
+
 interface StripeClient {
   paymentIntents: {
-    create(params: Record<string, unknown>): Promise<StripePaymentIntent>;
-    retrieve(id: string): Promise<StripePaymentIntent>;
-    update(id: string, params: Record<string, unknown>): Promise<StripePaymentIntent>;
+    create(params: Record<string, unknown>, options?: StripeOptions): Promise<StripePaymentIntent>;
+    retrieve(id: string, options?: StripeOptions): Promise<StripePaymentIntent>;
+    update(
+      id: string,
+      params: Record<string, unknown>,
+      options?: StripeOptions,
+    ): Promise<StripePaymentIntent>;
   };
 }
 
@@ -65,33 +90,6 @@ const REUSABLE_STATUSES = new Set([
 
 // ─── Webhook Stripe ───
 
-/**
- * Tolérance d'horodatage de la signature, en secondes — la valeur par défaut de
- * Stripe. Elle borne la fenêtre pendant laquelle une requête interceptée peut
- * être rejouée telle quelle par un tiers ; au-delà, la signature reste
- * mathématiquement correcte mais l'événement est trop vieux pour être honnête.
- * Chaque nouvelle tentative de livraison de Stripe est resignée avec l'heure
- * courante : un vrai rejeu Stripe (jusqu'à 3 jours) passe donc toujours.
- */
-const SIGNATURE_TOLERANCE_SECONDS = 300;
-
-/**
- * Sous-ensemble d'un événement Stripe réellement exploité ici — même parti pris
- * que `StripePaymentIntent` plus haut : on décrit ce qu'on lit, pas l'API
- * entière, et on ne dépend d'aucun type du paquet `stripe` (absent du projet).
- */
-export interface StripeWebhookEvent {
-  id: string;
-  type: string;
-  data: { object: StripeWebhookObject };
-}
-
-export interface StripeWebhookObject {
-  id?: string;
-  amount?: number;
-  metadata?: Record<string, string> | null;
-  last_payment_error?: { message?: string } | null;
-}
 
 /**
  * Ce qui a été fait de l'événement. Renvoyé à Stripe en 200 : le tableau de bord
@@ -104,6 +102,10 @@ export interface WebhookResult {
   outcome: 'payee' | 'deja_payee' | 'echec_paiement' | 'ignoree';
   message: string;
 }
+
+// Réexportés : le contrôleur et les tests les importaient déjà d'ici, et la
+// forme de l'événement n'a pas changé — seule sa vérification a déménagé.
+export type { StripeWebhookEvent, StripeWebhookObject };
 
 @Injectable()
 export class PaymentsService {
@@ -118,6 +120,7 @@ export class PaymentsService {
     // `RedisModule` est @Global : la connexion de publication est disponible
     // sans passer par `OrdersService`, dont ce module ne dépend pas.
     @Inject(REDIS_PUB) private readonly redis: Redis,
+    private readonly encaissement: EncaissementService,
   ) {}
 
   /** `true` si le paiement en ligne est configuré (clé présente + paquet installé). */
@@ -174,22 +177,58 @@ export class PaymentsService {
     const stripe = await this.getClient();
     if (!stripe) return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
 
+    /*
+     * SUR QUEL COMPTE ENCAISSE-T-ON ? La question se pose AVANT d'appeler
+     * Stripe, et sa réponse peut être « aucun ».
+     *
+     * Il n'existe aucun repli : sans compte connecté actif, on ne se rabat
+     * PAS sur la clé de la plateforme. L'argent des clients d'un restaurant
+     * qui transiterait par le compte de l'éditeur serait un encaissement pour
+     * compte de tiers — un service de paiement réservé aux établissements
+     * agréés, dont l'exercice illégal est pénalement sanctionné.
+     *
+     * Le client règle donc au comptoir, comme avant : c'est un parcours
+     * complet et valide, pas une panne.
+     */
+    const compte = await this.encaissement.compteActifDe(String(order.tenantId));
+    if (!compte) {
+      return this.unavailable(
+        'Paiement en ligne indisponible pour ce restaurant — réglez votre commande au comptoir.',
+      );
+    }
+
     const publishableKey = this.config.get<string>('STRIPE_PUBLISHABLE_KEY') ?? null;
 
     try {
-      const intent = await this.resolveIntent(stripe, order, amount);
+      const intent = await this.resolveIntent(stripe, order, amount, { stripeAccount: compte });
       if (!intent.client_secret) {
         this.logger.warn(`PaymentIntent ${intent.id} sans client_secret`);
         return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
       }
-      if (order.payment && order.payment.stripePaymentIntentId !== intent.id) {
+      if (
+        order.payment &&
+        (order.payment.stripePaymentIntentId !== intent.id ||
+          order.payment.stripeAccountId !== compte)
+      ) {
         order.payment.stripePaymentIntentId = intent.id;
+        /*
+         * LE COMPTE ENCAISSEUR EST FIGÉ SUR LA COMMANDE, et ce n'est pas une
+         * commodité : un remboursement demandé six mois plus tard doit
+         * s'exécuter sur le compte qui a RÉELLEMENT encaissé. Le redériver
+         * depuis le restaurant serait faux le jour où celui-ci change de
+         * compte — Stripe répondrait « intention introuvable », et l'argent
+         * du client resterait chez le restaurateur sans moyen de le rendre.
+         */
+        order.payment.stripeAccountId = compte;
         await order.save();
       }
       return {
         clientSecret: intent.client_secret,
         publishableKey,
         paymentIntentId: intent.id,
+        // Le navigateur en a besoin pour initialiser Stripe.js sur le bon
+        // compte : sans lui, le `client_secret` ci-dessus est rejeté.
+        stripeAccount: compte,
         amount,
         currency: 'eur',
         unavailable: false,
@@ -206,16 +245,20 @@ export class PaymentsService {
     stripe: StripeClient,
     order: Order & { _id: unknown },
     amount: number,
+    options: StripeOptions,
   ): Promise<StripePaymentIntent> {
     const existingId = order.payment?.stripePaymentIntentId;
     if (existingId) {
       try {
-        const existing = await stripe.paymentIntents.retrieve(existingId);
+        // Les options voyagent sur CHAQUE appel : une intention créée sur le
+        // compte du restaurant n'existe pas sur celui de la plateforme, et la
+        // relire sans l'en-tête renverrait « ressource introuvable ».
+        const existing = await stripe.paymentIntents.retrieve(existingId, options);
         if (REUSABLE_STATUSES.has(existing.status)) {
           // Le total a pu bouger (remise appliquée au comptoir) : on resynchronise.
           return existing.amount === amount
             ? existing
-            : await stripe.paymentIntents.update(existingId, { amount });
+            : await stripe.paymentIntents.update(existingId, { amount }, options);
         }
       } catch (err) {
         this.logger.warn(
@@ -224,16 +267,26 @@ export class PaymentsService {
       }
     }
 
-    return stripe.paymentIntents.create({
-      amount, // centimes — l'unité Stripe pour l'EUR est déjà le centime
-      currency: 'eur',
-      automatic_payment_methods: { enabled: true },
-      metadata: {
-        orderId: String(order._id),
-        tenantId: String(order.tenantId),
-        orderNumber: String(order.number ?? ''),
+    /*
+     * AUCUNE `application_fee_amount`, AUCUN `transfer_data`, et c'est une
+     * décision, pas un oubli : « zéro commission sur vos ventes » est
+     * l'argument qui sépare Snack Manager des caisses qui se rémunèrent sur
+     * chaque encaissement. Le logiciel se facture au mois ; la vente du
+     * restaurateur ne se taxe jamais.
+     */
+    return stripe.paymentIntents.create(
+      {
+        amount, // centimes — l'unité Stripe pour l'EUR est déjà le centime
+        currency: 'eur',
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          orderId: String(order._id),
+          tenantId: String(order.tenantId),
+          orderNumber: String(order.number ?? ''),
+        },
       },
-    });
+      options,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -280,41 +333,7 @@ export class PaymentsService {
         'Webhook Stripe non configuré : renseigner STRIPE_WEBHOOK_SECRET côté API.',
       );
     }
-    if (payload === undefined || payload.length === 0) {
-      // Symptôme classique d'un `NestFactory.create` sans `{ rawBody: true }`.
-      throw new BadRequestException(
-        'Corps brut absent : le webhook Stripe exige « rawBody » (voir main.ts).',
-      );
-    }
-    if (!signatureHeader) {
-      throw new BadRequestException('En-tête « stripe-signature » absent.');
-    }
-
-    const body = typeof payload === 'string' ? payload : payload.toString('utf8');
-    const { timestamp, signatures } = parseSignatureHeader(signatureHeader);
-
-    const expected = createHmac('sha256', secret)
-      .update(`${timestamp}.${body}`, 'utf8')
-      .digest('hex');
-    // Plusieurs `v1` cohabitent pendant une rotation de secret : il suffit
-    // qu'UNE corresponde.
-    if (!signatures.some((candidate) => safeEqualHex(candidate, expected))) {
-      throw new BadRequestException('Signature Stripe invalide.');
-    }
-
-    const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - timestamp);
-    if (ageSeconds > SIGNATURE_TOLERANCE_SECONDS) {
-      throw new BadRequestException(
-        `Horodatage Stripe hors tolérance (${ageSeconds} s) — rejeu suspect ou horloge serveur décalée.`,
-      );
-    }
-
-    try {
-      return JSON.parse(body) as StripeWebhookEvent;
-    } catch {
-      // Signature valide mais corps illisible : anomalie, pas une attaque.
-      throw new BadRequestException('Corps du webhook Stripe illisible.');
-    }
+    return verifierEvenementStripe(payload, signatureHeader, secret);
   }
 
   /** Aiguillage des événements. Ne lève pas : tout ce qui n'est pas traité repart en 200. */
@@ -371,8 +390,33 @@ export class PaymentsService {
     };
     if (intentId) paid['payment.stripePaymentIntentId'] = intentId;
 
+    /*
+     * LE COMPTE ÉMETTEUR ENTRE DANS LE FILTRE, ET C'EST UNE BARRIÈRE DE
+     * SÉCURITÉ, PAS UNE PRÉCISION.
+     *
+     * Le point d'entrée « comptes connectés » reçoit par construction les
+     * événements de TOUS les restaurants raccordés, et leur contenu —
+     * métadonnées comprises — est sous le contrôle du marchand émetteur : il
+     * détient un compte Stripe Standard, donc ses propres clés.
+     *
+     * Sans cette clé, un restaurateur pouvait commander chez un concurrent,
+     * relever l'identifiant de la commande, puis payer cinquante centimes sur
+     * SON compte en pointant `metadata.orderId` sur la commande de l'autre :
+     * elle basculait « payée en ligne », la cuisine du concurrent l'imprimait,
+     * et il servait la marchandise. Reproduit avant correction.
+     *
+     * `?? null` traite l'historique : les événements du webhook de PLATEFORME
+     * ne portent pas de compte, et ne doivent viser que les commandes
+     * encaissées avant Connect (`stripeAccountId` absent). Une commande
+     * encaissée sur un compte connecté ne peut donc plus être confirmée par un
+     * événement de plateforme, ni l'inverse.
+     */
     const order = await this.orders.findOneAndUpdate(
-      { _id: orderId, 'payment.status': 'pending' },
+      {
+        _id: orderId,
+        'payment.status': 'pending',
+        'payment.stripeAccountId': event.account ?? null,
+      },
       { $set: paid },
       { new: true },
     );
@@ -463,45 +507,7 @@ export class PaymentsService {
   }
 }
 
-/**
- * `stripe-signature: t=1614556800,v1=5257a8…,v1=…`
- *
- * Tolérant sur la forme (espaces, paires inconnues comme `v0`), strict sur le
- * fond : sans `t` ni au moins un `v1`, il n'y a rien à vérifier.
- */
-function parseSignatureHeader(header: string): { timestamp: number; signatures: string[] } {
-  let timestamp = Number.NaN;
-  const signatures: string[] = [];
 
-  for (const part of header.split(',')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) continue;
-    const key = part.slice(0, separator).trim();
-    const value = part.slice(separator + 1).trim();
-    if (key === 't') timestamp = Number(value);
-    else if (key === 'v1') signatures.push(value);
-  }
-
-  if (!Number.isFinite(timestamp) || signatures.length === 0) {
-    throw new BadRequestException('En-tête « stripe-signature » illisible.');
-  }
-  return { timestamp, signatures };
-}
-
-/**
- * Comparaison à temps constant de deux empreintes hexadécimales.
- * Un `===` fuirait, par sa durée, le nombre de caractères devinés — de quoi
- * reconstruire une signature valide octet par octet.
- */
-function safeEqualHex(candidate: string, expected: string): boolean {
-  if (candidate.length !== expected.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(expected, 'hex'));
-  } catch {
-    // `candidate` n'est pas de l'hexadécimal : longueurs décodées différentes.
-    return false;
-  }
-}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);

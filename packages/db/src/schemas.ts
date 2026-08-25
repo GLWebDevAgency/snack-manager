@@ -196,9 +196,46 @@ export const TenantSchema = new Schema(
       printTicketOn: { type: String, enum: ['accept', 'ready'], default: 'accept' },
       printStickerOn: { type: String, enum: ['accept', 'ready'], default: 'ready' },
     },
+    /**
+     * NOTRE relation Stripe avec ce restaurant : c'est LUI qui nous paie
+     * l'abonnement. À ne jamais confondre avec `encaissement` ci-dessous, où
+     * c'est le CONSOMMATEUR qui paie LE RESTAURANT.
+     */
     stripe: {
       customerId: { type: String, default: null },
       subscriptionId: { type: String, default: null },
+    },
+    /**
+     * SON compte Stripe à lui — celui sur lequel ses clients paient leurs
+     * commandes en ligne (charges directes, cf. @sm/contracts `encaissement`).
+     *
+     * Rien de secret n'entre ici : un identifiant de compte et les drapeaux
+     * que Stripe nous rend. Les coordonnées bancaires, les pièces d'identité
+     * et la lutte anti-blanchiment restent chez Stripe — c'est ce transfert de
+     * responsabilité qui rend le montage tenable, et l'argent ne transite
+     * JAMAIS par le compte de l'éditeur (ce serait un service de paiement,
+     * réservé aux établissements agréés).
+     *
+     * `null` = pas raccordé : le restaurant encaisse au comptoir, et rien
+     * n'est cassé pour autant.
+     */
+    encaissement: {
+      type: new Schema(
+        {
+          accountId: { type: String, required: true },
+          // Les trois drapeaux sont FAUX par défaut. Un défaut permissif
+          // ferait croire qu'un restaurant encaisse alors que Stripe refuse
+          // ses paiements — le client final verrait un formulaire de carte
+          // qui échoue au dernier clic.
+          chargesEnabled: { type: Boolean, default: false },
+          payoutsEnabled: { type: Boolean, default: false },
+          detailsSubmitted: { type: Boolean, default: false },
+          raccordeLe: { type: Date, required: true },
+          synchroniseLe: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      default: null,
     },
   },
   { timestamps: true },
@@ -481,6 +518,13 @@ export const OrderSchema = new Schema(
           cashReceived: { type: Number, default: null },
           changeGiven: { type: Number, default: null },
           stripePaymentIntentId: { type: String, default: null },
+          /**
+           * Le compte Stripe qui a RÉELLEMENT encaissé (charges directes).
+           * `null` = encaissé avant Connect, sur le compte de la plateforme :
+           * c'est la seule porte par laquelle l'historique reste remboursable,
+           * et aucun chemin de création ne sait plus la fabriquer.
+           */
+          stripeAccountId: { type: String, default: null },
         },
         { _id: false },
       ),

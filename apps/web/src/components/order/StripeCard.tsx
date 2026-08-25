@@ -101,6 +101,7 @@ function appearance(accent: string) {
 export function StripeCard({
   publishableKey,
   clientSecret,
+  stripeAccount,
   amount,
   accent,
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
@@ -110,6 +111,13 @@ export function StripeCard({
 }: {
   publishableKey: string;
   clientSecret: string;
+  /**
+   * Le compte du restaurant (charges directes) — Stripe.js DOIT être
+   * initialisé dessus. L'intention de paiement n'existe que sur ce compte :
+   * sans lui, Stripe refuse le `client_secret` et le client voit son paiement
+   * échouer au dernier clic, sans explication.
+   */
+  stripeAccount: string;
   amount: number;
   accent: string;
   returnUrl: string;
@@ -134,7 +142,7 @@ export function StripeCard({
         if (cancelled || !mountRef.current) return;
         const factory = window.Stripe;
         if (!factory) throw new Error("Stripe.js indisponible");
-        const stripe = factory(publishableKey, { locale: "fr" });
+        const stripe = factory(publishableKey, { locale: "fr", stripeAccount });
         const elements = stripe.elements({
           clientSecret,
           appearance: appearance(accent),
@@ -159,7 +167,7 @@ export function StripeCard({
         /* démontage best-effort */
       }
     };
-  }, [publishableKey, clientSecret, accent]);
+  }, [publishableKey, clientSecret, stripeAccount, accent]);
 
   async function pay() {
     const stripe = stripeRef.current;
