@@ -316,7 +316,10 @@ export const SECTIONS: readonly SectionMeta[] = [
   // `nav` dit « Les services » quand le badge dit « L'Atelier » : le menu et
   // le pied de page portent AUSSI le lien vers la page /atelier — deux entrées
   // « L'Atelier » côte à côte, l'ancre et la page, se liraient comme un bug.
-  { id: "commander", nav: "Les services", badge: "L’Atelier", title: "Un logiciel ne suffit pas. On s’occupe du reste." },
+  // Le titre est LA phrase du fondateur (25/08) : l'angle n'est pas une liste
+  // de prestations, c'est ce qu'un restaurant EST — une image, une
+  // communication — et qui s'en occupe.
+  { id: "commander", nav: "Les services", badge: "L’Atelier", title: "Un restaurant, c’est aussi une image. On s’en occupe pour vous." },
   {
     id: "materiel",
     nav: "Matériel",
@@ -1118,20 +1121,14 @@ export type Service = {
  * Une seule section, tous les prix, et la page `/atelier` en appel à
  * l'action pour la démarche et le détail.
  *
- * L'ORDRE EST UN ARGUMENTAIRE : la maquette d'abord — c'est le renversement
- * de risque que personne d'autre n'offre (vous VOYEZ avant de payer), donc la
- * rangée de tête. Puis Google (le mécanisme du zéro commission), les réseaux,
- * l'identité, la commande en ligne.
+ * L'ORDRE EST UN ARGUMENTAIRE — ET IL NE CENTRE RIEN SUR LE SITE : tout le
+ * monde a une fiche Google, donc elle ouvre (et c'est le mécanisme du zéro
+ * commission) ; le site vient ensuite, avec SA garantie (la maquette offerte
+ * — le renversement de risque du service site, jamais l'étape obligée d'un
+ * parcours : un restaurateur peut ne rien vouloir changer à son site et tout
+ * confier des réseaux). Puis les réseaux, l'identité, la commande en ligne.
  */
 export const SERVICES: readonly Service[] = [
-  {
-    id: "site",
-    title: "Votre site, maquette montrée d’abord",
-    lead: "Vous validez sur pièce, pas sur promesse.",
-    line: "On dessine la maquette de votre site et on vous la montre AVANT tout engagement. Contenus posés, référencement local, mise en ligne — et votre menu est déjà dedans, branché sur la caisse : un prix change au back-office, le site suit.",
-    price: euros(ATELIER_CENTS.site),
-    priceNote: `une fois, avec une formule · refonte de l’existant : ${euros(ATELIER_CENTS.refonte)}`,
-  },
   {
     id: "google",
     title: "Votre visibilité sur Google",
@@ -1139,6 +1136,14 @@ export const SERVICES: readonly Service[] = [
     line: "Le lien de commande directe est posé sur votre fiche à la mise en route, à côté de ceux des plateformes et marqué « préféré par l'établissement ». Et si vous voulez qu'on la tienne : publications, photos, horaires, une réponse à tous les avis — et un rapport mensuel simple, appels, itinéraires, vues.",
     price: `${euros(ATELIER_CENTS.presence)} / mois`,
     priceNote: "fiche tenue, sans engagement · le lien de commande : compris dans la mise en route",
+  },
+  {
+    id: "site",
+    title: "Votre site, maquette montrée d’abord",
+    lead: "Vous validez sur pièce, pas sur promesse.",
+    line: "On dessine la maquette de votre site et on vous la montre AVANT tout engagement. Contenus posés, référencement local, mise en ligne — et votre menu est déjà dedans, branché sur la caisse : un prix change au back-office, le site suit.",
+    price: euros(ATELIER_CENTS.site),
+    priceNote: `une fois, avec une formule · refonte de l’existant : ${euros(ATELIER_CENTS.refonte)}`,
   },
   {
     id: "reseaux",

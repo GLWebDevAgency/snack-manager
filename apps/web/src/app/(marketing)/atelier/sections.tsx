@@ -29,7 +29,8 @@ import {
  * montant.
  *
  * Le rythme alterne les gabarits, deux de même forme ne se suivent jamais :
- * bande photographique → grille de faits → rangées de devis → tableau → bande.
+ * bande photographique → frise → rangées de devis → grille de faits → tableau
+ * → bande.
  */
 
 /* ── En-tête — la bande d'ouverture ──────────────────────────── */
@@ -247,17 +248,19 @@ function AppelFinal() {
 }
 
 /**
- * La page, dans l'ordre d'une mise en confiance : la démarche → la grille →
- * la comparaison → le geste. On ne demande le numéro qu'après avoir tout
- * montré, prix compris.
+ * La page, dans l'ordre d'une mise en confiance : la démarche (neutre — aucun
+ * service n'y est une étape) → la grille → la garantie du site (la maquette,
+ * À SA PLACE : celle d'un service parmi d'autres, jamais le centre) → la
+ * comparaison → le geste. On ne demande le numéro qu'après avoir tout montré,
+ * prix compris.
  */
 export function AtelierBody() {
   return (
     <>
       <PageHead />
-      <Maquette />
       <Parcours />
       <Services />
+      <Maquette />
       <Agence />
       <AppelFinal />
     </>

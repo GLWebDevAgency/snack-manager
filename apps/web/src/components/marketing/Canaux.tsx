@@ -11,8 +11,11 @@ import { ATELIER_PORTE, DIRECT_DELIVERY, SERVICES, SERVICES_BAND, section } from
  * l'Atelier » est venue répéter les mêmes services en trois cartes juste en
  * dessous. Le fondateur a vu ce que le lecteur voyait : deux sections pour la
  * même chose. La porte est morte ; TOUT l'Atelier vit ici — cinq rangées, la
- * maquette en tête (le renversement de risque que personne d'autre n'offre),
- * chaque service et son prix, et le renvoi vers `/atelier` en seul appel.
+ * fiche Google en tête (tout le monde en a une, et c'est le mécanisme du zéro
+ * commission), chaque service et son prix, et le renvoi vers `/atelier` en
+ * seul appel. La maquette offerte reste la garantie DU service site, jamais
+ * la tête d'affiche : un restaurateur peut ne rien vouloir changer à son site
+ * et tout confier de sa fiche ou de ses réseaux (fondateur, 25/08).
  *
  * CINQ RANGÉES PLEINE LARGEUR, JAMAIS CINQ CARTES, et ce n'est pas une
  * question de goût : la grille tarifaire est deux sections plus bas. Des
@@ -84,7 +87,7 @@ export function Canaux() {
 
       <ol className="ch-rows">
         {SERVICES.map((service, i) => (
-          // `SERVICES[0]` est le site et sa maquette, et l'ordre du tableau est
+          // `SERVICES[0]` est la fiche Google, et l'ordre du tableau est
           // l'ordre d'affichage : la rangée de tête n'est pas choisie ici.
           <li className={i === 0 ? "ch-row lead rv" : "ch-row rv"} key={service.id}>
             {/* La fracture verticale est conservée — c'est elle qui fait lire
@@ -109,8 +112,8 @@ export function Canaux() {
       </ol>
 
       {/* Le seul appel de la section — une navigation, pas une demande : les
-          prix sont déjà là, la page de l'Atelier montre la démarche (la
-          maquette d'abord) et le détail de chaque service. */}
+          prix sont déjà là, la page de l'Atelier montre la démarche (regarder,
+          choisir service par service, confier) et le détail de chacun. */}
       <div className="ch-cta rv">
         <Link className="btn light" href={ATELIER_PORTE.href}>
           {ATELIER_PORTE.cta}

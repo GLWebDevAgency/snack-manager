@@ -44,25 +44,24 @@ export type AtelierSectionMeta = {
 };
 
 /**
- * L'ORDRE EST CELUI D'UNE MISE EN CONFIANCE : d'abord la démarche (la
- * maquette, montrée avant l'engagement), puis la grille (les six services et
- * leurs prix), puis la comparaison que le lecteur fait de toute façon (et
- * pourquoi pas une agence ?). On ne demande rien avant d'avoir tout montré.
+ * L'ORDRE EST CELUI D'UNE MISE EN CONFIANCE : la démarche (neutre), la grille
+ * des prix, la garantie du site, puis la comparaison que le lecteur fait de
+ * toute façon (et pourquoi pas une agence ?). On ne demande rien avant
+ * d'avoir tout montré. Le sommaire dérive de ce tableau : son ordre EST
+ * l'ordre des sections dans la page — les deux se recalent ensemble.
  */
 export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
-  {
-    id: "maquette",
-    nav: "La maquette",
-    badge: "Avant tout engagement",
-    title: "La maquette d’abord. Votre décision ensuite.",
-    lead: "On dessine votre site et on vous le montre : vous validez sur pièce, pas sur promesse — et votre menu est déjà dedans.",
-  },
+  // La démarche OUVRE, et elle est neutre : regarder, choisir service par
+  // service, confier. La maquette n'y est plus une étape — elle avait pris
+  // cette place et laissait croire que tout partait du site, alors qu'un
+  // restaurateur peut ne rien vouloir y changer (fondateur, 25/08) : elle est
+  // redescendue comme GARANTIE du service site, dans sa propre section.
   {
     id: "parcours",
     nav: "La démarche",
     badge: "Trois étapes",
-    title: "D’abord on regarde. Ensuite on dessine. Vous décidez en dernier.",
-    lead: "Aucune étape ne vous engage avant que vous ayez vu — c’est l’ordre entier de la démarche.",
+    title: "On regarde. Vous choisissez. On s’en occupe.",
+    lead: "Chaque service se choisit seul — la fiche Google sans le site, les réseaux sans le logo. Rien n’est un paquet.",
   },
   {
     id: "services",
@@ -70,6 +69,13 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
     badge: "Prix affichés",
     title: "Six services, six prix. Écrits ici.",
     lead: "Une agence répond par un devis. Nous, on affiche la grille : voici ce qu’on fait, et ce que ça coûte.",
+  },
+  {
+    id: "maquette",
+    nav: "Le site, sans risque",
+    badge: "Si vous prenez le site",
+    title: "Le site ? Vous le voyez avant de payer.",
+    lead: "Pour ce service-là, on dessine d’abord : la maquette est offerte, montrée avant tout engagement — et votre menu est déjà dedans.",
   },
   {
     id: "agence",
@@ -116,21 +122,25 @@ export const ATELIER_SHOTS = {
 /**
  * LE PREMIER DORÉ DE LA PAGE N'EST PAS UN PRIX, ET C'EST UNE DÉCISION : la
  * transparence EST l'argument de l'Atelier, donc c'est elle qui prend la
- * place du chiffre — même écart assumé que `/cuisine`, dont le doré dit
- * « compris dans toutes les formules ». Les montants, eux, arrivent deux
- * écrans plus bas, tous ensemble et tous affichés.
+ * place du chiffre — même écart assumé que `/cuisine`. Les montants arrivent
+ * plus bas, tous ensemble et tous affichés. « Sans engagement » ne s'écrit
+ * jamais seul — toujours avec « résiliable à tout moment ».
  *
- * « Sans engagement » ne s'écrit jamais seul — toujours avec « résiliable à
- * tout moment », la leçon de la constante `ENGAGEMENT`.
+ * L'ANGLE EST CELUI DU FONDATEUR (25/08), MOT POUR MOT OU PRESQUE : un
+ * restaurant, c'est aussi une image et de la communication — et quelqu'un
+ * s'en occupe pour vous. Pas une liste de prestations : une charge qu'on
+ * enlève. La pastille à pouls doré porte l'autre message qui devait être
+ * limpide : chaque service se choisit SEUL — la maquette du site n'est la
+ * condition de rien, elle est la garantie d'UN service, dite dans sa section.
  */
 export const ATELIER_HERO = {
   badge: "L’Atelier",
-  title: "Votre présence en ligne, tenue par ceux qui font tourner votre caisse.",
-  lead: "Le site, Google, les réseaux et la caisse : un seul interlocuteur — un artisan local, pas une plateforme. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
-  /** La pastille à pouls doré — LE renversement de risque, épinglé dès l'ouverture. */
-  chip: "Maquette offerte — vous voyez avant de payer",
+  title: "Un restaurant, c’est aussi une image. On s’en occupe pour vous.",
+  lead: "La fiche Google, les réseaux, le site, l’identité visuelle : de la communication tenue par l’artisan local qui fait déjà tourner votre caisse — pas par une plateforme. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
+  /** La pastille à pouls doré — LE message anti-confusion, épinglé dès l'ouverture. */
+  chip: "Chaque service se choisit seul — rien n’est imposé",
   price: "des prix affichés, pas des devis",
-  claim: "et la maquette de votre site, montrée avant tout engagement",
+  claim: "et si vous prenez le site : sa maquette est offerte, montrée avant tout engagement",
 } as const;
 
 /* ── 1 bis. La démarche — trois étapes ───────────────────────── */
@@ -138,25 +148,31 @@ export const ATELIER_HERO = {
 /**
  * LA FRISE DES JALONS, APPLIQUÉE À LA VENTE : le même gabarit visuel que le
  * lancement de la landing (`jl-`), parce que c'est le type le plus premium du
- * site et qu'une démarche EST une frise. Trois étapes, et la troisième dit la
- * seule chose qui compte : vous pouvez dire non, et vous ne devez rien —
- * c'est vrai (la maquette est offerte), donc ça s'écrit.
+ * site et qu'une démarche EST une frise.
+ *
+ * ═══ ET ELLE EST NEUTRE — AUCUN SERVICE N'Y EST UNE ÉTAPE ═══
+ *
+ * La première version mettait « on dessine votre maquette » en étape 2 : le
+ * lecteur qui ne voulait pas toucher à son site comprenait que tout partait
+ * de là (fondateur, 25/08). La démarche dit désormais la seule chose vraie
+ * pour TOUS les services : on regarde, VOUS choisissez service par service,
+ * on s'en occupe. La maquette vit dans la section du site, comme sa garantie.
  */
 export const PARCOURS_STEPS: readonly { when: string; title: string; line: string }[] = [
   {
     when: "Étape 1",
-    title: "On regarde ensemble",
-    line: "Trente minutes, chez vous ou au téléphone : votre site s’il existe, votre fiche Google, vos réseaux. Ce qui marche, ce qui manque — dit simplement, sans jargon.",
+    title: "On regarde votre image ensemble",
+    line: "Trente minutes, chez vous ou au téléphone : votre fiche Google, vos réseaux, votre site s’il existe. Ce qui marche, ce qui manque — dit simplement, sans jargon.",
   },
   {
     when: "Étape 2",
-    title: "On dessine votre maquette",
-    line: "Votre enseigne, vos photos, votre carte déjà dedans. Offerte, sans engagement : c’est notre façon de prouver, pas de promettre.",
+    title: "Vous choisissez, service par service",
+    line: "Chaque service a son prix, affiché sur cette page, et se prend seul — la fiche Google sans le site, les réseaux sans le logo. Rien n’est un paquet, personne ne pousse.",
   },
   {
     when: "Étape 3",
-    title: "Vous décidez devant elle",
-    line: "Elle vous plaît : on pose les contenus et on met en ligne. Elle ne vous plaît pas : on se serre la main, et vous ne devez rien.",
+    title: "On s’en occupe, vous tenez votre comptoir",
+    line: "Publications, avis, mises à jour : le travail part, et un rapport simple vous dit ce qui a été fait. Les services mensuels se résilient à tout moment.",
   },
 ] as const;
 
@@ -211,8 +227,8 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
  * jamais quand.
  */
 export const ATELIER_CTA = {
-  title: "On commence par la maquette.",
-  line: "Laissez votre numéro : on regarde ensemble ce que vous avez déjà — site, fiche Google, réseaux — puis on dessine la maquette de votre site. Vous déciderez devant elle.",
+  title: "On commence par regarder — pas par vendre.",
+  line: "Laissez votre numéro : on regarde ensemble votre image — fiche Google, réseaux, site — et on vous dit ce qu’on ferait, aux prix affichés ici. Vous choisirez service par service.",
   /**
    * La preuve, au moment de demander le numéro : le logiciel derrière
    * l'Atelier tourne en service réel — un FAIT du site (la frise des jalons
