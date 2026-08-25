@@ -456,7 +456,9 @@ export const NAV_PAGES: readonly NavLink[] = [
  */
 export const NAV_PLATEFORME: readonly NavLink[] = [
   { href: "/caisse", label: "La caisse" },
-  { href: "/cuisine", label: "L'écran cuisine" },
+  // Apostrophe typographique, comme « L’Atelier » deux lignes plus bas : le
+  // même menu ne doit pas mélanger deux glyphes pour le même signe.
+  { href: "/cuisine", label: "L’écran cuisine" },
   { href: "/commande-en-ligne", label: "La commande en ligne" },
   { href: "/atelier", label: "L’Atelier" },
   { ...ancre("produit"), label: "La démo en direct" },

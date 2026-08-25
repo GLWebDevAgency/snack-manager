@@ -74,6 +74,29 @@ export const TenantSchema = new Schema(
     plan: { type: String, enum: ['essentiel', 'complet', 'boost'], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
     /**
+     * L'Atelier signé — les services vendus avec l'abonnement, posés à la
+     * signature. Les factures disent ce qui a été FACTURÉ ; ce champ dit ce
+     * qui est DÛ en travail (présence internet à tenir, publications à
+     * sortir) : c'est lui que la fiche client lit pour répondre à « qui a
+     * quoi ? » sans fouiller la facturation. Les prix, eux, restent dérivés
+     * de la grille — jamais stockés.
+     */
+    atelier: {
+      type: new Schema(
+        {
+          siteVitrine: { type: Boolean, default: false },
+          refonteSite: { type: Boolean, default: false },
+          identiteVisuelle: { type: Boolean, default: false },
+          integrationCommande: { type: Boolean, default: false },
+          presenceInternet: { type: Boolean, default: false },
+          reseauxSociaux: { type: String, enum: ['hebdo', 'bihebdo', null], default: null },
+          signedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+    /**
      * État du compte côté Snack Manager — le seul champ qui décide de l'ACCÈS.
      *
      * Suspendre coupe l'accès, jamais les données : le menu, les commandes et
