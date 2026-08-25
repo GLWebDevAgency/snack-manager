@@ -718,6 +718,38 @@ export const SignalDismissalSchema = new Schema(
 );
 export type SignalDismissal = InferSchemaType<typeof SignalDismissalSchema>;
 
+/**
+ * Une COCHE de la file de production hebdomadaire de l'Atelier — « la
+ * publication de la semaine est faite chez ce client ».
+ *
+ * Le DÛ ne se stocke jamais : il se dérive de `tenant.atelier` et de la
+ * semaine (@sm/contracts, `productionTasksFor`) — même principe que le
+ * retard d'une facture. Seul le FAIT s'écrit : décocher supprime le
+ * document, l'unicité (tenant, semaine, tâche) rend le geste idempotent.
+ */
+export const AtelierTickSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true },
+    /** Clef de semaine ISO `AAAA-Wss` — voir @sm/contracts `production.ts`. */
+    week: { type: String, required: true },
+    // Les clefs de tâches vivent dans @sm/contracts (`PRODUCTION_TASKS`) ;
+    // recopiées ici comme les formules plus haut — ce paquet reste sans
+    // dépendance, et un test de cohérence casserait à la divergence.
+    task: {
+      type: String,
+      enum: ['social_pub_1', 'social_pub_2', 'presence_avis', 'presence_rapport'],
+      required: true,
+    },
+    doneAt: { type: Date, required: true },
+    /** `sub` du jeton sm_admin — même trace que les signaux traités. */
+    doneBy: { type: String, default: '' },
+    note: { type: String, default: '' },
+  },
+  { timestamps: false },
+);
+AtelierTickSchema.index({ tenantId: 1, week: 1, task: 1 }, { unique: true });
+export type AtelierTick = InferSchemaType<typeof AtelierTickSchema>;
+
 // ─────────────────────────────────────────────────────────────
 // platformSettings — les réglages de NOTRE plateforme (document unique)
 // ─────────────────────────────────────────────────────────────
@@ -1292,6 +1324,7 @@ export const MODELS = {
     schema: SignalDismissalSchema,
     collection: 'signaldismissals',
   },
+  AtelierTick: { name: 'AtelierTick', schema: AtelierTickSchema, collection: 'atelierticks' },
   FunnelEvent: { name: 'FunnelEvent', schema: FunnelEventSchema, collection: 'funnelevents' },
   Review: { name: 'Review', schema: ReviewSchema, collection: 'reviews' },
   Promotion: { name: 'Promotion', schema: PromotionSchema, collection: 'promotions' },

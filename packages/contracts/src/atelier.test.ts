@@ -101,6 +101,29 @@ describe('sans formule — les services se vendent seuls', () => {
     expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.integrationCommande);
   });
 
+  it('sans formule, le module ne se vend que greffé : l’intégration est exigée', () => {
+    // Le module « seul » (79 € + 55 €) n'existe qu'adossé à une formule.
+    expect(
+      LeadProposalSchema.safeParse({ plan: null, onlineOrdering: true }).success,
+    ).toBe(false);
+    expect(
+      LeadProposalSchema.safeParse({
+        plan: null,
+        onlineOrdering: true,
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+      }).success,
+    ).toBe(true);
+    // La même règle verrouille la signature.
+    expect(
+      LeadConvertSchema.safeParse({
+        slug: 'chez-nicolas',
+        ownerEmail: 'nicolas@exemple.fr',
+        plan: null,
+        onlineOrdering: true,
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepte une proposition services seuls, refuse une proposition vide', () => {
     expect(
       LeadProposalSchema.safeParse({

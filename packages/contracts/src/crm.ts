@@ -227,8 +227,11 @@ export const ATELIER_ONCE_LABELS: Record<AtelierOnceKey, string> = {
   siteVitrine: 'Site vitrine clé en main — maquette sur mesure, contenus, référencement local',
   refonteSite: 'Refonte du site existant — reprise complète, maquette validée avant chantier',
   identiteVisuelle: 'Identité visuelle — logo, couleurs, déclinaisons (tickets, vitrine, réseaux)',
+  // « Mise en service », pas « intégration une fois » : les 190 € sont le
+  // branchement sur SON site — le module, lui, se paie au mois (fondateur,
+  // 25/08). Les 55 € de mise en service classique n'existent pas ici.
   integrationCommande:
-    'Intégration de la commande en ligne sur votre site existant — mise en service du module comprise',
+    'Mise en service de la commande en ligne sur votre site existant — le module se facture au mois',
 };
 
 /** Présence internet : fiche Google tenue, avis répondus, rapport mensuel. */
@@ -331,6 +334,26 @@ const integrationExigeLeModule = (
  * rien à imprimer, rien à signer : refusé ici, à la proposition COMME à la
  * signature — plutôt qu'un devis vide entre les mains du prospect.
  */
+/**
+ * SANS formule, le module n'a pas de page hébergée où vivre : la commande en
+ * ligne ne se vend alors QUE greffée sur le site existant du client —
+ * 190 € de mise en service, puis le module au mois (fondateur, 25/08).
+ * Le module « seul » à 79 € + 55 € n'existe qu'ADOSSÉ à une formule.
+ */
+const moduleSansFormuleExigeLIntegration = (
+  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
+  ctx: z.RefinementCtx,
+): void => {
+  if (p.plan === null && p.onlineOrdering && !p.services.integrationCommande) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['onlineOrdering'],
+      message:
+        'Sans formule, la commande en ligne se vend greffée sur le site existant — cochez l’intégration.',
+    });
+  }
+};
+
 const propositionNonVide = (
   p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
   ctx: z.RefinementCtx,
@@ -361,6 +384,7 @@ export const LeadProposalSchema = z
     note: z.string().trim().max(500).default(''),
   })
   .superRefine(integrationExigeLeModule)
+  .superRefine(moduleSansFormuleExigeLIntegration)
   .superRefine(propositionNonVide);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
@@ -559,6 +583,7 @@ export const LeadConvertSchema = z
     services: LeadServicesSchema.default(EMPTY_SERVICES),
   })
   .superRefine(integrationExigeLeModule)
+  .superRefine(moduleSansFormuleExigeLIntegration)
   .superRefine(propositionNonVide);
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 

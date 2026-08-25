@@ -53,6 +53,9 @@ const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
   { href: "/sm/pipeline", label: "Pipeline", icon: "grid", title: "Pipeline commercial" },
   { href: "/sm/clients", label: "Clients", icon: "user", title: "Restaurants clients" },
   { href: "/sm/signals", label: "Signaux", icon: "bell", title: "File de travail" },
+  // Après les signaux : on a écouté le parc, on TIENT ensuite les promesses
+  // récurrentes de l'Atelier — publications, fiche Google, rapports.
+  { href: "/sm/production", label: "Production", icon: "check", title: "Production de l'Atelier" },
   { href: "/sm/erreurs", label: "Erreurs", icon: "gear", title: "Journal d'erreurs" },
   {
     href: "/sm/facturation",
