@@ -71,7 +71,9 @@ export const TenantSchema = new Schema(
       ],
       default: [],
     },
-    plan: { type: String, enum: ['essentiel', 'complet', 'boost'], default: 'essentiel' },
+    // `null` admis depuis l'Atelier : un client peut n'acheter QUE des
+    // services (site, réseaux, présence) — aucune formule logicielle alors.
+    plan: { type: String, enum: ['essentiel', 'complet', 'boost', null], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
     /**
      * L'Atelier signé — les services vendus avec l'abonnement, posés à la
@@ -600,7 +602,9 @@ export const LeadSchema = new Schema(
     proposal: {
       type: new Schema(
         {
-          plan: { type: String, enum: ['essentiel', 'complet', 'boost'], required: true },
+          // `null` = proposition sans formule — que des services de l'Atelier
+          // (même motif que `reseauxSociaux` plus bas pour l'enum nullable).
+          plan: { type: String, enum: ['essentiel', 'complet', 'boost', null], default: null },
           onlineOrdering: { type: Boolean, default: false },
           billing: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
           // L'Atelier — les services retenus. Les prix ne se stockent pas :

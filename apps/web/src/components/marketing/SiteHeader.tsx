@@ -53,6 +53,7 @@ export function SiteHeader() {
    */
   const [dropOpen, setDropOpen] = useState(false);
   const dropClose = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropSettle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropButton = useRef<HTMLButtonElement>(null);
   const midRef = useRef<HTMLDivElement>(null);
 
@@ -71,15 +72,28 @@ export function SiteHeader() {
     if (b && m) setDropLeft(b.left - m.left);
   }, []);
 
+  /*
+   * LA MESURE NE SE FAIT QU'À L'OUVERTURE. Elle se refaisait à CHAQUE survol —
+   * panneau compris : entrer dans le panneau re-mesurait pendant que l'encoche
+   * s'anime encore, le `left` changeait sous le curseur et le panneau
+   * tremblait, parfois jusqu'à sortir de sous la souris et se refermer
+   * (constaté par le fondateur, 25/08). Ouvert, il ne bouge plus ; la mesure
+   * de rattrapage à 0,5 s (animation posée) reste, mais une seule à la fois.
+   */
   const dropEnter = useCallback(() => {
     if (dropClose.current) clearTimeout(dropClose.current);
-    measureDrop();
-    setTimeout(measureDrop, 500);
+    if (!dropOpen) {
+      measureDrop();
+      if (dropSettle.current) clearTimeout(dropSettle.current);
+      dropSettle.current = setTimeout(measureDrop, 500);
+    }
     setDropOpen(true);
-  }, [measureDrop]);
+  }, [dropOpen, measureDrop]);
   const dropLeave = useCallback(() => {
     if (dropClose.current) clearTimeout(dropClose.current);
-    dropClose.current = setTimeout(() => setDropOpen(false), 160);
+    // 240 ms : le trajet déclencheur → panneau peut marquer un arrêt (le pont
+    // CSS couvre le vide, ce délai couvre l'hésitation).
+    dropClose.current = setTimeout(() => setDropOpen(false), 240);
   }, []);
   const dropEscape = useCallback((ev: React.KeyboardEvent) => {
     if (ev.key === "Escape") {

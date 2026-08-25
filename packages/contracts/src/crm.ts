@@ -173,6 +173,25 @@ export const PLAN_LABELS: Record<'essentiel' | 'complet' | 'boost', string> = {
   boost: 'Boost',
 };
 
+/**
+ * LA FORMULE EST DEVENUE UN CHOIX, PAS UN PRÉALABLE.
+ *
+ * Depuis l'Atelier, un restaurateur peut n'acheter QUE le site, QUE les
+ * réseaux sociaux ou QUE le module de commande en ligne greffé sur son site :
+ * la proposition (et la signature) portent alors `plan: null`, et chaque
+ * service se cite seul, comme un produit. `null` et non une pseudo-formule
+ * « aucune » dans l'énumération : une valeur de plus contaminerait la grille
+ * (`PLAN_MRR_CENTS`), la facturation et tous les écrans qui la déroulent.
+ */
+export type PlanChoice = keyof typeof PLAN_MRR_CENTS | null;
+
+export const PLAN_NONE_LABEL = 'Sans formule — services seuls';
+/** La même absence, en pastille courte (listes, cartes du pipeline). */
+export const PLAN_NONE_SHORT_LABEL = 'Atelier seul';
+
+export const planChoiceLabel = (plan: PlanChoice): string =>
+  plan ? PLAN_LABELS[plan] : PLAN_NONE_LABEL;
+
 /* ── L'Atelier — les services d'agence, au catalogue ──── */
 
 /**
@@ -295,7 +314,7 @@ export const EMPTY_SERVICES: LeadServices = {
  * à la proposition COMME à la signature.
  */
 const integrationExigeLeModule = (
-  p: { plan: string; onlineOrdering: boolean; services: LeadServices },
+  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
   ctx: z.RefinementCtx,
 ): void => {
   if (p.services.integrationCommande && !p.onlineOrdering && p.plan !== 'boost') {
@@ -307,18 +326,42 @@ const integrationExigeLeModule = (
   }
 };
 
+/**
+ * Sans formule, sans module et sans aucun service, il n'y a rien à chiffrer,
+ * rien à imprimer, rien à signer : refusé ici, à la proposition COMME à la
+ * signature — plutôt qu'un devis vide entre les mains du prospect.
+ */
+const propositionNonVide = (
+  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
+  ctx: z.RefinementCtx,
+): void => {
+  const unService =
+    ATELIER_ONCE_KEYS.some((cle) => p.services[cle]) ||
+    p.services.presenceInternet ||
+    p.services.reseauxSociaux !== null;
+  if (p.plan === null && !p.onlineOrdering && !unService) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['plan'],
+      message: 'Rien sur la table : choisissez une formule, le module ou au moins un service.',
+    });
+  }
+};
+
 export const LeadProposalSchema = z
   .object({
-    plan: z.enum(['essentiel', 'complet', 'boost']),
+    /** `null` = aucune formule — le prospect n'achète que des services. */
+    plan: z.enum(['essentiel', 'complet', 'boost']).nullable(),
     /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
     onlineOrdering: z.boolean().default(false),
     billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-    /** L'Atelier — les services retenus en plus du logiciel. */
+    /** L'Atelier — les services retenus, avec ou sans le logiciel. */
     services: LeadServicesSchema.default(EMPTY_SERVICES),
     /** Ce qui s'est dit et ne rentre pas dans les cases — « attend son associé ». */
     note: z.string().trim().max(500).default(''),
   })
-  .superRefine(integrationExigeLeModule);
+  .superRefine(integrationExigeLeModule)
+  .superRefine(propositionNonVide);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
 /** La proposition telle que servie — datée du jour où elle a été posée. */
@@ -343,8 +386,9 @@ export function servicesCents(services: LeadServices): {
  * Sur Boost le module est compris : ni mensualité ni mise en service en plus,
  * même si la case a été cochée par réflexe.
  *
- * `monthlyCents` reste le LOGICIEL seul : c'est lui que l'engagement annuel
- * remise (douze mois payés dix). Les services mensuels de l'Atelier sortent à
+ * `monthlyCents` reste le LOGICIEL seul (formule + module) : c'est lui que
+ * l'engagement annuel remise (douze mois payés dix) — et il vaut 0 quand la
+ * proposition ne vend que des services. Les mensuels de l'Atelier sortent à
  * part (`servicesMonthlyCents`) — sans engagement, ils ne s'annualisent
  * jamais. Les ponctuels de l'Atelier rejoignent `setupOnceCents`.
  */
@@ -362,7 +406,8 @@ export function proposalCents(
   const miseEnService = moduleFacture && !services.integrationCommande;
   const atelier = servicesCents(services);
   return {
-    monthlyCents: PLAN_MRR_CENTS[p.plan] + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
+    monthlyCents:
+      (p.plan ? PLAN_MRR_CENTS[p.plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
     servicesMonthlyCents: atelier.monthlyCents,
     setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
   };
@@ -499,7 +544,8 @@ export const LeadConvertSchema = z
       .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
     ownerEmail: z.email().max(160),
     ownerName: z.string().trim().max(120).default(''),
-    plan: z.enum(['essentiel', 'complet', 'boost']).default('essentiel'),
+    /** `null` = signé sans formule — le client n'achète que des services. */
+    plan: z.enum(['essentiel', 'complet', 'boost']).nullable().default('essentiel'),
     founderSeat: z.boolean().default(false),
     /**
      * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
@@ -512,7 +558,8 @@ export const LeadConvertSchema = z
     /** L'Atelier signé — mêmes règles que la proposition, même primauté du signé. */
     services: LeadServicesSchema.default(EMPTY_SERVICES),
   })
-  .superRefine(integrationExigeLeModule);
+  .superRefine(integrationExigeLeModule)
+  .superRefine(propositionNonVide);
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 
 /* ── « Qui je relance aujourd'hui ? » ─────────────────────────── */
@@ -651,8 +698,9 @@ export type CrmClient = {
   _id: string;
   name: string;
   slug: string;
-  plan: 'essentiel' | 'complet' | 'boost';
-  /** MRR estimé du client (CENTIMES), d'après son plan. */
+  /** `null` = client Atelier seul — aucun abonnement logiciel. */
+  plan: 'essentiel' | 'complet' | 'boost' | null;
+  /** MRR estimé du client (CENTIMES), d'après son plan — 0 sans formule. */
   mrrCents: number;
   founderSeat: boolean;
   /** Date d'entrée dans le parc (création du tenant). */

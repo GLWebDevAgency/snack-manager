@@ -276,7 +276,7 @@ export class BillingService {
       const view = toInvoiceView(raw as RawInvoice, now);
       if (view.status !== 'en_retard') continue;
       const tenant = byTenant.get(view.tenantId);
-      const plan = tenant ? planOf(tenant) : ('essentiel' as BillingPlan);
+      const plan = tenant ? planOf(tenant) : null;
       const status = tenant ? accountStatusOf(tenant) : ('trial' as TenantAccountStatus);
       invoices.push({
         ...view,
@@ -937,7 +937,9 @@ function toObjectId(id: string, message: string): Types.ObjectId {
 const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;
 
-const planOf = (tenant: RawTenant): BillingPlan => (tenant.plan ?? 'essentiel') as BillingPlan;
+// `null` = client Atelier seul : aucun abonnement logiciel à facturer.
+const planOf = (tenant: RawTenant): BillingPlan | null =>
+  (tenant.plan ?? null) as BillingPlan | null;
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

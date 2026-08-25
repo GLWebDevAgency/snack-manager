@@ -6,7 +6,7 @@ import {
   CRM_SIGNAL_SEVERITY_LABELS,
   CRM_SIGNAL_SEVERITY_RANK,
   DEVICE_OFFLINE_AFTER_MS,
-  PLAN_LABELS,
+  planChoiceLabel,
   SCREEN_OFFLINE_AFTER_MS,
   TENANT_ACCOUNT_STATUS_LABELS,
   daysSince,
@@ -274,7 +274,8 @@ export type SignalClient = {
   tenantId: string;
   tenantName: string;
   tenantSlug: string;
-  plan: 'essentiel' | 'complet' | 'boost';
+  /** `null` = client Atelier seul — aucun abonnement logiciel. */
+  plan: 'essentiel' | 'complet' | 'boost' | null;
   accountStatus: TenantAccountStatus;
   /** Début du statut COURANT — c'est lui qui date une période d'essai. */
   accountSince: Date | null;
@@ -478,7 +479,7 @@ export function signalsForClient(client: SignalClient, now: Date): CrmQueueSigna
     tenantId: client.tenantId,
     tenantName: client.tenantName,
     tenantSlug: client.tenantSlug,
-    planLabel: PLAN_LABELS[client.plan] ?? client.plan,
+    planLabel: planChoiceLabel(client.plan),
     accountStatus: client.accountStatus,
     accountStatusLabel: TENANT_ACCOUNT_STATUS_LABELS[client.accountStatus],
     href: tenantHref(client.tenantId),
@@ -999,7 +1000,7 @@ export class SignalsService {
             tenantId: id,
             tenantName: String(tenant.name ?? ''),
             tenantSlug: String(tenant.slug ?? ''),
-            plan: (tenant.plan ?? 'essentiel') as SignalClient['plan'],
+            plan: (tenant.plan ?? null) as SignalClient['plan'],
             accountStatus: account.status,
             accountSince: account.since,
             trialEndsAt: account.trialEndsAt ?? null,

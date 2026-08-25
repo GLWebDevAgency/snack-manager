@@ -17,6 +17,7 @@ import {
   LEAD_TOUCH_LABELS,
   LEAD_TOUCH_TYPES,
   PLAN_LABELS,
+  PLAN_NONE_LABEL,
   ATELIER_ONCE_CENTS,
   ATELIER_PRESENCE_CENTS,
   EMPTY_SERVICES,
@@ -25,6 +26,7 @@ import {
   PROPOSAL_BILLING_LABELS,
   SOCIAL_CADENCE_CENTS,
   nextLeadStage,
+  planChoiceLabel,
   previousLeadStage,
   proposalCents,
   yearlyCents,
@@ -833,18 +835,20 @@ function slugifie(name: string): string {
  */
 /** Le chiffrage d'une proposition, en une phrase — toujours dérivé de la grille. */
 function phrasePrix(p: {
-  plan: (typeof PLANS)[number];
+  plan: (typeof PLANS)[number] | null;
   onlineOrdering: boolean;
   billing: ProposalBilling;
   services?: LeadServices;
 }): string {
   const { monthlyCents, servicesMonthlyCents, setupOnceCents } = proposalCents(p);
-  const morceaux = [`${fmtEuro(monthlyCents)}/mois`];
+  // Sans formule ni module, le logiciel pèse 0 : la phrase ne parle alors que
+  // de l'Atelier — « 0 €/mois » ferait douter du chiffrage entier.
+  const morceaux = monthlyCents > 0 ? [`${fmtEuro(monthlyCents)}/mois`] : [];
   if (servicesMonthlyCents > 0)
     morceaux.push(`atelier ${fmtEuro(servicesMonthlyCents)}/mois (sans engagement)`);
   if (setupOnceCents > 0) morceaux.push(`${fmtEuro(setupOnceCents)} une fois`);
   const annee =
-    p.billing === "annuel"
+    p.billing === "annuel" && monthlyCents > 0
       ? ` · logiciel ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)`
       : "";
   return morceaux.join(" + ") + annee;
@@ -881,15 +885,18 @@ function ProposalPanel({
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState(false);
-  const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
+  // `null` = sans formule : les services de l'Atelier se vendent seuls.
+  const [plan, setPlan] = useState<(typeof PLANS)[number] | null>("complet");
   const [module, setModule] = useState(false);
   const [billing, setBilling] = useState<ProposalBilling>("mensuel");
   const [services, setServices] = useState<LeadServices>(EMPTY_SERVICES);
   const [note, setNote] = useState("");
 
   useEffect(() => {
+    // « ?? » serait faux ici : une proposition posée SANS formule doit rouvrir
+    // sur « sans formule », pas retomber sur Complet.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire, re-synchronisé à chaque lead ouvert : mêmes raisons que le brouillon d'édition du tiroir.
-    setPlan(lead.proposal?.plan ?? "complet");
+    setPlan(lead.proposal ? lead.proposal.plan : "complet");
     setModule(lead.proposal?.onlineOrdering ?? false);
     setBilling(lead.proposal?.billing ?? "mensuel");
     setServices(lead.proposal?.services ?? EMPTY_SERVICES);
@@ -925,14 +932,15 @@ function ProposalPanel({
           </span>
         </div>
         <div className="mt-1 text-sm font-bold text-ink">
-          {PLAN_LABELS[p.plan]}
+          {planChoiceLabel(p.plan)}
           {p.plan === "boost"
             ? " — commande en ligne comprise"
             : p.onlineOrdering
               ? " + commande en ligne"
               : ""}
-          {" · "}
-          {PROPOSAL_BILLING_LABELS[p.billing]}
+          {/* L'engagement ne concerne que le logiciel : sur une proposition
+              services seuls, l'afficher promettrait un abonnement absent. */}
+          {p.plan || p.onlineOrdering ? ` · ${PROPOSAL_BILLING_LABELS[p.billing]}` : ""}
         </div>
         <div className="mt-0.5 text-xs text-mut">{phrasePrix(p)}</div>
         {resumeAtelier(p.services) && (
@@ -988,9 +996,17 @@ function ProposalPanel({
         <Field label="Formule" htmlFor="prop-plan">
           <Select
             id="prop-plan"
-            value={plan}
-            onChange={(e) => setPlan(e.target.value as (typeof PLANS)[number])}
+            value={plan ?? "aucune"}
+            onChange={(e) =>
+              setPlan(
+                e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]),
+              )
+            }
           >
+            {/* Les services se citent seuls : la formule est un choix, pas un
+                préalable — un prospect peut ne vouloir QUE le site ou QUE les
+                réseaux. */}
+            <option value="aucune">{PLAN_NONE_LABEL}</option>
             {PLANS.map((p) => (
               <option key={p} value={p}>
                 {PLAN_LABELS[p]}
@@ -1151,7 +1167,8 @@ function ConvertPanel({
   const [slug, setSlug] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  const [plan, setPlan] = useState<(typeof PLANS)[number]>("essentiel");
+  // `null` = signé sans formule — un client Atelier seul entre aussi au parc.
+  const [plan, setPlan] = useState<(typeof PLANS)[number] | null>("essentiel");
   const [founderSeat, setFounderSeat] = useState(false);
   const [onlineOrdering, setOnlineOrdering] = useState(false);
   const [billing, setBilling] = useState<ProposalBilling>("mensuel");
@@ -1166,7 +1183,8 @@ function ConvertPanel({
     setOwnerEmail(lead.contact.email);
     setOwnerName(lead.contact.name);
     setFounderSeat(lead.founderSeatReserved);
-    setPlan(lead.proposal?.plan ?? "essentiel");
+    // Pas de « ?? » : une proposition sans formule doit signer sans formule.
+    setPlan(lead.proposal ? lead.proposal.plan : "essentiel");
     setOnlineOrdering(lead.proposal?.onlineOrdering ?? false);
     setBilling(lead.proposal?.billing ?? "mensuel");
     setServices(lead.proposal?.services ?? EMPTY_SERVICES);
@@ -1290,9 +1308,14 @@ function ConvertPanel({
       <Field label="Formule" htmlFor="convert-plan">
         <Select
           id="convert-plan"
-          value={plan}
-          onChange={(e) => setPlan(e.target.value as (typeof PLANS)[number])}
+          value={plan ?? "aucune"}
+          onChange={(e) =>
+            setPlan(
+              e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]),
+            )
+          }
         >
+          <option value="aucune">{PLAN_NONE_LABEL}</option>
           {PLANS.map((p) => (
             <option key={p} value={p}>
               {PLAN_LABELS[p]}

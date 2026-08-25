@@ -53,7 +53,7 @@ export const CAISSE_SECTIONS: readonly CaisseSectionMeta[] = [
     nav: "Le service",
     badge: "Au comptoir",
     title: "Prendre la commande, l'envoyer en cuisine, encaisser.",
-    lead: "Trois gestes, des gros boutons, rien à apprendre par cœur : une nouvelle recrue tient la caisse en une heure.",
+    lead: "Trois gestes, des gros boutons : une nouvelle recrue tient la caisse en une heure.",
   },
   {
     id: "encaissement",
@@ -155,7 +155,7 @@ export const ENCAISSEMENT_ROWS: readonly EncaissementRow[] = [
   },
   {
     label: "Carte bancaire",
-    line: "Vous encaissez sur votre TPE, aux conditions de votre banque. La caisse enregistre — nous ne touchons pas à votre argent.",
+    line: "Vous encaissez sur votre TPE, aux conditions de votre banque : l’argent va droit sur votre compte. La caisse, elle, enregistre.",
   },
   {
     label: "Titre-restaurant",
@@ -192,7 +192,7 @@ export const VOUS_POINTS: readonly string[] = [
 /**
  * LE DERNIER MOT EST UNE PREUVE, PAS UNE PROMESSE : la caisse se manipule en
  * démonstration sur la landing, sans compte. C'est le même contrat que le
- * titre de la section produit — « Ne nous croyez pas sur parole ».
+ * titre de la section produit — « Passez derrière le comptoir ».
  */
 export const CAISSE_CTA = {
   title: "Essayez-la maintenant, sans compte.",

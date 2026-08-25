@@ -5,7 +5,7 @@ import {
   CLIENT_HEALTH_LABELS,
   CLIENT_RISK_DAYS,
   DEVICE_OFFLINE_AFTER_MS,
-  PLAN_LABELS,
+  planChoiceLabel,
   REVOCABLE_DEVICE_KIND_LABELS,
   SCREEN_OFFLINE_AFTER_MS,
   TENANT_ACCOUNT_STATUS_LABELS,
@@ -932,13 +932,13 @@ export class HealthService {
       healthAxis('paiement', paiementAxis(account.status, outstanding)),
     ]);
 
-    const plan = (tenant.plan ?? 'essentiel') as CrmTenantHealth['plan'];
+    const plan = (tenant.plan ?? null) as CrmTenantHealth['plan'];
     return {
       tenantId: id,
       name: String(tenant.name ?? ''),
       slug: String(tenant.slug ?? ''),
       plan,
-      planLabel: PLAN_LABELS[plan] ?? plan,
+      planLabel: planChoiceLabel(plan),
       founderSeat: tenant.founderSeat === true,
       since: iso(tenant.createdAt) ?? now.toISOString(),
       account: {

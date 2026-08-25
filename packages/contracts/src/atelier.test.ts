@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ATELIER_ONCE_CENTS,
   EMPTY_SERVICES,
+  LeadConvertSchema,
   LeadProposalSchema,
   LeadServicesSchema,
   SOCIAL_CADENCE_CENTS,
@@ -74,6 +75,56 @@ describe('l’intégration sur site existant', () => {
       services: { ...EMPTY_SERVICES, integrationCommande: true },
     });
     expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.integrationCommande);
+  });
+});
+
+describe('sans formule — les services se vendent seuls', () => {
+  it('plan null : le logiciel pèse zéro, les services gardent leurs prix', () => {
+    const prix = proposalCents({
+      plan: null,
+      onlineOrdering: false,
+      services: { ...EMPTY_SERVICES, siteVitrine: true, reseauxSociaux: 'hebdo' },
+    });
+    expect(prix.monthlyCents).toBe(0);
+    expect(prix.servicesMonthlyCents).toBe(SOCIAL_CADENCE_CENTS.hebdo);
+    expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.siteVitrine);
+  });
+
+  it('module seul sur site existant : 79 €/mois sans formule, intégration comprise', () => {
+    const prix = proposalCents({
+      plan: null,
+      onlineOrdering: true,
+      services: { ...EMPTY_SERVICES, integrationCommande: true },
+    });
+    expect(prix.monthlyCents).toBe(7_900);
+    // L'intégration comprend la mise en service — jamais les 55 € en plus.
+    expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.integrationCommande);
+  });
+
+  it('accepte une proposition services seuls, refuse une proposition vide', () => {
+    expect(
+      LeadProposalSchema.safeParse({
+        plan: null,
+        services: { ...EMPTY_SERVICES, identiteVisuelle: true },
+      }).success,
+    ).toBe(true);
+    // Rien sur la table : ni formule, ni module, ni service — rien à signer.
+    expect(LeadProposalSchema.safeParse({ plan: null }).success).toBe(false);
+  });
+
+  it('la signature suit les mêmes règles, et garde Essentiel par défaut', () => {
+    const base = { slug: 'chez-nicolas', ownerEmail: 'nicolas@exemple.fr' };
+    expect(
+      LeadConvertSchema.safeParse({
+        ...base,
+        plan: null,
+        services: { ...EMPTY_SERVICES, presenceInternet: true },
+      }).success,
+    ).toBe(true);
+    expect(LeadConvertSchema.safeParse({ ...base, plan: null }).success).toBe(false);
+    // Les appels d'avant la formule optionnelle ne passent pas de plan : le
+    // défaut historique reste Essentiel, jamais null par surprise.
+    expect(LeadConvertSchema.parse(base).plan).toBe('essentiel');
   });
 });
 
