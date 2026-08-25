@@ -34,7 +34,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_TENANT_ACCOUNT_STATUS,
-  PLAN_LABELS,
+  planChoiceLabel,
   isAccessBlocked,
   type AdminPlan,
 } from "@sm/contracts";
@@ -147,7 +147,7 @@ export default function ClientFilePage({
     );
   }
 
-  const plan = (account?.plan ?? row?.plan ?? "essentiel") as AdminPlan;
+  const plan = (account?.plan ?? row?.plan ?? null) as AdminPlan | null;
   const status = account?.account.status ?? row?.accountStatus ?? null;
   const blocked = account?.accessBlocked ?? isAccessBlocked(status);
 
@@ -239,7 +239,7 @@ export default function ClientFilePage({
               disabled={!account}
               title={
                 account
-                  ? `Formule actuelle : ${PLAN_LABELS[plan]}`
+                  ? `Formule actuelle : ${planChoiceLabel(plan)}`
                   : "Route /crm/tenants/:id/account indisponible"
               }
             >

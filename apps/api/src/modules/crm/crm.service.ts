@@ -342,7 +342,8 @@ export class CrmService implements OnApplicationBootstrap {
       const a = byTenant.get(id) ?? EMPTY_ACTIVITY;
       const lastOrderAt = a.lastOrderAt ?? null;
       const silence = daysSince(lastOrderAt, now);
-      const plan = (t.plan ?? 'essentiel') as CrmClient['plan'];
+      // `null` = client Atelier seul : son MRR logiciel est honnêtement zéro.
+      const plan = (t.plan ?? null) as CrmClient['plan'];
       const fleet = buildFleet(fleets.get(id) ?? []);
       // L'absence de bloc `account` vaut « essai », jamais « anomalie » : les
       // tenants créés avant ce champ n'en ont pas, et `.lean()` ne matérialise
@@ -395,7 +396,7 @@ export class CrmService implements OnApplicationBootstrap {
         name: t.name,
         slug: t.slug,
         plan,
-        mrrCents: PLAN_MRR_CENTS[plan] ?? 0,
+        mrrCents: plan ? (PLAN_MRR_CENTS[plan] ?? 0) : 0,
         founderSeat: Boolean(t.founderSeat),
         since: iso((t as { createdAt?: Date }).createdAt) ?? now.toISOString(),
         orders30d: window30.orders,
@@ -512,7 +513,7 @@ function toLead(doc: Record<string, unknown>): CrmLead {
     notes: raw.notes ?? '',
     proposal: raw.proposal
       ? {
-          plan: raw.proposal.plan as 'essentiel' | 'complet' | 'boost',
+          plan: (raw.proposal.plan ?? null) as 'essentiel' | 'complet' | 'boost' | null,
           onlineOrdering: Boolean(raw.proposal.onlineOrdering),
           billing: (raw.proposal.billing ?? 'mensuel') as 'mensuel' | 'annuel',
           // Les propositions posées avant l'Atelier n'ont pas de services :

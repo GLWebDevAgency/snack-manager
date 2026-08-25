@@ -14,6 +14,7 @@
 import type { ReactNode } from "react";
 import {
   PLAN_LABELS,
+  PLAN_NONE_SHORT_LABEL,
   TENANT_ACCOUNT_STATUS_LABELS,
   type CrmClientHealth,
   type TenantAccountStatus,
@@ -223,20 +224,21 @@ export function PlanPill({
   plan,
   className,
 }: {
-  plan: "essentiel" | "complet" | "boost";
+  /** `null` = client Atelier seul — aucun abonnement logiciel. */
+  plan: "essentiel" | "complet" | "boost" | null;
   className?: string;
 }) {
   return (
     <span
       className={cx(
         "inline-flex items-center whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
-        plan === "essentiel"
+        plan === null || plan === "essentiel"
           ? "border-white/20 bg-white/6 text-mut"
           : "border-accent/50 bg-accent/12 text-accent",
         className,
       )}
     >
-      {PLAN_LABELS[plan]}
+      {plan ? PLAN_LABELS[plan] : PLAN_NONE_SHORT_LABEL}
     </span>
   );
 }

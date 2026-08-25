@@ -139,7 +139,9 @@ export class ConversionService {
 
     await this.admin.recordTenantCreation(actor, String(tenant._id), {
       slug: body.slug,
-      plan: body.plan,
+      // Le journal se lit seul : « aucune » dit mieux que null qu'un client
+      // Atelier seul vient d'entrer au parc.
+      plan: body.plan ?? 'aucune',
       founderSeat: body.founderSeat,
       leadId: String(lead._id),
       ownerEmail: email,
@@ -182,24 +184,30 @@ export class ConversionService {
       services: body.services,
     });
     const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
-    const moduleSigne = body.onlineOrdering || body.plan === 'boost';
     const moduleFacture = body.onlineOrdering && body.plan !== 'boost';
 
     let poses = 0;
     try {
-      await this.billing.issue(actor, tenantId, {
-        kind: 'abonnement',
-        period,
-        draft: true,
-        dueAt: trialEndsAt,
-        amountCents:
-          body.billing === 'annuel' ? yearlyCents(prix.monthlyCents) : prix.monthlyCents,
-        label:
-          `Abonnement ${PLAN_LABELS[body.plan]}` +
-          (moduleSigne && body.plan !== 'boost' ? ' + commande en ligne' : '') +
-          (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : ''),
-      });
-      poses += 1;
+      // La pièce d'abonnement n'existe que si du LOGICIEL est vendu : une
+      // signature Atelier seul (site, réseaux…) n'a rien à abonner — sans
+      // formule, le module éventuel est tout l'abonnement.
+      if (body.plan || moduleFacture) {
+        await this.billing.issue(actor, tenantId, {
+          kind: 'abonnement',
+          period,
+          draft: true,
+          dueAt: trialEndsAt,
+          amountCents:
+            body.billing === 'annuel' ? yearlyCents(prix.monthlyCents) : prix.monthlyCents,
+          label:
+            (body.plan
+              ? `Abonnement ${PLAN_LABELS[body.plan]}` +
+                (moduleFacture ? ' + commande en ligne' : '')
+              : 'Abonnement — module commande en ligne') +
+            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : ''),
+        });
+        poses += 1;
+      }
 
       // Les mensuels de l'Atelier sur leur propre pièce, JAMAIS annualisés :
       // sans engagement, un service humain ne se facture pas d'avance —

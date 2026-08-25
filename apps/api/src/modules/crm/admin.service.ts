@@ -212,7 +212,9 @@ export class AdminService {
     body: TenantPlanChange,
   ): Promise<AdminTenantAccount> {
     const before = await this.requireTenant(tenantId);
-    const previous = (before.plan ?? 'essentiel') as AdminPlan;
+    // « aucune » : un client Atelier seul peut monter vers une formule, et la
+    // ligne de journal doit dire d'où il part.
+    const previous = (before.plan ?? 'aucune') as AdminPlan | 'aucune';
 
     const tenant = await this.updateTenant(tenantId, { plan: body.plan });
     await this.record(actor, {
@@ -615,7 +617,7 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     tenantId: String(raw._id),
     name: String(raw.name ?? ''),
     slug: String(raw.slug ?? ''),
-    plan: (raw.plan ?? 'essentiel') as AdminPlan,
+    plan: (raw.plan ?? null) as AdminPlan | null,
     founderSeat: raw.founderSeat === true,
     account,
     accessBlocked: isAccessBlocked(account.status),

@@ -48,31 +48,39 @@ export function buildDevisDocument(
   issuer: InvoiceParty,
   now: Date,
 ): DevisDocument {
-  const moduleFacture = proposal.onlineOrdering && proposal.plan !== 'boost';
-  const planLibelle =
-    `Abonnement ${PLAN_LABELS[proposal.plan]} — caisse, cuisine, écrans` +
-    (proposal.plan === 'boost' ? ', commande en ligne comprise' : '');
+  // Le LOGICIEL d'abord — s'il est vendu. Depuis l'Atelier, une proposition
+  // peut ne porter AUCUNE formule : le devis n'affiche alors que les services
+  // (et le module éventuel reste sa seule ligne d'abonnement).
+  const plan = proposal.plan;
+  const moduleFacture = proposal.onlineOrdering && plan !== 'boost';
+  const planLibelle = plan
+    ? `Abonnement ${PLAN_LABELS[plan]} — caisse, cuisine, écrans` +
+      (plan === 'boost' ? ', commande en ligne comprise' : '')
+    : null;
+  const moduleLibelle = 'Module commande en ligne — page de commande, encaissement et suivi';
 
   const lignes: DevisLigne[] = [];
-  if (proposal.billing === 'annuel') {
-    const mensuel = PLAN_MRR_CENTS[proposal.plan] + (moduleFacture ? MODULE_ORDERING_CENTS : 0);
+  if (proposal.billing === 'annuel' && (plan || moduleFacture)) {
+    const mensuel = (plan ? PLAN_MRR_CENTS[plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0);
     lignes.push({
       designation:
-        planLibelle +
-        (moduleFacture ? ' + module commande en ligne' : '') +
+        (planLibelle ?? moduleLibelle) +
+        (planLibelle && moduleFacture ? ' + module commande en ligne' : '') +
         ' — engagement annuel, douze mois payés dix',
       recurrence: 'par an',
       montantHtCents: yearlyCents(mensuel),
     });
   } else {
-    lignes.push({
-      designation: planLibelle,
-      recurrence: 'par mois',
-      montantHtCents: PLAN_MRR_CENTS[proposal.plan],
-    });
+    if (plan && planLibelle) {
+      lignes.push({
+        designation: planLibelle,
+        recurrence: 'par mois',
+        montantHtCents: PLAN_MRR_CENTS[plan],
+      });
+    }
     if (moduleFacture) {
       lignes.push({
-        designation: 'Module commande en ligne — page de commande, encaissement et suivi',
+        designation: moduleLibelle,
         recurrence: 'par mois',
         montantHtCents: MODULE_ORDERING_CENTS,
       });
@@ -131,8 +139,14 @@ export function buildDevisDocument(
     vatRatePercent: SM_VAT_RATE_PERCENT,
     conditions: [
       `Devis valable ${VALIDITE_JOURS} jours à compter de son émission. Montants exprimés hors taxes.`,
-      `Essai de ${TRIAL_DAYS} jours offert à l'ouverture du compte — la facturation démarre à l'issue de l'essai.`,
-      ...(proposal.billing === 'annuel'
+      // L'essai ne parle que du LOGICIEL : sur un devis services seuls, la
+      // ligne promettrait un essai d'un produit qui n'y figure pas.
+      ...(plan || proposal.onlineOrdering
+        ? [
+            `Essai de ${TRIAL_DAYS} jours offert à l'ouverture du compte — la facturation démarre à l'issue de l'essai.`,
+          ]
+        : []),
+      ...(proposal.billing === 'annuel' && (plan || moduleFacture)
         ? ['Engagement annuel : douze mois de service, dix facturés — deux mois offerts.']
         : []),
       ...(services.presenceInternet || services.reseauxSociaux
@@ -141,7 +155,11 @@ export function buildDevisDocument(
       ...(services.siteVitrine || services.refonteSite
         ? ['Site : la maquette est présentée et validée AVANT la mise en chantier — rien ne part sans votre accord sur pièce.']
         : []),
-      'Matériel non compris — l’application fonctionne sur vos tablettes et votre imprimante.',
+      // La ligne matériel parle de l'application : hors sujet sur un devis
+      // qui ne vend que des services de l'Atelier.
+      ...(plan || proposal.onlineOrdering
+        ? ['Matériel non compris — l’application fonctionne sur vos tablettes et votre imprimante.']
+        : []),
     ],
     gaps: issuerGaps(issuer),
   };
@@ -160,13 +178,13 @@ export class DevisService {
     if (!lead) throw new NotFoundException('Lead introuvable');
     if (!lead.proposal) {
       throw new ConflictException(
-        'Aucune proposition posée sur ce lead — posez le plan et l’engagement avant de générer le devis.',
+        'Aucune proposition posée sur ce lead — posez la formule ou les services avant de générer le devis.',
       );
     }
     const doc = buildDevisDocument(
       lead,
       {
-        plan: lead.proposal.plan as LeadProposal['plan'],
+        plan: (lead.proposal.plan ?? null) as LeadProposal['plan'],
         onlineOrdering: Boolean(lead.proposal.onlineOrdering),
         billing: (lead.proposal.billing ?? 'mensuel') as LeadProposal['billing'],
         // Les propositions d'avant l'Atelier : le schéma pose les défauts.
