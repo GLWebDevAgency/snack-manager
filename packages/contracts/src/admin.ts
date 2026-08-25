@@ -477,7 +477,8 @@ export type AdminTenantAccount = {
   tenantId: string;
   name: string;
   slug: string;
-  plan: AdminPlan;
+  /** `null` = client Atelier seul — aucun abonnement logiciel. */
+  plan: AdminPlan | null;
   founderSeat: boolean;
   account: TenantAccount;
   /** Résultat de la règle d'accès, calculé une fois côté API. */

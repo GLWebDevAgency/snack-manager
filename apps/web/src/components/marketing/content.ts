@@ -304,7 +304,11 @@ export const SECTIONS: readonly SectionMeta[] = [
     // ne peut donc pas être une phrase unique.
     title: "Votre journée sans. Votre journée avec.",
   },
-  { id: "produit", nav: "Produit", badge: "Le produit", title: "Ne nous croyez pas sur parole. Prenez une commande." },
+  // « Ne nous croyez pas sur parole » ouvrait la section la plus forte du site
+  // par une négation (fondateur, 25/08 : communication positive partout). Le
+  // titre INVITE désormais — le lecteur se met derrière le comptoir, et une
+  // démo qu'on s'approprie vend plus fort qu'un défi qu'on relève.
+  { id: "produit", nav: "Produit", badge: "Le produit", title: "Passez derrière le comptoir. Prenez une commande." },
   // « Vos clients commandent chez vous. Pas chez eux. » désignait un adversaire
   // sans le nommer — « chez eux », c'est qui ? — et n'expliquait nulle part
   // l'avantage qu'il y a à commander chez le restaurateur. Une préférence
@@ -1140,7 +1144,7 @@ export const SERVICES: readonly Service[] = [
   {
     id: "site",
     title: "Votre site, maquette montrée d’abord",
-    lead: "Vous validez sur pièce, pas sur promesse.",
+    lead: "La maquette d’abord — vous validez sur pièce.",
     line: "On dessine la maquette de votre site et on vous la montre AVANT tout engagement. Contenus posés, référencement local, mise en ligne — et votre menu est déjà dedans, branché sur la caisse : un prix change au back-office, le site suit.",
     price: euros(ATELIER_CENTS.site),
     priceNote: `une fois, avec une formule · refonte de l’existant : ${euros(ATELIER_CENTS.refonte)}`,
@@ -1342,7 +1346,7 @@ export type HardwareItem = {
  * entière — la ligne dépasse les six mots, et c'est le prix de l'honnêteté.
  */
 export const HARDWARE: readonly HardwareItem[] = [
-  { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad. Aucun matériel propriétaire." },
+  { id: "tablette", label: "Tablette pour la caisse", line: "Android ou iPad — votre tablette suffit." },
   { id: "imprimante", label: "Imprimante ticket 80 mm", line: "Requise, en réseau. Elle ouvre le tiroir-caisse." },
   { id: "ecran", label: "Tablette pour la cuisine", line: "Ou un moniteur mural, si vous préférez." },
   { id: "reseau", label: "Connexion internet", line: "Une box suffit. Fibre non requise." },
@@ -1802,8 +1806,11 @@ export const PRICING_FOOTNOTE =
  * vient conseiller un licenciement.
  */
 export const SIM_LEAD = {
-  title: "On n'ajoute pas un outil.",
-  line: "On vous rend les heures que votre organisation vous prend.",
+  // « On n'ajoute pas un outil » ouvrait par une négation : le bénéfice
+  // passe devant (fondateur, 25/08) — le titre donne, la ligne invite à
+  // compter sur SES chiffres, ce que le simulateur fait juste en dessous.
+  title: "On vous rend des heures.",
+  line: "Comptez-les ci-dessous, avec vos chiffres à vous.",
 } as const;
 
 /**

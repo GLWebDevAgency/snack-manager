@@ -16,6 +16,7 @@ import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
   PLAN_LABELS,
+  PLAN_NONE_SHORT_LABEL,
   nextLeadStage,
   previousLeadStage,
   proposalCents,
@@ -367,11 +368,13 @@ function LeadCard({
         {/* La proposition sur la table — la carte répond à « on lui a proposé quoi ? » sans ouvrir la fiche. */}
         {lead.proposal && (
           <div className="mt-1 truncate text-[12px] font-semibold text-accent">
-            {PLAN_LABELS[lead.proposal.plan]}
+            {/* Sans formule, la carte dit « Atelier seul » — répéter
+                « + atelier » derrière serait dire deux fois la même chose. */}
+            {lead.proposal.plan ? PLAN_LABELS[lead.proposal.plan] : PLAN_NONE_SHORT_LABEL}
             {lead.proposal.onlineOrdering && lead.proposal.plan !== "boost"
               ? " + commande en ligne"
               : ""}
-            {atelierRetenu(lead.proposal.services) ? " + atelier" : ""}
+            {lead.proposal.plan && atelierRetenu(lead.proposal.services) ? " + atelier" : ""}
             {" · "}
             {/* Le mensuel TOTAL (logiciel + Atelier) : c'est le panier que la
                 carte doit annoncer, pas le seul abonnement. */}

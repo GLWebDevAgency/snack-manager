@@ -385,6 +385,29 @@ html:has(.mk) {
   pointer-events: auto;
   transform: translateY(0);
 }
+/* Le pont invisible au-dessus du panneau : le trajet souris entre le mot
+   « Plateforme » et le panneau traverse les 10 px de vide sous la barre —
+   sans pont, ce vide compte comme une sortie et le panneau clignote. */
+.mk .hd-droppanel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -12px;
+  height: 12px;
+}
+/* Le survol se VOIT : l'item visé passe à l'or et glisse d'un cheveu — même
+   langage que les liens de l'encoche, le lecteur sait toujours où il clique. */
+.mk .hd-droppanel .ui-link {
+  transition:
+    color 0.15s,
+    transform 0.18s ease-out;
+}
+.mk .hd-droppanel .ui-link:hover,
+.mk .hd-droppanel .ui-link:focus-visible {
+  color: var(--accent);
+  transform: translateX(3px);
+}
 .mk .hd-desktop:hover .hd-mid,
 .mk .hd-desktop:focus-within .hd-mid {
   width: var(--hd-open-w, 420px);

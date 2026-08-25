@@ -232,6 +232,61 @@ describe('Convertir un lead en restaurant', () => {
     });
   });
 
+  it('signé SANS formule : le tenant naît sans plan, aucune pièce d’abonnement', async () => {
+    const { service, billing, tenants, admin, tenantId } = build();
+    const result = await service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        plan: null,
+        onlineOrdering: false,
+        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+      },
+      NOW,
+    );
+    // Le client Atelier seul entre au parc : plan null, Atelier sur la fiche.
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.plan).toBeNull();
+    expect(tenant.atelier).toMatchObject({ siteVitrine: true, presenceInternet: true });
+    // Rien à abonner : que le mensuel Atelier et le ponctuel du site.
+    const corps = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
+    expect(corps.map((c) => [c.kind, c.amountCents])).toEqual([
+      ['option', 6_900],
+      ['autre', 69_000],
+    ]);
+    expect(result.draftInvoices).toBe(2);
+    // Le journal se lit seul : « aucune », jamais un null muet.
+    expect(admin.recordTenantCreation).toHaveBeenCalledWith(
+      ACTOR,
+      String(tenantId),
+      expect.objectContaining({ plan: 'aucune' }),
+    );
+  });
+
+  it('module seul sur site existant : la pièce d’abonnement ne porte que le module', async () => {
+    const { service, billing } = build();
+    await service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        plan: null,
+        onlineOrdering: true,
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+      },
+      NOW,
+    );
+    // 79 € de module, 190 € d'intégration (mise en service COMPRISE) — et
+    // jamais de pièce à 55 € ni d'abonnement de formule.
+    const corps = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
+    expect(corps.map((c) => [c.kind, c.amountCents])).toEqual([
+      ['abonnement', 7_900],
+      ['autre', 19_000],
+    ]);
+    expect(corps[0]?.label).toContain('module commande en ligne');
+  });
+
   it('la signature SURVIT à une facturation en panne — draftInvoices le dit', async () => {
     const { service, users } = build({ failIssue: true });
     const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);

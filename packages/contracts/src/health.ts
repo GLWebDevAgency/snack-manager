@@ -212,7 +212,8 @@ export type CrmTenantHealth = {
   tenantId: string;
   name: string;
   slug: string;
-  plan: AdminPlan;
+  /** `null` = client Atelier seul — aucun abonnement logiciel. */
+  plan: AdminPlan | null;
   planLabel: string;
   founderSeat: boolean;
   /** Entrée dans le parc. */

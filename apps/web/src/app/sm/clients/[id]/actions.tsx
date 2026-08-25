@@ -239,14 +239,17 @@ export function PlanModal({
   onClose,
   onDone,
   current,
-}: Common & { current: AdminPlan }) {
+}: Common & { current: AdminPlan | null }) {
   const toast = useToast();
-  const [plan, setPlan] = useState<AdminPlan>(current);
+  // Un client Atelier seul (`current: null`) s'ouvre sur Essentiel : ce modal
+  // ne sait qu'ATTRIBUER une formule — la vente sans formule se fait à la
+  // signature, pas ici.
+  const [plan, setPlan] = useState<AdminPlan>(current ?? "essentiel");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
   const changed = plan !== current;
-  const delta = PLAN_MRR_CENTS[plan] - PLAN_MRR_CENTS[current];
+  const delta = PLAN_MRR_CENTS[plan] - (current ? PLAN_MRR_CENTS[current] : 0);
 
   async function run() {
     if (!changed || busy) return;

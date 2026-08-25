@@ -481,7 +481,11 @@ function readEnum<T extends string>(v: unknown, allowed: readonly T[]): T | null
 }
 
 const HEALTHS = CLIENT_HEALTHS;
-const PLANS: CrmClient["plan"][] = ["essentiel", "complet", "boost"];
+// Les trois formules RÉELLES — le `null` d'un client Atelier seul n'est pas
+// une valeur à lire, c'est l'absence que le `?? null` d'en dessous assume.
+const PLANS = ["essentiel", "complet", "boost"] as const satisfies readonly NonNullable<
+  CrmClient["plan"]
+>[];
 
 /** Variation en % entre deux périodes ; `null` si la base est vide ou absente. */
 export function trend(current: number, previous: number | null): number | null {
@@ -508,7 +512,8 @@ export function readClientRow(raw: unknown): ClientRow {
     _id: str(o, "_id", "id", "tenantId"),
     name: str(o, "name") || "Sans nom",
     slug: str(o, "slug"),
-    plan: readEnum(o.plan, PLANS) ?? "essentiel",
+    // `null` assumé : un client Atelier seul n'a pas de formule à afficher.
+    plan: readEnum(o.plan, PLANS) ?? null,
     mrrCents: num(o, "mrrCents") ?? 0,
     founderSeat: bool(o, "founderSeat") ?? false,
     since: iso(o, "since", "createdAt") ?? new Date().toISOString(),

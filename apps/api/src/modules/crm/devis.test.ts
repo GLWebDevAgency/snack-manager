@@ -119,6 +119,53 @@ describe('composition du devis', () => {
     expect(doc.conditions.join(' ')).toContain('maquette');
   });
 
+  it('sans formule : aucune ligne d’abonnement, aucune condition d’essai ni de matériel', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: null,
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: { ...EMPTY_SERVICES, siteVitrine: true, reseauxSociaux: 'hebdo' },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+    );
+    // Que les services : réseaux au mois, site une fois — le devis ne parle
+    // pas d'un logiciel qui n'est pas vendu.
+    expect(doc.lignes.map((l) => [l.recurrence, l.montantHtCents])).toEqual([
+      ['par mois', 14_900],
+      ['une fois', 69_000],
+    ]);
+    const conditions = doc.conditions.join(' ');
+    expect(conditions).not.toContain('Essai');
+    expect(conditions).not.toContain('Matériel');
+    expect(conditions).toContain('sans engagement');
+  });
+
+  it('module seul sur site existant, à l’annuel : la seule ligne d’abonnement est le module', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: null,
+        onlineOrdering: true,
+        billing: 'annuel',
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+    );
+    // 79 € × 10 sur l'année, l'intégration une fois — mise en service comprise.
+    expect(doc.lignes.map((l) => [l.recurrence, l.montantHtCents])).toEqual([
+      ['par an', 79_000],
+      ['une fois', 19_000],
+    ]);
+    expect(doc.lignes[0]?.designation).toContain('Module commande en ligne');
+    expect(doc.conditions.join(' ')).toContain('Essai');
+  });
+
   it('émetteur incomplet : les manques sont déclarés, rien n’est inventé', () => {
     const doc = buildDevisDocument(
       LEAD,

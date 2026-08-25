@@ -234,7 +234,10 @@ type RawTenant = Tenant & { _id: unknown; createdAt?: Date };
 const iso = (value: Date | string | null | undefined): string | null =>
   value ? new Date(value).toISOString() : null;
 
-const planOf = (tenant: RawTenant): BillingPlan => (tenant.plan ?? 'essentiel') as BillingPlan;
+// `null` = client Atelier seul : sa page abonnement dit « Sans formule » et
+// ne projette aucune échéance théorique.
+const planOf = (tenant: RawTenant): BillingPlan | null =>
+  (tenant.plan ?? null) as BillingPlan | null;
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

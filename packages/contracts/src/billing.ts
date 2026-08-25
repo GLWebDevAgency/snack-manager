@@ -4,7 +4,7 @@ import {
   isAccessBlocked,
   type TenantAccountStatus,
 } from './admin';
-import { PLAN_LABELS, PLAN_MRR_CENTS } from './crm';
+import { PLAN_LABELS, PLAN_MRR_CENTS, PLAN_NONE_LABEL } from './crm';
 
 // ─────────────────────────────────────────────────────────────
 // FACTURATION — qui paie, qui doit, et depuis quand.
@@ -674,9 +674,10 @@ export function paiementAxis(
 
 // ─── Fiche facturation d'un client ───
 
-/** L'abonnement en cours, tel qu'il se lit sur la fiche. */
+/** L'abonnement en cours, tel qu'il se lit sur la fiche — `plan: null` pour
+ * un client Atelier seul, sans abonnement logiciel. */
 export type CrmSubscription = {
-  plan: BillingPlan;
+  plan: BillingPlan | null;
   planLabel: string;
   mrrCents: number;
   mrrLabel: string;
@@ -730,7 +731,7 @@ export type CrmOverdueInvoice = CrmInvoice & {
     id: string;
     name: string;
     slug: string;
-    plan: BillingPlan;
+    plan: BillingPlan | null;
     planLabel: string;
     accountStatus: TenantAccountStatus;
     accountStatusLabel: string;
@@ -893,19 +894,27 @@ export const BILLING_JOURNAL = {
 /** Libellé par défaut d'une facture, quand l'équipe n'en saisit pas. */
 export function defaultInvoiceLabel(
   kind: InvoiceKind,
-  plan: BillingPlan,
+  plan: BillingPlan | null,
   period: { label: string },
 ): string {
   if (kind === 'mise_en_place') return `Mise en place — onboarding et formation (${period.label})`;
-  if (kind === 'abonnement') return `Abonnement ${PLAN_LABELS[plan]} — ${period.label}`;
+  // Sans formule, un « abonnement » ne peut porter que le module : le libellé
+  // reste honnête plutôt que d'inventer une formule que le client n'a pas.
+  if (kind === 'abonnement') {
+    return plan
+      ? `Abonnement ${PLAN_LABELS[plan]} — ${period.label}`
+      : `Abonnement — ${period.label}`;
+  }
   return `${INVOICE_KIND_LABELS[kind]} — ${period.label}`;
 }
 
-/** MRR facturé d'une formule, en centimes. */
-export const planMrrCents = (plan: BillingPlan): number => PLAN_MRR_CENTS[plan] ?? 0;
+/** MRR facturé d'une formule, en centimes — 0 sans formule (Atelier seul). */
+export const planMrrCents = (plan: BillingPlan | null): number =>
+  plan ? (PLAN_MRR_CENTS[plan] ?? 0) : 0;
 
 /** Libellé d'une formule — réexporté pour que la surface facturation soit autonome. */
-export const planLabel = (plan: BillingPlan): string => PLAN_LABELS[plan] ?? plan;
+export const planLabel = (plan: BillingPlan | null): string =>
+  plan ? (PLAN_LABELS[plan] ?? plan) : PLAN_NONE_LABEL;
 
 /** Libellé d'un statut de compte — même raison. */
 export const accountStatusLabel = (status: TenantAccountStatus): string =>
@@ -1071,7 +1080,7 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
  */
 export function nextInvoiceDue(
   due: readonly CrmInvoice[],
-  plan: BillingPlan,
+  plan: BillingPlan | null,
   billable: boolean,
   now: Date = new Date(),
 ): CrmNextDue | null {
@@ -1095,6 +1104,11 @@ export function nextInvoiceDue(
       invoiceNumber: first.number,
     };
   }
+
+  // Sans formule (client Atelier seul), aucun abonnement à projeter : ses
+  // mensuels sans engagement s'émettent à la main — annoncer « 0 € le 1er »
+  // serait une promesse vide.
+  if (!plan) return null;
 
   const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
   const amountCents = planMrrCents(plan);

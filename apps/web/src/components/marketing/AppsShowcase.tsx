@@ -57,7 +57,7 @@ const LOAD_TIMEOUT_MS = 9000;
 type LoadState = "loading" | "ready" | "failed";
 
 /**
- * Section 3 — « Ne nous croyez pas sur parole. Prenez une commande. »
+ * Section 3 — « Passez derrière le comptoir. Prenez une commande. »
  *
  * UNE SEULE BALISE `<section>`, ET C'EST UNE CORRECTION DE FOND.
  *
