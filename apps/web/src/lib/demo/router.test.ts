@@ -22,6 +22,9 @@ beforeEach(() => resetDemoWorld());
 
 /** Appels de LECTURE, écran par écran. */
 const READS: [string, string][] = [
+  // Encaissement en ligne
+  ["GET", "/encaissement/me"],
+  ["POST", "/encaissement/me/synchroniser"],
   // Shell
   ["GET", "/tenants/me"],
   ["GET", "/orders?status=new"],

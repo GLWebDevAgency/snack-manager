@@ -15,6 +15,7 @@ export * from './planning';
 export * from './platform';
 export * from './ops';
 export * from './tenant';
+export * from './encaissement';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

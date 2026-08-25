@@ -97,6 +97,19 @@ export const PaymentIntentReadySchema = z.object({
   /** `null` si `STRIPE_PUBLISHABLE_KEY` n'est pas configurée côté serveur. */
   publishableKey: z.string().nullable(),
   paymentIntentId: z.string(),
+  /**
+   * LE COMPTE DU RESTAURANT — et sans lui, rien ne marche.
+   *
+   * En charges directes, l'intention de paiement naît sur le compte du
+   * restaurant : elle n'existe PAS sur celui de la plateforme. Un navigateur
+   * qui initialiserait Stripe.js sans ce compte présenterait un
+   * `client_secret` que Stripe refuserait — le client verrait son paiement
+   * échouer au dernier clic, sans explication.
+   *
+   * Il voyage donc jusqu'au front, qui le passe à `loadStripe`. Ce n'est pas
+   * un secret : un identifiant `acct_…` est public par construction.
+   */
+  stripeAccount: z.string(),
   amount: z.number().int(), // centimes
   currency: z.literal('eur'),
   unavailable: z.literal(false),
