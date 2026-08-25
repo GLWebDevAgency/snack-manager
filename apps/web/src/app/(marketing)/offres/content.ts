@@ -145,7 +145,7 @@ export const OFFRE_SECTIONS: readonly OffreSectionMeta[] = [
     id: "services",
     nav: "Les services",
     badge: "Autour du logiciel",
-    title: "Un logiciel ne suffit pas. Voici le reste, et son prix.",
+    title: "Le logiciel, et tout ce qui l’entoure. Chiffré ici.",
     // La demi-phrase qui reste de l'ancienne entrée 3 des limites : ces deux
     // chantiers sont ponctuels et dans aucune formule. Dit ici, à côté de leurs
     // montants, il n'y a plus besoin d'un bloc entier pour le dire ailleurs.
@@ -155,7 +155,7 @@ export const OFFRE_SECTIONS: readonly OffreSectionMeta[] = [
     id: "compris",
     nav: "Toujours compris",
     badge: "Dans les trois formules",
-    title: "Ce que vous ne payez jamais en supplément.",
+    title: "Déjà compris dans votre formule.",
     lead: "Neuf choses comprises dans les trois formules, du premier mois au dernier. Votre facture porte une seule ligne : la vôtre.",
   },
   {

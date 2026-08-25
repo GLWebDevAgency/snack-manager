@@ -36,14 +36,14 @@ export const COMMANDE_SECTIONS: readonly CommandeSectionMeta[] = [
     nav: "En direct",
     badge: "Chez vous",
     title: "Vos clients commandent chez vous. Au prix de la carte.",
-    lead: "Une page à vos couleurs, sur votre nom de domaine si vous en avez un. Pas de commission à absorber, donc pas de prix gonflés — et le client est le vôtre.",
+    lead: "Une page à vos couleurs, sur votre nom de domaine si vous en avez un. Zéro commission à absorber : vos prix restent les vôtres, et le client aussi.",
   },
   {
     id: "cuisine",
     nav: "Vers la cuisine",
     badge: "Sans ressaisie",
     title: "La commande tombe en cuisine, toute seule.",
-    lead: "Pas de tablette de plus à surveiller, pas de ressaisie : le ticket part droit à l'écran cuisine, avec son créneau de retrait.",
+    lead: "Le ticket part droit à l'écran cuisine, avec son créneau de retrait : zéro ressaisie, zéro tablette de plus.",
   },
   {
     id: "fidelite",

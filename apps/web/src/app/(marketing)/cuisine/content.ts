@@ -43,8 +43,8 @@ export const CUISINE_SECTIONS: readonly CuisineSectionMeta[] = [
     id: "coupure",
     nav: "Sans internet",
     badge: "Vendredi soir",
-    title: "La coupure ne vide pas l'écran.",
-    lead: "Les tickets restent affichés, la cuisine continue, et tout se resynchronise au retour du réseau — sans rien perdre.",
+    title: "La coupure passe, vos tickets restent.",
+    lead: "Les tickets restent affichés, la cuisine continue, et tout se resynchronise au retour du réseau — au complet.",
   },
   {
     id: "vous",

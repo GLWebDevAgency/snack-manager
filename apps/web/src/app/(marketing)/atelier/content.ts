@@ -61,7 +61,10 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
     nav: "La démarche",
     badge: "Trois étapes",
     title: "On regarde. Vous choisissez. On s’en occupe.",
-    lead: "Chaque service se choisit seul — la fiche Google sans le site, les réseaux sans le logo. Rien n’est un paquet.",
+    // « Rien n'est un paquet » disait la liberté par la négative : « à la
+    // carte » la dit dans la langue du métier (fondateur, 25/08 —
+    // communication positive partout).
+    lead: "Chaque service se choisit à la carte : la fiche Google seule, les réseaux seuls, ou tout ensemble. Vous composez, on s’occupe du reste.",
   },
   {
     id: "services",
@@ -80,9 +83,11 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
   {
     id: "agence",
     nav: "Pourquoi nous",
-    badge: "Et pas une agence",
-    title: "Pourquoi nous, et pas une agence.",
-    lead: "Quatre raisons — toutes vérifiables sur cette page, aucune à croire sur parole.",
+    badge: "La comparaison",
+    // Le titre AFFIRME au lieu d'opposer : tout ce qu'une agence fait, plus
+    // ce qu'elle n'aura jamais — le comptoir, la caisse, la carte.
+    title: "Tout d’une agence, avec le comptoir en plus.",
+    lead: "Quatre raisons, toutes vérifiables sur cette page — chiffres à l’appui.",
   },
 ] as const;
 
@@ -136,10 +141,10 @@ export const ATELIER_SHOTS = {
 export const ATELIER_HERO = {
   badge: "L’Atelier",
   title: "Un restaurant, c’est aussi une image. On s’en occupe pour vous.",
-  lead: "La fiche Google, les réseaux, le site, l’identité visuelle : de la communication tenue par l’artisan local qui fait déjà tourner votre caisse — pas par une plateforme. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
+  lead: "La fiche Google, les réseaux, le site, l’identité visuelle : de la communication tenue par l’artisan local qui fait déjà tourner votre caisse. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
   /** La pastille à pouls doré — LE message anti-confusion, épinglé dès l'ouverture. */
-  chip: "Chaque service se choisit seul — rien n’est imposé",
-  price: "des prix affichés, pas des devis",
+  chip: "Chaque service se choisit seul, à la carte",
+  price: "des prix affichés, noir sur blanc",
   claim: "et si vous prenez le site : sa maquette est offerte, montrée avant tout engagement",
 } as const;
 
@@ -167,7 +172,7 @@ export const PARCOURS_STEPS: readonly { when: string; title: string; line: strin
   {
     when: "Étape 2",
     title: "Vous choisissez, service par service",
-    line: "Chaque service a son prix, affiché sur cette page, et se prend seul — la fiche Google sans le site, les réseaux sans le logo. Rien n’est un paquet, personne ne pousse.",
+    line: "Chaque service a son prix, affiché sur cette page, et se prend seul — la fiche Google seule, les réseaux seuls. Vous composez à la carte, à votre rythme.",
   },
   {
     when: "Étape 3",
@@ -187,7 +192,7 @@ export const MAQUETTE_POINTS: readonly string[] = [
   "La maquette de votre site est dessinée sur mesure, et montrée avant tout engagement.",
   "Vous validez sur pièce : ce que vous voyez est ce qui part en ligne.",
   "Votre menu est déjà dedans : le site affiche la carte de votre caisse.",
-  "Un prix change, un plat saute ? Vous le faites au back-office, le site suit — jamais de carte périmée en ligne.",
+  "Un prix change, un plat saute ? Vous le faites au back-office, le site suit — votre carte en ligne est toujours la bonne.",
 ] as const;
 
 /* ── 3. Et pas une agence ────────────────────────────────────── */
@@ -206,15 +211,15 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
   },
   {
     label: "Sans engagement",
-    line: "Les services mensuels se résilient à tout moment. Vous restez parce que le travail est bon, pas parce qu’un contrat vous tient.",
+    line: "Les services mensuels se résilient à tout moment. Vous restez pour une seule raison : le travail est bon.",
   },
   {
     label: "Local et joignable",
-    line: "Un artisan local, pas une plateforme : la personne qui tient votre site connaît votre caisse, votre carte et votre comptoir — et vous savez qui appeler.",
+    line: "Un artisan local : la personne qui tient votre site connaît votre caisse, votre carte et votre comptoir — et vous savez qui appeler.",
   },
   {
     label: "Le logiciel derrière",
-    line: "Aucune agence n’a la caisse, le site, la fiche Google et les réseaux sur une seule facture. Nous, si — et votre site est branché sur la carte de votre caisse.",
+    line: "La caisse, le site, la fiche Google et les réseaux sur une seule facture — nous sommes les seuls à le faire, et votre site est branché sur la carte de votre caisse.",
   },
 ] as const;
 
@@ -227,7 +232,10 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
  * jamais quand.
  */
 export const ATELIER_CTA = {
-  title: "On commence par regarder — pas par vendre.",
+  // « — pas par vendre » finissait la page sur une négation : la promesse
+  // positive dit la même retenue — un regard d'abord, une demi-heure, et le
+  // lecteur repart avec un avis clair (fondateur, 25/08).
+  title: "On commence par regarder votre image — trente minutes, et vous saurez.",
   line: "Laissez votre numéro : on regarde ensemble votre image — fiche Google, réseaux, site — et on vous dit ce qu’on ferait, aux prix affichés ici. Vous choisirez service par service.",
   /**
    * La preuve, au moment de demander le numéro : le logiciel derrière
