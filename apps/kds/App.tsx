@@ -83,7 +83,7 @@ export default function App() {
     void logout();
   }, [logout]);
 
-  const board = useBoard(client, session !== null, onUnauthorized);
+  const board = useBoard(client, session !== null, onUnauthorized, session?.token ?? null);
 
   // ─── Préférences locales (son, panneau « À lancer ») ───
 

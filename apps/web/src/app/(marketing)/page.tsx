@@ -1,5 +1,4 @@
 import { AppsShowcase } from "@/components/marketing/AppsShowcase";
-import { Atelier } from "@/components/marketing/Atelier";
 import { Canaux } from "@/components/marketing/Canaux";
 import { Comparison } from "@/components/marketing/Comparison";
 import { ContactSection } from "@/components/marketing/ContactSection";
@@ -28,16 +27,18 @@ import { lireReseaux } from "@/lib/reseaux";
  *  2. Comparison ...... est-ce que ça me parle ?
  *  3. AppsShowcase .... est-ce que ça existe vraiment ?  ← la preuve, et elle
  *                       porte l'ancre #produit, cible du lien d'évitement.
- *  4. Canaux .......... mes clients commandent comment ?
- *  5. Atelier ......... et ma présence en ligne ?  ← une PORTE vers /atelier,
- *                       trois cartes sans un prix : l'accueil vend le logiciel.
- *  6. Materiel ........ est-ce que ça marche dans MA cuisine ?
- *  7. Pricing ......... combien ?
- *  8. Simulator ....... et par rapport à ce que je paie déjà ?
- *  9. Jalons .......... si je dis oui, il se passe quoi ?
- * 10. Faq ............. qu'est-ce que je risque ?
- * 11. Founder ......... à qui je donne mon numéro ?
- * 12. ContactSection .. le seul point de conversion de la page.
+ *  4. Canaux .......... et ma présence en ligne ?  ← L'ATELIER entier : cinq
+ *                       services chiffrés, la maquette en tête, le renvoi vers
+ *                       /atelier en seul appel. (La « porte » séparée qui le
+ *                       répétait est morte le 25/08 — deux sections pour la
+ *                       même chose diluaient le message.)
+ *  5. Materiel ........ est-ce que ça marche dans MA cuisine ?
+ *  6. Pricing ......... combien ?
+ *  7. Simulator ....... et par rapport à ce que je paie déjà ?
+ *  8. Jalons .......... si je dis oui, il se passe quoi ?
+ *  9. Faq ............. qu'est-ce que je risque ?
+ * 10. Founder ......... à qui je donne mon numéro ?
+ * 11. ContactSection .. le seul point de conversion de la page.
  *
  * Chaque question est posée UNE fois : une section qui redit le travail d'une
  * autre n'a pas sa place ici. `SECTIONS` (content.ts) porte le même ordre et
@@ -71,7 +72,6 @@ export default async function LandingPage() {
         <Comparison />
         <AppsShowcase />
         <Canaux />
-        <Atelier />
         <Materiel />
         <Pricing />
         <Simulator />

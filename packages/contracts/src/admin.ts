@@ -466,6 +466,13 @@ export type AdminLogQuery = z.infer<typeof AdminLogQuerySchema>;
 // ─── Sorties d'API ───
 
 /** Fiche « compte » d'un établissement : ce qui décide de son accès. */
+/**
+ * L'Atelier signé d'un client — les services vendus avec l'abonnement, datés
+ * de la signature. `null` : rien de vendu (les clients d'avant l'Atelier
+ * comme ceux qui n'ont pris que le logiciel).
+ */
+export type AdminTenantAtelier = import('./crm').LeadServices & { signedAt: string };
+
 export type AdminTenantAccount = {
   tenantId: string;
   name: string;
@@ -476,6 +483,7 @@ export type AdminTenantAccount = {
   /** Résultat de la règle d'accès, calculé une fois côté API. */
   accessBlocked: boolean;
   statusLabel: string;
+  atelier: AdminTenantAtelier | null;
 };
 
 /**

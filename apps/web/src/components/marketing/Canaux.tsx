@@ -1,30 +1,34 @@
+import Link from "next/link";
 import { Photo } from "./Photo";
-import { DIRECT_DELIVERY, SERVICES, SERVICES_BAND, section } from "./content";
+import { ATELIER_PORTE, DIRECT_DELIVERY, SERVICES, SERVICES_BAND, section } from "./content";
 
 /**
- * « Un logiciel ne suffit pas. On s'occupe du reste. » — les trois services.
+ * « Un logiciel ne suffit pas. On s'occupe du reste. » — L'ATELIER, en une
+ * seule section.
  *
- * CE QUE LA SECTION EST DEVENUE, ET POURQUOI. Elle listait des CANAUX sous le
- * titre « Vos clients commandent chez vous. Pas chez eux. » Deux défauts que le
- * fondateur a vus d'un coup : « chez eux » ne désigne personne — le lecteur ne
- * sait même pas de qui on parle — et la section n'expliquait NULLE PART
- * l'avantage qu'il y a à commander chez le restaurateur plutôt que sur une
- * plateforme. Elle annonçait une préférence sans jamais donner sa raison.
+ * CE QUE LA SECTION EST DEVENUE, ET POURQUOI. Elle listait des CANAUX, puis
+ * trois services chiffrés — et le 25/08 une seconde section « porte de
+ * l'Atelier » est venue répéter les mêmes services en trois cartes juste en
+ * dessous. Le fondateur a vu ce que le lecteur voyait : deux sections pour la
+ * même chose. La porte est morte ; TOUT l'Atelier vit ici — cinq rangées, la
+ * fiche Google en tête (tout le monde en a une, et c'est le mécanisme du zéro
+ * commission), chaque service et son prix, et le renvoi vers `/atelier` en
+ * seul appel. La maquette offerte reste la garantie DU service site, jamais
+ * la tête d'affiche : un restaurateur peut ne rien vouloir changer à son site
+ * et tout confier de sa fiche ou de ses réseaux (fondateur, 25/08).
  *
- * Elle dit maintenant ce qu'on FAIT, et chaque service porte son prix. Un
- * service dont le prix se demande est un service qu'on ne demande pas.
+ * CINQ RANGÉES PLEINE LARGEUR, JAMAIS CINQ CARTES, et ce n'est pas une
+ * question de goût : la grille tarifaire est deux sections plus bas. Des
+ * cartes ici feraient lire chaque service comme un choix parmi cinq, alors
+ * que c'est un devis affiché — on le lit en colonne, prix sous prix.
  *
- * TROIS RANGÉES PLEINE LARGEUR, JAMAIS TROIS CARTES, et ce n'est pas une
- * question de goût : la grille tarifaire est deux sections plus bas. Trois
- * cartes ici feraient lire la fiche Google comme un troisième choix parmi
- * trois, alors que c'est le mécanisme qui rend le 0 % possible.
+ * La première rangée est la plus haute. C'est le meilleur argument de la
+ * page : il doit se voir avant d'être lu.
  *
- * La première rangée est la plus haute. C'est le meilleur argument de la page :
- * il doit se voir avant d'être lu.
- *
- * Aucun appel à l'action. On explique, on ne demande rien — et la clause de
- * livraison ferme la section, à l'endroit exact où le lecteur qui vient de
- * comprendre qu'il peut reprendre son volume se demande qui porte les sacs.
+ * Un SEUL appel à l'action, en navigation (« Découvrir l'Atelier ») — et la
+ * clause de livraison ferme la section, à l'endroit exact où le lecteur qui
+ * vient de comprendre qu'il peut reprendre son volume se demande qui porte
+ * les sacs.
  *
  * ═══ LA SEULE IMAGE DE LA SECTION EST DERRIÈRE ELLE ═══
  *
@@ -83,8 +87,8 @@ export function Canaux() {
 
       <ol className="ch-rows">
         {SERVICES.map((service, i) => (
-          // `SERVICES[0]` est la fiche Google, et l'ordre du tableau est l'ordre
-          // d'affichage : la rangée de tête n'est pas choisie ici.
+          // `SERVICES[0]` est la fiche Google, et l'ordre du tableau est
+          // l'ordre d'affichage : la rangée de tête n'est pas choisie ici.
           <li className={i === 0 ? "ch-row lead rv" : "ch-row rv"} key={service.id}>
             {/* La fracture verticale est conservée — c'est elle qui fait lire
                 une RANGÉE et non une carte. L'accroche reste collée au titre :
@@ -106,6 +110,16 @@ export function Canaux() {
           </li>
         ))}
       </ol>
+
+      {/* Le seul appel de la section — une navigation, pas une demande : les
+          prix sont déjà là, la page de l'Atelier montre la démarche (regarder,
+          choisir service par service, confier) et le détail de chacun. */}
+      <div className="ch-cta rv">
+        <Link className="btn light" href={ATELIER_PORTE.href}>
+          {ATELIER_PORTE.cta}
+        </Link>
+        <span className="ch-ctanote">{ATELIER_PORTE.note}</span>
+      </div>
 
       {/*
        * Le hors-tunnel, en toutes lettres : nous nous arrêtons au créneau de

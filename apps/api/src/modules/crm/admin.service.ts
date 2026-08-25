@@ -6,6 +6,7 @@ import {
   DEVICE_REVOKE_REASON_LABELS,
   PAIRING_CODE_TTL_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
+  LeadServicesSchema,
   TENANT_ACCOUNT_STATUS_LABELS,
   isAccessBlocked,
   type AdminInvoiceGesture,
@@ -619,6 +620,14 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],
+    // Les clients d'avant l'Atelier n'ont rien en base : null, pas un objet
+    // de faux — la fiche doit lire l'absence comme une absence.
+    atelier: raw.atelier
+      ? {
+          ...LeadServicesSchema.parse(raw.atelier),
+          signedAt: iso(raw.atelier.signedAt) ?? new Date(0).toISOString(),
+        }
+      : null,
   };
 }
 

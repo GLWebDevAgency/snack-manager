@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   getStore,
   mergeOrder,
@@ -9,11 +10,15 @@ import {
   type SmClient,
 } from '@sm/client-core';
 import { BOARD_STATUSES } from './ui';
-import { KEY_BOARD, KEY_DELIVERED, POLL_MS } from './config';
+import { KEY_BOARD, KEY_DELIVERED } from './config';
+import { creerDebounce, pollCadenceMs } from './temps-reel';
+import { useTenantSocket } from './useTenantSocket';
 
 /**
  * Le tableau de la cuisine : les commandes `new` / `preparing` / `ready` du
- * tenant, tenues à jour par sondage et avancées de façon optimiste.
+ * tenant, tenues à jour par sondage et avancées de façon optimiste. La socket
+ * temps réel (`useTenantSocket`) anticipe le sondage et en étire la cadence ;
+ * elle ne le remplace jamais — voir `temps-reel.ts`.
  *
  * Trois règles gouvernent l'état :
  *
@@ -52,7 +57,13 @@ export interface Board {
 const isBoardStatus = (s: OrderStatus): boolean =>
   s === 'new' || s === 'preparing' || s === 'ready';
 
-export function useBoard(client: SmClient, enabled: boolean, onUnauthorized: () => void): Board {
+export function useBoard(
+  client: SmClient,
+  enabled: boolean,
+  onUnauthorized: () => void,
+  /** Jeton de la session d’équipe — sert UNIQUEMENT au handshake temps réel. */
+  token: string | null,
+): Board {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
@@ -153,11 +164,43 @@ export function useBoard(client: SmClient, enabled: boolean, onUnauthorized: () 
     }
   }, [client]);
 
+  // ─── Temps réel : la socket anticipe, le sondage garantit ───
+
+  /**
+   * Rafraîchissement demandé par un événement `order.*`. Débouncé : une
+   * commande génère volontiers une rafale d’événements, et chaque
+   * rafraîchissement coûte trois GET (voir `temps-reel.ts`).
+   */
+  const rafale = useMemo(() => creerDebounce(() => void poll()), [poll]);
+  useEffect(() => () => rafale.annuler(), [rafale]);
+
+  const socketConnectee = useTenantSocket(enabled ? token : null, rafale.demander);
+
+  /**
+   * Socket connectée : 60 s — le sondage ne fait plus que rattraper un
+   * événement perdu. Sinon : 5 s, le comportement historique à l’identique.
+   */
+  const cadence = pollCadenceMs(socketConnectee);
+
   useEffect(() => {
     if (!enabled) return;
+    // Le premier tour est immédiat — y compris à chaque changement de
+    // cadence : une socket qui vient de se (re)connecter rattrape ce qu’elle
+    // a manqué, une socket qui vient de tomber revalide l’état sans attendre.
     void poll();
-    const id = setInterval(() => void poll(), POLL_MS);
+    const id = setInterval(() => void poll(), cadence);
     return () => clearInterval(id);
+  }, [enabled, poll, cadence]);
+
+  // Une tablette qui revient au premier plan a peut-être dormi des heures :
+  // on resonde tout de suite, sans debounce — le cuisinier regarde déjà
+  // l’écran. (La reconnexion de la socket, elle, vit dans `useTenantSocket`.)
+  useEffect(() => {
+    if (!enabled) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void poll();
+    });
+    return () => sub.remove();
   }, [enabled, poll]);
 
   // ─── Avancement optimiste ───
