@@ -32,17 +32,16 @@ import {
 } from '../../common/stripe-signature';
 
 /**
- * Spécificateur passé par variable, et non en littéral, VOLONTAIREMENT :
- * `stripe` n'est pas une dépendance du projet. Un `import('stripe')` littéral
- * ferait échouer `tsc` (module introuvable) et, une fois compilé, un `require`
- * en tête de fichier ferait planter le démarrage de l'API. Avec un
- * spécificateur dynamique, TypeScript n'essaie pas de résoudre le module et
- * l'échec de chargement est simplement rattrapé ici, à froid.
+ * Spécificateur passé par variable, et non en littéral, VOLONTAIREMENT.
+ * `stripe` est une dépendance de l'API, mais son chargement reste paresseux :
+ * TypeScript ne résout pas un spécificateur dynamique, ce qui garde la surface
+ * décrite ci-dessous — quatre méthodes — au lieu de laisser les types du SDK
+ * se répandre dans le module, et un paquet illisible dégrade au lieu de tuer
+ * le démarrage. Voir le commentaire jumeau dans `stripe-payment-gateway.ts`.
  *
- * Pour activer le paiement en ligne : `pnpm --filter @sm/api add stripe` puis
- * renseigner `STRIPE_SECRET_KEY` (et `STRIPE_PUBLISHABLE_KEY` pour le front).
- * Sans cela, l'API répond `{ unavailable: true }` et le paiement au comptoir
- * reste possible — aucun parcours client n'est bloqué.
+ * Il reste à renseigner `STRIPE_SECRET_KEY` (et `STRIPE_PUBLISHABLE_KEY` pour
+ * le front). Sans elle, l'API répond `{ unavailable: true }` et le paiement au
+ * comptoir reste possible — aucun parcours client n'est bloqué.
  */
 const STRIPE_MODULE = 'stripe';
 
@@ -307,12 +306,14 @@ export class PaymentsService {
    * Vérifie la signature Stripe et rend l'événement décodé.
    *
    * La vérification est faite ici à la main, avec `node:crypto`, et NON via
-   * `stripe.webhooks.constructEvent` : le paquet `stripe` n'est pas une
-   * dépendance du projet (cf. `STRIPE_MODULE` plus haut), et un webhook qui ne
-   * fonctionnerait qu'après `pnpm add stripe` laisserait les commandes payées
-   * en ligne bloquées « en attente » sans que personne ne comprenne pourquoi.
-   * L'algorithme est celui, public et stable, du schéma `v1` de Stripe :
-   * HMAC-SHA256 de `<timestamp>.<corps brut>` avec le secret `whsec_…`.
+   * `stripe.webhooks.constructEvent`. Le paquet est pourtant installé — mais
+   * le webhook est la SEULE pièce de la chaîne qui doive survivre à sa panne :
+   * il encaisse déjà, chez Stripe, de l'argent réellement débité, et une
+   * commande dont la confirmation n'arrive pas reste « en attente » pendant
+   * que la cuisine ne voit rien. Le paiement en ligne peut se désactiver
+   * proprement ; sa confirmation, non. L'algorithme est celui, public et
+   * stable, du schéma `v1` : HMAC-SHA256 de `<timestamp>.<corps brut>` avec le
+   * secret `whsec_…`.
    *
    * `payload` DOIT être le corps brut (octets reçus). Un JSON re-sérialisé —
    * même sémantiquement identique — change l'ordre des clés, les espaces et les

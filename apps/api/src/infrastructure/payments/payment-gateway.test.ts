@@ -2,7 +2,7 @@ import { Money, TenantSlug, unwrap } from '@sm/domain';
 // `OrderNumber` vit dans le sous-domaine COMMANDE, non réexporté par la racine.
 import { OrderNumber } from '@sm/domain/src/ordering';
 import type { PaymentReference } from '@sm/domain/src/ports';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { FactoryLogger } from '../factory-logger';
 import { NullPaymentGateway } from './null-payment-gateway';
@@ -14,7 +14,30 @@ import { StripePaymentGateway } from './stripe-payment-gateway';
  * l'absence de paiement en ligne n'est JAMAIS une erreur. Le comptoir encaisse
  * depuis toujours, et un snack qui découvre le produit n'ouvrira pas un compte
  * Stripe avant de l'avoir essayé.
+ *
+ * LE SDK EST DOUBLÉ, ET CE N'EST PAS UN CONFORT. Depuis que `stripe` est une
+ * vraie dépendance, un test qui appelle la passerelle avec une clé factice
+ * PART SUR LE RÉSEAU : il devient lent, dépendant d'Internet, et rouge dans un
+ * runner cloisonné. La doublure ci-dessous rejoue les deux façons dont Stripe
+ * peut faire défaut — le SDK ne se charge pas, ou l'appel est rejeté — de
+ * manière déterministe et hors ligne.
  */
+const sdk = vi.hoisted(() => ({ comportement: 'rejette' as 'rejette' | 'constructeur-leve' }));
+
+vi.mock('stripe', () => {
+  const refus = () => Promise.reject(new Error('Invalid API Key provided'));
+  return {
+    default: class {
+      paymentIntents = { create: refus };
+      refunds = { create: refus };
+      constructor() {
+        if (sdk.comportement === 'constructeur-leve') {
+          throw new Error('Cannot find module « stripe »');
+        }
+      }
+    },
+  };
+});
 
 const REFERENCE: PaymentReference = {
   tenant: unwrap(TenantSlug.create('classfood')),
@@ -67,10 +90,12 @@ describe('StripePaymentGateway', () => {
     expect(attempt.available).toBe(false);
   });
 
-  it('dégrade proprement quand le paquet « stripe » n’est pas installé', async () => {
-    // C'est l'état actuel du dépôt : la clé peut être posée, le paquet absent.
-    // L'import dynamique échoue, on le journalise, et la commande reste payable
-    // au comptoir.
+  it('dégrade proprement quand le SDK refuse de se charger', async () => {
+    // Paquet retiré des dépendances, installation incomplète, version illisible :
+    // l'import dynamique échoue, on le journalise, et la commande reste payable
+    // au comptoir. Le mock rejoue cet échec SANS toucher au réseau — le vrai
+    // paquet, lui, est vérifié dans `stripe-connect.client.test.ts`.
+    sdk.comportement = 'constructeur-leve';
     const gateway = new StripePaymentGateway('sk_test_peu_importe');
 
     const attempt = await gateway.createIntent(REFERENCE, Money.fromCents(1250), {});
@@ -79,6 +104,18 @@ describe('StripePaymentGateway', () => {
     if (!attempt.available) {
       expect(attempt.reason).toMatch(/non configuré|indisponible/);
     }
+  });
+
+  it('dégrade proprement quand Stripe refuse l’appel', async () => {
+    // Clé révoquée, compte suspendu, Stripe en panne : la passerelle ne doit
+    // JAMAIS laisser remonter l'exception. Un client au comptoir attend, et
+    // une commande impayable en ligne reste payable en espèces.
+    sdk.comportement = 'rejette';
+    const gateway = new StripePaymentGateway('sk_test_peu_importe');
+
+    const attempt = await gateway.createIntent(REFERENCE, Money.fromCents(1250), {});
+
+    expect(attempt.available).toBe(false);
   });
 });
 
