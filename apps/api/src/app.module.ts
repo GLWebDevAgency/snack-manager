@@ -14,6 +14,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
+import { EncaissementModule } from './modules/encaissement/encaissement.module';
 import { SupplyDbModule } from './supply-db.module';
 import { SupplyModule } from './modules/supply/supply.module';
 import { StatsModule } from './modules/stats/stats.module';
@@ -61,6 +62,20 @@ import { OpsModule } from './modules/ops/ops.module';
     MenuModule,
     OrdersModule,
     OrderingModule,
+    /*
+     * DÉCLARÉ ICI ALORS QU'`OrderingModule` L'IMPORTE DÉJÀ, ET C'EST VOLONTAIRE.
+     *
+     * Nest enregistre les contrôleurs des modules importés transitivement : les
+     * routes `/encaissement/*` répondaient donc, mais seulement PARCE QUE le
+     * module de commande a besoin du service pour savoir sur quel compte
+     * encaisser. Le jour où cette dépendance disparaît — un refactoring, une
+     * interface qui se déplace — le back-office perd l'écran de raccordement
+     * sans qu'aucun test ne rougisse et sans qu'aucune erreur ne s'affiche :
+     * juste des 404, sur les routes qui décident où va l'argent.
+     *
+     * Nest déduplique par référence : le déclarer deux fois ne coûte rien.
+     */
+    EncaissementModule,
     SupplyDbModule,
     SupplyModule,
     StatsModule,

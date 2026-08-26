@@ -246,6 +246,18 @@ describe('le câblage Nest — un contrôleur non déclaré est une route 404 si
     expect(declares).toContain(StripeWebhookController);
     expect(declares).toContain(StripeConnectWebhookController);
   });
+
+  it('l’application déclare le module d’encaissement SANS passer par `ordering`', async () => {
+    // Les routes `/encaissement/*` répondaient par transitivité seulement :
+    // `OrderingModule` importe ce module pour savoir sur quel compte encaisser,
+    // et Nest enregistre au passage ses contrôleurs. Le jour où cette
+    // dépendance se déplace, le raccordement disparaît du back-office en
+    // silence — des 404 sur les routes qui décident où va l'argent.
+    const { AppModule } = await import('../../app.module');
+    const { EncaissementModule } = await import('./encaissement.module');
+    const importes = Reflect.getMetadata('imports', AppModule) as unknown[];
+    expect(importes).toContain(EncaissementModule);
+  });
 });
 
 describe('le cloisonnement du contrôleur', () => {
