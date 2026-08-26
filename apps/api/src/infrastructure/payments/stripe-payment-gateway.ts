@@ -15,16 +15,21 @@ import { errorMessage } from '../http';
 /**
  * ADAPTATEUR — `PaymentGateway` sur Stripe.
  *
- * Spécificateur passé par VARIABLE, et non en littéral : `stripe` n'est pas une
- * dépendance du projet. Un `import('stripe')` littéral ferait échouer `tsc`
- * (module introuvable) et, compilé, un `require` en tête de fichier ferait
- * planter le démarrage de l'API sur une installation qui n'encaisse qu'au
- * comptoir. Avec un spécificateur dynamique, TypeScript ne cherche pas à
- * résoudre le module et l'échec de chargement se rattrape ici, à froid.
+ * Spécificateur passé par VARIABLE, et non en littéral. `stripe` est désormais
+ * une dépendance de l'API — sans elle, aucun raccordement ni aucun paiement en
+ * ligne n'est possible — mais le chargement reste PARESSEUX et rattrapé :
  *
- * Pour activer : `pnpm --filter @sm/api add stripe` puis `STRIPE_SECRET_KEY`.
- * Sans cela, la fabrique fournit `NullPaymentGateway` et le paiement au
- * comptoir continue de fonctionner — aucun parcours client n'est bloqué.
+ *  · un `require` en tête de fichier ferait payer le SDK au démarrage à toutes
+ *    les installations, y compris à celles qui n'encaissent qu'au comptoir ;
+ *  · TypeScript ne résout pas un spécificateur dynamique, si bien que la
+ *    surface décrite plus bas reste la NÔTRE : trois méthodes, pas les
+ *    milliers de types du SDK qui remonteraient jusque dans le domaine ;
+ *  · un paquet manquant ou illisible dégrade au lieu de tuer le démarrage.
+ *
+ * Ce dernier point est un filet, pas un plan : sans le paquet, la fabrique
+ * fournit `NullPaymentGateway` et l'écran annonce « bientôt disponible » sans
+ * qu'aucune erreur ne remonte — panne silencieuse verrouillée par un test
+ * dédié, `stripe-connect.client.test.ts`.
  */
 const STRIPE_MODULE = 'stripe';
 
