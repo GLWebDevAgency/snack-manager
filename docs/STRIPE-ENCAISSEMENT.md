@@ -47,6 +47,23 @@ bord, et plus aucun `account.updated` ne suit. Sans lui, nos drapeaux
 resteraient « encaissement actif » pour toujours et chaque client verrait son
 paiement échouer au dernier clic.
 
+## Ce qui ne se script pas : l'identité de la plateforme
+
+Pendant le raccordement, le restaurateur quitte notre back-office pour une
+page Stripe qui lui demande ses papiers et son IBAN. Cette page porte **notre**
+nom et **nos** couleurs — c'est le moment de la relation commerciale où la
+confiance se gagne ou se perd, et il se joue sur un écran que nous ne
+dessinons pas.
+
+Deux réglages, au tableau de bord Stripe, qu'aucune API publique n'expose :
+
+- **Paramètres → Détails de l'entreprise** : le nom public. Un compte laissé
+  à « New business » affiche « New business souhaite accéder à votre
+  compte » — la phrase exacte qui fait refermer l'onglet.
+- **Paramètres → Marque** : logo, icône et couleurs. La charte donne le
+  laiton `#c9a15a` en couleur principale et `#12100d` pour le texte posé
+  dessus — jamais du blanc, dont le contraste sur le laiton tombe à 2,2:1.
+
 ## Variables par environnement
 
 | Variable | Staging | Production |
@@ -60,6 +77,24 @@ paiement échouer au dernier clic.
 `WEB_PUBLIC_URL` sert d'adresse de retour après l'inscription Stripe du
 restaurateur. Codée en dur, elle renverrait un restaurateur de production sur
 l'environnement de test — avec un compte Stripe bien réel au bout.
+
+## Vérifier la configuration en une commande
+
+La route webhook dit elle-même si son secret est posé, sans qu'on ait à lire
+une seule variable :
+
+    curl -s -o /dev/null -w '%{http_code}\n' -X POST -d '{}' \
+      https://api-staging-a5e8.up.railway.app/public/stripe/webhook
+
+| Réponse | Ce que ça veut dire |
+|---|---|
+| `404` | la route n'existe pas — un contrôleur oublié dans son module |
+| `503` | le secret n'est pas posé sur ce service, ou le déploiement est antérieur |
+| `400` | **tout va bien** — la signature est vérifiée, et elle manque, forcément |
+
+Un `400` sur un corps vide est donc la bonne nouvelle : la vérification tourne.
+Poser une variable dans Railway ne suffit pas, il faut **redéployer** le
+service pour qu'elle entre dans l'environnement du processus.
 
 ## Dégradation : rien ne casse sans configuration
 
