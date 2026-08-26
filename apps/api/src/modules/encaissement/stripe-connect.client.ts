@@ -4,10 +4,10 @@ import { Logger } from '@nestjs/common';
  * LA SURFACE STRIPE RÉELLEMENT UTILISÉE POUR LE RACCORDEMENT — et rien de plus.
  *
  * Même parti pris que partout ailleurs dans ce dépôt : on décrit ce qu'on
- * appelle, jamais l'API entière. Le paquet `stripe` n'est PAS une dépendance du
- * projet (import dynamique par variable, échec rattrapé à froid) ; en dépendre
- * pour des TYPES rendrait le typecheck impossible sur une installation qui
- * n'encaisse qu'au comptoir.
+ * appelle, jamais l'API entière. Le paquet `stripe` est bien une dépendance de
+ * l'API, mais il est chargé par import dynamique et l'on n'emprunte AUCUN de
+ * ses types : trois méthodes suffisent au raccordement, et c'est cette
+ * frontière qui empêche le SDK de remonter jusque dans le domaine.
  *
  * C'est aussi ce qui rend le service testable : une doublure de cette
  * interface tient en dix lignes, là où simuler le SDK Stripe demanderait de
