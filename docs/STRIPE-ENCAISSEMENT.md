@@ -96,6 +96,29 @@ Un `400` sur un corps vide est donc la bonne nouvelle : la vérification tourne.
 Poser une variable dans Railway ne suffit pas, il faut **redéployer** le
 service pour qu'elle entre dans l'environnement du processus.
 
+Ce `curl` dit que *le secret est là*. Il ne dit pas que c'est **le bon**, ni
+que le bon est sur la bonne route — la confusion qui laisse une commande en
+« attente » sans le moindre message. Pour cela, il faut signer :
+
+    WHSEC_COMPTE=whsec_… WHSEC_CONNECT=whsec_… \
+      node scripts/verifier-webhooks-stripe.mjs production
+
+Six cas, dont le secret croisé et le rejeu d'il y a une heure. Le script
+n'envoie aucun identifiant de commande existant : il ne peut rien modifier.
+
+## Les URL, et celle qu'on pourrait leur préférer
+
+Les points d'entrée visent le domaine que Railway génère
+(`api-production-8949.up.railway.app`) : un intermédiaire de moins entre
+Stripe et l'API. Sa faiblesse est d'être **généré** — recréer le service en
+change le nom, et les webhooks tombent dans le vide sans rien casser d'autre,
+donc sans qu'on le remarque avant qu'une commande reste impayée.
+
+Le domaine propre `api.snackmanager.fr` sert exactement les mêmes routes :
+mesuré, 6 cas sur 6, Cloudflare compris. La bascule est donc disponible et
+sans surprise le jour où le domaine généré doit changer — il suffit de
+modifier l'URL des deux points d'entrée live, le secret ne change pas.
+
 ## Dégradation : rien ne casse sans configuration
 
 Aucune de ces variables n'est obligatoire au démarrage.
