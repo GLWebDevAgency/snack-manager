@@ -7,6 +7,8 @@ import {
   PAIRING_CODE_TTL_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
   LeadServicesSchema,
+  servicesCents,
+  type TenantOffre,
   TENANT_ACCOUNT_STATUS_LABELS,
   isAccessBlocked,
   type AdminInvoiceGesture,
@@ -203,27 +205,59 @@ export class AdminService {
   }
 
   /**
-   * Change la formule. Le statut de compte n'est PAS touché : passer un client
-   * de « Essentiel » à « Boost » n'est pas une décision d'accès.
+   * CHANGE L'OFFRE ENTIÈRE d'un client — formule, module, engagement, services.
+   *
+   * `changePlan` n'écrivait que `plan`, et son schéma excluait `null` : le
+   * module de commande en ligne et l'Atelier n'étaient ni activables ni
+   * retirables après la signature, et on ne pouvait pas redescendre un client
+   * vers « Atelier seul ». Un restaurateur qui ajoutait les réseaux sociaux six
+   * mois plus tard n'avait aucun chemin dans le logiciel — et comme toute la
+   * facturation lit ces champs, sa facture ne bougeait pas non plus.
+   *
+   * Le statut de compte n'est PAS touché : passer un client de Essentiel à
+   * Boost n'est pas une décision d'accès.
+   *
+   * `founderUntil` n'est pas retouché ici, et c'est délibéré : la remise court
+   * depuis la signature du PREMIER contrat. Ce qui s'ajoute ensuite se paie
+   * plein tarif — sinon un fondateur relancerait sa remise en changeant d'offre
+   * le onzième mois.
    */
-  async changePlan(
+  async changeOffre(
     actor: JwtPayload,
     tenantId: string,
-    body: TenantPlanChange,
+    body: TenantOffre,
+    now: Date = new Date(),
   ): Promise<AdminTenantAccount> {
     const before = await this.requireTenant(tenantId);
-    // « aucune » : un client Atelier seul peut monter vers une formule, et la
-    // ligne de journal doit dire d'où il part.
     const previous = (before.plan ?? 'aucune') as AdminPlan | 'aucune';
 
-    const tenant = await this.updateTenant(tenantId, { plan: body.plan });
+    const { onceCents, monthlyCents } = servicesCents(body.services);
+    const aDesServices = onceCents > 0 || monthlyCents > 0;
+    const tenant = await this.updateTenant(tenantId, {
+      plan: body.plan,
+      onlineOrdering: body.onlineOrdering,
+      billingCycle: body.billing,
+      // Rien de vendu → `null`, jamais un sous-objet de faux : la fiche doit
+      // lire l'absence comme une absence. La date de signature de l'Atelier
+      // est conservée si des services étaient déjà là — c'est la date du
+      // service rendu, pas celle du dernier clic.
+      atelier: aDesServices
+        ? { ...body.services, signedAt: before.atelier?.signedAt ?? now }
+        : null,
+    });
+
     await this.record(actor, {
       action: 'tenant.plan_change',
       tenantId: String(tenant._id),
       reason: body.reason,
-      // Une ligne de journal doit se lire seule : sans l'ancienne formule, on
-      // ne sait pas si le client a monté ou descendu en gamme.
-      meta: { from: previous, to: body.plan },
+      // La ligne se lit seule six mois plus tard : d'où part le client, où il
+      // va, et ce qui a bougé autour de la formule.
+      meta: {
+        from: previous,
+        to: body.plan ?? 'aucune',
+        onlineOrdering: body.onlineOrdering,
+        billing: body.billing,
+      },
     });
     return toAccountView(tenant);
   }
@@ -618,7 +652,10 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     name: String(raw.name ?? ''),
     slug: String(raw.slug ?? ''),
     plan: (raw.plan ?? null) as AdminPlan | null,
+    onlineOrdering: raw.onlineOrdering === true,
+    billingCycle: (raw.billingCycle ?? 'mensuel') as 'mensuel' | 'annuel',
     founderSeat: raw.founderSeat === true,
+    founderUntil: iso(raw.founderUntil) ?? null,
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],

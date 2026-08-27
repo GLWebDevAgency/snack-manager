@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  EMPTY_SERVICES,
   ACCOUNT_SUSPENDED_MESSAGE,
   ADMIN_LOG_ACTIONS,
   ADMIN_LOG_ACTION_LABELS,
@@ -195,7 +196,13 @@ describe('Administration client', () => {
 
   describe('Changement de formule', () => {
     it('journalise l’ancienne et la nouvelle formule', async () => {
-      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'boost', reason: 'Upsell démo' });
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'boost',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: 'Upsell démo',
+      });
 
       expect(view.plan).toBe('boost');
       const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
@@ -203,13 +210,79 @@ describe('Administration client', () => {
       );
       // Sans l'ancienne valeur, impossible de dire si le client a monté ou
       // descendu en gamme six mois plus tard.
-      expect(entry?.meta).toEqual({ from: 'essentiel', to: 'boost' });
+      expect(entry?.meta).toMatchObject({ from: 'essentiel', to: 'boost' });
       expect(entry?.reason).toBe('Upsell démo');
+    });
+
+    /**
+     * L'OFFRE ENTIÈRE, PAS SEULEMENT LA FORMULE.
+     *
+     * `changePlan` n'écrivait que `plan`. Le module de commande en ligne et les
+     * services de l'Atelier n'étaient ni activables ni retirables après la
+     * signature : un restaurateur qui prenait les réseaux sociaux six mois plus
+     * tard n'avait aucun chemin dans le logiciel, et sa facture ne bougeait pas.
+     */
+    it('écrit le module, l’engagement et les services — pas seulement le plan', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: true,
+        billing: 'annuel',
+        services: { ...EMPTY_SERVICES, presenceInternet: true, reseauxSociaux: 'hebdo' },
+        reason: 'Le gérant ajoute les réseaux.',
+      });
+      expect(view.plan).toBe('complet');
+      expect(view.onlineOrdering).toBe(true);
+      expect(view.billingCycle).toBe('annuel');
+      expect(view.atelier).toMatchObject({ presenceInternet: true, reseauxSociaux: 'hebdo' });
+    });
+
+    it('sait RETIRER la formule — un client peut redescendre à l’Atelier seul', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: null,
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: { ...EMPTY_SERVICES, presenceInternet: true },
+        reason: 'Garde la présence internet, arrête le logiciel.',
+      });
+      expect(view.plan).toBeNull();
+      expect(view.atelier).toMatchObject({ presenceInternet: true });
+    });
+
+    it('retirer tous les services efface l’Atelier — l’absence se lit comme une absence', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
+      expect(view.atelier).toBeNull();
+    });
+
+    it('le journal dit ce qui a changé, pas seulement la formule', async () => {
+      await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'boost',
+        onlineOrdering: true,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: 'Upsell',
+      });
+      const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
+        (e) => e.action === 'tenant.plan_change',
+      );
+      expect(entry?.meta).toMatchObject({ from: 'essentiel', to: 'boost' });
+      expect(entry?.reason).toBe('Upsell');
     });
 
     it('ne touche pas au statut de compte', async () => {
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
-      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
 
       // Changer de formule n'est pas une décision d'accès : un client suspendu
       // qu'on repasse en « Complet » reste suspendu.
@@ -430,7 +503,13 @@ describe('Administration client', () => {
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
       await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
       await admin.churn(SM, CLASSFOOD, { reason: 'Ferme fin août' });
-      await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+      await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });

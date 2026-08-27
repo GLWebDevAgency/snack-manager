@@ -479,7 +479,13 @@ export type AdminTenantAccount = {
   slug: string;
   /** `null` = client Atelier seul — aucun abonnement logiciel. */
   plan: AdminPlan | null;
+  /** Le module de commande en ligne — vendu à part de la formule, 79 €/mois. */
+  onlineOrdering: boolean;
+  /** L'engagement signé : au mois, ou à l'année avec deux mois offerts. */
+  billingCycle: 'mensuel' | 'annuel';
   founderSeat: boolean;
+  /** Fin de la remise fondateur, ou `null` — un booléen ne peut pas expirer. */
+  founderUntil: string | null;
   account: TenantAccount;
   /** Résultat de la règle d'accès, calculé une fois côté API. */
   accessBlocked: boolean;

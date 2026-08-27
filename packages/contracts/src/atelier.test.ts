@@ -7,6 +7,7 @@ import {
   LeadConvertSchema,
   LeadProposalSchema,
   LeadServicesSchema,
+  TenantOffreSchema,
   SOCIAL_CADENCE_CENTS,
   proposalCents,
   servicesCents,
@@ -234,5 +235,88 @@ describe('abonnementMensuelCents — ce qu’un client paie vraiment chaque mois
         atelier: { ...EMPTY_SERVICES, presenceInternet: true, signedAt: new Date() },
       }),
     ).toBe(6_900);
+  });
+});
+
+/**
+ * CHANGER L'OFFRE D'UN CLIENT APRÈS LA SIGNATURE.
+ *
+ * La seule route qui existait, `PATCH /crm/tenants/:id/plan`, ne portait que la
+ * formule — et son énumération excluait `null`, si bien qu'on ne pouvait même
+ * pas dégrader un client vers « Atelier seul ». Le module de commande en ligne
+ * et les services n'étaient ni affichables, ni activables, ni retirables : un
+ * restaurateur qui ajoutait les réseaux sociaux six mois plus tard n'avait
+ * aucun chemin dans le logiciel.
+ *
+ * Le nouveau schéma porte l'offre entière et REJOUE les trois règles de
+ * composition de la proposition. Les redéfinir ici en produirait des jumelles
+ * qui divergeraient au premier changement — et on ne saurait plus laquelle fait
+ * foi, celle qui vend ou celle qui modifie.
+ */
+describe('TenantOffreSchema — modifier ce qu’un client achète', () => {
+  const BASE = { services: EMPTY_SERVICES, reason: 'Le gérant veut les écrans de salle.' };
+
+  it('accepte une formule seule', () => {
+    const r = TenantOffreSchema.safeParse({ ...BASE, plan: 'complet', onlineOrdering: false });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepte de RETIRER la formule — c’était impossible avant', () => {
+    const r = TenantOffreSchema.safeParse({
+      ...BASE,
+      plan: null,
+      onlineOrdering: false,
+      services: { ...EMPTY_SERVICES, presenceInternet: true },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejoue la règle du module greffé : sans formule, il exige l’intégration', () => {
+    expect(
+      TenantOffreSchema.safeParse({ ...BASE, plan: null, onlineOrdering: true }).success,
+    ).toBe(false);
+    expect(
+      TenantOffreSchema.safeParse({
+        ...BASE,
+        plan: null,
+        onlineOrdering: true,
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejoue la règle de l’intégration : elle exige le module ou Boost', () => {
+    expect(
+      TenantOffreSchema.safeParse({
+        ...BASE,
+        plan: 'essentiel',
+        onlineOrdering: false,
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuse une offre vide : un client qui n’achète rien n’est pas un client', () => {
+    expect(
+      TenantOffreSchema.safeParse({ ...BASE, plan: null, onlineOrdering: false }).success,
+    ).toBe(false);
+  });
+
+  it('le motif est facultatif mais borné — un journal se relit', () => {
+    expect(
+      TenantOffreSchema.parse({ plan: 'boost', onlineOrdering: false, services: EMPTY_SERVICES }).reason,
+    ).toBe('');
+    expect(
+      TenantOffreSchema.safeParse({ ...BASE, plan: 'boost', onlineOrdering: false, reason: 'x'.repeat(501) })
+        .success,
+    ).toBe(false);
+  });
+
+  it('l’engagement se change aussi — mensuel par défaut', () => {
+    const r = TenantOffreSchema.parse({ plan: 'complet', onlineOrdering: false, services: EMPTY_SERVICES });
+    expect(r.billing).toBe('mensuel');
+    expect(
+      TenantOffreSchema.parse({ ...BASE, plan: 'complet', onlineOrdering: false, billing: 'annuel' }).billing,
+    ).toBe('annuel');
   });
 });

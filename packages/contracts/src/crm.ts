@@ -449,6 +449,39 @@ export const LeadProposalSchema = z
   .superRefine(propositionNonVide);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
+/**
+ * CHANGER L'OFFRE D'UN CLIENT DÉJÀ SIGNÉ.
+ *
+ * `TenantPlanChangeSchema` ne portait que la formule, et son énumération
+ * excluait `null` : on ne pouvait ni voir, ni ajouter, ni retirer le module de
+ * commande en ligne et les services après la signature, ni dégrader un client
+ * vers « Atelier seul ». Un restaurateur qui prenait les réseaux sociaux six
+ * mois plus tard n'avait aucun chemin dans le logiciel — et sa facture ne
+ * bougeait pas non plus, puisque tout le calcul retombait sur `plan`.
+ *
+ * Les trois `superRefine` sont ceux de la proposition, à l'identique. Les
+ * réécrire ici en produirait des jumelles qui divergeraient au premier
+ * changement de règle, et on ne saurait plus laquelle fait foi : celle qui
+ * vend, ou celle qui modifie.
+ *
+ * Le motif n'est pas décoratif : il part au journal d'administration, et
+ * « demandé par le gérant au téléphone » vaut mieux que rien le jour où l'on
+ * se demande pourquoi ce client est passé de Boost à Essentiel.
+ */
+export const TenantOffreSchema = z
+  .object({
+    plan: z.enum(['essentiel', 'complet', 'boost']).nullable(),
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+    reason: z.string().trim().max(500).default(''),
+  })
+  .superRefine(integrationExigeLeModule)
+  .superRefine(moduleSansFormuleExigeLIntegration)
+  .superRefine(propositionNonVide);
+export type TenantOffre = z.infer<typeof TenantOffreSchema>;
+
+
 /** La proposition telle que servie — datée du jour où elle a été posée. */
 export type CrmLeadProposal = LeadProposal & { at: string };
 

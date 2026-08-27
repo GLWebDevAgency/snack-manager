@@ -46,6 +46,8 @@ import {
   clientHealth,
   type AdminLogEntry,
   type AdminPlan,
+  type LeadServices,
+  type ProposalBilling,
   type AdminTenantAccount,
   type CrmActivityWindow,
   type CrmClient,
@@ -430,8 +432,61 @@ export const clientsApi = {
     api.post<unknown>(`/crm/tenants/${id}/suspend`, { reason }),
   reactivate: (id: string, reason: string) =>
     api.post<unknown>(`/crm/tenants/${id}/reactivate`, { reason }),
-  changePlan: (id: string, plan: AdminPlan, reason: string) =>
-    api.patch<unknown>(`/crm/tenants/${id}/plan`, { plan, reason }),
+  /**
+   * L'OFFRE entière, pas la seule formule : `/plan` ne portait que `plan` et
+   * son énumération excluait `null`, si bien qu'on ne pouvait ni activer le
+   * module ni redescendre un client vers l'Atelier seul.
+   */
+  changeOffre: (
+    id: string,
+    body: {
+      plan: AdminPlan | null;
+      onlineOrdering: boolean;
+      billing: ProposalBilling;
+      services: LeadServices;
+      reason: string;
+    },
+  ) => api.patch<unknown>(`/crm/tenants/${id}/offre`, body),
+  /**
+   * LA FICHE FACTURATION D'UN CLIENT — pièces, ardoise, prochaine échéance.
+   *
+   * Cette route JOURNALISE une consultation de dossier : on l'appelle quand on
+   * ouvre volontairement la facturation d'un client, jamais en boucle sur une
+   * liste. C'est pour la même raison qu'elle n'est pas fondue dans le
+   * chargement de la fiche.
+   */
+  billing: (id: string) => api.get<unknown>(`/crm/tenants/${id}/billing`),
+
+  /**
+   * ÉMETTRE une pièce. Aucune surface ne le permettait : les brouillons posés
+   * automatiquement à la signature ne pouvaient jamais partir, et l'abonnement
+   * du mois suivant n'était jamais facturé. La file de recouvrement pouvait
+   * donc rester vide non parce que le parc était à jour, mais parce que rien
+   * n'avait jamais été facturé.
+   *
+   * Aucun champ n'est obligatoire : sans montant, l'API applique l'offre du
+   * client ; sans période, le mois courant ; sans libellé, un intitulé dérivé
+   * de la nature et de la formule.
+   */
+  issueInvoice: (
+    id: string,
+    body: {
+      kind?: "abonnement" | "mise_en_place" | "option" | "autre";
+      period?: string;
+      amountCents?: number;
+      label?: string;
+      draft?: boolean;
+    },
+  ) => api.post<unknown>(`/crm/tenants/${id}/invoices`, body),
+
+  /** Envoyer un BROUILLON : c'est ce geste qui crée la créance. */
+  sendInvoice: (id: string, invoiceId: string) =>
+    api.post<unknown>(`/crm/tenants/${id}/invoices/${invoiceId}/send`, {}),
+
+  /** Un avoir sur une pièce réglée — le seul moyen d'annuler après paiement. */
+  creditInvoice: (id: string, invoiceId: string, reason: string) =>
+    api.post<unknown>(`/crm/tenants/${id}/invoices/${invoiceId}/credit`, { reason }),
+
   addNote: (id: string, note: string) =>
     api.post<unknown>(`/crm/tenants/${id}/notes`, { note }),
   /**

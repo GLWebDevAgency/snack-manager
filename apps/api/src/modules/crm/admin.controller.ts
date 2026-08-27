@@ -4,7 +4,7 @@ import {
   DeviceRevokeSchema,
   TenantChurnSchema,
   TenantNoteSchema,
-  TenantPlanChangeSchema,
+  TenantOffreSchema,
   TenantReactivateSchema,
   TenantSuspendSchema,
   type AdminLogQuery,
@@ -12,7 +12,7 @@ import {
   type JwtPayload,
   type TenantChurn,
   type TenantNote,
-  type TenantPlanChange,
+  type TenantOffre,
   type TenantReactivate,
   type TenantSuspend,
 } from '@sm/contracts';
@@ -94,13 +94,21 @@ export class AdminController {
     return this.admin.churn(actor, id, body);
   }
 
-  @Patch('tenants/:id/plan')
-  changePlan(
+  /**
+   * Change l'OFFRE d'un client — formule, module, engagement, services.
+   *
+   * Nommée `/offre` et non `/plan` : ce n'est plus une formule qu'on change,
+   * c'est ce que le client achète. L'ancienne route ne portait que `plan` et
+   * son énumération excluait `null`, si bien qu'on ne pouvait ni activer le
+   * module ni redescendre un client vers l'Atelier seul.
+   */
+  @Patch('tenants/:id/offre')
+  changeOffre(
     @CurrentUser() actor: JwtPayload,
     @Param('id') id: string,
-    @Body(zod(TenantPlanChangeSchema)) body: TenantPlanChange,
+    @Body(zod(TenantOffreSchema)) body: TenantOffre,
   ) {
-    return this.admin.changePlan(actor, id, body);
+    return this.admin.changeOffre(actor, id, body);
   }
 
   /** Note interne — elle s'ajoute au journal, elle ne vit pas ailleurs. */

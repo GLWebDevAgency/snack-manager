@@ -33,6 +33,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import {
+  EMPTY_SERVICES,
   DEFAULT_TENANT_ACCOUNT_STATUS,
   planChoiceLabel,
   isAccessBlocked,
@@ -45,7 +46,8 @@ import { resumeAtelier } from "../../parts";
 import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import {
-  PlanModal,
+  EmettreFactureModal,
+  OffreModal,
   ResetOwnerModal,
   ReactivateModal,
   RevokeDeviceModal,
@@ -76,7 +78,9 @@ export default function ClientFilePage({
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
-  const [modal, setModal] = useState<"suspend" | "reactivate" | "plan" | "motdepasse" | null>(null);
+  const [modal, setModal] = useState<
+    "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | null
+  >(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
 
   useEffect(() => {
@@ -243,7 +247,21 @@ export default function ClientFilePage({
                   : "Route /crm/tenants/:id/account indisponible"
               }
             >
-              Formule
+              Offre
+            </Btn>
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon="euro"
+              onClick={() => setModal("facturer")}
+              disabled={!account}
+              title={
+                account
+                  ? "Émettre une facture ou poser un brouillon"
+                  : "Route /crm/tenants/:id/account indisponible"
+              }
+            >
+              Facturer
             </Btn>
             <Btn
               size="sm"
@@ -360,10 +378,29 @@ export default function ClientFilePage({
         />
       )}
       {modal === "plan" && (
-        <PlanModal
+        <OffreModal
           tenantId={id}
           tenantName={name}
-          current={plan}
+          current={{
+            plan,
+            onlineOrdering: account?.onlineOrdering ?? false,
+            billingCycle: account?.billingCycle ?? "mensuel",
+            // Les clients d'avant l'Atelier n'ont rien en base : le formulaire
+            // s'ouvre alors sur « aucun service », pas sur un objet de faux.
+            services: account?.atelier ?? EMPTY_SERVICES,
+          }}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
+      {modal === "facturer" && (
+        <EmettreFactureModal
+          tenantId={id}
+          tenantName={name}
+          // Le montant par défaut proposé à l'écran est celui que l'API
+          // appliquera si le champ reste vide : offre entière et remise
+          // fondateur comprises. Les deux doivent dire la même chose.
+          mrrCents={row?.mrrCents ?? 0}
           onClose={() => setModal(null)}
           onDone={reload}
         />
