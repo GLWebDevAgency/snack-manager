@@ -24,8 +24,21 @@ donc pas *si*, mais *quoi* et *quand*.
   les pays de l'UE**, précisément parce qu'ils l'exigent. Notre
   `formatInvoiceNumber` fait la même chose à la main.
 - **Relances automatiques** (dunning) : réessais échelonnés, e-mails, escalade.
-- **Coupons et remises** : `percent_off: 50, duration: repeating,
-  duration_in_months: 12` — c'est **exactement** notre offre fondateur.
+- **Coupons et remises** : `duration: repeating, duration_in_months: 12` — la
+  durée de notre offre fondateur, telle quelle.
+
+  **Mais `amount_off`, jamais `percent_off`** — et la nuance décide de qui paie.
+  Un `percent_off` s'applique à toute la facture, lignes ajoutées comprises :
+  un fondateur qui souscrit un service au onzième mois l'obtiendrait à moitié
+  prix, alors que la remise a été vendue sur « tout ce qu'on signe aujourd'hui ».
+  `amount_off` est un montant figé, exactement ce que porte
+  `founderDiscountCents` depuis le 28/08/2026.
+
+  Cette ligne disait `percent_off` dans la première rédaction de l'ADR, et le
+  code faisait la même erreur au même moment : la remise y était un pourcentage
+  appliqué à l'offre courante. Corriger l'un sans l'autre aurait réintroduit le
+  défaut le jour de la bascule — c'est le propre d'une erreur de conception que
+  d'être écrite deux fois.
 - **Portail client** : le restaurateur voit ses factures et son moyen de
   paiement sans que nous écrivions l'écran.
 - **Prélèvement SEPA**, cartes, et les moyens locaux.
@@ -87,7 +100,7 @@ l'autre.**
 | Le pipeline, la file de production, les services à rendre | ✓ | |
 | Les abonnements récurrents et leur prélèvement | | ✓ (M9) |
 | Les relances de paiement | | ✓ (M9) |
-| La remise fondateur | | ✓ (M9, en coupon) |
+| La remise fondateur | | ✓ (M9, coupon `amount_off`) |
 | Les factures et leur numérotation | | ✓ (M9) |
 | La facturation électronique | ✓ (via un tiers) | |
 
@@ -138,9 +151,11 @@ disparaissent pas : c'est la table qui disparaît, comme le note déjà
 - Le montant d'une facture reste calculé chez nous jusqu'à M9. La source unique
   est `abonnementMensuelCents` — c'est elle qui deviendra le prix du catalogue
   Stripe, sans réécriture des règles.
-- La remise fondateur est datée (`founderUntil`) plutôt que gelée. Ce choix se
-  traduit tel quel en coupon `duration: repeating` : un gel à vie n'aurait pas
-  d'équivalent Stripe propre.
+- La remise fondateur est datée (`founderUntil`) plutôt que gelée, et portée par
+  un MONTANT (`founderDiscountCents`) plutôt qu'un taux. Les deux se traduisent
+  tels quels en coupon `amount_off` + `duration: repeating` : un gel à vie
+  n'aurait pas d'équivalent Stripe propre, et un taux y remiserait ce qui est
+  ajouté après la signature.
 - La numérotation maison (`SM-2026-0001`) sera remplacée par celle de Stripe.
   Les deux séquences ne devront **jamais** coexister sur un même exercice : la
   bascule se fait au 1er janvier, ou avec un préfixe distinct.
