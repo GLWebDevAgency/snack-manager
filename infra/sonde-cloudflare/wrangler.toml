@@ -1,12 +1,19 @@
 # Sonde de production — Cloudflare Workers
 #
-# Déploiement :
+# La sonde EST DÉJÀ DÉPLOYÉE et tourne : ce fichier ne sert qu'à la
+# redéployer le jour où son code change. Voir docs/SONDE-PRODUCTION.md
+# § « Redéployer la sonde » pour les trois voies possibles — dont deux ne
+# demandent aucun jeton.
+#
+# Déploiement en ligne de commande :
 #   CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npx --yes wrangler@4 deploy
 #
-# Le jeton doit porter « Workers Scripts : Edit » ET « Workers KV Storage :
+# Ce jeton-là doit porter « Workers Scripts : Edit » ET « Workers KV Storage :
 # Edit ». Celui des sauvegardes (`CLOUDFLARE_API_TOKEN` côté GitHub) ne porte
-# que R2 : il ne suffit pas ici, et le message d'erreur ne le dit pas
-# clairement — il parle d'une ressource introuvable, pas d'un droit manquant.
+# que R2 : il ne suffit pas ici, et il ne FAUT PAS l'élargir — deux jetons
+# étroits valent mieux qu'un jeton large, le jour où l'un des deux fuite.
+# Créer un second jeton, donc. À noter : le message d'erreur d'un jeton trop
+# étroit parle d'une ressource introuvable, jamais d'un droit manquant.
 #
 # Le secret SM_ALERT_WEBHOOK ne figure pas ici, et ne doit jamais y figurer :
 #   npx wrangler@4 secret put SM_ALERT_WEBHOOK

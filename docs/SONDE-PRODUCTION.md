@@ -103,9 +103,28 @@ Elle se lance aussi à la main, depuis l'onglet Actions du dépôt.
 
 ## Redéployer la sonde
 
-Le Worker se déploie depuis ce dépôt avec `wrangler`, qui a besoin d'un jeton
-Cloudflare portant **Workers Scripts : Edit** (celui des sauvegardes ne porte
-que R2) :
+> **Rien à faire aujourd'hui.** La sonde est déployée, son déclencheur est
+> posé, elle tourne. Cette section ne sert que le jour où le code du Worker
+> change — en pratique, le jour où un slug de production sera configuré.
+
+Le déploiement initial est passé par le connecteur Cloudflare, qui parle à
+l'API avec les droits du compte : aucun jeton n'a été créé pour l'occasion, et
+**le jeton des sauvegardes n'a pas été touché**. Il ne porte que R2, et c'est
+très bien ainsi — un jeton qui ne peut faire qu'une chose est un jeton dont on
+connaît le rayon d'action le jour où il fuite.
+
+Pour redéployer, trois voies, de la plus simple à la plus outillée :
+
+1. **Le tableau de bord** — Workers & Pages → `sonde-snack-manager` → Edit
+   code. Aucun jeton, aucune installation. Suffisant pour changer une
+   constante comme `SLUG_CARTE`. Penser à reporter la modification ici, sinon
+   le dépôt et le déployé divergent en silence.
+2. **Demander à Claude** — le connecteur redéploie depuis ce fichier en une
+   commande, sans rien installer chez vous.
+3. **`wrangler`, en ligne de commande** — la seule voie qui demande un jeton,
+   et il faut alors en créer un **second**, portant `Workers Scripts : Edit`
+   et `Workers KV Storage : Edit`. Ne pas élargir celui des sauvegardes :
+   deux jetons étroits valent mieux qu'un jeton large.
 
 ```sh
 cd infra/sonde-cloudflare
@@ -113,7 +132,9 @@ CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npx --yes wrangler@4 deploy
 ```
 
 `wrangler.toml` porte déjà le cron, le nom et le rattachement KV — rien à
-retaper.
+retaper. Et si le message d'erreur parle d'une ressource introuvable plutôt
+que d'un droit manquant, c'est le jeton : Cloudflare ne distingue pas les deux
+cas dans sa réponse.
 
 ## Les ressources Cloudflare
 
