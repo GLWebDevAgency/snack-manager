@@ -1,5 +1,10 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
-import { TenantIdentityUpdateSchema, type TenantIdentityUpdate } from '@sm/contracts';
+import {
+  TenantIdentityUpdateSchema,
+  type TenantIdentityUpdate,
+  TenantSettingsUpdateSchema,
+  type TenantSettingsUpdate,
+} from '@sm/contracts';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
 import { TenantsService } from './tenants.service';
@@ -18,9 +23,19 @@ export class TenantsController {
     return this.tenants.byId(tenantId);
   }
 
+  /**
+   * Les réglages du service — créneaux, pause, impression, objectif du jour.
+   *
+   * Le corps arrivait NU, sans schéma : une liste blanche de clés recopiait les
+   * valeurs sans regarder ce qu'elles contenaient. Une liste de clés dit quels
+   * champs s'écrivent, jamais avec quoi.
+   */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/settings')
-  updateSettings(@TenantId() tenantId: string, @Body() body: Record<string, unknown>) {
+  updateSettings(
+    @TenantId() tenantId: string,
+    @Body(zod(TenantSettingsUpdateSchema)) body: TenantSettingsUpdate,
+  ) {
     return this.tenants.updateSettings(tenantId, body);
   }
 

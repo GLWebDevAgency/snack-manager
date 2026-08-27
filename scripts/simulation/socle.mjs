@@ -63,23 +63,72 @@ const DELAI_REQUETE_MS = 20_000;
  * La production n'est pas un terrain de jeu. Le refus est ici, dans le socle,
  * et non dans chaque script : un garde-fou qu'on peut oublier de recopier
  * n'est pas un garde-fou.
+ *
+ * ── Le refus porte sur l'ADRESSE, pas sur le nom ──────────────────────────
+ *
+ * Il ne portait que sur le nom de la cible, et `SM_URL_API` écrase l'adresse
+ * APRÈS ce contrôle. Lancer la simulation avec l'URL de production et le nom
+ * « staging » visait donc la production sans rien déclencher — le script
+ * croyait de bonne foi parler à staging, et créait de vraies commandes, de
+ * vrais paiements et de vraies lignes de statistiques.
+ *
+ * La surcharge d'adresse reste, elle sert à viser une API locale. C'est le
+ * contrôle qui se déplace : il regarde ce qu'on va RÉELLEMENT appeler.
  */
+
+/** Les hôtes de production, quels qu'en soient les chemins ou le protocole. */
+const HOTES_PRODUCTION = [
+  'api-production-8949.up.railway.app',
+  'app.snackmanager.fr',
+  'snackmanager.fr',
+];
+
+const AVEU = 'oui-je-sais-ce-que-je-fais';
+
+/** L'hôte d'une adresse, en minuscules — `null` si elle est illisible. */
+function hote(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export function resoudreCible(nom) {
   const cible = CIBLES[nom];
   if (!cible) {
     throw new Error(`Environnement « ${nom} » inconnu — attendu : staging.`);
   }
-  if (nom === 'production' && process.env.SM_SIMULATION_PRODUCTION !== 'oui-je-sais-ce-que-je-fais') {
+
+  const api = process.env.SM_URL_API || cible.api;
+  const web = process.env.SM_URL_WEB || cible.web;
+  const assume = process.env.SM_SIMULATION_PRODUCTION === AVEU;
+
+  // Une adresse illisible n'est pas une adresse sûre : on la refuse plutôt que
+  // de la laisser passer faute de savoir la lire.
+  for (const [role, url] of [['API', api], ['web', web]]) {
+    const h = hote(url);
+    if (h === null) {
+      throw new Error(`Adresse ${role} illisible : « ${url} ».`);
+    }
+    if (HOTES_PRODUCTION.includes(h) && !assume) {
+      throw new Error(
+        `La simulation refuse de viser la production (${role} : ${h}) : elle crée de vraies ` +
+          'commandes, de vrais paiements et de vraies lignes de statistiques.\n' +
+          `Le nom de l’environnement demandé (« ${nom} ») n’y change rien — c’est l’adresse ` +
+          'réellement appelée qui décide.',
+      );
+    }
+  }
+
+  if (nom === 'production' && !assume) {
     throw new Error(
       'La simulation refuse de viser la production : elle crée de vraies commandes, ' +
         'de vrais paiements et de vraies lignes de statistiques.',
     );
   }
-  return {
-    nom,
-    api: process.env.SM_URL_API || cible.api,
-    web: process.env.SM_URL_WEB || cible.web,
-  };
+
+  return { nom, api, web };
 }
 
 /**

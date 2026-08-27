@@ -1,0 +1,14 @@
+{
+  "name": "@sm/scripts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "echo ok",
+    "lint": "echo ok",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
+  }
+}

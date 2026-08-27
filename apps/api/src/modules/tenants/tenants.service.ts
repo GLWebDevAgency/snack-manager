@@ -1,7 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { publicOrderingState, type TenantIdentityUpdate } from '@sm/contracts';
+import {
+  publicOrderingState,
+  type TenantIdentityUpdate,
+  type TenantSettingsUpdate,
+} from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 
 /**
@@ -64,11 +68,23 @@ export class TenantsService {
     };
   }
 
-  async updateSettings(tenantId: string, patch: Record<string, unknown>) {
+  /**
+   * Les réglages du service. Le corps est VALIDÉ en amont
+   * (`TenantSettingsUpdateSchema`) : cette liste ne décide plus que des champs
+   * ÉCRITS, ce qu'elle a toujours fait, et le schéma décide des VALEURS — ce
+   * que personne ne faisait.
+   *
+   * Les deux restent nécessaires et le test `tenants.test.ts` verrouille leur
+   * correspondance : une clé validée mais absente d'ici serait acceptée puis
+   * jetée en silence, et une clé d'ici absente du schéma Mongoose subirait le
+   * même sort en base — c'est exactement ce qui est arrivé à `dailyGoalCents`.
+   */
+  async updateSettings(tenantId: string, patch: TenantSettingsUpdate) {
     const $set: Record<string, unknown> = {};
     for (const k of REGLAGES_MODIFIABLES) {
-      if (k in patch) $set[`settings.${k}`] = patch[k];
+      if (k in patch) $set[`settings.${k}`] = (patch as Record<string, unknown>)[k];
     }
+    if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
   }
 

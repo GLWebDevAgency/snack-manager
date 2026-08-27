@@ -1,3 +1,4 @@
+import { TenantSettingsUpdateSchema } from '@sm/contracts';
 import { TenantSchema } from '@sm/db';
 import { describe, expect, it } from 'vitest';
 import { REGLAGES_MODIFIABLES } from './tenants.service';
@@ -44,5 +45,69 @@ describe('les réglages de service', () => {
     // test qui finit par être supprimé.
     const chemin = TenantSchema.path('settings.dailyGoalCents');
     expect(chemin.options.default).toBeUndefined();
+  });
+});
+
+/**
+ * LES RÉGLAGES SONT VALIDÉS, PAS SEULEMENT FILTRÉS.
+ *
+ * `PATCH /tenants/me/settings` prenait un corps NU : une liste blanche de clés
+ * recopiait les valeurs dans un `$set` sans regarder ce qu'elles contenaient.
+ * Le service le disait lui-même — « cette liste est le seul rempart ». Une
+ * liste de clés dit QUELS champs s'écrivent, jamais AVEC QUOI.
+ *
+ * Chaque borne répare un dégât précis, et aucune n'est décorative.
+ */
+describe('la validation des réglages', () => {
+  const passe = (patch: Record<string, unknown>) => TenantSettingsUpdateSchema.safeParse(patch).success;
+
+  it('refuse un intervalle de créneau à zéro — il divise par zéro en aval', () => {
+    expect(passe({ slotIntervalMin: 0 })).toBe(false);
+    expect(passe({ slotIntervalMin: 10 })).toBe(true);
+  });
+
+  it('refuse une capacité nulle ou négative — elle fermerait la commande sans le dire', () => {
+    expect(passe({ slotCapacity: 0 })).toBe(false);
+    expect(passe({ slotCapacity: -3 })).toBe(false);
+    expect(passe({ slotCapacity: 4 })).toBe(true);
+  });
+
+  it('refuse un objectif du jour nul ou négatif', () => {
+    // Zéro serait atteint dès l'ouverture : la jauge afficherait 100 % avant
+    // la première commande.
+    expect(passe({ dailyGoalCents: 0 })).toBe(false);
+    expect(passe({ dailyGoalCents: -5_000 })).toBe(false);
+    expect(passe({ dailyGoalCents: 30_000 })).toBe(true);
+    // `null` efface l'objectif : le tableau de bord reprend le sien.
+    expect(passe({ dailyGoalCents: null })).toBe(true);
+    // La faute de frappe qui prend des euros pour des centimes.
+    expect(passe({ dailyGoalCents: 100_000_001 })).toBe(false);
+  });
+
+  it('borne le message de pause, mais admet le vide', () => {
+    // Effacer son message est un geste normal : l'interdire obligerait le
+    // gérant à inventer un texte pour se taire.
+    expect(passe({ pauseMessage: '' })).toBe(true);
+    expect(passe({ pauseMessage: 'x'.repeat(201) })).toBe(false);
+  });
+
+  it('refuse un moment d’impression inconnu', () => {
+    expect(passe({ printTicketOn: 'jamais' })).toBe(false);
+    expect(passe({ printTicketOn: 'ready' })).toBe(true);
+  });
+
+  it('reste un PATCH : les clés absentes le restent', () => {
+    // Un défaut appliqué ici réinitialiserait en silence ce que le gérant n'a
+    // pas touché.
+    const r = TenantSettingsUpdateSchema.parse({ onlineOrderingPaused: true });
+    expect(Object.keys(r)).toEqual(['onlineOrderingPaused']);
+  });
+
+  it('chaque clé validée est écrite, et chaque clé écrite est validée', () => {
+    // Une clé validée mais absente de la liste blanche serait acceptée puis
+    // jetée en silence — la route répondrait 200 sans rien enregistrer. C'est
+    // exactement ce qui est arrivé à `dailyGoalCents`.
+    const valides = Object.keys(TenantSettingsUpdateSchema.shape).sort();
+    expect(valides).toEqual([...REGLAGES_MODIFIABLES].sort());
   });
 });

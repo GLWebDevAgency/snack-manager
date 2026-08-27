@@ -62,6 +62,34 @@ const noter = (etape, donnees) => {
   dejaFait.set(etape, donnees);
 };
 
+/**
+ * Une étape LIGNE À LIGNE — la reprise descend jusqu'à l'élément.
+ *
+ * `etape` note au journal une fois l'action TERMINÉE. Sur une boucle, c'est
+ * trop tard : un script tué après cinq catégories sur sept n'a rien noté, et
+ * le relancement recrée les sept — les cinq premières en double. La reprise
+ * existait, elle était simplement posée au mauvais niveau.
+ *
+ * Chaque élément porte donc sa propre marque, et le journal se relit à la
+ * ligne près. `cle` doit être STABLE d'une exécution à l'autre : un
+ * identifiant rendu par le serveur ne conviendrait pas, puisqu'on cherche
+ * précisément à savoir si l'appel a eu lieu.
+ */
+async function chaque(nom, elements, cle, action) {
+  const faits = [];
+  for (const element of elements) {
+    const marque = `${nom}:${cle(element)}`;
+    if (dejaFait.has(marque)) {
+      faits.push(dejaFait.get(marque));
+      continue;
+    }
+    const resultat = await action(element);
+    noter(marque, resultat);
+    faits.push(resultat);
+  }
+  return faits;
+}
+
 async function etape(nom, action) {
   if (dejaFait.has(nom)) {
     dire.ignore(`${nom} — déjà fait`);
@@ -216,62 +244,49 @@ async function configurer(owner) {
 }
 
 async function poserCarte(owner) {
-  const ids = dejaFait.get('catégories')?.ids ?? {};
-  await etape('catégories', async () => {
-    const crees = { ...ids };
-    for (const categorie of CATEGORIES) {
-      if (crees[categorie.key]) continue;
-      const charge = exigerSucces(
-        await appel(cible, 'POST', '/categories', {
-          jeton: owner,
-          corps: { name: categorie.name, order: categorie.order, active: true },
-        }),
-        `catégorie ${categorie.name}`,
-      );
-      crees[categorie.key] = charge._id;
-    }
-    return { ids: crees, resume: `${Object.keys(crees).length} catégories` };
+  dire.etape('catégories');
+  const categories = await chaque('catégorie', CATEGORIES, (c) => c.key, async (categorie) => {
+    const charge = exigerSucces(
+      await appel(cible, 'POST', '/categories', {
+        jeton: owner,
+        corps: { name: categorie.name, order: categorie.order, active: true },
+      }),
+      `catégorie ${categorie.name}`,
+    );
+    return { key: categorie.key, id: charge._id };
   });
+  const categorieIds = Object.fromEntries(categories.map((c) => [c.key, c.id]));
+  dire.ok(`catégories — ${categories.length}`);
 
-  const categorieIds = dejaFait.get('catégories').ids;
-  const dejaCrees = new Set(dejaFait.get('produits')?.noms ?? []);
-
-  await etape('produits', async () => {
-    const noms = [...dejaCrees];
-    for (const produit of PRODUITS) {
-      if (dejaCrees.has(produit.name)) continue;
-      const { categorie, ...reste } = produit;
-      exigerSucces(
-        await appel(cible, 'POST', '/products', {
-          jeton: owner,
-          corps: { categoryId: categorieIds[categorie], ...reste },
-        }),
-        `produit ${produit.name}`,
-      );
-      noms.push(produit.name);
-      await cadence(150);
-    }
-    return { noms, resume: `${noms.length} produits` };
+  dire.etape('produits');
+  const produits = await chaque('produit', PRODUITS, (p) => p.name, async (produit) => {
+    const { categorie, ...reste } = produit;
+    exigerSucces(
+      await appel(cible, 'POST', '/products', {
+        jeton: owner,
+        corps: { categoryId: categorieIds[categorie], ...reste },
+      }),
+      `produit ${produit.name}`,
+    );
+    await cadence(150);
+    return { name: produit.name };
   });
+  dire.ok(`produits — ${produits.length}`);
 }
 
 async function poserEquipe(owner) {
-  await etape('équipe', async () => {
-    const crees = [];
-    for (const membre of EQUIPE) {
-      const reponse = await appel(cible, 'POST', '/staff', {
-        jeton: owner,
-        corps: { name: membre.name, role: membre.role, pin: membre.pin },
-      });
-      if (reponse.statut === 409) {
-        crees.push(`${membre.name} (existait)`);
-        continue;
-      }
-      exigerSucces(reponse, `équipier ${membre.name}`);
-      crees.push(membre.name);
-    }
-    return { crees, resume: crees.join(', ') };
+  dire.etape('équipe');
+  const crees = await chaque('équipier', EQUIPE, (m) => m.name, async (membre) => {
+    const reponse = await appel(cible, 'POST', '/staff', {
+      jeton: owner,
+      corps: { name: membre.name, role: membre.role, pin: membre.pin },
+    });
+    // Le 409 vaut « déjà là » : la reprise doit le noter comme un succès,
+    // sinon chaque relance retente un appel qui échouera toujours.
+    if (reponse.statut !== 409) exigerSucces(reponse, `équipier ${membre.name}`);
+    return { name: membre.name, existait: reponse.statut === 409 };
   });
+  dire.ok(`équipe — ${crees.map((c) => c.name).join(', ')}`);
 }
 
 // ─── Le déroulé ──────────────────────────────────────────────────────────────

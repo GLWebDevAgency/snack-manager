@@ -317,6 +317,12 @@ importers:
         specifier: ^4.19.0
         version: 4.23.12
 
+  scripts:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
