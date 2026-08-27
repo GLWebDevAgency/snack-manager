@@ -8,9 +8,19 @@
 | À quoi ça sert | Lien |
 |---|---|
 | **L'état de la production, en un coup d'œil** | https://sonde-snack-manager.snackmanager.workers.dev/etat |
-| Forcer un contrôle immédiat | https://sonde-snack-manager.snackmanager.workers.dev/ |
+| Forcer un contrôle immédiat | `…/verifier?token=…` |
+| **Vérifier que les alertes marchent encore** | `…/diagnostic?token=…` |
 | Le Worker dans le tableau de bord | https://dash.cloudflare.com/ → Workers & Pages → `sonde-snack-manager` |
 | Le code de la sonde | [`infra/sonde-cloudflare/worker.js`](../infra/sonde-cloudflare/worker.js) |
+
+Le premier lien est **public et sans risque** : il ne fait que lire la mémoire
+de la sonde. C'est celui qu'on met en favori sur son téléphone.
+
+Les deux autres **agissent** — l'un écrit dans KV, l'autre envoie une
+notification — et demandent donc le jeton `DIAGNOSTIC_TOKEN`, qui se lit dans
+Cloudflare → Workers & Pages → `sonde-snack-manager` → Settings → Variables.
+Il ne figure pas ici : un secret écrit dans un dépôt reste un secret exposé,
+même en dépôt privé.
 
 Le premier lien se met en favori sur le téléphone. Il répond en 400 ms et dit
 tout : l'état, la révision servie, chaque service avec son temps de réponse.
@@ -65,17 +75,38 @@ Une sonde qui alerte à chaque passage rouge envoie 12 notifications par heure ;
 au bout de deux pannes on coupe les notifications, et la troisième passe
 inaperçue.
 
-Le canal est le même que celui du veilleur de l'API : `SM_ALERT_WEBHOOK`.
-Il se pose sur le Worker, une fois :
+Le canal est le même que celui du veilleur de l'API : `SM_ALERT_WEBHOOK`,
+posé sur le Worker et **repris depuis Railway**, donc une seule adresse à
+maintenir pour les deux. Il est en place et vérifié.
 
-```
-Cloudflare → Workers & Pages → sonde-snack-manager → Settings → Variables
-  Nom    : SM_ALERT_WEBHOOK
-  Valeur : https://ntfy.sh/<votre-sujet>     (chiffrer : « Encrypt »)
+Tant qu'un canal n'est pas posé, la sonde fonctionne et mémorise tout — elle
+ne sonne simplement pas. L'état reste consultable par le lien ci-dessus.
+
+### Vérifier que l'alerte marche encore
+
+C'est la seule pièce que l'état ne dit pas : le canal ne sert **qu'au
+changement**, donc il peut être cassé pendant des mois sans que rien ne le
+signale — et on le croit armé tout ce temps.
+
+`/diagnostic?token=…` l'exerce pour de vrai : il envoie un message rassurant
+sur le canal et rapporte l'échec au lieu de l'avaler.
+
+```json
+{ "canal_configure": true,
+  "envoi": { "envoye": true, "raison": null } }
 ```
 
-Tant qu'il n'est pas posé, la sonde fonctionne et mémorise tout — elle ne
-sonne simplement pas. L'état reste consultable par le lien ci-dessus.
+Aucun fragment de l'adresse n'est renvoyé : savoir que le canal est configuré
+suffit à l'exploitant, et un préfixe d'URL est une moitié de secret —
+c'est-à-dire un secret. À ouvrir après chaque redéploiement, et une fois de
+temps en temps.
+
+**Le piège qui a coûté une demi-heure :** poser le secret ne suffit pas si le
+Worker tourne déjà. Le binding n'entre en service qu'au déploiement suivant —
+exactement comme une variable Railway qui n'entre dans le processus qu'au
+redéploiement. Et un redéploiement en API brute **efface les bindings non
+redéclarés** : `keep_bindings: ["secret_text"]` dans les métadonnées, sinon la
+sonde redevient muette sans que rien ne le dise.
 
 ## Ce qu'il y a à faire, de temps en temps
 
@@ -144,6 +175,7 @@ cas dans sa réponse.
 | Espace KV | `sonde-snack-manager` (`563f07d5244e4d1582eac6dd8189f586`) |
 | Sous-domaine | `snackmanager.workers.dev` |
 | Déclencheur | `*/5 * * * *` |
+| Secrets | `SM_ALERT_WEBHOOK`, `DIAGNOSTIC_TOKEN` |
 
 L'espace KV garde deux clefs : `etat` (`vert` / `rouge`) et `dernier-passage`
 (le détail complet). C'est cette mémoire qui permet de ne notifier qu'au
