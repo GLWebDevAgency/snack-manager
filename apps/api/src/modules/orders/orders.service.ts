@@ -281,6 +281,10 @@ export class OrdersService {
     // rien — même règle que pour les prix, et pour la même raison.
     const promotion = await this.resoudrePromotion(tenantId, dto, subtotal, lines);
 
+    // Ce que le client doit RÉELLEMENT — le seul montant qui fasse autorité
+    // pour l'encaissement, le rendu monnaie et le ticket.
+    const totalDu = subtotal - (promotion?.discount.amount ?? 0);
+
     const number = await this.nextNumber(tenantId);
     try {
       const order = await this.orders.create({
@@ -290,14 +294,19 @@ export class OrdersService {
         channel: dto.channel,
         type: dto.type,
         lines,
-        totals: {
-          subtotal,
-          discount: promotion?.discount ?? null,
-          total: subtotal - (promotion?.discount.amount ?? 0),
-        },
-        // Le total fait autorité pour le rendu monnaie : il vient d'être
-        // recalculé depuis le menu, pas du corps envoyé par l'appareil.
-        payment: resolvePayment(dto.channel, dto.payment, subtotal),
+        totals: { subtotal, discount: promotion?.discount ?? null, total: totalDu },
+        // LE TOTAL DÛ, remise comprise — jamais le sous-total.
+        //
+        // Il vient d'être recalculé depuis le menu, pas du corps envoyé par
+        // l'appareil. Et il est DIMINUÉ de la promotion : tant que rien ne les
+        // appliquait, `discount` valait toujours `null` et les deux montants
+        // coïncidaient — passer l'un pour l'autre était sans conséquence.
+        //
+        // Depuis qu'une promotion peut s'appliquer, ce raccourci ment deux
+        // fois : sur une commande de 20 € remisée de 2 €, le client qui tend
+        // 18 € se fait refuser « montant reçu insuffisant », et celui qui tend
+        // 20 € repart sans son rendu monnaie.
+        payment: resolvePayment(dto.channel, dto.payment, totalDu),
         trackingToken: newTrackingToken(),
         status: 'new',
         statusHistory: [{ status: 'new', at: new Date(), by: actor }],

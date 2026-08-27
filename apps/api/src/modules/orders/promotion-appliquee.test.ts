@@ -55,6 +55,7 @@ const promoDoc = (over: Record<string, unknown> = {}) => ({
 
 type Creee = {
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
+  payment: { cashReceived: number | null; changeGiven: number | null };
 };
 
 function build(
@@ -252,5 +253,46 @@ describe('la réservation rendue quand la commande n’existe pas', () => {
     const { service, rendu } = build([], { creationEchoue: { code: 11000 } });
     await service.create(TENANT, commande(), 'client');
     expect(rendu).toHaveLength(0);
+  });
+});
+
+/**
+ * LE RENDU MONNAIE SUIT LE TOTAL DÛ, JAMAIS LE SOUS-TOTAL.
+ *
+ * Tant que rien n'appliquait les promotions, `discount` valait toujours `null`
+ * et les deux montants coïncidaient : passer l'un pour l'autre était sans
+ * conséquence. Brancher les promotions a rendu ce raccourci faux sans qu'une
+ * ligne de l'encaissement change — le défaut le plus sournois qui soit, celui
+ * qu'on introduit ailleurs.
+ *
+ * Deux dégâts, aux deux extrémités : le client qui tend le bon montant se fait
+ * refuser, celui qui tend le montant facial repart sans sa monnaie.
+ */
+describe('l’encaissement en espèces d’une commande remisée', () => {
+  const especes = (recu) =>
+    commande({
+      promoCode: 'BIENVENUE10',
+      channel: 'pos',
+      payment: { method: 'cash', tender: 'cash', cashReceived: recu },
+    });
+
+  it('accepte le montant RÉELLEMENT dû, pas le tarif plein', async () => {
+    const { service, created } = build([promoDoc()]);
+    // 1 000 − 100 de remise = 900 dus. Le client tend exactement 900.
+    await service.create(TENANT, especes(900), 'caisse');
+    expect(created[0]!.payment.cashReceived).toBe(900);
+    expect(created[0]!.payment.changeGiven).toBe(0);
+  });
+
+  it('rend la monnaie sur le total remisé', async () => {
+    const { service, created } = build([promoDoc()]);
+    // Le client tend 1 000 sur 900 dus : 100 lui reviennent.
+    await service.create(TENANT, especes(1_000), 'caisse');
+    expect(created[0]!.payment.changeGiven).toBe(100);
+  });
+
+  it('refuse toujours un montant réellement insuffisant', async () => {
+    const { service } = build([promoDoc()]);
+    await expect(service.create(TENANT, especes(800), 'caisse')).rejects.toThrow(/insuffisant/);
   });
 });

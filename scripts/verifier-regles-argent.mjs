@@ -104,6 +104,16 @@ const REGLES = [
     suite: 'src/modules/orders/promotion-appliquee.test.ts',
   },
   {
+    nom: 'le rendu monnaie suit le total DÛ, pas le sous-total',
+    casse: 'la caisse refuserait le bon montant et garderait la monnaie du client',
+    fichier: 'apps/api/src/modules/orders/orders.service.ts',
+    avant: 'payment: resolvePayment(dto.channel, dto.payment, totalDu),',
+    apres: 'payment: resolvePayment(dto.channel, dto.payment, subtotal),',
+    build: null,
+    cwd: 'apps/api',
+    suite: 'src/modules/orders/promotion-appliquee.test.ts',
+  },
+  {
     nom: 'le MRR d’un client annuel est normalisé',
     casse: 'le MRR du parc serait surestimé de vingt pour cent par client annuel',
     fichier: 'apps/api/src/modules/crm/billing.service.ts',
