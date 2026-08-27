@@ -9,6 +9,7 @@ import {
   type JwtPayload,
   type Login,
   type PinLogin,
+  type StaffRole,
 } from '@sm/contracts';
 import type { Staff, Tenant, User } from '@sm/db';
 
@@ -75,11 +76,21 @@ export class AuthService {
     throw new UnauthorizedException('PIN invalide');
   }
 
-  /** Re-validation PIN pour action sensible (annulation, remise…) — traçabilité NF525. */
-  async verifyPin(tenantId: string, pin: string): Promise<string> {
+  /**
+   * Re-validation PIN pour action sensible (annulation, remise…) — NF525.
+   *
+   * Rend le RÔLE avec l'identité, et ce n'est pas un détail de confort :
+   * re-saisir un code prouve QUI agit, jamais que cette personne en a le droit.
+   * Les appelants n'avaient que le `staffId` et ne pouvaient donc pas faire le
+   * second contrôle — n'importe quel code actif du restaurant, cuisine
+   * comprise, accordait une remise de n'importe quel montant.
+   */
+  async verifyPin(tenantId: string, pin: string): Promise<{ staffId: string; role: StaffRole }> {
     const members = await this.staff.find({ tenantId, active: true });
     for (const member of members) {
-      if (await argon2.verify(member.pinHash, pin)) return String(member._id);
+      if (await argon2.verify(member.pinHash, pin)) {
+        return { staffId: String(member._id), role: member.role as StaffRole };
+      }
     }
     throw new UnauthorizedException('PIN invalide');
   }

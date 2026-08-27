@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -11,6 +12,9 @@ import Redis from 'ioredis';
 import { Money, ordering } from '@sm/domain';
 import {
   type CreateOrder,
+  plafondRemiseLabel,
+  REMISE_PLAFOND_CENTS,
+  type StaffRole,
   ORDER_STATUS_RANK,
   type OrderStatus,
   type OrderTracking,
@@ -425,23 +429,77 @@ export class OrdersService {
   }
 
   /** Remise — action sensible : PIN re-validé en amont, journalisée. */
-  async discount(tenantId: string, id: string, staffId: string, amount: number, reason: string) {
+  /**
+   * REMISE SUR COMMANDE — le geste qui minore la recette.
+   *
+   * Passe par le value object du domaine, ce que ce service ne faisait pas :
+   * il écrivait directement dans `order.totals.discount`, contournant les trois
+   * règles que `Discount` existe pour tenir — motif obligatoire, valideur
+   * identifié, et désormais plafond par rôle.
+   *
+   * Le contrôle du montant vit dans le domaine et non ici : c'est le seul
+   * endroit par lequel une remise peut naître, et une règle d'argent posée dans
+   * un service finit contournée par le prochain appelant.
+   */
+  async discount(
+    tenantId: string,
+    id: string,
+    valideur: { staffId: string; role: StaffRole },
+    amount: number,
+    reason: string,
+  ) {
     const order = await this.byId(tenantId, id);
-    if (amount <= 0 || amount > order.totals.subtotal) {
-      throw new BadRequestException('Montant de remise invalide');
+    if (amount > order.totals.subtotal) {
+      throw new BadRequestException(
+        'Une remise ne peut pas dépasser le montant de la commande',
+      );
     }
-    order.totals.discount = { amount, reason, staffId: staffId as never };
-    order.totals.total = order.totals.subtotal - amount;
+
+    const horloge = { now: () => new Date() };
+    const autorisation = ordering.StaffAuthorization.grant(valideur.staffId, horloge);
+    if (!autorisation.ok) throw new BadRequestException(autorisation.error.message);
+
+    const remise = ordering.Discount.create({
+      amount: Money.fromCents(amount),
+      reason,
+      authorization: autorisation.value,
+      // Ce que CE code autorise. `null` = le gérant, `0` = la cuisine, qui
+      // n'accorde aucune remise : elle prépare, elle ne négocie pas.
+      plafondCents: REMISE_PLAFOND_CENTS[valideur.role],
+    });
+    if (!remise.ok) {
+      // Un dépassement de plafond n'est pas une erreur de saisie : c'est un
+      // refus de droit, et le 403 le dit. La confondre avec un 400 ferait
+      // chercher la faute au caissier plutôt qu'au niveau d'autorisation.
+      const refus = remise.error;
+      throw refus.code === 'authorization.required'
+        ? new ForbiddenException(
+            `Ce code n’autorise aucune remise (${plafondRemiseLabel(valideur.role)}) — demandez au gérant.`,
+          )
+        : new BadRequestException(refus.message);
+    }
+
+    const pose = remise.value.toJSON();
+    order.totals.discount = {
+      amount: pose.amount,
+      reason: pose.reason,
+      staffId: valideur.staffId as never,
+      promotionId: null as never,
+    };
+    order.totals.total = order.totals.subtotal - pose.amount;
     await order.save();
     await this.audit.log({
       tenantId,
-      staffId,
+      staffId: valideur.staffId,
       action: 'order.discount',
       targetId: id,
-      meta: { amount, reason, number: order.number },
-      pinVerifiedAt: new Date(),
+      // Le RÔLE du valideur au journal : « qui » ne suffit pas à relire un
+      // contrôle six mois plus tard, il faut « à quel titre ».
+      meta: { amount: pose.amount, reason: pose.reason, role: valideur.role, number: order.number },
+      pinVerifiedAt: new Date(pose.pinVerifiedAt),
     });
     this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
     return order;
   }
+
 }

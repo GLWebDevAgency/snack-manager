@@ -8,6 +8,11 @@ import { TenantsService } from './tenants.service';
 export class TenantsController {
   constructor(private readonly tenants: TenantsService) {}
 
+  /**
+   * L'établissement de la session — nom, couleur, horaires. Tout l'équipage en
+   * a besoin pour afficher son propre restaurant, y compris sur une tablette.
+   */
+  @Roles('owner', 'gerant', 'caisse', 'cuisine')
   @Get('tenants/me')
   me(@TenantId() tenantId: string) {
     return this.tenants.byId(tenantId);

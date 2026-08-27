@@ -110,6 +110,37 @@ export const STAFF_ROLES = ['gerant', 'caisse', 'cuisine'] as const;
 export const StaffRoleSchema = z.enum(STAFF_ROLES);
 export type StaffRole = z.infer<typeof StaffRoleSchema>;
 
+/**
+ * CE QU'UN ÉQUIPIER PEUT ACCORDER DE REMISE, PAR RÔLE.
+ *
+ * `POST /orders/:id/discount` re-demandait le PIN — traçabilité NF525 — et
+ * s'arrêtait là : n'importe quel PIN actif du restaurant faisait l'affaire,
+ * cuisine comprise, et le seul plafond était le sous-total. Un équipier pouvait
+ * donc offrir la commande entière, avec son propre code, sans qu'aucun écran ne
+ * le signale au gérant.
+ *
+ * Re-saisir un code prouve QUI agit, jamais que cette personne en a le droit.
+ * Les deux contrôles sont distincts et il manquait le second.
+ *
+ * `null` = pas de plafond : le gérant assume les gestes commerciaux, c'est son
+ * métier. La cuisine ne touche pas aux montants — elle prépare. La caisse
+ * arrange un client mécontent à hauteur d'un plat, au-delà elle appelle le
+ * gérant, ce qui est exactement la conversation qu'on veut provoquer.
+ */
+export const REMISE_PLAFOND_CENTS: Record<StaffRole, number | null> = {
+  gerant: null,
+  caisse: 1_500,
+  cuisine: 0,
+};
+
+/** Le plafond en toutes lettres — pour l'écran qui demande le PIN. */
+export const plafondRemiseLabel = (role: StaffRole): string => {
+  const cents = REMISE_PLAFOND_CENTS[role];
+  if (cents === null) return 'sans plafond';
+  if (cents === 0) return 'aucune remise autorisée';
+  return `${(cents / 100).toFixed(2).replace('.', ',')} € maximum`;
+};
+
 export const USER_ROLES = ['owner', 'sm_admin'] as const;
 export const UserRoleSchema = z.enum(USER_ROLES);
 export type UserRole = z.infer<typeof UserRoleSchema>;
@@ -281,6 +312,28 @@ export const CreateOrderSchema = z.object({
   promoCode: z.string().trim().min(1).max(24).optional(),
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
+
+/**
+ * Les deux gestes qui MINORENT la recette — et qui n'étaient pas validés.
+ *
+ * Le corps arrivait en `@Body()` nu, sans schéma : `amount` pouvait être un
+ * flottant, une chaîne, ou manquer ; `reason` était facultative alors que
+ * NF525 exige qu'une minoration de recette soit motivée. Le domaine réclamait
+ * bien un motif — le service ne passait simplement pas par lui.
+ */
+export const OrderCancelSchema = z.object({
+  pin: z.string().regex(/^\d{4,6}$/, 'Code à 4 à 6 chiffres'),
+  reason: z.string().trim().min(3, 'Motif obligatoire').max(200),
+});
+export type OrderCancel = z.infer<typeof OrderCancelSchema>;
+
+export const OrderDiscountSchema = z.object({
+  pin: z.string().regex(/^\d{4,6}$/, 'Code à 4 à 6 chiffres'),
+  /** En CENTIMES, entier et positif — jamais des euros, jamais un flottant. */
+  amount: z.number().int().positive('Montant de remise invalide'),
+  reason: z.string().trim().min(3, 'Motif obligatoire').max(200),
+});
+export type OrderDiscount = z.infer<typeof OrderDiscountSchema>;
 
 export const UpdateOrderStatusSchema = z.object({ status: OrderStatusSchema });
 

@@ -37,7 +37,9 @@ export function CancelModal({
     setSubmitting(false);
   }, [order?._id]);
 
-  const valid = PIN_RE.test(pin) && reason.trim().length > 0;
+  // La MÊME borne que l'API (`OrderCancelSchema`) : « x » passait cet écran et
+  // se faisait refuser côté serveur, ce qui fait chercher la faute au PIN.
+  const valid = PIN_RE.test(pin) && reason.trim().length >= 3;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();

@@ -342,7 +342,23 @@ export function DiscountModal({
   }, [custom, entry.total, percent]);
 
   const synced = !!entry.serverId;
-  const valid = synced && amount > 0 && amount <= entry.total && /^\d{4,6}$/.test(pin);
+  /**
+   * Le MOTIF est obligatoire, comme il l'est côté serveur.
+   *
+   * Il ne l'était ni ici ni là-bas : le champ existait, il pouvait rester vide,
+   * et la remise partait sans raison. NF525 n'admet pas une minoration de
+   * recette sans motif — et six mois plus tard, « −5,00 € » sans un mot
+   * n'explique rien à personne, ni au gérant ni au contrôle.
+   *
+   * La même borne des deux côtés : un écran plus permissif que son API produit
+   * un bouton qui valide et un serveur qui refuse.
+   */
+  const valid =
+    synced &&
+    amount > 0 &&
+    amount <= entry.total &&
+    reason.trim().length >= 3 &&
+    /^\d{4,6}$/.test(pin);
 
   return (
     <Overlay onClose={onClose} width={440}>
@@ -391,7 +407,13 @@ export function DiscountModal({
             ) : null}
           </View>
 
-          <Field value={reason} onChangeText={setReason} label="Motif" placeholder="Geste commercial" accent={brand.accent} />
+          <Field
+            value={reason}
+            onChangeText={setReason}
+            label="Motif (obligatoire)"
+            placeholder="Geste commercial, plat renversé…"
+            accent={brand.accent}
+          />
 
           <Field
             value={pin}
