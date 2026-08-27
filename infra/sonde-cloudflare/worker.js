@@ -102,10 +102,11 @@ async function controlerCarte() {
  * `.github/workflows/sonde.yml`, pour qu'un seul secret arme les deux.
  */
 async function alerter(hook, titre, texte, urgent) {
-  if (!hook) return false;
+  if (!hook) return { envoye: false, raison: 'aucun canal configuré (SM_ALERT_WEBHOOK absent)' };
   try {
+    let reponse;
     if (hook.startsWith('https://ntfy.sh/')) {
-      await fetch(hook, {
+      reponse = await fetch(hook, {
         method: 'POST',
         headers: {
           'content-type': 'text/plain',
@@ -117,18 +118,24 @@ async function alerter(hook, titre, texte, urgent) {
         signal: AbortSignal.timeout(10_000),
       });
     } else {
-      await fetch(hook, {
+      reponse = await fetch(hook, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ text: `${titre} — ${texte}`, content: `${titre} — ${texte}` }),
         signal: AbortSignal.timeout(10_000),
       });
     }
-    return true;
-  } catch {
+    if (!reponse.ok) {
+      const corps = await reponse.text().catch(() => '');
+      return { envoye: false, raison: `le canal a répondu ${reponse.status}`, corps: corps.slice(0, 200) };
+    }
+    return { envoye: true, raison: null };
+  } catch (erreur) {
     // Une alerte qui échoue ne doit jamais faire échouer la sonde : le
-    // passage suivant réessaiera, et l'état reste consultable dans KV.
-    return false;
+    // passage suivant réessaiera, et l'état reste consultable dans KV. Mais
+    // elle doit dire POURQUOI — une alerte muette qui échoue en silence est
+    // pire que pas d'alerte du tout, puisqu'on la croit armée.
+    return { envoye: false, raison: String(erreur?.message || erreur).slice(0, 200) };
   }
 }
 
@@ -144,26 +151,40 @@ async function passage(env) {
 
   const precedent = (await env.SONDE.get('etat')) ?? 'inconnu';
 
+  // On ne notifie qu'au changement — la chute, puis le retour. Le premier
+  // passage après un déploiement se contente de noter l'état, sinon chaque
+  // mise à jour du Worker sonnerait.
+  let alerte = { envoye: false, raison: 'aucun changement d’état' };
+  if (etat !== precedent && precedent !== 'inconnu') {
+    alerte =
+      etat === 'rouge'
+        ? await alerter(
+            env.SM_ALERT_WEBHOOK,
+            'Production en défaut',
+            `La production ne répond pas correctement.\n${echecs.map((e) => `· ${e.nom} : ${e.raison}`).join('\n')}`,
+            true,
+          )
+        : await alerter(
+            env.SM_ALERT_WEBHOOK,
+            'Production rétablie',
+            `Les ${resultats.length} contrôles repassent au vert.`,
+            false,
+          );
+  }
+
   const detail = {
     etat,
     horodatage,
     revision,
+    precedent,
+    alerte,
     services: resultats.map((r) => ({ nom: r.nom, ok: !r.raison, raison: r.raison, ms: r.ms ?? null })),
   };
+  // L'état ne s'écrit qu'APRÈS la tentative d'alerte : si le Worker meurt
+  // entre les deux, le passage suivant retrouve l'ancien état et réessaie.
+  // Écrire d'abord, c'est perdre l'alerte sans laisser de trace.
   await env.SONDE.put('etat', etat);
   await env.SONDE.put('dernier-passage', JSON.stringify(detail));
-
-  // On ne notifie qu'au changement — la chute, puis le retour.
-  if (etat !== precedent && precedent !== 'inconnu') {
-    if (etat === 'rouge') {
-      const liste = echecs.map((e) => `· ${e.nom} : ${e.raison}`).join('\n');
-      await alerter(env.SM_ALERT_WEBHOOK, 'Production en défaut', `La production ne répond pas correctement.\n${liste}`, true);
-    } else {
-      await alerter(env.SM_ALERT_WEBHOOK, 'Production rétablie', `Les ${resultats.length} contrôles repassent au vert.`, false);
-    }
-  }
-  // Premier passage après un déploiement de la sonde : on note l'état sans
-  // réveiller personne, sinon chaque mise à jour du Worker sonnerait.
   return detail;
 }
 
@@ -172,20 +193,69 @@ export default {
     ctx.waitUntil(passage(env));
   },
   /**
-   * Consultable à la demande, pour voir l'état sans attendre le prochain
-   * passage. Aucune donnée sensible : les mêmes surfaces publiques que
-   * `smoke.mjs`, rien de plus.
+   * Deux natures de chemins, et la frontière est celle de l'effet de bord.
+   *
+   * `/etat` et `/` ne font que LIRE la mémoire : rien à protéger, c'est le
+   * lien qu'on met en favori sur son téléphone.
+   *
+   * `/verifier` et `/diagnostic` AGISSENT — l'un écrit dans KV, l'autre
+   * envoie une notification. Laissés ouverts, ils donnent à quiconque
+   * découvre l'adresse du Worker deux moyens de nuire sans rien pirater :
+   * réveiller le gérant à volonté, et épuiser les 1 000 écritures KV
+   * quotidiennes en quelques minutes — ce qui rendrait la sonde incapable de
+   * mémoriser son état, donc aveugle. Ils demandent donc un jeton.
    */
   async fetch(requete, env) {
     const url = new URL(requete.url);
-    if (url.pathname === '/etat') {
+    const json = (corps, statut = 200) =>
+      new Response(JSON.stringify(corps, null, 2), {
+        status: statut,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      });
+
+    // Le jeton n'est pas un mot de passe : c'est une clef d'actionneur. S'il
+    // n'est pas configuré, les chemins qui agissent restent fermés — jamais
+    // ouverts « par défaut », qui est la façon dont ces choses-là s'oublient.
+    const autorise = () => {
+      const attendu = env.DIAGNOSTIC_TOKEN;
+      if (!attendu) return false;
+      const fourni = url.searchParams.get('token') ?? requete.headers.get('x-sonde-token') ?? '';
+      return fourni.length === attendu.length && fourni === attendu;
+    };
+
+    if (url.pathname === '/etat' || url.pathname === '/') {
       const brut = (await env.SONDE.get('dernier-passage')) ?? '{"etat":"inconnu"}';
       return new Response(brut, { headers: { 'content-type': 'application/json; charset=utf-8' } });
     }
-    const detail = await passage(env);
-    return new Response(JSON.stringify(detail, null, 2), {
-      status: detail.etat === 'vert' ? 200 : 503,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-    });
+
+    if (url.pathname === '/verifier') {
+      if (!autorise()) return json({ erreur: 'jeton requis' }, 401);
+      const detail = await passage(env);
+      return json(detail, detail.etat === 'vert' ? 200 : 503);
+    }
+
+    /**
+     * Le canal d'alerte est la seule pièce qu'on ne peut pas vérifier en
+     * regardant l'état : il ne sert qu'au changement, donc il peut être cassé
+     * pendant des mois sans que rien ne le dise. Ce chemin l'exerce pour de
+     * vrai et rapporte l'échec au lieu de l'avaler.
+     *
+     * Il ne renvoie AUCUN fragment de l'adresse : savoir que le canal est
+     * configuré suffit à l'exploitant, et un préfixe d'URL est une moitié de
+     * secret — c'est-à-dire un secret.
+     */
+    if (url.pathname === '/diagnostic') {
+      if (!autorise()) return json({ erreur: 'jeton requis' }, 401);
+      const hook = env.SM_ALERT_WEBHOOK;
+      const resultat = await alerter(
+        hook,
+        'Diagnostic de la sonde',
+        'Ce message confirme que le canal d’alerte fonctionne. Aucune panne.',
+        false,
+      );
+      return json({ canal_configure: Boolean(hook), envoi: resultat });
+    }
+
+    return json({ erreur: 'chemin inconnu', chemins: ['/etat', '/verifier', '/diagnostic'] }, 404);
   },
 };
