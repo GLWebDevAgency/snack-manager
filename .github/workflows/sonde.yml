@@ -6,15 +6,30 @@ name: Sonde
 # Le contrôle de santé (`smoke.mjs`) ne tournait qu'au moment du déploiement :
 # entre deux mises en ligne, une production tombée un vendredi 21 h n'était vue
 # par personne avant l'appel du restaurateur (diagnostic quatre casquettes,
-# 24/08/2026, P0). Cette sonde rejoue le même contrôle toutes les 30 minutes.
+# 24/08/2026, P0).
 #
-# Toutes les 30 minutes et pas 15 : le dépôt est privé, chaque exécution
-# consomme du quota Actions (~1 min facturée), et 48 passages par jour font
-# ~1 500 minutes par mois — dans le forfait gratuit, sans l'assécher pour la
-# CI. Le jour où un service d'uptime externe (UptimeRobot et consorts, sondes
-# à 5 min sans quota) est branché, cette sonde devient une doublure qu'on
-# peut espacer, pas un doublon à supprimer : elle vérifie plus qu'un ping —
-# la carte traverse Mongo, les trois interfaces servent leur vraie page.
+# ── Ce fichier n'est plus la sonde principale (27/08/2026) ───────────────────
+#
+# La surveillance haute fréquence est passée sur Cloudflare Workers —
+# `infra/sonde-cloudflare/worker.js`, toutes les 5 minutes, plan gratuit,
+# aucun quota consommé. Ce qui suit explique pourquoi, et ce que ce fichier-ci
+# garde encore comme rôle.
+#
+# Le jour prévu par le commentaire d'origine est arrivé plus vite que prévu.
+# Un passage de sonde prend 11 secondes ; GitHub facture la minute pleine. À
+# 48 passages par jour, cela faisait 1 440 minutes par mois pour 4 h 24 de
+# calcul réel — 82 % du quota parti en arrondi, sur un poste qui pesait à lui
+# seul la moitié du forfait. Le 26/08 vers 12 h UTC, le quota s'est épuisé :
+# GitHub a cessé de démarrer les jobs, et le déploiement de production de la
+# PR #66 est resté à quai — sans que personne ne le voie, précisément parce
+# que la sonde était muette elle aussi. La production a servi une révision de
+# six commits en retard pendant vingt heures.
+#
+# Ce fichier reste, une fois par jour, parce qu'il vérifie ce que le Worker ne
+# sait pas faire : il rejoue `smoke.mjs` en entier, donc la carte publique qui
+# traverse Mongo le jour où un slug de production sera configuré, et il le
+# fait depuis un runner, avec le dépôt sous la main. C'est une doublure, pas
+# un doublon — et 30 minutes par mois au lieu de 1 440.
 #
 # En échec : l'exécution rougit (GitHub prévient par e-mail), et si le secret
 # `SM_ALERT_WEBHOOK` existe, le même canal que le veilleur de l'API sonne.
@@ -27,7 +42,9 @@ name: Sonde
 
 on:
   schedule:
-    - cron: '7,37 * * * *'
+    # Une fois par jour, à 6 h 07 UTC — avant l'ouverture des établissements,
+    # après la sauvegarde de 3 h 17. Le Worker Cloudflare tient les 5 minutes.
+    - cron: '7 6 * * *'
   workflow_dispatch:
 
 permissions:
