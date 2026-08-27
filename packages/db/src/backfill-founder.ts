@@ -50,6 +50,40 @@ const euros = (cents: number): string =>
 
 const jour = (d: Date): string => d.toISOString().slice(0, 10);
 
+/**
+ * CE QU'UN CLIENT FONDATEUR DOIT RECEVOIR — décision pure, sans base.
+ *
+ * Extraite de la boucle pour être testable : elle décide d'un MONTANT de remise
+ * sur de vrais clients, et une règle d'argent qui ne peut pas être exercée hors
+ * de Mongo ne peut pas être vérifiée avant d'être lancée.
+ *
+ * IDEMPOTENTE PAR CONSTRUCTION : un champ déjà posé est repris tel quel, jamais
+ * recalculé. C'est ce qui interdit à un second passage de relancer une remise
+ * sur une offre entre-temps augmentée — précisément le défaut que le montant
+ * figé existe pour empêcher.
+ */
+export function repriseFondateur(
+  tenant: {
+    createdAt?: Date | null;
+    founderUntil?: Date | null;
+    founderDiscountCents?: number | null;
+    plan?: unknown;
+    onlineOrdering?: unknown;
+    atelier?: unknown;
+  },
+  now: Date,
+): { until: Date; remise: number; eteinte: boolean; signeLe: Date } {
+  // Sans date de création — un tenant d'avant le champ — on prend l'instant
+  // courant : la remise part d'aujourd'hui plutôt que de n'exister jamais.
+  const signeLe = tenant.createdAt ?? now;
+  const until = tenant.founderUntil ?? finRemiseFondateur(signeLe);
+  const remise =
+    typeof tenant.founderDiscountCents === 'number'
+      ? tenant.founderDiscountCents
+      : remiseFondateurContrat(offreClient(tenant));
+  return { until, remise, eteinte: until.getTime() <= now.getTime(), signeLe };
+}
+
 async function main(): Promise<void> {
   const appliquer = process.argv.includes('--appliquer');
   const uri = process.env.MONGODB_URI;
@@ -86,14 +120,7 @@ async function main(): Promise<void> {
   const lot: { _id: unknown; nom: string; until: Date; remise: number }[] = [];
 
   for (const t of aReprendre) {
-    const signeLe = (t.createdAt as Date | undefined) ?? now;
-    const until = (t.founderUntil as Date | null) ?? finRemiseFondateur(signeLe);
-    const offre = offreClient(t);
-    const remise =
-      typeof t.founderDiscountCents === 'number'
-        ? t.founderDiscountCents
-        : remiseFondateurContrat(offre);
-    const eteinte = until.getTime() <= now.getTime();
+    const { signeLe, until, remise, eteinte } = repriseFondateur(t, now);
     if (eteinte) expires += 1;
 
     console.log(
@@ -128,7 +155,19 @@ async function main(): Promise<void> {
   await mongoose.disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+/**
+ * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
+ *
+ * Sans cette garde, importer ce fichier pour tester `repriseFondateur` ouvrait
+ * une connexion à la base pointée par `MONGODB_URI` : sur un poste dont le
+ * `.env` vise la production, un test unitaire s'y serait connecté. Une décision
+ * qui touche à de vrais montants doit pouvoir être exercée SANS base — c'est
+ * tout l'objet de l'extraction ci-dessus, et cette ligne est ce qui la rend
+ * vraie.
+ */
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

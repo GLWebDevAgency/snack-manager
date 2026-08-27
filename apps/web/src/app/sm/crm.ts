@@ -23,6 +23,7 @@ import type {
   ProductionTick,
 } from "@sm/contracts";
 import { ApiError } from "@/lib/api";
+import { messageDeRefus } from "./refus";
 import { api, getToken } from "@/lib/api";
 
 // ─── Identité & cloisonnement ───
@@ -161,12 +162,8 @@ export function fmtDaysAgo(days: number | null): string {
  * libellé générique que Nest pose quand aucun schéma n'a parlé.
  */
 export function errText(e: unknown, fallback: string): string {
+  // `instanceof` conservé : sans lui, le message d'une `TypeError` de notre
+  // propre code s'afficherait au restaurateur comme une explication.
   if (!(e instanceof ApiError)) return fallback;
-  const body: unknown = (e as { body?: unknown }).body;
-  const issues = (body as { issues?: unknown })?.issues;
-  const premier = Array.isArray(issues) ? issues[0] : null;
-  const zod = (premier as { message?: unknown })?.message;
-  if (typeof zod === 'string' && zod.trim()) return zod.trim();
-  const message = typeof e.message === 'string' ? e.message.trim() : '';
-  return message && message !== 'Validation failed' ? message : fallback;
+  return messageDeRefus((e as { body?: unknown }).body, e.message, fallback);
 }
