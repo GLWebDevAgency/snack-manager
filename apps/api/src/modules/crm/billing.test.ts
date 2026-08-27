@@ -25,6 +25,8 @@ import {
   type CrmInvoice,
   type InvoiceIssue,
   type JwtPayload,
+  EMPTY_SERVICES,
+  ATELIER_PRESENCE_CENTS,
 } from '@sm/contracts';
 import type { AdminLog, Counter, Invoice, Tenant, User } from '@sm/db';
 import { AdminService } from './admin.service';
@@ -1117,26 +1119,58 @@ describe('Facturation', () => {
      * « tarif gelé à vie » et facturait le tarif public. La règle du 27/08/2026
      * — moitié prix pendant douze mois — doit se voir partout où un montant
      * sort : le MRR de la fiche, la facture émise, la prochaine échéance.
+     *
+     * TROIS champs, et les trois sont nécessaires : `founderSeat` dit le droit,
+     * `founderUntil` le terme, `founderDiscountCents` la PORTÉE. Un client
+     * fondateur à qui il manque le montant n'est pas remisé — c'est voulu, et
+     * `backfill-founder.ts` reprend ceux d'avant. La portée est un montant figé
+     * et non un taux : ce qu'on ajoute après la signature se paie plein tarif,
+     * et le test plus bas le verrouille.
      */
-    it('un fondateur voit son MRR à moitié prix', async () => {
-      await sansAmorce();
+    /** Le fondateur tel qu'il sort de la conversion : droit, terme ET montant. */
+    const fondateur = (): void => {
       tenants.rows[0]!.founderSeat = true;
       tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      tenants.rows[0]!.founderDiscountCents = MRR / 2;
+    };
+
+    it('un fondateur voit son MRR à moitié prix', async () => {
+      await sansAmorce();
+      fondateur();
       const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
       expect(fiche.subscription.mrrCents).toBe(MRR / 2);
     });
 
     it('sa facture d’abonnement porte le montant remisé, pas le tarif public', async () => {
       await sansAmorce();
-      tenants.rows[0]!.founderSeat = true;
-      tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      fondateur();
       const emise = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
       expect(emise.amountCents).toBe(MRR / 2);
+    });
+
+    /**
+     * L'INVARIANT QUI COÛTE LE PLUS CHER S'IL TOMBE.
+     *
+     * Tant que la remise était un pourcentage appliqué à l'offre courante, un
+     * fondateur qui ajoutait un service au onzième mois l'obtenait à moitié
+     * prix — et le CRM offre un bouton pour le faire en un clic. Le montant
+     * figé rend la règle vraie sans qu'aucun code n'ait à distinguer « signé »
+     * de « ajouté depuis » : le dû grossit, la remise non.
+     */
+    it('un service ajouté APRÈS la signature se paie plein tarif', async () => {
+      await sansAmorce();
+      fondateur();
+      // Le client souscrit la présence internet après coup : 69 € qui
+      // s'ajoutent ENTIERS au montant déjà remisé.
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR / 2 + ATELIER_PRESENCE_CENTS);
     });
 
     it('la remise expirée, il repasse au tarif public sans qu’on fasse un geste', async () => {
       await sansAmorce();
       tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderDiscountCents = MRR / 2;
       // Terme dépassé : LE_19_AOUT est en 2026, la remise s'est éteinte en 2025.
       tenants.rows[0]!.founderUntil = new Date('2025-08-19T00:00:00.000Z');
       const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
@@ -1147,6 +1181,7 @@ describe('Facturation', () => {
       await sansAmorce();
       tenants.rows[0]!.founderSeat = true;
       tenants.rows[0]!.founderUntil = null;
+      tenants.rows[0]!.founderDiscountCents = MRR / 2;
       const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
       expect(fiche.subscription.mrrCents).toBe(MRR);
     });
@@ -1211,11 +1246,99 @@ describe('Facturation', () => {
 
     it('un client remisé est facturé à son prix, pas au tarif public', async () => {
       await sansAmorce();
-      tenants.rows[0]!.founderSeat = true;
-      tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      fondateur();
       const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
       const ligne = bilan.emises.find((e) => e.slug === 'classfood');
       expect(ligne?.amountCents).toBe(MRR / 2);
+    });
+
+    /**
+     * L'ENGAGEMENT ANNUEL, ENFIN LU.
+     *
+     * `billingCycle` était écrit à la signature, montré sur la fiche client, et
+     * lu par aucun calcul de facturation : un client ayant signé « douze mois
+     * payés dix » recevait douze mensualités pleines — vingt pour cent de trop,
+     * en silence. Ces trois tests verrouillent la règle du devis, qui fait foi
+     * puisque c'est lui que le client a signé : l'engagement porte sur le
+     * LOGICIEL, les services de l'Atelier restent mensuels.
+     *
+     * Le tenant `classfood` est créé le 18 août : son mois anniversaire est
+     * donc août, et septembre tombe hors échéance.
+     */
+    it('un client à l’année n’est pas facturé hors de son mois anniversaire', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      expect(bilan.emises.map((e) => e.slug)).not.toContain('classfood');
+      expect(bilan.ignores.find((i) => i.slug === 'classfood')?.raison).toBe(
+        'hors_echeance_annuelle',
+      );
+    });
+
+    it('à son mois anniversaire, il paie dix mensualités et pas douze', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      const bilan = await billing.runMensuel(SM, { period: '2026-08', draft: false }, LE_19_AOUT);
+      const ligne = bilan.emises.find((e) => e.slug === 'classfood');
+      // Dix, jamais douze : les deux mois offerts sont la remise vendue.
+      expect(ligne?.amountCents).toBe(MRR * 10);
+      expect(ligne?.amountCents).not.toBe(MRR * 12);
+    });
+
+    it('ses services de l’Atelier restent mensuels — ils ne s’annualisent pas', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      // Septembre : hors échéance logicielle, mais la présence internet est due.
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      const ligne = bilan.emises.find((e) => e.slug === 'classfood');
+      expect(ligne?.amountCents).toBe(ATELIER_PRESENCE_CENTS);
+    });
+
+    it('le libellé cesse de nommer la formule dès que la pièce porte autre chose', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      const piece = invoices.rows.find((i) => String(i.label ?? '').includes('septembre'));
+      // Exigé AVANT le `not.toContain` : sans cette ligne, une pièce absente
+      // ferait passer l'assertion suivante sans que rien n'ait été vérifié.
+      expect(piece).toBeDefined();
+      // « Abonnement Complet — septembre » sur 228 € ferait appeler un client
+      // qui sait que Complet vaut 159 €.
+      expect(String(piece!.label)).not.toContain('Complet');
+      expect(String(piece!.label)).toContain('services');
+      expect(bilan.emises.find((e) => e.slug === 'classfood')?.amountCents).toBe(
+        MRR + ATELIER_PRESENCE_CENTS,
+      );
+    });
+
+    /**
+     * LA PROJECTION SE FAIT À SA PROPRE DATE, PAS À CELLE D'AUJOURD'HUI.
+     *
+     * « Prochaine échéance » annonçait le montant du jour appliqué au mois
+     * suivant. Un fondateur dans son douzième mois lisait donc la moitié de ce
+     * qui allait réellement être prélevé, et découvrait le tarif public sur son
+     * relevé bancaire — le seul endroit où on ne veut pas qu'il l'apprenne.
+     */
+    it('un fondateur dont la remise s’éteint voit la VRAIE prochaine échéance', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderDiscountCents = MRR / 2;
+      // Elle court le 19 août, elle est éteinte au 1er septembre.
+      tenants.rows[0]!.founderUntil = new Date('2026-08-31T23:59:59.000Z');
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      // Ce qu'il paie ce mois-ci : la moitié. Ce qu'on lui prélèvera : tout.
+      expect(fiche.subscription.mrrCents).toBe(MRR / 2);
+      expect(fiche.nextDue?.amountCents).toBe(MRR);
+    });
+
+    it('la prochaine échéance d’un client annuel hors anniversaire n’annonce que ses services', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      // Signé en août, on projette septembre : le logiciel n'est pas dû.
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.nextDue?.amountCents).toBe(ATELIER_PRESENCE_CENTS);
     });
 
     it('continue de facturer un compte suspendu', async () => {

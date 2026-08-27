@@ -68,6 +68,7 @@ import {
   type DeviceRevoke,
   type RevocableDeviceKind,
   type TenantAccountStatus,
+  type CrmInvoice,
 } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 
@@ -387,6 +388,16 @@ export type ClientFile = {
   recommendations: Recommendation[];
   signals: ClientSignal[];
   journal: AdminLogEntry[];
+  /**
+   * Les pièces du client, la plus récente d'abord — brouillons compris.
+   *
+   * La fiche n'en affichait AUCUNE. `POST …/invoices/:id/send` existait, était
+   * testée, et n'avait aucun appelant : un brouillon posé par la conversion ou
+   * par la passe mensuelle n'avait, littéralement, aucun chemin pour partir. La
+   * file de recouvrement ne montre que les impayées — un brouillon n'est pas
+   * dû, il n'y figure donc jamais.
+   */
+  invoices: CrmInvoice[];
   /** Sections dont la route a répondu 404 / en erreur — affichées comme telles. */
   offline: Set<Section>;
 };
@@ -397,7 +408,8 @@ export type Section =
   | "health"
   | "insights"
   | "signals"
-  | "journal";
+  | "journal"
+  | "invoices";
 
 // ─────────────────────────────────────────────────────────────
 // Lecture des routes
@@ -864,13 +876,14 @@ function readAccount(raw: unknown): AdminTenantAccount | null {
  * de l'outil demandé. Chaque section manquante est signalée telle quelle.
  */
 export async function loadClientFile(id: string): Promise<ClientFile> {
-  const [rows, account, healthRaw, insightsRaw, signals, journal] = await Promise.all([
+  const [rows, account, healthRaw, insightsRaw, signals, journal, billing] = await Promise.all([
     soft(clientsApi.list()),
     soft(clientsApi.account(id)),
     soft(clientsApi.health(id)),
     soft(clientsApi.insights(id)),
     soft(clientsApi.signals()),
     soft(clientsApi.journal(id)),
+    soft(clientsApi.billing(id)),
   ]);
 
   // `/health` et `/insights` sont CONTRACTUALISÉS : une réponse qui n'a pas le
@@ -886,6 +899,7 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
   if (insights === null) offline.add("insights");
   if (signals === null) offline.add("signals");
   if (journal === null) offline.add("journal");
+  if (billing === null) offline.add("invoices");
 
   const row = readClientRows(rows).find((c) => c._id === id) ?? null;
   if (rows !== null && !row) offline.add("row");
@@ -919,8 +933,27 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     recommendations: insights?.recommendations.map(readRecommendation) ?? [],
     signals: readSignals(signals).filter((s) => s.tenantId === id),
     journal: readJournal(journal),
+    invoices: readInvoices(billing),
     offline,
   };
+}
+
+/**
+ * Les factures de `/crm/tenants/:id/billing`, en ne gardant que ce dont
+ * l'écran a besoin et rien de deviné.
+ *
+ * Une pièce sans numéro ni statut n'est pas une pièce : la laisser passer
+ * afficherait une ligne muette sur laquelle l'équipe cliquerait quand même.
+ */
+function readInvoices(raw: unknown): CrmInvoice[] {
+  const liste = bag(raw)?.invoices;
+  if (!Array.isArray(liste)) return [];
+  return liste.filter(
+    (i): i is CrmInvoice =>
+      typeof (i as CrmInvoice)?.number === "string" &&
+      typeof (i as CrmInvoice)?.storedStatus === "string" &&
+      typeof (i as CrmInvoice)?._id === "string",
+  );
 }
 
 // ─────────────────────────────────────────────────────────────

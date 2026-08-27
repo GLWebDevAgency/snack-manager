@@ -33,8 +33,8 @@ import {
   type DeviceRevokeReason,
   type LeadServices,
   type ProposalBilling,
+  remiseFondateurActive,
 } from "@sm/contracts";
-import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import {
   Btn,
@@ -51,7 +51,8 @@ import {
 // depuis un téléphone, sans panneau qui déborde.
 import { SheetModal } from "../../mobile";
 import { OffreFields } from "../../parts";
-import { crm, euroRound } from "../../crm";
+import { crm, errText, euroRound } from "../../crm";
+import { euros } from "../../facturation/data";
 import { clientsApi, type ParkDevice } from "../data";
 
 /** Longueur minimale d'un motif — alignée sur le schéma zod de l'API. */
@@ -71,12 +72,6 @@ type Common = {
   /** Rechargement de la fiche après une écriture réussie. */
   onDone: () => void;
 };
-
-/** Message d'erreur lisible — jamais un code HTTP nu devant un opérateur. */
-const errText = (e: unknown, fallback: string): string =>
-  e instanceof ApiError && typeof e.message === "string" && e.message.trim()
-    ? e.message
-    : fallback;
 
 // ─────────────────────────────────────────────────────────────
 // Suspendre
@@ -263,6 +258,10 @@ export function OffreModal({
     onlineOrdering: boolean;
     billingCycle: ProposalBilling;
     services: LeadServices;
+    /** Fin de la remise fondateur, ou `null` — voir le chiffrage ci-dessous. */
+    founderUntil: string | null;
+    /** La remise MENSUELLE figée au contrat signé, ou `null`. */
+    founderDiscountCents: number | null;
   };
 }) {
   const toast = useToast();
@@ -282,6 +281,23 @@ export function OffreModal({
   const mrrAvant = avant.monthlyCents + avant.servicesMonthlyCents;
   const mrrApres = apres.monthlyCents + apres.servicesMonthlyCents;
   const delta = mrrApres - mrrAvant;
+
+  /**
+   * CE QU'IL PAIERA VRAIMENT — la fiche l'affiche deux lignes plus haut.
+   *
+   * La modale ne chiffrait qu'au tarif public : sur un fondateur, elle
+   * annonçait « 159 € → 238 € » à côté d'une fiche disant « 119 € par mois ».
+   * L'opérateur au téléphone lisait le mauvais chiffre au client.
+   *
+   * Le DELTA, lui, est déjà juste au tarif public — et c'est la règle : la
+   * remise est un montant figé au contrat signé, ce qui s'ajoute ensuite se
+   * paie plein tarif. C'est le total qu'il fallait corriger, pas l'écart.
+   */
+  const remise = remiseFondateurActive(current.founderUntil)
+    ? Math.min(current.founderDiscountCents ?? 0, mrrApres)
+    : 0;
+  const duApres = mrrApres - remise;
+  const duAvant = Math.max(0, mrrAvant - Math.min(current.founderDiscountCents ?? 0, mrrAvant));
   const changed =
     plan !== current.plan ||
     module !== current.onlineOrdering ||
@@ -356,8 +372,11 @@ export function OffreModal({
         <div className="mt-3 flex items-center gap-2 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3 text-[13px]">
           <Icon name="euro" size={16} className="shrink-0 text-accent" />
           <span className="text-mut">
-            Récurrent {euroRound(mrrAvant)} →{" "}
-            <span className="cf-fig font-extrabold text-ink">{euroRound(mrrApres)}</span> par mois
+            Récurrent {euroRound(remise > 0 ? duAvant : mrrAvant)} →{" "}
+            <span className="cf-fig font-extrabold text-ink">
+              {euroRound(remise > 0 ? duApres : mrrApres)}
+            </span>{" "}
+            par mois
             {delta !== 0 && (
               <>
                 {" ("}
@@ -369,6 +388,16 @@ export function OffreModal({
               </>
             )}{" "}
             — d&apos;après la grille ; la facturation reste la source de vérité.
+            {remise > 0 && (
+              <>
+                {" "}
+                <span className="text-gold">
+                  Remise fondateur de {euroRound(remise)} déduite ({euroRound(mrrApres)} au tarif
+                  public). Elle est figée au contrat signé : ce qui s&apos;ajoute aujourd&apos;hui
+                  se paie plein tarif.
+                </span>
+              </>
+            )}
           </span>
         </div>
       )}
@@ -417,11 +446,20 @@ export function EmettreFactureModal({
   const [period, setPeriod] = useState(moisCourant());
   const [montant, setMontant] = useState("");
   const [label, setLabel] = useState("");
-  const [draft, setDraft] = useState(false);
+  // BROUILLON PAR DÉFAUT, comme la passe mensuelle. Émettre crée une créance
+  // qui entre au recouvrement et ne s'efface pas — elle s'annule avec un
+  // motif, qui reste au dossier. Le geste sûr est celui qu'on propose ; l'autre
+  // reste à un clic, délibérément.
+  const [draft, setDraft] = useState(true);
   const [busy, setBusy] = useState(false);
 
   // Ce que l'API facturera si le champ reste vide — affiché pour que personne
   // n'ait à le deviner, ni à le ressaisir « pour être sûr ».
+  //
+  // AU CENTIME, jamais arrondi à l'euro : sur un fondateur à 49,50 €, l'écran
+  // annonçait « 50 € » et l'API facturait 49,50 €. Un opérateur qui recopie ce
+  // qu'il lit fabrique alors un écart de cinquante centimes, sur une pièce
+  // comptable, sans que rien ne le signale.
   const parDefaut = kind === "mise_en_place" ? INSTALL_FEE_CENTS : mrrCents;
   const saisi = montant.trim() === "" ? null : Math.round(Number(montant.replace(",", ".")) * 100);
   const montantInvalide = saisi !== null && (!Number.isFinite(saisi) || saisi < 0);
@@ -466,7 +504,7 @@ export function EmettreFactureModal({
             disabled={busy || montantInvalide}
             onClick={() => void run()}
           >
-            {busy ? "Émission…" : draft ? "Poser le brouillon" : "Émettre la facture"}
+            {busy ? "Émission…" : draft ? "Poser le brouillon" : `Émettre — ${euros(saisi ?? parDefaut)} dus`}
           </Btn>
         </>
       }
@@ -503,7 +541,14 @@ export function EmettreFactureModal({
         className="mt-3"
         label="Montant HT"
         htmlFor="fact-montant"
-        hint={`Laissez vide pour appliquer l’offre du client — ${euroRound(parDefaut)}.`}
+        hint={
+          kind === "mise_en_place"
+            ? // La remise fondateur est figée au contrat signé : une prestation
+              // commandée APRÈS se paie plein tarif. Écrit, sinon un opérateur
+              // « corrige » la moitié à la main en croyant bien faire.
+              `Laissez vide pour le tarif de la mise en place — ${euros(parDefaut)}. Une prestation commandée après la signature n’est pas couverte par la remise fondateur.`
+            : `Laissez vide pour appliquer l’offre du client — ${euros(parDefaut)}, remise fondateur comprise.`
+        }
       >
         <Input
           id="fact-montant"

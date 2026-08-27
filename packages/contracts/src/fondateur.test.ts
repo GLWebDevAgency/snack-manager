@@ -5,12 +5,15 @@ import {
   FOUNDER_DISCOUNT_RATE,
   MODULE_ORDERING_CENTS,
   abonnementMensuelCents,
+  offreClient,
   SOCIAL_CADENCE_CENTS,
   chiffrageFondateur,
   finRemiseFondateur,
   prixFondateurCents,
   proposalCents,
   remiseFondateurActive,
+  remiseFondateurCents,
+  remiseFondateurContrat,
 } from './crm';
 
 /**
@@ -41,12 +44,23 @@ describe('le prix fondateur', () => {
     expect(prixFondateurCents(MODULE_ORDERING_CENTS)).toBe(3_950);
   });
 
-  it('arrondit au centime, jamais à la fraction', () => {
+  it('arrondit au centime, et le demi-centime va au client', () => {
     // Aucun prix de la grille n'est impair aujourd'hui, mais une révision
     // future le sera, et une facture ne se règle pas en demi-centimes.
-    expect(prixFondateurCents(9_999)).toBe(5_000);
-    expect(prixFondateurCents(1)).toBe(1);
+    // Le sens de l'arrondi n'est pas indifférent : `Money.percent`, dans le
+    // domaine, arrondit déjà en faveur du client. Deux primitives de remise
+    // qui penchent en sens contraire produisent deux totaux pour une offre.
+    expect(remiseFondateurCents(9_999)).toBe(5_000);
+    expect(prixFondateurCents(9_999)).toBe(4_999);
+    expect(prixFondateurCents(1)).toBe(0);
     expect(Number.isInteger(prixFondateurCents(14_901))).toBe(true);
+  });
+
+  it('la remise et le prix remisé se recomposent toujours', () => {
+    // La propriété qui interdit le centime perdu, quel que soit l'arrondi.
+    for (const cents of [0, 1, 9_999, 14_901, 15_900, 23_800, 7]) {
+      expect(prixFondateurCents(cents) + remiseFondateurCents(cents)).toBe(cents);
+    }
   });
 
   it('zéro reste zéro — on ne fabrique pas une remise sur rien', () => {
@@ -136,36 +150,87 @@ describe('le chiffrage d’un fondateur', () => {
  * exception.
  */
 describe('abonnementMensuelCents et la remise fondateur', () => {
-  const client = {
+  const contrat = {
     plan: 'complet' as const,
     onlineOrdering: true,
     atelier: { ...EMPTY_SERVICES, presenceInternet: true },
   };
   const PUBLIC = 15_900 + MODULE_ORDERING_CENTS + 6_900;
+  const REMISE = remiseFondateurContrat(contrat);
+  /** Le client tel qu'il sort de la conversion : droit, terme ET montant. */
+  const fondateur = offreClient({
+    ...contrat,
+    founderUntil: '2027-08-27T10:00:00.000Z',
+    founderDiscountCents: REMISE,
+  });
+  const PENDANT = new Date('2027-01-15T00:00:00.000Z');
 
   it('sans place fondateur, c’est le tarif public', () => {
-    expect(abonnementMensuelCents(client)).toBe(PUBLIC);
+    expect(abonnementMensuelCents(offreClient(contrat))).toBe(PUBLIC);
   });
 
   it('pendant les douze mois, c’est la moitié', () => {
-    expect(
-      abonnementMensuelCents(
-        { ...client, founderUntil: '2027-08-27T10:00:00.000Z' },
-        new Date('2027-01-15T00:00:00.000Z'),
-      ),
-    ).toBe(prixFondateurCents(PUBLIC));
+    // Vérifié contre la grille, PAS contre `prixFondateurCents(PUBLIC)` : se
+    // comparer à la même fonction laisserait passer toute erreur symétrique.
+    expect(REMISE).toBe(7_950 + 3_950 + 3_450);
+    expect(abonnementMensuelCents(fondateur, PENDANT)).toBe(15_350);
   });
 
   it('le treizième mois, il bascule au tarif public sans qu’on fasse un geste', () => {
-    expect(
-      abonnementMensuelCents(
-        { ...client, founderUntil: '2027-08-27T10:00:00.000Z' },
-        new Date('2027-08-28T00:00:00.000Z'),
-      ),
-    ).toBe(PUBLIC);
+    expect(abonnementMensuelCents(fondateur, new Date('2027-08-28T00:00:00.000Z'))).toBe(PUBLIC);
   });
 
   it('une date de fin absente ne vaut jamais « remise à vie »', () => {
-    expect(abonnementMensuelCents({ ...client, founderUntil: null })).toBe(PUBLIC);
+    expect(abonnementMensuelCents(offreClient({ ...contrat, founderUntil: null }))).toBe(PUBLIC);
+  });
+
+  /**
+   * L'INVARIANT LE PLUS COÛTEUX DE TOUTE LA FACTURATION.
+   *
+   * La remise a été vendue sur « ce qu'on signe aujourd'hui ». Tant qu'elle
+   * était un pourcentage appliqué à l'offre courante, un fondateur qui montait
+   * en gamme au onzième mois obtenait la moitié sur sa nouvelle offre — et le
+   * CRM offre précisément un bouton pour changer d'offre en un clic.
+   *
+   * Ces trois tests sont la raison d'être du montant figé. S'ils tombent, la
+   * remise est redevenue un pourcentage et l'entreprise perd de l'argent en
+   * silence, sans qu'aucun écran ne l'indique.
+   */
+  it('ce qui est ajouté APRÈS la signature se paie plein tarif', () => {
+    const apres = offreClient({
+      ...contrat,
+      atelier: { ...EMPTY_SERVICES, presenceInternet: true, reseauxSociaux: 'hebdo' },
+      founderUntil: '2027-08-27T10:00:00.000Z',
+      founderDiscountCents: REMISE,
+    });
+    const ajoute = SOCIAL_CADENCE_CENTS.hebdo;
+    expect(abonnementMensuelCents(apres, PENDANT)).toBe(15_350 + ajoute);
+  });
+
+  it('monter en gamme ne relance pas la remise', () => {
+    const monte = offreClient({
+      ...contrat,
+      plan: 'boost',
+      founderUntil: '2027-08-27T10:00:00.000Z',
+      founderDiscountCents: REMISE,
+    });
+    // Boost comprend le module : le public passe de 30 700 à 26 800, et la
+    // remise reste celle du contrat signé — 15 350, pas la moitié de 26 800.
+    expect(abonnementMensuelCents(monte, PENDANT)).toBe(26_800 - REMISE);
+    expect(abonnementMensuelCents(monte, PENDANT)).not.toBe(prixFondateurCents(26_800));
+  });
+
+  it('rétrograder sous la remise ne fabrique jamais un avoir', () => {
+    const minuscule = offreClient({
+      plan: null,
+      onlineOrdering: false,
+      atelier: { ...EMPTY_SERVICES, presenceInternet: true },
+      founderUntil: '2027-08-27T10:00:00.000Z',
+      founderDiscountCents: REMISE,
+    });
+    // 6 900 dûs, 15 350 de remise : zéro, jamais un négatif que la
+    // facturation lirait comme une somme à rendre.
+    expect(abonnementMensuelCents(minuscule, PENDANT)).toBe(0);
   });
 });
+

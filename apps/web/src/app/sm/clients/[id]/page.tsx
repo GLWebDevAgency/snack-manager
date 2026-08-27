@@ -45,6 +45,7 @@ import { euroRound, fmtDay, fmtMonth, int } from "../../crm";
 import { resumeAtelier } from "../../parts";
 import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
+import { FacturesCard } from "./Factures";
 import {
   EmettreFactureModal,
   OffreModal,
@@ -331,6 +332,18 @@ export default function ClientFilePage({
           */}
           <SignalsSection file={file} />
 
+          {/*
+            LES FACTURES, sur la fiche du client et non ailleurs.
+            La file de recouvrement ne montre que les impayées : un brouillon
+            n'y figure jamais, et n'avait donc aucun écran d'où partir.
+          */}
+          <FacturesCard
+            tenantId={id}
+            tenantName={name}
+            invoices={file.invoices}
+            indisponible={file.offline.has("invoices")}
+            onDone={reload}
+          />
           <DevicesSection file={file} onRevoke={setDevice} />
           <SupplySection file={file} />
           <NotesSection file={file} onSaved={reload} />
@@ -385,6 +398,11 @@ export default function ClientFilePage({
             plan,
             onlineOrdering: account?.onlineOrdering ?? false,
             billingCycle: account?.billingCycle ?? "mensuel",
+            // La remise, pour que le chiffrage de la modale dise la même chose
+            // que la fiche : elle annonçait le tarif public à côté d'un MRR
+            // remisé, et l'opérateur lisait le mauvais chiffre au client.
+            founderUntil: account?.founderUntil ?? null,
+            founderDiscountCents: account?.founderDiscountCents ?? null,
             // Les clients d'avant l'Atelier n'ont rien en base : le formulaire
             // s'ouvre alors sur « aucun service », pas sur un objet de faux.
             services: account?.atelier ?? EMPTY_SERVICES,

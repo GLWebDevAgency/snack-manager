@@ -27,6 +27,8 @@ import {
   type BillingRun,
   type BillingRunReport,
   abonnementMensuelCents,
+  offreClient,
+  echeancesDues,
   shiftMonthKey,
   summarizeOutstanding,
   type BillingHistoryQuery,
@@ -205,13 +207,23 @@ export class BillingService {
         mrrCents: mrrOf(tenant, now),
         mrrLabel: formatEuros(mrrOf(tenant, now)),
         founderSeat: tenant.founderSeat === true,
+        founderUntil: iso(tenant.founderUntil as Date | null) ?? null,
         accountStatus: status,
         accountStatusLabel: TENANT_ACCOUNT_STATUS_LABELS[status],
         accessBlocked: isAccessBlocked(status),
         since: iso(tenant.createdAt) ?? now.toISOString(),
         billable,
       },
-      nextDue: nextDueFor(due, { plan, mrrCents: mrrOf(tenant, now) }, billable, now),
+      nextDue: nextDueFor(
+        due,
+        {
+          offre: offreClient(tenant),
+          mrrCents: mrrOf(tenant, now),
+          signeLe: (tenant.createdAt as Date | undefined) ?? null,
+        },
+        billable,
+        now,
+      ),
       outstanding,
       invoices,
       generatedAt: now.toISOString(),
@@ -349,11 +361,29 @@ export class BillingService {
         ignores.push({ slug, name: nom, raison: 'rien_a_facturer' });
         continue;
       }
+      // L'ENGAGEMENT SIGNÉ DÉCIDE DU MONTANT ET DU RYTHME.
+      //
+      // `billingCycle` était écrit à la signature, affiché sur la fiche, et lu
+      // par aucun calcul : un client ayant signé « douze mois payés dix »
+      // recevait douze mensualités pleines — vingt pour cent de trop, sans
+      // qu'aucun écran ne le signale. Vendre un engagement qu'on ne sait pas
+      // facturer est pire que ne pas le vendre.
+      const du = duDuMois(tenant, period, now);
+      if (du === null) {
+        ignores.push({ slug, name: nom, raison: 'hors_echeance_annuelle' });
+        continue;
+      }
       try {
         const piece = await this.issue(
           actor,
           String(tenant._id),
-          { kind: 'abonnement', period: period.key, label: '', draft: body.draft },
+          {
+            kind: 'abonnement',
+            period: period.key,
+            label: du.label,
+            amountCents: du.cents,
+            draft: body.draft,
+          },
           now,
         );
         emises.push({
@@ -426,10 +456,16 @@ export class BillingService {
     const amountCents =
       body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : mrrOf(tenant, now));
 
+    // La pièce porte-t-elle autre chose que la seule formule ? Le libellé par
+    // défaut cesse alors de la nommer : « Abonnement Complet » sur un montant
+    // qui n'est pas celui de Complet fait appeler le client — et il a raison.
+    // Vrai du module, des services de l'Atelier, et de la remise fondateur.
+    const composite = kind === 'abonnement' && amountCents !== planMrrCents(plan);
+
     const raw = await this.writeInvoice({
       tenantId: tenant._id as Types.ObjectId,
       kind,
-      label: body.label || defaultInvoiceLabel(kind, plan, period),
+      label: body.label || defaultInvoiceLabel(kind, plan, period, composite),
       period,
       amountCents,
       status: body.draft ? 'brouillon' : 'envoyee',
@@ -1031,19 +1067,52 @@ const planOf = (tenant: RawTenant): BillingPlan | null =>
  * arrive `undefined` et `atelier` absent — `abonnementMensuelCents` les traite
  * comme « non vendu », donc l'ancien parc retombe sur sa formule sans lever.
  */
+/**
+ * CE QUI EST DÛ CE MOIS-CI — montant et libellé, ou `null` si rien ne l'est.
+ *
+ * Un client au mois doit sa mensualité entière. Un client à l'année ne doit son
+ * LOGICIEL qu'une fois l'an, à son mois anniversaire, pour dix mensualités ; ses
+ * services de l'Atelier, eux, restent mensuels — sans engagement, ils ne
+ * s'annualisent jamais, et c'est déjà ce que le devis promet au client (« douze
+ * mois de service, dix facturés » n'apparaît que sur la part logicielle).
+ *
+ * `null` ne veut donc pas dire « rien à facturer » mais « pas ce mois-ci » : la
+ * passe le distingue à l'écran, sans quoi un client annuel disparaîtrait du
+ * compte rendu onze mois sur douze et passerait pour oublié.
+ */
+function duDuMois(
+  tenant: RawTenant,
+  period: { key: string; label: string },
+  now: Date,
+): { cents: number; label: string } | null {
+  const offre = offreClient(tenant);
+  const lignes = echeancesDues(offre, now);
+  const mois = Number(period.key.slice(5, 7)) - 1;
+  // Le mois anniversaire de la signature. Sans date de création — un tenant
+  // d'avant le champ — on retombe sur le mois courant : mieux vaut facturer
+  // une fois que jamais.
+  const anniversaire = (tenant.createdAt as Date | undefined)?.getUTCMonth() ?? mois;
+
+  let cents = 0;
+  const parts: string[] = [];
+  for (const l of lignes) {
+    if (l.cadence === 'annuel') {
+      if (mois !== anniversaire) continue;
+      cents += l.cents;
+      parts.push('abonnement annuel (douze mois, dix facturés)');
+      continue;
+    }
+    cents += l.cents;
+    parts.push(l.nature === 'logiciel' ? 'abonnement' : 'services');
+  }
+  if (cents <= 0) return null;
+
+  const majuscule = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+  return { cents, label: `${majuscule(parts.join(' et '))} — ${period.label}` };
+}
+
 const mrrOf = (tenant: RawTenant, now: Date = new Date()): number =>
-  abonnementMensuelCents(
-    {
-      plan: planOf(tenant),
-      onlineOrdering: (tenant as { onlineOrdering?: boolean }).onlineOrdering === true,
-      atelier: (tenant as { atelier?: Record<string, unknown> | null }).atelier ?? null,
-      // La remise fondateur s'applique ici et nulle part ailleurs : c'est ce
-      // montant qui devient le MRR de la fiche, la facture par défaut et la
-      // projection d'échéance. Elle s'éteint d'elle-même au terme.
-      founderUntil: (tenant as { founderUntil?: Date | null }).founderUntil ?? null,
-    },
-    now,
-  );
+  abonnementMensuelCents(offreClient(tenant), now);
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

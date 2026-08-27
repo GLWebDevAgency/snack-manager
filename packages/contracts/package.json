@@ -8,7 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
-    "lint": "echo ok",
+    "lint": "eslint --config ../../eslint.serveur.mjs src",
     "test": "vitest run"
   },
   "dependencies": {

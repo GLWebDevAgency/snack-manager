@@ -40,6 +40,7 @@ import {
   type LeadTouchType,
   type LeadUpdate,
   type ProposalBilling,
+  chiffrageFondateur,
 } from "@sm/contracts";
 import { csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -840,8 +841,19 @@ function phrasePrix(p: {
   onlineOrdering: boolean;
   billing: ProposalBilling;
   services?: LeadServices;
+  /**
+   * La place fondateur, cochée à l'écran de signature.
+   *
+   * Le bouton était bien branché sur l'API — le client naissait remisé — mais
+   * ne changeait AUCUN chiffre sous les yeux de l'opérateur : il annonçait au
+   * gérant, au téléphone, le tarif public de ce qu'il venait de lui remiser de
+   * moitié. Un contrôle qui décide d'un prix doit montrer le prix.
+   */
+  founderSeat?: boolean;
 }): string {
-  const { monthlyCents, servicesMonthlyCents, setupOnceCents } = proposalCents(p);
+  const publie = proposalCents(p);
+  const { monthlyCents, servicesMonthlyCents, setupOnceCents } =
+    p.founderSeat === true ? chiffrageFondateur(publie) : publie;
   // Sans formule ni module, le logiciel pèse 0 : la phrase ne parle alors que
   // de l'Atelier — « 0 €/mois » ferait douter du chiffrage entier.
   const morceaux = monthlyCents > 0 ? [`${fmtEuro(monthlyCents)}/mois`] : [];
@@ -852,7 +864,15 @@ function phrasePrix(p: {
     p.billing === "annuel" && monthlyCents > 0
       ? ` · logiciel ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)`
       : "";
-  return morceaux.join(" + ") + annee;
+  // Le tarif public reste écrit à côté : c'est ce que la remise fait gagner,
+  // et c'est là que l'offre se vend au téléphone.
+  const fondateur =
+    p.founderSeat === true
+      ? ` · fondateur — moitié prix douze mois (public ${fmtEuro(
+          publie.monthlyCents + publie.servicesMonthlyCents,
+        )}/mois)`
+      : "";
+  return morceaux.join(" + ") + annee + fondateur;
 }
 
 /** Les services retenus, en toutes lettres courtes — carte, panneau, fiche client. */
@@ -1406,7 +1426,7 @@ function ConvertPanel({
           Atelier) — on les CHIFFRE sous les yeux de l'opérateur : c'est ce
           montant-là que les brouillons de factures vont porter. */}
       <div className="text-xs font-semibold text-accent">
-        {phrasePrix({ plan, onlineOrdering, billing, services })}
+        {phrasePrix({ plan, onlineOrdering, billing, services, founderSeat })}
         {resumeAtelier(services) ? ` · Atelier : ${resumeAtelier(services)}` : ""}
       </div>
       {erreur && <div className="text-xs font-semibold text-alertt">{erreur}</div>}

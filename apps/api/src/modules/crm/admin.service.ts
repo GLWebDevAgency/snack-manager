@@ -6,6 +6,8 @@ import {
   DEVICE_REVOKE_REASON_LABELS,
   PAIRING_CODE_TTL_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
+  EMPTY_SERVICES,
+  type LeadServices,
   LeadServicesSchema,
   servicesCents,
   type TenantOffre,
@@ -26,7 +28,6 @@ import {
   type TenantAccountStatus,
   type TenantChurn,
   type TenantNote,
-  type TenantPlanChange,
   type TenantReactivate,
   type TenantSuspend,
 } from '@sm/contracts';
@@ -217,10 +218,14 @@ export class AdminService {
    * Le statut de compte n'est PAS touché : passer un client de Essentiel à
    * Boost n'est pas une décision d'accès.
    *
-   * `founderUntil` n'est pas retouché ici, et c'est délibéré : la remise court
-   * depuis la signature du PREMIER contrat. Ce qui s'ajoute ensuite se paie
-   * plein tarif — sinon un fondateur relancerait sa remise en changeant d'offre
-   * le onzième mois.
+   * NI `founderUntil` NI `founderDiscountCents` ne sont retouchés ici, et
+   * c'est le point le plus coûteux de cette méthode. La remise fondateur est un
+   * MONTANT figé au premier contrat : le dû grossit quand le client ajoute,
+   * la remise non, et le supplément se paie donc plein tarif de lui-même.
+   * Recalculer l'un des deux champs ici rendrait à un fondateur le moyen de
+   * relancer sa remise en montant en gamme le onzième mois — ce que ce bouton
+   * permet de faire en un clic. L'invariant est tenu par
+   * `packages/contracts/src/fondateur.test.ts`.
    */
   async changeOffre(
     actor: JwtPayload,
@@ -257,6 +262,13 @@ export class AdminService {
         to: body.plan ?? 'aucune',
         onlineOrdering: body.onlineOrdering,
         billing: body.billing,
+        // Les SERVICES aussi, et nommément. Sans eux, retirer les réseaux
+        // sociaux d'un client laissait au journal une ligne « Complet →
+        // Complet » que personne ne pouvait relire — alors que c'est
+        // précisément le geste qui fait tomber sa facture de 69 €. Le dernier
+        // service retiré efface en outre `atelier` tout entier, date de
+        // signature comprise : cette perte doit se lire quelque part.
+        ...deltaServices(before.atelier ?? null, body.services),
       },
     });
     return toAccountView(tenant);
@@ -645,6 +657,42 @@ function toAccount(raw: RawTenant): TenantAccount {
   };
 }
 
+/**
+ * Ce qui a été AJOUTÉ et RETIRÉ entre deux états de l'Atelier.
+ *
+ * Rend des clés omises quand rien n'a bougé : une entrée de journal ne doit
+ * porter que ce qui a changé, sinon la ligne qui compte se noie dans le reste.
+ */
+function deltaServices(
+  avant: Partial<LeadServices> | null,
+  apres: LeadServices,
+): { servicesAjoutes?: string[]; servicesRetires?: string[]; atelierEfface?: true } {
+  const valeur = (s: Partial<LeadServices> | null, cle: keyof LeadServices): string | null => {
+    const v = s?.[cle];
+    if (cle === 'reseauxSociaux') return typeof v === 'string' ? v : null;
+    return v === true ? 'oui' : null;
+  };
+  const cles = Object.keys(EMPTY_SERVICES) as (keyof LeadServices)[];
+  const ajoutes: string[] = [];
+  const retires: string[] = [];
+  for (const cle of cles) {
+    const a = valeur(avant, cle);
+    const b = valeur(apres, cle);
+    if (a === b) continue;
+    if (b !== null) ajoutes.push(cle === 'reseauxSociaux' ? `reseauxSociaux:${b}` : cle);
+    if (a !== null) retires.push(cle === 'reseauxSociaux' ? `reseauxSociaux:${a}` : cle);
+  }
+  return {
+    ...(ajoutes.length > 0 ? { servicesAjoutes: ajoutes } : {}),
+    ...(retires.length > 0 ? { servicesRetires: retires } : {}),
+    // L'Atelier passe à `null` : la date de signature du service rendu
+    // disparaît avec lui, et c'est irréversible.
+    ...(avant !== null && !cles.some((c) => valeur(apres, c) !== null)
+      ? { atelierEfface: true as const }
+      : {}),
+  };
+}
+
 function toAccountView(raw: RawTenant): AdminTenantAccount {
   const account = toAccount(raw);
   return {
@@ -656,6 +704,8 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     billingCycle: (raw.billingCycle ?? 'mensuel') as 'mensuel' | 'annuel',
     founderSeat: raw.founderSeat === true,
     founderUntil: iso(raw.founderUntil) ?? null,
+    founderDiscountCents:
+      typeof raw.founderDiscountCents === 'number' ? raw.founderDiscountCents : null,
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],

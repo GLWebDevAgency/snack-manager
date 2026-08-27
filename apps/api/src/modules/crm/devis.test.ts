@@ -308,12 +308,15 @@ describe('cohérence des arrondis de la remise fondateur', () => {
   });
 
   it('reste juste avec des montants impairs — le cas qu’aucun prix ne produit encore', () => {
-    // Deux lignes à 9,99 € : moitié par ligne = 5,00 + 5,00 = 10,00 ;
-    // moitié du total = 9,99. C'est ce centime-là qu'on verrouille.
+    // Deux lignes à 9,99 €. Le demi-centime va au client (`Math.ceil` sur la
+    // REMISE), donc chaque ligne tombe à 4,99 € : 9,98 € par ligne contre
+    // 9,99 € si l'on avait arrondi sur leur somme. C'est ce centime-là qu'on
+    // verrouille — et il penche du bon côté, celui du client.
     const parLigne = prixFondateurCents(999) + prixFondateurCents(999);
     const surTotal = prixFondateurCents(999 + 999);
     expect(parLigne).not.toBe(surTotal);
     // Le devis doit suivre la règle « par ligne », celle des factures émises.
-    expect(parLigne).toBe(1_000);
+    expect(parLigne).toBe(998);
+    expect(surTotal).toBe(999);
   });
 });

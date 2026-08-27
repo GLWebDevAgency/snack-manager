@@ -10,7 +10,9 @@ import {
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
   SOCIAL_CADENCE_LABELS,
+  FOUNDER_SEATS_TOTAL,
   finRemiseFondateur,
+  remiseFondateurContrat,
   proposalCents,
   chiffrageFondateur,
   prixFondateurCents,
@@ -87,6 +89,29 @@ export class ConversionService {
       throw new ConflictException(`L’e-mail « ${email} » a déjà un compte`);
     }
 
+    /**
+     * LES DIX PLACES SONT UNE PROMESSE PUBLIQUE, PAS UN COMPTEUR D'AFFICHAGE.
+     *
+     * La landing annonce « dix places fondateur », le CRM affiche le décompte
+     * restant — et rien, côté serveur, n'empêchait d'en signer une onzième. La
+     * rareté était donc un argument de vente que le logiciel ne tenait pas :
+     * c'est le genre d'écart qui se découvre le jour où un client compte.
+     *
+     * Le contrôle est ici et non au schéma parce qu'il dépend de l'ÉTAT du
+     * parc, pas de la forme du corps. Course possible entre deux conversions
+     * simultanées : à ce rythme de signature, une revue humaine du décompte
+     * vaut mieux qu'un verrou distribué — et le refus, lui, tient dans le cas
+     * qui se produit vraiment.
+     */
+    if (body.founderSeat) {
+      const prises = await this.tenants.countDocuments({ founderSeat: true });
+      if (prises >= FOUNDER_SEATS_TOTAL) {
+        throw new ConflictException(
+          `Les ${FOUNDER_SEATS_TOTAL} places fondateur sont prises — ce client se signe au tarif public.`,
+        );
+      }
+    }
+
     const password = generatePassword();
     const passwordHash = await this.hasher.hash(password);
     const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * DAY_MS);
@@ -103,10 +128,25 @@ export class ConversionService {
       // facturation récurrente retombait sur `plan` seul et sous-facturait.
       onlineOrdering: body.onlineOrdering,
       billingCycle: body.billing,
-      // La place fondateur donne le DROIT, cette date donne le TERME. Posée
-      // ici une fois pour toutes : la remise d'un client se lit sur son
-      // contrat, jamais sur l'horloge du serveur.
+      // La place fondateur donne le DROIT, cette date donne le TERME, et le
+      // montant ci-dessous donne la PORTÉE. Les trois sont posés ici une fois
+      // pour toutes : la remise d'un client se lit sur son contrat, jamais sur
+      // l'horloge du serveur ni sur l'offre qu'il possède aujourd'hui.
       founderUntil: body.founderSeat ? finRemiseFondateur(now) : null,
+      // LA REMISE EST FIGÉE AU CONTRAT SIGNÉ, et c'est tout l'enjeu.
+      //
+      // Un taux appliqué à l'offre courante remiserait aussi le service ajouté
+      // le onzième mois, et donnerait à un fondateur le moyen de relancer sa
+      // remise en changeant d'offre — ce que le CRM permet en un clic. Le
+      // montant, lui, ne bouge plus : le dû grossit, la remise non, et le
+      // supplément se paie plein tarif de lui-même.
+      founderDiscountCents: body.founderSeat
+        ? remiseFondateurContrat({
+            plan: body.plan,
+            onlineOrdering: body.onlineOrdering,
+            atelier: body.services,
+          })
+        : null,
       account: {
         status: 'trial',
         since: now,

@@ -39,9 +39,6 @@ const key = (s: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
-const cents = (v: string | number): number =>
-  Math.round(parseFloat(String(v).replace(/[+€\s]/g, '').replace(',', '.')) * 100);
-
 const choices = (names: string[], priceDelta = 0) =>
   names.map((n) => ({ key: key(n), name: n, priceDelta }));
 

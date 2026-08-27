@@ -39,6 +39,7 @@ import {
   type InvoiceStatus,
   type MyBilling,
   type TenantBillingIdentity,
+  remiseFondateurActive,
 } from "@sm/contracts";
 import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -221,10 +222,16 @@ export default function AbonnementPage() {
             <span className="text-[30px] font-extrabold leading-[1.1] tracking-[-0.03em] text-ink">
               {sub.planLabel}
             </span>
-            {sub.founderSeat && (
+            {/*
+              La pastille suit la REMISE, pas le droit. `founderSeat` est un
+              booléen, et un booléen n'expire pas : il affichait « moitié prix »
+              à vie, y compris à côté d'un montant redevenu plein tarif — au
+              restaurateur qui, lui, voyait son prélèvement doubler.
+            */}
+            {remiseFondateurActive(sub.founderUntil) && (
               <Pill
                 className="border-gold/40 bg-gold/15 text-gold"
-                title="Moitié prix sur tout votre contrat, pendant douze mois"
+                title="Moitié prix sur tout votre contrat signé, pendant douze mois"
               >
                 Fondateur — moitié prix
               </Pill>
@@ -233,6 +240,30 @@ export default function AbonnementPage() {
           <p className="cf-fig mt-1 text-[13px] text-mut">
             {fmtEuro(sub.mrrCents)} HT par mois · client depuis le {fmtJour(sub.since)}
           </p>
+          {/*
+            LA DATE DE FIN, ÉCRITE. Les conditions du devis promettent « au
+            terme, le tarif public s'applique sans autre formalité » : un
+            restaurateur qui découvrirait ce terme sur son relevé bancaire
+            aurait raison d'appeler. Elle reste affichée après l'échéance —
+            c'est justement le mois où il cherche l'explication.
+          */}
+          {sub.founderUntil && (
+            <p className="mt-1 text-[13px] text-mut">
+              {remiseFondateurActive(sub.founderUntil) ? (
+                <>
+                  Remise fondateur jusqu&apos;au{" "}
+                  <span className="cf-fig text-ink">{fmtJour(sub.founderUntil)}</span> — le tarif
+                  public s&apos;applique ensuite. Ce que vous ajoutez d&apos;ici là est au tarif
+                  public.
+                </>
+              ) : (
+                <>
+                  Remise fondateur terminée le{" "}
+                  <span className="cf-fig text-ink">{fmtJour(sub.founderUntil)}</span>.
+                </>
+              )}
+            </p>
+          )}
         </Card>
 
         <Card className="flex-1 p-[18px]">

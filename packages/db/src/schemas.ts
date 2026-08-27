@@ -91,6 +91,21 @@ export const TenantSchema = new Schema(
      */
     founderUntil: { type: Date, default: null },
     /**
+     * La remise fondateur MENSUELLE, figée au montant du contrat signé.
+     *
+     * Un montant et non un taux, et c'est tout l'objet du champ. La remise
+     * vendue porte sur « tout ce qu'on signe aujourd'hui » : un pourcentage
+     * appliqué à l'offre courante remiserait aussi le service ajouté le
+     * onzième mois, et permettrait à un fondateur de relancer sa remise en
+     * changeant d'offre. Un montant figé, lui, ne bouge pas quand l'offre
+     * grossit — le supplément se paie donc plein tarif de lui-même.
+     *
+     * Posé une fois à la conversion, jamais recalculé, jamais touché par un
+     * changement d'offre. `null` quand il n'y a pas de remise ; `0` serait une
+     * remise de zéro euro, ce qui n'est pas la même chose.
+     */
+    founderDiscountCents: { type: Number, default: null },
+    /**
      * Le module de commande en ligne, vendu à part de la formule — il se
      * greffe sur un abonnement OU sur le site existant du restaurateur.
      *

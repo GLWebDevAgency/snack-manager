@@ -4,6 +4,7 @@ import {
   EMPTY_SERVICES,
   MODULE_ORDERING_CENTS,
   abonnementMensuelCents,
+  offreClient,
   LeadConvertSchema,
   LeadProposalSchema,
   LeadServicesSchema,
@@ -185,55 +186,55 @@ describe('LeadServicesSchema', () => {
  */
 describe('abonnementMensuelCents — ce qu’un client paie vraiment chaque mois', () => {
   it('formule et module s’additionnent : c’est là que la facturation sous-facturait', () => {
-    expect(abonnementMensuelCents({ plan: 'complet', onlineOrdering: true })).toBe(
+    expect(abonnementMensuelCents(offreClient({ plan: 'complet', onlineOrdering: true }))).toBe(
       15_900 + MODULE_ORDERING_CENTS,
     );
   });
 
   it('la formule seule reste la formule seule', () => {
-    expect(abonnementMensuelCents({ plan: 'complet', onlineOrdering: false })).toBe(15_900);
+    expect(abonnementMensuelCents(offreClient({ plan: 'complet', onlineOrdering: false }))).toBe(15_900);
   });
 
   it('sur Boost le module est compris — le facturer serait le faire payer deux fois', () => {
-    expect(abonnementMensuelCents({ plan: 'boost', onlineOrdering: true })).toBe(19_900);
+    expect(abonnementMensuelCents(offreClient({ plan: 'boost', onlineOrdering: true }))).toBe(19_900);
   });
 
   it('sans formule, les services mensuels sont bien un abonnement — pas zéro', () => {
     // Le défaut le plus coûteux : ce client payait 69 € + réseaux tous les
     // mois et n'apparaissait dans aucune projection d'échéance.
     expect(
-      abonnementMensuelCents({
+      abonnementMensuelCents(offreClient({
         plan: null,
         onlineOrdering: false,
         atelier: { ...EMPTY_SERVICES, presenceInternet: true, reseauxSociaux: 'hebdo' },
-      }),
+      })),
     ).toBe(6_900 + SOCIAL_CADENCE_CENTS.hebdo);
   });
 
   it('les trois dimensions ensemble', () => {
     expect(
-      abonnementMensuelCents({
+      abonnementMensuelCents(offreClient({
         plan: 'essentiel',
         onlineOrdering: true,
         atelier: { ...EMPTY_SERVICES, presenceInternet: true },
-      }),
+      })),
     ).toBe(9_900 + MODULE_ORDERING_CENTS + 6_900);
   });
 
   it('un client signé avant ces champs ne fait pas exploser le calcul', () => {
     // Les tenants d'avant portent `onlineOrdering` absent et `atelier` null :
     // le montant retombe sur la formule, sans jamais lever.
-    expect(abonnementMensuelCents({ plan: 'complet' })).toBe(15_900);
-    expect(abonnementMensuelCents({ plan: 'complet', atelier: null })).toBe(15_900);
-    expect(abonnementMensuelCents({ plan: null })).toBe(0);
+    expect(abonnementMensuelCents(offreClient({ plan: 'complet' }))).toBe(15_900);
+    expect(abonnementMensuelCents(offreClient({ plan: 'complet', atelier: null }))).toBe(15_900);
+    expect(abonnementMensuelCents(offreClient({ plan: null }))).toBe(0);
   });
 
   it('l’Atelier stocké porte un signedAt : il ne doit pas gêner le chiffrage', () => {
     expect(
-      abonnementMensuelCents({
+      abonnementMensuelCents(offreClient({
         plan: null,
         atelier: { ...EMPTY_SERVICES, presenceInternet: true, signedAt: new Date() },
-      }),
+      })),
     ).toBe(6_900);
   });
 });

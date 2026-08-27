@@ -12,8 +12,8 @@ import {
   FOUNDER_SEATS_TOTAL,
   LEAD_STAGES,
   LeadServicesSchema,
-  PLAN_MRR_CENTS,
   abonnementMensuelCents,
+  offreClient,
   SCREEN_OFFLINE_AFTER_MS,
   type CrmClient,
   type CrmInvoice,
@@ -421,15 +421,7 @@ export class CrmService implements OnApplicationBootstrap {
         // L'offre ENTIÈRE, remise fondateur comprise : le MRR du parc
         // sous-estimait le chiffre réel de tout ce qui n'était pas une
         // formule — module à 79 €/mois et mensuels de l'Atelier.
-        mrrCents: abonnementMensuelCents(
-          {
-            plan,
-            onlineOrdering: (t as { onlineOrdering?: boolean }).onlineOrdering === true,
-            atelier: (t as { atelier?: Record<string, unknown> | null }).atelier ?? null,
-            founderUntil: (t as { founderUntil?: Date | null }).founderUntil ?? null,
-          },
-          now,
-        ),
+        mrrCents: abonnementMensuelCents(offreClient(t), now),
         founderSeat: Boolean(t.founderSeat),
         since: iso((t as { createdAt?: Date }).createdAt) ?? now.toISOString(),
         orders30d: window30.orders,

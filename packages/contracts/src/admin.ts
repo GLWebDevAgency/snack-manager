@@ -486,6 +486,15 @@ export type AdminTenantAccount = {
   founderSeat: boolean;
   /** Fin de la remise fondateur, ou `null` — un booléen ne peut pas expirer. */
   founderUntil: string | null;
+  /**
+   * La remise MENSUELLE figée au contrat signé, ou `null`.
+   *
+   * Un montant et non un taux : c'est ce qui rend vraie la règle vendue — la
+   * moitié sur ce qui a été signé, plein tarif sur ce qui s'ajoute après. Les
+   * écrans qui chiffrent une offre en ont besoin pour ne pas annoncer le tarif
+   * public à côté d'un montant remisé.
+   */
+  founderDiscountCents: number | null;
   account: TenantAccount;
   /** Résultat de la règle d'accès, calculé une fois côté API. */
   accessBlocked: boolean;

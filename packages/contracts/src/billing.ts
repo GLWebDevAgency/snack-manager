@@ -4,7 +4,13 @@ import {
   isAccessBlocked,
   type TenantAccountStatus,
 } from './admin';
-import { PLAN_LABELS, PLAN_MRR_CENTS, PLAN_NONE_LABEL } from './crm';
+import {
+  type OffreClient,
+  PLAN_LABELS,
+  PLAN_MRR_CENTS,
+  PLAN_NONE_LABEL,
+  echeanceDuMois,
+} from './crm';
 
 // ─────────────────────────────────────────────────────────────
 // FACTURATION — qui paie, qui doit, et depuis quand.
@@ -682,6 +688,16 @@ export type CrmSubscription = {
   mrrCents: number;
   mrrLabel: string;
   founderSeat: boolean;
+  /**
+   * Fin de la remise fondateur, ou `null`.
+   *
+   * `founderSeat` seul ne pouvait pas porter cet écran : un booléen n'expire
+   * pas, si bien que la pastille « Fondateur — moitié prix » restait affichée à
+   * vie, y compris à côté d'un montant redevenu plein tarif. Et la date que la
+   * FAQ promet contractuellement au restaurateur (« au terme, le tarif public
+   * s'applique ») n'était visible nulle part — pas même pour lui.
+   */
+  founderUntil: string | null;
   accountStatus: TenantAccountStatus;
   accountStatusLabel: string;
   accessBlocked: boolean;
@@ -796,13 +812,22 @@ export const BillingRunSchema = z.object({
 export type BillingRun = z.infer<typeof BillingRunSchema>;
 
 /** Pourquoi un client a été sauté — dit à l'écran, jamais deviné. */
-export const BILLING_RUN_SKIPS = ['non_facturable', 'deja_facture', 'rien_a_facturer'] as const;
+export const BILLING_RUN_SKIPS = [
+  'non_facturable',
+  'deja_facture',
+  'rien_a_facturer',
+  'hors_echeance_annuelle',
+] as const;
 export type BillingRunSkip = (typeof BILLING_RUN_SKIPS)[number];
 
 export const BILLING_RUN_SKIP_LABELS: Record<BillingRunSkip, string> = {
   non_facturable: 'En essai ou parti — rien à facturer ce mois-ci',
   deja_facture: 'Déjà une facture d’abonnement pour ce mois',
   rien_a_facturer: 'Aucun abonnement récurrent — que des prestations ponctuelles',
+  // Un engagement annuel se facture UNE fois l'an, à son mois anniversaire.
+  // Le client reste listé chaque mois : l'équipe voit qu'il est suivi, et non
+  // qu'il a été oublié.
+  hors_echeance_annuelle: 'Engagement annuel — facturé à son mois anniversaire',
 };
 
 /**
@@ -955,11 +980,20 @@ export function defaultInvoiceLabel(
   kind: InvoiceKind,
   plan: BillingPlan | null,
   period: { label: string },
+  /**
+   * L'abonnement porte-t-il autre chose que la seule formule — module,
+   * services de l'Atelier, remise fondateur ? Le libellé cesse alors de nommer
+   * la formule : « Abonnement Complet — septembre » sur une pièce à 153,50 €
+   * fait appeler un client qui sait que Complet vaut 159 €. Le montant, lui,
+   * est juste ; c'est le libellé qui mentait.
+   */
+  composite = false,
 ): string {
   if (kind === 'mise_en_place') return `Mise en place — onboarding et formation (${period.label})`;
   // Sans formule, un « abonnement » ne peut porter que le module : le libellé
   // reste honnête plutôt que d'inventer une formule que le client n'a pas.
   if (kind === 'abonnement') {
+    if (composite) return `Abonnement et services — ${period.label}`;
     return plan
       ? `Abonnement ${PLAN_LABELS[plan]} — ${period.label}`
       : `Abonnement — ${period.label}`;
@@ -1146,11 +1180,10 @@ export function nextInvoiceDue(
    * services en a un, et il doit être projeté comme les autres : c'est
    * exactement ce que l'ancienne signature rendait impossible.
    */
-  offre: { plan: BillingPlan | null; mrrCents: number },
+  offre: { offre: OffreClient; mrrCents: number; signeLe: Date | null },
   billable: boolean,
   now: Date = new Date(),
 ): CrmNextDue | null {
-  const { plan } = offre;
   if (!billable) return null;
 
   // Un AVOIR peut traîner dans une liste de pièces « dues » (son statut stocké
@@ -1179,11 +1212,16 @@ export function nextInvoiceDue(
   if (offre.mrrCents <= 0) return null;
 
   const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
-  const amountCents = offre.mrrCents;
   // Échéance THÉORIQUE : la pièce n'existe pas encore, donc aucun taux n'y est
-  // figé. Elle est projetée au régime COURANT — c'est celui sous lequel elle
-  // sera émise. Les tarifs de `PLAN_MRR_CENTS` sont hors taxes (cf.
-  // `SM_AMOUNTS_ARE`), le prélèvement annoncé est donc leur TTC.
+  // figé. Elle est projetée AU RÉGIME DE SA PROPRE DATE, et non à celui
+  // d'aujourd'hui : un fondateur dans son douzième mois lisait autrement la
+  // moitié de ce qui allait réellement être prélevé, et découvrait le tarif
+  // public sur son relevé. La date décide aussi du montant chez un client
+  // annuel, dont la plupart des mois ne portent que ses services.
+  const { cents: amountCents } = echeanceDuMois(offre.offre, at, offre.signeLe, at);
+  if (amountCents <= 0) return null;
+  // Les tarifs de `PLAN_MRR_CENTS` sont hors taxes (cf. `SM_AMOUNTS_ARE`) :
+  // le prélèvement annoncé est donc leur TTC.
   const projected = invoiceTotals(amountCents, SM_INVOICE_VAT);
   return {
     at: at.toISOString(),

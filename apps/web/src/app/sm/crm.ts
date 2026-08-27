@@ -22,6 +22,7 @@ import type {
   LeadUpdate,
   ProductionTick,
 } from "@sm/contracts";
+import { ApiError } from "@/lib/api";
 import { api, getToken } from "@/lib/api";
 
 // ─── Identité & cloisonnement ───
@@ -144,4 +145,28 @@ export function fmtDaysAgo(days: number | null): string {
   if (days === 0) return "aujourd'hui";
   if (days === 1) return "hier";
   return `il y a ${days} j`;
+}
+
+/**
+ * MESSAGE D'ERREUR LISIBLE — jamais un code, jamais l'anglais.
+ *
+ * Vit ici, sur la surface entière, parce que trois écrans écrivaient chacun
+ * leur version et qu'une seule savait lire les refus de schéma. Les autres
+ * affichaient « Validation failed » — en anglais, dans un toast de deux
+ * secondes, devant un opérateur qui ne saura jamais quel champ a été refusé.
+ *
+ * L'ordre compte : le message zod du PREMIER refus d'abord (nos schémas les
+ * rédigent en français et nomment le champ), le message de l'API ensuite, le
+ * repli en dernier. « Validation failed » est explicitement écarté — c'est le
+ * libellé générique que Nest pose quand aucun schéma n'a parlé.
+ */
+export function errText(e: unknown, fallback: string): string {
+  if (!(e instanceof ApiError)) return fallback;
+  const body: unknown = (e as { body?: unknown }).body;
+  const issues = (body as { issues?: unknown })?.issues;
+  const premier = Array.isArray(issues) ? issues[0] : null;
+  const zod = (premier as { message?: unknown })?.message;
+  if (typeof zod === 'string' && zod.trim()) return zod.trim();
+  const message = typeof e.message === 'string' ? e.message.trim() : '';
+  return message && message !== 'Validation failed' ? message : fallback;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import type { Model } from 'mongoose';
-import { EMPTY_SERVICES, type JwtPayload } from '@sm/contracts';
+import { EMPTY_SERVICES, FOUNDER_SEATS_TOTAL, type JwtPayload } from '@sm/contracts';
 import type { Lead, Tenant, User } from '@sm/db';
 import type { SecretHasher } from '@sm/domain/src/ports';
 import type { AdminService } from './admin.service';
@@ -32,6 +32,8 @@ function build(over: {
   userCreateFails?: boolean;
   failIssue?: boolean;
   lead?: ReturnType<typeof leadDoc> | null;
+  /** Places fondateur déjà prises au parc — dix au total. */
+  founderSeatsTaken?: number;
 } = {}) {
   const tenantId = new Types.ObjectId();
   const leads = {
@@ -42,6 +44,8 @@ function build(over: {
     findOne: vi.fn().mockReturnValue({ lean: () => Promise.resolve(over.slugTaken ? { _id: 'x' } : null) }),
     create: vi.fn().mockImplementation((doc: Record<string, unknown>) => Promise.resolve({ _id: tenantId, ...doc })),
     deleteOne: vi.fn().mockResolvedValue({}),
+    // Les places fondateur déjà prises au parc — bornées à dix côté serveur.
+    countDocuments: vi.fn().mockResolvedValue(over.founderSeatsTaken ?? 0),
   };
   const users = {
     findOne: vi.fn().mockReturnValue({ lean: () => Promise.resolve(over.emailTaken ? { _id: 'u' } : null) }),
@@ -458,5 +462,35 @@ describe('les premières factures d’un fondateur', () => {
     await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
     const labels = billing.issue.mock.calls.map((c) => String((c[2] as Record<string, any>).label));
     expect(labels.some((l) => /fondateur/i.test(l))).toBe(true);
+  });
+});
+
+/**
+ * LES DIX PLACES, TENUES PAR LE SERVEUR.
+ *
+ * La landing les annonce, le CRM affiche le décompte — et rien n'empêchait d'en
+ * signer une onzième. Une rareté qu'on vend doit être une rareté qu'on tient :
+ * l'écart se découvre le jour où un client compte.
+ */
+describe('les dix places fondateur', () => {
+  it('refuse la onzième, en nommant la raison', async () => {
+    const { service } = build({ founderSeatsTaken: FOUNDER_SEATS_TOTAL });
+    await expect(
+      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }),
+    ).rejects.toThrow(/places fondateur sont prises/);
+  });
+
+  it('laisse passer la dixième', async () => {
+    const { service } = build({ founderSeatsTaken: FOUNDER_SEATS_TOTAL - 1 });
+    await expect(
+      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }),
+    ).resolves.toMatchObject({ slug: expect.any(String) });
+  });
+
+  it('un client ORDINAIRE passe même les places épuisées', async () => {
+    const { service } = build({ founderSeatsTaken: 99 });
+    await expect(
+      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: false }),
+    ).resolves.toMatchObject({ slug: expect.any(String) });
   });
 });

@@ -14,13 +14,11 @@ import {
   DeviceCreateSchema,
   DeviceHeartbeatBodySchema,
   DevicePinLoginSchema,
-  DeviceTokenBodySchema,
   DeviceUpdateSchema,
   PairDeviceSchema,
   type DeviceCreate,
   type DeviceHeartbeatBody,
   type DevicePinLogin as DevicePinLoginDto,
-  type DeviceTokenBody,
   type DeviceUpdate,
   type PairDevice,
 } from '@sm/contracts';
