@@ -4,6 +4,27 @@ import { Model } from 'mongoose';
 import { publicOrderingState, type TenantIdentityUpdate } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 
+/**
+ * Les réglages de service qu'un gérant peut écrire. Tout ce qui n'est pas ici
+ * est ignoré en silence — c'est voulu : la route prend un corps nu, sans schéma
+ * Zod, et cette liste est le seul rempart.
+ *
+ * Elle est EXPORTÉE pour être testable. Une liste blanche qui autorise un champ
+ * absent du schéma Mongoose produit le pire des défauts : la route répond 200,
+ * le gérant croit avoir enregistré, et rien ne persiste. C'est arrivé à
+ * `dailyGoalCents`, resté six semaines dans cette liste sans exister en base.
+ * Le test `tenants.test.ts` verrouille désormais la correspondance.
+ */
+export const REGLAGES_MODIFIABLES = [
+  'slotIntervalMin',
+  'slotCapacity',
+  'onlineOrderingPaused',
+  'pauseMessage',
+  'printTicketOn',
+  'printStickerOn',
+  'dailyGoalCents',
+] as const;
+
 @Injectable()
 export class TenantsService {
   constructor(@InjectModel('Tenant') private readonly tenants: Model<Tenant>) {}
@@ -44,17 +65,8 @@ export class TenantsService {
   }
 
   async updateSettings(tenantId: string, patch: Record<string, unknown>) {
-    const allowed = [
-      'slotIntervalMin',
-      'slotCapacity',
-      'onlineOrderingPaused',
-      'pauseMessage',
-      'printTicketOn',
-      'printStickerOn',
-      'dailyGoalCents',
-    ];
     const $set: Record<string, unknown> = {};
-    for (const k of allowed) {
+    for (const k of REGLAGES_MODIFIABLES) {
       if (k in patch) $set[`settings.${k}`] = patch[k];
     }
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });

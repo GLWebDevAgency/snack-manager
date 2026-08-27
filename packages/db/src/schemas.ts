@@ -195,6 +195,21 @@ export const TenantSchema = new Schema(
       pauseMessage: { type: String, default: 'Victimes de notre succès — la commande en ligne rouvre très vite !' },
       printTicketOn: { type: String, enum: ['accept', 'ready'], default: 'accept' },
       printStickerOn: { type: String, enum: ['accept', 'ready'], default: 'ready' },
+      /**
+       * L'objectif de recette du jour, en centimes — le curseur que le gérant
+       * pose depuis son tableau de bord.
+       *
+       * SANS DÉFAUT, délibérément : zéro serait un objectif atteint dès
+       * l'ouverture, et la jauge afficherait 100 % avant la première commande.
+       * L'absence de valeur laisse le tableau de bord appliquer la sienne.
+       *
+       * Ce champ a vécu six semaines dans la liste blanche du service sans
+       * exister ici : Mongoose en mode strict jetait le `$set` en silence, la
+       * route répondait 200, et l'objectif disparaissait au rechargement.
+       * `apps/api/src/modules/tenants/tenants.test.ts` verrouille désormais la
+       * correspondance entre la liste blanche et ce schéma.
+       */
+      dailyGoalCents: { type: Number },
     },
     /**
      * NOTRE relation Stripe avec ce restaurant : c'est LUI qui nous paie
