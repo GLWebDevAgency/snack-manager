@@ -458,7 +458,7 @@ export function LeadDrawer({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-ink">Place fondateur</div>
           <div className="text-xs text-mut">
-            Tarif gelé à vie — 10 places au total
+            Moitié prix la première année — 10 places au total
           </div>
         </div>
         <Toggle
@@ -1346,7 +1346,7 @@ function ConvertPanel({
       </Field>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-xs text-mut">
-          Place fondateur — le tarif gelé suit le restaurant, plus le pipeline.
+          Place fondateur — moitié prix sur tout le contrat, douze mois durant.
         </div>
         <Toggle on={founderSeat} label="Place fondateur" onChange={setFounderSeat} />
       </div>

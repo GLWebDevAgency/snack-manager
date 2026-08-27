@@ -76,6 +76,44 @@ export const TenantSchema = new Schema(
     plan: { type: String, enum: ['essentiel', 'complet', 'boost', null], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
     /**
+     * Fin de la remise fondateur — douze mois après la signature.
+     *
+     * `founderSeat` dit le DROIT, ce champ dit le TERME. Les deux sont
+     * nécessaires : un booléen ne peut pas expirer, et c'est exactement ce qui
+     * a fait vivre pendant des mois une promesse de « tarif gelé à vie » que
+     * personne n'appliquait — un gel sans terme est une dette perpétuelle qui
+     * pèse sur chaque révision de grille.
+     *
+     * Posé une seule fois, à la conversion, et jamais recalculé : la remise
+     * d'un client se lit sur son contrat, pas sur l'horloge du serveur.
+     * `null` quand il n'y a pas de remise — l'absence se lit, elle ne se déduit
+     * pas d'un champ manquant.
+     */
+    founderUntil: { type: Date, default: null },
+    /**
+     * Le module de commande en ligne, vendu à part de la formule — il se
+     * greffe sur un abonnement OU sur le site existant du restaurateur.
+     *
+     * Ce champ a manqué pendant tout le développement de l'Atelier : la
+     * proposition le portait, le devis le chiffrait, les brouillons de facture
+     * le facturaient, puis la signature le JETAIT. En aval, toute la
+     * facturation retombait sur `plan` seul — un client Complet avec le module
+     * était facturé 159 € au lieu de 238 €.
+     *
+     * À ne jamais confondre avec `settings.onlineOrderingPaused`, qui est une
+     * pause d'exploitation décidée par le gérant un soir de coup de feu. Ici
+     * c'est une SOUSCRIPTION.
+     */
+    onlineOrdering: { type: Boolean, default: false },
+    /**
+     * L'engagement signé : au mois, ou à l'année avec deux mois offerts.
+     *
+     * Nommé `billingCycle` et non `billing` parce que `billing` porte déjà
+     * l'identité de facturation du restaurant (raison sociale, SIRET, TVA) —
+     * deux notions voisines de nom, étrangères de nature.
+     */
+    billingCycle: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
+    /**
      * L'Atelier signé — les services vendus avec l'abonnement, posés à la
      * signature. Les factures disent ce qui a été FACTURÉ ; ce champ dit ce
      * qui est DÛ en travail (présence internet à tenir, publications à

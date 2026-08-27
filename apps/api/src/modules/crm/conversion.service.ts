@@ -10,7 +10,10 @@ import {
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
   SOCIAL_CADENCE_LABELS,
+  finRemiseFondateur,
   proposalCents,
+  chiffrageFondateur,
+  prixFondateurCents,
   servicesCents,
   yearlyCents,
   type JwtPayload,
@@ -94,6 +97,16 @@ export class ConversionService {
       name: lead.restaurantName,
       plan: body.plan,
       founderSeat: body.founderSeat,
+      // L'offre signée EN ENTIER, pas seulement sa formule. Le module et
+      // l'engagement se perdaient ici : le devis les chiffrait, les brouillons
+      // les facturaient, et le client naissait sans eux — après quoi toute la
+      // facturation récurrente retombait sur `plan` seul et sous-facturait.
+      onlineOrdering: body.onlineOrdering,
+      billingCycle: body.billing,
+      // La place fondateur donne le DROIT, cette date donne le TERME. Posée
+      // ici une fois pour toutes : la remise d'un client se lit sur son
+      // contrat, jamais sur l'horloge du serveur.
+      founderUntil: body.founderSeat ? finRemiseFondateur(now) : null,
       account: {
         status: 'trial',
         since: now,
@@ -178,11 +191,20 @@ export class ConversionService {
     body: LeadConvert,
     trialEndsAt: Date,
   ): Promise<number> {
-    const prix = proposalCents({
+    const publie = proposalCents({
       plan: body.plan,
       onlineOrdering: body.onlineOrdering,
       services: body.services,
     });
+    // Le devis a promis moitié prix ; les premières factures doivent porter le
+    // même montant. Un client qui reçoit une pièce contredisant le document
+    // qu'il vient de signer appelle — et il a raison.
+    const prix = body.founderSeat ? chiffrageFondateur(publie) : publie;
+    const mention = body.founderSeat ? ' — offre fondateur, moitié prix' : '';
+    // Les pièces ponctuelles se chiffrent une à une : la remise s'applique
+    // donc à chacune, et non au total — c'est ce qui la rend lisible sur la
+    // facture que le client reçoit.
+    const remise = (cents: number) => (body.founderSeat ? prixFondateurCents(cents) : cents);
     const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
     const moduleFacture = body.onlineOrdering && body.plan !== 'boost';
 
@@ -204,7 +226,8 @@ export class ConversionService {
               ? `Abonnement ${PLAN_LABELS[body.plan]}` +
                 (moduleFacture ? ' + commande en ligne' : '')
               : 'Abonnement — module commande en ligne') +
-            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : ''),
+            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +
+            mention,
         });
         poses += 1;
       }
@@ -225,7 +248,7 @@ export class ConversionService {
           draft: true,
           dueAt: trialEndsAt,
           amountCents: prix.servicesMonthlyCents,
-          label: `Atelier (mensuel, sans engagement) — ${libelles.join(' ; ')}`,
+          label: `Atelier (mensuel, sans engagement) — ${libelles.join(' ; ')}${mention}`,
         });
         poses += 1;
       }
@@ -238,8 +261,8 @@ export class ConversionService {
           period,
           draft: true,
           dueAt: trialEndsAt,
-          amountCents: MODULE_ORDERING_SETUP_CENTS,
-          label: 'Mise en service — module commande en ligne',
+          amountCents: remise(MODULE_ORDERING_SETUP_CENTS),
+          label: `Mise en service — module commande en ligne${mention}`,
         });
         poses += 1;
       }
@@ -254,8 +277,8 @@ export class ConversionService {
           period,
           draft: true,
           dueAt: trialEndsAt,
-          amountCents: ATELIER_ONCE_CENTS[cle],
-          label: ATELIER_ONCE_LABELS[cle],
+          amountCents: remise(ATELIER_ONCE_CENTS[cle]),
+          label: `${ATELIER_ONCE_LABELS[cle]}${mention}`,
         });
         poses += 1;
       }

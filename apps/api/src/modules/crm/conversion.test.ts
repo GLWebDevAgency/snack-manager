@@ -82,7 +82,10 @@ const BODY = {
   ownerEmail: 'Nicolas@Exemple.fr',
   ownerName: 'Nicolas',
   plan: 'complet' as const,
-  founderSeat: true,
+  // Un client ORDINAIRE par défaut : depuis que la place fondateur remise
+  // réellement de 50 %, la laisser à `true` ici ferait passer tous les
+  // montants de tous les tests par la remise, sans que ce soit le sujet.
+  founderSeat: false,
   onlineOrdering: true,
   billing: 'mensuel' as const,
   services: EMPTY_SERVICES,
@@ -105,11 +108,11 @@ describe('Convertir un lead en restaurant', () => {
     const { service, leads, tenants, users, admin, tenantId } = build();
     const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
 
-    // Le tenant : essai de 30 jours, échéance POSÉE, place fondateur portée.
+    // Le tenant : essai de 30 jours, échéance POSÉE, offre signée conservée.
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.slug).toBe('chez-nicolas');
     expect(tenant.name).toBe('Chez Nicolas');
-    expect(tenant.founderSeat).toBe(true);
+    expect(tenant.founderSeat).toBe(false);
     expect(tenant.account.status).toBe('trial');
     expect(tenant.account.trialEndsAt).toEqual(new Date('2026-09-23T12:00:00.000Z'));
     // Rien de vendu à l'Atelier : l'absence s'écrit null, pas un objet de faux.
@@ -318,5 +321,142 @@ describe('Réinitialiser le mot de passe gérant', () => {
     await expect(service.resetOwnerPassword(ACTOR, new Types.ObjectId().toHexString())).rejects.toThrow(
       NotFoundException,
     );
+  });
+});
+
+/**
+ * L'OFFRE SIGNÉE SURVIT À LA SIGNATURE.
+ *
+ * Le lead porte le modèle complet : formule, module de commande en ligne,
+ * services de l'Atelier, engagement mensuel ou annuel. Le devis l'honore, les
+ * brouillons de facture aussi. Puis la conversion n'en gardait que la formule
+ * et l'Atelier : le module et l'engagement disparaissaient — le champ
+ * `onlineOrdering` n'existait même pas sur le tenant.
+ *
+ * Ce n'était pas un oubli d'affichage. En aval, TOUTE la facturation retombe
+ * sur `tenant.plan` : le montant par défaut d'une facture, le MRR de la fiche,
+ * la projection d'échéance, l'écran « Abonnement » du gérant, le MRR du parc.
+ * Un client Complet avec le module était facturé 159 € au lieu de 238 €, et un
+ * client sans formule n'avait jamais de prochaine échéance annoncée alors
+ * qu'il payait tous les mois.
+ */
+describe('l’offre signée survit à la signature', () => {
+  it('le module de commande en ligne est écrit sur le client', async () => {
+    const { service, tenants } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, onlineOrdering: true }, NOW);
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.onlineOrdering).toBe(true);
+  });
+
+  it('vendu sans le module, le client le dit aussi — false, jamais absent', async () => {
+    const { service, tenants } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, onlineOrdering: false }, NOW);
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.onlineOrdering).toBe(false);
+  });
+
+  it('l’engagement suit : c’est lui qui décide si l’on facture au mois ou à l’année', async () => {
+    const { service, tenants } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, billing: 'annuel' }, NOW);
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.billingCycle).toBe('annuel');
+  });
+
+  it('sans formule mais avec le module greffé : les deux se lisent sur le client', async () => {
+    const { service, tenants } = build();
+    await service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        plan: null,
+        onlineOrdering: true,
+        services: { ...EMPTY_SERVICES, integrationCommande: true },
+      },
+      NOW,
+    );
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.plan).toBeNull();
+    expect(tenant.onlineOrdering).toBe(true);
+    expect(tenant.atelier).toMatchObject({ integrationCommande: true });
+  });
+});
+
+/**
+ * LA REMISE FONDATEUR EST DATÉE À LA SIGNATURE.
+ *
+ * `founderSeat` était un droit sans terme : le CRM promettait « tarif gelé à
+ * vie » et rien ne l'appliquait. La règle du 27/08/2026 est une remise de 50 %
+ * pendant douze mois — donc il lui faut une DATE DE FIN, posée au moment où le
+ * contrat est signé et jamais recalculée après.
+ *
+ * Un booléen ne peut pas expirer. C'est toute la différence entre une remise
+ * qui s'éteint toute seule et une dette perpétuelle qui pèse sur chaque
+ * révision de grille.
+ */
+describe('la remise fondateur est datée', () => {
+  it('signé avec une place fondateur : la remise court douze mois', async () => {
+    const { service, tenants } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.founderSeat).toBe(true);
+    // NOW = 2026-08-24T12:00:00Z
+    expect((tenant.founderUntil as Date).toISOString()).toBe('2027-08-24T12:00:00.000Z');
+  });
+
+  it('signé sans place fondateur : aucune date, donc aucune remise', async () => {
+    const { service, tenants } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: false }, NOW);
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant.founderSeat).toBe(false);
+    // `null` et non `undefined` : l'absence de remise se lit, elle ne se déduit pas.
+    expect(tenant.founderUntil).toBeNull();
+  });
+});
+
+/**
+ * LES BROUILLONS DE SIGNATURE SUIVENT LA REMISE.
+ *
+ * Le devis promet moitié prix ; les premières factures doivent porter le même
+ * montant, sinon le client reçoit une pièce qui contredit le document qu'il
+ * vient de signer. C'est le genre d'écart qui se règle au téléphone, mal.
+ */
+describe('les premières factures d’un fondateur', () => {
+  it('toutes les pièces sont à moitié prix', async () => {
+    const { service, billing } = build();
+    await service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        founderSeat: true,
+        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+      },
+      NOW,
+    );
+    const sansRemise = build();
+    await sansRemise.service.convert(
+      ACTOR,
+      LEAD_ID,
+      {
+        ...BODY,
+        founderSeat: false,
+        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+      },
+      NOW,
+    );
+    const montants = (b: typeof billing) =>
+      b.issue.mock.calls.map((c) => (c[2] as Record<string, any>).amountCents as number);
+    const avec = montants(billing);
+    const sans = montants(sansRemise.billing);
+    expect(avec).toHaveLength(sans.length);
+    avec.forEach((m, i) => expect(m).toBe(Math.round(sans[i]! / 2)));
+  });
+
+  it('le libellé dit la remise — une facture doit s’expliquer seule', async () => {
+    const { service, billing } = build();
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
+    const labels = billing.issue.mock.calls.map((c) => String((c[2] as Record<string, any>).label));
+    expect(labels.some((l) => /fondateur/i.test(l))).toBe(true);
   });
 });

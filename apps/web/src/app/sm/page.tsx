@@ -339,7 +339,7 @@ export default function HqDashboard() {
         <Panel
           className="flex-1"
           title="Programme fondateur"
-          sub="10 places à tarif gelé à vie"
+          sub="10 places à moitié prix la première année"
         >
           <div className="flex items-baseline gap-2">
             <span className="cf-fig text-[44px] font-extrabold leading-none text-accent">

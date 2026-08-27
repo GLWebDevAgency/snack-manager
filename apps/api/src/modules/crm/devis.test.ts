@@ -193,3 +193,63 @@ describe('rendu PDF', () => {
     expect(pdf).toContain('DEV-20260824-7b8c');
   });
 });
+
+/**
+ * LE DEVIS FONDATEUR — la remise se montre, elle ne se cache pas dans le prix.
+ *
+ * Un devis qui afficherait directement 119 € ne dit rien : le prospect ne sait
+ * pas ce qu'il gagne. On imprime donc le tarif public, puis la remise en
+ * négatif, ligne par récurrence — c'est là que l'offre se vend.
+ *
+ * Une ligne de remise PAR récurrence, et non une seule globale : mélanger un
+ * mensuel, un annuel et un ponctuel dans un même total ferait un chiffre que
+ * personne ne peut vérifier.
+ */
+describe('le devis d’un fondateur', () => {
+  const PROPOSITION = {
+    plan: 'complet' as const,
+    onlineOrdering: true,
+    billing: 'mensuel' as const,
+    services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+    note: '',
+  };
+
+  it('imprime le tarif public, puis la remise en négatif', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const remises = doc.lignes.filter((l) => l.montantHtCents < 0);
+    expect(remises.length).toBeGreaterThan(0);
+    for (const r of remises) expect(r.designation).toContain('fondateur');
+    // Les lignes au tarif public sont intactes : le prospect voit les deux.
+    expect(doc.lignes.some((l) => l.montantHtCents === 15_900)).toBe(true);
+  });
+
+  it('une remise par récurrence — jamais un total qui mélange mois, an et ponctuel', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const parRecurrence = new Map<string, number>();
+    for (const l of doc.lignes) {
+      parRecurrence.set(l.recurrence, (parRecurrence.get(l.recurrence) ?? 0) + l.montantHtCents);
+    }
+    // Chaque récurrence utilisée est ramenée EXACTEMENT à la moitié.
+    const publie = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW);
+    const publieParRec = new Map<string, number>();
+    for (const l of publie.lignes) {
+      publieParRec.set(l.recurrence, (publieParRec.get(l.recurrence) ?? 0) + l.montantHtCents);
+    }
+    for (const [rec, total] of publieParRec) {
+      expect(parRecurrence.get(rec)).toBe(Math.round(total / 2));
+    }
+  });
+
+  it('l’annonce la condition : douze mois, puis le tarif public', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const texte = doc.conditions.join(' ');
+    expect(texte).toMatch(/fondateur/i);
+    expect(texte).toMatch(/douze mois|12 mois/i);
+  });
+
+  it('sans place fondateur, rien ne change — aucune ligne négative', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW);
+    expect(doc.lignes.every((l) => l.montantHtCents > 0)).toBe(true);
+    expect(doc.conditions.join(' ')).not.toMatch(/fondateur/i);
+  });
+});

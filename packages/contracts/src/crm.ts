@@ -103,8 +103,69 @@ export const LEAD_TOUCH_LABELS: Record<LeadTouchType, string> = {
 
 // ─── Places fondateur & MRR ───
 
-/** « 10 places à tarif préférentiel à vie » (Dossier fondateur, roadmap T4). */
+/** Dix places à moitié prix la première année (Dossier fondateur, roadmap T4). */
 export const FOUNDER_SEATS_TOTAL = 10;
+
+/**
+ * L'OFFRE FONDATEUR — moitié prix, douze mois, sur tout le premier contrat.
+ *
+ * Arrêtée le 27/08/2026, en remplacement du « tarif gelé à vie » que le CRM
+ * affichait sans que rien ne l'applique : le drapeau `founderSeat` existait,
+ * la promesse était en barre latérale, et pas une ligne de code ne changeait un
+ * prix. Un client fondateur payait le tarif public.
+ *
+ * La règle, telle qu'elle se dit au restaurateur : « la moitié du prix pendant
+ * un an, sur tout ce qu'on signe aujourd'hui — l'abonnement, le module, et même
+ * le site si vous en prenez un ». Douze mois plus tard, il bascule au tarif
+ * public sans qu'on ait un geste à faire ; ce qu'il ajoute après se paie plein
+ * tarif dès le premier jour.
+ *
+ * Un gel à vie et une remise datée ne sont pas deux formulations du même
+ * cadeau : le premier est une dette perpétuelle qui pèse sur chaque révision de
+ * grille, la seconde s'éteint toute seule.
+ */
+export const FOUNDER_DISCOUNT_RATE = 0.5;
+export const FOUNDER_DISCOUNT_MONTHS = 12;
+
+/**
+ * Le prix fondateur d'un montant public — la moitié, arrondie au centime.
+ *
+ * `Math.round` et non `Math.floor` : aucun prix de la grille n'est impair
+ * aujourd'hui, mais une révision le sera, et une facture ne se règle pas en
+ * demi-centimes.
+ */
+export const prixFondateurCents = (cents: number): number =>
+  Math.round(cents * (1 - FOUNDER_DISCOUNT_RATE));
+
+/**
+ * La fin de la remise : douze mois après la signature, à la seconde près.
+ *
+ * `setUTCMonth` déborde sur le mois suivant quand le jour n'existe pas dans le
+ * mois d'arrivée — un 29 février signerait jusqu'au 1er mars. On replie donc
+ * sur le dernier jour du mois. Une remise qui dure un jour de trop est un
+ * cadeau ; un jour de moins, une réclamation.
+ */
+export function finRemiseFondateur(signeLe: Date): Date {
+  const fin = new Date(signeLe.getTime());
+  const jour = fin.getUTCDate();
+  fin.setUTCMonth(fin.getUTCMonth() + FOUNDER_DISCOUNT_MONTHS);
+  if (fin.getUTCDate() !== jour) fin.setUTCDate(0);
+  return fin;
+}
+
+/**
+ * La remise court-elle encore ? L'absence de date vaut « pas de remise » —
+ * jamais « à vie », qui est précisément le défaut qu'on répare.
+ */
+export function remiseFondateurActive(
+  finLe: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!finLe) return false;
+  const fin = finLe instanceof Date ? finLe : new Date(finLe);
+  if (Number.isNaN(fin.getTime())) return false;
+  return now.getTime() < fin.getTime();
+}
 
 /**
  * LA GRILLE, EN CENTIMES, ET C'EST ICI QU'ELLE FAIT LOI.
@@ -434,6 +495,72 @@ export function proposalCents(
       (p.plan ? PLAN_MRR_CENTS[p.plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
     servicesMonthlyCents: atelier.monthlyCents,
     setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
+  };
+}
+
+/**
+ * Ce qu'un client PAIE chaque mois — le pendant de `proposalCents` côté
+ * client, une fois la proposition devenue contrat.
+ *
+ * Les deux fonctions doivent rendre le même montant récurrent pour la même
+ * offre : ce qui a été devisé est ce qui sera facturé. C'est précisément ce
+ * qui manquait — toute la facturation lisait `tenant.plan` seul, si bien qu'un
+ * client Complet avec le module était facturé 159 € au lieu de 238 €, et qu'un
+ * client sans formule, qui paie pourtant tous les mois ses services, n'était
+ * projeté dans aucune échéance.
+ *
+ * Tolérante aux clients d'avant : `onlineOrdering` absent vaut « non vendu »,
+ * `atelier` nul vaut « aucun service ». Un ancien tenant retombe donc sur sa
+ * formule sans jamais lever.
+ */
+export function abonnementMensuelCents(
+  client: {
+    plan: PlanChoice;
+    onlineOrdering?: boolean | null;
+    /** Le sous-document `atelier` du tenant : les services + `signedAt`. */
+    atelier?: (Partial<LeadServices> & { signedAt?: unknown }) | null;
+    /**
+     * Fin de la remise fondateur, ou `null`. Tant qu'elle court, ce client
+     * paie la moitié — c'est ce montant-là qui doit sortir d'ici, puisque
+     * toute la facturation en dépend. Pour afficher le tarif public à côté
+     * (« 238 € — vous payez 119 € »), rappeler la fonction sans ce champ.
+     */
+    founderUntil?: Date | string | null;
+  },
+  now: Date = new Date(),
+): number {
+  const services: LeadServices = { ...EMPTY_SERVICES, ...(client.atelier ?? {}) };
+  const prix = proposalCents({
+    plan: client.plan,
+    onlineOrdering: client.onlineOrdering === true,
+    services,
+  });
+  // Le logiciel ET les services : c'est le prélèvement du mois, pas une part.
+  const publie = prix.monthlyCents + prix.servicesMonthlyCents;
+  return remiseFondateurActive(client.founderUntil, now) ? prixFondateurCents(publie) : publie;
+}
+
+/**
+ * Le chiffrage d'un fondateur : la moitié de tout, en une passe.
+ *
+ * Volontairement SÉPARÉE de `proposalCents`. La grille dit le tarif public et
+ * doit pouvoir être révisée sans qu'on touche aux remises accordées ; la remise
+ * dit ce que ce client-là paiera. Mêler les deux, c'est perdre la réponse à
+ * « quel était le prix catalogue le jour de la signature ? » — et cette
+ * question se pose au premier litige.
+ *
+ * Rend un objet neuf : le chiffrage public reste intact et les deux peuvent
+ * s'afficher côte à côte sur le devis, ce qui est tout l'intérêt d'une remise.
+ */
+export function chiffrageFondateur(prix: {
+  monthlyCents: number;
+  servicesMonthlyCents: number;
+  setupOnceCents: number;
+}): { monthlyCents: number; servicesMonthlyCents: number; setupOnceCents: number } {
+  return {
+    monthlyCents: prixFondateurCents(prix.monthlyCents),
+    servicesMonthlyCents: prixFondateurCents(prix.servicesMonthlyCents),
+    setupOnceCents: prixFondateurCents(prix.setupOnceCents),
   };
 }
 

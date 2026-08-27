@@ -24,6 +24,7 @@ import {
   nextInvoiceDue,
   planLabel,
   planMrrCents,
+  abonnementMensuelCents,
   shiftMonthKey,
   summarizeOutstanding,
   type BillingHistoryQuery,
@@ -199,8 +200,8 @@ export class BillingService {
       subscription: {
         plan,
         planLabel: planLabel(plan),
-        mrrCents: planMrrCents(plan),
-        mrrLabel: formatEuros(planMrrCents(plan)),
+        mrrCents: mrrOf(tenant, now),
+        mrrLabel: formatEuros(mrrOf(tenant, now)),
         founderSeat: tenant.founderSeat === true,
         accountStatus: status,
         accountStatusLabel: TENANT_ACCOUNT_STATUS_LABELS[status],
@@ -208,7 +209,7 @@ export class BillingService {
         since: iso(tenant.createdAt) ?? now.toISOString(),
         billable,
       },
-      nextDue: nextDueFor(due, plan, billable, now),
+      nextDue: nextDueFor(due, { plan, mrrCents: mrrOf(tenant, now) }, billable, now),
       outstanding,
       invoices,
       generatedAt: now.toISOString(),
@@ -345,7 +346,7 @@ export class BillingService {
     }
 
     const amountCents =
-      body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : planMrrCents(plan));
+      body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : mrrOf(tenant, now));
 
     const raw = await this.writeInvoice({
       tenantId: tenant._id as Types.ObjectId,
@@ -861,7 +862,9 @@ export class BillingService {
     if (arrival.getTime() > now.getTime()) return;
 
     const plan = planOf(tenant);
-    const mrr = planMrrCents(plan);
+    // Même source que la facturation réelle : l'amorce de démonstration doit
+    // montrer les mêmes montants que ceux qu'on prélève, sinon elle ment.
+    const mrr = mrrOf(tenant, now);
     const tenantOid = tenant._id as Types.ObjectId;
     const firstKey = monthKey(arrival);
     const currentKey = monthKey(now);
@@ -940,6 +943,29 @@ const iso = (d: Date | string | null | undefined): string | null =>
 // `null` = client Atelier seul : aucun abonnement logiciel à facturer.
 const planOf = (tenant: RawTenant): BillingPlan | null =>
   (tenant.plan ?? null) as BillingPlan | null;
+
+/**
+ * Ce qu'un client paie chaque mois : formule + module + services mensuels.
+ *
+ * Toute la facturation lisait `planOf` seul, et sous-facturait donc tout
+ * client ayant acheté autre chose qu'une formule. `.lean()` ne matérialise pas
+ * les défauts Mongoose : sur un tenant d'avant ces champs, `onlineOrdering`
+ * arrive `undefined` et `atelier` absent — `abonnementMensuelCents` les traite
+ * comme « non vendu », donc l'ancien parc retombe sur sa formule sans lever.
+ */
+const mrrOf = (tenant: RawTenant, now: Date = new Date()): number =>
+  abonnementMensuelCents(
+    {
+      plan: planOf(tenant),
+      onlineOrdering: (tenant as { onlineOrdering?: boolean }).onlineOrdering === true,
+      atelier: (tenant as { atelier?: Record<string, unknown> | null }).atelier ?? null,
+      // La remise fondateur s'applique ici et nulle part ailleurs : c'est ce
+      // montant qui devient le MRR de la fiche, la facture par défaut et la
+      // projection d'échéance. Elle s'éteint d'elle-même au terme.
+      founderUntil: (tenant as { founderUntil?: Date | null }).founderUntil ?? null,
+    },
+    now,
+  );
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

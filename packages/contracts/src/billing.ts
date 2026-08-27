@@ -1080,10 +1080,18 @@ export function invoiceView(raw: StoredInvoice, now: Date | string = new Date())
  */
 export function nextInvoiceDue(
   due: readonly CrmInvoice[],
-  plan: BillingPlan | null,
+  /**
+   * L'offre du client, pas seulement sa formule. Le second champ est le
+   * montant récurrent RÉEL — formule + module + services mensuels — calculé
+   * par `abonnementMensuelCents`. Un client sans formule mais avec des
+   * services en a un, et il doit être projeté comme les autres : c'est
+   * exactement ce que l'ancienne signature rendait impossible.
+   */
+  offre: { plan: BillingPlan | null; mrrCents: number },
   billable: boolean,
   now: Date = new Date(),
 ): CrmNextDue | null {
+  const { plan } = offre;
   if (!billable) return null;
 
   // Un AVOIR peut traîner dans une liste de pièces « dues » (son statut stocké
@@ -1105,13 +1113,14 @@ export function nextInvoiceDue(
     };
   }
 
-  // Sans formule (client Atelier seul), aucun abonnement à projeter : ses
-  // mensuels sans engagement s'émettent à la main — annoncer « 0 € le 1er »
-  // serait une promesse vide.
-  if (!plan) return null;
+  // Rien de récurrent — ni formule, ni module, ni service mensuel : annoncer
+  // « 0 € le 1er » serait une promesse vide. Mais un client SANS formule qui
+  // paie sa présence internet tous les mois en a bien une, et il n'apparaissait
+  // dans aucune file de relance.
+  if (offre.mrrCents <= 0) return null;
 
   const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
-  const amountCents = planMrrCents(plan);
+  const amountCents = offre.mrrCents;
   // Échéance THÉORIQUE : la pièce n'existe pas encore, donc aucun taux n'y est
   // figé. Elle est projetée au régime COURANT — c'est celui sous lequel elle
   // sera émise. Les tarifs de `PLAN_MRR_CENTS` sont hors taxes (cf.

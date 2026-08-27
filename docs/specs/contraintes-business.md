@@ -253,7 +253,7 @@ Ces comportements sont promis mot pour mot aux gérants — ils sont donc contra
 - **PIN oublié** (FAQ #14) : « Back-office → Équipe → l'employé → Réinitialiser le PIN. Lui seul le re-choisit à sa prochaine prise de poste. » → reset ne révèle jamais le PIN ; re-choix à la prochaine connexion.
 - **Journal d'audit** (FAQ #15) : « Back-office → Journal : chaque action sensible est signée par le PIN de celui qui l'a faite, avec l'heure. » (annulations, remises au minimum).
 - **Mode formation** (FAQ #16) : « La caisse a un mode entraînement (Réglages → Mode formation) : vraies manipulations, fausses commandes, rien ne part en cuisine ni dans le CA. »
-- **Abonnement & factures** (FAQ #17) : « Back-office → Abonnement : toutes les factures en PDF, le détail de votre formule, et votre statut fondateur (tarif gelé). Le prélèvement est le même chaque mois. »
+- **Abonnement & factures** (FAQ #17) : « Back-office → Abonnement : toutes les factures en PDF, le détail de votre formule, et votre statut fondateur (moitié prix la première année, avec sa date de fin). Le prélèvement est le même chaque mois. »
 - **Export / réversibilité** (FAQ #18) : « Back-office → Exporter (menu, historique des commandes, clients) en CSV standard. Sans engagement veut dire sans otage. »
 - **Confidentialité des données** (FAQ #19) : « Vous et les comptes que vous créez. Nous, on voit des données techniques et des agrégats anonymes pour améliorer le produit — jamais votre détail sans votre accord. C'est contractuel. » → séparation stricte : données tenant vs télémétrie/agrégats anonymes côté SM.
 
@@ -325,7 +325,7 @@ Logique commerciale (texte exact) : « chaque pilier vend les deux autres. Le re
 - Le MRR de référence utilisé dans les simulations est **139 €/mois** (ligne « SaaS seul (référence) » du tableau d'impact).
 - Une formule nommée « **Complet** » existe (le service A6 est « inclus dans l'offre Complet »). Le détail des formules SaaS individuelles (noms, paliers exacts entre 89 et 189 €) n'est pas dans ces 4 fichiers : **à définir** (cf. site vitrine / proposition commerciale).
 - **Frais d'installation : 290 €**, justifiés par l'onboarding IA (« Inclus dans les frais d'installation : c'est lui qui justifie les 290 €. »). Cohérent avec le flux CRM « Devis : mise en place + abonnement » et l'architecture « facturation SaaS (mise en place + abonnement) ».
-- **Statut fondateur** : « tarif gelé » (FAQ #17), « compteur fondateur » au CRM (roadmap M9), « les 10 places fondateur » (T4). → le modèle d'abonnement doit porter un flag `fondateur` avec gel tarifaire.
+- **Statut fondateur** : **moitié prix pendant douze mois** sur tout le premier contrat — décision du 27/08/2026, en remplacement du « tarif gelé à vie » qui n'avait jamais été implémenté et qui créait une dette perpétuelle sur chaque révision de grille. → le tenant porte `founderSeat` (le droit) ET `founderUntil` (le terme) : sans date de fin, il n'y a pas de remise.
 - Sans engagement (FAQ #18 : « Sans engagement veut dire sans otage »), prélèvement mensuel constant (FAQ #17), facturation automatisée **Stripe Billing** (roadmap M9), factures PDF téléchargeables.
 
 ### 6.3 Pilier 2 — Studio IA : catalogue exact des services
@@ -427,7 +427,7 @@ Entités strictement dérivées des sources (champs non cités = **à définir**
 Subscription (par tenant)
 ├─ plan_saas: { fourchette: 89–189 €/mois, formule: "Complet" | à définir, mrr }
 ├─ frais_installation: 290 € (one-shot, inclut onboarding IA)
-├─ fondateur: { actif: bool, tarif_gelé: bool, place_n°: 1–10 }
+├─ fondateur: { actif: bool, remise_50_jusquau: date, place_n°: 1–10 }
 ├─ options_studio_recurrentes: [ {code: "A4", 19 €/mois}, {code: "A5", 29 €/mois} ]
 ├─ services_studio_oneshot: [ A1: 690–1 490 €, A2: 990–2 490 €, A3: 290 € (ou inclus), photos_IA_pro: 399 € ]
 ├─ sm_boost: { plan: "Essentiel"(99 €)| "Pro"(149 €)| "Premium"(199 €), marques_gérées: 1|2|3, sans_engagement: true }
@@ -635,7 +635,7 @@ Chaque champ ci-dessous est justifié par une citation des sources (§2, §4, §
 
 **`stats`** — M7 : CA jour/semaine, top ventes, heures de pointe, digest hebdo (SMS/email chaque lundi — A10) ; mise à jour à la « Remise » (flux 3) ; suivi live CA du jour (flux 4)
 
-**`abonnements`** — cf. schéma §6.8 + factures PDF, statut fondateur (tarif gelé), attestation loi anti-fraude téléchargeable
+**`abonnements`** — cf. schéma §6.8 + factures PDF, statut fondateur (moitié prix la première année), attestation loi anti-fraude téléchargeable
 
 **`crm` (interne SM)** — M9 + flux 5 : leads (source : site / démarchage / bouche-à-oreille), démos, devis (mise en place + abonnement), onboarding (menu importé, équipe créée, matériel, formation, mise en ligne), statut actif, relances tracées, compteur fondateur
 

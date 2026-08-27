@@ -15,6 +15,7 @@ import {
   nextInvoiceDue,
   planLabel,
   planMrrCents,
+  abonnementMensuelCents,
   summarizeOutstanding,
   type BillingHistoryQuery,
   type BillingPlan,
@@ -112,7 +113,20 @@ export class MyBillingService {
     const plan = planOf(tenant);
     const status = accountStatusOf(tenant);
     const billable = status === 'active' || status === 'suspended';
-    const mrrCents = planMrrCents(plan);
+    // L'offre ENTIÈRE, pas la formule seule : c'est le montant que le
+    // restaurateur voit sur son écran « Abonnement », et il doit être celui
+    // qu'on lui prélève. Il lisait 159 € là où on facturait 238 €.
+    const mrrCents = abonnementMensuelCents(
+      {
+        plan,
+        onlineOrdering: (tenant as { onlineOrdering?: boolean }).onlineOrdering === true,
+        atelier: (tenant as { atelier?: Record<string, unknown> | null }).atelier ?? null,
+        // Le restaurateur fondateur doit lire ce qu'on lui prélève, pas le
+        // tarif public : c'est le montant de son prélèvement du mois.
+        founderUntil: (tenant as { founderUntil?: Date | null }).founderUntil ?? null,
+      },
+      now,
+    );
 
     return {
       tenant: { id: String(tenant._id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? '') },
@@ -128,7 +142,7 @@ export class MyBillingService {
         since: iso(tenant.createdAt) ?? now.toISOString(),
         billable,
       },
-      nextDue: nextInvoiceDue(due, plan, billable, now),
+      nextDue: nextInvoiceDue(due, { plan, mrrCents }, billable, now),
       outstanding: summarizeOutstanding(due, now),
       invoices,
       // Les manques ne dépendent que de l'émetteur et du client — jamais du

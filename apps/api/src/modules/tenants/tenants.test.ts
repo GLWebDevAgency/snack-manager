@@ -38,7 +38,11 @@ describe('les réglages de service', () => {
     // Zéro serait un objectif atteint dès l'ouverture, et le tableau de bord
     // afficherait 100 % avant la première commande. L'absence de valeur laisse
     // le front appliquer son propre défaut.
+    //
+    // On lit `options.default` et non `defaultValue` : le second n'est pas
+    // exposé par les types de Mongoose, et un test qui ne compile pas est un
+    // test qui finit par être supprimé.
     const chemin = TenantSchema.path('settings.dailyGoalCents');
-    expect(chemin.defaultValue).toBeUndefined();
+    expect(chemin.options.default).toBeUndefined();
   });
 });

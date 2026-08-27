@@ -8,6 +8,8 @@ import {
   INVOICE_STATUSES,
   NO_OUTSTANDING,
   PLAN_MRR_CENTS,
+  MODULE_ORDERING_CENTS,
+  SOCIAL_CADENCE_CENTS,
   billingPeriod,
   effectiveInvoiceStatus,
   formatEuros,
@@ -1057,6 +1059,96 @@ describe('Facturation', () => {
       const fiche = await billing.tenantBilling(SM, VOISIN, TOUT, LE_19_AOUT);
       expect(fiche.subscription.billable).toBe(false);
       expect(fiche.nextDue).toBeNull();
+    });
+
+    /**
+     * L'OFFRE COMPLÈTE, PAS SEULEMENT LA FORMULE.
+     *
+     * Toute la facturation lisait `tenant.plan` seul. Un client Complet avec
+     * le module de commande en ligne était donc facturé 159 € au lieu de
+     * 238 €, et un client sans formule — qui paie pourtant ses services tous
+     * les mois — n'apparaissait dans aucune projection d'échéance.
+     *
+     * `abonnementMensuelCents` est la source unique : ce qui a été devisé est
+     * ce qui est facturé.
+     */
+    it('le MRR de la fiche compte le module de commande en ligne', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.onlineOrdering = true;
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR + MODULE_ORDERING_CENTS);
+    });
+
+    it('le MRR de la fiche compte les services mensuels de l’Atelier', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.atelier = { presenceInternet: true, reseauxSociaux: 'hebdo', signedAt: new Date() };
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR + 6_900 + SOCIAL_CADENCE_CENTS.hebdo);
+    });
+
+    it('la facture d’abonnement sans montant saisi porte l’offre entière', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.onlineOrdering = true;
+      const emise = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      expect(emise.amountCents).toBe(MRR + MODULE_ORDERING_CENTS);
+    });
+
+    it('un client SANS formule a bien une prochaine échéance : ses services se paient', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.plan = null;
+      tenants.rows[0]!.atelier = { presenceInternet: true, signedAt: new Date() };
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.nextDue).not.toBeNull();
+      expect(fiche.nextDue?.amountCents).toBe(6_900);
+    });
+
+    it('un client qui n’a vraiment rien de récurrent n’a pas d’échéance', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.plan = null;
+      tenants.rows[0]!.atelier = null;
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.nextDue).toBeNull();
+    });
+
+    /**
+     * LA REMISE FONDATEUR DESCEND JUSQU'À LA FACTURE.
+     *
+     * Le drapeau `founderSeat` ne changeait aucun prix : le CRM promettait
+     * « tarif gelé à vie » et facturait le tarif public. La règle du 27/08/2026
+     * — moitié prix pendant douze mois — doit se voir partout où un montant
+     * sort : le MRR de la fiche, la facture émise, la prochaine échéance.
+     */
+    it('un fondateur voit son MRR à moitié prix', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR / 2);
+    });
+
+    it('sa facture d’abonnement porte le montant remisé, pas le tarif public', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      const emise = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      expect(emise.amountCents).toBe(MRR / 2);
+    });
+
+    it('la remise expirée, il repasse au tarif public sans qu’on fasse un geste', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      // Terme dépassé : LE_19_AOUT est en 2026, la remise s'est éteinte en 2025.
+      tenants.rows[0]!.founderUntil = new Date('2025-08-19T00:00:00.000Z');
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR);
+    });
+
+    it('la place fondateur sans date ne remise rien — un booléen n’expire pas', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderUntil = null;
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(MRR);
     });
 
     it('continue de facturer un compte suspendu', async () => {

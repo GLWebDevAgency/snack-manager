@@ -5,8 +5,13 @@
  *
  * `docs/specs/contraintes-business.md` §5 (FAQ #17) répond au restaurateur qui
  * demande à voir ses factures : « Back-office → Abonnement : toutes les
- * factures en PDF, le détail de votre formule, et votre statut fondateur
- * (tarif gelé) ». La page n'existait pas. Elle existe.
+ * factures en PDF, le détail de votre formule, et votre statut fondateur ».
+ * La page n'existait pas. Elle existe.
+ *
+ * Le statut fondateur valait « tarif gelé à vie » jusqu'au 27/08/2026 ; il vaut
+ * désormais MOITIÉ PRIX PENDANT DOUZE MOIS, sur tout le premier contrat. Le
+ * restaurateur doit lire la date de fin, pas seulement la mention : une remise
+ * qui s'arrête sans prévenir est une réclamation garantie.
  *
  * ─── SOBRE, PARCE QU'ON N'Y VIENT PAS SOUVENT ───
  *
@@ -217,8 +222,11 @@ export default function AbonnementPage() {
               {sub.planLabel}
             </span>
             {sub.founderSeat && (
-              <Pill className="border-gold/40 bg-gold/15 text-gold" title="Tarif gelé">
-                Fondateur
+              <Pill
+                className="border-gold/40 bg-gold/15 text-gold"
+                title="Moitié prix sur tout votre contrat, pendant douze mois"
+              >
+                Fondateur — moitié prix
               </Pill>
             )}
           </div>

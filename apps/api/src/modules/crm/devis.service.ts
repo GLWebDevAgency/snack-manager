@@ -12,6 +12,7 @@ import {
   MODULE_ORDERING_CENTS,
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
+  prixFondateurCents,
   PLAN_MRR_CENTS,
   SM_VAT_RATE_PERCENT,
   SOCIAL_CADENCE_CENTS,
@@ -41,12 +42,50 @@ import { TRIAL_DAYS } from './signals.service';
 const VALIDITE_JOURS = 30;
 const DAY_MS = 86_400_000;
 
+/**
+ * Les lignes de remise fondateur — une PAR RÉCURRENCE, jamais une globale.
+ *
+ * Mélanger un mensuel, un annuel et un ponctuel dans un même total produirait
+ * un chiffre que personne ne peut vérifier, ni le prospect ni nous. Chaque
+ * récurrence est donc ramenée exactement à sa moitié, et l'écart s'imprime en
+ * négatif sous les lignes qu'il remise.
+ *
+ * L'arrondi se fait sur le TOTAL de la récurrence et non ligne à ligne : deux
+ * arrondis successifs peuvent décaler d'un centime, et un devis dont le total
+ * ne tombe pas juste se fait recompter par le comptable du prospect.
+ */
+function remisesFondateur(lignes: readonly DevisLigne[], actif: boolean): DevisLigne[] {
+  if (!actif) return [];
+  const totaux = new Map<string, number>();
+  for (const l of lignes) {
+    totaux.set(l.recurrence, (totaux.get(l.recurrence) ?? 0) + l.montantHtCents);
+  }
+  const remises: DevisLigne[] = [];
+  for (const [recurrence, total] of totaux) {
+    if (total <= 0) continue;
+    const apres = prixFondateurCents(total);
+    remises.push({
+      designation: 'Remise fondateur — moitié prix pendant douze mois',
+      recurrence,
+      montantHtCents: apres - total,
+    });
+  }
+  return remises;
+}
+
 /** Composition pure — testable sans Nest ni Mongo. */
 export function buildDevisDocument(
   lead: Pick<Lead, 'restaurantName' | 'contact'> & { _id: unknown },
   proposal: LeadProposal,
   issuer: InvoiceParty,
   now: Date,
+  /**
+   * La place fondateur réservée sur le lead. Le devis imprime alors le tarif
+   * PUBLIC puis la remise en négatif : un document qui afficherait directement
+   * la moitié ne dirait rien au prospect de ce qu'il gagne, et c'est là que
+   * l'offre se vend.
+   */
+  options: { founderSeat?: boolean } = {},
 ): DevisDocument {
   // Le LOGICIEL d'abord — s'il est vendu. Depuis l'Atelier, une proposition
   // peut ne porter AUCUNE formule : le devis n'affiche alors que les services
@@ -135,10 +174,15 @@ export function buildDevisDocument(
     contactLine: [lead.contact?.name, lead.contact?.phone, lead.contact?.email]
       .filter(Boolean)
       .join(' · '),
-    lignes,
+    lignes: [...lignes, ...remisesFondateur(lignes, options.founderSeat === true)],
     vatRatePercent: SM_VAT_RATE_PERCENT,
     conditions: [
       `Devis valable ${VALIDITE_JOURS} jours à compter de son émission. Montants exprimés hors taxes.`,
+      ...(options.founderSeat === true
+        ? [
+            'Offre fondateur : moitié prix sur l’ensemble de ce devis pendant douze mois à compter de la signature — abonnement, module et prestations comprises. Au terme, le tarif public s’applique sans autre formalité.',
+          ]
+        : []),
       // L'essai ne parle que du LOGICIEL : sur un devis services seuls, la
       // ligne promettrait un essai d'un produit qui n'y figure pas.
       ...(plan || proposal.onlineOrdering
@@ -193,6 +237,9 @@ export class DevisService {
       },
       this.issuer.issuer(),
       now,
+      // La place réservée sur le lead décide de la remise imprimée : c'est le
+      // même drapeau qui deviendra `founderSeat` sur le tenant à la signature.
+      { founderSeat: lead.founderSeatReserved === true },
     );
     return { buffer: renderDevisPdf(doc), number: doc.number };
   }
