@@ -62,22 +62,15 @@ export const MOVEMENT_META: Record<
 // ─── Parsing / formatage fr-FR ───
 
 /** « 1,5 » / « 1.5 » → 1.5 ; vide ou invalide → null. Jamais négatif. */
-export function parseDecimal(raw: string): number | null {
-  const s = raw.trim().replace(/\s/g, "").replace(",", ".");
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-}
-
-/** « 12,50 » (euros saisis) → 1250 centimes ; invalide → null. */
-export function parseEurosToCents(raw: string): number | null {
-  const n = parseDecimal(raw);
-  return n === null ? null : Math.round(n * 100);
-}
-
-/** 1250 centimes → « 12,50 » (pré-remplissage d'un champ euros). */
-export const centsToInput = (cents: number) =>
-  (cents / 100).toFixed(2).replace(".", ",");
+// Les conversions de montants vivent dans `montants.ts` — pur, sans import,
+// donc testable. Réexportées ici pour que les appelants n'aient pas à savoir
+// où elles habitent.
+export {
+  centsToInput,
+  parseDecimal,
+  parseEurosToCents,
+  supplementDepuisSaisie,
+} from "./montants";
 
 /** Quantité en unité de base, fr-FR, 3 décimales max. */
 export const fmtQty = (n: number) =>

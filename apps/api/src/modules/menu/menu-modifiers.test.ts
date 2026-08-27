@@ -143,3 +143,144 @@ describe('contexte supply coupé', () => {
     expect(produit.supplements).toEqual([]);
   });
 });
+
+/**
+ * LE GROUPE RÉSERVÉ NE DOIT JAMAIS DISPARAÎTRE PAR UN ALLER-RETOUR D'ÉCRAN.
+ *
+ * `GET /menu` retire `supplements` de `optionGroups` — il n'existe que pour
+ * faire foi sur le prix côté serveur, et la carte l'expose déjà dans son propre
+ * bloc. Un éditeur qui lit la carte puis renvoie `optionGroups` tel quel
+ * SUPPRIME donc ce groupe du document, c'est-à-dire la seule source du prix
+ * des suppléments à la création de commande.
+ *
+ * Ce n'est pas une hypothèse : `packages/db/src/repair-options.ts` documente
+ * l'incident. « L'ajout du groupe suppléments a remplacé `optionGroups` au lieu
+ * de le compléter : 32 produits ont perdu leur choix de pain et leurs sauces,
+ * 19 se sont retrouvés sans aucune option. La caisse refusait alors toute
+ * commande de sandwich avec un “Option inconnue”. »
+ *
+ * Le service réinjecte donc le groupe réservé quand la mise à jour ne le porte
+ * pas. La garantie vit ICI, côté serveur, et non dans la discipline de chaque
+ * écran qui écrira un jour un produit.
+ */
+describe('le groupe réservé survit à une mise à jour venue de l’écran', () => {
+  const AVEC_SUPPLEMENTS = [
+    { key: 'pain', name: 'Pain ou galette', type: 'single', min: 1, max: 1, choices: [{ key: 'pain', name: 'Pain', priceDelta: 0 }] },
+    { key: SUPPLEMENT_GROUP_KEY, name: 'Suppléments', type: 'multi', min: 0, choices: [{ key: 'cheddar', name: 'Cheddar', priceDelta: 100 }] },
+  ];
+
+  /** Un service dont on peut inspecter le `$set` réellement envoyé à Mongo. */
+  function serviceEspion(existant: unknown[]) {
+    const vus: Record<string, unknown>[] = [];
+    const products = {
+      findOne: () => ({ lean: async () => ({ optionGroups: existant }) }),
+      findOneAndUpdate: (_f: unknown, u: { $set: Record<string, unknown> }) => {
+        vus.push(u.$set);
+        return { lean: async () => ({ _id: PRODUIT, name: 'Sandwich' }), then: undefined } as never;
+      },
+    };
+    // `findOneAndUpdate` doit rendre un document : on le simule en promesse.
+    const productsAvecRetour = {
+      ...products,
+      findOneAndUpdate: async (_f: unknown, u: { $set: Record<string, unknown> }) => {
+        vus.push(u.$set);
+        return { _id: PRODUIT, name: 'Sandwich', price: 750 };
+      },
+    };
+    const service = new MenuService(
+      { find: () => ({ sort: () => ({ lean: async () => [] }) }) } as never,
+      productsAvecRetour as never,
+      { publish: () => {} } as never,
+      new SupplyService(supplyDb() as never, productsAvecRetour as never, { publish: () => {} } as never),
+      { log: async () => {} } as never,
+    );
+    return { service, vus };
+  }
+
+  it('réinjecte le groupe réservé quand l’écran ne le renvoie pas', async () => {
+    const { service, vus } = serviceEspion(AVEC_SUPPLEMENTS);
+    await service.updateProduct(TENANT, PRODUIT, {
+      optionGroups: [
+        { key: 'sauces', name: 'Sauces', type: 'multi', min: 0, max: 2, choices: [{ key: 'ketchup', name: 'Ketchup', priceDelta: 0 }] },
+      ],
+    } as never);
+    const groupes = (vus[0]?.optionGroups ?? []) as { key: string }[];
+    expect(groupes.map((g) => g.key)).toContain(SUPPLEMENT_GROUP_KEY);
+    expect(groupes.map((g) => g.key)).toContain('sauces');
+  });
+
+  it('ne touche à rien quand la mise à jour ne parle pas d’options', async () => {
+    const { service, vus } = serviceEspion(AVEC_SUPPLEMENTS);
+    await service.updateProduct(TENANT, PRODUIT, { name: 'Sandwich Merguez' } as never);
+    expect(vus[0]).not.toHaveProperty('optionGroups');
+  });
+
+  it('n’invente pas de groupe réservé sur un produit qui n’en a pas', async () => {
+    const { service, vus } = serviceEspion([
+      { key: 'pain', name: 'Pain', type: 'single', min: 1, max: 1, choices: [{ key: 'pain', name: 'Pain', priceDelta: 0 }] },
+    ]);
+    await service.updateProduct(TENANT, PRODUIT, { optionGroups: [] } as never);
+    expect((vus[0]?.optionGroups ?? []) as unknown[]).toHaveLength(0);
+  });
+});
+
+/**
+ * LE JOURNAL DOIT SUIVRE LE PRIX RÉELLEMENT VENDU.
+ *
+ * L'obligation de traçabilité porte sur le prix de vente, pas sur le champ qui
+ * le porte. Un produit à variantes a un `price` mort — `orders.service.ts`
+ * exige une variante dès qu'il y en a — et son prix réel vit dans
+ * `variants[].price`. Journaliser l'un sans l'autre laisse un trou :
+ * « Compose ton Tacos M » peut passer de 8,90 € à 12,90 € sans qu'une ligne
+ * l'écrive, tandis qu'un produit simple à 2 € est tracé.
+ */
+describe('journal des prix — les variantes aussi', () => {
+  function serviceJournal(avant: unknown) {
+    const lignes: Record<string, unknown>[] = [];
+    const products = {
+      findOne: () => ({ lean: async () => avant }),
+      findOneAndUpdate: async () => ({ _id: PRODUIT, name: 'Compose ton Tacos', price: 0 }),
+    };
+    const service = new MenuService(
+      { find: () => ({ sort: () => ({ lean: async () => [] }) }) } as never,
+      products as never,
+      { publish: () => {} } as never,
+      new SupplyService(supplyDb() as never, products as never, { publish: () => {} } as never),
+      { log: async (l: Record<string, unknown>) => void lignes.push(l) } as never,
+    );
+    return { service, lignes };
+  }
+
+  it('trace un prix de variante qui change, avec l’avant et l’après', async () => {
+    const { service, lignes } = serviceJournal({
+      price: 0,
+      variants: [{ key: 'M', name: 'M', price: 890 }, { key: 'L', name: 'L', price: 990 }],
+    });
+    await service.updateProduct(TENANT, PRODUIT, {
+      variants: [{ key: 'M', name: 'M', price: 1_290 }, { key: 'L', name: 'L', price: 990 }],
+    } as never);
+    const ligne = lignes.find((l) => l.action === 'price.change');
+    expect(ligne, 'un changement de prix de variante doit être journalisé').toBeDefined();
+    expect(ligne?.meta).toMatchObject({ variantKey: 'M', fromCents: 890, toCents: 1_290 });
+  });
+
+  it('ne trace rien quand les variantes changent sans que le prix bouge', async () => {
+    const { service, lignes } = serviceJournal({
+      price: 0,
+      variants: [{ key: 'M', name: 'M', price: 890 }],
+    });
+    await service.updateProduct(TENANT, PRODUIT, {
+      variants: [{ key: 'M', name: 'Moyen', price: 890 }],
+    } as never);
+    expect(lignes.filter((l) => l.action === 'price.change')).toHaveLength(0);
+  });
+
+  it('trace une variante ajoutée — c’est un prix de vente qui apparaît', async () => {
+    const { service, lignes } = serviceJournal({ price: 0, variants: [{ key: 'M', name: 'M', price: 890 }] });
+    await service.updateProduct(TENANT, PRODUIT, {
+      variants: [{ key: 'M', name: 'M', price: 890 }, { key: 'XL', name: 'XL', price: 1_250 }],
+    } as never);
+    const ligne = lignes.find((l) => (l.meta as { variantKey?: string })?.variantKey === 'XL');
+    expect(ligne?.meta).toMatchObject({ variantKey: 'XL', fromCents: null, toCents: 1_250 });
+  });
+});

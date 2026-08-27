@@ -87,6 +87,9 @@ const normProduct = (p: RawProduct, categoryId: string | null): Product => ({
   description: p.description ?? "",
   price: typeof p.price === "number" ? p.price : 0,
   variants: p.variants ?? [],
+  // Conservés : ils étaient jetés ici, ce qui rendait les groupes d'options
+  // invisibles du back-office quoi que l'API en dise.
+  optionGroups: p.optionGroups ?? [],
   tags: p.tags ?? [],
   isNew: p.isNew === true,
   outOfStock: p.outOfStock === true,
@@ -670,7 +673,7 @@ export default function MenuPage() {
                           aria-label={`Prix de ${p.name}`}
                           title={
                             hasVariants
-                              ? "Prix porté par les variantes — édite-les avec le bouton Modifier"
+                              ? "Prix porté par les tailles — bouton Modifier, section « Tailles et formats »"
                               : undefined
                           }
                           className={cx(
