@@ -558,9 +558,28 @@ export const OrderSchema = new Schema(
       type: new Schema(
         {
           subtotal: { type: Number, required: true },
+          /**
+           * La remise portée par le ticket — geste commercial OU promotion.
+           *
+           * Les deux ne sont pas la même chose et le champ le dit : une remise
+           * décidée au comptoir nomme l'ÉQUIPIER qui l'a accordée, PIN vérifié,
+           * parce que c'est ce que NF525 veut pouvoir retrouver. Une promotion
+           * applique une règle publiée par le restaurateur, que personne au
+           * comptoir n'a décidée — la nommer d'un équipier ferait porter à
+           * quelqu'un une décision qu'il n'a pas prise.
+           *
+           * Exactement l'un des deux est renseigné. `promotionId` est arrivé
+           * avec l'application des promotions, jusque-là écrites en base et
+           * jamais appliquées.
+           */
           discount: {
             type: new Schema(
-              { amount: Number, reason: String, staffId: Schema.Types.ObjectId },
+              {
+                amount: Number,
+                reason: String,
+                staffId: { type: Schema.Types.ObjectId, default: null },
+                promotionId: { type: Schema.Types.ObjectId, ref: 'Promotion', default: null },
+              },
               { _id: false },
             ),
             default: null,
@@ -979,6 +998,29 @@ export const PromotionSchema = new Schema(
     endsAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
     usageCount: { type: Number, default: 0 },
+    /**
+     * Les trois bornes qui manquaient — et sans lesquelles une promotion se
+     * découvre sur la marge du mois plutôt que sur un écran.
+     *
+     * `minSubtotalCents` : sans lui, « 5 € offerts » s'applique à une commande
+     * de 5,50 €. `maxDiscountCents` : sans lui, « −50 % » sur une commande de
+     * groupe à 200 € coûte cent euros. `maxUsage` : sans lui, un code qui fuit
+     * sur les réseaux ne s'arrête jamais.
+     *
+     * `0` vaut « pas de borne » dans les trois cas, et jamais « borne à zéro » —
+     * c'est le défaut, et il doit se lire comme l'absence de condition.
+     */
+    minSubtotalCents: { type: Number, default: 0 },
+    maxDiscountCents: { type: Number, default: 0 },
+    maxUsage: { type: Number, default: 0 },
+    /**
+     * Le produit offert — `offered_item` seulement.
+     *
+     * La nature figurait à l'énuméré depuis l'origine et était INAPPLICABLE :
+     * le modèle ne disait pas quel produit offrir. Le formulaire la proposait
+     * pourtant, et la promotion créée n'aurait rien pu faire.
+     */
+    offeredProductId: { type: Schema.Types.ObjectId, ref: 'Product', default: null },
   },
   { timestamps: true },
 );

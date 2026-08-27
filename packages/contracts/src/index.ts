@@ -266,6 +266,19 @@ export const CreateOrderSchema = z.object({
     })
     .optional(),
   note: z.string().max(500).optional(),
+  /**
+   * Le code promo saisi par le client, ou absent.
+   *
+   * Il manquait au corps de commande, et c'est la moitié du défaut : le
+   * back-office savait créer un code, l'activer et l'imprimer sur des flyers —
+   * aucune surface ne savait le RECEVOIR. Le restaurateur ne l'apprenait pas
+   * d'une erreur, il l'apprenait d'un client au téléphone.
+   *
+   * Le montant, lui, n'est jamais transmis : comme les prix, il est résolu par
+   * le serveur contre la promotion en base. Un client qui enverrait sa propre
+   * remise n'obtient rien.
+   */
+  promoCode: z.string().trim().min(1).max(24).optional(),
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
 

@@ -41,6 +41,10 @@ type Promo = {
   value: number; // percent : % · amount : CENTIMES
   code: string | null;
   channels: PromoChannel[];
+  minSubtotalCents: number;
+  maxDiscountCents: number;
+  maxUsage: number;
+  offeredProductId: string | null;
   startsAt: string | null;
   endsAt: string | null;
   active: boolean;
@@ -97,6 +101,14 @@ type Draft = {
   valueStr: string; // % entier ou euros « 3,50 » selon kind
   code: string;
   channels: PromoChannel[];
+  /** Panier minimum, en euros saisis (« 25 »). Vide = aucune condition. */
+  minStr: string;
+  /** Plafond de la remise, en euros saisis. Vide = non plafonnée. */
+  maxStr: string;
+  /** Nombre d'utilisations. Vide = illimité. */
+  usageStr: string;
+  /** Le produit offert — `offered_item` seulement. */
+  offeredProductId: string;
   startsAt: string; // yyyy-mm-dd ou ''
   endsAt: string;
 };
@@ -108,6 +120,10 @@ const emptyDraft = (): Draft => ({
   valueStr: "",
   code: "",
   channels: ["online", "pos"],
+  minStr: "",
+  maxStr: "",
+  usageStr: "",
+  offeredProductId: "",
   startsAt: "",
   endsAt: "",
 });
@@ -115,6 +131,15 @@ const emptyDraft = (): Draft => ({
 export default function PromosPage() {
   const toast = useToast();
   const [promos, setPromos] = useState<Promo[] | null>(null);
+  /**
+   * La carte, uniquement pour désigner le produit offert.
+   *
+   * Sans elle, « produit offert » restait inapplicable : le formulaire
+   * proposait la nature, et la promotion créée ne disait jamais QUOI offrir.
+   * Chargée en parallèle et non bloquante — une carte indisponible n'empêche
+   * pas de créer un pourcentage.
+   */
+  const [carte, setCarte] = useState<{ _id: string; name: string; price: number }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
@@ -135,6 +160,30 @@ export default function PromosPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : sans cet appel `promos` reste null, aucune promotion n'est affichée et les bascules optimistes de `toggleActive` retombent sur `?? null`, donc sans effet visible.
     void load();
   }, [load]);
+
+  useEffect(() => {
+    // Best-effort ASSUMÉ : la carte ne sert qu'au choix du produit offert. Une
+    // panne de `/menu` doit laisser créer un pourcentage, pas bloquer l'écran.
+    void (async () => {
+      try {
+        const menu = await api.get<{
+          categories?: { products?: { _id: string; name?: string; price?: number }[] }[];
+          uncategorized?: { _id: string; name?: string; price?: number }[];
+        }>("/menu");
+        const tous = [
+          ...(menu.categories ?? []).flatMap((c) => c.products ?? []),
+          ...(menu.uncategorized ?? []),
+        ];
+        setCarte(
+          tous
+            .map((p) => ({ _id: String(p._id), name: p.name ?? "", price: p.price ?? 0 }))
+            .sort((a, b) => a.name.localeCompare(b.name, "fr")),
+        );
+      } catch {
+        /* la carte reste vide : le champ le dit à l'écran */
+      }
+    })();
+  }, []);
 
   // ─── Actions ───
 
@@ -169,6 +218,10 @@ export default function PromosPage() {
             : "",
       code: p.code ?? "",
       channels: p.channels,
+      minStr: p.minSubtotalCents > 0 ? (p.minSubtotalCents / 100).toFixed(2).replace(".", ",") : "",
+      maxStr: p.maxDiscountCents > 0 ? (p.maxDiscountCents / 100).toFixed(2).replace(".", ",") : "",
+      usageStr: p.maxUsage > 0 ? String(p.maxUsage) : "",
+      offeredProductId: p.offeredProductId ?? "",
       startsAt: toDateInput(p.startsAt),
       endsAt: toDateInput(p.endsAt),
     });
@@ -196,6 +249,25 @@ export default function PromosPage() {
       setDraftError("Sélectionnez au moins un canal.");
       return;
     }
+    // « Produit offert » sans produit désigné ne peut RIEN offrir. Le refus
+    // vient ici plutôt qu'au moment de la commande, où il serait découvert par
+    // un client à qui l'offre a été promise.
+    if (draft.kind === "offered_item" && !draft.offeredProductId) {
+      setDraftError("Choisissez le produit offert.");
+      return;
+    }
+    // Vide vaut « pas de borne », jamais « borne à zéro » : un plafond de 0 €
+    // annulerait la promotion en silence.
+    const enCents = (v: string): number => {
+      const net = v.trim().replace(",", ".");
+      if (net === "") return 0;
+      const n = Number(net);
+      return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+    };
+    const entier = (v: string): number => {
+      const n = parseInt(v.trim(), 10);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    };
     setSaving(true);
     setDraftError(null);
     const body = {
@@ -205,6 +277,10 @@ export default function PromosPage() {
       value,
       code: draft.code.trim() ? draft.code.trim().toUpperCase() : null,
       channels: draft.channels,
+      minSubtotalCents: enCents(draft.minStr),
+      maxDiscountCents: enCents(draft.maxStr),
+      maxUsage: entier(draft.usageStr),
+      offeredProductId: draft.kind === "offered_item" ? draft.offeredProductId : null,
       startsAt: draft.startsAt ? new Date(`${draft.startsAt}T00:00:00`).toISOString() : null,
       endsAt: draft.endsAt ? new Date(`${draft.endsAt}T23:59:59`).toISOString() : null,
     };
@@ -335,8 +411,27 @@ export default function PromosPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2.5 max-sm:w-full max-sm:pl-[56px]">
-                    <span className="cf-fig text-[13px] text-mut max-sm:mr-auto">
-                      {p.usageCount.toLocaleString("fr-FR")} utilisés
+                    {/*
+                      Le compteur BOUGE enfin. Il affichait « 0 utilisés » à
+                      vie : rien n'appliquait les promotions, donc rien ne
+                      l'incrémentait. Avec un quota, on montre le reste — c'est
+                      ce que le gérant regarde, pas le cumul.
+                    */}
+                    <span
+                      className={`cf-fig text-[13px] max-sm:mr-auto ${
+                        p.maxUsage > 0 && p.usageCount >= p.maxUsage ? "text-alertt" : "text-mut"
+                      }`}
+                      title={
+                        p.maxUsage > 0
+                          ? `${p.usageCount} sur ${p.maxUsage} utilisations`
+                          : "Utilisations illimitées"
+                      }
+                    >
+                      {p.maxUsage > 0
+                        ? p.usageCount >= p.maxUsage
+                          ? "Épuisée"
+                          : `${(p.maxUsage - p.usageCount).toLocaleString("fr-FR")} restantes`
+                        : `${p.usageCount.toLocaleString("fr-FR")} utilisés`}
                     </span>
                     <Toggle
                       on={p.active}
@@ -462,6 +557,90 @@ export default function PromosPage() {
                         ? "10"
                         : "—"
                   }
+                  className="tabular-nums"
+                />
+              </Field>
+            </div>
+
+            {/*
+              LE PRODUIT OFFERT — sans lui, la nature ne pouvait rien offrir.
+              « Produit offert » figurait à la liste des types depuis l'origine
+              et le modèle ne disait jamais lequel : la promotion créée était
+              inapplicable, sans qu'aucun écran ne le signale.
+            */}
+            {draft.kind === "offered_item" && (
+              <Field
+                label="Produit offert"
+                htmlFor="promo-offered"
+                hint={
+                  carte.length === 0
+                    ? "Carte indisponible — réessayez dans un instant"
+                    : "Offert quand il figure dans la commande"
+                }
+              >
+                <Select
+                  id="promo-offered"
+                  value={draft.offeredProductId}
+                  disabled={carte.length === 0}
+                  onChange={(e) => setDraft({ ...draft, offeredProductId: e.target.value })}
+                >
+                  <option value="">Choisir…</option>
+                  {carte.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name} — {fmtEuro(p.price)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+
+            {/*
+              LES TROIS BORNES — celles qui manquaient, et sans lesquelles une
+              promotion se découvre sur la marge du mois plutôt qu'à l'écran.
+
+              Laisser vide vaut « pas de limite », jamais « limite à zéro » :
+              un plafond de 0 € annulerait la promotion en silence.
+            */}
+            <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1">
+              <Field
+                label="Panier minimum"
+                htmlFor="promo-min"
+                hint="Vide = aucune condition"
+              >
+                <Input
+                  id="promo-min"
+                  inputMode="decimal"
+                  placeholder="25,00"
+                  value={draft.minStr}
+                  onChange={(e) => setDraft({ ...draft, minStr: e.target.value })}
+                  className="tabular-nums"
+                />
+              </Field>
+              <Field
+                label="Remise maximum"
+                htmlFor="promo-max"
+                hint={draft.kind === "percent" ? "Recommandé sur un %" : "Vide = non plafonnée"}
+              >
+                <Input
+                  id="promo-max"
+                  inputMode="decimal"
+                  placeholder="10,00"
+                  value={draft.maxStr}
+                  onChange={(e) => setDraft({ ...draft, maxStr: e.target.value })}
+                  className="tabular-nums"
+                />
+              </Field>
+              <Field
+                label="Utilisations"
+                htmlFor="promo-usage"
+                hint="Vide = illimité"
+              >
+                <Input
+                  id="promo-usage"
+                  inputMode="numeric"
+                  placeholder="100"
+                  value={draft.usageStr}
+                  onChange={(e) => setDraft({ ...draft, usageStr: e.target.value })}
                   className="tabular-nums"
                 />
               </Field>

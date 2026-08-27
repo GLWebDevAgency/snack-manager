@@ -8,6 +8,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import Redis from 'ioredis';
+import { Money, ordering } from '@sm/domain';
 import {
   type CreateOrder,
   ORDER_STATUS_RANK,
@@ -16,11 +17,41 @@ import {
   ordersChannel,
   WS_EVENTS,
 } from '@sm/contracts';
-import type { Counter, Order, Product } from '@sm/db';
+import type { Counter, Order, Product, Promotion } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { AuditService } from '../audit/audit.module';
 import { resolvePayment } from './payment';
 import { newTrackingToken, trackingFilter } from './tracking';
+
+/**
+ * Le document Mongo → la règle que le domaine sait lire.
+ *
+ * Tolérant aux promotions d'AVANT les bornes : `minSubtotalCents`,
+ * `maxDiscountCents` et `maxUsage` sont arrivés avec l'application des
+ * promotions, et `.lean()` ne matérialise pas les défauts Mongoose. Absents,
+ * ils valent « aucune borne » — ce qui est le comportement qu'avait la
+ * promotion quand elle a été créée.
+ */
+function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
+  const nombre = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  const date = (v: unknown): Date | null => (v instanceof Date ? v : null);
+  return {
+    id: String(doc._id),
+    name: String(doc.name ?? ''),
+    kind: doc.kind as ordering.PromotionRule['kind'],
+    value: nombre(doc.value),
+    code: typeof doc.code === 'string' && doc.code ? doc.code : null,
+    channels: Array.isArray(doc.channels) ? (doc.channels as string[]) : [],
+    startsAt: date(doc.startsAt),
+    endsAt: date(doc.endsAt),
+    active: doc.active === true,
+    minSubtotalCents: nombre(doc.minSubtotalCents),
+    maxDiscountCents: nombre(doc.maxDiscountCents),
+    maxUsage: nombre(doc.maxUsage),
+    usageCount: nombre(doc.usageCount),
+    offeredProductId: doc.offeredProductId ? String(doc.offeredProductId) : null,
+  };
+}
 
 @Injectable()
 export class OrdersService {
@@ -28,12 +59,123 @@ export class OrdersService {
     @InjectModel('Order') private readonly orders: Model<Order>,
     @InjectModel('Product') private readonly products: Model<Product>,
     @InjectModel('Counter') private readonly counters: Model<Counter>,
+    @InjectModel('Promotion') private readonly promotions: Model<Promotion>,
     @Inject(REDIS_PUB) private readonly redis: Redis,
     private readonly audit: AuditService,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
     void this.redis.publish(ordersChannel(tenantId), JSON.stringify({ event, payload }));
+  }
+
+  /**
+   * LA PROMOTION APPLICABLE — et son incrément d'usage, atomique.
+   *
+   * Rien n'appliquait les promotions : `totals.discount` valait `null` en dur
+   * et `usageCount` restait à zéro pour toujours. Le back-office savait
+   * pourtant les créer, les activer d'un clic et les supprimer — le logiciel
+   * avait l'air complet, et le code imprimé sur les flyers n'était accepté
+   * nulle part.
+   *
+   * ── Deux chemins, une seule règle ─────────────────────────────────────
+   *
+   * Avec un code saisi, on cherche CETTE offre et on dit pourquoi si elle est
+   * refusée : le client doit savoir s'il s'est trompé, s'il est trop tôt, ou si
+   * son panier est trop petit. Sans code, on applique d'office la meilleure des
+   * offres publiques — c'est la seule interprétation défendable de « promotion
+   * sans code » du point de vue du client.
+   *
+   * ── L'incrément est une COURSE, et il est traité comme telle ──────────
+   *
+   * Deux commandes simultanées sur la dernière utilisation d'un code passeraient
+   * toutes deux le contrôle du domaine, qui lit un compteur figé. La garde vit
+   * donc dans le `findOneAndUpdate` : c'est Mongo qui arbitre, et le perdant
+   * repart sans promotion plutôt qu'avec une remise hors quota.
+   */
+  private async resoudrePromotion(
+    tenantId: string,
+    dto: CreateOrder,
+    subtotal: number,
+    lines: readonly { productId: unknown; unitPrice: number }[],
+  ): Promise<{ discount: { amount: number; reason: string; promotionId: unknown } } | null> {
+    const code = dto.promoCode?.trim();
+    const filtre = code
+      ? { tenantId, active: true, code: code.toUpperCase() }
+      : { tenantId, active: true, code: null };
+    const candidates = await this.promotions.find(filtre).lean();
+
+    if (code && candidates.length === 0) {
+      throw new BadRequestException(`Le code « ${code} » ne correspond à aucune offre`);
+    }
+    if (candidates.length === 0) return null;
+
+    // Le prix unitaire réellement retenu pour chaque produit du panier — c'est
+    // lui que vaut un « produit offert », options comprises, et non le prix
+    // catalogue. Le MOINS cher quand le produit figure sur plusieurs lignes :
+    // offrir le plus cher des exemplaires serait un cadeau qu'on n'a pas promis.
+    const prixAuPanier = new Map<string, Money>();
+    for (const l of lines) {
+      const id = String(l.productId);
+      const actuel = prixAuPanier.get(id);
+      if (!actuel || l.unitPrice < actuel.cents) prixAuPanier.set(id, Money.fromCents(l.unitPrice));
+    }
+    const contexte = {
+      subtotal: Money.fromCents(subtotal),
+      channel: dto.channel,
+      code: code ?? null,
+      now: new Date(),
+      prixAuPanier,
+    };
+
+    // La MEILLEURE offre pour le client parmi celles qui passent. Avec un code
+    // saisi il n'y en a qu'une ; sans code, en retenir une moins avantageuse
+    // qu'une autre également applicable serait un choix qu'on ne saurait pas
+    // justifier au comptoir.
+    let retenue: { id: unknown; amount: number; reason: string } | null = null;
+    let refus: string | null = null;
+    for (const brut of candidates) {
+      const resultat = ordering.appliquerPromotion(versRegle(brut), contexte);
+      if (!resultat.ok) {
+        refus ??= resultat.error.message;
+        continue;
+      }
+      const cents = resultat.value.amount.cents;
+      if (!retenue || cents > retenue.amount) {
+        retenue = { id: brut._id, amount: cents, reason: resultat.value.reason };
+      }
+    }
+
+    if (!retenue) {
+      // Un code SAISI qui ne passe pas doit dire pourquoi : le client l'attend.
+      // Une offre d'office qui ne passe pas ne regarde personne — la commande
+      // se poursuit au tarif normal.
+      if (code) throw new BadRequestException(refus ?? `Le code « ${code} » n’est pas applicable`);
+      return null;
+    }
+
+    // Le quota s'arbitre ici, en base. `maxUsage: 0` vaut illimité — la
+    // condition doit donc laisser passer ce cas sans le confondre avec un
+    // quota épuisé.
+    const reserve = await this.promotions.findOneAndUpdate(
+      {
+        _id: retenue.id,
+        tenantId,
+        active: true,
+        $or: [{ maxUsage: { $lte: 0 } }, { $expr: { $lt: ['$usageCount', '$maxUsage'] } }],
+      },
+      { $inc: { usageCount: 1 } },
+      { new: true },
+    );
+    if (!reserve) {
+      if (code) {
+        throw new ConflictException('Cette offre vient d’atteindre son nombre d’utilisations');
+      }
+      return null;
+    }
+
+    return {
+      discount: { amount: retenue.amount, reason: retenue.reason, promotionId: retenue.id },
+    };
   }
 
   /** Numéro de retrait : séquence journalière par tenant, atomique (fuseau restaurant). */
@@ -128,6 +270,13 @@ export class OrdersService {
       };
     });
 
+    // LA PROMOTION, RÉSOLUE CÔTÉ SERVEUR comme les prix.
+    //
+    // Le corps ne porte qu'un CODE : le montant est calculé ici contre la
+    // promotion en base. Un client qui enverrait sa propre remise n'obtient
+    // rien — même règle que pour les prix, et pour la même raison.
+    const promotion = await this.resoudrePromotion(tenantId, dto, subtotal, lines);
+
     const number = await this.nextNumber(tenantId);
     try {
       const order = await this.orders.create({
@@ -137,7 +286,11 @@ export class OrdersService {
         channel: dto.channel,
         type: dto.type,
         lines,
-        totals: { subtotal, discount: null, total: subtotal },
+        totals: {
+          subtotal,
+          discount: promotion?.discount ?? null,
+          total: subtotal - (promotion?.discount.amount ?? 0),
+        },
         // Le total fait autorité pour le rendu monnaie : il vient d'être
         // recalculé depuis le menu, pas du corps envoyé par l'appareil.
         payment: resolvePayment(dto.channel, dto.payment, subtotal),
