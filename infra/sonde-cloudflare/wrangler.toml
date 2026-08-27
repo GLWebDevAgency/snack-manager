@@ -1,0 +1,33 @@
+# Sonde de production — Cloudflare Workers
+#
+# Déploiement :
+#   CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npx --yes wrangler@4 deploy
+#
+# Le jeton doit porter « Workers Scripts : Edit » ET « Workers KV Storage :
+# Edit ». Celui des sauvegardes (`CLOUDFLARE_API_TOKEN` côté GitHub) ne porte
+# que R2 : il ne suffit pas ici, et le message d'erreur ne le dit pas
+# clairement — il parle d'une ressource introuvable, pas d'un droit manquant.
+#
+# Le secret SM_ALERT_WEBHOOK ne figure pas ici, et ne doit jamais y figurer :
+#   npx wrangler@4 secret put SM_ALERT_WEBHOOK
+# ou, plus simplement, par le tableau de bord (Settings → Variables → Encrypt).
+
+name = "sonde-snack-manager"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Toutes les 5 minutes. Le plan gratuit l'autorise sans quota : 8 640 passages
+# par mois pour 100 000 requêtes par jour incluses.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# La mémoire de la sonde : `etat` et `dernier-passage`. C'est elle qui permet
+# de ne notifier qu'au CHANGEMENT d'état, et d'annoncer la reprise.
+[[kv_namespaces]]
+binding = "SONDE"
+id = "563f07d5244e4d1582eac6dd8189f586"
+
+# Exposé sur snackmanager.workers.dev pour consulter l'état depuis un
+# téléphone. Aucune donnée sensible : les mêmes surfaces publiques que
+# `scripts/smoke.mjs`, rien de plus.
+workers_dev = true
