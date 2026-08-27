@@ -26,16 +26,46 @@ Connect fait échouer la vérification de signature : le client paie, le
 restaurant encaisse, et la commande reste « en attente » — la cuisine ne la
 voit jamais. Aucun message d'erreur ne le dit.
 
+## Le prérequis dont dépendent tous les autres : l'inscription à Connect
+
+Connect **s'active**, il ne suffit pas d'avoir un compte Stripe. Tant que
+l'inscription n'est pas faite sur <https://dashboard.stripe.com/connect>,
+la création d'un compte marchand échoue :
+
+    You can only create new accounts if you've signed up for Connect.
+
+Le piège est que rien ne le laisse deviner avant d'essayer : `GET /v1/accounts`
+répond `200` avec une liste vide, comme sur une plateforme parfaitement
+configurée. **La lecture est ouverte à tous, seule l'écriture est réservée.**
+Un `200` sur cette route ne prouve donc rien, et c'est le contrôle qu'on est
+naturellement tenté de faire.
+
+Ce que ça implique dans l'ordre des opérations : inutile de poser les clés, de
+configurer les webhooks ou de déboguer l'écran de raccordement tant que ce
+formulaire n'est pas rempli. Rien de tout cela ne fonctionnera, et rien ne
+dira pourquoi.
+
 ## Ce qui est configuré chez Stripe
 
-Quatre points d'entrée, créés le 26/08/2026 sur le compte `acct_1S8qJp…` :
+Deux comptes, et ce n'est pas un accident : **staging vit dans un bac à sable
+séparé** (`acct_1S8qJz…`), production sur le compte principal en mode live
+(`acct_1S8qJp…`). Une clé de test du compte principal et une clé de bac à
+sable se ressemblent — toutes deux en `sk_test_…` — mais leurs événements ne
+partent pas au même endroit. Le fragment qui suit `sk_test_51` est
+l'identifiant du compte : c'est lui qu'il faut lire pour savoir où l'on est.
 
-| Mode | Type | URL |
-|---|---|---|
-| Test | compte | `https://api-staging-a5e8.up.railway.app/public/stripe/webhook` |
-| Test | comptes connectés | `https://api-staging-a5e8.up.railway.app/public/stripe/webhook/connect` |
-| Live | compte | `https://api-production-8949.up.railway.app/public/stripe/webhook` |
-| Live | comptes connectés | `https://api-production-8949.up.railway.app/public/stripe/webhook/connect` |
+| Environnement | Compte | Type | URL |
+|---|---|---|---|
+| Staging | bac à sable | compte | `https://api-staging-a5e8.up.railway.app/public/stripe/webhook` |
+| Staging | bac à sable | comptes connectés | `https://api-staging-a5e8.up.railway.app/public/stripe/webhook/connect` |
+| Production | principal, live | compte | `https://api-production-8949.up.railway.app/public/stripe/webhook` |
+| Production | principal, live | comptes connectés | `https://api-production-8949.up.railway.app/public/stripe/webhook/connect` |
+
+Deux points d'entrée subsistent sur le compte principal **en mode test**,
+créés avant la bascule vers le bac à sable. Ils visent l'API de staging, qui
+n'écoute plus leurs secrets : tout ce qu'ils enverraient serait rejeté en
+`400`. À désactiver depuis le tableau de bord — une configuration morte qui
+pointe vers une URL vivante finit toujours par coûter une heure à quelqu'un.
 
 Événements écoutés côté **comptes connectés** :
 `account.updated`, `account.application.deauthorized`,
@@ -66,13 +96,16 @@ Deux réglages, au tableau de bord Stripe, qu'aucune API publique n'expose :
 
 ## Variables par environnement
 
-| Variable | Staging | Production |
+Toutes sur le service `api` : la clé publiable elle-même transite par l'API
+vers le navigateur, si bien que le service `web` n'a aucune variable Stripe.
+
+| Variable | Staging (bac à sable) | Production (principal, live) |
 |---|---|---|
-| `STRIPE_SECRET_KEY` | clé **test** (`sk_test_…`) | clé **live** (`sk_live_…`) |
-| `STRIPE_PUBLISHABLE_KEY` | `pk_test_…` | `pk_live_…` |
-| `STRIPE_WEBHOOK_SECRET` | secret du point d'entrée **compte**, mode test | idem, mode live |
-| `STRIPE_CONNECT_WEBHOOK_SECRET` | secret du point d'entrée **comptes connectés**, mode test | idem, mode live |
-| `WEB_PUBLIC_URL` | URL du back-office de staging | URL du back-office de production |
+| `STRIPE_SECRET_KEY` | `sk_test_51S8qJz…` | `sk_live_…` |
+| `STRIPE_PUBLISHABLE_KEY` | `pk_test_51S8qJz…` | `pk_live_…` |
+| `STRIPE_WEBHOOK_SECRET` | point d'entrée **compte** du bac à sable | idem, mode live |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | point d'entrée **comptes connectés** du bac à sable | idem, mode live |
+| `WEB_PUBLIC_URL` | `https://staging.snackmanager.fr` | `https://snackmanager.fr` |
 
 `WEB_PUBLIC_URL` sert d'adresse de retour après l'inscription Stripe du
 restaurateur. Codée en dur, elle renverrait un restaurateur de production sur
