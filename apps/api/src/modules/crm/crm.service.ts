@@ -12,7 +12,7 @@ import {
   FOUNDER_SEATS_TOTAL,
   LEAD_STAGES,
   LeadServicesSchema,
-  abonnementMensuelCents,
+  mrrNormaliseCents,
   offreClient,
   SCREEN_OFFLINE_AFTER_MS,
   type CrmClient,
@@ -421,7 +421,9 @@ export class CrmService implements OnApplicationBootstrap {
         // L'offre ENTIÈRE, remise fondateur comprise : le MRR du parc
         // sous-estimait le chiffre réel de tout ce qui n'était pas une
         // formule — module à 79 €/mois et mensuels de l'Atelier.
-        mrrCents: abonnementMensuelCents(offreClient(t), now),
+        // NORMALISÉ : un engagement annuel rapporte un sixième de moins par
+        // mois que sa mensualité faciale, et c'est ce chiffre-ci qu'on somme.
+        mrrCents: mrrNormaliseCents(offreClient(t), now),
         founderSeat: Boolean(t.founderSeat),
         since: iso((t as { createdAt?: Date }).createdAt) ?? now.toISOString(),
         orders30d: window30.orders,

@@ -313,12 +313,50 @@ export class OrdersService {
       this.publish(tenantId, WS_EVENTS.orderCreated, order.toObject());
       return order;
     } catch (err: unknown) {
+      // LA RÉSERVATION EST RENDUE : la commande n'existera pas.
+      //
+      // `resoudrePromotion` incrémente `usageCount` AVANT la création, et il le
+      // faut — c'est ce qui arbitre la course sur la dernière utilisation d'un
+      // code. Mais une réservation sans commande grignote le quota pour rien,
+      // et le cas n'est pas théorique : un POS qui rejoue sa file offline
+      // repasse ici avec le même `clientId`, se fait refuser en doublon (11000),
+      // et aurait consommé une utilisation à chaque tentative.
+      //
+      // Best-effort ASSUMÉ : si la compensation échoue, on ne masque pas
+      // l'erreur d'origine, qui est celle qui intéresse l'appelant. Le quota
+      // peut alors dériver d'une unité — préjudice sans commune mesure avec une
+      // création de commande avalée.
+      await this.rendreReservation(tenantId, promotion);
+
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
         const raced = await this.orders.findOne({ tenantId, clientId: dto.clientId });
         return raced ? this.withTrackingToken(raced) : raced;
       }
       throw err;
+    }
+  }
+
+  /**
+   * Rend une utilisation réservée dont la commande n'est jamais née.
+   *
+   * Le décrément est borné à zéro : sans la garde, une compensation jouée deux
+   * fois — ou sur une promotion remise à zéro entre-temps par le gérant —
+   * rendrait le compteur négatif, et « −1 utilisée » ne veut rien dire sur
+   * l'écran des promotions.
+   */
+  private async rendreReservation(
+    tenantId: string,
+    promotion: { discount: { promotionId: unknown } } | null,
+  ): Promise<void> {
+    if (!promotion) return;
+    try {
+      await this.promotions.updateOne(
+        { _id: promotion.discount.promotionId, tenantId, usageCount: { $gt: 0 } },
+        { $inc: { usageCount: -1 } },
+      );
+    } catch {
+      /* l'erreur d'origine prime : elle seule intéresse l'appelant */
     }
   }
 

@@ -721,6 +721,29 @@ export function echeanceDuMois(
   return { cents: lignes.reduce((somme, l) => somme + l.cents, 0), lignes };
 }
 
+/**
+ * LE MRR NORMALISÉ — ce qu'un client rapporte par mois, en moyenne.
+ *
+ * Distinct de `abonnementMensuelCents`, qui rend la MENSUALITÉ FACIALE. Pour un
+ * client au mois les deux coïncident ; pour un engagement annuel, non : « douze
+ * mois payés dix » à 159 € rapporte 1 590 € l'an, soit 132,50 € par mois et non
+ * 159 €. Sommer les mensualités faciales gonfle le MRR du parc de vingt pour
+ * cent à chaque client annuel — et le MRR est le chiffre sur lequel on décide.
+ *
+ * Les services de l'Atelier ne s'annualisent jamais : ils entrent au mois, quel
+ * que soit l'engagement du logiciel.
+ *
+ * Arrondi À L'INFÉRIEUR, délibérément : un indicateur de pilotage qui se
+ * trompe doit se tromper vers le bas, jamais annoncer une recette qu'on n'a pas.
+ */
+export function mrrNormaliseCents(offre: OffreClient, now: Date = new Date()): number {
+  const lignes = echeancesDues(offre, now);
+  return lignes.reduce(
+    (somme, l) => somme + (l.cadence === 'annuel' ? Math.floor(l.cents / 12) : l.cents),
+    0,
+  );
+}
+
 /** Une échéance à émettre : son montant, et le pas qui la sépare de la suivante. */
 export type EcheanceDue = {
   nature: 'logiciel' | 'services';

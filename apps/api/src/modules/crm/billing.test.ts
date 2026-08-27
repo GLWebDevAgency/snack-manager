@@ -1341,6 +1341,58 @@ describe('Facturation', () => {
       expect(fiche.nextDue?.amountCents).toBe(ATELIER_PRESENCE_CENTS);
     });
 
+    /**
+     * LE CAS QUE LE TEST PRÉCÉDENT NE VOYAIT PAS.
+     *
+     * Avec des services mensuels, le mois prochain doit toujours quelque chose
+     * et la projection tombe juste par accident. SANS services, un client à
+     * l'engagement annuel ne doit rien onze mois sur douze : projeter le seul
+     * mois suivant lui affichait « aucune échéance » presque toute l'année,
+     * alors que son prélèvement existe et tombe à sa date anniversaire.
+     *
+     * La projection avance donc jusqu'au premier mois qui doit quelque chose.
+     */
+    it('un client annuel SANS services garde une échéance — à son anniversaire', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = null;
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      // Dix mensualités, et la date est le 1er août SUIVANT — pas septembre,
+      // et surtout pas « aucune échéance ».
+      expect(fiche.nextDue?.amountCents).toBe(MRR * 10);
+      expect(fiche.nextDue?.at.slice(0, 7)).toBe('2027-08');
+    });
+
+    /**
+     * LE MRR D'UN CLIENT ANNUEL N'EST PAS SA MENSUALITÉ FACIALE.
+     *
+     * « Douze mois payés dix » à 159 € rapporte 1 590 € l'an, soit 132,50 € par
+     * mois. Sommer les mensualités faciales gonflait le MRR du parc de vingt
+     * pour cent à chaque client annuel — et le MRR est le chiffre sur lequel on
+     * décide d'embaucher ou de baisser un prix.
+     */
+    it('le MRR d’un client annuel est normalisé, pas sa mensualité faciale', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = null;
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      // Dix douzièmes de la mensualité, pas la mensualité entière.
+      expect(fiche.subscription.mrrCents).toBe(Math.floor((MRR * 10) / 12));
+      expect(fiche.subscription.mrrCents).not.toBe(MRR);
+    });
+
+    it('les services de l’Atelier entrent au mois, engagement ou pas', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      // Le logiciel normalisé + la présence internet ENTIÈRE : sans
+      // engagement, elle ne s'annualise jamais.
+      expect(fiche.subscription.mrrCents).toBe(
+        Math.floor((MRR * 10) / 12) + ATELIER_PRESENCE_CENTS,
+      );
+    });
+
     it('continue de facturer un compte suspendu', async () => {
       await sansAmorce();
       tenants.rows[0]!.account = { status: 'suspended', since: LE_19_AOUT, reason: 'Impayé' };

@@ -1211,15 +1211,37 @@ export function nextInvoiceDue(
   // dans aucune file de relance.
   if (offre.mrrCents <= 0) return null;
 
-  const at = billingPeriod(shiftMonthKey(monthKey(now), 1)).start;
+  // LA PROCHAINE ÉCHÉANCE RÉELLE, pas simplement le mois prochain.
+  //
   // Échéance THÉORIQUE : la pièce n'existe pas encore, donc aucun taux n'y est
   // figé. Elle est projetée AU RÉGIME DE SA PROPRE DATE, et non à celui
-  // d'aujourd'hui : un fondateur dans son douzième mois lisait autrement la
+  // d'aujourd'hui — un fondateur dans son douzième mois lisait autrement la
   // moitié de ce qui allait réellement être prélevé, et découvrait le tarif
-  // public sur son relevé. La date décide aussi du montant chez un client
-  // annuel, dont la plupart des mois ne portent que ses services.
-  const { cents: amountCents } = echeanceDuMois(offre.offre, at, offre.signeLe, at);
-  if (amountCents <= 0) return null;
+  // public sur son relevé bancaire.
+  //
+  // On AVANCE jusqu'au premier mois qui doit quelque chose, au lieu de
+  // s'arrêter au suivant. Un client à l'engagement annuel sans services ne doit
+  // rien onze mois sur douze : projeter le seul mois prochain lui aurait
+  // affiché « aucune échéance » presque toute l'année, alors que son
+  // prélèvement existe et tombe à sa date anniversaire.
+  //
+  // Douze essais : au-delà, l'offre ne doit rien de récurrent — et une boucle
+  // sans borne sur une donnée de base est un gel de service qui attend son
+  // heure.
+  let at: Date | null = null;
+  let amountCents = 0;
+  let cle = monthKey(now);
+  for (let saut = 0; saut < 12; saut += 1) {
+    cle = shiftMonthKey(cle, 1);
+    const debut = billingPeriod(cle).start;
+    const du = echeanceDuMois(offre.offre, debut, offre.signeLe, debut).cents;
+    if (du > 0) {
+      at = debut;
+      amountCents = du;
+      break;
+    }
+  }
+  if (!at || amountCents <= 0) return null;
   // Les tarifs de `PLAN_MRR_CENTS` sont hors taxes (cf. `SM_AMOUNTS_ARE`) :
   // le prélèvement annoncé est donc leur TTC.
   const projected = invoiceTotals(amountCents, SM_INVOICE_VAT);

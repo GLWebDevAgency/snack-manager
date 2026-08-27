@@ -26,9 +26,9 @@ import {
   planMrrCents,
   type BillingRun,
   type BillingRunReport,
-  abonnementMensuelCents,
+  mrrNormaliseCents,
   offreClient,
-  echeancesDues,
+  echeanceDuMois,
   shiftMonthKey,
   summarizeOutstanding,
   type BillingHistoryQuery,
@@ -1085,34 +1085,41 @@ function duDuMois(
   period: { key: string; label: string },
   now: Date,
 ): { cents: number; label: string } | null {
-  const offre = offreClient(tenant);
-  const lignes = echeancesDues(offre, now);
-  const mois = Number(period.key.slice(5, 7)) - 1;
-  // Le mois anniversaire de la signature. Sans date de création — un tenant
-  // d'avant le champ — on retombe sur le mois courant : mieux vaut facturer
-  // une fois que jamais.
-  const anniversaire = (tenant.createdAt as Date | undefined)?.getUTCMonth() ?? mois;
-
-  let cents = 0;
-  const parts: string[] = [];
-  for (const l of lignes) {
-    if (l.cadence === 'annuel') {
-      if (mois !== anniversaire) continue;
-      cents += l.cents;
-      parts.push('abonnement annuel (douze mois, dix facturés)');
-      continue;
-    }
-    cents += l.cents;
-    parts.push(l.nature === 'logiciel' ? 'abonnement' : 'services');
-  }
+  // La RÈGLE vient des contrats (`echeanceDuMois`), pas d'ici. Elle était
+  // recopiée dans ce fichier — filtre annuel compris — alors que la projection
+  // d'échéance appliquait la sienne : deux écritures de la même règle qui
+  // doivent rendre le même montant, et qui finissent par annoncer un chiffre
+  // et en facturer un autre. Ce service ne compose plus que le LIBELLÉ.
+  const { cents, lignes } = echeanceDuMois(
+    offreClient(tenant),
+    billingPeriod(period.key).start,
+    (tenant.createdAt as Date | undefined) ?? null,
+    now,
+  );
   if (cents <= 0) return null;
 
+  const parts = lignes.map((l) =>
+    l.cadence === 'annuel'
+      ? 'abonnement annuel (douze mois, dix facturés)'
+      : l.nature === 'logiciel'
+        ? 'abonnement'
+        : 'services',
+  );
   const majuscule = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
   return { cents, label: `${majuscule(parts.join(' et '))} — ${period.label}` };
 }
 
+/**
+ * Le MRR d'un client — NORMALISÉ, pas sa mensualité faciale.
+ *
+ * La distinction ne se voyait pas tant que personne n'avait signé à l'année :
+ * « douze mois payés dix » rapporte un sixième de moins par mois que ce que le
+ * tarif affiche, et sommer les mensualités faciales gonflait le MRR du parc
+ * d'autant. C'est le pendant, côté PILOTAGE, du défaut que `billingCycle`
+ * portait côté facturation.
+ */
 const mrrOf = (tenant: RawTenant, now: Date = new Date()): number =>
-  abonnementMensuelCents(offreClient(tenant), now);
+  mrrNormaliseCents(offreClient(tenant), now);
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

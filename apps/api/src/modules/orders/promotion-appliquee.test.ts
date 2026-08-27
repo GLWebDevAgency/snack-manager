@@ -57,13 +57,23 @@ type Creee = {
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
 };
 
-function build(promos: Record<string, unknown>[], over: { reserveRefusee?: boolean } = {}) {
+function build(
+  promos: Record<string, unknown>[],
+  over: { reserveRefusee?: boolean; creationEchoue?: unknown } = {},
+) {
   const created: Creee[] = [];
   const incremente: unknown[] = [];
+  const rendu: unknown[] = [];
+  const vus: number[] = [];
   const service = new OrdersService(
     {
-      findOne: async () => null,
+      // `null` au PREMIER appel — le contrôle d'idempotence en tête de
+      // `create` — puis la commande gagnante au second, celui du rattrapage de
+      // course. Rendre la commande dès le premier ferait sortir avant même de
+      // toucher à la promotion, et le test ne vérifierait rien.
+      findOne: async () => (vus.push(1) > 1 ? { trackingToken: 't' } : null),
       create: async (doc: Record<string, unknown>) => {
+        if (over.creationEchoue) throw over.creationEchoue;
         created.push(doc as unknown as Creee);
         return { ...doc, toObject: () => doc };
       },
@@ -76,11 +86,12 @@ function build(promos: Record<string, unknown>[], over: { reserveRefusee?: boole
         incremente.push(filtre);
         return over.reserveRefusee ? null : { usageCount: 1 };
       },
+      updateOne: async (filtre: unknown) => void rendu.push(filtre),
     } as never,
     { publish: () => {} } as never,
     { record: async () => {} } as never,
   );
-  return { service, created, incremente };
+  return { service, created, incremente, rendu };
 }
 
 const commande = (over: Record<string, unknown> = {}) =>
@@ -196,5 +207,50 @@ describe('la promotion appliquée à la commande', () => {
     await expect(
       service.create(TENANT, commande({ promoCode: 'BIENVENUE10' }), 'client'),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+/**
+ * LA RÉSERVATION RENDUE — le quota ne doit pas fondre sans commande.
+ *
+ * `resoudrePromotion` incrémente `usageCount` AVANT la création, et il le faut :
+ * c'est ce qui arbitre la course sur la dernière utilisation d'un code. Mais
+ * une réservation sans commande grignote le quota pour rien.
+ *
+ * Le cas n'est pas théorique. Un POS qui rejoue sa file offline repasse par la
+ * création avec le même `clientId`, se fait refuser en doublon (11000) — et
+ * aurait consommé une utilisation à CHAQUE tentative. Sur un code à cent
+ * utilisations, une tablette qui rejoue sa journée l'épuise seule.
+ */
+describe('la réservation rendue quand la commande n’existe pas', () => {
+  /**
+   * Le rejeu offline ORDINAIRE sort plus tôt : le contrôle d'idempotence en
+   * tête de `create` rend la commande existante sans jamais toucher à la
+   * promotion. Ce test-ci couvre la COURSE — deux rejeux simultanés, dont le
+   * perdant a déjà réservé quand il découvre le doublon.
+   */
+  it('rend l’utilisation quand deux rejeux simultanés se disputent la commande', async () => {
+    const { service, rendu } = build([promoDoc()], { creationEchoue: { code: 11000 } });
+    await service.create(TENANT, commande({ promoCode: 'BIENVENUE10' }), 'client');
+    expect(rendu).toHaveLength(1);
+    // Borné à zéro : un décrément sur un compteur déjà nul écrirait
+    // « −1 utilisée », qui ne veut rien dire à l'écran.
+    expect(rendu[0]).toMatchObject({ usageCount: { $gt: 0 } });
+  });
+
+  it('rend l’utilisation sur une panne d’écriture, et laisse remonter l’erreur', async () => {
+    const { service, rendu } = build([promoDoc()], {
+      creationEchoue: new Error('mongo indisponible'),
+    });
+    await expect(
+      service.create(TENANT, commande({ promoCode: 'BIENVENUE10' }), 'client'),
+    ).rejects.toThrow(/mongo indisponible/);
+    expect(rendu).toHaveLength(1);
+  });
+
+  it('ne rend rien quand aucune promotion n’a été réservée', async () => {
+    const { service, rendu } = build([], { creationEchoue: { code: 11000 } });
+    await service.create(TENANT, commande(), 'client');
+    expect(rendu).toHaveLength(0);
   });
 });
