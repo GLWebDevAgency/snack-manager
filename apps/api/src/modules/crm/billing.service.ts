@@ -24,6 +24,8 @@ import {
   nextInvoiceDue,
   planLabel,
   planMrrCents,
+  type BillingRun,
+  type BillingRunReport,
   abonnementMensuelCents,
   shiftMonthKey,
   summarizeOutstanding,
@@ -308,6 +310,82 @@ export class BillingService {
   }
 
   // ─── Écritures : les gestes ───
+
+  /**
+   * LA FACTURATION DU MOIS, POUR TOUT LE PARC, EN UN GESTE.
+   *
+   * Rien n'émettait l'abonnement du mois suivant : ni écran, ni planificateur.
+   * Cette passe le fait, et rend un compte rendu qui dit aussi ce qu'elle n'a
+   * PAS fait — un geste de masse qui ne rendrait qu'un nombre laisserait
+   * l'équipe deviner pourquoi trois clients manquent à l'appel.
+   *
+   * IDEMPOTENTE par construction : `issue` refuse déjà un doublon d'abonnement
+   * sur la même période, et ce refus est ici traduit en « déjà facturé »
+   * plutôt qu'en erreur. Relancer la passe est donc sans danger — c'est même
+   * le mode d'emploi : on la relance après avoir corrigé ce qui bloquait.
+   *
+   * Un client sans rien de récurrent est sauté : facturer 0 € produirait une
+   * pièce que personne ne peut ni payer ni comprendre.
+   */
+  async runMensuel(
+    actor: JwtPayload,
+    body: BillingRun,
+    now: Date = new Date(),
+  ): Promise<BillingRunReport> {
+    const period = billingPeriod(body.period ?? monthKey(now));
+    const tenants = (await this.tenants.find({}).sort({ slug: 1 }).lean()) as RawTenant[];
+
+    const emises: BillingRunReport['emises'][number][] = [];
+    const ignores: BillingRunReport['ignores'][number][] = [];
+
+    for (const tenant of tenants) {
+      const nom = String(tenant.name ?? '');
+      const slug = String(tenant.slug ?? '');
+      if (!isBillable(accountStatusOf(tenant))) {
+        ignores.push({ slug, name: nom, raison: 'non_facturable' });
+        continue;
+      }
+      if (mrrOf(tenant, now) <= 0) {
+        ignores.push({ slug, name: nom, raison: 'rien_a_facturer' });
+        continue;
+      }
+      try {
+        const piece = await this.issue(
+          actor,
+          String(tenant._id),
+          { kind: 'abonnement', period: period.key, label: '', draft: body.draft },
+          now,
+        );
+        emises.push({
+          tenantId: String(tenant._id),
+          slug,
+          name: nom,
+          number: piece.number,
+          amountCents: piece.amountCents,
+          amountLabel: piece.amountLabel,
+        });
+      } catch (cause) {
+        // Le seul refus attendu est le doublon : `issue` protège déjà contre
+        // deux abonnements sur la même période. Tout autre échec doit remonter
+        // — une passe qui avale ses erreurs ferait croire le parc à jour.
+        if (cause instanceof ConflictException) {
+          ignores.push({ slug, name: nom, raison: 'deja_facture' });
+          continue;
+        }
+        throw cause;
+      }
+    }
+
+    const totalCents = emises.reduce((somme, e) => somme + e.amountCents, 0);
+    return {
+      period: { key: period.key, label: period.label },
+      draft: body.draft,
+      emises,
+      ignores,
+      totalCents,
+      totalLabel: formatEuros(totalCents),
+    };
+  }
 
   /**
    * ÉMETTRE une facture.

@@ -47,30 +47,35 @@ const DAY_MS = 86_400_000;
  *
  * Mélanger un mensuel, un annuel et un ponctuel dans un même total produirait
  * un chiffre que personne ne peut vérifier, ni le prospect ni nous. Chaque
- * récurrence est donc ramenée exactement à sa moitié, et l'écart s'imprime en
- * négatif sous les lignes qu'il remise.
+ * récurrence porte donc sa propre remise, imprimée en négatif sous les lignes
+ * qu'elle remise.
  *
- * L'arrondi se fait sur le TOTAL de la récurrence et non ligne à ligne : deux
- * arrondis successifs peuvent décaler d'un centime, et un devis dont le total
- * ne tombe pas juste se fait recompter par le comptable du prospect.
+ * L'ARRONDI SE FAIT LIGNE À LIGNE, et c'est ce qui compte ici. Les factures
+ * sont émises UNE PAR SERVICE — un abonnement, un mensuel Atelier, une mise en
+ * service, un ponctuel par prestation — et chacune est remisée pour son propre
+ * compte. Arrondir sur le total de la récurrence donnerait un devis qui ne
+ * tombe pas sur la somme des factures : un centime d'écart dès qu'un prix
+ * devient impair, et un devis qu'on fait recompter.
+ *
+ * Aucun prix de la grille n'est impair aujourd'hui, donc les deux règles
+ * coïncident — raison de plus pour écrire la bonne maintenant : le jour d'une
+ * révision de grille, personne ne repensera à cet arrondi.
  */
 function remisesFondateur(lignes: readonly DevisLigne[], actif: boolean): DevisLigne[] {
   if (!actif) return [];
-  const totaux = new Map<string, number>();
+  const remises = new Map<string, number>();
   for (const l of lignes) {
-    totaux.set(l.recurrence, (totaux.get(l.recurrence) ?? 0) + l.montantHtCents);
+    if (l.montantHtCents <= 0) continue;
+    const ecart = prixFondateurCents(l.montantHtCents) - l.montantHtCents;
+    remises.set(l.recurrence, (remises.get(l.recurrence) ?? 0) + ecart);
   }
-  const remises: DevisLigne[] = [];
-  for (const [recurrence, total] of totaux) {
-    if (total <= 0) continue;
-    const apres = prixFondateurCents(total);
-    remises.push({
+  return [...remises]
+    .filter(([, ecart]) => ecart !== 0)
+    .map(([recurrence, ecart]) => ({
       designation: 'Remise fondateur — moitié prix pendant douze mois',
       recurrence,
-      montantHtCents: apres - total,
-    });
-  }
-  return remises;
+      montantHtCents: ecart,
+    }));
 }
 
 /** Composition pure — testable sans Nest ni Mongo. */

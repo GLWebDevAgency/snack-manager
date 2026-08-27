@@ -767,6 +767,65 @@ export type CrmBillingOverdue = {
  * sa formule » — se déclenche avec un corps vide. Les champs ne servent qu'aux
  * exceptions (régularisation d'un mois passé, geste commercial, option).
  */
+/**
+ * LA FACTURATION DU MOIS, EN UN GESTE.
+ *
+ * Rien n'émettait l'abonnement du mois suivant : ni écran, ni planificateur.
+ * La file de recouvrement pouvait donc rester vide non parce que le parc était
+ * à jour, mais parce que rien n'avait jamais été facturé.
+ *
+ * Un geste DEMANDÉ plutôt qu'un cron, et c'est un choix : un automate qui émet
+ * des créances tout seul se découvre le jour où il a facturé un client parti,
+ * ou facturé deux fois après un redémarrage. À l'échelle d'un parc qui se
+ * compte en dizaines, une revue mensuelle de trente secondes vaut mieux qu'un
+ * automate à surveiller.
+ */
+export const BillingRunSchema = z.object({
+  /** Mois à facturer, `AAAA-MM`. Défaut : le mois courant. */
+  period: z
+    .string()
+    .trim()
+    .regex(PERIOD_KEY_RE, 'Période attendue au format AAAA-MM')
+    .optional(),
+  /**
+   * Poser en brouillon plutôt qu'émettre. Recommandé pour une première passe :
+   * rien n'est dû, et l'équipe revoit avant d'envoyer.
+   */
+  draft: z.boolean().default(false),
+});
+export type BillingRun = z.infer<typeof BillingRunSchema>;
+
+/** Pourquoi un client a été sauté — dit à l'écran, jamais deviné. */
+export const BILLING_RUN_SKIPS = ['non_facturable', 'deja_facture', 'rien_a_facturer'] as const;
+export type BillingRunSkip = (typeof BILLING_RUN_SKIPS)[number];
+
+export const BILLING_RUN_SKIP_LABELS: Record<BillingRunSkip, string> = {
+  non_facturable: 'En essai ou parti — rien à facturer ce mois-ci',
+  deja_facture: 'Déjà une facture d’abonnement pour ce mois',
+  rien_a_facturer: 'Aucun abonnement récurrent — que des prestations ponctuelles',
+};
+
+/**
+ * Le compte rendu d'une passe. Il dit ce qui a été fait ET ce qui ne l'a pas
+ * été : un geste de masse qui ne rendrait qu'un nombre laisserait l'équipe
+ * deviner pourquoi trois clients manquent à l'appel.
+ */
+export type BillingRunReport = {
+  period: { key: string; label: string };
+  draft: boolean;
+  emises: readonly {
+    tenantId: string;
+    slug: string;
+    name: string;
+    number: string;
+    amountCents: number;
+    amountLabel: string;
+  }[];
+  ignores: readonly { slug: string; name: string; raison: BillingRunSkip }[];
+  totalCents: number;
+  totalLabel: string;
+};
+
 export const InvoiceIssueSchema = z.object({
   /** Mois facturé, `AAAA-MM`. Défaut : le mois courant. */
   period: z

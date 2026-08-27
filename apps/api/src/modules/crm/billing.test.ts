@@ -1151,6 +1151,73 @@ describe('Facturation', () => {
       expect(fiche.subscription.mrrCents).toBe(MRR);
     });
 
+    /**
+     * LA FACTURATION DU MOIS, EN UN GESTE.
+     *
+     * Rien n'émettait l'abonnement du mois suivant : ni écran, ni planificateur.
+     * La file de recouvrement pouvait rester vide non parce que le parc était à
+     * jour, mais parce que rien n'avait jamais été facturé.
+     *
+     * Un geste de masse plutôt qu'un cron : un automate qui émet des créances
+     * tout seul se découvre le jour où il a facturé un client parti. Avec un
+     * parc de cette taille, une revue mensuelle de trente secondes vaut mieux
+     * qu'un automate à surveiller.
+     */
+    it('émet l’abonnement du mois pour chaque client facturable', async () => {
+      await sansAmorce();
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      expect(bilan.emises.map((e) => e.slug).sort()).toEqual(['classfood', 'voisin']);
+      expect(bilan.emises.every((e) => e.number)).toBe(true);
+    });
+
+    it('est IDEMPOTENT : relancé, il ne double aucune facture', async () => {
+      await sansAmorce();
+      await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      const second = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      expect(second.emises).toHaveLength(0);
+      expect(second.ignores.map((i) => i.raison)).toEqual([
+        'deja_facture',
+        'deja_facture',
+      ]);
+    });
+
+    it('saute un compte en essai, et dit pourquoi', async () => {
+      await sansAmorce();
+      tenants.rows[1]!.account = { status: 'trial', since: new Date('2026-05-02T09:00:00Z') };
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      expect(bilan.emises.map((e) => e.slug)).toEqual(['classfood']);
+      expect(bilan.ignores).toEqual([
+        { slug: 'voisin', name: 'Le Voisin', raison: 'non_facturable' },
+      ]);
+    });
+
+    it('saute un client qui n’a rien de récurrent — un Atelier ponctuel ne s’abonne pas', async () => {
+      await sansAmorce();
+      tenants.rows[1]!.plan = null;
+      tenants.rows[1]!.atelier = null;
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      expect(bilan.emises.map((e) => e.slug)).toEqual(['classfood']);
+      expect(bilan.ignores.map((i) => i.raison)).toEqual(['rien_a_facturer']);
+    });
+
+    it('en brouillon, rien n’est dû : les pièces attendent d’être envoyées', async () => {
+      await sansAmorce();
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: true }, LE_19_AOUT);
+      expect(bilan.emises).toHaveLength(2);
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      const piece = fiche.invoices.find((i) => i.period.key === '2026-09');
+      expect(piece?.status).toBe('brouillon');
+    });
+
+    it('un client remisé est facturé à son prix, pas au tarif public', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.founderSeat = true;
+      tenants.rows[0]!.founderUntil = new Date('2027-08-19T00:00:00.000Z');
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+      const ligne = bilan.emises.find((e) => e.slug === 'classfood');
+      expect(ligne?.amountCents).toBe(MRR / 2);
+    });
+
     it('continue de facturer un compte suspendu', async () => {
       await sansAmorce();
       tenants.rows[0]!.account = { status: 'suspended', since: LE_19_AOUT, reason: 'Impayé' };

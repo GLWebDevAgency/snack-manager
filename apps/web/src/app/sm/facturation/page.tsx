@@ -39,6 +39,7 @@ import Link from "next/link";
 import { cx } from "@/lib/cx";
 import { Card, EmptyState, Icon, Panel, Skeleton } from "@/components/ui";
 import { euroRound, int } from "../crm";
+import { RunMensuel } from "./RunMensuel";
 import {
   EMPTY_QUEUE,
   MISE_EN_DEMEURE_DAYS,
@@ -209,6 +210,10 @@ export default function FacturationPage() {
           title={`Ancienneté de la plus vieille créance du parc, recalculée à chaque lecture. Au-delà de ${MISE_EN_DEMEURE_DAYS} jours, la relance téléphonique ne suffit plus.`}
         />
       </div>
+
+      {/* Facturer le mois — le geste qui alimente cette file. Placé AVANT
+          elle : on facture d'abord, on recouvre ensuite. */}
+      <RunMensuel onDone={reload} />
 
       {queueFailed && (
         <Unavailable

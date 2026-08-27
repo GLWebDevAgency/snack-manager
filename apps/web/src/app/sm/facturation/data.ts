@@ -258,6 +258,16 @@ export type ParkTenant = {
 
 export const billingApi = {
   overdue: () => api.get<unknown>("/crm/billing/overdue"),
+
+  /**
+   * LA PASSE DU MOIS — une pièce d'abonnement par client facturable.
+   *
+   * Idempotente : relancée, elle ne double aucune facture et rapporte
+   * « déjà facturé » plutôt qu'une erreur. C'est même le mode d'emploi — on la
+   * relance après avoir corrigé ce qui bloquait.
+   */
+  runMensuel: (body: { period: string; draft: boolean }) =>
+    api.post<unknown>("/crm/billing/run", body),
   park: () => api.get<unknown>("/crm/tenants"),
 
   /** ENCAISSER : le moyen est obligatoire, la date vaut « maintenant » par défaut. */

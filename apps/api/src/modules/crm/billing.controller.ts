@@ -3,12 +3,14 @@ import {
   BillingHistoryQuerySchema,
   InvoiceCancelSchema,
   InvoiceCreditSchema,
+  BillingRunSchema,
   InvoiceIssueSchema,
   InvoicePaySchema,
   InvoiceReminderCreateSchema,
   type BillingHistoryQuery,
   type InvoiceCancel,
   type InvoiceCredit,
+  type BillingRun,
   type InvoiceIssue,
   type InvoicePay,
   type InvoiceReminderCreate,
@@ -60,6 +62,19 @@ export class BillingController {
    * Déclarée AVANT les routes `tenants/:id/…` par habitude de lecture ; les
    * chemins ne se recouvrent pas, il n'y a donc aucun risque de capture.
    */
+  /**
+   * LA FACTURATION DU MOIS, POUR TOUT LE PARC.
+   *
+   * Rien n'émettait l'abonnement du mois suivant : ni écran, ni planificateur.
+   * Idempotente — relancer la passe ne double aucune pièce — et elle rend un
+   * compte rendu qui dit aussi ce qu'elle n'a PAS fait.
+   */
+  @Post('billing/run')
+  @HttpCode(200)
+  runMensuel(@CurrentUser() actor: JwtPayload, @Body(zod(BillingRunSchema)) body: BillingRun) {
+    return this.billing.runMensuel(actor, body);
+  }
+
   @Get('billing/overdue')
   overdue() {
     return this.billing.overdue();

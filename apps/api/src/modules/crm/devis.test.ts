@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
-import { EMPTY_PARTY, EMPTY_SERVICES, type InvoiceParty } from '@sm/contracts';
+import {
+  EMPTY_PARTY,
+  EMPTY_SERVICES,
+  prixFondateurCents,
+  type InvoiceParty,
+} from '@sm/contracts';
 import { renderDevisPdf } from '../billing/devis-pdf';
 import { buildDevisDocument } from './devis.service';
 
@@ -251,5 +256,64 @@ describe('le devis d’un fondateur', () => {
     const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW);
     expect(doc.lignes.every((l) => l.montantHtCents > 0)).toBe(true);
     expect(doc.conditions.join(' ')).not.toMatch(/fondateur/i);
+  });
+});
+
+/**
+ * LE DEVIS ET LES FACTURES DOIVENT TOMBER SUR LE MÊME TOTAL.
+ *
+ * Les pièces sont émises UNE PAR SERVICE — un abonnement, un mensuel Atelier,
+ * une mise en service, un ponctuel par prestation. Chacune est remisée pour son
+ * propre compte. Si le devis remisait sur le TOTAL d'une récurrence, les deux
+ * arrondis divergeraient d'un centime dès qu'un prix devient impair, et un
+ * devis qui ne tombe pas juste se fait recompter par le comptable d'en face.
+ *
+ * Aucun prix de la grille n'est impair aujourd'hui : ce test ne protège de rien
+ * à cet instant, et c'est exactement pourquoi il doit exister. Le jour d'une
+ * révision de grille — un prix psychologique à 14,99 €, une reprise de TVA —
+ * personne ne repensera à cet arrondi.
+ */
+describe('cohérence des arrondis de la remise fondateur', () => {
+  it('la remise du devis vaut la somme des remises ligne à ligne', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: 'complet',
+        onlineOrdering: true,
+        billing: 'mensuel',
+        services: {
+          ...EMPTY_SERVICES,
+          siteVitrine: true,
+          identiteVisuelle: true,
+          presenceInternet: true,
+          reseauxSociaux: 'hebdo',
+        },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+      { founderSeat: true },
+    );
+    const publiques = doc.lignes.filter((l) => l.montantHtCents > 0);
+    const remises = doc.lignes.filter((l) => l.montantHtCents < 0);
+
+    // Chaque récurrence : la remise doit égaler la somme des moitiés de CHAQUE
+    // ligne, pas la moitié de leur somme.
+    for (const r of remises) {
+      const attendu = publiques
+        .filter((l) => l.recurrence === r.recurrence)
+        .reduce((somme, l) => somme + (prixFondateurCents(l.montantHtCents) - l.montantHtCents), 0);
+      expect(r.montantHtCents, `récurrence « ${r.recurrence} »`).toBe(attendu);
+    }
+  });
+
+  it('reste juste avec des montants impairs — le cas qu’aucun prix ne produit encore', () => {
+    // Deux lignes à 9,99 € : moitié par ligne = 5,00 + 5,00 = 10,00 ;
+    // moitié du total = 9,99. C'est ce centime-là qu'on verrouille.
+    const parLigne = prixFondateurCents(999) + prixFondateurCents(999);
+    const surTotal = prixFondateurCents(999 + 999);
+    expect(parLigne).not.toBe(surTotal);
+    // Le devis doit suivre la règle « par ligne », celle des factures émises.
+    expect(parLigne).toBe(1_000);
   });
 });
