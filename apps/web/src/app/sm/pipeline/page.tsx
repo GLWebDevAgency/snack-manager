@@ -29,6 +29,7 @@ import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
 import { Btn, Card, Icon, Input, Skeleton, useToast } from "@/components/ui";
 import { crm, useHq } from "../crm";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import { LeadDrawer, NewLeadDrawer, StagePill } from "../parts";
 
 export default function PipelinePage() {
@@ -370,12 +371,7 @@ function LeadCard({
             {lead.restaurantName}
           </span>
           {lead.founderSeatReserved && (
-            <Icon
-              name="star"
-              size={15}
-              className="shrink-0 text-accent"
-              aria-label="Place fondateur réservée"
-            />
+            <BadgeFondateur statut="reserve" size={20} />
           )}
         </div>
         {(lead.contact.name || lead.contact.phone) && (
