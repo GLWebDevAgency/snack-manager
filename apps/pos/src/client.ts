@@ -91,15 +91,16 @@ function nativeStore(): KeyValueStore {
 
 // ─── Clés de persistance locale ───
 
-export const KEYS = {
-  session: 'sm.pos.session.v1',
-  /** Appairage de l'appareil — survit à la déconnexion de l'équipier. */
-  device: 'sm.pos.device.v1',
-  parked: 'sm.pos.parked.v1',
-  dayLog: 'sm.pos.daylog.v1',
-  /** Ouverture du service courant — borne de découpe du Z. */
-  serviceStart: 'sm.pos.servicestart.v1',
-} as const;
+/**
+ * Les clés de stockage de la caisse — définies dans `pos-state.ts`.
+ *
+ * Elles y vivent parce que ce module-là est PUR : `client.ts` tire React
+ * Native, que la configuration de test ne sait pas analyser. La liste des clés
+ * à purger au désappairage décide si les ventes d'un commerçant peuvent
+ * ressortir chez un autre : elle doit être vérifiable.
+ */
+import { KEYS } from './pos-state';
+export { KEYS };
 
 export interface Session {
   token: string;
@@ -297,11 +298,22 @@ export function installErrorReporting(): () => void {
   });
 }
 
+/**
+ * DÉSAPPAIRER, c'est tout oublier de CET établissement.
+ *
+ * L'appairage, la session et la file partaient bien. Le reste — journal du
+ * service, tickets mis en attente, heure d'ouverture — restait en place et
+ * ressortait tel quel après ré-appairage chez un AUTRE commerçant : le Z du
+ * soir mélangeait deux restaurants, et un ticket parqué chez A se rappelait
+ * chez B avec ses lignes et le nom de son client.
+ *
+ * La liste est donc celle des clés `KEYS`, dans son ensemble, et non un
+ * sous-ensemble choisi : une clé ajoutée demain doit y entrer d'office.
+ */
 export async function forgetPairedDevice(): Promise<void> {
   adopt(null);
   client.setToken(null);
-  await getStore().removeItem(KEYS.device);
-  await getStore().removeItem(KEYS.session);
+  for (const cle of Object.values(KEYS)) await getStore().removeItem(cle);
   // La file hors-ligne part avec l'appairage. Elle n'est pas cloisonnée par
   // établissement : des mutations en attente de l'établissement A rejouées
   // après ré-appairage chez B seraient des ventes écrites chez le mauvais

@@ -62,6 +62,20 @@ function nativeStore(): KeyValueStore {
 /** Appairage de l'appareil — survit à la déconnexion de l'équipe. */
 export const KEY_DEVICE = 'sm.kds.device.v1';
 
+/**
+ * Tout ce qui appartient à l'établissement appairé, et rien d'autre.
+ *
+ * Écrit ici, à côté de la clé d'appairage, pour qu'une clé ajoutée demain se
+ * pose au même endroit que celle qu'il faudra penser à purger.
+ */
+export const CLES_ETABLISSEMENT = [
+  KEY_DEVICE,
+  KEY_SESSION,
+  'sm.kds.board.v1',
+  'sm.kds.delivered.v1',
+  'sm.kds.prefs.v1',
+] as const;
+
 // ─────────────────────────────────────────────────────────────
 // Démonstration
 // ─────────────────────────────────────────────────────────────
@@ -236,11 +250,19 @@ export function installErrorReporting(): () => void {
   });
 }
 
+/**
+ * DÉSAPPAIRER, c'est tout oublier de CET établissement.
+ *
+ * L'appairage, la session et la file partaient bien. Le TABLEAU, lui, restait :
+ * après ré-appairage chez un autre commerçant, les tickets du restaurant
+ * précédent s'affichaient en cuisine — avec leurs lignes, leurs notes et les
+ * noms de leurs clients. Les commandes déjà livrées et les préférences
+ * d'écran suivaient de même.
+ */
 export async function forgetPairedDevice(): Promise<void> {
   adopt(null);
   client.setToken(null);
-  await getStore().removeItem(KEY_DEVICE);
-  await getStore().removeItem(KEY_SESSION);
+  for (const cle of CLES_ETABLISSEMENT) await getStore().removeItem(cle);
   // La file hors-ligne part avec l'appairage : non cloisonnée par
   // établissement, elle rejouerait sinon les gestes de l'établissement A
   // sous l'établissement B après ré-appairage. Perte assumée et visible

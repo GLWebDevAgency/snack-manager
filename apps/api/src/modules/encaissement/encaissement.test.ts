@@ -3,7 +3,7 @@ import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import type { Model } from 'mongoose';
 import type { Tenant } from '@sm/db';
-import { EncaissementService } from './encaissement.service';
+import { EncaissementService, raccordementRompu } from './encaissement.service';
 import type { StripeCompte, StripeConnectClient } from './stripe-connect.client';
 
 /**
@@ -295,15 +295,150 @@ describe('le restaurateur nous débranche', () => {
     expect(set.$set.encaissement.accountId).toBe('acct_resto1');
   });
 
-  it('Stripe refuse de répondre : on FERME au lieu de laisser un drapeau périmé ouvert', async () => {
+  it('Stripe REFUSE l’accès : on ferme, sinon le drapeau resterait « actif » pour toujours', async () => {
     const { service, tenants } = build({
       tenant: raccorde,
-      client: { lireCompte: vi.fn().mockRejectedValue(new Error('permission_error')) },
+      client: {
+        lireCompte: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('permission_error'), {
+            type: 'StripePermissionError',
+          })),
+      },
     });
     // Ne lève pas : un webhook en erreur serait rejoué trois jours durant, et
     // le bouton « vérifier » du gérant tomberait en 500 sans qu'il comprenne.
     await expect(service.synchroniser('acct_resto1', NOW)).resolves.toBeUndefined();
     const set = tenants.updateOne.mock.calls[0]?.[1] as Record<string, any>;
     expect(set.$set.encaissement.chargesEnabled).toBe(false);
+  });
+
+  /**
+   * LE CAS QUE LE TEST PRÉCÉDENT CONFONDAIT AVEC LE PREMIER.
+   *
+   * Une panne passagère chez Stripe n'est pas une décision du restaurateur.
+   * Fermer sur une absence de réponse coupait la commande en ligne de tous les
+   * restaurants dont un webhook passait pendant l'incident — et rien ne la
+   * rouvrait tant que le gérant ne cliquait pas « vérifier ».
+   */
+  it('Stripe NE RÉPOND PAS : on ne touche à rien, l’encaissement reste ouvert', async () => {
+    const { service, tenants } = build({
+      tenant: raccorde,
+      client: {
+        lireCompte: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('socket hang up'), {
+            type: 'StripeConnectionError',
+          })),
+      },
+    });
+    await expect(service.synchroniser('acct_resto1', NOW)).resolves.toBeUndefined();
+    // AUCUNE écriture : les drapeaux d'hier valent mieux qu'une fermeture
+    // fondée sur une absence de réponse.
+    expect(tenants.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('une erreur ILLISIBLE ne ferme rien non plus', async () => {
+    const { service, tenants } = build({
+      tenant: raccorde,
+      client: { lireCompte: vi.fn().mockRejectedValue(new Error('boom')) },
+    });
+    await expect(service.synchroniser('acct_resto1', NOW)).resolves.toBeUndefined();
+    expect(tenants.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * UN COMPTE RÉVOQUÉ ET UNE PANNE STRIPE NE SE TRAITENT PAS PAREIL.
+ *
+ * `lireChezStripe` rendait `null` dans les deux cas, et les deux fermaient
+ * l'encaissement. Un incident passager chez Stripe coupait donc la commande en
+ * ligne de tous les restaurants dont un webhook passait pendant la panne — et
+ * rien ne la rouvrait tant que le gérant ne cliquait pas « vérifier ».
+ *
+ * Le commentaire du code l'écrivait sans le voir : « Stripe ne répond pas, OU le
+ * restaurateur nous a débranchés ».
+ */
+describe('lire une erreur Stripe', () => {
+  it('reconnaît un raccordement rompu', () => {
+    // Ce que Stripe renvoie quand le restaurateur nous a retiré l'accès.
+    expect(raccordementRompu({ type: 'StripePermissionError' })).toBe(true);
+    expect(raccordementRompu({ type: 'StripeInvalidRequestError' })).toBe(true);
+    expect(raccordementRompu({ code: 'account_invalid' })).toBe(true);
+    expect(raccordementRompu({ statusCode: 403 })).toBe(true);
+    expect(raccordementRompu({ statusCode: 404 })).toBe(true);
+  });
+
+  it('ne prend PAS une panne pour une révocation', () => {
+    // Réseau coupé, 500 chez Stripe, quota dépassé : le compte n'y est pour
+    // rien, et fermer l'encaissement de tout un parc serait la mauvaise
+    // décision prise sur une absence de réponse.
+    expect(raccordementRompu({ type: 'StripeConnectionError' })).toBe(false);
+    expect(raccordementRompu({ type: 'StripeAPIError', statusCode: 500 })).toBe(false);
+    expect(raccordementRompu({ type: 'StripeRateLimitError', statusCode: 429 })).toBe(false);
+    expect(raccordementRompu({ statusCode: 502 })).toBe(false);
+  });
+
+  it('devant l’inconnu, ne conclut PAS à la rupture', () => {
+    // Une erreur qu'on ne sait pas lire n'est pas une preuve de révocation.
+    // Ne rien changer est le choix sûr : les drapeaux d'hier valent mieux
+    // qu'une fermeture fondée sur une incompréhension.
+    for (const inconnu of [null, undefined, new Error('boom'), {}, 'texte', 42]) {
+      expect(raccordementRompu(inconnu)).toBe(false);
+    }
+  });
+});
+
+/**
+ * UN DÉBRANCHEMENT NE DOIT PAS ÊTRE DÉFINITIF.
+ *
+ * L'identifiant du compte est conservé à la révocation — c'est voulu, il permet
+ * de reprendre. Mais si le restaurateur nous a retiré l'accès, Stripe refuse de
+ * nous ouvrir une page sur CE compte : on réessayait donc éternellement le même,
+ * et le gérant lisait « réessayez dans un instant » devant un geste qui ne
+ * marcherait jamais. Le restaurant ne pouvait plus jamais encaisser en ligne.
+ */
+describe('se rebrancher après un débranchement', () => {
+  const lien = { url: 'https://connect.stripe.com/setup/x', expires_at: 1_800_000_000 };
+  /** Un restaurant déjà raccordé — c'est le cas qui pose problème. */
+  const raccorde = {
+    _id: TENANT,
+    encaissement: {
+      accountId: 'acct_resto1',
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      detailsSubmitted: true,
+      raccordeLe: NOW,
+      synchroniseLe: NOW,
+    },
+  };
+
+  it('repart sur un compte NEUF quand l’ancien nous est refusé', async () => {
+    const creerLien = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('permission'), { type: 'StripePermissionError' }),
+      )
+      .mockResolvedValueOnce(lien);
+    const creerCompte = vi.fn().mockResolvedValue(compteStripe({ id: 'acct_neuf' }));
+    const { service } = build({ tenant: raccorde, client: { creerLien, creerCompte } });
+
+    await expect(service.demarrerRaccordement(String(TENANT))).resolves.toMatchObject({ url: lien.url });
+    // Le second essai porte sur le compte neuf, pas sur celui qu'on a perdu.
+    expect(creerCompte).toHaveBeenCalledTimes(1);
+    expect(creerLien.mock.calls[1]![0]).toBe('acct_neuf');
+  });
+
+  it('ne fabrique PAS de compte sur une panne passagère', async () => {
+    // Un compte Stripe de plus à chaque incident réseau serait un parc de
+    // comptes fantômes, et une facture chez Stripe.
+    const creerLien = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('socket'), { type: 'StripeConnectionError' }));
+    const creerCompte = vi.fn();
+    const { service } = build({ tenant: raccorde, client: { creerLien, creerCompte } });
+
+    await expect(service.demarrerRaccordement(String(TENANT))).rejects.toThrow(/réessayez/);
+    expect(creerCompte).not.toHaveBeenCalled();
   });
 });

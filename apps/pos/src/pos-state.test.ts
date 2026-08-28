@@ -6,6 +6,7 @@ import {
   zFromServer,
   type DayEntry,
   type ServiceOrderRow,
+  KEYS,
 } from './pos-state';
 
 const LINE: CartLine = {
@@ -160,5 +161,39 @@ describe('Z — ventilation par moyen de paiement', () => {
     expect(z.card).toBe(750);
     expect(z.ca).toBe(750);
     expect(z.discounts).toBe(250);
+  });
+});
+
+/**
+ * DÉSAPPAIRER, C'EST TOUT OUBLIER DE CET ÉTABLISSEMENT.
+ *
+ * L'appairage, la session et la file partaient bien. Le reste — journal du
+ * service, tickets mis en attente, heure d'ouverture — restait en place et
+ * ressortait après ré-appairage chez un AUTRE commerçant : le Z du soir
+ * mélangeait deux restaurants, et un ticket parqué chez A se rappelait chez B
+ * avec ses lignes et le nom de son client.
+ */
+describe('les clés effacées au désappairage', () => {
+  it('couvre TOUT ce que la caisse persiste — pas un sous-ensemble choisi', () => {
+    // La purge itère sur `Object.values(KEYS)` : une clé ajoutée demain y entre
+    // d'office, sans qu'on ait à penser à la lister. Ce test verrouille le
+    // fait que rien ne vit hors de cette table.
+    expect(Object.values(KEYS).sort()).toEqual(
+      [
+        'sm.pos.daylog.v1',
+        'sm.pos.device.v1',
+        'sm.pos.parked.v1',
+        'sm.pos.servicestart.v1',
+        'sm.pos.session.v1',
+      ].sort(),
+    );
+  });
+
+  it('le journal du service et les tickets parqués en font partie', () => {
+    // Les deux qui manquaient, nommément : ce sont eux qui faisaient passer
+    // des ventes et des clients d'un commerçant à l'autre.
+    const cles = Object.values(KEYS) as string[];
+    expect(cles).toContain('sm.pos.daylog.v1');
+    expect(cles).toContain('sm.pos.parked.v1');
   });
 });

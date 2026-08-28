@@ -272,9 +272,15 @@ export class SyncQueue {
     return { sent, failed, remaining: this.entries.length };
   }
 
-  /** Vide la file — réservé aux outils de maintenance. */
+  /**
+   * Vide la file ET les rejets — appelé au désappairage de l'appareil.
+   *
+   * Les rejets partent avec : ils portent le corps de ventes d'un
+   * établissement, et les laisser les ferait apparaître chez le suivant.
+   */
   async clear() {
     this.entries = [];
+    this.state.rejected = [];
     await this.persist();
     this.emit();
   }

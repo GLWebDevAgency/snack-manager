@@ -1,4 +1,27 @@
 /**
+ * TOUT CE QUE LA CAISSE PERSISTE — et donc tout ce qu'il faut effacer quand
+ * l'appareil change d'établissement.
+ *
+ * Le désappairage n'effaçait que l'appairage, la session et la file : le
+ * journal du service et les tickets mis en attente restaient, et ressortaient
+ * après ré-appairage chez un AUTRE commerçant. Le Z du soir mélangeait deux
+ * restaurants, et un ticket parqué chez A se rappelait chez B avec ses lignes
+ * et le nom de son client.
+ *
+ * La purge itère sur cette table entière : une clé ajoutée ici y entre
+ * d'office, sans qu'on ait à penser à la lister ailleurs.
+ */
+export const KEYS = {
+  session: 'sm.pos.session.v1',
+  /** Appairage de l'appareil — survit à la déconnexion de l'équipier. */
+  device: 'sm.pos.device.v1',
+  parked: 'sm.pos.parked.v1',
+  dayLog: 'sm.pos.daylog.v1',
+  /** Ouverture du service courant — borne de découpe du Z. */
+  serviceStart: 'sm.pos.servicestart.v1',
+} as const;
+
+/**
  * État métier du poste : modes de service, journal du service, tickets en
  * attente, construction du corps de commande.
  *
