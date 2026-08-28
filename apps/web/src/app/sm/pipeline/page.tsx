@@ -35,6 +35,8 @@ export default function PipelinePage() {
   const toast = useToast();
   const { reload } = useHq();
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
+  /** Le pipeline n'a pas pu être lu — distinct de « aucun lead ». */
+  const [enPanne, setEnPanne] = useState(false);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -95,7 +97,10 @@ export default function PipelinePage() {
         if (!cancelled) setLeads(l);
       })
       .catch(() => {
-        if (!cancelled) setLeads([]);
+        // PAS `[]` : « la prospection est vide » et « la route est tombée » ne
+        // se ressemblent que sur cet écran, qui afficherait « 0 lead » et six
+        // colonnes vides sans rien distinguer.
+        if (!cancelled) setEnPanne(true);
       });
     return () => {
       cancelled = true;
@@ -139,6 +144,19 @@ export default function PipelinePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/*
+        La route est tombée : on le DIT, au lieu d'afficher six colonnes vides
+        et « 0 lead ». Rien ne distinguait « la prospection n'a pas commencé »
+        de « l'API ne répond pas » — et la première conclusion est celle qu'on
+        tire naturellement devant un écran propre.
+      */}
+      {enPanne && (
+        <p className="shrink-0 border-b border-alert/30 bg-alert/10 px-[26px] py-2.5 text-[13px] text-alertt max-md:px-4">
+          Le pipeline n&apos;a pas pu être lu — <span className="cf-fig">/crm/leads</span>{" "}
+          n&apos;a pas répondu. Les colonnes ci-dessous sont vides par défaut d&apos;information,
+          pas par absence de prospects.
+        </p>
+      )}
       {/* ── Barre d'outils ── */}
       <div className="flex shrink-0 items-center gap-3 px-[26px] pb-3 pt-[26px] max-md:flex-wrap max-md:gap-2 max-md:px-4 max-md:pb-2 max-md:pt-4">
         <div className="relative max-md:order-last max-md:w-full">

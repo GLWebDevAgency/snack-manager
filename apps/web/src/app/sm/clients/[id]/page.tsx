@@ -135,18 +135,37 @@ export default function ClientFilePage({
   const { row, account } = file;
   const name = account?.name ?? row?.name ?? "Restaurant";
 
-  // Ni le parc ni le compte ne connaissent cet identifiant : le lien est faux
-  // ou le restaurant a disparu du parc.
+  // ── « INTROUVABLE » N'EST PAS « ILLISIBLE » ──
+  //
+  // `loadClientFile` enveloppe chaque route dans `soft()`, qui avale tout sauf
+  // 401/403 et rend `null`. Deux causes très différentes arrivaient donc ici
+  // sous la même forme : l'identifiant n'existe pas, ou les deux routes ont
+  // échoué. L'écran accusait le lien — « copié à la main » — devant une API
+  // tombée, et l'équipe cherchait une faute de frappe pendant une panne.
+  //
+  // `offline` distingue les deux : il ne contient une section que si sa route a
+  // RÉPONDU en erreur.
+  const injoignable = file.offline.has("row") && file.offline.has("account");
+
   if (!row && !account) {
     return (
       <div className="p-[26px] max-md:p-4">
         <Card>
-          <EmptyState
-            icon="search"
-            title="Restaurant introuvable"
-            hint="Aucun établissement ne porte cet identifiant. Le lien a peut-être été copié à la main."
-            action={<BackLink />}
-          />
+          {injoignable ? (
+            <EmptyState
+              icon="bell"
+              title="Fiche indisponible"
+              hint="Le CRM n’a pas répondu — ni le parc, ni le compte de cet établissement. Le lien est probablement bon : réessayez dans un instant."
+              action={<BackLink />}
+            />
+          ) : (
+            <EmptyState
+              icon="search"
+              title="Restaurant introuvable"
+              hint="Aucun établissement ne porte cet identifiant. Le lien a peut-être été copié à la main."
+              action={<BackLink />}
+            />
+          )}
         </Card>
       </div>
     );

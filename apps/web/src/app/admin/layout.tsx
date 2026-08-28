@@ -253,11 +253,17 @@ function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hasToken) return;
     let cancelled = false;
+    // `GET /orders` rend `{ rows, total }`, JAMAIS un tableau nu. Le code
+    // typait la réponse en tableau et se protégeait par `Array.isArray` : la
+    // garde était donc toujours fausse, `setNewIds` n'était jamais appelé, et
+    // le badge restait à zéro au chargement — sans erreur, sans journal. Le
+    // gérant qui ouvrait son back-office ne voyait aucune commande en attente
+    // tant qu'une nouvelle n'arrivait pas par le temps réel.
     api
-      .get<{ _id: string }[]>("/orders?status=new")
-      .then((orders) => {
-        if (!cancelled && Array.isArray(orders))
-          setNewIds(new Set(orders.map((o) => o._id)));
+      .get<{ rows?: { _id: string }[] }>("/orders?status=new")
+      .then((res) => {
+        const rows = res?.rows;
+        if (!cancelled && Array.isArray(rows)) setNewIds(new Set(rows.map((o) => o._id)));
       })
       .catch(() => {}); // badge à 0 si l'appel échoue — non bloquant
     return () => {
