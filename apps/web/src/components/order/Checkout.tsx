@@ -550,7 +550,6 @@ export function Checkout({
             status={status}
             paidOnline={paidOnline}
             downgraded={downgraded}
-            tenantName={tenantName}
             demo={demo}
             demoCard={demo && method === "online"}
           />
@@ -1321,7 +1320,6 @@ function DoneStep({
   status,
   paidOnline,
   downgraded,
-  tenantName,
   demo,
   demoCard,
 }: {
@@ -1330,7 +1328,6 @@ function DoneStep({
   status: OrderStatus;
   paidOnline: boolean;
   downgraded: boolean;
-  tenantName: string;
   demo: boolean;
   /** Démonstration où le visiteur avait choisi la carte bancaire. */
   demoCard: boolean;
