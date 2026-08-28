@@ -51,6 +51,20 @@ export type NotificationResult =
   | { readonly sent: true; readonly channel: NotificationChannel; readonly providerId: string }
   | { readonly sent: false; readonly reason: string };
 
+/**
+ * ⚠ AUCUN ADAPTATEUR N'EXISTE ENCORE (constaté le 28/08/2026).
+ *
+ * Ce port est déclaré, documenté, et n'a jamais été branché : `notifyCustomer`
+ * n'a aucune implémentation dans le dépôt, et aucun appelant. Le tunnel de
+ * commande promettait pourtant au client « vous êtes prévenu par SMS dès que
+ * c'est prêt » — une promesse que rien ne tenait, et qui faisait attendre un
+ * message qui ne partirait jamais. Les deux écrans disent désormais ce qui
+ * existe vraiment : la page de suivi.
+ *
+ * Le jour où un adaptateur sera écrit, ce sont ces deux libellés
+ * (`Checkout.tsx`, écran des coordonnées et écran de confirmation) qu'il faudra
+ * remettre à la promesse.
+ */
 export interface Notifier {
   /** Nom lisible de l'implémentation (journalisation, écran d'administration). */
   readonly providerName: string;

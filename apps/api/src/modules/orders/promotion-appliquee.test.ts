@@ -338,3 +338,57 @@ describe('la liste des commandes du service', () => {
     expect(r.truncated).toBe(false);
   });
 });
+
+/**
+ * UNE COMMANDE REMISE A FORCÉMENT ÉTÉ RÉGLÉE.
+ *
+ * Le filet qui solde le paiement à la remise ne visait que `method: 'counter'`,
+ * et ratait donc le cas le plus fréquent des ennuis de paiement en ligne : le
+ * client choisit la carte, la commande naît en `online`, Stripe ne se charge
+ * pas (bloqueur, réseau d'entreprise) ou le client renonce et règle au
+ * comptoir. Son paiement restait « en attente » POUR TOUJOURS, et le montant
+ * grossissait indéfiniment la ligne « à encaisser au retrait » de chaque Z.
+ */
+describe('le paiement soldé à la remise', () => {
+  function commandeEn(method: string, statut: string) {
+    const doc = {
+      _id: 'o1',
+      status: 'ready',
+      statusHistory: [],
+      payment: { method, status: statut, tender: null },
+      totals: { subtotal: 1_000, total: 1_000 },
+      save: async () => {},
+      toObject: () => ({}),
+    };
+    const service = new OrdersService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { publish: () => {} } as never,
+      { log: async () => {} } as never,
+    );
+    (service as unknown as { byId: () => Promise<unknown> }).byId = async () => doc;
+    return { service, doc };
+  }
+
+  it('solde une commande EN LIGNE dont le paiement a échoué', async () => {
+    const { service, doc } = commandeEn('online', 'pending');
+    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    expect(doc.payment.status).toBe('paid');
+  });
+
+  it('solde aussi le « à régler au retrait », comme avant', async () => {
+    const { service, doc } = commandeEn('counter', 'pending');
+    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    expect(doc.payment.status).toBe('paid');
+  });
+
+  it('ne « repaie » pas une commande déjà réglée', async () => {
+    const { service, doc } = commandeEn('online', 'paid');
+    doc.payment.tender = 'online' as never;
+    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    // Le moyen d'origine est conservé : il vaut mieux que rien au Z.
+    expect(doc.payment.tender).toBe('online');
+  });
+});

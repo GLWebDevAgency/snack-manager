@@ -123,6 +123,20 @@ export type PaymentIntentReady = z.infer<typeof PaymentIntentReadySchema>;
 export const PaymentIntentUnavailableSchema = z.object({
   unavailable: z.literal(true),
   reason: z.string(),
+  /**
+   * Ce refus vaut-il pour TOUJOURS, ou seulement pour maintenant ?
+   *
+   * Le tunnel les confondait et éteignait le paiement par carte pour toute la
+   * visite dès le premier refus. Or les causes n'ont rien de commun : un
+   * restaurant sans compte Stripe ne pourra jamais encaisser en ligne
+   * (permanent), tandis qu'un 500 de Stripe, une coupure réseau ou un panier
+   * sous cinquante centimes se réessaient — le dernier change même dès que le
+   * client ajoute un article.
+   *
+   * Absent, vaut « passager » : devant un refus qu'on ne sait pas qualifier,
+   * réessayer coûte moins cher que priver le restaurant d'un paiement.
+   */
+  permanent: z.boolean().optional(),
 });
 export type PaymentIntentUnavailable = z.infer<typeof PaymentIntentUnavailableSchema>;
 

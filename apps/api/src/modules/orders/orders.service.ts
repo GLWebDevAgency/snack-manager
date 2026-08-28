@@ -464,14 +464,20 @@ export class OrdersService {
 
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor });
-    // Filet pour les commandes parties sans encaissement (« à régler au
-    // retrait ») : l'argent rentre à la remise. Une commande déjà réglée à la
-    // caisse garde son tender et son horodatage — on ne la « repaie » pas.
-    if (
-      status === 'delivered' &&
-      order.payment.method === 'counter' &&
-      order.payment.status === 'pending'
-    ) {
+    // FILET : une commande REMISE a forcément été réglée.
+    //
+    // Il ne visait que `method: 'counter'`, et ratait donc le cas le plus
+    // fréquent des ennuis de paiement en ligne : le client choisit la carte, la
+    // commande naît en `method: 'online'`, Stripe ne se charge pas (bloqueur,
+    // réseau d'entreprise) ou le client renonce et règle au comptoir. Son
+    // paiement restait « en attente » POUR TOUJOURS — aucun geste du logiciel
+    // ne pouvait plus le solder, et le montant grossissait indéfiniment la
+    // ligne « à encaisser au retrait » de chaque Z.
+    //
+    // Un restaurant ne remet pas la marchandise sans être payé : la remise vaut
+    // donc encaissement, quel que soit le moyen annoncé au départ. Une commande
+    // déjà réglée garde son moyen et son horodatage — on ne la « repaie » pas.
+    if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }
     await order.save();
@@ -500,7 +506,6 @@ export class OrdersService {
     return order;
   }
 
-  /** Remise — action sensible : PIN re-validé en amont, journalisée. */
   /**
    * REMISE SUR COMMANDE — le geste qui minore la recette.
    *

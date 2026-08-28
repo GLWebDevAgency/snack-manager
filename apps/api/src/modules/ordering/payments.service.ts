@@ -147,8 +147,15 @@ export class PaymentsService {
     }
   }
 
-  private unavailable(reason: string): PaymentIntentResponse {
-    return { unavailable: true, reason };
+  /**
+   * Un refus de paiement en ligne, et sa NATURE.
+   *
+   * `permanent: true` dit « ce restaurant ne peut pas encaisser en ligne » —
+   * le tunnel a raison d'éteindre la carte pour la visite. Tout le reste est
+   * passager ou propre à une commande, et doit pouvoir se réessayer.
+   */
+  private unavailable(reason: string, permanent = false): PaymentIntentResponse {
+    return { unavailable: true, reason, permanent };
   }
 
   /**
@@ -186,7 +193,8 @@ export class PaymentsService {
     }
 
     const stripe = await this.getClient();
-    if (!stripe) return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
+    // Aucune clé plateforme : ce n'est pas un incident, c'est une absence.
+    if (!stripe) return this.unavailable(PAYMENT_UNAVAILABLE_REASON, true);
 
     /*
      * SUR QUEL COMPTE ENCAISSE-T-ON ? La question se pose AVANT d'appeler
@@ -203,8 +211,10 @@ export class PaymentsService {
      */
     const compte = await this.encaissement.compteActifDe(String(order.tenantId));
     if (!compte) {
+      // Ce restaurant n'a pas de compte raccordé : structurel, pas passager.
       return this.unavailable(
         'Paiement en ligne indisponible pour ce restaurant — réglez votre commande au comptoir.',
+        true,
       );
     }
 
@@ -214,7 +224,7 @@ export class PaymentsService {
       const intent = await this.resolveIntent(stripe, order, amount, { stripeAccount: compte });
       if (!intent.client_secret) {
         this.logger.warn(`PaymentIntent ${intent.id} sans client_secret`);
-        return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
+        return this.unavailable(PAYMENT_UNAVAILABLE_REASON, true);
       }
       if (
         order.payment &&

@@ -349,10 +349,42 @@ export function Checkout({
         return;
       }
 
-      const res = await api.createPaymentIntent(created._id, created.trackingToken);
-      if (res.unavailable || !res.publishableKey) {
-        writePayProbe(slug, "off");
-        setProbe("off");
+      // ── LA COMMANDE EXISTE DÉJÀ : PLUS AUCUN ÉCHEC NE DOIT LA NIER ──
+      //
+      // Ce qui suit — demander une intention de paiement — était dans le MÊME
+      // `try` que la création. Un réseau qui lâche entre les deux, ou un 404
+      // parce que la commande n'est pas encore visible depuis une autre
+      // réplique, faisait afficher « La commande n'a pas pu être envoyée » à
+      // quelqu'un dont la commande était en cuisine. Le panier venait pourtant
+      // d'être vidé : le client ne pouvait ni recommencer, ni comprendre — et
+      // celui qui insistait commandait deux fois.
+      //
+      // À partir d'ici, l'échec ne peut plus faire pire que « réglez au
+      // comptoir », ce qui est vrai et rattrapable.
+      let res: PaymentIntentResponse | null = null;
+      try {
+        res = await api.createPaymentIntent(created._id, created.trackingToken);
+      } catch {
+        res = null;
+      }
+
+      if (!res || res.unavailable || !res.publishableKey) {
+        // Un incident PASSAGER n'éteint pas la carte pour la session.
+        //
+        // `createIntent` rend `unavailable` pour des causes très différentes :
+        // Stripe non configuré chez ce restaurant (permanent), mais aussi une
+        // panne réseau, un 500 de Stripe, ou un panier sous cinquante
+        // centimes — transitoire, ou propre à CETTE commande. Le tunnel les
+        // confondait et écrivait « paiement en ligne éteint » pour tout le
+        // reste de la visite : le client qui ajoutait un article et revenait
+        // n'avait plus le choix de la carte, sans explication.
+        //
+        // Seule l'absence de clé publiable est structurelle : elle dit que ce
+        // restaurant n'a pas de paiement en ligne. Le reste se réessaie.
+        if (res?.unavailable === true && res.permanent === true) {
+          writePayProbe(slug, "off");
+          setProbe("off");
+        }
         setDowngraded(true);
         setStep("done");
         return;
@@ -977,7 +1009,12 @@ function CustomerStep({
           </p>
         ) : (
           <p id="sm-phone-hint" className="text-[13px] text-mut">
-            Uniquement pour vous prévenir que la commande est prête.
+            {/*
+              Le numéro sert au RESTAURANT, pas à un envoi automatique : aucun
+              SMS n'est expédié aujourd'hui. Annoncer « pour vous prévenir »
+              faisait attendre un message qui ne partait jamais.
+            */}
+            Pour que le restaurant puisse vous joindre en cas de besoin.
           </p>
         )}
       </div>
@@ -1318,9 +1355,16 @@ function DoneStep({
           C’est envoyé en cuisine
         </h3>
         <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
+          {/*
+            AUCUN SMS NE PART. Le port `Notifier.notifyCustomer` est déclaré
+            dans le domaine et n'a jamais eu d'adaptateur : le client lisait une
+            promesse que rien ne tenait, et attendait un message qui ne
+            viendrait pas. Ce qui existe VRAIMENT, c'est cette page — elle suit
+            l'avancement en temps réel. On promet donc ce qu'on fait.
+          */}
           {demo
             ? "Suivez la préparation juste en dessous, comme le ferait votre client."
-            : `${tenantName} vous prévient par SMS dès que c’est prêt.`}
+            : "Suivez la préparation ici même — la page se met à jour toute seule."}
         </p>
       </div>
 
