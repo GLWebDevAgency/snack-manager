@@ -234,7 +234,14 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     if (!ready) return;
     // Premier passage forcé : il amorce la séquence de numéros du jour.
     void reconcile(true);
-    const id = setInterval(() => void reconcile(), 12_000);
+    // TOUJOURS forcé. La sortie anticipée de `reconcile` — « rien du poste
+    // n'attend son identifiant serveur » — est juste pour économiser un appel
+    // après une salve de caisse, mais elle arrêtait aussi le rafraîchissement
+    // périodique : une fois la dernière commande du poste réconciliée, la photo
+    // serveur ne bougeait plus. Les commandes EN LIGNE, qui ne passent jamais
+    // par le journal local, n'entraient donc plus jamais dans le Z — qui
+    // annonce pourtant « vente en ligne comprise ».
+    const id = setInterval(() => void reconcile(true), 12_000);
     return () => clearInterval(id);
   }, [ready, reconcile]);
 
@@ -541,6 +548,10 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           // La barre haute reste active sous les surcouches : on referme la
           // confirmation pour ne jamais empiler deux panneaux.
           setSentClientId(null);
+          // Photo FRAÎCHE avant de clôturer : le Z se lit sur les commandes du
+          // serveur, et une vente en ligne passée depuis le dernier
+          // rafraîchissement manquerait au total qu'on s'apprête à recompter.
+          void reconcile(true);
           setCloseOpen(true);
         }}
         onLock={() => onLock()}

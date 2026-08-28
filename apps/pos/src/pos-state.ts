@@ -276,7 +276,19 @@ export interface ServiceZ {
   online: number;
   /** Commandes parties sans encaissement (« à encaisser au retrait »). */
   due: number;
-  /** Encaissé sans moyen renseigné — n'existe que sur des données anciennes. */
+  /**
+   * Encaissé au comptoir SANS moyen saisi.
+   *
+   * Ce n'est pas un vestige : le cas se produit à chaque commande « à régler au
+   * retrait » que la cuisine fait passer à « Remis ». L'API bascule alors le
+   * paiement en « réglé » — l'argent rentre bien — mais personne n'a dit
+   * comment : ni le KDS, qui ne connaît pas le tiroir, ni la caisse, qui n'a
+   * pas été sollicitée.
+   *
+   * Le montant est donc RÉEL et doit être ventilé à la main au moment du Z. Le
+   * présenter comme une anomalie de données anciennes faisait chercher un bogue
+   * là où il y a un geste manquant.
+   */
   unspecified: number;
   discounts: number;
   /**

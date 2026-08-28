@@ -786,9 +786,15 @@ export function CloseModal({
             <StatRow label="Titres-restaurant" value={euros(z.mealVoucher)} />
             <StatRow label="En ligne" value={euros(z.online)} />
             <StatRow label="À encaisser au retrait" value={euros(z.due)} tone={palette.amber} />
+            {/*
+              Encaissé au retrait, sans moyen saisi. Ce n'est pas une anomalie
+              de données : c'est ce que la cuisine encaisse en marquant
+              « Remis », sans que personne ait dit comment le client a payé. Le
+              montant est réel et doit être ventilé à la main.
+            */}
             {z.unspecified > 0 ? (
               <StatRow
-                label="Encaissé, moyen non précisé"
+                label="Encaissé au retrait — à ventiler"
                 value={euros(z.unspecified)}
                 tone={palette.amber}
               />

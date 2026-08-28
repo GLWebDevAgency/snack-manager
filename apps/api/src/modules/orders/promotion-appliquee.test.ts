@@ -296,3 +296,45 @@ describe('l’encaissement en espèces d’une commande remisée', () => {
     await expect(service.create(TENANT, especes(800), 'caisse')).rejects.toThrow(/insuffisant/);
   });
 });
+
+/**
+ * LE PLAFOND DE LA LISTE SE DIT, au lieu de se faire passer pour un total.
+ *
+ * `total` valait `rows.length`, c'est-à-dire le plafond lui-même dès qu'il
+ * était atteint. Le Z de clôture du POS se calcule sur cette liste : un snack
+ * qui passe deux cent cinquante tickets voyait les cinquante plus anciens
+ * disparaître du chiffre d'affaires, des espèces, de la carte et des
+ * titres-restaurant — sans qu'aucun écran ne signale la coupe. Le gérant
+ * recomptait sa caisse contre un total amputé.
+ */
+describe('la liste des commandes du service', () => {
+  function service(enBase: number, rendues: number) {
+    return new OrdersService(
+      {
+        find: () => ({
+          sort: () => ({
+            limit: () => ({ lean: async () => Array.from({ length: rendues }, () => ({})) }),
+          }),
+        }),
+        countDocuments: async () => enBase,
+      } as never,
+      {} as never,
+      {} as never,
+      { find: () => ({ lean: async () => [] }) } as never,
+      { publish: () => {} } as never,
+      { log: async () => {} } as never,
+    );
+  }
+
+  it('rend le VRAI total, pas le nombre de lignes servies', async () => {
+    const r = await service(250, 200).list(TENANT, {});
+    expect(r.total).toBe(250);
+    expect(r.truncated).toBe(true);
+  });
+
+  it('ne crie pas à la troncature quand tout tient', async () => {
+    const r = await service(42, 42).list(TENANT, {});
+    expect(r.total).toBe(42);
+    expect(r.truncated).toBe(false);
+  });
+});

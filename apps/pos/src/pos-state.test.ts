@@ -197,3 +197,59 @@ describe('les clés effacées au désappairage', () => {
     expect(cles).toContain('sm.pos.parked.v1');
   });
 });
+
+/**
+ * CE QUE LE Z NE DOIT PAS TAIRE.
+ *
+ * Le montant « encaissé sans moyen saisi » était documenté comme n'existant
+ * « que sur des données anciennes ». C'est faux : il se produit à chaque
+ * commande « à régler au retrait » que la cuisine fait passer à « Remis ».
+ * L'API bascule alors le paiement en réglé — l'argent rentre — mais personne
+ * n'a dit comment : ni le KDS, qui ne connaît pas le tiroir, ni la caisse, qui
+ * n'a pas été sollicitée.
+ */
+describe('la ventilation du Z', () => {
+  const commande = (over: Record<string, unknown> = {}) => ({
+    createdAt: new Date(2_000_000).toISOString(),
+    status: 'delivered',
+    totals: { total: 1_500 },
+    ...over,
+  });
+
+  it('range le retrait encaissé sans moyen dans « à ventiler », pas dans le vide', () => {
+    const z = zFromServer(
+      [commande({ payment: { status: 'paid', tender: null } })] as never,
+      0,
+    );
+    expect(z.unspecified).toBe(1_500);
+    // Il compte dans le chiffre d'affaires : l'argent est bien rentré.
+    expect(z.ca).toBe(1_500);
+    // Et il n'est pas confondu avec ce qui reste dû.
+    expect(z.due).toBe(0);
+  });
+
+  it('sépare ce qui reste DÛ de ce qui est encaissé sans moyen', () => {
+    const z = zFromServer(
+      [
+        commande({ payment: { status: 'pending', tender: null } }),
+        commande({ payment: { status: 'paid', tender: null } }),
+      ] as never,
+      0,
+    );
+    expect(z.due).toBe(1_500);
+    expect(z.unspecified).toBe(1_500);
+  });
+
+  it('ventile normalement quand le moyen est connu', () => {
+    const z = zFromServer(
+      [
+        commande({ payment: { status: 'paid', tender: 'cash' } }),
+        commande({ payment: { status: 'paid', tender: 'meal_voucher' } }),
+      ] as never,
+      0,
+    );
+    expect(z.cash).toBe(1_500);
+    expect(z.mealVoucher).toBe(1_500);
+    expect(z.unspecified).toBe(0);
+  });
+});

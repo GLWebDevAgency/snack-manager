@@ -57,6 +57,14 @@ function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
   };
 }
 
+/**
+ * Le plafond de lecture d'une liste de commandes.
+ *
+ * Deux cents suffit à un service de comptoir ordinaire ; au-delà, la réponse
+ * annonce sa troncature plutôt que de laisser croire à un total.
+ */
+const ORDERS_PAGE_MAX = 200;
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -388,12 +396,29 @@ export class OrdersService {
     return patched ?? order;
   }
 
+  /**
+   * Les commandes du service — plafonnées, et le PLAFOND SE DIT.
+   *
+   * `total` valait `rows.length`, c'est-à-dire le plafond lui-même dès qu'il
+   * était atteint. Le Z de clôture du POS est calculé sur cette liste : un
+   * snack qui passe deux cent cinquante tickets dans la journée voyait les
+   * cinquante plus anciens disparaître du chiffre d'affaires, des espèces, de
+   * la carte et des titres-restaurant — sans qu'aucun écran ne signale la
+   * coupe. Le gérant recomptait sa caisse contre un total amputé.
+   *
+   * `total` est désormais le vrai compte, et `truncated` dit qu'il manque des
+   * lignes. Les deux ensemble permettent à l'écran de refuser de conclure,
+   * plutôt que de conclure faux.
+   */
   async list(tenantId: string, filter: { status?: OrderStatus; since?: string }) {
     const query: Record<string, unknown> = { tenantId };
     if (filter.status) query.status = filter.status;
     if (filter.since) query.createdAt = { $gte: new Date(filter.since) };
-    const rows = await this.orders.find(query).sort({ createdAt: -1 }).limit(200).lean();
-    return { rows, total: rows.length };
+    const [rows, total] = await Promise.all([
+      this.orders.find(query).sort({ createdAt: -1 }).limit(ORDERS_PAGE_MAX).lean(),
+      this.orders.countDocuments(query),
+    ]);
+    return { rows, total, truncated: total > rows.length };
   }
 
   async byId(tenantId: string, id: string) {
