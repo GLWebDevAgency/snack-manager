@@ -32,7 +32,7 @@ import { TopBar } from './TopBar';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
-import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto } from './modals';
+import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto, RejetsModal } from './modals';
 import {
   buildOrderBody,
   loadJson,
@@ -114,6 +114,14 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
   const [cashOpen, setCashOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  /**
+   * Les ventes que le serveur a refusées définitivement.
+   *
+   * Elles étaient retirées de la file et JETÉES : sur une commande déjà
+   * encaissée, l'argent est dans le tiroir, le client est parti, et la vente
+   * n'existe nulle part. Rien à l'écran ne le disait.
+   */
+  const [rejetsOpen, setRejetsOpen] = useState(false);
   const [sentClientId, setSentClientId] = useState<string | null>(null);
   const [ticketFor, setTicketFor] = useState<DayEntry | null>(null);
   const [discountFor, setDiscountFor] = useState<DayEntry | null>(null);
@@ -525,6 +533,8 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         pending={sync.pending}
         syncing={sync.syncing}
         offline={offline}
+        rejets={sync.rejected.length}
+        onRejets={() => setRejetsOpen(true)}
         now={now}
         serviceCount={dayLog.length}
         onService={() => {
@@ -621,6 +631,18 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
             onCloseService={closeService}
             onOpenTicket={setTicketFor}
             onOpenDiscount={setDiscountFor}
+          />
+        ) : null}
+
+        {rejetsOpen ? (
+          <RejetsModal
+            rejets={sync.rejected}
+            brand={brand}
+            onClose={() => setRejetsOpen(false)}
+            onAcquitter={() => {
+              void client.queue.acquitterRejets();
+              setRejetsOpen(false);
+            }}
           />
         ) : null}
 

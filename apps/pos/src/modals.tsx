@@ -977,3 +977,98 @@ export function Notice({ tone, title, body }: { tone: string; title: string; bod
     </View>
   );
 }
+
+/**
+ * LES VENTES REFUSÉES — l'écran qui manquait.
+ *
+ * Un refus définitif du serveur (produit supprimé, commande déjà servie…)
+ * retirait l'entrée de la file offline et la JETAIT. Le raisonnement était juste
+ * — rejouer ne changerait rien, et bloquer la file arrêterait le service — mais
+ * retirer SANS TRACE ne l'est pas.
+ *
+ * Sur une commande déjà encaissée, l'argent est dans le tiroir et le client est
+ * parti avec son ticket : la vente n'existe alors nulle part, et rien ne dit
+ * laquelle. Le Z du soir tombe faux sans qu'on sache pourquoi.
+ *
+ * Cet écran montre ce qui a été refusé, avec le motif du serveur et le montant,
+ * pour que le gérant puisse ressaisir. L'acquittement est un geste EXPLICITE :
+ * un rejet qui s'efface tout seul ramène le défaut qu'on répare.
+ */
+export function RejetsModal({
+  rejets,
+  brand,
+  onClose,
+  onAcquitter,
+}: {
+  rejets: readonly {
+    id: string;
+    path: string;
+    body?: unknown;
+    reason: string;
+    status: number;
+    at: number;
+  }[];
+  brand: Brand;
+  onClose: () => void;
+  onAcquitter: () => void;
+}) {
+  const heure = (ms: number) =>
+    new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  /** Le total du corps refusé, quand il en porte un — c'est ce qui a été encaissé. */
+  const montant = (body: unknown): string => {
+    const t = (body as { totals?: { total?: unknown } } | null)?.totals?.total;
+    return typeof t === 'number' ? euros(t) : '—';
+  };
+
+  return (
+    <Overlay onClose={onClose} width={520}>
+      <PanelHead
+        title="Ventes refusées par le serveur"
+        sub={`${rejets.length} à traiter`}
+        onClose={onClose}
+      />
+      <Paper>
+        Ces mutations ont été refusées définitivement : les rejouer ne changerait
+        rien. Si l&apos;une d&apos;elles était encaissée, l&apos;encaissement a bien eu lieu —
+        ressaisissez la vente pour que le Z du soir tombe juste.
+      </Paper>
+
+      <View style={{ gap: S.sm, marginTop: S.lg }}>
+        {rejets.map((r) => (
+          <View
+            key={r.id}
+            style={{
+              borderWidth: 1,
+              borderColor: withAlpha(palette.red, 0.3),
+              backgroundColor: withAlpha(palette.red, 0.08),
+              borderRadius: R.card,
+              padding: S.lg,
+              gap: 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: S.sm }}>
+              <Text style={{ fontFamily: FONT, color: palette.red, fontWeight: '800', fontSize: 15 }}>
+                {montant(r.body)}
+              </Text>
+              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 13 }}>
+                {heure(r.at)} · {r.status}
+              </Text>
+            </View>
+            <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 13 }}>{r.reason}</Text>
+            <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 12 }}>{r.path}</Text>
+          </View>
+        ))}
+      </View>
+
+      <Btn
+        label="J'ai traité ces ventes"
+        kind="solid"
+        size="md"
+        onPress={onAcquitter}
+        block
+        style={{ marginTop: S.lg }}
+      />
+    </Overlay>
+  );
+}
