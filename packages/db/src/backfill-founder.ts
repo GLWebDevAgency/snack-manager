@@ -86,8 +86,11 @@ export function repriseFondateur(
 
 async function main(): Promise<void> {
   const appliquer = process.argv.includes('--appliquer');
-  const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI manquante');
+  // `MONGO_URL` — le nom que l'API et `seed.ts` lisent déjà, et celui que
+  // Railway pose. Un second nom aurait créé deux conventions, et un script de
+  // reprise qui ne démarre pas sur l'environnement où on veut le lancer.
+  const uri = process.env.MONGO_URL;
+  if (!uri) throw new Error('MONGO_URL manquante');
 
   await mongoose.connect(uri);
   const now = new Date();
@@ -159,7 +162,7 @@ async function main(): Promise<void> {
  * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
  *
  * Sans cette garde, importer ce fichier pour tester `repriseFondateur` ouvrait
- * une connexion à la base pointée par `MONGODB_URI` : sur un poste dont le
+ * une connexion à la base pointée par `MONGO_URL` : sur un poste dont le
  * `.env` vise la production, un test unitaire s'y serait connecté. Une décision
  * qui touche à de vrais montants doit pouvoir être exercée SANS base — c'est
  * tout l'objet de l'extraction ci-dessus, et cette ligne est ce qui la rend

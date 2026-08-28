@@ -1,10 +1,20 @@
 # Audit stratégique, produit et technique de SnackManager
 
 **Date :** 28 août 2026  
-**Snapshot audité :** `5438fb2b88c09111b732ac971ee56677099a7803`  
+**Snapshot principal audité :** `c5f3f30c2e0a8e759c0d36349b56ffb52f80acfa`  
+**Scan de sécurité scellé :** `5438fb2b88c09111b732ac971ee56677099a7803` ; le delta jusqu'au snapshot principal a été revu et concerne surtout le CRM interne et le suivi des départs clients, sans modification des chemins transactionnels à l'origine des constats de sécurité.  
 **Cible :** fast-foods indépendants, puis réseaux et multi-sites  
 **Contrainte structurante :** un fondateur-développeur, budget limité, accès direct à des établissements pilotes  
 **Statut du document :** audit de décision ; ce n'est ni une certification de sécurité, ni un avis juridique, fiscal ou sanitaire.
+
+### Deux horizons à ne jamais confondre
+
+| Horizon | Ce qui est vendu | Ce qui n'est pas promis | Critère de réussite |
+|---|---|---|---|
+| **Pilote Classfood — maintenant** | Commande directe, caisse, cuisine, back-office, menu, horaires, promotions, appareils et accompagnement fondateur | Assistant IA, conseil automatisé, HACCP numérique, IoT, stock automatique complet, conformité caisse certifiée | Un service réel sans commande perdue, un gérant qui gagne du temps et des données avant/après exploitables |
+| **Vision restaurant 2030 — trajectoire** | Une boucle unifiée opérations, matière, équipe, finance, HACCP et décisions assistées | Aucune autonomie opaque ni promesse réglementaire sans preuve | Chaque nouvelle capacité est financée par des clients, mesurée et débloquée par un seuil de maturité |
+
+Le pilote n'est pas une version miniature de toutes les ambitions. C'est une **preuve commerciale étroite et fiable**. La vision 2030 sert à choisir une architecture et un ordre de construction ; elle ne doit jamais élargir le contrat Classfood par anticipation.
 
 ## Sommaire
 
@@ -536,3 +546,227 @@ L'API active actuellement `origin: true` avec `credentials: true`, ce qui reflè
 5. Centraliser logs de sécurité, alertes et corrélation sans PII.
 6. Réaliser un test d'intrusion externe avant encaissement à grande échelle ou HACCP connecté.
 
+---
+
+## 10. Infrastructure, exploitation et qualité
+
+### 10.1 État de l'infrastructure
+
+Le projet est déployé sur Railway avec des environnements staging et production, quatre surfaces distinctes, des workflows GitHub Actions de CI/déploiement, une sonde externe, des contrôles de santé et une sauvegarde programmée. Pour une entreprise solo, le socle est au-dessus de la moyenne. Il reste cependant organisé comme un système **techniquement déployable**, pas encore comme un service garanti pendant le coup de feu.
+
+| Capacité | État | Risque réel | Décision |
+|---|---|---|---|
+| CI typecheck/lint/test/build | Solide sur API et packages | Web sans suite de tests dédiée ; lint POS/KDS/scripts parfois simulé par `echo ok` | Conserver le monorepo, remplacer progressivement les faux contrôles |
+| Déploiement staging/production | Automatisé et documenté | Plusieurs dépendances au contrôle plane Railway ; dérive possible entre source, variables et révision servie | Afficher et sonder la révision déployée sur chaque service |
+| Smoke de production | API, web, POS et KDS répondent | Pas de slug restaurant réel ni parcours commande complet dans le smoke actuel | Créer un tenant synthétique de sonde et un parcours sans paiement |
+| Temps réel | WebSocket, Redis events et polling de secours | L'adaptateur Socket.IO Redis n'est pas démontré ; plusieurs réplicas peuvent diverger | Rester à un réplica API ou brancher/tester l'adaptateur avant scale-out |
+| Sauvegarde | Export nocturne, R2 ou artefact de repli | Succès possible avec export partiel ; restauration réelle non automatisée | Test mensuel de restauration en environnement éphémère |
+| Observabilité | Santé, erreurs, événements ops et sonde | Pas de SLO métier ni d'alerte « commande bloquée » de bout en bout | Mesurer les résultats métier, pas seulement les HTTP 200 |
+| Exploitation | Documentation et outils internes riches | Le fondateur reste point unique de panne humain | Runbooks, repli restaurant et relais support dès 8–10 clients |
+
+### 10.2 SLO internes du pilote
+
+Ces objectifs ne sont pas encore des SLA contractuels. Ils servent de seuils de décision internes pour Classfood :
+
+| Indicateur | Cible pilote | Mesure |
+|---|---:|---|
+| Commandes perdues ou dupliquées imputables au système | **0** sur 30 jours | Réconciliation commande source, POS, KDS et statut final |
+| Disponibilité du flux critique pendant les horaires d'ouverture | **≥ 99,9 %** observé | Sonde synthétique pondérée par les plages d'ouverture |
+| Délai création → visibilité KDS en ligne | p95 **< 3 s** | Corrélation par `orderId` et horodatages serveur/client |
+| Requêtes API critiques | p95 **< 500 ms** hors fournisseurs externes | Métriques par route et tenant |
+| File offline non synchronisée | **0** élément âgé de plus de 15 min après retour réseau | Âge de la file par appareil |
+| Reprise après panne d'un écran | **< 5 min** avec runbook | Exercice chronométré hors rush puis en observation réelle |
+| RPO initial | **≤ 24 h** | Dernière sauvegarde complète et vérifiée |
+| RTO initial | **≤ 4 h** | Restauration chronométrée sur environnement isolé |
+
+La disponibilité globale ne suffit pas : une API à 99,9 % qui perd une commande est un échec. Le SLI principal est l'**intégrité de la commande de bout en bout**.
+
+### 10.3 Gate de mise en production
+
+Avant chaque go-live externe :
+
+1. `typecheck`, lint réel, tests et builds verts sur le commit exact ;
+2. révision exposée par les quatre services et vérifiée par le smoke ;
+3. sauvegarde complète récente et exercice de repli connu du restaurant ;
+4. test d'une commande comptoir, d'une commande directe, d'une annulation et d'une reconnexion ;
+5. test impression/son uniquement sur le matériel supporté ;
+6. vérification des rôles, PIN, appareils et révocation ;
+7. aucun constat sécurité élevé ouvert sur le flux concerné ;
+8. déploiement lundi à mercredi, jamais avant un rush ni sans fenêtre d'observation.
+
+### 10.4 Dette de qualité à rembourser
+
+La suite actuelle est volumineuse et utile, mais le nombre de tests ne doit pas masquer ses angles morts. Les priorités sont :
+
+- tests E2E du parcours order → POS → KDS → prêt → clôture ;
+- tests de concurrence, idempotence et reconnexion ;
+- lint réel des clients POS/KDS et des scripts ;
+- tests d'accessibilité automatisés complétés par clavier/tablette réels ;
+- test de charge représentatif d'un rush, avec Redis et bases réelles ;
+- chaos ciblé : Redis indisponible, PostgreSQL lent, WebSocket coupé, Stripe lent, imprimante absente ;
+- contrat de compatibilité matérielle versionné ;
+- tests de migrations sur copie anonymisée et rollback applicatif documenté.
+
+---
+
+## 11. Réglementation et HACCP
+
+### 11.1 Ce que le produit devra réellement permettre
+
+Le [règlement européen 852/2004, article 5](https://eur-lex.europa.eu/eli/reg/2004/852/oj?locale=fr) impose aux exploitants du secteur alimentaire des procédures permanentes fondées sur les principes HACCP. Cela ne signifie pas qu'un logiciel « certifie HACCP » un restaurant. Le produit peut aider l'exploitant à exécuter, documenter et retrouver son plan de maîtrise sanitaire ; la responsabilité de l'exploitant et l'adaptation au site restent centrales.
+
+La doctrine française rappelle que les personnes manipulant des denrées doivent recevoir des instructions ou une formation adaptées et qu'en restauration commerciale au moins une personne doit pouvoir justifier la formation spécifique prévue ; la page officielle décrit une durée de quatorze heures ([ministère de l'Agriculture, mise à jour du 16 juillet 2026](https://agriculture.gouv.fr/restauration-quelles-obligations-en-matiere-de-formation-a-lhygiene-des-aliments)). SnackManager devra donc stocker des habilitations et échéances, sans se substituer à l'organisme de formation.
+
+Autres obligations structurantes pour la feuille de route :
+
+- traçabilité amont/aval selon l'[article 18 du règlement 178/2002](https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:32002R0178) ;
+- information écrite sur les allergènes accessible avant la commande, notamment sur menu, affichage ou cahier consultable selon la [DGCCRF](https://www.economie.gouv.fr/dgccrf/les-fiches-pratiques/faq-coupe-du-monde-de-sport-concerts-festivals-competitions-en-france-les-reponses-vos-questions) ;
+- pour la fonctionnalité caisse, inaltérabilité, sécurisation, conservation, archivage et clôtures ; la loi de finances 2026 a rétabli la possibilité d'une attestation individuelle de l'éditeur selon la [fiche officielle sur les logiciels de caisse](https://www.economie.gouv.fr/entreprises/gerer-son-entreprise-au-quotidien/gerer-sa-comptabilite-et-ses-demarches/ce-quil-faut-savoir-sur-la-certification-des-logiciels-de-caisse) ;
+- réception obligatoire de factures électroniques à partir du 1er septembre 2026 pour toutes les entreprises, puis émission par PME et microentreprises à partir du 1er septembre 2027 selon le [calendrier officiel](https://www.economie.gouv.fr/tout-savoir-sur-la-facturation-electronique-pour-les-entreprises) ;
+- accès RH limité, droits adaptés et journalisation selon la [CNIL](https://www.cnil.fr/fr/les-regles-pour-la-gestion-du-personnel) ; toute surveillance d'activité doit être justifiée, proportionnée et portée à la connaissance du personnel ([CNIL](https://www.cnil.fr/fr/controle-de-lactivite-des-personnes-employees)).
+
+### 11.2 Écart actuel
+
+| Domaine | Présent aujourd'hui | Manque avant vente du domaine |
+|---|---|---|
+| Allergènes | Données menu et rollup depuis les recettes | Workflow de validation, version publiée, date/source, gestion des contaminations croisées et preuve d'information client |
+| Traçabilité | Fournisseurs, ingrédients et mouvements partiels | Lots, réception, DLC/DDM, quantités, liens avec produits vendus, retrait/rappel et export rapide |
+| Températures | Absent | Plan de points de contrôle, relevé manuel, seuils contextualisés, écart et action corrective |
+| Nettoyage | Absent | Plan, fréquence, acteur, produit/méthode, preuve et retard |
+| Non-conformités | Audit applicatif générique | Gravité, cause, produit/lot/équipement, correction, responsable et vérification d'efficacité |
+| Formation | Rôles et équipe | Habilitations, justificatifs, échéances et alertes |
+| Inspection | Absent | Dossier exportable par période/site, complet même hors connexion |
+| Caisse | Journal et primitives métier | Inaltérabilité démontrée, séquences, clôtures, archives, documentation et attestation/certification applicable |
+| Données personnelles | Rôles et traces partielles | Registre, finalités, durées, DPA, droits, minimisation, accès support et procédure de violation |
+
+### 11.3 Produit HACCP minimal vendable
+
+Le premier module HACCP doit fonctionner **sans capteur** et couvrir une journée complète :
+
+1. modèles de tâches configurés avec un spécialiste métier et le restaurateur ;
+2. checklist d'ouverture, de réception, de nettoyage et de fermeture ;
+3. relevés manuels avec unité, heure de mesure, heure de saisie et auteur ;
+4. seuils par équipement/produit et non-conformité automatique ;
+5. action corrective obligatoire, responsable et échéance ;
+6. pièces jointes contrôlées, preuve de signature et historique non écrasable ;
+7. lots, DLC/DDM, réception et retrait/rappel minimal ;
+8. export par site, date, registre et anomalie, utilisable pendant un contrôle ;
+9. mode dégradé, synchronisation et détection des trous de données ;
+10. dashboard de complétude, pas un simple score vert trompeur.
+
+Le wording commercial devra être : **« registre HACCP numérique et aide à l'exécution du PMS »**, validé juridiquement. Éviter « conforme automatiquement », « certifié HACCP » ou « vous protège en cas de contrôle ».
+
+### 11.4 Gate réglementaire
+
+Avant d'ouvrir un module HACCP payant : revue par un expert hygiène/restauration connaissant le GBPH applicable, pilote manuel de trente jours, export relu lors d'un audit à blanc, politique de conservation, clauses de responsabilité et procédure d'incident. Avant de remplacer une caisse conforme : revue spécialisée, dossier de preuves et attestation/certification applicable. Avant tout conseil contractuel, ces points doivent être vérifiés avec un professionnel compétent et, si besoin, la DDPP ; cet audit logiciel ne vaut pas validation réglementaire.
+
+---
+
+## 12. Faisabilité de l'IoT
+
+### 12.1 Verdict
+
+L'IoT est **faisable**, mais économiquement mauvais maintenant et dangereux s'il précède le workflow humain. Une sonde ne résout ni l'absence de plan HACCP, ni l'étalonnage, ni la réaction à une excursion. Elle ajoute du matériel, des piles, du réseau, du support et une responsabilité d'alerte.
+
+Décision : **ne fabriquer aucun capteur ni gateway**. Intégrer un fournisseur existant, avec matériel acheté ou loué par le restaurateur, après adoption du registre manuel par plusieurs clients.
+
+### 12.2 Architecture cible fournisseur-agnostique
+
+```text
+Capteur fournisseur
+    → cloud ou passerelle du fournisseur
+        → webhook signé / API pull bornée
+            → ingestion brute horodatée
+                → normalisation measurement
+                    → moteur de règles déterministe
+                        → alerte + acquittement + action corrective
+                            → preuve et contrôle des trous de mesure
+```
+
+Le modèle doit séparer :
+
+- heure de mesure, heure de réception et heure d'enregistrement ;
+- valeur brute, valeur normalisée et règle évaluée ;
+- appareil, équipement, zone, site et tenant ;
+- état de batterie, connectivité et dernière calibration ;
+- seuil, durée de dépassement et temporisation anti-bruit ;
+- acquittement, action corrective et vérification ;
+- trous de mesure et données arrivées en retard.
+
+### 12.3 Premier POC autorisé
+
+Un seul établissement, une seule chambre froide ou armoire, un seul fournisseur, pendant quatre à six semaines. Les critères de réussite sont :
+
+- moins de 1 % de mesures attendues manquantes hors maintenance planifiée ;
+- aucun silence de capteur interprété comme température normale ;
+- comparaison hebdomadaire à un instrument de référence ;
+- alerte comprise, acquittée et suivie d'une action ;
+- charge support inférieure à la valeur gagnée ;
+- fonctionnement manuel disponible en repli ;
+- consentement explicite du client sur dépendance fournisseur et coût matériel.
+
+Le POC ne démarre que lorsqu'au moins trois clients utilisent réellement le registre manuel et qu'au moins deux acceptent de payer l'automatisation. Une intégration IoT sans demande payante est une diversion.
+
+### 12.4 Risques à contractualiser
+
+- latence ou indisponibilité du cloud fournisseur ;
+- batterie vide, sonde déplacée, porte ouverte et faux positifs ;
+- étalonnage et dérive ;
+- responsabilité de la surveillance hors horaires ;
+- destinataire et escalade des alertes ;
+- réversibilité/export si le fournisseur disparaît ;
+- sécurité du provisioning, rotation des secrets et isolation par tenant ;
+- coûts cellulaires, passerelle, remplacement et support.
+
+---
+
+## 13. Trajectoire IA
+
+### 13.1 Verdict
+
+L'IA n'est pas la prochaine fonctionnalité. La prochaine étape est un **moteur de décisions déterministe et explicable**. Les analyses déjà calculées — marge, food cost, creux, manque à gagner, couverture de planning — doivent d'abord être rendues au bon tenant sous forme d'actions. Un LLM pourra ensuite expliquer, résumer ou faciliter la saisie, mais ne devra jamais inventer la donnée opérationnelle.
+
+### 13.2 Niveaux d'autonomie
+
+| Niveau | Capacité | Condition d'ouverture | Exemples |
+|---|---|---|---|
+| **L0 — règles** | Détecter et prioriser | Données et seuils fiables | retard, rupture probable, tâche HACCP manquante |
+| **L1 — explication** | Reformuler une analyse sourcée | RAG/outil tenant-scopé, citations internes, évaluations | « pourquoi la marge a baissé ? » |
+| **L2 — prévision** | Estimer demande et besoin | Historique propre, baseline naïve et backtest | volumes par créneau, besoins matière |
+| **L3 — proposition** | Préparer une action | Droits, confirmation et aperçu d'impact | brouillon de commande fournisseur ou planning |
+| **L4 — exécution contrôlée** | Exécuter après confirmation | Audit, idempotence, plafond, annulation et vérification | envoyer une commande approuvée |
+| **L5 — autonomie** | Agir sans validation | Hors feuille de route actuelle | aucun achat, prix, sanction RH ou décision HACCP autonome |
+
+### 13.3 Cas d'usage par ordre de valeur/risque
+
+1. **Aujourd'hui déterministe** : agrégation d'exceptions et actions ; sans modèle génératif.
+2. **Explication de KPI** : texte généré uniquement depuis des calculs vérifiés et liés à leurs sources.
+3. **OCR assisté de documents/menu** : extraction puis validation humaine champ par champ.
+4. **Prévision de demande** : modèles statistiques comparés à une baseline jour/semaine, météo ou événements seulement si l'amélioration est prouvée.
+5. **Suggestion d'approvisionnement** : après stock théorique fiable, inventaires et délais fournisseurs.
+6. **Planning conseillé** : contraintes, disponibilités et coût ; validation du manager obligatoire.
+7. **Vision HACCP** : lecture d'étiquettes ou documents uniquement comme aide, jamais comme preuve unique ni diagnostic de conformité.
+
+### 13.4 Socle data à construire avant les modèles
+
+- dictionnaire de métriques versionné ;
+- événements stables avec tenant, site, appareil, acteur, source et corrélation ;
+- séparation entre temps événement, temps d'ingestion et temps de correction ;
+- qualité mesurée : complétude, fraîcheur, unicité, cohérence et taux de corrections ;
+- historique des versions de menu, recette, coût et seuil ;
+- jeu d'évaluation anonymisé ou synthétique ;
+- consentement et contrat avec les fournisseurs IA ; aucune réutilisation des données clients pour entraîner un modèle par défaut ;
+- coûts de modèles plafonnés par tenant et cas d'usage ;
+- journal de chaque conseil : entrée, outils appelés, version, sortie, confirmation et résultat.
+
+### 13.5 Évaluation obligatoire
+
+| Usage | Baseline | Métrique de décision |
+|---|---|---|
+| Prévision de demande | même jour de la semaine précédente / moyenne mobile | WAPE ou MAE par créneau, biais et performance jours atypiques |
+| Besoin matière | vente réelle × recette versionnée | écart théorique/réel et taux de rupture |
+| Conseil | aucune suggestion | taux d'acceptation, valeur réalisée, faux positifs et temps économisé |
+| Explication LLM | texte modèle déterministe | exactitude factuelle, citation de source, omission critique, hallucination |
+| OCR | saisie manuelle | précision par champ et temps de correction humain |
+
+Un modèle n'est mis en production que s'il bat sa baseline sur plusieurs périodes et ne dégrade pas une sous-population critique. Le KPI final n'est pas « nombre de conversations IA », mais **décisions utiles exécutées et résultat vérifié**.

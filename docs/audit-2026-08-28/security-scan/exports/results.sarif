@@ -1,0 +1,845 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "scan_snackmanager_20260828"
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "level": "warning",
+              "message": {
+                "text": "V\u00e9rifier les variables Railway, protections GitHub, scopes Cloudflare, endpoints Stripe, ACL DB/Redis et r\u00e8gles Sentry avec acc\u00e8s op\u00e9rateur."
+              }
+            },
+            {
+              "level": "warning",
+              "message": {
+                "text": "Effectuer un pentest authentifi\u00e9 et des tests d'abus distribu\u00e9s avant extension du parc."
+              }
+            },
+            {
+              "level": "warning",
+              "message": {
+                "text": "Le workflow actuel v\u00e9rifie la lisibilit\u00e9 mais ne r\u00e9importe pas MongoDB/PostgreSQL; un exercice complet reste \u00e0 r\u00e9aliser."
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "codexSecurityCoverageCompleteness": "partial",
+        "codexSecuritySchemaVersion": "1.0",
+        "codexSecurityTargetKind": "git_worktree"
+      },
+      "results": [
+        {
+          "level": "note",
+          "locations": [
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/auth/auth.service.ts"
+                },
+                "region": {
+                  "endLine": 36,
+                  "startLine": 22
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Le temps de r\u00e9ponse du login r\u00e9v\u00e8le probablement l'existence d'un compte\n\nAuthService court-circuite quand l'email est inconnu, alors qu'un email valide avec mauvais mot de passe ex\u00e9cute Argon2. Le message est identique, mais la diff\u00e9rence de calcul cr\u00e9e un oracle temporel.\n\nSeverity: low\n\nCategory: Account enumeration\n\nWeaknesses: CWE-208\n\nRemediation:\nConserver un hash Argon2 factice valide et v\u00e9rifier le mot de passe contre lui lorsque l'utilisateur est absent. Garder r\u00e9ponse et throttling identiques et surveiller les sondages distribu\u00e9s.\n\nRemediation tests:\n- Benchmark statistique des deux chemins en CI d\u00e9di\u00e9e."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:248a7058c5e345ccaba25eea54752d6e16cd4ad297fc32eb3cf2d81ef8f40595",
+            "primaryLocationLineHash": "abc16daf3889fa79:1"
+          },
+          "properties": {
+            "category": "account-enumeration",
+            "confidence": "high",
+            "findingId": "csf_bf2072ab1784f6279c04a426",
+            "occurrenceId": "occ_0ee30375b3db1039f2988cc1",
+            "severity": "low"
+          },
+          "ruleId": "authentication.timing-account-enumeration",
+          "ruleIndex": 0
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "message": {
+                "text": "data-flow"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/orders/orders.gateway.ts"
+                },
+                "region": {
+                  "endLine": 76,
+                  "startLine": 68
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "authorization"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/orders/orders.gateway.ts"
+                },
+                "region": {
+                  "endLine": 114,
+                  "startLine": 87
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "comparison"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/common/auth.ts"
+                },
+                "region": {
+                  "endLine": 130,
+                  "startLine": 103
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Les connexions WebSocket survivent \u00e0 l'expiration et \u00e0 la r\u00e9vocation\n\nLe gateway v\u00e9rifie le JWT seulement \u00e0 la connexion, rejoint tenant:<tenantId>, puis ne consulte plus l'\u00e9tat du tenant, du salari\u00e9 ou de l'appareil et ne programme pas de d\u00e9connexion \u00e0 exp. Les commandes compl\u00e8tes continuent d'\u00eatre diffus\u00e9es \u00e0 la room.\n\nSeverity: high\n\nCategory: Websocket authorization\n\nWeaknesses: CWE-613\n\nRemediation:\nUtiliser un service de session commun HTTP/WebSocket, v\u00e9rifier tenant, staff, r\u00f4le et appareil \u00e0 l'admission, d\u00e9connecter \u00e0 l'expiration du JWT et sur \u00e9v\u00e9nements de r\u00e9vocation, avec revalidation p\u00e9riodique de secours.\n\nRemediation tests:\n- Test WebSocket avec horloge contr\u00f4l\u00e9e et expiration.\n- Test de suspension tenant, d\u00e9sactivation staff et r\u00e9vocation appareil sur socket ouverte."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:f4ef9c100491e94d98aa3734184c1c77c8793b9248c50d3b9a80f64909217e25",
+            "primaryLocationLineHash": "99e5000e298a9d57:1"
+          },
+          "properties": {
+            "category": "websocket-authorization",
+            "confidence": "high",
+            "findingId": "csf_2815bdd97cb34aad2ba7dd69",
+            "occurrenceId": "occ_1c748ae4c5ef32f78f56d53b",
+            "severity": "high"
+          },
+          "ruleId": "websocket.authorization-revocation",
+          "ruleIndex": 9
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "configuration"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/next.config.ts"
+                },
+                "region": {
+                  "endLine": 5,
+                  "startLine": 3
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/proxy.ts"
+                },
+                "region": {
+                  "endLine": 515,
+                  "startLine": 477
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "impact"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/admin/menu/page.tsx"
+                },
+                "region": {
+                  "endLine": 745,
+                  "startLine": 703
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Les interfaces d'administration peuvent \u00eatre int\u00e9gr\u00e9es dans un site malveillant\n\nLa configuration Next ne d\u00e9finit pas d'en-t\u00eates globaux et le proxy ne limite frame-ancestors que pour certains embeds. Les pages /admin et /sm restent frameables et lisent leur JWT localStorage dans le frame, permettant des clics trompeurs sur des mutations en un geste.\n\nSeverity: medium\n\nCategory: Clickjacking\n\nWeaknesses: CWE-1021\n\nRemediation:\nD\u00e9finir CSP frame-ancestors 'none' ou 'self' et X-Frame-Options DENY/SAMEORIGIN sur toutes les pages hors embed. Garder une exception explicite et \u00e9troite pour /embed/* et tester les en-t\u00eates de /admin, /sm et des widgets.\n\nRemediation tests:\n- Test automatis\u00e9 des en-t\u00eates et tentative d'iframe cross-origin."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:b2d38abc45c59842970841b8c8caba3e33c0abab313bb78ca3a309faf8e46517",
+            "primaryLocationLineHash": "1c7895e4dbbeab3b:1"
+          },
+          "properties": {
+            "category": "clickjacking",
+            "confidence": "medium",
+            "findingId": "csf_cc510bd2d02554ec8f4010c1",
+            "occurrenceId": "occ_265ef1695413721e5aa845f5",
+            "severity": "medium"
+          },
+          "ruleId": "browser-security.clickjacking-admin",
+          "ruleIndex": 2
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/ops/public-errors.controller.ts"
+                },
+                "region": {
+                  "endLine": 61,
+                  "startLine": 23
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/ops/report-throttle.ts"
+                },
+                "region": {
+                  "endLine": 39,
+                  "startLine": 15
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/contact/route.ts"
+                },
+                "region": {
+                  "endLine": 113,
+                  "startLine": 109
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Les limites publiques utilisent une adresse X-Forwarded-For falsifiable\n\nLa t\u00e9l\u00e9m\u00e9trie API et le formulaire de contact prennent directement la premi\u00e8re valeur de X-Forwarded-For. Si l'edge ajoute au lieu de remplacer l'en-t\u00eate, un attaquant peut faire tourner cette valeur et obtenir un nouveau bucket \u00e0 chaque requ\u00eate.\n\nSeverity: medium\n\nCategory: Rate limit bypass\n\nWeaknesses: CWE-400\n\nRemediation:\nFaire confiance uniquement \u00e0 req.ip apr\u00e8s configuration des CIDR proxy exacts, imposer la reconstruction de l'en-t\u00eate \u00e0 l'edge, d\u00e9placer les limites dans Redis ou \u00e0 l'edge et ajouter des quotas globaux et par route. Authentifier la t\u00e9l\u00e9m\u00e9trie appareil quand possible et expirer/capper les ErrorEvent.\n\nRemediation tests:\n- Test d'int\u00e9gration derri\u00e8re le proxy r\u00e9el avec un X-Forwarded-For forg\u00e9."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:57305762d56f8e2a7da827f5f7c83d3ae7ada6b273c123b0a6364858a6f11b05",
+            "primaryLocationLineHash": "dd8085636e8d2ef1:1"
+          },
+          "properties": {
+            "category": "rate-limit-bypass",
+            "confidence": "medium",
+            "findingId": "csf_8e42186729812a684c020411",
+            "occurrenceId": "occ_418b313abe8e70879727e0f6",
+            "severity": "medium"
+          },
+          "ruleId": "rate-limit.spoofable-forwarded-for",
+          "ruleIndex": 7
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/pos/server.js"
+                },
+                "region": {
+                  "endLine": 56,
+                  "startLine": 29
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/kds/server.js"
+                },
+                "region": {
+                  "endLine": 56,
+                  "startLine": 29
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Une URL mal encod\u00e9e peut arr\u00eater les serveurs web POS et KDS\n\nLes serveurs de production POS et KDS appellent decodeURIComponent sur le chemin brut sans try/catch. Une requ\u00eate comme /% ou /%ZZ l\u00e8ve URIError hors gestionnaire et termine le processus Node.\n\nSeverity: medium\n\nCategory: Denial of service\n\nWeaknesses: CWE-248\n\nRemediation:\nIntercepter URIError et renvoyer 400 avant tout acc\u00e8s fichier, prot\u00e9ger l'ensemble du handler, g\u00e9rer les erreurs de stream et ajouter des tests de r\u00e9gression sur les encodages invalides.\n\nRemediation tests:\n- Tests HTTP /%, /%ZZ et s\u00e9quences UTF-8 invalides sur les deux serveurs."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:23381956a725a0145da84b764c35c5758c5d834d4a0b5072f04527893ad07d5d",
+            "primaryLocationLineHash": "e3ed42728e035617:1"
+          },
+          "properties": {
+            "category": "denial-of-service",
+            "confidence": "high",
+            "findingId": "csf_f2a5a4faba50d15fe3cf149c",
+            "occurrenceId": "occ_4e48621c1018bf9314a464f4",
+            "severity": "medium"
+          },
+          "ruleId": "availability.malformed-url-decode",
+          "ruleIndex": 1
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "data"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/contact/route.ts"
+                },
+                "region": {
+                  "endLine": 64,
+                  "startLine": 48
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/web/src/app/api/contact/route.ts"
+                },
+                "region": {
+                  "endLine": 174,
+                  "startLine": 136
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Le fallback du formulaire de contact \u00e9crit les coordonn\u00e9es prospects dans les logs\n\nLe handler collecte nom, restaurant, t\u00e9l\u00e9phone, email et cr\u00e9neau. Comme /public/leads n'existe pas dans l'API inspect\u00e9e, les erreurs et 404 s\u00e9rialisent ces champs dans console.warn; seul le corps libre du message est masqu\u00e9.\n\nSeverity: medium\n\nCategory: Sensitive data exposure\n\nWeaknesses: CWE-532\n\nRemediation:\nCr\u00e9er un stockage de leads avec acc\u00e8s, chiffrement et r\u00e9tention d\u00e9finis. Ne journaliser qu'un identifiant de corr\u00e9lation, une cat\u00e9gorie de r\u00e9sultat et des m\u00e9triques non sensibles; purger les logs historiques selon la politique de confidentialit\u00e9.\n\nRemediation tests:\n- Test de logs sur succ\u00e8s, 404, 500, timeout et erreur r\u00e9seau avec marqueurs PII."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:fc90a93fe402df6b7f8b7221e6c1224b986fe52befee49974c1d08e3a0ab6794",
+            "primaryLocationLineHash": "c9bc15e9ffa3dee8:1"
+          },
+          "properties": {
+            "category": "sensitive-data-exposure",
+            "confidence": "high",
+            "findingId": "csf_d2bd955d6c3a9b56cf409b7a",
+            "occurrenceId": "occ_70f2c7b8443c4992d65038bb",
+            "severity": "medium"
+          },
+          "ruleId": "privacy.pii-in-operational-logs",
+          "ruleIndex": 6
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/kds/src/config.ts"
+                },
+                "region": {
+                  "endLine": 38,
+                  "startLine": 15
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/kds/src/useTenantSocket.ts"
+                },
+                "region": {
+                  "endLine": 49,
+                  "startLine": 34
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/kds/src/client.ts"
+                },
+                "region": {
+                  "endLine": 348,
+                  "startLine": 295
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Le param\u00e8tre d'URL KDS peut d\u00e9tourner les jetons appareil et employ\u00e9\n\nLe build web KDS accepte et persiste une origine API arbitraire issue de ?api=, puis y envoie le jeton appareil et le JWT staff via HTTP et Socket.IO. Un lien pi\u00e9g\u00e9 ouvert sur un KDS d\u00e9j\u00e0 appair\u00e9 peut donc exfiltrer les deux secrets.\n\nSeverity: high\n\nCategory: Credential exposure\n\nWeaknesses: CWE-346\n\nRemediation:\nSupprimer l'override des builds de production. Si n\u00e9cessaire en d\u00e9veloppement, l'activer uniquement sous flag explicite, sur localhost, apr\u00e8s parsing et allowlist HTTPS exacte. Purger sm.kds.cfg.api et ne jamais construire un transport authentifi\u00e9 depuis un param\u00e8tre non fiable.\n\nRemediation tests:\n- Test E2E du build production avec ?api=https://example.invalid et v\u00e9rification qu'aucune requ\u00eate ne part.\n- Test de migration supprimant la cl\u00e9 locale historique."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:c46b57b2e9c72601b4063e9cc69476e34478e3a564851fc73595fbf85ed4840b",
+            "primaryLocationLineHash": "f48e437cd6634913:1"
+          },
+          "properties": {
+            "category": "credential-exposure",
+            "confidence": "high",
+            "findingId": "csf_4783f315d62bce44a3ad43d8",
+            "occurrenceId": "occ_b1d8065e0228731de8666e5c",
+            "severity": "high"
+          },
+          "ruleId": "credential-exposure.untrusted-api-origin",
+          "ruleIndex": 4
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/devices/device-pin-login.usecase.ts"
+                },
+                "region": {
+                  "endLine": 80,
+                  "startLine": 57
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/common/auth.ts"
+                },
+                "region": {
+                  "endLine": 130,
+                  "startLine": 103
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "revocation"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/staff/staff.service.ts"
+                },
+                "region": {
+                  "endLine": 118,
+                  "startLine": 91
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "La d\u00e9sactivation d'un salari\u00e9 ou appareil ne r\u00e9voque pas les JWT d\u00e9j\u00e0 \u00e9mis\n\nLe login PIN v\u00e9rifie salari\u00e9 et appareil uniquement lors de l'\u00e9mission d'un JWT de douze heures. Le guard HTTP ne recharge ensuite ni Staff ni Device et le token ne contient pas d'identifiant de session ou de version de r\u00e9vocation.\n\nSeverity: medium\n\nCategory: Session management\n\nWeaknesses: CWE-613\n\nRemediation:\nLier les JWT staff \u00e0 une session/appareil et \u00e0 une version de token. V\u00e9rifier via cache serveur que le salari\u00e9 est actif, que son r\u00f4le courant correspond et que la session/appareil n'est pas r\u00e9voqu\u00e9. Incr\u00e9menter la version et d\u00e9connecter lors des changements, avec access tokens courts et refresh rotatif.\n\nRemediation tests:\n- Test d'int\u00e9gration login puis deactivation/role-change/device-revoke avec ancien bearer."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:c5c58964119cc304462c96a652105ca491bd219fcd6cb23f3b9508d84c54e5f0",
+            "primaryLocationLineHash": "b5073815b301b558:1"
+          },
+          "properties": {
+            "category": "session-management",
+            "confidence": "high",
+            "findingId": "csf_2a0015ec1ecb8bbcd99228eb",
+            "occurrenceId": "occ_db392846ed95793ec705eb64",
+            "severity": "medium"
+          },
+          "ruleId": "session-management.staff-revocation",
+          "ruleIndex": 8
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "packages/contracts/src/index.ts"
+                },
+                "region": {
+                  "endLine": 355,
+                  "startLine": 342
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sanitizer"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/stats/stats.service.ts"
+                },
+                "region": {
+                  "endLine": 87,
+                  "startLine": 83
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/stats/stats.service.ts"
+                },
+                "region": {
+                  "endLine": 501,
+                  "startLine": 437
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Un nom client peut devenir une formule lors de l'export Excel\n\ncustomerName est accept\u00e9 publiquement puis export\u00e9 dans commandes.csv. Le helper CSV \u00e9chappe s\u00e9parateurs et guillemets mais ne neutralise pas les cellules commen\u00e7ant par =, +, -, @ ou un caract\u00e8re de contr\u00f4le.\n\nSeverity: medium\n\nCategory: Csv injection\n\nWeaknesses: CWE-1236\n\nRemediation:\nCentraliser un s\u00e9rialiseur CSV compatible tableurs et neutraliser toute cellule non fiable commen\u00e7ant par =, +, -, @, tabulation, retour chariot ou saut de ligne, avec politique document\u00e9e et limites de longueur.\n\nRemediation tests:\n- Test unitaire de chaque pr\u00e9fixe dangereux et ouverture manuelle du fichier g\u00e9n\u00e9r\u00e9."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:e465d64d249d9a753349a79fa62d55af5a45404e2a59678e464d1968b865118e",
+            "primaryLocationLineHash": "da7ae3a9fd686ae6:1"
+          },
+          "properties": {
+            "category": "csv-injection",
+            "confidence": "high",
+            "findingId": "csf_ccbddd053d870a7ed4bf0b99",
+            "occurrenceId": "occ_deefdbfbe475f68c53487dba",
+            "severity": "medium"
+          },
+          "ruleId": "output-injection.csv-formula",
+          "ruleIndex": 5
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "message": {
+                "text": "source"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "packages/contracts/src/index.ts"
+                },
+                "region": {
+                  "endLine": 355,
+                  "startLine": 342
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "validation"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/orders/orders.controller.ts"
+                },
+                "region": {
+                  "endLine": 181,
+                  "startLine": 146
+                }
+              }
+            },
+            {
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "apps/api/src/modules/orders/orders.service.ts"
+                },
+                "region": {
+                  "endLine": 330,
+                  "startLine": 296
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Des commandes anonymes non v\u00e9rifi\u00e9es peuvent saturer le flux cuisine\n\nLa route publique accepte des types sans cr\u00e9neau obligatoire, cr\u00e9e imm\u00e9diatement une commande new et publie order.created avant confirmation de paiement. Des UUID uniques permettent d'injecter jusqu'\u00e0 vingt tickets par minute et par adresse apparente dans la cuisine.\n\nSeverity: high\n\nCategory: Business logic abuse\n\nWeaknesses: CWE-799\n\nRemediation:\nCr\u00e9er un sch\u00e9ma de commande publique d\u00e9di\u00e9, forcer le type support\u00e9 et un cr\u00e9neau valide, conserver les commandes non v\u00e9rifi\u00e9es hors du KDS jusqu'au paiement ou \u00e0 un contr\u00f4le \u00e9quivalent, puis ajouter des quotas partag\u00e9s par tenant, origine et global ainsi que des contr\u00f4les anti-bot adapt\u00e9s au paiement comptoir.\n\nRemediation tests:\n- Test d'abus de commandes impay\u00e9es et sans pickup.\n- Test concurrent multi-IP simulant le quota par tenant."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:409c1c281226aeafa8c1be2e3de024eacc22f84f78a1aad467a37b661356a068",
+            "primaryLocationLineHash": "da7ae3a9fd686ae6:1"
+          },
+          "properties": {
+            "category": "business-logic-abuse",
+            "confidence": "high",
+            "findingId": "csf_5d365349dd308604e100d749",
+            "occurrenceId": "occ_f7895e6626faffbdc34eef73",
+            "severity": "high"
+          },
+          "ruleId": "business-logic.public-order-abuse",
+          "ruleIndex": 3
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "Codex Security",
+          "rules": [
+            {
+              "fullDescription": {
+                "text": "Authentication: Timing account enumeration. Categories: Account enumeration. Weaknesses: CWE-208."
+              },
+              "help": {
+                "markdown": "Authentication: Timing account enumeration. Categories: Account enumeration. Weaknesses: CWE-208.\n\n## Remediation\n\nConserver un hash Argon2 factice valide et v\u00e9rifier le mot de passe contre lui lorsque l'utilisateur est absent. Garder r\u00e9ponse et throttling identiques et surveiller les sondages distribu\u00e9s.",
+                "text": "Authentication: Timing account enumeration. Categories: Account enumeration. Weaknesses: CWE-208.\n\nRemediation:\n\nConserver un hash Argon2 factice valide et v\u00e9rifier le mot de passe contre lui lorsque l'utilisateur est absent. Garder r\u00e9ponse et throttling identiques et surveiller les sondages distribu\u00e9s."
+              },
+              "id": "authentication.timing-account-enumeration",
+              "name": "Authentication: Timing account enumeration",
+              "properties": {
+                "security-severity": "3.7",
+                "tags": [
+                  "account-enumeration",
+                  "external/cwe/cwe-208",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Authentication: Timing account enumeration"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Availability: Malformed URL decode. Categories: Denial of service. Weaknesses: CWE-248."
+              },
+              "help": {
+                "markdown": "Availability: Malformed URL decode. Categories: Denial of service. Weaknesses: CWE-248.\n\n## Remediation\n\nIntercepter URIError et renvoyer 400 avant tout acc\u00e8s fichier, prot\u00e9ger l'ensemble du handler, g\u00e9rer les erreurs de stream et ajouter des tests de r\u00e9gression sur les encodages invalides.",
+                "text": "Availability: Malformed URL decode. Categories: Denial of service. Weaknesses: CWE-248.\n\nRemediation:\n\nIntercepter URIError et renvoyer 400 avant tout acc\u00e8s fichier, prot\u00e9ger l'ensemble du handler, g\u00e9rer les erreurs de stream et ajouter des tests de r\u00e9gression sur les encodages invalides."
+              },
+              "id": "availability.malformed-url-decode",
+              "name": "Availability: Malformed URL decode",
+              "properties": {
+                "security-severity": "7.5",
+                "tags": [
+                  "denial-of-service",
+                  "external/cwe/cwe-248",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Availability: Malformed URL decode"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Browser security: Clickjacking admin. Categories: Clickjacking. Weaknesses: CWE-1021."
+              },
+              "help": {
+                "markdown": "Browser security: Clickjacking admin. Categories: Clickjacking. Weaknesses: CWE-1021.\n\n## Remediation\n\nD\u00e9finir CSP frame-ancestors 'none' ou 'self' et X-Frame-Options DENY/SAMEORIGIN sur toutes les pages hors embed. Garder une exception explicite et \u00e9troite pour /embed/* et tester les en-t\u00eates de /admin, /sm et des widgets.",
+                "text": "Browser security: Clickjacking admin. Categories: Clickjacking. Weaknesses: CWE-1021.\n\nRemediation:\n\nD\u00e9finir CSP frame-ancestors 'none' ou 'self' et X-Frame-Options DENY/SAMEORIGIN sur toutes les pages hors embed. Garder une exception explicite et \u00e9troite pour /embed/* et tester les en-t\u00eates de /admin, /sm et des widgets."
+              },
+              "id": "browser-security.clickjacking-admin",
+              "name": "Browser security: Clickjacking admin",
+              "properties": {
+                "security-severity": "6.1",
+                "tags": [
+                  "clickjacking",
+                  "external/cwe/cwe-1021",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Browser security: Clickjacking admin"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Business logic: Public order abuse. Categories: Business logic abuse. Weaknesses: CWE-799."
+              },
+              "help": {
+                "markdown": "Business logic: Public order abuse. Categories: Business logic abuse. Weaknesses: CWE-799.\n\n## Remediation\n\nCr\u00e9er un sch\u00e9ma de commande publique d\u00e9di\u00e9, forcer le type support\u00e9 et un cr\u00e9neau valide, conserver les commandes non v\u00e9rifi\u00e9es hors du KDS jusqu'au paiement ou \u00e0 un contr\u00f4le \u00e9quivalent, puis ajouter des quotas partag\u00e9s par tenant, origine et global ainsi que des contr\u00f4les anti-bot adapt\u00e9s au paiement comptoir.",
+                "text": "Business logic: Public order abuse. Categories: Business logic abuse. Weaknesses: CWE-799.\n\nRemediation:\n\nCr\u00e9er un sch\u00e9ma de commande publique d\u00e9di\u00e9, forcer le type support\u00e9 et un cr\u00e9neau valide, conserver les commandes non v\u00e9rifi\u00e9es hors du KDS jusqu'au paiement ou \u00e0 un contr\u00f4le \u00e9quivalent, puis ajouter des quotas partag\u00e9s par tenant, origine et global ainsi que des contr\u00f4les anti-bot adapt\u00e9s au paiement comptoir."
+              },
+              "id": "business-logic.public-order-abuse",
+              "name": "Business logic: Public order abuse",
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "business-logic-abuse",
+                  "external/cwe/cwe-799",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Business logic: Public order abuse"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Credential exposure: Untrusted API origin. Categories: Credential exposure. Weaknesses: CWE-346."
+              },
+              "help": {
+                "markdown": "Credential exposure: Untrusted API origin. Categories: Credential exposure. Weaknesses: CWE-346.\n\n## Remediation\n\nSupprimer l'override des builds de production. Si n\u00e9cessaire en d\u00e9veloppement, l'activer uniquement sous flag explicite, sur localhost, apr\u00e8s parsing et allowlist HTTPS exacte. Purger sm.kds.cfg.api et ne jamais construire un transport authentifi\u00e9 depuis un param\u00e8tre non fiable.",
+                "text": "Credential exposure: Untrusted API origin. Categories: Credential exposure. Weaknesses: CWE-346.\n\nRemediation:\n\nSupprimer l'override des builds de production. Si n\u00e9cessaire en d\u00e9veloppement, l'activer uniquement sous flag explicite, sur localhost, apr\u00e8s parsing et allowlist HTTPS exacte. Purger sm.kds.cfg.api et ne jamais construire un transport authentifi\u00e9 depuis un param\u00e8tre non fiable."
+              },
+              "id": "credential-exposure.untrusted-api-origin",
+              "name": "Credential exposure: Untrusted API origin",
+              "properties": {
+                "security-severity": "8.1",
+                "tags": [
+                  "credential-exposure",
+                  "external/cwe/cwe-346",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Credential exposure: Untrusted API origin"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Output injection: Csv formula. Categories: Csv injection. Weaknesses: CWE-1236."
+              },
+              "help": {
+                "markdown": "Output injection: Csv formula. Categories: Csv injection. Weaknesses: CWE-1236.\n\n## Remediation\n\nCentraliser un s\u00e9rialiseur CSV compatible tableurs et neutraliser toute cellule non fiable commen\u00e7ant par =, +, -, @, tabulation, retour chariot ou saut de ligne, avec politique document\u00e9e et limites de longueur.",
+                "text": "Output injection: Csv formula. Categories: Csv injection. Weaknesses: CWE-1236.\n\nRemediation:\n\nCentraliser un s\u00e9rialiseur CSV compatible tableurs et neutraliser toute cellule non fiable commen\u00e7ant par =, +, -, @, tabulation, retour chariot ou saut de ligne, avec politique document\u00e9e et limites de longueur."
+              },
+              "id": "output-injection.csv-formula",
+              "name": "Output injection: Csv formula",
+              "properties": {
+                "security-severity": "6.1",
+                "tags": [
+                  "csv-injection",
+                  "external/cwe/cwe-1236",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Output injection: Csv formula"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Privacy: Pii in operational logs. Categories: Sensitive data exposure. Weaknesses: CWE-532."
+              },
+              "help": {
+                "markdown": "Privacy: Pii in operational logs. Categories: Sensitive data exposure. Weaknesses: CWE-532.\n\n## Remediation\n\nCr\u00e9er un stockage de leads avec acc\u00e8s, chiffrement et r\u00e9tention d\u00e9finis. Ne journaliser qu'un identifiant de corr\u00e9lation, une cat\u00e9gorie de r\u00e9sultat et des m\u00e9triques non sensibles; purger les logs historiques selon la politique de confidentialit\u00e9.",
+                "text": "Privacy: Pii in operational logs. Categories: Sensitive data exposure. Weaknesses: CWE-532.\n\nRemediation:\n\nCr\u00e9er un stockage de leads avec acc\u00e8s, chiffrement et r\u00e9tention d\u00e9finis. Ne journaliser qu'un identifiant de corr\u00e9lation, une cat\u00e9gorie de r\u00e9sultat et des m\u00e9triques non sensibles; purger les logs historiques selon la politique de confidentialit\u00e9."
+              },
+              "id": "privacy.pii-in-operational-logs",
+              "name": "Privacy: Pii in operational logs",
+              "properties": {
+                "security-severity": "5.5",
+                "tags": [
+                  "external/cwe/cwe-532",
+                  "security",
+                  "sensitive-data-exposure"
+                ]
+              },
+              "shortDescription": {
+                "text": "Privacy: Pii in operational logs"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Rate limit: Spoofable forwarded for. Categories: Rate limit bypass. Weaknesses: CWE-400."
+              },
+              "help": {
+                "markdown": "Rate limit: Spoofable forwarded for. Categories: Rate limit bypass. Weaknesses: CWE-400.\n\n## Remediation\n\nFaire confiance uniquement \u00e0 req.ip apr\u00e8s configuration des CIDR proxy exacts, imposer la reconstruction de l'en-t\u00eate \u00e0 l'edge, d\u00e9placer les limites dans Redis ou \u00e0 l'edge et ajouter des quotas globaux et par route. Authentifier la t\u00e9l\u00e9m\u00e9trie appareil quand possible et expirer/capper les ErrorEvent.",
+                "text": "Rate limit: Spoofable forwarded for. Categories: Rate limit bypass. Weaknesses: CWE-400.\n\nRemediation:\n\nFaire confiance uniquement \u00e0 req.ip apr\u00e8s configuration des CIDR proxy exacts, imposer la reconstruction de l'en-t\u00eate \u00e0 l'edge, d\u00e9placer les limites dans Redis ou \u00e0 l'edge et ajouter des quotas globaux et par route. Authentifier la t\u00e9l\u00e9m\u00e9trie appareil quand possible et expirer/capper les ErrorEvent."
+              },
+              "id": "rate-limit.spoofable-forwarded-for",
+              "name": "Rate limit: Spoofable forwarded for",
+              "properties": {
+                "security-severity": "6.5",
+                "tags": [
+                  "external/cwe/cwe-400",
+                  "rate-limit-bypass",
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "Rate limit: Spoofable forwarded for"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Session management: Staff revocation. Categories: Session management. Weaknesses: CWE-613."
+              },
+              "help": {
+                "markdown": "Session management: Staff revocation. Categories: Session management. Weaknesses: CWE-613.\n\n## Remediation\n\nLier les JWT staff \u00e0 une session/appareil et \u00e0 une version de token. V\u00e9rifier via cache serveur que le salari\u00e9 est actif, que son r\u00f4le courant correspond et que la session/appareil n'est pas r\u00e9voqu\u00e9. Incr\u00e9menter la version et d\u00e9connecter lors des changements, avec access tokens courts et refresh rotatif.",
+                "text": "Session management: Staff revocation. Categories: Session management. Weaknesses: CWE-613.\n\nRemediation:\n\nLier les JWT staff \u00e0 une session/appareil et \u00e0 une version de token. V\u00e9rifier via cache serveur que le salari\u00e9 est actif, que son r\u00f4le courant correspond et que la session/appareil n'est pas r\u00e9voqu\u00e9. Incr\u00e9menter la version et d\u00e9connecter lors des changements, avec access tokens courts et refresh rotatif."
+              },
+              "id": "session-management.staff-revocation",
+              "name": "Session management: Staff revocation",
+              "properties": {
+                "security-severity": "6.5",
+                "tags": [
+                  "external/cwe/cwe-613",
+                  "security",
+                  "session-management"
+                ]
+              },
+              "shortDescription": {
+                "text": "Session management: Staff revocation"
+              }
+            },
+            {
+              "fullDescription": {
+                "text": "Websocket: Authorization revocation. Categories: Websocket authorization. Weaknesses: CWE-613."
+              },
+              "help": {
+                "markdown": "Websocket: Authorization revocation. Categories: Websocket authorization. Weaknesses: CWE-613.\n\n## Remediation\n\nUtiliser un service de session commun HTTP/WebSocket, v\u00e9rifier tenant, staff, r\u00f4le et appareil \u00e0 l'admission, d\u00e9connecter \u00e0 l'expiration du JWT et sur \u00e9v\u00e9nements de r\u00e9vocation, avec revalidation p\u00e9riodique de secours.",
+                "text": "Websocket: Authorization revocation. Categories: Websocket authorization. Weaknesses: CWE-613.\n\nRemediation:\n\nUtiliser un service de session commun HTTP/WebSocket, v\u00e9rifier tenant, staff, r\u00f4le et appareil \u00e0 l'admission, d\u00e9connecter \u00e0 l'expiration du JWT et sur \u00e9v\u00e9nements de r\u00e9vocation, avec revalidation p\u00e9riodique de secours."
+              },
+              "id": "websocket.authorization-revocation",
+              "name": "Websocket: Authorization revocation",
+              "properties": {
+                "security-severity": "8.0",
+                "tags": [
+                  "external/cwe/cwe-613",
+                  "security",
+                  "websocket-authorization"
+                ]
+              },
+              "shortDescription": {
+                "text": "Websocket: Authorization revocation"
+              }
+            }
+          ],
+          "version": "0.1.22"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

@@ -64,8 +64,11 @@ export function dejaJoignable(tenant: { contact?: { phone?: unknown; email?: unk
 
 async function main(): Promise<void> {
   const appliquer = process.argv.includes('--appliquer');
-  const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI manquante');
+  // `MONGO_URL` — le nom que l'API et `seed.ts` lisent déjà, et celui que
+  // Railway pose. Un second nom aurait créé deux conventions, et un script de
+  // reprise qui ne démarre pas sur l'environnement où on veut le lancer.
+  const uri = process.env.MONGO_URL;
+  if (!uri) throw new Error('MONGO_URL manquante');
 
   await mongoose.connect(uri);
   const modele = (cle: keyof typeof MODELS) =>
