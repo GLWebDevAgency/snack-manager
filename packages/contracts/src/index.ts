@@ -175,15 +175,55 @@ export const PerVariantRuleSchema = z.object({
 });
 export type PerVariantRule = z.infer<typeof PerVariantRuleSchema>;
 
-export const OptionGroupSchema = z.object({
-  key: z.string().min(1),
-  name: z.string().min(1),
-  type: z.enum(['single', 'multi']),
-  min: z.number().int().nonnegative().default(0),
-  max: z.number().int().positive().optional(),
-  choices: z.array(OptionChoiceSchema).min(1),
-  perVariant: z.record(z.string(), PerVariantRuleSchema).optional(),
-});
+export const OptionGroupSchema = z
+  .object({
+    key: z.string().min(1),
+    name: z.string().min(1),
+    type: z.enum(['single', 'multi']),
+    min: z.number().int().nonnegative().default(0),
+    max: z.number().int().positive().optional(),
+    choices: z.array(OptionChoiceSchema).min(1),
+    perVariant: z.record(z.string(), PerVariantRuleSchema).optional(),
+  })
+  /**
+   * UN GROUPE « UN SEUL » VAUT UN, PARTOUT.
+   *
+   * `type: 'single'` sans `max` était lu de trois façons : la page de commande
+   * en ligne n'autorisait qu'un choix, la caisse et l'API en acceptaient une
+   * infinité. L'éditeur y menait tout droit — son champ « Maximum » annonce
+   * « Vide = autant qu'on veut », ce qui est faux pour un groupe « un seul ».
+   *
+   * Le maximum se DÉDUIT donc du type plutôt que de rester au bon vouloir de
+   * chaque lecteur. Un `max` explicite plus grand que 1 sur un groupe « un
+   * seul » est une contradiction, pas une préférence : il est refusé.
+   */
+  .transform((g) => (g.type === 'single' && g.max === undefined ? { ...g, max: 1 } : g))
+  .superRefine((g, ctx) => {
+    if (g.type === 'single' && g.max !== undefined && g.max > 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max'],
+        message: 'Un groupe « un seul choix » ne peut pas accepter plus d’un choix',
+      });
+    }
+    // `min > max` rend le produit INVENDABLE : la commande exige plus de choix
+    // que le groupe n'en autorise, et refuse chaque tentative. Aucun écran ne
+    // prévenait — les deux champs étaient validés séparément.
+    if (g.max !== undefined && g.min > g.max) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['min'],
+        message: `Minimum (${g.min}) supérieur au maximum (${g.max}) — le produit serait invendable`,
+      });
+    }
+    if (g.max !== undefined && g.max > g.choices.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max'],
+        message: `Maximum (${g.max}) supérieur au nombre de choix (${g.choices.length})`,
+      });
+    }
+  });
 export type OptionGroup = z.infer<typeof OptionGroupSchema>;
 
 export const ProductCreateSchema = z.object({
@@ -258,9 +298,26 @@ export const OrderLineInputSchema = z.object({
   options: z
     .array(z.object({ groupKey: z.string(), choiceKey: z.string() }))
     .default([]),
-  removed: z.array(z.string()).default([]),
+  /**
+   * Les retraits « sans oignons » — BORNÉS, comme la note deux lignes plus bas.
+   *
+   * C'était un tableau sans longueur de chaînes sans longueur, recopié tel quel
+   * sur la commande et imprimé tel quel sur le ticket cuisine. Un appel direct
+   * envoyait donc mille lignes de mille caractères vers l'imprimante du
+   * comptoir — et la note, elle, était plafonnée à deux cents caractères depuis
+   * toujours dans le même schéma.
+   */
+  removed: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   note: z.string().max(200).optional(),
-  qty: z.number().int().positive().default(1),
+  /**
+   * Un plafond haut, mais un plafond.
+   *
+   * Sans lui, un appel anonyme posait `qty: 1000000` sur un tacos à 8,90 € et
+   * créait une commande à 8 900 000 € qui partait en cuisine. Cinquante est
+   * au-delà de toute commande de comptoir réelle et en deçà de l'absurde ; une
+   * commande de groupe se saisit en plusieurs lignes.
+   */
+  qty: z.number().int().positive().max(50).default(1),
 });
 export type OrderLineInput = z.infer<typeof OrderLineInputSchema>;
 
@@ -335,7 +392,23 @@ export const OrderDiscountSchema = z.object({
 });
 export type OrderDiscount = z.infer<typeof OrderDiscountSchema>;
 
-export const UpdateOrderStatusSchema = z.object({ status: OrderStatusSchema });
+/**
+ * L'AVANCEMENT D'UNE COMMANDE — et « annulée » n'en est pas un.
+ *
+ * Le schéma acceptait les cinq statuts, `cancelled` compris. Or la règle
+ * d'écriture compare les rangs, et `cancelled` vaut −1 : la demande était
+ * acceptée, puis JETÉE en silence, l'API rendant la commande inchangée avec un
+ * 200. L'équipe croyait avoir annulé.
+ *
+ * Annuler passe par `POST /orders/:id/cancel`, qui exige un motif et un code —
+ * une annulation sort une commande de la recette du jour, elle ne se fait pas
+ * d'un glissement d'écran. Le refus le dit plutôt que de laisser deviner.
+ */
+export const UpdateOrderStatusSchema = z.object({
+  status: OrderStatusSchema.refine((s) => s !== 'cancelled', {
+    message: 'Une annulation passe par « Annuler la commande » — avec un motif et un code.',
+  }),
+});
 
 // ─────────────────────────────────────────────────────────────
 // Auth
