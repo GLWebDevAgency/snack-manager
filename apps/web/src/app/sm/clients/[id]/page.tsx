@@ -53,6 +53,7 @@ import {
   ReactivateModal,
   RevokeDeviceModal,
   SuspendModal,
+  ChurnModal,
 } from "./actions";
 import {
   AdoptionSection,
@@ -80,7 +81,7 @@ export default function ClientFilePage({
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
   const [modal, setModal] = useState<
-    "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | null
+    "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | "churn" | null
   >(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
 
@@ -318,6 +319,27 @@ export default function ClientFilePage({
                 Suspendre
               </Btn>
             )}
+            {/*
+              ACTER UN DÉPART — le geste qui n'existait nulle part.
+              `POST /crm/tenants/:id/churn` était écrite et testée sans aucun
+              appelant : un client parti restait « actif » au parc, comptait
+              dans le MRR, et sa raison de partir n'était consignée nulle part.
+              C'est pourtant la donnée la plus utile qu'un éditeur puisse
+              recueillir sur son propre produit.
+            */}
+            {account?.account.status !== "churned" && (
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon="logout"
+                className="border-white/15 text-mut hover:border-white/30 hover:text-ink"
+                onClick={() => setModal("churn")}
+                disabled={!account}
+                title="Acter le départ — cause et détail obligatoires"
+              >
+                Départ
+              </Btn>
+            )}
           </div>
         </div>
 
@@ -385,6 +407,14 @@ export default function ClientFilePage({
         qui survivrait à la fermeture de la modale finirait un jour collé sur
         le mauvais client.
       */}
+      {modal === "churn" && (
+        <ChurnModal
+          tenantId={id}
+          tenantName={name}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
       {modal === "suspend" && (
         <SuspendModal
           tenantId={id}

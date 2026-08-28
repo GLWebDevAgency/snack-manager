@@ -34,10 +34,15 @@ import {
   type LeadServices,
   type ProposalBilling,
   remiseFondateurActive,
+  CHURN_CAUSES,
+  CHURN_CAUSE_LABELS,
+  CHURN_CAUSE_HINTS,
+  type ChurnCause,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import {
   Btn,
+  Chip,
   Field,
   Icon,
   Input,
@@ -900,6 +905,115 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
           ]}
         />
       )}
+    </SheetModal>
+  );
+}
+
+/**
+ * ACTER LE DÉPART D'UN CLIENT — et capter POURQUOI.
+ *
+ * `POST /crm/tenants/:id/churn` était écrite, testée, et n'avait aucun
+ * appelant : aucun écran ne permettait de sortir un client du parc. Il restait
+ * « actif », comptait dans le MRR, apparaissait dans la file de recouvrement —
+ * et sa raison de partir n'était consignée nulle part.
+ *
+ * ── La CAUSE, avant le détail ─────────────────────────────────────────────
+ *
+ * Un motif en texte libre ne s'agrège pas : six départs donnent six phrases, et
+ * aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se poser au
+ * bout d'un an — prix, complexité, fonction manquante ? — et elle ne se répond
+ * qu'avec une cause structurée. La liste est courte : un menu de quinze causes
+ * se remplit au hasard.
+ *
+ * Le détail libre reste obligatoire. C'est lui qui porte le cas particulier, et
+ * c'est lui qu'on relit avant d'appeler pour tenter de récupérer le client.
+ *
+ * ── Ce geste ne coupe PAS l'accès ─────────────────────────────────────────
+ *
+ * Un départ n'est pas une suspension : il constate, il ne sanctionne pas. Le
+ * gérant qui part garde ses données le temps de les récupérer — et un client
+ * qu'on chasse est un client qui ne revient jamais.
+ */
+export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
+  const toast = useToast();
+  const [cause, setCause] = useState<ChurnCause | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pret = cause !== null && reason.trim().length >= MIN_REASON;
+
+  async function run() {
+    if (!pret || busy) return;
+    setBusy(true);
+    try {
+      await clientsApi.churn(tenantId, { cause, reason: reason.trim() });
+      toast(`${tenantName} est sorti du parc`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      toast(errText(e, "Impossible d’acter le départ — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      title={`Départ de ${tenantName}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={!pret || busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Enregistrement…" : "Acter le départ"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[13px] text-mut">
+        Le client sort du parc : il ne compte plus dans le MRR ni dans la file de
+        recouvrement. Son accès n&apos;est PAS coupé — un départ se constate, il ne se
+        sanctionne pas, et le gérant garde ses données le temps de les récupérer.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-1.5">
+        <span className="block text-xs font-bold uppercase tracking-[0.04em] text-mut">
+          Pourquoi part-il ?
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {CHURN_CAUSES.map((c) => (
+            <Chip key={c} on={cause === c} onClick={() => setCause(c)}>
+              {CHURN_CAUSE_LABELS[c]}
+            </Chip>
+          ))}
+        </div>
+        {cause && (
+          <p className="mt-1 text-[12px] text-mut">{CHURN_CAUSE_HINTS[cause]}</p>
+        )}
+      </div>
+
+      <Field
+        className="mt-3"
+        label="Ce qu’il a dit"
+        htmlFor="churn-reason"
+        hint="Ses mots, pas les vôtres — c’est ce qu’on relit avant de tenter de le récupérer."
+      >
+        <Textarea
+          id="churn-reason"
+          rows={3}
+          placeholder="« On a fermé le service du midi, le logiciel ne se rentabilise plus. »"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
     </SheetModal>
   );
 }

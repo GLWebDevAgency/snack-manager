@@ -30,6 +30,7 @@ import {
   type TenantNote,
   type TenantReactivate,
   type TenantSuspend,
+  type ChurnCause,
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
 import { generatePairingCode } from '../screens/pairing-code';
@@ -195,12 +196,18 @@ export class AdminService {
       since: at,
       reason: body.reason,
       suspendedAt: null,
+      // La CAUSE est stockée à côté du détail : c'est elle qui s'agrège, et
+      // sans elle un an de départs ne donne qu'une liste de phrases.
+      churnCause: body.cause,
     });
     await this.record(actor, {
       action: 'tenant.churn',
       tenantId: String(tenant._id),
       reason: body.reason,
       at,
+      // Au journal aussi : la fiche porte l'état courant, le journal porte
+      // l'histoire — et c'est l'histoire qu'on relit pour compter.
+      meta: { cause: body.cause },
     });
     return toAccountView(tenant);
   }
@@ -601,7 +608,14 @@ export class AdminService {
   /** Réécrit le bloc `account` en entier : ses quatre champs bougent ensemble. */
   private setAccount(
     tenantId: string,
-    account: { status: TenantAccountStatus; since: Date; reason: string; suspendedAt: Date | null },
+    account: {
+      status: TenantAccountStatus;
+      since: Date;
+      reason: string;
+      suspendedAt: Date | null;
+      /** La cause d'un départ — `undefined` sur tous les autres gestes. */
+      churnCause?: ChurnCause;
+    },
   ): Promise<RawTenant> {
     return this.updateTenant(tenantId, { account });
   }
@@ -706,6 +720,13 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     founderUntil: iso(raw.founderUntil) ?? null,
     founderDiscountCents:
       typeof raw.founderDiscountCents === 'number' ? raw.founderDiscountCents : null,
+    // Tolérant aux clients d'AVANT le champ : un contact absent vaut trois
+    // chaînes vides, et la fiche masque simplement le bouton d'appel.
+    contact: {
+      name: String((raw.contact as { name?: unknown })?.name ?? ''),
+      phone: String((raw.contact as { phone?: unknown })?.phone ?? ''),
+      email: String((raw.contact as { email?: unknown })?.email ?? ''),
+    },
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],

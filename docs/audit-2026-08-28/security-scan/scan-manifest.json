@@ -1,0 +1,97 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "schemaVersion": "1.0",
+  "scan": {
+    "id": "scan_snackmanager_20260828",
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.22"
+    },
+    "status": "completed",
+    "startedAt": "2026-08-28T08:00:00Z",
+    "completedAt": "2026-08-28T08:47:01Z",
+    "target": {
+      "kind": "git_worktree",
+      "targetId": "target_sha256_9ce15e7c0b0f07c75f7228afbe50cd200d63c7033ef61dcc16d2d20fcbbf47a5",
+      "displayName": "GLWebDevAgency/snack-manager",
+      "remote": "https://github.com/GLWebDevAgency/snack-manager.git",
+      "revision": "5438fb2b88c09111b732ac971ee56677099a7803",
+      "snapshotDigest": "codex-security-snapshot/v1:sha256:24a83e361ed3eff4ea2adf37d0d191a8478353f840483d090c089586e4f4b30d"
+    },
+    "scope": {
+      "includePaths": [
+        "."
+      ],
+      "excludePaths": [
+        ".git/",
+        "**/node_modules/",
+        "**/dist/",
+        "**/.next/",
+        "docs/audit-2026-08-28/screenshots/"
+      ],
+      "summary": "Revue statique source-backed du monorepo SnackManager, centrée sur les frontières Internet, l'authentification, l'autorisation multi-tenant, POS/KDS, commandes, WebSockets, exports, télémétrie, paiements, sauvegardes et déploiement.",
+      "artifactsReviewed": [
+        "apps/api/src/",
+        "apps/web/src/",
+        "apps/pos/",
+        "apps/kds/",
+        "packages/contracts/src/",
+        "packages/client-core/src/",
+        "packages/db/src/",
+        ".github/workflows/",
+        "infra/"
+      ],
+      "runtimeStatus": "Aucun test d'exploitation intrusif n'a été exécuté. Les quatre surfaces publiques de production ont été vérifiées par smoke test séparé.",
+      "validationMode": "Revue statique manuelle, traces source-vers-sink et contre-preuves.",
+      "limitations": [
+        "Aucun test d'intrusion dynamique ou authentifié contre la production.",
+        "La configuration effective Railway, GitHub, Stripe, Cloudflare, MongoDB, PostgreSQL, Redis et Sentry n'était pas disponible.",
+        "La branche a évolué pendant l'audit; les localisations ont été revérifiées sur la révision finale indiquée."
+      ]
+    },
+    "threatModel": {
+      "summary": "SaaS restaurant multi-tenant exposant Next.js, POS/KDS Expo et API NestJS, avec MongoDB, PostgreSQL et Redis. Les actifs majeurs sont les commandes et données clients, identités utilisateurs et appareils, paiement Stripe, stock, personnel, secrets d'exploitation et sauvegardes.",
+      "assets": [
+        "Commandes, prix, réductions, noms et téléphones clients par tenant.",
+        "Stock, recettes, coûts matière et mouvements PostgreSQL.",
+        "Planning, pointage, coût du personnel et sessions PIN.",
+        "JWT, jetons POS/KDS/écrans, tracking et sauvegarde.",
+        "Secrets Stripe, statuts de paiement et comptes connectés.",
+        "Autorité sm_admin cross-tenant, déploiement et configuration Railway.",
+        "Sauvegardes MongoDB/PostgreSQL et journaux d'audit."
+      ],
+      "trustBoundaries": [
+        "Internet anonyme vers routes publiques de commande, suivi, appairage, télémétrie et webhooks.",
+        "Navigateur back-office et stockage local vers authentification Bearer API.",
+        "POS/KDS appairé puis PIN employé vers jeton appareil et JWT staff.",
+        "Claims tenant signés vers requêtes MongoDB/PostgreSQL et rooms WebSocket.",
+        "sm_admin vers opérations cross-tenant et contrôle du parc.",
+        "API vers Stripe, Railway, Cloudflare, Sentry, MongoDB, PostgreSQL et Redis.",
+        "Runner GitHub vers production et sauvegardes."
+      ],
+      "attackerCapabilities": [
+        "Un attaquant Internet peut appeler les routes publiques et WebSockets avec des entrées arbitraires sans accès initial aux secrets.",
+        "Un client légitime peut posséder un token de suivi d'une commande mais pas l'autorité restaurant.",
+        "Un salarié, ex-salarié ou voleur de tablette peut posséder un JWT ou jeton appareil précédemment valide.",
+        "Un site malveillant peut attirer un utilisateur authentifié et tenter framing, redirections ou liens configurés.",
+        "La compromission initiale des fournisseurs cloud et de leurs consoles n'est pas supposée."
+      ],
+      "securityObjectives": [
+        "Isoler strictement tenants, rôles, appareils, écrans et clients.",
+        "Révoquer immédiatement toute session ou connexion désactivée.",
+        "Ne transmettre les secrets qu'aux origines prévues.",
+        "Empêcher les commandes non vérifiées de perturber la cuisine.",
+        "Préserver intégrité, confidentialité et restaurabilité des données.",
+        "Séparer staging et production dans le code, les builds et les secrets."
+      ],
+      "assumptions": [
+        "Les contrôles d'infrastructure non présents dans le dépôt ne sont pas considérés comme actifs.",
+        "Les clients web KDS/POS déployés exécutent le code source audité.",
+        "Le reverse proxy peut ajouter X-Forwarded-For mais aucune garantie de reconstruction de cet en-tête n'est prouvée dans le dépôt.",
+        "HACCP et IoT sont des fonctions futures et non des surfaces de sécurité actuelles."
+      ]
+    },
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json"
+  }
+}

@@ -434,7 +434,59 @@ export type TenantReactivate = z.infer<typeof TenantReactivateSchema>;
  * départ ne coupe pas l'accès (cf. `isAccessBlocked`) : ce n'est pas une
  * sanction, c'est un constat.
  */
+/**
+ * POURQUOI UN CLIENT PART — la donnée la plus précieuse d'un SaaS naissant.
+ *
+ * Le motif était un texte libre, et un texte libre ne s'agrège pas : six
+ * départs donnent six phrases différentes, et aucun tableau. Or c'est
+ * exactement la question qu'un éditeur doit pouvoir se poser au bout d'un an —
+ * « est-ce le prix, la complexité, ou une fonction qui manque ? » — et elle ne
+ * se répond qu'avec une cause structurée.
+ *
+ * La liste est COURTE et exclusive, parce qu'un menu de quinze causes se remplit
+ * au hasard. Chacune appelle une réponse différente de l'éditeur : le prix se
+ * négocie, la complexité se corrige, un concurrent s'analyse, une fermeture ne
+ * se rattrape pas.
+ *
+ * Le détail libre reste : c'est lui qui porte le cas particulier, et c'est lui
+ * qu'on relit avant d'appeler pour tenter de récupérer le client.
+ */
+export const CHURN_CAUSES = [
+  'prix',
+  'fermeture',
+  'concurrent',
+  'usage',
+  'manque',
+  'impaye',
+  'autre',
+] as const;
+export type ChurnCause = (typeof CHURN_CAUSES)[number];
+
+export const CHURN_CAUSE_LABELS: Record<ChurnCause, string> = {
+  prix: 'Trop cher pour lui',
+  fermeture: 'Le restaurant ferme ou est vendu',
+  concurrent: 'Parti chez un concurrent',
+  usage: 'Ne s’en servait pas / trop compliqué',
+  manque: 'Une fonction essentielle manquait',
+  impaye: 'Perdu sur un impayé',
+  autre: 'Autre',
+};
+
+/** Ce que l'éditeur peut faire de chaque cause — affiché sous le choix. */
+export const CHURN_CAUSE_HINTS: Record<ChurnCause, string> = {
+  prix: 'À recouper avec sa formule et son volume de commandes.',
+  fermeture: 'Rien à corriger — mais à sortir des statistiques de perte évitable.',
+  concurrent: 'Notez lequel dans le détail : c’est ce qui se compare.',
+  usage: 'Le signal le plus actionnable — un écran a échoué quelque part.',
+  manque: 'Notez laquelle : trois fois la même, c’est une feuille de route.',
+  impaye: 'Vérifiez que la relance a bien été faite avant de conclure.',
+  autre: 'Décrivez : si « autre » revient souvent, la liste est à revoir.',
+};
+
 export const TenantChurnSchema = z.object({
+  /** La cause, pour l'agrégation. */
+  cause: z.enum(CHURN_CAUSES),
+  /** Le détail, pour le cas particulier — et pour la tentative de reprise. */
   reason: z.string().trim().min(3, 'Indiquez le motif du départ').max(500),
 });
 export type TenantChurn = z.infer<typeof TenantChurnSchema>;
@@ -495,6 +547,12 @@ export type AdminTenantAccount = {
    * public à côté d'un montant remisé.
    */
   founderDiscountCents: number | null;
+  /**
+   * Le contact du GÉRANT — celui qu'on appelle, pas le numéro public du
+   * restaurant. Recueilli à la prospection, il était perdu à la signature :
+   * la fiche client affichait un bouton « Appeler » qui ne s'affichait jamais.
+   */
+  contact: { name: string; phone: string; email: string };
   account: TenantAccount;
   /** Résultat de la règle d'accès, calculé une fois côté API. */
   accessBlocked: boolean;

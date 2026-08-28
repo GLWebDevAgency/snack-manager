@@ -69,6 +69,7 @@ import {
   type RevocableDeviceKind,
   type TenantAccountStatus,
   type CrmInvoice,
+  type ChurnCause,
 } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 
@@ -498,6 +499,16 @@ export const clientsApi = {
   /** Un avoir sur une pièce réglée — le seul moyen d'annuler après paiement. */
   creditInvoice: (id: string, invoiceId: string, reason: string) =>
     api.post<unknown>(`/crm/tenants/${id}/invoices/${invoiceId}/credit`, { reason }),
+
+  /**
+   * Acter le départ d'un client — avec sa CAUSE.
+   *
+   * La route existait, testée, sans aucun appelant : aucun écran ne permettait
+   * de sortir un client du parc. Il restait « actif », comptait dans le MRR, et
+   * sa raison de partir n'était consignée nulle part.
+   */
+  churn: (id: string, body: { cause: ChurnCause; reason: string }) =>
+    api.post<unknown>(`/crm/tenants/${id}/churn`, body),
 
   addNote: (id: string, note: string) =>
     api.post<unknown>(`/crm/tenants/${id}/notes`, { note }),

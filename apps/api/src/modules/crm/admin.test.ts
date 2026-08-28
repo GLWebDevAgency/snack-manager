@@ -148,7 +148,7 @@ describe('Administration client', () => {
 
   describe('Départ d’un client', () => {
     it('acte le départ avec son motif — SANS couper l’accès', async () => {
-      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Revend le fonds de commerce' });
+      const view = await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Revend le fonds de commerce' });
 
       expect(view.account.status).toBe('churned');
       expect(view.statusLabel).toBe('Parti');
@@ -166,7 +166,7 @@ describe('Administration client', () => {
     it('ne détruit rien : le compte garde son nom, sa formule, ses données', async () => {
       // « On garde tout, on ne coupe rien de force » — le départ est un
       // constat commercial, pas une purge.
-      await admin.churn(SM, CLASSFOOD, { reason: 'Fermeture définitive' });
+      await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Fermeture définitive' });
       const row = tenants.rows.find((r) => r._id === CLASSFOOD)!;
 
       expect(row.name).toBe("Class'Food");
@@ -177,7 +177,7 @@ describe('Administration client', () => {
 
     it('solde une suspension en cours — la trace reste au journal', async () => {
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
-      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Ne règle pas, ferme boutique' });
+      const view = await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Ne règle pas, ferme boutique' });
 
       // Le statut courant n'est plus « suspendu » : `suspendedAt` s'efface,
       // l'épisode se relit au journal, qui ne s'efface pas.
@@ -188,9 +188,40 @@ describe('Administration client', () => {
       expect(actions).toContain('tenant.churn');
     });
 
+    /**
+     * LA CAUSE ET LE DÉTAIL, tous deux exigés.
+     *
+     * Un motif en texte libre ne s'agrège pas : six départs donnent six phrases
+     * et aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se
+     * poser au bout d'un an — prix, complexité, fonction manquante ? La cause
+     * structurée y répond ; le détail porte le cas particulier, et c'est lui
+     * qu'on relit avant d'appeler pour tenter de récupérer le client.
+     */
     it('exige un motif — « pourquoi est-il parti ? » doit se lire au journal', () => {
-      expect(TenantChurnSchema.safeParse({ reason: '' }).success).toBe(false);
-      expect(TenantChurnSchema.safeParse({ reason: 'Racheté par une chaîne' }).success).toBe(true);
+      expect(TenantChurnSchema.safeParse({ cause: 'prix', reason: '' }).success).toBe(false);
+      expect(
+        TenantChurnSchema.safeParse({ cause: 'concurrent', reason: 'Racheté par une chaîne' })
+          .success,
+      ).toBe(true);
+    });
+
+    it('exige aussi la CAUSE — sans elle, un an de départs ne se compte pas', () => {
+      expect(TenantChurnSchema.safeParse({ reason: 'Racheté par une chaîne' }).success).toBe(false);
+      // Et une cause inventée ne passe pas : la liste est courte pour rester
+      // agrégeable, un menu de quinze causes se remplit au hasard.
+      expect(
+        TenantChurnSchema.safeParse({ cause: 'pas-content', reason: 'Racheté' }).success,
+      ).toBe(false);
+    });
+
+    it('enregistre la cause SUR le compte et AU journal', async () => {
+      await admin.churn(SM, CLASSFOOD, { cause: 'usage', reason: 'Ne s’en servait plus' });
+      const compte = tenants.rows[0]!.account as { churnCause?: string };
+      // Sur le compte : c'est l'état courant, lu par la fiche.
+      expect(compte.churnCause).toBe('usage');
+      // Au journal : c'est l'histoire, et c'est elle qu'on relit pour compter.
+      const ligne = logs.rows.find((l) => l.action === 'tenant.churn');
+      expect((ligne?.meta as { cause?: string })?.cause).toBe('usage');
     });
   });
 
@@ -502,7 +533,7 @@ describe('Administration client', () => {
       await admin.recordOwnerReset(SM, CLASSFOOD, 'gerant@classfood.fr');
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
       await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
-      await admin.churn(SM, CLASSFOOD, { reason: 'Ferme fin août' });
+      await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Ferme fin août' });
       await admin.changeOffre(SM, CLASSFOOD, {
         plan: 'complet',
         onlineOrdering: false,

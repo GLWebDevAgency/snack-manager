@@ -18,7 +18,8 @@
     "create:admin": "tsx src/create-admin.ts",
     "admin": "tsx src/admin-cli.ts",
     "test": "vitest run",
-    "backfill:founder": "tsx src/backfill-founder.ts"
+    "backfill:founder": "tsx src/backfill-founder.ts",
+    "backfill:contact": "tsx src/backfill-contact.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",

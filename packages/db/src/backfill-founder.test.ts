@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_SERVICES, MODULE_ORDERING_CENTS, PLAN_MRR_CENTS } from '@sm/contracts';
 import { repriseFondateur } from './backfill-founder';
+import { contactUtile, dejaJoignable } from './backfill-contact';
 
 /**
  * LA REPRISE DES FONDATEURS D'AVANT.
@@ -80,5 +81,45 @@ describe('la reprise d’un fondateur', () => {
   it('un client sans formule ni service n’a rien à remiser', () => {
     const r = repriseFondateur({ createdAt: NOW, plan: null, atelier: null }, NOW);
     expect(r.remise).toBe(0);
+  });
+});
+
+/**
+ * LA REPRISE DU CONTACT DU GÉRANT.
+ *
+ * Le lead porte `contact { name, phone, email }` depuis la prospection, et la
+ * conversion le jetait : la fiche client affichait un bouton « Appeler » qui ne
+ * s'affichait jamais, et le commercial rouvrait le pipeline pour retrouver ce
+ * qu'il venait de signer.
+ */
+describe('reprendre un contact', () => {
+  it('retient un contact qui porte au moins un moyen de joindre', () => {
+    expect(contactUtile({ phone: '0612345678' })).toBe(true);
+    expect(contactUtile({ email: 'nicolas@exemple.fr' })).toBe(true);
+  });
+
+  it('écarte un contact qui ne permet PAS de joindre', () => {
+    // Un nom seul ne sert à rien : c'est un numéro ou une adresse qu'on
+    // compose. Écrire un contact vide masquerait le vrai manque.
+    expect(contactUtile({ name: 'Nicolas' })).toBe(false);
+    expect(contactUtile({})).toBe(false);
+    expect(contactUtile({ phone: '   ', email: '  ' })).toBe(false);
+  });
+
+  /**
+   * L'IDEMPOTENCE PROTÈGE LA SAISIE HUMAINE.
+   *
+   * Un client déjà renseigné n'est jamais retouché : le commercial a pu
+   * corriger le numéro à la main depuis la signature, et sa saisie prime sur ce
+   * que disait le pipeline il y a six mois.
+   */
+  it('ne retouche jamais un client déjà joignable', () => {
+    expect(dejaJoignable({ contact: { phone: '0612345678' } })).toBe(true);
+    expect(dejaJoignable({ contact: { email: 'gerant@exemple.fr' } })).toBe(true);
+  });
+
+  it('reprend celui dont le contact est vide ou absent', () => {
+    expect(dejaJoignable({})).toBe(false);
+    expect(dejaJoignable({ contact: { phone: '', email: '' } })).toBe(false);
   });
 });

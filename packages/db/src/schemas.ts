@@ -35,6 +35,26 @@ export const TenantSchema = new Schema(
     brandColor: { type: String, default: '#c9a15a' },
     address: { type: String, default: '' },
     phones: { type: [String], default: [] },
+    /**
+     * LE CONTACT DU GÉRANT — celui qu'on appelle, pas celui qu'on affiche.
+     *
+     * À ne pas confondre avec `phones` juste au-dessus, qui porte les numéros
+     * PUBLICS du restaurant : une ligne de comptoir décroche en plein coup de
+     * feu, ou pas du tout. Quand l'équipe Snack Manager doit joindre le
+     * restaurateur — impayé, incident, relance — c'est ce numéro-là qu'il lui
+     * faut.
+     *
+     * L'information existait pourtant : le lead la porte depuis la
+     * prospection, et la conversion la JETAIT. La fiche client du CRM affichait
+     * donc un bouton « Appeler » qui ne s'affichait jamais, faute de numéro à
+     * composer, et le commercial rouvrait le pipeline pour retrouver ce qu'il
+     * venait de signer.
+     */
+    contact: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      email: { type: String, default: '' },
+    },
     hours: { type: [DayHours], default: [] },
     closures: {
       type: [
@@ -189,6 +209,23 @@ export const TenantSchema = new Schema(
            * comme avant — jamais une anomalie.
            */
           trialEndsAt: { type: Date, default: null },
+          /**
+           * POURQUOI il est parti — la cause structurée, pour l'agrégation.
+           *
+           * `reason` juste au-dessus porte le détail en toutes lettres, et un
+           * texte libre ne s'agrège pas : six départs donnent six phrases, et
+           * aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se
+           * poser au bout d'un an — prix, complexité, fonction manquante ? —
+           * et elle ne se répond qu'avec une cause.
+           *
+           * `null` sur les départs actés avant ce champ : l'absence se lit,
+           * elle ne se devine pas d'un texte qu'on relirait à la main.
+           */
+          churnCause: {
+            type: String,
+            enum: ['prix', 'fermeture', 'concurrent', 'usage', 'manque', 'impaye', 'autre', null],
+            default: null,
+          },
         },
         { _id: false },
       ),

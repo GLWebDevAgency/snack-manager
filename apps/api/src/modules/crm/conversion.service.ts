@@ -120,6 +120,15 @@ export class ConversionService {
     const tenant = await this.tenants.create({
       slug: body.slug,
       name: lead.restaurantName,
+      // LE CONTACT SUIT LE CLIENT. Il était recueilli à la prospection puis
+      // perdu à la signature : la fiche client n'avait plus de numéro à
+      // composer, et le commercial rouvrait le pipeline pour retrouver ce
+      // qu'il venait de signer.
+      contact: {
+        name: lead.contact?.name ?? '',
+        phone: lead.contact?.phone ?? '',
+        email: lead.contact?.email ?? '',
+      },
       plan: body.plan,
       founderSeat: body.founderSeat,
       // L'offre signée EN ENTIER, pas seulement sa formule. Le module et
