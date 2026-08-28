@@ -73,6 +73,13 @@ export const TENANT_FIELDS = {
   plan: 1,
   founderSeat: 1,
   founderUntil: 1,
+  // La PORTÉE de la remise fondateur et le CYCLE d'engagement : sans eux,
+  // `offreClient` lit `undefined`, la remise ne s'applique pas et un client
+  // annuel est compté à sa mensualité faciale. Le MRR du parc redevenait faux
+  // par la projection après avoir été corrigé dans le calcul — précisément le
+  // piège que le commentaire ci-dessus décrit.
+  founderDiscountCents: 1,
+  billingCycle: 1,
   onlineOrdering: 1,
   atelier: 1,
   createdAt: 1,

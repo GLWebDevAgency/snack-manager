@@ -1,7 +1,7 @@
 import { TenantSettingsUpdateSchema } from '@sm/contracts';
 import { TenantSchema } from '@sm/db';
 import { describe, expect, it } from 'vitest';
-import { REGLAGES_MODIFIABLES } from './tenants.service';
+import { REGLAGES_MODIFIABLES, TENANT_ME_FIELDS } from './tenants.service';
 
 /**
  * La route des réglages prend un corps NU — aucun schéma Zod ne la valide
@@ -109,5 +109,59 @@ describe('la validation des réglages', () => {
     // exactement ce qui est arrivé à `dailyGoalCents`.
     const valides = Object.keys(TenantSettingsUpdateSchema.shape).sort();
     expect(valides).toEqual([...REGLAGES_MODIFIABLES].sort());
+  });
+});
+
+/**
+ * CE QU'UNE TABLETTE DE COMPTOIR PEUT LIRE SUR SON RESTAURANT.
+ *
+ * `GET /tenants/me` rendait le document Mongo ENTIER. Or elle sert tout
+ * l'équipage, y compris une session ouverte au code sur la tablette : un
+ * équipier de cuisine lisait le SIRET, le numéro de TVA, l'identité de
+ * facturation, l'identifiant du compte Stripe, le motif de suspension du
+ * compte, et jusqu'au montant de la remise fondateur négociée.
+ *
+ * Aucun de ces champs n'est utilisé par les écrans.
+ */
+describe('la fiche établissement rendue aux tablettes', () => {
+  it('ne laisse passer QUE ce que les écrans consomment', () => {
+    // La liste du contrat côté web (`TenantMe`), à la clé près. `_id` sort
+    // toujours d'une projection Mongo et n'a pas à y figurer.
+    expect(Object.keys(TENANT_ME_FIELDS).sort()).toEqual(
+      [
+        'address',
+        'brandColor',
+        'closures',
+        'hours',
+        'logoUrl',
+        'name',
+        'phones',
+        'plan',
+        'settings',
+        'slug',
+      ].sort(),
+    );
+  });
+
+  it('ne rend AUCUN des champs qui fuyaient', () => {
+    // Nommés un par un : c'est la liste qu'un équipier de cuisine lisait, et
+    // celle qu'une régression rouvrirait.
+    for (const secret of [
+      'billing',
+      'siret',
+      'tvaNumber',
+      'stripe',
+      'encaissement',
+      'account',
+      'atelier',
+      'founderDiscountCents',
+      'founderUntil',
+      'onlineOrdering',
+      'billingCycle',
+    ]) {
+      expect(TENANT_ME_FIELDS, `« ${secret} » ne doit pas sortir sur une tablette`).not.toHaveProperty(
+        secret,
+      );
+    }
   });
 });

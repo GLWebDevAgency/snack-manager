@@ -19,6 +19,26 @@ import type { Tenant } from '@sm/db';
  * `dailyGoalCents`, resté six semaines dans cette liste sans exister en base.
  * Le test `tenants.test.ts` verrouille désormais la correspondance.
  */
+/**
+ * Ce que `GET /tenants/me` a le droit de rendre.
+ *
+ * EXPORTÉE pour être testable : cette liste décide de ce qu'une tablette de
+ * comptoir peut lire sur son propre restaurant, et un champ de trop y est une
+ * fuite silencieuse.
+ */
+export const TENANT_ME_FIELDS = {
+  slug: 1,
+  name: 1,
+  logoUrl: 1,
+  brandColor: 1,
+  address: 1,
+  phones: 1,
+  hours: 1,
+  closures: 1,
+  plan: 1,
+  settings: 1,
+} as const;
+
 export const REGLAGES_MODIFIABLES = [
   'slotIntervalMin',
   'slotCapacity',
@@ -33,8 +53,23 @@ export const REGLAGES_MODIFIABLES = [
 export class TenantsService {
   constructor(@InjectModel('Tenant') private readonly tenants: Model<Tenant>) {}
 
+  /**
+   * L'ÉTABLISSEMENT DE LA SESSION — en liste blanche, jamais le document entier.
+   *
+   * Elle rendait le tenant complet. Or cette route sert TOUT l'équipage, y
+   * compris une session ouverte au code sur la tablette du comptoir : un
+   * équipier de cuisine lisait donc le SIRET, le numéro de TVA, l'identité de
+   * facturation, l'identifiant du compte Stripe du restaurant, le motif de sa
+   * suspension, et jusqu'au montant de sa remise fondateur.
+   *
+   * Rien de tout cela n'est utilisé par les écrans — ils lisent onze champs, et
+   * ce sont exactement ceux d'en dessous. La projection est écrite en liste
+   * BLANCHE, et non en retrait des champs sensibles : un champ ajouté demain au
+   * schéma ne doit pas partir sur une tablette parce que personne n'a pensé à
+   * l'exclure. C'est le même choix que pour la diffusion temps réel du suivi.
+   */
   async byId(tenantId: string) {
-    const t = await this.tenants.findById(tenantId);
+    const t = await this.tenants.findById(tenantId, TENANT_ME_FIELDS);
     if (!t) throw new NotFoundException('Tenant introuvable');
     return t;
   }

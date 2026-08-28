@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { offreClient } from '@sm/contracts';
 import { TENANT_FIELDS } from './crm.service';
 
 /**
@@ -8,22 +9,53 @@ import { TENANT_FIELDS } from './crm.service';
  * sa valeur par défaut. Aucune erreur, aucun journal, aucun test rouge — juste
  * un chiffre faux.
  *
- * C'est exactement ce qui est arrivé au MRR du parc : `listClients` ne chargeait
- * que `plan`, si bien que le module de commande en ligne (79 €/mois) et les
- * mensuels de l'Atelier n'entraient dans aucun total. Le tableau de bord
- * annonçait un chiffre d'affaires récurrent inférieur au réel, et rien ne
- * pouvait le signaler.
+ * C'est arrivé DEUX FOIS. D'abord `onlineOrdering` et `atelier` : le module de
+ * commande en ligne et les mensuels de l'Atelier n'entraient dans aucun total.
+ * Puis, malgré ce test, `founderDiscountCents` et `billingCycle` : la remise
+ * fondateur ne s'appliquait pas et un client annuel était compté à sa
+ * mensualité faciale.
  *
- * Ce test relie la projection au calcul : il ne vérifie pas un champ en
- * particulier, il vérifie que les deux listes ne divergent pas — aujourd'hui et
- * à chaque champ qu'on ajoutera au chiffrage.
+ * ── POURQUOI LA PREMIÈRE VERSION DE CE TEST N'A RIEN VU ───────────────────
+ *
+ * Elle RECOPIAIT à la main la liste des champs du chiffrage. Deux listes
+ * écrites séparément ne divergent pas moins que deux morceaux de code : ajouter
+ * un champ à `offreClient` laissait la copie intacte, et le test restait vert
+ * en affirmant dans son propre commentaire qu'il « vérifiait que les deux
+ * listes ne divergent pas ».
+ *
+ * La liste est donc désormais OBSERVÉE : on donne à `offreClient` un objet qui
+ * note ce qu'on lui demande. Un champ ajouté au chiffrage apparaît ici sans que
+ * personne l'écrive, et fait tomber le test tant que la projection ne le charge
+ * pas. Un test qui se met à jour tout seul est le seul qui tienne.
  */
 describe('la projection des clients', () => {
-  /** Ce que `abonnementMensuelCents` lit sur un tenant pour chiffrer son mois. */
-  const CHAMPS_DU_CHIFFRAGE = ['plan', 'onlineOrdering', 'atelier', 'founderUntil'] as const;
+  /** Les champs que `offreClient` lit RÉELLEMENT, relevés à l'exécution. */
+  function champsDuChiffrage(): string[] {
+    const lus = new Set<string>();
+    const mouchard = new Proxy(
+      {},
+      {
+        get(_cible, propriete) {
+          if (typeof propriete === 'string') lus.add(propriete);
+          return undefined;
+        },
+        has: () => true,
+      },
+    );
+    offreClient(mouchard);
+    return [...lus];
+  }
+
+  it('relève bien ce que le chiffrage consulte — sinon ce test ne prouve rien', () => {
+    // Garde-fou du garde-fou : si le mouchard ne captait rien, le test suivant
+    // passerait sur une liste vide et ne vérifierait plus rien du tout.
+    const champs = champsDuChiffrage();
+    expect(champs.length).toBeGreaterThanOrEqual(5);
+    expect(champs).toContain('plan');
+  });
 
   it('charge tout ce dont le chiffrage a besoin', () => {
-    const manquants = CHAMPS_DU_CHIFFRAGE.filter((c) => !(c in TENANT_FIELDS));
+    const manquants = champsDuChiffrage().filter((c) => !(c in TENANT_FIELDS));
     expect(
       manquants,
       'Ces champs sont lus par le calcul du MRR mais absents de la projection : ' +
