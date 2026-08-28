@@ -183,6 +183,24 @@ export function EditPanel({
     return sum;
   }, [lines, ingredientById]);
 
+  /**
+   * Ce produit impose-t-il un choix qui COÛTE ?
+   *
+   * Le recalcul live ne compte que les lignes de RECETTE : les ingrédients
+   * consommés par une option obligatoire — la viande imposée d'un tacos — n'y
+   * entrent pas. L'API les compte, elle (`requiredOptionsCost`), et son
+   * commentaire dit pourquoi : « un tacos M sans sa viande imposée » ne doit
+   * pas afficher 90 % de marge.
+   *
+   * On ne peut pas les additionner ici sans refaire tout le chiffrage des
+   * recettes d'options. On le DIT donc, plutôt que d'annoncer une marge que le
+   * gérant croirait complète et sur laquelle il fixerait son prix.
+   */
+  const aDesChoixImposes = useMemo(
+    () => groups.some((g) => (g.min ?? 0) > 0),
+    [groups],
+  );
+
   const priceCents = product ? effectivePrice(product) : 0;
   const showBatchFigures = bomState !== "ready" && initialCost !== undefined;
   const costCents = showBatchFigures ? initialCost.costCents : liveCostCents;
@@ -453,6 +471,14 @@ export function EditPanel({
                 </span>
                 <span className="text-xs text-mut">
                   sur prix de vente {fmtEuro(priceCents)}
+                  {aDesChoixImposes && !showBatchFigures && (
+                    <>
+                      {" · "}
+                      <span className="text-prept">
+                        hors choix imposés — la marge réelle est plus basse
+                      </span>
+                    </>
+                  )}
                 </span>
               </div>
 
