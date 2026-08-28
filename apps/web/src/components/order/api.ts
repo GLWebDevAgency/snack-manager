@@ -553,9 +553,19 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
-  function createPaymentIntent(orderId: string): Promise<PaymentIntentResponse> {
+  /**
+   * Le jeton de suivi accompagne l'appel, comme sur le suivi et le ticket.
+   *
+   * Cette route était la seule à ouvrir une commande sur son seul identifiant :
+   * elle confirmait son existence et en révélait le montant à qui devinait un
+   * ObjectId — que `tracking.ts` décrit précisément comme devinable.
+   */
+  function createPaymentIntent(
+    orderId: string,
+    token: string,
+  ): Promise<PaymentIntentResponse> {
     return postJson<PaymentIntentResponse>(
-      `/public/orders/${encodeURIComponent(orderId)}/payment-intent`,
+      withToken(`/public/orders/${encodeURIComponent(orderId)}/payment-intent`, token),
       {},
     );
   }

@@ -349,7 +349,7 @@ export function Checkout({
         return;
       }
 
-      const res = await api.createPaymentIntent(created._id);
+      const res = await api.createPaymentIntent(created._id, created.trackingToken);
       if (res.unavailable || !res.publishableKey) {
         writePayProbe(slug, "off");
         setProbe("off");

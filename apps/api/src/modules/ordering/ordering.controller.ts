@@ -52,8 +52,11 @@ export class OrderingController {
   @Public()
   @HttpCode(200)
   @Post('public/orders/:id/payment-intent')
-  paymentIntent(@Param('id') id: string) {
-    return this.payments.createIntent(id);
+  paymentIntent(
+    @Param('id') id: string,
+    @Query(zod(TrackingTokenQuerySchema)) query: TrackingTokenQuery,
+  ) {
+    return this.payments.createIntent(id, query.t);
   }
 
   /**
