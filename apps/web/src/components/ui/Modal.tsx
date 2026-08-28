@@ -53,12 +53,33 @@ export function Modal({
         if (!destructive) onClose();
       }}
     >
+      {/*
+        ── LE CORPS DÉFILE, L'EN-TÊTE ET LE PIED RESTENT ──
+        
+        Le panneau n'avait ni hauteur maximale ni zone défilante : centré dans
+        une grille, il débordait symétriquement en haut ET en bas, et le voile
+        étant `fixed`, ce débordement n'alimentait AUCUN défilement — ni celui
+        de la page, ni celui de la modale.
+        
+        Le pied devenait donc inatteignable dès que le contenu dépassait la
+        hauteur utile : sur un portable 768p, la modale « Nouveau code promo »
+        demande environ 712 px pour 640 disponibles. Le gérant remplissait neuf
+        champs et ne pouvait pas les envoyer. Sur téléphone, où la grille se
+        déplie en une colonne, c'était certain.
+        
+        `Drawer` faisait déjà ce qu'il fallait (`cf-scroll min-h-0 flex-1
+        overflow-y-auto`) — d'où deux modales qui avaient bricolé leur propre
+        `max-h` interne faute que le composant s'en charge.
+        
+        `100dvh` et non `100vh` : sur mobile, la barre d'adresse rétractable
+        fausse `vh`, et le pied repasserait sous elle.
+      */}
       <div
-        className="w-full animate-pop rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
           <h2 className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink">
             {title}
           </h2>
@@ -70,9 +91,13 @@ export function Modal({
             onClick={onClose}
           />
         </div>
-        <div className="text-sm text-ink">{children}</div>
+        {/* `-mx-5 px-5` : la zone défilante va d'un bord à l'autre du panneau,
+            sinon l'ascenseur apparaît à 20 px du bord et semble flotter. */}
+        <div className="cf-scroll -mx-5 min-h-0 flex-1 overflow-y-auto px-5 text-sm text-ink">
+          {children}
+        </div>
         {footer && (
-          <div className="mt-5 flex items-center justify-end gap-2">
+          <div className="mt-5 flex shrink-0 items-center justify-end gap-2">
             {footer}
           </div>
         )}

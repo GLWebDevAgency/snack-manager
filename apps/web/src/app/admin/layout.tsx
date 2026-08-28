@@ -86,6 +86,15 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   // deux — prévu contre pointé — est justement ce que le planning affiche.
   { id: "planning", href: "/admin/planning", label: "Planning", icon: "clock" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },
+  // « Votre site web » était INATTEIGNABLE : la page existait, complète —
+  // adresse du site, nom de domaine, état de propagation DNS — et ne figurait
+  // dans aucune navigation. Le restaurateur qui achète un nom de domaine ne
+  // pouvait pas y arriver, sauf à connaître l'URL par cœur.
+  //
+  // Sa place est ici, entre les avis et l'argent : les trois entrées
+  // précédentes parlent de ce que le PUBLIC voit du restaurant — ses écrans,
+  // ses avis, son site — et les deux suivantes de ce qu'il encaisse.
+  { id: "site", href: "/admin/site", label: "Votre site web", icon: "home" },
   // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
   // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
   // trouver seul — la FAQ lui promet mot pour mot d'y retrouver ses factures.
