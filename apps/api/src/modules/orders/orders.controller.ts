@@ -30,6 +30,7 @@ import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { OrdersService } from './orders.service';
 import { AuthService } from '../auth/auth.service';
 import { TenantsService } from '../tenants/tenants.service';
+import { SlotsService } from '../ordering/slots.service';
 
 @Controller()
 export class OrdersController {
@@ -37,6 +38,7 @@ export class OrdersController {
     private readonly orders: OrdersService,
     private readonly auth: AuthService,
     private readonly tenants: TenantsService,
+    private readonly slots: SlotsService,
   ) {}
 
   // ─── Staff (POS / téléphone) ───
@@ -159,6 +161,22 @@ export class OrdersController {
       message: tenant.settings?.pauseMessage ?? null,
     });
     if (gate.paused) return gate;
+
+    // LE CRÉNEAU EST VÉRIFIÉ ICI, PAS SEULEMENT PROPOSÉ.
+    //
+    // `SlotsService.compute` calculait déjà la capacité restante, les
+    // fermetures exceptionnelles et le délai de préparation — et rien ne les
+    // relisait à l'écriture. Le tunnel grisait les créneaux pleins, ce qui
+    // arrête un client honnête et personne d'autre : un appel direct posait
+    // vingt commandes à la minute sur un créneau affiché « complet », ou un
+    // jour de fermeture. La cuisine recevait des commandes qu'elle avait
+    // explicitement déclaré ne pas pouvoir honorer.
+    //
+    // Le cas du client resté dix minutes sur l'étape paiement se referme du
+    // même coup : son créneau est revérifié au moment où il valide, pas au
+    // moment où il l'a choisi.
+    if (body.pickup) await this.slots.exigerDisponible(tenant, body.pickup.slot);
+
     // Canal forcé : une commande postée sur la route publique est toujours « online »
     return this.orders.create(String(tenant._id), { ...body, channel: 'online' }, 'online');
   }

@@ -3,9 +3,13 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrdersGateway } from './orders.gateway';
 import { TenantsModule } from '../tenants/tenants.module';
+// `SlotsService` sert à VÉRIFIER un créneau au moment de la commande, et non
+// seulement à en proposer la liste : sans lui, la capacité et les fermetures
+// ne valaient que dans l'écran du client.
+import { OrderingModule } from '../ordering/ordering.module';
 
 @Module({
-  imports: [TenantsModule],
+  imports: [TenantsModule, OrderingModule],
   controllers: [OrdersController],
   providers: [OrdersService, OrdersGateway],
 })
