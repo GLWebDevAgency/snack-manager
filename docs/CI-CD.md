@@ -260,6 +260,50 @@ protection côté serveur.
 
 ---
 
+### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
+
+Le `preDeployCommand` de Railway migre le schéma **PostgreSQL** (appro), et lui
+seul. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
+scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
+délibérément : une reprise de données se relit avant d'être appliquée.
+
+```bash
+# 1. Viser le BON environnement — la CLI reste sur le dernier utilisé.
+railway environment staging   # ou production
+railway status                # relire ce qui est affiché AVANT de continuer
+
+# 2. Composer l'accès depuis le proxy TCP public du service MongoDB.
+#    `railway run` n'irait pas : il injecte les variables mais exécute en
+#    local, où `mongodb.railway.internal` ne se résout pas.
+eval "$(railway variables --service MongoDB --kv \
+  | grep -E '^(MONGOUSER|MONGOPASSWORD|RAILWAY_TCP_PROXY_DOMAIN|RAILWAY_TCP_PROXY_PORT)=' \
+  | sed 's/^/export /')"
+export MONGO_URL="mongodb://${MONGOUSER}:${MONGOPASSWORD}@${RAILWAY_TCP_PROXY_DOMAIN}:${RAILWAY_TCP_PROXY_PORT}/snackmanager?authSource=admin"
+
+# 3. LIRE d'abord — aucun script n'écrit sans `--appliquer`.
+pnpm --filter @sm/db backfill:founder
+pnpm --filter @sm/db backfill:contact
+
+# 4. Appliquer, puis relancer pour vérifier l'idempotence (doit ne rien trouver).
+pnpm --filter @sm/db backfill:founder -- --appliquer
+pnpm --filter @sm/db backfill:contact -- --appliquer
+```
+
+**Le nom de la base ne s'invente pas.** L'URL du proxy TCP n'en porte aucun : sans
+`/snackmanager`, le script se connecte à la base `test` et annonce sereinement
+« 0 client à reprendre ». C'est le piège le plus coûteux de cette procédure —
+il ne lève pas, il rassure.
+
+| Script | Ce qu'il répare | Ce qu'on voit sans lui |
+|---|---|---|
+| `backfill:founder` | pose `founderUntil` et `founderDiscountCents` | le fondateur lit « moitié prix » à côté d'un montant plein tarif |
+| `backfill:contact` | reprend le téléphone du gérant depuis son lead | le bouton « Appeler » reste masqué sur la fiche client |
+
+Les deux sont **idempotents** : un client déjà repris n'est jamais recalculé.
+`backfill:contact` refuse d'ailleurs les rapprochements ambigus et le dit — un
+mauvais numéro sur une fiche client est pire que pas de numéro.
+
 ## 4 · Livrer un changement
 
 ```bash
