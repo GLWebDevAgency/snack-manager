@@ -106,11 +106,25 @@ interface BlockInput {
 }
 
 function blockFor(input: BlockInput): PlanningCoverageBlock {
-  const { hours, window } = coveredHours(input.shifts, input.service);
+  const { window } = coveredHours(input.shifts, input.service);
 
+  /*
+   * LE VOLUME ATTENDU NE DÉPEND PAS DE QUI EST POSÉ.
+   *
+   * Il se calculait sur les heures COUVERTES : poser une personne de 19 h à
+   * 20 h réduisait la demande du soir à cette seule heure, et le trou de
+   * service qu'on venait de signaler disparaissait. Le gérant croyait avoir
+   * réglé le problème en y mettant quelqu'un une heure — c'est l'indicateur
+   * qui s'était aligné sur lui.
+   *
+   * La demande est une donnée du RESTAURANT : ce que la clientèle commande sur
+   * l'amplitude du service, que quelqu'un soit là ou non. Les heures couvertes
+   * mesurent la réponse à cette demande, elles ne la définissent pas.
+   */
+  const { fromHour, toHour } = PLANNING_SERVICE_DEFAULT_HOURS[input.service];
   let total = 0;
   let peak = 0;
-  for (const hour of hours) {
+  for (const hour of rangeOf(fromHour, toHour)) {
     const n = input.expectedHours.get(hour) ?? 0;
     total += n;
     if (n > peak) peak = n;
