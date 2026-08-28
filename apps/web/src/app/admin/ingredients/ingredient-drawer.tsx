@@ -73,7 +73,7 @@ type Draft = {
   displayName: string;
 };
 
-type FieldErrors = Partial<Record<"name" | "cost" | "par" | "stock", string>>;
+type FieldErrors = Partial<Record<"name" | "cost" | "par" | "stock" | "supplement", string>>;
 
 function draftFrom(ing: SupplyIngredient | null): Draft {
   return ing
@@ -162,6 +162,17 @@ export function IngredientDrawer({
       ? parseDecimal(draft.initialStock)
       : 0;
     if (stock === null) next.stock = "Quantité invalide.";
+    // LE PRIX DE SUPPLÉMENT, ENFIN VALIDÉ.
+    //
+    // `supplementDepuisSaisie` rend `null` pour DEUX intentions opposées : le
+    // champ vidé — « ne plus le proposer », qui est voulu — et la saisie
+    // illisible. Sans ce contrôle, taper « 1,20 € » avec le symbole, ou « -1 »,
+    // retirait l'ingrédient du catalogue des suppléments sans un mot : la
+    // caisse cessait de le proposer, et le gérant croyait avoir changé un prix.
+    const supplementSaisi = draft.supplementEuros.trim();
+    if (supplementSaisi !== "" && supplementDepuisSaisie(supplementSaisi) === null) {
+      next.supplement = "Montant invalide (ex. 1,00) — laissez vide pour ne plus le proposer.";
+    }
     setErrors(next);
     if (Object.keys(next).length) return null;
     return {
@@ -389,7 +400,7 @@ export function IngredientDrawer({
               <Field
                 label="Prix en supplément"
                 htmlFor="ing-supplement"
-                hint="Vide = pas proposé. 0 = proposé, offert."
+                hint={errors.supplement ?? "Vide = pas proposé. 0 = proposé, offert."}
               >
                 <Input
                   id="ing-supplement"
@@ -398,6 +409,7 @@ export function IngredientDrawer({
                   onChange={(e) => set("supplementEuros", e.target.value)}
                   placeholder="Ex. 1,00"
                   className="tabular-nums"
+                  aria-invalid={errors.supplement ? true : undefined}
                 />
               </Field>
               <Field

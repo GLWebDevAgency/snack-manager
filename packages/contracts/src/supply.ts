@@ -278,7 +278,15 @@ export const SupplierUpdateSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   contactName: z.string().max(120).optional(),
   phone: z.string().max(30).optional(),
-  email: z.email().optional(),
+  /**
+   * La chaîne VIDE est admise : c'est ainsi qu'on efface une adresse.
+   *
+   * `z.email()` seul la refusait, et l'écran contournait le refus en
+   * n'envoyant simplement pas le champ — l'ancienne adresse survivait donc à
+   * son effacement, et revenait à l'écran au rechargement. Un contact qui a
+   * changé restait joignable à la mauvaise adresse.
+   */
+  email: z.union([z.email(), z.literal('')]).optional(),
   paymentTerms: z.string().max(200).optional(),
   deliveryDays: z.string().max(100).optional(),
   notes: z.string().max(500).optional(),
