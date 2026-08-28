@@ -269,7 +269,7 @@ describe('la réservation rendue quand la commande n’existe pas', () => {
  * refuser, celui qui tend le montant facial repart sans sa monnaie.
  */
 describe('l’encaissement en espèces d’une commande remisée', () => {
-  const especes = (recu) =>
+  const especes = (recu: number) =>
     commande({
       promoCode: 'BIENVENUE10',
       channel: 'pos',
