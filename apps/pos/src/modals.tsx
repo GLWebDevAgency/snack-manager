@@ -1034,6 +1034,13 @@ export function RejetsModal({
         sub={`${rejets.length} à traiter`}
         onClose={onClose}
       />
+      {/*
+        DÉFILANT, comme la clôture. `Overlay` borne la hauteur à 94 % de
+        l'écran sans zone de défilement : vingt rejets y seraient comprimés, et
+        le bouton d'acquittement sortirait de la vue — sur une tablette de
+        comptoir, un bouton hors écran est un bouton qui n'existe pas.
+      */}
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: S.lg, gap: S.md }}>
       <Paper>
         Ces mutations ont été refusées définitivement : les rejouer ne changerait
         rien. Si l&apos;une d&apos;elles était encaissée, l&apos;encaissement a bien eu lieu —
@@ -1061,8 +1068,17 @@ export function RejetsModal({
                 {heure(r.at)} · {r.status}
               </Text>
             </View>
-            <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 13 }}>{r.reason}</Text>
-            <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 12 }}>{r.path}</Text>
+            {/* Le motif vient du serveur : sa longueur n'est pas bornée, et
+                une phrase de dix lignes chasserait les rejets suivants. */}
+            <Text
+              numberOfLines={3}
+              style={{ fontFamily: FONT, color: palette.text, fontSize: 13, lineHeight: 18 }}
+            >
+              {r.reason}
+            </Text>
+            <Text numberOfLines={1} style={{ fontFamily: FONT, color: palette.mut, fontSize: 12 }}>
+              {r.path}
+            </Text>
           </View>
         ))}
       </View>
@@ -1075,6 +1091,7 @@ export function RejetsModal({
         block
         style={{ marginTop: S.lg }}
       />
+      </ScrollView>
     </Overlay>
   );
 }

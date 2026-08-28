@@ -15,6 +15,7 @@ import {
   Card,
   EmptyState,
   Field,
+  Icon,
   IconBtn,
   Input,
   Kpi,
@@ -414,10 +415,17 @@ export default function TeamPage() {
                   key={m._id}
                   type="button"
                   onClick={() => setModal({ mode: "edit", member: m })}
-                  className="cf-press inline-flex items-center gap-2 rounded-pill border border-line bg-white/3 px-3 py-2 text-[13px] font-bold text-mut hover:border-white/25 hover:text-ink"
+                  title={`Ouvrir la fiche de ${m.name} — le bouton « Réactiver » s'y trouve`}
+                  className="cf-press inline-flex max-w-full items-center gap-2 rounded-pill border border-line bg-white/3 px-3 py-2 text-[13px] font-bold text-mut hover:border-white/25 hover:text-ink"
                 >
-                  {m.name}
-                  <span className="text-[12px] font-semibold text-accent">Réactiver</span>
+                  {/*
+                    Le NOM porte le clic, pas un verbe : ce bouton ouvre la
+                    fiche, il ne réactive pas. Écrire « Réactiver » ici
+                    promettait une action immédiate que le clic ne fait pas —
+                    le vrai geste, et sa confirmation, sont dans la fiche.
+                  */}
+                  <span className="truncate">{m.name}</span>
+                  <Icon name="arrow" size={14} className="shrink-0 text-accent" />
                 </button>
               ))}
             </div>
