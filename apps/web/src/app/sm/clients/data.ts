@@ -596,6 +596,10 @@ export function readClientRow(raw: unknown): ClientRow {
       readAccountStatus(dig(o, "account", "status")) ??
       readAccountStatus(o.status),
     score: num(o, "score", "healthScore"),
+    // Le verdict vient de la liste depuis qu'on ne rappelle plus `/health`
+    // client par client. Vide quand l'API ne le rend pas encore : la ligne
+    // s'affiche sans phrase plutôt que de se faire attendre.
+    verdictLabel: str(o, "verdictLabel", "verdict"),
     ordersPrev30d: prev,
     /*
       `ordersDeltaPct: null` N'EST PAS UNE ABSENCE, c'est un REFUS — l'API dit

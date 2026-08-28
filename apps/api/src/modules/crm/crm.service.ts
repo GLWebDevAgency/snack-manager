@@ -440,6 +440,7 @@ export class CrmService implements OnApplicationBootstrap {
         health: clientHealth(lastOrderAt, now),
         accountStatus,
         score: score.value,
+        verdictLabel: score.verdictLabel,
         previousOrders: window30.previousOrders,
         ordersDeltaPct: window30.ordersDeltaPct,
         devicesOffline: fleet.offline,

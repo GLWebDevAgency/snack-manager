@@ -36,19 +36,15 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CLIENT_RISK_DAYS, type CrmClientHealth, type TenantAccountStatus } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Card, Chip, EmptyState, Icon, Input, Kpi, Skeleton } from "@/components/ui";
 import { euroRound, fmtMonth, int } from "../crm";
 import {
-  hydrateSummaries,
-  hydrationOrder,
   readWorkSignals,
   signalsByTenant,
   worstSeverity,
-  SUMMARY_BUDGET,
-  type TenantSummary,
   type WorkSignal,
 } from "../signals/data";
 import {
@@ -143,7 +139,6 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [signals, setSignals] = useState<WorkSignal[] | null>(null);
-  const [summaries, setSummaries] = useState<Map<string, TenantSummary>>(new Map());
   const [filter, setFilter] = useState<Filter>("tous");
   const [q, setQ] = useState("");
 
@@ -183,11 +178,6 @@ export default function ClientsPage() {
   // L'ordre attend que les DEUX premières routes aient répondu : il dépend des
   // signaux, et commencer sans eux reviendrait à dépenser le budget sur les
   // clients qui vont bien.
-  const order = useMemo(
-    () =>
-      clients === null || signals === null ? [] : hydrationOrder(clients, byTenant),
-    [clients, signals, byTenant],
-  );
 
   /**
    * Les clients dont la fiche est DEMANDÉE — dérivé, jamais stocké.
@@ -197,66 +187,56 @@ export default function ClientsPage() {
    * évite un rendu en cascade au montage : la file de rendu ne doit pas dépendre
    * d'un effet qui lui écrirait dessus.
    */
-  const queued = useMemo(
-    () => new Set(order.slice(0, SUMMARY_BUDGET)),
-    [order],
-  );
 
-  const cancelledRef = useRef(false);
-  useEffect(() => {
-    cancelledRef.current = false;
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, []);
 
-  useEffect(() => {
-    if (order.length === 0) return;
-    void hydrateSummaries(
-      order,
-      (id, summary) => {
-        setSummaries((prev) => {
-          const next = new Map(prev);
-          next.set(id, summary);
-          return next;
-        });
-      },
-      () => cancelledRef.current,
-    );
-  }, [order]);
+  /*
+   * PLUS D'HYDRATATION CLIENT PAR CLIENT.
+   *
+   * L'écran rappelait `/crm/tenants/:id/health` pour chaque ligne — jusqu'à
+   * `SUMMARY_BUDGET` requêtes à l'ouverture de la liste. Deux conséquences.
+   *
+   * D'abord `/crm/tenants` rend DÉJÀ tout ce qui était demandé : score,
+   * verdict, statut de compte, tendance, appareils muets. Le calcul avait été
+   * rapatrié dans la liste précisément pour supprimer ces appels, et l'écran a
+   * continué de les faire.
+   *
+   * Ensuite, et c'est le plus grave : `tenantHealth` journalise une
+   * CONSULTATION DE DOSSIER (`recordDetailView`). Ouvrir la liste en
+   * fabriquait donc des dizaines, sur des clients que personne n'avait
+   * ouverts — le journal d'administration devenait illisible, et il est
+   * précisément ce qu'on relit quand on cherche qui a consulté quoi.
+   */
 
   const rows = useMemo<Row[]>(() => {
     return (clients ?? []).map((c) => {
-      const s = summaries.get(c._id) ?? null;
       const sig = byTenant.get(c._id) ?? [];
       const worst = worstSeverity(sig);
-      const score = s?.score ?? c.score;
-      // Le signal porte lui aussi le statut du compte : il arrive avec le
-      // premier appel, la fiche de santé avec le troisième. « Suspendu »
-      // s'affiche donc tout de suite sur le client concerné.
-      const accountStatus =
-        s?.accountStatus ?? sig[0]?.accountStatus ?? c.accountStatus;
+      const score = c.score;
+      // Le signal porte lui aussi le statut du compte, et il arrive parfois
+      // avant la liste : « suspendu » s'affiche donc tout de suite.
+      const accountStatus = sig[0]?.accountStatus ?? c.accountStatus;
       const tone = scoreHealth(score) ?? c.health;
       const callBack =
         worst === "critique" || accountStatus === "suspended" || tone === "risque";
       return {
         client: c,
         score,
-        verdict: s?.verdictLabel ?? "",
-        pending: s === null && queued.has(c._id),
+        verdict: c.verdictLabel,
+        // Plus rien à attendre : la ligne arrive complète.
+        pending: false,
         tone,
         accountStatus,
-        trendPct: s?.ordersDeltaPct ?? c.trendPct,
-        trendDays: s?.deltaDays ?? 30,
-        lastActivityAt: s?.lastOrderAt ?? c.lastActivityAt,
-        devicesOffline: s?.devicesOffline ?? c.devicesOffline,
+        trendPct: c.trendPct,
+        trendDays: 30,
+        lastActivityAt: c.lastActivityAt,
+        devicesOffline: c.devicesOffline,
         signals: sig,
         worst,
         callBack,
         bucket: bucketOf(callBack, worst, tone),
       };
     });
-  }, [clients, summaries, byTenant, queued]);
+  }, [clients, byTenant]);
 
   const sorted = useMemo(
     () =>
@@ -470,12 +450,11 @@ export default function ClientsPage() {
 
       <p className="text-[13px] text-mut">
         Tri par urgence — les clients à rappeler sont en tête, avec la raison de
-        l&apos;appel sous leur nom. Le score vient de{" "}
-        <span className="cf-fig">/crm/tenants/:id/health</span>, lu après
-        l&apos;affichage pour les {SUMMARY_BUDGET} clients les plus urgents ; sans
-        lui, la santé retombe sur la dernière commande encaissée (bonne sous 2
-        jours, à suivre jusqu&apos;à {CLIENT_RISK_DAYS} jours, à risque au-delà).
-        MRR estimé d&apos;après la formule.
+        l&apos;appel sous leur nom. Score, verdict, tendance et appareils muets
+        arrivent avec la liste : ouvrir cet écran ne consulte AUCUN dossier. À
+        défaut de score, la santé retombe sur la dernière commande encaissée
+        (bonne sous 2 jours, à suivre jusqu&apos;à {CLIENT_RISK_DAYS} jours, à
+        risque au-delà). MRR estimé d&apos;après la formule.
       </p>
     </div>
   );

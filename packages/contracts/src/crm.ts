@@ -1118,6 +1118,16 @@ export type CrmClient = {
   accountStatus: TenantAccountStatus;
   /** Score de santé composite 0-100, identique à celui de la fiche. */
   score: number;
+  /**
+   * Le verdict en toutes lettres — « Client solide », « Client fragile »…
+   *
+   * Rendu ICI parce qu'il n'est PAS dérivable du score seul : il est plafonné
+   * par l'axe activité, qu'une liste ne recalcule pas. Sans lui, l'écran
+   * rappelait `/crm/tenants/:id/health` client par client pour cette seule
+   * phrase — et chaque appel journalisait une CONSULTATION DE DOSSIER que
+   * personne n'avait ouvert.
+   */
+  verdictLabel: string;
   /** Commandes des 30 jours PRÉCÉDENTS — le socle de la tendance. */
   previousOrders: number;
   /**
