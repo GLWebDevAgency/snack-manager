@@ -217,6 +217,20 @@ export default function TeamPage() {
 
   // ── Dérivés ──
 
+  /**
+   * Les membres DÉSACTIVÉS — visibles, et réactivables.
+   *
+   * L'écran ne rendait que les actifs, et la modale d'édition n'est atteignable
+   * que depuis une carte : désactiver quelqu'un le faisait disparaître pour
+   * toujours. Son code restait pourtant réservé — deux équipiers ne peuvent pas
+   * partager un PIN — et le gérant n'avait aucun moyen de le rendre, ni de
+   * reprendre la personne à la saison suivante. `StaffUpdateSchema` accepte
+   * `active: true` depuis toujours ; aucun écran ne l'envoyait.
+   */
+  const inactiveMembers = useMemo(
+    () => (members ?? []).filter((m) => !m.active),
+    [members],
+  );
   const activeMembers = useMemo(
     () => (members ?? []).filter((m) => m.active),
     [members],
@@ -376,6 +390,37 @@ export default function TeamPage() {
                 onEdit={() => setModal({ mode: "edit", member: m })}
               />
             ))}
+          </div>
+        )}
+
+        {/*
+          LES DÉSACTIVÉS, ET LE CHEMIN DU RETOUR.
+          Sans cette section, désactiver était irréversible depuis le
+          back-office : la personne sortait de l'écran, son code restait
+          réservé, et rien ne permettait de la reprendre.
+        */}
+        {inactiveMembers.length > 0 && (
+          <div className="mt-6">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+              Désactivés — {inactiveMembers.length}
+            </div>
+            <p className="mt-1 text-[13px] text-mut">
+              Ils ne pointent plus et n&apos;apparaissent pas au planning. Leur code reste
+              réservé : réactivez pour le rendre, ou pour reprendre la personne.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {inactiveMembers.map((m) => (
+                <button
+                  key={m._id}
+                  type="button"
+                  onClick={() => setModal({ mode: "edit", member: m })}
+                  className="cf-press inline-flex items-center gap-2 rounded-pill border border-line bg-white/3 px-3 py-2 text-[13px] font-bold text-mut hover:border-white/25 hover:text-ink"
+                >
+                  {m.name}
+                  <span className="text-[12px] font-semibold text-accent">Réactiver</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </Panel>
@@ -664,6 +709,29 @@ function MemberModal({
     }
   }
 
+  /**
+   * Rendre un équipier au service — et son code avec lui.
+   *
+   * `PATCH /staff/:id { active: true }` était accepté par l'API depuis
+   * toujours, et aucun écran ne l'appelait : une désactivation était donc
+   * définitive côté back-office, et le PIN de la personne restait réservé à un
+   * membre devenu invisible.
+   */
+  async function reactiver() {
+    if (!member) return;
+    setSaving(true);
+    try {
+      await api.patch(`/staff/${member._id}`, { active: true });
+      toast(`${member.name} est de nouveau au service`, { icon: "check" });
+      onClose();
+      await onDone();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Réactivation impossible — réessayez");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function deactivate() {
     if (!member) return;
     setSaving(true);
@@ -748,7 +816,33 @@ function MemberModal({
           </Field>
         </div>
 
-        {isEdit && (
+        {/*
+          RÉACTIVER — le chemin qui n'existait pas.
+          `StaffUpdateSchema` accepte `active: true` depuis toujours ; aucun
+          écran ne l'envoyait, si bien qu'une désactivation était définitive et
+          que le code de la personne restait réservé à un membre invisible.
+        */}
+        {isEdit && member && !member.active && (
+          <div className="rounded-ctrl border border-ok/25 bg-ok/8 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[13px] text-mut">
+                <strong className="text-ink">{member.name}</strong> est désactivé — il ne
+                pointe plus et n&apos;apparaît pas au planning.
+              </p>
+              <Btn
+                variant="ink"
+                size="sm"
+                icon="check"
+                disabled={saving}
+                onClick={() => void reactiver()}
+              >
+                Réactiver
+              </Btn>
+            </div>
+          </div>
+        )}
+
+        {isEdit && member?.active !== false && (
           <div className="rounded-ctrl border border-white/8 bg-[image:var(--cf-elev-gradient)] p-3">
             {confirmOff ? (
               <div className="flex flex-wrap items-center justify-between gap-2">

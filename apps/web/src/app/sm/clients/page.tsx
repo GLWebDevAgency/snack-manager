@@ -363,7 +363,7 @@ export default function ClientsPage() {
           />
           <Input
             aria-label="Rechercher un restaurant"
-            placeholder="Rechercher — nom ou ville…"
+            placeholder="Rechercher un client…"
             className="w-[260px] !py-[9px] pl-9 text-[13px] max-md:w-full"
             value={q}
             onChange={(e) => setQ(e.target.value)}
