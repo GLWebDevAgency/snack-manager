@@ -260,6 +260,49 @@ protection côté serveur.
 
 ---
 
+### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
+
+Le `preDeployCommand` de Railway migre le schéma **PostgreSQL** (appro), et lui
+seul. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
+scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
+délibérément : une reprise de données se relit avant d'être appliquée.
+
+```bash
+# 1. LIRE d'abord — sans --appliquer, rien n'est écrit.
+scripts/reprise-mongo.sh staging backfill:founder
+scripts/reprise-mongo.sh staging backfill:contact
+
+# 2. Appliquer. Le script relance ensuite la tâche pour vérifier
+#    l'idempotence : elle ne doit plus rien trouver.
+scripts/reprise-mongo.sh staging backfill:founder --appliquer
+scripts/reprise-mongo.sh staging backfill:contact --appliquer
+```
+
+| Script | Ce qu'il répare | Ce qu'on voit sans lui |
+|---|---|---|
+| `backfill:founder` | pose `founderUntil` et `founderDiscountCents` | le fondateur lit « moitié prix » à côté d'un montant plein tarif |
+| `backfill:contact` | reprend le téléphone du gérant depuis son lead | le bouton « Appeler » reste masqué sur la fiche client |
+
+**Pourquoi un script et pas une suite de commandes à recopier.** Trois pièges,
+tous rencontrés en déroulant la procédure à la main le 28 août 2026, et tous
+fermés par `scripts/reprise-mongo.sh` :
+
+1. **`railway run` n'irait pas.** Il injecte les variables mais exécute en
+   local, où `mongodb.railway.internal` ne se résout pas. Il faut passer par le
+   proxy TCP public du service MongoDB.
+2. **L'URL du proxy ne porte aucun nom de base.** Sans lui, le script se
+   connecte à la base `test` et annonce sereinement « 0 client à reprendre ».
+   C'est le plus coûteux des trois : il ne lève pas, il rassure.
+3. **La CLI reste sur le dernier environnement utilisé.** Une commande lancée
+   sans vérifier vise la production sans le dire — c'est exactement ainsi qu'un
+   `railway redeploy` a redéployé la production au lieu de staging. Le script
+   POSE l'environnement, et fait taper « production » à la main quand c'est elle.
+
+Les deux reprises sont **idempotentes** : un client déjà traité n'est jamais
+recalculé. `backfill:contact` refuse en outre les rapprochements ambigus et le
+dit — un mauvais numéro sur une fiche client est pire que pas de numéro.
+
 ## 4 · Livrer un changement
 
 ```bash
