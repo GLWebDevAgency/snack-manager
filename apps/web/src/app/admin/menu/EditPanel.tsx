@@ -24,7 +24,14 @@ import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
 import { Btn, Field, Icon, Input, Pill, Select, Skeleton } from "@/components/ui";
-import { effectivePrice, type Category, type Product } from "./types";
+import {
+  effectivePrice,
+  type Category,
+  type OptionGroup,
+  type Product,
+  type Variant,
+} from "./types";
+import { EditeurOptions, EditeurVariantes, figerLesClefs } from "./VariantesOptions";
 
 type LineDraft = { ingredientId: string; qty: string; unit: MeasureUnit };
 
@@ -72,6 +79,17 @@ export function EditPanel({
     mode === "create" ? (createCategoryId ?? "") : (product?.categoryId ?? ""),
   );
   const [desc, setDesc] = useState(product?.description ?? "");
+
+  /**
+   * Tailles et options — l'écran ne savait pas les éditer, alors que le
+   * contrat les accepte depuis le premier jour. Un produit à variantes voyait
+   * même son prix passer en lecture seule dans la grille, avec un message qui
+   * renvoyait vers CE panneau : le prix n'était modifiable nulle part.
+   */
+  const [variants, setVariants] = useState<Variant[]>(() => product?.variants ?? []);
+  const [groups, setGroups] = useState<OptionGroup[]>(() => product?.optionGroups ?? []);
+  const variantsInitiales = useMemo(() => JSON.stringify(product?.variants ?? []), [product]);
+  const groupsInitiaux = useMemo(() => JSON.stringify(product?.optionGroups ?? []), [product]);
 
   /**
    * Services d'affichage sur les écrans de salle.
@@ -165,6 +183,24 @@ export function EditPanel({
     return sum;
   }, [lines, ingredientById]);
 
+  /**
+   * Ce produit impose-t-il un choix qui COÛTE ?
+   *
+   * Le recalcul live ne compte que les lignes de RECETTE : les ingrédients
+   * consommés par une option obligatoire — la viande imposée d'un tacos — n'y
+   * entrent pas. L'API les compte, elle (`requiredOptionsCost`), et son
+   * commentaire dit pourquoi : « un tacos M sans sa viande imposée » ne doit
+   * pas afficher 90 % de marge.
+   *
+   * On ne peut pas les additionner ici sans refaire tout le chiffrage des
+   * recettes d'options. On le DIT donc, plutôt que d'annoncer une marge que le
+   * gérant croirait complète et sur laquelle il fixerait son prix.
+   */
+  const aDesChoixImposes = useMemo(
+    () => groups.some((g) => (g.min ?? 0) > 0),
+    [groups],
+  );
+
   const priceCents = product ? effectivePrice(product) : 0;
   const showBatchFigures = bomState !== "ready" && initialCost !== undefined;
   const costCents = showBatchFigures ? initialCost.costCents : liveCostCents;
@@ -233,6 +269,14 @@ export function EditPanel({
       if (desc.trim() !== product.description) patch.description = desc.trim();
       if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
       if (tagsChanged()) patch.tags = nextTags();
+      // Diff-only ici AUSSI, et ce n'est pas du zèle : envoyer `optionGroups`
+      // sans y toucher ferait passer la liste FILTRÉE de la carte — le groupe
+      // réservé « supplements » en moins. Le service le réinjecte, mais ne rien
+      // envoyer reste la meilleure façon de ne rien casser.
+      if (JSON.stringify(variants) !== variantsInitiales) patch.variants = variants;
+      if (JSON.stringify(groups) !== groupsInitiaux) {
+        patch.optionGroups = figerLesClefs(groups, product.optionGroups ?? []);
+      }
       if (Object.keys(patch).length > 0) {
         await api.patch(`/products/${product._id}`, patch);
       }
@@ -353,6 +397,14 @@ export function EditPanel({
         </div>
       </div>
 
+      {/* ─── Tailles et options ─── */}
+      {mode !== "create" && (
+        <>
+          <EditeurVariantes variants={variants} onChange={setVariants} />
+          <EditeurOptions groups={groups} onChange={setGroups} />
+        </>
+      )}
+
       {/* ─── Recette & marge (supply) ─── */}
       {mode === "create" ? (
         <p className="mt-3 border-t border-line pt-3 text-xs text-mut">
@@ -419,6 +471,14 @@ export function EditPanel({
                 </span>
                 <span className="text-xs text-mut">
                   sur prix de vente {fmtEuro(priceCents)}
+                  {aDesChoixImposes && !showBatchFigures && (
+                    <>
+                      {" · "}
+                      <span className="text-prept">
+                        hors choix imposés — la marge réelle est plus basse
+                      </span>
+                    </>
+                  )}
                 </span>
               </div>
 

@@ -6,7 +6,11 @@ import {
   DEVICE_REVOKE_REASON_LABELS,
   PAIRING_CODE_TTL_MS,
   REVOCABLE_DEVICE_KIND_LABELS,
+  EMPTY_SERVICES,
+  type LeadServices,
   LeadServicesSchema,
+  servicesCents,
+  type TenantOffre,
   TENANT_ACCOUNT_STATUS_LABELS,
   isAccessBlocked,
   type AdminInvoiceGesture,
@@ -24,9 +28,9 @@ import {
   type TenantAccountStatus,
   type TenantChurn,
   type TenantNote,
-  type TenantPlanChange,
   type TenantReactivate,
   type TenantSuspend,
+  type ChurnCause,
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
 import { generatePairingCode } from '../screens/pairing-code';
@@ -192,38 +196,87 @@ export class AdminService {
       since: at,
       reason: body.reason,
       suspendedAt: null,
+      // La CAUSE est stockée à côté du détail : c'est elle qui s'agrège, et
+      // sans elle un an de départs ne donne qu'une liste de phrases.
+      churnCause: body.cause,
     });
     await this.record(actor, {
       action: 'tenant.churn',
       tenantId: String(tenant._id),
       reason: body.reason,
       at,
+      // Au journal aussi : la fiche porte l'état courant, le journal porte
+      // l'histoire — et c'est l'histoire qu'on relit pour compter.
+      meta: { cause: body.cause },
     });
     return toAccountView(tenant);
   }
 
   /**
-   * Change la formule. Le statut de compte n'est PAS touché : passer un client
-   * de « Essentiel » à « Boost » n'est pas une décision d'accès.
+   * CHANGE L'OFFRE ENTIÈRE d'un client — formule, module, engagement, services.
+   *
+   * `changePlan` n'écrivait que `plan`, et son schéma excluait `null` : le
+   * module de commande en ligne et l'Atelier n'étaient ni activables ni
+   * retirables après la signature, et on ne pouvait pas redescendre un client
+   * vers « Atelier seul ». Un restaurateur qui ajoutait les réseaux sociaux six
+   * mois plus tard n'avait aucun chemin dans le logiciel — et comme toute la
+   * facturation lit ces champs, sa facture ne bougeait pas non plus.
+   *
+   * Le statut de compte n'est PAS touché : passer un client de Essentiel à
+   * Boost n'est pas une décision d'accès.
+   *
+   * NI `founderUntil` NI `founderDiscountCents` ne sont retouchés ici, et
+   * c'est le point le plus coûteux de cette méthode. La remise fondateur est un
+   * MONTANT figé au premier contrat : le dû grossit quand le client ajoute,
+   * la remise non, et le supplément se paie donc plein tarif de lui-même.
+   * Recalculer l'un des deux champs ici rendrait à un fondateur le moyen de
+   * relancer sa remise en montant en gamme le onzième mois — ce que ce bouton
+   * permet de faire en un clic. L'invariant est tenu par
+   * `packages/contracts/src/fondateur.test.ts`.
    */
-  async changePlan(
+  async changeOffre(
     actor: JwtPayload,
     tenantId: string,
-    body: TenantPlanChange,
+    body: TenantOffre,
+    now: Date = new Date(),
   ): Promise<AdminTenantAccount> {
     const before = await this.requireTenant(tenantId);
-    // « aucune » : un client Atelier seul peut monter vers une formule, et la
-    // ligne de journal doit dire d'où il part.
     const previous = (before.plan ?? 'aucune') as AdminPlan | 'aucune';
 
-    const tenant = await this.updateTenant(tenantId, { plan: body.plan });
+    const { onceCents, monthlyCents } = servicesCents(body.services);
+    const aDesServices = onceCents > 0 || monthlyCents > 0;
+    const tenant = await this.updateTenant(tenantId, {
+      plan: body.plan,
+      onlineOrdering: body.onlineOrdering,
+      billingCycle: body.billing,
+      // Rien de vendu → `null`, jamais un sous-objet de faux : la fiche doit
+      // lire l'absence comme une absence. La date de signature de l'Atelier
+      // est conservée si des services étaient déjà là — c'est la date du
+      // service rendu, pas celle du dernier clic.
+      atelier: aDesServices
+        ? { ...body.services, signedAt: before.atelier?.signedAt ?? now }
+        : null,
+    });
+
     await this.record(actor, {
       action: 'tenant.plan_change',
       tenantId: String(tenant._id),
       reason: body.reason,
-      // Une ligne de journal doit se lire seule : sans l'ancienne formule, on
-      // ne sait pas si le client a monté ou descendu en gamme.
-      meta: { from: previous, to: body.plan },
+      // La ligne se lit seule six mois plus tard : d'où part le client, où il
+      // va, et ce qui a bougé autour de la formule.
+      meta: {
+        from: previous,
+        to: body.plan ?? 'aucune',
+        onlineOrdering: body.onlineOrdering,
+        billing: body.billing,
+        // Les SERVICES aussi, et nommément. Sans eux, retirer les réseaux
+        // sociaux d'un client laissait au journal une ligne « Complet →
+        // Complet » que personne ne pouvait relire — alors que c'est
+        // précisément le geste qui fait tomber sa facture de 69 €. Le dernier
+        // service retiré efface en outre `atelier` tout entier, date de
+        // signature comprise : cette perte doit se lire quelque part.
+        ...deltaServices(before.atelier ?? null, body.services),
+      },
     });
     return toAccountView(tenant);
   }
@@ -555,7 +608,14 @@ export class AdminService {
   /** Réécrit le bloc `account` en entier : ses quatre champs bougent ensemble. */
   private setAccount(
     tenantId: string,
-    account: { status: TenantAccountStatus; since: Date; reason: string; suspendedAt: Date | null },
+    account: {
+      status: TenantAccountStatus;
+      since: Date;
+      reason: string;
+      suspendedAt: Date | null;
+      /** La cause d'un départ — `undefined` sur tous les autres gestes. */
+      churnCause?: ChurnCause;
+    },
   ): Promise<RawTenant> {
     return this.updateTenant(tenantId, { account });
   }
@@ -611,6 +671,42 @@ function toAccount(raw: RawTenant): TenantAccount {
   };
 }
 
+/**
+ * Ce qui a été AJOUTÉ et RETIRÉ entre deux états de l'Atelier.
+ *
+ * Rend des clés omises quand rien n'a bougé : une entrée de journal ne doit
+ * porter que ce qui a changé, sinon la ligne qui compte se noie dans le reste.
+ */
+function deltaServices(
+  avant: Partial<LeadServices> | null,
+  apres: LeadServices,
+): { servicesAjoutes?: string[]; servicesRetires?: string[]; atelierEfface?: true } {
+  const valeur = (s: Partial<LeadServices> | null, cle: keyof LeadServices): string | null => {
+    const v = s?.[cle];
+    if (cle === 'reseauxSociaux') return typeof v === 'string' ? v : null;
+    return v === true ? 'oui' : null;
+  };
+  const cles = Object.keys(EMPTY_SERVICES) as (keyof LeadServices)[];
+  const ajoutes: string[] = [];
+  const retires: string[] = [];
+  for (const cle of cles) {
+    const a = valeur(avant, cle);
+    const b = valeur(apres, cle);
+    if (a === b) continue;
+    if (b !== null) ajoutes.push(cle === 'reseauxSociaux' ? `reseauxSociaux:${b}` : cle);
+    if (a !== null) retires.push(cle === 'reseauxSociaux' ? `reseauxSociaux:${a}` : cle);
+  }
+  return {
+    ...(ajoutes.length > 0 ? { servicesAjoutes: ajoutes } : {}),
+    ...(retires.length > 0 ? { servicesRetires: retires } : {}),
+    // L'Atelier passe à `null` : la date de signature du service rendu
+    // disparaît avec lui, et c'est irréversible.
+    ...(avant !== null && !cles.some((c) => valeur(apres, c) !== null)
+      ? { atelierEfface: true as const }
+      : {}),
+  };
+}
+
 function toAccountView(raw: RawTenant): AdminTenantAccount {
   const account = toAccount(raw);
   return {
@@ -618,7 +714,19 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     name: String(raw.name ?? ''),
     slug: String(raw.slug ?? ''),
     plan: (raw.plan ?? null) as AdminPlan | null,
+    onlineOrdering: raw.onlineOrdering === true,
+    billingCycle: (raw.billingCycle ?? 'mensuel') as 'mensuel' | 'annuel',
     founderSeat: raw.founderSeat === true,
+    founderUntil: iso(raw.founderUntil) ?? null,
+    founderDiscountCents:
+      typeof raw.founderDiscountCents === 'number' ? raw.founderDiscountCents : null,
+    // Tolérant aux clients d'AVANT le champ : un contact absent vaut trois
+    // chaînes vides, et la fiche masque simplement le bouton d'appel.
+    contact: {
+      name: String((raw.contact as { name?: unknown })?.name ?? ''),
+      phone: String((raw.contact as { phone?: unknown })?.phone ?? ''),
+      email: String((raw.contact as { email?: unknown })?.email ?? ''),
+    },
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],

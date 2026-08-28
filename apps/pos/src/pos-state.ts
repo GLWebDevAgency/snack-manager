@@ -1,4 +1,27 @@
 /**
+ * TOUT CE QUE LA CAISSE PERSISTE — et donc tout ce qu'il faut effacer quand
+ * l'appareil change d'établissement.
+ *
+ * Le désappairage n'effaçait que l'appairage, la session et la file : le
+ * journal du service et les tickets mis en attente restaient, et ressortaient
+ * après ré-appairage chez un AUTRE commerçant. Le Z du soir mélangeait deux
+ * restaurants, et un ticket parqué chez A se rappelait chez B avec ses lignes
+ * et le nom de son client.
+ *
+ * La purge itère sur cette table entière : une clé ajoutée ici y entre
+ * d'office, sans qu'on ait à penser à la lister ailleurs.
+ */
+export const KEYS = {
+  session: 'sm.pos.session.v1',
+  /** Appairage de l'appareil — survit à la déconnexion de l'équipier. */
+  device: 'sm.pos.device.v1',
+  parked: 'sm.pos.parked.v1',
+  dayLog: 'sm.pos.daylog.v1',
+  /** Ouverture du service courant — borne de découpe du Z. */
+  serviceStart: 'sm.pos.servicestart.v1',
+} as const;
+
+/**
  * État métier du poste : modes de service, journal du service, tickets en
  * attente, construction du corps de commande.
  *
@@ -253,7 +276,19 @@ export interface ServiceZ {
   online: number;
   /** Commandes parties sans encaissement (« à encaisser au retrait »). */
   due: number;
-  /** Encaissé sans moyen renseigné — n'existe que sur des données anciennes. */
+  /**
+   * Encaissé au comptoir SANS moyen saisi.
+   *
+   * Ce n'est pas un vestige : le cas se produit à chaque commande « à régler au
+   * retrait » que la cuisine fait passer à « Remis ». L'API bascule alors le
+   * paiement en « réglé » — l'argent rentre bien — mais personne n'a dit
+   * comment : ni le KDS, qui ne connaît pas le tiroir, ni la caisse, qui n'a
+   * pas été sollicitée.
+   *
+   * Le montant est donc RÉEL et doit être ventilé à la main au moment du Z. Le
+   * présenter comme une anomalie de données anciennes faisait chercher un bogue
+   * là où il y a un geste manquant.
+   */
   unspecified: number;
   discounts: number;
   /**

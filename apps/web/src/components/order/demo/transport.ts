@@ -325,7 +325,9 @@ function projection(order: DemoOrder, at: number): CreatedOrder {
     _id: order._id,
     number: order.number,
     status: statusAt(order, at),
-    totals: { subtotal: order.totals.subtotal, total: order.totals.total },
+    // La démonstration ne joue aucune promotion : ses commandes sont au tarif
+    // de la carte, et une remise inventée ferait douter du chiffre montré.
+    totals: { subtotal: order.totals.subtotal, discount: null, total: order.totals.total },
     pickup: order.pickup
       ? { slot: order.pickup.slot, customerName: order.pickup.customerName }
       : null,

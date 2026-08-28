@@ -168,6 +168,13 @@ export function Checkout({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downgraded, setDowngraded] = useState(false);
+  /**
+   * Le code promo saisi. Il part avec la commande et le serveur décide : le
+   * montant n'est jamais calculé ici, comme les prix. Un refus revient nommé
+   * (« au moins 25,00 € », « cette offre est terminée ») et s'affiche tel quel
+   * — le client doit savoir s'il peut corriger.
+   */
+  const [promoCode, setPromoCode] = useState("");
 
   // Clé d’idempotence : forgée au premier envoi, conservée pendant tous les
   // réessais de la même tentative — un double appui ne crée jamais deux
@@ -281,12 +288,19 @@ export function Checkout({
     };
   }, [api, demo, step, order, status]);
 
-  // ── Jalon d'entonnoir : le client vient d'entrer dans le tunnel. ──
+  // ── Jalon d'entonnoir : le client a SAISI ses coordonnées. ──
+  //
+  // Il était émis à l'OUVERTURE du panier, c'est-à-dire avant que le client
+  // ait vu le moindre champ. L'entonnoir du back-office mesurait donc « a
+  // ouvert son panier » sous le nom « a saisi ses coordonnées », et le taux
+  // d'abandon de cette étape était structurellement faux — celui qui referme
+  // aussitôt comptait comme un client qui s'est identifié.
+  //
   // (En démonstration, `armeFunnel` n'a posé aucun contexte : ce jalon est
   // alors un no-op par construction.)
   useEffect(() => {
-    if (open) jalonFunnel("coordonnees");
-  }, [open]);
+    if (open && step === "customer") jalonFunnel("coordonnees");
+  }, [open, step]);
 
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
@@ -308,6 +322,7 @@ export function Checkout({
           customerPhone: customer.phone.trim(),
         },
         ...(cart.note.trim() ? { note: cart.note.trim() } : {}),
+        ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
       });
 
       if (isPaused(created)) {
@@ -341,10 +356,42 @@ export function Checkout({
         return;
       }
 
-      const res = await api.createPaymentIntent(created._id);
-      if (res.unavailable || !res.publishableKey) {
-        writePayProbe(slug, "off");
-        setProbe("off");
+      // ── LA COMMANDE EXISTE DÉJÀ : PLUS AUCUN ÉCHEC NE DOIT LA NIER ──
+      //
+      // Ce qui suit — demander une intention de paiement — était dans le MÊME
+      // `try` que la création. Un réseau qui lâche entre les deux, ou un 404
+      // parce que la commande n'est pas encore visible depuis une autre
+      // réplique, faisait afficher « La commande n'a pas pu être envoyée » à
+      // quelqu'un dont la commande était en cuisine. Le panier venait pourtant
+      // d'être vidé : le client ne pouvait ni recommencer, ni comprendre — et
+      // celui qui insistait commandait deux fois.
+      //
+      // À partir d'ici, l'échec ne peut plus faire pire que « réglez au
+      // comptoir », ce qui est vrai et rattrapable.
+      let res: PaymentIntentResponse | null = null;
+      try {
+        res = await api.createPaymentIntent(created._id, created.trackingToken);
+      } catch {
+        res = null;
+      }
+
+      if (!res || res.unavailable || !res.publishableKey) {
+        // Un incident PASSAGER n'éteint pas la carte pour la session.
+        //
+        // `createIntent` rend `unavailable` pour des causes très différentes :
+        // Stripe non configuré chez ce restaurant (permanent), mais aussi une
+        // panne réseau, un 500 de Stripe, ou un panier sous cinquante
+        // centimes — transitoire, ou propre à CETTE commande. Le tunnel les
+        // confondait et écrivait « paiement en ligne éteint » pour tout le
+        // reste de la visite : le client qui ajoutait un article et revenait
+        // n'avait plus le choix de la carte, sans explication.
+        //
+        // Seule l'absence de clé publiable est structurelle : elle dit que ce
+        // restaurant n'a pas de paiement en ligne. Le reste se réessaie.
+        if (res?.unavailable === true && res.permanent === true) {
+          writePayProbe(slug, "off");
+          setProbe("off");
+        }
         setDowngraded(true);
         setStep("done");
         return;
@@ -440,7 +487,13 @@ export function Checkout({
         )}
 
         {step === "cart" && (
-          <CartStep cart={cart} onBrowse={onBrowse} onEditLine={onEditLine} />
+          <CartStep
+            cart={cart}
+            onBrowse={onBrowse}
+            onEditLine={onEditLine}
+            promoCode={promoCode}
+            onPromoCode={setPromoCode}
+          />
         )}
 
         {step === "customer" && (
@@ -504,7 +557,6 @@ export function Checkout({
             status={status}
             paidOnline={paidOnline}
             downgraded={downgraded}
-            tenantName={tenantName}
             demo={demo}
             demoCard={demo && method === "online"}
           />
@@ -689,10 +741,14 @@ function CartStep({
   cart,
   onBrowse,
   onEditLine,
+  promoCode,
+  onPromoCode,
 }: {
   cart: CartApi;
   onBrowse: () => void;
   onEditLine: (line: CartLine) => void;
+  promoCode: string;
+  onPromoCode: (v: string) => void;
 }) {
   if (!cart.hydrated) {
     return (
@@ -747,6 +803,42 @@ function CartStep({
           className="w-full resize-none rounded-card border border-white/8 bg-white/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 focus:border-accent"
         />
       </section>
+
+      {/*
+        LE CODE PROMO — le champ qui n'existait nulle part.
+
+        Le back-office savait créer un code, l'activer et l'imprimer sur des
+        flyers ; aucune surface ne savait le RECEVOIR. Le restaurateur ne
+        l'apprenait pas d'une erreur, il l'apprenait d'un client au téléphone.
+
+        Volontairement discret et replié : la majorité des clients n'en a pas,
+        et un champ vide mis en avant fait douter — « ai-je raté une offre ? ».
+      */}
+      <details className="group mb-3 rounded-panel border border-white/8 bg-surface2 px-4 py-3">
+        <summary className="cursor-pointer list-none text-[14px] text-mut marker:content-none">
+          <span className="underline decoration-white/25 underline-offset-4 group-open:no-underline">
+            J&apos;ai un code promo
+          </span>
+        </summary>
+        <label className="mt-3 block">
+          <span className="sr-only">Code promo</span>
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={24}
+            placeholder="BIENVENUE10"
+            value={promoCode}
+            onChange={(e) => onPromoCode(e.target.value.toUpperCase())}
+            className="w-full rounded-input border border-white/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut/60 focus:border-accent focus:outline-none"
+          />
+        </label>
+        <p className="mt-2 text-[12px] leading-relaxed text-mut">
+          La remise est appliquée par le restaurant au moment de valider.
+        </p>
+      </details>
 
       <section className="rounded-panel border border-white/8 bg-surface2 p-4">
         <div className="flex items-baseline justify-between gap-3">
@@ -923,7 +1015,12 @@ function CustomerStep({
           </p>
         ) : (
           <p id="sm-phone-hint" className="text-[13px] text-mut">
-            Uniquement pour vous prévenir que la commande est prête.
+            {/*
+              Le numéro sert au RESTAURANT, pas à un envoi automatique : aucun
+              SMS n'est expédié aujourd'hui. Annoncer « pour vous prévenir »
+              faisait attendre un message qui ne partait jamais.
+            */}
+            Pour que le restaurant puisse vous joindre en cas de besoin.
           </p>
         )}
       </div>
@@ -1230,7 +1327,6 @@ function DoneStep({
   status,
   paidOnline,
   downgraded,
-  tenantName,
   demo,
   demoCard,
 }: {
@@ -1239,7 +1335,6 @@ function DoneStep({
   status: OrderStatus;
   paidOnline: boolean;
   downgraded: boolean;
-  tenantName: string;
   demo: boolean;
   /** Démonstration où le visiteur avait choisi la carte bancaire. */
   demoCard: boolean;
@@ -1264,9 +1359,16 @@ function DoneStep({
           C’est envoyé en cuisine
         </h3>
         <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
+          {/*
+            AUCUN SMS NE PART. Le port `Notifier.notifyCustomer` est déclaré
+            dans le domaine et n'a jamais eu d'adaptateur : le client lisait une
+            promesse que rien ne tenait, et attendait un message qui ne
+            viendrait pas. Ce qui existe VRAIMENT, c'est cette page — elle suit
+            l'avancement en temps réel. On promet donc ce qu'on fait.
+          */}
           {demo
             ? "Suivez la préparation juste en dessous, comme le ferait votre client."
-            : `${tenantName} vous prévient par SMS dès que c’est prêt.`}
+            : "Suivez la préparation ici même — la page se met à jour toute seule."}
         </p>
       </div>
 
@@ -1331,6 +1433,26 @@ function DoneStep({
             );
           })}
         </ol>
+
+        {/*
+          LA REMISE OBTENUE, NOMMÉE.
+
+          Elle ne pouvait pas s'afficher avant validation — le montant est
+          résolu par le serveur, jamais par le navigateur. C'est ici qu'elle se
+          confirme, et le libellé porte le code : « BIENVENUE10 — Offre de
+          bienvenue ». Un « −2,00 € » sans raison ferait rappeler le restaurant
+          autant qu'une remise absente.
+        */}
+        {order.totals?.discount && (
+          <div className="mt-4 flex items-baseline justify-between gap-3 rounded-panel border border-ok/25 bg-ok/8 px-4 py-3">
+            <span className="min-w-0 text-[13px] text-okt">
+              {order.totals.discount.reason}
+            </span>
+            <span className="shrink-0 text-[15px] font-extrabold tabular-nums text-okt">
+              −{euros(order.totals.discount.amount)}
+            </span>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-col gap-2.5">
           {demoCard ? (

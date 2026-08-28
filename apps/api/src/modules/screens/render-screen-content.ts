@@ -217,6 +217,17 @@ export function renderScreenContent(
   const service: ScreenService = screen.active ? currentService(hours, now) : 'closed';
 
   let scenes: ScreenScenePayload[];
+  // DÉFENSE EN PROFONDEUR, et non un chemin nominal.
+  //
+  // Un écran désactivé n'arrive PAS jusqu'ici : `requirePairedScreen` refuse
+  // l'appel de la clé HDMI avant que cette fonction ne soit atteinte, et c'est
+  // le bon endroit pour le faire — un écran révoqué ne doit obtenir aucune
+  // réponse, pas une jolie veille.
+  //
+  // La branche reste néanmoins, et volontairement : cette fonction est PURE et
+  // publique, un appelant futur pourrait l'atteindre sans passer par le garde.
+  // Mieux vaut alors un écran noir qu'une carte de prix affichée en salle sur
+  // un appareil qu'on croyait coupé.
   if (!screen.active) {
     scenes = [standbyScene(snapshot)];
   } else if (service === 'closed') {

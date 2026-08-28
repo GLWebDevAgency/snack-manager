@@ -104,16 +104,40 @@ describe('Adéquation du planning au volume attendu', () => {
     expect(midi?.verdict).toBe('sur-effectif');
   });
 
-  it('ne compte que les heures RÉELLEMENT couvertes', () => {
-    // Un service 20 h → 21 h ne « couvre » ni 18 h ni 22 h : la prévision doit
-    // suivre l'amplitude posée, pas la plage théorique du soir.
+  /**
+   * LE VOLUME ATTENDU NE DÉPEND PAS DE QUI EST POSÉ.
+   *
+   * Il se calculait sur les heures COUVERTES, et l'inversion était pernicieuse :
+   * samedi soir sans personne annonçait « aucun service prévu pour ≈ 68
+   * commandes attendues » ; le gérant posait UNE personne de 20 h à 21 h, la
+   * demande retombait aux 32 commandes de cette heure-là, et le bloc passait au
+   * vert. Le trou de 18 h à 20 h et de 21 h à 23 h avait disparu de l'écran —
+   * l'indicateur s'était aligné sur le planning au lieu de le juger.
+   *
+   * La demande est une donnée du RESTAURANT : ce que la clientèle commande sur
+   * l'amplitude du service, que quelqu'un soit là ou non. Les heures couvertes
+   * mesurent la réponse à cette demande ; elles ne la définissent pas.
+   */
+  it('ne rétrécit PAS avec l’amplitude posée — sinon poser quelqu’un efface le trou', () => {
     const coverage = buildCoverage({
       weekStart: LUNDI,
       heatmap: SAMEDI_CHARGE,
       shifts: [shift({ id: '1', staffId: 'ali', date: '2026-08-22', start: '20:00', end: '21:00' })],
     });
     const soir = blockOf(coverage, '2026-08-22', 'soir');
-    expect(soir?.expectedOrders).toBe(32); // la seule heure de 20 h
+
+    // Le volume du SOIR entier, pas celui de l'heure couverte.
+    const sansPersonne = blockOf(
+      buildCoverage({ weekStart: LUNDI, heatmap: SAMEDI_CHARGE, shifts: [] }),
+      '2026-08-22',
+      'soir',
+    );
+    expect(soir?.expectedOrders).toBe(sansPersonne?.expectedOrders);
+    expect(soir?.expectedOrders).toBeGreaterThan(32);
+
+    // Et la fenêtre affichée reste celle du service posé : c'est elle qui dit
+    // au gérant ce qu'il a réellement couvert.
+    expect(soir?.window).toEqual({ start: '20:00', end: '21:00' });
   });
 
   it('se tait quand aucun volume n’est attendu', () => {

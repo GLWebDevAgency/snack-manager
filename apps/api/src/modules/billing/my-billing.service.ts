@@ -14,7 +14,8 @@ import {
   isTenantVisibleInvoice,
   nextInvoiceDue,
   planLabel,
-  planMrrCents,
+  abonnementMensuelCents,
+  offreClient,
   summarizeOutstanding,
   type BillingHistoryQuery,
   type BillingPlan,
@@ -112,7 +113,11 @@ export class MyBillingService {
     const plan = planOf(tenant);
     const status = accountStatusOf(tenant);
     const billable = status === 'active' || status === 'suspended';
-    const mrrCents = planMrrCents(plan);
+    // L'offre ENTIÈRE, pas la formule seule : c'est le montant que le
+    // restaurateur voit sur son écran « Abonnement », et il doit être celui
+    // qu'on lui prélève. Il lisait 159 € là où on facturait 238 €.
+    const offre = offreClient(tenant);
+    const mrrCents = abonnementMensuelCents(offre, now);
 
     return {
       tenant: { id: String(tenant._id), name: String(tenant.name ?? ''), slug: String(tenant.slug ?? '') },
@@ -122,13 +127,22 @@ export class MyBillingService {
         mrrCents,
         mrrLabel: formatEuros(mrrCents),
         founderSeat: tenant.founderSeat === true,
+        founderUntil: iso(tenant.founderUntil as Date | null) ?? null,
         accountStatus: status,
         accountStatusLabel: TENANT_ACCOUNT_STATUS_LABELS[status],
         accessBlocked: isAccessBlocked(status),
         since: iso(tenant.createdAt) ?? now.toISOString(),
         billable,
       },
-      nextDue: nextInvoiceDue(due, plan, billable, now),
+      nextDue: nextInvoiceDue(
+        due,
+        // L'offre ENTIÈRE et la date de signature : la projection décide
+        // elle-même du montant à SA date — une remise fondateur qui s'éteint
+        // d'ici là, un engagement annuel dont ce mois n'est pas l'anniversaire.
+        { offre, mrrCents, signeLe: (tenant.createdAt as Date | undefined) ?? null },
+        billable,
+        now,
+      ),
       outstanding: summarizeOutstanding(due, now),
       invoices,
       // Les manques ne dépendent que de l'émetteur et du client — jamais du

@@ -42,6 +42,7 @@ import {
   centsToInput,
   parseDecimal,
   parseEurosToCents,
+  supplementDepuisSaisie,
 } from "./shared";
 
 type Draft = {
@@ -53,9 +54,26 @@ type Draft = {
   initialStock: string;
   storage: StorageMode;
   allergens: Allergen[];
+  /**
+   * Les trois champs qui font d'un ingrédient un SUPPLÉMENT PAYANT à la caisse.
+   *
+   * Tout le back-end existait — colonnes, contrats, projection vers le menu,
+   * tests — et aucun formulaire ne les posait. Un gérant ne pouvait ni créer,
+   * ni voir, ni corriger un supplément : le cheddar à 1 € se saisissait par
+   * script ou n'existait pas.
+   */
+  removable: boolean;
+  /**
+   * Chaîne VIDE = pas de supplément (`null` côté API). « 0 » = supplément
+   * gratuit proposé. La distinction n'est pas cosmétique : `0` fait apparaître
+   * le choix à la caisse, `null` le retire du catalogue.
+   */
+  supplementEuros: string;
+  /** Libellé caisse — prime sur le nom d'inventaire. Vide = on garde le nom. */
+  displayName: string;
 };
 
-type FieldErrors = Partial<Record<"name" | "cost" | "par" | "stock", string>>;
+type FieldErrors = Partial<Record<"name" | "cost" | "par" | "stock" | "supplement", string>>;
 
 function draftFrom(ing: SupplyIngredient | null): Draft {
   return ing
@@ -68,6 +86,12 @@ function draftFrom(ing: SupplyIngredient | null): Draft {
         initialStock: "",
         storage: ing.storage,
         allergens: [...ing.allergens],
+        removable: ing.removable,
+        // `centsToInput` n'est PAS réutilisable ici : il rendrait « 0,00 »
+        // pour un supplément absent, transformant « désactivé » en « gratuit ».
+        supplementEuros:
+          ing.supplementPriceCents == null ? "" : centsToInput(ing.supplementPriceCents),
+        displayName: ing.displayName ?? "",
       }
     : {
         name: "",
@@ -78,6 +102,12 @@ function draftFrom(ing: SupplyIngredient | null): Draft {
         initialStock: "",
         storage: "sec",
         allergens: [],
+        // Le défaut de `removable` dépend de la catégorie côté serveur
+        // (`isRemovableByDefault`) : on ne le devine pas ici, on laisse
+        // l'API trancher tant que le gérant n'y touche pas.
+        removable: false,
+        supplementEuros: "",
+        displayName: "",
       };
 }
 
@@ -132,6 +162,17 @@ export function IngredientDrawer({
       ? parseDecimal(draft.initialStock)
       : 0;
     if (stock === null) next.stock = "Quantité invalide.";
+    // LE PRIX DE SUPPLÉMENT, ENFIN VALIDÉ.
+    //
+    // `supplementDepuisSaisie` rend `null` pour DEUX intentions opposées : le
+    // champ vidé — « ne plus le proposer », qui est voulu — et la saisie
+    // illisible. Sans ce contrôle, taper « 1,20 € » avec le symbole, ou « -1 »,
+    // retirait l'ingrédient du catalogue des suppléments sans un mot : la
+    // caisse cessait de le proposer, et le gérant croyait avoir changé un prix.
+    const supplementSaisi = draft.supplementEuros.trim();
+    if (supplementSaisi !== "" && supplementDepuisSaisie(supplementSaisi) === null) {
+      next.supplement = "Montant invalide (ex. 1,00) — laissez vide pour ne plus le proposer.";
+    }
     setErrors(next);
     if (Object.keys(next).length) return null;
     return {
@@ -158,6 +199,9 @@ export function IngredientDrawer({
             costPerUnitCents: parsed.costPerUnitCents,
             parLevel: parsed.parLevel,
             storage: draft.storage,
+            removable: draft.removable,
+            supplementPriceCents: supplementDepuisSaisie(draft.supplementEuros),
+            displayName: draft.displayName.trim() || null,
           },
         );
         setCurrent(updated);
@@ -174,6 +218,9 @@ export function IngredientDrawer({
           currentStock: parsed.initialStock,
           parLevel: parsed.parLevel,
           storage: draft.storage,
+          removable: draft.removable,
+          supplementPriceCents: supplementDepuisSaisie(draft.supplementEuros),
+          displayName: draft.displayName.trim() || null,
         });
         setCurrent(created);
         setDraft(draftFrom(created));
@@ -334,6 +381,66 @@ export function IngredientDrawer({
                 ))}
               </Select>
             </Field>
+          {/*
+            ── À LA CAISSE ──────────────────────────────────────────────────
+            Ces trois champs ne pilotent pas l'inventaire : ils décident de ce
+            que le comptoir peut vendre en plus. Ils vivaient dans les colonnes,
+            les contrats et la projection du menu — sans aucun formulaire pour
+            les poser.
+          */}
+          <div className="mt-5 border-t border-white/6 pt-4">
+            <div className="text-sm font-bold text-ink">À la caisse</div>
+            <p className="mt-1 text-[12.5px] text-mut">
+              Le supplément n&apos;apparaît que sur les plats dont la recette
+              contient un pain, un féculent, une viande, un poisson ou un
+              fromage — et jamais sur un plat qui contient déjà cet ingrédient.
+            </p>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field
+                label="Prix en supplément"
+                htmlFor="ing-supplement"
+                hint={errors.supplement ?? "Vide = pas proposé. 0 = proposé, offert."}
+              >
+                <Input
+                  id="ing-supplement"
+                  inputMode="decimal"
+                  value={draft.supplementEuros}
+                  onChange={(e) => set("supplementEuros", e.target.value)}
+                  placeholder="Ex. 1,00"
+                  className="tabular-nums"
+                  aria-invalid={errors.supplement ? true : undefined}
+                />
+              </Field>
+              <Field
+                label="Nom à la caisse"
+                htmlFor="ing-display"
+                hint="Vide = le nom d’inventaire."
+              >
+                <Input
+                  id="ing-display"
+                  value={draft.displayName}
+                  onChange={(e) => set("displayName", e.target.value)}
+                  placeholder="Ex. Cheddar"
+                  maxLength={60}
+                />
+              </Field>
+            </div>
+
+            <label className="mt-3 flex items-start gap-3 text-[13px]">
+              <input
+                type="checkbox"
+                checked={draft.removable}
+                onChange={(e) => set("removable", e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-[var(--cf-accent)]"
+              />
+              <span className="min-w-0 text-mut">
+                <span className="font-semibold text-ink">Retirable</span> — le
+                client peut demander « sans » sur les plats qui en contiennent.
+              </span>
+            </label>
+          </div>
+
             {!isEdit && (
               <Field
                 label={`Stock initial (${unit})`}

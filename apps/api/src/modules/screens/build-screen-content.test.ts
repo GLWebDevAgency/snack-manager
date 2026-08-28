@@ -188,7 +188,21 @@ describe('Contenu résolu', () => {
     expect(content.scenes[0]?.title).toBe("Class'Food");
   });
 
-  it('un écran désactivé repasse en veille sans cesser de répondre', () => {
+  /**
+   * DÉFENSE EN PROFONDEUR — ce n'est pas le chemin nominal.
+   *
+   * En service, un écran désactivé n'atteint jamais cette fonction :
+   * `requirePairedScreen` refuse l'appel de la clé HDMI avant, et c'est le bon
+   * endroit — un écran révoqué ne doit obtenir aucune réponse, pas une jolie
+   * veille. Le test précédent laissait croire l'inverse en affirmant qu'un
+   * écran désactivé « ne cesse pas de répondre ».
+   *
+   * Ce qu'on vérifie ici est donc la robustesse de la fonction PURE, au cas où
+   * un appelant futur l'atteindrait sans passer par le garde : mieux vaut un
+   * écran noir qu'une carte de prix affichée en salle sur un appareil qu'on
+   * croyait coupé.
+   */
+  it('rend une veille si on l’appelle malgré tout sur un écran désactivé', () => {
     const content = renderScreenContent(
       storedScreen({ active: false }),
       boardSnapshot(),

@@ -292,6 +292,28 @@ questions : ce que ça change, comment ça a été vérifié, ce que ça peut ca
 La troisième est celle qu'on est tenté de sauter, et c'est celle qui sert le
 jour du retour arrière.
 
+### Avant une mise en production qui touche à l'argent
+
+```bash
+pnpm verifier:argent
+```
+
+Casse volontairement, une par une, les six règles du produit qui décident d'un
+montant — plafond de remise par rôle, remise fondateur figée, borne du
+sous-total, quota de promotion, MRR normalisé — et vérifie qu'un test tombe à
+chaque fois.
+
+**Une suite verte prouve que le code passe les tests ; elle ne prouve pas que
+les tests attraperaient une régression.** Un test qui ne vérifie rien reste vert
+quoi qu'il arrive, et c'est précisément ce qu'on ne voit jamais : deux tests
+écrits le 28/08/2026 étaient dans ce cas, trouvés en relisant plutôt qu'en
+exécutant. Une mutation qui passe inaperçue est une protection qui n'existe pas.
+
+Le harnais est lent — il reconstruit `@sm/contracts` et `@sm/domain` entre
+chaque mutation, parce qu'ils sont consommés depuis leur `dist/`. Il n'a donc
+pas sa place en CI : on le lance avant de fusionner vers `main`, et après tout
+remaniement de la facturation, des promotions ou des remises.
+
 **Une CI verte prouve que ça compile et que les tests passent. Elle ne prouve
 pas que ça marche.** Depuis le 20 août 2026, le workflow **Bout en bout**
 (`e2e.yml`) joue les parcours qui coûtent de l'argent — commande, cuisine,

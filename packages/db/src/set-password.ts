@@ -84,7 +84,17 @@ async function main(): Promise<void> {
   console.log('jusqu’à leur expiration (12 h) — déconnectez-vous et reconnectez-vous pour vérifier.');
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+/**
+ * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
+ *
+ * Sans cette garde, importer ce fichier — pour tester une de ses fonctions, ou
+ * par une chaîne d'imports involontaire — ouvre une connexion à la base pointée
+ * par l'environnement et LANCE le traitement. Sur un poste dont le `.env` vise
+ * la production, c'est un script d'administration qui part tout seul.
+ */
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -1,4 +1,4 @@
-import type { Product, Variant, OptionGroup } from './types';
+import type { Product, OptionGroup } from './types';
 
 /**
  * Calcul de prix côté client — pour l'affichage immédiat et le fonctionnement

@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -9,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { trackingFilter } from '../orders/tracking';
 import Redis from 'ioredis';
 import {
   ordersChannel,
@@ -147,8 +147,15 @@ export class PaymentsService {
     }
   }
 
-  private unavailable(reason: string): PaymentIntentResponse {
-    return { unavailable: true, reason };
+  /**
+   * Un refus de paiement en ligne, et sa NATURE.
+   *
+   * `permanent: true` dit « ce restaurant ne peut pas encaisser en ligne » —
+   * le tunnel a raison d'éteindre la carte pour la visite. Tout le reste est
+   * passager ou propre à une commande, et doit pouvoir se réessayer.
+   */
+  private unavailable(reason: string, permanent = false): PaymentIntentResponse {
+    return { unavailable: true, reason, permanent };
   }
 
   /**
@@ -156,9 +163,21 @@ export class PaymentsService {
    * Ne lève jamais pour un problème Stripe : le front doit toujours pouvoir
    * retomber sur « payer au comptoir ».
    */
-  async createIntent(orderId: string): Promise<PaymentIntentResponse> {
-    if (!Types.ObjectId.isValid(orderId)) throw new NotFoundException('Commande introuvable');
-    const order = await this.orders.findById(orderId);
+  async createIntent(orderId: string, token: unknown): Promise<PaymentIntentResponse> {
+    // LE JETON DE SUIVI, comme sur les trois autres routes publiques.
+    //
+    // Celle-ci était la seule à ouvrir une commande sur son seul ObjectId. Or
+    // `tracking.ts` explique pourquoi cela ne suffit pas : les quatre premiers
+    // octets sont l'horodatage, les trois derniers un compteur — à partir d'une
+    // commande connue, les voisines se devinent. La route confirmait donc
+    // l'existence d'une commande (404 ou 200), en révélait le montant, et
+    // laissait ouvrir des intentions de paiement sur des commandes d'autrui.
+    //
+    // Le refus est un 404, jamais un 403 : un 403 confirmerait la commande,
+    // c'est-à-dire exactement ce que le jeton doit empêcher.
+    const filtre = trackingFilter(orderId, token);
+    if (!filtre) throw new NotFoundException('Commande introuvable');
+    const order = await this.orders.findOne(filtre);
     if (!order) throw new NotFoundException('Commande introuvable');
 
     if (order.status === 'cancelled') {
@@ -174,7 +193,8 @@ export class PaymentsService {
     }
 
     const stripe = await this.getClient();
-    if (!stripe) return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
+    // Aucune clé plateforme : ce n'est pas un incident, c'est une absence.
+    if (!stripe) return this.unavailable(PAYMENT_UNAVAILABLE_REASON, true);
 
     /*
      * SUR QUEL COMPTE ENCAISSE-T-ON ? La question se pose AVANT d'appeler
@@ -191,8 +211,10 @@ export class PaymentsService {
      */
     const compte = await this.encaissement.compteActifDe(String(order.tenantId));
     if (!compte) {
+      // Ce restaurant n'a pas de compte raccordé : structurel, pas passager.
       return this.unavailable(
         'Paiement en ligne indisponible pour ce restaurant — réglez votre commande au comptoir.',
+        true,
       );
     }
 
@@ -202,7 +224,7 @@ export class PaymentsService {
       const intent = await this.resolveIntent(stripe, order, amount, { stripeAccount: compte });
       if (!intent.client_secret) {
         this.logger.warn(`PaymentIntent ${intent.id} sans client_secret`);
-        return this.unavailable(PAYMENT_UNAVAILABLE_REASON);
+        return this.unavailable(PAYMENT_UNAVAILABLE_REASON, true);
       }
       if (
         order.payment &&

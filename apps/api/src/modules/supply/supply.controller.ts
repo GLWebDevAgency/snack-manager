@@ -48,6 +48,19 @@ export class SupplyController {
 
   // ─── Ingrédients ───
 
+  // ─── LES LECTURES, désormais déclarées ───
+  //
+  // Elles ne portaient AUCUN rôle, et l'absence de `@Roles` vaut « tout rôle
+  // authentifié » : un code cuisine lisait les prix d'achat, les marges par
+  // produit et l'historique des tarifs fournisseurs. Les écritures étaient
+  // protégées depuis toujours ; c'est la lecture qui laissait passer
+  // l'information la plus sensible du restaurant.
+
+  /**
+   * La cuisine déclare les ruptures depuis le KDS : elle doit voir la liste
+   * qu'elle alimente. Les PRIX d'achat, eux, ne sortent pas de cette route.
+   */
+  @Roles('owner', 'gerant', 'cuisine')
   @Get('ingredients')
   listIngredients(
     @TenantId() tenantId: string,
@@ -126,6 +139,7 @@ export class SupplyController {
 
   // ─── Fournisseurs & catalogue ───
 
+  @Roles('owner', 'gerant')
   @Get('suppliers')
   listSuppliers(@TenantId() tenantId: string) {
     return this.supply.listSuppliers(tenantId);
@@ -176,6 +190,7 @@ export class SupplyController {
     return this.supply.updateSupplierItem(tenantId, itemId, body);
   }
 
+  @Roles('owner', 'gerant')
   @Get('items/:itemId/price-history')
   priceHistory(@TenantId() tenantId: string, @Param('itemId') itemId: string) {
     return this.supply.priceHistory(tenantId, itemId);
@@ -183,6 +198,7 @@ export class SupplyController {
 
   // ─── Recettes / BOM & coût matière ───
 
+  @Roles('owner', 'gerant')
   @Get('products/:productRef/bom')
   bom(@TenantId() tenantId: string, @Param('productRef') productRef: string) {
     return this.supply.bom(tenantId, productRef);
@@ -209,6 +225,7 @@ export class SupplyController {
   }
 
   /** Batch pour la vue Menu : `?refs=id1,id2` → { ref: { costCents, marginPct } }. */
+  @Roles('owner', 'gerant')
   @Get('costs')
   costs(@TenantId() tenantId: string, @Query('refs') refs?: string) {
     if (!refs) throw new BadRequestException('Paramètre refs requis');
@@ -223,6 +240,11 @@ export class SupplyController {
 
   // ─── Alertes ───
 
+  /**
+   * Les alertes de stock servent d'abord en cuisine — c'est là qu'on
+   * constate qu'il manque quelque chose.
+   */
+  @Roles('owner', 'gerant', 'cuisine')
   @Get('alerts')
   alerts(@TenantId() tenantId: string) {
     return this.supply.alerts(tenantId);
@@ -239,6 +261,7 @@ export class SupplyController {
     return this.supply.createMovement(tenantId, body);
   }
 
+  @Roles('owner', 'gerant')
   @Get('movements')
   listMovements(
     @TenantId() tenantId: string,

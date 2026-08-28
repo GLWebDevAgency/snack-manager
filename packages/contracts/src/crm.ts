@@ -103,8 +103,79 @@ export const LEAD_TOUCH_LABELS: Record<LeadTouchType, string> = {
 
 // ─── Places fondateur & MRR ───
 
-/** « 10 places à tarif préférentiel à vie » (Dossier fondateur, roadmap T4). */
+/** Dix places à moitié prix la première année (Dossier fondateur, roadmap T4). */
 export const FOUNDER_SEATS_TOTAL = 10;
+
+/**
+ * L'OFFRE FONDATEUR — moitié prix, douze mois, sur tout le premier contrat.
+ *
+ * Arrêtée le 27/08/2026, en remplacement du « tarif gelé à vie » que le CRM
+ * affichait sans que rien ne l'applique : le drapeau `founderSeat` existait,
+ * la promesse était en barre latérale, et pas une ligne de code ne changeait un
+ * prix. Un client fondateur payait le tarif public.
+ *
+ * La règle, telle qu'elle se dit au restaurateur : « la moitié du prix pendant
+ * un an, sur tout ce qu'on signe aujourd'hui — l'abonnement, le module, et même
+ * le site si vous en prenez un ». Douze mois plus tard, il bascule au tarif
+ * public sans qu'on ait un geste à faire ; ce qu'il ajoute après se paie plein
+ * tarif dès le premier jour.
+ *
+ * Un gel à vie et une remise datée ne sont pas deux formulations du même
+ * cadeau : le premier est une dette perpétuelle qui pèse sur chaque révision de
+ * grille, la seconde s'éteint toute seule.
+ */
+export const FOUNDER_DISCOUNT_RATE = 0.5;
+export const FOUNDER_DISCOUNT_MONTHS = 12;
+
+/**
+ * La REMISE accordée sur un montant public — la moitié, arrondie au centime.
+ *
+ * C'est la remise qui est la primitive, et non le prix remisé : c'est elle
+ * qu'on fige au contrat, elle qui s'écrit sur une ligne de devis, elle qui
+ * deviendra un `amount_off` chez Stripe. Le prix remisé s'en déduit ; l'inverse
+ * ne se déduit pas sans reperdre un centime à chaque arrondi.
+ *
+ * `Math.ceil` : sur un montant impair, le demi-centime va au CLIENT. C'est
+ * l'arrondi que `Money.percent` applique déjà dans le domaine, et deux
+ * primitives de remise qui n'arrondissent pas dans le même sens finissent par
+ * produire deux totaux pour la même offre.
+ */
+export const remiseFondateurCents = (cents: number): number =>
+  Math.ceil(cents * FOUNDER_DISCOUNT_RATE);
+
+/** Le prix fondateur d'un montant public — ce qui reste une fois la remise ôtée. */
+export const prixFondateurCents = (cents: number): number =>
+  cents - remiseFondateurCents(cents);
+
+/**
+ * La fin de la remise : douze mois après la signature, à la seconde près.
+ *
+ * `setUTCMonth` déborde sur le mois suivant quand le jour n'existe pas dans le
+ * mois d'arrivée — un 29 février signerait jusqu'au 1er mars. On replie donc
+ * sur le dernier jour du mois. Une remise qui dure un jour de trop est un
+ * cadeau ; un jour de moins, une réclamation.
+ */
+export function finRemiseFondateur(signeLe: Date): Date {
+  const fin = new Date(signeLe.getTime());
+  const jour = fin.getUTCDate();
+  fin.setUTCMonth(fin.getUTCMonth() + FOUNDER_DISCOUNT_MONTHS);
+  if (fin.getUTCDate() !== jour) fin.setUTCDate(0);
+  return fin;
+}
+
+/**
+ * La remise court-elle encore ? L'absence de date vaut « pas de remise » —
+ * jamais « à vie », qui est précisément le défaut qu'on répare.
+ */
+export function remiseFondateurActive(
+  finLe: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!finLe) return false;
+  const fin = finLe instanceof Date ? finLe : new Date(finLe);
+  if (Number.isNaN(fin.getTime())) return false;
+  return now.getTime() < fin.getTime();
+}
 
 /**
  * LA GRILLE, EN CENTIMES, ET C'EST ICI QU'ELLE FAIT LOI.
@@ -388,6 +459,39 @@ export const LeadProposalSchema = z
   .superRefine(propositionNonVide);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
+/**
+ * CHANGER L'OFFRE D'UN CLIENT DÉJÀ SIGNÉ.
+ *
+ * `TenantPlanChangeSchema` ne portait que la formule, et son énumération
+ * excluait `null` : on ne pouvait ni voir, ni ajouter, ni retirer le module de
+ * commande en ligne et les services après la signature, ni dégrader un client
+ * vers « Atelier seul ». Un restaurateur qui prenait les réseaux sociaux six
+ * mois plus tard n'avait aucun chemin dans le logiciel — et sa facture ne
+ * bougeait pas non plus, puisque tout le calcul retombait sur `plan`.
+ *
+ * Les trois `superRefine` sont ceux de la proposition, à l'identique. Les
+ * réécrire ici en produirait des jumelles qui divergeraient au premier
+ * changement de règle, et on ne saurait plus laquelle fait foi : celle qui
+ * vend, ou celle qui modifie.
+ *
+ * Le motif n'est pas décoratif : il part au journal d'administration, et
+ * « demandé par le gérant au téléphone » vaut mieux que rien le jour où l'on
+ * se demande pourquoi ce client est passé de Boost à Essentiel.
+ */
+export const TenantOffreSchema = z
+  .object({
+    plan: z.enum(['essentiel', 'complet', 'boost']).nullable(),
+    onlineOrdering: z.boolean().default(false),
+    billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
+    services: LeadServicesSchema.default(EMPTY_SERVICES),
+    reason: z.string().trim().max(500).default(''),
+  })
+  .superRefine(integrationExigeLeModule)
+  .superRefine(moduleSansFormuleExigeLIntegration)
+  .superRefine(propositionNonVide);
+export type TenantOffre = z.infer<typeof TenantOffreSchema>;
+
+
 /** La proposition telle que servie — datée du jour où elle a été posée. */
 export type CrmLeadProposal = LeadProposal & { at: string };
 
@@ -434,6 +538,277 @@ export function proposalCents(
       (p.plan ? PLAN_MRR_CENTS[p.plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
     servicesMonthlyCents: atelier.monthlyCents,
     setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
+  };
+}
+
+/**
+ * L'OFFRE D'UN CLIENT — la forme unique dont dépend toute la facturation.
+ *
+ * Elle existe parce que la lecture « document → offre » était recopiée quatre
+ * fois : deux services de l'API, la façade du restaurateur, et le navigateur.
+ * Quatre copies d'une même règle, c'est trois occasions de ne pas la corriger
+ * le jour où elle change — et cette règle-là décide de ce qu'on prélève.
+ *
+ * Volontairement structurelle : le tenant Mongo, le DTO d'administration et la
+ * ligne du CRM portent les mêmes noms de champs, et aucun d'eux n'a besoin de
+ * connaître les autres pour être lu ici.
+ */
+export type OffreClient = {
+  plan: PlanChoice;
+  onlineOrdering: boolean;
+  atelier: (Partial<LeadServices> & { signedAt?: unknown }) | null;
+  /** Fin de la remise fondateur, ou `null` — voir `finRemiseFondateur`. */
+  founderUntil: Date | string | null;
+  /** La remise mensuelle FIGÉE au contrat, ou `null` — voir `abonnementMensuelCents`. */
+  founderDiscountCents: number | null;
+  billingCycle: ProposalBilling;
+};
+
+/**
+ * Lit l'offre d'un document quelconque qui la porte — tenant brut, DTO, ligne.
+ *
+ * Tolérante aux clients d'avant, et c'est tout son intérêt : `onlineOrdering`
+ * absent vaut « non vendu », `atelier` nul vaut « aucun service »,
+ * `billingCycle` absent vaut « mensuel ». Un tenant créé avant l'Atelier
+ * retombe donc sur sa formule sans jamais lever.
+ */
+export function offreClient(source: {
+  plan?: unknown;
+  onlineOrdering?: unknown;
+  atelier?: unknown;
+  founderUntil?: unknown;
+  founderDiscountCents?: unknown;
+  billingCycle?: unknown;
+}): OffreClient {
+  const plan = source.plan;
+  return {
+    plan: plan === 'essentiel' || plan === 'complet' || plan === 'boost' ? plan : null,
+    onlineOrdering: source.onlineOrdering === true,
+    atelier: (source.atelier ?? null) as OffreClient['atelier'],
+    founderUntil:
+      source.founderUntil instanceof Date || typeof source.founderUntil === 'string'
+        ? source.founderUntil
+        : null,
+    founderDiscountCents:
+      typeof source.founderDiscountCents === 'number' && Number.isFinite(source.founderDiscountCents)
+        ? source.founderDiscountCents
+        : null,
+    billingCycle: source.billingCycle === 'annuel' ? 'annuel' : 'mensuel',
+  };
+}
+
+/**
+ * Le TARIF PUBLIC d'une offre, remise ignorée — logiciel et services séparés.
+ *
+ * Séparés parce que l'engagement annuel ne porte que sur le logiciel : le devis
+ * le dit déjà au client (« douze mois de service, dix facturés » n'apparaît que
+ * si une formule ou le module sont vendus), et les mensuels de l'Atelier se
+ * facturent au mois quel que soit l'engagement. Un total unique rendrait cette
+ * distinction impossible à retrouver en aval.
+ */
+export function tarifPublicMensuel(offre: OffreClient): {
+  logicielCents: number;
+  servicesCents: number;
+} {
+  const prix = proposalCents({
+    plan: offre.plan,
+    onlineOrdering: offre.onlineOrdering,
+    services: { ...EMPTY_SERVICES, ...(offre.atelier ?? {}) },
+  });
+  return { logicielCents: prix.monthlyCents, servicesCents: prix.servicesMonthlyCents };
+}
+
+/**
+ * LA REMISE À FIGER AU CONTRAT — calculée composante par composante.
+ *
+ * Appelée UNE FOIS, à la signature, et son résultat vit ensuite sur le client
+ * (`founderDiscountCents`). Ne jamais la rappeler pour facturer : ce serait
+ * réintroduire le pourcentage sur l'offre courante que `remiseFondateurDue`
+ * existe pour empêcher.
+ *
+ * Composante par composante, et non sur le total, parce que c'est ainsi que le
+ * DEVIS remise — une ligne par prestation, arrondie pour son propre compte — et
+ * que les factures sont émises une par service. Arrondir ici sur le total
+ * donnerait un contrat qui ne tombe pas sur la somme des pièces : un centime
+ * d'écart au premier prix impair, et un client qui fait recompter.
+ */
+export function remiseFondateurContrat(offre: Pick<OffreClient, 'plan' | 'onlineOrdering' | 'atelier'>): number {
+  const services: LeadServices = { ...EMPTY_SERVICES, ...(offre.atelier ?? {}) };
+  const moduleFacture = offre.onlineOrdering && offre.plan !== 'boost';
+  const composantes = [
+    offre.plan ? PLAN_MRR_CENTS[offre.plan] : 0,
+    moduleFacture ? MODULE_ORDERING_CENTS : 0,
+    services.presenceInternet ? ATELIER_PRESENCE_CENTS : 0,
+    services.reseauxSociaux ? SOCIAL_CADENCE_CENTS[services.reseauxSociaux] : 0,
+  ];
+  return composantes.reduce((somme, cents) => somme + remiseFondateurCents(cents), 0);
+}
+
+/**
+ * LA REMISE FONDATEUR EST UN MONTANT FIGÉ, PAS UN POURCENTAGE COURANT.
+ *
+ * C'est la seule forme qui exprime la règle vendue : « la moitié du prix sur
+ * tout ce qu'on signe aujourd'hui ; ce qui s'ajoute après se paie plein tarif ».
+ * Un taux ne connaît que le montant qu'on lui donne — lui donner l'offre du
+ * jour, c'est remiser aussi le service ajouté le onzième mois, et offrir à un
+ * fondateur le moyen de relancer sa remise en changeant d'offre. La version
+ * précédente faisait exactement cela, sous un commentaire qui affirmait le
+ * contraire.
+ *
+ * Un montant, lui, ne bouge pas quand l'offre grossit : le dû augmente, la
+ * remise non, et le supplément se paie donc plein tarif sans qu'aucune ligne de
+ * code n'ait à distinguer « signé » de « ajouté depuis ».
+ *
+ * `Math.min` borne la remise au dû : un client qui rétrograde en dessous de sa
+ * remise paie zéro, jamais un montant négatif que la facturation lirait comme
+ * un avoir.
+ *
+ * C'est aussi, exactement, un coupon Stripe `amount_off` en `duration:
+ * repeating` — la bascule de l'ADR 0005 se fera sans retraduire la règle. Un
+ * `percent_off` porterait sur toute la facture, lignes ajoutées comprises : ce
+ * serait réintroduire le défaut chez Stripe.
+ */
+export function remiseFondateurDue(offre: OffreClient, now: Date = new Date()): number {
+  if (!remiseFondateurActive(offre.founderUntil, now)) return 0;
+  const { logicielCents, servicesCents } = tarifPublicMensuel(offre);
+  return Math.min(Math.max(0, offre.founderDiscountCents ?? 0), logicielCents + servicesCents);
+}
+
+/**
+ * Ce qu'un client PAIE chaque mois — le pendant de `proposalCents` côté
+ * client, une fois la proposition devenue contrat.
+ *
+ * Les deux fonctions doivent rendre le même montant récurrent pour la même
+ * offre : ce qui a été devisé est ce qui sera facturé. C'est précisément ce
+ * qui manquait — toute la facturation lisait `tenant.plan` seul, si bien qu'un
+ * client Complet avec le module était facturé 159 € au lieu de 238 €, et qu'un
+ * client sans formule, qui paie pourtant tous les mois ses services, n'était
+ * projeté dans aucune échéance.
+ *
+ * Rend le montant MENSUEL, remise comprise — y compris pour un engagement
+ * annuel, dont c'est la mensualité équivalente. Ce qui sera réellement prélevé,
+ * et quand, se lit sur `echeancesDues`.
+ */
+export function abonnementMensuelCents(offre: OffreClient, now: Date = new Date()): number {
+  const { logicielCents, servicesCents } = tarifPublicMensuel(offre);
+  return Math.max(0, logicielCents + servicesCents - remiseFondateurDue(offre, now));
+}
+
+/**
+ * CE QUI EST DÛ UN MOIS DONNÉ — la règle unique, contrats compris.
+ *
+ * Vit ici et non dans le service de facturation parce que DEUX surfaces en
+ * dépendent : la passe qui émet les pièces, et la projection d'échéance qui
+ * annonce au restaurateur ce qu'on lui prélèvera. Écrite deux fois, elle
+ * finirait par annoncer un montant et en facturer un autre.
+ *
+ * `signeLe` donne le mois anniversaire d'un engagement annuel. Absent — un
+ * client d'avant le champ — l'échéance annuelle est traitée comme due : mieux
+ * vaut facturer une fois que jamais.
+ */
+export function echeanceDuMois(
+  offre: OffreClient,
+  mois: Date,
+  signeLe: Date | null,
+  now: Date = new Date(),
+): { cents: number; lignes: EcheanceDue[] } {
+  const lignes = echeancesDues(offre, now).filter(
+    (l) =>
+      l.cadence !== 'annuel' ||
+      signeLe === null ||
+      signeLe.getUTCMonth() === mois.getUTCMonth(),
+  );
+  return { cents: lignes.reduce((somme, l) => somme + l.cents, 0), lignes };
+}
+
+/**
+ * LE MRR NORMALISÉ — ce qu'un client rapporte par mois, en moyenne.
+ *
+ * Distinct de `abonnementMensuelCents`, qui rend la MENSUALITÉ FACIALE. Pour un
+ * client au mois les deux coïncident ; pour un engagement annuel, non : « douze
+ * mois payés dix » à 159 € rapporte 1 590 € l'an, soit 132,50 € par mois et non
+ * 159 €. Sommer les mensualités faciales gonfle le MRR du parc de vingt pour
+ * cent à chaque client annuel — et le MRR est le chiffre sur lequel on décide.
+ *
+ * Les services de l'Atelier ne s'annualisent jamais : ils entrent au mois, quel
+ * que soit l'engagement du logiciel.
+ *
+ * Arrondi À L'INFÉRIEUR, délibérément : un indicateur de pilotage qui se
+ * trompe doit se tromper vers le bas, jamais annoncer une recette qu'on n'a pas.
+ */
+export function mrrNormaliseCents(offre: OffreClient, now: Date = new Date()): number {
+  const lignes = echeancesDues(offre, now);
+  return lignes.reduce(
+    (somme, l) => somme + (l.cadence === 'annuel' ? Math.floor(l.cents / 12) : l.cents),
+    0,
+  );
+}
+
+/** Une échéance à émettre : son montant, et le pas qui la sépare de la suivante. */
+export type EcheanceDue = {
+  nature: 'logiciel' | 'services';
+  cadence: ProposalBilling;
+  cents: number;
+};
+
+/**
+ * CE QU'ON PRÉLÈVE, ET À QUEL RYTHME — la règle que `billingCycle` attendait.
+ *
+ * Le champ était écrit à la signature, affiché sur la fiche, et lu par aucun
+ * calcul : un client ayant signé « douze mois payés dix » recevait douze
+ * mensualités pleines, soit vingt pour cent de trop, sans qu'aucune alerte ne
+ * se déclenche. Vendre un engagement qu'on ne sait pas facturer est pire que ne
+ * pas le vendre.
+ *
+ * La répartition suit le devis, qui fait foi puisque c'est lui que le client a
+ * signé : l'engagement annuel ne porte que sur le LOGICIEL, les mensuels de
+ * l'Atelier restent mensuels. La remise s'impute donc d'abord sur le logiciel —
+ * c'est la part qui s'annualise, et l'imputer sur les services la ferait
+ * disparaître dix mois sur douze.
+ *
+ * Les lignes à zéro sont omises : un client sans services n'a pas d'échéance de
+ * services, et une pièce à 0 € n'est pas une facture.
+ */
+export function echeancesDues(offre: OffreClient, now: Date = new Date()): EcheanceDue[] {
+  const { logicielCents, servicesCents } = tarifPublicMensuel(offre);
+  const remise = remiseFondateurDue(offre, now);
+  const remiseLogiciel = Math.min(remise, logicielCents);
+  const logiciel = logicielCents - remiseLogiciel;
+  const services = servicesCents - (remise - remiseLogiciel);
+
+  const lignes: EcheanceDue[] = [];
+  if (logiciel > 0) {
+    lignes.push(
+      offre.billingCycle === 'annuel'
+        ? { nature: 'logiciel', cadence: 'annuel', cents: yearlyCents(logiciel) }
+        : { nature: 'logiciel', cadence: 'mensuel', cents: logiciel },
+    );
+  }
+  if (services > 0) lignes.push({ nature: 'services', cadence: 'mensuel', cents: services });
+  return lignes;
+}
+
+/**
+ * Le chiffrage d'un fondateur : la moitié de tout, en une passe.
+ *
+ * Volontairement SÉPARÉE de `proposalCents`. La grille dit le tarif public et
+ * doit pouvoir être révisée sans qu'on touche aux remises accordées ; la remise
+ * dit ce que ce client-là paiera. Mêler les deux, c'est perdre la réponse à
+ * « quel était le prix catalogue le jour de la signature ? » — et cette
+ * question se pose au premier litige.
+ *
+ * Rend un objet neuf : le chiffrage public reste intact et les deux peuvent
+ * s'afficher côte à côte sur le devis, ce qui est tout l'intérêt d'une remise.
+ */
+export function chiffrageFondateur(prix: {
+  monthlyCents: number;
+  servicesMonthlyCents: number;
+  setupOnceCents: number;
+}): { monthlyCents: number; servicesMonthlyCents: number; setupOnceCents: number } {
+  return {
+    monthlyCents: prixFondateurCents(prix.monthlyCents),
+    servicesMonthlyCents: prixFondateurCents(prix.servicesMonthlyCents),
+    setupOnceCents: prixFondateurCents(prix.setupOnceCents),
   };
 }
 
@@ -743,6 +1118,16 @@ export type CrmClient = {
   accountStatus: TenantAccountStatus;
   /** Score de santé composite 0-100, identique à celui de la fiche. */
   score: number;
+  /**
+   * Le verdict en toutes lettres — « Client solide », « Client fragile »…
+   *
+   * Rendu ICI parce qu'il n'est PAS dérivable du score seul : il est plafonné
+   * par l'axe activité, qu'une liste ne recalcule pas. Sans lui, l'écran
+   * rappelait `/crm/tenants/:id/health` client par client pour cette seule
+   * phrase — et chaque appel journalisait une CONSULTATION DE DOSSIER que
+   * personne n'avait ouvert.
+   */
+  verdictLabel: string;
   /** Commandes des 30 jours PRÉCÉDENTS — le socle de la tendance. */
   previousOrders: number;
   /**

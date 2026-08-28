@@ -35,6 +35,26 @@ export const TenantSchema = new Schema(
     brandColor: { type: String, default: '#c9a15a' },
     address: { type: String, default: '' },
     phones: { type: [String], default: [] },
+    /**
+     * LE CONTACT DU GÉRANT — celui qu'on appelle, pas celui qu'on affiche.
+     *
+     * À ne pas confondre avec `phones` juste au-dessus, qui porte les numéros
+     * PUBLICS du restaurant : une ligne de comptoir décroche en plein coup de
+     * feu, ou pas du tout. Quand l'équipe Snack Manager doit joindre le
+     * restaurateur — impayé, incident, relance — c'est ce numéro-là qu'il lui
+     * faut.
+     *
+     * L'information existait pourtant : le lead la porte depuis la
+     * prospection, et la conversion la JETAIT. La fiche client du CRM affichait
+     * donc un bouton « Appeler » qui ne s'affichait jamais, faute de numéro à
+     * composer, et le commercial rouvrait le pipeline pour retrouver ce qu'il
+     * venait de signer.
+     */
+    contact: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      email: { type: String, default: '' },
+    },
     hours: { type: [DayHours], default: [] },
     closures: {
       type: [
@@ -75,6 +95,59 @@ export const TenantSchema = new Schema(
     // services (site, réseaux, présence) — aucune formule logicielle alors.
     plan: { type: String, enum: ['essentiel', 'complet', 'boost', null], default: 'essentiel' },
     founderSeat: { type: Boolean, default: false },
+    /**
+     * Fin de la remise fondateur — douze mois après la signature.
+     *
+     * `founderSeat` dit le DROIT, ce champ dit le TERME. Les deux sont
+     * nécessaires : un booléen ne peut pas expirer, et c'est exactement ce qui
+     * a fait vivre pendant des mois une promesse de « tarif gelé à vie » que
+     * personne n'appliquait — un gel sans terme est une dette perpétuelle qui
+     * pèse sur chaque révision de grille.
+     *
+     * Posé une seule fois, à la conversion, et jamais recalculé : la remise
+     * d'un client se lit sur son contrat, pas sur l'horloge du serveur.
+     * `null` quand il n'y a pas de remise — l'absence se lit, elle ne se déduit
+     * pas d'un champ manquant.
+     */
+    founderUntil: { type: Date, default: null },
+    /**
+     * La remise fondateur MENSUELLE, figée au montant du contrat signé.
+     *
+     * Un montant et non un taux, et c'est tout l'objet du champ. La remise
+     * vendue porte sur « tout ce qu'on signe aujourd'hui » : un pourcentage
+     * appliqué à l'offre courante remiserait aussi le service ajouté le
+     * onzième mois, et permettrait à un fondateur de relancer sa remise en
+     * changeant d'offre. Un montant figé, lui, ne bouge pas quand l'offre
+     * grossit — le supplément se paie donc plein tarif de lui-même.
+     *
+     * Posé une fois à la conversion, jamais recalculé, jamais touché par un
+     * changement d'offre. `null` quand il n'y a pas de remise ; `0` serait une
+     * remise de zéro euro, ce qui n'est pas la même chose.
+     */
+    founderDiscountCents: { type: Number, default: null },
+    /**
+     * Le module de commande en ligne, vendu à part de la formule — il se
+     * greffe sur un abonnement OU sur le site existant du restaurateur.
+     *
+     * Ce champ a manqué pendant tout le développement de l'Atelier : la
+     * proposition le portait, le devis le chiffrait, les brouillons de facture
+     * le facturaient, puis la signature le JETAIT. En aval, toute la
+     * facturation retombait sur `plan` seul — un client Complet avec le module
+     * était facturé 159 € au lieu de 238 €.
+     *
+     * À ne jamais confondre avec `settings.onlineOrderingPaused`, qui est une
+     * pause d'exploitation décidée par le gérant un soir de coup de feu. Ici
+     * c'est une SOUSCRIPTION.
+     */
+    onlineOrdering: { type: Boolean, default: false },
+    /**
+     * L'engagement signé : au mois, ou à l'année avec deux mois offerts.
+     *
+     * Nommé `billingCycle` et non `billing` parce que `billing` porte déjà
+     * l'identité de facturation du restaurant (raison sociale, SIRET, TVA) —
+     * deux notions voisines de nom, étrangères de nature.
+     */
+    billingCycle: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
     /**
      * L'Atelier signé — les services vendus avec l'abonnement, posés à la
      * signature. Les factures disent ce qui a été FACTURÉ ; ce champ dit ce
@@ -136,6 +209,23 @@ export const TenantSchema = new Schema(
            * comme avant — jamais une anomalie.
            */
           trialEndsAt: { type: Date, default: null },
+          /**
+           * POURQUOI il est parti — la cause structurée, pour l'agrégation.
+           *
+           * `reason` juste au-dessus porte le détail en toutes lettres, et un
+           * texte libre ne s'agrège pas : six départs donnent six phrases, et
+           * aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se
+           * poser au bout d'un an — prix, complexité, fonction manquante ? —
+           * et elle ne se répond qu'avec une cause.
+           *
+           * `null` sur les départs actés avant ce champ : l'absence se lit,
+           * elle ne se devine pas d'un texte qu'on relirait à la main.
+           */
+          churnCause: {
+            type: String,
+            enum: ['prix', 'fermeture', 'concurrent', 'usage', 'manque', 'impaye', 'autre', null],
+            default: null,
+          },
         },
         { _id: false },
       ),
@@ -195,6 +285,21 @@ export const TenantSchema = new Schema(
       pauseMessage: { type: String, default: 'Victimes de notre succès — la commande en ligne rouvre très vite !' },
       printTicketOn: { type: String, enum: ['accept', 'ready'], default: 'accept' },
       printStickerOn: { type: String, enum: ['accept', 'ready'], default: 'ready' },
+      /**
+       * L'objectif de recette du jour, en centimes — le curseur que le gérant
+       * pose depuis son tableau de bord.
+       *
+       * SANS DÉFAUT, délibérément : zéro serait un objectif atteint dès
+       * l'ouverture, et la jauge afficherait 100 % avant la première commande.
+       * L'absence de valeur laisse le tableau de bord appliquer la sienne.
+       *
+       * Ce champ a vécu six semaines dans la liste blanche du service sans
+       * exister ici : Mongoose en mode strict jetait le `$set` en silence, la
+       * route répondait 200, et l'objectif disparaissait au rechargement.
+       * `apps/api/src/modules/tenants/tenants.test.ts` verrouille désormais la
+       * correspondance entre la liste blanche et ce schéma.
+       */
+      dailyGoalCents: { type: Number },
     },
     /**
      * NOTRE relation Stripe avec ce restaurant : c'est LUI qui nous paie
@@ -490,9 +595,28 @@ export const OrderSchema = new Schema(
       type: new Schema(
         {
           subtotal: { type: Number, required: true },
+          /**
+           * La remise portée par le ticket — geste commercial OU promotion.
+           *
+           * Les deux ne sont pas la même chose et le champ le dit : une remise
+           * décidée au comptoir nomme l'ÉQUIPIER qui l'a accordée, PIN vérifié,
+           * parce que c'est ce que NF525 veut pouvoir retrouver. Une promotion
+           * applique une règle publiée par le restaurateur, que personne au
+           * comptoir n'a décidée — la nommer d'un équipier ferait porter à
+           * quelqu'un une décision qu'il n'a pas prise.
+           *
+           * Exactement l'un des deux est renseigné. `promotionId` est arrivé
+           * avec l'application des promotions, jusque-là écrites en base et
+           * jamais appliquées.
+           */
           discount: {
             type: new Schema(
-              { amount: Number, reason: String, staffId: Schema.Types.ObjectId },
+              {
+                amount: Number,
+                reason: String,
+                staffId: { type: Schema.Types.ObjectId, default: null },
+                promotionId: { type: Schema.Types.ObjectId, ref: 'Promotion', default: null },
+              },
               { _id: false },
             ),
             default: null,
@@ -911,6 +1035,29 @@ export const PromotionSchema = new Schema(
     endsAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
     usageCount: { type: Number, default: 0 },
+    /**
+     * Les trois bornes qui manquaient — et sans lesquelles une promotion se
+     * découvre sur la marge du mois plutôt que sur un écran.
+     *
+     * `minSubtotalCents` : sans lui, « 5 € offerts » s'applique à une commande
+     * de 5,50 €. `maxDiscountCents` : sans lui, « −50 % » sur une commande de
+     * groupe à 200 € coûte cent euros. `maxUsage` : sans lui, un code qui fuit
+     * sur les réseaux ne s'arrête jamais.
+     *
+     * `0` vaut « pas de borne » dans les trois cas, et jamais « borne à zéro » —
+     * c'est le défaut, et il doit se lire comme l'absence de condition.
+     */
+    minSubtotalCents: { type: Number, default: 0 },
+    maxDiscountCents: { type: Number, default: 0 },
+    maxUsage: { type: Number, default: 0 },
+    /**
+     * Le produit offert — `offered_item` seulement.
+     *
+     * La nature figurait à l'énuméré depuis l'origine et était INAPPLICABLE :
+     * le modèle ne disait pas quel produit offrir. Le formulaire la proposait
+     * pourtant, et la promotion créée n'aurait rien pu faire.
+     */
+    offeredProductId: { type: Schema.Types.ObjectId, ref: 'Product', default: null },
   },
   { timestamps: true },
 );

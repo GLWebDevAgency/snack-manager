@@ -71,6 +71,7 @@ import {
   PLANNING_STATUS_PUBLISHED,
   planningComparison,
   planningCoverage,
+  planningSetStaffCost,
   planningStaffCosts,
   planningWeek,
   shiftsOfWeek,
@@ -980,6 +981,11 @@ function dispatch(w: DemoWorld, method: string, rawPath: string, body?: unknown)
       return ok(planningComparison(w, week));
     }
     if (method === "GET" && seg[1] === "staff-costs") return ok(planningStaffCosts(w));
+    // La saisie d'un coût horaire : sans elle, la démonstration montrerait un
+    // écran qui refuse d'enregistrer — pire qu'un écran absent.
+    if (method === "PUT" && seg[1] === "staff-costs" && seg[2]) {
+      return ok(planningSetStaffCost(w, seg[2], (b.hourlyCostCents as number | null) ?? null));
+    }
 
     if (method === "POST" && seg[1] === "week" && seg[2] === "publish") {
       const monday = weekAnchor(w, (b.week as string) ?? null);

@@ -74,6 +74,7 @@ import {
 import { GridLegend, WeekGrid, type CellTarget } from "./grid";
 import { ShiftEditor, type EditorState } from "./editor";
 import { DuplicateModal, PublishShareModal } from "./actions";
+import { CoutsHorairesModal } from "./CoutsHoraires";
 
 /** Étiquette courte d'un rappel — le message complet vient de l'API, intact. */
 const REMINDER_LABEL: Readonly<Record<PlanningReminderKind, string>> = {
@@ -206,6 +207,7 @@ export default function PlanningPage() {
 
   const week = bundle?.week ?? null;
   const payrollVisible = week?.payroll.visible ?? false;
+  const [coutsOuverts, setCoutsOuverts] = useState(false);
 
   const days = useMemo(() => week?.days.map((d) => d.date) ?? [], [week]);
   const rows = useMemo(
@@ -375,9 +377,18 @@ export default function PlanningPage() {
             </p>
           )}
           {payrollVisible && week.payroll.missingCost.length > 0 && (
-            <p className="flex items-center gap-1.5 text-[12.5px] text-prept">
+            <p className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-prept">
               <Icon name="euro" size={13} className="shrink-0" aria-hidden />
               {week.payroll.message}
+              {/* Le message signalait le manque sans offrir de chemin : la
+                  route de saisie existait, aucun écran ne l'appelait. */}
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-ink"
+                onClick={() => setCoutsOuverts(true)}
+              >
+                Renseigner les coûts
+              </button>
             </p>
           )}
 
@@ -539,6 +550,16 @@ export default function PlanningPage() {
           weekHours={week.totals.hours}
           onClose={() => setEditor(null)}
           onSaved={refresh}
+        />
+      )}
+
+      {/* La saisie des coûts horaires — la route existait, aucun écran ne
+          l'appelait, et tout le volet « coût de main-d'œuvre » restait à « — ». */}
+      {coutsOuverts && bundle?.staffCosts && (
+        <CoutsHorairesModal
+          costs={bundle.staffCosts}
+          onClose={() => setCoutsOuverts(false)}
+          onDone={() => void refresh()}
         />
       )}
 

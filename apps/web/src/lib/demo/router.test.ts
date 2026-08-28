@@ -122,6 +122,20 @@ describe("lectures", () => {
 });
 
 describe("écritures", () => {
+  it("enregistre un coût horaire, et la lecture suivante le voit", () => {
+    // La route de saisie manquait au routeur : la démonstration montrait un
+    // écran qui accepte puis oublie, ce qui est pire qu'un écran absent.
+    const membre = demoWorld().staff.find((m) => m.active)!;
+    const res = routeDemo("PUT", `/planning/staff-costs/${membre._id}`, {
+      hourlyCostCents: 1_777,
+    });
+    expect(res.status).toBe(200);
+    const apres = routeDemo("GET", "/planning/staff-costs");
+    const lu = (apres.body as { members: { id: string; hourlyCostCents: number | null }[] })
+      .members.find((m) => m.id === membre._id);
+    expect(lu?.hourlyCostCents).toBe(1_777);
+  });
+
   it("accepte une commande et le statut change", () => {
     const id = demoWorld().orders.find((o) => o.status === "new")!._id;
     const res = routeDemo("PATCH", `/orders/${id}/status`, { status: "preparing" });

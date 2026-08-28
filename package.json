@@ -18,7 +18,8 @@
     "e2e:demo": "node e2e/lancer.mjs --demo",
     "e2e:reel": "node e2e/lancer.mjs --reel",
     "e2e:local": "node e2e/lancer.mjs --local",
-    "e2e:navigateur": "node e2e/lancer.mjs --navigateur"
+    "e2e:navigateur": "node e2e/lancer.mjs --navigateur",
+    "verifier:argent": "node scripts/verifier-regles-argent.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

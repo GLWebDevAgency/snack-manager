@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  EMPTY_SERVICES,
   ACCOUNT_SUSPENDED_MESSAGE,
   ADMIN_LOG_ACTIONS,
   ADMIN_LOG_ACTION_LABELS,
@@ -147,7 +148,7 @@ describe('Administration client', () => {
 
   describe('Départ d’un client', () => {
     it('acte le départ avec son motif — SANS couper l’accès', async () => {
-      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Revend le fonds de commerce' });
+      const view = await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Revend le fonds de commerce' });
 
       expect(view.account.status).toBe('churned');
       expect(view.statusLabel).toBe('Parti');
@@ -165,7 +166,7 @@ describe('Administration client', () => {
     it('ne détruit rien : le compte garde son nom, sa formule, ses données', async () => {
       // « On garde tout, on ne coupe rien de force » — le départ est un
       // constat commercial, pas une purge.
-      await admin.churn(SM, CLASSFOOD, { reason: 'Fermeture définitive' });
+      await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Fermeture définitive' });
       const row = tenants.rows.find((r) => r._id === CLASSFOOD)!;
 
       expect(row.name).toBe("Class'Food");
@@ -176,7 +177,7 @@ describe('Administration client', () => {
 
     it('solde une suspension en cours — la trace reste au journal', async () => {
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
-      const view = await admin.churn(SM, CLASSFOOD, { reason: 'Ne règle pas, ferme boutique' });
+      const view = await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Ne règle pas, ferme boutique' });
 
       // Le statut courant n'est plus « suspendu » : `suspendedAt` s'efface,
       // l'épisode se relit au journal, qui ne s'efface pas.
@@ -187,15 +188,52 @@ describe('Administration client', () => {
       expect(actions).toContain('tenant.churn');
     });
 
+    /**
+     * LA CAUSE ET LE DÉTAIL, tous deux exigés.
+     *
+     * Un motif en texte libre ne s'agrège pas : six départs donnent six phrases
+     * et aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se
+     * poser au bout d'un an — prix, complexité, fonction manquante ? La cause
+     * structurée y répond ; le détail porte le cas particulier, et c'est lui
+     * qu'on relit avant d'appeler pour tenter de récupérer le client.
+     */
     it('exige un motif — « pourquoi est-il parti ? » doit se lire au journal', () => {
-      expect(TenantChurnSchema.safeParse({ reason: '' }).success).toBe(false);
-      expect(TenantChurnSchema.safeParse({ reason: 'Racheté par une chaîne' }).success).toBe(true);
+      expect(TenantChurnSchema.safeParse({ cause: 'prix', reason: '' }).success).toBe(false);
+      expect(
+        TenantChurnSchema.safeParse({ cause: 'concurrent', reason: 'Racheté par une chaîne' })
+          .success,
+      ).toBe(true);
+    });
+
+    it('exige aussi la CAUSE — sans elle, un an de départs ne se compte pas', () => {
+      expect(TenantChurnSchema.safeParse({ reason: 'Racheté par une chaîne' }).success).toBe(false);
+      // Et une cause inventée ne passe pas : la liste est courte pour rester
+      // agrégeable, un menu de quinze causes se remplit au hasard.
+      expect(
+        TenantChurnSchema.safeParse({ cause: 'pas-content', reason: 'Racheté' }).success,
+      ).toBe(false);
+    });
+
+    it('enregistre la cause SUR le compte et AU journal', async () => {
+      await admin.churn(SM, CLASSFOOD, { cause: 'usage', reason: 'Ne s’en servait plus' });
+      const compte = tenants.rows[0]!.account as { churnCause?: string };
+      // Sur le compte : c'est l'état courant, lu par la fiche.
+      expect(compte.churnCause).toBe('usage');
+      // Au journal : c'est l'histoire, et c'est elle qu'on relit pour compter.
+      const ligne = logs.rows.find((l) => l.action === 'tenant.churn');
+      expect((ligne?.meta as { cause?: string })?.cause).toBe('usage');
     });
   });
 
   describe('Changement de formule', () => {
     it('journalise l’ancienne et la nouvelle formule', async () => {
-      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'boost', reason: 'Upsell démo' });
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'boost',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: 'Upsell démo',
+      });
 
       expect(view.plan).toBe('boost');
       const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
@@ -203,13 +241,79 @@ describe('Administration client', () => {
       );
       // Sans l'ancienne valeur, impossible de dire si le client a monté ou
       // descendu en gamme six mois plus tard.
-      expect(entry?.meta).toEqual({ from: 'essentiel', to: 'boost' });
+      expect(entry?.meta).toMatchObject({ from: 'essentiel', to: 'boost' });
       expect(entry?.reason).toBe('Upsell démo');
+    });
+
+    /**
+     * L'OFFRE ENTIÈRE, PAS SEULEMENT LA FORMULE.
+     *
+     * `changePlan` n'écrivait que `plan`. Le module de commande en ligne et les
+     * services de l'Atelier n'étaient ni activables ni retirables après la
+     * signature : un restaurateur qui prenait les réseaux sociaux six mois plus
+     * tard n'avait aucun chemin dans le logiciel, et sa facture ne bougeait pas.
+     */
+    it('écrit le module, l’engagement et les services — pas seulement le plan', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: true,
+        billing: 'annuel',
+        services: { ...EMPTY_SERVICES, presenceInternet: true, reseauxSociaux: 'hebdo' },
+        reason: 'Le gérant ajoute les réseaux.',
+      });
+      expect(view.plan).toBe('complet');
+      expect(view.onlineOrdering).toBe(true);
+      expect(view.billingCycle).toBe('annuel');
+      expect(view.atelier).toMatchObject({ presenceInternet: true, reseauxSociaux: 'hebdo' });
+    });
+
+    it('sait RETIRER la formule — un client peut redescendre à l’Atelier seul', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: null,
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: { ...EMPTY_SERVICES, presenceInternet: true },
+        reason: 'Garde la présence internet, arrête le logiciel.',
+      });
+      expect(view.plan).toBeNull();
+      expect(view.atelier).toMatchObject({ presenceInternet: true });
+    });
+
+    it('retirer tous les services efface l’Atelier — l’absence se lit comme une absence', async () => {
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
+      expect(view.atelier).toBeNull();
+    });
+
+    it('le journal dit ce qui a changé, pas seulement la formule', async () => {
+      await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'boost',
+        onlineOrdering: true,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: 'Upsell',
+      });
+      const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
+        (e) => e.action === 'tenant.plan_change',
+      );
+      expect(entry?.meta).toMatchObject({ from: 'essentiel', to: 'boost' });
+      expect(entry?.reason).toBe('Upsell');
     });
 
     it('ne touche pas au statut de compte', async () => {
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
-      const view = await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+      const view = await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
 
       // Changer de formule n'est pas une décision d'accès : un client suspendu
       // qu'on repasse en « Complet » reste suspendu.
@@ -429,8 +533,14 @@ describe('Administration client', () => {
       await admin.recordOwnerReset(SM, CLASSFOOD, 'gerant@classfood.fr');
       await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
       await admin.reactivate(SM, CLASSFOOD, { reason: 'Réglé' });
-      await admin.churn(SM, CLASSFOOD, { reason: 'Ferme fin août' });
-      await admin.changePlan(SM, CLASSFOOD, { plan: 'complet', reason: '' });
+      await admin.churn(SM, CLASSFOOD, { cause: 'prix', reason: 'Ferme fin août' });
+      await admin.changeOffre(SM, CLASSFOOD, {
+        plan: 'complet',
+        onlineOrdering: false,
+        billing: 'mensuel',
+        services: EMPTY_SERVICES,
+        reason: '',
+      });
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });

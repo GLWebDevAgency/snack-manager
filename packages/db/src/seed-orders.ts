@@ -555,7 +555,17 @@ async function main() {
   await mongoose.disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+/**
+ * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
+ *
+ * Sans cette garde, importer ce fichier — pour tester une de ses fonctions, ou
+ * par une chaîne d'imports involontaire — ouvre une connexion à la base pointée
+ * par l'environnement et LANCE le traitement. Sur un poste dont le `.env` vise
+ * la production, c'est un script d'administration qui part tout seul.
+ */
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

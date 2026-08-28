@@ -603,20 +603,31 @@ function SupplierDrawer({
     }
     setNameError(null);
     setSaving(true);
+    /*
+     * À L'ÉDITION, ON ENVOIE CE QU'ON AFFICHE — effacements compris.
+     *
+     * Le corps était construit PAR OMISSION : un champ vidé n'était pas
+     * transmis, et le serveur ne patchant que les clés reçues, l'ancienne
+     * valeur survivait. Le gérant effaçait un téléphone qui n'était plus le
+     * bon, l'écran confirmait « Fournisseur mis à jour », et le numéro
+     * réapparaissait au rechargement.
+     *
+     * À la CRÉATION, l'omission reste juste : elle laisse jouer les défauts
+     * plutôt que d'écrire des chaînes vides partout.
+     */
+    const facultatifs = {
+      contactName: draft.contactName.trim(),
+      phone: draft.phone.trim(),
+      email: draft.email.trim(),
+      paymentTerms: draft.paymentTerms.trim(),
+      deliveryDays: draft.deliveryDays.trim(),
+      notes: draft.notes.trim(),
+    };
     const body = {
       name: draft.name.trim(),
-      ...(draft.contactName.trim()
-        ? { contactName: draft.contactName.trim() }
-        : {}),
-      ...(draft.phone.trim() ? { phone: draft.phone.trim() } : {}),
-      ...(draft.email.trim() ? { email: draft.email.trim() } : {}),
-      ...(draft.paymentTerms.trim()
-        ? { paymentTerms: draft.paymentTerms.trim() }
-        : {}),
-      ...(draft.deliveryDays.trim()
-        ? { deliveryDays: draft.deliveryDays.trim() }
-        : {}),
-      ...(draft.notes.trim() ? { notes: draft.notes.trim() } : {}),
+      ...(isEdit
+        ? facultatifs
+        : Object.fromEntries(Object.entries(facultatifs).filter(([, v]) => v !== ""))),
     };
     try {
       if (isEdit && initial) {

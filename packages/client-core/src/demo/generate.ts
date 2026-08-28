@@ -13,7 +13,8 @@
  * Variables reconnues (toutes facultatives) :
  *   SM_API     racine de l'API           (défaut http://localhost:3001)
  *   SM_TENANT  slug à photographier      (défaut classfood)
- *   SM_PIN     code équipier pour /orders (défaut 1111)
+ *   SM_OWNER_EMAIL     compte propriétaire — requis
+ *   SM_OWNER_PASSWORD  son mot de passe    — requis, jamais en argument
  *
  * ─── ANONYMISATION ───
  *
@@ -40,7 +41,6 @@ import type { MenuSupplement, OptionGroup, Variant } from '../types';
 
 const API = process.env.SM_API ?? 'http://localhost:3001';
 const TENANT = process.env.SM_TENANT ?? 'classfood';
-const PIN = process.env.SM_PIN ?? '1111';
 
 // ─────────────────────────────────────────────────────────────
 // Formes servies par l'API (souples : on ne dépend pas des types serveur)
@@ -134,11 +134,32 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Le jeton qui sert à photographier la carte.
+ *
+ * Passait par `POST /auth/pin { tenantSlug, pin }`, supprimée le 28/08/2026 :
+ * elle prenait l'établissement dans le corps de la requête, et un slug n'étant
+ * pas un secret, elle ouvrait une session équipe sur n'importe quel restaurant
+ * à qui devinait un code.
+ *
+ * Un outil de développement se connecte donc comme le propriétaire, avec un
+ * vrai mot de passe. Les sessions d'équipe passent désormais par un appareil
+ * appairé (`POST /public/devices/pin`), ce qu'un script n'est pas.
+ */
 async function staffToken(): Promise<string> {
-  const { token } = await api<{ token: string }>('/auth/pin', {
+  const email = process.env.SM_OWNER_EMAIL;
+  const password = process.env.SM_OWNER_PASSWORD;
+  if (!email || !password) {
+    throw new Error(
+      'SM_OWNER_EMAIL et SM_OWNER_PASSWORD sont requis pour photographier la carte.\n' +
+        'Jamais en argument de ligne de commande : l’historique du terminal et la liste ' +
+        'des processus les conserveraient.',
+    );
+  }
+  const { token } = await api<{ token: string }>('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenantSlug: TENANT, pin: PIN }),
+    body: JSON.stringify({ email, password }),
   });
   return token;
 }

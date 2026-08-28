@@ -33,6 +33,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import {
+  EMPTY_SERVICES,
   DEFAULT_TENANT_ACCOUNT_STATUS,
   planChoiceLabel,
   isAccessBlocked,
@@ -44,12 +45,15 @@ import { euroRound, fmtDay, fmtMonth, int } from "../../crm";
 import { resumeAtelier } from "../../parts";
 import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
+import { FacturesCard } from "./Factures";
 import {
-  PlanModal,
+  EmettreFactureModal,
+  OffreModal,
   ResetOwnerModal,
   ReactivateModal,
   RevokeDeviceModal,
   SuspendModal,
+  ChurnModal,
 } from "./actions";
 import {
   AdoptionSection,
@@ -76,7 +80,9 @@ export default function ClientFilePage({
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
-  const [modal, setModal] = useState<"suspend" | "reactivate" | "plan" | "motdepasse" | null>(null);
+  const [modal, setModal] = useState<
+    "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | "churn" | null
+  >(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
 
   useEffect(() => {
@@ -130,18 +136,37 @@ export default function ClientFilePage({
   const { row, account } = file;
   const name = account?.name ?? row?.name ?? "Restaurant";
 
-  // Ni le parc ni le compte ne connaissent cet identifiant : le lien est faux
-  // ou le restaurant a disparu du parc.
+  // ── « INTROUVABLE » N'EST PAS « ILLISIBLE » ──
+  //
+  // `loadClientFile` enveloppe chaque route dans `soft()`, qui avale tout sauf
+  // 401/403 et rend `null`. Deux causes très différentes arrivaient donc ici
+  // sous la même forme : l'identifiant n'existe pas, ou les deux routes ont
+  // échoué. L'écran accusait le lien — « copié à la main » — devant une API
+  // tombée, et l'équipe cherchait une faute de frappe pendant une panne.
+  //
+  // `offline` distingue les deux : il ne contient une section que si sa route a
+  // RÉPONDU en erreur.
+  const injoignable = file.offline.has("row") && file.offline.has("account");
+
   if (!row && !account) {
     return (
       <div className="p-[26px] max-md:p-4">
         <Card>
-          <EmptyState
-            icon="search"
-            title="Restaurant introuvable"
-            hint="Aucun établissement ne porte cet identifiant. Le lien a peut-être été copié à la main."
-            action={<BackLink />}
-          />
+          {injoignable ? (
+            <EmptyState
+              icon="bell"
+              title="Fiche indisponible"
+              hint="Le CRM n’a pas répondu — ni le parc, ni le compte de cet établissement. Le lien est probablement bon : réessayez dans un instant."
+              action={<BackLink />}
+            />
+          ) : (
+            <EmptyState
+              icon="search"
+              title="Restaurant introuvable"
+              hint="Aucun établissement ne porte cet identifiant. Le lien a peut-être été copié à la main."
+              action={<BackLink />}
+            />
+          )}
         </Card>
       </div>
     );
@@ -243,7 +268,21 @@ export default function ClientFilePage({
                   : "Route /crm/tenants/:id/account indisponible"
               }
             >
-              Formule
+              Offre
+            </Btn>
+            <Btn
+              variant="ghost"
+              size="sm"
+              icon="euro"
+              onClick={() => setModal("facturer")}
+              disabled={!account}
+              title={
+                account
+                  ? "Émettre une facture ou poser un brouillon"
+                  : "Route /crm/tenants/:id/account indisponible"
+              }
+            >
+              Facturer
             </Btn>
             <Btn
               size="sm"
@@ -280,6 +319,27 @@ export default function ClientFilePage({
                 Suspendre
               </Btn>
             )}
+            {/*
+              ACTER UN DÉPART — le geste qui n'existait nulle part.
+              `POST /crm/tenants/:id/churn` était écrite et testée sans aucun
+              appelant : un client parti restait « actif » au parc, comptait
+              dans le MRR, et sa raison de partir n'était consignée nulle part.
+              C'est pourtant la donnée la plus utile qu'un éditeur puisse
+              recueillir sur son propre produit.
+            */}
+            {account?.account.status !== "churned" && (
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon="logout"
+                className="border-white/15 text-mut hover:border-white/30 hover:text-ink"
+                onClick={() => setModal("churn")}
+                disabled={!account}
+                title="Acter le départ — cause et détail obligatoires"
+              >
+                Départ
+              </Btn>
+            )}
           </div>
         </div>
 
@@ -313,6 +373,18 @@ export default function ClientFilePage({
           */}
           <SignalsSection file={file} />
 
+          {/*
+            LES FACTURES, sur la fiche du client et non ailleurs.
+            La file de recouvrement ne montre que les impayées : un brouillon
+            n'y figure jamais, et n'avait donc aucun écran d'où partir.
+          */}
+          <FacturesCard
+            tenantId={id}
+            tenantName={name}
+            invoices={file.invoices}
+            indisponible={file.offline.has("invoices")}
+            onDone={reload}
+          />
           <DevicesSection file={file} onRevoke={setDevice} />
           <SupplySection file={file} />
           <NotesSection file={file} onSaved={reload} />
@@ -335,6 +407,14 @@ export default function ClientFilePage({
         qui survivrait à la fermeture de la modale finirait un jour collé sur
         le mauvais client.
       */}
+      {modal === "churn" && (
+        <ChurnModal
+          tenantId={id}
+          tenantName={name}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
       {modal === "suspend" && (
         <SuspendModal
           tenantId={id}
@@ -360,10 +440,34 @@ export default function ClientFilePage({
         />
       )}
       {modal === "plan" && (
-        <PlanModal
+        <OffreModal
           tenantId={id}
           tenantName={name}
-          current={plan}
+          current={{
+            plan,
+            onlineOrdering: account?.onlineOrdering ?? false,
+            billingCycle: account?.billingCycle ?? "mensuel",
+            // La remise, pour que le chiffrage de la modale dise la même chose
+            // que la fiche : elle annonçait le tarif public à côté d'un MRR
+            // remisé, et l'opérateur lisait le mauvais chiffre au client.
+            founderUntil: account?.founderUntil ?? null,
+            founderDiscountCents: account?.founderDiscountCents ?? null,
+            // Les clients d'avant l'Atelier n'ont rien en base : le formulaire
+            // s'ouvre alors sur « aucun service », pas sur un objet de faux.
+            services: account?.atelier ?? EMPTY_SERVICES,
+          }}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
+      {modal === "facturer" && (
+        <EmettreFactureModal
+          tenantId={id}
+          tenantName={name}
+          // Le montant par défaut proposé à l'écran est celui que l'API
+          // appliquera si le champ reste vide : offre entière et remise
+          // fondateur comprises. Les deux doivent dire la même chose.
+          mrrCents={row?.mrrCents ?? 0}
           onClose={() => setModal(null)}
           onDone={reload}
         />

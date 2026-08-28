@@ -79,13 +79,34 @@ export class MenuBoardRepository {
       this.tenants.findById(tenantId).lean(),
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
+      // ── CE QUE L'ÉCRAN DE SALLE A LE DROIT D'ANNONCER ──
+      //
+      // Seuls `active` et les dates étaient regardés. Une offre réservée à la
+      // commande EN LIGNE, protégée par un code, ou déjà épuisée s'affichait
+      // donc en grand au-dessus du comptoir — et la caisse la refusait au
+      // client qui venait de la lire. C'est la pire forme du défaut : le
+      // logiciel promet à la place du restaurateur, puis le dédit devant son
+      // client.
+      //
+      // Le filtre est celui de l'affichage EN SALLE : le canal doit contenir
+      // « pos », l'offre ne doit pas demander un code que personne n'a
+      // distribué au comptoir, et son quota ne doit pas être épuisé.
       this.promotions
         .find({
           tenantId,
           active: true,
+          channels: 'pos',
+          code: null,
           $and: [
             { $or: [{ startsAt: null }, { startsAt: { $lte: now } }] },
             { $or: [{ endsAt: null }, { endsAt: { $gte: now } }] },
+            {
+              $or: [
+                { maxUsage: { $lte: 0 } },
+                { maxUsage: null },
+                { $expr: { $lt: ['$usageCount', '$maxUsage'] } },
+              ],
+            },
           ],
         })
         .sort({ createdAt: -1 })

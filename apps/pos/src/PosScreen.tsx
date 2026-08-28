@@ -32,7 +32,7 @@ import { TopBar } from './TopBar';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
-import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto } from './modals';
+import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto, RejetsModal } from './modals';
 import {
   buildOrderBody,
   loadJson,
@@ -114,6 +114,14 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
   const [cashOpen, setCashOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  /**
+   * Les ventes que le serveur a refusées définitivement.
+   *
+   * Elles étaient retirées de la file et JETÉES : sur une commande déjà
+   * encaissée, l'argent est dans le tiroir, le client est parti, et la vente
+   * n'existe nulle part. Rien à l'écran ne le disait.
+   */
+  const [rejetsOpen, setRejetsOpen] = useState(false);
   const [sentClientId, setSentClientId] = useState<string | null>(null);
   const [ticketFor, setTicketFor] = useState<DayEntry | null>(null);
   const [discountFor, setDiscountFor] = useState<DayEntry | null>(null);
@@ -226,7 +234,14 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     if (!ready) return;
     // Premier passage forcé : il amorce la séquence de numéros du jour.
     void reconcile(true);
-    const id = setInterval(() => void reconcile(), 12_000);
+    // TOUJOURS forcé. La sortie anticipée de `reconcile` — « rien du poste
+    // n'attend son identifiant serveur » — est juste pour économiser un appel
+    // après une salve de caisse, mais elle arrêtait aussi le rafraîchissement
+    // périodique : une fois la dernière commande du poste réconciliée, la photo
+    // serveur ne bougeait plus. Les commandes EN LIGNE, qui ne passent jamais
+    // par le journal local, n'entraient donc plus jamais dans le Z — qui
+    // annonce pourtant « vente en ligne comprise ».
+    const id = setInterval(() => void reconcile(true), 12_000);
     return () => clearInterval(id);
   }, [ready, reconcile]);
 
@@ -525,12 +540,18 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         pending={sync.pending}
         syncing={sync.syncing}
         offline={offline}
+        rejets={sync.rejected.length}
+        onRejets={() => setRejetsOpen(true)}
         now={now}
         serviceCount={dayLog.length}
         onService={() => {
           // La barre haute reste active sous les surcouches : on referme la
           // confirmation pour ne jamais empiler deux panneaux.
           setSentClientId(null);
+          // Photo FRAÎCHE avant de clôturer : le Z se lit sur les commandes du
+          // serveur, et une vente en ligne passée depuis le dernier
+          // rafraîchissement manquerait au total qu'on s'apprête à recompter.
+          void reconcile(true);
           setCloseOpen(true);
         }}
         onLock={() => onLock()}
@@ -621,6 +642,18 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
             onCloseService={closeService}
             onOpenTicket={setTicketFor}
             onOpenDiscount={setDiscountFor}
+          />
+        ) : null}
+
+        {rejetsOpen ? (
+          <RejetsModal
+            rejets={sync.rejected}
+            brand={brand}
+            onClose={() => setRejetsOpen(false)}
+            onAcquitter={() => {
+              void client.queue.acquitterRejets();
+              setRejetsOpen(false);
+            }}
           />
         ) : null}
 

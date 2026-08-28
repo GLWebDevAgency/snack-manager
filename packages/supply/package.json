@@ -8,7 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
-    "lint": "echo ok",
+    "lint": "eslint --config ../../eslint.serveur.mjs src",
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
     "seed": "tsx src/seed.ts",

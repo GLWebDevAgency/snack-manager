@@ -244,7 +244,19 @@ export const PRICE_RANGE = `${plainEuros(PLAN_MONTHLY_CENTS.essentiel)}, ${plain
  * délit d'un coup de téléphone. Le décompte et ses pastilles sont supprimés —
  * constante, calcul et affichage. La politique, elle, est vraie et reste.
  */
-export const FOUNDER_POLICY = "Les dix premiers restaurants gardent leur tarif à vie.";
+/*
+ * L'OFFRE A CHANGÉ LE 27/08/2026 : le gel à vie devient −50 % la première année.
+ *
+ * Le gel promettait une dette perpétuelle — chaque révision de grille l'aurait
+ * alourdie, et dix ans plus tard on facturait encore le tarif de 2026 à dix
+ * restaurants. La remise datée s'éteint toute seule.
+ *
+ * Elle se vend aussi mieux : « moitié prix » se décide, « tarif gelé » se
+ * comprend au bout d'une explication. Et elle porte sur TOUT le premier
+ * contrat — l'abonnement, le module, et le site si le restaurateur en prend un.
+ */
+export const FOUNDER_POLICY =
+  "Les dix premiers restaurants paient moitié prix pendant un an — sur tout ce qu'ils signent.";
 
 /* ── Appels à l'action ───────────────────────────────────────── */
 
@@ -1932,7 +1944,7 @@ export const FAQ = [
   },
   {
     q: "Vous avez combien de clients ?",
-    a: "Un. Class'Food, à Perriers-sur-Andelle, en service 7 j/7 : c'est notre restaurant pilote, et chaque écran y est testé midi et soir. Nous ouvrons dix places de lancement — vous seriez parmi les dix premiers, et vous gardez votre tarif à vie.",
+    a: "Un. Class'Food, à Perriers-sur-Andelle, en service 7 j/7 : c'est notre restaurant pilote, et chaque écran y est testé midi et soir. Nous ouvrons dix places de lancement — vous seriez parmi les dix premiers, et vous payez moitié prix pendant votre première année, sur tout ce que vous signez : l'abonnement, la commande en ligne, et votre site si vous en prenez un.",
   },
   {
     q: "Y a-t-il un engagement de durée ?",

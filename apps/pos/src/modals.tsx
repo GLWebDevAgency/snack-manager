@@ -342,7 +342,23 @@ export function DiscountModal({
   }, [custom, entry.total, percent]);
 
   const synced = !!entry.serverId;
-  const valid = synced && amount > 0 && amount <= entry.total && /^\d{4,6}$/.test(pin);
+  /**
+   * Le MOTIF est obligatoire, comme il l'est côté serveur.
+   *
+   * Il ne l'était ni ici ni là-bas : le champ existait, il pouvait rester vide,
+   * et la remise partait sans raison. NF525 n'admet pas une minoration de
+   * recette sans motif — et six mois plus tard, « −5,00 € » sans un mot
+   * n'explique rien à personne, ni au gérant ni au contrôle.
+   *
+   * La même borne des deux côtés : un écran plus permissif que son API produit
+   * un bouton qui valide et un serveur qui refuse.
+   */
+  const valid =
+    synced &&
+    amount > 0 &&
+    amount <= entry.total &&
+    reason.trim().length >= 3 &&
+    /^\d{4,6}$/.test(pin);
 
   return (
     <Overlay onClose={onClose} width={440}>
@@ -391,7 +407,13 @@ export function DiscountModal({
             ) : null}
           </View>
 
-          <Field value={reason} onChangeText={setReason} label="Motif" placeholder="Geste commercial" accent={brand.accent} />
+          <Field
+            value={reason}
+            onChangeText={setReason}
+            label="Motif (obligatoire)"
+            placeholder="Geste commercial, plat renversé…"
+            accent={brand.accent}
+          />
 
           <Field
             value={pin}
@@ -764,9 +786,15 @@ export function CloseModal({
             <StatRow label="Titres-restaurant" value={euros(z.mealVoucher)} />
             <StatRow label="En ligne" value={euros(z.online)} />
             <StatRow label="À encaisser au retrait" value={euros(z.due)} tone={palette.amber} />
+            {/*
+              Encaissé au retrait, sans moyen saisi. Ce n'est pas une anomalie
+              de données : c'est ce que la cuisine encaisse en marquant
+              « Remis », sans que personne ait dit comment le client a payé. Le
+              montant est réel et doit être ventilé à la main.
+            */}
             {z.unspecified > 0 ? (
               <StatRow
-                label="Encaissé, moyen non précisé"
+                label="Encaissé au retrait — à ventiler"
                 value={euros(z.unspecified)}
                 tone={palette.amber}
               />
@@ -953,5 +981,100 @@ export function Notice({ tone, title, body }: { tone: string; title: string; bod
       <Text style={{ fontFamily: FONT, color: tone, fontSize: L.fs(14.5), fontWeight: '700' }}>{title}</Text>
       <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: L.fs(13.5), lineHeight: L.fs(19) }}>{body}</Text>
     </View>
+  );
+}
+
+/**
+ * LES VENTES REFUSÉES — l'écran qui manquait.
+ *
+ * Un refus définitif du serveur (produit supprimé, commande déjà servie…)
+ * retirait l'entrée de la file offline et la JETAIT. Le raisonnement était juste
+ * — rejouer ne changerait rien, et bloquer la file arrêterait le service — mais
+ * retirer SANS TRACE ne l'est pas.
+ *
+ * Sur une commande déjà encaissée, l'argent est dans le tiroir et le client est
+ * parti avec son ticket : la vente n'existe alors nulle part, et rien ne dit
+ * laquelle. Le Z du soir tombe faux sans qu'on sache pourquoi.
+ *
+ * Cet écran montre ce qui a été refusé, avec le motif du serveur et le montant,
+ * pour que le gérant puisse ressaisir. L'acquittement est un geste EXPLICITE :
+ * un rejet qui s'efface tout seul ramène le défaut qu'on répare.
+ */
+export function RejetsModal({
+  rejets,
+  brand,
+  onClose,
+  onAcquitter,
+}: {
+  rejets: readonly {
+    id: string;
+    path: string;
+    body?: unknown;
+    reason: string;
+    status: number;
+    at: number;
+  }[];
+  brand: Brand;
+  onClose: () => void;
+  onAcquitter: () => void;
+}) {
+  const heure = (ms: number) =>
+    new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  /** Le total du corps refusé, quand il en porte un — c'est ce qui a été encaissé. */
+  const montant = (body: unknown): string => {
+    const t = (body as { totals?: { total?: unknown } } | null)?.totals?.total;
+    return typeof t === 'number' ? euros(t) : '—';
+  };
+
+  return (
+    <Overlay onClose={onClose} width={520}>
+      <PanelHead
+        title="Ventes refusées par le serveur"
+        sub={`${rejets.length} à traiter`}
+        onClose={onClose}
+      />
+      <Paper>
+        Ces mutations ont été refusées définitivement : les rejouer ne changerait
+        rien. Si l&apos;une d&apos;elles était encaissée, l&apos;encaissement a bien eu lieu —
+        ressaisissez la vente pour que le Z du soir tombe juste.
+      </Paper>
+
+      <View style={{ gap: S.sm, marginTop: S.lg }}>
+        {rejets.map((r) => (
+          <View
+            key={r.id}
+            style={{
+              borderWidth: 1,
+              borderColor: withAlpha(palette.red, 0.3),
+              backgroundColor: withAlpha(palette.red, 0.08),
+              borderRadius: R.card,
+              padding: S.lg,
+              gap: 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: S.sm }}>
+              <Text style={{ fontFamily: FONT, color: palette.red, fontWeight: '800', fontSize: 15 }}>
+                {montant(r.body)}
+              </Text>
+              <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 13 }}>
+                {heure(r.at)} · {r.status}
+              </Text>
+            </View>
+            <Text style={{ fontFamily: FONT, color: palette.text, fontSize: 13 }}>{r.reason}</Text>
+            <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 12 }}>{r.path}</Text>
+          </View>
+        ))}
+      </View>
+
+      <Btn
+        label="J'ai traité ces ventes"
+        kind="solid"
+        size="md"
+        onPress={onAcquitter}
+        block
+        style={{ marginTop: S.lg }}
+      />
+    </Overlay>
   );
 }

@@ -49,9 +49,39 @@ export interface QueueState {
   syncing: boolean;
   lastSyncAt: number | null;
   lastError: string | null;
+  /**
+   * Les mutations que le serveur a REFUSÉES définitivement, conservées.
+   *
+   * Elles étaient simplement retirées de la file : le commentaire disait « on
+   * retire pour ne pas bloquer le service », ce qui est juste, mais retirer
+   * SANS TRACE ne l'est pas. Sur une commande déjà encaissée — l'argent est
+   * dans le tiroir, le client est parti avec son ticket — le refus faisait
+   * disparaître la vente. Rien à l'écran ne disait laquelle, ni pourquoi.
+   *
+   * Bornée : une file de rejets qui gonfle indéfiniment finirait par remplir le
+   * stockage de la tablette, et un service ne se relit pas sur trois cents
+   * lignes. Les plus récents priment — ce sont eux qu'on peut encore rattraper.
+   */
+  rejected: RejectedEntry[];
 }
 
+/** Une mutation refusée, avec de quoi la retrouver et la ressaisir. */
+export interface RejectedEntry {
+  id: string;
+  path: string;
+  /** Le corps refusé — c'est lui qui permet de ressaisir la vente perdue. */
+  body?: unknown;
+  /** Le motif rendu par le serveur, en toutes lettres. */
+  reason: string;
+  status: number;
+  at: number;
+}
+
+/** Au-delà, la tablette accumule sans qu'on puisse rien en faire. */
+const MAX_REJECTED = 20;
+
 const KEY = 'sm.sync.queue.v1';
+const KEY_REJECTED = 'sm.sync.rejected.v1';
 
 /** Erreur métier définitive : inutile de rejouer, on retire l'entrée. */
 export class PermanentError extends Error {
@@ -73,6 +103,7 @@ export class SyncQueue {
     syncing: false,
     lastSyncAt: null,
     lastError: null,
+    rejected: [],
   };
 
   constructor(private readonly send: Sender) {}
@@ -90,12 +121,36 @@ export class SyncQueue {
         // file corrompue : on repart à vide plutôt que de bloquer le service
       }
     }
+    const bruts = await getStore().getItem(KEY_REJECTED);
+    if (bruts) {
+      try {
+        const parsed = JSON.parse(bruts) as RejectedEntry[];
+        if (Array.isArray(parsed)) this.state.rejected = parsed.slice(0, MAX_REJECTED);
+      } catch {
+        // liste corrompue : on repart à vide plutôt que de bloquer le service
+      }
+    }
     this.loaded = true;
     this.emit();
   }
 
   private async persist() {
     await getStore().setItem(KEY, JSON.stringify(this.entries));
+    // Les refus survivent au redémarrage de la tablette : une vente perdue
+    // découverte le lendemain matin reste une vente qu'on peut ressaisir.
+    await getStore().setItem(KEY_REJECTED, JSON.stringify(this.state.rejected));
+  }
+
+  /**
+   * Efface les refus — après que le gérant les a traités.
+   *
+   * Geste EXPLICITE et jamais automatique : un rejet qui disparaît tout seul
+   * ramène exactement le défaut qu'on répare.
+   */
+  async acquitterRejets() {
+    this.state.rejected = [];
+    await this.persist();
+    this.emit();
   }
 
   // ─── Observabilité ───
@@ -112,6 +167,7 @@ export class SyncQueue {
       syncing: this.syncing,
       lastSyncAt: this.state.lastSyncAt,
       lastError: this.state.lastError,
+      rejected: this.state.rejected,
     };
     for (const l of this.listeners) l(this.state);
   }
@@ -177,9 +233,25 @@ export class SyncQueue {
         this.state.lastError = null;
       } catch (err) {
         if (err instanceof PermanentError) {
-          // Refus métier (produit supprimé, commande déjà servie…) :
-          // rejouer ne changera rien, on retire pour ne pas bloquer le service.
+          // Refus métier (produit supprimé, commande déjà servie…) : rejouer ne
+          // changera rien, on retire pour ne pas bloquer le service.
+          //
+          // Mais on CONSERVE. Sur une commande encaissée, l'argent est dans le
+          // tiroir et le client est parti : la jeter en silence efface une vente
+          // que plus personne ne peut retrouver. Le gérant doit pouvoir la
+          // ressaisir, et pour cela la voir.
           this.entries = this.entries.filter((e) => e.id !== entry.id);
+          this.state.rejected = [
+            {
+              id: entry.id,
+              path: entry.path,
+              body: entry.body,
+              reason: err.message,
+              status: err.status,
+              at: Date.now(),
+            },
+            ...this.state.rejected,
+          ].slice(0, MAX_REJECTED);
           failed++;
           this.state.lastError = err.message;
         } else {
@@ -200,9 +272,15 @@ export class SyncQueue {
     return { sent, failed, remaining: this.entries.length };
   }
 
-  /** Vide la file — réservé aux outils de maintenance. */
+  /**
+   * Vide la file ET les rejets — appelé au désappairage de l'appareil.
+   *
+   * Les rejets partent avec : ils portent le corps de ventes d'un
+   * établissement, et les laisser les ferait apparaître chez le suivant.
+   */
   async clear() {
     this.entries = [];
+    this.state.rejected = [];
     await this.persist();
     this.emit();
   }

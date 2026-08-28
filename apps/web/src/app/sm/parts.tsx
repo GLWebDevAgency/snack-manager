@@ -40,6 +40,7 @@ import {
   type LeadTouchType,
   type LeadUpdate,
   type ProposalBilling,
+  chiffrageFondateur,
 } from "@sm/contracts";
 import { csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -458,7 +459,7 @@ export function LeadDrawer({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-ink">Place fondateur</div>
           <div className="text-xs text-mut">
-            Tarif gelé à vie — 10 places au total
+            Moitié prix la première année — 10 places au total
           </div>
         </div>
         <Toggle
@@ -840,8 +841,19 @@ function phrasePrix(p: {
   onlineOrdering: boolean;
   billing: ProposalBilling;
   services?: LeadServices;
+  /**
+   * La place fondateur, cochée à l'écran de signature.
+   *
+   * Le bouton était bien branché sur l'API — le client naissait remisé — mais
+   * ne changeait AUCUN chiffre sous les yeux de l'opérateur : il annonçait au
+   * gérant, au téléphone, le tarif public de ce qu'il venait de lui remiser de
+   * moitié. Un contrôle qui décide d'un prix doit montrer le prix.
+   */
+  founderSeat?: boolean;
 }): string {
-  const { monthlyCents, servicesMonthlyCents, setupOnceCents } = proposalCents(p);
+  const publie = proposalCents(p);
+  const { monthlyCents, servicesMonthlyCents, setupOnceCents } =
+    p.founderSeat === true ? chiffrageFondateur(publie) : publie;
   // Sans formule ni module, le logiciel pèse 0 : la phrase ne parle alors que
   // de l'Atelier — « 0 €/mois » ferait douter du chiffrage entier.
   const morceaux = monthlyCents > 0 ? [`${fmtEuro(monthlyCents)}/mois`] : [];
@@ -852,10 +864,209 @@ function phrasePrix(p: {
     p.billing === "annuel" && monthlyCents > 0
       ? ` · logiciel ${fmtEuro(yearlyCents(monthlyCents))} l'année (deux mois offerts)`
       : "";
-  return morceaux.join(" + ") + annee;
+  // Le tarif public reste écrit à côté : c'est ce que la remise fait gagner,
+  // et c'est là que l'offre se vend au téléphone.
+  const fondateur =
+    p.founderSeat === true
+      ? ` · fondateur — moitié prix douze mois (public ${fmtEuro(
+          publie.monthlyCents + publie.servicesMonthlyCents,
+        )}/mois)`
+      : "";
+  return morceaux.join(" + ") + annee + fondateur;
 }
 
 /** Les services retenus, en toutes lettres courtes — carte, panneau, fiche client. */
+/**
+ * LES CHAMPS D'UNE OFFRE — formule, module, engagement, services.
+ *
+ * Extrait du panneau de proposition pour être partagé avec la modale qui
+ * change l'offre d'un client déjà signé. Les deux écrans décrivent la MÊME
+ * notion : en écrire deux versions produirait deux interfaces qui divergent au
+ * premier ajout de service, et le CRM finirait par proposer à la vente ce
+ * qu'il ne sait pas modifier — c'est exactement le défaut qu'on répare.
+ *
+ * Entièrement CONTRÔLÉ : aucun état interne. L'appelant décide d'où vient la
+ * valeur (une proposition en brouillon, un contrat signé) et ce qu'il en fait.
+ * `idPrefix` permet aux deux instances de coexister sans collision d'attributs
+ * `id`, ce qui casserait l'association label/champ pour un lecteur d'écran.
+ */
+export function OffreFields({
+  plan,
+  setPlan,
+  module,
+  setModule,
+  billing,
+  setBilling,
+  services,
+  setServices,
+  idPrefix = "prop",
+}: {
+  plan: (typeof PLANS)[number] | null;
+  setPlan: (p: (typeof PLANS)[number] | null) => void;
+  module: boolean;
+  setModule: (on: boolean) => void;
+  billing: ProposalBilling;
+  setBilling: (b: ProposalBilling) => void;
+  services: LeadServices;
+  setServices: (s: LeadServices) => void;
+  idPrefix?: string;
+}) {
+  const id = (suffixe: string) => `${idPrefix}-${suffixe}`;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        <Field label="Formule" htmlFor={id("plan")}>
+          <Select
+            id={id("plan")}
+            value={plan ?? "aucune"}
+            onChange={(e) => {
+              const suivant =
+                e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
+              setPlan(suivant);
+              // Sans formule, le module ne vit que greffé sur le site
+              // existant : coché « seul », il tombe avec la formule.
+              if (suivant === null && module && !services.integrationCommande) setModule(false);
+            }}
+          >
+            {/* Les services se citent seuls : la formule est un choix, pas un
+                préalable — un prospect peut ne vouloir QUE le site ou QUE les
+                réseaux. */}
+            <option value="aucune">{PLAN_NONE_LABEL}</option>
+            {PLANS.map((p) => (
+              <option key={p} value={p}>
+                {PLAN_LABELS[p]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Engagement" htmlFor={id("billing")}>
+          <Select
+            id={id("billing")}
+            value={billing}
+            onChange={(e) => setBilling(e.target.value as ProposalBilling)}
+          >
+            {PROPOSAL_BILLINGS.map((b) => (
+              <option key={b} value={b}>
+                {PROPOSAL_BILLING_LABELS[b]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      {/* SANS formule, ce module « seul » n'existe pas : la commande en ligne
+          se vend alors greffée sur le site existant (section Atelier, plus
+          bas) — 190 € de mise en service, puis 79 €/mois. Afficher les deux
+          ici ferait doublon (fondateur, 25/08). */}
+      {plan !== null && (
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1 text-xs text-mut">
+            {plan === "boost"
+              ? "Commande en ligne comprise dans Boost — rien à ajouter."
+              : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
+          </div>
+          {plan !== "boost" && (
+            <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
+          )}
+        </div>
+      )}
+
+      {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
+          libellés sortent de la grille : changer un tarif ne réécrit pas cet
+          écran. */}
+      <Eyebrow>L&apos;Atelier — les services</Eyebrow>
+      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        <Field label="Site web" htmlFor={id("site")}>
+          <Select
+            id={id("site")}
+            value={services.siteVitrine ? "creation" : services.refonteSite ? "refonte" : "aucun"}
+            onChange={(e) =>
+              setServices({
+                ...services,
+                siteVitrine: e.target.value === "creation",
+                refonteSite: e.target.value === "refonte",
+              })
+            }
+          >
+            <option value="aucun">Aucun</option>
+            <option value="creation">
+              Création clé en main — {fmtEuro(ATELIER_ONCE_CENTS.siteVitrine)} (une fois)
+            </option>
+            <option value="refonte">
+              Refonte de l&apos;existant — {fmtEuro(ATELIER_ONCE_CENTS.refonteSite)} (une fois)
+            </option>
+          </Select>
+        </Field>
+        <Field label="Réseaux sociaux" htmlFor={id("social")}>
+          <Select
+            id={id("social")}
+            value={services.reseauxSociaux ?? "aucun"}
+            onChange={(e) =>
+              setServices({
+                ...services,
+                reseauxSociaux:
+                  e.target.value === "aucun" ? null : (e.target.value as "hebdo" | "bihebdo"),
+              })
+            }
+          >
+            <option value="aucun">Aucun</option>
+            <option value="hebdo">
+              1 publication/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.hebdo)}/mois
+            </option>
+            <option value="bihebdo">
+              2 publications/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.bihebdo)}/mois
+            </option>
+          </Select>
+        </Field>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Présence internet — fiche Google tenue, avis répondus, rapport mensuel.{" "}
+          {fmtEuro(ATELIER_PRESENCE_CENTS)}/mois, sans engagement.
+        </div>
+        <Toggle
+          on={services.presenceInternet}
+          label="Présence internet"
+          onChange={(on) => setServices({ ...services, presenceInternet: on })}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Identité visuelle — logo, couleurs, déclinaisons.{" "}
+          {fmtEuro(ATELIER_ONCE_CENTS.identiteVisuelle)} (une fois).
+        </div>
+        <Toggle
+          on={services.identiteVisuelle}
+          label="Identité visuelle"
+          onChange={(on) => setServices({ ...services, identiteVisuelle: on })}
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          {/* Les 190 € sont une MISE EN SERVICE (le branchement sur son
+              site), jamais « une fois » tout court — et le module se lit à
+              côté, au mois (fondateur, 25/08). */}
+          Commande en ligne greffée sur SON site existant — mise en service{" "}
+          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)}, puis le module{" "}
+          {fmtEuro(MODULE_ORDERING_CENTS)}/mois (il s&apos;active avec).
+        </div>
+        <Toggle
+          on={services.integrationCommande}
+          label="Intégration sur site existant"
+          onChange={(on) => {
+            setServices({ ...services, integrationCommande: on });
+            // L'intégration sans le module serait un devis incohérent — le
+            // schéma la refuse ; l'écran la rend simplement impossible.
+            if (on && plan !== "boost") setModule(true);
+            // Sans formule, le module n'existe qu'à travers l'intégration :
+            // décocher l'une décoche l'autre.
+            if (!on && plan === null) setModule(false);
+          }}
+        />
+      </div>
+    </>
+  );
+}
+
 export function resumeAtelier(s: LeadServices): string {
   return [
     s.siteVitrine && "site clé en main",
@@ -993,155 +1204,16 @@ function ProposalPanel({
       }}
     >
       <Eyebrow>La proposition</Eyebrow>
-      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-        <Field label="Formule" htmlFor="prop-plan">
-          <Select
-            id="prop-plan"
-            value={plan ?? "aucune"}
-            onChange={(e) => {
-              const suivant =
-                e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
-              setPlan(suivant);
-              // Sans formule, le module ne vit que greffé sur le site
-              // existant : coché « seul », il tombe avec la formule.
-              if (suivant === null && module && !services.integrationCommande) setModule(false);
-            }}
-          >
-            {/* Les services se citent seuls : la formule est un choix, pas un
-                préalable — un prospect peut ne vouloir QUE le site ou QUE les
-                réseaux. */}
-            <option value="aucune">{PLAN_NONE_LABEL}</option>
-            {PLANS.map((p) => (
-              <option key={p} value={p}>
-                {PLAN_LABELS[p]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Engagement" htmlFor="prop-billing">
-          <Select
-            id="prop-billing"
-            value={billing}
-            onChange={(e) => setBilling(e.target.value as ProposalBilling)}
-          >
-            {PROPOSAL_BILLINGS.map((b) => (
-              <option key={b} value={b}>
-                {PROPOSAL_BILLING_LABELS[b]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-      {/* SANS formule, ce module « seul » n'existe pas : la commande en ligne
-          se vend alors greffée sur le site existant (section Atelier, plus
-          bas) — 190 € de mise en service, puis 79 €/mois. Afficher les deux
-          ici ferait doublon (fondateur, 25/08). */}
-      {plan !== null && (
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1 text-xs text-mut">
-            {plan === "boost"
-              ? "Commande en ligne comprise dans Boost — rien à ajouter."
-              : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
-          </div>
-          {plan !== "boost" && (
-            <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
-          )}
-        </div>
-      )}
-
-      {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
-          libellés sortent de la grille : changer un tarif ne réécrit pas cet
-          écran. */}
-      <Eyebrow>L&apos;Atelier — les services</Eyebrow>
-      <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
-        <Field label="Site web" htmlFor="prop-site">
-          <Select
-            id="prop-site"
-            value={services.siteVitrine ? "creation" : services.refonteSite ? "refonte" : "aucun"}
-            onChange={(e) =>
-              setServices({
-                ...services,
-                siteVitrine: e.target.value === "creation",
-                refonteSite: e.target.value === "refonte",
-              })
-            }
-          >
-            <option value="aucun">Aucun</option>
-            <option value="creation">
-              Création clé en main — {fmtEuro(ATELIER_ONCE_CENTS.siteVitrine)} (une fois)
-            </option>
-            <option value="refonte">
-              Refonte de l&apos;existant — {fmtEuro(ATELIER_ONCE_CENTS.refonteSite)} (une fois)
-            </option>
-          </Select>
-        </Field>
-        <Field label="Réseaux sociaux" htmlFor="prop-social">
-          <Select
-            id="prop-social"
-            value={services.reseauxSociaux ?? "aucun"}
-            onChange={(e) =>
-              setServices({
-                ...services,
-                reseauxSociaux:
-                  e.target.value === "aucun" ? null : (e.target.value as "hebdo" | "bihebdo"),
-              })
-            }
-          >
-            <option value="aucun">Aucun</option>
-            <option value="hebdo">
-              1 publication/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.hebdo)}/mois
-            </option>
-            <option value="bihebdo">
-              2 publications/sem — {fmtEuro(SOCIAL_CADENCE_CENTS.bihebdo)}/mois
-            </option>
-          </Select>
-        </Field>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1 text-xs text-mut">
-          Présence internet — fiche Google tenue, avis répondus, rapport mensuel.{" "}
-          {fmtEuro(ATELIER_PRESENCE_CENTS)}/mois, sans engagement.
-        </div>
-        <Toggle
-          on={services.presenceInternet}
-          label="Présence internet"
-          onChange={(on) => setServices({ ...services, presenceInternet: on })}
-        />
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1 text-xs text-mut">
-          Identité visuelle — logo, couleurs, déclinaisons.{" "}
-          {fmtEuro(ATELIER_ONCE_CENTS.identiteVisuelle)} (une fois).
-        </div>
-        <Toggle
-          on={services.identiteVisuelle}
-          label="Identité visuelle"
-          onChange={(on) => setServices({ ...services, identiteVisuelle: on })}
-        />
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1 text-xs text-mut">
-          {/* Les 190 € sont une MISE EN SERVICE (le branchement sur son
-              site), jamais « une fois » tout court — et le module se lit à
-              côté, au mois (fondateur, 25/08). */}
-          Commande en ligne greffée sur SON site existant — mise en service{" "}
-          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)}, puis le module{" "}
-          {fmtEuro(MODULE_ORDERING_CENTS)}/mois (il s&apos;active avec).
-        </div>
-        <Toggle
-          on={services.integrationCommande}
-          label="Intégration sur site existant"
-          onChange={(on) => {
-            setServices({ ...services, integrationCommande: on });
-            // L'intégration sans le module serait un devis incohérent — le
-            // schéma la refuse ; l'écran la rend simplement impossible.
-            if (on && plan !== "boost") setModule(true);
-            // Sans formule, le module n'existe qu'à travers l'intégration :
-            // décocher l'une décoche l'autre.
-            if (!on && plan === null) setModule(false);
-          }}
-        />
-      </div>
+      <OffreFields
+        plan={plan}
+        setPlan={setPlan}
+        module={module}
+        setModule={setModule}
+        billing={billing}
+        setBilling={setBilling}
+        services={services}
+        setServices={setServices}
+      />
 
       <Field label="Note (ce qui s'est dit)" htmlFor="prop-note">
         <Input
@@ -1346,7 +1418,7 @@ function ConvertPanel({
       </Field>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-xs text-mut">
-          Place fondateur — le tarif gelé suit le restaurant, plus le pipeline.
+          Place fondateur — moitié prix sur tout le contrat, douze mois durant.
         </div>
         <Toggle on={founderSeat} label="Place fondateur" onChange={setFounderSeat} />
       </div>
@@ -1354,7 +1426,7 @@ function ConvertPanel({
           Atelier) — on les CHIFFRE sous les yeux de l'opérateur : c'est ce
           montant-là que les brouillons de factures vont porter. */}
       <div className="text-xs font-semibold text-accent">
-        {phrasePrix({ plan, onlineOrdering, billing, services })}
+        {phrasePrix({ plan, onlineOrdering, billing, services, founderSeat })}
         {resumeAtelier(services) ? ` · Atelier : ${resumeAtelier(services)}` : ""}
       </div>
       {erreur && <div className="text-xs font-semibold text-alertt">{erreur}</div>}

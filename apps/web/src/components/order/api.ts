@@ -348,6 +348,15 @@ export type CreateOrderPayload = {
   payment: { method: "online" | "counter" };
   pickup: { slot: string; customerName: string; customerPhone?: string };
   note?: string;
+  /**
+   * Le code promo saisi, s'il y en a un.
+   *
+   * Le MONTANT n'est jamais transmis : comme les prix, la remise est résolue
+   * par le serveur contre la promotion en base. Un panier modifié dans le
+   * navigateur n'obtient rien — et l'écran ne peut donc pas afficher le gain
+   * avant validation, ce que la mention sous le total dit déjà.
+   */
+  promoCode?: string;
 };
 
 /** Commande créée telle que renvoyée par l’API (projection utile au client). */
@@ -355,7 +364,12 @@ export type CreatedOrder = {
   _id: string;
   number: number;
   status: OrderStatus;
-  totals: { subtotal: number; total: number };
+  totals: {
+    subtotal: number;
+    /** La promotion retenue par le serveur, avec son libellé — `null` sinon. */
+    discount: { amount: number; reason: string } | null;
+    total: number;
+  };
   pickup: { slot: string; customerName: string } | null;
   /**
    * Secret de suivi remis une seule fois, à la création. L’identifiant de
@@ -539,9 +553,19 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
-  function createPaymentIntent(orderId: string): Promise<PaymentIntentResponse> {
+  /**
+   * Le jeton de suivi accompagne l'appel, comme sur le suivi et le ticket.
+   *
+   * Cette route était la seule à ouvrir une commande sur son seul identifiant :
+   * elle confirmait son existence et en révélait le montant à qui devinait un
+   * ObjectId — que `tracking.ts` décrit précisément comme devinable.
+   */
+  function createPaymentIntent(
+    orderId: string,
+    token: string,
+  ): Promise<PaymentIntentResponse> {
     return postJson<PaymentIntentResponse>(
-      `/public/orders/${encodeURIComponent(orderId)}/payment-intent`,
+      withToken(`/public/orders/${encodeURIComponent(orderId)}/payment-intent`, token),
       {},
     );
   }

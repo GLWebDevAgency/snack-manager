@@ -7,7 +7,7 @@ import { validateSelection } from '../menu/rules';
 import type { OptionSelection } from '../menu/selection';
 import type { Clock } from '../shared/clock';
 import type { DomainError } from '../shared/errors';
-import { err, ok, type Result } from '../shared/result';
+import { err, type Result } from '../shared/result';
 
 /**
  * Ce que demande une surface de prise de commande : des clés, jamais des prix.

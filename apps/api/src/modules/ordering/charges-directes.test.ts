@@ -4,6 +4,9 @@ import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order } from '@sm/db';
 import { PaymentsService } from './payments.service';
+
+/** Le jeton de suivi, désormais exigé comme sur les autres routes publiques. */
+const JETON = 'jeton-de-suivi-valable';
 import type { EncaissementService } from '../encaissement/encaissement.service';
 
 /**
@@ -39,7 +42,9 @@ function build(over: { compteActif?: string | null } = {}) {
     save: vi.fn().mockResolvedValue(undefined),
   };
 
-  const orders = { findById: vi.fn().mockResolvedValue(order) };
+  // `findOne` avec le filtre `{ _id, trackingToken }` : la route exige le
+  // jeton de suivi comme les trois autres routes publiques de commande.
+  const orders = { findOne: vi.fn().mockResolvedValue(order) };
 
   // Le SDK Stripe, réduit à ce que le service appelle — et surtout à sa
   // SIGNATURE : c'est le second argument (les options par appel) qui porte le
@@ -71,13 +76,13 @@ function build(over: { compteActif?: string | null } = {}) {
   (service as unknown as { client: unknown; loadAttempted: boolean }).client = stripe;
   (service as unknown as { loadAttempted: boolean }).loadAttempted = true;
 
-  return { service, create, encaissement, order };
+  return { service, create, encaissement, order, orders };
 }
 
 describe('le paiement d’une commande en ligne', () => {
   it('est créé SUR LE COMPTE DU RESTAURANT, jamais sur celui de la plateforme', async () => {
     const { service, create, encaissement } = build();
-    const reponse = await service.createIntent(ORDER_ID);
+    const reponse = await service.createIntent(ORDER_ID, JETON);
 
     expect(encaissement.compteActifDe).toHaveBeenCalledWith(TENANT_ID);
     // Deuxième argument = options par appel : c'est `stripeAccount` qui fait la
@@ -92,7 +97,7 @@ describe('le paiement d’une commande en ligne', () => {
 
   it('estampille le compte encaisseur SUR la commande — le remboursement en dépendra', async () => {
     const { service, order } = build();
-    await service.createIntent(ORDER_ID);
+    await service.createIntent(ORDER_ID, JETON);
     // Redériver le compte six mois plus tard serait faux le jour où le
     // restaurant en change : Stripe répondrait « intention introuvable ».
     expect(order.payment.stripeAccountId).toBe('acct_resto1');
@@ -101,7 +106,7 @@ describe('le paiement d’une commande en ligne', () => {
 
   it('ne pose AUCUNE commission de plateforme — « zéro commission » se vérifie ici', async () => {
     const { service, create } = build();
-    await service.createIntent(ORDER_ID);
+    await service.createIntent(ORDER_ID, JETON);
     const params = create.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(params).not.toHaveProperty('application_fee_amount');
     expect(params).not.toHaveProperty('transfer_data');
@@ -110,7 +115,7 @@ describe('le paiement d’une commande en ligne', () => {
 
   it('sans compte actif : indisponible, et SURTOUT aucun appel à Stripe', async () => {
     const { service, create } = build({ compteActif: null });
-    const reponse = await service.createIntent(ORDER_ID);
+    const reponse = await service.createIntent(ORDER_ID, JETON);
 
     // L'union est discriminée par `unavailable` : on la resserre avant de
     // lire le motif, sinon TypeScript refuse — et il a raison.
@@ -187,5 +192,38 @@ describe('le webhook des comptes connectés — cloisonnement entre restaurants'
     // `null` et non « absent » : une commande encaissée sur un compte connecté
     // ne doit jamais être confirmée par un événement de plateforme.
     expect(filtre['payment.stripeAccountId']).toBeNull();
+  });
+});
+
+/**
+ * LE PAIEMENT EXIGE LE JETON DE SUIVI, comme les trois autres routes publiques.
+ *
+ * `POST /public/orders/:id/payment-intent` était la seule à ouvrir une commande
+ * sur son seul ObjectId. Or `tracking.ts` explique pourquoi cela ne suffit pas :
+ * les quatre premiers octets sont l'horodatage, les trois derniers un compteur —
+ * à partir d'une commande connue, les voisines se devinent.
+ *
+ * Elle confirmait donc l'existence d'une commande, en révélait le montant, et
+ * laissait ouvrir des intentions de paiement sur les commandes d'autrui.
+ */
+describe('l’accès au paiement d’une commande', () => {
+  it('refuse sans jeton, et sans interroger la base', async () => {
+    const { service, orders } = build();
+    await expect(service.createIntent(ORDER_ID, undefined)).rejects.toThrow(/introuvable/);
+    expect(orders.findOne).not.toHaveBeenCalled();
+  });
+
+  it('refuse un jeton qui est un objet — pas d’opérateur Mongo par la fenêtre', async () => {
+    // Express parse `?t[$ne]=x` en objet : injecté dans un filtre, il rendrait
+    // la première commande venue.
+    const { service, orders } = build();
+    await expect(service.createIntent(ORDER_ID, { $ne: '' })).rejects.toThrow(/introuvable/);
+    expect(orders.findOne).not.toHaveBeenCalled();
+  });
+
+  it('cherche la commande PAR son jeton, pas seulement par son identifiant', async () => {
+    const { service, orders } = build();
+    await service.createIntent(ORDER_ID, JETON);
+    expect(orders.findOne).toHaveBeenCalledWith({ _id: ORDER_ID, trackingToken: JETON });
   });
 });

@@ -23,20 +23,29 @@
 
 import { useState } from "react";
 import {
-  ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
+  INSTALL_FEE_CENTS,
+  INVOICE_KIND_LABELS,
+  ISSUABLE_INVOICE_KINDS,
   DEVICE_REVOKE_REASON_LABELS,
-  PLAN_LABELS,
-  PLAN_MRR_CENTS,
+  proposalCents,
   type AdminPlan,
   type DeviceRevokeReason,
+  type LeadServices,
+  type ProposalBilling,
+  remiseFondateurActive,
+  CHURN_CAUSES,
+  CHURN_CAUSE_LABELS,
+  CHURN_CAUSE_HINTS,
+  type ChurnCause,
 } from "@sm/contracts";
-import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import {
   Btn,
+  Chip,
   Field,
   Icon,
+  Input,
   Select,
   Textarea,
   Toggle,
@@ -46,7 +55,9 @@ import {
 // `md`, une feuille plein écran en dessous — un geste grave se confirme aussi
 // depuis un téléphone, sans panneau qui déborde.
 import { SheetModal } from "../../mobile";
-import { crm, euroRound } from "../../crm";
+import { OffreFields } from "../../parts";
+import { crm, errText, euroRound } from "../../crm";
+import { euros } from "../../facturation/data";
 import { clientsApi, type ParkDevice } from "../data";
 
 /** Longueur minimale d'un motif — alignée sur le schéma zod de l'API. */
@@ -66,12 +77,6 @@ type Common = {
   /** Rechargement de la fiche après une écriture réussie. */
   onDone: () => void;
 };
-
-/** Message d'erreur lisible — jamais un code HTTP nu devant un opérateur. */
-const errText = (e: unknown, fallback: string): string =>
-  e instanceof ApiError && typeof e.message === "string" && e.message.trim()
-    ? e.message
-    : fallback;
 
 // ─────────────────────────────────────────────────────────────
 // Suspendre
@@ -233,34 +238,96 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
 // Changer de formule
 // ─────────────────────────────────────────────────────────────
 
-export function PlanModal({
+/**
+ * CHANGER L'OFFRE D'UN CLIENT — formule, module, engagement, services.
+ *
+ * Cette modale ne portait que la formule, et son sélecteur ne proposait même
+ * pas « sans formule » : le module de commande en ligne et les services de
+ * l'Atelier n'étaient ni affichables, ni activables, ni retirables après la
+ * signature. Un restaurateur qui prenait les réseaux sociaux six mois plus tard
+ * n'avait aucun chemin dans le logiciel — et comme toute la facturation lit ces
+ * champs, sa facture ne bougeait pas non plus.
+ *
+ * Les champs viennent de `OffreFields`, le même composant que le panneau de
+ * proposition : ce qu'on sait vendre, on sait le modifier.
+ */
+export function OffreModal({
   tenantId,
   tenantName,
   onClose,
   onDone,
   current,
-}: Common & { current: AdminPlan | null }) {
+}: Common & {
+  current: {
+    plan: AdminPlan | null;
+    onlineOrdering: boolean;
+    billingCycle: ProposalBilling;
+    services: LeadServices;
+    /** Fin de la remise fondateur, ou `null` — voir le chiffrage ci-dessous. */
+    founderUntil: string | null;
+    /** La remise MENSUELLE figée au contrat signé, ou `null`. */
+    founderDiscountCents: number | null;
+  };
+}) {
   const toast = useToast();
-  // Un client Atelier seul (`current: null`) s'ouvre sur Essentiel : ce modal
-  // ne sait qu'ATTRIBUER une formule — la vente sans formule se fait à la
-  // signature, pas ici.
-  const [plan, setPlan] = useState<AdminPlan>(current ?? "essentiel");
+  const [plan, setPlan] = useState<AdminPlan | null>(current.plan);
+  const [module, setModule] = useState(current.onlineOrdering);
+  const [billing, setBilling] = useState<ProposalBilling>(current.billingCycle);
+  const [services, setServices] = useState<LeadServices>(current.services);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const changed = plan !== current;
-  const delta = PLAN_MRR_CENTS[plan] - (current ? PLAN_MRR_CENTS[current] : 0);
+  const avant = proposalCents({
+    plan: current.plan,
+    onlineOrdering: current.onlineOrdering,
+    services: current.services,
+  });
+  const apres = proposalCents({ plan, onlineOrdering: module, services });
+  const mrrAvant = avant.monthlyCents + avant.servicesMonthlyCents;
+  const mrrApres = apres.monthlyCents + apres.servicesMonthlyCents;
+  const delta = mrrApres - mrrAvant;
+
+  /**
+   * CE QU'IL PAIERA VRAIMENT — la fiche l'affiche deux lignes plus haut.
+   *
+   * La modale ne chiffrait qu'au tarif public : sur un fondateur, elle
+   * annonçait « 159 € → 238 € » à côté d'une fiche disant « 119 € par mois ».
+   * L'opérateur au téléphone lisait le mauvais chiffre au client.
+   *
+   * Le DELTA, lui, est déjà juste au tarif public — et c'est la règle : la
+   * remise est un montant figé au contrat signé, ce qui s'ajoute ensuite se
+   * paie plein tarif. C'est le total qu'il fallait corriger, pas l'écart.
+   */
+  const remise = remiseFondateurActive(current.founderUntil)
+    ? Math.min(current.founderDiscountCents ?? 0, mrrApres)
+    : 0;
+  const duApres = mrrApres - remise;
+  const duAvant = Math.max(0, mrrAvant - Math.min(current.founderDiscountCents ?? 0, mrrAvant));
+  const changed =
+    plan !== current.plan ||
+    module !== current.onlineOrdering ||
+    billing !== current.billingCycle ||
+    JSON.stringify(services) !== JSON.stringify(current.services);
 
   async function run() {
     if (!changed || busy) return;
     setBusy(true);
     try {
-      await clientsApi.changePlan(tenantId, plan, reason.trim());
-      toast(`${tenantName} passe en ${PLAN_LABELS[plan]}`, { icon: "check" });
+      await clientsApi.changeOffre(tenantId, {
+        plan,
+        onlineOrdering: module,
+        billing,
+        services,
+        reason: reason.trim(),
+      });
+      toast(`Offre de ${tenantName} mise à jour`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Changement de formule impossible — réessayez"));
+      // Le refus vient des règles de composition (module greffé sans
+      // intégration, offre vide…) : on l'affiche mot pour mot plutôt que de
+      // le paraphraser — l'API sait mieux que nous ce qu'elle a refusé.
+      toast(errText(e, "Changement d’offre impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -270,7 +337,7 @@ export function PlanModal({
     <SheetModal
       open
       onClose={onClose}
-      title={`Formule de ${tenantName}`}
+      title={`Offre de ${tenantName}`}
       footer={
         <>
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
@@ -283,59 +350,252 @@ export function PlanModal({
             disabled={!changed || busy}
             onClick={() => void run()}
           >
-            {busy ? "Enregistrement…" : "Appliquer la formule"}
+            {busy ? "Enregistrement…" : "Appliquer l’offre"}
           </Btn>
         </>
       }
     >
       <p className="text-[13px] text-mut">
-        Changer de formule ouvre ou ferme des modules côté restaurant. Le statut
-        du compte n&apos;est pas touché : passer un client en Boost n&apos;est
-        pas une décision d&apos;accès.
+        Formule, module de commande en ligne et services de l&apos;Atelier — tout
+        ce que ce client achète. Le statut du compte n&apos;est pas touché :
+        passer un client en Boost n&apos;est pas une décision d&apos;accès.
       </p>
-      <Field className="mt-4" label="Formule" htmlFor="plan-select">
-        <Select
-          id="plan-select"
-          value={plan}
-          onChange={(e) => setPlan(e.target.value as AdminPlan)}
-        >
-          {ADMIN_PLANS.map((p) => (
-            <option key={p} value={p}>
-              {PLAN_LABELS[p]} — {euroRound(PLAN_MRR_CENTS[p])} / mois
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <div className="mt-4 flex flex-col gap-4">
+        <OffreFields
+          plan={plan}
+          setPlan={setPlan}
+          module={module}
+          setModule={setModule}
+          billing={billing}
+          setBilling={setBilling}
+          services={services}
+          setServices={setServices}
+          idPrefix="offre"
+        />
+      </div>
       {changed && (
         <div className="mt-3 flex items-center gap-2 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3 text-[13px]">
           <Icon name="euro" size={16} className="shrink-0 text-accent" />
           <span className="text-mut">
-            MRR estimé{" "}
-            <span className={cx("cf-fig font-extrabold", delta > 0 ? "text-okt" : "text-alertt")}>
-              {delta > 0 ? "+" : "−"}
-              {euroRound(Math.abs(delta))}
+            Récurrent {euroRound(remise > 0 ? duAvant : mrrAvant)} →{" "}
+            <span className="cf-fig font-extrabold text-ink">
+              {euroRound(remise > 0 ? duApres : mrrApres)}
             </span>{" "}
-            par mois — estimation d&apos;après la grille, la facturation reste
-            la source de vérité.
+            par mois
+            {delta !== 0 && (
+              <>
+                {" ("}
+                <span className={cx("cf-fig font-extrabold", delta > 0 ? "text-okt" : "text-alertt")}>
+                  {delta > 0 ? "+" : "−"}
+                  {euroRound(Math.abs(delta))}
+                </span>
+                {")"}
+              </>
+            )}{" "}
+            — d&apos;après la grille ; la facturation reste la source de vérité.
+            {remise > 0 && (
+              <>
+                {" "}
+                <span className="text-gold">
+                  Remise fondateur de {euroRound(remise)} déduite ({euroRound(mrrApres)} au tarif
+                  public). Elle est figée au contrat signé : ce qui s&apos;ajoute aujourd&apos;hui
+                  se paie plein tarif.
+                </span>
+              </>
+            )}
           </span>
         </div>
       )}
       <Field
         className="mt-3"
         label="Motif"
-        htmlFor="plan-reason"
+        htmlFor="offre-reason"
         hint="Facultatif — mais « demandé par le gérant au téléphone » vaut mieux que rien."
       >
         <Textarea
-          id="plan-reason"
+          id="offre-reason"
           rows={2}
-          placeholder="Le gérant veut la fidélité et les écrans de salle."
+          placeholder="Le gérant ajoute les réseaux sociaux."
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
     </SheetModal>
   );
+}
+
+/**
+ * ÉMETTRE UNE FACTURE — le geste qui n'existait nulle part.
+ *
+ * `POST /crm/tenants/:id/invoices` était écrit, testé, et n'avait AUCUN
+ * appelant dans toute l'application. Conséquences : les brouillons posés
+ * automatiquement à la signature ne pouvaient jamais partir, et l'abonnement du
+ * mois suivant n'était jamais facturé. La file de recouvrement pouvait rester
+ * vide non parce que le parc était à jour, mais parce que rien n'avait jamais
+ * été facturé.
+ *
+ * Le montant est FACULTATIF et c'est délibéré : laissé vide, l'API applique
+ * l'offre du client — formule, module, services et remise fondateur comprises.
+ * Le saisir à la main est l'exception, pas la règle : c'est ainsi qu'on évite
+ * de recopier de tête un chiffre que le serveur sait calculer.
+ */
+export function EmettreFactureModal({
+  tenantId,
+  tenantName,
+  onClose,
+  onDone,
+  mrrCents,
+}: Common & { mrrCents: number }) {
+  const toast = useToast();
+  const [kind, setKind] = useState<(typeof ISSUABLE_INVOICE_KINDS)[number]>("abonnement");
+  const [period, setPeriod] = useState(moisCourant());
+  const [montant, setMontant] = useState("");
+  const [label, setLabel] = useState("");
+  // BROUILLON PAR DÉFAUT, comme la passe mensuelle. Émettre crée une créance
+  // qui entre au recouvrement et ne s'efface pas — elle s'annule avec un
+  // motif, qui reste au dossier. Le geste sûr est celui qu'on propose ; l'autre
+  // reste à un clic, délibérément.
+  const [draft, setDraft] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  // Ce que l'API facturera si le champ reste vide — affiché pour que personne
+  // n'ait à le deviner, ni à le ressaisir « pour être sûr ».
+  //
+  // AU CENTIME, jamais arrondi à l'euro : sur un fondateur à 49,50 €, l'écran
+  // annonçait « 50 € » et l'API facturait 49,50 €. Un opérateur qui recopie ce
+  // qu'il lit fabrique alors un écart de cinquante centimes, sur une pièce
+  // comptable, sans que rien ne le signale.
+  const parDefaut = kind === "mise_en_place" ? INSTALL_FEE_CENTS : mrrCents;
+  const saisi = montant.trim() === "" ? null : Math.round(Number(montant.replace(",", ".")) * 100);
+  const montantInvalide = saisi !== null && (!Number.isFinite(saisi) || saisi < 0);
+
+  async function run() {
+    if (busy || montantInvalide) return;
+    setBusy(true);
+    try {
+      await clientsApi.issueInvoice(tenantId, {
+        kind,
+        period,
+        label: label.trim(),
+        draft,
+        ...(saisi !== null ? { amountCents: saisi } : {}),
+      });
+      toast(draft ? `Brouillon posé pour ${tenantName}` : `Facture émise pour ${tenantName}`, {
+        icon: "check",
+      });
+      onDone();
+      onClose();
+    } catch (e) {
+      toast(errText(e, "Émission impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      title={`Facturer ${tenantName}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={busy || montantInvalide}
+            onClick={() => void run()}
+          >
+            {busy ? "Émission…" : draft ? "Poser le brouillon" : `Émettre — ${euros(saisi ?? parDefaut)} dus`}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[13px] text-mut">
+        Une facture émise crée une créance : elle entre dans la file de
+        recouvrement et compte dans l&apos;ardoise du client. Un brouillon, non
+        — il attend d&apos;être envoyé.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        <Field label="Nature" htmlFor="fact-kind">
+          <Select
+            id="fact-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as typeof kind)}
+          >
+            {ISSUABLE_INVOICE_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {INVOICE_KIND_LABELS[k]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Mois facturé" htmlFor="fact-period">
+          <Input
+            id="fact-period"
+            type="month"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
+        </Field>
+      </div>
+      <Field
+        className="mt-3"
+        label="Montant HT"
+        htmlFor="fact-montant"
+        hint={
+          kind === "mise_en_place"
+            ? // La remise fondateur est figée au contrat signé : une prestation
+              // commandée APRÈS se paie plein tarif. Écrit, sinon un opérateur
+              // « corrige » la moitié à la main en croyant bien faire.
+              `Laissez vide pour le tarif de la mise en place — ${euros(parDefaut)}. Une prestation commandée après la signature n’est pas couverte par la remise fondateur.`
+            : `Laissez vide pour appliquer l’offre du client — ${euros(parDefaut)}, remise fondateur comprise.`
+        }
+      >
+        <Input
+          id="fact-montant"
+          inputMode="decimal"
+          placeholder={(parDefaut / 100).toFixed(2)}
+          value={montant}
+          onChange={(e) => setMontant(e.target.value)}
+        />
+      </Field>
+      {montantInvalide && (
+        <p className="mt-1 text-[12px] text-alertt">
+          Montant invalide — saisissez un nombre, ou laissez vide.
+        </p>
+      )}
+      <Field
+        className="mt-3"
+        label="Libellé"
+        htmlFor="fact-label"
+        hint="Facultatif — sinon l’intitulé se déduit de la nature et de la formule."
+      >
+        <Input
+          id="fact-label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Abonnement Complet — septembre 2026"
+        />
+      </Field>
+      <div className="mt-3 flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Poser en brouillon — rien n&apos;est dû tant qu&apos;il n&apos;est pas
+          envoyé. Utile pour préparer une pièce avant la fin d&apos;essai.
+        </div>
+        <Toggle on={draft} label="Brouillon" onChange={setDraft} />
+      </div>
+    </SheetModal>
+  );
+}
+
+/** Le mois courant en `AAAA-MM` — ce que l'API attend et ce qu'un `<input type="month">` rend. */
+function moisCourant(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -645,6 +905,115 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
           ]}
         />
       )}
+    </SheetModal>
+  );
+}
+
+/**
+ * ACTER LE DÉPART D'UN CLIENT — et capter POURQUOI.
+ *
+ * `POST /crm/tenants/:id/churn` était écrite, testée, et n'avait aucun
+ * appelant : aucun écran ne permettait de sortir un client du parc. Il restait
+ * « actif », comptait dans le MRR, apparaissait dans la file de recouvrement —
+ * et sa raison de partir n'était consignée nulle part.
+ *
+ * ── La CAUSE, avant le détail ─────────────────────────────────────────────
+ *
+ * Un motif en texte libre ne s'agrège pas : six départs donnent six phrases, et
+ * aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se poser au
+ * bout d'un an — prix, complexité, fonction manquante ? — et elle ne se répond
+ * qu'avec une cause structurée. La liste est courte : un menu de quinze causes
+ * se remplit au hasard.
+ *
+ * Le détail libre reste obligatoire. C'est lui qui porte le cas particulier, et
+ * c'est lui qu'on relit avant d'appeler pour tenter de récupérer le client.
+ *
+ * ── Ce geste ne coupe PAS l'accès ─────────────────────────────────────────
+ *
+ * Un départ n'est pas une suspension : il constate, il ne sanctionne pas. Le
+ * gérant qui part garde ses données le temps de les récupérer — et un client
+ * qu'on chasse est un client qui ne revient jamais.
+ */
+export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
+  const toast = useToast();
+  const [cause, setCause] = useState<ChurnCause | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const pret = cause !== null && reason.trim().length >= MIN_REASON;
+
+  async function run() {
+    if (!pret || busy) return;
+    setBusy(true);
+    try {
+      await clientsApi.churn(tenantId, { cause, reason: reason.trim() });
+      toast(`${tenantName} est sorti du parc`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      toast(errText(e, "Impossible d’acter le départ — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      title={`Départ de ${tenantName}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={!pret || busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Enregistrement…" : "Acter le départ"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[13px] text-mut">
+        Le client sort du parc : il ne compte plus dans le MRR ni dans la file de
+        recouvrement. Son accès n&apos;est PAS coupé — un départ se constate, il ne se
+        sanctionne pas, et le gérant garde ses données le temps de les récupérer.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-1.5">
+        <span className="block text-xs font-bold uppercase tracking-[0.04em] text-mut">
+          Pourquoi part-il ?
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {CHURN_CAUSES.map((c) => (
+            <Chip key={c} on={cause === c} onClick={() => setCause(c)}>
+              {CHURN_CAUSE_LABELS[c]}
+            </Chip>
+          ))}
+        </div>
+        {cause && (
+          <p className="mt-1 text-[12px] text-mut">{CHURN_CAUSE_HINTS[cause]}</p>
+        )}
+      </div>
+
+      <Field
+        className="mt-3"
+        label="Ce qu’il a dit"
+        htmlFor="churn-reason"
+        hint="Ses mots, pas les vôtres — c’est ce qu’on relit avant de tenter de le récupérer."
+      >
+        <Textarea
+          id="churn-reason"
+          rows={3}
+          placeholder="« On a fermé le service du midi, le logiciel ne se rentabilise plus. »"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
     </SheetModal>
   );
 }

@@ -1,0 +1,145 @@
+{
+  "completeness": "partial",
+  "deferred": [
+    {
+      "id": "deferred_live_cloud_config",
+      "reason": "V\u00e9rifier les variables Railway, protections GitHub, scopes Cloudflare, endpoints Stripe, ACL DB/Redis et r\u00e8gles Sentry avec acc\u00e8s op\u00e9rateur.",
+      "surfaceIds": [
+        "surface_backups_deploy"
+      ]
+    },
+    {
+      "id": "deferred_external_pentest",
+      "reason": "Effectuer un pentest authentifi\u00e9 et des tests d'abus distribu\u00e9s avant extension du parc.",
+      "surfaceIds": [
+        "surface_public_orders",
+        "surface_auth_tenancy",
+        "surface_websockets"
+      ]
+    },
+    {
+      "id": "deferred_restore_drill",
+      "reason": "Le workflow actuel v\u00e9rifie la lisibilit\u00e9 mais ne r\u00e9importe pas MongoDB/PostgreSQL; un exercice complet reste \u00e0 r\u00e9aliser.",
+      "surfaceIds": [
+        "surface_backups_deploy"
+      ]
+    }
+  ],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [
+    ".git/",
+    "**/node_modules/",
+    "**/dist/",
+    "**/.next/",
+    "docs/audit-2026-08-28/screenshots/"
+  ],
+  "explicitExclusions": [
+    {
+      "pattern": "**/node_modules/**",
+      "reason": "D\u00e9pendances tierces couvertes s\u00e9par\u00e9ment par pnpm audit, pas par revue source exhaustive."
+    },
+    {
+      "pattern": "**/dist/** et **/.next/**",
+      "reason": "Artefacts g\u00e9n\u00e9r\u00e9s; le code source et les scripts de build/serveur ont \u00e9t\u00e9 privil\u00e9gi\u00e9s."
+    },
+    {
+      "pattern": "Exploitation intrusive de production",
+      "reason": "Hors autorisation et inutile pour \u00e9tablir les chemins source report\u00e9s."
+    }
+  ],
+  "includePaths": [
+    "."
+  ],
+  "inventoryStrategy": "repository",
+  "mode": "repository",
+  "openQuestions": [
+    {
+      "question": "Les bundles staging POS/KDS publi\u00e9s pointent-ils r\u00e9ellement vers l'API de production comme le pr\u00e9voit le source actuel?"
+    },
+    {
+      "question": "Les sauvegardes R2 sont-elles chiffr\u00e9es, restaurables et test\u00e9es avec un RPO/RTO accept\u00e9?"
+    },
+    {
+      "question": "Quelles protections de branche, approbations d'environnement et allowlists r\u00e9seau sont actives hors d\u00e9p\u00f4t?"
+    }
+  ],
+  "scanId": "scan_snackmanager_20260828",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "reported",
+      "id": "surface_kds_pos_clients",
+      "label": "Clients POS/KDS, appairage, stockage local et cibles API",
+      "notes": "Override KDS, r\u00e9vocation et serveurs statiques examin\u00e9s.",
+      "receiptRefs": [],
+      "riskArea": "credential-routing-and-device-sessions"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_public_orders",
+      "label": "Commande publique, paiement et publication cuisine",
+      "receiptRefs": [],
+      "riskArea": "abuse-and-order-integrity"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_auth_tenancy",
+      "label": "Authentification, r\u00f4les et isolation tenant",
+      "notes": "Aucun IDOR tenant reportable trouv\u00e9; r\u00e9vocation de sessions incompl\u00e8te.",
+      "receiptRefs": [],
+      "riskArea": "authentication-and-authorization"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_websockets",
+      "label": "Rooms WebSocket et \u00e9v\u00e9nements temps r\u00e9el",
+      "receiptRefs": [],
+      "riskArea": "authorization-lifecycle"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_exports",
+      "label": "Exports CSV et documents",
+      "receiptRefs": [],
+      "riskArea": "output-injection"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_public_telemetry",
+      "label": "T\u00e9l\u00e9m\u00e9trie, funnel et formulaire de contact",
+      "receiptRefs": [],
+      "riskArea": "resource-abuse-and-privacy"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_web_headers",
+      "label": "En-t\u00eates web, framing et stockage de session",
+      "receiptRefs": [],
+      "riskArea": "browser-security"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_payments",
+      "label": "Stripe, webhooks et routage du paiement",
+      "notes": "Signatures raw-body, secrets s\u00e9par\u00e9s et routage Connect examin\u00e9s; aucun contournement reportable trouv\u00e9.",
+      "receiptRefs": [],
+      "riskArea": "payment-integrity"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_uploads",
+      "label": "Upload de logos et import menu",
+      "notes": "Signatures d'images et parsing XML c\u00f4t\u00e9 navigateur examin\u00e9s.",
+      "receiptRefs": [],
+      "riskArea": "file-and-parser-security"
+    },
+    {
+      "disposition": "needs_follow_up",
+      "id": "surface_backups_deploy",
+      "label": "Sauvegardes, restauration et workflows de d\u00e9ploiement",
+      "notes": "Architecture examin\u00e9e, mais la configuration et les historiques cloud effectifs manquent.",
+      "receiptRefs": [],
+      "riskArea": "operational-security"
+    }
+  ]
+}

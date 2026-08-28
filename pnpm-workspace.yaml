@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+  # Les scripts d'outillage : leurs garde-fous méritent une suite de tests,
+  # au même titre que le code qui part en production.
+  - scripts

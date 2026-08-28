@@ -349,6 +349,20 @@ infrastructure/
 - **Toute route est authentifiée par défaut** — `AuthGuard` est enregistré en `APP_GUARD`
   dans `AuthModule`. Une route publique s'annote explicitement `@Public()`, une route
   restreinte `@Roles('gerant')`.
+- **`@Roles` absent ne veut PAS dire « restreint » : il veut dire « tout rôle
+  authentifié »**, ce qui inclut les codes `caisse` et `cuisine` du comptoir. Un audit du
+  28/08/2026 a trouvé dix-neuf routes sans décorateur, dont la prise de commande, la
+  remise et la lecture des prix d'achat. Toute route porte désormais son rôle — y compris
+  quand la réponse est « tout l'équipage », qui doit être une décision écrite et non un
+  oubli. Le contrôle se refait en une commande : lister les `@Get|@Post|@Patch|@Delete`
+  des contrôleurs et vérifier qu'un `@Roles` ou un `@Public` les couvre, au niveau
+  méthode ou classe.
+- **Authentifier n'est pas autoriser.** Re-saisir un PIN sur un geste sensible prouve QUI
+  agit ; ça ne dit rien de ce que cette personne a le droit de faire. Les deux contrôles
+  sont distincts, et `POST /orders/:id/discount` ne faisait que le premier : n'importe
+  quel code actif du restaurant offrait la commande entière. Le second vit dans
+  `REMISE_PLAFOND_CENTS` (contrats) et s'applique dans le value object `Discount`, seul
+  endroit par lequel une remise peut naître.
 - Le `tenantId` s'obtient par le décorateur `@TenantId()`, qui le lit dans le JWT et lève
   s'il est absent. **On ne le lit jamais dans le corps ni dans l'URL.**
 

@@ -1,0 +1,685 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "La cha\u00eene query string vers localStorage, API_URL, headers et auth Socket.IO est directe dans le source."
+      },
+      "findingId": "csf_4783f315d62bce44a3ad43d8",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c46b57b2e9c72601b4063e9cc69476e34478e3a564851fc73595fbf85ed4840b"
+      },
+      "identity": {
+        "anchor": "kds-api-query-override"
+      },
+      "locations": [
+        {
+          "endLine": 38,
+          "path": "apps/kds/src/config.ts",
+          "role": "source",
+          "startLine": 15
+        },
+        {
+          "endLine": 49,
+          "path": "apps/kds/src/useTenantSocket.ts",
+          "role": "sink",
+          "startLine": 34
+        },
+        {
+          "endLine": 348,
+          "path": "apps/kds/src/client.ts",
+          "role": "sink",
+          "startLine": 295
+        }
+      ],
+      "occurrenceId": "occ_b1d8065e0228731de8666e5c",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Supprimer l'override des builds de production. Si n\u00e9cessaire en d\u00e9veloppement, l'activer uniquement sous flag explicite, sur localhost, apr\u00e8s parsing et allowlist HTTPS exacte. Purger sm.kds.cfg.api et ne jamais construire un transport authentifi\u00e9 depuis un param\u00e8tre non fiable.",
+      "remediationTests": [
+        "Test E2E du build production avec ?api=https://example.invalid et v\u00e9rification qu'aucune requ\u00eate ne part.",
+        "Test de migration supprimant la cl\u00e9 locale historique."
+      ],
+      "rootCause": {
+        "summary": "Une configuration de d\u00e9veloppement contr\u00f4l\u00e9e par l'URL est autoris\u00e9e dans le build web de production et alimente un transport porteur de credentials."
+      },
+      "ruleId": "credential-exposure.untrusted-api-origin",
+      "severity": {
+        "changeConditions": "Le risque baisse si l'override est strictement d\u00e9sactiv\u00e9 dans tous les builds accessibles et les anciennes valeurs locales sont purg\u00e9es.",
+        "level": "high",
+        "rationale": "La compromission expose donn\u00e9es clients et mutations de commande avec des secrets persistants.",
+        "score": 8.1,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "Le build web KDS accepte et persiste une origine API arbitraire issue de ?api=, puis y envoie le jeton appareil et le JWT staff via HTTP et Socket.IO. Un lien pi\u00e9g\u00e9 ouvert sur un KDS d\u00e9j\u00e0 appair\u00e9 peut donc exfiltrer les deux secrets.",
+      "taxonomy": {
+        "category": "credential-exposure",
+        "cwe": [
+          "CWE-346"
+        ]
+      },
+      "title": "Le param\u00e8tre d'URL KDS peut d\u00e9tourner les jetons appareil et employ\u00e9",
+      "validation": {
+        "assertions": [
+          "Un build de production ignore ?api= et toute ancienne valeur locale.",
+          "Aucun JWT ni jeton appareil n'est envoy\u00e9 \u00e0 une origine hors allowlist."
+        ],
+        "counterEvidence": [
+          "Le chemin est limit\u00e9 au web; les builds natifs ignorent l'override.",
+          "CORS n'emp\u00eache pas l'exfiltration vers un serveur contr\u00f4l\u00e9 par l'attaquant."
+        ],
+        "method": "Trace statique source-vers-sink.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le sch\u00e9ma public, la condition pickup, la cr\u00e9ation new et la publication imm\u00e9diate sont explicites."
+      },
+      "findingId": "csf_5d365349dd308604e100d749",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:409c1c281226aeafa8c1be2e3de024eacc22f84f78a1aad467a37b661356a068"
+      },
+      "identity": {
+        "anchor": "unverified-orders-published-to-kds"
+      },
+      "locations": [
+        {
+          "endLine": 355,
+          "path": "packages/contracts/src/index.ts",
+          "role": "source",
+          "startLine": 342
+        },
+        {
+          "endLine": 181,
+          "path": "apps/api/src/modules/orders/orders.controller.ts",
+          "role": "validation",
+          "startLine": 146
+        },
+        {
+          "endLine": 330,
+          "path": "apps/api/src/modules/orders/orders.service.ts",
+          "role": "sink",
+          "startLine": 296
+        }
+      ],
+      "occurrenceId": "occ_f7895e6626faffbdc34eef73",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Cr\u00e9er un sch\u00e9ma de commande publique d\u00e9di\u00e9, forcer le type support\u00e9 et un cr\u00e9neau valide, conserver les commandes non v\u00e9rifi\u00e9es hors du KDS jusqu'au paiement ou \u00e0 un contr\u00f4le \u00e9quivalent, puis ajouter des quotas partag\u00e9s par tenant, origine et global ainsi que des contr\u00f4les anti-bot adapt\u00e9s au paiement comptoir.",
+      "remediationTests": [
+        "Test d'abus de commandes impay\u00e9es et sans pickup.",
+        "Test concurrent multi-IP simulant le quota par tenant."
+      ],
+      "rootCause": {
+        "summary": "Le contrat interne g\u00e9n\u00e9ral est r\u00e9utilis\u00e9 comme contrat public et la visibilit\u00e9 cuisine n'est pas conditionn\u00e9e par une \u00e9tape de v\u00e9rification."
+      },
+      "ruleId": "business-logic.public-order-abuse",
+      "severity": {
+        "changeConditions": "Le risque baisse si les commandes non v\u00e9rifi\u00e9es restent hors KDS et si des quotas tenant/globaux partag\u00e9s sont appliqu\u00e9s.",
+        "level": "high",
+        "rationale": "L'abus peut interrompre un service r\u00e9el, polluer les m\u00e9triques et consommer stockage et num\u00e9ros de commande.",
+        "score": 8.0,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "La route publique accepte des types sans cr\u00e9neau obligatoire, cr\u00e9e imm\u00e9diatement une commande new et publie order.created avant confirmation de paiement. Des UUID uniques permettent d'injecter jusqu'\u00e0 vingt tickets par minute et par adresse apparente dans la cuisine.",
+      "taxonomy": {
+        "category": "business-logic-abuse",
+        "cwe": [
+          "CWE-799"
+        ]
+      },
+      "title": "Des commandes anonymes non v\u00e9rifi\u00e9es peuvent saturer le flux cuisine",
+      "validation": {
+        "assertions": [
+          "Une commande publique sans cr\u00e9neau ou non v\u00e9rifi\u00e9e ne rejoint pas le KDS.",
+          "Un d\u00e9passement distribu\u00e9 d\u00e9clenche un quota tenant ou global."
+        ],
+        "counterEvidence": [
+          "Un throttle de vingt requ\u00eates par minute et par IP existe.",
+          "Les prix sont recalcul\u00e9s c\u00f4t\u00e9 serveur et clientId est idempotent, mais des UUID uniques contournent ce frein."
+        ],
+        "method": "Trace statique et analyse d'abus m\u00e9tier.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le payload JWT, le guard et les mutations active/role/device ont \u00e9t\u00e9 suivis directement."
+      },
+      "findingId": "csf_2a0015ec1ecb8bbcd99228eb",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c5c58964119cc304462c96a652105ca491bd219fcd6cb23f3b9508d84c54e5f0"
+      },
+      "identity": {
+        "anchor": "staff-jwt-not-revoked"
+      },
+      "locations": [
+        {
+          "endLine": 80,
+          "path": "apps/api/src/modules/devices/device-pin-login.usecase.ts",
+          "role": "source",
+          "startLine": 57
+        },
+        {
+          "endLine": 130,
+          "path": "apps/api/src/common/auth.ts",
+          "role": "sink",
+          "startLine": 103
+        },
+        {
+          "endLine": 118,
+          "path": "apps/api/src/modules/staff/staff.service.ts",
+          "role": "revocation",
+          "startLine": 91
+        }
+      ],
+      "occurrenceId": "occ_db392846ed95793ec705eb64",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Lier les JWT staff \u00e0 une session/appareil et \u00e0 une version de token. V\u00e9rifier via cache serveur que le salari\u00e9 est actif, que son r\u00f4le courant correspond et que la session/appareil n'est pas r\u00e9voqu\u00e9. Incr\u00e9menter la version et d\u00e9connecter lors des changements, avec access tokens courts et refresh rotatif.",
+      "remediationTests": [
+        "Test d'int\u00e9gration login puis deactivation/role-change/device-revoke avec ancien bearer."
+      ],
+      "ruleId": "session-management.staff-revocation",
+      "severity": {
+        "changeConditions": "Une courte dur\u00e9e de token limite la fen\u00eatre mais ne remplace pas la r\u00e9vocation imm\u00e9diate attendue.",
+        "level": "medium",
+        "rationale": "Un ex-salari\u00e9, un manager r\u00e9trograd\u00e9 ou le voleur d'une tablette peut conserver ses droits jusqu'\u00e0 douze heures.",
+        "score": 6.5,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "Le login PIN v\u00e9rifie salari\u00e9 et appareil uniquement lors de l'\u00e9mission d'un JWT de douze heures. Le guard HTTP ne recharge ensuite ni Staff ni Device et le token ne contient pas d'identifiant de session ou de version de r\u00e9vocation.",
+      "taxonomy": {
+        "category": "session-management",
+        "cwe": [
+          "CWE-613"
+        ]
+      },
+      "title": "La d\u00e9sactivation d'un salari\u00e9 ou appareil ne r\u00e9voque pas les JWT d\u00e9j\u00e0 \u00e9mis",
+      "validation": {
+        "assertions": [
+          "D\u00e9sactiver un salari\u00e9, changer son r\u00f4le ou r\u00e9voquer l'appareil invalide imm\u00e9diatement les requ\u00eates existantes."
+        ],
+        "counterEvidence": [
+          "Les nouveaux logins PIN refusent d\u00e9j\u00e0 un salari\u00e9 ou appareil inactif.",
+          "Le client officiel efface sa session apr\u00e8s un 401 appareil, mais un bearer copi\u00e9 reste utilisable directement."
+        ],
+        "method": "Revue du cycle de vie du token.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "L'admission, le join de room et l'absence de revalidation sont explicites dans le gateway."
+      },
+      "findingId": "csf_2815bdd97cb34aad2ba7dd69",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:f4ef9c100491e94d98aa3734184c1c77c8793b9248c50d3b9a80f64909217e25"
+      },
+      "identity": {
+        "anchor": "tenant-room-not-revalidated"
+      },
+      "locations": [
+        {
+          "endLine": 76,
+          "path": "apps/api/src/modules/orders/orders.gateway.ts",
+          "role": "data-flow",
+          "startLine": 68
+        },
+        {
+          "endLine": 114,
+          "path": "apps/api/src/modules/orders/orders.gateway.ts",
+          "role": "authorization",
+          "startLine": 87
+        },
+        {
+          "endLine": 130,
+          "path": "apps/api/src/common/auth.ts",
+          "role": "comparison",
+          "startLine": 103
+        }
+      ],
+      "occurrenceId": "occ_1c748ae4c5ef32f78f56d53b",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Utiliser un service de session commun HTTP/WebSocket, v\u00e9rifier tenant, staff, r\u00f4le et appareil \u00e0 l'admission, d\u00e9connecter \u00e0 l'expiration du JWT et sur \u00e9v\u00e9nements de r\u00e9vocation, avec revalidation p\u00e9riodique de secours.",
+      "remediationTests": [
+        "Test WebSocket avec horloge contr\u00f4l\u00e9e et expiration.",
+        "Test de suspension tenant, d\u00e9sactivation staff et r\u00e9vocation appareil sur socket ouverte."
+      ],
+      "ruleId": "websocket.authorization-revocation",
+      "severity": {
+        "changeConditions": "Le risque baisse avec une admission partag\u00e9e, une d\u00e9connexion \u00e0 exp et des \u00e9v\u00e9nements de r\u00e9vocation.",
+        "level": "high",
+        "rationale": "Une connexion ouverte peut recevoir ind\u00e9finiment des donn\u00e9es clients apr\u00e8s suspension, vol ou d\u00e9part d'un salari\u00e9.",
+        "score": 8.0,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "Le gateway v\u00e9rifie le JWT seulement \u00e0 la connexion, rejoint tenant:<tenantId>, puis ne consulte plus l'\u00e9tat du tenant, du salari\u00e9 ou de l'appareil et ne programme pas de d\u00e9connexion \u00e0 exp. Les commandes compl\u00e8tes continuent d'\u00eatre diffus\u00e9es \u00e0 la room.",
+      "taxonomy": {
+        "category": "websocket-authorization",
+        "cwe": [
+          "CWE-613"
+        ]
+      },
+      "title": "Les connexions WebSocket survivent \u00e0 l'expiration et \u00e0 la r\u00e9vocation",
+      "validation": {
+        "assertions": [
+          "Une socket est ferm\u00e9e \u00e0 exp et imm\u00e9diatement apr\u00e8s toute r\u00e9vocation li\u00e9e.",
+          "Une socket r\u00e9voqu\u00e9e ne re\u00e7oit plus aucun order.created."
+        ],
+        "counterEvidence": [
+          "Signature et expiration sont v\u00e9rifi\u00e9es \u00e0 la connexion initiale.",
+          "Le flux public de suivi utilise un token et une projection r\u00e9duite; le constat vise les rooms tenant."
+        ],
+        "method": "Revue statique du gateway et comparaison avec le guard HTTP.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le champ public atteint directement le s\u00e9rialiseur CSV ciblant Excel."
+      },
+      "findingId": "csf_ccbddd053d870a7ed4bf0b99",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:e465d64d249d9a753349a79fa62d55af5a45404e2a59678e464d1968b865118e"
+      },
+      "identity": {
+        "anchor": "customer-name-exported-to-excel"
+      },
+      "locations": [
+        {
+          "endLine": 355,
+          "path": "packages/contracts/src/index.ts",
+          "role": "source",
+          "startLine": 342
+        },
+        {
+          "endLine": 87,
+          "path": "apps/api/src/modules/stats/stats.service.ts",
+          "role": "sanitizer",
+          "startLine": 83
+        },
+        {
+          "endLine": 501,
+          "path": "apps/api/src/modules/stats/stats.service.ts",
+          "role": "sink",
+          "startLine": 437
+        }
+      ],
+      "occurrenceId": "occ_deefdbfbe475f68c53487dba",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Centraliser un s\u00e9rialiseur CSV compatible tableurs et neutraliser toute cellule non fiable commen\u00e7ant par =, +, -, @, tabulation, retour chariot ou saut de ligne, avec politique document\u00e9e et limites de longueur.",
+      "remediationTests": [
+        "Test unitaire de chaque pr\u00e9fixe dangereux et ouverture manuelle du fichier g\u00e9n\u00e9r\u00e9."
+      ],
+      "ruleId": "output-injection.csv-formula",
+      "severity": {
+        "level": "medium",
+        "rationale": "L'ouverture par un g\u00e9rant peut ex\u00e9cuter une formule, d\u00e9clencher une requ\u00eate externe ou pr\u00e9senter un lien trompeur.",
+        "score": 6.1,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "customerName est accept\u00e9 publiquement puis export\u00e9 dans commandes.csv. Le helper CSV \u00e9chappe s\u00e9parateurs et guillemets mais ne neutralise pas les cellules commen\u00e7ant par =, +, -, @ ou un caract\u00e8re de contr\u00f4le.",
+      "taxonomy": {
+        "category": "csv-injection",
+        "cwe": [
+          "CWE-1236"
+        ]
+      },
+      "title": "Un nom client peut devenir une formule lors de l'export Excel",
+      "validation": {
+        "assertions": [
+          "Les pr\u00e9fixes de formule restent inertes dans Excel et LibreOffice."
+        ],
+        "counterEvidence": [
+          "L'export est authentifi\u00e9 owner/gerant, mais la donn\u00e9e vient d'une commande anonyme.",
+          "Mettre une cellule entre guillemets ne neutralise pas une formule."
+        ],
+        "method": "Trace de donn\u00e9e statique.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "medium",
+        "rationale": "Le parsing vuln\u00e9rable est certain; le comportement exact du proxy de production est hors d\u00e9p\u00f4t."
+      },
+      "findingId": "csf_8e42186729812a684c020411",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:57305762d56f8e2a7da827f5f7c83d3ae7ada6b273c123b0a6364858a6f11b05"
+      },
+      "identity": {
+        "anchor": "public-ingestion-leftmost-xff"
+      },
+      "locations": [
+        {
+          "endLine": 61,
+          "path": "apps/api/src/modules/ops/public-errors.controller.ts",
+          "role": "source",
+          "startLine": 23
+        },
+        {
+          "endLine": 39,
+          "path": "apps/api/src/modules/ops/report-throttle.ts",
+          "role": "control",
+          "startLine": 15
+        },
+        {
+          "endLine": 113,
+          "path": "apps/web/src/app/api/contact/route.ts",
+          "role": "source",
+          "startLine": 109
+        }
+      ],
+      "occurrenceId": "occ_418b313abe8e70879727e0f6",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Faire confiance uniquement \u00e0 req.ip apr\u00e8s configuration des CIDR proxy exacts, imposer la reconstruction de l'en-t\u00eate \u00e0 l'edge, d\u00e9placer les limites dans Redis ou \u00e0 l'edge et ajouter des quotas globaux et par route. Authentifier la t\u00e9l\u00e9m\u00e9trie appareil quand possible et expirer/capper les ErrorEvent.",
+      "remediationTests": [
+        "Test d'int\u00e9gration derri\u00e8re le proxy r\u00e9el avec un X-Forwarded-For forg\u00e9."
+      ],
+      "ruleId": "rate-limit.spoofable-forwarded-for",
+      "severity": {
+        "changeConditions": "Une preuve que l'ingress supprime et reconstruit syst\u00e9matiquement X-Forwarded-For r\u00e9duirait l'exploitabilit\u00e9.",
+        "level": "medium",
+        "rationale": "L'abus peut remplir MongoDB et les logs, consommer les quotas Sentry/alerte, polluer le funnel et spammer les leads.",
+        "score": 6.5,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "La t\u00e9l\u00e9m\u00e9trie API et le formulaire de contact prennent directement la premi\u00e8re valeur de X-Forwarded-For. Si l'edge ajoute au lieu de remplacer l'en-t\u00eate, un attaquant peut faire tourner cette valeur et obtenir un nouveau bucket \u00e0 chaque requ\u00eate.",
+      "taxonomy": {
+        "category": "rate-limit-bypass",
+        "cwe": [
+          "CWE-400"
+        ]
+      },
+      "title": "Les limites publiques utilisent une adresse X-Forwarded-For falsifiable",
+      "validation": {
+        "assertions": [
+          "Changer le X-Forwarded-For fourni par le client ne change pas son identit\u00e9 de quota.",
+          "Les quotas globaux bornent l'abus m\u00eame distribu\u00e9."
+        ],
+        "counterEvidence": [
+          "Les corps sont born\u00e9s et les maps ont une limite de cl\u00e9s.",
+          "Les FunnelEvent expirent apr\u00e8s 90 jours, mais ErrorEvent n'a pas de TTL."
+        ],
+        "limitations": [
+          "Configuration r\u00e9elle du proxy non disponible."
+        ],
+        "method": "Revue source et hypoth\u00e8se d'ingress explicite.",
+        "status": "confirmed-with-runtime-prerequisite"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le script start ex\u00e9cute ces serveurs et l'exception synchrone n'est pas intercept\u00e9e."
+      },
+      "findingId": "csf_f2a5a4faba50d15fe3cf149c",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:23381956a725a0145da84b764c35c5758c5d834d4a0b5072f04527893ad07d5d"
+      },
+      "identity": {
+        "anchor": "pos-kds-static-server-decodeuri"
+      },
+      "locations": [
+        {
+          "endLine": 56,
+          "path": "apps/pos/server.js",
+          "role": "sink",
+          "startLine": 29
+        },
+        {
+          "endLine": 56,
+          "path": "apps/kds/server.js",
+          "role": "sink",
+          "startLine": 29
+        }
+      ],
+      "occurrenceId": "occ_4e48621c1018bf9314a464f4",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Intercepter URIError et renvoyer 400 avant tout acc\u00e8s fichier, prot\u00e9ger l'ensemble du handler, g\u00e9rer les erreurs de stream et ajouter des tests de r\u00e9gression sur les encodages invalides.",
+      "remediationTests": [
+        "Tests HTTP /%, /%ZZ et s\u00e9quences UTF-8 invalides sur les deux serveurs."
+      ],
+      "ruleId": "availability.malformed-url-decode",
+      "severity": {
+        "level": "medium",
+        "rationale": "Une requ\u00eate anonyme suffit \u00e0 rendre une surface indisponible; les red\u00e9marrages peuvent \u00eatre r\u00e9p\u00e9t\u00e9s pendant le service.",
+        "score": 7.5,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "Les serveurs de production POS et KDS appellent decodeURIComponent sur le chemin brut sans try/catch. Une requ\u00eate comme /% ou /%ZZ l\u00e8ve URIError hors gestionnaire et termine le processus Node.",
+      "taxonomy": {
+        "category": "denial-of-service",
+        "cwe": [
+          "CWE-248"
+        ]
+      },
+      "title": "Une URL mal encod\u00e9e peut arr\u00eater les serveurs web POS et KDS",
+      "validation": {
+        "assertions": [
+          "Les chemins percent-encod\u00e9s invalides renvoient 400 et le processus reste vivant."
+        ],
+        "counterEvidence": [
+          "Un superviseur peut red\u00e9marrer le processus, sans emp\u00eacher la r\u00e9p\u00e9tition de l'attaque."
+        ],
+        "method": "Revue statique du chemin de requ\u00eate.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le fallback et l'absence de contr\u00f4leur correspondant sont explicites dans le source inspect\u00e9."
+      },
+      "findingId": "csf_d2bd955d6c3a9b56cf409b7a",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:fc90a93fe402df6b7f8b7221e6c1224b986fe52befee49974c1d08e3a0ab6794"
+      },
+      "identity": {
+        "anchor": "contact-fallback-logs-lead"
+      },
+      "locations": [
+        {
+          "endLine": 64,
+          "path": "apps/web/src/app/api/contact/route.ts",
+          "role": "data",
+          "startLine": 48
+        },
+        {
+          "endLine": 174,
+          "path": "apps/web/src/app/api/contact/route.ts",
+          "role": "sink",
+          "startLine": 136
+        }
+      ],
+      "occurrenceId": "occ_70f2c7b8443c4992d65038bb",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Cr\u00e9er un stockage de leads avec acc\u00e8s, chiffrement et r\u00e9tention d\u00e9finis. Ne journaliser qu'un identifiant de corr\u00e9lation, une cat\u00e9gorie de r\u00e9sultat et des m\u00e9triques non sensibles; purger les logs historiques selon la politique de confidentialit\u00e9.",
+      "remediationTests": [
+        "Test de logs sur succ\u00e8s, 404, 500, timeout et erreur r\u00e9seau avec marqueurs PII."
+      ],
+      "ruleId": "privacy.pii-in-operational-logs",
+      "severity": {
+        "level": "medium",
+        "rationale": "Les coordonn\u00e9es sont copi\u00e9es dans un syst\u00e8me de logs aux acc\u00e8s et dur\u00e9es distincts du futur CRM.",
+        "score": 5.5,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "Le handler collecte nom, restaurant, t\u00e9l\u00e9phone, email et cr\u00e9neau. Comme /public/leads n'existe pas dans l'API inspect\u00e9e, les erreurs et 404 s\u00e9rialisent ces champs dans console.warn; seul le corps libre du message est masqu\u00e9.",
+      "taxonomy": {
+        "category": "sensitive-data-exposure",
+        "cwe": [
+          "CWE-532"
+        ]
+      },
+      "title": "Le fallback du formulaire de contact \u00e9crit les coordonn\u00e9es prospects dans les logs",
+      "validation": {
+        "assertions": [
+          "Aucun t\u00e9l\u00e9phone, email ou nom n'appara\u00eet dans les logs de succ\u00e8s ou d'\u00e9chec."
+        ],
+        "counterEvidence": [
+          "Le message libre n'est d\u00e9j\u00e0 pas journalis\u00e9 en clair."
+        ],
+        "method": "Revue statique de la route et recherche de l'endpoint cible.",
+        "status": "confirmed"
+      }
+    },
+    {
+      "confidence": {
+        "level": "medium",
+        "rationale": "L'absence applicative et les mutations en un clic sont prouv\u00e9es; les en-t\u00eates de l'h\u00e9bergeur n'ont pas \u00e9t\u00e9 v\u00e9rifi\u00e9s comme garantie."
+      },
+      "findingId": "csf_cc510bd2d02554ec8f4010c1",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:b2d38abc45c59842970841b8c8caba3e33c0abab313bb78ca3a309faf8e46517"
+      },
+      "identity": {
+        "anchor": "admin-pages-frameable"
+      },
+      "locations": [
+        {
+          "endLine": 5,
+          "path": "apps/web/next.config.ts",
+          "role": "configuration",
+          "startLine": 3
+        },
+        {
+          "endLine": 515,
+          "path": "apps/web/src/proxy.ts",
+          "role": "control",
+          "startLine": 477
+        },
+        {
+          "endLine": 745,
+          "path": "apps/web/src/app/admin/menu/page.tsx",
+          "role": "impact",
+          "startLine": 703
+        }
+      ],
+      "occurrenceId": "occ_265ef1695413721e5aa845f5",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "D\u00e9finir CSP frame-ancestors 'none' ou 'self' et X-Frame-Options DENY/SAMEORIGIN sur toutes les pages hors embed. Garder une exception explicite et \u00e9troite pour /embed/* et tester les en-t\u00eates de /admin, /sm et des widgets.",
+      "remediationTests": [
+        "Test automatis\u00e9 des en-t\u00eates et tentative d'iframe cross-origin."
+      ],
+      "ruleId": "browser-security.clickjacking-admin",
+      "severity": {
+        "changeConditions": "Un en-t\u00eate frame-ancestors d\u00e9j\u00e0 impos\u00e9 par l'h\u00e9bergeur r\u00e9duirait le risque, mais aucune preuve n'est pr\u00e9sente dans le d\u00e9p\u00f4t.",
+        "level": "medium",
+        "rationale": "Un propri\u00e9taire authentifi\u00e9 peut \u00eatre amen\u00e9 \u00e0 modifier disponibilit\u00e9, stock ou autre configuration via superposition d'interface.",
+        "score": 6.1,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "La configuration Next ne d\u00e9finit pas d'en-t\u00eates globaux et le proxy ne limite frame-ancestors que pour certains embeds. Les pages /admin et /sm restent frameables et lisent leur JWT localStorage dans le frame, permettant des clics trompeurs sur des mutations en un geste.",
+      "taxonomy": {
+        "category": "clickjacking",
+        "cwe": [
+          "CWE-1021"
+        ]
+      },
+      "title": "Les interfaces d'administration peuvent \u00eatre int\u00e9gr\u00e9es dans un site malveillant",
+      "validation": {
+        "assertions": [
+          "Un domaine tiers ne peut pas afficher /admin ni /sm dans un iframe.",
+          "Les routes embed autoris\u00e9es continuent de fonctionner avec leur allowlist."
+        ],
+        "counterEvidence": [
+          "Certaines actions destructives ont d\u00e9j\u00e0 confirmation ou PIN, mais pas toutes les mutations."
+        ],
+        "limitations": [
+          "En-t\u00eates \u00e9ventuels inject\u00e9s par l'h\u00e9bergement non prouv\u00e9s."
+        ],
+        "method": "Revue de configuration et du flux navigateur.",
+        "status": "confirmed-with-hosting-caveat"
+      }
+    },
+    {
+      "confidence": {
+        "level": "high",
+        "rationale": "Le court-circuit JavaScript \u00e9vite explicitement Argon2 pour l'utilisateur absent."
+      },
+      "findingId": "csf_bf2072ab1784f6279c04a426",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:248a7058c5e345ccaba25eea54752d6e16cd4ad297fc32eb3cf2d81ef8f40595"
+      },
+      "identity": {
+        "anchor": "login-skips-argon2-for-unknown-user"
+      },
+      "locations": [
+        {
+          "endLine": 36,
+          "path": "apps/api/src/modules/auth/auth.service.ts",
+          "role": "sink",
+          "startLine": 22
+        }
+      ],
+      "occurrenceId": "occ_0ee30375b3db1039f2988cc1",
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Conserver un hash Argon2 factice valide et v\u00e9rifier le mot de passe contre lui lorsque l'utilisateur est absent. Garder r\u00e9ponse et throttling identiques et surveiller les sondages distribu\u00e9s.",
+      "remediationTests": [
+        "Benchmark statistique des deux chemins en CI d\u00e9di\u00e9e."
+      ],
+      "ruleId": "authentication.timing-account-enumeration",
+      "severity": {
+        "level": "low",
+        "rationale": "L'\u00e9num\u00e9ration facilite phishing et credential stuffing, avec impact indirect et throttle existant.",
+        "score": 3.7,
+        "scoringSystem": "CVSS:3.1"
+      },
+      "summary": "AuthService court-circuite quand l'email est inconnu, alors qu'un email valide avec mauvais mot de passe ex\u00e9cute Argon2. Le message est identique, mais la diff\u00e9rence de calcul cr\u00e9e un oracle temporel.",
+      "taxonomy": {
+        "category": "account-enumeration",
+        "cwe": [
+          "CWE-208"
+        ]
+      },
+      "title": "Le temps de r\u00e9ponse du login r\u00e9v\u00e8le probablement l'existence d'un compte",
+      "validation": {
+        "assertions": [
+          "Les distributions de temps email inconnu et mot de passe faux ne sont pas distinguables de fa\u00e7on exploitable."
+        ],
+        "counterEvidence": [
+          "Le message est d\u00e9j\u00e0 g\u00e9n\u00e9rique et le login limit\u00e9 \u00e0 dix tentatives par minute et par adresse."
+        ],
+        "method": "Revue statique du court-circuit d'authentification.",
+        "status": "confirmed"
+      }
+    }
+  ],
+  "scanId": "scan_snackmanager_20260828",
+  "schemaVersion": "1.0"
+}

@@ -24,6 +24,11 @@ import {
   nextInvoiceDue,
   planLabel,
   planMrrCents,
+  type BillingRun,
+  type BillingRunReport,
+  mrrNormaliseCents,
+  offreClient,
+  echeanceDuMois,
   shiftMonthKey,
   summarizeOutstanding,
   type BillingHistoryQuery,
@@ -199,16 +204,26 @@ export class BillingService {
       subscription: {
         plan,
         planLabel: planLabel(plan),
-        mrrCents: planMrrCents(plan),
-        mrrLabel: formatEuros(planMrrCents(plan)),
+        mrrCents: mrrOf(tenant, now),
+        mrrLabel: formatEuros(mrrOf(tenant, now)),
         founderSeat: tenant.founderSeat === true,
+        founderUntil: iso(tenant.founderUntil as Date | null) ?? null,
         accountStatus: status,
         accountStatusLabel: TENANT_ACCOUNT_STATUS_LABELS[status],
         accessBlocked: isAccessBlocked(status),
         since: iso(tenant.createdAt) ?? now.toISOString(),
         billable,
       },
-      nextDue: nextDueFor(due, plan, billable, now),
+      nextDue: nextDueFor(
+        due,
+        {
+          offre: offreClient(tenant),
+          mrrCents: mrrOf(tenant, now),
+          signeLe: (tenant.createdAt as Date | undefined) ?? null,
+        },
+        billable,
+        now,
+      ),
       outstanding,
       invoices,
       generatedAt: now.toISOString(),
@@ -309,6 +324,100 @@ export class BillingService {
   // ─── Écritures : les gestes ───
 
   /**
+   * LA FACTURATION DU MOIS, POUR TOUT LE PARC, EN UN GESTE.
+   *
+   * Rien n'émettait l'abonnement du mois suivant : ni écran, ni planificateur.
+   * Cette passe le fait, et rend un compte rendu qui dit aussi ce qu'elle n'a
+   * PAS fait — un geste de masse qui ne rendrait qu'un nombre laisserait
+   * l'équipe deviner pourquoi trois clients manquent à l'appel.
+   *
+   * IDEMPOTENTE par construction : `issue` refuse déjà un doublon d'abonnement
+   * sur la même période, et ce refus est ici traduit en « déjà facturé »
+   * plutôt qu'en erreur. Relancer la passe est donc sans danger — c'est même
+   * le mode d'emploi : on la relance après avoir corrigé ce qui bloquait.
+   *
+   * Un client sans rien de récurrent est sauté : facturer 0 € produirait une
+   * pièce que personne ne peut ni payer ni comprendre.
+   */
+  async runMensuel(
+    actor: JwtPayload,
+    body: BillingRun,
+    now: Date = new Date(),
+  ): Promise<BillingRunReport> {
+    const period = billingPeriod(body.period ?? monthKey(now));
+    const tenants = (await this.tenants.find({}).sort({ slug: 1 }).lean()) as RawTenant[];
+
+    const emises: BillingRunReport['emises'][number][] = [];
+    const ignores: BillingRunReport['ignores'][number][] = [];
+
+    for (const tenant of tenants) {
+      const nom = String(tenant.name ?? '');
+      const slug = String(tenant.slug ?? '');
+      if (!isBillable(accountStatusOf(tenant))) {
+        ignores.push({ slug, name: nom, raison: 'non_facturable' });
+        continue;
+      }
+      if (mrrOf(tenant, now) <= 0) {
+        ignores.push({ slug, name: nom, raison: 'rien_a_facturer' });
+        continue;
+      }
+      // L'ENGAGEMENT SIGNÉ DÉCIDE DU MONTANT ET DU RYTHME.
+      //
+      // `billingCycle` était écrit à la signature, affiché sur la fiche, et lu
+      // par aucun calcul : un client ayant signé « douze mois payés dix »
+      // recevait douze mensualités pleines — vingt pour cent de trop, sans
+      // qu'aucun écran ne le signale. Vendre un engagement qu'on ne sait pas
+      // facturer est pire que ne pas le vendre.
+      const du = duDuMois(tenant, period, now);
+      if (du === null) {
+        ignores.push({ slug, name: nom, raison: 'hors_echeance_annuelle' });
+        continue;
+      }
+      try {
+        const piece = await this.issue(
+          actor,
+          String(tenant._id),
+          {
+            kind: 'abonnement',
+            period: period.key,
+            label: du.label,
+            amountCents: du.cents,
+            draft: body.draft,
+          },
+          now,
+        );
+        emises.push({
+          tenantId: String(tenant._id),
+          slug,
+          name: nom,
+          number: piece.number,
+          amountCents: piece.amountCents,
+          amountLabel: piece.amountLabel,
+        });
+      } catch (cause) {
+        // Le seul refus attendu est le doublon : `issue` protège déjà contre
+        // deux abonnements sur la même période. Tout autre échec doit remonter
+        // — une passe qui avale ses erreurs ferait croire le parc à jour.
+        if (cause instanceof ConflictException) {
+          ignores.push({ slug, name: nom, raison: 'deja_facture' });
+          continue;
+        }
+        throw cause;
+      }
+    }
+
+    const totalCents = emises.reduce((somme, e) => somme + e.amountCents, 0);
+    return {
+      period: { key: period.key, label: period.label },
+      draft: body.draft,
+      emises,
+      ignores,
+      totalCents,
+      totalLabel: formatEuros(totalCents),
+    };
+  }
+
+  /**
    * ÉMETTRE une facture.
    *
    * Corps vide = le cas courant : « facture le mois en cours au tarif de sa
@@ -345,12 +454,18 @@ export class BillingService {
     }
 
     const amountCents =
-      body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : planMrrCents(plan));
+      body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : mrrOf(tenant, now));
+
+    // La pièce porte-t-elle autre chose que la seule formule ? Le libellé par
+    // défaut cesse alors de la nommer : « Abonnement Complet » sur un montant
+    // qui n'est pas celui de Complet fait appeler le client — et il a raison.
+    // Vrai du module, des services de l'Atelier, et de la remise fondateur.
+    const composite = kind === 'abonnement' && amountCents !== planMrrCents(plan);
 
     const raw = await this.writeInvoice({
       tenantId: tenant._id as Types.ObjectId,
       kind,
-      label: body.label || defaultInvoiceLabel(kind, plan, period),
+      label: body.label || defaultInvoiceLabel(kind, plan, period, composite),
       period,
       amountCents,
       status: body.draft ? 'brouillon' : 'envoyee',
@@ -861,7 +976,9 @@ export class BillingService {
     if (arrival.getTime() > now.getTime()) return;
 
     const plan = planOf(tenant);
-    const mrr = planMrrCents(plan);
+    // Même source que la facturation réelle : l'amorce de démonstration doit
+    // montrer les mêmes montants que ceux qu'on prélève, sinon elle ment.
+    const mrr = mrrOf(tenant, now);
     const tenantOid = tenant._id as Types.ObjectId;
     const firstKey = monthKey(arrival);
     const currentKey = monthKey(now);
@@ -940,6 +1057,69 @@ const iso = (d: Date | string | null | undefined): string | null =>
 // `null` = client Atelier seul : aucun abonnement logiciel à facturer.
 const planOf = (tenant: RawTenant): BillingPlan | null =>
   (tenant.plan ?? null) as BillingPlan | null;
+
+/**
+ * Ce qu'un client paie chaque mois : formule + module + services mensuels.
+ *
+ * Toute la facturation lisait `planOf` seul, et sous-facturait donc tout
+ * client ayant acheté autre chose qu'une formule. `.lean()` ne matérialise pas
+ * les défauts Mongoose : sur un tenant d'avant ces champs, `onlineOrdering`
+ * arrive `undefined` et `atelier` absent — `abonnementMensuelCents` les traite
+ * comme « non vendu », donc l'ancien parc retombe sur sa formule sans lever.
+ */
+/**
+ * CE QUI EST DÛ CE MOIS-CI — montant et libellé, ou `null` si rien ne l'est.
+ *
+ * Un client au mois doit sa mensualité entière. Un client à l'année ne doit son
+ * LOGICIEL qu'une fois l'an, à son mois anniversaire, pour dix mensualités ; ses
+ * services de l'Atelier, eux, restent mensuels — sans engagement, ils ne
+ * s'annualisent jamais, et c'est déjà ce que le devis promet au client (« douze
+ * mois de service, dix facturés » n'apparaît que sur la part logicielle).
+ *
+ * `null` ne veut donc pas dire « rien à facturer » mais « pas ce mois-ci » : la
+ * passe le distingue à l'écran, sans quoi un client annuel disparaîtrait du
+ * compte rendu onze mois sur douze et passerait pour oublié.
+ */
+function duDuMois(
+  tenant: RawTenant,
+  period: { key: string; label: string },
+  now: Date,
+): { cents: number; label: string } | null {
+  // La RÈGLE vient des contrats (`echeanceDuMois`), pas d'ici. Elle était
+  // recopiée dans ce fichier — filtre annuel compris — alors que la projection
+  // d'échéance appliquait la sienne : deux écritures de la même règle qui
+  // doivent rendre le même montant, et qui finissent par annoncer un chiffre
+  // et en facturer un autre. Ce service ne compose plus que le LIBELLÉ.
+  const { cents, lignes } = echeanceDuMois(
+    offreClient(tenant),
+    billingPeriod(period.key).start,
+    (tenant.createdAt as Date | undefined) ?? null,
+    now,
+  );
+  if (cents <= 0) return null;
+
+  const parts = lignes.map((l) =>
+    l.cadence === 'annuel'
+      ? 'abonnement annuel (douze mois, dix facturés)'
+      : l.nature === 'logiciel'
+        ? 'abonnement'
+        : 'services',
+  );
+  const majuscule = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+  return { cents, label: `${majuscule(parts.join(' et '))} — ${period.label}` };
+}
+
+/**
+ * Le MRR d'un client — NORMALISÉ, pas sa mensualité faciale.
+ *
+ * La distinction ne se voyait pas tant que personne n'avait signé à l'année :
+ * « douze mois payés dix » rapporte un sixième de moins par mois que ce que le
+ * tarif affiche, et sommer les mensualités faciales gonflait le MRR du parc
+ * d'autant. C'est le pendant, côté PILOTAGE, du défaut que `billingCycle`
+ * portait côté facturation.
+ */
+const mrrOf = (tenant: RawTenant, now: Date = new Date()): number =>
+  mrrNormaliseCents(offreClient(tenant), now);
 
 /**
  * Statut de compte, absence comprise : les établissements créés avant le champ

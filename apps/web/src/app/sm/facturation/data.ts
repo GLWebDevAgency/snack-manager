@@ -58,7 +58,7 @@ import {
   type InvoiceReminderChannel,
   type TenantAccountStatus,
 } from "@sm/contracts";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────
 // Lecteurs tolérants
@@ -258,6 +258,16 @@ export type ParkTenant = {
 
 export const billingApi = {
   overdue: () => api.get<unknown>("/crm/billing/overdue"),
+
+  /**
+   * LA PASSE DU MOIS — une pièce d'abonnement par client facturable.
+   *
+   * Idempotente : relancée, elle ne double aucune facture et rapporte
+   * « déjà facturé » plutôt qu'une erreur. C'est même le mode d'emploi — on la
+   * relance après avoir corrigé ce qui bloquait.
+   */
+  runMensuel: (body: { period: string; draft: boolean }) =>
+    api.post<unknown>("/crm/billing/run", body),
   park: () => api.get<unknown>("/crm/tenants"),
 
   /** ENCAISSER : le moyen est obligatoire, la date vaut « maintenant » par défaut. */
@@ -302,13 +312,10 @@ export const billingApi = {
  * seul à ne pas se lire — le vrai motif est alors dans `issues[]`, on va le
  * chercher plutôt que d'afficher une phrase en anglais.
  */
-export function errText(e: unknown, fallback: string): string {
-  if (!(e instanceof ApiError)) return fallback;
-  const issue = str(list(bag(e.body).issues)[0], "message");
-  if (issue) return issue;
-  const message = typeof e.message === "string" ? e.message.trim() : "";
-  return message && message !== "Validation failed" ? message : fallback;
-}
+// `errText` vit sur la surface SM entière (`../crm`) : trois écrans en
+// écrivaient chacun leur version, et une seule savait lire les refus de schéma.
+export { errText } from "../crm";
+
 
 // ─────────────────────────────────────────────────────────────
 // Normalisation

@@ -41,3 +41,54 @@ export const TenantIdentityUpdateSchema = z.object({
   phones: z.array(z.string().trim().min(1).max(20)).max(3).optional(),
 });
 export type TenantIdentityUpdate = z.infer<typeof TenantIdentityUpdateSchema>;
+
+/**
+ * LES RÉGLAGES DU RESTAURANT — validés, enfin.
+ *
+ * `PATCH /tenants/me/settings` prenait un corps NU : une liste blanche de clés
+ * recopiait les valeurs dans un `$set` sans regarder ce qu'elles contenaient.
+ * Le service le disait lui-même — « la route prend un corps nu, sans schéma
+ * Zod, et cette liste est le seul rempart ». Une liste de clés n'est pas un
+ * rempart : elle dit QUELS champs s'écrivent, jamais AVEC QUOI.
+ *
+ * Chaque borne ci-dessous répare un dégât précis, et aucune n'est décorative :
+ * un intervalle de créneau à zéro divise par zéro dans le calcul des
+ * disponibilités ; une capacité négative ferme la commande en ligne sans qu'un
+ * seul écran ne l'explique ; un objectif du jour négatif rend la jauge du
+ * tableau de bord illisible ; un message de pause sans borne part sur la page
+ * publique de tous les clients.
+ *
+ * `.partial()` et non des `.optional()` un à un : c'est un PATCH, et les clés
+ * absentes doivent rester absentes du `$set` — un défaut appliqué ici
+ * réinitialiserait en silence ce que le gérant n'a pas touché.
+ */
+export const TenantSettingsUpdateSchema = z
+  .object({
+    /** Le pas des créneaux de retrait, en minutes. */
+    slotIntervalMin: z.number().int().min(5).max(60),
+    /** Commandes acceptées par créneau — au moins une, sinon rien ne passe. */
+    slotCapacity: z.number().int().min(1).max(100),
+    onlineOrderingPaused: z.boolean(),
+    /**
+     * Affiché au CLIENT sur la page de commande — borné, jamais illimité.
+     *
+     * La chaîne vide est ADMISE : effacer son message est un geste normal du
+     * gérant, et l'interdire l'obligerait à inventer un texte pour se taire. La
+     * page de commande affiche alors la pause sans phrase, ce que
+     * `publicOrderingState` sait déjà rendre (`message: null` côté client).
+     */
+    pauseMessage: z.string().trim().max(200),
+    printTicketOn: z.enum(['accept', 'ready']),
+    printStickerOn: z.enum(['accept', 'ready']),
+    /**
+     * L'objectif de recette du jour, en centimes.
+     *
+     * `null` efface l'objectif — le tableau de bord reprend le sien. `0` est
+     * refusé : un objectif nul est atteint dès l'ouverture, et la jauge
+     * afficherait 100 % avant la première commande. Le plafond écarte la faute
+     * de frappe qui prend des euros pour des centimes.
+     */
+    dailyGoalCents: z.number().int().positive().max(100_000_000).nullable(),
+  })
+  .partial();
+export type TenantSettingsUpdate = z.infer<typeof TenantSettingsUpdateSchema>;

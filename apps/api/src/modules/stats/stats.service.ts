@@ -191,13 +191,35 @@ export class StatsService {
         },
       },
     ]);
+    /*
+     * LA COURBE COUVRE CE QUE LE KPI COMPTE.
+     *
+     * Elle s'arrêtait à 11 h–22 h : tout ce qui tombait hors de cette plage
+     * était agrégé par Mongo, puis JETÉ. Le chiffre d'affaires du jour, affiché
+     * juste à côté et calculé sur la journée entière, ne correspondait donc pas
+     * à la somme de la courbe — deux chiffres contradictoires, côte à côte, sans
+     * que rien n'explique l'écart. Un service du soir qui déborde à 23 h, un
+     * petit-déjeuner, une livraison de fin de nuit : autant de recettes
+     * invisibles.
+     *
+     * Le reste du produit assume d'ailleurs des heures plus larges — la carte de
+     * chaleur va jusqu'à 23 h.
+     *
+     * Les heures VIDES du début et de la fin sont retirées : afficher minuit à
+     * 10 h à zéro chaque matin écraserait la courbe du service sur le tiers
+     * droit du graphique. On garde toujours au moins la plage de référence,
+     * pour qu'un écran ne se réduise pas à une barre unique.
+     */
     const byHour = new Map(rows.map((r) => [r._id, r]));
-    const buckets: StatsTimeseriesBucket[] = [];
-    for (let h = 11; h <= 22; h++) {
+    const toutes: StatsTimeseriesBucket[] = [];
+    for (let h = 0; h <= 23; h++) {
       const row = byHour.get(pad(h));
-      buckets.push({ label: `${h}h`, caCents: row?.ca ?? 0, orders: row?.n ?? 0 });
+      toutes.push({ label: `${h}h`, caCents: row?.ca ?? 0, orders: row?.n ?? 0 });
     }
-    return buckets;
+    const premiere = toutes.findIndex((b) => b.orders > 0);
+    if (premiere < 0) return toutes.slice(11, 23);
+    const derniere = toutes.length - 1 - [...toutes].reverse().findIndex((b) => b.orders > 0);
+    return toutes.slice(Math.min(premiere, 11), Math.max(derniere, 22) + 1);
   }
 
   /** 7d : par jour (Lun → Dim), 7 derniers jours glissants. */

@@ -50,3 +50,15 @@ export class OrderClosed extends DomainError {
 export class InvalidDiscount extends DomainError {
   readonly code = 'order.discount.invalid';
 }
+
+/**
+ * Une promotion qui ne s'applique pas — et la raison, en toutes lettres.
+ *
+ * Une erreur unique pour six causes différentes ferait rappeler le restaurant :
+ * le client ne saurait pas s'il s'est trompé de code, s'il est trop tôt, ou si
+ * son panier est trop petit — et la personne au téléphone pas davantage. Le
+ * message est donc écrit pour être lu par le client, pas par nous.
+ */
+export class PromotionRefused extends DomainError {
+  readonly code = 'order.promotion.refused';
+}
