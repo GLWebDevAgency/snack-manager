@@ -253,8 +253,7 @@ export default function AbonnementPage() {
                 <>
                   Remise fondateur jusqu&apos;au{" "}
                   <span className="cf-fig text-ink">{fmtJour(sub.founderUntil)}</span> — le tarif
-                  public s&apos;applique ensuite. Ce que vous ajoutez d&apos;ici là est au tarif
-                  public.
+                  public s&apos;applique ensuite.
                 </>
               ) : (
                 <>

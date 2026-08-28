@@ -28,7 +28,9 @@
 
 import { useState } from "react";
 import type { CrmInvoice } from "@sm/contracts";
-import { Btn, Card, Field, Icon, Input, useToast } from "@/components/ui";
+import { Btn, Field, Icon, Input, Panel, useToast } from "@/components/ui";
+import { cx } from "@/lib/cx";
+import { Unavailable } from "../ui";
 import { SheetModal } from "../../mobile";
 import { clientsApi } from "../data";
 import { errText } from "../../crm";
@@ -67,99 +69,55 @@ export function FacturesCard({
   const historique = invoices.filter((i) => i.storedStatus !== "brouillon");
 
   return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-bold text-ink">Factures</h2>
-        {invoices.length > 0 && (
-          <span className="text-[12px] text-mut">
-            {invoices.length} pièce{invoices.length > 1 ? "s" : ""}
-          </span>
-        )}
-      </div>
-
+    <Panel
+      title="Factures"
+      sub={
+        indisponible
+          ? "Route /crm/tenants/:id/billing indisponible"
+          : invoices.length === 0
+            ? "Aucune pièce émise pour ce client"
+            : `${invoices.length} pièce${invoices.length > 1 ? "s" : ""}${brouillons.length > 0 ? ` · ${brouillons.length} à envoyer` : ""}`
+      }
+      // Les lignes vont d'un bord à l'autre, comme le parc d'appareils : dans
+      // cette colonne étroite, un padding sur chaque ligne mangerait la place
+      // du montant.
+      bodyClassName="-mx-[18px] -mb-[18px]"
+    >
       {indisponible ? (
-        <p className="mt-3 text-[13px] text-mut">
-          Route <span className="cf-fig">/crm/tenants/:id/billing</span> indisponible — les
-          pièces de ce client ne peuvent pas être lues.
-        </p>
+        <div className="px-[18px] pb-[18px]">
+          <Unavailable
+            icon="euro"
+            title="Facturation indisponible"
+            hint="La route /crm/tenants/:id/billing n'a pas répondu : les pièces de ce client ne peuvent pas être lues."
+          />
+        </div>
       ) : invoices.length === 0 ? (
-        <p className="mt-3 text-[13px] text-mut">
-          Aucune pièce émise. Le bouton <strong className="text-ink">Facturer</strong> en pose
-          une, en brouillon ou directement.
+        <p className="px-[18px] pb-[18px] text-[13px] text-mut">
+          Aucune pièce émise. Le bouton <strong className="text-ink">Facturer</strong> en
+          pose une, en brouillon ou directement.
         </p>
       ) : (
         <>
           {brouillons.length > 0 && (
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-                En attente d&apos;envoi
-              </div>
+            <ul>
               {brouillons.map((f) => (
-                <div
+                <FactureRow
                   key={f._id}
-                  className="flex flex-wrap items-center gap-3 rounded-card border border-white/10 bg-white/[0.03] px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="cf-fig text-[13px] font-bold text-ink">{f.number}</div>
-                    <div className="truncate text-[12px] text-mut" title={f.label}>
-                      {f.label}
-                    </div>
-                  </div>
-                  <div className="cf-fig shrink-0 text-[14px] font-extrabold text-ink">
-                    {f.amountLabel}
-                  </div>
-                  <Btn variant="ink" size="sm" icon="check" onClick={() => setAEnvoyer(f)}>
-                    Envoyer
-                  </Btn>
-                </div>
+                  facture={f}
+                  brouillon
+                  onAction={() => setAEnvoyer(f)}
+                />
               ))}
-              <p className="text-[12px] text-mut">
-                Un brouillon ne doit rien : c&apos;est l&apos;envoi qui crée la créance et
-                lance le compte à rebours de l&apos;échéance.
-              </p>
-            </div>
+            </ul>
           )}
-
           {historique.length > 0 && (
-            <ul className="mt-4 flex flex-col gap-1.5">
+            <ul>
               {historique.map((f) => (
-                <li key={f._id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="cf-fig shrink-0 text-[13px] font-bold text-ink">
-                    {f.number}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-pill border px-2 py-[1px] text-[11px] font-semibold ${
-                      TON[f.status] ?? TON.envoyee
-                    }`}
-                  >
-                    {f.statusLabel}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-mut" title={f.label}>
-                    {f.label}
-                  </span>
-                  <span className="cf-fig shrink-0 text-[12px] text-mut">
-                    {f.paidAt ? `réglée le ${jour(f.paidAt)}` : `échue le ${jour(f.dueAt)}`}
-                  </span>
-                  <span className="cf-fig shrink-0 text-[13px] font-bold text-ink">
-                    {f.amountLabel}
-                  </span>
-                  {/*
-                    L'AVOIR, sur les pièces réglées et elles seules. Le module
-                    ne sait pas supprimer une facture, et c'est délibéré : une
-                    pièce comptable s'annule avec un motif. Après encaissement,
-                    « annuler » n'est plus recevable — l'avoir est alors le seul
-                    geste juste, et il n'avait aucun bouton.
-                  */}
-                  {f.storedStatus === "payee" && (
-                    <button
-                      type="button"
-                      onClick={() => setAAvoir(f)}
-                      className="cf-press shrink-0 rounded-pill px-2 py-[2px] text-[12px] font-bold text-mut hover:text-alertt hover:underline"
-                    >
-                      Avoir
-                    </button>
-                  )}
-                </li>
+                <FactureRow
+                  key={f._id}
+                  facture={f}
+                  onAction={f.storedStatus === "payee" ? () => setAAvoir(f) : undefined}
+                />
               ))}
             </ul>
           )}
@@ -184,7 +142,85 @@ export function FacturesCard({
           onDone={onDone}
         />
       )}
-    </Card>
+    </Panel>
+  );
+}
+
+/**
+ * UNE LIGNE DE FACTURE — empilée, jamais en colonnes.
+ *
+ * Cette carte vit dans la colonne ÉTROITE de la fiche client. Une première
+ * version alignait numéro, statut, libellé, date, montant et action sur une
+ * seule ligne : le libellé se rognait à une largeur différente à chaque ligne
+ * (« Abonnement Com… », « Abonneme… », « Mise en pla… »), le montant touchait le
+ * bord, et le bouton « Avoir » sortait purement et simplement du cadre — un
+ * geste comptable devenu inatteignable.
+ *
+ * L'information s'empile donc sur trois niveaux, du plus identifiant au plus
+ * secondaire : ce qui nomme la pièce, ce qu'elle contient, ce qu'on en fait.
+ * Le montant reste en tête à droite, où l'œil le cherche, et l'action garde sa
+ * place en bas de ligne — visible sur TOUTES les pièces qui en ont une.
+ */
+function FactureRow({
+  facture: f,
+  brouillon = false,
+  onAction,
+}: {
+  facture: CrmInvoice;
+  brouillon?: boolean;
+  onAction?: () => void;
+}) {
+  return (
+    <li
+      className={cx(
+        "border-t border-line px-[18px] py-2.5",
+        // Un brouillon n'est pas une créance : il attend une décision, et se
+        // distingue au premier coup d'œil du reste de l'historique.
+        brouillon && "bg-accent/6",
+      )}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="cf-fig shrink-0 text-[13.5px] font-bold text-ink">{f.number}</span>
+        <span
+          className={cx(
+            "shrink-0 rounded-pill border px-2 py-[1px] text-[11px] font-semibold",
+            TON[f.status] ?? TON.envoyee,
+          )}
+        >
+          {f.statusLabel}
+        </span>
+        {/* Pousse le montant à droite sans lui disputer sa largeur. */}
+        <span className="min-w-0 flex-1" />
+        <span className="cf-fig shrink-0 text-[14px] font-extrabold tabular-nums text-ink">
+          {f.amountLabel}
+        </span>
+      </div>
+
+      {/* Le libellé sur SA ligne : c'est lui qui était rogné à six largeurs
+          différentes quand il partageait la première. */}
+      <div className="mt-0.5 truncate text-[12.5px] text-mut" title={f.label}>
+        {f.label}
+      </div>
+
+      <div className="mt-1 flex items-center gap-3">
+        <span className="cf-fig min-w-0 flex-1 truncate text-[12px] text-mut">
+          {f.paidAt ? `réglée le ${jour(f.paidAt)}` : `échue le ${jour(f.dueAt)}`}
+        </span>
+        {brouillon ? (
+          <Btn variant="ink" size="sm" icon="check" onClick={onAction}>
+            Envoyer
+          </Btn>
+        ) : onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="cf-press shrink-0 rounded-pill border border-line px-2.5 py-[3px] text-[12px] font-bold text-mut hover:border-alert/40 hover:text-alertt"
+          >
+            Avoir
+          </button>
+        ) : null}
+      </div>
+    </li>
   );
 }
 

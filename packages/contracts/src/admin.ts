@@ -462,24 +462,32 @@ export const CHURN_CAUSES = [
 ] as const;
 export type ChurnCause = (typeof CHURN_CAUSES)[number];
 
+/**
+ * Le libellé d'une cause — COURT, parce qu'il vit dans une puce.
+ *
+ * Une phrase entière y déborde, et sept phrases dans une modale étroite
+ * produisent un pavé qu'on ne lit plus. Ce qui explique la cause vit dans
+ * `CHURN_CAUSE_HINTS`, affiché sous le choix retenu — un seul à la fois, et
+ * seulement quand il sert.
+ */
 export const CHURN_CAUSE_LABELS: Record<ChurnCause, string> = {
-  prix: 'Trop cher pour lui',
-  fermeture: 'Le restaurant ferme ou est vendu',
-  concurrent: 'Parti chez un concurrent',
-  usage: 'Ne s’en servait pas / trop compliqué',
-  manque: 'Une fonction essentielle manquait',
-  impaye: 'Perdu sur un impayé',
+  prix: 'Trop cher',
+  fermeture: 'Ferme ou vendu',
+  concurrent: 'Concurrent',
+  usage: 'Ne s’en servait pas',
+  manque: 'Fonction manquante',
+  impaye: 'Impayé',
   autre: 'Autre',
 };
 
 /** Ce que l'éditeur peut faire de chaque cause — affiché sous le choix. */
 export const CHURN_CAUSE_HINTS: Record<ChurnCause, string> = {
-  prix: 'À recouper avec sa formule et son volume de commandes.',
-  fermeture: 'Rien à corriger — mais à sortir des statistiques de perte évitable.',
-  concurrent: 'Notez lequel dans le détail : c’est ce qui se compare.',
-  usage: 'Le signal le plus actionnable — un écran a échoué quelque part.',
-  manque: 'Notez laquelle : trois fois la même, c’est une feuille de route.',
-  impaye: 'Vérifiez que la relance a bien été faite avant de conclure.',
+  prix: 'Trop cher pour lui — à recouper avec sa formule et son volume de commandes.',
+  fermeture: 'Le restaurant ferme ou change de mains : à sortir des pertes évitables.',
+  concurrent: 'Parti ailleurs — notez lequel dans le détail, c’est ce qui se compare.',
+  usage: 'Ne s’en servait pas, ou trop compliqué : le signal le plus actionnable.',
+  manque: 'Une fonction essentielle manquait — notez laquelle, trois fois la même fait une feuille de route.',
+  impaye: 'Perdu sur un impayé : vérifiez que la relance a bien été faite avant de conclure.',
   autre: 'Décrivez : si « autre » revient souvent, la liste est à revoir.',
 };
 
