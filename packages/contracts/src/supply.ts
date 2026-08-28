@@ -158,8 +158,32 @@ export interface ProductModifiers {
 }
 
 /** Tous les types de mouvement existants (`sale` est généré par le système). */
+/**
+ * Les natures de mouvement de stock.
+ *
+ * `sale` est PRÉVU mais aucun code ne le produit : la sortie de stock à la
+ * vente n'est pas branchée, et la seule écriture de mouvements du dépôt
+ * n'accepte que les trois autres. Le garder ici est juste — c'est la forme des
+ * données, et le jour où la vente décrémentera le stock, les mouvements
+ * existants n'auront pas à être migrés.
+ *
+ * Ce qui ne l'était pas, c'est de le proposer dans le FILTRE de l'écran : une
+ * option qui ne rendra jamais rien fait douter de la donnée, pas de la
+ * fonctionnalité. `STOCK_MOVEMENT_FILTERABLE` ne liste que ce qui existe
+ * réellement en base.
+ */
 export const STOCK_MOVEMENT_TYPES = ['purchase', 'sale', 'waste', 'count'] as const;
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
+/**
+ * Ce qu'un écran peut proposer de filtrer — c'est-à-dire ce qui peut exister.
+ *
+ * Identique à `MOVEMENT_INPUT_TYPES` aujourd'hui, et volontairement distinct :
+ * les deux répondent à des questions différentes (« que peut-on créer ? » et
+ * « que peut-on trouver ? »), et elles divergeront le jour où la vente écrira
+ * ses propres mouvements sans être créable à la main.
+ */
+export const STOCK_MOVEMENT_FILTERABLE = ['purchase', 'waste', 'count'] as const;
 
 /** Types de mouvement créables via l'API. */
 export const MOVEMENT_INPUT_TYPES = ['purchase', 'waste', 'count'] as const;

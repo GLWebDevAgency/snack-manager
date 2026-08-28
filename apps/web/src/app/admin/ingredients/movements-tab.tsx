@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  STOCK_MOVEMENT_TYPES,
+  STOCK_MOVEMENT_FILTERABLE,
   type StockMovementRow,
   type StockMovementType,
   type SupplyIngredient,
@@ -109,7 +109,7 @@ export function MovementsTab({
           className="w-[180px]"
         >
           <option value="">Tous les types</option>
-          {STOCK_MOVEMENT_TYPES.map((t) => (
+          {STOCK_MOVEMENT_FILTERABLE.map((t) => (
             <option key={t} value={t}>
               {MOVEMENT_META[t].label}
             </option>

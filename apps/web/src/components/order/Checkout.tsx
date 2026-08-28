@@ -288,12 +288,19 @@ export function Checkout({
     };
   }, [api, demo, step, order, status]);
 
-  // ── Jalon d'entonnoir : le client vient d'entrer dans le tunnel. ──
+  // ── Jalon d'entonnoir : le client a SAISI ses coordonnées. ──
+  //
+  // Il était émis à l'OUVERTURE du panier, c'est-à-dire avant que le client
+  // ait vu le moindre champ. L'entonnoir du back-office mesurait donc « a
+  // ouvert son panier » sous le nom « a saisi ses coordonnées », et le taux
+  // d'abandon de cette étape était structurellement faux — celui qui referme
+  // aussitôt comptait comme un client qui s'est identifié.
+  //
   // (En démonstration, `armeFunnel` n'a posé aucun contexte : ce jalon est
   // alors un no-op par construction.)
   useEffect(() => {
-    if (open) jalonFunnel("coordonnees");
-  }, [open]);
+    if (open && step === "customer") jalonFunnel("coordonnees");
+  }, [open, step]);
 
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
