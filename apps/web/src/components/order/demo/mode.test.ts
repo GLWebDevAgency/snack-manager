@@ -172,7 +172,7 @@ describe("le paiement ne sort jamais de la démonstration", () => {
     const created = await api.createOrder(DEMO_SLUG, kebab("test-1"));
     if ("paused" in created) throw new Error("commande refusée");
 
-    const intent = await api.createPaymentIntent(created._id);
+    const intent = await api.createPaymentIntent(created._id, created.trackingToken);
 
     expect(intent.unavailable).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
