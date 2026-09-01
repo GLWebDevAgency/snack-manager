@@ -100,8 +100,9 @@ Points à connaître :
 
 - **Node 24.** `.nvmrc` fixe la version exacte commune aux postes et à tous les
   workflows ; `.node-version` garde les autres gestionnaires alignés. Le
-  `package.json` racine annonce `engines.node: >=24.3.0`, borne imposée aussi
-  par React Native 0.86. Railway/Railpack lit d'abord cette borne et la résout
+  `package.json` racine annonce `engines.node: >=24.12.0`, borne compatible avec
+  les binaires Linux optionnels de Rollup et supérieure à celle imposée par
+  React Native 0.86. Railway/Railpack lit d'abord cette borne et la résout
   sur le dernier Node 24 disponible ; `.nvmrc` vient ensuite dans son ordre de
   résolution. Après une mise à niveau, vérifier la version exacte réellement
   servie sur staging avant la production. Voir la
