@@ -27,9 +27,6 @@
         "resizeMode": "contain",
         "backgroundColor": "#000000"
       }
-    },
-    "extra": {
-      "apiUrl": "https://api-production-8949.up.railway.app"
     }
   }
 }

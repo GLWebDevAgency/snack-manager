@@ -267,8 +267,9 @@ protection côté serveur.
 
 ### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
 
-Le `preDeployCommand` de Railway migre les schémas **PostgreSQL** (supply puis
-fidélité), et eux seuls. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+Le job GitHub Actions `Migrations PostgreSQL privilégiées` migre les schémas
+**PostgreSQL** (supply puis fidélité), et eux seuls. L'identité DDL reste dans
+GitHub Secrets et n'est jamais injectée au conteneur API. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
 son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
 scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
 délibérément : une reprise de données se relit avant d'être appliquée.
@@ -582,7 +583,7 @@ gh run watch
 # 6. Essayer sur staging à la main : la caisse, l'écran cuisine, une commande
 #    en ligne. Le contrôle de santé (§ 11) dit que ça répond, pas que ça marche.
 
-# 7. Alors seulement, la production, par pull request (§ 4)
+# 7. Alors seulement, après un GO écrit, la production par pull request (§ 4)
 gh pr create --base main --fill
 gh pr checks --watch
 gh pr merge --squash --delete-branch   # ← déclenche le déploiement production
@@ -603,25 +604,28 @@ gh pr merge --squash --delete-branch   # ← déclenche le déploiement producti
 | 1 | **Cible du déploiement** | traduit la branche en environnement (`main`→production, `develop`→staging) | une référence inconnue arrête tout, immédiatement |
 | 2 | `verification` | **appelle `ci.yml`** : `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
 | 3 | `secrets` | **appelle `secrets.yml`** : gitleaks sur le diff puis sur l'arbre qui allait être téléversé | rien ne part |
-| 4 | **Mise en ligne** | pose `SM_REVISION` sur `api`, puis déploie `api` seul (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
-| 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
+| 4 | **Préflight Railway sans mutation** | impose l'environnement explicite, les quatre services et `pnpm verify:postgres:built` sur `api` | aucune migration ne part |
+| 5 | **Migrations PostgreSQL privilégiées** | applique supply puis fidélité depuis le runner, avec un credential DDL éphémère | aucun conteneur ne part ; le smoke contrôle l'ancien service |
+| 6 | **Mise en ligne** | publie uniquement les secrets runtime, pose `SM_REVISION`, déploie `api`, puis `web`, `pos`, `kds` | les suivants ne partent pas ; l'ancienne version continue de servir |
+| 7 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | l'exécution est déclarée **EN ÉCHEC**, mais le code peut être **EN LIGNE** (§ 12) |
 
 Les jobs 2 et 3 n'ont **aucune étape** : ce sont des appels. Dans l'interface
 GitHub ils apparaissent sous le nom du fichier appelé — `verification /
 Vérification du monorepo` et `secrets / Balayage des secrets`.
 
-Le job 5 tourne **aussi quand le job 4 a échoué** (`always()`). Un vendredi
+Le job 7 tourne **aussi quand les migrations ou le job 6 ont échoué**
+(`always()`). Un vendredi
 soir, la première question n'est pas « le déploiement est-il passé ? » mais
 « le restaurant peut-il encaisser ? ». Quand Railway refuse une mise en
 service, l'ancienne version continue de servir — et il faut le *savoir*, pas
 le supposer. Dans ce cas le job affiche un avertissement en tête : vert
 signifie alors « l'environnement répond », pas « le déploiement a réussi ».
-Si c'est la vérification qui a échoué, rien n'a été touché et le job 5 ne
+Si le préflight ou la vérification a échoué, rien n'a été touché et le job 7 ne
 tourne pas.
 
-Les jobs 4 et 5 sont branchés par `needs:` sur les jobs 2 et 3. Ce n'est pas
-une politesse : un job dont un `needs` échoue **ne démarre pas**. Le
-déploiement n'est pas « sauté », il est inatteignable.
+Les jobs 4 à 6 forment une chaîne stricte après les jobs 2 et 3. Ce n'est pas
+une politesse : un job dont un `needs` échoue **ne démarre pas**. Seul le smoke
+du job 7 utilise `always()` après qu'une migration a pu commencer.
 
 > **Tout push déploie, même un changement de documentation.** Il n'y a
 > volontairement aucun `paths-ignore` : le jour où une exclusion existe, la
@@ -634,29 +638,39 @@ déploiement n'est pas « sauté », il est inatteignable.
 > GitHub n'annulerait de toute façon pas le déploiement Railway déjà lancé, et
 > une migration peut être en cours.
 
-### Pourquoi `api` part seule, et en premier
+### Pourquoi les migrations partent avant `api`, puis `api` seule
 
-Le service `api` porte un `preDeployCommand` **posé côté Railway** (pas dans
-GitHub Actions, et il ne faut pas l'y déplacer) :
+Après la CI et le balayage des secrets, `deploy.yml` exécute d'abord un
+préflight Railway **sans mutation** : le jeton doit accéder aux quatre services
+dans l'environnement explicitement dérivé de la branche et le service `api`
+doit porter ce `preDeployCommand` en lecture seule :
 
 ```
-pnpm migrate:postgres:built
+pnpm verify:postgres:built
 ```
 
-Il exécute successivement
-`node packages/supply/dist/migrate.js` puis
-`node packages/loyalty/dist/migrate.js` dans le conteneur Railway, où
-`DATABASE_URL` est déjà présente. **Il bloque la mise en service dès qu'une
-migration échoue.** Les deux schémas PostgreSQL sont donc à jour avant que la nouvelle version serve la moindre requête, et
-avant que les trois interfaces se remettent à appeler l'API.
+Le job `Migrations PostgreSQL privilégiées` applique ensuite
+`pnpm migrate:postgres:built` depuis un runner GitHub. Il reçoit
+`SM_DATABASE_MIGRATION_URL_STAGING` ou `..._PRODUCTION` et la CA épinglée
+`SM_DATABASE_ROOT_CA_*` uniquement le temps de l'étape. Le workflow refuse les
+paramètres d'URL fournis par le secret, ajoute lui-même `verify-ca`, puis les
+migrateurs prouvent TLS 1.2+ avant le premier DDL. Le compte DDL est un rôle
+dédié, non-SUPERUSER et sans rôle hérité ; les migrateurs vérifient aussi que
+`DATABASE_RUNTIME_ROLE` existe, qu'il est distinct, sans contournement RLS ni
+DDL, puis lui accordent seulement `CONNECT`, `USAGE`, le CRUD et la lecture des
+journaux.
 
-> **Garde de livraison fidélité.** Cette commande est configurée côté Railway,
-> pas versionnée par ce dépôt. Avant la première mise en ligne de la fidélité,
-> remplacer l'ancienne valeur `node packages/supply/dist/migrate.js` dans
-> **staging puis production**, observer les deux messages
-> `✓ Migrations supply appliquées` et `✓ Migrations fidélité appliquées`, puis
-> seulement ouvrir la fonctionnalité. Tant que cette vérification n'est pas
-> faite, la fidélité est considérée comme **non déployable**.
+Railway ne reçoit que `DATABASE_URL` du rôle applicatif. Son preDeploy compare
+alors, avec cette identité limitée, les hash et horodatages attendus des deux
+journaux Drizzle. **Une base absente, en retard ou différente bloque la mise en
+service.** Une migration future additive reste acceptée afin qu'un rollback de
+code demeure possible.
+
+> **Garde de livraison fidélité.** Avant le premier push, configurer sur
+> **staging uniquement** `pnpm verify:postgres:built`, sans déclencher un ancien
+> déploiement. La production reste volontairement non armée : ses secrets DB,
+> clés et variables `SM_DATABASE_MIGRATION_HOST_PRODUCTION` / `_PORT_` ne sont
+> créés qu'après un GO écrit. Ne jamais copier une clé entre environnements.
 
 C'est aussi la raison de l'ordre : `web`, `pos` et `kds` ne partent qu'une fois
 l'`api` **en service**, pas seulement construite.
@@ -735,7 +749,7 @@ Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
 | Une mise en ligne en échec n'interrompt pas le service | l'ancien déploiement `api` a continué de servir ; contrôle de santé vert pendant toute la panne |
 | Déploiement complet | exécution `32303150404` : quatre services en 3 min 44, santé verte en 7 s |
 | Ordre `api` d'abord | `api` `SUCCESS` à 21:21:38, `web`/`pos`/`kds` lancés à 21:21:39 |
-| Migrations en pré-déploiement | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
+| Migrations en pré-déploiement (ancienne chaîne, historique) | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
 | Retour arrière | § 12 — mesuré dans les deux sens, 29 s et 24 s |
 
 **Bascule vers les workflows appelés — 20 août 2026**, pull request d'essai
@@ -945,9 +959,10 @@ plus vite ; il ne défait rien tout seul.
 ### La règle qui compte : les migrations ne se défont pas
 
 Un retour arrière **remet le code d'avant. Il ne remet pas le schéma
-d'avant.** `pnpm migrate:postgres:built` applique les migrations supply et
-fidélité en avant,
-il n'a pas d'inverse, et Railway ne rejoue rien à l'envers.
+d'avant.** Le job GitHub `pnpm migrate:postgres:built` applique les migrations
+supply et fidélité en avant ; il n'a pas d'inverse, et Railway ne rejoue rien à
+l'envers. Le preDeploy Railway ne fait qu'en vérifier l'état avec le rôle
+runtime.
 
 Conséquence, en clair : après un retour arrière, **l'ancien code parle à la
 nouvelle base**. Ça se passe bien quand la migration était additive (une
@@ -996,9 +1011,10 @@ deux sens :
 | retour arrière `660dd9d7` → image de `3e48d02a` | `a98fd8ec` `SUCCESS` | **29 s** |
 | retour en avant → image de `660dd9d7` | `b7413695` `SUCCESS` | **24 s** |
 
-Contrôle de santé vert après chacun des deux. Le pré-déploiement rejoue les
-migrations à chaque fois (`✓ Migrations supply appliquées` dans le journal) :
-elles sont idempotentes, les rejouer ne coûte rien.
+Contrôle de santé vert après chacun des deux. Ces mesures datent de l'ancienne
+chaîne, où le pré-déploiement rejouait les migrations. Désormais un redéploiement
+Railway vérifie seulement les journaux ; une fusion via GitHub Actions applique
+d'abord les migrations, puis lance la même vérification.
 
 Notez ce que la mutation fait : elle **crée un nouveau déploiement** à partir
 de l'image visée. On ne « remonte » pas dans l'historique, on ajoute un
@@ -1115,8 +1131,8 @@ avant vous.
   donc le contrôle de révision — c'est le job `Mise en ligne` qui échoue alors,
   et lui seul, ce qui suffit à rendre l'exécution rouge.
 
-- **Le déploiement de `main` n'a jamais été exécuté, et n'est pas encore
-  armé** — `deploy.yml` n'est pas sur `main` (§ 10). Le chemin est identique à
-  celui de `develop`, au jeton et au nom d'environnement près, et il a été
-  vérifié sur staging. La première mise en production réelle reste à faire, et
-  elle ne se fait pas un vendredi soir.
+- **`main` déclenche bien le chemin production, sans approbation serveur.** Il
+  reste volontairement fermé tant que ses secrets fidélité/DB et les variables
+  d'hôte attendues ne sont pas créés après un GO écrit. Une fusion prématurée
+  échoue fermée, mais reste interdite : la première mise en production fidélité
+  exige la recette staging et ne se fait jamais du jeudi au dimanche.

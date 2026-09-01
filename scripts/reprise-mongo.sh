@@ -2,7 +2,7 @@
 #
 # LANCE UNE REPRISE DE DONNÉES MONGO sur un environnement Railway.
 #
-# Le `preDeployCommand` de Railway migre le schéma PostgreSQL, et lui seul.
+# Le job de déploiement GitHub migre PostgreSQL ; ce script ne reprend que Mongo.
 # Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec son
 # défaut, et les documents existants gardent leur forme d'avant. Ce sont les
 # scripts `backfill:*` qui les reprennent — et ils ne partent pas tout seuls,

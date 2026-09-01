@@ -79,6 +79,7 @@ describe('la destination vient de la configuration', () => {
   });
 
   it('tient debout sans configuration du tout', () => {
+    vi.stubEnv('EXPO_PUBLIC_SITE_URL', undefined);
     visite('https://cuisine.snackmanager.fr/?demo=1');
     expect(retourVitrine()?.href).toMatch(/^https:\/\//);
   });

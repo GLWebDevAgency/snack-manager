@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { isDeployedRuntime } from './deployed-runtime';
 
 const RELAY_CLIENT_HEADER = 'x-sm-relay-client';
 const RELAY_AT_HEADER = 'x-sm-relay-at';
@@ -84,14 +85,14 @@ export function publicRelayHeadersPresent(request: RelayRequest): boolean {
   );
 }
 
-/** Gate de démarrage : en production, les deux services partagent cette clé. */
+/** Gate de démarrage : sur tout Railway, les deux services partagent cette clé. */
 export function validatePublicRelayEnvironment<T extends Record<string, unknown>>(
   config: T,
 ): T {
-  if (config.NODE_ENV !== 'production') return config;
+  if (!isDeployedRuntime(config)) return config;
   if (!decodeRelaySecret(config.SM_PUBLIC_RELAY_SIGNING_KEY)) {
     throw new Error(
-      'SM_PUBLIC_RELAY_SIGNING_KEY doit être une clé base64 de 32 octets en production',
+      'SM_PUBLIC_RELAY_SIGNING_KEY doit être une clé base64 de 32 octets en environnement déployé',
     );
   }
   return config;

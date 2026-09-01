@@ -74,7 +74,8 @@ env:
   # Version figée, même raison que gitleaks dans secrets.yml : un outil de
   # déploiement qui change de comportement tout seul n'est pas un outil de
   # déploiement. À relever volontairement.
-  VERSION_RAILWAY: 4.16.1
+  VERSION_RAILWAY: 5.47.1
+  SHA256_RAILWAY: bf8e79049a8a51095006ee60a7f0697855fed3521a8bfedf5906a96b4e3a2f78
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
@@ -163,8 +164,204 @@ jobs:
       pull-requests: read
     uses: ./.github/workflows/secrets.yml
 
+  # La base ne doit subir aucun DDL avant d'avoir prouvé que le jeton cible le
+  # bon projet Railway et que l'API possède le garde de schéma en lecture seule.
+  preflight_railway:
+    name: Préflight Railway sans mutation
+    needs: [cible, verification, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RAILWAY_TOKEN: >-
+        ${{ github.ref == 'refs/heads/main' && secrets.RAILWAY_TOKEN_PRODUCTION
+        || github.ref == 'refs/heads/develop' && secrets.RAILWAY_TOKEN_STAGING
+        || '' }}
+      ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+    steps:
+      - name: Installer la CLI Railway vérifiée
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/railway.tar.gz"
+          curl -sSfL \
+            "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" \
+            -o "$archive"
+          printf '%s  %s\n' "$SHA256_RAILWAY" "$archive" | sha256sum --check --status
+          sudo tar -xzf "$archive" -C /usr/local/bin railway
+
+      - name: Vérifier cible, services et garde de schéma
+        run: |
+          set -euo pipefail
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            echo "::error title=Aucun jeton Railway::$ENVIRONNEMENT n'a pas de jeton associé. Rien ne part."
+            exit 1
+          fi
+          for service in api web pos kds; do
+            if ! railway deployment list --environment "$ENVIRONNEMENT" --service "$service" --limit 1 --json >/dev/null 2>&1; then
+              echo "::error title=Jeton Railway inutilisable::service « $service » inaccessible. Rien ne part."
+              exit 1
+            fi
+          done
+          if ! api_service_id="$(
+            railway service list --environment "$ENVIRONNEMENT" --json 2>/dev/null |
+              jq -er '[.[] | select(.name == "api")] | if length == 1 then .[0].id else error("api cardinality") end'
+          )"; then
+            echo "::error title=Configuration Railway illisible::service api non résolu exactement. Rien ne part."
+            exit 1
+          fi
+          if ! railway environment config --environment "$ENVIRONNEMENT" --json 2>/dev/null |
+            jq -e --arg id "$api_service_id" '
+              .services[$id].deploy.preDeployCommand
+              | if type == "string" then [.] elif type == "array" then . else [] end
+              | . == ["pnpm verify:postgres:built"]
+            ' >/dev/null 2>&1; then
+            echo "::error title=Schéma PostgreSQL non verrouillé::preDeployCommand api incorrect. Aucune migration ne part."
+            exit 1
+          fi
+          echo "✓ préflight Railway $ENVIRONNEMENT validé sans mutation"
+
   # ───────────────────────────────────────────────────────────────────────────
-  # 3 · Le déploiement
+  # 3 · Les migrations privilégiées, hors du conteneur applicatif
+  #
+  # Railway expose les variables d'un service au preDeploy ET au processus en
+  # service. Y placer le compte DDL donnerait donc à l'API une voie de
+  # contournement de son rôle RLS. Ce job garde l'identité de migration dans
+  # GitHub Secrets, applique les migrations, puis disparaît avec son runner.
+  # ───────────────────────────────────────────────────────────────────────────
+  migrations:
+    name: Migrations PostgreSQL privilégiées
+    needs: [cible, verification, secrets, preflight_railway]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v7
+
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Compiler les migrateurs
+        run: pnpm --filter @sm/supply build && pnpm --filter @sm/loyalty build
+
+      - name: Préparer la connexion DDL authentifiée
+        env:
+          DATABASE_MIGRATION_URL_RAW: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_DATABASE_MIGRATION_URL_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_DATABASE_MIGRATION_URL_PRODUCTION
+            || '' }}
+          DATABASE_MIGRATION_ROOT_CA_B64: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_DATABASE_ROOT_CA_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_DATABASE_ROOT_CA_PRODUCTION
+            || '' }}
+          DATABASE_MIGRATION_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_migrator'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_migrator'
+            || '' }}
+          DATABASE_RUNTIME_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_app'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_app'
+            || '' }}
+          EXPECTED_MIGRATION_HOST: >-
+            ${{ github.ref == 'refs/heads/develop' && 'zephyr.proxy.rlwy.net'
+            || github.ref == 'refs/heads/main' && vars.SM_DATABASE_MIGRATION_HOST_PRODUCTION
+            || '' }}
+          EXPECTED_MIGRATION_PORT: >-
+            ${{ github.ref == 'refs/heads/develop' && '34641'
+            || github.ref == 'refs/heads/main' && vars.SM_DATABASE_MIGRATION_PORT_PRODUCTION
+            || '' }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { X509Certificate } = require('node:crypto');
+          const { appendFileSync, writeFileSync } = require('node:fs');
+          const { join } = require('node:path');
+
+          const role = process.env.DATABASE_RUNTIME_ROLE?.trim() ?? '';
+          if (!/^[a-z][a-z0-9_]{2,62}$/.test(role)) {
+            throw new Error('DATABASE_RUNTIME_ROLE invalide');
+          }
+          const migrationRole = process.env.DATABASE_MIGRATION_ROLE?.trim() ?? '';
+          if (!/^[a-z][a-z0-9_]{2,62}$/.test(migrationRole) || migrationRole === role) {
+            throw new Error('DATABASE_MIGRATION_ROLE invalide');
+          }
+          let migration;
+          try {
+            migration = new URL(process.env.DATABASE_MIGRATION_URL_RAW ?? '');
+          } catch {
+            throw new Error('SM_DATABASE_MIGRATION_URL_* doit être une URL PostgreSQL valide');
+          }
+          if (
+            !['postgres:', 'postgresql:'].includes(migration.protocol) ||
+            !migration.username ||
+            !migration.password ||
+            !migration.hostname ||
+            migration.pathname.length <= 1
+          ) {
+            throw new Error('SM_DATABASE_MIGRATION_URL_* doit être une URL PostgreSQL complète');
+          }
+          if ([...migration.searchParams].length !== 0) {
+            throw new Error('L URL de migration brute ne doit contenir aucun paramètre');
+          }
+          if (migration.hostname.endsWith('.railway.internal')) {
+            throw new Error('L URL de migration doit être joignable depuis le runner GitHub');
+          }
+          if (
+            migration.hostname !== process.env.EXPECTED_MIGRATION_HOST ||
+            migration.port !== process.env.EXPECTED_MIGRATION_PORT ||
+            decodeURIComponent(migration.pathname) !== '/railway'
+          ) {
+            throw new Error('L URL de migration ne cible pas la base autorisée pour cette branche');
+          }
+          if (decodeURIComponent(migration.username) !== migrationRole) {
+            throw new Error('L URL DDL doit utiliser exactement le rôle de migration dédié');
+          }
+
+          const encodedCa = process.env.DATABASE_MIGRATION_ROOT_CA_B64?.trim() ?? '';
+          const ca = Buffer.from(encodedCa, 'base64');
+          if (ca.length === 0 || ca.toString('base64') !== encodedCa) {
+            throw new Error('SM_DATABASE_ROOT_CA_* doit être un certificat base64 canonique');
+          }
+          let certificate;
+          try {
+            certificate = new X509Certificate(ca);
+          } catch {
+            throw new Error('SM_DATABASE_ROOT_CA_* ne contient pas un certificat X.509');
+          }
+          if (!certificate.ca) {
+            throw new Error('SM_DATABASE_ROOT_CA_* ne contient pas une autorité de certification');
+          }
+
+          const caPath = join(process.env.RUNNER_TEMP, 'postgres-migration-root-ca.pem');
+          writeFileSync(caPath, ca, { mode: 0o600 });
+          migration.searchParams.set('sslmode', 'verify-ca');
+          migration.searchParams.set('uselibpqcompat', 'true');
+          migration.searchParams.set('sslrootcert', caPath);
+          const securedUrl = migration.toString();
+          process.stdout.write(`::add-mask::${securedUrl}\n`);
+          appendFileSync(process.env.GITHUB_ENV, `DATABASE_MIGRATION_URL=${securedUrl}\n`);
+          NODE
+
+      - name: Appliquer supply puis fidélité
+        env:
+          NODE_ENV: production
+          DATABASE_RUNTIME_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_app'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_app'
+            || '' }}
+        run: |
+          set -euo pipefail
+          pnpm migrate:postgres:built
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4 · Le déploiement
   #
   # `needs` porte toute la garantie : ce job n'existe pas tant que les deux
   # précédents ne sont pas verts. Un échec de la vérification ou du balayage ne
@@ -172,17 +369,14 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   deploiement:
     name: Mise en ligne des quatre services
-    needs: [cible, verification, secrets]
+    needs: [cible, verification, secrets, preflight_railway, migrations]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      # LE JETON EST LA FRONTIÈRE.
+      # LE JETON ET L'ENVIRONNEMENT EXPLICITE FORMENT LA FRONTIÈRE.
       #
-      # Chaque jeton de projet Railway est cloisonné sur SON environnement :
-      # même si la correspondance branche → environnement était fausse, un
-      # jeton de staging ne peut RIEN déployer en production. Il n'y a donc
-      # aucun `--environment` dans les commandes plus bas : c'est le jeton, et
-      # lui seul, qui désigne la cible.
+      # Chaque commande reçoit aussi `--environment` : un secret GitHub mal
+      # câblé est ainsi refusé au lieu de publier des clés staging ailleurs.
       #
       # La garde est écrite sur la même ligne que le nom du secret, pour
       # qu'un `grep RAILWAY_TOKEN_PRODUCTION` montre immédiatement à quelle
@@ -205,9 +399,12 @@ jobs:
       - name: Installer la CLI Railway
         run: |
           set -euo pipefail
+          archive="$RUNNER_TEMP/railway.tar.gz"
           curl -sSfL \
             "https://github.com/railwayapp/cli/releases/download/v${VERSION_RAILWAY}/railway-v${VERSION_RAILWAY}-x86_64-unknown-linux-musl.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin railway
+            -o "$archive"
+          printf '%s  %s\n' "$SHA256_RAILWAY" "$archive" | sha256sum --check --status
+          sudo tar -xzf "$archive" -C /usr/local/bin railway
           railway --version
 
       # Contrôle préalable : le jeton existe, il ouvre bien les quatre services,
@@ -222,13 +419,190 @@ jobs:
           fi
           echo "Environnement visé : ${ENVIRONNEMENT}"
           for service in api web pos kds; do
-            if ! sortie="$(railway deployment list --service "$service" --limit 1 --json 2>&1)"; then
+            if ! sortie="$(railway deployment list --environment "$ENVIRONNEMENT" --service "$service" --limit 1 --json 2>&1)"; then
               echo "::error title=Jeton Railway inutilisable::service « $service » : $sortie"
               exit 1
             fi
             printf '  %-4s → en tête : %s (%s)\n' "$service" \
               "$(printf '%s' "$sortie" | jq -r '.[0].id // "aucun"')" \
               "$(printf '%s' "$sortie" | jq -r '.[0].status // "—"')"
+          done
+
+      # Ce réglage vit chez Railway et non dans l'arbre du monorepo. On le lit
+      # avant TOUTE mutation : une ancienne commande « supply seulement »
+      # laisserait les routes fidélité parler à un schéma absent. La sortie de
+      # `environment config` est toujours masquée car Railway y inclut aussi
+      # les variables déchiffrées du projet.
+      - name: Vérifier la migration PostgreSQL pré-déploiement
+        run: |
+          set -euo pipefail
+          expected='pnpm verify:postgres:built'
+          if ! api_service_id="$(
+            railway service list --environment "$ENVIRONNEMENT" --json 2>/dev/null |
+              jq -er '[.[] | select(.name == "api")] | if length == 1 then .[0].id else error("api cardinality") end'
+          )"; then
+            echo "::error title=Configuration Railway illisible::impossible de résoudre exactement le service api. Rien ne part."
+            exit 1
+          fi
+
+          if ! railway environment config --environment "$ENVIRONNEMENT" --json 2>/dev/null |
+            jq -e --arg id "$api_service_id" --arg expected "$expected" '
+              .services[$id].deploy.preDeployCommand
+              | if type == "string" then [.] elif type == "array" then . else [] end
+              | . == [$expected]
+            ' >/dev/null 2>&1; then
+            echo "::error title=Schéma PostgreSQL non verrouillé::le preDeployCommand api n'est pas exactement pnpm verify:postgres:built. Rien ne part."
+            exit 1
+          fi
+          echo '✓ preDeployCommand api vérifié (journaux supply puis fidélité)'
+
+      # Les clés sont gardées dans GitHub Secrets, séparées par environnement,
+      # puis copiées vers Railway juste avant le build. Aucune valeur ni aucune
+      # sortie de `railway variables` n'arrive dans les journaux.
+      - name: Vérifier et publier les secrets fidélité
+        env:
+          DATABASE_RUNTIME_URL: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_DATABASE_URL_RUNTIME_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_DATABASE_URL_RUNTIME_PRODUCTION
+            || '' }}
+          DATABASE_RUNTIME_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_app'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_app'
+            || '' }}
+          LOYALTY_PROFILE_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_LOYALTY_PROFILE_ENCRYPTION_KEY_V1_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_LOYALTY_PROFILE_ENCRYPTION_KEY_V1_PRODUCTION
+            || '' }}
+          LOYALTY_PHONE_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_LOYALTY_PHONE_LOOKUP_KEY_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_LOYALTY_PHONE_LOOKUP_KEY_PRODUCTION
+            || '' }}
+          LOYALTY_OPERATION_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_LOYALTY_OPERATION_FINGERPRINT_KEY_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_LOYALTY_OPERATION_FINGERPRINT_KEY_PRODUCTION
+            || '' }}
+          LOYALTY_QR_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_LOYALTY_QR_DERIVATION_KEY_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_LOYALTY_QR_DERIVATION_KEY_PRODUCTION
+            || '' }}
+          PUBLIC_RELAY_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_PUBLIC_RELAY_SIGNING_KEY_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_PUBLIC_RELAY_SIGNING_KEY_PRODUCTION
+            || '' }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const keyNames = [
+            'LOYALTY_PROFILE_KEY',
+            'LOYALTY_PHONE_KEY',
+            'LOYALTY_OPERATION_KEY',
+            'LOYALTY_QR_KEY',
+            'PUBLIC_RELAY_KEY',
+          ];
+          const decoded = keyNames.map((name) => {
+            const raw = process.env[name]?.trim() ?? '';
+            const value = Buffer.from(raw, 'base64');
+            if (value.length !== 32 || value.toString('base64') !== raw) {
+              throw new Error(`${name} doit être une clé base64 canonique de 32 octets`);
+            }
+            return raw;
+          });
+          if (new Set(decoded).size !== decoded.length) {
+            throw new Error('Les clés fidélité et relais doivent être indépendantes');
+          }
+
+          let runtime;
+          try {
+            runtime = new URL(process.env.DATABASE_RUNTIME_URL ?? '');
+          } catch {
+            throw new Error('SM_DATABASE_URL_RUNTIME_* doit être une URL PostgreSQL valide');
+          }
+          const role = process.env.DATABASE_RUNTIME_ROLE?.trim() ?? '';
+          if (
+            !['postgres:', 'postgresql:'].includes(runtime.protocol) ||
+            !runtime.username ||
+            !runtime.password ||
+            !runtime.hostname ||
+            runtime.pathname.length <= 1
+          ) {
+            throw new Error('URL PostgreSQL runtime invalide');
+          }
+          const forbiddenIdentityParameters = ['user', 'password', 'host', 'port', 'dbname', 'database', 'options', 'service'];
+          if (forbiddenIdentityParameters.some((name) => runtime.searchParams.has(name))) {
+            throw new Error('L URL runtime contient un paramètre d identité interdit');
+          }
+          if (
+            runtime.hostname !== 'postgres.railway.internal' ||
+            runtime.port !== '5432' ||
+            decodeURIComponent(runtime.pathname) !== '/railway'
+          ) {
+            throw new Error('DATABASE_URL runtime doit utiliser la base PostgreSQL privée Railway');
+          }
+          if (!/^[a-z][a-z0-9_]{2,62}$/.test(role)) {
+            throw new Error('DATABASE_RUNTIME_ROLE invalide');
+          }
+          if (decodeURIComponent(runtime.username) !== role) {
+            throw new Error('DATABASE_URL doit utiliser exactement DATABASE_RUNTIME_ROLE');
+          }
+          NODE
+
+          if ! railway variables --environment "$ENVIRONNEMENT" --service api --skip-deploys \
+               --set "DATABASE_URL=$DATABASE_RUNTIME_URL" \
+               --set 'DATABASE_MIGRATION_URL=' \
+               --set "DATABASE_RUNTIME_ROLE=$DATABASE_RUNTIME_ROLE" \
+               --set "LOYALTY_PROFILE_ENCRYPTION_KEY_V1=$LOYALTY_PROFILE_KEY" \
+               --set 'LOYALTY_PROFILE_KEY_VERSION=1' \
+               --set "LOYALTY_PHONE_LOOKUP_KEY=$LOYALTY_PHONE_KEY" \
+               --set "LOYALTY_OPERATION_FINGERPRINT_KEY=$LOYALTY_OPERATION_KEY" \
+               --set "LOYALTY_QR_DERIVATION_KEY=$LOYALTY_QR_KEY" \
+               --set "SM_PUBLIC_RELAY_SIGNING_KEY=$PUBLIC_RELAY_KEY" \
+               --set 'SM_PG_POOL_MAX=10' \
+               > "$RUNNER_TEMP/variables-api-fidelite.log" 2>&1; then
+            echo "::error title=Secrets fidélité non publiés::service api (sortie masquée). Rien ne part."
+            exit 1
+          fi
+
+          if ! railway variables --environment "$ENVIRONNEMENT" --service web --skip-deploys \
+               --set "SM_PUBLIC_RELAY_SIGNING_KEY=$PUBLIC_RELAY_KEY" \
+               > "$RUNNER_TEMP/variables-web-fidelite.log" 2>&1; then
+            echo "::error title=Clé relais non publiée::service web (sortie masquée). Rien ne part."
+            exit 1
+          fi
+          echo "✓ secrets fidélité publiés sur api et web ($ENVIRONNEMENT)"
+
+      # Les deux apps terrain embarquent leurs origines au BUILD. Elles ne
+      # doivent jamais hériter d'une valeur laissée par un autre environnement :
+      # une caisse de staging qui appelle la production y enverrait jetons,
+      # ventes et fidélité. La branche décide ici de la PAIRE API/Web, en un
+      # seul endroit, puis les deux services reçoivent exactement la même.
+      - name: Verrouiller les origines des surfaces terrain
+        run: |
+          set -euo pipefail
+          case "$ENVIRONNEMENT" in
+            staging)
+              api_origin='https://api-staging-a5e8.up.railway.app'
+              site_origin='https://web-staging-6f5f.up.railway.app'
+              ;;
+            production)
+              api_origin='https://api-production-8949.up.railway.app'
+              site_origin='https://web-production-99b58c.up.railway.app'
+              ;;
+            *)
+              echo "::error title=Environnement terrain inconnu::« $ENVIRONNEMENT » n'a aucune paire d'origines autorisée."
+              exit 1
+              ;;
+          esac
+
+          for service in pos kds; do
+            if ! railway variables --environment "$ENVIRONNEMENT" --service "$service" --skip-deploys \
+                 --set "EXPO_PUBLIC_API_URL=$api_origin" \
+                 --set "EXPO_PUBLIC_SITE_URL=$site_origin" \
+                 --set 'EXPO_PUBLIC_ALLOW_LOCAL_API=0' \
+                 > "$RUNNER_TEMP/variables-$service.log" 2>&1; then
+              echo "::error title=Origines non publiées::service « $service » (sortie masquée : elle contient les variables du service). Rien ne part."
+              exit 1
+            fi
+            echo "✓ $service configuré pour $ENVIRONNEMENT"
           done
 
       # ── Dire au conteneur quelle révision il sert ─────────────────────────
@@ -258,7 +632,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if ! railway variables --service api --skip-deploys --set "SM_REVISION=$SHA" \
+          if ! railway variables --environment "$ENVIRONNEMENT" --service api --skip-deploys --set "SM_REVISION=$SHA" \
                > "$RUNNER_TEMP/variables.log" 2>&1; then
             echo "::error title=Révision non publiée::railway variables a échoué (sortie masquée : elle contient les variables du service). Rien ne part."
             exit 1
@@ -274,7 +648,7 @@ jobs:
           cat > "$RUNNER_TEMP/deployer.sh" <<'SCRIPT'
           # Identifiant du déploiement actuellement en tête pour un service.
           derniere_id() {
-            railway deployment list --service "$1" --limit 1 --json 2>/dev/null \
+            railway deployment list --environment "$ENVIRONNEMENT" --service "$1" --limit 1 --json 2>/dev/null \
               | jq -r '.[0].id // "aucun"'
           }
 
@@ -292,13 +666,13 @@ jobs:
             # On ne s'arrête pas sur le code de sortie de `railway up` : c'est
             # l'état du déploiement chez Railway qui fait foi, et lui seul sait
             # si la migration puis le contrôle de santé sont passés.
-            if ! railway up --service "$service" --ci; then
+            if ! railway up --environment "$ENVIRONNEMENT" --service "$service" --ci; then
               echo "::warning title=$service::railway up a rendu un code non nul — on interroge l'état du déploiement."
             fi
 
             sans_nouveau=0
             for _ in $(seq 1 240); do
-              ligne="$(railway deployment list --service "$service" --limit 1 --json 2>/dev/null || echo '[]')"
+              ligne="$(railway deployment list --environment "$ENVIRONNEMENT" --service "$service" --limit 1 --json 2>/dev/null || echo '[]')"
               id="$(printf '%s' "$ligne" | jq -r '.[0].id // "aucun"')"
               statut="$(printf '%s' "$ligne" | jq -r '.[0].status // "INCONNU"')"
 
@@ -326,9 +700,9 @@ jobs:
                   echo "::error title=Déploiement $service::état $statut (déploiement $id)"
                   echo "$service|$id|$statut" >> "$RUNNER_TEMP/deploiements.txt"
                   echo "───── 80 dernières lignes de construction ($service) ─────"
-                  railway logs --service "$service" --build --lines 80 "$id" 2>&1 | tail -80 || true
+                  railway logs --environment "$ENVIRONNEMENT" --service "$service" --build --lines 80 "$id" 2>&1 | tail -80 || true
                   echo "───── 80 dernières lignes d'exécution ($service) ─────"
-                  railway logs --service "$service" --deployment --lines 80 "$id" 2>&1 | tail -80 || true
+                  railway logs --environment "$ENVIRONNEMENT" --service "$service" --deployment --lines 80 "$id" 2>&1 | tail -80 || true
                   return 1
                   ;;
                 *) sleep 5 ;;
@@ -342,13 +716,10 @@ jobs:
           echo "Procédure écrite dans $RUNNER_TEMP/deployer.sh"
 
       # ── L'api d'abord, seule ──────────────────────────────────────────────
-      # Elle porte le preDeployCommand Railway
-      # `pnpm migrate:postgres:built` (à poser sur les deux environnements,
-      # idempotent) : les schémas PostgreSQL supply ET fidélité doivent être à jour
-      # AVANT que les interfaces se remettent à l'appeler. Si la migration
-      # échoue, Railway refuse la mise en service, cette étape échoue, et les
-      # trois interfaces ne partent même pas.
-      - name: Déployer api — migrations PostgreSQL comprises
+      # Elle porte le preDeployCommand Railway `pnpm verify:postgres:built` :
+      # avec le seul rôle runtime, il prouve que le job privilégié a migré la
+      # même base avant d'autoriser la nouvelle API à démarrer.
+      - name: Déployer api — schémas PostgreSQL vérifiés
         run: |
           set -euo pipefail
           . "$RUNNER_TEMP/deployer.sh"
@@ -409,7 +780,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 4 · La santé
+  # 5 · La santé
   #
   # Ce job ne reçoit AUCUN secret — pas de RAILWAY_TOKEN, rien. C'est la preuve
   # structurelle que `scripts/smoke.mjs` ne tape que des surfaces publiques :
@@ -420,7 +791,7 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   sante:
     name: Santé après déploiement
-    needs: [cible, deploiement]
+    needs: [cible, migrations, deploiement]
     # `always()` : on contrôle la santé MÊME si la mise en ligne a échoué.
     # Un vendredi soir, la première question n'est pas « le déploiement
     # est-il passé ? » mais « le restaurant peut-il encaisser ? ». Quand
@@ -428,7 +799,11 @@ jobs:
     # servir — et il faut le SAVOIR, pas le supposer.
     # En revanche, si la vérification a échoué, `deploiement` est « skipped » :
     # on n'a rien touché, il n'y a rien à contrôler.
-    if: always() && needs.cible.result == 'success' && needs.deploiement.result != 'skipped'
+    # Une migration peut avoir appliqué supply puis échoué sur fidélité. Même
+    # sans nouveau conteneur, on contrôle alors immédiatement l'ancien service.
+    # Si le préflight/CI a bloqué avant tout DDL, migrations est skipped et le
+    # smoke reste inutile.
+    if: always() && needs.cible.result == 'success' && needs.migrations.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -443,9 +818,13 @@ jobs:
       - name: Rappeler dans quel cas on se trouve
         env:
           RESULTAT: ${{ needs.deploiement.result }}
+          RESULTAT_MIGRATIONS: ${{ needs.migrations.result }}
           ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
         run: |
           set -euo pipefail
+          if [ "$RESULTAT_MIGRATIONS" != 'success' ]; then
+            echo "::warning title=Migrations en échec::Le contrôle public vérifie que l'ancienne API de $ENVIRONNEMENT reste opérationnelle après une migration potentiellement partielle."
+          fi
           if [ "$RESULTAT" != 'success' ]; then
             echo "::warning title=Mise en ligne en échec::Le contrôle qui suit dit ce que « $ENVIRONNEMENT » sert MAINTENANT — donc, très probablement, la version PRÉCÉDENTE. Vert ici ne veut pas dire que le déploiement a réussi."
           fi

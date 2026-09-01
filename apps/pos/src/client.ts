@@ -58,8 +58,7 @@ import {
   uuid,
   withStoreLock,
 } from '@sm/client-core';
-
-const DEFAULT_API = 'https://api-production-8949.up.railway.app';
+import { API_URL } from './config';
 
 /**
  * Version du bundle, rapportée par le battement de cœur. La source est le
@@ -69,19 +68,6 @@ const DEFAULT_API = 'https://api-production-8949.up.railway.app';
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- lecture de la version au build, hors graphe ES
 const APP_VERSION: string = (require('../package.json') as { version: string }).version;
-
-/** Le poste peut être pointé vers une API locale sans rebuild (clé `sm.apiUrl`). */
-function resolveBaseUrl(): string {
-  if (Platform.OS === 'web') {
-    try {
-      const override = globalThis.localStorage?.getItem('sm.apiUrl');
-      if (override) return override;
-    } catch {
-      /* stockage bloqué : on garde l'URL par défaut */
-    }
-  }
-  return DEFAULT_API;
-}
 
 function nativeStore(): KeyValueStore {
   return {
@@ -177,10 +163,8 @@ setStore(
   DEMO ? demoStore(demoSeed()) : Platform.OS === 'web' ? webStore() : nativeStore(),
 );
 
-const BASE_URL = resolveBaseUrl();
-
 export const client = new SmClient({
-  baseUrl: BASE_URL,
+  baseUrl: API_URL,
   queueScopeRequired: true,
   ...(DEMO ? { transport: withDemoLoyalty(demoTransport()) } : null),
 });
@@ -382,7 +366,7 @@ export function installErrorReporting(): () => void {
   return installClientErrorReporter({
     source: 'pos',
     post: (body) => {
-      void fetch(`${BASE_URL}/public/client-errors`, {
+      void fetch(`${API_URL}/public/client-errors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -437,7 +421,7 @@ async function deviceFetch<T>(path: string, body: unknown, deviceToken?: string)
   // « demo », `App.tsx` en conclurait une révocation et renverrait le visiteur
   // sur l'écran d'appairage, en pleine démonstration.
   if (DEMO) throw new DeviceError('Route indisponible en démonstration', 503);
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

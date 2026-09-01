@@ -37,6 +37,11 @@ import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
 
 const adminUrl = process.env.LOYALTY_TEST_DATABASE_URL;
 const integration = adminUrl ? describe : describe.skip;
+const requestedTimeout = Number(process.env.LOYALTY_TEST_TIMEOUT_MS);
+const integrationTestTimeout =
+  Number.isInteger(requestedTimeout) && requestedTimeout >= 20_000 && requestedTimeout <= 120_000
+    ? requestedTimeout
+    : 20_000;
 const appRole = 'loyalty_app_test';
 const appPassword = 'loyalty-test-only';
 
@@ -207,7 +212,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     appPool = new Pool({ connectionString: appUrl.toString(), max: 8 });
     db = loyaltyDb(appPool);
     service = new LoyaltyMemberService(db, testCrypto(), trustedTestPurchases);
-  }, 20_000);
+  }, integrationTestTimeout);
 
   afterAll(async () => {
     await appPool?.end();
@@ -998,7 +1003,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         { ...actor, source: 'admin' },
       ),
     ).rejects.toBeInstanceOf(InternalServerErrorException);
-  }, 20_000);
+  }, integrationTestTimeout);
 
   it('clôture et anonymise chaque adhésion expirée avant de libérer son téléphone', async () => {
     const tenantRef = `expiry-${randomUUID()}`;
@@ -1174,7 +1179,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     );
     await expect(service.expireStaleEnrollments(tenantRef, new Date(), 10)).resolves.toBe(1);
     await expect(service.expireStaleEnrollments(tenantRef, new Date(), 10)).resolves.toBe(0);
-  }, 20_000);
+  }, integrationTestTimeout);
 
   it('réserve durablement les tickets et arbitre les courses earn/redeem', async () => {
     const tenantRef = `receipt-${randomUUID()}`;
@@ -1448,7 +1453,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         .where(eq(earnReceipts.tenantRef, tenantRef));
       expect(hidden).toEqual([]);
     });
-  }, 20_000);
+  }, integrationTestTimeout);
 
   it('bloque, remplace le QR puis anonymise sans effacer la preuve financière', async () => {
     const tenantRef = `lifecycle-${randomUUID()}`;
@@ -1850,7 +1855,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     expect(evidence.rows[0]?.operation_result).not.toContain('Nora');
     expect(evidence.rows[0]?.operation_result).not.toContain('54 32');
     expect(evidence.rows[0]?.operation_result).not.toContain(replacement.qrToken);
-  }, 20_000);
+  }, integrationTestTimeout);
 
   it('compense earn/redeem une seule fois, sous course et sans fuite inter-tenant', async () => {
     const tenantRef = `reversal-${randomUUID()}`;
@@ -2242,7 +2247,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       reversal_count: '1',
       loser_operation_count: '0',
     });
-  }, 20_000);
+  }, integrationTestTimeout);
 
   it('traverse Drizzle, PostgreSQL et les agrégats au-delà de INTEGER', async () => {
     const tenantRef = `bigint-${randomUUID()}`;
@@ -2301,5 +2306,5 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       outstandingUnits: 3_000_000_000,
       earnedUnits30d: 3_000_000_000,
     });
-  }, 20_000);
+  }, integrationTestTimeout);
 });

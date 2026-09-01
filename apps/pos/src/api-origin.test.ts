@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('frontiere de confiance de l API cuisine', () => {
+describe('frontiere de confiance de l API caisse', () => {
   it('refuse un build sans origine explicite', () => {
     expect(() => resolveApiOrigin(undefined)).toThrow(/explicitement/);
     expect(() => resolveApiOrigin('   ')).toThrow(/explicitement/);
@@ -50,31 +50,34 @@ describe('frontiere de confiance de l API cuisine', () => {
   it('supprime seulement l ancienne surcharge locale', () => {
     const values = new Map([
       [LEGACY_API_OVERRIDE_KEY, 'https://pirate.example'],
-      ['sm.kds.session.v1', 'session-legitime'],
-      ['sm.kds.board.v1', 'vue-legitime'],
+      ['sm.pos.device.v1', 'appairage-legitime'],
+      ['sm.pos.session.v1', 'session-legitime'],
+      ['sm.queue.v1', 'file-legitime'],
     ]);
 
     purgeLegacyApiOverride({ removeItem: (key) => values.delete(key) });
 
     expect(values.has(LEGACY_API_OVERRIDE_KEY)).toBe(false);
-    expect(values.get('sm.kds.session.v1')).toBe('session-legitime');
-    expect(values.get('sm.kds.board.v1')).toBe('vue-legitime');
+    expect(values.get('sm.pos.device.v1')).toBe('appairage-legitime');
+    expect(values.get('sm.pos.session.v1')).toBe('session-legitime');
+    expect(values.get('sm.queue.v1')).toBe('file-legitime');
   });
 });
 
-describe('integration de la configuration KDS web', () => {
-  it('ignore ?api, purge son ancienne valeur et conserve les donnees metier', async () => {
+describe('integration de la configuration POS web', () => {
+  it('ignore les URL mutables, purge seulement leur reliquat et garde le poste', async () => {
     vi.doMock('react-native', () => ({ Platform: { OS: 'web' } }));
-    vi.stubEnv('EXPO_PUBLIC_API_URL', PRODUCTION_API_ORIGIN);
+    vi.stubEnv('EXPO_PUBLIC_API_URL', STAGING_API_ORIGIN);
     vi.stubEnv('EXPO_PUBLIC_ALLOW_LOCAL_API', '0');
     vi.stubGlobal('location', {
-      href: 'https://cuisine.snackmanager.fr/?api=https://pirate.example',
+      href: `${PRODUCTION_API_ORIGIN}/?api=${PRODUCTION_API_ORIGIN}`,
     });
 
     const values = new Map([
-      [LEGACY_API_OVERRIDE_KEY, 'https://pirate.example'],
-      ['sm.kds.session.v1', 'session-legitime'],
-      ['sm.kds.board.v1', 'vue-legitime'],
+      [LEGACY_API_OVERRIDE_KEY, PRODUCTION_API_ORIGIN],
+      ['sm.pos.device.v1', 'appairage-legitime'],
+      ['sm.pos.session.v1', 'session-legitime'],
+      ['sm.sync.queue.v2', 'file-legitime'],
     ]);
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => values.get(key) ?? null,
@@ -84,9 +87,10 @@ describe('integration de la configuration KDS web', () => {
 
     const { API_URL } = await import('./config');
 
-    expect(API_URL).toBe(PRODUCTION_API_ORIGIN);
+    expect(API_URL).toBe(STAGING_API_ORIGIN);
     expect(values.has(LEGACY_API_OVERRIDE_KEY)).toBe(false);
-    expect(values.get('sm.kds.session.v1')).toBe('session-legitime');
-    expect(values.get('sm.kds.board.v1')).toBe('vue-legitime');
+    expect(values.get('sm.pos.device.v1')).toBe('appairage-legitime');
+    expect(values.get('sm.pos.session.v1')).toBe('session-legitime');
+    expect(values.get('sm.sync.queue.v2')).toBe('file-legitime');
   });
 });

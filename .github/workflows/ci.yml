@@ -59,6 +59,11 @@ env:
   TURBO_TELEMETRY_DISABLED: 1
   NEXT_TELEMETRY_DISABLED: 1
   DO_NOT_TRACK: 1
+  # La CI compile des bundles non déployés, fermés sur le socle local. Les
+  # déploiements remplacent cette paire explicitement dans deploy.yml.
+  EXPO_PUBLIC_API_URL: http://localhost:3001
+  EXPO_PUBLIC_SITE_URL: http://localhost:3000
+  EXPO_PUBLIC_ALLOW_LOCAL_API: 1
 
 jobs:
   verification:
@@ -67,6 +72,21 @@ jobs:
     # Budget annoncé : moins de dix minutes. Le garde-fou est au-dessus pour
     # laisser voir un dépassement plutôt que de le masquer par un timeout serré.
     timeout-minutes: 20
+    services:
+      postgres:
+        # Digest multi-architecture officiel de postgres:17.6-alpine3.22.
+        image: postgres:17.6-alpine3.22@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: loyalty-ci-only
+          POSTGRES_DB: snackmanager_loyalty_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d snackmanager_loyalty_test_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Récupérer le code
@@ -107,9 +127,9 @@ jobs:
 
       # Les quatre vérifications sont des étapes distinctes pour que l'échec
       # soit lisible d'un coup d'œil dans l'interface GitHub. Turborepo ignore
-      # silencieusement les paquets qui ne déclarent pas la tâche demandée
-      # (@sm/web, @sm/kds, @sm/db et @sm/supply n'ont pas de « test ») : leur
-      # absence de script ne fait donc pas échouer la CI.
+      # silencieusement les paquets qui ne déclarent pas la tâche demandée. Le
+      # paquet supply possède désormais ses tests de migration ; les autres
+      # absences éventuelles ne font pas échouer Turbo.
       - name: Typage
         run: pnpm exec turbo run typecheck $TURBO_FLAGS
 
@@ -129,6 +149,17 @@ jobs:
 
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
+
+      # Les suites générales restent rapides et hermétiques. Ces deux fichiers
+      # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : RLS,
+      # triggers, migrations et ledger ne peuvent plus se déclarer verts en
+      # ayant été silencieusement ignorés.
+      - name: Tests PostgreSQL réels — fidélité
+        env:
+          LOYALTY_TEST_DATABASE_URL: postgresql://postgres:loyalty-ci-only@127.0.0.1:5432/snackmanager_loyalty_test_ci
+        run: |
+          pnpm --filter @sm/loyalty exec vitest run src/schema.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
 
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS

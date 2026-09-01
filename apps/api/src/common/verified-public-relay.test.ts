@@ -111,4 +111,19 @@ describe('preuve du relais public', () => {
     ).not.toThrow();
     expect(() => validatePublicRelayEnvironment({ NODE_ENV: 'test' })).not.toThrow();
   });
+
+  it('refuse aussi une Railway staging mal configurée, quel que soit NODE_ENV', () => {
+    expect(() =>
+      validatePublicRelayEnvironment({
+        NODE_ENV: 'development',
+        RAILWAY_ENVIRONMENT_NAME: 'staging',
+      }),
+    ).toThrow(/SM_PUBLIC_RELAY_SIGNING_KEY/);
+    expect(() =>
+      validatePublicRelayEnvironment({
+        RAILWAY_ENVIRONMENT_ID: 'env_staging',
+        SM_PUBLIC_RELAY_SIGNING_KEY: Buffer.alloc(32, 9).toString('base64'),
+      }),
+    ).not.toThrow();
+  });
 });

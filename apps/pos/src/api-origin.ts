@@ -1,11 +1,9 @@
 /**
- * Frontiere de confiance de l'ecran cuisine.
+ * Frontiere de confiance de la caisse.
  *
- * Cette origine recoit le jeton d'appareil, les JWT du personnel et la socket
- * temps reel. Elle ne peut donc pas etre choisie par une URL visitee ou par le
- * stockage du navigateur. Les seules valeurs distantes autorisees sont nos
- * deux API exploitees ; localhost doit etre volontairement ouvert dans un
- * build de developpement.
+ * Cette origine recoit le jeton d'appareil, les JWT du personnel et toutes
+ * les ecritures de vente. Elle appartient donc au BUILD : ni l'URL visitee,
+ * ni le stockage du navigateur ne peuvent la choisir.
  */
 
 export const PRODUCTION_API_ORIGIN = 'https://api-production-8949.up.railway.app';
@@ -18,7 +16,7 @@ export interface LegacyApiOverrideStore {
   removeItem(key: string): void;
 }
 
-export const LEGACY_API_OVERRIDE_KEY = 'sm.kds.cfg.api';
+export const LEGACY_API_OVERRIDE_KEY = 'sm.apiUrl';
 
 /** Supprime uniquement l'ancienne origine mutable, sans toucher a l'appairage. */
 export function purgeLegacyApiOverride(store: LegacyApiOverrideStore | undefined): void {
@@ -28,8 +26,8 @@ export function purgeLegacyApiOverride(store: LegacyApiOverrideStore | undefined
 /**
  * Resout une origine API compilee dans l'application.
  *
- * Une valeur fournie mais invalide est une erreur de deploiement : retomber
- * sur la production pourrait melanger silencieusement deux environnements.
+ * Une valeur absente ou invalide est une erreur de deploiement. Retomber sur
+ * la production depuis un build de staging melangerait deux environnements.
  */
 export function resolveApiOrigin(
   configuredOrigin: string | undefined,
@@ -61,5 +59,5 @@ export function resolveApiOrigin(
   if (TRUSTED_REMOTE_ORIGINS.has(parsed.origin)) return parsed.origin;
   if (allowLocalhost && parsed.origin === LOCAL_API_ORIGIN) return LOCAL_API_ORIGIN;
 
-  throw new Error(`Origine API KDS non autorisee : ${parsed.origin}`);
+  throw new Error(`Origine API POS non autorisee : ${parsed.origin}`);
 }

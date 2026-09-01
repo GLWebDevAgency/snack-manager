@@ -11,7 +11,8 @@
     "lint": "eslint --config ../../eslint.serveur.mjs src",
     "test": "vitest run",
     "generate": "drizzle-kit generate",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "tsx src/migrate.ts",
+    "verify:migrations": "tsx src/verify-migrations.ts"
   },
   "dependencies": {
     "dotenv": "^17.0.0",
