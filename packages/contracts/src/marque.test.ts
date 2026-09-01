@@ -269,6 +269,21 @@ describe('marqueEffective', () => {
   it('sinon dérive du plat', () => {
     expect(marqueEffective({ brand: null, brandColor: '#2E9E4F' }).palette.accent).toBe('#2e9e4f');
   });
+  it('un brand malformé (paire typo hors liste) retombe sur le repli', () => {
+    const casse = { ...DIRECTIONS.soleil, type: { pair: 'comic-sans' } };
+    const m = marqueEffective({ brand: casse, brandColor: '#2E9E4F' });
+    expect(m.preset).toBe('nuit');
+    expect(m.palette.accent).toBe('#2e9e4f');
+  });
+  it('un document partiel retombe sur le repli plutôt que de casser', () => {
+    // Ce que Mongoose peut produire pour un document écrit à la main : une
+    // clé requise-mais-nullable (`hero`) purement ABSENTE, pas à `null`. Un
+    // document réellement écrit par le schéma porte toujours `hero: null` —
+    // seul un document partiel ou mal formé tombe ici.
+    const { hero: _hero, ...sansHero } = DIRECTIONS.soleil;
+    const m = marqueEffective({ brand: sansHero, brandColor: '#2E9E4F' });
+    expect(m.preset).toBe('nuit');
+  });
 });
 
 describe('les champs plats, dérivés du masque', () => {

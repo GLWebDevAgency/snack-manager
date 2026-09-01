@@ -1,7 +1,12 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import {
+  BRAND_MODES,
+  BRAND_MOTIONS,
+  BRAND_SHAPES,
   PLATFORM_SETTINGS_ID,
+  PRESET_KEYS,
   SM_INVOICE_VAT,
+  TYPE_PAIR_KEYS,
   isPlatformLogAction,
   type SocialNetwork,
 } from '@sm/contracts';
@@ -60,7 +65,7 @@ const LogoPair = new Schema(
 
 export const BrandSub = new Schema(
   {
-    mode: { type: String, enum: ['light', 'dark'], required: true },
+    mode: { type: String, enum: [...BRAND_MODES], required: true },
     palette: {
       type: new Schema(
         {
@@ -75,11 +80,14 @@ export const BrandSub = new Schema(
       required: true,
     },
     type: {
-      type: new Schema({ pair: { type: String, required: true } }, { _id: false }),
+      type: new Schema(
+        { pair: { type: String, enum: [...TYPE_PAIR_KEYS], required: true } },
+        { _id: false },
+      ),
       required: true,
     },
-    shape: { type: String, enum: ['net', 'doux', 'rond'], required: true },
-    motion: { type: String, enum: ['pose', 'vif'], required: true },
+    shape: { type: String, enum: [...BRAND_SHAPES], required: true },
+    motion: { type: String, enum: [...BRAND_MOTIONS], required: true },
     logo: {
       type: new Schema(
         {
@@ -93,7 +101,7 @@ export const BrandSub = new Schema(
     hero: { type: String, default: null },
     preset: {
       type: String,
-      enum: ['brasserie', 'neon', 'atelier', 'marche', 'nuit', 'soleil', null],
+      enum: [...PRESET_KEYS, null],
       default: null,
     },
   },

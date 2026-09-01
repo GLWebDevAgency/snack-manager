@@ -422,11 +422,15 @@ export function marqueDeRepli(
 }
 
 export function marqueEffective(t: {
-  brand?: Brand | null;
+  brand?: unknown;
   brandColor?: string | null;
   logoUrl?: string | null;
 }): Brand {
-  return t.brand ?? marqueDeRepli(t.brandColor, t.logoUrl);
+  // Le masque lu en base est une donnée de FORME non fiable : Mongoose infère
+  // des clés optionnelles là où le contrat les veut présentes, et `type.pair`
+  // en simple chaîne. Un seul adaptateur, ici — l'API ne caste jamais.
+  const lu = BrandSchema.safeParse(t.brand ?? null);
+  return lu.success && lu.data !== null ? lu.data : marqueDeRepli(t.brandColor, t.logoUrl);
 }
 
 /** Le contrat « logo + accent » des outils du personnel : dérivé, jamais stocké à part. */
