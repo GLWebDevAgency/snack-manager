@@ -1,9 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import * as argon2 from 'argon2';
 import mongoose from 'mongoose';
 import { MODELS } from './schemas';
 import { askHidden, complain } from './password-prompt';
+import { hashPassword } from './password-hash';
 
 // Même .env racine que les autres scripts du paquet (cf. `seed.ts`).
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -76,12 +77,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await Users.updateOne({ email }, { $set: { passwordHash: await argon2.hash(password) } });
+  await Users.updateOne(
+    { email },
+    {
+      $set: {
+        passwordHash: await hashPassword(password),
+        sessionVersion: randomUUID(),
+      },
+    },
+  );
   await mongoose.disconnect();
 
   // On ne réaffiche JAMAIS le mot de passe, même pour confirmer.
-  console.log(`\nMot de passe de ${email} mis à jour. Les sessions ouvertes restent valides`);
-  console.log('jusqu’à leur expiration (12 h) — déconnectez-vous et reconnectez-vous pour vérifier.');
+  console.log(`\nMot de passe de ${email} mis à jour. Les sessions ouvertes sont révoquées.`);
 }
 
 /**

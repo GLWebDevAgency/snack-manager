@@ -109,9 +109,12 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
+  signal?.throwIfAborted();
   if (isDemoActive()) {
     const res = await demoRequest(method, path, body);
+    signal?.throwIfAborted();
     if (res.status >= 400) throw new ApiError(res.status, res.body);
     return res.body as T;
   }
@@ -123,6 +126,7 @@ async function request<T>(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    signal,
   });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data);
@@ -130,8 +134,13 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  get: <T>(path: string, options: { signal?: AbortSignal } = {}) =>
+    request<T>("GET", path, undefined, options.signal),
+  post: <T>(
+    path: string,
+    body?: unknown,
+    options: { signal?: AbortSignal } = {},
+  ) => request<T>("POST", path, body, options.signal),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   del: <T>(path: string) => request<T>("DELETE", path),

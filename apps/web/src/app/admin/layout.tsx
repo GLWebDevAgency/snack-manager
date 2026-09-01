@@ -26,8 +26,10 @@ import { Splash } from "@/components/brand/Splash";
 import { consommerSplashDeTransition } from "@/components/brand/SplashAuPremierPassage";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
+import { tenantAccentPalette } from "@/lib/tenant-accent";
 import { useTenantSocket } from "@/lib/ws";
 import { Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
+import { clearAllEnrollmentRecoveries } from "./fidelite/clients/enrollment-recovery";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -46,36 +48,13 @@ const MOBILE_BAR: { id: string; short: string }[] = [
   { id: "menu", short: "Carte" },
 ];
 
-/**
- * Texte lisible sur l'accent tenant — même règle que `readableOn()` côté
- * caisse : un accent clair (laiton #c9a15a) réclame du texte sombre, le blanc
- * y tombe à 2,4:1, très en dessous du seuil WCAG.
- */
-function readableOnAccent(hex: string): string {
-  const raw = hex.replace("#", "");
-  const full =
-    raw.length === 3
-      ? raw
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : raw;
-  const n = Number.parseInt(full.slice(0, 6), 16);
-  if (!Number.isFinite(n)) return "#12100d";
-  const lin = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  const luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
-  return luminance > 0.18 ? "#12100d" : "#ffffff";
-}
-
 const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "dashboard", href: "/admin/dashboard", label: "Tableau de bord", icon: "home" },
   { id: "orders", href: "/admin/orders", label: "Commandes", icon: "ticket" },
   { id: "menu", href: "/admin/menu", label: "Menu & prix", icon: "grid" },
   { id: "ingredients", href: "/admin/ingredients", label: "Ingrédients & stocks", icon: "fries" },
   { id: "promos", href: "/admin/promos", label: "Promos", icon: "tag" },
+  { id: "loyalty", href: "/admin/fidelite", label: "Fidélité", icon: "gift" },
   { id: "hours", href: "/admin/hours", label: "Horaires", icon: "clock" },
   { id: "screens", href: "/admin/screens", label: "Écrans TV", icon: "tv" },
   { id: "devices", href: "/admin/devices", label: "Caisses & cuisine", icon: "print" },
@@ -199,6 +178,7 @@ function Shell({ children }: { children: ReactNode }) {
   // le jeton restait douze heures dans le navigateur — gênant sur un poste
   // partagé (un équipier qui emprunte la tablette du comptoir).
   const logout = () => {
+    clearAllEnrollmentRecoveries();
     clearToken();
     router.replace("/admin/login");
   };
@@ -241,14 +221,15 @@ function Shell({ children }: { children: ReactNode }) {
       .then((t) => {
         if (cancelled) return;
         setTenant(t);
-        const accent = t.brandColor || "#c9a15a";
+        const { accent, onAccent } = tenantAccentPalette(t.brandColor);
         const root = document.documentElement.style;
         root.setProperty("--cf-accent", accent);
-        root.setProperty("--cf-on-accent", readableOnAccent(accent));
+        root.setProperty("--cf-on-accent", onAccent);
       })
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) {
+          clearAllEnrollmentRecoveries();
           clearToken();
           router.replace("/admin/login");
         }

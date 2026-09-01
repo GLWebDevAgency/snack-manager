@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import {
   ADMIN_LOG_ACTION_LABELS,
   DEVICE_REVOKE_REASON_LABELS,
@@ -34,6 +35,7 @@ import {
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
 import { generatePairingCode } from '../screens/pairing-code';
+import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /**
  * Le journal se lit du plus récent au plus ancien.
@@ -88,6 +90,7 @@ export class AdminService {
     @InjectModel('Screen') private readonly screens: Model<Screen>,
     @InjectModel('AdminLog') private readonly logs: Model<AdminLog>,
     @InjectModel('User') private readonly users: Model<User>,
+    @Optional() private readonly revocations?: SessionRevocationPublisher,
   ) {}
 
   // ─── Statut de compte ───
@@ -125,6 +128,9 @@ export class AdminService {
       reason: body.reason,
       suspendedAt: at,
     });
+    // L'autorité a déjà changé : l'expulsion ne doit pas dépendre de la
+    // disponibilité du journal d'administration.
+    await this.revocations?.tenant(String(tenant._id));
     await this.record(actor, {
       action: 'tenant.suspend',
       tenantId: String(tenant._id),
@@ -432,6 +438,7 @@ export class AdminService {
       pairingCodeExpiresAt: expiresAt,
       revokedAt: at,
       revokedReason: body.reason,
+      ...(target === 'device' ? { sessionVersion: randomUUID() } : {}),
     };
 
     const collection: Model<Device> | Model<Screen> =
@@ -440,6 +447,8 @@ export class AdminService {
       .findOneAndUpdate(filter, { $set }, { new: true })
       .lean();
     if (!raw) throw new NotFoundException(label);
+
+    if (target === 'device') await this.revocations?.device(tenantId, String(raw._id));
 
     const kind: RevocableDeviceKind =
       target === 'screen' ? 'screen' : ((raw.kind ?? 'pos') as RevocableDeviceKind);

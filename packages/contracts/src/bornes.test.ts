@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { OptionGroupSchema, OrderLineInputSchema, UpdateOrderStatusSchema } from './index';
+import {
+  CreateOrderSchema,
+  CreatePublicOrderSchema,
+  OptionGroupSchema,
+  OrderLineInputSchema,
+  UpdateOrderStatusSchema,
+} from './index';
 
 /**
  * LES BORNES QUI MANQUAIENT AUX SCHÉMAS PARTAGÉS.
@@ -85,5 +91,90 @@ describe('le changement de statut', () => {
     const r = UpdateOrderStatusSchema.safeParse({ status: 'cancelled' });
     expect(r.success).toBe(false);
     expect(JSON.stringify(r)).toMatch(/Annuler la commande/);
+  });
+});
+
+describe('une commande publique', () => {
+  const publique = (over: Record<string, unknown> = {}) => ({
+    clientId: '11111111-1111-4111-8111-111111111111',
+    lines: [{ productId: 'produit', options: [], removed: [], qty: 1 }],
+    payment: { method: 'counter' },
+    pickup: {
+      slot: '2026-08-29T18:00:00.000Z',
+      customerName: 'Camille',
+      customerPhone: '0612345678',
+    },
+    turnstileToken: 'preuve-a-valider-cote-serveur',
+    ...over,
+  });
+
+  it('exige un retrait nominatif et une preuve anti-robot bornee', () => {
+    expect(CreatePublicOrderSchema.safeParse(publique()).success).toBe(true);
+    expect(CreatePublicOrderSchema.safeParse(publique({ pickup: undefined })).success).toBe(false);
+    expect(CreatePublicOrderSchema.safeParse(publique({ turnstileToken: '' })).success).toBe(false);
+    expect(
+      CreatePublicOrderSchema.safeParse(publique({ turnstileToken: 'x'.repeat(2_049) })).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['channel', 'pos'],
+    ['type', 'surplace'],
+    ['status', 'ready'],
+    ['paid', true],
+    ['tender', 'cash'],
+    ['cashReceived', 10_000],
+    ['loyaltyMemberId', '22222222-2222-4222-8222-222222222222'],
+  ])('refuse le fait serveur %s dans le corps public', (key, value) => {
+    const body = publique(
+      key === 'tender' || key === 'cashReceived'
+        ? { payment: { method: 'counter', [key]: value } }
+        : { [key]: value },
+    );
+    expect(CreatePublicOrderSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('une commande authentifiée au comptoir', () => {
+  const commande = (over: Record<string, unknown> = {}) => ({
+    clientId: '11111111-1111-4111-8111-111111111111',
+    channel: 'pos',
+    type: 'surplace',
+    lines: [{ productId: 'produit', options: [], removed: [], qty: 1 }],
+    payment: { method: 'counter', tender: 'card' },
+    ...over,
+  });
+
+  it('fige ensemble carte et opération idempotente sur une vente POS', () => {
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({
+          loyaltyMemberId: '22222222-2222-4222-8222-222222222222',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
+      ).success,
+    ).toBe(true);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({
+          loyaltyMemberId: 'carte-libre',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({ loyaltyMemberId: '22222222-2222-4222-8222-222222222222' }),
+      ).success,
+    ).toBe(false);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({
+          channel: 'phone',
+          loyaltyMemberId: '22222222-2222-4222-8222-222222222222',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
+      ).success,
+    ).toBe(false);
   });
 });

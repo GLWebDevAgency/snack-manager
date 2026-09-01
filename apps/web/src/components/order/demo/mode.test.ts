@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CreatePublicOrderSchema } from "@sm/contracts";
 import { DEMO_SLUG, isDemoRequested } from "./mode";
 import { demoTransport } from "./transport";
 import { orderingApi, type CreateOrderPayload } from "../api";
@@ -161,6 +162,35 @@ describe("le client par défaut parle au réseau, pas à une fixture", () => {
       "/public/tenants/classfood/slots",
     );
   });
+
+  it("envoie exactement le contrat public strict, sans faits réservés au serveur", async () => {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const sent = JSON.parse(String(init?.body)) as unknown;
+      expect(CreatePublicOrderSchema.safeParse(sent).success).toBe(true);
+      expect(sent).not.toHaveProperty("channel");
+      expect(sent).not.toHaveProperty("type");
+      expect(sent).not.toHaveProperty("status");
+      return new Response(
+        JSON.stringify({
+          _id: "commande",
+          number: 42,
+          status: "new",
+          totals: { subtotal: 1600, discount: null, total: 1600 },
+          pickup: { slot: new Date().toISOString(), customerName: "Camille" },
+          trackingToken: "secret-de-suivi",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await orderingApi().createOrder(
+      "classfood",
+      kebab("11111111-1111-4111-8111-111111111111"),
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });
 
 describe("le paiement ne sort jamais de la démonstration", () => {
@@ -182,8 +212,6 @@ describe("le paiement ne sort jamais de la démonstration", () => {
 /** Un kebab correctement composé — « Pain » est un groupe obligatoire. */
 const kebab = (clientId: string): CreateOrderPayload => ({
   clientId,
-  channel: "online",
-  type: "pickup",
   lines: [
     {
       productId: "p2",
@@ -193,7 +221,12 @@ const kebab = (clientId: string): CreateOrderPayload => ({
     },
   ],
   payment: { method: "counter" },
-  pickup: { slot: new Date().toISOString(), customerName: "Camille" },
+  turnstileToken: "demo",
+  pickup: {
+    slot: new Date().toISOString(),
+    customerName: "Camille",
+    customerPhone: "0612345678",
+  },
 });
 
 describe("la démonstration chiffre comme le serveur", () => {

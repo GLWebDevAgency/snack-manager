@@ -1,7 +1,7 @@
-import { Global, Module, type OnApplicationShutdown, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { createSupplyDb, type SupplyDb } from '@sm/supply';
+import { Global, Module } from '@nestjs/common';
+import { supplyDb } from '@sm/supply';
 import type { Pool } from 'pg';
+import { POSTGRES_POOL, PostgresModule } from './postgres.module';
 
 export const SUPPLY_DB = 'SUPPLY_DB';
 export const SUPPLY_POOL = 'SUPPLY_POOL';
@@ -9,21 +9,15 @@ export const SUPPLY_POOL = 'SUPPLY_POOL';
 /** Connexion PostgreSQL (contexte supply) partagée — injecter avec @Inject(SUPPLY_DB) : SupplyDb. */
 @Global()
 @Module({
+  imports: [PostgresModule],
   providers: [
     {
-      provide: 'SUPPLY_CONN',
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        createSupplyDb(config.getOrThrow<string>('DATABASE_URL')),
+      provide: SUPPLY_DB,
+      inject: [POSTGRES_POOL],
+      useFactory: (pool: Pool) => supplyDb(pool),
     },
-    { provide: SUPPLY_DB, inject: ['SUPPLY_CONN'], useFactory: (c: { db: SupplyDb }) => c.db },
-    { provide: SUPPLY_POOL, inject: ['SUPPLY_CONN'], useFactory: (c: { pool: Pool }) => c.pool },
+    { provide: SUPPLY_POOL, useExisting: POSTGRES_POOL },
   ],
   exports: [SUPPLY_DB, SUPPLY_POOL],
 })
-export class SupplyDbModule implements OnApplicationShutdown {
-  constructor(@Inject(SUPPLY_POOL) private readonly pool: Pool) {}
-  async onApplicationShutdown() {
-    await this.pool.end();
-  }
-}
+export class SupplyDbModule {}

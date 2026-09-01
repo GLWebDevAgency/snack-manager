@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import { PASSWORD_ARGON2_COST } from '@sm/contracts';
 import type { SecretHash, SecretHasher } from '@sm/domain/src/ports';
 
 import { errorMessage } from '../http';
@@ -7,11 +8,9 @@ import { errorMessage } from '../http';
 /**
  * ADAPTATEUR — `SecretHasher` sur argon2id.
  *
- * argon2id est l'algorithme recommandé par l'OWASP pour les secrets à faible
- * entropie, et c'est exactement notre cas : un PIN d'équipe fait quatre
- * chiffres, soit dix mille possibilités. Un hachage rapide se force en une
- * seconde sur un ordinateur portable ; le coût mémoire d'argon2 est ce qui rend
- * l'exercice inintéressant même si la base fuite.
+ * Cet adaptateur crée aujourd'hui les mots de passe des comptes issus du CRM.
+ * Le coût partagé avec les scripts DB et le hash factice du login évite qu'une
+ * cohorte plus rapide révèle, par sa durée, comment le compte a été créé.
  *
  * Le domaine, lui, ne sait rien de tout cela. Il sait qu'une remise exige un PIN
  * vérifié (cf. `StaffAuthorization`) — pas comment on le vérifie. Le jour où
@@ -29,14 +28,12 @@ export class Argon2SecretHasher implements SecretHasher {
    * après une montée de version. Les paramètres sont de toute façon inscrits
    * DANS l'empreinte produite, donc les anciennes continuent de se vérifier.
    *
-   * 19 Mio et 2 passes : le réglage OWASP. Sur une tablette de caisse qui
-   * revalide un PIN entre deux commandes, la vérification reste sous les 100 ms.
+   * La politique vient de @sm/contracts : seed, scripts d'administration,
+   * conversion CRM et login partagent exactement les mêmes nombres.
    */
   private static readonly OPTIONS = {
     type: argon2.argon2id,
-    memoryCost: 19_456,
-    timeCost: 2,
-    parallelism: 1,
+    ...PASSWORD_ARGON2_COST,
   } as const;
 
   async hash(secret: string): Promise<SecretHash> {

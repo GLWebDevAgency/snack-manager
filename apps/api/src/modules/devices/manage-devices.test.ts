@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEVICE_OFFLINE_AFTER_MS, PAIRING_CODE_TTL_MS, isPairingCodeShape } from '@sm/contracts';
 import { ManageDevices } from './manage-devices.usecase';
 import { FakeDevicesRepository, TestClock, storedDevice } from './devices.fakes';
@@ -84,5 +84,16 @@ describe('Back-office des appareils', () => {
     expect(updated.name).toBe('Caisse terrasse');
     expect(updated.paired).toBe(true);
     expect(await repository.findByDeviceToken('jeton')).not.toBeNull();
+  });
+
+  it('publie immédiatement la révocation quand les droits appareil changent', async () => {
+    repository.seed(storedDevice({ paired: true, active: true }), 'jeton');
+    const revocations = { device: vi.fn().mockResolvedValue(undefined) };
+    const avecEvenements = new ManageDevices(clock, repository.asRepository(), revocations as never);
+
+    await avecEvenements.update(TENANT, 'device-1', { active: false });
+
+    expect(revocations.device).toHaveBeenCalledWith(TENANT, 'device-1');
+    expect((await repository.byId(TENANT, 'device-1'))?.sessionVersion).not.toBe('0');
   });
 });

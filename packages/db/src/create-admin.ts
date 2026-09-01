@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import * as argon2 from 'argon2';
 import mongoose from 'mongoose';
 import { MODELS } from './schemas';
 import { askHidden, complain } from './password-prompt';
+import { hashPassword } from './password-hash';
 
 // Même .env racine que les autres scripts du paquet (cf. `seed.ts`).
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
   await Users.create({
     email,
-    passwordHash: await argon2.hash(password),
+    passwordHash: await hashPassword(password),
     role: 'sm_admin',
     tenantId: null, // null = équipe Snack Manager, pas un restaurant
     name,

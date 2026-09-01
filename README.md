@@ -13,6 +13,7 @@ Architecture complète : [ARCHITECTURE.md](ARCHITECTURE.md) · Specs UI par surf
 | `packages/contracts` | Schémas zod partagés (DTO, énumérations, événements WS) |
 | `packages/db` | Modèles Mongoose — contexte **commerce** + seeds (carte Class'Food, historique de commandes) |
 | `packages/supply` | Schéma Drizzle — contexte **supply** (ingrédients, allergènes, recettes, fournisseurs, stocks) |
+| `packages/loyalty` | Schéma Drizzle — contexte **fidélité** (programmes, membres, consentements, portefeuille et ledger append-only) |
 
 ## Persistance polyglotte
 
@@ -20,6 +21,7 @@ Architecture complète : [ARCHITECTURE.md](ARCHITECTURE.md) · Specs UI par surf
 |---|---|---|
 | Commerce (menus, commandes, équipe, avis) | **MongoDB** | documents flexibles (chaque resto a sa carte), écriture offline idempotente |
 | Supply (ingrédients, recettes, fournisseurs, factures) | **PostgreSQL** | relationnel profond, intégrité référentielle, historiques financiers |
+| Fidélité (membres, consentements, points/tampons, récompenses) | **PostgreSQL** | transactions atomiques, idempotence, isolation multi-tenant et audit append-only |
 
 Ponts : cascade de rupture ingrédient → produits · coût matière & marge par produit/variante · rollup d'allergènes (INCO UE 1169/2011).
 
@@ -32,10 +34,14 @@ Ponts : cascade de rupture ingrédient → produits · coût matière & marge pa
 
 ## Démarrage
 
+Prérequis : **Node.js 24.12 ou supérieur**. La version de référence du dépôt
+est fixée dans `.nvmrc` et `.node-version` ; pnpm suit la version déclarée par
+`packageManager`.
+
 ```bash
 pnpm install
 cp .env.example .env              # URLs des bases (railway variables) + JWT_SECRET
-pnpm --filter @sm/supply migrate  # schéma PostgreSQL
+pnpm migrate:postgres             # schémas PostgreSQL supply + fidélité
 pnpm seed                         # carte Class'Food (22 catégories, 109 produits)
 pnpm --filter @sm/supply seed     # ingrédients, recettes, fournisseurs
 pnpm --filter @sm/db seed:orders  # 30 jours d'historique de commandes

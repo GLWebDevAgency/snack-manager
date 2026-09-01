@@ -1,13 +1,9 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  type KeyboardEvent as ToucheReact,
-  type ReactNode,
-} from "react";
+import { useId, type ReactNode, type RefObject } from "react";
 import { cx } from "@/lib/cx";
 import { IconBtn } from "./IconBtn";
+import { useDialogLayer } from "./useDialogLayer";
 
 type DrawerProps = {
   open: boolean;
@@ -21,11 +17,13 @@ type DrawerProps = {
   width?: number;
   /** Pied fixe optionnel (boutons d'action). */
   footer?: ReactNode;
+  /** Cible de focus prioritaire à l'ouverture (optionnelle). */
+  initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
 /**
- * Tiroir latéral — positionné en ABSOLU dans la zone de contenu (le parent,
- * le <main> du shell admin, est `position: relative`).
+ * Tiroir latéral — positionné en fixe dans la fenêtre pour rester utilisable
+ * quelle que soit la position de défilement du contenu.
  * Profondeur (DA §1) : voile noir, panneau de niveau 2 en dégradé, séparation
  * portée par l'ombre (filet blanc 8 %) plutôt que par un bord blanc dur.
  */
@@ -37,46 +35,10 @@ export function Drawer({
   children,
   width = 400,
   footer,
+  initialFocusRef,
 }: DrawerProps) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  /*
-    Le focus entre, tourne, et revient — même contrat que Modal : ouvert au
-    clavier (Entrée sur une ligne), le tiroir prenait le voile mais laissait
-    Tab parcourir la liste masquée dessous — imprimer ou faire avancer une
-    commande invisible restait possible.
-  */
-  const panneau = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const declencheur = document.activeElement as HTMLElement | null;
-    panneau.current?.focus();
-    return () => declencheur?.focus();
-  }, [open]);
-
-  function confinerTab(e: ToucheReact<HTMLDivElement>) {
-    if (e.key !== "Tab" || !panneau.current) return;
-    const focusables = panneau.current.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusables.length === 0) return e.preventDefault();
-    const premier = focusables[0];
-    const dernier = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === premier) {
-      e.preventDefault();
-      dernier.focus();
-    } else if (!e.shiftKey && document.activeElement === dernier) {
-      e.preventDefault();
-      premier.focus();
-    }
-  }
+  const titleId = useId();
+  const dialogRef = useDialogLayer({ open, onClose, initialFocusRef });
 
   if (!open) return null;
 
@@ -90,25 +52,26 @@ export function Drawer({
      * l'écran. En fixe, il suit toujours la fenêtre.
      *
      * Le décalage à gauche préserve l'intention de la maquette (§6.4) : le
-     * rail de navigation reste visible et cliquable, le tiroir ne recouvre que
-     * la zone de travail. Il tombe à zéro sous 640 px, où l'espace manque.
+     * rail de navigation reste visible, tandis que `inert` le neutralise tant
+     * que le dialogue modal est ouvert. Il tombe à zéro sous 640 px.
      */
     <div
-      className="fixed inset-y-0 right-0 left-0 z-50 sm:left-[66px]"
+      ref={dialogRef}
+      inert
+      tabIndex={-1}
+      className="fixed inset-y-0 right-0 left-0 z-50 outline-none sm:left-[66px]"
       role="dialog"
       aria-modal="true"
-      aria-label={label ?? (typeof title === "string" ? title : "Panneau")}
+      aria-labelledby={title ? titleId : undefined}
+      aria-label={!title ? (label ?? "Panneau") : undefined}
     >
       <div
-        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/55"
+        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/55 motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden
       />
       <div
-        ref={panneau}
-        tabIndex={-1}
-        onKeyDown={confinerTab}
-        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] outline-none"
+        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] motion-reduce:animate-none"
         style={{ width }}
       >
         <div
@@ -118,7 +81,10 @@ export function Drawer({
           )}
         >
           {title && (
-            <h2 className="min-w-0 truncate text-lg font-semibold tracking-[-0.03em] text-ink">
+            <h2
+              id={titleId}
+              className="min-w-0 truncate text-lg font-semibold tracking-[-0.03em] text-ink"
+            >
               {title}
             </h2>
           )}
@@ -131,11 +97,17 @@ export function Drawer({
             className="ml-auto"
           />
         </div>
-        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto">
+        <div
+          data-dialog-content
+          className="cf-scroll min-h-0 flex-1 overflow-y-auto"
+        >
           {children}
         </div>
         {footer && (
-          <div className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5">
+          <div
+            data-dialog-footer
+            className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5"
+          >
             {footer}
           </div>
         )}

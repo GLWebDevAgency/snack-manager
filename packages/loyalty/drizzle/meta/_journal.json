@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788230085055,
+      "tag": "0000_glorious_swordsman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788235373783,
+      "tag": "0001_transactional_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788236557128,
+      "tag": "0002_outgoing_annihilus",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788237249676,
+      "tag": "0003_easy_silverclaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788238731832,
+      "tag": "0004_qr_generation_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788247851147,
+      "tag": "0005_cynical_scalphunter",
+      "breakpoints": true
+    }
+  ]
+}

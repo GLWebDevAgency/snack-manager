@@ -11,23 +11,25 @@
     "react-native-web": "~0.21.0",
     "expo-keep-awake": "~15.0.0",
     "expo-screen-orientation": "~9.0.0",
+    "qrcode": "^1.5.4",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@sm/client-core": "workspace:*",
     "@sm/contracts": "workspace:*"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "~19.2.2"
   },
   "scripts": {
     "start": "node server.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "dev": "expo start --web --port 8082",
+    "web": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-http://localhost:3000} expo start --web",
+    "dev": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-http://localhost:3000} expo start --web --port 8082",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} vitest run && node --test ../../scripts/verifier-build-terrain.node-test.mjs",
     "lint": "echo ok",
-    "build": "expo export --platform web --output-dir dist"
+    "build": "node ../../scripts/verifier-build-terrain.mjs && expo export --platform web --output-dir dist --clear"
   },
   "private": true
 }

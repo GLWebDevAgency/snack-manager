@@ -247,17 +247,24 @@ describe('le câblage Nest — un contrôleur non déclaré est une route 404 si
     expect(declares).toContain(StripeConnectWebhookController);
   });
 
-  it('l’application déclare le module d’encaissement SANS passer par `ordering`', async () => {
-    // Les routes `/encaissement/*` répondaient par transitivité seulement :
-    // `OrderingModule` importe ce module pour savoir sur quel compte encaisser,
-    // et Nest enregistre au passage ses contrôleurs. Le jour où cette
-    // dépendance se déplace, le raccordement disparaît du back-office en
-    // silence — des 404 sur les routes qui décident où va l'argent.
-    const { AppModule } = await import('../../app.module');
-    const { EncaissementModule } = await import('./encaissement.module');
-    const importes = Reflect.getMetadata('imports', AppModule) as unknown[];
-    expect(importes).toContain(EncaissementModule);
-  });
+  it(
+    'l’application déclare le module d’encaissement SANS passer par `ordering`',
+    async () => {
+      // Les routes `/encaissement/*` répondaient par transitivité seulement :
+      // `OrderingModule` importe ce module pour savoir sur quel compte encaisser,
+      // et Nest enregistre au passage ses contrôleurs. Le jour où cette
+      // dépendance se déplace, le raccordement disparaît du back-office en
+      // silence — des 404 sur les routes qui décident où va l'argent.
+      // Ce test charge volontairement tout AppModule à froid. Sous `pnpm verify`,
+      // les builds Next et les autres suites tournent en parallèle : son budget
+      // est donc local et explicite, sans relever le délai de tous les tests.
+      const { AppModule } = await import('../../app.module');
+      const { EncaissementModule } = await import('./encaissement.module');
+      const importes = Reflect.getMetadata('imports', AppModule) as unknown[];
+      expect(importes).toContain(EncaissementModule);
+    },
+    15_000,
+  );
 });
 
 describe('le cloisonnement du contrôleur', () => {

@@ -871,6 +871,27 @@ export const LeadContactSchema = z.object({
 });
 export type LeadContact = z.infer<typeof LeadContactSchema>;
 
+/**
+ * Entrée du SEUL guichet d'acquisition public : le formulaire de la vitrine.
+ *
+ * Ce contrat reste distinct de `LeadCreateSchema`, réservé au CRM interne : un
+ * visiteur ne choisit ni l'étape commerciale, ni une séquence, ni une place
+ * fondateur. La date de création vient également de Mongo, jamais du client.
+ */
+export const SiteLeadCreateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    restaurant: z.string().trim().min(1).max(160).nullable(),
+    phone: z.string().trim().max(32).regex(/^[+0-9][0-9\s.\-()]{7,19}$/),
+    email: z.email().max(180).nullable(),
+    callbackSlot: z.enum(['matin', 'entre-services', 'apres-21h']),
+    message: z.string().trim().max(2_000).nullable(),
+    platforms: z.boolean(),
+    source: z.literal('site-vitrine'),
+  })
+  .strict();
+export type SiteLeadCreate = z.infer<typeof SiteLeadCreateSchema>;
+
 export const LeadCreateSchema = z.object({
   restaurantName: z.string().trim().min(1).max(160),
   contact: LeadContactSchema.default({ name: '', phone: '', email: '' }),

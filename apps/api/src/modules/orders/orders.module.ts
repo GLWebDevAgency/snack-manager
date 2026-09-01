@@ -7,10 +7,11 @@ import { TenantsModule } from '../tenants/tenants.module';
 // seulement à en proposer la liste : sans lui, la capacité et les fermetures
 // ne valaient que dans l'écran du client.
 import { OrderingModule } from '../ordering/ordering.module';
+import { PublicOrderGate } from './public-order-gate';
 
 @Module({
   imports: [TenantsModule, OrderingModule],
   controllers: [OrdersController],
-  providers: [OrdersService, OrdersGateway],
+  providers: [OrdersService, OrdersGateway, PublicOrderGate],
 })
 export class OrdersModule {}

@@ -16,6 +16,9 @@ export * from './platform';
 export * from './ops';
 export * from './tenant';
 export * from './encaissement';
+export * from './security';
+export * from './loyalty';
+export * from './loyalty-public';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -342,6 +345,20 @@ export type CreateOrderPayment = z.infer<typeof CreateOrderPaymentSchema>;
 export const CreateOrderSchema = z.object({
   /** Clé d'idempotence générée par l'appareil — le rejeu offline ne crée jamais de doublon. */
   clientId: z.uuid(),
+  /**
+   * Carte présentée avant l'encaissement au comptoir.
+   *
+   * Le serveur la fige sur la vente : le crédit ne peut ainsi pas être
+   * détourné après coup vers une autre carte à partir de la liste des tickets.
+   * Ce champ n'existe volontairement pas dans le contrat public.
+   */
+  loyaltyMemberId: z.uuid().optional(),
+  /**
+   * Intention de gain embarquée dans LA MÊME écriture durable que la vente.
+   * Le serveur la traite après livraison ; aucun second outbox local ne peut
+   * donc être perdu entre deux écritures lors d'un crash de tablette.
+   */
+  loyaltyEarnOperationId: z.uuid().optional(),
   channel: OrderChannelSchema,
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),
@@ -367,8 +384,81 @@ export const CreateOrderSchema = z.object({
    * remise n'obtient rien.
    */
   promoCode: z.string().trim().min(1).max(24).optional(),
+}).superRefine((order, ctx) => {
+  const hasMember = order.loyaltyMemberId !== undefined;
+  const hasOperation = order.loyaltyEarnOperationId !== undefined;
+  if (hasMember !== hasOperation) {
+    ctx.addIssue({
+      code: 'custom',
+      path: hasMember ? ['loyaltyEarnOperationId'] : ['loyaltyMemberId'],
+      message: 'La carte et son intention de gain sont indissociables',
+    });
+  }
+  if (hasMember && order.channel !== 'pos') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['channel'],
+      message: 'La fidélité du pilote exige une vente au comptoir authentifiée',
+    });
+  }
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
+
+/**
+ * État public, sans identifiant membre ni détail technique, du gain porté
+ * par une vente POS. `processing` reste rejouable : il ne signifie jamais que
+ * les points sont acquis avant la validation du ledger PostgreSQL.
+ */
+export const OrderLoyaltyEarnStateSchema = z.enum([
+  'none',
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+export type OrderLoyaltyEarnState = z.infer<typeof OrderLoyaltyEarnStateSchema>;
+
+export const OrderLoyaltyEarnStatusSchema = z.object({
+  state: OrderLoyaltyEarnStateSchema,
+  attempts: z.number().int().nonnegative(),
+  /** Code fermé et non sensible ; jamais le message brut d'une dépendance. */
+  errorCode: z.string().regex(/^[a-z0-9_]{1,64}$/).nullable(),
+});
+export type OrderLoyaltyEarnStatus = z.infer<typeof OrderLoyaltyEarnStatusSchema>;
+
+/**
+ * Contrat de la commande PUBLIQUE, volontairement distinct de celui du POS.
+ *
+ * Le navigateur ne choisit ni le canal, ni le type, ni un moyen effectivement
+ * encaisse, ni un statut. Ces faits sont poses par l'API. Reutiliser le DTO du
+ * poste authentifie permettait notamment d'omettre le retrait et d'injecter
+ * des tickets `surplace` directement dans la cuisine.
+ */
+export const CreatePublicOrderSchema = z
+  .object({
+    clientId: z.uuid(),
+    lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
+    payment: z
+      .object({
+        /** Intention du client ; le statut reste toujours calcule serveur. */
+        method: PaymentMethodSchema,
+      })
+      .strict(),
+    pickup: z
+      .object({
+        slot: z.iso.datetime(),
+        customerName: z.string().trim().min(2).max(80),
+        customerPhone: z.string().trim().min(6).max(32),
+      })
+      .strict(),
+    note: z.string().trim().max(500).optional(),
+    promoCode: z.string().trim().min(1).max(24).optional(),
+    /** Jeton Cloudflare Turnstile : 2 048 caracteres maximum selon Siteverify. */
+    turnstileToken: z.string().min(1).max(2_048),
+  })
+  .strict();
+export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
 
 /**
  * Les deux gestes qui MINORENT la recette — et qui n'étaient pas validés.
@@ -431,6 +521,25 @@ export interface JwtPayload {
   tenantId: string | null;
   role: UserRole | StaffRole;
   kind: 'user' | 'staff';
+  /** Émis automatiquement par JwtService ; utilisé pour fermer le temps réel à échéance. */
+  iat?: number;
+  /** Émis automatiquement par JwtService ; exprimé en secondes Unix. */
+  exp?: number;
+  /**
+   * Version de sécurité d'un compte email/mot de passe. Elle reste optionnelle
+   * dans le type pour décoder les anciens JWT, mais l'autorité serveur refuse
+   * désormais toute session `user` qui ne la porte pas.
+   */
+  userSessionVersion?: string;
+  /**
+   * Une session PIN est liée à la personne ET à la tablette qui l'a ouverte.
+   * Les champs restent optionnels dans le type pour décoder proprement les
+   * anciens jetons ; l'autorisation serveur refuse toutefois un JWT staff qui
+   * ne les porte pas et demande une nouvelle saisie du PIN.
+   */
+  staffSessionVersion?: string;
+  deviceId?: string;
+  deviceSessionVersion?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

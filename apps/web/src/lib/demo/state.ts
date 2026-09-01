@@ -50,6 +50,17 @@ import type {
   BaseUnit,
   CostsResponse,
   IngredientCategory,
+  LoyaltyConsentMutationResult,
+  LoyaltyConsentStateView,
+  LoyaltyEarnResult,
+  LoyaltyLedgerEntryView,
+  LoyaltyMemberLifecycleResult,
+  LoyaltyMemberQrReplaceResult,
+  LoyaltyMemberSummary,
+  LoyaltyMutationResult,
+  LoyaltyProgramView,
+  LoyaltyRedeemResult,
+  LoyaltyRewardView,
   MeasureUnit,
   PlanningShiftView,
   StockMovementRow,
@@ -228,6 +239,79 @@ export interface DemoRecipe {
   options: [string, string, string, number, string][];
 }
 
+export type DemoLoyaltyOperationResult =
+  | LoyaltyEarnResult
+  | LoyaltyRedeemResult
+  | LoyaltyMutationResult
+  | LoyaltyConsentMutationResult
+  | LoyaltyMemberLifecycleResult
+  | LoyaltyMemberQrReplaceResult;
+
+/**
+ * Profil en clair strictement local a la demonstration.
+ *
+ * Il ne quitte jamais cette memoire, n'est ni journalise ni place dans une
+ * URL. En production, ces deux champs sont chiffres et le telephone n'est
+ * recherche qu'au moyen d'une empreinte HMAC cloisonnee par restaurant.
+ */
+export interface DemoLoyaltyMember {
+  id: string;
+  firstName: string | null;
+  phone: string | null;
+  qrTokens: string[];
+  /** Génération monotone du QR, même après anonymisation terminale. */
+  qrGeneration: number;
+  status: LoyaltyMemberSummary["status"];
+  balanceUnits: number;
+  lifetimeEarnedUnits: number;
+  lifetimeRedeemedUnits: number;
+  lastActivityAt: string | null;
+  joinedAt: string;
+  /** Null jusqu'à confirmation explicite de la remise du QR initial. */
+  enrollmentHandoffAt: string | null;
+  consents: LoyaltyConsentStateView[];
+  /** Du plus recent au plus ancien, comme la vue detail de l'API. */
+  ledger: LoyaltyLedgerEntryView[];
+}
+
+export interface DemoLoyaltyOperation {
+  kind:
+    | "member_create"
+    | "earn"
+    | "redeem"
+    | "adjust"
+    | "consent"
+    | "member_lifecycle"
+    | "token_replace";
+  fingerprint: string;
+  /** Membre technique concerné, sans profil ni secret. */
+  memberId: string | null;
+  /**
+   * Un résultat à secret unique devient un tombstone après rotation ou
+   * anonymisation. Le rejeu est alors refusé sans conserver PII ni ancien QR.
+   */
+  result: DemoLoyaltyOperationResult | null;
+  /** Métadonnée sans PII ni QR réservée aux opérations d'adhésion. */
+  enrollment?: {
+    ownerFingerprint: string;
+    phase: "prepared" | "ready" | "acknowledged" | "rejected" | "expired";
+    expiresAt: string;
+  };
+  invalidated?: true;
+}
+
+export interface DemoLoyaltyState {
+  program: LoyaltyProgramView | null;
+  rewards: LoyaltyRewardView[];
+  members: DemoLoyaltyMember[];
+  /** Boite de reception idempotente, volatile et propre a ce chargement. */
+  operations: Record<string, DemoLoyaltyOperation>;
+  /** Ticket de caisse réservé même lorsqu'il ne rapporte aucune unité. */
+  earnReceipts: Record<string, string>;
+  /** Référence métier d'une consommation lorsqu'elle existe. */
+  redeemReceipts: Record<string, string>;
+}
+
 export interface DemoWorld {
   /** Instant de démarrage — toutes les dates en découlent. */
   bootAt: number;
@@ -256,6 +340,7 @@ export interface DemoWorld {
   devices: DemoDeviceRow[];
   screens: DemoScreenRow[];
   promotions: DemoPromo[];
+  loyalty: DemoLoyaltyState;
   domains: DemoDomainRow[];
   billing: Record<string, unknown>;
   /**
@@ -306,6 +391,279 @@ const MONTHS_FR = [
 ];
 
 const euros = (cents: number) => `${(cents / 100).toFixed(2).replace(".", ",")} €`;
+
+const loyaltyUuid = (family: string, sequence: number): string =>
+  `${family}-0000-4000-8000-${String(sequence).padStart(12, "0")}`;
+
+/** 43 caracteres base64url, meme forme que le secret de 256 bits de l'API. */
+const demoLoyaltyQrToken = (sequence: number): string =>
+  `demo-loyalty-${String(sequence).padStart(6, "0")}`.padEnd(43, "_").slice(0, 43);
+
+interface LoyaltyLedgerSeed {
+  kind: LoyaltyLedgerEntryView["kind"];
+  deltaUnits: number;
+  ageMin: number;
+  source?: LoyaltyLedgerEntryView["source"];
+  reason: string;
+  externalRef?: string | null;
+}
+
+interface LoyaltyMemberSeed {
+  firstName: string | null;
+  phone: string | null;
+  status?: DemoLoyaltyMember["status"];
+  joinedAgeMin: number;
+  ledger: LoyaltyLedgerSeed[];
+  consents?: {
+    purpose: LoyaltyConsentStateView["purpose"];
+    decision: LoyaltyConsentStateView["decision"];
+    ageMin: number;
+  }[];
+}
+
+/**
+ * Programme de fast-food volontairement lisible : un point par euro entier,
+ * avec un panier minimal qui evite les micro-transactions. Tous les nombres du
+ * tableau de bord seront ensuite derives du registre ci-dessous.
+ */
+function buildLoyalty(bootAt: number): DemoLoyaltyState {
+  const programId = loyaltyUuid("10000000", 1);
+  const createdAt = at(bootAt, 420 * 24 * 60);
+  const program: LoyaltyProgramView = {
+    id: programId,
+    name: "Le Club du Comptoir",
+    status: "active",
+    earn: {
+      mechanism: "points",
+      minimumPurchaseCents: 500,
+      maximumUnitsPerPurchase: 100,
+      spendStepCents: 100,
+      unitsPerStep: 1,
+    },
+    unitLabelSingular: "point",
+    unitLabelPlural: "points",
+    termsSummary:
+      "1 point par euro entier depense, des 5 €. Les avantages sont personnels et non convertibles en especes.",
+    rulesVersion: 3,
+    createdAt,
+    updatedAt: at(bootAt, 35 * 24 * 60),
+  };
+
+  const rewards: LoyaltyRewardView[] = [
+    {
+      id: loyaltyUuid("11000000", 1),
+      programId,
+      name: "Frites offertes",
+      description: "Une portion M offerte au prochain passage.",
+      costUnits: 40,
+      kind: "product",
+      valueCents: null,
+      productRef: "p62",
+      active: true,
+      createdAt: at(bootAt, 180 * 24 * 60),
+      updatedAt: at(bootAt, 32 * 24 * 60),
+    },
+    {
+      id: loyaltyUuid("11000000", 2),
+      programId,
+      name: "5 € de remise",
+      description: "Valable sur une commande de 15 € minimum.",
+      costUnits: 80,
+      kind: "fixed_discount",
+      valueCents: 500,
+      productRef: null,
+      active: true,
+      createdAt: at(bootAt, 150 * 24 * 60),
+      updatedAt: at(bootAt, 20 * 24 * 60),
+    },
+    {
+      id: loyaltyUuid("11000000", 3),
+      programId,
+      name: "Menu signature offert",
+      description: "Un kebab ou un tacos M, avec frites et boisson.",
+      costUnits: 120,
+      kind: "custom",
+      valueCents: null,
+      productRef: null,
+      active: true,
+      createdAt: at(bootAt, 120 * 24 * 60),
+      updatedAt: at(bootAt, 18 * 24 * 60),
+    },
+    {
+      id: loyaltyUuid("11000000", 4),
+      programId,
+      name: "Ancien dessert offert",
+      description: "Avantage archive, conserve pour l'historique.",
+      costUnits: 35,
+      kind: "product",
+      valueCents: null,
+      productRef: "p98",
+      active: false,
+      createdAt: at(bootAt, 260 * 24 * 60),
+      updatedAt: at(bootAt, 110 * 24 * 60),
+    },
+  ];
+
+  const day = 24 * 60;
+  const seeds: LoyaltyMemberSeed[] = [
+    {
+      firstName: "Sarah",
+      phone: "+33199000101",
+      joinedAgeMin: 120 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 95, ageMin: 90 * day, reason: "Gain automatique sur achat", externalRef: "ticket-1842" },
+        { kind: "redeem", deltaUnits: -40, ageMin: 25 * day, reason: "Frites offertes" },
+        { kind: "adjust_credit", deltaUnits: 5, ageMin: 10 * day, source: "admin", reason: "Geste commercial valide par le gerant" },
+        { kind: "earn", deltaUnits: 24, ageMin: 2 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2318" },
+      ],
+      consents: [{ purpose: "marketing_sms", decision: "granted", ageMin: 118 * day }],
+    },
+    {
+      firstName: "Karim",
+      phone: "+33199000102",
+      joinedAgeMin: 55 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 62, ageMin: 50 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2054" },
+        { kind: "earn", deltaUnits: 31, ageMin: 14 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2241" },
+      ],
+      consents: [{ purpose: "marketing_sms", decision: "withdrawn", ageMin: 8 * day }],
+    },
+    {
+      firstName: "Ines",
+      phone: "+33199000103",
+      joinedAgeMin: 18 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 44, ageMin: 17 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2270" },
+        { kind: "earn", deltaUnits: 18, ageMin: day, reason: "Gain automatique sur achat", externalRef: "ticket-2336" },
+      ],
+      consents: [{ purpose: "marketing_sms", decision: "granted", ageMin: 17 * day }],
+    },
+    {
+      firstName: "Lucas",
+      phone: "+33199000104",
+      joinedAgeMin: 240 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 120, ageMin: 200 * day, reason: "Gain automatique sur achat", externalRef: "ticket-1210" },
+        { kind: "redeem", deltaUnits: -80, ageMin: 60 * day, reason: "5 € de remise" },
+        { kind: "earn", deltaUnits: 30, ageMin: 40 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2130" },
+      ],
+    },
+    {
+      firstName: "Yasmine",
+      phone: "+33199000105",
+      joinedAgeMin: 9 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 75, ageMin: 8 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2302" },
+      ],
+      consents: [{ purpose: "marketing_sms", decision: "granted", ageMin: 8 * day }],
+    },
+    {
+      firstName: "Mehdi",
+      phone: "+33199000106",
+      joinedAgeMin: 400 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 100, ageMin: 200 * day, reason: "Gain automatique sur achat", externalRef: "ticket-1182" },
+        { kind: "redeem", deltaUnits: -40, ageMin: 10 * day, reason: "Frites offertes" },
+        { kind: "earn", deltaUnits: 30, ageMin: 3 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2324" },
+      ],
+    },
+    {
+      firstName: "Lea",
+      phone: null,
+      joinedAgeMin: 3 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 14, ageMin: 2 * day, source: "standalone", reason: "Gain automatique sur achat", externalRef: "ticket-2319" },
+      ],
+    },
+    {
+      firstName: "Nassim",
+      phone: "+33199000108",
+      status: "blocked",
+      joinedAgeMin: 70 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 50, ageMin: 65 * day, reason: "Gain automatique sur achat", externalRef: "ticket-1968" },
+        { kind: "earn", deltaUnits: 20, ageMin: 20 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2262" },
+      ],
+    },
+    {
+      firstName: "Chloe",
+      phone: "+33199000109",
+      joinedAgeMin: 45 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 82, ageMin: 40 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2119" },
+        { kind: "adjust_debit", deltaUnits: -10, ageMin: 12 * day, source: "admin", reason: "Correction d'un double credit" },
+        { kind: "earn", deltaUnits: 22, ageMin: 4 * day, reason: "Gain automatique sur achat", externalRef: "ticket-2312" },
+      ],
+    },
+    {
+      firstName: null,
+      phone: null,
+      status: "anonymized",
+      joinedAgeMin: 600 * day,
+      ledger: [
+        { kind: "earn", deltaUnits: 100, ageMin: 500 * day, reason: "Gain automatique sur achat", externalRef: "ticket-archive" },
+      ],
+    },
+  ];
+
+  let ledgerSequence = 0;
+  const members = seeds.map((seed, memberIndex): DemoLoyaltyMember => {
+    let balanceUnits = 0;
+    let lifetimeEarnedUnits = 0;
+    let lifetimeRedeemedUnits = 0;
+    const ledger = seed.ledger
+      .slice()
+      .sort((left, right) => right.ageMin - left.ageMin)
+      .map((entry): LoyaltyLedgerEntryView => {
+        balanceUnits += entry.deltaUnits;
+        if (entry.kind === "earn") lifetimeEarnedUnits += entry.deltaUnits;
+        if (entry.kind === "redeem") lifetimeRedeemedUnits += Math.abs(entry.deltaUnits);
+        return {
+          id: loyaltyUuid("12000000", ++ledgerSequence),
+          kind: entry.kind,
+          deltaUnits: entry.deltaUnits,
+          balanceAfter: balanceUnits,
+          source: entry.source ?? "pos",
+          reason: entry.reason,
+          externalRef: entry.externalRef ?? null,
+          recordedAt: at(bootAt, entry.ageMin),
+        };
+      })
+      .reverse();
+
+    const status = seed.status ?? "active";
+    return {
+      id: loyaltyUuid("13000000", memberIndex + 1),
+      firstName: status === "anonymized" ? null : seed.firstName,
+      phone: status === "anonymized" ? null : seed.phone,
+      qrTokens: status === "anonymized" ? [] : [demoLoyaltyQrToken(memberIndex + 1)],
+      qrGeneration: 1,
+      status,
+      balanceUnits,
+      lifetimeEarnedUnits,
+      lifetimeRedeemedUnits,
+      lastActivityAt: ledger[0]?.recordedAt ?? null,
+      joinedAt: at(bootAt, seed.joinedAgeMin),
+      enrollmentHandoffAt: at(bootAt, seed.joinedAgeMin),
+      consents: (seed.consents ?? []).map((consent) => ({
+        purpose: consent.purpose,
+        decision: consent.decision,
+        noticeVersion: "marketing-v1",
+        updatedAt: at(bootAt, consent.ageMin),
+      })),
+      ledger,
+    };
+  });
+
+  return {
+    program,
+    rewards,
+    members,
+    operations: {},
+    earnReceipts: {},
+    redeemReceipts: {},
+  };
+}
 
 // ─────────────────────────────────────────────────────────────
 // Construction du monde
@@ -622,6 +980,7 @@ export function createWorld(bootAt: number): DemoWorld {
     devices,
     screens,
     promotions: SEED_PROMOTIONS.map((p) => ({ ...p, channels: [...p.channels] })),
+    loyalty: buildLoyalty(bootAt),
     domains,
     billing: buildBilling(bootAt),
     planning: {},

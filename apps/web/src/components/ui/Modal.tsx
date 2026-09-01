@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  useEffect,
-  useRef,
-  type KeyboardEvent as ToucheReact,
-  type ReactNode,
-} from "react";
+import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { IconBtn } from "./IconBtn";
+import { useDialogLayer } from "./useDialogLayer";
 
 type ModalProps = {
   open: boolean;
@@ -16,12 +12,14 @@ type ModalProps = {
   /** Boutons d'action (alignés à droite). */
   footer?: ReactNode;
   /**
-   * Modale destructive (« Supprimer… ») : le clic sur l'overlay et Échap ne
-   * ferment PAS — fermeture explicite uniquement (croix ou bouton Annuler).
+   * Modale destructive (« Supprimer… ») : ni l'overlay ni Échap ne ferment la
+   * fenêtre. La fermeture reste explicite via la croix ou le bouton Annuler.
    */
   destructive?: boolean;
   /** Largeur max du panneau (défaut 440). */
   width?: number;
+  /** Cible de focus prioritaire à l'ouverture (optionnelle). */
+  initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
 /**
@@ -36,58 +34,29 @@ export function Modal({
   footer,
   destructive = false,
   width = 440,
+  initialFocusRef,
 }: ModalProps) {
-  useEffect(() => {
-    if (!open || destructive) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, destructive, onClose]);
-
-  /*
-    ── LE FOCUS ENTRE, TOURNE, ET REVIENT ──
-
-    Sans cela, ouvrir une modale au clavier laissait le focus sur le bouton
-    déclencheur derrière le voile : Tab parcourait la page masquée — y compris
-    ses actions destructives — et Entrée agissait sur un élément invisible.
-    À l'ouverture le panneau prend le focus, Tab boucle à l'intérieur, et la
-    fermeture le rend au déclencheur.
-  */
-  const panneau = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const declencheur = document.activeElement as HTMLElement | null;
-    panneau.current?.focus();
-    return () => declencheur?.focus();
-  }, [open]);
-
-  function confinerTab(e: ToucheReact<HTMLDivElement>) {
-    if (e.key !== "Tab" || !panneau.current) return;
-    const focusables = panneau.current.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusables.length === 0) return e.preventDefault();
-    const premier = focusables[0];
-    const dernier = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === premier) {
-      e.preventDefault();
-      dernier.focus();
-    } else if (!e.shiftKey && document.activeElement === dernier) {
-      e.preventDefault();
-      premier.focus();
-    }
-  }
+  const titleId = useId();
+  const closeFromEscape = useCallback(() => {
+    if (!destructive) onClose();
+  }, [destructive, onClose]);
+  const dialogRef = useDialogLayer({
+    open,
+    onClose: closeFromEscape,
+    initialFocusRef,
+  });
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4"
+      ref={dialogRef}
+      inert
+      tabIndex={-1}
+      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
-      aria-label={typeof title === "string" ? title : undefined}
+      aria-labelledby={titleId}
       onClick={() => {
         if (!destructive) onClose();
       }}
@@ -114,15 +83,15 @@ export function Modal({
         fausse `vh`, et le pied repasserait sous elle.
       */}
       <div
-        ref={panneau}
-        tabIndex={-1}
-        onKeyDown={confinerTab}
-        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep outline-none"
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink">
+          <h2
+            id={titleId}
+            className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink"
+          >
             {title}
           </h2>
           <IconBtn
@@ -135,11 +104,17 @@ export function Modal({
         </div>
         {/* `-mx-5 px-5` : la zone défilante va d'un bord à l'autre du panneau,
             sinon l'ascenseur apparaît à 20 px du bord et semble flotter. */}
-        <div className="cf-scroll -mx-5 min-h-0 flex-1 overflow-y-auto px-5 text-sm text-ink">
+        <div
+          data-dialog-content
+          className="cf-scroll -mx-5 min-h-0 flex-1 overflow-y-auto px-5 text-sm text-ink"
+        >
           {children}
         </div>
         {footer && (
-          <div className="mt-5 flex shrink-0 items-center justify-end gap-2">
+          <div
+            data-dialog-footer
+            className="mt-5 flex shrink-0 items-center justify-end gap-2"
+          >
             {footer}
           </div>
         )}

@@ -16,6 +16,8 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
 import { EncaissementModule } from './modules/encaissement/encaissement.module';
 import { SupplyDbModule } from './supply-db.module';
+import { PostgresModule } from './postgres.module';
+import { LoyaltyDbModule } from './loyalty-db.module';
 import { SupplyModule } from './modules/supply/supply.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -27,11 +29,15 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { trustedClientIp } from './common/trusted-client-ip';
+import { validatePublicRelayEnvironment } from './common/verified-public-relay';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validatePublicRelayEnvironment,
       // Dev local : .env à la racine du monorepo ; en prod Railway les
       // variables sont injectées directement dans l'environnement.
       envFilePath: [join(process.cwd(), '.env'), join(process.cwd(), '../../.env')],
@@ -51,7 +57,12 @@ import { OpsModule } from './modules/ops/ops.module';
      * route, uniquement là où la force brute paie : connexions, saisie de PIN,
      * codes d'appairage, création de commande publique.
      */
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 30 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 30 }],
+      // Même frontière que les quotas Redis : Railway reconstruit X-Real-IP ;
+      // X-Forwarded-For et le req.ip qui en découle ne sont jamais un tracker.
+      getTracker: (request) => trustedClientIp(request),
+    }),
     DatabaseModule,
     RedisModule,
     // Adaptateurs des ports (@Global) : DOMAIN_REGISTRAR, PAYMENT_GATEWAY…
@@ -76,7 +87,10 @@ import { OpsModule } from './modules/ops/ops.module';
      * Nest déduplique par référence : le déclarer deux fois ne coûte rien.
      */
     EncaissementModule,
+    PostgresModule,
     SupplyDbModule,
+    LoyaltyDbModule,
+    LoyaltyModule,
     SupplyModule,
     StatsModule,
     StaffModule,

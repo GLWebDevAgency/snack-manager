@@ -17,12 +17,14 @@ import {
   type StaffRole,
   ORDER_STATUS_RANK,
   type OrderStatus,
+  type OrderLoyaltyEarnStatus,
   type OrderTracking,
   ordersChannel,
   WS_EVENTS,
 } from '@sm/contracts';
 import type { Counter, Order, Product, Promotion } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { AuditService } from '../audit/audit.module';
 import { resolvePayment } from './payment';
 import { newTrackingToken, trackingFilter } from './tracking';
@@ -77,7 +79,47 @@ export class OrdersService {
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
-    void this.redis.publish(ordersChannel(tenantId), JSON.stringify({ event, payload }));
+    void publishRedisBestEffort(
+      this.redis,
+      ordersChannel(tenantId),
+      JSON.stringify({ event, payload }),
+    );
+  }
+
+  /** Défense supplémentaire avant diffusion temps réel vers caisse ET cuisine. */
+  private orderEventPayload(order: { toObject(): Record<string, unknown> }) {
+    const payload = { ...order.toObject() };
+    delete payload.loyaltyMemberId;
+    delete payload.loyaltyEarnOperationId;
+    delete payload.loyaltyActorRef;
+    delete payload.loyaltyDeviceRef;
+    delete payload.loyaltyEarnState;
+    delete payload.loyaltyEarnAttempts;
+    delete payload.loyaltyEarnLastError;
+    delete payload.loyaltyEarnCompletedAt;
+    delete payload.loyaltyEarnNextAttemptAt;
+    delete payload.loyaltyEarnLeaseUntil;
+    return payload;
+  }
+
+  /**
+   * Transforme une collision `__v` en conflit métier explicite.
+   *
+   * `OrderSchema.optimisticConcurrency` empêche deux documents lus au même
+   * instant de s'écraser. Sans cette traduction, Mongoose protégerait bien la
+   * donnée mais la caisse recevrait un 500 sans savoir qu'elle doit actualiser.
+   */
+  private async saveWithoutLostUpdate(order: { save(): Promise<unknown> }): Promise<void> {
+    try {
+      await order.save();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'VersionError') {
+        throw new ConflictException(
+          'Commande modifiée en parallèle — actualisez le ticket puis recommencez',
+        );
+      }
+      throw error;
+    }
   }
 
   /**
@@ -208,9 +250,32 @@ export class OrdersService {
    * Les prix sont TOUJOURS résolus côté serveur depuis le menu courant.
    * Idempotente sur {tenantId, clientId} : le rejeu offline renvoie l'existante.
    */
-  async create(tenantId: string, dto: CreateOrder, actor: string) {
+  async create(
+    tenantId: string,
+    dto: CreateOrder,
+    actor: string,
+    deviceRef: string | null = null,
+  ) {
+    return (await this.createWithOutcome(tenantId, dto, actor, deviceRef)).order;
+  }
+
+  /**
+   * Variante qui révèle uniquement si CET appel a créé le document.
+   *
+   * Le contrôleur public s'en sert pour rendre sa réservation anti-abus lors
+   * d'une course idempotente. Les autres appelants gardent l'API historique et
+   * ne voient que la commande.
+   */
+  async createWithOutcome(
+    tenantId: string,
+    dto: CreateOrder,
+    actor: string,
+    deviceRef: string | null = null,
+  ) {
     const existing = await this.orders.findOne({ tenantId, clientId: dto.clientId });
-    if (existing) return this.withTrackingToken(existing); // rejeu de la file offline
+    if (existing) {
+      return { order: this.withTrackingToken(existing), created: false as const };
+    }
 
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
@@ -299,6 +364,16 @@ export class OrdersService {
         tenantId,
         number,
         clientId: dto.clientId,
+        loyaltyMemberId: dto.loyaltyMemberId ?? null,
+        loyaltyEarnOperationId: dto.loyaltyEarnOperationId ?? null,
+        loyaltyActorRef: dto.loyaltyMemberId ? actor : null,
+        loyaltyDeviceRef: dto.loyaltyMemberId ? deviceRef : null,
+        loyaltyEarnState: dto.loyaltyMemberId ? 'pending' : null,
+        loyaltyEarnAttempts: 0,
+        loyaltyEarnLastError: null,
+        loyaltyEarnCompletedAt: null,
+        loyaltyEarnNextAttemptAt: null,
+        loyaltyEarnLeaseUntil: null,
         channel: dto.channel,
         type: dto.type,
         lines,
@@ -327,8 +402,8 @@ export class OrdersService {
           : null,
         note: dto.note ?? null,
       });
-      this.publish(tenantId, WS_EVENTS.orderCreated, order.toObject());
-      return order;
+      this.publish(tenantId, WS_EVENTS.orderCreated, this.orderEventPayload(order));
+      return { order, created: true as const };
     } catch (err: unknown) {
       // LA RÉSERVATION EST RENDUE : la commande n'existera pas.
       //
@@ -348,10 +423,63 @@ export class OrdersService {
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
         const raced = await this.orders.findOne({ tenantId, clientId: dto.clientId });
-        return raced ? this.withTrackingToken(raced) : raced;
+        if (raced) {
+          return { order: this.withTrackingToken(raced), created: false as const };
+        }
       }
       throw err;
     }
+  }
+
+  /**
+   * Rejeu public avant une preuve Turnstile neuve.
+   *
+   * Le token fournisseur est a usage unique. Si la reponse de creation s'est
+   * perdue, le meme `clientId` doit retrouver la commande existante sans
+   * consommer une seconde preuve, un second quota ou un second numero.
+   */
+  async findByClientId(tenantId: string, clientId: string) {
+    const existing = await this.orders.findOne({ tenantId, clientId });
+    return existing ? this.withTrackingToken(existing) : null;
+  }
+
+  /**
+   * Projection minimale pour que le POS sache si le serveur a réellement
+   * crédité le ledger. Aucun membre, operationId, auteur ou détail interne ne
+   * franchit cette route.
+   */
+  async loyaltyEarnStatusByClientId(
+    tenantId: string,
+    clientId: string,
+  ): Promise<OrderLoyaltyEarnStatus | null> {
+    const order = await this.orders
+      .findOne({ tenantId, clientId })
+      .select('+loyaltyEarnState +loyaltyEarnAttempts +loyaltyEarnLastError')
+      .lean<{
+        loyaltyEarnState?: string | null;
+        loyaltyEarnAttempts?: number | null;
+        loyaltyEarnLastError?: string | null;
+      } | null>();
+    if (!order) return null;
+
+    const state = order.loyaltyEarnState;
+    const publicState =
+      state === 'pending' ||
+      state === 'processing' ||
+      state === 'completed' ||
+      state === 'failed' ||
+      state === 'cancelled'
+        ? state
+        : 'none';
+    const attempts = Number.isSafeInteger(order.loyaltyEarnAttempts)
+      ? Math.max(0, Number(order.loyaltyEarnAttempts))
+      : 0;
+    const errorCode =
+      typeof order.loyaltyEarnLastError === 'string' &&
+      /^[a-z0-9_]{1,64}$/.test(order.loyaltyEarnLastError)
+        ? order.loyaltyEarnLastError
+        : null;
+    return { state: publicState, attempts, errorCode };
   }
 
   /**
@@ -480,8 +608,8 @@ export class OrdersService {
     if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }
-    await order.save();
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    await this.saveWithoutLostUpdate(order);
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 
@@ -493,7 +621,7 @@ export class OrdersService {
     }
     order.status = 'cancelled';
     order.statusHistory.push({ status: 'cancelled', at: new Date(), by: staffId });
-    await order.save();
+    await this.saveWithoutLostUpdate(order);
     await this.audit.log({
       tenantId,
       staffId,
@@ -502,7 +630,7 @@ export class OrdersService {
       meta: { reason, number: order.number, total: order.totals.total },
       pinVerifiedAt: new Date(),
     });
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 
@@ -526,6 +654,11 @@ export class OrdersService {
     reason: string,
   ) {
     const order = await this.byId(tenantId, id);
+    if (order.status === 'delivered' || order.status === 'cancelled') {
+      throw new ConflictException(
+        'Commande clôturée — une remise doit être posée avant la remise au client',
+      );
+    }
     if (amount > order.totals.subtotal) {
       throw new BadRequestException(
         'Une remise ne peut pas dépasser le montant de la commande',
@@ -564,7 +697,7 @@ export class OrdersService {
       promotionId: null as never,
     };
     order.totals.total = order.totals.subtotal - pose.amount;
-    await order.save();
+    await this.saveWithoutLostUpdate(order);
     await this.audit.log({
       tenantId,
       staffId: valideur.staffId,
@@ -575,7 +708,7 @@ export class OrdersService {
       meta: { amount: pose.amount, reason: pose.reason, role: valideur.role, number: order.number },
       pinVerifiedAt: new Date(pose.pinVerifiedAt),
     });
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 

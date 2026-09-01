@@ -204,7 +204,15 @@ export class SlotsService {
       throw new BadRequestException('Créneau de retrait invalide.');
     }
 
-    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(parisYmd(at)));
+    const requested = parisYmd(at);
+    const furthest = addDays(parisYmd(new Date()), NEXT_OPEN_LOOKAHEAD_DAYS);
+    if (compareDays(requested, furthest) > 0) {
+      throw new ConflictException(
+        `Les commandes ouvrent au maximum ${NEXT_OPEN_LOOKAHEAD_DAYS} jours a l avance.`,
+      );
+    }
+
+    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(requested));
     const creneau = slots.find((s) => s.iso === at.toISOString());
 
     if (!creneau) {

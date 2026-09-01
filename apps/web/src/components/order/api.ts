@@ -32,6 +32,7 @@
  */
 
 import type {
+  CreatePublicOrder,
   OrderStatus,
   OrderTicket,
   PaymentIntentResponse,
@@ -340,24 +341,8 @@ export type OrderLinePayload = {
   qty: number;
 };
 
-export type CreateOrderPayload = {
-  clientId: string;
-  channel: "online";
-  type: "pickup";
-  lines: OrderLinePayload[];
-  payment: { method: "online" | "counter" };
-  pickup: { slot: string; customerName: string; customerPhone?: string };
-  note?: string;
-  /**
-   * Le code promo saisi, s'il y en a un.
-   *
-   * Le MONTANT n'est jamais transmis : comme les prix, la remise est résolue
-   * par le serveur contre la promotion en base. Un panier modifié dans le
-   * navigateur n'obtient rien — et l'écran ne peut donc pas afficher le gain
-   * avant validation, ce que la mention sous le total dit déjà.
-   */
-  promoCode?: string;
-};
+/** Même type que le pipe Zod API : aucun contrat navigateur parallèle ne dérive. */
+export type CreateOrderPayload = CreatePublicOrder;
 
 /** Commande créée telle que renvoyée par l’API (projection utile au client). */
 export type CreatedOrder = {

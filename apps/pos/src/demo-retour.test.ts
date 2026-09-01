@@ -88,6 +88,7 @@ describe('la destination vient de la configuration', () => {
   it('tient debout sans configuration du tout', () => {
     // Un export sans variable ne doit pas produire un bouton mort : le repli
     // est une adresse de production qui répond.
+    vi.stubEnv('EXPO_PUBLIC_SITE_URL', undefined);
     visite('https://caisse.snackmanager.fr/?demo=1');
     expect(retourVitrine()?.href).toMatch(/^https:\/\//);
   });

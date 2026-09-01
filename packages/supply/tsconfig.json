@@ -13,5 +13,5 @@
   // trafic, sinon le code parle à un schéma qui n'existe pas encore.
   // `seed.ts`, lui, reste dehors : une amorce de démonstration n'a rien à
   // faire dans une image de production.
-  "exclude": ["src/seed.ts"]
+  "exclude": ["src/seed.ts", "src/**/*.test.ts"]
 }

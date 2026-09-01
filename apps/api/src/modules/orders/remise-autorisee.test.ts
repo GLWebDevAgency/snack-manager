@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { REMISE_PLAFOND_CENTS } from '@sm/contracts';
 import { OrdersService } from './orders.service';
 
@@ -24,11 +28,12 @@ import { OrdersService } from './orders.service';
 const TENANT = '507f1f77bcf86cd799439011';
 const ORDER = '507f1f77bcf86cd799439012';
 
-function build(subtotal = 10_000) {
+function build(subtotal = 10_000, status = 'new') {
   const enregistre: Record<string, unknown>[] = [];
   const commande = {
     _id: ORDER,
     number: 12,
+    status,
     totals: { subtotal, discount: null as unknown, total: subtotal },
     save: async () => {},
     toObject: () => ({}),
@@ -96,6 +101,16 @@ describe('le plafond de remise par rôle', () => {
 });
 
 describe('ce que la remise exige encore', () => {
+  it.each(['delivered', 'cancelled'])(
+    'refuse de réécrire le total une fois la commande %s',
+    async (status) => {
+      const { service } = build(10_000, status);
+      await expect(
+        service.discount(TENANT, ORDER, gerant, 500, 'Geste commercial'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    },
+  );
+
   it('un motif — NF525 n’admet pas une minoration de recette sans raison', async () => {
     const { service } = build();
     await expect(service.discount(TENANT, ORDER, gerant, 500, 'ok')).rejects.toThrow(

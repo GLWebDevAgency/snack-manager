@@ -7,11 +7,17 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, ScrollView, Text, View } from 'react-native';
-import { TOUCH_MIN, euros, palette } from '@sm/client-core';
+import { TOUCH_MIN, euros, palette, type RejectedEntry } from '@sm/client-core';
 import { FONT, R, S, TABULAR, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMotion } from './ui';
 import { useLayout } from './useLayout';
 import { MODE_LABEL, PAY_LABEL, type DayEntry, type Mode, type ServiceZ } from './pos-state';
+import {
+  rejectedSaleAmount,
+  rejectedSnapshotIds,
+  serviceCloseBlockReason,
+  serviceCloseStatus,
+} from './pos-safety';
 
 // ─────────────────────────────────────────────────────────────
 // V3 · Encaissement espèces
@@ -40,7 +46,7 @@ export function CashModal({
   const digit = (d: string) => setReceived((cur) => Math.min(99_999_99, cur * 10 + Number(d)));
 
   return (
-    <Overlay onClose={onClose} width={460}>
+    <Overlay onClose={onClose} accessibilityLabel="Encaissement espèces" width={460}>
       <PanelHead title="Encaissement espèces" sub={`Total à encaisser · ${euros(total)}`} onClose={onClose} />
       <View style={sheet.hairline} />
 
@@ -199,7 +205,7 @@ export function SentOverlay({
   const number = entry.serverNumber ?? entry.localNumber;
 
   return (
-    <Overlay onClose={onClose} width={440} dim={0.72}>
+    <Overlay onClose={onClose} accessibilityLabel="Commande envoyée en cuisine" width={440} dim={0.72}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(28), alignItems: 'center' }}>
         <Animated.View
           style={{
@@ -268,6 +274,75 @@ export function SentOverlay({
           {MODE_LABEL[entry.mode]} · {euros(entry.total)} ·{' '}
           {entry.paid ? `Payé (${PAY_LABEL[entry.method].toLowerCase()})` : 'À encaisser au retrait'}
         </Text>
+
+        {entry.loyalty ? (
+          <View
+            style={{
+              alignSelf: 'stretch',
+              marginTop: 14,
+              paddingVertical: 11,
+              paddingHorizontal: 14,
+              borderRadius: R.ctrl,
+              backgroundColor: withAlpha(
+                entry.loyalty.state === 'credited'
+                  ? palette.green
+                  : entry.loyalty.state === 'failed'
+                    ? palette.red
+                    : palette.amber,
+                0.11,
+              ),
+              borderWidth: 1,
+              borderColor: withAlpha(
+                entry.loyalty.state === 'credited'
+                  ? palette.green
+                  : entry.loyalty.state === 'failed'
+                    ? palette.red
+                    : palette.amber,
+                0.3,
+              ),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 9,
+            }}
+          >
+            <Text
+              style={{
+                color:
+                  entry.loyalty.state === 'credited'
+                    ? palette.green
+                    : entry.loyalty.state === 'failed'
+                      ? palette.red
+                      : palette.amber,
+                fontSize: L.fs(17),
+              }}
+            >
+              ★
+            </Text>
+            <Text
+              style={{
+                flex: 1,
+                fontFamily: FONT,
+                color:
+                  entry.loyalty.state === 'credited'
+                    ? palette.green
+                    : entry.loyalty.state === 'failed'
+                      ? palette.red
+                      : palette.amber,
+                fontSize: L.fs(13),
+                fontWeight: '700',
+                textAlign: 'left',
+              }}
+            >
+              {entry.loyalty.state === 'credited'
+                ? 'Fidélité traitée par le serveur'
+                : entry.loyalty.state === 'failed'
+                  ? 'Fidélité à reprendre manuellement'
+                  : entry.loyalty.state === 'queued'
+                    ? 'Traitement fidélité sécurisé · envoi en cours'
+                    : 'Fidélité en attente de confirmation de la vente'}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Le rendu de monnaie ne doit pas être un message fugace : il reste
             affiché tant que le caissier n'a pas fermé la confirmation. */}
@@ -361,7 +436,7 @@ export function DiscountModal({
     /^\d{4,6}$/.test(pin);
 
   return (
-    <Overlay onClose={onClose} width={440}>
+    <Overlay onClose={onClose} accessibilityLabel="Appliquer une remise" width={440}>
       <PanelHead
         title="Remise"
         sub={`Commande n° ${entry.serverNumber ?? entry.localNumber} · ${euros(entry.total)}`}
@@ -538,7 +613,7 @@ export function TicketPreview({
   }, [load]);
 
   return (
-    <Overlay onClose={onClose} width={430}>
+    <Overlay onClose={onClose} accessibilityLabel="Ticket client" width={430}>
       <PanelHead title="Ticket client" sub={`Commande n° ${entry.serverNumber ?? entry.localNumber}`} onClose={onClose} />
       <View style={sheet.hairline} />
 
@@ -707,6 +782,10 @@ export function CloseModal({
   entries,
   z,
   pending,
+  rejected,
+  pendingLoyalty,
+  busy,
+  offline,
   brand,
   staffName,
   onClose,
@@ -718,6 +797,10 @@ export function CloseModal({
   /** Ventilation du service par moyen de paiement — le cœur du Z. */
   z: ServiceZ;
   pending: number;
+  rejected: number;
+  pendingLoyalty: number;
+  busy: boolean;
+  offline: boolean;
   brand: Brand;
   staffName: string;
   onClose: () => void;
@@ -727,6 +810,15 @@ export function CloseModal({
 }) {
   const L = useLayout();
   const [tab, setTab] = useState<'recap' | 'orders'>('recap');
+  const closeSafety = {
+    saleInFlight: busy,
+    offline,
+    pendingSync: pending,
+    rejectedSync: rejected,
+    pendingLoyalty,
+  };
+  const closeBlocked = serviceCloseBlockReason(closeSafety) !== null;
+  const closeStatus = serviceCloseStatus(closeSafety);
 
   const counts = useMemo(() => {
     const byMode = (m: Mode) => entries.filter((e) => e.mode === m).length;
@@ -734,7 +826,7 @@ export function CloseModal({
   }, [entries]);
 
   return (
-    <Overlay onClose={onClose} width={560}>
+    <Overlay onClose={onClose} accessibilityLabel="Clôture de service" width={560}>
       <PanelHead
         title="Clôture de service"
         sub={`${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
@@ -811,6 +903,7 @@ export function CloseModal({
           </View>
 
           <View
+            accessibilityLiveRegion="polite"
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -818,24 +911,29 @@ export function CloseModal({
               paddingHorizontal: 14,
               paddingVertical: 12,
               borderRadius: R.ctrl,
-              backgroundColor: pending > 0 ? withAlpha(palette.amber, 0.1) : withAlpha(palette.green, 0.1),
+              backgroundColor: closeBlocked
+                ? withAlpha(palette.amber, 0.1)
+                : withAlpha(palette.green, 0.1),
             }}
           >
             <View
-              style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: pending > 0 ? palette.amber : palette.green }}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: closeBlocked ? palette.amber : palette.green,
+              }}
             />
             <Text
               style={{
                 fontFamily: FONT,
-                color: pending > 0 ? palette.amber : palette.green,
+                color: closeBlocked ? palette.amber : palette.green,
                 fontSize: L.fs(13.5),
                 fontWeight: '600',
                 flex: 1,
               }}
             >
-              {pending > 0
-                ? `${pending} mutation${pending > 1 ? 's' : ''} encore en file — clôturez après synchronisation pour un Z exact.`
-                : 'File de synchronisation vide — toutes les commandes sont enregistrées.'}
+              {closeStatus}
             </Text>
           </View>
 
@@ -849,7 +947,7 @@ export function CloseModal({
               onAccent={brand.onAccent}
               // Un service ne comptant que des commandes en ligne se clôture
               // aussi : le journal local est vide, la caisse ne l'est pas.
-              disabled={z.orders === 0}
+              disabled={z.orders === 0 || closeBlocked}
               onPress={onCloseService}
               style={{ flex: 1 }}
             />
@@ -910,6 +1008,30 @@ function OrderRow({
           {entry.serverId ? '' : ' · en file'}
           {entry.discount ? ` · remise ${euros(entry.discount)}` : ''}
         </Text>
+        {entry.loyalty ? (
+          <Text
+            style={[
+              type.mut,
+              {
+                fontSize: L.fs(12),
+                marginTop: 2,
+                color:
+                  entry.loyalty.state === 'credited'
+                    ? palette.green
+                    : entry.loyalty.state === 'failed'
+                      ? palette.red
+                      : palette.amber,
+              },
+            ]}
+          >
+            ★ Fidélité ·{' '}
+            {entry.loyalty.state === 'credited'
+              ? 'traitée'
+              : entry.loyalty.state === 'failed'
+                ? 'à reprendre'
+                : 'en cours'}
+          </Text>
+        ) : null}
       </View>
       <Text style={[type.num, { fontSize: L.fs(16), fontWeight: '800' }]}>
         {euros(entry.total - (entry.discount ?? 0))}
@@ -1002,33 +1124,29 @@ export function Notice({ tone, title, body }: { tone: string; title: string; bod
  */
 export function RejetsModal({
   rejets,
+  entries,
   brand,
   onClose,
   onAcquitter,
 }: {
-  rejets: readonly {
-    id: string;
-    path: string;
-    body?: unknown;
-    reason: string;
-    status: number;
-    at: number;
-  }[];
+  rejets: readonly RejectedEntry[];
+  entries: readonly DayEntry[];
   brand: Brand;
   onClose: () => void;
-  onAcquitter: () => void;
+  onAcquitter: (ids: readonly string[]) => void;
 }) {
   const heure = (ms: number) =>
     new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const idsAffiches = useMemo(() => rejectedSnapshotIds(rejets), [rejets]);
 
-  /** Le total du corps refusé, quand il en porte un — c'est ce qui a été encaissé. */
-  const montant = (body: unknown): string => {
-    const t = (body as { totals?: { total?: unknown } } | null)?.totals?.total;
-    return typeof t === 'number' ? euros(t) : '—';
+  /** Le prix client local, car le corps refusé ne transporte aucun montant. */
+  const montant = (rejected: RejectedEntry): string => {
+    const amount = rejectedSaleAmount(rejected, entries);
+    return amount === null ? '—' : euros(amount);
   };
 
   return (
-    <Overlay onClose={onClose} width={520}>
+    <Overlay onClose={onClose} accessibilityLabel="Ventes refusées par le serveur" width={520}>
       <PanelHead
         title="Ventes refusées par le serveur"
         sub={`${rejets.length} à traiter`}
@@ -1062,7 +1180,7 @@ export function RejetsModal({
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: S.sm }}>
               <Text style={{ fontFamily: FONT, color: palette.red, fontWeight: '800', fontSize: 15 }}>
-                {montant(r.body)}
+                {montant(r)}
               </Text>
               <Text style={{ fontFamily: FONT, color: palette.mut, fontSize: 13 }}>
                 {heure(r.at)} · {r.status}
@@ -1087,7 +1205,7 @@ export function RejetsModal({
         label="J'ai traité ces ventes"
         kind="solid"
         size="md"
-        onPress={onAcquitter}
+        onPress={() => onAcquitter(idsAffiches)}
         block
         style={{ marginTop: S.lg }}
       />

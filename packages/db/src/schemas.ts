@@ -27,6 +27,23 @@ const DayHours = new Schema(
   { _id: false },
 );
 
+function hidePrivateOrderFields(
+  _document: unknown,
+  returned: Record<string, unknown>,
+): Record<string, unknown> {
+  delete returned.loyaltyMemberId;
+  delete returned.loyaltyEarnOperationId;
+  delete returned.loyaltyActorRef;
+  delete returned.loyaltyDeviceRef;
+  delete returned.loyaltyEarnState;
+  delete returned.loyaltyEarnAttempts;
+  delete returned.loyaltyEarnLastError;
+  delete returned.loyaltyEarnCompletedAt;
+  delete returned.loyaltyEarnNextAttemptAt;
+  delete returned.loyaltyEarnLeaseUntil;
+  return returned;
+}
+
 export const TenantSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
@@ -365,6 +382,12 @@ export const UserSchema = new Schema(
     role: { type: String, enum: ['owner', 'sm_admin'], required: true },
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null }, // null = équipe Snack Manager
     name: { type: String, default: '' },
+    /**
+     * Génération opaque des sessions email/mot de passe. Un changement de
+     * secret la remplace et révoque immédiatement tous les JWT antérieurs.
+     * `0` garde les comptes historiques connectables sans backfill.
+     */
+    sessionVersion: { type: String, default: '0' },
   },
   { timestamps: true },
 );
@@ -381,6 +404,12 @@ export const StaffSchema = new Schema(
     role: { type: String, enum: ['gerant', 'caisse', 'cuisine'], required: true },
     pinHash: { type: String, required: true },
     active: { type: Boolean, default: true },
+    /**
+     * Version opaque des sessions PIN. Tout changement de rôle, PIN ou état
+     * la remplace et rend immédiatement caducs les JWT déjà émis.
+     * `0` est volontairement compatible avec les documents historiques.
+     */
+    sessionVersion: { type: String, default: '0' },
     /**
      * Coût horaire employeur, en CENTIMES — sans lui aucune projection de masse
      * salariale n'est possible.
@@ -586,6 +615,32 @@ export const OrderSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     number: { type: Number, required: true }, // séquence journalière par tenant
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
+    /**
+     * Carte présentée AVANT la création de la vente.
+     *
+     * `select: false` évite d'exposer ce pseudonyme aux écrans cuisine et aux
+     * listes de commandes ; seul l'adaptateur fidélité le relit explicitement.
+     */
+    loyaltyMemberId: { type: String, default: null, select: false },
+    /**
+     * Outbox embarqué dans la commande Mongo : la vente et l'intention de
+     * gain naissent atomiquement. Un worker idempotent la consomme seulement
+     * après `delivered + paid`.
+     */
+    loyaltyEarnOperationId: { type: String, default: null, select: false },
+    loyaltyActorRef: { type: String, default: null, select: false },
+    loyaltyDeviceRef: { type: String, default: null, select: false },
+    loyaltyEarnState: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed', 'cancelled', null],
+      default: null,
+      select: false,
+    },
+    loyaltyEarnAttempts: { type: Number, default: 0, min: 0, select: false },
+    loyaltyEarnLastError: { type: String, default: null, select: false },
+    loyaltyEarnCompletedAt: { type: Date, default: null, select: false },
+    loyaltyEarnNextAttemptAt: { type: Date, default: null, select: false },
+    loyaltyEarnLeaseUntil: { type: Date, default: null, select: false },
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
     type: { type: String, enum: ['surplace', 'emporter', 'pickup'], required: true },
     lines: { type: [OrderLineSub], required: true },
@@ -694,11 +749,31 @@ export const OrderSchema = new Schema(
     // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
     meta: { type: Schema.Types.Mixed, default: null },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    // Chaque `save()` inclut `__v` dans son filtre et l'incrémente. Deux
+    // gestes concurrents sur le même ticket ne peuvent donc jamais s'écraser
+    // silencieusement (ex. livrer pendant qu'une annulation est validée).
+    optimisticConcurrency: true,
+    // `select:false` ne s'applique qu'aux lectures Mongo. Un document tout
+    // juste créé contient encore le champ en mémoire : ces transformations le
+    // retirent aussi des réponses HTTP et de toute sérialisation accidentelle.
+    toObject: { transform: hidePrivateOrderFields },
+    toJSON: { transform: hidePrivateOrderFields },
+  },
 );
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
+OrderSchema.index(
+  { tenantId: 1, loyaltyEarnOperationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { loyaltyEarnOperationId: { $type: 'string' } },
+  },
+);
+OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnNextAttemptAt: 1, createdAt: 1 });
+OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
 // Non unique : les commandes créées avant le champ portent toutes `null`, et
 // un index unique les ferait entrer en collision. La collision de deux jetons
 // de 192 bits tirés au hasard, elle, n'arrive pas.
@@ -832,6 +907,9 @@ export const ErrorEventSchema = new Schema(
 );
 ErrorEventSchema.index({ source: 1, hash: 1 }, { unique: true });
 ErrorEventSchema.index({ lastAt: -1 });
+// Un incident éteint n'est pas une archive métier : 90 jours suffisent pour
+// diagnostiquer une régression, sans conserver indéfiniment URL/pile/message.
+ErrorEventSchema.index({ lastAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
 export type ErrorEvent = InferSchemaType<typeof ErrorEventSchema>;
 
 /**
@@ -869,6 +947,9 @@ export const AlertLogSchema = new Schema(
   },
   { timestamps: false },
 );
+// Le cooldown opérationnel se compte en heures ; passé 90 jours, cette coche
+// n'a plus d'effet et ne doit pas devenir une collection permanente.
+AlertLogSchema.index({ sentAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
 export type AlertLog = InferSchemaType<typeof AlertLogSchema>;
 
 /**
@@ -1170,6 +1251,12 @@ export const DeviceSchema = new Schema(
     queueDepth: { type: Number, default: null },
     lastError: { type: String, default: '' },
     active: { type: Boolean, default: true },
+    /**
+     * Version opaque de l'appairage. Elle change lors d'une désactivation,
+     * d'un changement de type ou d'un nouvel appairage afin qu'un ancien JWT
+     * staff ne puisse jamais redevenir valide après révocation.
+     */
+    sessionVersion: { type: String, default: '0' },
     // Dernière révocation prononcée depuis le back-office interne (tablette
     // perdue ou volée). Le détail « qui, quand, pourquoi » vit dans
     // `adminLogs` ; ces deux champs ne sont là que pour l'afficher sur la
