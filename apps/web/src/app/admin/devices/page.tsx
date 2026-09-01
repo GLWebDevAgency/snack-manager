@@ -53,7 +53,7 @@ import {
   useNow,
 } from "./parts";
 import { DeviceCard } from "./device-card";
-import { KIND_PLACEHOLDER, KIND_ROLE, type DeviceView } from "./types";
+import { KIND_APP_LABEL, KIND_PLACEHOLDER, KIND_ROLE, type DeviceView } from "./types";
 
 /** Cadence de rafraîchissement de la liste — l'état reste juste sans action. */
 const REFRESH_MS = 30_000;
@@ -503,6 +503,10 @@ export default function DevicesPage() {
                         code={installDevice.pairing.code}
                         dimmed={installDevice.pairing.expired}
                       />
+                      <p className="rounded-ctrl border border-accent/30 bg-accent/8 px-3.5 py-2.5 text-[13px] leading-relaxed text-ink">
+                        <span className="font-bold">Code réservé&nbsp;:</span>{" "}
+                        saisissez-le uniquement dans {KIND_APP_LABEL[installDevice.kind]}.
+                      </p>
                       <div className="flex flex-wrap items-center gap-3">
                         <CodeCountdown
                           expiresAt={installDevice.pairing.expiresAt}

@@ -25,7 +25,7 @@ describe('Télémétrie du battement de cœur', () => {
   beforeEach(async () => {
     devices = new FakeDevicesRepository();
     devices.seed(storedDevice({ id: 'device-1', paired: false, pairingCode: 'ABCDEF' }));
-    await devices.claim('device-1', 'ABCDEF', TOKEN, new Date(START));
+    await devices.claim('device-1', 'ABCDEF', 'pos', TOKEN, new Date(START));
     heartbeat = new HeartbeatDevice(
       new TestClock(new Date(START)),
       devices.asRepository(),

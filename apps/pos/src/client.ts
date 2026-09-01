@@ -59,6 +59,7 @@ import {
   withStoreLock,
 } from '@sm/client-core';
 import { API_URL } from './config';
+import { belongsToApp, pairingRequest } from './device-boundary';
 
 /**
  * Version du bundle, rapportée par le battement de cœur. La source est le
@@ -448,7 +449,16 @@ export class DeviceError extends Error {
 
 /** Appairage : six caractères contre un jeton, une fois pour toutes. */
 export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
-  const result = await deviceFetch<DevicePaired>('/public/devices/pair', { pairingCode });
+  const result = await deviceFetch<DevicePaired>(
+    '/public/devices/pair',
+    pairingRequest(pairingCode),
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Ce code est réservé à l’application Cuisine. Utilisez le code d’une caisse.',
+      409,
+    );
+  }
   return persist({
     deviceToken: result.deviceToken,
     tenant: result.tenant,
@@ -490,6 +500,15 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
     if (e instanceof DeviceError && e.status === 401) throw e;
     return null;
   }
+  if (!belongsToApp(beat.device)) {
+    // Un ancien bundle a pu enregistrer un jeton KDS dans le POS. Le signaler
+    // comme une révocation fait passer par `revokeDevice` : la file de ventes
+    // est d'abord synchronisée, puis seulement l'identité locale est purgée.
+    throw new DeviceError(
+      "Cet appareil n'est pas une caisse. Réappairez-le avec le bon code.",
+      401,
+    );
+  }
   return persist({
     ...device,
     tenant: beat.tenant,
@@ -507,5 +526,16 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
 export async function pinLogin(pin: string): Promise<DevicePinSession> {
   const device = current;
   if (!device) throw new DeviceError("Cet appareil n'est pas appairé.", 401);
-  return deviceFetch<DevicePinSession>('/public/devices/pin', { pin }, device.deviceToken);
+  const result = await deviceFetch<DevicePinSession>(
+    '/public/devices/pin',
+    { pin },
+    device.deviceToken,
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Cet appareil est enregistré comme écran cuisine. Réappairez la caisse avec son propre code.',
+      409,
+    );
+  }
+  return result;
 }

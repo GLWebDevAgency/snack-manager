@@ -95,6 +95,12 @@ export const PairDeviceSchema = z.object({
     .min(1, 'Saisissez le code affiché dans le back-office')
     .max(32)
     .toUpperCase(),
+  /**
+   * Application qui présente le code. Le type enregistré en base reste
+   * l'autorité : ce champ permet au serveur de refuser un code Cuisine saisi
+   * dans la Caisse (et inversement) AVANT de le consommer.
+   */
+  expectedKind: DeviceKindSchema,
 });
 export type PairDevice = z.infer<typeof PairDeviceSchema>;
 

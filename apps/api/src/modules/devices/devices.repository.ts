@@ -159,9 +159,18 @@ export class DevicesRepository {
    * quand on déballe la caisse et l'écran cuisine d'affilée — n'obtiennent
    * jamais deux jetons valides.
    */
-  async claim(id: string, code: string, deviceToken: string, at: Date): Promise<boolean> {
+  async claim(
+    id: string,
+    code: string,
+    expectedKind: DeviceKind,
+    deviceToken: string,
+    at: Date,
+  ): Promise<boolean> {
     const res = await this.devices.updateOne(
-      { _id: id, pairingCode: code },
+      // Le type participe à l'écriture conditionnelle : même si un autre
+      // administrateur le change entre la lecture du code et ce claim, aucun
+      // jeton de la mauvaise surface n'est délivré.
+      { _id: id, pairingCode: code, kind: expectedKind },
       {
         $set: {
           pairingCode: null,
