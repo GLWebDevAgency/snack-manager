@@ -17,7 +17,11 @@ export function useSyncState(client: SmClient): QueueState {
  */
 export function useAutoSync(client: SmClient, intervalMs = 15000) {
   useEffect(() => {
-    const tick = () => void client.queue.flush();
+    // Avant la fin de la restauration d'appairage, une file terrain refuse
+    // volontairement de s'ouvrir. Une erreur de stockage est également portée
+    // par son état observable : aucune de ces situations ne doit devenir une
+    // promesse rejetée non gérée par React.
+    const tick = () => void client.queue.flush().catch(() => undefined);
     tick();
     const id = setInterval(tick, intervalMs);
     const onOnline = () => tick();

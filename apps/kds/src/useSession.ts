@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { DEVICE_HEARTBEAT_INTERVAL_MS } from '@sm/contracts';
-import { getStore, type SmClient } from '@sm/client-core';
+import { type SmClient } from '@sm/client-core';
 import {
   DeviceError,
   deviceHeartbeat,
@@ -47,8 +47,9 @@ export function useDevice(): PairedDevice | null {
 export function useSession(client: SmClient) {
   const [session, setSession] = useState<Session | null>(null);
   const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const device = useDevice();
-  const restored = useRef(false);
 
   /**
    * Restauration au démarrage : d'ABORD l'appairage, ensuite la session.
@@ -58,31 +59,55 @@ export function useSession(client: SmClient) {
    * sert plus.
    */
   useEffect(() => {
-    if (restored.current) return;
-    restored.current = true;
+    let alive = true;
+    setRestoring(true);
+    setRestoreError(null);
     void (async () => {
       try {
         const paired = await loadPairedDevice();
         if (!paired) return;
-        const raw = await getStore().getItem(KEY_SESSION);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Session;
-          if (parsed?.token) {
-            client.setToken(parsed.token);
-            setSession(parsed);
+        try {
+          const raw = await client.tenantStore.getItem(KEY_SESSION);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Session;
+            if (parsed?.token && parsed.tenant?.slug === paired.tenant.slug) {
+              client.setToken(parsed.token);
+              if (alive) setSession(parsed);
+            } else {
+              await client.tenantStore.removeItem(KEY_SESSION);
+            }
+          }
+        } catch (error) {
+          if (error instanceof SyntaxError) {
+            await client.tenantStore.removeItem(KEY_SESSION);
+          } else {
+            throw error;
           }
         }
-      } catch {
-        // session illisible : on redemande le PIN, c'est l'affaire de 2 secondes
+      } catch (error) {
+        if (alive) {
+          setRestoreError(
+            error instanceof Error
+              ? error.message
+              : 'Le stockage sécurisé de la cuisine est indisponible.',
+          );
+        }
       } finally {
-        setRestoring(false);
+        if (alive) setRestoring(false);
       }
     })();
-  }, [client]);
+    return () => {
+      alive = false;
+    };
+  }, [client, restoreAttempt]);
+
+  const retryRestore = useCallback(() => {
+    setRestoreAttempt((attempt) => attempt + 1);
+  }, []);
 
   const logout = useCallback(async () => {
     client.setToken(null);
-    await getStore().removeItem(KEY_SESSION);
+    await client.tenantStore.removeItem(KEY_SESSION);
     setSession(null);
   }, [client]);
 
@@ -91,7 +116,7 @@ export function useSession(client: SmClient) {
       const data = await pinLogin(pin);
       const next: Session = { token: data.token, staff: data.staff, tenant: data.tenant };
       client.setToken(next.token);
-      await getStore().setItem(KEY_SESSION, JSON.stringify(next));
+      await client.tenantStore.setItem(KEY_SESSION, JSON.stringify(next));
       setSession(next);
     },
     [client],
@@ -127,5 +152,5 @@ export function useSession(client: SmClient) {
     };
   }, [device]);
 
-  return { session, restoring, login, logout, device };
+  return { session, restoring, restoreError, retryRestore, login, logout, device };
 }

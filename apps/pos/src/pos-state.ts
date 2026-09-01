@@ -29,7 +29,7 @@ export const KEYS = {
  * service, session) passe par le stockage clé/valeur du noyau partagé — le
  * même que la file offline.
  */
-import { getStore, uuid, type CartLine } from '@sm/client-core';
+import { uuid, type CartLine, type KeyValueStore } from '@sm/client-core';
 import { PAYMENT_DUE_LABEL, PAYMENT_TENDER_LABELS, type PaymentTender } from '@sm/contracts';
 
 export type Mode = 'surplace' | 'emporter' | 'tel';
@@ -101,18 +101,26 @@ export interface ParkedTicket {
 
 // ─── Persistance ───
 
-export async function loadJson<T>(key: string, fallback: T): Promise<T> {
+export async function loadJson<T>(
+  store: KeyValueStore,
+  key: string,
+  fallback: T,
+): Promise<T> {
   try {
-    const raw = await getStore().getItem(key);
+    const raw = await store.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
 }
 
-export async function saveJson(key: string, value: unknown): Promise<void> {
+export async function saveJson(
+  store: KeyValueStore,
+  key: string,
+  value: unknown,
+): Promise<void> {
   try {
-    await getStore().setItem(key, JSON.stringify(value));
+    await store.setItem(key, JSON.stringify(value));
   } catch {
     /* quota : on ne bloque jamais le service pour un échec d'écriture */
   }

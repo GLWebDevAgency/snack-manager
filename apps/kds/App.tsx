@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
-  getStore,
   useAutoSync,
   useNow,
   useOncePerId,
@@ -72,9 +71,11 @@ export default function App() {
   const reducedMotion = useReducedMotion();
   const now = useNow(1000);
 
-  const { session, restoring, login, logout, device } = useSession(client);
+  const { session, restoring, restoreError, retryRestore, login, logout, device } =
+    useSession(client);
   const sync = useSyncState(client);
   useAutoSync(client, 15000);
+  const activeDeviceScope = sync.scopeValid ? (device?.queueScope ?? null) : null;
 
   // Le rapporteur d'erreurs, pour toute la vie de l'écran — voir `client.ts`.
   useEffect(() => installErrorReporting(), []);
@@ -83,19 +84,33 @@ export default function App() {
     void logout();
   }, [logout]);
 
-  const board = useBoard(client, session !== null, onUnauthorized, session?.token ?? null);
+  const board = useBoard(
+    client,
+    session !== null,
+    onUnauthorized,
+    session?.token ?? null,
+    activeDeviceScope,
+  );
 
   // ─── Préférences locales (son, panneau « À lancer ») ───
 
   const [soundOn, setSoundOn] = useState(true);
 
   /** Vrai une fois les préférences relues : avant, on n'écrase rien. */
-  const prefsLoaded = useRef(false);
+  const prefsLoadedScope = useRef<string | null>(null);
+  const deviceScope = activeDeviceScope;
 
   useEffect(() => {
+    let alive = true;
+    const capturedScope = deviceScope;
+    prefsLoadedScope.current = null;
+    setSoundOn(true);
+    setAllDayOn(true);
+    if (!capturedScope) return () => void (alive = false);
     void (async () => {
-      const raw = await getStore().getItem(KEY_PREFS);
       try {
+        const raw = await client.tenantStore.getItem(KEY_PREFS);
+        if (!alive || deviceScope !== capturedScope) return;
         if (raw) {
           const prefs = JSON.parse(raw) as Prefs;
           if (typeof prefs.sound === 'boolean') setSoundOn(prefs.sound);
@@ -104,21 +119,26 @@ export default function App() {
       } catch {
         /* préférences illisibles : on garde les valeurs par défaut */
       } finally {
-        prefsLoaded.current = true;
+        if (alive) prefsLoadedScope.current = capturedScope;
       }
     })();
-  }, []);
+    return () => {
+      alive = false;
+    };
+  }, [deviceScope]);
 
   // Une seule écriture pour toutes les préférences : chaque bascule n'a pas à
   // connaître l'état des autres, et aucune ne peut en effacer une en écrivant
   // un objet partiel.
   useEffect(() => {
-    if (!prefsLoaded.current) return;
-    void getStore().setItem(
-      KEY_PREFS,
-      JSON.stringify({ sound: soundOn, allDay: allDayOn } satisfies Prefs),
-    );
-  }, [soundOn, allDayOn]);
+    if (!deviceScope || prefsLoadedScope.current !== deviceScope) return;
+    void client.tenantStore
+      .setItem(
+        KEY_PREFS,
+        JSON.stringify({ sound: soundOn, allDay: allDayOn } satisfies Prefs),
+      )
+      .catch(() => undefined);
+  }, [soundOn, allDayOn, deviceScope]);
 
   const toggleAllDay = useCallback(() => setAllDayOn((v) => !v), []);
 
@@ -139,11 +159,14 @@ export default function App() {
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     let alive = true;
-    void client.queue.pending().then((entries) => {
-      if (!alive) return;
-      const ids = entries.map((e) => e.subject).filter((s): s is string => Boolean(s));
-      setPendingIds(new Set(ids));
-    });
+    void client.queue
+      .pending()
+      .then((entries) => {
+        if (!alive) return;
+        const ids = entries.map((e) => e.subject).filter((s): s is string => Boolean(s));
+        setPendingIds(new Set(ids));
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -213,6 +236,45 @@ export default function App() {
           <ActivityIndicator color={palette.mut} />
           <Text style={styles.bootText}>Ouverture du service…</Text>
         </View>
+      ) : restoreError ? (
+        <View style={styles.boot}>
+          <Text style={[styles.bootText, { fontSize: 20, fontWeight: '800', color: palette.text }]}>
+            Écran momentanément verrouillé
+          </Text>
+          <Text style={styles.bootText}>
+            {restoreError} Aucune donnée d’un autre établissement ne sera ouverte avant la fin de
+            la restauration.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Réessayer la restauration de l’écran cuisine"
+            onPress={retryRestore}
+            style={({ pressed }) => [
+              styles.retry,
+              { opacity: pressed ? 0.78 : 1 },
+            ]}
+          >
+            <Text style={styles.retryText}>Réessayer</Text>
+          </Pressable>
+        </View>
+      ) : !sync.scopeValid ? (
+        <View style={styles.boot}>
+          <Text style={[styles.bootText, { fontSize: 20, fontWeight: '800', color: palette.text }]}>
+            Appairage modifié
+          </Text>
+          <Text style={styles.bootText}>
+            Une autre fenêtre a changé l’établissement. Cet écran a masqué toutes ses données ;
+            rechargez-le pour continuer.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Recharger l’écran cuisine"
+            onPress={() => globalThis.location?.reload()}
+            style={({ pressed }) => [styles.retry, { opacity: pressed ? 0.78 : 1 }]}
+          >
+            <Text style={styles.retryText}>Recharger</Text>
+          </Pressable>
+        </View>
       ) : device?.suspended ? (
         // Abonnement suspendu : l'écran se verrouille (contrat
         // `DeviceHeartbeatResult`) au lieu d'afficher un tableau qui ne
@@ -273,5 +335,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.4,
     color: ink.dim,
+  },
+  retry: {
+    minHeight: 48,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.gold,
+  },
+  retryText: {
+    fontFamily: type.body.fontFamily,
+    color: palette.bg,
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

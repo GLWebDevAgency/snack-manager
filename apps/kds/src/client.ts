@@ -10,15 +10,21 @@ import {
 } from '@sm/contracts';
 import {
   DEMO_TENANT,
+  QueueScopeRetiredError,
   SmClient,
   demoStore,
   demoTransport,
   getStore,
   installClientErrorReporter,
   isDemoRequested,
+  purgeKeysWithIdentityLast,
+  restoreIdentityIfUnchanged,
+  restoreScopedIdentity,
   setStore,
   webStore,
   type KeyValueStore,
+  uuid,
+  withStoreLock,
 } from '@sm/client-core';
 import { API_URL, KEY_SESSION } from './config';
 
@@ -131,6 +137,7 @@ setStore(
 
 export const client = new SmClient({
   baseUrl: API_URL,
+  queueScopeRequired: true,
   ...(DEMO ? { transport: demoTransport() } : null),
 });
 
@@ -143,6 +150,10 @@ export interface PairedDevice {
   deviceToken: string;
   tenant: DeviceTenantBrand;
   device: DeviceIdentity;
+  /** Génération locale opaque : un réappairage ne reprend jamais une vieille file. */
+  queueScope?: string;
+  /** Journal de reprise si le processus tombe pendant la liaison de la file. */
+  queueBindingPending?: boolean;
   /**
    * Abonnement suspendu côté Snack Manager. Porté par le battement de cœur :
    * c'est l'ÉCRAN qui se verrouille (contrat `DeviceHeartbeatResult`), pas
@@ -171,6 +182,17 @@ function adopt(next: PairedDevice | null): PairedDevice | null {
 
 export const pairedDevice = (): PairedDevice | null => current;
 
+function queueScopeOf(device: PairedDevice): string {
+  return device.queueScope?.trim() || `legacy:${device.device.id}`;
+}
+
+async function finishInterruptedUnpair(): Promise<void> {
+  await purgeKeysWithIdentityLast(getStore(), CLES_ETABLISSEMENT, KEY_DEVICE);
+  await client.queue.completeClear();
+  adopt(null);
+  client.setToken(null);
+}
+
 export function subscribeDevice(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -178,16 +200,42 @@ export function subscribeDevice(listener: () => void): () => void {
 
 /** Lecture de l'appairage persisté — appelée une fois au démarrage. */
 export async function loadPairedDevice(): Promise<PairedDevice | null> {
-  try {
-    const raw = await getStore().getItem(KEY_DEVICE);
-    if (!raw) return adopt(null);
-    const parsed = JSON.parse(raw) as PairedDevice;
-    return adopt(parsed?.deviceToken && parsed.tenant?.slug ? parsed : null);
-  } catch {
-    // Appairage illisible : on redemande le code plutôt que de laisser une
-    // cuisine afficher les tickets d'on ne sait qui.
+  const parsed = await restoreScopedIdentity(
+    getStore(),
+    CLES_ETABLISSEMENT,
+    KEY_DEVICE,
+    (raw): PairedDevice | null => {
+      const candidate = JSON.parse(raw) as PairedDevice;
+      return candidate?.deviceToken && candidate.tenant?.slug && candidate.device?.id
+        ? candidate
+        : null;
+    },
+  );
+  if (!parsed) {
+    await client.queue.completeClear();
     return adopt(null);
   }
+
+
+  const scope = queueScopeOf(parsed);
+  try {
+    await client.queue.bindScope(scope, {
+      freshPairing: parsed.queueBindingPending === true,
+    });
+  } catch (error) {
+    if (error instanceof QueueScopeRetiredError) {
+      await finishInterruptedUnpair();
+      return null;
+    }
+    throw error;
+  }
+
+  const restored: PairedDevice = { ...parsed, queueScope: scope };
+  delete restored.queueBindingPending;
+  if (parsed.queueScope !== scope || parsed.queueBindingPending) {
+    await client.tenantStore.setItem(KEY_DEVICE, JSON.stringify(restored));
+  }
+  return adopt(restored);
 }
 
 /**
@@ -213,15 +261,50 @@ function sameDevice(a: PairedDevice | null, b: PairedDevice): boolean {
     a.device.id === b.device.id &&
     a.device.name === b.device.name &&
     a.device.kind === b.device.kind
+    && a.queueScope === b.queueScope
   );
 }
 
-async function persist(next: PairedDevice): Promise<PairedDevice> {
+async function persist(
+  next: PairedDevice,
+  options: { freshPairing?: boolean } = {},
+): Promise<PairedDevice> {
   const existing = current;
   if (existing && sameDevice(existing, next)) return existing;
-  adopt(next);
-  await getStore().setItem(KEY_DEVICE, JSON.stringify(next));
-  return next;
+  const scope = next.queueScope?.trim() || existing?.queueScope || `legacy:${next.device.id}`;
+  const committed: PairedDevice = { ...next, queueScope: scope };
+
+  if (options.freshPairing) {
+    const store = getStore();
+    const pending = { ...committed, queueBindingPending: true } satisfies PairedDevice;
+    const pendingRaw = JSON.stringify(pending);
+    const previous = await withStoreLock(async () => {
+      const currentRaw = await store.getItem(KEY_DEVICE);
+      await store.setItem(KEY_DEVICE, pendingRaw);
+      return currentRaw;
+    });
+    let scopeCommitted = false;
+    try {
+      await client.queue.bindScope(scope, { freshPairing: true });
+      scopeCommitted = true;
+      await client.tenantStore.setItem(KEY_DEVICE, JSON.stringify(committed));
+    } catch (error) {
+      if (!scopeCommitted) {
+        await restoreIdentityIfUnchanged(
+          store,
+          KEY_DEVICE,
+          pendingRaw,
+          previous,
+        ).catch(() => undefined);
+      }
+      throw error;
+    }
+  } else {
+    await client.queue.bindScope(scope);
+    await client.tenantStore.setItem(KEY_DEVICE, JSON.stringify(committed));
+  }
+  adopt(committed);
+  return committed;
 }
 
 /**
@@ -260,14 +343,18 @@ export function installErrorReporting(): () => void {
  * d'écran suivaient de même.
  */
 export async function forgetPairedDevice(): Promise<void> {
-  adopt(null);
-  client.setToken(null);
-  for (const cle of CLES_ETABLISSEMENT) await getStore().removeItem(cle);
   // La file hors-ligne part avec l'appairage : non cloisonnée par
   // établissement, elle rejouerait sinon les gestes de l'établissement A
   // sous l'établissement B après ré-appairage. Perte assumée et visible
   // (compteur « N en attente ») avant le geste, jamais silencieuse après.
+  // La file est purgée durablement AVANT de retirer le jeton. Si le processus
+  // tombe entre les deux, il redémarre encore chez A avec une file vide ; il ne
+  // peut jamais réémettre une mutation A après un futur appairage chez B.
   await client.queue.clear();
+  await purgeKeysWithIdentityLast(getStore(), CLES_ETABLISSEMENT, KEY_DEVICE);
+  await client.queue.completeClear();
+  adopt(null);
+  client.setToken(null);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -318,7 +405,8 @@ export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
     deviceToken: result.deviceToken,
     tenant: result.tenant,
     device: result.device,
-  });
+    queueScope: `pair:${uuid()}`,
+  }, { freshPairing: true });
 }
 
 /**

@@ -149,9 +149,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     let alive = true;
     void (async () => {
       const [log, park, start] = await Promise.all([
-        loadJson<DayLogFile>(KEYS.dayLog, { day: serviceDay(), entries: [] }),
-        loadJson<ParkedTicket[]>(KEYS.parked, []),
-        loadJson<ServiceStartFile>(KEYS.serviceStart, { day: serviceDay(), at: startOfDay() }),
+        loadJson<DayLogFile>(client.tenantStore, KEYS.dayLog, { day: serviceDay(), entries: [] }),
+        loadJson<ParkedTicket[]>(client.tenantStore, KEYS.parked, []),
+        loadJson<ServiceStartFile>(client.tenantStore, KEYS.serviceStart, { day: serviceDay(), at: startOfDay() }),
       ]);
       if (!alive) return;
       const sameDay = log.day === serviceDay();
@@ -167,16 +167,16 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   }, []);
 
   useEffect(() => {
-    if (ready) void saveJson(KEYS.dayLog, { day: serviceDay(), entries: dayLog } satisfies DayLogFile);
+    if (ready) void saveJson(client.tenantStore, KEYS.dayLog, { day: serviceDay(), entries: dayLog } satisfies DayLogFile);
   }, [dayLog, ready]);
 
   useEffect(() => {
-    if (ready) void saveJson(KEYS.parked, parked);
+    if (ready) void saveJson(client.tenantStore, KEYS.parked, parked);
   }, [parked, ready]);
 
   useEffect(() => {
     if (ready) {
-      void saveJson(KEYS.serviceStart, { day: serviceDay(), at: serviceStart } satisfies ServiceStartFile);
+      void saveJson(client.tenantStore, KEYS.serviceStart, { day: serviceDay(), at: serviceStart } satisfies ServiceStartFile);
     }
   }, [ready, serviceStart]);
 

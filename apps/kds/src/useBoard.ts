@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import {
-  getStore,
   mergeOrder,
   NEXT_STATUS,
   SmApiError,
@@ -63,31 +62,46 @@ export function useBoard(
   onUnauthorized: () => void,
   /** Jeton de la session d’équipe — sert UNIQUEMENT au handshake temps réel. */
   token: string | null,
+  /** Génération locale d'appairage — frontière mémoire ET stockage. */
+  scope: string | null,
 ): Board {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [hydratedScope, setHydratedScope] = useState<string | null>(null);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
 
   /** Commandes remises localement : retirées du tableau avant confirmation serveur. */
   const delivered = useRef<Set<string>>(new Set());
-  const hydrated = useRef(false);
   const unauthorized = useRef(onUnauthorized);
   unauthorized.current = onUnauthorized;
 
   // ─── Réhydratation : le service repart de sa dernière photo locale ───
 
   useEffect(() => {
+    const capturedScope = scope;
     let alive = true;
+    delivered.current = new Set();
+    setOrders([]);
+    setHydratedScope(null);
+    setLastSyncAt(null);
+    if (!capturedScope) {
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+    setLoading(true);
     void (async () => {
-      const store = getStore();
-      const [rawBoard, rawDelivered] = await Promise.all([
-        store.getItem(KEY_BOARD),
-        store.getItem(KEY_DELIVERED),
-      ]);
-      if (!alive) return;
       try {
+        const [rawBoard, rawDelivered] = await Promise.all([
+          client.tenantStore.getItem(KEY_BOARD),
+          client.tenantStore.getItem(KEY_DELIVERED),
+        ]);
+        if (!alive || scopeRef.current !== capturedScope) return;
         if (rawDelivered) {
           const ids = JSON.parse(rawDelivered) as unknown;
           if (Array.isArray(ids)) delivered.current = new Set(ids.filter((i) => typeof i === 'string'));
@@ -102,30 +116,37 @@ export function useBoard(
         }
       } catch {
         // photo corrompue : on repart du serveur plutôt que de bloquer le service
+      } finally {
+        if (alive && scopeRef.current === capturedScope) {
+          setHydratedScope(capturedScope);
+          setLoading(false);
+        }
       }
-      hydrated.current = true;
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [client, scope]);
 
   // ─── Persistance du tableau local ───
 
   useEffect(() => {
-    if (!hydrated.current) return;
-    void getStore().setItem(KEY_BOARD, JSON.stringify(orders));
-  }, [orders]);
+    if (!scope || hydratedScope !== scope) return;
+    void client.tenantStore.setItem(KEY_BOARD, JSON.stringify(orders)).catch(() => undefined);
+  }, [client, hydratedScope, orders, scope]);
 
   // ─── Sondage ───
 
   const poll = useCallback(async () => {
+    const capturedScope = scope;
+    if (!capturedScope) return;
     try {
       // Volontairement SANS cache de repli : on veut que la panne réseau
       // remonte comme une panne, pas comme une réponse fraîche mais périmée.
       const pages = await Promise.all(
         BOARD_STATUSES.map((status) => client.get<OrdersPage>(`/orders?status=${status}`)),
       );
+      if (scopeRef.current !== capturedScope) return;
       const rows = pages.flatMap((p) => p?.rows ?? []);
       const serverIds = new Set(rows.map((r) => r._id));
 
@@ -133,7 +154,9 @@ export function useBoard(
       for (const id of [...delivered.current]) {
         if (!serverIds.has(id)) delivered.current.delete(id);
       }
-      void getStore().setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]));
+      void client.tenantStore
+        .setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]))
+        .catch(() => undefined);
 
       setOrders((prev) => {
         let next = prev;
@@ -152,7 +175,9 @@ export function useBoard(
       setOffline(false);
       setError(null);
       setLastSyncAt(Date.now());
+      setHydratedScope(capturedScope);
     } catch (err) {
+      if (scopeRef.current !== capturedScope) return;
       if (err instanceof SmApiError && err.status === 401) {
         unauthorized.current();
         return;
@@ -162,7 +187,7 @@ export function useBoard(
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [client, scope]);
 
   // ─── Temps réel : la socket anticipe, le sondage garantit ───
 
@@ -207,23 +232,55 @@ export function useBoard(
 
   const advance = useCallback(
     (order: Order) => {
+      const capturedScope = scope;
+      if (!capturedScope || scopeRef.current !== capturedScope) return;
       const next = NEXT_STATUS[order.status as OrderStatus];
       if (!next) return;
 
-      if (next === 'delivered') {
-        delivered.current.add(order._id);
-        void getStore().setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]));
-        setOrders((prev) => prev.filter((o) => o._id !== order._id));
-      } else {
-        setOrders((prev) => mergeOrder(prev, { ...order, status: next }));
-      }
-
       // `subject` = la commande : la file garde l'ordre de ses mutations et
       // n'applique jamais « prêt » avant « en préparation ».
-      void client.patch(`/orders/${order._id}/status`, { status: next }, order._id);
+      void client
+        .patch(`/orders/${order._id}/status`, { status: next }, order._id)
+        .then(() => {
+          if (scopeRef.current !== capturedScope) return;
+          // L'optimisme commence APRÈS le commit local de la file. Sur une
+          // tablette c'est quelques millisecondes, mais cela interdit qu'un
+          // ticket disparaisse alors que son geste n'a jamais été durable.
+          if (next === 'delivered') {
+            delivered.current.add(order._id);
+            void client.tenantStore
+              .setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]))
+              .catch((reason: unknown) => {
+                if (scopeRef.current !== capturedScope) return;
+                setError(
+                  reason instanceof Error
+                    ? `État local non enregistré : ${reason.message}`
+                    : 'État local non enregistré',
+                );
+              });
+            setOrders((current) => current.filter((candidate) => candidate._id !== order._id));
+          } else {
+            setOrders((current) => mergeOrder(current, { ...order, status: next }));
+          }
+        })
+        .catch((reason: unknown) => {
+          if (scopeRef.current !== capturedScope) return;
+          setError(
+            reason instanceof Error
+              ? `Action non enregistrée : ${reason.message}`
+              : 'Action non enregistrée',
+          );
+        });
     },
-    [client],
+    [client, scope],
   );
 
-  return { orders, loading, offline, error, lastSyncAt, advance };
+  return {
+    orders: scope !== null && hydratedScope === scope ? orders : [],
+    loading,
+    offline,
+    error,
+    lastSyncAt,
+    advance,
+  };
 }
