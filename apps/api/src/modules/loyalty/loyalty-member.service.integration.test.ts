@@ -614,7 +614,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         { operationId: randomUUID(), units: -20, reason: 'Correction impossible' },
         { ...actor, source: 'admin', actorRef: 'owner:test', deviceRef: null },
       ),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(BadRequestException);
 
     const disabledGrantOperation = randomUUID();
     const disabledGrantError = await service

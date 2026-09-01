@@ -125,6 +125,13 @@ describe('contrats fidélité', () => {
         managerPin: '1234',
       }).success,
     ).toBe(false);
+    expect(
+      LoyaltyAdminAdjustmentSchema.safeParse({
+        operationId: '7f298b7f-96d5-4f0d-8b10-c9069acaaec4',
+        units: -10,
+        reason: 'Retrait manuel interdit',
+      }).success,
+    ).toBe(false);
   });
 
   it('rend le lifecycle explicite et protège l’anonymisation terminale', () => {

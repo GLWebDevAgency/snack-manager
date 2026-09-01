@@ -1251,6 +1251,11 @@ export class LoyaltyMemberService {
     dto: LoyaltyAdminAdjustment,
     actor: LoyaltyActorContext,
   ): Promise<LoyaltyMutationResult> {
+    if (dto.units <= 0) {
+      throw new BadRequestException(
+        'Un débit doit inverser une écriture fidélité précise et traçable',
+      );
+    }
     const fingerprint = this.crypto.operationFingerprint({
       tenantRef,
       kind: 'adjust',

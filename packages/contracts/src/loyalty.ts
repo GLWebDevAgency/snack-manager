@@ -236,14 +236,16 @@ const LoyaltyAdjustmentBaseSchema = z
     units: z
       .number()
       .int()
-      .min(-1_000_000)
-      .max(1_000_000)
-      .refine((value) => value !== 0),
+      .positive()
+      .max(1_000_000),
     reason: z.string().trim().min(3).max(300),
   })
   .strict();
 
-/** Correction depuis le back-office : le JWT propriétaire/gérant est la preuve d'autorité. */
+/**
+ * Crédit correctif depuis le back-office. Les débits manuels sont interdits :
+ * une reprise de points doit inverser une écriture précise et traçable.
+ */
 export const LoyaltyAdminAdjustmentSchema = LoyaltyAdjustmentBaseSchema;
 export type LoyaltyAdminAdjustment = z.infer<typeof LoyaltyAdminAdjustmentSchema>;
 

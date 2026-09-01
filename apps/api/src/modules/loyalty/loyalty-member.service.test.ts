@@ -127,6 +127,20 @@ describe('LoyaltyMemberService — validations avant transaction', () => {
     expect(purchases.confirmedPurchaseCents).not.toHaveBeenCalled();
   });
 
+  it('refuse tout débit manuel avant empreinte ou accès PostgreSQL', async () => {
+    const { service, transaction } = harness();
+
+    await expect(
+      service.adjust(
+        'tenant-test',
+        randomUUID(),
+        { operationId: randomUUID(), units: -1, reason: 'Retrait hors ticket' },
+        POS,
+      ),
+    ).rejects.toThrow('Un débit doit inverser une écriture fidélité précise');
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it('refuse une consommation POS sans référence opaque avant de réclamer une opération', async () => {
     const { service, transaction } = harness();
 
