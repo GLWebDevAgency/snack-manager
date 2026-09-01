@@ -164,3 +164,66 @@ export const DIRECTIONS: Record<PresetKey, Brand> = {
 export const PRESET_LABELS: Record<PresetKey, string> = {
   brasserie: 'Brasserie', neon: 'Néon', atelier: 'Atelier', marche: 'Marché', nuit: 'Nuit', soleil: 'Soleil',
 };
+
+// ─────────────────────────────────────────────────────────────
+// La couleur en pur — WCAG 2.x, sans dépendance
+// ─────────────────────────────────────────────────────────────
+
+export const WCAG_AA = 4.5;
+
+export type Rgb = readonly [number, number, number];
+
+export function hexVersRgb(hex: string): Rgb {
+  const h = hex.replace('#', '');
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function rgbVersHex([r, g, b]: Rgb): string {
+  const c = (v: number) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0');
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+/** Luminance relative WCAG — canal linéarisé, pondéré. */
+export function luminance(hex: string): number {
+  const [r, g, b] = hexVersRgb(hex).map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function ratioContraste(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  const [clair, sombre] = la >= lb ? [la, lb] : [lb, la];
+  return (clair + 0.05) / (sombre + 0.05);
+}
+
+/** Interpolation linéaire en sRGB — suffisante pour des teintes et des filets. */
+export function melanger(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexVersRgb(a);
+  const [br, bg, bb] = hexVersRgb(b);
+  return rgbVersHex([ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]);
+}
+
+export function alpha(hex: string, a: number): string {
+  const [r, g, b] = hexVersRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+
+/**
+ * Rapproche `couleur` du pôle opposé à `fond` (noir sur fond clair, blanc sur
+ * fond sombre) par pas de 1/200, jusqu'au seuil. Une couleur déjà conforme
+ * revient telle quelle, en minuscules.
+ */
+export function ajusterJusquaAA(couleur: string, fond: string, seuil = WCAG_AA): string {
+  const depart = couleur.toLowerCase();
+  if (ratioContraste(depart, fond) >= seuil) return depart;
+  const pole = luminance(fond) > 0.5 ? '#000000' : '#ffffff';
+  for (let pas = 1; pas <= 200; pas += 1) {
+    const candidat = melanger(depart, pole, pas / 200);
+    if (ratioContraste(candidat, fond) >= seuil) return candidat;
+  }
+  return pole;
+}
