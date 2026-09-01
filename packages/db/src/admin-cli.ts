@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import * as argon2 from 'argon2';
 import mongoose, { type Model } from 'mongoose';
 import { MODELS } from './schemas';
 import { askHidden, complain } from './password-prompt';
+import { hashPassword } from './password-hash';
 import { choisir, confirmer, demander, cyan, gras, gris, jaune, rouge, vert } from './cli/terminal';
 import { resoudreUrlMongo, masquerUrl, type Environnement } from './cli/railway';
 
@@ -131,7 +131,7 @@ async function creerCompteEquipe(cible: Cible): Promise<void> {
   if (!(await feuVert(cible, `créer le compte équipe ${email}`))) return;
   await Users.create({
     email,
-    passwordHash: await argon2.hash(motDePasse),
+    passwordHash: await hashPassword(motDePasse),
     role: 'sm_admin',
     tenantId: null, // null = équipe Snack Manager, pas un restaurant
     name: nom,
@@ -156,7 +156,7 @@ async function changerMotDePasse(cible: Cible): Promise<void> {
   const motDePasse = await saisirMotDePasse();
   if (motDePasse === null) return;
   if (!(await feuVert(cible, `changer le mot de passe de ${email}`))) return;
-  await Users.updateOne({ email }, { $set: { passwordHash: await argon2.hash(motDePasse) } });
+  await Users.updateOne({ email }, { $set: { passwordHash: await hashPassword(motDePasse) } });
   console.log(vert(`\nMot de passe de ${email} mis à jour.`));
   console.log(gris('Les sessions ouvertes restent valides jusqu’à leur expiration (12 h).\n'));
 }

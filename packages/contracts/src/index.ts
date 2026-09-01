@@ -16,6 +16,7 @@ export * from './platform';
 export * from './ops';
 export * from './tenant';
 export * from './encaissement';
+export * from './security';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
