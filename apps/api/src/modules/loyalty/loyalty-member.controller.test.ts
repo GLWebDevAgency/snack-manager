@@ -78,7 +78,7 @@ const REDEEM: LoyaltyRedeem = {
   operationId: '30000000-0000-4000-8000-000000000003',
   rewardId: REWARD,
   expectedCostUnits: 15,
-  externalRef: null,
+  externalRef: 'pos-redemption:30000000-0000-4000-8000-000000000003',
 };
 const ADJUST: LoyaltyAdminAdjustment = {
   operationId: '30000000-0000-4000-8000-000000000004',
@@ -411,6 +411,12 @@ describe('LoyaltyMemberController — contrats Zod réellement branchés', () =>
     expect(() => bodyPipe('redeem').transform({ ...REDEEM, rewardId: 'pas-un-uuid' })).toThrow(
       BadRequestException,
     );
+    expect(() =>
+      bodyPipe('redeem').transform({
+        ...REDEEM,
+        externalRef: 'Téléphone client : 06 12 34 56 78',
+      }),
+    ).toThrow(BadRequestException);
     expect(() => bodyPipe('adjust').transform({ ...ADJUST, units: 0 })).toThrow(
       BadRequestException,
     );

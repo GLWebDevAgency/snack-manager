@@ -112,6 +112,11 @@ export const LOYALTY_SMS_GRANT_DISABLED_CODE = 'loyalty_sms_grant_disabled';
 export const LOYALTY_SMS_GRANT_DISABLED_MESSAGE =
   "L'octroi du consentement SMS est désactivé pendant le pilote";
 
+const POS_REDEMPTION_REFERENCE =
+  /^pos-redemption:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ONLINE_REDEMPTION_REFERENCE =
+  /^online-redemption:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 interface CurrentProgram {
   program: ProgramRow;
   version: ProgramVersionRow;
@@ -1001,8 +1006,16 @@ export class LoyaltyMemberService {
     dto: LoyaltyRedeem,
     actor: LoyaltyActorContext,
   ): Promise<LoyaltyRedeemResult> {
-    if ((actor.source === 'pos' || actor.source === 'online') && dto.externalRef === null) {
-      throw new BadRequestException('La référence du ticket est obligatoire pour ce canal');
+    const expectedReference =
+      actor.source === 'pos'
+        ? POS_REDEMPTION_REFERENCE
+        : actor.source === 'online'
+          ? ONLINE_REDEMPTION_REFERENCE
+          : null;
+    if (expectedReference && !expectedReference.test(dto.externalRef ?? '')) {
+      throw new BadRequestException(
+        'La référence de consommation de ce canal est invalide',
+      );
     }
     const fingerprint = this.crypto.operationFingerprint({
       tenantRef,

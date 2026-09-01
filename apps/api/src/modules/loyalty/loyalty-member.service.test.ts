@@ -127,22 +127,24 @@ describe('LoyaltyMemberService — validations avant transaction', () => {
     expect(purchases.confirmedPurchaseCents).not.toHaveBeenCalled();
   });
 
-  it('refuse une consommation POS sans ticket avant de réclamer une opération', async () => {
+  it('refuse une consommation POS sans référence opaque avant de réclamer une opération', async () => {
     const { service, transaction } = harness();
 
-    await expect(
-      service.redeem(
-        'tenant-test',
-        randomUUID(),
-        {
-          operationId: randomUUID(),
-          rewardId: randomUUID(),
-          expectedCostUnits: 10,
-          externalRef: null,
-        },
-        POS,
-      ),
-    ).rejects.toThrow('La référence du ticket est obligatoire pour ce canal');
+    for (const externalRef of [null, '06 12 34 56 78', `online-redemption:${randomUUID()}`]) {
+      await expect(
+        service.redeem(
+          'tenant-test',
+          randomUUID(),
+          {
+            operationId: randomUUID(),
+            rewardId: randomUUID(),
+            expectedCostUnits: 10,
+            externalRef,
+          },
+          POS,
+        ),
+      ).rejects.toThrow('La référence de consommation de ce canal est invalide');
+    }
     expect(transaction).not.toHaveBeenCalled();
   });
 

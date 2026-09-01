@@ -233,6 +233,22 @@ describe('contrats fidélité', () => {
         expectedCostUnits: 15,
       }),
     ).toEqual({ operationId, rewardId, expectedCostUnits: 15, externalRef: null });
+    expect(
+      LoyaltyRedeemSchema.safeParse({
+        operationId,
+        rewardId,
+        expectedCostUnits: 15,
+        externalRef: `pos-redemption:${operationId}`,
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyRedeemSchema.safeParse({
+        operationId,
+        rewardId,
+        expectedCostUnits: 15,
+        externalRef: 'Client 06 12 34 56 78',
+      }).success,
+    ).toBe(false);
   });
 
   it('rend impossible un résultat de gain nul accompagné d’un ledger', () => {

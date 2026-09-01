@@ -159,6 +159,21 @@ export interface LoyaltyRewardView extends LoyaltyRewardCreate {
 /** Identifiant d'une mutation rejouable depuis une tablette. */
 export const LoyaltyOperationIdSchema = z.string().uuid();
 
+/**
+ * Référence opaque d'une consommation conservée dans le ledger immuable.
+ *
+ * Une chaîne libre permettrait d'y inscrire un nom, un téléphone ou une note
+ * impossible à effacer ensuite. Les canaux exposés ne transportent donc que
+ * leur famille technique et un UUID v4 sans signification personnelle.
+ */
+export const LoyaltyRedemptionExternalRefSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^(?:pos|online|admin)-redemption:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    'La référence de consommation doit être un identifiant technique opaque',
+  );
+
 export const LoyaltyMemberCreateSchema = z
   .object({
     operationId: LoyaltyOperationIdSchema,
@@ -210,7 +225,7 @@ export const LoyaltyRedeemSchema = z
     rewardId: z.string().uuid(),
     /** Coût affiché à l'opérateur : le serveur refuse une récompense devenue plus chère. */
     expectedCostUnits: z.number().int().positive().max(1_000_000),
-    externalRef: z.string().trim().min(1).max(160).nullable().default(null),
+    externalRef: LoyaltyRedemptionExternalRefSchema.nullable().default(null),
   })
   .strict();
 export type LoyaltyRedeem = z.infer<typeof LoyaltyRedeemSchema>;
