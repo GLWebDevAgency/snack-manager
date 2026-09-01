@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ToucheReact,
+  type ReactNode,
+} from "react";
 import { cx } from "@/lib/cx";
 import { IconBtn } from "./IconBtn";
 
@@ -42,6 +47,37 @@ export function Drawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  /*
+    Le focus entre, tourne, et revient — même contrat que Modal : ouvert au
+    clavier (Entrée sur une ligne), le tiroir prenait le voile mais laissait
+    Tab parcourir la liste masquée dessous — imprimer ou faire avancer une
+    commande invisible restait possible.
+  */
+  const panneau = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const declencheur = document.activeElement as HTMLElement | null;
+    panneau.current?.focus();
+    return () => declencheur?.focus();
+  }, [open]);
+
+  function confinerTab(e: ToucheReact<HTMLDivElement>) {
+    if (e.key !== "Tab" || !panneau.current) return;
+    const focusables = panneau.current.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return e.preventDefault();
+    const premier = focusables[0];
+    const dernier = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === premier) {
+      e.preventDefault();
+      dernier.focus();
+    } else if (!e.shiftKey && document.activeElement === dernier) {
+      e.preventDefault();
+      premier.focus();
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -69,7 +105,10 @@ export function Drawer({
         aria-hidden
       />
       <div
-        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)]"
+        ref={panneau}
+        tabIndex={-1}
+        onKeyDown={confinerTab}
+        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] outline-none"
         style={{ width }}
       >
         <div

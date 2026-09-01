@@ -193,7 +193,9 @@ const ACCOUNT_STYLE: Record<string, string> = {
   active: "border-white/20 bg-white/6 text-mut",
   trial: "border-prep/50 bg-prep/12 text-prept",
   suspended: "border-alert/70 bg-alert/12 text-alertt",
-  churned: "border-white/12 bg-transparent text-mut/70",
+  // Dé-emphase par la bordure et le fond seulement : à 10 px gras, un texte
+  // `text-mut/70` descendait sous les 4,5:1 de contraste exigés (WCAG AA).
+  churned: "border-white/12 bg-transparent text-mut",
 };
 
 export function AccountPill({
@@ -206,7 +208,7 @@ export function AccountPill({
   if (!label) {
     return (
       <span
-        className="text-[11px] text-mut/60"
+        className="text-[11px] text-mut"
         title="Statut de compte non renvoyé par l'API"
       >
         —
@@ -318,6 +320,13 @@ export function OverdueLine({
             }
           >
             {reminded}
+            {/* Le canal en clair : à J+15, c'est lui qui dit si le client a
+                déjà été relancé par écrit — un title ne se lit ni au clavier,
+                ni au doigt, ni au lecteur d'écran. */}
+            {row.lastReminderChannelLabel && <> · {row.lastReminderChannelLabel}</>}
+            {row.reminderCount > 1 && (
+              <span className="sr-only"> — {row.reminderCount} relances au total</span>
+            )}
           </span>
         )}
       </div>
@@ -517,7 +526,7 @@ export function RemindModal({ row, onClose, onDone }: GestureProps) {
       footer={
         <>
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
-            Fermer
+            Annuler
           </Btn>
           <Btn
             variant="primary"
@@ -639,7 +648,7 @@ export function PayModal({ row, onClose, onDone }: GestureProps) {
       footer={
         <>
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
-            Fermer
+            Annuler
           </Btn>
           <Btn
             variant="primary"
@@ -769,13 +778,15 @@ export function CancelModal({ row, onClose, onDone }: GestureProps) {
       title={`Annuler ${row.number}`}
       footer={
         <>
+          {/* « Fermer », pas « Annuler » : l'action primaire annule déjà la
+              facture, deux « Annuler » face à face se disputeraient le sens. */}
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
             Fermer
           </Btn>
           <Btn
             size="sm"
             icon="close"
-            className="bg-alert text-white hover:opacity-85"
+            variant="danger"
             disabled={!ok || busy}
             onClick={() => void run()}
           >

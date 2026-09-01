@@ -28,6 +28,9 @@ export function CancelModal({
   const [pin, setPin] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Erreur affichée en ligne sous le PIN (comme MovementModal) : un toast seul
+  // se manque quand on regarde le clavier pour retaper le PIN.
+  const [error, setError] = useState<string | null>(null);
 
   // Champs remis à zéro à chaque nouvelle cible (le PIN ne persiste jamais).
   useEffect(() => {
@@ -35,6 +38,7 @@ export function CancelModal({
     setPin("");
     setReason("");
     setSubmitting(false);
+    setError(null);
   }, [order?._id]);
 
   // La MÊME borne que l'API (`OrderCancelSchema`) : « x » passait cet écran et
@@ -44,6 +48,7 @@ export function CancelModal({
   async function submit(e?: FormEvent) {
     e?.preventDefault();
     if (!order || !valid || submitting) return;
+    setError(null);
     setSubmitting(true);
     try {
       const updated = await api.post<Order>(`/orders/${order._id}/cancel`, {
@@ -53,7 +58,7 @@ export function CancelModal({
       toast(`Commande n°${order.number} annulée`, { icon: "check" });
       onCancelled(updated);
     } catch (err) {
-      toast(
+      setError(
         err instanceof ApiError && err.status === 401
           ? "PIN incorrect — annulation refusée"
           : err instanceof Error
@@ -76,8 +81,10 @@ export function CancelModal({
             Retour
           </Btn>
           <Btn
-            variant="ink"
             size="sm"
+            // Rouge fonctionnel : annulation définitive, journalisée NF525 —
+            // jamais l'accent tenant (même motif que la suppression de catégorie).
+            style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
             onClick={() => void submit()}
             disabled={!valid || submitting}
           >
@@ -108,6 +115,7 @@ export function CancelModal({
             label="PIN staff"
             htmlFor="cancel-pin"
             hint="4 à 6 chiffres — jamais mémorisé."
+            error={error}
           >
             <Input
               id="cancel-pin"

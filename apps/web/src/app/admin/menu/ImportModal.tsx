@@ -18,7 +18,14 @@
  * (ProductCreateSchema ignore les champs inconnus).
  */
 
-import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
@@ -28,6 +35,8 @@ import { inputToCents, type Category } from "./types";
 const MAX_BYTES = 5 * 1024 * 1024;
 /** Au-delà, l'aperçu est tronqué (l'import, lui, traite tout le fichier). */
 const PREVIEW_ROWS = 100;
+/** Rapport final : au-delà, la liste des lignes en erreur est repliée en « +N autres ». */
+const ERROR_ROWS = 30;
 
 // ─── Colonnes reconnues (accents et casse ignorés) ───
 const NAME_KEYS = ["nom", "name", "produit", "libelle", "titre", "designation"];
@@ -234,10 +243,16 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Lignes traitées pendant la série de POST — « Import en cours… 42/230 ». */
+  const [progress, setProgress] = useState(0);
+  /** Croix cliquée pendant l'import : on l'explique au lieu de l'avaler en silence. */
+  const [closeAttempted, setCloseAttempted] = useState(false);
   const [result, setResult] = useState<{
     created: number;
     failed: number;
     cats: number;
+    /** « Nom · Catégorie » des lignes en échec — listées dans le rapport final. */
+    errors: string[];
   } | null>(null);
 
   const existing = useMemo(
@@ -263,20 +278,40 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
     setDragOver(false);
     setError(null);
     setBusy(false);
+    setProgress(0);
+    setCloseAttempted(false);
     setResult(null);
   }, []);
 
   const close = useCallback(() => {
-    if (busy) return; // import en cours : on ne coupe pas la série de POST
+    if (busy) {
+      // Import en cours : on ne coupe pas la série de POST — mais on le DIT,
+      // un clic avalé en silence passe pour une interface figée.
+      setCloseAttempted(true);
+      return;
+    }
     reset();
     onClose();
   }, [busy, reset, onClose]);
+
+  // Échap ferme la modale aux étapes sans enjeu (dépôt vierge, récap final).
+  // `destructive` prive la Modal de son écouteur clavier EN MÊME TEMPS que du
+  // clic overlay (spec §7.5) : on rebranche ici la touche seule, hors aperçu
+  // et hors import.
+  useEffect(() => {
+    if (!open || busy || step === "preview") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, step, close]);
 
   const handleFile = useCallback(async (file: File) => {
     setError(null);
     const ext = file.name.toLowerCase().split(".").pop() ?? "";
     if (ext !== "csv" && ext !== "xml") {
-      setError("Format non supporté — dépose un fichier .csv ou .xml.");
+      setError("Format non supporté — déposez un fichier .csv ou .xml.");
       return;
     }
     if (file.size > MAX_BYTES) {
@@ -288,7 +323,7 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
       const parsed = ext === "csv" ? parseCsv(text) : parseXml(text);
       if (parsed.rows.length === 0) {
         setError(
-          "Aucun produit exploitable — vérifie les colonnes nom et catégorie.",
+          "Aucun produit exploitable — vérifiez les colonnes nom et catégorie.",
         );
         return;
       }
@@ -325,6 +360,8 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
 
   async function confirmImport() {
     setBusy(true);
+    setProgress(0);
+    setCloseAttempted(false);
     const map = new Map(existing);
     let cats = 0;
     for (const c of newCats) {
@@ -342,10 +379,15 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
 
     let created = 0;
     let failed = 0;
+    const errors: string[] = [];
+    let processed = 0;
     for (const r of rows) {
+      processed++;
       const categoryId = map.get(norm(r.categoryName));
       if (!categoryId) {
         failed++;
+        errors.push(`${r.name} · ${r.categoryName}`);
+        setProgress(processed);
         continue;
       }
       try {
@@ -359,14 +401,19 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
         created++;
       } catch {
         failed++;
+        errors.push(`${r.name} · ${r.categoryName}`);
       }
+      setProgress(processed);
     }
 
-    setResult({ created, failed, cats });
+    setResult({ created, failed, cats, errors });
     setBusy(false);
     setStep("done");
     onImported();
   }
+
+  /** Bilan sans aucune création (API injoignable…) : l'écran final bascule en échec. */
+  const allFailed = result !== null && result.created === 0 && result.failed > 0;
 
   const footer =
     step === "drop" ? (
@@ -387,9 +434,34 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
         <Btn variant="ghost" size="sm" onClick={reset} disabled={busy}>
           Retour
         </Btn>
-        <Btn size="sm" icon="check" onClick={() => void confirmImport()} disabled={busy}>
-          {busy ? "Import en cours…" : "Confirmer l'import"}
+        <Btn
+          size="sm"
+          icon="check"
+          className="tabular-nums"
+          onClick={() => void confirmImport()}
+          disabled={busy}
+        >
+          {busy ? `Import en cours… ${progress}/${rows.length}` : "Confirmer l'import"}
         </Btn>
+      </>
+    ) : step === "done" ? (
+      <>
+        <Btn variant="ghost" size="sm" onClick={close}>
+          Fermer
+        </Btn>
+        {/* Réessayer uniquement quand RIEN n'a été créé : relancer un import
+            partiellement réussi dupliquerait les produits déjà passés. */}
+        {allFailed && (
+          <Btn
+            size="sm"
+            onClick={() => {
+              setResult(null);
+              setStep("preview");
+            }}
+          >
+            Réessayer
+          </Btn>
+        )}
       </>
     ) : undefined;
 
@@ -397,8 +469,9 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
     <Modal
       open={open}
       onClose={close}
-      // Fermeture explicite uniquement (spec §7.5 : le clic sur l'overlay ne
-      // ferme pas) — d'autant plus pendant la série de POST.
+      // Spec §7.5 : le clic sur l'overlay ne ferme pas — d'autant plus pendant
+      // la série de POST. Échap est rebranché plus haut, aux seules étapes sans
+      // enjeu (dépôt, récap).
       destructive
       width={520}
       title="Importer la carte (CSV / XML)"
@@ -426,7 +499,7 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
           >
             <Icon name="arrow" size={22} className="rotate-90 text-accent" />
             <span className="text-[14.5px] font-bold text-ink">
-              Dépose ton fichier ici ou clique pour parcourir
+              Déposez votre fichier ici ou cliquez pour parcourir
             </span>
             <span className="text-[12.5px] text-mut">.csv · .xml — max 5 Mo</span>
           </button>
@@ -462,62 +535,95 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
       {step === "preview" && (
         <div className="flex flex-col gap-3">
           <p className="text-[13.5px] text-mut">
-            Aperçu — <b className="text-ink">{fileName}</b> : {rows.length} produit
+            {/* break-all : un nom de fichier sans espace (export généré) ne doit
+                pas faire défiler horizontalement le corps de la modale. */}
+            Aperçu — <b className="break-all text-ink">{fileName}</b> : {rows.length} produit
             {rows.length > 1 ? "s" : ""} · {newCats.length} nouvelle
             {newCats.length > 1 ? "s" : ""} catégorie{newCats.length > 1 ? "s" : ""}
             {newCats.length > 0 && ` (« ${newCats.map((c) => c.name).join(" », « ")} »)`}
           </p>
 
+          {/* Vraie table th/td (comme les onglets Ingrédients) : au lecteur
+              d'écran, chaque prix et chaque catégorie restent associés à leur
+              produit — l'en-tête colle en haut de la zone défilante. */}
           <div className="overflow-hidden rounded-ctrl border border-line">
-            <div className="flex items-center gap-2 bg-[image:var(--cf-elev-gradient)] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.06em] text-mut">
-              <span className="min-w-0 flex-1">Nom</span>
-              <span className="w-16 shrink-0 text-right">Prix</span>
-              <span className="w-[120px] shrink-0">Catégorie</span>
-            </div>
             <div className="cf-scroll max-h-[240px] overflow-y-auto">
-              {rows.slice(0, PREVIEW_ROWS).map((r, i) => {
-                const isNewCat = !existing.has(norm(r.categoryName));
-                return (
-                  <div
-                    key={`${r.name}-${i}`}
-                    className="flex items-center gap-2 border-t border-line2 px-3 py-2"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-ink">
-                        {r.name}
-                      </span>
-                      {r.description && (
-                        <span className="block truncate text-[11px] text-mut">
-                          {r.description}
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={cx(
-                        "w-16 shrink-0 text-right text-[12.5px] tabular-nums",
-                        r.priceCents > 0 ? "text-ink" : "text-gold",
-                      )}
+              <table className="w-full table-fixed border-collapse">
+                <thead>
+                  <tr>
+                    <th
+                      scope="col"
+                      className="sticky top-0 bg-[image:var(--cf-elev-gradient)] px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut"
                     >
-                      {r.priceCents > 0 ? fmtEuro(r.priceCents) : "à définir"}
-                    </span>
-                    <span className="w-[120px] shrink-0">
-                      {isNewCat ? (
-                        <Pill
-                          className="max-w-full truncate"
-                          style={{
-                            background: "var(--cf-green)",
-                            color: "var(--cf-text)",
-                          }}
+                      Nom
+                    </th>
+                    <th
+                      scope="col"
+                      className="sticky top-0 w-20 bg-[image:var(--cf-elev-gradient)] px-2 py-2 text-right text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut"
+                    >
+                      Prix
+                    </th>
+                    <th
+                      scope="col"
+                      className="sticky top-0 w-[128px] bg-[image:var(--cf-elev-gradient)] py-2 pl-2 pr-3 text-left text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut"
+                    >
+                      Catégorie
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, PREVIEW_ROWS).map((r, i) => {
+                    const isNewCat = !existing.has(norm(r.categoryName));
+                    return (
+                      <tr key={`${r.name}-${i}`} className="border-t border-line2">
+                        <td className="px-3 py-2">
+                          <span className="block truncate text-[13px] font-semibold text-ink">
+                            {r.name}
+                          </span>
+                          {r.description && (
+                            <span className="block truncate text-[11px] text-mut">
+                              {r.description}
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className={cx(
+                            "px-2 py-2 text-right text-[12.5px] tabular-nums",
+                            r.priceCents > 0 ? "text-ink" : "text-gold",
+                          )}
                         >
-                          {r.categoryName} · nouveau
-                        </Pill>
-                      ) : (
-                        <Pill className="max-w-full truncate">{r.categoryName}</Pill>
-                      )}
-                    </span>
-                  </div>
-                );
-              })}
+                          {r.priceCents > 0 ? fmtEuro(r.priceCents) : "à définir"}
+                        </td>
+                        <td className="py-2 pl-2 pr-3">
+                          {/* Le texte tronqué vit dans un span enfant : `truncate`
+                              posé sur Pill (conteneur flex) coupe net sans ellipse.
+                              `title` en dernier filet pour lire le nom entier. */}
+                          {isNewCat ? (
+                            <Pill
+                              className="max-w-full"
+                              title={`${r.categoryName} · nouveau`}
+                              // Texte sombre sur le vert plein (comme la pilule
+                              // gold) : le blanc n'y atteint pas le contraste AA.
+                              style={{
+                                background: "var(--cf-green)",
+                                color: "#0B1F0E",
+                              }}
+                            >
+                              <span className="truncate">
+                                {r.categoryName} · nouveau
+                              </span>
+                            </Pill>
+                          ) : (
+                            <Pill className="max-w-full" title={r.categoryName}>
+                              <span className="truncate">{r.categoryName}</span>
+                            </Pill>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -534,41 +640,78 @@ export function ImportModal({ open, categories, onClose, onImported }: Props) {
               ou catégorie manquant.
             </p>
           )}
+          {/* Réponse au clic sur la croix pendant l'import — la Modal n'expose
+              pas d'état désactivé pour sa croix, on répond donc par le texte. */}
+          {busy && closeAttempted && (
+            <p role="status" className="text-xs text-gold">
+              Import en cours — la fermeture sera possible à la fin.
+            </p>
+          )}
         </div>
       )}
 
       {step === "done" && result && (
         <div className="flex flex-col items-center gap-2 py-2 text-center">
+          {/* Rien créé = échec, pas succès : pastille rouge fonctionnelle —
+              un check vert au-dessus de « 0 créés » ferait croire à un import réussi. */}
           <div
             aria-hidden
             className="grid size-[52px] place-items-center rounded-pill"
             style={{
-              background: "color-mix(in srgb, var(--cf-green) 22%, var(--cf-surface))",
+              background: allFailed
+                ? "color-mix(in srgb, var(--cf-red) 22%, var(--cf-surface))"
+                : "color-mix(in srgb, var(--cf-green) 22%, var(--cf-surface))",
             }}
           >
-            <Icon name="check" size={26} stroke={3} className="text-ok" />
+            <Icon
+              name={allFailed ? "close" : "check"}
+              size={26}
+              stroke={3}
+              className={allFailed ? "text-alertt" : "text-ok"}
+            />
           </div>
-          <p className="text-base font-extrabold text-ink">Import terminé</p>
-          <p className="text-[13.5px] leading-[1.5] text-mut">
-            {result.created} produit{result.created > 1 ? "s" : ""} ajouté
-            {result.created > 1 ? "s" : ""}
-            {result.cats > 0 &&
-              ` · ${result.cats} catégorie${result.cats > 1 ? "s" : ""} créée${
-                result.cats > 1 ? "s" : ""
-              }`}
-            .
-            <br />
-            Retrouve-les dans la liste, prêts à éditer.
+          <p className="text-base font-extrabold text-ink">
+            {allFailed ? "Import échoué" : "Import terminé"}
           </p>
-          {result.failed > 0 && (
-            <p role="alert" className="text-[12.5px] text-alertt">
-              {result.created} créés, {result.failed} en erreur — reprends ces lignes à la
-              main.
+          {allFailed ? (
+            <p className="text-[13.5px] leading-[1.5] text-mut">
+              Aucun produit n&apos;a pu être créé — vérifiez la connexion, puis
+              réessayez.
+            </p>
+          ) : (
+            <p className="text-[13.5px] leading-[1.5] text-mut">
+              {result.created} produit{result.created > 1 ? "s" : ""} ajouté
+              {result.created > 1 ? "s" : ""}
+              {result.cats > 0 &&
+                ` · ${result.cats} catégorie${result.cats > 1 ? "s" : ""} créée${
+                  result.cats > 1 ? "s" : ""
+                }`}
+              .
+              <br />
+              Retrouvez-les dans la liste, prêts à éditer.
             </p>
           )}
-          <Btn size="sm" className="mt-2" onClick={close}>
-            Fermer
-          </Btn>
+          {result.failed > 0 && (
+            <div className="w-full">
+              <p role="alert" className="text-[12.5px] text-alertt">
+                {allFailed
+                  ? `${result.failed} ligne${result.failed > 1 ? "s" : ""} en erreur :`
+                  : `${result.created} créés, ${result.failed} en erreur — reprenez ces lignes à la main :`}
+              </p>
+              {/* LESQUELLES : sans la liste, il faudrait recomparer la carte au
+                  fichier ligne à ligne pour retrouver ce qui a échoué. */}
+              <ul className="cf-scroll mt-1.5 max-h-[140px] overflow-y-auto rounded-ctrl border border-line px-3 py-2 text-left text-xs leading-[1.7] text-mut">
+                {result.errors.slice(0, ERROR_ROWS).map((line, i) => (
+                  <li key={`${line}-${i}`} className="truncate" title={line}>
+                    {line}
+                  </li>
+                ))}
+                {result.errors.length > ERROR_ROWS && (
+                  <li>+ {result.errors.length - ERROR_ROWS} autres</li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </Modal>

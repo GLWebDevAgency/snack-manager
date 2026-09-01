@@ -8,7 +8,7 @@
 
 import { useState, type DragEvent } from "react";
 import { cx } from "@/lib/cx";
-import { Btn, Card, EmptyState, Icon } from "@/components/ui";
+import { Btn, Card, EmptyState, Icon, Modal } from "@/components/ui";
 import { UNCAT, type Category } from "./types";
 
 type Props = {
@@ -17,7 +17,8 @@ type Props = {
   /** Id de catégorie sélectionnée, ou sentinelle UNCAT. */
   selected: string | null;
   onSelect: (id: string) => void;
-  onCreate: (name: string) => void;
+  /** Rend vrai si la création a abouti — l'échec rétablit la ligne de saisie. */
+  onCreate: (name: string) => Promise<boolean>;
   onSortAlpha: () => void;
   /** Nouvel ordre complet des ids après drag & drop. */
   onReorder: (ids: string[]) => void;
@@ -42,13 +43,26 @@ export function CategoriesCard({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   /** Emplacement d'insertion (0..n) survolé pendant le drag. */
   const [overSlot, setOverSlot] = useState<number | null>(null);
+  /**
+   * Catégorie VIDE en attente de confirmation de suppression : le parent ne
+   * montre sa modale §7.4 que sur 409 (produits rattachés) — sans garde ici,
+   * une catégorie vide partait au premier clic corbeille.
+   */
+  const [confirmDelete, setConfirmDelete] = useState<Category | null>(null);
 
   function commitCreate() {
     const name = newName.trim();
     setCreating(false);
     setNewName("");
     if (!name) return; // valeur vide = annulation silencieuse (spec §7.2)
-    onCreate(name);
+    // L'échec du POST rétablit la ligne AVEC le nom saisi : le toast
+    // « Création impossible » ne doit pas coûter la saisie en plus.
+    void onCreate(name).then((cree) => {
+      if (!cree) {
+        setCreating(true);
+        setNewName(name);
+      }
+    });
   }
 
   function slotFromEvent(e: DragEvent<HTMLDivElement>, index: number): number {
@@ -88,11 +102,15 @@ export function CategoriesCard({
           Catégories
         </span>
         <div className="flex items-center gap-1.5">
+          {/* aria-label : le contenu prime sur le title, sans lui le lecteur
+              d'écran lit « A flèche Z ». py-1.5 + marge négative : cibles
+              ~28 px (WCAG 2.5.8) sans épaissir l'en-tête. */}
           <button
             type="button"
             onClick={onSortAlpha}
             title="Trier par ordre alphabétique"
-            className="cf-press rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-2 py-[3px] text-[11px] font-extrabold text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
+            aria-label="Trier par ordre alphabétique"
+            className="cf-press -my-1 rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-2 py-1.5 text-[11px] font-extrabold text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
           >
             A→Z
           </button>
@@ -101,7 +119,7 @@ export function CategoriesCard({
             onClick={() => setCreating(true)}
             title="Nouvelle catégorie"
             aria-label="Nouvelle catégorie"
-            className="cf-press rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-[7px] py-[3px] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
+            className="cf-press -my-1 rounded-xs border border-line bg-[image:var(--cf-elev-gradient)] px-2 py-1.5 text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]"
           >
             <Icon name="plus" size={13} />
           </button>
@@ -124,7 +142,7 @@ export function CategoriesCard({
             }}
             placeholder="Nom de la catégorie"
             aria-label="Nom de la nouvelle catégorie"
-            className="min-w-0 flex-1 rounded-ctrl border border-white/6 bg-white/5 px-2.5 py-[7px] text-[13px] text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 hover:border-white/16 focus:border-accent focus:bg-white/8"
+            className="min-w-0 flex-1 rounded-ctrl border border-white/6 bg-white/5 px-2.5 py-[7px] text-[13px] text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut hover:border-white/16 focus:border-accent focus:bg-white/8"
           />
           <button
             type="button"
@@ -172,6 +190,11 @@ export function CategoriesCard({
             return (
               <div key={cat._id}>
                 {overSlot === i && dragIndex !== null && indicator}
+                {/* Le div ne porte que la sémantique de liste et le drag :
+                    la sélection est un VRAI bouton (annoncé actionnable au
+                    lecteur d'écran, Enter/Espace natifs, aria-current dessus),
+                    la corbeille son frère — plus d'action destructive imbriquée
+                    dans une zone cliquable. */}
                 <div
                   role="listitem"
                   draggable
@@ -192,17 +215,8 @@ export function CategoriesCard({
                     commitDrop(slotFromEvent(e, i));
                   }}
                   onDragEnd={endDrag}
-                  onClick={() => onSelect(cat._id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelect(cat._id);
-                    }
-                  }}
-                  tabIndex={0}
-                  aria-current={isSel || undefined}
                   className={cx(
-                    "cf-press-row flex cursor-pointer items-center gap-2 rounded-ctrl px-2 py-2",
+                    "flex items-center gap-2 rounded-ctrl px-2",
                     isSel
                       ? "bg-[image:var(--cf-elev-gradient)] shadow-[inset_0_0_0_1px_rgba(255,255,255,.06)]"
                       : "hover:bg-white/6",
@@ -216,33 +230,45 @@ export function CategoriesCard({
                   >
                     ⋮⋮
                   </span>
-                  <Icon
-                    name="tag"
-                    size={16}
-                    className={cx("shrink-0", isSel ? "text-accent" : "text-mut")}
-                  />
-                  <span
-                    className={cx(
-                      "min-w-0 flex-1 truncate text-[13.5px] text-ink",
-                      isSel && "font-bold",
-                    )}
-                  >
-                    {cat.name}
-                  </span>
-                  <span className="cf-fig shrink-0 text-[11px] font-bold text-mut">
-                    {cat.products.length}
-                  </span>
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(cat);
-                    }}
+                    onClick={() => onSelect(cat._id)}
+                    aria-current={isSel || undefined}
+                    className="cf-press-row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-left"
+                  >
+                    <Icon
+                      name="tag"
+                      size={16}
+                      className={cx("shrink-0", isSel ? "text-accent" : "text-mut")}
+                    />
+                    {/* Le nom porte son `title` : dernier filet pour lire un
+                        nom tronqué dans la colonne de 268 px avant la corbeille
+                        — motif DeviceRow de la fiche client. */}
+                    <span
+                      title={cat.name}
+                      className={cx(
+                        "min-w-0 flex-1 truncate text-[13.5px] text-ink",
+                        isSel && "font-bold",
+                      )}
+                    >
+                      {cat.name}
+                    </span>
+                    <span className="cf-fig shrink-0 text-[11px] font-bold text-mut">
+                      {cat.products.length}
+                    </span>
+                  </button>
+                  {/* size-7 : cible ≥ 24 px (WCAG 2.5.8) pour le geste
+                      destructif ; -mr-1 garde la densité de la colonne. */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      cat.products.length === 0 ? setConfirmDelete(cat) : onDelete(cat)
+                    }
                     title="Supprimer la catégorie"
                     aria-label={`Supprimer la catégorie ${cat.name}`}
-                    className="cf-press shrink-0 rounded-xs p-0.5 text-mut hover:bg-alert/15 hover:text-alertt"
+                    className="cf-press -mr-1 grid size-7 shrink-0 place-items-center rounded-xs text-mut hover:bg-alert/15 hover:text-alertt"
                   >
-                    <Icon name="trash" size={13} />
+                    <Icon name="trash" size={15} />
                   </button>
                 </div>
               </div>
@@ -298,6 +324,56 @@ export function CategoriesCard({
           Glisse ⋮⋮ pour réordonner — l&apos;ordre est celui de la carte client.
         </p>
       )}
+
+      {/* ── Confirmation pour une catégorie VIDE ── Le DELETE du parent part
+          immédiatement quand rien n'est rattaché (sa modale §7.4 ne s'ouvre
+          que sur 409) : la garde se joue donc ici, même habillage que la §7.4.
+          Pour une catégorie avec produits, le flux 409 → §7.4 reste seul. */}
+      <Modal
+        open={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        destructive
+        title={
+          <span className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="grid size-[38px] shrink-0 place-items-center rounded-ctrl text-alert"
+              style={{
+                background: "color-mix(in srgb, var(--cf-red) 22%, var(--cf-surface))",
+              }}
+            >
+              <Icon name="trash" size={18} />
+            </span>
+            <span className="min-w-0 truncate">
+              Supprimer «&nbsp;{confirmDelete?.name}&nbsp;» ?
+            </span>
+          </span>
+        }
+        footer={
+          <>
+            <Btn variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>
+              Annuler
+            </Btn>
+            <Btn
+              size="sm"
+              icon="trash"
+              // Rouge fonctionnel imposé (§7.4) — jamais l'accent tenant.
+              style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
+              onClick={() => {
+                if (confirmDelete) onDelete(confirmDelete);
+                setConfirmDelete(null);
+              }}
+            >
+              Supprimer la catégorie
+            </Btn>
+          </>
+        }
+      >
+        <p className="leading-[1.5] text-mut">
+          Cette catégorie est vide : aucun produit ne sera touché. Elle sera
+          supprimée immédiatement — il faudra la recréer pour la retrouver.
+        </p>
+      </Modal>
     </Card>
   );
 }

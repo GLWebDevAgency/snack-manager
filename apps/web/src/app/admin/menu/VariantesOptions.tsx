@@ -147,10 +147,25 @@ export function EditeurVariantes({
 
       <div className="mt-3 flex flex-col gap-2">
         {variants.map((v, i) => (
-          <div key={v.key} className="flex items-end gap-2">
-            <Field label={i === 0 ? "Nom" : ""} htmlFor={`var-nom-${v.key}`} className="flex-1">
+          /*
+           * `flex-wrap` + `basis-full` : avec prix (110) + poubelle (40), le
+           * nom ne pouvait pas rétrécir (min-width intrinsèque d'un input) —
+           * la rangée débordait d'un écran de téléphone et la poubelle
+           * sortait du cadre. Le nom prend donc toute la largeur, le reste se
+           * replie dessous (motif DeviceRow, déjà appliqué aux lignes de
+           * recette d'EditPanel).
+           */
+          <div key={v.key} className="flex flex-wrap items-end gap-x-2 gap-y-1.5">
+            <Field
+              label={i === 0 ? "Nom" : ""}
+              htmlFor={`var-nom-${v.key}`}
+              className="min-w-0 flex-1 basis-full md:basis-0"
+            >
               <Input
                 id={`var-nom-${v.key}`}
+                // Les lignes 2+ ont un label vide : sans aria-label, leur seul
+                // nom accessible serait le placeholder, identique partout.
+                aria-label={`Nom de la taille ${v.name || i + 1}`}
                 value={v.name}
                 onChange={(e) => modifier(i, { name: e.target.value })}
                 placeholder="Ex. M — 1 viande"
@@ -196,6 +211,16 @@ export function EditeurVariantes({
 // Les groupes d'options
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Ce qu'un client peut réellement cocher dans un groupe : borné par le
+ * maximum quand il est posé (1 implicite pour « Un seul ») et par le nombre
+ * de choix. Sert à signaler AVANT l'enregistrement un minimum inatteignable —
+ * le schéma ne couvre pas le cas « Plusieurs » sans maximum, qui ne se
+ * révélait qu'au moment où un client tentait de commander.
+ */
+const plafondChoix = (g: OptionGroup): number =>
+  Math.min(g.max ?? (g.type === "single" ? 1 : g.choices.length), g.choices.length);
+
 export function EditeurOptions({
   groups,
   onChange,
@@ -220,8 +245,14 @@ export function EditeurOptions({
       <div className="mt-3 flex flex-col gap-4">
         {groups.map((g, i) => (
           <div key={g.key} className="rounded-card border border-white/6 p-3">
-            <div className="flex items-end gap-2">
-              <Field label="Intitulé" htmlFor={`grp-nom-${g.key}`} className="flex-1">
+            {/* Même repli que les tailles : l'intitulé prend la largeur, le
+                sélecteur et la poubelle passent dessous sur téléphone. */}
+            <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5">
+              <Field
+                label="Intitulé"
+                htmlFor={`grp-nom-${g.key}`}
+                className="min-w-0 flex-1 basis-full md:basis-0"
+              >
                 <Input
                   id={`grp-nom-${g.key}`}
                   value={g.name}
@@ -293,13 +324,20 @@ export function EditeurOptions({
               </Field>
             </div>
 
+            {(g.min ?? 0) > plafondChoix(g) && (
+              <p role="alert" className="mt-2 text-xs text-alertt">
+                Minimum ({g.min ?? 0}) supérieur au nombre de choix possibles (
+                {plafondChoix(g)}) — le produit serait invendable.
+              </p>
+            )}
+
             <div className="mt-3">
-              <div className="text-[12px] font-semibold uppercase tracking-wide text-mut">
+              <div className="text-xs font-bold uppercase tracking-[0.04em] text-mut">
                 Choix possibles
               </div>
               <div className="mt-2 flex flex-col gap-2">
                 {g.choices.map((c, k) => (
-                  <div key={c.key} className="flex items-center gap-2">
+                  <div key={c.key} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                     <Input
                       aria-label={`Nom du choix ${k + 1}`}
                       value={c.name}
@@ -311,7 +349,7 @@ export function EditeurOptions({
                         })
                       }
                       placeholder="Ex. Samouraï"
-                      className="flex-1"
+                      className="min-w-0 flex-1 basis-full md:basis-0"
                     />
                     <ChampMontant
                       id={`opt-supp-${g.key}-${k}`}

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupplyAlerts, SupplyIngredient } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
-import { Chip, Icon, Skeleton, type IconName } from "@/components/ui";
+import { Chip, Icon, Skeleton, useToast, type IconName } from "@/components/ui";
 import { ErrorState } from "./shared";
 import { IngredientsTab, type IngredientAlertFilter } from "./ingredients-tab";
 import { SuppliersTab } from "./suppliers-tab";
@@ -27,15 +27,34 @@ const TABS: { key: TabKey; label: string; icon: IconName }[] = [
   { key: "movements", label: "Mouvements", icon: "clock" },
 ];
 
+/** Onglet demandé dans l'URL (`?tab=suppliers`) — au SSR on rend le défaut. */
+function tabFromUrl(): TabKey {
+  if (typeof window === "undefined") return "ingredients";
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return TABS.some((x) => x.key === t) ? (t as TabKey) : "ingredients";
+}
+
 export default function IngredientsPage() {
   const [ingredients, setIngredients] = useState<SupplyIngredient[] | null>(
     null,
   );
   const [alerts, setAlerts] = useState<SupplyAlerts | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("ingredients");
+  const [tab, setTabState] = useState<TabKey>(tabFromUrl);
   const [alertFilter, setAlertFilter] = useState<IngredientAlertFilter>(null);
   const [priceUp, setPriceUp] = useState(false);
+  const toast = useToast();
+
+  // L'onglet vit AUSSI dans l'URL (?tab=…) : rechargement et lien partagé
+  // retombent dessus. `replaceState` plutôt que router.replace : pas de
+  // re-navigation Next, l'état local reste la source de vérité.
+  const setTab = useCallback((next: TabKey) => {
+    setTabState(next);
+    const url = new URL(window.location.href);
+    if (next === "ingredients") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
 
   const fetchAll = useCallback(async () => {
     const [list, next] = await Promise.all([
@@ -67,11 +86,15 @@ export default function IngredientsPage() {
 
   /**
    * Revalidation silencieuse après mutation : on garde l'affichage courant
-   * (l'onglet a déjà appliqué sa mise à jour optimiste et signalé ses erreurs).
+   * (l'onglet a déjà appliqué sa mise à jour optimiste et signalé ses erreurs
+   * de mutation). Si le GET échoue, les tuiles d'alertes peuvent contredire la
+   * table : on nomme l'incohérence au lieu de la taire.
    */
   const refresh = useCallback(() => {
-    void fetchAll().catch(() => {});
-  }, [fetchAll]);
+    void fetchAll().catch(() => {
+      toast("Alertes non actualisées — rechargez pour resynchroniser");
+    });
+  }, [fetchAll, toast]);
 
   // ── Mise à jour locale immédiate depuis l'onglet Ingrédients ──
   const upsert = useCallback((ing: SupplyIngredient) => {
@@ -150,7 +173,14 @@ export default function IngredientsPage() {
   return (
     <div className="p-4 md:p-[26px]">
       {/* ── Bandeau d'alertes (chaque tuile filtre la table) ── */}
-      <div className="mb-4" aria-live="polite">
+      <div className="mb-4">
+        {/* Seule cette synthèse est annoncée au lecteur d'écran quand les
+            alertes changent — pas les trois tuiles relues en entier. */}
+        <p className="sr-only" aria-live="polite">
+          {rupturesCount} rupture{rupturesCount > 1 ? "s" : ""},{" "}
+          {belowParCount} sous le seuil, {priceUpCount} hausse
+          {priceUpCount > 1 ? "s" : ""} de prix
+        </p>
         {totalAlerts === 0 ? (
           <div className="flex items-center gap-2.5 rounded-ctrl border border-ok/35 bg-ok/8 px-4 py-3 text-[13px] text-ink">
             <span className="size-2.5 shrink-0 rounded-full bg-ok" aria-hidden />
@@ -200,7 +230,12 @@ export default function IngredientsPage() {
       {/* ── Onglets ── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
-          <Chip key={t.key} on={tab === t.key} onClick={() => setTab(t.key)}>
+          <Chip
+            key={t.key}
+            on={tab === t.key}
+            onClick={() => setTab(t.key)}
+            className="max-md:min-h-11"
+          >
             <Icon name={t.icon} size={14} />
             {t.label}
             {t.key === "ingredients" && (

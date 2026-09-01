@@ -69,7 +69,7 @@ export function ScorePill({
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-[1.5px] bg-transparent px-[9px] py-[3px] text-[11px] font-extrabold uppercase tracking-[0.04em]",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-[1.5px] bg-transparent px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
         SCORE_BORDER[tone],
         HEALTH_TEXT[tone],
         className,
@@ -87,7 +87,7 @@ export function ScorePill({
           "size-[7px] shrink-0 rounded-full",
           HEALTH_BAR[tone],
           // Un client qui décroche clignote : on le repère en balayant.
-          tone === "risque" && "animate-pulse",
+          tone === "risque" && "motion-safe:animate-pulse",
         )}
         aria-hidden
       />
@@ -95,10 +95,11 @@ export function ScorePill({
         {score !== null ? (
           <>
             {score}
-            <span className="sr-only"> sur 100</span>
+            {/* Le title est muet au clavier et au lecteur d'écran : le verdict se dit ici. */}
+            <span className="sr-only"> sur 100{verdict ? ` — ${verdict}` : ""}</span>
           </>
         ) : pending ? (
-          <span className="inline-block h-[9px] w-[18px] animate-pulse rounded-xs bg-current opacity-30" />
+          <span className="inline-block h-[9px] w-[18px] rounded-xs bg-current opacity-30 motion-safe:animate-pulse" />
         ) : (
           "—"
         )}
@@ -110,7 +111,7 @@ export function ScorePill({
 // ─── Gravité d'un signal ───
 
 const SEVERITY_DOT: Record<SignalSeverity, string> = {
-  critique: "bg-alert animate-pulse",
+  critique: "bg-alert motion-safe:animate-pulse",
   attention: "bg-prep",
   info: "bg-white/40",
 };
@@ -187,7 +188,9 @@ const STATUS_STYLE: Record<TenantAccountStatus, string> = {
   active: "border-white/20 bg-white/6 text-mut",
   trial: "border-prep/50 bg-prep/12 text-prept",
   suspended: "border-alert/70 bg-alert/12 text-alertt",
-  churned: "border-white/12 bg-transparent text-mut/70",
+  // Parti : bordure affaiblie et fond nu marquent déjà l'état — baisser
+  // l'opacité du texte rendrait le client parti le plus dur à lire (AA 4,5:1).
+  churned: "border-white/12 bg-transparent text-mut",
 };
 
 export function AccountPill({
@@ -200,7 +203,7 @@ export function AccountPill({
   if (!status) {
     return (
       <span
-        className={cx("text-[11px] text-mut/60", className)}
+        className={cx("text-[11px] text-mut", className)}
         title="Statut de compte non renvoyé par l'API"
       >
         —
@@ -210,11 +213,19 @@ export function AccountPill({
   return (
     <span
       className={cx(
-        "inline-flex items-center whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
         STATUS_STYLE[status],
         className,
       )}
     >
+      {/* Le même point battant que la file de recouvrement (facturation/ui.tsx) :
+          un client suspendu se présente pareil sur les deux surfaces. */}
+      {status === "suspended" && (
+        <span
+          className="size-[7px] shrink-0 animate-pulse rounded-full bg-alert"
+          aria-hidden
+        />
+      )}
       {TENANT_ACCOUNT_STATUS_LABELS[status]}
     </span>
   );
@@ -263,7 +274,7 @@ export function Trend({
 }) {
   if (pct === null) {
     return (
-      <span className={cx("text-[11px] text-mut/60", className)}>
+      <span className={cx("text-[11px] italic text-mut", className)}>
         pas d&apos;historique
       </span>
     );
