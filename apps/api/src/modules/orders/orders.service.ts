@@ -23,6 +23,7 @@ import {
 } from '@sm/contracts';
 import type { Counter, Order, Product, Promotion } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { AuditService } from '../audit/audit.module';
 import { resolvePayment } from './payment';
 import { newTrackingToken, trackingFilter } from './tracking';
@@ -77,7 +78,11 @@ export class OrdersService {
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
-    void this.redis.publish(ordersChannel(tenantId), JSON.stringify({ event, payload }));
+    void publishRedisBestEffort(
+      this.redis,
+      ordersChannel(tenantId),
+      JSON.stringify({ event, payload }),
+    );
   }
 
   /**

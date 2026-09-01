@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS } from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
 import { AuditService } from '../audit/audit.module';
 
@@ -45,7 +46,8 @@ export class MenuService {
   }
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
-    void this.redis.publish(
+    void publishRedisBestEffort(
+      this.redis,
       ordersChannel(tenantId),
       JSON.stringify({ event: WS_EVENTS.menuUpdated, payload: meta }),
     );
