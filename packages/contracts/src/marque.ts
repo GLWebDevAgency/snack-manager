@@ -429,8 +429,14 @@ export function marqueEffective(t: {
   // Le masque lu en base est une donnée de FORME non fiable : Mongoose infère
   // des clés optionnelles là où le contrat les veut présentes, et `type.pair`
   // en simple chaîne. Un seul adaptateur, ici — l'API ne caste jamais.
-  const lu = BrandSchema.safeParse(t.brand ?? null);
-  return lu.success && lu.data !== null ? lu.data : marqueDeRepli(t.brandColor, t.logoUrl);
+  //
+  // Un sous-document Mongoose HYDRATÉ porte des clés de prototype ($__parent,
+  // save, toObject…) que le schéma strict refuse : on le ramène à un objet nu
+  // avant de le lire. Un objet déjà nu passe tel quel.
+  const brut = t.brand as { toObject?: () => unknown } | null | undefined;
+  const nu = brut && typeof brut.toObject === 'function' ? brut.toObject() : brut;
+  const lu = BrandSchema.safeParse(nu ?? null);
+  return lu.success ? lu.data : marqueDeRepli(t.brandColor, t.logoUrl);
 }
 
 /** Le contrat « logo + accent » des outils du personnel : dérivé, jamais stocké à part. */

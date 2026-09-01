@@ -1,6 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import { marqueEffective } from '@sm/contracts';
 import type { TenantsService } from '../tenants/tenants.service';
 import type { LoyaltyAdminService } from './loyalty-admin.service';
 import type { LoyaltyMemberService } from './loyalty-member.service';
@@ -109,14 +108,14 @@ describe('LoyaltyPublicService', () => {
     const { service } = build();
     const catalog = await service.catalog('classfood');
     // Ce tenant n'a pas été repris (pas de `brand`) : le masque effectif est le
-    // repli Nuit avec son accent — même calcul que le service, en pur.
-    expect(catalog.restaurant).toEqual({
-      slug: 'classfood',
-      name: 'Classfood',
-      brand: marqueEffective({ brandColor: '#c9a15a', logoUrl: null }),
-      brandColor: '#c9a15a',
-      logoUrl: null,
-    });
+    // repli Nuit avec son accent — valeurs concrètes, pas recalculées avec la
+    // fonction sous test (ça ne vérifierait plus rien).
+    expect(catalog.restaurant.slug).toBe('classfood');
+    expect(catalog.restaurant.name).toBe('Classfood');
+    expect(catalog.restaurant.brandColor).toBe('#c9a15a');
+    expect(catalog.restaurant.logoUrl).toBeNull();
+    expect(catalog.restaurant.brand.preset).toBe('nuit');
+    expect(catalog.restaurant.brand.palette.accent).toBe('#c9a15a');
     expect(catalog.rewards).toHaveLength(1);
   });
 

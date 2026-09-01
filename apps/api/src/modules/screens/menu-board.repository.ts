@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Category, Product, Promotion, Tenant } from '@sm/db';
+import { brandColorDe, logoUrlDe, marqueEffective } from '@sm/contracts';
 import type { RawDayHours } from './daypart';
 
 /**
@@ -115,13 +116,16 @@ export class MenuBoardRepository {
 
     if (!tenant) return null;
 
+    // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
+    const brand = marqueEffective(tenant);
+
     return {
       identity: {
         tenantId: String(tenant._id),
         slug: String(tenant.slug ?? ''),
         name: String(tenant.name ?? ''),
-        logoUrl: tenant.logoUrl ?? null,
-        brandColor: tenant.brandColor ?? '#c9a15a',
+        logoUrl: logoUrlDe(brand),
+        brandColor: brandColorDe(brand),
         hours: (tenant.hours ?? []).map((h) => ({
           day: Number(h?.day ?? 0),
           lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,

@@ -6,7 +6,7 @@ describe("retour accessible après scan", () => {
   it("annonce la carte et son solde sans répéter le secret QR", () => {
     const card = {
       member: { alias: "Maya", balanceUnits: 12 },
-      restaurant: { slug: "classfood", name: "Classfood", brandColor: "#c9a15a" },
+      restaurant: { slug: "classfood", name: "Classfood", brandColor: "#c9a15a", brand: null },
       program: {
         name: "La carte",
         status: "active",
