@@ -20,6 +20,7 @@ const USER = {
   role: 'owner',
   tenantId: 'tenant_1',
   passwordHash: '$argon2id$empreinte-reelle',
+  sessionVersion: 'owner-v7',
 } as unknown as HydratedDocument<User>;
 
 function harness(user: HydratedDocument<User> | null) {
@@ -128,7 +129,25 @@ describe('AuthService.login — même coût de vérification', () => {
     });
     expect(findOne).toHaveBeenCalledWith({ email: 'gerant@example.com' });
     expect(verify).toHaveBeenCalledExactlyOnceWith(USER.passwordHash, 'mot-de-passe-valide');
-    expect(signAsync).toHaveBeenCalledOnce();
+    expect(signAsync).toHaveBeenCalledExactlyOnceWith({
+      sub: 'user_1',
+      tenantId: 'tenant_1',
+      role: 'owner',
+      kind: 'user',
+      userSessionVersion: 'owner-v7',
+    });
+  });
+
+  it('émet la génération historique 0 sans nécessiter de backfill Mongo', async () => {
+    verify.mockResolvedValue(true);
+    const legacy = { ...USER, sessionVersion: undefined } as unknown as HydratedDocument<User>;
+    const { service, signAsync } = harness(legacy);
+
+    await service.login({ email: USER.email, password: 'mot-de-passe-valide' });
+
+    expect(signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ userSessionVersion: '0' }),
+    );
   });
 
   it('rehash une ancienne cohorte après succès avec un compare-and-set', async () => {

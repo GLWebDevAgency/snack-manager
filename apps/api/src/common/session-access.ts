@@ -8,7 +8,13 @@ import {
   type JwtPayload,
   type TenantAccountStatus,
 } from '@sm/contracts';
-import type { Device, Staff, Tenant } from '@sm/db';
+import type { Device, Staff, Tenant, User } from '@sm/db';
+
+type UserSessionRow = {
+  tenantId?: unknown;
+  role?: unknown;
+  sessionVersion?: unknown;
+};
 
 type StaffSessionRow = {
   tenantId: unknown;
@@ -25,6 +31,8 @@ type DeviceSessionRow = {
 };
 
 const sessionVersion = (value: unknown): string => String(value ?? '0');
+const tenantRef = (value: unknown): string | null =>
+  value === null || value === undefined ? null : String(value);
 
 /**
  * Autorité de session commune aux requêtes HTTP et aux rooms WebSocket.
@@ -39,15 +47,20 @@ export class SessionAccessService {
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     @InjectModel('Staff') private readonly staff: Model<Staff>,
     @InjectModel('Device') private readonly devices: Model<Device>,
+    @InjectModel('User') private readonly users: Model<User>,
   ) {}
 
   async assertAllows(user: JwtPayload): Promise<void> {
     if (user.kind !== 'user' && user.kind !== 'staff') throw new UnauthorizedException();
     this.assertNotExpired(user);
 
-    // L'équipe Snack Manager doit pouvoir rouvrir un client suspendu depuis
-    // son back-office. Une session staff ne peut jamais s'attribuer ce rôle.
-    if (user.kind === 'user' && user.role === 'sm_admin') return;
+    if (user.kind === 'user') {
+      await this.assertUserSessionAllows(user);
+      // L'équipe Snack Manager doit pouvoir rouvrir un client suspendu depuis
+      // son back-office. La version du compte vient toutefois d'être relue :
+      // cette exception métier ne ressuscite jamais un ancien JWT.
+      if (user.role === 'sm_admin') return;
+    }
 
     if (!user.tenantId || !Types.ObjectId.isValid(user.tenantId)) {
       throw new UnauthorizedException();
@@ -59,6 +72,20 @@ export class SessionAccessService {
     // L'expiration peut tomber pendant les lectures Mongo. Le contrôle final
     // empêche leur résultat, pourtant valide à leur départ, d'autoriser une
     // requête ou une émission après `exp`.
+    this.assertNotExpired(user);
+  }
+
+  /**
+   * Valide l'identité utilisateur sans lire l'état commercial du tenant.
+   *
+   * Cette frontière publique sert à l'unique route de facturation qui reste
+   * accessible à un owner suspendu. Elle conserve la révocation du compte tout
+   * en laissant `assertAllows` porter la règle d'abonnement générale.
+   */
+  async assertUserSessionAllows(user: JwtPayload): Promise<void> {
+    if (user.kind !== 'user') throw new UnauthorizedException();
+    this.assertNotExpired(user);
+    await this.assertUserRecordAllows(user);
     this.assertNotExpired(user);
   }
 
@@ -84,6 +111,30 @@ export class SessionAccessService {
         message: ACCOUNT_SUSPENDED_MESSAGE,
         code: ACCOUNT_SUSPENDED_CODE,
       });
+    }
+  }
+
+  private async assertUserRecordAllows(user: JwtPayload): Promise<void> {
+    if (
+      !Types.ObjectId.isValid(user.sub) ||
+      typeof user.userSessionVersion !== 'string'
+    ) {
+      // Les JWT antérieurs à la version de session sont volontairement fermés :
+      // une reconnexion unique les remplace par un jeton révocable.
+      throw new UnauthorizedException();
+    }
+
+    const stored = await this.users
+      .findById(user.sub, { tenantId: 1, role: 1, sessionVersion: 1 })
+      .lean<UserSessionRow | null>();
+
+    if (
+      !stored ||
+      stored.role !== user.role ||
+      tenantRef(stored.tenantId) !== user.tenantId ||
+      sessionVersion(stored.sessionVersion) !== user.userSessionVersion
+    ) {
+      throw new UnauthorizedException();
     }
   }
 

@@ -4,7 +4,7 @@ import type { JwtService } from '@nestjs/jwt';
 import type { Model } from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { ACCOUNT_SUSPENDED_CODE, ACCOUNT_SUSPENDED_MESSAGE, type JwtPayload } from '@sm/contracts';
-import type { Device, Staff, Tenant } from '@sm/db';
+import type { Device, Staff, Tenant, User } from '@sm/db';
 import { AuthGuard, IS_PUBLIC, ROLES } from './auth';
 import { SessionAccessService } from './session-access';
 
@@ -20,6 +20,9 @@ const ACTIF = '65f000000000000000000001';
 const SUSPENDU = '65f000000000000000000002';
 const LEGACY = '65f000000000000000000003';
 const DISPARU = '65f000000000000000000004';
+const OWNER = '65f000000000000000000011';
+const STAFF = '65f000000000000000000012';
+const SM_ADMIN = '65f000000000000000000013';
 
 /** Le parc tel que Mongo le rendrait — `legacy` n'a pas de champ `account`. */
 const TENANTS: Record<string, Record<string, unknown>> = {
@@ -54,8 +57,26 @@ function makeGuard(tokens: Record<string, JwtPayload>, meta: Record<string, unkn
   const devices = {
     findOne: () => ({ lean: async () => null }),
   } as unknown as Model<Device>;
+  const users = {
+    findById: (id: unknown) => ({
+      lean: async () => {
+        const payload = Object.values(tokens).find(
+          (candidate) => candidate.kind === 'user' && candidate.sub === String(id),
+        );
+        return payload
+          ? {
+              // Un compte plateforme reste global en base même si un payload
+              // de test tente de lui greffer artificiellement un tenant.
+              tenantId: payload.role === 'sm_admin' ? null : payload.tenantId,
+              role: payload.role,
+              sessionVersion: payload.userSessionVersion,
+            }
+          : null;
+      },
+    }),
+  } as unknown as Model<User>;
 
-  return new AuthGuard(jwt, reflector, new SessionAccessService(tenants, staff, devices));
+  return new AuthGuard(jwt, reflector, new SessionAccessService(tenants, staff, devices, users));
 }
 
 function contextFor(token: string | null): ExecutionContext {
@@ -71,15 +92,16 @@ function contextFor(token: string | null): ExecutionContext {
 }
 
 const gerant = (tenantId: string | null): JwtPayload => ({
-  sub: 'user-1',
+  sub: OWNER,
   tenantId,
   role: 'owner',
   kind: 'user',
+  userSessionVersion: 'owner-v1',
   exp: 4_102_444_800,
 });
 
 const caissier = (tenantId: string): JwtPayload => ({
-  sub: 'staff-1',
+  sub: STAFF,
   tenantId,
   role: 'caisse',
   kind: 'staff',
@@ -87,10 +109,11 @@ const caissier = (tenantId: string): JwtPayload => ({
 });
 
 const equipeSm = (tenantId: string | null = null): JwtPayload => ({
-  sub: 'user-sm',
+  sub: SM_ADMIN,
   tenantId,
   role: 'sm_admin',
   kind: 'user',
+  userSessionVersion: 'sm-v1',
   exp: 4_102_444_800,
 });
 
@@ -125,7 +148,9 @@ describe('Statut de compte au guard', () => {
     await expect(guard.canActivate(contextFor('jeton'))).resolves.toBe(true);
 
     const rattache = makeGuard({ jeton: equipeSm(SUSPENDU) });
-    await expect(rattache.canActivate(contextFor('jeton'))).resolves.toBe(true);
+    await expect(rattache.canActivate(contextFor('jeton'))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('laisse travailler un établissement actif', async () => {

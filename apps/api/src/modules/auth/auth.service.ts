@@ -58,11 +58,17 @@ export class AuthService {
     }
 
     await this.rehashIfNeeded(user, storedHash, password, currentPolicy);
+    // Le paquet API peut être typechecké avant la reconstruction de `@sm/db` ;
+    // la lecture tolérante couvre aussi les documents Mongo historiques.
+    const userSessionVersion = String(
+      (user as unknown as { sessionVersion?: unknown }).sessionVersion ?? '0',
+    );
     const payload: JwtPayload = {
       sub: String(user._id),
       tenantId: user.tenantId ? String(user.tenantId) : null,
       role: user.role,
       kind: 'user',
+      userSessionVersion,
     };
     return {
       token: await this.jwt.signAsync(payload),

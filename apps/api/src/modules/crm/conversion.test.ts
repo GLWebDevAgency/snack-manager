@@ -306,7 +306,11 @@ describe('Convertir un lead en restaurant', () => {
 describe('Réinitialiser le mot de passe gérant', () => {
   it('fabrique, hache, journalise — et rend le mot de passe une fois', async () => {
     const { service, users, admin } = build();
-    const owner = { _id: new Types.ObjectId(), email: 'gerant@exemple.fr' };
+    const owner = {
+      _id: new Types.ObjectId(),
+      email: 'gerant@exemple.fr',
+      sessionVersion: 'owner-v1',
+    };
     users.findOne.mockReturnValue({ lean: () => Promise.resolve(owner) });
 
     const tenantId = new Types.ObjectId().toHexString();
@@ -316,6 +320,10 @@ describe('Réinitialiser le mot de passe gérant', () => {
     expect(result.password).toMatch(/^[a-z2-9]{4}-/);
     const update = users.updateOne.mock.calls[0]?.[1] as Record<string, any>;
     expect(update.$set.passwordHash).toBe(`empreinte(${result.password})`);
+    expect(update.$set.sessionVersion).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(update.$set.sessionVersion).not.toBe(owner.sessionVersion);
     expect(admin.recordOwnerReset).toHaveBeenCalledWith(ACTOR, tenantId, 'gerant@exemple.fr');
   });
 

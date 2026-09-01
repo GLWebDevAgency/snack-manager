@@ -41,6 +41,7 @@ const SM: JwtPayload = {
   tenantId: null,
   role: 'sm_admin',
   kind: 'user',
+  userSessionVersion: 'sm-v1',
   exp: 4_102_444_800,
 };
 
@@ -52,6 +53,7 @@ const GERANT: JwtPayload = {
   tenantId: RESTO,
   role: 'owner',
   kind: 'user',
+  userSessionVersion: 'owner-v1',
   exp: 4_102_444_800,
 };
 
@@ -121,6 +123,18 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
     } as unknown as Model<Tenant>;
     const staff = { findOne: () => ({ lean: async () => null }) } as unknown as Model<Staff>;
     const devices = { findOne: () => ({ lean: async () => null }) } as unknown as Model<Device>;
+    const userAccounts = {
+      findById: () => ({
+        lean: async () =>
+          token?.kind === 'user'
+            ? {
+                tenantId: token.tenantId,
+                role: token.role,
+                sessionVersion: token.userSessionVersion,
+              }
+            : null,
+      }),
+    } as unknown as Model<User>;
 
     const context = {
       switchToHttp: () => ({
@@ -133,7 +147,7 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
       getClass: () => route.target,
     } as unknown as ExecutionContext;
 
-    const sessions = new SessionAccessService(tenants, staff, devices);
+    const sessions = new SessionAccessService(tenants, staff, devices, userAccounts);
     return new AuthGuard(jwt, new Reflector(), sessions).canActivate(context);
   }
 

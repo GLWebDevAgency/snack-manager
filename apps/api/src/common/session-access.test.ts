@@ -6,15 +6,18 @@ import {
   ACCOUNT_SUSPENDED_MESSAGE,
   type JwtPayload,
 } from '@sm/contracts';
-import type { Device, Staff, Tenant } from '@sm/db';
+import type { Device, Staff, Tenant, User } from '@sm/db';
 import { SessionAccessService } from './session-access';
 
 const TENANT = '65f000000000000000000001';
 const STAFF = '65f000000000000000000011';
 const DEVICE = '65f000000000000000000021';
+const OWNER = '65f000000000000000000031';
+const SM_ADMIN = '65f000000000000000000099';
 
 type State = {
   tenant: Record<string, unknown> | null;
+  user: Record<string, unknown> | null;
   member: Record<string, unknown> | null;
   device: Record<string, unknown> | null;
 };
@@ -22,6 +25,12 @@ type State = {
 function service(state: Partial<State> = {}): SessionAccessService {
   const current: State = {
     tenant: { account: { status: 'active' } },
+    user: {
+      _id: OWNER,
+      tenantId: TENANT,
+      role: 'owner',
+      sessionVersion: 'user-v1',
+    },
     member: {
       _id: STAFF,
       tenantId: TENANT,
@@ -48,14 +57,21 @@ function service(state: Partial<State> = {}): SessionAccessService {
   const devices = {
     findOne: () => ({ lean: async () => current.device }),
   } as unknown as Model<Device>;
-  return new SessionAccessService(tenants, staff, devices);
+  const users = {
+    findById: (id: unknown) => ({
+      lean: async () =>
+        current.user && String(current.user._id) === String(id) ? current.user : null,
+    }),
+  } as unknown as Model<User>;
+  return new SessionAccessService(tenants, staff, devices, users);
 }
 
 const owner = (tenantId: string | null = TENANT): JwtPayload => ({
-  sub: '65f000000000000000000031',
+  sub: OWNER,
   tenantId,
   role: 'owner',
   kind: 'user',
+  userSessionVersion: 'user-v1',
   exp: 4_102_444_800,
 });
 
@@ -102,14 +118,81 @@ describe('autorité de session commune HTTP / WebSocket', () => {
 
   it('conserve l’accès de l’équipe SM nécessaire à la réactivation', async () => {
     await expect(
-      service({ tenant: { account: { status: 'suspended' } } }).assertAllows({
-        sub: '65f000000000000000000099',
+      service({
+        tenant: { account: { status: 'suspended' } },
+        user: {
+          _id: SM_ADMIN,
+          tenantId: null,
+          role: 'sm_admin',
+          sessionVersion: 'sm-v1',
+        },
+      }).assertAllows({
+        sub: SM_ADMIN,
         tenantId: null,
         role: 'sm_admin',
         kind: 'user',
+        userSessionVersion: 'sm-v1',
         exp: 4_102_444_800,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('révoque owner et sm_admin dès que leur génération Mongo tourne', async () => {
+    await expect(
+      service({
+        user: { _id: OWNER, tenantId: TENANT, role: 'owner', sessionVersion: 'user-v2' },
+      }).assertAllows(owner()),
+    ).rejects.toThrow(UnauthorizedException);
+
+    await expect(
+      service({
+        user: {
+          _id: SM_ADMIN,
+          tenantId: null,
+          role: 'sm_admin',
+          sessionVersion: 'sm-v2',
+        },
+      }).assertAllows({
+        sub: SM_ADMIN,
+        tenantId: null,
+        role: 'sm_admin',
+        kind: 'user',
+        userSessionVersion: 'sm-v1',
+        exp: 4_102_444_800,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('refuse les anciens JWT user sans génération et les comptes supprimés', async () => {
+    const legacy = { ...owner(), userSessionVersion: undefined };
+    await expect(service().assertAllows(legacy)).rejects.toThrow(UnauthorizedException);
+    await expect(service({ user: null }).assertAllows(owner())).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('refuse aussi un rôle ou un tenant JWT qui ne correspond plus au compte', async () => {
+    await expect(
+      service({
+        user: { _id: OWNER, tenantId: TENANT, role: 'sm_admin', sessionVersion: 'user-v1' },
+      }).assertAllows(owner()),
+    ).rejects.toThrow(UnauthorizedException);
+    await expect(
+      service({
+        user: {
+          _id: OWNER,
+          tenantId: '65f0000000000000000000ff',
+          role: 'owner',
+          sessionVersion: 'user-v1',
+        },
+      }).assertAllows(owner()),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('valide la session owner suspendue sans rouvrir les autres routes du tenant', async () => {
+    const access = service({ tenant: { account: { status: 'suspended' } } });
+    await expect(access.assertUserSessionAllows(owner())).resolves.toBeUndefined();
+    await expect(access.assertAllows(owner())).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('admet uniquement une session staff encore liée au rôle et à la tablette', async () => {
@@ -176,10 +259,21 @@ describe('autorité de session commune HTTP / WebSocket', () => {
         }),
       } as unknown as Model<Tenant>;
       const empty = { findOne: () => ({ lean: async () => null }) };
+      const users = {
+        findById: () => ({
+          lean: async () => ({
+            _id: OWNER,
+            tenantId: TENANT,
+            role: 'owner',
+            sessionVersion: 'user-v1',
+          }),
+        }),
+      };
       const access = new SessionAccessService(
         tenants,
         empty as unknown as Model<Staff>,
         empty as unknown as Model<Device>,
+        users as unknown as Model<User>,
       );
       const pending = access.assertAllows({
         ...owner(),

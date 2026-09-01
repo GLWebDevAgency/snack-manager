@@ -480,6 +480,12 @@ export interface JwtPayload {
   /** Émis automatiquement par JwtService ; exprimé en secondes Unix. */
   exp?: number;
   /**
+   * Version de sécurité d'un compte email/mot de passe. Elle reste optionnelle
+   * dans le type pour décoder les anciens JWT, mais l'autorité serveur refuse
+   * désormais toute session `user` qui ne la porte pas.
+   */
+  userSessionVersion?: string;
+  /**
    * Une session PIN est liée à la personne ET à la tablette qui l'a ouverte.
    * Les champs restent optionnels dans le type pour décoder proprement les
    * anciens jetons ; l'autorisation serveur refuse toutefois un JWT staff qui

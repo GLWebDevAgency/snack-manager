@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose from 'mongoose';
@@ -76,12 +77,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await Users.updateOne({ email }, { $set: { passwordHash: await hashPassword(password) } });
+  await Users.updateOne(
+    { email },
+    {
+      $set: {
+        passwordHash: await hashPassword(password),
+        sessionVersion: randomUUID(),
+      },
+    },
+  );
   await mongoose.disconnect();
 
   // On ne réaffiche JAMAIS le mot de passe, même pour confirmer.
-  console.log(`\nMot de passe de ${email} mis à jour. Les sessions ouvertes restent valides`);
-  console.log('jusqu’à leur expiration (12 h) — déconnectez-vous et reconnectez-vous pour vérifier.');
+  console.log(`\nMot de passe de ${email} mis à jour. Les sessions ouvertes sont révoquées.`);
 }
 
 /**

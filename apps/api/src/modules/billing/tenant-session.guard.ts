@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import type { JwtPayload } from '@sm/contracts';
 import type { AuthedRequest } from '../../common/auth';
+import { SessionAccessService } from '../../common/session-access';
 
 /**
  * LA SEULE PORTE QUI RESTE OUVERTE À UN COMPTE SUSPENDU.
@@ -53,7 +54,10 @@ import type { AuthedRequest } from '../../common/auth';
  */
 @Injectable()
 export class TenantSessionGuard implements CanActivate {
-  constructor(private readonly jwt: JwtService) {}
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly sessions: SessionAccessService,
+  ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const req = ctx.switchToHttp().getRequest<AuthedRequest>();
@@ -80,6 +84,11 @@ export class TenantSessionGuard implements CanActivate {
     if (!payload.tenantId || !Types.ObjectId.isValid(payload.tenantId)) {
       throw new UnauthorizedException();
     }
+
+    // Cette route ignore uniquement la suspension COMMERCIALE du tenant. Le
+    // compte owner et sa génération de session restent relus en base, comme sur
+    // toutes les autres frontières HTTP et WebSocket.
+    await this.sessions.assertUserSessionAllows(payload);
 
     req.user = payload;
     return true;

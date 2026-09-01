@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose, { type Model } from 'mongoose';
@@ -37,6 +38,7 @@ type Utilisateurs = Model<{
   role: string;
   tenantId: unknown;
   name: string;
+  sessionVersion: string;
 }>;
 
 /** Le modèle User, unique par processus — reconnexions comprises. */
@@ -156,9 +158,17 @@ async function changerMotDePasse(cible: Cible): Promise<void> {
   const motDePasse = await saisirMotDePasse();
   if (motDePasse === null) return;
   if (!(await feuVert(cible, `changer le mot de passe de ${email}`))) return;
-  await Users.updateOne({ email }, { $set: { passwordHash: await hashPassword(motDePasse) } });
+  await Users.updateOne(
+    { email },
+    {
+      $set: {
+        passwordHash: await hashPassword(motDePasse),
+        sessionVersion: randomUUID(),
+      },
+    },
+  );
   console.log(vert(`\nMot de passe de ${email} mis à jour.`));
-  console.log(gris('Les sessions ouvertes restent valides jusqu’à leur expiration (12 h).\n'));
+  console.log(gris('Les sessions ouvertes sont révoquées ; une reconnexion est nécessaire.\n'));
 }
 
 async function listerComptesEquipe(): Promise<void> {

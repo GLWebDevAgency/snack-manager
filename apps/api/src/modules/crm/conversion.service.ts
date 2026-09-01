@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -355,7 +355,17 @@ export class ConversionService {
 
     const password = generatePassword();
     const passwordHash = await this.hasher.hash(password);
-    await this.users.updateOne({ _id: owner._id }, { $set: { passwordHash } });
+    await this.users.updateOne(
+      { _id: owner._id },
+      {
+        $set: {
+          passwordHash,
+          // Même écriture Mongo que le secret : aucun instant ne peut exposer
+          // le nouveau mot de passe avec l'ancienne génération encore valide.
+          sessionVersion: randomUUID(),
+        },
+      },
+    );
 
     await this.admin.recordOwnerReset(actor, tenantId, owner.email);
     return { ownerEmail: owner.email, password };

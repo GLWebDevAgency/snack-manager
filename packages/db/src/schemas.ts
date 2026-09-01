@@ -373,6 +373,12 @@ export const UserSchema = new Schema(
     role: { type: String, enum: ['owner', 'sm_admin'], required: true },
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null }, // null = équipe Snack Manager
     name: { type: String, default: '' },
+    /**
+     * Génération opaque des sessions email/mot de passe. Un changement de
+     * secret la remplace et révoque immédiatement tous les JWT antérieurs.
+     * `0` garde les comptes historiques connectables sans backfill.
+     */
+    sessionVersion: { type: String, default: '0' },
   },
   { timestamps: true },
 );
