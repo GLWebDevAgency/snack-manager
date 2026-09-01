@@ -27,6 +27,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { trustedClientIp } from './common/trusted-client-ip';
 
 @Module({
   imports: [
@@ -51,7 +52,12 @@ import { OpsModule } from './modules/ops/ops.module';
      * route, uniquement là où la force brute paie : connexions, saisie de PIN,
      * codes d'appairage, création de commande publique.
      */
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 30 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [{ name: 'default', ttl: 60_000, limit: 30 }],
+      // Même frontière que les quotas Redis : Railway reconstruit X-Real-IP ;
+      // X-Forwarded-For et le req.ip qui en découle ne sont jamais un tracker.
+      getTracker: (request) => trustedClientIp(request),
+    }),
     DatabaseModule,
     RedisModule,
     // Adaptateurs des ports (@Global) : DOMAIN_REGISTRAR, PAYMENT_GATEWAY…

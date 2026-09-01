@@ -3,7 +3,6 @@ import { HttpException, NotFoundException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import type { ErrorEvent, FunnelEvent } from '@sm/db';
 import { errorFingerprint } from './fingerprint';
-import { ReportThrottle } from './report-throttle';
 import { toRecord } from './ops-exception.filter';
 import { OpsService } from './ops.service';
 import { ALERT_COOLDOWN_MS, composeAlert, dueCandidates } from './alerts-digest';
@@ -30,33 +29,6 @@ describe('Empreinte d’erreur', () => {
 
   it('sépare la même panne selon sa source', () => {
     expect(errorFingerprint('pos', 'boom')).not.toBe(errorFingerprint('kds', 'boom'));
-  });
-});
-
-describe('Limiteur du guichet public', () => {
-  it('laisse passer jusqu’à la limite puis bloque dans la fenêtre', () => {
-    const throttle = new ReportThrottle(3, 60_000);
-    expect(throttle.allow('ip', 1_000)).toBe(true);
-    expect(throttle.allow('ip', 2_000)).toBe(true);
-    expect(throttle.allow('ip', 3_000)).toBe(true);
-    expect(throttle.allow('ip', 4_000)).toBe(false);
-  });
-
-  it('rouvre quand la fenêtre glisse', () => {
-    const throttle = new ReportThrottle(2, 60_000);
-    throttle.allow('ip', 0);
-    throttle.allow('ip', 1_000);
-    expect(throttle.allow('ip', 30_000)).toBe(false);
-    expect(throttle.allow('ip', 61_001)).toBe(true);
-  });
-
-  it('borne sa mémoire en sacrifiant les clés les plus anciennes', () => {
-    const throttle = new ReportThrottle(5, 60_000, 2);
-    throttle.allow('a', 1);
-    throttle.allow('b', 2);
-    throttle.allow('c', 3); // « a » est évincée
-    // « a » repart de zéro : elle re-passe même si elle avait consommé.
-    expect(throttle.allow('a', 4)).toBe(true);
   });
 });
 

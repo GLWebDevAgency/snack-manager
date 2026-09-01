@@ -832,6 +832,9 @@ export const ErrorEventSchema = new Schema(
 );
 ErrorEventSchema.index({ source: 1, hash: 1 }, { unique: true });
 ErrorEventSchema.index({ lastAt: -1 });
+// Un incident éteint n'est pas une archive métier : 90 jours suffisent pour
+// diagnostiquer une régression, sans conserver indéfiniment URL/pile/message.
+ErrorEventSchema.index({ lastAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
 export type ErrorEvent = InferSchemaType<typeof ErrorEventSchema>;
 
 /**
@@ -869,6 +872,9 @@ export const AlertLogSchema = new Schema(
   },
   { timestamps: false },
 );
+// Le cooldown opérationnel se compte en heures ; passé 90 jours, cette coche
+// n'a plus d'effet et ne doit pas devenir une collection permanente.
+AlertLogSchema.index({ sentAt: 1 }, { expireAfterSeconds: 90 * 24 * 3600 });
 export type AlertLog = InferSchemaType<typeof AlertLogSchema>;
 
 /**

@@ -8,8 +8,9 @@ import {
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
 import { Public } from '../../common/auth';
+import { SharedPublicQuota } from '../../common/shared-public-quota';
+import { trustedClientIp } from '../../common/trusted-client-ip';
 import { OpsService } from './ops.service';
-import { ReportThrottle } from './report-throttle';
 
 /**
  * Le guichet public des interfaces : la caisse, la cuisine, le web y déposent
@@ -23,19 +24,25 @@ import { ReportThrottle } from './report-throttle';
 @Public()
 @Controller('public')
 export class PublicErrorsController {
-  private readonly throttle = new ReportThrottle();
-  /** Un client normal émet 4 jalons par commande — 60/min est déjà large. */
-  private readonly funnelThrottle = new ReportThrottle(60);
-
-  constructor(private readonly ops: OpsService) {}
+  constructor(
+    private readonly ops: OpsService,
+    private readonly quota: SharedPublicQuota,
+  ) {}
 
   @Post('client-errors')
   async report(
     @Body(zod(ClientErrorReportSchema)) body: ClientErrorReport,
     @Req() req: Request,
   ): Promise<{ ok: true }> {
-    const key = clientKey(req);
-    if (this.throttle.allow(key, Date.now())) {
+    if (
+      await this.allowed({
+        scope: 'client-errors',
+        clientKey: clientKey(req),
+        windowMs: 60_000,
+        clientLimit: 30,
+        globalLimit: 300,
+      })
+    ) {
       await this.ops.record(body);
     }
     return { ok: true };
@@ -47,16 +54,37 @@ export class PublicErrorsController {
     @Body(zod(FunnelEventSchema)) body: FunnelEvent,
     @Req() req: Request,
   ): Promise<{ ok: true }> {
-    if (this.funnelThrottle.allow(clientKey(req), Date.now())) {
+    if (
+      await this.allowed({
+        scope: 'funnel',
+        clientKey: clientKey(req),
+        windowMs: 60_000,
+        // Un client normal émet quatre jalons par commande — 60/min est large.
+        clientLimit: 60,
+        globalLimit: 1_000,
+      })
+    ) {
       await this.ops.recordFunnel(body);
     }
     return { ok: true };
   }
+
+  private async allowed(input: Parameters<SharedPublicQuota['reserve']>[0]): Promise<boolean> {
+    try {
+      return await this.quota.reserve(input);
+    } catch {
+      // La télémétrie est auxiliaire : Redis indisponible = DROP. Écrire quand
+      // même ouvrirait précisément le chemin non borné que le quota protège.
+      return false;
+    }
+  }
 }
 
-/** L'adresse d'origine, en tête de `x-forwarded-for` derrière le proxy Railway. */
+/**
+ * Railway reconstruit `X-Real-IP`. `trustedClientIp` le valide et refuse le
+ * `X-Forwarded-For` arbitraire, y compris quand Express l'a déjà placé dans
+ * `req.ip`.
+ */
 function clientKey(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
-  return (first ?? req.ip ?? 'inconnu').trim();
+  return trustedClientIp(req);
 }
