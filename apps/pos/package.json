@@ -11,11 +11,13 @@
     "react-native-web": "~0.21.0",
     "expo-keep-awake": "~15.0.0",
     "expo-screen-orientation": "~9.0.0",
+    "qrcode": "^1.5.4",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@sm/client-core": "workspace:*",
     "@sm/contracts": "workspace:*"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.6",
     "@types/react": "~19.2.2"
   },
   "scripts": {
