@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Brand } from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Administration client — le socle du back-office interne « /sm ».
@@ -210,7 +211,7 @@ export const ADMIN_LOG_ACTIONS = [
   // Le masque d'identité posé depuis la fiche client — même geste que la route
   // du restaurateur, tracé sous son propre nom plutôt que noyé dans
   // `tenant.plan_change`, qui ne parle que de formule.
-  'marque',
+  'tenant.brand_change',
   'device.revoke',
   'screen.revoke',
   'invoice.issue',
@@ -235,7 +236,7 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
   'tenant.owner_reset': 'Réinitialisation du mot de passe gérant',
-  marque: 'Masque d’identité modifié',
+  'tenant.brand_change': 'Masque d’identité modifié',
   // Apostrophe TYPOGRAPHIQUE (’) et non droite : ces libellés s'affichent tels
   // quels dans la fiche d'un client, à côté de phrases qui l'emploient déjà.
   'device.revoke': 'Révocation d’un appareil',
@@ -571,6 +572,12 @@ export type AdminTenantAccount = {
   accessBlocked: boolean;
   statusLabel: string;
   atelier: AdminTenantAtelier | null;
+  /**
+   * Le masque d'identité effectif — dérivé (`marqueEffective`), jamais un
+   * champ stocké à part. Porté par la fiche client pour le futur éditeur CRM
+   * (plan B) : la même vérité que la vitrine publique du restaurant.
+   */
+  brand: Brand;
 };
 
 /**

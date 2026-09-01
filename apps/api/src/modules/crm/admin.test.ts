@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import {
   EMPTY_SERVICES,
@@ -359,6 +360,37 @@ describe('Administration client', () => {
       // qu'on repasse en « Complet » reste suspendu.
       expect(view.account.status).toBe('suspended');
       expect(view.accessBlocked).toBe(true);
+    });
+  });
+
+  describe('Le masque d’identité (CRM)', () => {
+    it('hérite le logo legacy à la première pose — persisté, pas seulement rendu', async () => {
+      // Le tenant porte un logo d'AVANT le masque (`logoUrl`, champ racine) ;
+      // `DIRECTIONS.marche` n'en porte aucun dans ses quatre emplacements.
+      tenants.rows[0]!.logoUrl = 'https://r2.example/classfood/logo.png';
+
+      await admin.changeMarque(SM, CLASSFOOD, DIRECTIONS.marche);
+
+      // Vérifié sur le DOCUMENT PERSISTÉ, pas seulement sur la vue rendue :
+      // c'est ce qui sera relu à la prochaine ouverture de la fiche.
+      const persiste = tenants.rows.find((r) => r._id === CLASSFOOD)!;
+      const brand = persiste.brand as { logo: { mark: { light: unknown; dark: unknown } } };
+      expect(brand.logo.mark.dark).toBe('https://r2.example/classfood/logo.png');
+      expect(brand.logo.mark.light).toBeNull();
+    });
+
+    it('refuse en 400 un masque qui échoue AA, et n’écrit rien au journal', async () => {
+      const pale = {
+        ...DIRECTIONS.marche,
+        palette: { ...DIRECTIONS.marche.palette, ink: '#9aa79e' },
+      };
+      // Même registre qui ne doit pas mentir que pour les autres gestes :
+      // un masque refusé ne doit laisser aucune trace d'un changement qui
+      // n'a pas eu lieu.
+      await expect(admin.changeMarque(SM, CLASSFOOD, pale)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(logs.size).toBe(0);
     });
   });
 

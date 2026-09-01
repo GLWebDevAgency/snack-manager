@@ -33,10 +33,11 @@ import {
   type TenantReactivate,
   type TenantSuspend,
   type ChurnCause,
+  marqueEffective,
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
 import { generatePairingCode } from '../screens/pairing-code';
-import { avecLogoHerite, exigerAA } from '../tenants/marque';
+import { masqueAEnregistrer } from '../tenants/marque';
 import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /**
@@ -294,26 +295,26 @@ export class AdminService {
    *
    * Même garde que la route du restaurateur (`TenantsService.updateMarque`) :
    * le tenant est LU avant d'être écrit, un masque sans aucun logo hérite du
-   * logo legacy (`avecLogoHerite`), et le contraste est REJOUÉ ici — l'API ne
-   * fait confiance ni à l'écran du restaurateur, ni à celui de l'équipe SM.
+   * logo legacy, et le contraste est REJOUÉ ici — l'API ne fait confiance ni
+   * à l'écran du restaurateur, ni à celui de l'équipe SM (`masqueAEnregistrer`,
+   * partagée entre les deux services).
    *
    * Le journal reprend EXACTEMENT le motif de `changeOffre` : même méthode
    * (`record`), même établissement (`tenantId`), et `meta.preset` pour que la
    * ligne se lise seule — quelle direction a été posée, sans dérouler tout le
    * masque.
    */
-  async changeMarque(actor: JwtPayload, tenantId: string, brand: Brand): Promise<RawTenant> {
+  async changeMarque(actor: JwtPayload, tenantId: string, brand: Brand): Promise<AdminTenantAccount> {
     const before = await this.requireTenant(tenantId);
-    const herite = avecLogoHerite(brand, before.logoUrl);
-    exigerAA(herite);
-    const tenant = await this.updateTenant(tenantId, { brand: herite });
+    const aEnregistrer = masqueAEnregistrer(brand, before.logoUrl);
+    const tenant = await this.updateTenant(tenantId, { brand: aEnregistrer });
 
     await this.record(actor, {
-      action: 'marque',
+      action: 'tenant.brand_change',
       tenantId: String(tenant._id),
-      meta: { preset: herite.preset },
+      meta: { preset: aEnregistrer.preset },
     });
-    return tenant;
+    return toAccountView(tenant);
   }
 
   /**
@@ -768,6 +769,9 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],
+    // Dérivé, jamais stocké à part : même résolveur que la vitrine publique
+    // (`marqueEffective`). Le futur éditeur CRM (plan B) en a besoin.
+    brand: marqueEffective(raw),
     // Les clients d'avant l'Atelier n'ont rien en base : null, pas un objet
     // de faux — la fiche doit lire l'absence comme une absence.
     atelier: raw.atelier

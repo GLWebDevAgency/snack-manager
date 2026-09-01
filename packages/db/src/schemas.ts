@@ -1,5 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import {
+  ADMIN_LOG_ACTIONS,
   BRAND_MODES,
   BRAND_MOTIONS,
   BRAND_SHAPES,
@@ -1376,30 +1377,9 @@ export const AdminLogSchema = new Schema(
     actorEmail: { type: String, default: '' },
     action: {
       type: String,
-      // RECOPIE de `ADMIN_LOG_ACTIONS` (@sm/contracts) : toute action ajoutée
-      // là-bas doit l'être ici, sinon l'écriture tombe en ValidationError APRÈS
-      // la mutation qu'elle devait tracer. `admin.test.ts` épingle l'égalité
-      // des deux listes.
-      enum: [
-        'tenant.create',
-        'tenant.suspend',
-        'tenant.reactivate',
-        'tenant.churn',
-        'tenant.plan_change',
-        'tenant.note',
-        'tenant.detail_view',
-        'tenant.owner_reset',
-        'marque',
-        'device.revoke',
-        'screen.revoke',
-        'invoice.issue',
-        'invoice.send',
-        'invoice.remind',
-        'invoice.pay',
-        'invoice.cancel',
-        'invoice.credit',
-        'platform.social_change',
-      ],
+      // La SOURCE, plus une recopie : une action ajoutée à `ADMIN_LOG_ACTIONS`
+      // (@sm/contracts) existe ici sans geste supplémentaire.
+      enum: [...ADMIN_LOG_ACTIONS],
       required: true,
     },
     /**

@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { DIRECTIONS } from '@sm/contracts';
-import { avecLogoHerite, exigerAA } from './marque';
+import { avecLogoHerite, exigerAA, masqueAEnregistrer } from './marque';
 
 describe('l’API ne fait pas confiance à l’éditeur', () => {
   it('laisse passer une direction dessinée', () => {
@@ -48,5 +48,28 @@ describe('un masque sans logo hérite du logo legacy', () => {
     expect(avecLogoHerite(DIRECTIONS.marche, null)).toBe(DIRECTIONS.marche);
     expect(avecLogoHerite(DIRECTIONS.marche, undefined)).toBe(DIRECTIONS.marche);
     expect(avecLogoHerite(DIRECTIONS.marche, '')).toBe(DIRECTIONS.marche);
+  });
+});
+
+describe('masqueAEnregistrer — hérite AVANT de juger, rien ne s’écrit sans AA', () => {
+  it('hérite le logo legacy puis rejoue AA sur le résultat', () => {
+    const enregistre = masqueAEnregistrer(DIRECTIONS.marche, 'https://r2.example/logos/vieux-logo.png');
+    expect(enregistre.logo.mark.dark).toBe('https://r2.example/logos/vieux-logo.png');
+  });
+
+  it('un logo legacy mal formé n’est PAS greffé — le masque reste lisible, sans lever', () => {
+    // `avecLogoHerite` grefferait 'pas-une-url' telle quelle ; `masqueAEnregistrer`
+    // vérifie que le résultat reste un `Brand` valide avant de le retenir.
+    const enregistre = masqueAEnregistrer(DIRECTIONS.marche, 'pas-une-url');
+    expect(enregistre).toBe(DIRECTIONS.marche);
+    expect(enregistre.logo.mark.dark).toBeNull();
+    expect(() => masqueAEnregistrer(DIRECTIONS.marche, 'pas-une-url')).not.toThrow();
+  });
+
+  it('rejette malgré un héritage réussi, si le masque final échoue AA', () => {
+    const pale = { ...DIRECTIONS.marche, palette: { ...DIRECTIONS.marche.palette, ink: '#9aa79e' } };
+    expect(() => masqueAEnregistrer(pale, 'https://r2.example/logos/vieux-logo.png')).toThrow(
+      BadRequestException,
+    );
   });
 });

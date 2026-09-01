@@ -11,7 +11,7 @@ import {
   type TenantSettingsUpdate,
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
-import { avecLogoHerite, exigerAA } from './marque';
+import { masqueAEnregistrer } from './marque';
 
 /**
  * Les réglages de service qu'un gérant peut écrire. Tout ce qui n'est pas ici
@@ -151,17 +151,24 @@ export class TenantsService {
    * Le masque d'identité posé par le restaurateur.
    *
    * Le tenant est LU avant d'être écrit : un masque dont les quatre
-   * emplacements de logo sont vides hérite du logo legacy (`avecLogoHerite`)
-   * — sinon la première pose du masque effacerait le logo affiché depuis
-   * toujours, avant même que le restaurateur en pose un nouveau. Le contraste
-   * est rejoué ENSUITE, sur le masque tel qu'il sera vraiment enregistré.
+   * emplacements de logo sont vides hérite du logo legacy — sinon la première
+   * pose du masque effacerait le logo affiché depuis toujours, avant même que
+   * le restaurateur en pose un nouveau. Le contraste est rejoué ENSUITE, sur
+   * le masque tel qu'il sera vraiment enregistré (`masqueAEnregistrer`).
+   *
+   * La réponse est PROJETÉE (`TENANT_ME_FIELDS`), pas le document entier :
+   * cette route répond à une session ouverte au code sur une tablette de
+   * comptoir, le même risque de fuite que documenté sur `byId` ci-dessus.
    */
   async updateMarque(tenantId: string, brand: Brand) {
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant introuvable');
-    const herite = avecLogoHerite(brand, tenant.logoUrl);
-    exigerAA(herite);
-    return this.tenants.findByIdAndUpdate(tenantId, { $set: { brand: herite } }, { new: true });
+    const aEnregistrer = masqueAEnregistrer(brand, tenant.logoUrl);
+    return this.tenants.findByIdAndUpdate(
+      tenantId,
+      { $set: { brand: aEnregistrer } },
+      { new: true, projection: TENANT_ME_FIELDS },
+    );
   }
 
   /** Horaires hebdomadaires (vue Horaires du back-office). */
