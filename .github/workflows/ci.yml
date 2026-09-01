@@ -80,10 +80,9 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v7
         with:
-          # Le package.json racine déclare « engines.node: >=20 », qui est une
-          # borne et non une version. On fige 22 (LTS), qui satisfait la borne.
-          # Si un .nvmrc apparaît un jour, c'est lui qui doit gagner.
-          node-version: 22
+          # `.nvmrc` est la source de vérité commune aux postes, à la CI et aux
+          # autres workflows. `engines.node` garde la borne minimale supportée.
+          node-version-file: '.nvmrc'
           cache: pnpm
 
       - name: Restaurer le cache Turborepo
@@ -96,9 +95,9 @@ jobs:
           # Clé unique par commit — actions/cache n'écrase jamais une clé
           # existante, donc une clé fixe ne serait sauvegardée qu'une fois.
           # Le repli restore-keys récupère le cache de l'exécution précédente.
-          key: turbo-${{ runner.os }}-node22-${{ github.sha }}
+          key: turbo-${{ runner.os }}-node-${{ hashFiles('.nvmrc') }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-node22-
+            turbo-${{ runner.os }}-node-${{ hashFiles('.nvmrc') }}-
 
       - name: Installer les dépendances
         # --frozen-lockfile : si le lockfile ne correspond plus aux

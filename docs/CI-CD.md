@@ -98,10 +98,14 @@ Compilation        → turbo run build            bloquant
 
 Points à connaître :
 
-- **Node 22.** Le `package.json` racine déclare `engines.node: >=20`, qui est
-  une borne et non une version. La CI fige 22 (LTS), qui satisfait la borne.
-  Si un `.nvmrc` est ajouté un jour, c'est lui qui doit faire foi — pensez à
-  aligner `ci.yml`.
+- **Node 24.** `.nvmrc` fixe la version exacte commune aux postes et à tous les
+  workflows ; `.node-version` garde les autres gestionnaires alignés. Le
+  `package.json` racine annonce `engines.node: >=24.3.0`, borne imposée aussi
+  par React Native 0.86. Railway/Railpack lit d'abord cette borne et la résout
+  sur le dernier Node 24 disponible ; `.nvmrc` vient ensuite dans son ordre de
+  résolution. Après une mise à niveau, vérifier la version exacte réellement
+  servie sur staging avant la production. Voir la
+  [résolution Node officielle de Railpack](https://railpack.com/languages/node/).
 - **pnpm n'est pas versionné dans le workflow.** `pnpm/action-setup` lit le
   champ `packageManager` du `package.json` racine. Une seule source de vérité.
 - **`pnpm install --frozen-lockfile`.** Si `pnpm-lock.yaml` ne correspond plus
@@ -123,8 +127,8 @@ l'autre par `actions/cache`.
 La clé est unique par commit avec un repli sur la précédente :
 
 ```
-key:          turbo-Linux-node22-<sha>
-restore-keys: turbo-Linux-node22-
+key:          turbo-Linux-node-<empreinte .nvmrc>-<sha>
+restore-keys: turbo-Linux-node-<empreinte .nvmrc>-
 ```
 
 La clé unique est nécessaire : `actions/cache` n'écrase jamais une entrée
@@ -444,7 +448,7 @@ pas cette règle — c'est vous qui décidez du moment où vous poussez.
 
 | Élément | Où | Quand le relever |
 |---|---|---|
-| Version de Node | `ci.yml` → `node-version` | passage d'une LTS à la suivante, ou ajout d'un `.nvmrc` |
+| Version de Node | `.nvmrc`, `.node-version`, puis `package.json` → `engines.node` | relever volontairement les trois lors d'un changement de version supportée |
 | Version de pnpm | `package.json` → `packageManager` | la CI suit automatiquement |
 | Versions des actions | `ci.yml`, `secrets.yml` | GitHub retire les anciens moteurs Node ; toutes les actions sont épinglées sur des versions à moteur Node 24 |
 | Version de gitleaks | `secrets.yml` → `VERSION_GITLEAKS` | de temps en temps, pour bénéficier des nouvelles règles |
@@ -782,7 +786,7 @@ node scripts/smoke.mjs staging
 node scripts/smoke.mjs production
 ```
 
-Aucune dépendance à installer (Node ≥ 20 suffit), et il tourne aussi bien
+Aucune dépendance à installer (la cible du dépôt, Node ≥ 24.3, suffit), et il tourne aussi bien
 depuis un poste que dans la CI.
 
 | Contrôle | Ce qu'il prouve |

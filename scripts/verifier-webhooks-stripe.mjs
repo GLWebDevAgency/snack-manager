@@ -40,7 +40,7 @@
  * Aucun événement envoyé ne porte d'identifiant de commande existant : le
  * script ne peut donc rien modifier, dans aucun environnement.
  *
- * Aucune dépendance : `fetch` et `node:crypto` suffisent (Node ≥ 20).
+ * Aucune dépendance : `fetch` et `node:crypto` suffisent (cible Node ≥ 24.3).
  */
 import { createHmac } from 'node:crypto';
 

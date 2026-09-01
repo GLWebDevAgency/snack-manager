@@ -32,6 +32,10 @@ Ponts : cascade de rupture ingrédient → produits · coût matière & marge pa
 
 ## Démarrage
 
+Prérequis : **Node.js 24.3 ou supérieur**. La version de référence du dépôt
+est fixée dans `.nvmrc` et `.node-version` ; pnpm suit la version déclarée par
+`packageManager`.
+
 ```bash
 pnpm install
 cp .env.example .env              # URLs des bases (railway variables) + JWT_SECRET

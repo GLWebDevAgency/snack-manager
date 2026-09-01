@@ -7,11 +7,10 @@
  * viennent de l'environnement, et l'environnement vient d'ici en local, des
  * secrets GitHub en intégration continue.
  *
- * Pourquoi une lecture maison plutôt que `--env-file` : le drapeau échoue si le
- * fichier n'existe pas, et `--env-file-if-exists` n'existe qu'à partir de
- * Node 22 alors que le dépôt annonce `engines.node: >=20`. Un lanceur de tests
- * qui refuse de démarrer sur un poste sans `.env` — le cas de l'intégration
- * continue — serait un lanceur cassé.
+ * Pourquoi une lecture maison plutôt que `--env-file-if-exists` : le lanceur
+ * est aussi importé par les tests et centralise ici la règle de priorité des
+ * variables, sans dépendre de la façon exacte dont chaque processus Node 24 a
+ * été démarré.
  *
  * Règle qui ne bouge pas : l'ENVIRONNEMENT DÉJÀ POSÉ GAGNE TOUJOURS. En CI, les
  * secrets sont dans `process.env` et aucun `.env` n'existe ; en local, le `.env`

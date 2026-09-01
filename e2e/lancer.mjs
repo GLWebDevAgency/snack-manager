@@ -76,7 +76,7 @@ if (!reelSeul) {
     nom: 'Démonstrations',
     quoi: 'caisse · cuisine · commande en ligne · back-office — fixture, aucun état partagé',
     // Un motif, pas un dossier : `node --test` n'accepte un répertoire que
-    // dans certaines versions, alors qu'il développe un glob depuis Node 22
+    // dans certaines versions, alors que la cible Node 24 développe ce glob
     // partout. Un lanceur qui ne trouve aucun test et sort en vert serait la
     // pire panne possible de ce dossier.
     motif: 'e2e/demo/*.test.mjs',

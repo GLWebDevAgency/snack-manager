@@ -62,7 +62,7 @@ jobs:
       - name: Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: '.nvmrc'
 
       # Sans SM_REVISION_ATTENDUE : le contrôle de révision s'annonce IGNORÉ
       # (le script est fait pour) — entre deux déploiements, la question n'est

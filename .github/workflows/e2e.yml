@@ -236,7 +236,7 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: '.nvmrc'
           cache: pnpm
 
       - name: Installer les dépendances
@@ -322,7 +322,7 @@ jobs:
       - name: Installer Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: '.nvmrc'
           cache: pnpm
 
       - name: Installer les dépendances

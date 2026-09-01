@@ -41,7 +41,7 @@
  * peut-il encaisser ? ». Sans la variable, le contrôle s'annonce IGNORÉ, la
  * révision servie reste AFFICHÉE, et rien n'est affirmé.
  *
- * Aucune dépendance : `fetch` et `node:crypto` suffisent (Node ≥ 20).
+ * Aucune dépendance : `fetch` et `node:crypto` suffisent (cible Node ≥ 24.3).
  *
  * Voir docs/CI-CD.md § 11.
  */

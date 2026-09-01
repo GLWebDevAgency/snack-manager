@@ -36,7 +36,7 @@
  *     affichés, même tronqués — un préfixe de jeton reste une moitié de
  *     secret, et ces journaux finissent dans des tickets.
  *
- * Aucune dépendance : `fetch` et `node:crypto` suffisent (Node ≥ 20).
+ * Aucune dépendance : `fetch` et `node:crypto` suffisent (cible Node ≥ 24.3).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
