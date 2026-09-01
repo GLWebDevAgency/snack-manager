@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  GoneException,
   HttpCode,
   HttpStatus,
   Param,
@@ -74,7 +75,8 @@ function saleActor(user: JwtPayload): LoyaltyActorContext {
  *
  * La cuisine ne recherche pas un client et ne touche jamais à son solde. Le
  * propriétaire, le gérant et la caisse partagent en revanche le parcours
- * quotidien : créer/retrouver la carte, créditer puis consommer un avantage.
+ * quotidien : créer/retrouver la carte et créditer une vente prouvée. La
+ * consommation reste fermée tant qu'elle n'est pas atomiquement liée au ticket.
  */
 @Controller('loyalty/members')
 @Roles('owner', 'gerant', 'caisse')
@@ -126,12 +128,19 @@ export class LoyaltyMemberController {
     @Param('id', new ParseUUIDPipe({ version: '4' })) memberId: string,
     @Body(zod(LoyaltyRedeemSchema)) body: unknown,
   ) {
-    return this.members.redeem(
-      tenantRef,
-      memberId,
-      body as LoyaltyRedeem,
-      authenticatedActor(user),
-    );
+    // Le débit autonome historique ne prouve pas que l'avantage a été porté
+    // par une commande. La route reste explicite pour les anciennes caisses,
+    // mais échoue fermée jusqu'à la saga réservation -> ticket -> consommation.
+    void tenantRef;
+    void user;
+    void memberId;
+    void (body as LoyaltyRedeem);
+    throw new GoneException({
+      statusCode: HttpStatus.GONE,
+      error: 'Gone',
+      message: 'La consommation fidélité exige désormais un ticket de vente',
+      code: 'loyalty_redemption_requires_order',
+    });
   }
 
   @Post(':id/adjustments')

@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import {
   BadRequestException,
+  GoneException,
   ParseUUIDPipe,
   RequestMethod,
   type ArgumentMetadata,
@@ -252,7 +253,7 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
     expect(resolveMember).toHaveBeenCalledWith(TENANT, RESOLVE);
   });
 
-  it('transmet le membre et le contexte signé au gain comme à la consommation', async () => {
+  it('transmet le gain signé mais suspend tout débit sans ticket', async () => {
     const { controller, earn, redeem } = harness();
 
     await expect(controller.earn(TENANT, OWNER, MEMBER, EARN)).resolves.toEqual({ route: 'earn' });
@@ -262,14 +263,10 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       deviceRef: null,
     });
 
-    await expect(controller.redeem(TENANT, CASHIER, MEMBER, REDEEM)).resolves.toEqual({
-      route: 'redeem',
-    });
-    expect(redeem).toHaveBeenCalledWith(TENANT, MEMBER, REDEEM, {
-      source: 'pos',
-      actorRef: CASHIER.sub,
-      deviceRef: DEVICE,
-    });
+    expect(() => controller.redeem(TENANT, CASHIER, MEMBER, REDEEM)).toThrow(
+      GoneException,
+    );
+    expect(redeem).not.toHaveBeenCalled();
   });
 
   it('trace correction et consentement avec le contexte signé', async () => {
