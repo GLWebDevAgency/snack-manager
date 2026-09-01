@@ -16,6 +16,8 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
 import { EncaissementModule } from './modules/encaissement/encaissement.module';
 import { SupplyDbModule } from './supply-db.module';
+import { PostgresModule } from './postgres.module';
+import { LoyaltyDbModule } from './loyalty-db.module';
 import { SupplyModule } from './modules/supply/supply.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { StaffModule } from './modules/staff/staff.module';
@@ -27,6 +29,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { OpsModule } from './modules/ops/ops.module';
+import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { trustedClientIp } from './common/trusted-client-ip';
 
 @Module({
@@ -82,7 +85,10 @@ import { trustedClientIp } from './common/trusted-client-ip';
      * Nest déduplique par référence : le déclarer deux fois ne coûte rien.
      */
     EncaissementModule,
+    PostgresModule,
     SupplyDbModule,
+    LoyaltyDbModule,
+    LoyaltyModule,
     SupplyModule,
     StatsModule,
     StaffModule,
