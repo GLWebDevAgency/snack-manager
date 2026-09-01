@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import {
+  BrandSchema,
+  type Brand,
   TenantIdentityUpdateSchema,
   type TenantIdentityUpdate,
   TenantSettingsUpdateSchema,
@@ -51,6 +53,17 @@ export class TenantsController {
     @Body(zod(TenantIdentityUpdateSchema)) body: TenantIdentityUpdate,
   ) {
     return this.tenants.updateIdentity(tenantId, body);
+  }
+
+  /**
+   * Le masque d'identité du restaurateur — ce que voient SES clients. Validé
+   * par le contrat, puis le contraste est REJOUÉ ici : l'API ne fait pas
+   * confiance à l'écran.
+   */
+  @Roles('owner', 'gerant')
+  @Patch('tenants/me/marque')
+  updateMarque(@TenantId() tenantId: string, @Body(zod(BrandSchema)) body: Brand) {
+    return this.tenants.updateMarque(tenantId, body);
   }
 
   @Roles('owner', 'gerant')

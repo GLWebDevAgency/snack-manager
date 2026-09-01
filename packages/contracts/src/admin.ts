@@ -207,6 +207,10 @@ export const ADMIN_LOG_ACTIONS = [
   'tenant.note',
   'tenant.detail_view',
   'tenant.owner_reset',
+  // Le masque d'identité posé depuis la fiche client — même geste que la route
+  // du restaurateur, tracé sous son propre nom plutôt que noyé dans
+  // `tenant.plan_change`, qui ne parle que de formule.
+  'marque',
   'device.revoke',
   'screen.revoke',
   'invoice.issue',
@@ -231,6 +235,7 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
   'tenant.owner_reset': 'Réinitialisation du mot de passe gérant',
+  marque: 'Masque d’identité modifié',
   // Apostrophe TYPOGRAPHIQUE (’) et non droite : ces libellés s'affichent tels
   // quels dans la fiche d'un client, à côté de phrases qui l'emploient déjà.
   'device.revoke': 'Révocation d’un appareil',

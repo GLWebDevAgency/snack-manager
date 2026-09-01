@@ -6,10 +6,12 @@ import {
   logoUrlDe,
   marqueEffective,
   publicOrderingState,
+  type Brand,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
+import { avecLogoHerite, exigerAA } from './marque';
 
 /**
  * Les réglages de service qu'un gérant peut écrire. Tout ce qui n'est pas ici
@@ -143,6 +145,23 @@ export class TenantsService {
     if (patch.phones !== undefined) $set.phones = patch.phones;
     if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+  }
+
+  /**
+   * Le masque d'identité posé par le restaurateur.
+   *
+   * Le tenant est LU avant d'être écrit : un masque dont les quatre
+   * emplacements de logo sont vides hérite du logo legacy (`avecLogoHerite`)
+   * — sinon la première pose du masque effacerait le logo affiché depuis
+   * toujours, avant même que le restaurateur en pose un nouveau. Le contraste
+   * est rejoué ENSUITE, sur le masque tel qu'il sera vraiment enregistré.
+   */
+  async updateMarque(tenantId: string, brand: Brand) {
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant) throw new NotFoundException('Tenant introuvable');
+    const herite = avecLogoHerite(brand, tenant.logoUrl);
+    exigerAA(herite);
+    return this.tenants.findByIdAndUpdate(tenantId, { $set: { brand: herite } }, { new: true });
   }
 
   /** Horaires hebdomadaires (vue Horaires du back-office). */

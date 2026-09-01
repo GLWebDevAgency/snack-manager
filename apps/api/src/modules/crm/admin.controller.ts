@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   AdminLogQuerySchema,
+  BrandSchema,
   DeviceRevokeSchema,
   TenantChurnSchema,
   TenantNoteSchema,
@@ -8,6 +9,7 @@ import {
   TenantReactivateSchema,
   TenantSuspendSchema,
   type AdminLogQuery,
+  type Brand,
   type DeviceRevoke,
   type JwtPayload,
   type TenantChurn,
@@ -109,6 +111,16 @@ export class AdminController {
     @Body(zod(TenantOffreSchema)) body: TenantOffre,
   ) {
     return this.admin.changeOffre(actor, id, body);
+  }
+
+  /** Le masque posé à l'installation, depuis la fiche client du CRM. */
+  @Patch('tenants/:id/marque')
+  changeMarque(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body(zod(BrandSchema)) body: Brand,
+  ) {
+    return this.admin.changeMarque(actor, id, body);
   }
 
   /** Note interne — elle s'ajoute au journal, elle ne vit pas ailleurs. */

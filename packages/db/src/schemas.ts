@@ -1389,6 +1389,7 @@ export const AdminLogSchema = new Schema(
         'tenant.note',
         'tenant.detail_view',
         'tenant.owner_reset',
+        'marque',
         'device.revoke',
         'screen.revoke',
         'invoice.issue',

@@ -21,6 +21,7 @@ import {
   type AdminPlan,
   type AdminRevokedDevice,
   type AdminTenantAccount,
+  type Brand,
   type DeviceRevoke,
   type JwtPayload,
   type PlatformLogAction,
@@ -35,6 +36,7 @@ import {
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
 import { generatePairingCode } from '../screens/pairing-code';
+import { avecLogoHerite, exigerAA } from '../tenants/marque';
 import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /**
@@ -285,6 +287,33 @@ export class AdminService {
       },
     });
     return toAccountView(tenant);
+  }
+
+  /**
+   * Le masque posé à l'installation, depuis la fiche client du CRM.
+   *
+   * Même garde que la route du restaurateur (`TenantsService.updateMarque`) :
+   * le tenant est LU avant d'être écrit, un masque sans aucun logo hérite du
+   * logo legacy (`avecLogoHerite`), et le contraste est REJOUÉ ici — l'API ne
+   * fait confiance ni à l'écran du restaurateur, ni à celui de l'équipe SM.
+   *
+   * Le journal reprend EXACTEMENT le motif de `changeOffre` : même méthode
+   * (`record`), même établissement (`tenantId`), et `meta.preset` pour que la
+   * ligne se lise seule — quelle direction a été posée, sans dérouler tout le
+   * masque.
+   */
+  async changeMarque(actor: JwtPayload, tenantId: string, brand: Brand): Promise<RawTenant> {
+    const before = await this.requireTenant(tenantId);
+    const herite = avecLogoHerite(brand, before.logoUrl);
+    exigerAA(herite);
+    const tenant = await this.updateTenant(tenantId, { brand: herite });
+
+    await this.record(actor, {
+      action: 'marque',
+      tenantId: String(tenant._id),
+      meta: { preset: herite.preset },
+    });
+    return tenant;
   }
 
   /**

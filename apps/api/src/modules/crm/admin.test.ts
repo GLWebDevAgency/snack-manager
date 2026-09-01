@@ -7,6 +7,7 @@ import {
   ADMIN_LOG_ACTION_LABELS,
   ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
+  DIRECTIONS,
   INVOICE_LOG_ACTIONS,
   PAIRING_CODE_TTL_MS,
   PLANS,
@@ -603,6 +604,7 @@ describe('Administration client', () => {
         services: EMPTY_SERVICES,
         reason: '',
       });
+      await admin.changeMarque(SM, CLASSFOOD, DIRECTIONS.marche);
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });
