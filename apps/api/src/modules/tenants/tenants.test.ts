@@ -130,6 +130,7 @@ describe('la fiche établissement rendue aux tablettes', () => {
     expect(Object.keys(TENANT_ME_FIELDS).sort()).toEqual(
       [
         'address',
+        'brand',
         'brandColor',
         'closures',
         'hours',

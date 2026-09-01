@@ -2,6 +2,9 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
+  brandColorDe,
+  logoUrlDe,
+  marqueEffective,
   publicOrderingState,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
@@ -31,6 +34,7 @@ export const TENANT_ME_FIELDS = {
   name: 1,
   logoUrl: 1,
   brandColor: 1,
+  brand: 1,
   address: 1,
   phones: 1,
   hours: 1,
@@ -89,11 +93,14 @@ export class TenantsService {
       paused: t.settings?.onlineOrderingPaused ?? false,
       message: t.settings?.pauseMessage ?? null,
     });
+    // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
+    const brand = marqueEffective(t);
     return {
       slug: t.slug,
       name: t.name,
-      logoUrl: t.logoUrl,
-      brandColor: t.brandColor,
+      brand,
+      logoUrl: logoUrlDe(brand),
+      brandColor: brandColorDe(brand),
       address: t.address,
       phones: t.phones,
       hours: t.hours,

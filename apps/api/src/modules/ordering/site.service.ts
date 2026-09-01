@@ -2,11 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  brandColorDe,
+  logoUrlDe,
+  marqueEffective,
   publicOrderingState,
   type PublicSiteCategory,
   type PublicSiteProduct,
   type PublicSiteResponse,
   type PublicSiteReview,
+  type PublicSiteTenant,
 } from '@sm/contracts';
 import type { Category, Product, Review } from '@sm/db';
 import { TenantsService } from '../tenants/tenants.service';
@@ -15,6 +19,36 @@ import { parisYmd } from './paris-time';
 
 /** Nombre d'avis récents renvoyés avec la page publique. */
 const LATEST_REVIEWS = 3;
+
+/**
+ * La vue publique de l'établissement — EXPORTÉE pour être testée sans Mongo.
+ * Les champs plats sont DÉRIVÉS du masque : une seule vérité, l'accent ne
+ * peut plus diverger de la palette.
+ */
+export function tenantPublicDe(tenant: {
+  slug?: unknown; name?: unknown; brand?: unknown; brandColor?: unknown; logoUrl?: unknown;
+  address?: unknown; phones?: unknown[]; hours?: Array<{ day?: unknown; lunch?: { open: string; close: string } | null; dinner?: { open: string; close: string } | null } | null>;
+}): PublicSiteTenant {
+  const brand = marqueEffective({
+    brand: tenant.brand,
+    brandColor: typeof tenant.brandColor === 'string' ? tenant.brandColor : null,
+    logoUrl: typeof tenant.logoUrl === 'string' ? tenant.logoUrl : null,
+  });
+  return {
+    slug: String(tenant.slug ?? ''),
+    name: String(tenant.name ?? ''),
+    brand,
+    logoUrl: logoUrlDe(brand),
+    brandColor: brandColorDe(brand),
+    address: String(tenant.address ?? ''),
+    phones: (tenant.phones ?? []).map(String),
+    hours: (tenant.hours ?? []).map((h) => ({
+      day: Number(h?.day ?? 0),
+      lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
+      dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
+    })),
+  };
+}
 
 /**
  * Agrégat « page publique du restaurant » : tout ce dont le site vitrine et
@@ -50,19 +84,7 @@ export class SiteService {
     const paused = gate.paused;
 
     return {
-      tenant: {
-        slug: String(tenant.slug ?? ''),
-        name: String(tenant.name ?? ''),
-        logoUrl: tenant.logoUrl ?? null,
-        brandColor: tenant.brandColor ?? '#c9a15a',
-        address: String(tenant.address ?? ''),
-        phones: (tenant.phones ?? []).map(String),
-        hours: (tenant.hours ?? []).map((h) => ({
-          day: Number(h?.day ?? 0),
-          lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
-          dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
-        })),
-      },
+      tenant: tenantPublicDe(tenant),
       menu,
       slots,
       reviews,

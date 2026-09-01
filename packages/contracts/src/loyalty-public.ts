@@ -3,6 +3,8 @@ import {
   LoyaltyMechanismSchema,
   LoyaltyRewardKindSchema,
 } from './loyalty';
+// Import de valeur : `marque.ts` n'importe rien de `loyalty-public.ts`, pas de cycle.
+import { BrandSchema } from './marque';
 
 export const LOYALTY_QR_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -21,6 +23,7 @@ export const LoyaltyPublicProgramSchema = z
       .object({
         slug: z.string(),
         name: z.string(),
+        brand: BrandSchema,
         brandColor: z.string(),
         logoUrl: z.string().nullable(),
       })
