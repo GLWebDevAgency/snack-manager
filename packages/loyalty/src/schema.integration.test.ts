@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool, type PoolClient } from 'pg';
@@ -367,5 +368,79 @@ integration('migration PostgreSQL fidélité', () => {
       code: '23505',
       constraint: 'member_tokens_one_active_uq',
     });
+  });
+
+  it('ferme explicitement les opérations antérieures lors du cutover de remise', async () => {
+    const tenant = `cutover-${randomUUID()}`;
+    const completedOperation = randomUUID();
+    const pendingOperation = randomUUID();
+    const completedMember = randomUUID();
+    const pendingMember = randomUUID();
+    await adminPool.query(
+      `INSERT INTO loyalty.operations
+        (tenant_ref, operation_id, kind, request_fingerprint, status, result, completed_at)
+       VALUES
+        ($1, $2, 'member_create', 'old-create-fingerprint', 'completed',
+          jsonb_build_object('memberId', $3::text, 'qrTokenHash', repeat('a', 64)), now()),
+        ($1, $4, 'member_create', 'old-pending-fingerprint', 'pending', NULL, NULL)`,
+      [tenant, completedOperation, completedMember, pendingOperation],
+    );
+    await adminPool.query(
+      `INSERT INTO loyalty.members (id, tenant_ref, enrollment_handoff_at)
+       VALUES ($1, $3, NULL), ($2, $3, NULL)`,
+      [completedMember, pendingMember, tenant],
+    );
+
+    const migration = readFileSync(
+      resolve(__dirname, '../drizzle/0005_cynical_scalphunter.sql'),
+      'utf8',
+    );
+    const statements = migration
+      .split('--> statement-breakpoint')
+      .map((statement) => statement.trim());
+    const memberBackfill = statements.find((statement) =>
+      statement.startsWith('UPDATE "loyalty"."members"'),
+    );
+    const operationCutover = statements.find((statement) =>
+      statement.startsWith('-- Le protocole précédent'),
+    );
+    if (!memberBackfill || !operationCutover) {
+      throw new Error('Migration 0005 incomplète');
+    }
+    await adminPool.query(memberBackfill);
+    await adminPool.query(operationCutover);
+
+    const operationsAfter = await adminPool.query<{
+      operation_id: string;
+      request_fingerprint: string;
+      status: string;
+      result: Record<string, unknown>;
+      completed: boolean;
+    }>(
+      `SELECT operation_id::text, request_fingerprint, status::text, result,
+              completed_at IS NOT NULL AS completed
+         FROM loyalty.operations
+        WHERE tenant_ref = $1
+        ORDER BY operation_id`,
+      [tenant],
+    );
+    expect(operationsAfter.rows).toHaveLength(2);
+    for (const operation of operationsAfter.rows) {
+      expect(operation).toMatchObject({
+        request_fingerprint: '0'.repeat(64),
+        status: 'completed',
+        result: { enrollmentCutoverClosed: true },
+        completed: true,
+      });
+      expect(operation.result).not.toHaveProperty('memberId');
+      expect(operation.result).not.toHaveProperty('qrTokenHash');
+    }
+    const membersAfter = await adminPool.query<{ handed_off: boolean }>(
+      `SELECT enrollment_handoff_at = joined_at AS handed_off
+         FROM loyalty.members
+        WHERE tenant_ref = $1`,
+      [tenant],
+    );
+    expect(membersAfter.rows).toEqual([{ handed_off: true }, { handed_off: true }]);
   });
 });

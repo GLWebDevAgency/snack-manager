@@ -36,6 +36,13 @@
       "when": 1788238731832,
       "tag": "0004_qr_generation_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788247851147,
+      "tag": "0005_cynical_scalphunter",
+      "breakpoints": true
     }
   ]
 }

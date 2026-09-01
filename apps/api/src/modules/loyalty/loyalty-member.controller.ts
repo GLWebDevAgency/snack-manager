@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   GoneException,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -11,6 +12,8 @@ import {
 import {
   LoyaltyAdminAdjustmentSchema,
   LoyaltyConsentEventSchema,
+  LoyaltyEnrollmentAcknowledgementSchema,
+  LoyaltyEnrollmentPrepareSchema,
   LoyaltyEnrollmentRecoverySchema,
   LoyaltyEarnSchema,
   LoyaltyLedgerReversalSchema,
@@ -22,6 +25,8 @@ import {
   type JwtPayload,
   type LoyaltyAdminAdjustment,
   type LoyaltyConsentEvent,
+  type LoyaltyEnrollmentAcknowledgement,
+  type LoyaltyEnrollmentPrepare,
   type LoyaltyEnrollmentRecovery,
   type LoyaltyEarn,
   type LoyaltyLedgerReversal,
@@ -86,6 +91,7 @@ export class LoyaltyMemberController {
   constructor(private readonly members: LoyaltyMemberService) {}
 
   @Post()
+  @Header('Cache-Control', 'no-store')
   create(
     @TenantId() tenantRef: string,
     @CurrentUser() user: JwtPayload,
@@ -98,22 +104,58 @@ export class LoyaltyMemberController {
     );
   }
 
-  /** Reprise sans PII d'une création dont la réponse réseau s'est perdue. */
+  /** Réserve l'intention avant l'envoi du profil afin de fermer la course 404. */
+  @Post('enrollments/prepare')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  prepareEnrollment(
+    @TenantId() tenantRef: string,
+    @CurrentUser() user: JwtPayload,
+    @Body(zod(LoyaltyEnrollmentPrepareSchema)) body: unknown,
+  ) {
+    return this.members.prepareEnrollment(
+      tenantRef,
+      body as LoyaltyEnrollmentPrepare,
+      authenticatedActor(user),
+    );
+  }
+
+  /** Reprise sans PII, limitée au principal/appareil ayant préparé l'adhésion. */
   @Post('enrollments/recover')
   @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
   recoverEnrollment(
     @TenantId() tenantRef: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(LoyaltyEnrollmentRecoverySchema)) body: unknown,
   ) {
     return this.members.recoverEnrollment(
       tenantRef,
-      (body as LoyaltyEnrollmentRecovery).operationId,
+      body as LoyaltyEnrollmentRecovery,
+      authenticatedActor(user),
+    );
+  }
+
+  /** Clôture définitivement la restitution du secret après remise au client. */
+  @Post('enrollments/acknowledge')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
+  acknowledgeEnrollment(
+    @TenantId() tenantRef: string,
+    @CurrentUser() user: JwtPayload,
+    @Body(zod(LoyaltyEnrollmentAcknowledgementSchema)) body: unknown,
+  ) {
+    return this.members.acknowledgeEnrollment(
+      tenantRef,
+      body as LoyaltyEnrollmentAcknowledgement,
+      authenticatedActor(user),
     );
   }
 
   /** Une recherche n'est pas une création de ressource : elle répond 200. */
   @Post('resolve')
   @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
   resolve(
     @TenantId() tenantRef: string,
     @Body(zod(LoyaltyMemberResolveSchema)) body: unknown,
@@ -226,6 +268,7 @@ export class LoyaltyMemberController {
 
   @Post(':id/qr/replace')
   @Roles('owner', 'gerant')
+  @Header('Cache-Control', 'no-store')
   replaceQr(
     @TenantId() tenantRef: string,
     @CurrentUser() user: JwtPayload,

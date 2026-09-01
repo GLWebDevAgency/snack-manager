@@ -3,11 +3,17 @@ import {
   LoyaltyAdminAdjustmentSchema,
   LoyaltyConsentEventSchema,
   LoyaltyCustomerCardSchema,
+  LoyaltyEnrollmentAcknowledgementResultSchema,
+  LoyaltyEnrollmentAcknowledgementSchema,
+  LoyaltyEnrollmentPrepareResultSchema,
+  LoyaltyEnrollmentPrepareSchema,
+  LoyaltyEnrollmentRecoveryResultSchema,
   LoyaltyEnrollmentRecoverySchema,
   LoyaltyEarnResultSchema,
   LoyaltyEarnSchema,
   LoyaltyLedgerReversalResultSchema,
   LoyaltyLedgerReversalSchema,
+  LoyaltyMemberCreateResultSchema,
   LoyaltyMemberCreateSchema,
   LoyaltyMemberLifecycleResultSchema,
   LoyaltyMemberLifecycleSchema,
@@ -107,6 +113,92 @@ describe('contrats fidélité', () => {
       LoyaltyEnrollmentRecoverySchema.safeParse({
         operationId: '7f298b7f-96d5-4f0d-8b10-c9069acaaec4',
         phone: '06 12 34 56 78',
+      }).success,
+    ).toBe(false);
+  });
+
+  it("prépare, reprend et acquitte une adhésion sans transporter de PII", () => {
+    const operationId = '7f298b7f-96d5-4f0d-8b10-c9069acaaec4';
+    for (const schema of [
+      LoyaltyEnrollmentPrepareSchema,
+      LoyaltyEnrollmentRecoverySchema,
+      LoyaltyEnrollmentAcknowledgementSchema,
+    ]) {
+      expect(schema.safeParse({ operationId }).success).toBe(true);
+      expect(schema.safeParse({ operationId, phone: '06 12 34 56 78' }).success).toBe(
+        false,
+      );
+    }
+  });
+
+  it("décrit chaque état strict du handoff d'adhésion", () => {
+    const operationId = '7f298b7f-96d5-4f0d-8b10-c9069acaaec4';
+    const expiresAt = '2026-09-01T10:05:00.000Z';
+    const enrollment = {
+      operationId,
+      replayed: false,
+      member: {
+        id: '8f298b7f-96d5-4f0d-8b10-c9069acaaec5',
+        alias: 'Mina',
+        maskedPhone: null,
+        status: 'active',
+        balanceUnits: 0,
+        lifetimeEarnedUnits: 0,
+        lifetimeRedeemedUnits: 0,
+        lastActivityAt: null,
+        joinedAt: '2026-09-01T10:00:00.000Z',
+      },
+      qrToken: 'A'.repeat(43),
+      handoffExpiresAt: expiresAt,
+    };
+
+    expect(LoyaltyMemberCreateResultSchema.safeParse(enrollment).success).toBe(true);
+    expect(
+      LoyaltyMemberCreateResultSchema.safeParse({
+        ...enrollment,
+        handoffExpiresAt: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      LoyaltyEnrollmentPrepareResultSchema.safeParse({
+        operationId,
+        status: 'prepared',
+        expiresAt,
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyEnrollmentRecoveryResultSchema.safeParse({
+        status: 'pending',
+        operationId,
+        retryAfterMs: 1_000,
+        expiresAt,
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyEnrollmentRecoveryResultSchema.safeParse({
+        status: 'ready',
+        enrollment,
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyEnrollmentRecoveryResultSchema.safeParse({
+        status: 'ready',
+        enrollment,
+        retryAfterMs: 1_000,
+      }).success,
+    ).toBe(false);
+    expect(
+      LoyaltyEnrollmentAcknowledgementResultSchema.safeParse({
+        operationId,
+        acknowledged: true,
+        replayed: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyEnrollmentAcknowledgementResultSchema.safeParse({
+        operationId,
+        acknowledged: false,
+        replayed: false,
       }).success,
     ).toBe(false);
   });

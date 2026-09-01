@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -33,11 +34,13 @@ export class LoyaltyController {
   ) {}
 
   @Get('dashboard')
+  @Header('Cache-Control', 'no-store')
   dashboard(@TenantId() tenantRef: string) {
     return this.members.dashboard(tenantRef);
   }
 
   @Get('members')
+  @Header('Cache-Control', 'no-store')
   listMembers(
     @TenantId() tenantRef: string,
     @Query(zod(LoyaltyMemberListQuerySchema)) query: unknown,
@@ -46,6 +49,7 @@ export class LoyaltyController {
   }
 
   @Get('members/:id')
+  @Header('Cache-Control', 'no-store')
   getMember(
     @TenantId() tenantRef: string,
     @Param('id', new ParseUUIDPipe({ version: '4' })) memberId: string,

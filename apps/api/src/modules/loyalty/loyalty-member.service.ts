@@ -3,6 +3,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  GoneException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -28,6 +30,12 @@ import {
   type LoyaltyDashboard,
   type LoyaltyEarn,
   type LoyaltyEarnResult,
+  type LoyaltyEnrollmentAcknowledgement,
+  type LoyaltyEnrollmentAcknowledgementResult,
+  type LoyaltyEnrollmentPrepare,
+  type LoyaltyEnrollmentPrepareResult,
+  type LoyaltyEnrollmentRecovery,
+  type LoyaltyEnrollmentRecoveryResult,
   type LoyaltyLedgerReversal,
   type LoyaltyLedgerReversalResult,
   type LoyaltyMemberCreate,
@@ -89,6 +97,7 @@ type MemberProfileRow = typeof memberProfiles.$inferSelect;
 type WalletRow = typeof wallets.$inferSelect;
 type LedgerRow = typeof ledgerEntries.$inferSelect;
 type RedemptionRow = typeof redemptions.$inferSelect;
+type OperationRow = typeof operations.$inferSelect;
 
 const reversalLedgerEntries = alias(ledgerEntries, 'reversal_ledger_entries');
 
@@ -390,6 +399,17 @@ function assertStoredHash(value: unknown, label: string): string {
   return value;
 }
 
+function assertStoredIsoDate(value: unknown, label: string): Date {
+  if (typeof value !== 'string') {
+    throw new Error(`Horodatage ${label} fidélité illisible`);
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
+    throw new Error(`Horodatage ${label} fidélité illisible`);
+  }
+  return date;
+}
+
 function assertStoredSafeInteger(value: unknown, label: string, positive = false): number {
   if (
     typeof value !== 'number' ||
@@ -455,6 +475,9 @@ function decodeMemberCursor(raw: string): { joinedAt: Date; id: string } {
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1_000;
+/** Délai maximal entre la préparation d'une adhésion et la remise de son QR. */
+const ENROLLMENT_HANDOFF_WINDOW_MS = 30 * 60 * 1_000;
+const ENROLLMENT_RECOVERY_RETRY_MS = 750;
 
 @Injectable()
 export class LoyaltyMemberService {
@@ -567,7 +590,347 @@ export class LoyaltyMemberService {
     if (member.status !== 'active') {
       throw new ConflictException('Cette carte fidélité est bloquée ou anonymisée');
     }
+    if (member.enrollmentHandoffAt === null) {
+      throw new ConflictException("Cette carte n'a pas encore été remise au client");
+    }
     return member;
+  }
+
+  /**
+   * Empreinte du principal autorisé à reprendre le secret d'adhésion.
+   *
+   * Une session caisse est liée à la tablette afin qu'un changement
+   * d'équipier sur le même poste puisse terminer la remise. Le back-office est
+   * lié à l'utilisateur signé. Aucune de ces références n'est stockée en clair
+   * dans l'inbox PostgreSQL.
+   */
+  private enrollmentRecoveryOwnerFingerprint(
+    tenantRef: string,
+    actor: LoyaltyActorContext,
+  ): string {
+    if (actor.source === 'pos' && actor.deviceRef === null) {
+      throw new ForbiddenException('La reprise d’adhésion exige une caisse appairée');
+    }
+    if (actor.source !== 'pos' && actor.source !== 'admin' && actor.source !== 'standalone') {
+      throw new ForbiddenException('Ce canal ne peut pas préparer une adhésion');
+    }
+    return this.crypto.operationFingerprint({
+      tenantRef,
+      kind: 'member_create',
+      payload: {
+        purpose: 'enrollment-recovery-owner-v1',
+        owner:
+          actor.source === 'pos'
+            ? { source: 'pos', deviceRef: actor.deviceRef }
+            : { source: actor.source, actorRef: actor.actorRef },
+      },
+    });
+  }
+
+  private enrollmentExpiry(createdAt: Date): Date {
+    return new Date(createdAt.getTime() + ENROLLMENT_HANDOFF_WINDOW_MS);
+  }
+
+  /** Ferme sans PII une intention PREPARE qui n'a jamais créé de membre. */
+  private async expirePreparedEnrollment(
+    tx: LoyaltyTx,
+    tenantRef: string,
+    operation: OperationRow,
+    ownerFingerprint: string,
+    now: Date,
+  ): Promise<void> {
+    const recoveryExpiresAt = this.enrollmentExpiry(operation.createdAt);
+    await tx
+      .update(operations)
+      .set({
+        requestFingerprint: ownerFingerprint,
+        status: 'completed',
+        result: {
+          enrollmentExpired: true,
+          recoveryOwnerFingerprint: ownerFingerprint,
+          recoveryExpiresAt: recoveryExpiresAt.toISOString(),
+        },
+        completedAt: now,
+      })
+      .where(
+        and(
+          eq(operations.tenantRef, tenantRef),
+          eq(operations.operationId, operation.operationId),
+          eq(operations.kind, 'member_create'),
+          eq(operations.status, 'pending'),
+          eq(operations.requestFingerprint, ownerFingerprint),
+        ),
+      );
+  }
+
+  private assertEnrollmentRecoveryOwner(
+    stored: Record<string, unknown>,
+    expectedFingerprint: string,
+  ): void {
+    if (stored.enrollmentCutoverClosed === true) {
+      throw new GoneException('Cette ancienne tentative d’adhésion est clôturée');
+    }
+    if (stored.recoveryOwnerFingerprint !== expectedFingerprint) {
+      throw new ForbiddenException('Cette adhésion appartient à un autre poste');
+    }
+  }
+
+  private assertEnrollmentResultOpen(stored: Record<string, unknown>): void {
+    if (
+      stored.enrollmentCutoverClosed === true ||
+      stored.enrollmentExpired === true ||
+      stored.enrollmentRejected === true
+    ) {
+      throw new GoneException('Cette tentative d’adhésion est clôturée');
+    }
+  }
+
+  /**
+   * Efface les données directement identifiantes d'une carte dont le secret
+   * initial n'a jamais été remis. Le membre et ses événements restent comme
+   * preuves pseudonymisées ; le numéro redevient immédiatement disponible.
+   */
+  private async anonymizeExpiredEnrollmentMember(
+    tx: LoyaltyTx,
+    tenantRef: string,
+    memberId: string,
+    now: Date,
+  ): Promise<'expired' | 'acknowledged'> {
+    const [member] = await tx
+      .select()
+      .from(members)
+      .where(and(eq(members.tenantRef, tenantRef), eq(members.id, memberId)))
+      .limit(1)
+      .for('update');
+    if (!member) return 'expired';
+    if (member.enrollmentHandoffAt !== null) return 'acknowledged';
+
+    const revoked = await tx
+      .update(memberTokens)
+      .set({ status: 'revoked', revokedAt: now })
+      .where(
+        and(
+          eq(memberTokens.tenantRef, tenantRef),
+          eq(memberTokens.memberId, memberId),
+          eq(memberTokens.status, 'active'),
+        ),
+      )
+      .returning({ id: memberTokens.id });
+    await tx
+      .delete(memberProfiles)
+      .where(
+        and(
+          eq(memberProfiles.tenantRef, tenantRef),
+          eq(memberProfiles.memberId, memberId),
+        ),
+      );
+
+    if (member.status !== 'anonymized') {
+      await tx
+        .update(members)
+        .set({ status: 'anonymized', blockedAt: null, anonymizedAt: now })
+        .where(
+          and(
+            eq(members.tenantRef, tenantRef),
+            eq(members.id, memberId),
+            isNull(members.enrollmentHandoffAt),
+          ),
+        );
+
+      const lifecycleOperationId = randomUUID();
+      const lifecycleFingerprint = this.crypto.operationFingerprint({
+        tenantRef,
+        kind: 'member_lifecycle',
+        payload: {
+          memberId,
+          action: 'anonymize',
+          cause: 'enrollment_handoff_expired',
+        },
+      });
+      await tx.insert(operations).values({
+        tenantRef,
+        operationId: lifecycleOperationId,
+        kind: 'member_lifecycle',
+        requestFingerprint: lifecycleFingerprint,
+      });
+      await tx.insert(membershipEvents).values({
+        tenantRef,
+        memberId,
+        operationId: lifecycleOperationId,
+        kind: 'anonymized',
+        reason: 'enrollment_handoff_expired',
+        source: 'system',
+        actorRef: 'system:enrollment-expiry',
+      });
+      await completeOperation(tx, tenantRef, lifecycleOperationId, {
+        operationId: lifecycleOperationId,
+        replayed: false,
+        action: 'anonymize',
+        memberId,
+        status: 'anonymized',
+        revokedTokens: revoked.length,
+        withdrawnConsents: 0,
+      });
+    }
+    return 'expired';
+  }
+
+  /**
+   * Ferme une CREATE arrivée au terme de sa fenêtre de remise. L'opération
+   * d'origine devient un tombstone sans identifiant membre, empreinte de PII ni
+   * hash de QR, et reste liée uniquement au propriétaire de reprise.
+   */
+  private async expireCompletedEnrollment(
+    tx: LoyaltyTx,
+    tenantRef: string,
+    operation: OperationRow,
+    now: Date,
+  ): Promise<'expired' | 'acknowledged'> {
+    const stored = storedObject(operation.result, "d'adhésion");
+    this.assertEnrollmentResultOpen(stored);
+    const ownerFingerprint = assertStoredHash(
+      stored.recoveryOwnerFingerprint,
+      'de propriétaire de reprise',
+    );
+    const recoveryExpiresAt = assertStoredIsoDate(
+      stored.recoveryExpiresAt,
+      'd’expiration de remise',
+    );
+    if (recoveryExpiresAt.getTime() > now.getTime()) {
+      throw new ConflictException("L'adhésion n'est pas encore expirée");
+    }
+    const memberId = assertStoredUuid(stored.memberId, 'membre');
+    const outcome = await this.anonymizeExpiredEnrollmentMember(
+      tx,
+      tenantRef,
+      memberId,
+      now,
+    );
+    if (outcome === 'acknowledged') return outcome;
+
+    await tx
+      .update(operations)
+      .set({
+        requestFingerprint: ownerFingerprint,
+        status: 'completed',
+        result: {
+          enrollmentExpired: true,
+          recoveryOwnerFingerprint: ownerFingerprint,
+          recoveryExpiresAt: recoveryExpiresAt.toISOString(),
+        },
+        completedAt: now,
+      })
+      .where(
+        and(
+          eq(operations.tenantRef, tenantRef),
+          eq(operations.operationId, operation.operationId),
+          eq(operations.kind, 'member_create'),
+        ),
+      );
+    return 'expired';
+  }
+
+  private async enrollmentOperationForMember(
+    tx: LoyaltyTx,
+    tenantRef: string,
+    memberId: string,
+    skipLocked = false,
+  ): Promise<OperationRow | null> {
+    const [joined] = await tx
+      .select({ operationId: membershipEvents.operationId })
+      .from(membershipEvents)
+      .where(
+        and(
+          eq(membershipEvents.tenantRef, tenantRef),
+          eq(membershipEvents.memberId, memberId),
+          eq(membershipEvents.kind, 'joined'),
+        ),
+      )
+      .limit(1);
+    if (!joined) throw new Error('Adhésion provisoire sans preuve de création');
+    const operationQuery = tx
+      .select()
+      .from(operations)
+      .where(
+        and(
+          eq(operations.tenantRef, tenantRef),
+          eq(operations.operationId, joined.operationId),
+          eq(operations.kind, 'member_create'),
+        ),
+      )
+      .limit(1);
+    const [operation] = skipLocked
+      ? await operationQuery.for('update', { skipLocked: true })
+      : await operationQuery.for('update');
+    if (!operation && skipLocked) return null;
+    if (!operation || operation.status !== 'completed') {
+      throw new Error('Adhésion provisoire sans opération achevée');
+    }
+    return operation;
+  }
+
+  /**
+   * Balayage borné appelé par le worker multi-tenant. L'index partiel
+   * `members_unhanded_enrollment_idx` rend le coût proportionnel aux seules
+   * adhésions provisoires, et SKIP LOCKED autorise plusieurs instances API.
+   */
+  async expireStaleEnrollments(
+    tenantRef: string,
+    now = new Date(),
+    limit = 50,
+  ): Promise<number> {
+    const safeLimit = Math.max(1, Math.min(250, Math.trunc(limit)));
+    const cutoff = new Date(now.getTime() - ENROLLMENT_HANDOFF_WINDOW_MS);
+    return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+      const staleMembers = await tx
+        .select({ id: members.id })
+        .from(members)
+        .innerJoin(
+          membershipEvents,
+          and(
+            eq(membershipEvents.tenantRef, members.tenantRef),
+            eq(membershipEvents.memberId, members.id),
+            eq(membershipEvents.kind, 'joined'),
+          ),
+        )
+        .innerJoin(
+          operations,
+          and(
+            eq(operations.tenantRef, membershipEvents.tenantRef),
+            eq(operations.operationId, membershipEvents.operationId),
+            eq(operations.kind, 'member_create'),
+            eq(operations.status, 'completed'),
+          ),
+        )
+        .where(
+          and(
+            eq(members.tenantRef, tenantRef),
+            isNull(members.enrollmentHandoffAt),
+            sql`${operations.createdAt} <= ${cutoff}`,
+            sql`${members.status} <> 'anonymized'`,
+          ),
+        )
+        .orderBy(operations.createdAt, members.id)
+        .limit(safeLimit);
+
+      let expired = 0;
+      for (const candidate of staleMembers) {
+        const operation = await this.enrollmentOperationForMember(
+          tx,
+          tenantRef,
+          candidate.id,
+          true,
+        );
+        if (!operation) continue;
+        if (
+          (await this.expireCompletedEnrollment(tx, tenantRef, operation, now)) ===
+          'expired'
+        ) {
+          expired += 1;
+        }
+      }
+      return expired;
+    });
   }
 
   private async issueEnrollmentToken(
@@ -575,6 +938,7 @@ export class LoyaltyMemberService {
     tenantRef: string,
     memberId: string,
     operationId: string,
+    expiresAt: Date | null,
   ): Promise<{ clearToken: string; tokenHash: string }> {
     const token = this.crypto.deriveEnrollmentQrToken({
       tenantRef,
@@ -586,6 +950,7 @@ export class LoyaltyMemberService {
       memberId,
       tokenHash: token.tokenHash,
       status: 'active',
+      expiresAt,
     });
     return token;
   }
@@ -596,6 +961,7 @@ export class LoyaltyMemberService {
     memberId: string,
     operationId: string,
     expectedHash: string,
+    handoff: 'pending' | 'completed' = 'pending',
   ): Promise<string> {
     const token = this.crypto.deriveEnrollmentQrToken({ tenantRef, memberId, operationId });
     if (token.tokenHash !== expectedHash) {
@@ -604,7 +970,7 @@ export class LoyaltyMemberService {
       );
     }
     const [storedToken] = await tx
-      .select({ status: memberTokens.status })
+      .select({ status: memberTokens.status, expiresAt: memberTokens.expiresAt })
       .from(memberTokens)
       .where(
         and(
@@ -618,9 +984,166 @@ export class LoyaltyMemberService {
       throw new InternalServerErrorException('Jeton QR d’adhésion introuvable');
     }
     if (storedToken.status !== 'active') {
-      throw new ConflictException('Le QR initial de cette carte a été révoqué');
+      throw new GoneException('Le QR initial de cette carte a été révoqué');
+    }
+    const [member] = await tx
+      .select({ enrollmentHandoffAt: members.enrollmentHandoffAt })
+      .from(members)
+      .where(and(eq(members.tenantRef, tenantRef), eq(members.id, memberId)))
+      .limit(1);
+    if (!member) throw new NotFoundException('Carte fidélité introuvable');
+    if (handoff === 'pending' && member.enrollmentHandoffAt !== null) {
+      throw new GoneException('Le QR initial a déjà été remis au client');
+    }
+    if (handoff === 'completed' && member.enrollmentHandoffAt === null) {
+      throw new GoneException('Cette carte n’a pas encore été remise au client');
+    }
+    if (
+      (handoff === 'pending' && storedToken.expiresAt === null) ||
+      (storedToken.expiresAt !== null && storedToken.expiresAt.getTime() <= Date.now())
+    ) {
+      throw new GoneException('Le délai de remise du QR est expiré');
     }
     return token.clearToken;
+  }
+
+  /**
+   * Prépare durablement l'intention avant que la caisse n'envoie la moindre
+   * donnée de profil. Une récupération concurrente voit donc `pending`, jamais
+   * un faux 404 susceptible de libérer une seconde adhésion.
+   */
+  async prepareEnrollment(
+    tenantRef: string,
+    dto: LoyaltyEnrollmentPrepare,
+    actor: LoyaltyActorContext,
+  ): Promise<LoyaltyEnrollmentPrepareResult> {
+    const ownerFingerprint = this.enrollmentRecoveryOwnerFingerprint(tenantRef, actor);
+    const now = new Date();
+    const outcome = await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+      const [inserted] = await tx
+        .insert(operations)
+        .values({
+          tenantRef,
+          operationId: dto.operationId,
+          kind: 'member_create',
+          requestFingerprint: ownerFingerprint,
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      const operation =
+        inserted ??
+        (
+          await tx
+            .select()
+            .from(operations)
+            .where(
+              and(
+                eq(operations.tenantRef, tenantRef),
+                eq(operations.operationId, dto.operationId),
+              ),
+            )
+            .limit(1)
+            .for('update')
+        )[0];
+      if (!operation || operation.kind !== 'member_create') {
+        throw new ConflictException("Cette clé appartient à une autre opération");
+      }
+
+      const expiresAt = this.enrollmentExpiry(operation.createdAt);
+      if (operation.status === 'pending') {
+        if (operation.requestFingerprint !== ownerFingerprint) {
+          throw new ForbiddenException('Cette adhésion appartient à un autre poste');
+        }
+        if (expiresAt.getTime() <= now.getTime()) {
+          await this.expirePreparedEnrollment(
+            tx,
+            tenantRef,
+            operation,
+            ownerFingerprint,
+            now,
+          );
+          return { kind: 'expired' as const };
+        }
+        return {
+          kind: 'result' as const,
+          result: {
+            operationId: dto.operationId,
+            status: 'prepared' as const,
+            expiresAt: expiresAt.toISOString(),
+          },
+        };
+      }
+
+      const stored = storedObject(operation.result, "d'adhésion");
+      this.assertEnrollmentRecoveryOwner(stored, ownerFingerprint);
+      this.assertEnrollmentResultOpen(stored);
+      const recoveryExpiresAt = assertStoredIsoDate(
+        stored.recoveryExpiresAt,
+        'd’expiration de remise',
+      );
+      if (recoveryExpiresAt.getTime() <= now.getTime()) {
+        const expiryOutcome = await this.expireCompletedEnrollment(
+          tx,
+          tenantRef,
+          operation,
+          now,
+        );
+        return { kind: expiryOutcome };
+      }
+      const memberId = assertStoredUuid(stored.memberId, 'membre');
+      const [member] = await tx
+        .select({ enrollmentHandoffAt: members.enrollmentHandoffAt })
+        .from(members)
+        .where(and(eq(members.tenantRef, tenantRef), eq(members.id, memberId)))
+        .limit(1);
+      if (!member || member.enrollmentHandoffAt !== null) {
+        return { kind: 'acknowledged' as const };
+      }
+      return {
+        kind: 'result' as const,
+        result: {
+          operationId: dto.operationId,
+          status: 'ready' as const,
+          expiresAt: recoveryExpiresAt.toISOString(),
+        },
+      };
+    });
+
+    if (outcome.kind === 'result') return outcome.result;
+    if (outcome.kind === 'acknowledged') {
+      throw new GoneException('Cette adhésion a déjà été remise au client');
+    }
+    throw new GoneException('Le délai de remise du QR est expiré');
+  }
+
+  private async rejectPreparedEnrollment(
+    tenantRef: string,
+    operationId: string,
+    ownerFingerprint: string,
+  ): Promise<void> {
+    await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+      await tx
+        .update(operations)
+        .set({
+          status: 'completed',
+          result: {
+            enrollmentRejected: true,
+            recoveryOwnerFingerprint: ownerFingerprint,
+            recoveryExpiresAt: new Date().toISOString(),
+          },
+          completedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(operations.tenantRef, tenantRef),
+            eq(operations.operationId, operationId),
+            eq(operations.kind, 'member_create'),
+            eq(operations.status, 'pending'),
+            eq(operations.requestFingerprint, ownerFingerprint),
+          ),
+        );
+    });
   }
 
   async createMember(
@@ -637,6 +1160,11 @@ export class LoyaltyMemberService {
       );
     }
     const normalizedDto = { ...dto, phone: normalizedPhone };
+    const phoneLookupHash = normalizedDto.phone
+      ? this.crypto.phoneLookupHash(tenantRef, normalizedDto.phone)
+      : null;
+    const ownerFingerprint = this.enrollmentRecoveryOwnerFingerprint(tenantRef, actor);
+    await this.prepareEnrollment(tenantRef, { operationId: dto.operationId }, actor);
     const fingerprint = this.crypto.operationFingerprint({
       tenantRef,
       kind: 'member_create',
@@ -649,19 +1177,39 @@ export class LoyaltyMemberService {
     });
     try {
       return await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
-        const claim = await claimOperation(tx, {
-          tenantRef,
-          operationId: dto.operationId,
-          kind: 'member_create',
-          fingerprint,
-        });
-        if (claim.replayed) {
-          const stored = storedObject(claim.result, "d'adhésion");
+        const [operation] = await tx
+          .select()
+          .from(operations)
+          .where(
+            and(
+              eq(operations.tenantRef, tenantRef),
+              eq(operations.operationId, dto.operationId),
+            ),
+          )
+          .limit(1)
+          .for('update');
+        if (!operation || operation.kind !== 'member_create') {
+          throw new ConflictException("L'adhésion n'a pas été préparée");
+        }
+
+        if (operation.status === 'completed') {
+          const stored = storedObject(operation.result, "d'adhésion");
+          this.assertEnrollmentRecoveryOwner(stored, ownerFingerprint);
+          this.assertEnrollmentResultOpen(stored);
+          if (stored.createFingerprint !== fingerprint) {
+            throw new ConflictException(
+              "Cette clé d'idempotence appartient à une autre adhésion",
+            );
+          }
           const memberId = assertStoredUuid(stored.memberId, 'membre');
           const qrTokenHash = assertStoredHash(stored.qrTokenHash, 'QR');
+          const recoveryExpiresAt = assertStoredIsoDate(
+            stored.recoveryExpiresAt,
+            'd’expiration de remise',
+          );
           const member = await this.memberSummary(tx, tenantRef, memberId);
-          if (member.status === 'anonymized') {
-            throw new ConflictException('Cette adhésion a depuis été anonymisée');
+          if (member.status !== 'active') {
+            throw new GoneException('Cette adhésion n’est plus active');
           }
           return {
             operationId: dto.operationId,
@@ -674,12 +1222,98 @@ export class LoyaltyMemberService {
               dto.operationId,
               qrTokenHash,
             ),
+            handoffExpiresAt: recoveryExpiresAt.toISOString(),
           };
         }
+
+        if (operation.requestFingerprint !== ownerFingerprint) {
+          throw new ForbiddenException('Cette adhésion appartient à un autre poste');
+        }
+        const recoveryExpiresAt = this.enrollmentExpiry(operation.createdAt);
+        if (recoveryExpiresAt.getTime() <= Date.now()) {
+          throw new GoneException('Le délai de remise du QR est expiré');
+        }
+        const [claimed] = await tx
+          .update(operations)
+          .set({ requestFingerprint: fingerprint })
+          .where(
+            and(
+              eq(operations.tenantRef, tenantRef),
+              eq(operations.operationId, dto.operationId),
+              eq(operations.status, 'pending'),
+              eq(operations.requestFingerprint, ownerFingerprint),
+            ),
+          )
+          .returning({ operationId: operations.operationId });
+        if (!claimed) throw new ConflictException("L'adhésion est déjà en cours");
 
         const current = await loadCurrentProgram(tx, tenantRef, true);
         if (!current || current.program.status !== 'active') {
           throw new ConflictException("Le programme de fidélité n'est pas actif");
+        }
+
+        // Une caisse peut recommencer directement avec le même téléphone sans
+        // devoir connaître l'UUID de l'ancienne tentative. Comme l'ACK et le
+        // sweeper, on verrouille l'opération avant le membre afin d'éviter une
+        // inversion de verrous, puis on libère l'index si la remise est expirée.
+        if (phoneLookupHash) {
+          const [indexedProfile] = await tx
+            .select({ memberId: memberProfiles.memberId })
+            .from(memberProfiles)
+            .where(
+              and(
+                eq(memberProfiles.tenantRef, tenantRef),
+                eq(memberProfiles.phoneLookupHash, phoneLookupHash),
+              ),
+            )
+            .limit(1);
+          if (indexedProfile) {
+            const [indexedMember] = await tx
+              .select({
+                id: members.id,
+                enrollmentHandoffAt: members.enrollmentHandoffAt,
+              })
+              .from(members)
+              .where(
+                and(
+                  eq(members.tenantRef, tenantRef),
+                  eq(members.id, indexedProfile.memberId),
+                ),
+              )
+              .limit(1);
+            const [stillIndexed] = await tx
+              .select({ memberId: memberProfiles.memberId })
+              .from(memberProfiles)
+              .where(
+                and(
+                  eq(memberProfiles.tenantRef, tenantRef),
+                  eq(memberProfiles.memberId, indexedProfile.memberId),
+                  eq(memberProfiles.phoneLookupHash, phoneLookupHash),
+                ),
+              )
+              .limit(1);
+            if (indexedMember?.enrollmentHandoffAt === null && stillIndexed) {
+              const staleOperation = await this.enrollmentOperationForMember(
+                tx,
+                tenantRef,
+                indexedMember.id,
+              );
+              if (!staleOperation) throw new Error('Opération d’adhésion introuvable');
+              const staleResult = storedObject(staleOperation.result, "d'adhésion");
+              const staleExpiry = assertStoredIsoDate(
+                staleResult.recoveryExpiresAt,
+                'd’expiration de remise',
+              );
+              if (staleExpiry.getTime() <= Date.now()) {
+                await this.expireCompletedEnrollment(
+                  tx,
+                  tenantRef,
+                  staleOperation,
+                  new Date(),
+                );
+              }
+            }
+          }
         }
 
         const memberId = randomUUID();
@@ -692,9 +1326,7 @@ export class LoyaltyMemberService {
           tenantRef,
           memberId,
           encryptedPayload: JSON.stringify(profile),
-          phoneLookupHash: normalizedDto.phone
-            ? this.crypto.phoneLookupHash(tenantRef, normalizedDto.phone)
-            : null,
+          phoneLookupHash,
           keyVersion: profile.keyVersion,
         });
         await tx.insert(wallets).values({
@@ -716,78 +1348,251 @@ export class LoyaltyMemberService {
           tenantRef,
           memberId,
           dto.operationId,
+          recoveryExpiresAt,
         );
         const member = await this.memberSummary(tx, tenantRef, memberId, current);
         await completeOperation(tx, tenantRef, dto.operationId, {
           memberId,
           qrTokenHash: qrToken.tokenHash,
+          createFingerprint: fingerprint,
+          recoveryOwnerFingerprint: ownerFingerprint,
+          recoveryExpiresAt: recoveryExpiresAt.toISOString(),
         });
         return {
           operationId: dto.operationId,
           replayed: false,
           member,
           qrToken: qrToken.clearToken,
+          handoffExpiresAt: recoveryExpiresAt.toISOString(),
         };
       });
     } catch (error) {
-      if (isUniqueConstraint(error, 'member_profiles_tenant_phone_uq')) {
-        throw new ConflictException('Ce téléphone est déjà rattaché à une carte fidélité');
+      const publicError = isUniqueConstraint(error, 'member_profiles_tenant_phone_uq')
+        ? new ConflictException('Ce téléphone est déjà rattaché à une carte fidélité')
+        : error;
+      if (publicError instanceof HttpException && !(publicError instanceof ForbiddenException)) {
+        await this.rejectPreparedEnrollment(
+          tenantRef,
+          dto.operationId,
+          ownerFingerprint,
+        ).catch(() => {});
       }
-      throw error;
+      throw publicError;
     }
   }
 
-  /**
-   * Rend à la même caisse le résultat d'une adhésion déjà clôturée lorsque la
-   * réponse HTTP s'est perdue. Le token QR est redérivé puis comparé à son hash
-   * stocké ; aucune donnée de profil n'est nécessaire dans la requête.
-   */
   async recoverEnrollment(
     tenantRef: string,
-    operationId: string,
-  ): Promise<LoyaltyMemberCreateResult> {
-    return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+    dto: LoyaltyEnrollmentRecovery,
+    actor: LoyaltyActorContext,
+  ): Promise<LoyaltyEnrollmentRecoveryResult> {
+    const ownerFingerprint = this.enrollmentRecoveryOwnerFingerprint(tenantRef, actor);
+    const now = new Date();
+    const outcome = await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
       const [operation] = await tx
-        .select({
-          kind: operations.kind,
-          status: operations.status,
-          result: operations.result,
-        })
+        .select()
         .from(operations)
         .where(
           and(
             eq(operations.tenantRef, tenantRef),
-            eq(operations.operationId, operationId),
+            eq(operations.operationId, dto.operationId),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!operation || operation.kind !== 'member_create') {
         throw new NotFoundException('Adhésion fidélité introuvable');
       }
-      if (operation.status !== 'completed' || operation.result === null) {
-        throw new ConflictException("L'adhésion est encore en cours, réessayez");
+
+      const fallbackExpiry = this.enrollmentExpiry(operation.createdAt);
+      if (operation.status === 'pending') {
+        if (operation.requestFingerprint !== ownerFingerprint) {
+          throw new ForbiddenException('Cette adhésion appartient à un autre poste');
+        }
+        if (fallbackExpiry.getTime() <= now.getTime()) {
+          await this.expirePreparedEnrollment(
+            tx,
+            tenantRef,
+            operation,
+            ownerFingerprint,
+            now,
+          );
+          return { kind: 'expired' as const };
+        }
+        return {
+          kind: 'result' as const,
+          result: {
+            status: 'pending' as const,
+            operationId: dto.operationId,
+            retryAfterMs: ENROLLMENT_RECOVERY_RETRY_MS,
+            expiresAt: fallbackExpiry.toISOString(),
+          },
+        };
       }
 
       const stored = storedObject(operation.result, "d'adhésion");
+      this.assertEnrollmentRecoveryOwner(stored, ownerFingerprint);
+      this.assertEnrollmentResultOpen(stored);
+      const recoveryExpiresAt = assertStoredIsoDate(
+        stored.recoveryExpiresAt,
+        'd’expiration de remise',
+      );
+      if (recoveryExpiresAt.getTime() <= now.getTime()) {
+        const expiryOutcome = await this.expireCompletedEnrollment(
+          tx,
+          tenantRef,
+          operation,
+          now,
+        );
+        return { kind: expiryOutcome };
+      }
       const memberId = assertStoredUuid(stored.memberId, 'membre');
       const qrTokenHash = assertStoredHash(stored.qrTokenHash, 'QR');
       const member = await this.memberSummary(tx, tenantRef, memberId);
-      if (member.status === 'anonymized') {
-        throw new ConflictException('Cette adhésion a depuis été anonymisée');
-      }
+      if (member.status !== 'active') return { kind: 'expired' as const };
       return {
-        operationId,
-        replayed: true,
-        member,
-        qrToken: await this.replayEnrollmentToken(
-          tx,
-          tenantRef,
-          memberId,
-          operationId,
-          qrTokenHash,
-        ),
+        kind: 'result' as const,
+        result: {
+          status: 'ready' as const,
+          enrollment: {
+            operationId: dto.operationId,
+            replayed: true,
+            member,
+            qrToken: await this.replayEnrollmentToken(
+              tx,
+              tenantRef,
+              memberId,
+              dto.operationId,
+              qrTokenHash,
+            ),
+            handoffExpiresAt: recoveryExpiresAt.toISOString(),
+          },
+        },
       };
     });
+    if (outcome.kind === 'result') return outcome.result;
+    if (outcome.kind === 'acknowledged') {
+      throw new GoneException('Cette adhésion a déjà été remise au client');
+    }
+    throw new GoneException('Le délai de remise du QR est expiré ou la carte a été révoquée');
+  }
+
+  async acknowledgeEnrollment(
+    tenantRef: string,
+    dto: LoyaltyEnrollmentAcknowledgement,
+    actor: LoyaltyActorContext,
+  ): Promise<LoyaltyEnrollmentAcknowledgementResult> {
+    const ownerFingerprint = this.enrollmentRecoveryOwnerFingerprint(tenantRef, actor);
+    const outcome = await withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+      const [operation] = await tx
+        .select()
+        .from(operations)
+        .where(
+          and(
+            eq(operations.tenantRef, tenantRef),
+            eq(operations.operationId, dto.operationId),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (!operation || operation.kind !== 'member_create') {
+        throw new NotFoundException('Adhésion fidélité introuvable');
+      }
+      if (operation.status !== 'completed') {
+        throw new ConflictException("L'adhésion est encore en cours");
+      }
+      const stored = storedObject(operation.result, "d'adhésion");
+      this.assertEnrollmentRecoveryOwner(stored, ownerFingerprint);
+      this.assertEnrollmentResultOpen(stored);
+      const memberId = assertStoredUuid(stored.memberId, 'membre');
+      const qrTokenHash = assertStoredHash(stored.qrTokenHash, 'QR');
+      const recoveryExpiresAt = assertStoredIsoDate(
+        stored.recoveryExpiresAt,
+        'd’expiration de remise',
+      );
+      if (recoveryExpiresAt.getTime() <= Date.now()) {
+        const expiryOutcome = await this.expireCompletedEnrollment(
+          tx,
+          tenantRef,
+          operation,
+          new Date(),
+        );
+        if (expiryOutcome === 'acknowledged') {
+          return {
+            kind: 'result' as const,
+            result: { operationId: dto.operationId, acknowledged: true as const, replayed: true },
+          };
+        }
+        return { kind: 'expired' as const };
+      }
+      const [member] = await tx
+        .select()
+        .from(members)
+        .where(and(eq(members.tenantRef, tenantRef), eq(members.id, memberId)))
+        .limit(1)
+        .for('update');
+      if (!member) throw new NotFoundException('Carte fidélité introuvable');
+      if (member.enrollmentHandoffAt !== null) {
+        return {
+          kind: 'result' as const,
+          result: { operationId: dto.operationId, acknowledged: true as const, replayed: true },
+        };
+      }
+      if (member.status !== 'active') {
+        throw new GoneException('Le délai de remise du QR est expiré ou la carte a été révoquée');
+      }
+
+      const [token] = await tx
+        .select()
+        .from(memberTokens)
+        .where(
+          and(
+            eq(memberTokens.tenantRef, tenantRef),
+            eq(memberTokens.memberId, memberId),
+            eq(memberTokens.tokenHash, qrTokenHash),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (
+        !token ||
+        token.status !== 'active' ||
+        token.expiresAt === null ||
+        token.expiresAt.getTime() <= Date.now()
+      ) {
+        throw new GoneException('Le QR initial est expiré ou révoqué');
+      }
+
+      const acknowledgedAt = new Date();
+      await tx
+        .update(members)
+        .set({ enrollmentHandoffAt: acknowledgedAt })
+        .where(
+          and(
+            eq(members.tenantRef, tenantRef),
+            eq(members.id, memberId),
+            isNull(members.enrollmentHandoffAt),
+          ),
+        );
+      await tx
+        .update(memberTokens)
+        .set({ expiresAt: null })
+        .where(
+          and(
+            eq(memberTokens.tenantRef, tenantRef),
+            eq(memberTokens.id, token.id),
+            eq(memberTokens.status, 'active'),
+          ),
+        );
+      return {
+        kind: 'result' as const,
+        result: { operationId: dto.operationId, acknowledged: true as const, replayed: false },
+      };
+    });
+    if (outcome.kind === 'expired') {
+      throw new GoneException('Le délai de remise du QR est expiré');
+    }
+    return outcome.result;
   }
 
   async resolveMember(
@@ -839,6 +1644,18 @@ export class LoyaltyMemberService {
         memberId = token?.memberId ?? null;
       }
       if (!memberId) throw new NotFoundException('Carte fidélité introuvable');
+      const [handedOff] = await tx
+        .select({ id: members.id })
+        .from(members)
+        .where(
+          and(
+            eq(members.tenantRef, tenantRef),
+            eq(members.id, memberId),
+            sql`${members.enrollmentHandoffAt} IS NOT NULL`,
+          ),
+        )
+        .limit(1);
+      if (!handedOff) throw new NotFoundException('Carte fidélité introuvable');
       return this.memberSummary(tx, tenantRef, memberId);
     });
   }
@@ -1874,6 +2691,12 @@ export class LoyaltyMemberService {
         .for('update');
       if (!member) throw new NotFoundException('Carte fidélité introuvable');
 
+      if (member.enrollmentHandoffAt === null && dto.action !== 'anonymize') {
+        throw new ConflictException(
+          "Une adhésion non remise peut seulement être annulée par anonymisation",
+        );
+      }
+
       const now = new Date();
       let nextStatus: 'active' | 'blocked' | 'anonymized';
       let eventKind: 'blocked' | 'unblocked' | 'anonymized';
@@ -2095,6 +2918,7 @@ export class LoyaltyMemberService {
             memberId,
             dto.operationId,
             tokenHash,
+            'completed',
           ),
           revokedTokens: assertStoredSafeInteger(stored.revokedTokens, 'revokedTokens'),
           previousGeneration,
@@ -2155,6 +2979,7 @@ export class LoyaltyMemberService {
         tenantRef,
         memberId,
         dto.operationId,
+        null,
       );
       await tx.insert(membershipEvents).values({
         tenantRef,
@@ -2210,6 +3035,7 @@ export class LoyaltyMemberService {
         .where(
           and(
             eq(members.tenantRef, tenantRef),
+            sql`${members.enrollmentHandoffAt} IS NOT NULL`,
             query.status ? eq(members.status, query.status) : undefined,
             query.memberRef ? eq(members.id, query.memberRef) : undefined,
             cursor
@@ -2239,13 +3065,18 @@ export class LoyaltyMemberService {
 
   getMemberDetail(tenantRef: string, memberId: string): Promise<LoyaltyMemberDetail> {
     return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
-      const member = await this.memberSummary(tx, tenantRef, memberId);
       const [qrState] = await tx
-        .select({ qrGeneration: members.qrGeneration })
+        .select({
+          qrGeneration: members.qrGeneration,
+          enrollmentHandoffAt: members.enrollmentHandoffAt,
+        })
         .from(members)
         .where(and(eq(members.tenantRef, tenantRef), eq(members.id, memberId)))
         .limit(1);
-      if (!qrState) return corruptedWallet();
+      if (!qrState || qrState.enrollmentHandoffAt === null) {
+        throw new NotFoundException('Carte fidélité introuvable');
+      }
+      const member = await this.memberSummary(tx, tenantRef, memberId);
       // Une transaction Drizzle repose sur UNE connexion pg. Les requêtes
       // sont donc séquentielles : les mettre dans Promise.all ne crée aucun
       // parallélisme utile et certains drivers peuvent entrelacer leur état.
@@ -2289,9 +3120,9 @@ export class LoyaltyMemberService {
       const since = new Date(Date.now() - THIRTY_DAYS_MS);
       const memberMetrics = await tx
         .select({
-          totalMembers: sql<string>`count(*) filter (where ${members.status} <> 'anonymized')`,
-          activeMembers30d: sql<string>`count(*) filter (where ${members.status} = 'active' and ${members.lastActivityAt} >= ${since})`,
-          newMembers30d: sql<string>`count(*) filter (where ${members.status} <> 'anonymized' and ${members.joinedAt} >= ${since})`,
+          totalMembers: sql<string>`count(*) filter (where ${members.status} <> 'anonymized' and ${members.enrollmentHandoffAt} is not null)`,
+          activeMembers30d: sql<string>`count(*) filter (where ${members.status} = 'active' and ${members.enrollmentHandoffAt} is not null and ${members.lastActivityAt} >= ${since})`,
+          newMembers30d: sql<string>`count(*) filter (where ${members.status} <> 'anonymized' and ${members.enrollmentHandoffAt} >= ${since})`,
         })
         .from(members)
         .where(eq(members.tenantRef, tenantRef));
@@ -2305,7 +3136,11 @@ export class LoyaltyMemberService {
           and(eq(members.tenantRef, wallets.tenantRef), eq(members.id, wallets.memberId)),
         )
         .where(
-          and(eq(wallets.tenantRef, tenantRef), sql`${members.status} <> 'anonymized'`),
+          and(
+            eq(wallets.tenantRef, tenantRef),
+            sql`${members.status} <> 'anonymized'`,
+            sql`${members.enrollmentHandoffAt} IS NOT NULL`,
+          ),
         );
       const ledgerMetrics = await tx
         .select({

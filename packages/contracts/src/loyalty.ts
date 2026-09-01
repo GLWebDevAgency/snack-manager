@@ -188,6 +188,19 @@ export const LoyaltyMemberCreateSchema = z
 export type LoyaltyMemberCreate = z.infer<typeof LoyaltyMemberCreateSchema>;
 
 /**
+ * Réserve une opération d'adhésion avant toute collecte de PII.
+ *
+ * Le serveur lie cet UUID au principal et à l'appareil authentifiés. La
+ * création complète peut ensuite remplacer cette intention sous verrou.
+ */
+export const LoyaltyEnrollmentPrepareSchema = z
+  .object({ operationId: LoyaltyOperationIdSchema })
+  .strict();
+export type LoyaltyEnrollmentPrepare = z.infer<
+  typeof LoyaltyEnrollmentPrepareSchema
+>;
+
+/**
  * Reprise d'une adhésion dont la réponse s'est perdue. L'UUID aléatoire est la
  * seule donnée persistée par la caisse : ni téléphone, ni prénom, ni secret QR.
  */
@@ -195,6 +208,14 @@ export const LoyaltyEnrollmentRecoverySchema = z
   .object({ operationId: LoyaltyOperationIdSchema })
   .strict();
 export type LoyaltyEnrollmentRecovery = z.infer<typeof LoyaltyEnrollmentRecoverySchema>;
+
+/** Confirme que le secret d'adhésion a été remis au client. */
+export const LoyaltyEnrollmentAcknowledgementSchema = z
+  .object({ operationId: LoyaltyOperationIdSchema })
+  .strict();
+export type LoyaltyEnrollmentAcknowledgement = z.infer<
+  typeof LoyaltyEnrollmentAcknowledgementSchema
+>;
 
 export const LoyaltyMemberResolveSchema = z.discriminatedUnion('by', [
   z.object({ by: z.literal('member_ref'), memberRef: z.string().uuid() }).strict(),
@@ -490,9 +511,53 @@ export const LoyaltyMemberCreateResultSchema = z
     member: LoyaltyMemberSummarySchema,
     /** Secret remis une fois ; la base ne conserve que son SHA-256. */
     qrToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    /** Fin de la fenêtre pendant laquelle ce secret peut être repris. */
+    handoffExpiresAt: z.iso.datetime(),
   })
   .strict();
 export type LoyaltyMemberCreateResult = z.infer<typeof LoyaltyMemberCreateResultSchema>;
+
+export const LoyaltyEnrollmentPrepareResultSchema = z
+  .object({
+    operationId: LoyaltyOperationIdSchema,
+    status: z.enum(['prepared', 'ready']),
+    expiresAt: z.iso.datetime(),
+  })
+  .strict();
+export type LoyaltyEnrollmentPrepareResult = z.infer<
+  typeof LoyaltyEnrollmentPrepareResultSchema
+>;
+
+export const LoyaltyEnrollmentRecoveryResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('pending'),
+      operationId: LoyaltyOperationIdSchema,
+      retryAfterMs: z.number().int().positive().max(60_000),
+      expiresAt: z.iso.datetime(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('ready'),
+      enrollment: LoyaltyMemberCreateResultSchema,
+    })
+    .strict(),
+]);
+export type LoyaltyEnrollmentRecoveryResult = z.infer<
+  typeof LoyaltyEnrollmentRecoveryResultSchema
+>;
+
+export const LoyaltyEnrollmentAcknowledgementResultSchema = z
+  .object({
+    operationId: LoyaltyOperationIdSchema,
+    acknowledged: z.literal(true),
+    replayed: z.boolean(),
+  })
+  .strict();
+export type LoyaltyEnrollmentAcknowledgementResult = z.infer<
+  typeof LoyaltyEnrollmentAcknowledgementResultSchema
+>;
 
 export const LoyaltyConsentMutationResultSchema = z
   .object({

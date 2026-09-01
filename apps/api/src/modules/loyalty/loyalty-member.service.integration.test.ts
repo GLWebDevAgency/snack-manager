@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  GoneException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -128,6 +130,48 @@ async function seedHistoricalSmsGrant(
   return operationId;
 }
 
+async function acknowledgeCreated(
+  tenantRef: string,
+  created: Awaited<ReturnType<LoyaltyMemberService['createMember']>>,
+  enrollmentActor: LoyaltyActorContext,
+) {
+  await service.acknowledgeEnrollment(
+    tenantRef,
+    { operationId: created.operationId },
+    enrollmentActor,
+  );
+  return created;
+}
+
+async function forceEnrollmentExpired(input: {
+  tenantRef: string;
+  operationId: string;
+  memberId: string;
+  ageOperation?: boolean;
+}): Promise<string> {
+  const expiredAt = new Date(Date.now() - 60_000).toISOString();
+  await adminPool.query(
+    `UPDATE loyalty.operations
+        SET result = jsonb_set(result, '{recoveryExpiresAt}', to_jsonb($3::text)),
+            created_at = CASE WHEN $4::boolean THEN $5::timestamptz ELSE created_at END
+      WHERE tenant_ref = $1 AND operation_id = $2`,
+    [
+      input.tenantRef,
+      input.operationId,
+      expiredAt,
+      input.ageOperation ?? false,
+      new Date(Date.now() - 31 * 60_000).toISOString(),
+    ],
+  );
+  await adminPool.query(
+    `UPDATE loyalty.member_tokens
+        SET expires_at = $3
+      WHERE tenant_ref = $1 AND member_id = $2 AND status = 'active'`,
+    [input.tenantRef, input.memberId, expiredAt],
+  );
+  return expiredAt;
+}
+
 integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
   beforeAll(async () => {
     const url = new URL(adminUrl!);
@@ -216,7 +260,56 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       termsAccepted: true,
       termsNoticeVersion: 'loyalty-2026-09',
     } as const;
-    const created = await service.createMember(tenantRef, createInput, actor);
+    const enrollmentActor: LoyaltyActorContext = { ...actor, source: 'pos' };
+    await expect(
+      service.prepareEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).resolves.toMatchObject({
+      operationId: createOperation,
+      status: 'prepared',
+    });
+    await expect(
+      service.recoverEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).resolves.toMatchObject({ status: 'pending', operationId: createOperation });
+    await expect(
+      service.prepareEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        { ...enrollmentActor, actorRef: 'cashier:next-shift' },
+      ),
+    ).resolves.toMatchObject({ status: 'prepared' });
+    await expect(
+      service.prepareEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        { ...enrollmentActor, deviceRef: 'device:other' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    const pendingEvidence = await adminPool.query<{
+      result: unknown;
+      request_fingerprint: string;
+    }>(
+      `SELECT result, request_fingerprint
+         FROM loyalty.operations
+        WHERE tenant_ref = $1 AND operation_id = $2`,
+      [tenantRef, createOperation],
+    );
+    expect(pendingEvidence.rows[0]?.result).toBeNull();
+    expect(pendingEvidence.rows[0]?.request_fingerprint).toMatch(/^[a-f0-9]{64}$/);
+
+    const created = await service.createMember(
+      tenantRef,
+      createInput,
+      enrollmentActor,
+    );
 
     expect(created).toMatchObject({
       operationId: createOperation,
@@ -242,6 +335,119 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     expect(profile?.encrypted_payload).not.toContain('0612345678');
     expect(profile?.encrypted_payload).not.toContain('+33612345678');
     expect(profile?.phone_lookup_hash).toMatch(/^[a-f0-9]{64}$/);
+    const completedEvidence = await adminPool.query<{ result: unknown }>(
+      `SELECT result FROM loyalty.operations
+        WHERE tenant_ref = $1 AND operation_id = $2`,
+      [tenantRef, createOperation],
+    );
+    const storedEnrollment = JSON.stringify(completedEvidence.rows[0]?.result);
+    expect(storedEnrollment).not.toContain('Mina');
+    expect(storedEnrollment).not.toContain('0612345678');
+    expect(storedEnrollment).not.toContain('+33612345678');
+    expect(storedEnrollment).not.toContain(created.qrToken);
+
+    const replayedCreate = await service.createMember(
+      tenantRef,
+      { ...createInput, phone: '+33612345678' },
+      enrollmentActor,
+    );
+    expect(replayedCreate).toMatchObject({
+      operationId: createOperation,
+      replayed: true,
+      member: { id: created.member.id },
+    });
+    expect(replayedCreate.qrToken).toBe(created.qrToken);
+    await expect(
+      service.recoverEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).resolves.toEqual({
+      status: 'ready',
+      enrollment: { ...replayedCreate, replayed: true },
+    });
+    await expect(
+      service.recoverEnrollment(
+        otherTenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.recoverEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        { ...enrollmentActor, deviceRef: 'device:other' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.acknowledgeEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        { ...enrollmentActor, deviceRef: 'device:other' },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    await expect(
+      service.resolveMember(tenantRef, {
+        by: 'phone',
+        phone: '+33 (0)6.12.34.56.78',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getMemberDetail(tenantRef, created.member.id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.listMembers(tenantRef, { limit: 20 })).resolves.toMatchObject({
+      items: [],
+    });
+    await expect(service.dashboard(tenantRef)).resolves.toMatchObject({
+      totalMembers: 0,
+      newMembers30d: 0,
+    });
+    await expect(
+      service.changeLifecycle(
+        tenantRef,
+        created.member.id,
+        {
+          operationId: randomUUID(),
+          action: 'block',
+          reasonCode: 'suspected_sharing',
+        },
+        { ...actor, source: 'admin' },
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    const acknowledged = await service.acknowledgeEnrollment(
+      tenantRef,
+      { operationId: createOperation },
+      enrollmentActor,
+    );
+    expect(acknowledged).toEqual({
+      operationId: createOperation,
+      acknowledged: true,
+      replayed: false,
+    });
+    await expect(
+      service.acknowledgeEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).resolves.toMatchObject({ acknowledged: true, replayed: true });
+    await expect(
+      service.recoverEnrollment(
+        tenantRef,
+        { operationId: createOperation },
+        enrollmentActor,
+      ),
+    ).rejects.toBeInstanceOf(GoneException);
+    await expect(
+      service.createMember(
+        tenantRef,
+        { ...createInput, phone: '+33612345678' },
+        enrollmentActor,
+      ),
+    ).rejects.toBeInstanceOf(GoneException);
 
     await expect(
       service.resolveMember(tenantRef, {
@@ -257,25 +463,6 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         by: 'qr_token',
         qrToken: created.qrToken,
       }),
-    ).rejects.toBeInstanceOf(NotFoundException);
-
-    const replayedCreate = await service.createMember(
-      tenantRef,
-      { ...createInput, phone: '+33612345678' },
-      actor,
-    );
-    expect(replayedCreate).toMatchObject({
-      operationId: createOperation,
-      replayed: true,
-      member: { id: created.member.id },
-    });
-    expect(replayedCreate.qrToken).toBe(created.qrToken);
-    await expect(service.recoverEnrollment(tenantRef, createOperation)).resolves.toEqual({
-      ...replayedCreate,
-      replayed: true,
-    });
-    await expect(
-      service.recoverEnrollment(otherTenantRef, createOperation),
     ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
       service.resolveMember(tenantRef, {
@@ -465,7 +652,7 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         },
         { ...actor, source: 'pos' },
       ),
-    ).rejects.toThrow('La référence du ticket est obligatoire pour ce canal');
+    ).rejects.toThrow('La référence de consommation de ce canal est invalide');
     await expect(
       service.redeem(
         tenantRef,
@@ -685,15 +872,19 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       ),
     ).resolves.toMatchObject({ replayed: true, consent: { decision: 'withdrawn' } });
 
-    const qrOnly = await service.createMember(
+    const qrOnly = await acknowledgeCreated(
       tenantRef,
-      {
-        operationId: randomUUID(),
-        firstName: null,
-        phone: null,
-        termsAccepted: true,
-        termsNoticeVersion: 'loyalty-2026-09',
-      },
+      await service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: null,
+          phone: null,
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        actor,
+      ),
       actor,
     );
     const firstPage = await service.listMembers(tenantRef, { limit: 1 });
@@ -809,6 +1000,182 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
     ).rejects.toBeInstanceOf(InternalServerErrorException);
   }, 20_000);
 
+  it('clôture et anonymise chaque adhésion expirée avant de libérer son téléphone', async () => {
+    const tenantRef = `expiry-${randomUUID()}`;
+    const programId = randomUUID();
+    await withLoyaltyTenant(db, tenantRef, async (tx) => {
+      await tx.insert(programs).values({ id: programId, tenantRef, status: 'active' });
+      await tx.insert(programVersions).values({
+        tenantRef,
+        programId,
+        version: 1,
+        name: 'Programme expiration',
+        mechanism: 'points',
+        minimumPurchaseCents: 0,
+        maximumUnitsPerPurchase: null,
+        spendStepCents: 100,
+        unitsPerStep: 1,
+        unitsPerVisit: null,
+        unitLabelSingular: 'point',
+        unitLabelPlural: 'points',
+        termsSummary: 'Version expiration',
+      });
+    });
+
+    const abandonedOperationId = randomUUID();
+    await service.prepareEnrollment(tenantRef, { operationId: abandonedOperationId }, actor);
+    await adminPool.query(
+      `UPDATE loyalty.operations
+          SET created_at = $3
+        WHERE tenant_ref = $1 AND operation_id = $2`,
+      [tenantRef, abandonedOperationId, new Date(Date.now() - 31 * 60_000)],
+    );
+    await expect(
+      service.recoverEnrollment(tenantRef, { operationId: abandonedOperationId }, actor),
+    ).rejects.toBeInstanceOf(GoneException);
+    const abandoned = await adminPool.query<{ status: string; result: unknown }>(
+      `SELECT status::text AS status, result
+         FROM loyalty.operations
+        WHERE tenant_ref = $1 AND operation_id = $2`,
+      [tenantRef, abandonedOperationId],
+    );
+    expect(abandoned.rows[0]).toMatchObject({
+      status: 'completed',
+      result: { enrollmentExpired: true },
+    });
+
+    const create = (phone: string) =>
+      service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: 'Essai',
+          phone,
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        actor,
+      );
+
+    const expired = await create('06 31 41 59 26');
+    const expiredAt = await forceEnrollmentExpired({
+      tenantRef,
+      operationId: expired.operationId,
+      memberId: expired.member.id,
+    });
+    await expect(
+      service.recoverEnrollment(
+        tenantRef,
+        { operationId: expired.operationId },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(GoneException);
+
+    const closed = await adminPool.query<{
+      status: string;
+      anonymized: boolean;
+      profile_count: string;
+      token_status: string;
+      request_fingerprint: string;
+      result: Record<string, unknown>;
+      anonymized_events: string;
+    }>(
+      `SELECT m.status::text AS status,
+              (m.anonymized_at IS NOT NULL) AS anonymized,
+              (SELECT count(*) FROM loyalty.member_profiles p
+                WHERE p.tenant_ref = m.tenant_ref AND p.member_id = m.id) AS profile_count,
+              (SELECT t.status::text FROM loyalty.member_tokens t
+                WHERE t.tenant_ref = m.tenant_ref AND t.member_id = m.id
+                ORDER BY t.created_at DESC LIMIT 1) AS token_status,
+              o.request_fingerprint,
+              o.result,
+              (SELECT count(*) FROM loyalty.membership_events e
+                WHERE e.tenant_ref = m.tenant_ref AND e.member_id = m.id
+                  AND e.kind = 'anonymized'
+                  AND e.reason = 'enrollment_handoff_expired') AS anonymized_events
+         FROM loyalty.members m
+         JOIN loyalty.operations o
+           ON o.tenant_ref = m.tenant_ref AND o.operation_id = $2
+        WHERE m.tenant_ref = $1 AND m.id = $3`,
+      [tenantRef, expired.operationId, expired.member.id],
+    );
+    expect(closed.rows[0]).toMatchObject({
+      status: 'anonymized',
+      anonymized: true,
+      profile_count: '0',
+      token_status: 'revoked',
+      request_fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      result: {
+        enrollmentExpired: true,
+        recoveryOwnerFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        recoveryExpiresAt: expiredAt,
+      },
+      anonymized_events: '1',
+    });
+    expect(closed.rows[0]?.result).not.toHaveProperty('memberId');
+    expect(closed.rows[0]?.result).not.toHaveProperty('qrTokenHash');
+    expect(closed.rows[0]?.result).not.toHaveProperty('createFingerprint');
+    await expect(
+      service.resolveMember(tenantRef, { by: 'qr_token', qrToken: expired.qrToken }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const replacement = await create('+33 6 31 41 59 26');
+    expect(replacement.member.id).not.toBe(expired.member.id);
+    await service.acknowledgeEnrollment(
+      tenantRef,
+      { operationId: replacement.operationId },
+      actor,
+    );
+
+    const expiredAtAck = await create('06 27 18 28 18');
+    await forceEnrollmentExpired({
+      tenantRef,
+      operationId: expiredAtAck.operationId,
+      memberId: expiredAtAck.member.id,
+    });
+    await expect(
+      service.acknowledgeEnrollment(
+        tenantRef,
+        { operationId: expiredAtAck.operationId },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(GoneException);
+    const ackCleanup = await adminPool.query<{ profile_count: string; status: string }>(
+      `SELECT m.status::text AS status,
+              (SELECT count(*) FROM loyalty.member_profiles p
+                WHERE p.tenant_ref = m.tenant_ref AND p.member_id = m.id) AS profile_count
+         FROM loyalty.members m
+        WHERE m.tenant_ref = $1 AND m.id = $2`,
+      [tenantRef, expiredAtAck.member.id],
+    );
+    expect(ackCleanup.rows[0]).toEqual({ status: 'anonymized', profile_count: '0' });
+
+    const swept = await create('06 16 18 03 14');
+    await forceEnrollmentExpired({
+      tenantRef,
+      operationId: swept.operationId,
+      memberId: swept.member.id,
+      // Reproduit PREPARE à T0 puis CREATE presque 30 minutes plus tard : la
+      // deadline canonique est celle de l'opération, pas `members.joined_at`.
+      ageOperation: true,
+    });
+    const sweepClocks = await adminPool.query<{ operation_created_at: Date; member_joined_at: Date }>(
+      `SELECT o.created_at AS operation_created_at, m.joined_at AS member_joined_at
+         FROM loyalty.operations o
+         JOIN loyalty.membership_events e
+           ON e.tenant_ref = o.tenant_ref AND e.operation_id = o.operation_id
+         JOIN loyalty.members m
+           ON m.tenant_ref = e.tenant_ref AND m.id = e.member_id
+        WHERE o.tenant_ref = $1 AND o.operation_id = $2 AND e.kind = 'joined'`,
+      [tenantRef, swept.operationId],
+    );
+    expect(sweepClocks.rows[0]!.member_joined_at.getTime()).toBeGreaterThan(
+      sweepClocks.rows[0]!.operation_created_at.getTime(),
+    );
+    await expect(service.expireStaleEnrollments(tenantRef, new Date(), 10)).resolves.toBe(1);
+    await expect(service.expireStaleEnrollments(tenantRef, new Date(), 10)).resolves.toBe(0);
+  }, 20_000);
+
   it('réserve durablement les tickets et arbitre les courses earn/redeem', async () => {
     const tenantRef = `receipt-${randomUUID()}`;
     const programId = randomUUID();
@@ -842,15 +1209,19 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         kind: 'custom',
       });
     });
-    const member = await service.createMember(
+    const member = await acknowledgeCreated(
       tenantRef,
-      {
-        operationId: randomUUID(),
-        firstName: null,
-        phone: null,
-        termsAccepted: true,
-        termsNoticeVersion: 'loyalty-2026-09',
-      },
+      await service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: null,
+          phone: null,
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        actor,
+      ),
       actor,
     );
 
@@ -1106,15 +1477,19 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       });
     });
 
-    const created = await service.createMember(
+    const created = await acknowledgeCreated(
       tenantRef,
-      {
-        operationId: randomUUID(),
-        firstName: 'Nora',
-        phone: '06 98 76 54 32',
-        termsAccepted: true,
-        termsNoticeVersion: 'loyalty-2026-09',
-      },
+      await service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: 'Nora',
+          phone: '06 98 76 54 32',
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        manager,
+      ),
       manager,
     );
     await service.earn(
@@ -1255,15 +1630,19 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       ),
     ).resolves.toMatchObject({ replayed: true, qrToken: replacement.qrToken });
 
-    const racingMember = await service.createMember(
+    const racingMember = await acknowledgeCreated(
       tenantRef,
-      {
-        operationId: randomUUID(),
-        firstName: null,
-        phone: null,
-        termsAccepted: true,
-        termsNoticeVersion: 'loyalty-2026-09',
-      },
+      await service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: null,
+          phone: null,
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        manager,
+      ),
       manager,
     );
     const rotationInputs = [
@@ -1517,8 +1896,8 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       });
     });
 
-    const createMember = () =>
-      service.createMember(
+    const createMember = async () => {
+      const created = await service.createMember(
         tenantRef,
         {
           operationId: randomUUID(),
@@ -1529,6 +1908,8 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         },
         actor,
       );
+      return acknowledgeCreated(tenantRef, created, actor);
+    };
 
     const member = await createMember();
     const earned = await service.earn(
@@ -1884,15 +2265,19 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
         termsSummary: 'Test BIGINT',
       });
     });
-    const created = await service.createMember(
+    const created = await acknowledgeCreated(
       tenantRef,
-      {
-        operationId: randomUUID(),
-        firstName: null,
-        phone: null,
-        termsAccepted: true,
-        termsNoticeVersion: 'loyalty-2026-09',
-      },
+      await service.createMember(
+        tenantRef,
+        {
+          operationId: randomUUID(),
+          firstName: null,
+          phone: null,
+          termsAccepted: true,
+          termsNoticeVersion: 'loyalty-2026-09',
+        },
+        actor,
+      ),
       actor,
     );
     const result = await service.earn(

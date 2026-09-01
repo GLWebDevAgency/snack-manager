@@ -16,6 +16,8 @@ import {
   type JwtPayload,
   type LoyaltyAdminAdjustment,
   type LoyaltyConsentEvent,
+  type LoyaltyEnrollmentAcknowledgement,
+  type LoyaltyEnrollmentPrepare,
   type LoyaltyEnrollmentRecovery,
   type LoyaltyEarn,
   type LoyaltyLedgerReversal,
@@ -29,6 +31,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ROLES } from '../../common/auth';
 import { ZodValidationPipe } from '../../common/zod.pipe';
 import { LoyaltyAdminService } from './loyalty-admin.service';
+import { LoyaltyEnrollmentExpiryProcessor } from './loyalty-enrollment-expiry.processor';
 import { LoyaltyMemberController } from './loyalty-member.controller';
 import { LoyaltyMemberService } from './loyalty-member.service';
 import { LoyaltyOrderEarnProcessor } from './loyalty-order-earn.processor';
@@ -72,7 +75,11 @@ const CREATE: LoyaltyMemberCreate = {
   termsNoticeVersion: 'loyalty-2026-09',
 };
 const RESOLVE: LoyaltyMemberResolve = { by: 'member_ref', memberRef: MEMBER };
+const PREPARE: LoyaltyEnrollmentPrepare = { operationId: CREATE.operationId };
 const RECOVER: LoyaltyEnrollmentRecovery = { operationId: CREATE.operationId };
+const ACKNOWLEDGE: LoyaltyEnrollmentAcknowledgement = {
+  operationId: CREATE.operationId,
+};
 const EARN: LoyaltyEarn = {
   operationId: '30000000-0000-4000-8000-000000000002',
   purchaseCents: 1_850,
@@ -112,7 +119,9 @@ const REPLACE_QR: LoyaltyMemberQrReplace = {
 
 function harness() {
   const createMember = vi.fn().mockResolvedValue({ route: 'create' });
+  const prepareEnrollment = vi.fn().mockResolvedValue({ route: 'prepare' });
   const recoverEnrollment = vi.fn().mockResolvedValue({ route: 'recover' });
+  const acknowledgeEnrollment = vi.fn().mockResolvedValue({ route: 'acknowledge' });
   const resolveMember = vi.fn().mockResolvedValue({ route: 'resolve' });
   const earn = vi.fn().mockResolvedValue({ route: 'earn' });
   const redeem = vi.fn().mockResolvedValue({ route: 'redeem' });
@@ -123,7 +132,9 @@ function harness() {
   const replaceQr = vi.fn().mockResolvedValue({ route: 'replaceQr' });
   const service = {
     createMember,
+    prepareEnrollment,
     recoverEnrollment,
+    acknowledgeEnrollment,
     resolveMember,
     earn,
     redeem,
@@ -139,7 +150,9 @@ function harness() {
   return {
     controller,
     createMember,
+    prepareEnrollment,
     recoverEnrollment,
+    acknowledgeEnrollment,
     resolveMember,
     earn,
     redeem,
@@ -153,7 +166,9 @@ function harness() {
 
 type RouteMethod =
   | 'create'
+  | 'prepareEnrollment'
   | 'recoverEnrollment'
+  | 'acknowledgeEnrollment'
   | 'resolve'
   | 'earn'
   | 'redeem'
@@ -179,12 +194,14 @@ function bodyPipe(method: RouteMethod): ZodValidationPipe {
 }
 
 describe('LoyaltyMemberController — frontière HTTP', () => {
-  it('expose les dix POST sous /loyalty/members, avec les lectures en 200', () => {
+  it('expose les douze POST sous /loyalty/members, avec les lectures en 200', () => {
     expect(Reflect.getMetadata(PATH_METADATA, LoyaltyMemberController)).toBe('loyalty/members');
 
     const routes = {
       create: '/',
+      prepareEnrollment: 'enrollments/prepare',
       recoverEnrollment: 'enrollments/recover',
+      acknowledgeEnrollment: 'enrollments/acknowledge',
       resolve: 'resolve',
       earn: ':id/earn',
       redeem: ':id/redemptions',
@@ -206,6 +223,18 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       Reflect.getMetadata(
         HTTP_CODE_METADATA,
         LoyaltyMemberController.prototype.recoverEnrollment,
+      ),
+    ).toBe(200);
+    expect(
+      Reflect.getMetadata(
+        HTTP_CODE_METADATA,
+        LoyaltyMemberController.prototype.prepareEnrollment,
+      ),
+    ).toBe(200);
+    expect(
+      Reflect.getMetadata(
+        HTTP_CODE_METADATA,
+        LoyaltyMemberController.prototype.acknowledgeEnrollment,
       ),
     ).toBe(200);
   });
@@ -243,6 +272,7 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
     ]);
     expect(providers).toEqual([
       LoyaltyAdminService,
+      LoyaltyEnrollmentExpiryProcessor,
       LoyaltyMemberService,
       LoyaltyOrderEarnProcessor,
       LoyaltyPublicService,
@@ -261,13 +291,27 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
     });
   });
 
-  it("reprend une adhésion dans le tenant sans retransmettre de profil", async () => {
-    const { controller, recoverEnrollment } = harness();
+  it("prépare, reprend puis acquitte une adhésion avec le contexte signé", async () => {
+    const { controller, prepareEnrollment, recoverEnrollment, acknowledgeEnrollment } =
+      harness();
 
-    await expect(controller.recoverEnrollment(TENANT, RECOVER)).resolves.toEqual({
+    await expect(controller.prepareEnrollment(TENANT, CASHIER, PREPARE)).resolves.toEqual({
+      route: 'prepare',
+    });
+    await expect(controller.recoverEnrollment(TENANT, CASHIER, RECOVER)).resolves.toEqual({
       route: 'recover',
     });
-    expect(recoverEnrollment).toHaveBeenCalledWith(TENANT, RECOVER.operationId);
+    await expect(
+      controller.acknowledgeEnrollment(TENANT, CASHIER, ACKNOWLEDGE),
+    ).resolves.toEqual({ route: 'acknowledge' });
+    const actor = {
+      source: 'pos',
+      actorRef: CASHIER.sub,
+      deviceRef: DEVICE,
+    };
+    expect(prepareEnrollment).toHaveBeenCalledWith(TENANT, PREPARE, actor);
+    expect(recoverEnrollment).toHaveBeenCalledWith(TENANT, RECOVER, actor);
+    expect(acknowledgeEnrollment).toHaveBeenCalledWith(TENANT, ACKNOWLEDGE, actor);
   });
 
   it('résout une carte dans le tenant du JWT, sans contexte falsifiable dans le body', async () => {
@@ -394,12 +438,17 @@ describe('LoyaltyMemberController — contrats Zod réellement branchés', () =>
   });
 
   it('branche une reprise stricte sans donnée personnelle', () => {
+    expect(bodyPipe('prepareEnrollment').transform(PREPARE)).toEqual(PREPARE);
     expect(bodyPipe('recoverEnrollment').transform(RECOVER)).toEqual(RECOVER);
+    expect(bodyPipe('acknowledgeEnrollment').transform(ACKNOWLEDGE)).toEqual(ACKNOWLEDGE);
     expect(() =>
       bodyPipe('recoverEnrollment').transform({
         ...RECOVER,
         phone: '06 12 34 56 78',
       }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      bodyPipe('prepareEnrollment').transform({ ...PREPARE, firstName: 'Leïla' }),
     ).toThrow(BadRequestException);
   });
 

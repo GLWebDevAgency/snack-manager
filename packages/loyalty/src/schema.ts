@@ -222,6 +222,8 @@ export const members = loyaltySchema.table(
     /** Jeton de concurrence optimiste des rotations QR. */
     qrGeneration: bigint('qr_generation', { mode: 'number' }).notNull().default(1),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Date à laquelle le secret initial a été remis ; NULL tant que le handoff reste ouvert. */
+    enrollmentHandoffAt: timestamp('enrollment_handoff_at', { withTimezone: true }),
     lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
     blockedAt: timestamp('blocked_at', { withTimezone: true }),
     anonymizedAt: timestamp('anonymized_at', { withTimezone: true }),
@@ -229,10 +231,17 @@ export const members = loyaltySchema.table(
   (table) => [
     uniqueIndex('members_tenant_id_uq').on(table.tenantRef, table.id),
     index('members_tenant_activity_idx').on(table.tenantRef, table.lastActivityAt),
+    index('members_unhanded_enrollment_idx')
+      .on(table.tenantRef, table.joinedAt)
+      .where(sql`${table.enrollmentHandoffAt} IS NULL`),
     check('members_qr_generation_positive', sql`${table.qrGeneration} > 0`),
     check(
       'members_qr_generation_safe_integer',
       sql`${table.qrGeneration} <= 9007199254740991`,
+    ),
+    check(
+      'members_enrollment_handoff_after_joined',
+      sql`${table.enrollmentHandoffAt} IS NULL OR ${table.enrollmentHandoffAt} >= ${table.joinedAt}`,
     ),
     check(
       'members_status_timestamps_shape',
