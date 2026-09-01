@@ -56,6 +56,7 @@ import {
   type ClientRow,
   type SignalSeverity,
 } from "./data";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
   AccountPill,
   CallBackFlag,
@@ -511,12 +512,7 @@ function ClientLine({ row: r }: { row: Row }) {
               {c.name}
             </span>
             {c.founderSeat && (
-              <Icon
-                name="star"
-                size={14}
-                className="shrink-0 text-accent"
-                aria-label="Client fondateur"
-              />
+              <BadgeFondateur size={20} />
             )}
             {mute && (
               <span

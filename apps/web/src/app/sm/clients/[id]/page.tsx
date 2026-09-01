@@ -55,6 +55,7 @@ import {
   SuspendModal,
   ChurnModal,
 } from "./actions";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
   AdoptionSection,
   AdviceSection,
@@ -196,12 +197,7 @@ export default function ClientFilePage({
                 {name}
               </h2>
               {(account?.founderSeat ?? row?.founderSeat) && (
-                <Icon
-                  name="star"
-                  size={17}
-                  className="shrink-0 text-accent"
-                  aria-label="Client fondateur"
-                />
+                <BadgeFondateur size={26} />
               )}
               <PlanPill plan={plan} />
               <AccountPill status={status ?? DEFAULT_TENANT_ACCOUNT_STATUS} />

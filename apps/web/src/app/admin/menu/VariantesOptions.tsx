@@ -26,9 +26,71 @@
  */
 
 import type { OptionGroup, Product, Variant } from "./types";
+import { cx } from "@/lib/cx";
+import { useState } from "react";
 import { Btn, Field, IconBtn, Input, Select } from "@/components/ui";
 
 /** « 8,90 » → 890 centimes. Chaîne vide ou illisible → `null`. */
+/**
+ * UN CHAMP MONÉTAIRE QU'ON PEUT RÉELLEMENT REMPLIR.
+ *
+ * Le champ était PLEINEMENT CONTRÔLÉ sur la valeur en centimes : à chaque
+ * frappe, la saisie était reconvertie et réaffichée en `0,00`. Taper « 8,90 »
+ * donnait deux centimes — vérifié frappe à frappe :
+ *
+ *   « 0,00 » + « 8 »  → « 0,008 » → 1 c  → réaffiché « 0,01 »
+ *   « 0,01 » + « , »  → « 0,01, » → NaN  → REJETÉ, la virgule s'efface
+ *   « 0,01 » + « 9 »  → « 0,019 » → 2 c  → réaffiché « 0,02 »
+ *
+ * Et c'est le SEUL point d'entrée du prix d'un produit à variantes : la grille
+ * passe le prix produit en lecture seule dès qu'il y a des tailles. Le prix
+ * d'un tacos M n'était donc modifiable nulle part.
+ *
+ * Le remède est celui que la grille du même écran applique déjà, quatre cents
+ * lignes plus haut : garder la SAISIE BRUTE tant que le champ a le focus, et
+ * ne convertir qu'au moment où l'utilisateur en sort. Échap rend la valeur
+ * d'origine, Entrée valide — les deux gestes qu'on attend d'un champ de prix.
+ */
+function ChampMontant({
+  id,
+  cents,
+  onCommit,
+  label,
+  className,
+}: {
+  id: string;
+  cents: number;
+  onCommit: (cents: number) => void;
+  label: string;
+  className?: string;
+}) {
+  const [brouillon, setBrouillon] = useState<string | null>(null);
+
+  const valider = (saisie: string) => {
+    const c = euxCentimes(saisie);
+    // Une saisie illisible ne devient PAS zéro : on rend la valeur d'avant.
+    // Écrire zéro sur une faute de frappe met un produit à prix nul en vente.
+    if (c !== null) onCommit(c);
+    setBrouillon(null);
+  };
+
+  return (
+    <Input
+      id={id}
+      inputMode="decimal"
+      aria-label={label}
+      value={brouillon ?? centimesEnSaisie(cents)}
+      onChange={(e) => setBrouillon(e.target.value)}
+      onBlur={(e) => valider(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") setBrouillon(null);
+      }}
+      className={cx("tabular-nums", className)}
+    />
+  );
+}
+
 export function euxCentimes(saisie: string): number | null {
   const net = saisie.trim().replace(/\s/g, "").replace(",", ".");
   if (net === "") return null;
@@ -95,15 +157,11 @@ export function EditeurVariantes({
               />
             </Field>
             <Field label={i === 0 ? "Prix" : ""} htmlFor={`var-prix-${v.key}`} className="w-[110px]">
-              <Input
+              <ChampMontant
                 id={`var-prix-${v.key}`}
-                inputMode="decimal"
-                value={centimesEnSaisie(v.price)}
-                onChange={(e) => {
-                  const c = euxCentimes(e.target.value);
-                  if (c !== null) modifier(i, { price: c });
-                }}
-                className="tabular-nums"
+                cents={v.price}
+                label={`Prix de la taille ${v.name || i + 1}`}
+                onCommit={(price) => modifier(i, { price })}
               />
             </Field>
             <IconBtn
@@ -255,20 +313,18 @@ export function EditeurOptions({
                       placeholder="Ex. Samouraï"
                       className="flex-1"
                     />
-                    <Input
-                      aria-label={`Supplément du choix ${k + 1}`}
-                      inputMode="decimal"
-                      value={centimesEnSaisie(c.priceDelta ?? 0)}
-                      onChange={(e) => {
-                        const v = euxCentimes(e.target.value);
-                        if (v !== null)
-                          modifier(i, {
-                            choices: g.choices.map((x, j) =>
-                              j === k ? { ...x, priceDelta: v } : x,
-                            ),
-                          });
-                      }}
-                      className="w-[100px] tabular-nums"
+                    <ChampMontant
+                      id={`opt-supp-${g.key}-${k}`}
+                      label={`Supplément du choix ${c.name || k + 1}`}
+                      cents={c.priceDelta ?? 0}
+                      onCommit={(priceDelta) =>
+                        modifier(i, {
+                          choices: g.choices.map((x, j) =>
+                            j === k ? { ...x, priceDelta } : x,
+                          ),
+                        })
+                      }
+                      className="w-[100px]"
                     />
                     <IconBtn
                       icon="trash"

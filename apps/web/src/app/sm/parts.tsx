@@ -56,6 +56,7 @@ import {
   Toggle,
   useToast,
 } from "@/components/ui";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import { crm, fmtDay, useHq } from "./crm";
 
 // ─── Pastilles ───
@@ -455,7 +456,16 @@ export function LeadDrawer({
 
       {/* ── Place fondateur ── */}
       <div className="flex items-center gap-3 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
-        <Icon name="star" size={18} className="shrink-0 text-accent" />
+        {/*
+          Le badge suit l'état du toggle : réservé, il s'allume ; libéré, il
+          s'éteint. L'opérateur voit CE QU'IL ACCORDE au moment où il le fait,
+          et reconnaîtra le même signe sur la fiche du client une fois signé.
+        */}
+        <BadgeFondateur
+          statut="reserve"
+          size={26}
+          className={lead.founderSeatReserved ? undefined : "opacity-30 grayscale"}
+        />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-ink">Place fondateur</div>
           <div className="text-xs text-mut">
@@ -1417,6 +1427,12 @@ function ConvertPanel({
         </Select>
       </Field>
       <div className="flex items-center gap-3">
+        {/* Le même badge qu'à la réservation et qu'à la fiche client : c'est en
+            le revoyant au moment de signer qu'il devient un repère. */}
+        <BadgeFondateur
+          size={24}
+          className={founderSeat ? undefined : "opacity-30 grayscale"}
+        />
         <div className="min-w-0 flex-1 text-xs text-mut">
           Place fondateur — moitié prix sur tout le contrat, douze mois durant.
         </div>

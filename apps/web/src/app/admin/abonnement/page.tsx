@@ -44,6 +44,7 @@ import {
 import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
   Btn,
   Card,
@@ -51,7 +52,6 @@ import {
   Field,
   Input,
   Panel,
-  Pill,
   Skeleton,
   useToast,
 } from "@/components/ui";
@@ -229,12 +229,16 @@ export default function AbonnementPage() {
               restaurateur qui, lui, voyait son prélèvement doubler.
             */}
             {remiseFondateurActive(sub.founderUntil) && (
-              <Pill
-                className="border-gold/40 bg-gold/15 text-gold"
-                title="Moitié prix sur tout votre contrat signé, pendant douze mois"
-              >
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-gold/40 bg-gold/15 px-2.5 py-[3px] text-[12px] font-semibold text-gold">
+                {/*
+                  Le MÊME badge que le CRM affiche sur sa fiche. Côté équipe
+                  Snack Manager, il identifie un client fondateur ; côté
+                  restaurateur, il lui rappelle qu'il en est un — c'est le même
+                  fait, vu des deux bords, et ce doit être le même signe.
+                */}
+                <BadgeFondateur size={18} />
                 Fondateur — moitié prix
-              </Pill>
+              </span>
             )}
           </div>
           <p className="cf-fig mt-1 text-[13px] text-mut">
