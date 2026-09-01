@@ -27,7 +27,7 @@ import type { CrmOverview } from "@sm/contracts";
 import { ApiError, clearToken, getToken } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
-import { Icon, ToastProvider, type IconName } from "@/components/ui";
+import { Icon, IconBtn, ToastProvider, type IconName } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
 import { crm, euroRound, HqContext, isHqSession } from "./crm";
 import { BottomSheet } from "./mobile";
@@ -56,7 +56,7 @@ const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
   // Après les signaux : on a écouté le parc, on TIENT ensuite les promesses
   // récurrentes de l'Atelier — publications, fiche Google, rapports.
   { href: "/sm/production", label: "Production", icon: "check", title: "Production de l'Atelier" },
-  { href: "/sm/erreurs", label: "Erreurs", icon: "gear", title: "Journal d'erreurs" },
+  { href: "/sm/erreurs", label: "Erreurs", icon: "alert", title: "Journal d'erreurs" },
   {
     href: "/sm/facturation",
     label: "Facturation",
@@ -289,15 +289,13 @@ function HqShell({ children }: { children: ReactNode }) {
               <div className="truncate text-sm font-bold text-ink">Admin SM</div>
               <div className="truncate text-xs text-mut">Fondateur</div>
             </div>
-            <button
-              type="button"
+            <IconBtn
+              icon="logout"
+              label="Se déconnecter"
+              size={32}
+              iconSize={15}
               onClick={logout}
-              title="Se déconnecter"
-              aria-label="Se déconnecter"
-              className="cf-press grid size-8 shrink-0 place-items-center rounded-xs border border-white/12 bg-white/6 text-mut hover:border-white/25 hover:bg-white/12 hover:text-white"
-            >
-              <Icon name="logout" size={15} />
-            </button>
+            />
           </div>
         </aside>
 

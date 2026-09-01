@@ -15,7 +15,7 @@ import {
   type StorageMode,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
-import { Pill } from "@/components/ui";
+import { Btn, Card, EmptyState, Pill } from "@/components/ui";
 
 // ─── Libellés français ───
 
@@ -53,7 +53,8 @@ export const MOVEMENT_META: Record<
   { label: string; cls: string }
 > = {
   // Couleurs FONCTIONNELLES fixes (§2.6) — jamais l'accent tenant.
-  purchase: { label: "Réception", cls: "bg-ok text-white" },
+  // Texte sombre sur vert : le blanc sur --cf-green plafonne à ~2,9:1 (< AA).
+  purchase: { label: "Réception", cls: "bg-ok text-[#0B1F0E]" },
   sale: { label: "Vente", cls: "bg-fill text-onfill" },
   waste: { label: "Perte", cls: "bg-alert text-white" },
   count: { label: "Inventaire", cls: "bg-prep text-[#1C1612]" },
@@ -196,7 +197,9 @@ export function MovementBadge({ type }: { type: StockMovementType }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center whitespace-nowrap rounded-pill px-[9px] py-[3px] text-[9px] font-bold uppercase tracking-[0.06em]",
+        // Mêmes classes que StatusBadge — 10px : le 9px d'origine était sous
+        // le seuil de lisibilité de service.
+        "inline-flex items-center whitespace-nowrap rounded-pill px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
         meta.cls,
       )}
     >
@@ -205,7 +208,10 @@ export function MovementBadge({ type }: { type: StockMovementType }) {
   );
 }
 
-/** État d'erreur standard : message rouge fonctionnel + bouton Réessayer. */
+/**
+ * État d'erreur standard : même habillage EmptyState + Réessayer que
+ * Commandes et Planification — un seul motif pour « le chargement a échoué ».
+ */
 export function ErrorState({
   message,
   onRetry,
@@ -214,20 +220,27 @@ export function ErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-card border border-alert/40 bg-alert/10 px-6 py-8 text-center">
-      <p className="text-sm font-bold text-alertt">{message}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="cf-press rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
-      >
-        Réessayer
-      </button>
-    </div>
+    <Card className="p-[18px]">
+      <EmptyState
+        icon="close"
+        title="Chargement impossible"
+        hint={message}
+        action={
+          <Btn variant="ghost" size="sm" onClick={onRetry}>
+            Réessayer
+          </Btn>
+        }
+      />
+    </Card>
   );
 }
 
-/** Bouton destructif (rouge fonctionnel — pas de variante Btn dédiée au DS). */
+/**
+ * Bouton destructif — pas de variante Btn dédiée au DS : on compose le Btn
+ * avec la surcharge rouge fonctionnel déjà employée par le Menu (§7.4),
+ * plutôt que d'en recopier les classes (elles divergeraient à la première
+ * retouche du Btn).
+ */
 export function DangerBtn({
   children,
   onClick,
@@ -240,17 +253,14 @@ export function DangerBtn({
   className?: string;
 }) {
   return (
-    <button
-      type="button"
+    <Btn
       onClick={onClick}
       disabled={disabled}
-      className={cx(
-        "cf-press inline-flex items-center justify-center gap-[9px] whitespace-nowrap rounded-pill bg-alert px-5 py-[13px] text-sm font-bold tracking-[-0.01em] text-white shadow-card hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40",
-        className,
-      )}
+      className={className}
+      style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
     >
       {children}
-    </button>
+    </Btn>
   );
 }
 

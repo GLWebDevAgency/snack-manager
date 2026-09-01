@@ -132,9 +132,31 @@ export function IngredientDrawer({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const isEdit = current !== null;
   const unit = UNIT_LABELS[draft.unit];
+
+  // Une douzaine de champs vivent en état local : un Échap ou un clic sur le
+  // voile démonte le composant et perd tout. Les deux brouillons sortent de
+  // `draftFrom` avec les mêmes clés dans le même ordre — la comparaison JSON
+  // suffit.
+  const dirty = JSON.stringify(draft) !== JSON.stringify(draftFrom(current));
+
+  /**
+   * Toute demande de fermeture (Échap, voile, croix, bouton du pied) passe
+   * ici : on ignore tant qu'une requête est en vol ou qu'une confirmation est
+   * ouverte (sinon Échap devant « Supprimer ? » démonterait tout), et une
+   * saisie en cours exige une confirmation avant d'être jetée.
+   */
+  function requestClose() {
+    if (saving || deleting || confirmDelete || confirmDiscard) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  }
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -262,7 +284,7 @@ export function IngredientDrawer({
     <>
       <Drawer
         open
-        onClose={onClose}
+        onClose={requestClose}
         title={isEdit ? "Modifier l'ingrédient" : "Nouvel ingrédient"}
         footer={
           <div className="flex items-center gap-2">
@@ -275,8 +297,16 @@ export function IngredientDrawer({
                 Supprimer
               </button>
             )}
-            <Btn variant="ghost" size="sm" onClick={onClose} className="ml-auto">
-              Annuler
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={requestClose}
+              disabled={saving}
+              className="ml-auto"
+            >
+              {/* Après création, l'ingrédient est déjà persisté : le bouton
+                  ferme, il n'annule plus rien. */}
+              {isEdit ? "Fermer" : "Annuler"}
             </Btn>
             <Btn type="submit" size="sm" form="sm-ingredient-form" disabled={saving}>
               {saving ? "Enregistrement…" : "Enregistrer"}
@@ -381,6 +411,25 @@ export function IngredientDrawer({
                 ))}
               </Select>
             </Field>
+            {!isEdit && (
+              <Field
+                label={`Stock initial (${unit})`}
+                htmlFor="ing-stock"
+                error={errors.stock}
+                hint="Ensuite piloté par les mouvements."
+              >
+                <Input
+                  id="ing-stock"
+                  inputMode="decimal"
+                  value={draft.initialStock}
+                  onChange={(e) => set("initialStock", e.target.value)}
+                  placeholder="Ex. 10"
+                  className="tabular-nums"
+                />
+              </Field>
+            )}
+          </div>
+
           {/*
             ── À LA CAISSE ──────────────────────────────────────────────────
             Ces trois champs ne pilotent pas l'inventaire : ils décident de ce
@@ -400,7 +449,8 @@ export function IngredientDrawer({
               <Field
                 label="Prix en supplément"
                 htmlFor="ing-supplement"
-                hint={errors.supplement ?? "Vide = pas proposé. 0 = proposé, offert."}
+                error={errors.supplement}
+                hint="Vide = pas proposé. 0 = proposé, offert."
               >
                 <Input
                   id="ing-supplement"
@@ -439,25 +489,6 @@ export function IngredientDrawer({
                 client peut demander « sans » sur les plats qui en contiennent.
               </span>
             </label>
-          </div>
-
-            {!isEdit && (
-              <Field
-                label={`Stock initial (${unit})`}
-                htmlFor="ing-stock"
-                error={errors.stock}
-                hint="Ensuite piloté par les mouvements."
-              >
-                <Input
-                  id="ing-stock"
-                  inputMode="decimal"
-                  value={draft.initialStock}
-                  onChange={(e) => set("initialStock", e.target.value)}
-                  placeholder="Ex. 10"
-                  className="tabular-nums"
-                />
-              </Field>
-            )}
           </div>
 
           <fieldset>
@@ -515,6 +546,27 @@ export function IngredientDrawer({
           prix le conservent (suppression douce).
         </p>
       </Modal>
+
+      {/* Garde-fou du voile et d'Échap : la saisie ne se jette qu'en le disant. */}
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Abandonner la saisie ?"
+        destructive
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setConfirmDiscard(false)}>
+              Continuer la saisie
+            </Btn>
+            <DangerBtn onClick={onClose}>Fermer sans enregistrer</DangerBtn>
+          </>
+        }
+      >
+        <p className="text-mut">
+          Les champs modifiés ne sont pas enregistrés — fermer le panneau les
+          perd.
+        </p>
+      </Modal>
     </>
   );
 }
@@ -530,6 +582,9 @@ function BrandsEditor({
   const toast = useToast();
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
+  // Marque dont la croix attend une confirmation (id) — le DELETE est immédiat
+  // et la re-création ne rend ni les notes ni le statut préféré.
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const brands = ingredient.brands;
 
   async function add() {
@@ -584,6 +639,7 @@ function BrandsEditor({
       toast(err instanceof ApiError ? err.message : "Suppression impossible");
     } finally {
       setBusy(false);
+      setConfirmRemove(null);
     }
   }
 
@@ -603,42 +659,73 @@ function BrandsEditor({
             key={b.id}
             className="flex items-center gap-2 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] px-3 py-2"
           >
-            <button
-              type="button"
-              onClick={() => setPreferred(b)}
-              disabled={busy}
-              aria-pressed={b.preferred}
-              aria-label={
-                b.preferred
-                  ? `${b.name} : marque préférée — cliquer pour retirer`
-                  : `Définir ${b.name} comme marque préférée`
-              }
-              title={b.preferred ? "Marque préférée" : "Définir comme préférée"}
-              className={cx(
-                "cf-press shrink-0",
-                b.preferred ? "text-gold" : "text-mut hover:text-white",
-              )}
-            >
-              <Icon
-                name="star"
-                size={15}
-                fill={b.preferred ? "currentColor" : "none"}
-              />
-            </button>
-            <span
-              className="min-w-0 flex-1 truncate text-sm text-ink"
-              title={b.notes ?? undefined}
-            >
-              {b.name}
-            </span>
-            <IconBtn
-              icon="close"
-              label={`Supprimer la marque ${b.name}`}
-              size={26}
-              iconSize={12}
-              disabled={busy}
-              onClick={() => remove(b)}
-            />
+            {confirmRemove === b.id ? (
+              /* Confirmation inline (motif ShiftEditor) : pas d'empilement
+                 de modale au-dessus du tiroir pour une petite entité. */
+              <>
+                <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-alertt">
+                  Supprimer « {b.name} » ?
+                </p>
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConfirmRemove(null)}
+                  disabled={busy}
+                >
+                  Annuler
+                </Btn>
+                <Btn
+                  variant="ink"
+                  size="sm"
+                  className="text-alertt"
+                  onClick={() => void remove(b)}
+                  disabled={busy}
+                >
+                  Supprimer
+                </Btn>
+              </>
+            ) : (
+              <>
+                {/* Pas un IconBtn : l'étoile a besoin de `fill` pour dire
+                    « préférée » — on lui donne juste la cible de 32 px. */}
+                <button
+                  type="button"
+                  onClick={() => setPreferred(b)}
+                  disabled={busy}
+                  aria-pressed={b.preferred}
+                  aria-label={
+                    b.preferred
+                      ? `${b.name} : marque préférée — cliquer pour retirer`
+                      : `Définir ${b.name} comme marque préférée`
+                  }
+                  title={b.preferred ? "Marque préférée" : "Définir comme préférée"}
+                  className={cx(
+                    "cf-press flex size-8 shrink-0 items-center justify-center rounded-pill",
+                    b.preferred ? "text-gold" : "text-mut hover:text-white",
+                  )}
+                >
+                  <Icon
+                    name="star"
+                    size={15}
+                    fill={b.preferred ? "currentColor" : "none"}
+                  />
+                </button>
+                <span
+                  className="min-w-0 flex-1 truncate text-sm text-ink"
+                  title={b.notes ?? undefined}
+                >
+                  {b.name}
+                </span>
+                <IconBtn
+                  icon="close"
+                  label={`Supprimer la marque ${b.name}`}
+                  size={32}
+                  iconSize={13}
+                  disabled={busy}
+                  onClick={() => setConfirmRemove(b.id)}
+                />
+              </>
+            )}
           </li>
         ))}
       </ul>

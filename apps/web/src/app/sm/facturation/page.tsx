@@ -67,10 +67,36 @@ import {
 /** Le geste ouvert sur une créance — une seule modale à la fois. */
 type Gesture = { row: OverdueRow; kind: "relancer" | "encaisser" | "annuler" };
 
+/**
+ * Ce que chaque chiffre de tête compte EXACTEMENT — la définition qui évite
+ * les mauvaises conclusions. Servie deux fois : en infobulle `title` pour la
+ * souris, et en `sr-only` au bout du hint pour le clavier, le doigt et le
+ * lecteur d'écran — un `title` posé sur un <div> n'est atteignable qu'au
+ * survol.
+ */
+const DEFINITIONS = {
+  mrr:
+    "Somme des abonnements des clients ACTIFS sans facture échue. Les comptes suspendus et les clients en retard en sont exclus ; les essais et les clients partis ne sont facturés ni d'un côté ni de l'autre.",
+  totalDu:
+    "Somme des factures ÉCHUES et non réglées du parc. Une facture envoyée dont l'échéance n'est pas passée n'est pas un impayé : elle n'entre pas dans ce total.",
+  retard:
+    "Nombre de RESTAURANTS concernés — deux factures d'un même client ne font qu'un appel.",
+  ancien:
+    `Ancienneté de la plus vieille créance du parc, recalculée à chaque lecture. Au-delà de ${MISE_EN_DEMEURE_DAYS} jours, la relance téléphonique ne suffit plus.`,
+} as const;
+
+/**
+ * Le hint des chiffres quand /crm/billing/overdue est tombée : chaque carte
+ * qui dépend de la file affiche « — » plutôt qu'un zéro rassurant — l'en-tête
+ * interdit d'annoncer un parc à jour sur une requête tombée.
+ */
+const QUEUE_DOWN_HINT = "Route /crm/billing/overdue indisponible";
+
 export default function FacturationPage() {
   const [queue, setQueue] = useState<BillingQueue | null>(null);
   const [park, setPark] = useState<ParkTenant[] | null>(null);
   const [queueFailed, setQueueFailed] = useState(false);
+  const [parkFailed, setParkFailed] = useState(false);
   const [gesture, setGesture] = useState<Gesture | null>(null);
   const [tick, setTick] = useState(0);
 
@@ -99,10 +125,14 @@ export default function FacturationPage() {
     billingApi
       .park()
       .then((raw) => {
-        if (!cancelled) setPark(readPark(raw));
+        if (cancelled) return;
+        setPark(readPark(raw));
+        setParkFailed(false);
       })
       .catch(() => {
-        if (!cancelled) setPark([]);
+        if (cancelled) return;
+        setPark([]);
+        setParkFailed(true);
       });
 
     return () => {
@@ -140,23 +170,40 @@ export default function FacturationPage() {
   const oldestTone: Tone =
     queue.oldestDays >= MISE_EN_DEMEURE_DAYS ? "alert" : step ? "prep" : "mut";
   const parkKnown = park !== null && park.length > 0;
+  // Trois silences distincts derrière un même « — » : le parc encore en route
+  // (le squelette de tête ne couvre que la file), la route tombée, ou un parc
+  // réellement vide. Chacun son libellé — aucun ne laisse croire l'autre.
+  const parkHint = parkFailed
+    ? "Route /crm/tenants indisponible"
+    : park === null
+      ? "Parc en cours de chargement…"
+      : "Aucun client au parc";
 
   return (
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/* ── Les quatre chiffres de tête ── */}
       <div className="flex flex-wrap items-stretch gap-4 max-md:gap-3">
+        {/* Sans la file, l'« encaissé » compterait tout le parc comme à
+            jour — le mensonge exact que l'en-tête interdit. Donc « — ». */}
         <BillingKpi
           label="MRR encaissé"
           icon="euro"
-          value={parkKnown ? euroRound(mrr.collectedCents) : "—"}
-          hint={
-            !parkKnown
-              ? "Parc non chargé"
-              : mrr.atRiskCents > 0
-                ? `${euroRound(mrr.atRiskCents)} à risque sur ${euroRound(mrr.billedCents)} facturés`
-                : `${int(mrr.onTime)} client${mrr.onTime > 1 ? "s" : ""} à jour, rien à relancer`
+          value={
+            parkKnown && !queueFailed ? euroRound(mrr.collectedCents) : "—"
           }
-          title="Somme des abonnements des clients ACTIFS sans facture échue. Les comptes suspendus et les clients en retard en sont exclus ; les essais et les clients partis ne sont facturés ni d'un côté ni de l'autre."
+          hint={
+            <>
+              {queueFailed
+                ? QUEUE_DOWN_HINT
+                : !parkKnown
+                  ? parkHint
+                  : mrr.atRiskCents > 0
+                    ? `${euroRound(mrr.atRiskCents)} à risque sur ${euroRound(mrr.billedCents)} facturés`
+                    : `${int(mrr.onTime)} client${mrr.onTime > 1 ? "s" : ""} à jour, rien à relancer`}
+              <span className="sr-only"> {DEFINITIONS.mrr}</span>
+            </>
+          }
+          title={DEFINITIONS.mrr}
         />
         {/*
           Total dû et clients en retard restent NEUTRES, même quand ils ne sont
@@ -167,30 +214,40 @@ export default function FacturationPage() {
         <BillingKpi
           label="Total dû"
           icon="ticket"
-          value={queue.totalLabel}
+          value={queueFailed ? "—" : queue.totalLabel}
           hint={
-            queue.count === 0
-              ? "Aucune facture échue"
-              : `${int(queue.count)} facture${queue.count > 1 ? "s" : ""} échue${queue.count > 1 ? "s" : ""}`
+            <>
+              {queueFailed
+                ? QUEUE_DOWN_HINT
+                : queue.count === 0
+                  ? "Aucune facture échue"
+                  : `${int(queue.count)} facture${queue.count > 1 ? "s" : ""} échue${queue.count > 1 ? "s" : ""}`}
+              <span className="sr-only"> {DEFINITIONS.totalDu}</span>
+            </>
           }
-          title="Somme des factures ÉCHUES et non réglées du parc. Une facture envoyée dont l'échéance n'est pas passée n'est pas un impayé : elle n'entre pas dans ce total."
+          title={DEFINITIONS.totalDu}
         />
         <BillingKpi
           label="Clients en retard"
           icon="user"
-          value={int(queue.tenants)}
+          value={queueFailed ? "—" : int(queue.tenants)}
           hint={
-            queue.tenants === 0
-              ? parkKnown
-                ? `sur ${int(mrr.clients)} client${mrr.clients > 1 ? "s" : ""} au parc`
-                : "personne à relancer"
-              : `${int(queue.tenants)} appel${queue.tenants > 1 ? "s" : ""} à passer${
-                  parkKnown
-                    ? ` · parc de ${int(mrr.clients)} client${mrr.clients > 1 ? "s" : ""}`
-                    : ""
-                }`
+            <>
+              {queueFailed
+                ? QUEUE_DOWN_HINT
+                : queue.tenants === 0
+                  ? parkKnown
+                    ? `sur ${int(mrr.clients)} client${mrr.clients > 1 ? "s" : ""} au parc`
+                    : "personne à relancer"
+                  : `${int(queue.tenants)} appel${queue.tenants > 1 ? "s" : ""} à passer${
+                      parkKnown
+                        ? ` · parc de ${int(mrr.clients)} client${mrr.clients > 1 ? "s" : ""}`
+                        : ""
+                    }`}
+              <span className="sr-only"> {DEFINITIONS.retard}</span>
+            </>
           }
-          title="Nombre de RESTAURANTS concernés — deux factures d'un même client ne font qu'un appel."
+          title={DEFINITIONS.retard}
         />
         <BillingKpi
           label="Plus ancien impayé"
@@ -198,16 +255,21 @@ export default function FacturationPage() {
           tone={oldestTone}
           value={queue.oldestDays > 0 ? fmtDays(queue.oldestDays) : "—"}
           hint={
-            queue.oldestDays === 0
-              ? "Aucune créance en cours"
-              : queue.oldestDays >= MISE_EN_DEMEURE_DAYS
-                ? // On nomme le SEUIL plutôt que de répéter le nombre de jours
-                  // affiché juste au-dessus : c'est la règle franchie qui
-                  // explique la couleur, pas le chiffre.
-                  `Seuil des ${MISE_EN_DEMEURE_DAYS} j franchi — ${step?.geste ?? "à traiter"}`
-                : (step?.geste ?? "À traiter")
+            <>
+              {queueFailed
+                ? QUEUE_DOWN_HINT
+                : queue.oldestDays === 0
+                  ? "Aucune créance en cours"
+                  : queue.oldestDays >= MISE_EN_DEMEURE_DAYS
+                    ? // On nomme le SEUIL plutôt que de répéter le nombre de
+                      // jours affiché juste au-dessus : c'est la règle franchie
+                      // qui explique la couleur, pas le chiffre.
+                      `Seuil des ${MISE_EN_DEMEURE_DAYS} j franchi — ${step?.geste ?? "à traiter"}`
+                    : (step?.geste ?? "À traiter")}
+              <span className="sr-only"> {DEFINITIONS.ancien}</span>
+            </>
           }
-          title={`Ancienneté de la plus vieille créance du parc, recalculée à chaque lecture. Au-delà de ${MISE_EN_DEMEURE_DAYS} jours, la relance téléphonique ne suffit plus.`}
+          title={DEFINITIONS.ancien}
         />
       </div>
 

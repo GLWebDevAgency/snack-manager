@@ -20,15 +20,108 @@
  *    est, le geste de sortie reste toujours sous le pouce.
  */
 
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import { IconBtn } from "@/components/ui";
+
+/**
+ * DISCIPLINE COMMUNE des deux feuilles — la même que celle du tiroir
+ * (`HqDrawer`, parts.tsx), pour que toutes les modales du CRM se comportent
+ * pareil au clavier :
+ *
+ *  · le focus ENTRE dans le dialogue à l'ouverture (sans voler un champ
+ *    `autoFocus` qui l'a déjà pris) et REVIENT au déclencheur à la fermeture
+ *    — sans quoi Tab continuait de parcourir la page recouverte, et sur un
+ *    geste grave (suspension, révocation) c'est le moment où l'on se trompe ;
+ *  · Tab reste PIÉGÉ dans le dialogue — `aria-modal` le promet ;
+ *  · Échap ferme, sauf sous garde ;
+ *  · le défilement de la coquille est VERROUILLÉ pendant l'ouverture — la
+ *    feuille vit DANS la page, et sans verrou la molette sur le voile ou le
+ *    bout de course du corps faisait défiler le `<main>` derrière : à la
+ *    fermeture, l'écran n'était plus là où on l'avait laissé.
+ *
+ * Le panneau rendu porte la ref retournée et `tabIndex={-1}`.
+ */
+function useFeuille(open: boolean, garde: boolean, onClose: () => void) {
+  const panneau = useRef<HTMLDivElement>(null);
+  // Lus par les effets sans les réabonner — l'idiome du tiroir.
+  const gardeRef = useRef(garde);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    gardeRef.current = garde;
+    closeRef.current = onClose;
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !gardeRef.current) closeRef.current();
+      // `aria-modal` promet que Tab reste dans le dialogue : on boucle
+      // premier ↔ dernier et on rapatrie un focus égaré derrière le voile.
+      if (e.key === "Tab" && panneau.current) {
+        const focusables = panneau.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        const premier = focusables[0];
+        const dernier = focusables[focusables.length - 1];
+        if (!premier || !dernier) return;
+        const actif = document.activeElement;
+        if (!panneau.current.contains(actif)) {
+          e.preventDefault();
+          premier.focus();
+        } else if (e.shiftKey && (actif === premier || actif === panneau.current)) {
+          e.preventDefault();
+          dernier.focus();
+        } else if (!e.shiftKey && actif === dernier) {
+          e.preventDefault();
+          premier.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const declencheur =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Un champ `autoFocus` (Suspendre, Réactiver…) a déjà pris le focus au
+    // montage : on ne le lui vole pas.
+    if (!panneau.current?.contains(document.activeElement)) panneau.current?.focus();
+    return () => declencheur?.focus();
+  }, [open]);
+
+  // Le verrou de défilement : on remonte jusqu'au conteneur qui défile
+  // réellement derrière (le `<main>` de la coquille) et on le fige. Retiré
+  // plutôt que restauré à la fermeture, pour que deux feuilles empilées ne
+  // laissent jamais la coquille figée.
+  useEffect(() => {
+    if (!open) return;
+    let coquille: HTMLElement | null = null;
+    for (let el = panneau.current?.parentElement ?? null; el; el = el.parentElement) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) {
+        coquille = el;
+        break;
+      }
+    }
+    const cible = coquille ?? document.documentElement;
+    cible.style.setProperty("overflow-y", "hidden");
+    return () => {
+      cible.style.removeProperty("overflow-y");
+    };
+  }, [open]);
+
+  return panneau;
+}
 
 /**
  * MODALE-FEUILLE : la modale du design system au-dessus de `md`, une feuille
  * plein écran en dessous. Même contrat d'appel que `Modal` — le remplacement
  * dans un écran est mécanique, aucun comportement ne change côté bureau :
- * Échap ferme (sauf destructive), le voile ferme (sauf destructive), le pied
+ * Échap et le voile ferment — sauf feuille destructive, et sauf saisie
+ * entamée, pour qu'un brouillon ne se perde pas d'un mis-clic —, le pied
  * porte les gestes.
  */
 export function SheetModal({
@@ -51,14 +144,17 @@ export function SheetModal({
   /** Largeur max du panneau AU-DESSUS de `md` (défaut 440). */
   width?: number;
 }) {
+  // Dès qu'un champ a été touché, voile et Échap ne ferment plus : la
+  // citation d'un départ ou le motif d'un avoir ne se perdent pas d'un
+  // mis-clic. La croix et le pied restent les fermetures explicites, et une
+  // feuille rouverte repart vierge — le brouillon appartient à l'ouverture.
+  const [saisie, setSaisie] = useState(false);
   useEffect(() => {
-    if (!open || destructive) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, destructive, onClose]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- remise à zéro du brouillon à la fermeture : un booléen, aucune cascade.
+    if (!open) setSaisie(false);
+  }, [open]);
+
+  const panneau = useFeuille(open, destructive || saisie, onClose);
 
   if (!open) return null;
 
@@ -69,12 +165,14 @@ export function SheetModal({
       aria-modal="true"
       aria-label={typeof title === "string" ? title : undefined}
       onClick={() => {
-        if (!destructive) onClose();
+        if (!destructive && !saisie) onClose();
       }}
     >
       <div
+        ref={panneau}
+        tabIndex={-1}
         className={cx(
-          "flex flex-col bg-[image:var(--cf-card-gradient)]",
+          "flex flex-col bg-[image:var(--cf-card-gradient)] outline-none",
           // Feuille : tout l'écran, sans rayon — un panneau arrondi qui touche
           // les quatre bords se lit comme un bug, pas comme un choix.
           "max-md:h-dvh max-md:w-full max-md:animate-[cf-slide-in_.28s_var(--sm-ease)_both]",
@@ -84,6 +182,7 @@ export function SheetModal({
         )}
         style={{ "--sm-feuille-l": `${width}px` } as CSSProperties}
         onClick={(e) => e.stopPropagation()}
+        onInput={() => setSaisie(true)}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line2 px-4 py-3.5 md:px-5">
           <h2 className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink">
@@ -91,13 +190,16 @@ export function SheetModal({
           </h2>
           <IconBtn icon="close" label="Fermer" size={36} iconSize={16} onClick={onClose} />
         </div>
-        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 text-sm text-ink md:px-5">
+        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 text-sm text-ink md:px-5">
           {children}
         </div>
         {footer && (
           <div
             className={cx(
-              "flex shrink-0 items-center justify-end gap-2 border-t border-line2 px-4 py-3.5 md:px-5",
+              // `flex-wrap` : deux gestes larges — « Émettre l'avoir (1 234,56 €) »
+              // face à « Annuler » — passent l'un sous l'autre sur un petit
+              // écran au lieu de rogner le montant contre le bord.
+              "flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line2 px-4 py-3.5 md:px-5",
               // Le pied reste sous le pouce : boutons étirés, ≥ 44 px, et la
               // marge de sécurité des encoches en plus du rembourrage.
               "max-md:pb-[calc(14px+env(safe-area-inset-bottom))] max-md:[&>a]:min-h-11 max-md:[&>a]:flex-1 max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1",
@@ -128,14 +230,7 @@ export function BottomSheet({
   title: ReactNode;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const panneau = useFeuille(open, false, onClose);
 
   if (!open) return null;
 
@@ -158,7 +253,11 @@ export function BottomSheet({
         onClick={onClose}
         aria-hidden
       />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[82dvh] animate-[sm-feuille-monte_.26s_var(--sm-ease)_both] flex-col rounded-t-panel border-t border-white/10 bg-[image:var(--cf-card-gradient)] shadow-deep">
+      <div
+        ref={panneau}
+        tabIndex={-1}
+        className="absolute inset-x-0 bottom-0 flex max-h-[82dvh] animate-[sm-feuille-monte_.26s_var(--sm-ease)_both] flex-col rounded-t-panel border-t border-white/10 bg-[image:var(--cf-card-gradient)] shadow-deep outline-none"
+      >
         {/* Poignée : l'affordance universelle « ceci se referme vers le bas ». */}
         <div className="grid shrink-0 place-items-center pb-1 pt-2" aria-hidden>
           <span className="h-1 w-9 rounded-pill bg-white/20" />
@@ -169,7 +268,7 @@ export function BottomSheet({
           </h2>
           <IconBtn icon="close" label="Fermer" size={36} iconSize={16} onClick={onClose} />
         </div>
-        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-[calc(14px+env(safe-area-inset-bottom))]">
+        <div className="cf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[calc(14px+env(safe-area-inset-bottom))]">
           {children}
         </div>
       </div>

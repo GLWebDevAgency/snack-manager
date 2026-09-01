@@ -21,17 +21,24 @@
  *
  * Le mode brouillon est proposé EN PREMIER et coché par défaut : il pose les
  * pièces sans créer de créance, ce qui laisse relire avant d'envoyer. Émettre
- * directement reste possible — c'est un clic de plus, délibérément.
+ * directement reste possible — derrière une confirmation qui nomme le mois et
+ * la portée, comme l'envoi d'UNE facture depuis la fiche client : le geste de
+ * masse ne mérite pas moins de relecture que le geste unitaire.
  */
 
 import { useState } from "react";
 import {
   BILLING_RUN_SKIP_LABELS,
+  billingPeriod,
+  isPeriodKeyShape,
   type BillingRunReport,
   type BillingRunSkip,
 } from "@sm/contracts";
-import { Btn, Card, Field, Icon, Input, Toggle, useToast } from "@/components/ui";
-import { billingApi } from "./data";
+import { Btn, Field, Icon, Input, Panel, Toggle, useToast } from "@/components/ui";
+// La modale-feuille locale à `/sm` : la modale du design system au bureau,
+// une feuille plein écran sur téléphone (même choix que `./ui`).
+import { SheetModal } from "../mobile";
+import { billingApi, errText } from "./data";
 
 /** Le mois courant en `AAAA-MM` — ce que l'API attend et ce qu'un `<input type="month">` rend. */
 function moisCourant(): string {
@@ -45,10 +52,22 @@ export function RunMensuel({ onDone }: { onDone: () => void }) {
   const [draft, setDraft] = useState(true);
   const [busy, setBusy] = useState(false);
   const [rapport, setRapport] = useState<BillingRunReport | null>(null);
+  // L'échec reste À L'ÉCRAN, comme le succès a son Rapport : le compte rendu
+  // du geste de masse le plus lourd de l'écran ne part pas dans un toast.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  // Confirmation d'émission directe — le brouillon, lui, ne crée rien : il
+  // part sans cérémonie.
+  const [confirmation, setConfirmation] = useState(false);
+
+  // Le mois visé, en toutes lettres. Garde de forme : un `<input type="month">`
+  // peut être vidé, et `billingPeriod` refuse une clé invalide — l'API
+  // tranchera, ici on affiche au pire la valeur brute.
+  const labelPeriode = isPeriodKeyShape(period) ? billingPeriod(period).label : period || "—";
 
   async function run() {
     if (busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       const r = (await billingApi.runMensuel({ period, draft })) as BillingRunReport;
       setRapport(r);
@@ -60,27 +79,28 @@ export function RunMensuel({ onDone }: { onDone: () => void }) {
       );
       onDone();
     } catch (e) {
-      toast(
-        e instanceof Error && e.message
-          ? e.message
-          : "La passe a échoué — aucune facture n’a été posée. Réessayez.",
-      );
+      // `errText`, comme partout sur la surface : jamais un « Validation
+      // failed » anglais ni le message d'une TypeError interne à l'écran.
+      setRefusal(errText(e, "La passe a échoué — aucune facture n’a été posée. Réessayez."));
     } finally {
       setBusy(false);
+      // Succès ou refus, la suite se lit dans la carte : la modale se ferme.
+      setConfirmation(false);
     }
   }
 
   return (
-    <Card>
+    <Panel
+      title="Facturer le mois"
+      sub={
+        <>
+          Pose une pièce d&apos;abonnement pour chaque client facturable, au
+          montant de son offre — module, services et remise fondateur compris.
+          Relancer la passe ne double rien.
+        </>
+      }
+    >
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-bold text-ink">Facturer le mois</div>
-          <p className="mt-1 max-w-[60ch] text-[13px] text-mut">
-            Pose une pièce d&apos;abonnement pour chaque client facturable, au
-            montant de son offre — module, services et remise fondateur
-            compris. Relancer la passe ne double rien.
-          </p>
-        </div>
         <Field label="Mois" htmlFor="run-period" className="w-[170px]">
           <Input
             id="run-period"
@@ -89,16 +109,22 @@ export function RunMensuel({ onDone }: { onDone: () => void }) {
             onChange={(e) => setPeriod(e.target.value)}
           />
         </Field>
-        <div className="flex items-center gap-2 pb-1">
+        {/* Le mot vit DANS un <label> : le bouton du Toggle est l'élément
+            étiquetable, donc toucher « Brouillon » bascule l'interrupteur —
+            le libellé visible est une cible, pas une décoration. */}
+        <label className="flex cursor-pointer select-none items-center gap-2 pb-1">
           <span className="text-xs text-mut">Brouillon</span>
           <Toggle on={draft} label="Poser en brouillon" onChange={setDraft} />
-        </div>
+        </label>
         <Btn
           variant="primary"
           size="sm"
           icon="euro"
           disabled={busy}
-          onClick={() => void run()}
+          onClick={() => {
+            if (draft) void run();
+            else setConfirmation(true);
+          }}
           className="mb-1"
         >
           {busy ? "En cours…" : draft ? "Poser les brouillons" : "Émettre les factures"}
@@ -112,8 +138,77 @@ export function RunMensuel({ onDone }: { onDone: () => void }) {
         </p>
       )}
 
+      {refusal && <Refusal message={refusal} />}
+
       {rapport && <Rapport rapport={rapport} />}
-    </Card>
+
+      {/* La confirmation nomme le mois et la portée — même contrat que l'envoi
+          d'UNE facture depuis la fiche client : un « Confirmer ? » anonyme sur
+          un geste irréversible ne fait pas relire, il fait cliquer. */}
+      {confirmation && (
+        <SheetModal
+          open
+          onClose={() => setConfirmation(false)}
+          title={`Facturer ${labelPeriode}`}
+          footer={
+            <>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirmation(false)}
+                disabled={busy}
+              >
+                Annuler
+              </Btn>
+              <Btn
+                variant="primary"
+                size="sm"
+                icon="euro"
+                disabled={busy}
+                onClick={() => void run()}
+              >
+                {busy ? "En cours…" : "Émettre les factures"}
+              </Btn>
+            </>
+          }
+        >
+          <p className="text-[13px] text-mut">
+            Une facture d&apos;abonnement part pour{" "}
+            <strong className="text-ink">chaque client facturable du parc</strong>,
+            période <strong className="text-ink">{labelPeriode}</strong> — au
+            montant de son offre.
+          </p>
+          <p className="mt-2 flex items-start gap-2 text-[13px] text-mut">
+            <Icon name="bell" size={16} className="mt-[2px] shrink-0 text-prept" />
+            <span>
+              L&apos;émission crée les créances et fixe le point de départ des
+              relances. Une facture partie ne s&apos;efface pas : elle
+              s&apos;annule une à une, avec un motif qui reste au dossier.
+            </span>
+          </p>
+        </SheetModal>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * LE REFUS, À DEMEURE — même pièce que `Refusal` de `./ui`, redéfinie ici pour
+ * la même raison que ses pastilles : pas de dépendance croisée entre modules
+ * en cours d'écriture pour huit lignes, et le langage visuel reste identique
+ * au trait près. Le refus reste affiché tant qu'une passe n'a pas abouti.
+ */
+function Refusal({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mt-4 flex items-start gap-2.5 rounded-card border border-alert/50 bg-alert/10 p-3"
+    >
+      <Icon name="bell" size={16} className="mt-px shrink-0 text-alertt" />
+      <p className="min-w-0 text-[13px] font-semibold leading-[1.45] text-alertt">
+        {message}
+      </p>
+    </div>
   );
 }
 

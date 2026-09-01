@@ -56,12 +56,17 @@ export function CoutsHorairesModal({
     Object.fromEntries(costs.members.map((m) => [m.id, enEuros(m.hourlyCostCents)])),
   );
   const [busy, setBusy] = useState(false);
+  // Les taux réellement écrits pendant cette feuille : après un échec au
+  // milieu de la série, ils font référence — sans quoi « Enregistrer (N) »
+  // recompterait les lignes déjà passées et les ré-écrirait au clic suivant.
+  const [ecrits, setEcrits] = useState<Record<string, number | null>>({});
 
   // Ce qui a bougé, et lui seul : renvoyer les taux inchangés écrirait des
   // lignes de journal pour rien, et ferait croire à une modification de paie.
-  const modifies = costs.members.filter(
-    (m) => enCentimes(valeurs[m.id] ?? "") !== m.hourlyCostCents,
-  );
+  const modifies = costs.members.filter((m) => {
+    const reference = m.id in ecrits ? (ecrits[m.id] ?? null) : m.hourlyCostCents;
+    return enCentimes(valeurs[m.id] ?? "") !== reference;
+  });
   const invalides = costs.members.filter((m) => {
     const brut = (valeurs[m.id] ?? "").trim();
     return brut !== "" && enCentimes(brut) === null;
@@ -75,9 +80,23 @@ export function CoutsHorairesModal({
       // erreur au milieu doit laisser un état lisible plutôt qu'un panachage
       // dont on ne sait plus ce qui est passé.
       for (const m of modifies) {
-        await api.put(`/planning/staff-costs/${m.id}`, {
-          hourlyCostCents: enCentimes(valeurs[m.id] ?? ""),
-        });
+        const cents = enCentimes(valeurs[m.id] ?? "");
+        try {
+          await api.put(`/planning/staff-costs/${m.id}`, { hourlyCostCents: cents });
+        } catch (e) {
+          // Échec au milieu de la série : nommer qui bloque. Les lignes déjà
+          // écrites sont consignées dans `ecrits` — le bouton ne recompte que
+          // le reste, et un nouveau clic ne les ré-écrit pas.
+          toast(
+            `${m.name} — ${
+              e instanceof Error && e.message
+                ? e.message
+                : "enregistrement impossible, vérifiez le montant et réessayez."
+            }`,
+          );
+          return;
+        }
+        setEcrits((s) => ({ ...s, [m.id]: cents }));
       }
       toast(
         modifies.length === 1
@@ -86,26 +105,27 @@ export function CoutsHorairesModal({
         { icon: "check" },
       );
       onDone();
-      onClose();
-    } catch (e) {
-      toast(
-        e instanceof Error && e.message
-          ? e.message
-          : "Enregistrement impossible — vérifiez les montants et réessayez.",
-      );
+      onClose(); // et non `fermer` : busy est encore vrai ici, à dessein.
     } finally {
       setBusy(false);
     }
   }
 
+  // Échap, le voile, la croix et « Annuler » passent tous par ici : pendant
+  // l'écriture, fermer laisserait la série de PUT de paie continuer en
+  // coulisse alors que la personne croit avoir interrompu.
+  const fermer = () => {
+    if (!busy) onClose();
+  };
+
   return (
     <SheetModal
       open
-      onClose={onClose}
+      onClose={fermer}
       title="Coûts horaires de l’équipe"
       footer={
         <>
-          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+          <Btn variant="ghost" size="sm" onClick={fermer} disabled={busy}>
             Annuler
           </Btn>
           <Btn
@@ -143,7 +163,7 @@ export function CoutsHorairesModal({
               key={m.id}
               label={`${m.name} — ${m.role}`}
               htmlFor={`cout-${m.id}`}
-              hint={invalide ? "Montant illisible — un nombre, par exemple 14,50" : undefined}
+              error={invalide ? "Montant illisible — un nombre, par exemple 14,50" : undefined}
             >
               <div className="flex items-center gap-2">
                 <Input

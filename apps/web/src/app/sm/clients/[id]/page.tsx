@@ -31,7 +31,7 @@
  */
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import {
   EMPTY_SERVICES,
   DEFAULT_TENANT_ACCOUNT_STATUS,
@@ -40,6 +40,7 @@ import {
   type AdminPlan,
 } from "@sm/contracts";
 import { ApiError } from "@/lib/api";
+import { cx } from "@/lib/cx";
 import { Btn, Card, EmptyState, Icon, Skeleton } from "@/components/ui";
 import { euroRound, fmtDay, fmtMonth, int } from "../../crm";
 import { resumeAtelier } from "../../parts";
@@ -77,8 +78,17 @@ export default function ClientFilePage({
   const { id } = use(params);
 
   const [file, setFile] = useState<ClientFile | null>(null);
+  // Miroir de `file` lisible depuis l'effet sans figurer dans ses dépendances :
+  // c'est lui qui permet de refuser d'écraser une fiche affichée et juste.
+  const fileRef = useRef<ClientFile | null>(null);
   const [error, setError] = useState<"forbidden" | "failed" | null>(null);
   const [tick, setTick] = useState(0);
+  // Rechargement alors qu'une fiche est déjà à l'écran : l'état affiché est
+  // périmé le temps que les routes répondent — il se voile et se gèle.
+  const [rechargement, setRechargement] = useState(false);
+  // Le dernier rafraîchissement de fond est revenu entièrement muet : la
+  // fiche affichée date d'avant le geste, et un bandeau le dit.
+  const [rafraichissementMuet, setRafraichissementMuet] = useState(false);
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
   const [modal, setModal] = useState<
@@ -88,21 +98,44 @@ export default function ClientFilePage({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- le drapeau de rechargement se lève AVANT le départ de la requête ; un booléen, aucune cascade.
+    setRechargement(true);
     loadClientFile(id)
       .then((f) => {
         if (cancelled) return;
-        setFile(f);
+        setRechargement(false);
+        // ── UN RAFRAÎCHISSEMENT DE FOND NE REMPLACE PAS UNE FICHE JUSTE ──
+        // Après un geste, `reload()` relance tout ; si le CRM tousse à ce
+        // moment-là, `soft()` rend une fiche entièrement vide (`row` et
+        // `account` nuls, tous deux « offline »). L'écraser afficherait
+        // « Fiche indisponible » par-dessus une fiche que l'opérateur avait
+        // sous les yeux, en plein appel. On garde l'ancienne et on le dit.
+        const muet =
+          !f.row && !f.account && f.offline.has("row") && f.offline.has("account");
+        const avant = fileRef.current;
+        if (muet && avant && (avant.row || avant.account)) {
+          setRafraichissementMuet(true);
+        } else {
+          fileRef.current = f;
+          setFile(f);
+          setRafraichissementMuet(false);
+        }
         setError(null);
       })
       .catch((e) => {
         if (cancelled) return;
+        setRechargement(false);
         // 401/403 : la coquille `/sm` s'occupe de renvoyer l'utilisateur au bon
         // endroit. On affiche quand même un écran propre le temps du saut.
-        setError(
-          e instanceof ApiError && (e.status === 401 || e.status === 403)
-            ? "forbidden"
-            : "failed",
-        );
+        const forbidden =
+          e instanceof ApiError && (e.status === 401 || e.status === 403);
+        // Même règle qu'au-dessus : un échec de rafraîchissement ne vaut pas
+        // un écran d'erreur tant qu'une fiche est déjà affichée.
+        if (!forbidden && fileRef.current) {
+          setRafraichissementMuet(true);
+          return;
+        }
+        setError(forbidden ? "forbidden" : "failed");
       });
     return () => {
       cancelled = true;
@@ -123,9 +156,26 @@ export default function ClientFilePage({
             hint={
               error === "forbidden"
                 ? "Ce dossier traverse les données de tous les restaurants du parc."
-                : "L'API n'a pas répondu. Rechargez la page — si le problème persiste, vérifiez que le service tourne."
+                : "L'API n'a pas répondu. Réessayez — si le problème persiste, vérifiez que le service tourne."
             }
-            action={<BackLink />}
+            action={
+              error === "forbidden" ? (
+                <BackLink />
+              ) : (
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Btn
+                    size="sm"
+                    onClick={() => {
+                      setError(null);
+                      reload();
+                    }}
+                  >
+                    Réessayer
+                  </Btn>
+                  <BackLink />
+                </div>
+              )
+            }
           />
         </Card>
       </div>
@@ -158,7 +208,14 @@ export default function ClientFilePage({
               icon="bell"
               title="Fiche indisponible"
               hint="Le CRM n’a pas répondu — ni le parc, ni le compte de cet établissement. Le lien est probablement bon : réessayez dans un instant."
-              action={<BackLink />}
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Btn size="sm" onClick={reload} disabled={rechargement}>
+                    {rechargement ? "Chargement…" : "Réessayer"}
+                  </Btn>
+                  <BackLink />
+                </div>
+              }
             />
           ) : (
             <EmptyState
@@ -181,220 +238,259 @@ export default function ClientFilePage({
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       <BackLink />
 
-      {/* ── En-tête : qui c'est, où il en est, ce qu'on peut faire ── */}
-      <Card className="p-[18px]">
-        <div className="flex flex-wrap items-start gap-4">
-          <div
-            className="grid size-[52px] shrink-0 place-items-center rounded-card bg-accent text-2xl font-extrabold text-onaccent"
-            aria-hidden
-          >
-            {name.trim().charAt(0).toUpperCase()}
-          </div>
-
+      {rafraichissementMuet && (
+        <div className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="min-w-0 truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
-                {name}
-              </h2>
-              {(account?.founderSeat ?? row?.founderSeat) && (
-                <BadgeFondateur size={26} />
-              )}
-              <PlanPill plan={plan} />
-              <AccountPill status={status ?? DEFAULT_TENANT_ACCOUNT_STATUS} />
-              <ScorePill score={file.score} health={file.health} />
-            </div>
-
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-mut">
-              {file.city && (
-                <Meta icon="home">{file.city}</Meta>
-              )}
-              {row && <Meta icon="clock">client depuis {fmtMonth(row.since)}</Meta>}
-              {file.contact.phone && (
-                <Meta icon="phone">
-                  {file.contact.phone}
-                  {file.contact.name && ` · ${file.contact.name}`}
-                </Meta>
-              )}
-              {file.contact.email && <Meta icon="edit">{file.contact.email}</Meta>}
-              {row && (
-                <Meta icon="euro">{euroRound(row.mrrCents)} / mois estimés</Meta>
-              )}
-              {/* L'Atelier signé — « qui a quoi ? » se lit ici, pas dans la
-                  facturation : c'est le travail dû, présence à tenir comprise. */}
-              {account?.atelier && (
-                <Meta icon="gear">
-                  Atelier : {resumeAtelier(account.atelier)} — signé le{" "}
-                  {fmtDay(account.atelier.signedAt)}
-                </Meta>
-              )}
-            </div>
-
-            {blocked && account && (
-              <p className="mt-2.5 flex items-start gap-2 rounded-card border border-alert/45 bg-alert/10 p-2.5 text-[13px] font-bold text-alertt">
-                <Icon name="bell" size={15} className="mt-px shrink-0" />
-                <span>
-                  Accès suspendu depuis le {fmtDay(account.account.since)}
-                  {account.account.reason && ` — ${account.account.reason}`}
-                </span>
-              </p>
-            )}
+            <Unavailable
+              icon="bell"
+              title="Rafraîchissement impossible"
+              hint="Le CRM n'a pas répondu : la fiche affichée reste celle d'avant votre dernier geste."
+            />
           </div>
+          <Btn size="sm" variant="ghost" onClick={reload} disabled={rechargement}>
+            {rechargement ? "Chargement…" : "Réessayer"}
+          </Btn>
+        </div>
+      )}
 
-          {/* ── Les actions — pleine largeur sous `md`, « Appeler » en tête et
-              à hauteur de pouce : c'est le geste pour lequel la fiche s'ouvre ── */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&>a]:min-h-11 max-md:[&>a]:flex-1 max-md:[&>a]:justify-center max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
-            {file.contact.phone && (
-              <a
-                href={`tel:${file.contact.phone.replace(/\s/g, "")}`}
-                className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btndark px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
-              >
-                <Icon name="phone" size={15} />
-                Appeler
-              </a>
-            )}
-            <Btn
-              variant="ghost"
-              size="sm"
-              icon="tag"
-              onClick={() => setModal("plan")}
-              disabled={!account}
-              title={
-                account
-                  ? `Formule actuelle : ${planChoiceLabel(plan)}`
-                  : "Route /crm/tenants/:id/account indisponible"
-              }
+      {/*
+        ── Pendant un rechargement post-geste, l'état affiché est périmé ──
+        Il se voile et se gèle (`inert` : ni souris, ni clavier) le temps que
+        les routes répondent — un brouillon déjà envoyé ne doit pas offrir
+        « Envoyer » une seconde fois.
+      */}
+      <div
+        inert={rechargement}
+        aria-busy={rechargement || undefined}
+        className={cx(
+          "flex flex-col gap-4 transition-opacity",
+          rechargement && "opacity-60",
+        )}
+      >
+        {/* ── En-tête : qui c'est, où il en est, ce qu'on peut faire ── */}
+        <Card className="p-[18px]">
+          <div className="flex flex-wrap items-start gap-4">
+            <div
+              className="grid size-[52px] shrink-0 place-items-center rounded-card bg-accent text-2xl font-extrabold text-onaccent"
+              aria-hidden
             >
-              Offre
-            </Btn>
-            <Btn
-              variant="ghost"
-              size="sm"
-              icon="euro"
-              onClick={() => setModal("facturer")}
-              disabled={!account}
-              title={
-                account
-                  ? "Émettre une facture ou poser un brouillon"
-                  : "Route /crm/tenants/:id/account indisponible"
-              }
-            >
-              Facturer
-            </Btn>
-            <Btn
-              size="sm"
-              variant="ghost"
-              icon="edit"
-              onClick={() => setModal("motdepasse")}
-              title="Nouveau mot de passe gérant — remis une fois, jamais relu"
-            >
-              Mot de passe
-            </Btn>
-            {blocked ? (
+              {name.trim().charAt(0).toUpperCase()}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="min-w-0 truncate text-2xl font-extrabold tracking-[-0.03em] text-ink">
+                  {name}
+                </h2>
+                {(account?.founderSeat ?? row?.founderSeat) && (
+                  <BadgeFondateur size={26} />
+                )}
+                <PlanPill plan={plan} />
+                <AccountPill status={status ?? DEFAULT_TENANT_ACCOUNT_STATUS} />
+                <ScorePill score={file.score} health={file.health} />
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-mut">
+                {file.city && (
+                  <Meta icon="home">{file.city}</Meta>
+                )}
+                {row && <Meta icon="clock">client depuis {fmtMonth(row.since)}</Meta>}
+                {file.contact.phone && (
+                  <Meta icon="phone">
+                    {file.contact.phone}
+                    {file.contact.name && ` · ${file.contact.name}`}
+                  </Meta>
+                )}
+                {/* Cliquable comme le téléphone : écrire au gérant sans
+                    recopier l'adresse à la main. */}
+                {file.contact.email && (
+                  <Meta icon="mail" href={`mailto:${file.contact.email}`}>
+                    {file.contact.email}
+                  </Meta>
+                )}
+                {row && (
+                  <Meta icon="euro">{euroRound(row.mrrCents)} / mois estimés</Meta>
+                )}
+                {/* L'Atelier signé — « qui a quoi ? » se lit ici, pas dans la
+                    facturation : c'est le travail dû, présence à tenir comprise.
+                    En entier et sur sa propre ligne : deux services signés
+                    suffisent à dépasser la largeur, et l'ellipse mangeait la
+                    date de signature — affichée nulle part ailleurs. */}
+                {account?.atelier && (
+                  <Meta icon="gear" wrap>
+                    Atelier : {resumeAtelier(account.atelier)} — signé le{" "}
+                    {fmtDay(account.atelier.signedAt)}
+                  </Meta>
+                )}
+              </div>
+
+              {blocked && account && (
+                <p className="mt-2.5 flex items-start gap-2 rounded-card border border-alert/45 bg-alert/10 p-2.5 text-[13px] font-bold text-alertt">
+                  <Icon name="bell" size={15} className="mt-px shrink-0" />
+                  <span>
+                    Accès suspendu depuis le {fmtDay(account.account.since)}
+                    {account.account.reason && ` — ${account.account.reason}`}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* ── Les actions — pleine largeur sous `md`, « Appeler » en tête et
+                à hauteur de pouce : c'est le geste pour lequel la fiche s'ouvre ── */}
+            <div className="flex shrink-0 flex-wrap items-center gap-2 max-md:w-full max-md:[&>a]:min-h-11 max-md:[&>a]:flex-1 max-md:[&>a]:justify-center max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
+              {file.contact.phone && (
+                <a
+                  href={`tel:${file.contact.phone.replace(/\s/g, "")}`}
+                  className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btndark px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
+                >
+                  <Icon name="phone" size={15} />
+                  Appeler
+                </a>
+              )}
               <Btn
+                variant="ghost"
                 size="sm"
-                icon="check"
-                className="bg-ok text-white hover:opacity-85"
-                onClick={() => setModal("reactivate")}
-                disabled={!account}
-              >
-                Réactiver
-              </Btn>
-            ) : (
-              <Btn
-                size="sm"
-                icon="close"
-                className="bg-alert text-white hover:opacity-85"
-                onClick={() => setModal("suspend")}
+                icon="tag"
+                onClick={() => setModal("plan")}
                 disabled={!account}
                 title={
                   account
-                    ? "Couper l'accès du gérant — motif obligatoire"
+                    ? `Formule actuelle : ${planChoiceLabel(plan)}`
                     : "Route /crm/tenants/:id/account indisponible"
                 }
               >
-                Suspendre
+                Offre
               </Btn>
-            )}
-            {/*
-              ACTER UN DÉPART — le geste qui n'existait nulle part.
-              `POST /crm/tenants/:id/churn` était écrite et testée sans aucun
-              appelant : un client parti restait « actif » au parc, comptait
-              dans le MRR, et sa raison de partir n'était consignée nulle part.
-              C'est pourtant la donnée la plus utile qu'un éditeur puisse
-              recueillir sur son propre produit.
-            */}
-            {account?.account.status !== "churned" && (
+              <Btn
+                variant="ghost"
+                size="sm"
+                icon="euro"
+                onClick={() => setModal("facturer")}
+                disabled={!account}
+                title={
+                  account
+                    ? "Émettre une facture ou poser un brouillon"
+                    : "Route /crm/tenants/:id/account indisponible"
+                }
+              >
+                Facturer
+              </Btn>
               <Btn
                 size="sm"
                 variant="ghost"
-                icon="logout"
-                className="border-white/15 text-mut hover:border-white/30 hover:text-ink"
-                onClick={() => setModal("churn")}
-                disabled={!account}
-                title="Acter le départ — cause et détail obligatoires"
+                icon="edit"
+                onClick={() => setModal("motdepasse")}
+                title="Nouveau mot de passe gérant — remis une fois, jamais relu"
               >
-                Départ
+                Mot de passe
               </Btn>
-            )}
+              {blocked ? (
+                <Btn
+                  size="sm"
+                  icon="check"
+                  variant="success"
+                  onClick={() => setModal("reactivate")}
+                  disabled={!account}
+                >
+                  Réactiver
+                </Btn>
+              ) : (
+                <Btn
+                  size="sm"
+                  icon="close"
+                  variant="danger"
+                  onClick={() => setModal("suspend")}
+                  disabled={!account}
+                  title={
+                    account
+                      ? "Couper l'accès du gérant — motif obligatoire"
+                      : "Route /crm/tenants/:id/account indisponible"
+                  }
+                >
+                  Suspendre
+                </Btn>
+              )}
+              {/*
+                ACTER UN DÉPART — le geste qui n'existait nulle part.
+                `POST /crm/tenants/:id/churn` était écrite et testée sans aucun
+                appelant : un client parti restait « actif » au parc, comptait
+                dans le MRR, et sa raison de partir n'était consignée nulle part.
+                C'est pourtant la donnée la plus utile qu'un éditeur puisse
+                recueillir sur son propre produit.
+              */}
+              {account?.account.status !== "churned" && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  icon="logout"
+                  className="border-white/15 text-mut hover:border-white/30 hover:text-ink"
+                  onClick={() => setModal("churn")}
+                  disabled={!account}
+                  title="Acter le départ — cause et détail obligatoires"
+                >
+                  Départ
+                </Btn>
+              )}
+            </div>
+          </div>
+
+          {!account && (
+            <Unavailable
+              icon="gear"
+              title="Administration du compte indisponible"
+              hint="La route /crm/tenants/:id/account n'a pas répondu : statut, suspension et changement de formule sont hors de portée pour l'instant. Le reste de la fiche reste lisible."
+            />
+          )}
+        </Card>
+
+        {/*
+          ── Deux colonnes : à gauche ce qui s'analyse, à droite ce qui s'agit ──
+          Empilées sous 1280 px : deux colonnes de 300 px ne sont plus denses,
+          elles sont illisibles.
+        */}
+        <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
+          <div className="flex min-w-0 flex-[1.5] flex-col gap-4">
+            <HealthSection file={file} />
+            <AdoptionSection file={file} />
+            <AdviceSection file={file} />
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            {/*
+              EN TÊTE DE LA COLONNE DE DROITE, toujours montée — même vide.
+              C'est la raison de l'appel : elle se cherche au même endroit qu'on
+              ait trois signaux ouverts ou aucun, et « rien à signaler » est une
+              réponse, pas une absence de carte.
+            */}
+            <SignalsSection file={file} />
+
+            {/*
+              LES FACTURES, sur la fiche du client et non ailleurs.
+              La file de recouvrement ne montre que les impayées : un brouillon
+              n'y figure jamais, et n'avait donc aucun écran d'où partir.
+            */}
+            <FacturesCard
+              tenantId={id}
+              tenantName={name}
+              invoices={file.invoices}
+              indisponible={file.offline.has("invoices")}
+              onDone={reload}
+            />
+            <DevicesSection file={file} onRevoke={setDevice} />
+            <SupplySection file={file} />
+            <NotesSection file={file} onSaved={reload} />
           </div>
         </div>
 
-        {!account && (
-          <Unavailable
-            icon="gear"
-            title="Administration du compte indisponible"
-            hint="La route /crm/tenants/:id/account n'a pas répondu : statut, suspension et changement de formule sont hors de portée pour l'instant. Le reste de la fiche reste lisible."
-          />
+        {row && (
+          <p className="text-[13px] text-mut">
+            {int(row.orders30d)} commande{row.orders30d > 1 ? "s" : ""} encaissée
+            {row.orders30d > 1 ? "s" : ""} sur 30 jours pour{" "}
+            {euroRound(row.revenue30dCents)}. Montants estimés d&apos;après la
+            formule — la facturation reste la source de vérité.
+          </p>
         )}
-      </Card>
-
-      {/*
-        ── Deux colonnes : à gauche ce qui s'analyse, à droite ce qui s'agit ──
-        Empilées sous 1280 px : deux colonnes de 300 px ne sont plus denses,
-        elles sont illisibles.
-      */}
-      <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
-        <div className="flex min-w-0 flex-[1.5] flex-col gap-4">
-          <HealthSection file={file} />
-          <AdoptionSection file={file} />
-          <AdviceSection file={file} />
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
-          {/*
-            EN TÊTE DE LA COLONNE DE DROITE, toujours montée — même vide.
-            C'est la raison de l'appel : elle se cherche au même endroit qu'on
-            ait trois signaux ouverts ou aucun, et « rien à signaler » est une
-            réponse, pas une absence de carte.
-          */}
-          <SignalsSection file={file} />
-
-          {/*
-            LES FACTURES, sur la fiche du client et non ailleurs.
-            La file de recouvrement ne montre que les impayées : un brouillon
-            n'y figure jamais, et n'avait donc aucun écran d'où partir.
-          */}
-          <FacturesCard
-            tenantId={id}
-            tenantName={name}
-            invoices={file.invoices}
-            indisponible={file.offline.has("invoices")}
-            onDone={reload}
-          />
-          <DevicesSection file={file} onRevoke={setDevice} />
-          <SupplySection file={file} />
-          <NotesSection file={file} onSaved={reload} />
-        </div>
       </div>
-
-      {row && (
-        <p className="text-[13px] text-mut">
-          {int(row.orders30d)} commande{row.orders30d > 1 ? "s" : ""} encaissée
-          {row.orders30d > 1 ? "s" : ""} sur 30 jours pour{" "}
-          {euroRound(row.revenue30dCents)}. Montants estimés d&apos;après la
-          formule — la facturation reste la source de vérité.
-        </p>
-      )}
 
       {/*
         ── Gestes graves ──
@@ -463,6 +559,8 @@ export default function ClientFilePage({
           // Le montant par défaut proposé à l'écran est celui que l'API
           // appliquera si le champ reste vide : offre entière et remise
           // fondateur comprises. Les deux doivent dire la même chose.
+          // `0` vaut « parc muet » : la modale n'annonce alors aucun chiffre
+          // plutôt qu'un faux « 0,00 € » — cf. `defautConnu` dans actions.tsx.
           mrrCents={row?.mrrCents ?? 0}
           onClose={() => setModal(null)}
           onDone={reload}
@@ -481,12 +579,38 @@ export default function ClientFilePage({
   );
 }
 
-function Meta({ icon, children }: { icon: "home" | "clock" | "phone" | "edit" | "euro" | "gear"; children: React.ReactNode }) {
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <Icon name={icon} size={14} className="shrink-0 text-mut" />
-      <span className="truncate">{children}</span>
-    </span>
+function Meta({
+  icon,
+  href,
+  wrap = false,
+  children,
+}: {
+  icon: "home" | "clock" | "phone" | "edit" | "euro" | "gear" | "mail";
+  /** Lien d'action (`mailto:`…) — la méta se clique au lieu de se recopier. */
+  href?: string;
+  /** Pleine ligne et texte entier, sans ellipse — pour les métas longues. */
+  wrap?: boolean;
+  children: React.ReactNode;
+}) {
+  const classes = wrap
+    ? "flex w-full items-start gap-1.5"
+    : "inline-flex min-w-0 items-center gap-1.5";
+  const contenu = (
+    <>
+      <Icon
+        name={icon}
+        size={14}
+        className={cx("shrink-0 text-mut", wrap && "mt-px")}
+      />
+      <span className={wrap ? undefined : "truncate"}>{children}</span>
+    </>
+  );
+  return href ? (
+    <a href={href} className={cx(classes, "hover:text-white")}>
+      {contenu}
+    </a>
+  ) : (
+    <span className={classes}>{contenu}</span>
   );
 }
 
@@ -506,7 +630,10 @@ function FileSkeleton() {
   return (
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       <Skeleton className="h-[108px]" />
-      <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
+      {/* Mêmes seuils que la page chargée : empilé jusqu'à xl, deux colonnes
+          ensuite — sinon le squelette dessinait entre md et xl une mise en
+          page que le contenu réel venait défaire sous les yeux. */}
+      <div className="flex flex-col items-stretch gap-4 xl:flex-row xl:items-start">
         <div className="flex flex-[1.5] flex-col gap-4">
           <Skeleton className="h-[260px]" />
           <Skeleton className="h-[180px]" />

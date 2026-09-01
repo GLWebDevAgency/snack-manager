@@ -52,6 +52,7 @@ const CHIP_DEFS: { key: "all" | OrderStatus; label: string }[] = [
   { key: "preparing", label: "En prépa" },
   { key: "ready", label: "Prêtes" },
   { key: "delivered", label: "Remises" },
+  { key: "cancelled", label: "Annulées" },
 ];
 
 /**
@@ -99,7 +100,6 @@ function ding() {
 
 export default function OrdersPage() {
   const toast = useToast();
-  const rootRef = useRef<HTMLDivElement>(null);
 
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +148,7 @@ export default function OrdersPage() {
   }, []);
 
   // ── Temps réel : created → tête de liste + son ; updated → en place ──
-  useTenantSocket({
+  const { connected } = useTenantSocket({
     "order.created": (payload) => {
       const o = payload as Order;
       if (!o?._id) return;
@@ -164,7 +164,19 @@ export default function OrdersPage() {
       if (o?._id) replaceOrder(o);
     },
   });
-  const { connected } = useTenantSocket();
+
+  // ── Reprise après coupure : les événements émis hors connexion ne sont
+  // jamais rejoués — au retour du socket, on recharge la liste du jour, la
+  // déduplication ci-dessus absorbant les doublons. Pas de rechargement à la
+  // première connexion : celui du montage suffit. ──
+  const everConnected = useRef(false);
+  useEffect(() => {
+    if (!connected) return;
+    // Resynchronisation réseau : seule une requête peut combler les
+    // événements manqués pendant la coupure.
+    if (everConnected.current) void load();
+    else everConnected.current = true;
+  }, [connected, load]);
 
   // ── Filtre statut → recherche client-side (§6.1), puis pagination ──
   const counts = useMemo(() => {
@@ -209,9 +221,6 @@ export default function OrdersPage() {
   // ── Actions ──
   function openDrawer(o: Order) {
     setSelectedId(o._id);
-    // Le drawer se positionne en absolu dans <main> : on remonte la zone
-    // de contenu pour qu'il soit toujours visible à l'ouverture.
-    rootRef.current?.closest("main")?.scrollTo({ top: 0 });
   }
 
   async function advance(o: Order) {
@@ -245,7 +254,7 @@ export default function OrdersPage() {
 
   // ── Rendu ──
   return (
-    <div ref={rootRef} className="p-4 md:p-[26px]">
+    <div className="p-4 md:p-[26px]">
       {/* ── Filtres & recherche (§6.1) ── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {CHIP_DEFS.map((c) => (
@@ -293,7 +302,7 @@ export default function OrdersPage() {
       <Card>
         {/* L'en-tête de colonnes n'existe qu'avec les colonnes : en carte,
             chaque valeur porte sa propre étiquette visuelle (pilule, badge). */}
-        <div className="hidden items-center gap-3 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.08em] text-mut lg:flex">
+        <div className="hidden items-center gap-3 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut lg:flex">
           <span className={COLS.num}>N°</span>
           <span className="min-w-0 flex-1">Client</span>
           <span className={COLS.channel}>Canal</span>
@@ -346,18 +355,13 @@ export default function OrdersPage() {
         ) : (
           <>
             {visible.map((o) => (
+              /* Le clic sur la ligne entière reste un confort souris :
+                 l'accès clavier/lecteur d'écran passe par le vrai bouton
+                 nom+n° ci-dessous — un rôle bouton englobant masquerait
+                 les actions Imprimer/Avancer qu'il contient. */
               <div
                 key={o._id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Commande n°${o.number} de ${customerName(o)} — ouvrir la fiche`}
                 onClick={() => openDrawer(o)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openDrawer(o);
-                  }
-                }}
                 className="cf-press-row flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-t border-line2 p-4 hover:bg-white/4 lg:flex-nowrap lg:px-[18px] lg:py-3"
               >
                 {/*
@@ -376,15 +380,25 @@ export default function OrdersPage() {
                   {o.number}
                 </span>
 
-                {/* Client + résumé articles */}
-                <div className="min-w-0 flex-1 lg:order-2">
-                  <div className="truncate text-[15px] font-bold text-ink">
+                {/* Client + résumé articles — le point d'entrée clavier de
+                    la fiche (spans en bloc : un <button> n'admet que du
+                    contenu phrasé) */}
+                <button
+                  type="button"
+                  aria-label={`Commande n°${o.number} de ${customerName(o)} — ouvrir la fiche`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDrawer(o);
+                  }}
+                  className="min-w-0 flex-1 cursor-pointer text-left lg:order-2"
+                >
+                  <span className="block truncate text-[15px] font-bold text-ink">
                     {customerName(o)}
-                  </div>
-                  <div className="truncate text-[13px] text-mut">
+                  </span>
+                  <span className="block truncate text-[13px] text-mut">
                     {shortId(o)} · {linesSummary(o)}
-                  </div>
-                </div>
+                  </span>
+                </button>
 
                 {/* Total */}
                 <span
@@ -447,8 +461,10 @@ export default function OrdersPage() {
                     size={34}
                     iconSize={16}
                     /* `!` : IconBtn fige son côté en style inline — seule une
-                       classe importante ramène la cible aux 44 px tactiles. */
-                    className="max-lg:!size-11"
+                       classe importante ramène la cible aux 44 px tactiles
+                       (sous `lg`, et sur tout pointeur grossier : un iPad
+                       paysage dépasse les 1024 px de `lg`). */
+                    className="max-lg:!size-11 pointer-coarse:!size-11"
                     onClick={(e) => {
                       e.stopPropagation();
                       printTicket(o);
@@ -500,7 +516,13 @@ export default function OrdersPage() {
           order={selected}
           onClose={() => setSelectedId(null)}
           onPrint={printTicket}
-          onCancel={setCancelTarget}
+          onCancel={(o) => {
+            // Fermer la fiche avant d'ouvrir la modale : le Drawer écoute
+            // Échap tant qu'il est monté, et la modale destructive laisse
+            // passer la touche — la fiche se fermerait derrière le voile.
+            setSelectedId(null);
+            setCancelTarget(o);
+          }}
         />
       )}
 

@@ -35,7 +35,7 @@ import { crm, euroRound, fmtDaysAgo, int, useHq } from "./crm";
 import { clientsApi } from "./clients/data";
 import { SeverityPill } from "./clients/ui";
 import { readWorkSignals, todaysMoves, type WorkSignal } from "./signals/data";
-import { Eyebrow, HealthPill } from "./parts";
+import { HealthPill } from "./parts";
 
 export default function HqDashboard() {
   const { overview, loading } = useHq();
@@ -162,7 +162,7 @@ export default function HqDashboard() {
         actions={
           <Link
             href="/sm/signals"
-            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+            className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
             File de travail
             {(signals?.length ?? 0) > moves.length && (
@@ -206,7 +206,7 @@ export default function HqDashboard() {
         actions={
           <Link
             href="/sm/pipeline"
-            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+            className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
             Pipeline
             <Icon name="arrow" size={15} />
@@ -302,7 +302,7 @@ export default function HqDashboard() {
           actions={
             <Link
               href="/sm/pipeline"
-              className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+              className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
             >
               Ouvrir
               <Icon name="arrow" size={15} />
@@ -408,7 +408,7 @@ export default function HqDashboard() {
           actions={
             <Link
               href="/sm/clients"
-              className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+              className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
             >
               Détail
               <Icon name="arrow" size={15} />
@@ -529,10 +529,10 @@ export default function HqDashboard() {
         )}
       </Panel>
 
-      <Eyebrow className="pt-1">
+      <p className="pt-1 text-[13px] text-mut">
         MRR estimé d&apos;après le plan de chaque restaurant actif · source de vérité
         facturation : Stripe
-      </Eyebrow>
+      </p>
     </div>
   );
 }

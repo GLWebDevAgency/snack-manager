@@ -15,7 +15,8 @@
  *
  * Temps réel : `menu.updated` recharge la carte, sauf pendant un drag, une
  * édition, un import ou une saisie de prix en cours (on ne casse jamais une
- * frappe utilisateur).
+ * frappe utilisateur) — le rechargement est alors différé, puis rejoué dès
+ * que la manipulation se termine, jamais jeté.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -113,12 +114,16 @@ export default function MenuPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [editor, setEditor] = useState<Editor>(null);
+  /** Catégorie cliquée pendant qu'un panneau est ouvert — confirmation avant d'abandonner la saisie. */
+  const [pendingSelect, setPendingSelect] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     cat: Category;
     attached: number;
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  /** DELETE catégorie en vol — ignore le double-clic (cf. deleteCategory). */
+  const deleteInFlight = useRef<Set<string>>(new Set());
   const [dragging, setDragging] = useState(false);
   /** Saisies de prix en cours (id → texte brut), prioritaires sur l'état serveur. */
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -205,7 +210,14 @@ export default function MenuPage() {
 
   // ─── Temps réel : on diffère tant que l'utilisateur manipule la vue ───
   const deferRef = useRef(false);
+  /** `menu.updated` reçu pendant une manipulation : à rejouer, pas à jeter. */
+  const pendingReload = useRef(false);
   const reloadTimer = useRef<number | undefined>(undefined);
+
+  const scheduleReload = useCallback(() => {
+    window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(() => void load(), 700);
+  }, [load]);
 
   useEffect(() => {
     deferRef.current =
@@ -214,13 +226,22 @@ export default function MenuPage() {
       importOpen ||
       deleteTarget !== null ||
       Object.keys(drafts).length > 0;
+    // La manipulation vient de se terminer : rejouer le rechargement différé —
+    // sans quoi une modification concurrente (autre tablette, import)
+    // laisserait la carte périmée sans aucun signe.
+    if (!deferRef.current && pendingReload.current) {
+      pendingReload.current = false;
+      scheduleReload();
+    }
   });
 
   useTenantSocket({
     "menu.updated": () => {
-      if (deferRef.current) return;
-      window.clearTimeout(reloadTimer.current);
-      reloadTimer.current = window.setTimeout(() => void load(), 700);
+      if (deferRef.current) {
+        pendingReload.current = true;
+        return;
+      }
+      scheduleReload();
     },
   });
 
@@ -304,7 +325,7 @@ export default function MenuPage() {
   }
 
   // ─── Catégories ───
-  async function createCategory(name: string) {
+  async function createCategory(name: string): Promise<boolean> {
     try {
       const doc = await api.post<{ _id: string }>("/categories", {
         name,
@@ -314,8 +335,10 @@ export default function MenuPage() {
       setQ("");
       toast("Catégorie créée", { icon: "check" });
       await load();
+      return true;
     } catch (e) {
       fail(e, "Création impossible");
+      return false;
     }
   }
 
@@ -346,6 +369,10 @@ export default function MenuPage() {
   }
 
   async function deleteCategory(cat: Category, force: boolean) {
+    // Un double-clic sur la corbeille enverrait deux DELETE : le second (404)
+    // afficherait « Suppression impossible » juste après le toast de succès.
+    if (deleteInFlight.current.has(cat._id)) return;
+    deleteInFlight.current.add(cat._id);
     if (force) setDeleting(true);
     try {
       await api.del(`/categories/${cat._id}${force ? "?force=true" : ""}`);
@@ -368,6 +395,7 @@ export default function MenuPage() {
       }
       fail(e, "Suppression impossible");
     } finally {
+      deleteInFlight.current.delete(cat._id);
       setDeleting(false);
     }
   }
@@ -429,9 +457,10 @@ export default function MenuPage() {
     return (
       <div className="p-4 md:p-[26px]">
         <Skeleton className="mb-4 h-[46px] w-full" />
-        <div className="flex items-start gap-4">
-          <Skeleton className="h-[320px] w-[268px] shrink-0" />
-          <Skeleton className="h-[420px] flex-1" />
+        {/* Même gabarit responsive que la vraie page : empilé sous `lg` */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          <Skeleton className="h-[320px] w-full shrink-0 lg:w-[268px]" />
+          <Skeleton className="h-[420px] w-full lg:flex-1" />
         </div>
       </div>
     );
@@ -474,11 +503,16 @@ export default function MenuPage() {
           uncategorizedCount={menu.uncategorized.length}
           selected={activeSel}
           onSelect={(id) => {
+            // Un panneau ouvert porte une saisie bufferisée : on ne la jette
+            // jamais sur un simple clic de navigation — confirmation d'abord.
+            if (editor !== null) {
+              setPendingSelect(id);
+              return;
+            }
             setSelected(id);
             setQ("");
-            setEditor(null);
           }}
-          onCreate={(name) => void createCategory(name)}
+          onCreate={createCategory}
           onSortAlpha={sortAlpha}
           onReorder={(ids) => void reorderCategories(ids)}
           onDelete={(cat) => void deleteCategory(cat, false)}
@@ -488,13 +522,30 @@ export default function MenuPage() {
         <Card className="min-w-0 flex-1">
           {/* Recherche dans toute la carte + création à l'unité */}
           <div className="flex items-center gap-2 px-[18px] pt-3">
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Rechercher un produit dans toute la carte…"
-              aria-label="Rechercher un produit dans toute la carte"
-              className="min-w-0 flex-1 px-[12px] py-[9px] text-[13px]"
-            />
+            {/* Gabarit standard des barres d'outils (cf. Ingrédients) : contrôle
+                du DS pleine hauteur, loupe intégrée. Gelée pendant une édition :
+                filtrer la liste démonterait le panneau et jetterait la saisie. */}
+            <div className="relative min-w-0 flex-1">
+              <Icon
+                name="search"
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mut"
+              />
+              <Input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Rechercher un produit dans toute la carte…"
+                aria-label="Rechercher un produit dans toute la carte"
+                disabled={editor?.mode === "edit"}
+                title={
+                  editor?.mode === "edit"
+                    ? "Recherche suspendue pendant l'édition — enregistre ou ferme le panneau"
+                    : undefined
+                }
+                className="w-full pl-9"
+              />
+            </div>
             <Btn
               variant="ink"
               size="sm"
@@ -605,8 +656,12 @@ export default function MenuPage() {
                                 Non rattaché
                               </Pill>
                             ) : (
-                              <Pill className="max-w-[160px] shrink-0 truncate">
-                                {catNameById.get(p.categoryId) ?? "—"}
+                              <Pill className="max-w-[160px] shrink-0">
+                                {/* l'ellipse doit porter sur le bloc de texte :
+                                    `truncate` est inopérant sur la Pill (flex) */}
+                                <span className="truncate">
+                                  {catNameById.get(p.categoryId) ?? "—"}
+                                </span>
                               </Pill>
                             ))}
                           {p.isNew && (
@@ -633,7 +688,11 @@ export default function MenuPage() {
                           aria-expanded={isEditing}
                           title="Modifier le produit"
                           className={cx(
-                            "cf-press grid place-items-center rounded-xs border max-lg:size-11 lg:size-8",
+                            // Rond comme IconBtn (spec §4.2) — bouton local car
+                            // la taille doit rester adaptative : 44px au doigt
+                            // (même sur iPad paysage, pile 1024px), 32px dense
+                            // à la souris seulement.
+                            "cf-press grid size-11 place-items-center rounded-pill border lg:pointer-fine:size-8",
                             isEditing
                               ? "border-accent bg-accent text-onaccent"
                               : "border-line bg-[image:var(--cf-elev-gradient)] text-ink hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
@@ -700,7 +759,7 @@ export default function MenuPage() {
                         </span>
                       </div>
 
-                      {/* Dispo — l'affichage tient compte de la rupture, le clic non */}
+                      {/* Dispo — gelée pendant une rupture : la lever d'abord (colonne voisine) */}
                       <div
                         className={cx(
                           "flex items-center gap-1.5 lg:justify-center",
@@ -714,7 +773,18 @@ export default function MenuPage() {
                         <Toggle
                           on={p.active && !p.outOfStock}
                           onChange={() => void toggleAvailable(p)}
-                          label={`Disponibilité de ${p.name}`}
+                          // Gelée en rupture : la bascule s'afficherait éteinte
+                          // avant comme après le clic — l'état changerait sans
+                          // aucun retour visible, avec un toast contradictoire.
+                          disabled={p.outOfStock}
+                          label={
+                            p.outOfStock
+                              ? `Disponibilité de ${p.name} — lève d'abord la rupture`
+                              : `Disponibilité de ${p.name}`
+                          }
+                          // Zone d'appui ~62×46 sans changer le dessin 46×26 :
+                          // geste principal de la page, tapé debout en service.
+                          className="after:absolute after:-inset-x-2 after:-inset-y-2.5"
                         />
                       </div>
 
@@ -743,6 +813,8 @@ export default function MenuPage() {
                             danger
                             onChange={() => void toggleStock(p)}
                             label={`Rupture de ${p.name}`}
+                            // idem Dispo : zone d'appui élargie au doigt
+                            className="after:absolute after:-inset-x-2 after:-inset-y-2.5"
                           />
                         )}
                       </div>
@@ -766,6 +838,40 @@ export default function MenuPage() {
           </div>
         </Card>
       </div>
+
+      {/* ── Garde de navigation : un clic de catégorie ne jette jamais une
+          saisie en cours dans un panneau ouvert ── */}
+      <Modal
+        open={pendingSelect !== null}
+        onClose={() => setPendingSelect(null)}
+        title="Modifications non enregistrées"
+        footer={
+          <>
+            <Btn variant="ghost" size="sm" onClick={() => setPendingSelect(null)}>
+              Continuer l&apos;édition
+            </Btn>
+            <Btn
+              size="sm"
+              // Rouge fonctionnel : l'action abandonne la saisie en cours.
+              style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
+              onClick={() => {
+                if (pendingSelect === null) return;
+                setSelected(pendingSelect);
+                setQ("");
+                setEditor(null);
+                setPendingSelect(null);
+              }}
+            >
+              Quitter sans enregistrer
+            </Btn>
+          </>
+        }
+      >
+        <p className="leading-[1.5] text-mut">
+          Un panneau d&apos;édition est encore ouvert : changer de catégorie le
+          ferme et abandonne ce qui y a été saisi sans l&apos;enregistrer.
+        </p>
+      </Modal>
 
       {/* ── §7.4 Suppression de catégorie (produits détachés, jamais supprimés) ── */}
       <Modal

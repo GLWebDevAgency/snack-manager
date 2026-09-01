@@ -86,19 +86,21 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
   const toast = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const ok = reason.trim().length >= MIN_REASON;
 
   async function run() {
     if (!ok || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.suspend(tenantId, reason.trim());
       toast(`${tenantName} — accès suspendu`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Suspension impossible — réessayez"));
+      setRefusal(errText(e, "Suspension impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -118,7 +120,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
           <Btn
             size="sm"
             icon="close"
-            className="bg-alert text-white hover:opacity-85"
+            variant="danger"
             disabled={!ok || busy}
             onClick={() => void run()}
           >
@@ -153,6 +155,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -165,19 +168,21 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
   const toast = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const ok = reason.trim().length >= MIN_REASON;
 
   async function run() {
     if (!ok || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.reactivate(tenantId, reason.trim());
       toast(`${tenantName} — accès rouvert`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Réactivation impossible — réessayez"));
+      setRefusal(errText(e, "Réactivation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -196,7 +201,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
           <Btn
             size="sm"
             icon="check"
-            className="bg-ok text-white hover:opacity-85"
+            variant="success"
             disabled={!ok || busy}
             onClick={() => void run()}
           >
@@ -230,6 +235,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -276,6 +282,7 @@ export function OffreModal({
   const [services, setServices] = useState<LeadServices>(current.services);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const avant = proposalCents({
     plan: current.plan,
@@ -312,6 +319,7 @@ export function OffreModal({
   async function run() {
     if (!changed || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.changeOffre(tenantId, {
         plan,
@@ -326,8 +334,9 @@ export function OffreModal({
     } catch (e) {
       // Le refus vient des règles de composition (module greffé sans
       // intégration, offre vide…) : on l'affiche mot pour mot plutôt que de
-      // le paraphraser — l'API sait mieux que nous ce qu'elle a refusé.
-      toast(errText(e, "Changement d’offre impossible — réessayez"));
+      // le paraphraser — l'API sait mieux que nous ce qu'elle a refusé — et
+      // il reste à l'écran le temps d'être relu.
+      setRefusal(errText(e, "Changement d’offre impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -420,6 +429,7 @@ export function OffreModal({
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -457,6 +467,7 @@ export function EmettreFactureModal({
   // reste à un clic, délibérément.
   const [draft, setDraft] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   // Ce que l'API facturera si le champ reste vide — affiché pour que personne
   // n'ait à le deviner, ni à le ressaisir « pour être sûr ».
@@ -466,12 +477,17 @@ export function EmettreFactureModal({
   // qu'il lit fabrique alors un écart de cinquante centimes, sur une pièce
   // comptable, sans que rien ne le signale.
   const parDefaut = kind === "mise_en_place" ? INSTALL_FEE_CENTS : mrrCents;
+  // Un MRR à zéro, c'est aussi la ligne parc qui n'a pas chargé (le parent
+  // retombe sur 0) : promettre « 0,00 € » serait mentir — l'API, elle,
+  // facturera l'offre réelle. Sans chiffre sûr, on n'en écrit pas.
+  const defautConnu = kind === "mise_en_place" || mrrCents > 0;
   const saisi = montant.trim() === "" ? null : Math.round(Number(montant.replace(",", ".")) * 100);
   const montantInvalide = saisi !== null && (!Number.isFinite(saisi) || saisi < 0);
 
   async function run() {
     if (busy || montantInvalide) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.issueInvoice(tenantId, {
         kind,
@@ -486,7 +502,7 @@ export function EmettreFactureModal({
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Émission impossible — réessayez"));
+      setRefusal(errText(e, "Émission impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -509,7 +525,13 @@ export function EmettreFactureModal({
             disabled={busy || montantInvalide}
             onClick={() => void run()}
           >
-            {busy ? "Émission…" : draft ? "Poser le brouillon" : `Émettre — ${euros(saisi ?? parDefaut)} dus`}
+            {busy
+              ? "Émission…"
+              : draft
+                ? "Poser le brouillon"
+                : saisi !== null || defautConnu
+                  ? `Émettre — ${euros(saisi ?? parDefaut)} dus`
+                  : "Émettre la facture"}
           </Btn>
         </>
       }
@@ -546,28 +568,27 @@ export function EmettreFactureModal({
         className="mt-3"
         label="Montant HT"
         htmlFor="fact-montant"
+        error={montantInvalide ? "Montant invalide — saisissez un nombre, ou laissez vide." : undefined}
         hint={
           kind === "mise_en_place"
             ? // La remise fondateur est figée au contrat signé : une prestation
               // commandée APRÈS se paie plein tarif. Écrit, sinon un opérateur
               // « corrige » la moitié à la main en croyant bien faire.
               `Laissez vide pour le tarif de la mise en place — ${euros(parDefaut)}. Une prestation commandée après la signature n’est pas couverte par la remise fondateur.`
-            : `Laissez vide pour appliquer l’offre du client — ${euros(parDefaut)}, remise fondateur comprise.`
+            : defautConnu
+              ? `Laissez vide pour appliquer l’offre du client — ${euros(parDefaut)}, remise fondateur comprise.`
+              : "Laissez vide pour appliquer l’offre du client — montant calculé par l’API, remise fondateur comprise."
         }
       >
         <Input
           id="fact-montant"
           inputMode="decimal"
-          placeholder={(parDefaut / 100).toFixed(2)}
+          aria-invalid={montantInvalide || undefined}
+          placeholder={defautConnu ? (parDefaut / 100).toFixed(2) : undefined}
           value={montant}
           onChange={(e) => setMontant(e.target.value)}
         />
       </Field>
-      {montantInvalide && (
-        <p className="mt-1 text-[12px] text-alertt">
-          Montant invalide — saisissez un nombre, ou laissez vide.
-        </p>
-      )}
       <Field
         className="mt-3"
         label="Libellé"
@@ -588,6 +609,7 @@ export function EmettreFactureModal({
         </div>
         <Toggle on={draft} label="Brouillon" onChange={setDraft} />
       </div>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -631,11 +653,17 @@ export function RevokeDeviceModal({
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState<string | null>(null);
+  // `null` tant que rien n'est révoqué ; ensuite l'écran de fin, avec ou sans
+  // code — deux états distincts, sinon un succès sans code laisserait la
+  // modale sur « Révoquer maintenant » et l'opérateur re-cliquerait sur un
+  // appareil déjà coupé.
+  const [fin, setFin] = useState<{ code: string | null } | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   async function run() {
     if (!confirmed || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       const res = await clientsApi.revokeDevice(tenantId, device, {
         reason,
@@ -644,24 +672,27 @@ export function RevokeDeviceModal({
       // Le code peut ne pas être renvoyé (écran, API plus ancienne) : la
       // révocation reste un succès, on ne bloque pas là-dessus.
       const pairing = (res as { pairing?: { code?: unknown } })?.pairing?.code;
-      setCode(typeof pairing === "string" ? pairing : null);
+      setFin({ code: typeof pairing === "string" ? pairing : null });
       toast(`${device.name} révoqué — ${DEVICE_REVOKE_REASON_LABELS[reason]}`, {
         icon: "check",
       });
       onDone();
     } catch (e) {
-      toast(errText(e, "Révocation impossible — réessayez"));
+      setRefusal(errText(e, "Révocation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
   }
 
   // ── Après coup : le code à dicter ──
-  if (code !== null) {
+  if (fin) {
     return (
       <SheetModal
         open
         onClose={onClose}
+        // Le CRM n'affiche ce code qu'ici : un Échap réflexe ou un clic à
+        // côté du panneau pendant l'appel le perdrait — fermeture explicite.
+        destructive
         title={`${device.name} est coupé`}
         footer={
           <Btn variant="primary" size="sm" icon="check" onClick={onClose}>
@@ -669,19 +700,30 @@ export function RevokeDeviceModal({
           </Btn>
         }
       >
-        <p className="text-[13px] text-mut">
-          Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
-          repart en attente d&apos;appairage. Dictez ce code au gérant pour
-          remettre un appareil en service maintenant.
-        </p>
-        <div className="mt-4 grid place-items-center rounded-card border border-accent/40 bg-accent/10 py-5">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-accent/80">
-            Code d&apos;appairage
-          </div>
-          <div className="cf-fig mt-1 text-[34px] font-extrabold tracking-[0.12em] text-accent">
-            {code}
-          </div>
-        </div>
+        {fin.code !== null ? (
+          <>
+            <p className="text-[13px] text-mut">
+              Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
+              repart en attente d&apos;appairage. Dictez ce code au gérant pour
+              remettre un appareil en service maintenant.
+            </p>
+            <div className="mt-4 grid place-items-center rounded-card border border-accent/40 bg-accent/10 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-accent/80">
+                Code d&apos;appairage
+              </div>
+              <div className="cf-fig mt-1 text-[34px] font-extrabold tracking-[0.12em] text-accent">
+                {fin.code}
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-[13px] text-mut">
+            Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
+            repart en attente d&apos;appairage — aucun code d&apos;appairage
+            renvoyé ici : le gérant le retrouve dans son back-office, écran
+            Appareils.
+          </p>
+        )}
       </SheetModal>
     );
   }
@@ -701,7 +743,7 @@ export function RevokeDeviceModal({
           <Btn
             size="sm"
             icon="trash"
-            className="bg-alert text-white hover:opacity-85"
+            variant="danger"
             disabled={!confirmed || busy}
             onClick={() => void run()}
           >
@@ -767,6 +809,7 @@ export function RevokeDeviceModal({
           onChange={setConfirmed}
         />
       </div>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -817,6 +860,27 @@ function Consequences({
   );
 }
 
+/**
+ * LE REFUS DE L'API, AFFICHÉ TEL QUEL — le même motif que `facturation/ui.tsx`.
+ *
+ * Il reste À L'ÉCRAN, dans la modale, plutôt que de partir avec un toast de
+ * 2,2 s : un refus arrive au moment précis où l'on a besoin de relire ce qui
+ * a été refusé — et le formulaire reste là, prêt à être corrigé.
+ */
+function Refusal({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mt-4 flex items-start gap-2.5 rounded-card border border-alert/50 bg-alert/10 p-3"
+    >
+      <Icon name="bell" size={16} className="mt-px shrink-0 text-alertt" />
+      <p className="min-w-0 text-[13px] font-semibold leading-[1.45] text-alertt">
+        {message}
+      </p>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Mot de passe gérant
 // ─────────────────────────────────────────────────────────────
@@ -832,15 +896,17 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [fait, setFait] = useState<{ ownerEmail: string; password: string } | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   async function run() {
     if (busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       setFait(await crm.resetOwner(tenantId));
       onDone();
     } catch (e) {
-      toast(errText(e, "Réinitialisation impossible — réessayez"));
+      setRefusal(errText(e, "Réinitialisation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -850,6 +916,10 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
     <SheetModal
       open
       onClose={onClose}
+      // Une fois le mot de passe affiché, un Échap réflexe ou un clic sur le
+      // voile le perdrait — et il ne sera jamais réaffiché. Fermeture
+      // explicite uniquement, comme SuspendModal.
+      destructive={fait !== null}
       title={`Mot de passe gérant — ${tenantName}`}
       footer={
         fait ? (
@@ -871,8 +941,11 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
       {fait ? (
         <div>
           <p className="text-[13px] text-mut">
-            À dicter ou copier MAINTENANT pour <b className="text-ink">{fait.ownerEmail}</b> —
-            il ne sera jamais réaffiché.
+            À dicter ou copier MAINTENANT pour{" "}
+            {/* `break-all` : une adresse longue se replie au lieu de forcer
+                le corps de la modale à défiler horizontalement. */}
+            <b className="break-all text-ink">{fait.ownerEmail}</b> — il ne
+            sera jamais réaffiché.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">
@@ -892,18 +965,21 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
           </div>
         </div>
       ) : (
-        <Consequences
-          tone="alert"
-          does={[
-            "Un nouveau mot de passe est fabriqué et remis UNE fois, ici.",
-            "L'ancien cesse de fonctionner à l'instant même.",
-            "Le geste s'inscrit au journal de l'établissement.",
-          ]}
-          doesNot={[
-            "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
-            "Personne n'est prévenu automatiquement — c'est vous qui remettez le mot de passe au gérant.",
-          ]}
-        />
+        <>
+          <Consequences
+            tone="alert"
+            does={[
+              "Un nouveau mot de passe est fabriqué et remis UNE fois, ici.",
+              "L'ancien cesse de fonctionner à l'instant même.",
+              "Le geste s'inscrit au journal de l'établissement.",
+            ]}
+            doesNot={[
+              "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
+              "Personne n'est prévenu automatiquement — c'est vous qui remettez le mot de passe au gérant.",
+            ]}
+          />
+          {refusal && <Refusal message={refusal} />}
+        </>
       )}
     </SheetModal>
   );
@@ -939,18 +1015,20 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
   const [cause, setCause] = useState<ChurnCause | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const pret = cause !== null && reason.trim().length >= MIN_REASON;
 
   async function run() {
     if (!pret || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.churn(tenantId, { cause, reason: reason.trim() });
       toast(`${tenantName} est sorti du parc`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Impossible d’acter le départ — réessayez"));
+      setRefusal(errText(e, "Impossible d’acter le départ — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -960,6 +1038,10 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
     <SheetModal
       open
       onClose={onClose}
+      // Même verrou que Suspendre : trois lignes de verbatim tapées au
+      // téléphone ne doivent pas partir sur un Échap réflexe ou un clic à
+      // côté du panneau.
+      destructive
       title={`Départ de ${tenantName}`}
       footer={
         <>
@@ -985,18 +1067,29 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
       </p>
 
       <div className="mt-4 flex flex-col gap-1.5">
-        <span className="block text-xs font-bold uppercase tracking-[0.04em] text-mut">
+        <span
+          id="churn-cause-label"
+          className="block text-xs font-bold uppercase tracking-[0.04em] text-mut"
+        >
           Pourquoi part-il ?
         </span>
-        <div className="flex flex-wrap gap-1.5">
+        {/* `role="group"` relié à la question : au lecteur d'écran, « Prix,
+            bouton » n'a de sens que rattaché à « Pourquoi part-il ? ». */}
+        <div role="group" aria-labelledby="churn-cause-label" className="flex flex-wrap gap-1.5">
           {CHURN_CAUSES.map((c) => (
             <Chip key={c} on={cause === c} onClick={() => setCause(c)}>
               {CHURN_CAUSE_LABELS[c]}
             </Chip>
           ))}
         </div>
-        {cause && (
+        {cause ? (
           <p className="mt-1 text-[12px] text-mut">{CHURN_CAUSE_HINTS[cause]}</p>
+        ) : (
+          // Le bouton reste grisé tant qu'une cause manque : sans cette
+          // ligne, rien à l'écran ne le dit.
+          <p className="mt-1 text-[12px] text-mut">
+            Obligatoire — une seule cause, la principale.
+          </p>
         )}
       </div>
 
@@ -1004,7 +1097,7 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
         className="mt-3"
         label="Ce qu’il a dit"
         htmlFor="churn-reason"
-        hint="Ses mots, pas les vôtres — c’est ce qu’on relit avant de tenter de le récupérer."
+        hint="Obligatoire — ses mots, pas les vôtres : c’est ce qu’on relit avant de tenter de le récupérer."
       >
         <Textarea
           id="churn-reason"
@@ -1014,6 +1107,7 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }

@@ -110,14 +110,19 @@ export function MovementModal({
   return (
     <Modal
       open
-      onClose={onClose}
+      // Pendant l'enregistrement, aucune sortie ne ferme : Échap, le voile et
+      // la croix passent tous ici — sinon le POST continue en arrière-plan et
+      // une ressaisie doublerait le mouvement.
+      onClose={() => {
+        if (!saving) onClose();
+      }}
       title={`${meta.title} — ${ingredient.name}`}
       footer={
         <>
-          <Btn variant="ghost" onClick={onClose}>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={saving}>
             Annuler
           </Btn>
-          <Btn type="submit" form="sm-movement-form" disabled={saving}>
+          <Btn type="submit" size="sm" form="sm-movement-form" disabled={saving}>
             {saving ? "Enregistrement…" : meta.submit}
           </Btn>
         </>

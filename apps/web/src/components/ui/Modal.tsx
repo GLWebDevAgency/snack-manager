@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ReactNode, type RefObject } from "react";
+import { useCallback, useId, type ReactNode, type RefObject } from "react";
 import { IconBtn } from "./IconBtn";
 import { useDialogLayer } from "./useDialogLayer";
 
@@ -12,8 +12,8 @@ type ModalProps = {
   /** Boutons d'action (alignés à droite). */
   footer?: ReactNode;
   /**
-   * Modale destructive (« Supprimer… ») : le clic sur l'overlay ne ferme pas.
-   * Échap reste un geste explicite d'annulation, comme la croix.
+   * Modale destructive (« Supprimer… ») : ni l'overlay ni Échap ne ferment la
+   * fenêtre. La fermeture reste explicite via la croix ou le bouton Annuler.
    */
   destructive?: boolean;
   /** Largeur max du panneau (défaut 440). */
@@ -37,7 +37,14 @@ export function Modal({
   initialFocusRef,
 }: ModalProps) {
   const titleId = useId();
-  const dialogRef = useDialogLayer({ open, onClose, initialFocusRef });
+  const closeFromEscape = useCallback(() => {
+    if (!destructive) onClose();
+  }, [destructive, onClose]);
+  const dialogRef = useDialogLayer({
+    open,
+    onClose: closeFromEscape,
+    initialFocusRef,
+  });
 
   if (!open) return null;
 

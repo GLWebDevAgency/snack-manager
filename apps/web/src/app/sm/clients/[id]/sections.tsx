@@ -28,7 +28,7 @@ import {
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
-import { Btn, Icon, Input, Panel, useToast } from "@/components/ui";
+import { Btn, Chip, Icon, Input, Panel, useToast } from "@/components/ui";
 import { euroRound, fmtDay, int } from "../../crm";
 import {
   clientsApi,
@@ -39,7 +39,6 @@ import {
   fmtSince,
   scoreHealth,
   HEALTH_TEXT,
-  SEVERITY_BORDER,
   SEVERITY_RANK,
   SUPPLY_ALERT_LABELS,
   type ActivityWindow,
@@ -52,7 +51,7 @@ import {
   type SupplyAlertKind,
   type TenantActivity,
 } from "../data";
-import { Eyebrow, Meter, ScorePill, Trend, Unavailable } from "../ui";
+import { Eyebrow, Meter, ScorePill, SeverityPill, Trend, Unavailable } from "../ui";
 
 // ─────────────────────────────────────────────────────────────
 // Santé
@@ -141,7 +140,7 @@ function ComponentRow({ component: c }: { component: HealthComponent }) {
               {c.weight} %
             </span>
           </span>
-          <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.04em] text-mut/70">
+          <span className="shrink-0 text-[11px] font-bold uppercase tracking-[0.04em] text-mut">
             non mesuré
           </span>
         </div>
@@ -266,7 +265,7 @@ function Compare({
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
         {deltaPct !== undefined &&
           (deltaPct === null ? (
-            <span className="text-[11px] text-mut/60">tendance non mesurable</span>
+            <span className="text-[11px] text-mut">tendance non mesurable</span>
           ) : (
             <Trend pct={deltaPct} />
           ))}
@@ -324,15 +323,20 @@ export function AdoptionSection({ file }: { file: ClientFile }) {
       }
     >
       {modules.length === 0 ? (
-        <Unavailable
-          icon="grid"
-          title="Adoption indisponible"
-          hint={
-            file.offline.has("health")
-              ? "La route /crm/tenants/:id/health n'a pas répondu : impossible de dire ce que ce client utilise."
-              : "L'API n'a renvoyé aucun module pour ce client."
-          }
-        />
+        file.offline.has("health") ? (
+          <Unavailable
+            icon="grid"
+            title="Adoption indisponible"
+            hint="La route /crm/tenants/:id/health n'a pas répondu : impossible de dire ce que ce client utilise."
+          />
+        ) : (
+          /* Zéro module avec une route en vie : un vide légitime, pas une
+             panne — l'habit d'incident dirait le contraire. */
+          <p className="text-[13px] text-mut">
+            Aucun module ouvert chez ce client — l&apos;adoption se mesurera à
+            la première ouverture.
+          </p>
+        )
       ) : (
         <ul className="grid grid-cols-2 gap-2.5 max-md:grid-cols-1">
           {modules.map((m) => (
@@ -369,7 +373,7 @@ function ModuleTile({ module: m }: { module: ModuleAdoption }) {
           <div
             className={cx(
               "mt-0.5 text-xs font-semibold",
-              m.used ? "text-mut" : wasted ? "text-prept" : "text-mut/70",
+              wasted ? "text-prept" : "text-mut",
             )}
           >
             {/* « Ouvert, jamais utilisé » — jamais « facturé » : voir l'en-tête
@@ -424,15 +428,20 @@ export function DevicesSection({
     >
       {devices.length === 0 ? (
         <div className="px-[18px] pb-[18px]">
-          <Unavailable
-            icon="tv"
-            title="Parc indisponible"
-            hint={
-              file.offline.has("health")
-                ? "La route /crm/tenants/:id/health n'a pas répondu : impossible de dire si les tablettes de ce client répondent."
-                : "Aucun appareil appairé, ou l'API ne renvoie pas encore le parc."
-            }
-          />
+          {file.offline.has("health") ? (
+            <Unavailable
+              icon="tv"
+              title="Parc indisponible"
+              hint="La route /crm/tenants/:id/health n'a pas répondu : impossible de dire si les tablettes de ce client répondent."
+            />
+          ) : (
+            /* Un parc vide avec une route en vie est un cas normal (client
+               Atelier seul) : un vide légitime, pas une panne à habiller. */
+            <p className="text-[13px] text-mut">
+              Aucun appareil appairé chez ce client — ni tablette de caisse, ni
+              écran cuisine, ni téléviseur de salle.
+            </p>
+          )}
         </div>
       ) : (
         <ul>
@@ -500,7 +509,7 @@ function DeviceRow({
         <span
           className={cx(
             "size-[7px] shrink-0 rounded-full",
-            d.online ? "bg-ok" : "bg-alert animate-pulse",
+            d.online ? "bg-ok" : "bg-alert motion-safe:animate-pulse",
           )}
           aria-hidden
         />
@@ -640,7 +649,7 @@ export function SupplySection({ file }: { file: ClientFile }) {
         <>
           <ul className="flex flex-col gap-1.5">
             {rows.map((a) => (
-              <li key={a.key} className="flex items-center gap-2.5 max-md:flex-wrap">
+              <li key={a.key} className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                 <span
                   className={cx(
                     "w-[104px] shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-center text-[10px] font-extrabold uppercase tracking-[0.06em]",
@@ -649,12 +658,13 @@ export function SupplySection({ file }: { file: ClientFile }) {
                 >
                   {SUPPLY_ALERT_LABELS[a.kind]}
                 </span>
-                <span className="min-w-0 shrink-0 truncate text-[13px] font-bold text-ink">
+                <span className="min-w-0 truncate text-[13px] font-bold text-ink">
                   {a.name}
                 </span>
-                {/* Le détail passe SOUS la ligne sur mobile, en entier : tronqué
-                    à droite, il perdait précisément le prix qui justifie l'appel. */}
-                <span className="min-w-0 flex-1 truncate text-right text-xs text-mut max-md:basis-full max-md:whitespace-normal max-md:text-left">
+                {/* Le détail passe SOUS la ligne, en entier — bureau compris :
+                    tronqué à droite dans la colonne étroite de la fiche, il
+                    perdait précisément le prix qui justifie l'appel. */}
+                <span className="basis-full text-xs leading-[1.4] text-mut">
                   {a.detail}
                 </span>
               </li>
@@ -713,11 +723,14 @@ export function SignalsSection({ file }: { file: ClientFile }) {
           : `${int(signals.length)} raison${signals.length > 1 ? "s" : ""} d'appeler, de la plus urgente à la moins urgente`
       }
       actions={
+        // Même habit que le tableau de bord pour la même destination : la
+        // pilule ghost avec flèche, pas un troisième costume.
         <Link
           href="/sm/signals"
-          className="text-[13px] font-bold text-accent hover:underline"
+          className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
         >
           Toute la file
+          <Icon name="arrow" size={15} />
         </Link>
       }
     >
@@ -782,15 +795,9 @@ function SignalCard({ signal: s }: { signal: ClientSignal }) {
       )}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        {/* La bande, en toutes lettres et en couleur fonctionnelle. */}
-        <span
-          className={cx(
-            "shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
-            SEVERITY_BORDER[s.severity],
-          )}
-        >
-          {s.severityLabel}
-        </span>
+        {/* La bande, en toutes lettres et en couleur fonctionnelle — la MÊME
+            pastille que la file de travail, point coloré compris. */}
+        <SeverityPill severity={s.severity} label={s.severityLabel} className="shrink-0" />
         <span className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
           {s.kindLabel}
         </span>
@@ -873,15 +880,30 @@ export function AdviceSection({ file }: { file: ClientFile }) {
       }
     >
       {advice.length === 0 ? (
-        <Unavailable
-          icon="star"
-          title="Aucune recommandation"
-          hint={
-            file.offline.has("insights")
-              ? "La route /crm/tenants/:id/insights n'a pas répondu."
-              : "Rien à signaler sur ce client : ses ratios sont dans la médiane du réseau."
-          }
-        />
+        file.offline.has("insights") ? (
+          <Unavailable
+            icon="star"
+            title="Conseil indisponible"
+            hint="La route /crm/tenants/:id/insights n'a pas répondu."
+          />
+        ) : (
+          /*
+            RIEN À CONSEILLER ≠ PANNE — même langage que les signaux : l'état
+            sain s'affirme en vert, l'habit pointillé reste à la panne.
+          */
+          <div className="flex items-start gap-2.5 rounded-card border border-ok/35 bg-ok/8 p-3">
+            <Icon name="check" size={16} className="mt-px shrink-0 text-okt" />
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-okt">
+                Rien à conseiller sur ce client
+              </div>
+              <div className="mt-0.5 text-xs text-mut">
+                Ses ratios sont dans la médiane du réseau — aucun argument
+                chiffré à apporter au téléphone.
+              </div>
+            </div>
+          </div>
+        )
       ) : (
         <ul className="flex flex-col gap-2.5">
           {advice.map((r) => (
@@ -898,14 +920,11 @@ function AdviceCard({ advice: r }: { advice: Recommendation }) {
   return (
     <li className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
       <div className="flex items-start gap-2.5">
-        <span
-          className={cx(
-            "mt-px shrink-0 rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
-            SEVERITY_BORDER[r.severity],
-          )}
-        >
-          {r.severity === "critique" ? "Priorité" : r.severity === "attention" ? "À voir" : "Idée"}
-        </span>
+        <SeverityPill
+          severity={r.severity}
+          label={r.severity === "critique" ? "Priorité" : r.severity === "attention" ? "À voir" : "Idée"}
+          className="mt-px shrink-0"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-2.5 gap-y-1">
             <span className="min-w-0 text-[13.5px] font-bold text-ink">{r.title}</span>
@@ -978,19 +997,16 @@ export function NotesSection({
       title="Notes internes & journal"
       sub="Ce qu'on a dit, ce qu'on a fait — append-only"
       actions={
-        <button
-          type="button"
-          aria-pressed={onlyNotes}
+        // Le Chip du design system, pas sa copie décalée d'un pixel — états et
+        // aria-pressed fournis ; plancher tactile pour la fiche ouverte en
+        // parlant au téléphone, comme les autres contrôles de la colonne.
+        <Chip
+          on={onlyNotes}
           onClick={() => setOnlyNotes((v) => !v)}
-          className={cx(
-            "cf-press rounded-pill border px-3 py-1.5 text-[12px] font-bold",
-            onlyNotes
-              ? "border-white/55 bg-white/12 text-white"
-              : "border-transparent bg-white/6 text-mut hover:bg-white/10 hover:text-white",
-          )}
+          className="max-md:min-h-11"
         >
           Notes seules
-        </button>
+        </Chip>
       }
     >
       <form
@@ -1084,7 +1100,11 @@ function JournalRow({
           <p className="mt-0.5 text-[13px] leading-[1.45] text-ink/90">{e.reason}</p>
         )}
         {e.actor?.email && (
-          <p className="mt-0.5 text-xs text-mut">{e.actor.email}</p>
+          /* `truncate` + infobulle : une adresse longue se rognait net au bord
+             de la carte (overflow-hidden) — motif DeviceRow. */
+          <p className="mt-0.5 truncate text-xs text-mut" title={e.actor.email}>
+            {e.actor.email}
+          </p>
         )}
       </div>
     </li>
