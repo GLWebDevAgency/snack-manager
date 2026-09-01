@@ -16,6 +16,7 @@ import {
   type JwtPayload,
   type LoyaltyAdminAdjustment,
   type LoyaltyConsentEvent,
+  type LoyaltyEnrollmentRecovery,
   type LoyaltyEarn,
   type LoyaltyLedgerReversal,
   type LoyaltyMemberCreate,
@@ -71,6 +72,7 @@ const CREATE: LoyaltyMemberCreate = {
   termsNoticeVersion: 'loyalty-2026-09',
 };
 const RESOLVE: LoyaltyMemberResolve = { by: 'member_ref', memberRef: MEMBER };
+const RECOVER: LoyaltyEnrollmentRecovery = { operationId: CREATE.operationId };
 const EARN: LoyaltyEarn = {
   operationId: '30000000-0000-4000-8000-000000000002',
   purchaseCents: 1_850,
@@ -110,6 +112,7 @@ const REPLACE_QR: LoyaltyMemberQrReplace = {
 
 function harness() {
   const createMember = vi.fn().mockResolvedValue({ route: 'create' });
+  const recoverEnrollment = vi.fn().mockResolvedValue({ route: 'recover' });
   const resolveMember = vi.fn().mockResolvedValue({ route: 'resolve' });
   const earn = vi.fn().mockResolvedValue({ route: 'earn' });
   const redeem = vi.fn().mockResolvedValue({ route: 'redeem' });
@@ -120,6 +123,7 @@ function harness() {
   const replaceQr = vi.fn().mockResolvedValue({ route: 'replaceQr' });
   const service = {
     createMember,
+    recoverEnrollment,
     resolveMember,
     earn,
     redeem,
@@ -135,6 +139,7 @@ function harness() {
   return {
     controller,
     createMember,
+    recoverEnrollment,
     resolveMember,
     earn,
     redeem,
@@ -148,6 +153,7 @@ function harness() {
 
 type RouteMethod =
   | 'create'
+  | 'recoverEnrollment'
   | 'resolve'
   | 'earn'
   | 'redeem'
@@ -173,11 +179,12 @@ function bodyPipe(method: RouteMethod): ZodValidationPipe {
 }
 
 describe('LoyaltyMemberController — frontière HTTP', () => {
-  it('expose les neuf POST sous /loyalty/members, avec resolve en 200', () => {
+  it('expose les dix POST sous /loyalty/members, avec les lectures en 200', () => {
     expect(Reflect.getMetadata(PATH_METADATA, LoyaltyMemberController)).toBe('loyalty/members');
 
     const routes = {
       create: '/',
+      recoverEnrollment: 'enrollments/recover',
       resolve: 'resolve',
       earn: ':id/earn',
       redeem: ':id/redemptions',
@@ -194,6 +201,12 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
     }
     expect(
       Reflect.getMetadata(HTTP_CODE_METADATA, LoyaltyMemberController.prototype.resolve),
+    ).toBe(200);
+    expect(
+      Reflect.getMetadata(
+        HTTP_CODE_METADATA,
+        LoyaltyMemberController.prototype.recoverEnrollment,
+      ),
     ).toBe(200);
   });
 
@@ -246,6 +259,15 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
       actorRef: CASHIER.sub,
       deviceRef: DEVICE,
     });
+  });
+
+  it("reprend une adhésion dans le tenant sans retransmettre de profil", async () => {
+    const { controller, recoverEnrollment } = harness();
+
+    await expect(controller.recoverEnrollment(TENANT, RECOVER)).resolves.toEqual({
+      route: 'recover',
+    });
+    expect(recoverEnrollment).toHaveBeenCalledWith(TENANT, RECOVER.operationId);
   });
 
   it('résout une carte dans le tenant du JWT, sans contexte falsifiable dans le body', async () => {
@@ -369,6 +391,16 @@ describe('LoyaltyMemberController — contrats Zod réellement branchés', () =>
       termsAccepted: true,
       termsNoticeVersion: CREATE.termsNoticeVersion,
     });
+  });
+
+  it('branche une reprise stricte sans donnée personnelle', () => {
+    expect(bodyPipe('recoverEnrollment').transform(RECOVER)).toEqual(RECOVER);
+    expect(() =>
+      bodyPipe('recoverEnrollment').transform({
+        ...RECOVER,
+        phone: '06 12 34 56 78',
+      }),
+    ).toThrow(BadRequestException);
   });
 
   it("exige l'acceptation des conditions et le coût affiché avant mutation", () => {

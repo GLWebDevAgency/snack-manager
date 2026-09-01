@@ -11,6 +11,7 @@ import {
 import {
   LoyaltyAdminAdjustmentSchema,
   LoyaltyConsentEventSchema,
+  LoyaltyEnrollmentRecoverySchema,
   LoyaltyEarnSchema,
   LoyaltyLedgerReversalSchema,
   LoyaltyMemberCreateSchema,
@@ -21,6 +22,7 @@ import {
   type JwtPayload,
   type LoyaltyAdminAdjustment,
   type LoyaltyConsentEvent,
+  type LoyaltyEnrollmentRecovery,
   type LoyaltyEarn,
   type LoyaltyLedgerReversal,
   type LoyaltyMemberCreate,
@@ -93,6 +95,19 @@ export class LoyaltyMemberController {
       tenantRef,
       body as LoyaltyMemberCreate,
       authenticatedActor(user),
+    );
+  }
+
+  /** Reprise sans PII d'une création dont la réponse réseau s'est perdue. */
+  @Post('enrollments/recover')
+  @HttpCode(HttpStatus.OK)
+  recoverEnrollment(
+    @TenantId() tenantRef: string,
+    @Body(zod(LoyaltyEnrollmentRecoverySchema)) body: unknown,
+  ) {
+    return this.members.recoverEnrollment(
+      tenantRef,
+      (body as LoyaltyEnrollmentRecovery).operationId,
     );
   }
 

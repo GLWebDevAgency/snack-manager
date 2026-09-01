@@ -270,6 +270,13 @@ integration('LoyaltyMemberService — transaction PostgreSQL réelle', () => {
       member: { id: created.member.id },
     });
     expect(replayedCreate.qrToken).toBe(created.qrToken);
+    await expect(service.recoverEnrollment(tenantRef, createOperation)).resolves.toEqual({
+      ...replayedCreate,
+      replayed: true,
+    });
+    await expect(
+      service.recoverEnrollment(otherTenantRef, createOperation),
+    ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
       service.resolveMember(tenantRef, {
         by: 'qr_token',

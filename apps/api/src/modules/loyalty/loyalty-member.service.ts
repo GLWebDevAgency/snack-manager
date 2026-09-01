@@ -737,6 +737,59 @@ export class LoyaltyMemberService {
     }
   }
 
+  /**
+   * Rend à la même caisse le résultat d'une adhésion déjà clôturée lorsque la
+   * réponse HTTP s'est perdue. Le token QR est redérivé puis comparé à son hash
+   * stocké ; aucune donnée de profil n'est nécessaire dans la requête.
+   */
+  async recoverEnrollment(
+    tenantRef: string,
+    operationId: string,
+  ): Promise<LoyaltyMemberCreateResult> {
+    return withLoyaltyTenant(this.db, tenantRef, async (tx) => {
+      const [operation] = await tx
+        .select({
+          kind: operations.kind,
+          status: operations.status,
+          result: operations.result,
+        })
+        .from(operations)
+        .where(
+          and(
+            eq(operations.tenantRef, tenantRef),
+            eq(operations.operationId, operationId),
+          ),
+        )
+        .limit(1);
+      if (!operation || operation.kind !== 'member_create') {
+        throw new NotFoundException('Adhésion fidélité introuvable');
+      }
+      if (operation.status !== 'completed' || operation.result === null) {
+        throw new ConflictException("L'adhésion est encore en cours, réessayez");
+      }
+
+      const stored = storedObject(operation.result, "d'adhésion");
+      const memberId = assertStoredUuid(stored.memberId, 'membre');
+      const qrTokenHash = assertStoredHash(stored.qrTokenHash, 'QR');
+      const member = await this.memberSummary(tx, tenantRef, memberId);
+      if (member.status === 'anonymized') {
+        throw new ConflictException('Cette adhésion a depuis été anonymisée');
+      }
+      return {
+        operationId,
+        replayed: true,
+        member,
+        qrToken: await this.replayEnrollmentToken(
+          tx,
+          tenantRef,
+          memberId,
+          operationId,
+          qrTokenHash,
+        ),
+      };
+    });
+  }
+
   async resolveMember(
     tenantRef: string,
     lookup: LoyaltyMemberResolve,

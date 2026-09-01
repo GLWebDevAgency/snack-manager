@@ -187,6 +187,15 @@ export const LoyaltyMemberCreateSchema = z
   .strict();
 export type LoyaltyMemberCreate = z.infer<typeof LoyaltyMemberCreateSchema>;
 
+/**
+ * Reprise d'une adhésion dont la réponse s'est perdue. L'UUID aléatoire est la
+ * seule donnée persistée par la caisse : ni téléphone, ni prénom, ni secret QR.
+ */
+export const LoyaltyEnrollmentRecoverySchema = z
+  .object({ operationId: LoyaltyOperationIdSchema })
+  .strict();
+export type LoyaltyEnrollmentRecovery = z.infer<typeof LoyaltyEnrollmentRecoverySchema>;
+
 export const LoyaltyMemberResolveSchema = z.discriminatedUnion('by', [
   z.object({ by: z.literal('member_ref'), memberRef: z.string().uuid() }).strict(),
   z.object({ by: z.literal('qr_token'), qrToken: z.string().min(32).max(512) }).strict(),

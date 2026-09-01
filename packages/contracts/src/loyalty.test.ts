@@ -3,6 +3,7 @@ import {
   LoyaltyAdminAdjustmentSchema,
   LoyaltyConsentEventSchema,
   LoyaltyCustomerCardSchema,
+  LoyaltyEnrollmentRecoverySchema,
   LoyaltyEarnResultSchema,
   LoyaltyEarnSchema,
   LoyaltyLedgerReversalResultSchema,
@@ -94,6 +95,20 @@ describe('contrats fidélité', () => {
         noticeVersion: '2026-09',
       }).success,
     ).toBe(true);
+  });
+
+  it("ne reprend une adhésion qu'avec son UUID opaque", () => {
+    expect(
+      LoyaltyEnrollmentRecoverySchema.safeParse({
+        operationId: '7f298b7f-96d5-4f0d-8b10-c9069acaaec4',
+      }).success,
+    ).toBe(true);
+    expect(
+      LoyaltyEnrollmentRecoverySchema.safeParse({
+        operationId: '7f298b7f-96d5-4f0d-8b10-c9069acaaec4',
+        phone: '06 12 34 56 78',
+      }).success,
+    ).toBe(false);
   });
 
   it('refuse une récompense automatique incomplète', () => {
