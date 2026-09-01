@@ -10,6 +10,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "migrate:postgres": "pnpm --filter @sm/supply migrate && pnpm --filter @sm/loyalty migrate",
+    "migrate:postgres:built": "node packages/supply/dist/migrate.js && node packages/loyalty/dist/migrate.js",
     "seed": "pnpm --filter @sm/db seed",
     "admin": "pnpm --filter @sm/db run admin",
     "test": "turbo test",

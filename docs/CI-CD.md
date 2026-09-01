@@ -266,8 +266,8 @@ protection côté serveur.
 
 ### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
 
-Le `preDeployCommand` de Railway migre le schéma **PostgreSQL** (appro), et lui
-seul. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+Le `preDeployCommand` de Railway migre les schémas **PostgreSQL** (supply puis
+fidélité), et eux seuls. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
 son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
 scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
 délibérément : une reprise de données se relit avant d'être appliquée.
@@ -639,13 +639,23 @@ Le service `api` porte un `preDeployCommand` **posé côté Railway** (pas dans
 GitHub Actions, et il ne faut pas l'y déplacer) :
 
 ```
-node packages/supply/dist/migrate.js
+pnpm migrate:postgres:built
 ```
 
-Il s'exécute dans le conteneur Railway, où `DATABASE_URL` est déjà présente, et
-**il bloque la mise en service si la migration échoue**. Le schéma PostgreSQL
-est donc à jour avant que la nouvelle version serve la moindre requête, et
+Il exécute successivement
+`node packages/supply/dist/migrate.js` puis
+`node packages/loyalty/dist/migrate.js` dans le conteneur Railway, où
+`DATABASE_URL` est déjà présente. **Il bloque la mise en service dès qu'une
+migration échoue.** Les deux schémas PostgreSQL sont donc à jour avant que la nouvelle version serve la moindre requête, et
 avant que les trois interfaces se remettent à appeler l'API.
+
+> **Garde de livraison fidélité.** Cette commande est configurée côté Railway,
+> pas versionnée par ce dépôt. Avant la première mise en ligne de la fidélité,
+> remplacer l'ancienne valeur `node packages/supply/dist/migrate.js` dans
+> **staging puis production**, observer les deux messages
+> `✓ Migrations supply appliquées` et `✓ Migrations fidélité appliquées`, puis
+> seulement ouvrir la fonctionnalité. Tant que cette vérification n'est pas
+> faite, la fidélité est considérée comme **non déployable**.
 
 C'est aussi la raison de l'ordre : `web`, `pos` et `kds` ne partent qu'une fois
 l'`api` **en service**, pas seulement construite.
@@ -934,7 +944,8 @@ plus vite ; il ne défait rien tout seul.
 ### La règle qui compte : les migrations ne se défont pas
 
 Un retour arrière **remet le code d'avant. Il ne remet pas le schéma
-d'avant.** `packages/supply/dist/migrate.js` applique les migrations en avant,
+d'avant.** `pnpm migrate:postgres:built` applique les migrations supply et
+fidélité en avant,
 il n'a pas d'inverse, et Railway ne rejoue rien à l'envers.
 
 Conséquence, en clair : après un retour arrière, **l'ancien code parle à la

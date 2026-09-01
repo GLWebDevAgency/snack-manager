@@ -343,8 +343,8 @@ jobs:
 
       # ── L'api d'abord, seule ──────────────────────────────────────────────
       # Elle porte le preDeployCommand Railway
-      # `node packages/supply/dist/migrate.js` (posé sur les deux
-      # environnements, idempotent) : le schéma PostgreSQL doit être à jour
+      # `pnpm migrate:postgres:built` (à poser sur les deux environnements,
+      # idempotent) : les schémas PostgreSQL supply ET fidélité doivent être à jour
       # AVANT que les interfaces se remettent à l'appeler. Si la migration
       # échoue, Railway refuse la mise en service, cette étape échoue, et les
       # trois interfaces ne partent même pas.
