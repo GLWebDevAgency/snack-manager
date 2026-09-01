@@ -41,6 +41,29 @@ describe('SharedPublicQuota', () => {
     expect(JSON.stringify(evalFn.mock.calls)).not.toContain(INPUT.clientKey);
   });
 
+  it('réserve une dimension secondaire sans créer de seconde clé globale', async () => {
+    const { redis, evalFn } = redisReturning([1, 1]);
+    const quota = new SharedPublicQuota(redis);
+
+    await expect(
+      quota.reserveClient({
+        scope: 'loyalty-card-token',
+        clientKey: 'tenant:classfood\0token:secret',
+        windowMs: 60_000,
+        clientLimit: 120,
+      }),
+    ).resolves.toBe(true);
+
+    const [script, keyCount, clientKey] = evalFn.mock.calls[0] as unknown[];
+    expect(script).toEqual(expect.stringContaining("redis.call('TIME')"));
+    expect(keyCount).toBe(1);
+    expect(clientKey).toEqual(
+      expect.stringContaining('public-quota:loyalty-card-token:client:'),
+    );
+    expect(JSON.stringify(evalFn.mock.calls)).not.toContain('token:secret');
+    expect(JSON.stringify(evalFn.mock.calls)).not.toContain(':global');
+  });
+
   it("refuse toute la réservation dès qu'une des deux bornes est pleine", async () => {
     const { redis } = redisReturning([0, 5, 12]);
     await expect(new SharedPublicQuota(redis).reserve(INPUT)).resolves.toBe(false);

@@ -91,6 +91,38 @@ describe("politique anti-cadrage", () => {
     expectSameOrigin(response);
   });
 
+  it.each([
+    "/r/classfood/fidelite",
+    "/r/classfood/fidelite/",
+    "/r/classfood/fidelite/manifest.webmanifest",
+    "/r/classfood/fidelite/icon.svg",
+  ])("sert l’application fidélité du bon restaurant sur son domaine : %s", async (pathname) => {
+    resolvesTo("classfood");
+    const response = await proxy(request(pathname, `fidelite-${pathname.length}.example`));
+    expect(response.status).toBe(200);
+    expect(isRewrite(response)).toBe(false);
+    expectSameOrigin(response);
+  });
+
+  it("ne sert jamais la fidélité d’un autre restaurant sous le domaine du client", async () => {
+    resolvesTo("classfood");
+    const navigation = await proxy(
+      request("/r/concurrent/fidelite", "fidelite-isolation.example", {
+        "sec-fetch-mode": "navigate",
+      }),
+    );
+    expect(navigation.status).toBe(308);
+    expect(getRedirectUrl(navigation)).toBe("https://fidelite-isolation.example/");
+
+    const machine = await proxy(
+      request(
+        "/r/concurrent/fidelite/manifest.webmanifest",
+        "fidelite-isolation-machine.example",
+      ),
+    );
+    expect(machine.status).toBe(404);
+    expectSameOrigin(machine);
+  });
 
   it("décore les refus machine et les hôtes inconnus", async () => {
     resolvesTo("classfood");

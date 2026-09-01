@@ -31,11 +31,13 @@ import { BillingModule } from './modules/billing/billing.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
 import { trustedClientIp } from './common/trusted-client-ip';
+import { validatePublicRelayEnvironment } from './common/verified-public-relay';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validatePublicRelayEnvironment,
       // Dev local : .env à la racine du monorepo ; en prod Railway les
       // variables sont injectées directement dans l'environnement.
       envFilePath: [join(process.cwd(), '.env'), join(process.cwd(), '../../.env')],

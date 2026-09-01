@@ -386,7 +386,14 @@ type Verdict = "réécrire" | "laisser" | "refuser";
 function verdictPourRestaurant(pathname: string, slug: string): Verdict {
   if (pathname === "/") return "réécrire";
 
-  if (pathname === `/r/${slug}` || pathname === `/r/${slug}/`) return "laisser";
+  if (
+    pathname === `/r/${slug}` ||
+    pathname === `/r/${slug}/` ||
+    pathname === `/r/${slug}/fidelite` ||
+    pathname.startsWith(`/r/${slug}/fidelite/`)
+  ) {
+    return "laisser";
+  }
   if (pathname === "/w.js" || pathname === "/robots.txt") return "laisser";
   if (pathname === `/embed/${slug}` || pathname === `/embed/${slug}/`) return "laisser";
   if (pathname.startsWith("/t/") || pathname.startsWith("/photos/")) return "laisser";

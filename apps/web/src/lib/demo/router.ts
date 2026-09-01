@@ -34,6 +34,34 @@
 import {
   DEVICE_KIND_LABELS,
   DEVICE_OFFLINE_AFTER_MS,
+  LoyaltyAdminAdjustmentSchema,
+  LoyaltyConsentEventSchema,
+  LoyaltyConsentMutationResultSchema,
+  LoyaltyDashboardSchema,
+  LoyaltyEarnResultSchema,
+  LoyaltyEarnSchema,
+  LoyaltyEnrollmentAcknowledgementResultSchema,
+  LoyaltyEnrollmentAcknowledgementSchema,
+  LoyaltyEnrollmentPrepareResultSchema,
+  LoyaltyEnrollmentPrepareSchema,
+  LoyaltyEnrollmentRecoveryResultSchema,
+  LoyaltyEnrollmentRecoverySchema,
+  LoyaltyLedgerEntryViewSchema,
+  LoyaltyMemberCreateResultSchema,
+  LoyaltyMemberCreateSchema,
+  LoyaltyMemberDetailSchema,
+  LoyaltyMemberLifecycleResultSchema,
+  LoyaltyMemberLifecycleSchema,
+  LoyaltyMemberListQuerySchema,
+  LoyaltyMemberListSchema,
+  LoyaltyMemberResolveSchema,
+  LoyaltyMemberQrReplaceResultSchema,
+  LoyaltyMemberQrReplaceSchema,
+  LoyaltyMemberSummarySchema,
+  LoyaltyMutationResultSchema,
+  LoyaltyProgramPutSchema,
+  LoyaltyRewardCreateSchema,
+  LoyaltyRewardUpdateSchema,
   PAIRING_CODE_ALPHABET,
   PAIRING_CODE_LENGTH,
   SCREEN_OFFLINE_AFTER_MS,
@@ -41,12 +69,18 @@ import {
   SCREEN_THEME_LABELS,
   mostAdvancedStatus,
   type DeviceKind,
+  type LoyaltyEarnResult,
+  type LoyaltyMemberSummary,
+  type LoyaltyProgramPut,
+  type LoyaltyProgramView,
+  type LoyaltyRewardView,
   type OrderStatus,
   type PlanningPosition,
   type PlanningShiftView,
   type PlanningStatus,
   type SupplyIngredient,
 } from "@sm/contracts";
+import { loyalty as loyaltyDomain, Money } from "@sm/domain";
 import {
   bomOf,
   channels,
@@ -64,6 +98,9 @@ import {
   CNAME_TARGET,
   DOMAIN_PROVIDER,
   SITE_SUBDOMAIN,
+  type DemoLoyaltyMember,
+  type DemoLoyaltyOperation,
+  type DemoLoyaltyOperationResult,
   type DemoOrder,
   type DemoWorld,
 } from "./state";
@@ -83,6 +120,11 @@ import {
 export interface DemoResponse {
   status: number;
   body: unknown;
+}
+
+export interface DemoRouteContext {
+  /** Identité volatile de l'onglet démo ; jamais enregistrée en clair. */
+  sessionRef?: string;
 }
 
 /** Refus rendu avec la forme d'erreur de l'API (NestJS). */
@@ -284,20 +326,410 @@ const withBelowPar = (i: SupplyIngredient): SupplyIngredient => ({
 });
 
 // ─────────────────────────────────────────────────────────────
+// Fidélité : vues, validation et idempotence
+// ─────────────────────────────────────────────────────────────
+
+interface DemoSchema<T> {
+  safeParse(value: unknown):
+    | { success: true; data: T }
+    | { success: false; error: { issues: { message: string }[] } };
+}
+
+function parseDemoBody<T>(schema: DemoSchema<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new Refusal(400, parsed.error.issues.map((issue) => issue.message).join(". "));
+  }
+  return parsed.data;
+}
+
+function normalizeDemoFrenchPhone(rawPhone: string): string {
+  if (!/^[+0-9\s().-]+$/.test(rawPhone)) {
+    throw new Refusal(400, "Le numéro de téléphone français contient un caractère invalide.");
+  }
+  let compact = rawPhone.trim().replace(/[\s().-]/g, "");
+  if (/^00330[1-9]\d{8}$/.test(compact)) compact = `+33${compact.slice(5)}`;
+  else if (/^0033[1-9]\d{8}$/.test(compact)) compact = `+${compact.slice(2)}`;
+  else if (/^\+330[1-9]\d{8}$/.test(compact)) compact = `+33${compact.slice(4)}`;
+  else if (/^0[1-9]\d{8}$/.test(compact)) compact = `+33${compact.slice(1)}`;
+  if (!/^\+33[1-9]\d{8}$/.test(compact)) {
+    throw new Refusal(
+      400,
+      "Le numéro doit être un numéro français valide au format 0XXXXXXXXX ou +33XXXXXXXXX.",
+    );
+  }
+  return compact;
+}
+
+function canonicalDemoJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalDemoJson).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return `{${entries
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalDemoJson(entry)}`)
+    .join(",")}}`;
+}
+
+/**
+ * Empreinte volatile pour comparer deux rejeux sans dupliquer le téléphone ou
+ * le QR en clair dans la boîte d'idempotence. Ce n'est pas un mécanisme de
+ * sécurité : l'API réelle emploie un HMAC avec une clé dédiée.
+ */
+function demoOperationFingerprint(kind: string, payload: unknown): string {
+  const canonical = canonicalDemoJson({ kind, payload });
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
+  for (let index = 0; index < canonical.length; index++) {
+    const code = canonical.charCodeAt(index);
+    left = Math.imul(left ^ code, 0x01000193);
+    right = Math.imul(right ^ code, 0x85ebca6b);
+  }
+  return `${(left >>> 0).toString(16).padStart(8, "0")}${(right >>> 0)
+    .toString(16)
+    .padStart(8, "0")}`;
+}
+
+function replayLoyaltyOperation(
+  w: DemoWorld,
+  kind: DemoWorld["loyalty"]["operations"][string]["kind"],
+  operationId: string,
+  payload: unknown,
+): DemoLoyaltyOperationResult | null {
+  const fingerprint = demoOperationFingerprint(kind, payload);
+  const existing = w.loyalty.operations[operationId];
+  if (!existing) return null;
+  if (existing.kind !== kind || existing.fingerprint !== fingerprint) {
+    throw new Refusal(409, "Cet identifiant d'opération a déjà servi pour une autre demande");
+  }
+  if (existing.invalidated || existing.result === null) {
+    throw new Refusal(
+      409,
+      "Ce secret à affichage unique a été révoqué et ne peut pas être rejoué",
+    );
+  }
+  if (kind === "token_replace") {
+    const replaced = LoyaltyMemberQrReplaceResultSchema.parse(existing.result);
+    const member = existing.memberId
+      ? w.loyalty.members.find((candidate) => candidate.id === existing.memberId)
+      : null;
+    if (!member || member.status !== "active" || !member.qrTokens.includes(replaced.qrToken)) {
+      throw new Refusal(409, "Ce remplacement QR n'est plus la génération active");
+    }
+  }
+  return { ...existing.result, replayed: true } as DemoLoyaltyOperationResult;
+}
+
+function loyaltyOperationMemberId(result: DemoLoyaltyOperationResult): string | null {
+  const record = result as unknown as Record<string, unknown>;
+  if (typeof record.memberId === "string") return record.memberId;
+  const member = record.member;
+  if (
+    member &&
+    typeof member === "object" &&
+    typeof (member as Record<string, unknown>).id === "string"
+  ) {
+    return (member as Record<string, unknown>).id as string;
+  }
+  return null;
+}
+
+function completeLoyaltyOperation(
+  w: DemoWorld,
+  kind: Exclude<DemoWorld["loyalty"]["operations"][string]["kind"], "member_create">,
+  operationId: string,
+  payload: unknown,
+  result: DemoLoyaltyOperationResult,
+): void {
+  w.loyalty.operations[operationId] = {
+    kind,
+    fingerprint: demoOperationFingerprint(kind, payload),
+    memberId: loyaltyOperationMemberId(result),
+    result,
+  };
+}
+
+const ENROLLMENT_HANDOFF_WINDOW_MS = 30 * 60_000;
+const ENROLLMENT_RECOVERY_RETRY_MS = 750;
+
+function demoEnrollmentOwnerFingerprint(context: DemoRouteContext): string {
+  return demoOperationFingerprint("enrollment_owner", {
+    sessionRef: context.sessionRef ?? "demo-admin-session",
+  });
+}
+
+function demoEnrollmentOperation(
+  w: DemoWorld,
+  operationId: string,
+  missingStatus: 404 | 409,
+): DemoLoyaltyOperation {
+  const operation = w.loyalty.operations[operationId];
+  if (!operation || operation.kind !== "member_create" || !operation.enrollment) {
+    throw new Refusal(
+      missingStatus,
+      missingStatus === 404
+        ? "Adhésion fidélité introuvable"
+        : "Préparez l'adhésion avant de transmettre le profil",
+    );
+  }
+  return operation;
+}
+
+function assertDemoEnrollmentOwner(
+  operation: DemoLoyaltyOperation,
+  ownerFingerprint: string,
+): void {
+  if (operation.enrollment?.ownerFingerprint !== ownerFingerprint) {
+    throw new Refusal(403, "Cette adhésion appartient à une autre session");
+  }
+}
+
+function expireDemoEnrollmentIfNeeded(operation: DemoLoyaltyOperation): void {
+  const enrollment = operation.enrollment;
+  if (!enrollment) throw new Refusal(404, "Adhésion fidélité introuvable");
+  if (Date.parse(enrollment.expiresAt) <= Date.now()) {
+    enrollment.phase = "expired";
+    throw new Refusal(410, "Le délai de remise du QR est expiré");
+  }
+}
+
+/**
+ * Reconstruit le secret depuis la carte tant que la remise reste ouverte.
+ * L'opération sérialisée ne contient donc jamais le QR ni un résumé membre.
+ */
+function demoEnrollmentResult(
+  w: DemoWorld,
+  operationId: string,
+  operation: DemoLoyaltyOperation,
+  replayed: boolean,
+) {
+  const enrollment = operation.enrollment;
+  if (
+    !enrollment ||
+    enrollment.phase !== "ready" ||
+    operation.invalidated ||
+    !operation.memberId
+  ) {
+    throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+  }
+  expireDemoEnrollmentIfNeeded(operation);
+  const member = w.loyalty.members.find((candidate) => candidate.id === operation.memberId);
+  const qrToken = member?.qrTokens[0];
+  if (
+    !member ||
+    member.status !== "active" ||
+    member.enrollmentHandoffAt !== null ||
+    !qrToken
+  ) {
+    throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+  }
+  return LoyaltyMemberCreateResultSchema.parse({
+    operationId,
+    replayed,
+    member: loyaltyMemberSummary(member),
+    qrToken,
+    handoffExpiresAt: enrollment.expiresAt,
+  });
+}
+
+/**
+ * Supprime de la boîte d'idempotence toute copie d'un QR/alias devenue
+ * obsolète, tout en conservant un tombstone qui interdit de recréer la même
+ * intention comme s'il s'agissait d'une première demande.
+ */
+function invalidateLoyaltySecretOperations(w: DemoWorld, memberId: string): void {
+  for (const operation of Object.values(w.loyalty.operations)) {
+    if (
+      operation.memberId === memberId &&
+      (operation.kind === "member_create" || operation.kind === "token_replace")
+    ) {
+      operation.result = null;
+      operation.invalidated = true;
+    }
+  }
+}
+
+/** Après anonymisation, aucun rejeu ne doit restaurer un ancien résumé membre. */
+function invalidateLoyaltyMemberSnapshotOperations(w: DemoWorld, memberId: string): void {
+  for (const operation of Object.values(w.loyalty.operations)) {
+    if (
+      operation.memberId === memberId &&
+      ["member_create", "earn", "redeem", "adjust", "token_replace"].includes(
+        operation.kind,
+      )
+    ) {
+      operation.result = null;
+      operation.invalidated = true;
+    }
+  }
+}
+
+const maskedLoyaltyPhone = (phone: string | null): string | null =>
+  phone ? `•• •• •• ${phone.slice(-4, -2)} ${phone.slice(-2)}` : null;
+
+function loyaltyMemberSummary(member: DemoLoyaltyMember): LoyaltyMemberSummary {
+  const alias =
+    member.status === "anonymized"
+      ? "Carte anonymisée"
+      : (member.firstName?.trim() ?? "") ||
+        (member.phone ? `Client · ${member.phone.slice(-4)}` : `Carte ${member.id.slice(0, 8)}`);
+  return LoyaltyMemberSummarySchema.parse({
+    id: member.id,
+    alias,
+    maskedPhone: member.status === "anonymized" ? null : maskedLoyaltyPhone(member.phone),
+    status: member.status,
+    balanceUnits: member.balanceUnits,
+    lifetimeEarnedUnits: member.lifetimeEarnedUnits,
+    lifetimeRedeemedUnits: member.lifetimeRedeemedUnits,
+    lastActivityAt: member.lastActivityAt,
+    joinedAt: member.joinedAt,
+  });
+}
+
+function loyaltyMember(w: DemoWorld, memberId: string | undefined): DemoLoyaltyMember {
+  const member = memberId
+    ? w.loyalty.members.find(
+        (candidate) =>
+          candidate.id === memberId && candidate.enrollmentHandoffAt !== null,
+      )
+    : null;
+  if (!member) throw new Refusal(404, "Carte fidélité introuvable");
+  return member;
+}
+
+function activeLoyaltyMember(w: DemoWorld, memberId: string | undefined): DemoLoyaltyMember {
+  const member = loyaltyMember(w, memberId);
+  if (member.status !== "active") {
+    throw new Refusal(409, "Cette carte fidélité est bloquée ou anonymisée");
+  }
+  return member;
+}
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assertLoyaltyUuid(value: string | undefined): string {
+  if (!value || !UUID_V4.test(value)) throw new Refusal(400, "Identifiant fidélité invalide");
+  return value;
+}
+
+const nextLoyaltyUuid = (w: DemoWorld, family: string): string =>
+  `${family}-0000-4000-8000-${String(++w.seq).padStart(12, "0")}`;
+
+const nextLoyaltyQrToken = (w: DemoWorld): string =>
+  `demo-loyalty-${String(++w.seq).padStart(6, "0")}`.padEnd(43, "_").slice(0, 43);
+
+function addLoyaltyLedgerEntry(
+  w: DemoWorld,
+  member: DemoLoyaltyMember,
+  values: Omit<DemoLoyaltyMember["ledger"][number], "id" | "recordedAt">,
+): DemoLoyaltyMember["ledger"][number] {
+  const entry = LoyaltyLedgerEntryViewSchema.parse({
+    ...values,
+    id: nextLoyaltyUuid(w, "14000000"),
+    recordedAt: new Date().toISOString(),
+  });
+  member.ledger.unshift(entry);
+  member.lastActivityAt = entry.recordedAt;
+  return entry;
+}
+
+function loyaltyCursor(member: DemoLoyaltyMember): string {
+  return `${Date.parse(member.joinedAt).toString(36)}.${member.id}`;
+}
+
+function decodeLoyaltyCursor(raw: string): { joinedAt: number; id: string } {
+  const match = /^([0-9a-z]+)\.([0-9a-f-]{36})$/i.exec(raw);
+  const joinedAt = match ? Number.parseInt(match[1]!, 36) : Number.NaN;
+  if (!match || !Number.isFinite(joinedAt) || !UUID_V4.test(match[2]!)) {
+    throw new Refusal(400, "Curseur de pagination fidélité invalide");
+  }
+  return { joinedAt, id: match[2]! };
+}
+
+function loyaltyDashboard(w: DemoWorld) {
+  const since = Date.now() - 30 * 24 * 60 * 60_000;
+  const handedOffMembers = w.loyalty.members.filter(
+    (member) => member.enrollmentHandoffAt !== null,
+  );
+  const visibleMembers = handedOffMembers.filter((member) => member.status !== "anonymized");
+  const entries = w.loyalty.members
+    .filter((member) => member.enrollmentHandoffAt !== null)
+    .flatMap((member) => member.ledger.map((entry) => ({ member, entry })))
+    .sort(
+      (left, right) =>
+        Date.parse(right.entry.recordedAt) - Date.parse(left.entry.recordedAt) ||
+        right.entry.id.localeCompare(left.entry.id),
+    );
+  const recentEntries = entries.filter(({ entry }) => Date.parse(entry.recordedAt) >= since);
+  return LoyaltyDashboardSchema.parse({
+    totalMembers: visibleMembers.length,
+    activeMembers30d: visibleMembers.filter(
+      (member) =>
+        member.status === "active" &&
+        member.lastActivityAt !== null &&
+        Date.parse(member.lastActivityAt) >= since,
+    ).length,
+    newMembers30d: visibleMembers.filter((member) => Date.parse(member.joinedAt) >= since).length,
+    outstandingUnits: visibleMembers.reduce((sum, member) => sum + member.balanceUnits, 0),
+    earnedUnits30d: recentEntries
+      .filter(({ entry }) => entry.kind === "earn")
+      .reduce((sum, { entry }) => sum + entry.deltaUnits, 0),
+    redeemedUnits30d: recentEntries
+      .filter(({ entry }) => entry.kind === "redeem")
+      .reduce((sum, { entry }) => sum + Math.abs(entry.deltaUnits), 0),
+    redemptions30d: recentEntries.filter(({ entry }) => entry.kind === "redeem").length,
+    recentActivity: entries.slice(0, 8).map(({ member, entry }) => ({
+      memberId: member.id,
+      memberAlias: loyaltyMemberSummary(member).alias,
+      entry,
+    })),
+  });
+}
+
+function sameLoyaltyProgram(current: LoyaltyProgramView, next: LoyaltyProgramPut): boolean {
+  return (
+    current.name === next.name &&
+    current.status === next.status &&
+    current.unitLabelSingular === next.unitLabelSingular &&
+    current.unitLabelPlural === next.unitLabelPlural &&
+    current.termsSummary === next.termsSummary &&
+    canonicalDemoJson(current.earn) === canonicalDemoJson(next.earn)
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Aiguillage
 // ─────────────────────────────────────────────────────────────
 
-export function routeDemo(method: string, rawPath: string, body?: unknown): DemoResponse {
+export function routeDemo(
+  method: string,
+  rawPath: string,
+  body?: unknown,
+  context: DemoRouteContext = {},
+): DemoResponse {
   const w = demoWorld();
   try {
-    return dispatch(w, method.toUpperCase(), rawPath, body);
+    return dispatch(
+      w,
+      method.toUpperCase(),
+      rawPath,
+      body,
+      demoEnrollmentOwnerFingerprint(context),
+    );
   } catch (err) {
     if (err instanceof Refusal) return refuse(err.status, err.message);
     throw err;
   }
 }
 
-function dispatch(w: DemoWorld, method: string, rawPath: string, body?: unknown): DemoResponse {
+function dispatch(
+  w: DemoWorld,
+  method: string,
+  rawPath: string,
+  body: unknown,
+  enrollmentOwnerFingerprint: string,
+): DemoResponse {
   const [pathPart = "", queryPart = ""] = rawPath.split("?");
   const path = pathPart.replace(/\/+$/, "") || "/";
   const q = new URLSearchParams(queryPart);
@@ -460,6 +892,579 @@ function dispatch(w: DemoWorld, method: string, rawPath: string, body?: unknown)
     if (seg[1] === "heatmap") return ok(HEATMAP);
     if (seg[1] === "prep-times") return ok(prepTimes(w, period));
     if (seg[1] === "summary-live") return ok(summaryLive(w));
+  }
+
+  // ─── Fidélité autonome ───
+  //
+  // Ces routes ne dépendent d'aucune commande en ligne. Une carte peut être
+  // créée et utilisée au comptoir avec son QR, ou retrouvée exactement par
+  // téléphone via POST : aucune donnée personnelle ne voyage dans l'URL.
+
+  if (seg[0] === "loyalty") {
+    if (seg[1] === "program" && seg.length === 2) {
+      if (method === "GET") return ok(w.loyalty.program);
+      if (method === "PUT") {
+        const dto = parseDemoBody(LoyaltyProgramPutSchema, b);
+        const current = w.loyalty.program;
+        if (current && sameLoyaltyProgram(current, dto)) return ok(current);
+        const now = new Date().toISOString();
+        const next: LoyaltyProgramView = {
+          ...dto,
+          id: current?.id ?? nextLoyaltyUuid(w, "15000000"),
+          rulesVersion: current ? current.rulesVersion + 1 : 1,
+          createdAt: current?.createdAt ?? now,
+          updatedAt: now,
+        };
+        w.loyalty.program = next;
+        return ok(next);
+      }
+    }
+
+    if (seg[1] === "rewards") {
+      if (method === "GET" && seg.length === 2) {
+        return ok(
+          w.loyalty.rewards
+            .slice()
+            .sort(
+              (left, right) =>
+                left.costUnits - right.costUnits ||
+                Date.parse(left.createdAt) - Date.parse(right.createdAt),
+            ),
+        );
+      }
+      if (method === "POST" && seg.length === 2) {
+        const dto = parseDemoBody(LoyaltyRewardCreateSchema, b);
+        const program = w.loyalty.program;
+        if (!program) {
+          throw new Refusal(409, "Configurez le programme avant de créer une récompense");
+        }
+        const now = new Date().toISOString();
+        const created: LoyaltyRewardView = {
+          ...dto,
+          id: nextLoyaltyUuid(w, "16000000"),
+          programId: program.id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        w.loyalty.rewards.push(created);
+        return ok(created);
+      }
+      if (method === "PATCH" && seg.length === 3) {
+        const rewardId = assertLoyaltyUuid(seg[2]);
+        const reward = w.loyalty.rewards.find((candidate) => candidate.id === rewardId);
+        if (!reward) throw new Refusal(404, "Récompense introuvable");
+        const patch = parseDemoBody(LoyaltyRewardUpdateSchema, b);
+        const merged = parseDemoBody(LoyaltyRewardCreateSchema, {
+          name: patch.name ?? reward.name,
+          description: patch.description ?? reward.description,
+          costUnits: patch.costUnits ?? reward.costUnits,
+          kind: patch.kind ?? reward.kind,
+          valueCents: patch.valueCents !== undefined ? patch.valueCents : reward.valueCents,
+          productRef: patch.productRef !== undefined ? patch.productRef : reward.productRef,
+          active: patch.active ?? reward.active,
+        });
+        Object.assign(reward, merged, { updatedAt: new Date().toISOString() });
+        return ok(reward);
+      }
+    }
+
+    if (seg[1] === "dashboard" && seg.length === 2 && method === "GET") {
+      return ok(loyaltyDashboard(w));
+    }
+
+    if (seg[1] === "members") {
+      if (seg[2] === "enrollments" && seg.length === 4 && method === "POST") {
+        if (seg[3] === "prepare") {
+          const dto = parseDemoBody(LoyaltyEnrollmentPrepareSchema, b);
+          const existing = w.loyalty.operations[dto.operationId];
+          if (existing) {
+            if (existing.kind !== "member_create" || !existing.enrollment) {
+              throw new Refusal(409, "Cette clé appartient à une autre opération");
+            }
+            assertDemoEnrollmentOwner(existing, enrollmentOwnerFingerprint);
+            if (
+              existing.invalidated ||
+              ["acknowledged", "rejected", "expired"].includes(existing.enrollment.phase)
+            ) {
+              throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+            }
+            expireDemoEnrollmentIfNeeded(existing);
+            return ok(
+              LoyaltyEnrollmentPrepareResultSchema.parse({
+                operationId: dto.operationId,
+                status: existing.enrollment.phase === "ready" ? "ready" : "prepared",
+                expiresAt: existing.enrollment.expiresAt,
+              }),
+            );
+          }
+
+          const expiresAt = new Date(Date.now() + ENROLLMENT_HANDOFF_WINDOW_MS).toISOString();
+          w.loyalty.operations[dto.operationId] = {
+            kind: "member_create",
+            fingerprint: demoOperationFingerprint("member_create_prepare", {
+              operationId: dto.operationId,
+              ownerFingerprint: enrollmentOwnerFingerprint,
+            }),
+            memberId: null,
+            result: null,
+            enrollment: {
+              ownerFingerprint: enrollmentOwnerFingerprint,
+              phase: "prepared",
+              expiresAt,
+            },
+          };
+          return ok(
+            LoyaltyEnrollmentPrepareResultSchema.parse({
+              operationId: dto.operationId,
+              status: "prepared",
+              expiresAt,
+            }),
+          );
+        }
+
+        if (seg[3] === "recover") {
+          const dto = parseDemoBody(LoyaltyEnrollmentRecoverySchema, b);
+          const operation = demoEnrollmentOperation(w, dto.operationId, 404);
+          assertDemoEnrollmentOwner(operation, enrollmentOwnerFingerprint);
+          const enrollment = operation.enrollment!;
+          if (
+            operation.invalidated ||
+            ["acknowledged", "rejected", "expired"].includes(enrollment.phase)
+          ) {
+            throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+          }
+          expireDemoEnrollmentIfNeeded(operation);
+          if (enrollment.phase === "prepared") {
+            return ok(
+              LoyaltyEnrollmentRecoveryResultSchema.parse({
+                status: "pending",
+                operationId: dto.operationId,
+                retryAfterMs: ENROLLMENT_RECOVERY_RETRY_MS,
+                expiresAt: enrollment.expiresAt,
+              }),
+            );
+          }
+          return ok(
+            LoyaltyEnrollmentRecoveryResultSchema.parse({
+              status: "ready",
+              enrollment: demoEnrollmentResult(w, dto.operationId, operation, true),
+            }),
+          );
+        }
+
+        if (seg[3] === "acknowledge") {
+          const dto = parseDemoBody(LoyaltyEnrollmentAcknowledgementSchema, b);
+          const operation = demoEnrollmentOperation(w, dto.operationId, 404);
+          assertDemoEnrollmentOwner(operation, enrollmentOwnerFingerprint);
+          const enrollment = operation.enrollment!;
+          if (enrollment.phase === "acknowledged") {
+            return ok(
+              LoyaltyEnrollmentAcknowledgementResultSchema.parse({
+                operationId: dto.operationId,
+                acknowledged: true,
+                replayed: true,
+              }),
+            );
+          }
+          if (
+            operation.invalidated ||
+            ["rejected", "expired"].includes(enrollment.phase)
+          ) {
+            throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+          }
+          if (enrollment.phase === "prepared") {
+            throw new Refusal(409, "L'adhésion est encore en cours");
+          }
+          expireDemoEnrollmentIfNeeded(operation);
+          const member = operation.memberId
+            ? w.loyalty.members.find((candidate) => candidate.id === operation.memberId)
+            : null;
+          if (
+            !member ||
+            member.status !== "active" ||
+            member.enrollmentHandoffAt !== null ||
+            !member.qrTokens[0]
+          ) {
+            throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+          }
+          member.enrollmentHandoffAt = new Date().toISOString();
+          enrollment.phase = "acknowledged";
+          return ok(
+            LoyaltyEnrollmentAcknowledgementResultSchema.parse({
+              operationId: dto.operationId,
+              acknowledged: true,
+              replayed: false,
+            }),
+          );
+        }
+      }
+
+      if (seg.length === 2 && method === "GET") {
+        const query = parseDemoBody(
+          LoyaltyMemberListQuerySchema,
+          Object.fromEntries(q.entries()),
+        );
+        const cursor = query.cursor ? decodeLoyaltyCursor(query.cursor) : null;
+        let rows = w.loyalty.members
+          .filter((member) => member.enrollmentHandoffAt !== null)
+          .filter((member) => (query.status ? member.status === query.status : true))
+          .filter((member) => (query.memberRef ? member.id === query.memberRef : true))
+          .sort(
+            (left, right) =>
+              Date.parse(right.joinedAt) - Date.parse(left.joinedAt) ||
+              right.id.localeCompare(left.id),
+          );
+        if (cursor) {
+          rows = rows.filter((member) => {
+            const joinedAt = Date.parse(member.joinedAt);
+            return joinedAt < cursor.joinedAt || (joinedAt === cursor.joinedAt && member.id < cursor.id);
+          });
+        }
+        const page = rows.slice(0, query.limit);
+        return ok(
+          LoyaltyMemberListSchema.parse({
+            items: page.map(loyaltyMemberSummary),
+            nextCursor: rows.length > query.limit ? loyaltyCursor(page[page.length - 1]!) : null,
+          }),
+        );
+      }
+
+      if (seg.length === 3 && method === "GET") {
+        const member = loyaltyMember(w, assertLoyaltyUuid(seg[2]));
+        return ok(
+          LoyaltyMemberDetailSchema.parse({
+            member: loyaltyMemberSummary(member),
+            qrGeneration: member.qrGeneration,
+            consents: member.consents.slice().sort((left, right) =>
+              left.purpose.localeCompare(right.purpose),
+            ),
+            ledger: member.ledger.slice(0, 100),
+          }),
+        );
+      }
+
+      if (seg.length === 2 && method === "POST") {
+        const dto = parseDemoBody(LoyaltyMemberCreateSchema, b);
+        const normalized = {
+          ...dto,
+          phone: dto.phone === null ? null : normalizeDemoFrenchPhone(dto.phone),
+        };
+        const operation = demoEnrollmentOperation(w, dto.operationId, 409);
+        assertDemoEnrollmentOwner(operation, enrollmentOwnerFingerprint);
+        const enrollment = operation.enrollment!;
+        if (
+          operation.invalidated ||
+          ["acknowledged", "rejected", "expired"].includes(enrollment.phase)
+        ) {
+          throw new Refusal(410, "Cette adhésion n'est plus récupérable");
+        }
+        expireDemoEnrollmentIfNeeded(operation);
+        const createFingerprint = demoOperationFingerprint("member_create", normalized);
+        if (enrollment.phase === "ready") {
+          if (operation.fingerprint !== createFingerprint) {
+            throw new Refusal(
+              409,
+              "Cet identifiant d'opération a déjà servi pour une autre demande",
+            );
+          }
+          return ok(demoEnrollmentResult(w, dto.operationId, operation, true));
+        }
+        if (!w.loyalty.program || w.loyalty.program.status !== "active") {
+          enrollment.phase = "rejected";
+          throw new Refusal(409, "Le programme de fidélité n'est pas actif");
+        }
+        if (
+          normalized.phone &&
+          w.loyalty.members.some((member) => member.phone === normalized.phone)
+        ) {
+          enrollment.phase = "rejected";
+          throw new Refusal(409, "Ce téléphone est déjà rattaché à une carte fidélité");
+        }
+        const now = new Date().toISOString();
+        const qrToken = nextLoyaltyQrToken(w);
+        const member: DemoLoyaltyMember = {
+          id: nextLoyaltyUuid(w, "17000000"),
+          firstName: normalized.firstName,
+          phone: normalized.phone,
+          qrTokens: [qrToken],
+          qrGeneration: 1,
+          status: "active",
+          balanceUnits: 0,
+          lifetimeEarnedUnits: 0,
+          lifetimeRedeemedUnits: 0,
+          lastActivityAt: null,
+          joinedAt: now,
+          enrollmentHandoffAt: null,
+          consents: [],
+          ledger: [],
+        };
+        w.loyalty.members.unshift(member);
+        const result = LoyaltyMemberCreateResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          member: loyaltyMemberSummary(member),
+          qrToken,
+          handoffExpiresAt: enrollment.expiresAt,
+        });
+        operation.fingerprint = createFingerprint;
+        operation.memberId = member.id;
+        operation.result = null;
+        enrollment.phase = "ready";
+        return ok(result);
+      }
+
+      if (seg[2] === "resolve" && seg.length === 3 && method === "POST") {
+        const lookup = parseDemoBody(LoyaltyMemberResolveSchema, b);
+        const member =
+          lookup.by === "member_ref"
+            ? w.loyalty.members.find((candidate) => candidate.id === lookup.memberRef)
+            : lookup.by === "phone"
+              ? w.loyalty.members.find(
+                  (candidate) => candidate.phone === normalizeDemoFrenchPhone(lookup.phone),
+                )
+              : w.loyalty.members.find((candidate) => candidate.qrTokens.includes(lookup.qrToken));
+        if (
+          !member ||
+          member.status !== "active" ||
+          member.enrollmentHandoffAt === null
+        ) {
+          throw new Refusal(404, "Carte fidélité introuvable");
+        }
+        return ok(loyaltyMemberSummary(member));
+      }
+
+      if (seg.length === 4 && seg[3] === "earn" && method === "POST") {
+        const memberId = assertLoyaltyUuid(seg[2]);
+        const dto = parseDemoBody(LoyaltyEarnSchema, b);
+        const operationPayload = { memberId, ...dto };
+        const replayed = replayLoyaltyOperation(w, "earn", dto.operationId, operationPayload);
+        if (replayed) return ok(LoyaltyEarnResultSchema.parse(replayed));
+        const program = w.loyalty.program;
+        if (!program) throw new Refusal(409, "Programme de fidélité non configuré");
+        if (
+          dto.externalRef &&
+          w.loyalty.earnReceipts[dto.externalRef] &&
+          w.loyalty.earnReceipts[dto.externalRef] !== dto.operationId
+        ) {
+          throw new Refusal(409, "Ce ticket a déjà été présenté au programme fidélité");
+        }
+        const member = activeLoyaltyMember(w, memberId);
+        const calculation = loyaltyDomain.calculateLoyaltyEarn(
+          { status: program.status, earn: program.earn },
+          Money.fromCents(dto.purchaseCents),
+        );
+        if (!calculation.ok) throw new Refusal(409, calculation.error.message);
+
+        let entry: LoyaltyEarnResult["entry"] = null;
+        if (calculation.value.units > 0) {
+          member.balanceUnits += calculation.value.units;
+          member.lifetimeEarnedUnits += calculation.value.units;
+          entry = addLoyaltyLedgerEntry(w, member, {
+            kind: "earn",
+            deltaUnits: calculation.value.units,
+            balanceAfter: member.balanceUnits,
+            source: "admin",
+            reason: "Gain automatique sur achat",
+            externalRef: dto.externalRef,
+          });
+        } else {
+          member.lastActivityAt = new Date().toISOString();
+        }
+        const result = LoyaltyEarnResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          outcome: calculation.value.units > 0 ? "earned" : "below_minimum",
+          awardedUnits: calculation.value.units,
+          rulesVersion: program.rulesVersion,
+          member: loyaltyMemberSummary(member),
+          entry,
+        });
+        if (dto.externalRef) {
+          w.loyalty.earnReceipts[dto.externalRef] = dto.operationId;
+        }
+        completeLoyaltyOperation(w, "earn", dto.operationId, operationPayload, result);
+        return ok(result);
+      }
+
+      if (seg.length === 4 && seg[3] === "redemptions" && method === "POST") {
+        throw new Refusal(410, "La consommation fidélité exige désormais un ticket de vente");
+      }
+
+      if (seg.length === 4 && seg[3] === "adjustments" && method === "POST") {
+        const memberId = assertLoyaltyUuid(seg[2]);
+        const dto = parseDemoBody(LoyaltyAdminAdjustmentSchema, b);
+        const operationPayload = { memberId, ...dto };
+        const replayed = replayLoyaltyOperation(w, "adjust", dto.operationId, operationPayload);
+        if (replayed) return ok(LoyaltyMutationResultSchema.parse(replayed));
+        if (!w.loyalty.program) {
+          throw new Refusal(409, "Programme de fidélité non configuré");
+        }
+        const member = activeLoyaltyMember(w, memberId);
+        const balanceAfter = member.balanceUnits + dto.units;
+        if (balanceAfter < 0) {
+          throw new Refusal(
+            409,
+            `Solde insuffisant : ${member.balanceUnits} disponible, ${Math.abs(dto.units)} retiré`,
+          );
+        }
+        member.balanceUnits = balanceAfter;
+        const entry = addLoyaltyLedgerEntry(w, member, {
+          kind: dto.units > 0 ? "adjust_credit" : "adjust_debit",
+          deltaUnits: dto.units,
+          balanceAfter,
+          source: "admin",
+          reason: dto.reason,
+          externalRef: null,
+        });
+        const result = LoyaltyMutationResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          member: loyaltyMemberSummary(member),
+          entry,
+        });
+        completeLoyaltyOperation(w, "adjust", dto.operationId, operationPayload, result);
+        return ok(result);
+      }
+
+      if (seg.length === 4 && seg[3] === "consents" && method === "POST") {
+        const memberId = assertLoyaltyUuid(seg[2]);
+        const dto = parseDemoBody(LoyaltyConsentEventSchema, b);
+        const operationPayload = { memberId, ...dto };
+        const replayed = replayLoyaltyOperation(w, "consent", dto.operationId, operationPayload);
+        if (replayed) return ok(LoyaltyConsentMutationResultSchema.parse(replayed));
+        const member = activeLoyaltyMember(w, memberId);
+        if (dto.decision === "granted") {
+          throw new Refusal(409, "Le canal marketing n'est pas activé pendant le pilote");
+        }
+        const consent = {
+          purpose: dto.purpose,
+          decision: dto.decision,
+          noticeVersion: dto.noticeVersion,
+          updatedAt: new Date().toISOString(),
+        };
+        const current = member.consents.find((candidate) => candidate.purpose === dto.purpose);
+        if (current) Object.assign(current, consent);
+        else member.consents.push(consent);
+        const result = LoyaltyConsentMutationResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          consent,
+        });
+        completeLoyaltyOperation(w, "consent", dto.operationId, operationPayload, result);
+        return ok(result);
+      }
+
+      if (seg.length === 4 && seg[3] === "lifecycle" && method === "POST") {
+        const memberId = assertLoyaltyUuid(seg[2]);
+        const dto = parseDemoBody(LoyaltyMemberLifecycleSchema, b);
+        const operationPayload = { memberId, ...dto };
+        const replayed = replayLoyaltyOperation(
+          w,
+          "member_lifecycle",
+          dto.operationId,
+          operationPayload,
+        );
+        if (replayed) return ok(LoyaltyMemberLifecycleResultSchema.parse(replayed));
+        const member = loyaltyMember(w, memberId);
+        let revokedTokens = 0;
+        let withdrawnConsents = 0;
+        if (dto.action === "block") {
+          if (member.status !== "active") {
+            throw new Refusal(409, "Seule une carte active peut être bloquée");
+          }
+          member.status = "blocked";
+        } else if (dto.action === "unblock") {
+          if (member.status !== "blocked") {
+            throw new Refusal(409, "Seule une carte bloquée peut être réactivée");
+          }
+          member.status = "active";
+        } else {
+          if (member.status === "anonymized") {
+            throw new Refusal(409, "Cette carte est déjà anonymisée");
+          }
+          revokedTokens = member.qrTokens.length;
+          withdrawnConsents = member.consents.filter(
+            (consent) => consent.decision === "granted",
+          ).length;
+          member.firstName = null;
+          member.phone = null;
+          member.qrTokens = [];
+          member.status = "anonymized";
+          member.consents = member.consents.map((consent) => ({
+            ...consent,
+            decision: "withdrawn",
+            updatedAt: new Date().toISOString(),
+          }));
+          invalidateLoyaltyMemberSnapshotOperations(w, memberId);
+        }
+        const result = LoyaltyMemberLifecycleResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          action: dto.action,
+          memberId,
+          status: member.status,
+          revokedTokens,
+          withdrawnConsents,
+        });
+        completeLoyaltyOperation(
+          w,
+          "member_lifecycle",
+          dto.operationId,
+          operationPayload,
+          result,
+        );
+        return ok(result);
+      }
+
+      if (
+        seg.length === 5 &&
+        seg[3] === "qr" &&
+        seg[4] === "replace" &&
+        method === "POST"
+      ) {
+        const memberId = assertLoyaltyUuid(seg[2]);
+        const dto = parseDemoBody(LoyaltyMemberQrReplaceSchema, b);
+        const operationPayload = { memberId, ...dto };
+        const replayed = replayLoyaltyOperation(
+          w,
+          "token_replace",
+          dto.operationId,
+          operationPayload,
+        );
+        if (replayed) return ok(LoyaltyMemberQrReplaceResultSchema.parse(replayed));
+        const member = activeLoyaltyMember(w, memberId);
+        if (dto.expectedGeneration !== member.qrGeneration) {
+          throw new Refusal(
+            409,
+            "Le QR a déjà changé — actualisez la fiche avant de recommencer",
+          );
+        }
+        const revokedTokens = member.qrTokens.length;
+        const previousGeneration = member.qrGeneration;
+        invalidateLoyaltySecretOperations(w, memberId);
+        const qrToken = nextLoyaltyQrToken(w);
+        member.qrTokens = [qrToken];
+        member.qrGeneration = previousGeneration + 1;
+        const result = LoyaltyMemberQrReplaceResultSchema.parse({
+          operationId: dto.operationId,
+          replayed: false,
+          memberId,
+          status: "active",
+          qrToken,
+          revokedTokens,
+          previousGeneration,
+          qrGeneration: member.qrGeneration,
+        });
+        completeLoyaltyOperation(
+          w,
+          "token_replace",
+          dto.operationId,
+          operationPayload,
+          result,
+        );
+        return ok(result);
+      }
+    }
   }
 
   // ─── Approvisionnement ───
