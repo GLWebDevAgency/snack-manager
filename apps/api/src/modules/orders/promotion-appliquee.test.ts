@@ -54,6 +54,7 @@ const promoDoc = (over: Record<string, unknown> = {}) => ({
 });
 
 type Creee = {
+  loyaltyMemberId?: string | null;
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
   payment: { cashReceived: number | null; changeGiven: number | null };
 };
@@ -66,6 +67,7 @@ function build(
   const incremente: unknown[] = [];
   const rendu: unknown[] = [];
   const vus: number[] = [];
+  const published: string[] = [];
   const service = new OrdersService(
     {
       // `null` au PREMIER appel — le contrôle d'idempotence en tête de
@@ -89,10 +91,15 @@ function build(
       },
       updateOne: async (filtre: unknown) => void rendu.push(filtre),
     } as never,
-    { publish: () => {} } as never,
+    {
+      publish: (_channel: string, payload: string) => {
+        published.push(payload);
+        return Promise.resolve(1);
+      },
+    } as never,
     { record: async () => {} } as never,
   );
-  return { service, created, incremente, rendu };
+  return { service, created, incremente, rendu, published };
 }
 
 const commande = (over: Record<string, unknown> = {}) =>
@@ -123,6 +130,22 @@ describe('la promotion appliquée à la commande', () => {
     await service.create(TENANT, commande(), 'client');
     expect(created[0]!.totals.discount).toBeNull();
     expect(created[0]!.totals.total).toBe(1_000);
+  });
+
+  it('fige la carte présentée sur la vente sans la dériver du crédit ultérieur', async () => {
+    const { service, created, published } = build([]);
+    const loyaltyMemberId = '22222222-2222-4222-8222-222222222222';
+
+    await service.create(
+      TENANT,
+      commande({ channel: 'pos', loyaltyMemberId }),
+      'caisse',
+    );
+
+    expect(created[0]!.loyaltyMemberId).toBe(loyaltyMemberId);
+    expect(published).toHaveLength(1);
+    expect(published[0]).not.toContain(loyaltyMemberId);
+    expect(published[0]).not.toContain('loyaltyMemberId');
   });
 
   /**

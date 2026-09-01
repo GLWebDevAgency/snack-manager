@@ -345,6 +345,14 @@ export type CreateOrderPayment = z.infer<typeof CreateOrderPaymentSchema>;
 export const CreateOrderSchema = z.object({
   /** Clé d'idempotence générée par l'appareil — le rejeu offline ne crée jamais de doublon. */
   clientId: z.uuid(),
+  /**
+   * Carte présentée avant l'encaissement au comptoir.
+   *
+   * Le serveur la fige sur la vente : le crédit ne peut ainsi pas être
+   * détourné après coup vers une autre carte à partir de la liste des tickets.
+   * Ce champ n'existe volontairement pas dans le contrat public.
+   */
+  loyaltyMemberId: z.uuid().optional(),
   channel: OrderChannelSchema,
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),

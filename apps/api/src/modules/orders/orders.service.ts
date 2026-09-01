@@ -85,6 +85,33 @@ export class OrdersService {
     );
   }
 
+  /** Défense supplémentaire avant diffusion temps réel vers caisse ET cuisine. */
+  private orderEventPayload(order: { toObject(): Record<string, unknown> }) {
+    const payload = { ...order.toObject() };
+    delete payload.loyaltyMemberId;
+    return payload;
+  }
+
+  /**
+   * Transforme une collision `__v` en conflit métier explicite.
+   *
+   * `OrderSchema.optimisticConcurrency` empêche deux documents lus au même
+   * instant de s'écraser. Sans cette traduction, Mongoose protégerait bien la
+   * donnée mais la caisse recevrait un 500 sans savoir qu'elle doit actualiser.
+   */
+  private async saveWithoutLostUpdate(order: { save(): Promise<unknown> }): Promise<void> {
+    try {
+      await order.save();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'VersionError') {
+        throw new ConflictException(
+          'Commande modifiée en parallèle — actualisez le ticket puis recommencez',
+        );
+      }
+      throw error;
+    }
+  }
+
   /**
    * LA PROMOTION APPLICABLE — et son incrément d'usage, atomique.
    *
@@ -317,6 +344,7 @@ export class OrdersService {
         tenantId,
         number,
         clientId: dto.clientId,
+        loyaltyMemberId: dto.loyaltyMemberId ?? null,
         channel: dto.channel,
         type: dto.type,
         lines,
@@ -345,7 +373,7 @@ export class OrdersService {
           : null,
         note: dto.note ?? null,
       });
-      this.publish(tenantId, WS_EVENTS.orderCreated, order.toObject());
+      this.publish(tenantId, WS_EVENTS.orderCreated, this.orderEventPayload(order));
       return { order, created: true as const };
     } catch (err: unknown) {
       // LA RÉSERVATION EST RENDUE : la commande n'existera pas.
@@ -512,8 +540,8 @@ export class OrdersService {
     if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }
-    await order.save();
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    await this.saveWithoutLostUpdate(order);
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 
@@ -525,7 +553,7 @@ export class OrdersService {
     }
     order.status = 'cancelled';
     order.statusHistory.push({ status: 'cancelled', at: new Date(), by: staffId });
-    await order.save();
+    await this.saveWithoutLostUpdate(order);
     await this.audit.log({
       tenantId,
       staffId,
@@ -534,7 +562,7 @@ export class OrdersService {
       meta: { reason, number: order.number, total: order.totals.total },
       pinVerifiedAt: new Date(),
     });
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 
@@ -558,6 +586,11 @@ export class OrdersService {
     reason: string,
   ) {
     const order = await this.byId(tenantId, id);
+    if (order.status === 'delivered' || order.status === 'cancelled') {
+      throw new ConflictException(
+        'Commande clôturée — une remise doit être posée avant la remise au client',
+      );
+    }
     if (amount > order.totals.subtotal) {
       throw new BadRequestException(
         'Une remise ne peut pas dépasser le montant de la commande',
@@ -596,7 +629,7 @@ export class OrdersService {
       promotionId: null as never,
     };
     order.totals.total = order.totals.subtotal - pose.amount;
-    await order.save();
+    await this.saveWithoutLostUpdate(order);
     await this.audit.log({
       tenantId,
       staffId: valideur.staffId,
@@ -607,7 +640,7 @@ export class OrdersService {
       meta: { amount: pose.amount, reason: pose.reason, role: valideur.role, number: order.number },
       pinVerifiedAt: new Date(pose.pinVerifiedAt),
     });
-    this.publish(tenantId, WS_EVENTS.orderUpdated, order.toObject());
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
 

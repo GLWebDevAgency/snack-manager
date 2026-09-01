@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CreateOrderSchema,
   CreatePublicOrderSchema,
   OptionGroupSchema,
   OrderLineInputSchema,
@@ -123,6 +124,7 @@ describe('une commande publique', () => {
     ['paid', true],
     ['tender', 'cash'],
     ['cashReceived', 10_000],
+    ['loyaltyMemberId', '22222222-2222-4222-8222-222222222222'],
   ])('refuse le fait serveur %s dans le corps public', (key, value) => {
     const body = publique(
       key === 'tender' || key === 'cashReceived'
@@ -130,5 +132,25 @@ describe('une commande publique', () => {
         : { [key]: value },
     );
     expect(CreatePublicOrderSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('une commande authentifiée au comptoir', () => {
+  const commande = (loyaltyMemberId: unknown) => ({
+    clientId: '11111111-1111-4111-8111-111111111111',
+    loyaltyMemberId,
+    channel: 'pos',
+    type: 'surplace',
+    lines: [{ productId: 'produit', options: [], removed: [], qty: 1 }],
+    payment: { method: 'counter', tender: 'card' },
+  });
+
+  it('accepte uniquement un UUID de membre, figé au moment de la vente', () => {
+    expect(
+      CreateOrderSchema.safeParse(
+        commande('22222222-2222-4222-8222-222222222222'),
+      ).success,
+    ).toBe(true);
+    expect(CreateOrderSchema.safeParse(commande('carte-libre')).success).toBe(false);
   });
 });

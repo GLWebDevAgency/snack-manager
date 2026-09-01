@@ -27,6 +27,14 @@ const DayHours = new Schema(
   { _id: false },
 );
 
+function hidePrivateOrderFields(
+  _document: unknown,
+  returned: Record<string, unknown>,
+): Record<string, unknown> {
+  delete returned.loyaltyMemberId;
+  return returned;
+}
+
 export const TenantSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
@@ -592,6 +600,13 @@ export const OrderSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     number: { type: Number, required: true }, // séquence journalière par tenant
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
+    /**
+     * Carte présentée AVANT la création de la vente.
+     *
+     * `select: false` évite d'exposer ce pseudonyme aux écrans cuisine et aux
+     * listes de commandes ; seul l'adaptateur fidélité le relit explicitement.
+     */
+    loyaltyMemberId: { type: String, default: null, select: false },
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
     type: { type: String, enum: ['surplace', 'emporter', 'pickup'], required: true },
     lines: { type: [OrderLineSub], required: true },
@@ -700,7 +715,18 @@ export const OrderSchema = new Schema(
     // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
     meta: { type: Schema.Types.Mixed, default: null },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+    // Chaque `save()` inclut `__v` dans son filtre et l'incrémente. Deux
+    // gestes concurrents sur le même ticket ne peuvent donc jamais s'écraser
+    // silencieusement (ex. livrer pendant qu'une annulation est validée).
+    optimisticConcurrency: true,
+    // `select:false` ne s'applique qu'aux lectures Mongo. Un document tout
+    // juste créé contient encore le champ en mémoire : ces transformations le
+    // retirent aussi des réponses HTTP et de toute sérialisation accidentelle.
+    toObject: { transform: hidePrivateOrderFields },
+    toJSON: { transform: hidePrivateOrderFields },
+  },
 );
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
