@@ -136,21 +136,45 @@ describe('une commande publique', () => {
 });
 
 describe('une commande authentifiée au comptoir', () => {
-  const commande = (loyaltyMemberId: unknown) => ({
+  const commande = (over: Record<string, unknown> = {}) => ({
     clientId: '11111111-1111-4111-8111-111111111111',
-    loyaltyMemberId,
     channel: 'pos',
     type: 'surplace',
     lines: [{ productId: 'produit', options: [], removed: [], qty: 1 }],
     payment: { method: 'counter', tender: 'card' },
+    ...over,
   });
 
-  it('accepte uniquement un UUID de membre, figé au moment de la vente', () => {
+  it('fige ensemble carte et opération idempotente sur une vente POS', () => {
     expect(
       CreateOrderSchema.safeParse(
-        commande('22222222-2222-4222-8222-222222222222'),
+        commande({
+          loyaltyMemberId: '22222222-2222-4222-8222-222222222222',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
       ).success,
     ).toBe(true);
-    expect(CreateOrderSchema.safeParse(commande('carte-libre')).success).toBe(false);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({
+          loyaltyMemberId: 'carte-libre',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({ loyaltyMemberId: '22222222-2222-4222-8222-222222222222' }),
+      ).success,
+    ).toBe(false);
+    expect(
+      CreateOrderSchema.safeParse(
+        commande({
+          channel: 'phone',
+          loyaltyMemberId: '22222222-2222-4222-8222-222222222222',
+          loyaltyEarnOperationId: '33333333-3333-4333-8333-333333333333',
+        }),
+      ).success,
+    ).toBe(false);
   });
 });

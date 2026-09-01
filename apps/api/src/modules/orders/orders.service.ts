@@ -17,6 +17,7 @@ import {
   type StaffRole,
   ORDER_STATUS_RANK,
   type OrderStatus,
+  type OrderLoyaltyEarnStatus,
   type OrderTracking,
   ordersChannel,
   WS_EVENTS,
@@ -89,6 +90,15 @@ export class OrdersService {
   private orderEventPayload(order: { toObject(): Record<string, unknown> }) {
     const payload = { ...order.toObject() };
     delete payload.loyaltyMemberId;
+    delete payload.loyaltyEarnOperationId;
+    delete payload.loyaltyActorRef;
+    delete payload.loyaltyDeviceRef;
+    delete payload.loyaltyEarnState;
+    delete payload.loyaltyEarnAttempts;
+    delete payload.loyaltyEarnLastError;
+    delete payload.loyaltyEarnCompletedAt;
+    delete payload.loyaltyEarnNextAttemptAt;
+    delete payload.loyaltyEarnLeaseUntil;
     return payload;
   }
 
@@ -240,8 +250,13 @@ export class OrdersService {
    * Les prix sont TOUJOURS résolus côté serveur depuis le menu courant.
    * Idempotente sur {tenantId, clientId} : le rejeu offline renvoie l'existante.
    */
-  async create(tenantId: string, dto: CreateOrder, actor: string) {
-    return (await this.createWithOutcome(tenantId, dto, actor)).order;
+  async create(
+    tenantId: string,
+    dto: CreateOrder,
+    actor: string,
+    deviceRef: string | null = null,
+  ) {
+    return (await this.createWithOutcome(tenantId, dto, actor, deviceRef)).order;
   }
 
   /**
@@ -251,7 +266,12 @@ export class OrdersService {
    * d'une course idempotente. Les autres appelants gardent l'API historique et
    * ne voient que la commande.
    */
-  async createWithOutcome(tenantId: string, dto: CreateOrder, actor: string) {
+  async createWithOutcome(
+    tenantId: string,
+    dto: CreateOrder,
+    actor: string,
+    deviceRef: string | null = null,
+  ) {
     const existing = await this.orders.findOne({ tenantId, clientId: dto.clientId });
     if (existing) {
       return { order: this.withTrackingToken(existing), created: false as const };
@@ -345,6 +365,15 @@ export class OrdersService {
         number,
         clientId: dto.clientId,
         loyaltyMemberId: dto.loyaltyMemberId ?? null,
+        loyaltyEarnOperationId: dto.loyaltyEarnOperationId ?? null,
+        loyaltyActorRef: dto.loyaltyMemberId ? actor : null,
+        loyaltyDeviceRef: dto.loyaltyMemberId ? deviceRef : null,
+        loyaltyEarnState: dto.loyaltyMemberId ? 'pending' : null,
+        loyaltyEarnAttempts: 0,
+        loyaltyEarnLastError: null,
+        loyaltyEarnCompletedAt: null,
+        loyaltyEarnNextAttemptAt: null,
+        loyaltyEarnLeaseUntil: null,
         channel: dto.channel,
         type: dto.type,
         lines,
@@ -412,6 +441,45 @@ export class OrdersService {
   async findByClientId(tenantId: string, clientId: string) {
     const existing = await this.orders.findOne({ tenantId, clientId });
     return existing ? this.withTrackingToken(existing) : null;
+  }
+
+  /**
+   * Projection minimale pour que le POS sache si le serveur a réellement
+   * crédité le ledger. Aucun membre, operationId, auteur ou détail interne ne
+   * franchit cette route.
+   */
+  async loyaltyEarnStatusByClientId(
+    tenantId: string,
+    clientId: string,
+  ): Promise<OrderLoyaltyEarnStatus | null> {
+    const order = await this.orders
+      .findOne({ tenantId, clientId })
+      .select('+loyaltyEarnState +loyaltyEarnAttempts +loyaltyEarnLastError')
+      .lean<{
+        loyaltyEarnState?: string | null;
+        loyaltyEarnAttempts?: number | null;
+        loyaltyEarnLastError?: string | null;
+      } | null>();
+    if (!order) return null;
+
+    const state = order.loyaltyEarnState;
+    const publicState =
+      state === 'pending' ||
+      state === 'processing' ||
+      state === 'completed' ||
+      state === 'failed' ||
+      state === 'cancelled'
+        ? state
+        : 'none';
+    const attempts = Number.isSafeInteger(order.loyaltyEarnAttempts)
+      ? Math.max(0, Number(order.loyaltyEarnAttempts))
+      : 0;
+    const errorCode =
+      typeof order.loyaltyEarnLastError === 'string' &&
+      /^[a-z0-9_]{1,64}$/.test(order.loyaltyEarnLastError)
+        ? order.loyaltyEarnLastError
+        : null;
+    return { state: publicState, attempts, errorCode };
   }
 
   /**

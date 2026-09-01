@@ -63,7 +63,7 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body(zod(CreateOrderSchema)) body: CreateOrder,
   ) {
-    return this.orders.create(tenantId, body, user.sub);
+    return this.orders.create(tenantId, body, user.sub, user.deviceId ?? null);
   }
 
   /** Tout l'équipage lit la file : c'est l'écran de travail du KDS. */
@@ -85,6 +85,17 @@ export class OrdersController {
    * dans un restaurant à fort débit. Le `clientId` UUID est la clé
    * d'idempotence du poste et la recherche reste strictement tenant-scopée.
    */
+  @Roles('owner', 'gerant', 'caisse')
+  @Get('orders/by-client/:clientId/loyalty')
+  async loyaltyEarnStatus(
+    @TenantId() tenantId: string,
+    @Param('clientId', new ParseUUIDPipe({ version: '4' })) clientId: string,
+  ) {
+    const status = await this.orders.loyaltyEarnStatusByClientId(tenantId, clientId);
+    if (!status) throw new NotFoundException('Commande introuvable');
+    return status;
+  }
+
   @Roles('owner', 'gerant', 'caisse')
   @Get('orders/by-client/:clientId')
   async byClientId(

@@ -32,6 +32,15 @@ function hidePrivateOrderFields(
   returned: Record<string, unknown>,
 ): Record<string, unknown> {
   delete returned.loyaltyMemberId;
+  delete returned.loyaltyEarnOperationId;
+  delete returned.loyaltyActorRef;
+  delete returned.loyaltyDeviceRef;
+  delete returned.loyaltyEarnState;
+  delete returned.loyaltyEarnAttempts;
+  delete returned.loyaltyEarnLastError;
+  delete returned.loyaltyEarnCompletedAt;
+  delete returned.loyaltyEarnNextAttemptAt;
+  delete returned.loyaltyEarnLeaseUntil;
   return returned;
 }
 
@@ -613,6 +622,25 @@ export const OrderSchema = new Schema(
      * listes de commandes ; seul l'adaptateur fidélité le relit explicitement.
      */
     loyaltyMemberId: { type: String, default: null, select: false },
+    /**
+     * Outbox embarqué dans la commande Mongo : la vente et l'intention de
+     * gain naissent atomiquement. Un worker idempotent la consomme seulement
+     * après `delivered + paid`.
+     */
+    loyaltyEarnOperationId: { type: String, default: null, select: false },
+    loyaltyActorRef: { type: String, default: null, select: false },
+    loyaltyDeviceRef: { type: String, default: null, select: false },
+    loyaltyEarnState: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed', 'cancelled', null],
+      default: null,
+      select: false,
+    },
+    loyaltyEarnAttempts: { type: Number, default: 0, min: 0, select: false },
+    loyaltyEarnLastError: { type: String, default: null, select: false },
+    loyaltyEarnCompletedAt: { type: Date, default: null, select: false },
+    loyaltyEarnNextAttemptAt: { type: Date, default: null, select: false },
+    loyaltyEarnLeaseUntil: { type: Date, default: null, select: false },
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
     type: { type: String, enum: ['surplace', 'emporter', 'pickup'], required: true },
     lines: { type: [OrderLineSub], required: true },
@@ -737,6 +765,15 @@ export const OrderSchema = new Schema(
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
+OrderSchema.index(
+  { tenantId: 1, loyaltyEarnOperationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { loyaltyEarnOperationId: { $type: 'string' } },
+  },
+);
+OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnNextAttemptAt: 1, createdAt: 1 });
+OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
 // Non unique : les commandes créées avant le champ portent toutes `null`, et
 // un index unique les ferait entrer en collision. La collision de deux jetons
 // de 192 bits tirés au hasard, elle, n'arrive pas.

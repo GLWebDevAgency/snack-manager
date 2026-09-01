@@ -55,6 +55,8 @@ const promoDoc = (over: Record<string, unknown> = {}) => ({
 
 type Creee = {
   loyaltyMemberId?: string | null;
+  loyaltyEarnOperationId?: string | null;
+  loyaltyEarnState?: string | null;
   totals: { subtotal: number; discount: { amount: number; reason: string } | null; total: number };
   payment: { cashReceived: number | null; changeGiven: number | null };
 };
@@ -135,17 +137,21 @@ describe('la promotion appliquée à la commande', () => {
   it('fige la carte présentée sur la vente sans la dériver du crédit ultérieur', async () => {
     const { service, created, published } = build([]);
     const loyaltyMemberId = '22222222-2222-4222-8222-222222222222';
+    const loyaltyEarnOperationId = '33333333-3333-4333-8333-333333333333';
 
     await service.create(
       TENANT,
-      commande({ channel: 'pos', loyaltyMemberId }),
+      commande({ channel: 'pos', loyaltyMemberId, loyaltyEarnOperationId }),
       'caisse',
     );
 
     expect(created[0]!.loyaltyMemberId).toBe(loyaltyMemberId);
+    expect(created[0]!.loyaltyEarnOperationId).toBe(loyaltyEarnOperationId);
+    expect(created[0]!.loyaltyEarnState).toBe('pending');
     expect(published).toHaveLength(1);
     expect(published[0]).not.toContain(loyaltyMemberId);
     expect(published[0]).not.toContain('loyaltyMemberId');
+    expect(published[0]).not.toContain(loyaltyEarnOperationId);
   });
 
   /**

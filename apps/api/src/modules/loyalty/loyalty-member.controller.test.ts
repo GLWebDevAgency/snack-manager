@@ -30,6 +30,7 @@ import { ZodValidationPipe } from '../../common/zod.pipe';
 import { LoyaltyAdminService } from './loyalty-admin.service';
 import { LoyaltyMemberController } from './loyalty-member.controller';
 import { LoyaltyMemberService } from './loyalty-member.service';
+import { LoyaltyOrderEarnProcessor } from './loyalty-order-earn.processor';
 import { LoyaltyPublicController } from './loyalty-public.controller';
 import { LoyaltyPublicService } from './loyalty-public.service';
 import { LoyaltyPurchaseVerifier } from './loyalty-purchase-verifier';
@@ -230,6 +231,7 @@ describe('LoyaltyMemberController — frontière HTTP', () => {
     expect(providers).toEqual([
       LoyaltyAdminService,
       LoyaltyMemberService,
+      LoyaltyOrderEarnProcessor,
       LoyaltyPublicService,
       LoyaltyPurchaseVerifier,
     ]);

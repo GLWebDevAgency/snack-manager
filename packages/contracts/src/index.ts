@@ -353,6 +353,12 @@ export const CreateOrderSchema = z.object({
    * Ce champ n'existe volontairement pas dans le contrat public.
    */
   loyaltyMemberId: z.uuid().optional(),
+  /**
+   * Intention de gain embarquée dans LA MÊME écriture durable que la vente.
+   * Le serveur la traite après livraison ; aucun second outbox local ne peut
+   * donc être perdu entre deux écritures lors d'un crash de tablette.
+   */
+  loyaltyEarnOperationId: z.uuid().optional(),
   channel: OrderChannelSchema,
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),
@@ -378,8 +384,48 @@ export const CreateOrderSchema = z.object({
    * remise n'obtient rien.
    */
   promoCode: z.string().trim().min(1).max(24).optional(),
+}).superRefine((order, ctx) => {
+  const hasMember = order.loyaltyMemberId !== undefined;
+  const hasOperation = order.loyaltyEarnOperationId !== undefined;
+  if (hasMember !== hasOperation) {
+    ctx.addIssue({
+      code: 'custom',
+      path: hasMember ? ['loyaltyEarnOperationId'] : ['loyaltyMemberId'],
+      message: 'La carte et son intention de gain sont indissociables',
+    });
+  }
+  if (hasMember && order.channel !== 'pos') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['channel'],
+      message: 'La fidélité du pilote exige une vente au comptoir authentifiée',
+    });
+  }
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
+
+/**
+ * État public, sans identifiant membre ni détail technique, du gain porté
+ * par une vente POS. `processing` reste rejouable : il ne signifie jamais que
+ * les points sont acquis avant la validation du ledger PostgreSQL.
+ */
+export const OrderLoyaltyEarnStateSchema = z.enum([
+  'none',
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+export type OrderLoyaltyEarnState = z.infer<typeof OrderLoyaltyEarnStateSchema>;
+
+export const OrderLoyaltyEarnStatusSchema = z.object({
+  state: OrderLoyaltyEarnStateSchema,
+  attempts: z.number().int().nonnegative(),
+  /** Code fermé et non sensible ; jamais le message brut d'une dépendance. */
+  errorCode: z.string().regex(/^[a-z0-9_]{1,64}$/).nullable(),
+});
+export type OrderLoyaltyEarnStatus = z.infer<typeof OrderLoyaltyEarnStatusSchema>;
 
 /**
  * Contrat de la commande PUBLIQUE, volontairement distinct de celui du POS.
