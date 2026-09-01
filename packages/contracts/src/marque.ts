@@ -393,3 +393,53 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
   };
   return { vars, colorScheme: brand.mode, prixMono: pair.prixMono };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Le repli, le masque effectif, les champs plats
+// ─────────────────────────────────────────────────────────────
+
+const LAITON = '#c9a15a';
+
+/**
+ * Tant qu'un tenant n'a pas été repris (brand = null), il porte Nuit — la
+ * direction la plus proche de l'identité Snack Manager — avec son accent et
+ * son logo. Aucune surface ne casse avant la reprise.
+ */
+export function marqueDeRepli(
+  brandColor: string | null | undefined,
+  logoUrl: string | null | undefined,
+): Brand {
+  const nuit = DIRECTIONS.nuit;
+  const brut = String(brandColor ?? '').trim().toLowerCase();
+  const accent = ajusterJusquaAA(HEX.test(brut) ? brut : LAITON, nuit.palette.ground);
+  const onAccent = ratioContraste('#000000', accent) >= ratioContraste('#ffffff', accent) ? '#000000' : '#ffffff';
+  return {
+    ...nuit,
+    palette: { ...nuit.palette, accent, onAccent },
+    logo: { mark: { light: null, dark: logoUrl ?? null }, lockup: { light: null, dark: null } },
+    preset: 'nuit',
+  };
+}
+
+export function marqueEffective(t: {
+  brand?: Brand | null;
+  brandColor?: string | null;
+  logoUrl?: string | null;
+}): Brand {
+  return t.brand ?? marqueDeRepli(t.brandColor, t.logoUrl);
+}
+
+/** Le contrat « logo + accent » des outils du personnel : dérivé, jamais stocké à part. */
+export const brandColorDe = (b: Brand): string => b.palette.accent;
+
+export function logoUrlDe(b: Brand): string | null {
+  return b.logo.mark.dark ?? b.logo.mark.light ?? b.logo.lockup.dark ?? b.logo.lockup.light;
+}
+
+/** La déclinaison du mode ; sinon l'autre déclinaison ; sinon l'autre format. */
+export function logoPour(b: Brand, format: 'mark' | 'lockup'): string | null {
+  const autre = format === 'mark' ? 'lockup' : 'mark';
+  const pref = b.mode === 'dark' ? 'dark' : 'light';
+  const alt = pref === 'dark' ? 'light' : 'dark';
+  return b.logo[format][pref] ?? b.logo[format][alt] ?? b.logo[autre][pref] ?? b.logo[autre][alt];
+}

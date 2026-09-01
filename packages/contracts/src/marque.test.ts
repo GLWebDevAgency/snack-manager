@@ -238,3 +238,53 @@ describe('resoudreMarque(brand)', () => {
     }
   });
 });
+
+import { Brand, brandColorDe, logoPour, logoUrlDe, marqueDeRepli, marqueEffective } from './marque';
+
+describe('le repli — un tenant sans brand a quand même un masque', () => {
+  it('part de Nuit, prend l’accent du tenant, calcule onAccent', () => {
+    const b = marqueDeRepli('#2E9E4F', 'https://r2.example/logo.png');
+    expect(b.preset).toBe('nuit');
+    expect(b.palette.accent).toBe('#2e9e4f');
+    expect(ratioContraste(b.palette.onAccent, b.palette.accent)).toBeGreaterThanOrEqual(4.5);
+    expect(b.logo.mark.dark).toBe('https://r2.example/logo.png');
+    expect(contraste(b).ok).toBe(true);
+  });
+
+  it('un accent invalide retombe sur le laiton', () => {
+    expect(marqueDeRepli('rouge', null).palette.accent).toBe('#c9a15a');
+    expect(marqueDeRepli(null, null).palette.accent).toBe('#c9a15a');
+  });
+
+  it('un accent trop sombre pour Nuit est éclairci jusqu’à AA sur le fond', () => {
+    const b = marqueDeRepli('#1a1a1a', null);
+    expect(contraste(b).ok).toBe(true);
+  });
+});
+
+describe('marqueEffective', () => {
+  it('rend brand tel quel quand il existe', () => {
+    expect(marqueEffective({ brand: DIRECTIONS.soleil, brandColor: '#000000' })).toEqual(DIRECTIONS.soleil);
+  });
+  it('sinon dérive du plat', () => {
+    expect(marqueEffective({ brand: null, brandColor: '#2E9E4F' }).palette.accent).toBe('#2e9e4f');
+  });
+});
+
+describe('les champs plats, dérivés du masque', () => {
+  it('brandColor est l’accent', () => {
+    expect(brandColorDe(DIRECTIONS.neon)).toBe('#D8F04A');
+  });
+  it('logoUrl préfère la marque sombre, puis claire, puis l’horizontale', () => {
+    const b: Brand = { ...DIRECTIONS.nuit, logo: { mark: { light: 'l', dark: null }, lockup: { light: null, dark: 'ld' } } };
+    expect(logoUrlDe(b)).toBe('l');
+    expect(logoUrlDe({ ...b, logo: { mark: { light: null, dark: null }, lockup: { light: null, dark: 'ld' } } })).toBe('ld');
+    expect(logoUrlDe(DIRECTIONS.nuit)).toBeNull();
+  });
+  it('logoPour suit le mode, avec repli', () => {
+    const clair: Brand = { ...DIRECTIONS.brasserie, logo: { mark: { light: null, dark: 'md' }, lockup: { light: 'll', dark: null } } };
+    expect(logoPour(clair, 'mark')).toBe('md');   // pas de clair → le sombre du même format
+    expect(logoPour(clair, 'lockup')).toBe('ll');
+    expect(logoPour({ ...clair, logo: { mark: { light: null, dark: null }, lockup: { light: 'll', dark: null } } }, 'mark')).toBe('ll'); // → l'autre format
+  });
+});
