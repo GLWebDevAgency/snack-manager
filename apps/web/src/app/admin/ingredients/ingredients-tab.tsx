@@ -19,6 +19,7 @@ import { cx } from "@/lib/cx";
 import {
   Btn,
   Card,
+  Chip,
   EmptyState,
   Icon,
   IconBtn,
@@ -73,7 +74,11 @@ export function IngredientsTab({
     ing: SupplyIngredient;
     type: MovementInputType;
   } | null>(null);
-  const [pendingOutId, setPendingOutId] = useState<string | null>(null);
+  // Ruptures en vol — un Set, pas un id : chaque ingrédient se verrouille
+  // seul, les bascules voisines restent utilisables pendant l'appel réseau.
+  const [pendingOutIds, setPendingOutIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
 
   const filtered = useMemo(() => {
     const q = normalize(search.trim());
@@ -102,8 +107,8 @@ export function IngredientsTab({
   );
 
   async function toggleOut(ing: SupplyIngredient) {
-    if (pendingOutId) return;
-    setPendingOutId(ing.id);
+    if (pendingOutIds.has(ing.id)) return;
+    setPendingOutIds((prev) => new Set(prev).add(ing.id));
     const next = !ing.isOut;
     try {
       const res = await api.post<{
@@ -131,7 +136,11 @@ export function IngredientsTab({
           : "Impossible de changer l'état de rupture",
       );
     } finally {
-      setPendingOutId(null);
+      setPendingOutIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ing.id);
+        return next;
+      });
     }
   }
 
@@ -172,20 +181,22 @@ export function IngredientsTab({
           ))}
         </Select>
         {alertFilter && (
-          <button
-            type="button"
+          <Chip
+            on
             onClick={onClearAlertFilter}
-            className={cx(
-              "cf-press inline-flex items-center gap-1.5 rounded-pill border px-3 py-[7px] text-[13px] font-semibold",
+            /* `!` : la palette `on` du Chip (bg-white/12…) sort APRÈS les
+               teintes fonctionnelles dans la feuille v4 (ordre alphabétique,
+               alert < white) — sans important, elle gagnerait. */
+            className={
               alertFilter === "out"
-                ? "border-alert/60 bg-alert/10 text-alertt"
-                : "border-prep/60 bg-prep/10 text-prept",
-            )}
+                ? "!border-alert/60 !bg-alert/10 !text-alertt"
+                : "!border-prep/60 !bg-prep/10 !text-prept"
+            }
           >
             Filtre : {ALERT_FILTER_LABELS[alertFilter]}
             <Icon name="close" size={12} />
             <span className="sr-only">— retirer le filtre</span>
-          </button>
+          </Chip>
         )}
         <Btn
           icon="plus"
@@ -282,13 +293,18 @@ export function IngredientsTab({
                       <Toggle
                         danger
                         on={ing.isOut}
-                        disabled={pendingOutId === ing.id}
+                        disabled={pendingOutIds.has(ing.id)}
                         label={
                           ing.isOut
                             ? `Lever la rupture de ${ing.name}`
                             : `Déclarer ${ing.name} en rupture`
                         }
                         onChange={() => void toggleOut(ing)}
+                        // Zone d'appui ~62×46 sans changer le dessin 46×26 :
+                        // LE geste de la page, tapé debout en salle — au
+                        // niveau des 44 px des QuickActions voisines (même
+                        // motif que Menu).
+                        className="after:absolute after:-inset-x-2 after:-inset-y-2.5"
                       />
                     </div>
                     <QuickActions
@@ -304,7 +320,7 @@ export function IngredientsTab({
             </div>
 
             {/* ── Table (dès `lg`) ── */}
-            <div className="hidden overflow-x-auto lg:block">
+            <div className="cf-scroll hidden overflow-x-auto lg:block">
               <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-line">
@@ -381,13 +397,16 @@ export function IngredientsTab({
                         <Toggle
                           danger
                           on={ing.isOut}
-                          disabled={pendingOutId === ing.id}
+                          disabled={pendingOutIds.has(ing.id)}
                           label={
                             ing.isOut
                               ? `Lever la rupture de ${ing.name}`
                               : `Déclarer ${ing.name} en rupture`
                           }
                           onChange={() => void toggleOut(ing)}
+                          // idem carte : zone d'appui élargie au doigt — la
+                          // table s'affiche aussi sur iPad paysage (`lg`).
+                          className="after:absolute after:-inset-x-2 after:-inset-y-2.5"
                         />
                       </td>
                       <td className="px-4 py-3">
@@ -454,8 +473,10 @@ export function IngredientsTab({
 /**
  * Les quatre actions rapides d'un ingrédient (réception, perte, inventaire,
  * édition) — partagées entre la ligne de table (30 px, densité bureau) et la
- * carte mobile (44 px, la taille minimale d'une cible tactile). Un seul
- * endroit à modifier le jour où une cinquième action apparaît.
+ * carte mobile (44 px, la taille minimale d'une cible tactile). Au doigt
+ * (iPad paysage : la table s'affiche dès `lg`), la ligne de table repasse
+ * elle aussi à 44 px. Un seul endroit à modifier le jour où une cinquième
+ * action apparaît.
  */
 function QuickActions({
   ing,
@@ -470,6 +491,10 @@ function QuickActions({
   onMovement: (type: MovementInputType) => void;
   onEdit: () => void;
 }) {
+  /* `!` : IconBtn fige son côté en style inline — seule une classe importante
+     ramène la cible aux 44 px tactiles sur pointeur grossier (même motif que
+     Commandes). Sans effet en carte mobile, déjà servie à 44 px. */
+  const coarse = "pointer-coarse:!size-11";
   return (
     <div className="flex items-center justify-end gap-1">
       <IconBtn
@@ -477,6 +502,7 @@ function QuickActions({
         label={`Réception — ${ing.name}`}
         size={size}
         iconSize={iconSize}
+        className={coarse}
         onClick={() => onMovement("purchase")}
       />
       <IconBtn
@@ -484,6 +510,7 @@ function QuickActions({
         label={`Perte — ${ing.name}`}
         size={size}
         iconSize={iconSize}
+        className={coarse}
         onClick={() => onMovement("waste")}
       />
       <IconBtn
@@ -491,6 +518,7 @@ function QuickActions({
         label={`Inventaire — ${ing.name}`}
         size={size}
         iconSize={iconSize}
+        className={coarse}
         onClick={() => onMovement("count")}
       />
       <IconBtn
@@ -498,6 +526,7 @@ function QuickActions({
         label={`Modifier ${ing.name}`}
         size={size}
         iconSize={iconSize}
+        className={coarse}
         onClick={onEdit}
       />
     </div>

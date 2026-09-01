@@ -164,7 +164,9 @@ export default function ErreursPage() {
               <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
                 <span
                   className={cx(
-                    "mt-0.5 inline-flex shrink-0 items-center rounded-pill border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.05em]",
+                    // Base commune des pastilles d'état (cf. StagePill/HealthPill de parts.tsx) —
+                    // même bord 1,5 px, même corps 10px : une seule famille d'un écran à l'autre.
+                    "mt-0.5 inline-flex shrink-0 items-center whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[3px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
                     g.seenAt === null
                       ? "border-alert/60 text-alertt"
                       : "border-white/12 text-mut",

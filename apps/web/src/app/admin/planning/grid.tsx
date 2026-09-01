@@ -76,7 +76,7 @@ export function WeekGrid({
   return (
     <div className="cf-scroll -mx-1 overflow-x-auto px-1 pb-1">
       <div
-        role="grid"
+        role="table"
         aria-label="Planning de la semaine — équipe en lignes, jours en colonnes"
         className="grid"
         style={{ gridTemplateColumns: template, minWidth }}
@@ -129,6 +129,7 @@ export function WeekGrid({
             {i === 0 ? (
               <div
                 role="rowheader"
+                aria-rowspan={2}
                 className="sticky left-0 z-20 row-span-2 flex flex-col justify-center border-b border-line bg-[image:var(--cf-elev-gradient)] px-2.5 py-2"
                 style={{ width: COL_STAFF }}
               >
@@ -145,7 +146,7 @@ export function WeekGrid({
               return (
                 <div
                   key={iso}
-                  role="gridcell"
+                  role="cell"
                   className={cx(
                     "flex min-h-[44px] flex-col justify-center border-l border-line2 px-2 py-1.5 text-center",
                     i === SERVICES.length - 1 && "border-b border-b-line",
@@ -211,7 +212,7 @@ export function WeekGrid({
             return (
               <div
                 key={iso}
-                role="gridcell"
+                role="cell"
                 className={cx(
                   "border-l border-line2 px-2 py-2.5 text-center",
                   iso === todayIso && "bg-white/4",
@@ -266,10 +267,14 @@ function StaffRows({
           {i === 0 ? (
             <div
               role="rowheader"
+              aria-rowspan={2}
               className="sticky left-0 z-20 row-span-2 flex flex-col justify-center gap-0.5 border-b border-line2 bg-[image:var(--cf-elev-gradient)] px-2.5 py-2"
               style={{ width: COL_STAFF }}
             >
-              <span className="truncate text-[13.5px] font-bold leading-tight text-ink">
+              <span
+                className="truncate text-[13.5px] font-bold leading-tight text-ink"
+                title={row.name}
+              >
                 {row.name}
               </span>
               <span className="text-[11px] text-mut">
@@ -306,6 +311,7 @@ function StaffRows({
 function ServiceTag({ service, last }: { service: PlanningService; last: boolean }) {
   return (
     <div
+      role="rowheader"
       className={cx(
         "sticky z-20 grid place-items-center bg-[image:var(--cf-elev-gradient)]",
         last ? "border-b border-line2" : "",
@@ -338,9 +344,9 @@ function ServiceBand({
 }) {
   return (
     <div
-      role="gridcell"
+      role="cell"
       className={cx(
-        "group/band flex min-h-[52px] flex-col gap-1 border-l border-line2 p-1",
+        "group/band flex min-h-[52px] flex-col gap-1.5 border-l border-line2 p-1",
         lastBand && "border-b border-b-line2",
         isToday && "bg-white/4",
       )}
@@ -355,10 +361,11 @@ function ServiceBand({
         className={cx(
           "cf-press flex flex-1 items-center justify-center rounded-ctrl border border-dashed border-white/14 text-mut",
           "transition-[opacity,border-color,background-color] duration-200 ease-sm",
-          "hover:border-white/30 hover:bg-white/6 hover:text-ink focus-visible:border-accent focus-visible:text-ink focus-visible:outline-none",
+          "hover:border-white/30 hover:bg-white/6 hover:text-ink focus-visible:border-accent focus-visible:text-ink",
           // Un doigt ne survole pas : sur tablette la cible reste visible en
-          // permanence, sur souris elle s'efface pour ne pas bruiter la grille.
-          shifts.length > 0 && "min-h-[26px]",
+          // permanence (et garde 36 px de haut sous un service existant),
+          // sur souris elle s'efface pour ne pas bruiter la grille.
+          shifts.length > 0 && "min-h-[26px] [@media(pointer:coarse)]:min-h-[36px]",
           shifts.length === 0
             ? "min-h-[44px]"
             : "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/band:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100",
@@ -378,7 +385,7 @@ function ShiftChip({ shift, onOpen }: { shift: PlanningShiftView; onOpen: () => 
       onClick={onOpen}
       className={cx(
         "cf-press w-full rounded-ctrl border px-1.5 py-1 text-left transition-colors duration-200 ease-sm",
-        "focus-visible:border-accent focus-visible:outline-none",
+        "focus-visible:border-accent",
         draft
           ? "border-dashed border-white/28 bg-white/4 hover:bg-white/8"
           : "border-white/12 bg-[image:var(--cf-elev-gradient)] hover:bg-[image:var(--cf-elev-hover)]",

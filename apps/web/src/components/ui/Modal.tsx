@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ToucheReact,
+  type ReactNode,
+} from "react";
 import { IconBtn } from "./IconBtn";
 
 type ModalProps = {
@@ -41,6 +46,40 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, destructive, onClose]);
 
+  /*
+    ── LE FOCUS ENTRE, TOURNE, ET REVIENT ──
+
+    Sans cela, ouvrir une modale au clavier laissait le focus sur le bouton
+    déclencheur derrière le voile : Tab parcourait la page masquée — y compris
+    ses actions destructives — et Entrée agissait sur un élément invisible.
+    À l'ouverture le panneau prend le focus, Tab boucle à l'intérieur, et la
+    fermeture le rend au déclencheur.
+  */
+  const panneau = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const declencheur = document.activeElement as HTMLElement | null;
+    panneau.current?.focus();
+    return () => declencheur?.focus();
+  }, [open]);
+
+  function confinerTab(e: ToucheReact<HTMLDivElement>) {
+    if (e.key !== "Tab" || !panneau.current) return;
+    const focusables = panneau.current.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusables.length === 0) return e.preventDefault();
+    const premier = focusables[0];
+    const dernier = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === premier) {
+      e.preventDefault();
+      dernier.focus();
+    } else if (!e.shiftKey && document.activeElement === dernier) {
+      e.preventDefault();
+      premier.focus();
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -75,7 +114,10 @@ export function Modal({
         fausse `vh`, et le pied repasserait sous elle.
       */}
       <div
-        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
+        ref={panneau}
+        tabIndex={-1}
+        onKeyDown={confinerTab}
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep outline-none"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

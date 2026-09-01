@@ -5,7 +5,7 @@
  * tiroir latéral de la surface, fiche lead, création de lead.
  */
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   CLIENT_HEALTH_LABELS,
   LEAD_PIPELINE,
@@ -47,6 +47,7 @@ import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
 import {
   Btn,
+  Card,
   Field,
   Icon,
   IconBtn,
@@ -57,7 +58,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
-import { crm, fmtDay, useHq } from "./crm";
+import { crm, errText, fmtDay, useHq } from "./crm";
 
 // ─── Pastilles ───
 
@@ -128,7 +129,10 @@ export function HealthPill({
           "size-[7px] rounded-full",
           HEALTH_DOT[health],
           // Un client qui décroche doit se voir sans être cherché (DA §7).
-          health === "risque" && "animate-pulse",
+          // `motion-safe` : la règle reduced-motion globale raccourcit les
+          // animations sans en finir le cycle — sans la variante, le point
+          // scintillerait à la cadence des frames au lieu de s'immobiliser.
+          health === "risque" && "motion-safe:animate-pulse",
         )}
         aria-hidden
       />
@@ -173,6 +177,7 @@ export function HqDrawer({
   sub,
   children,
   footer,
+  garde = false,
   width = 440,
 }: {
   open: boolean;
@@ -181,16 +186,90 @@ export function HqDrawer({
   sub?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * Saisie en cours ou secret à l'écran : voile, Échap et retour système ne
+   * ferment plus (le contrat de `destructive` sur Modal) — la croix, geste
+   * délibéré, reste le seul chemin de sortie.
+   */
+  garde?: boolean;
   width?: number;
 }) {
+  const panneau = useRef<HTMLDivElement>(null);
+  // Lus par les effets sans les réabonner : l'effet d'historique resouscrit à
+  // chaque rendu pousserait une entrée par frappe dans le brouillon.
+  const gardeRef = useRef(garde);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    gardeRef.current = garde;
+    closeRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !gardeRef.current) closeRef.current();
+      // `aria-modal` promet que Tab reste dans le dialogue : on boucle
+      // premier ↔ dernier et on rapatrie un focus égaré derrière le voile.
+      if (e.key === "Tab" && panneau.current) {
+        const focusables = panneau.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        const premier = focusables[0];
+        const dernier = focusables[focusables.length - 1];
+        if (!premier || !dernier) return;
+        const actif = document.activeElement;
+        if (!panneau.current.contains(actif)) {
+          e.preventDefault();
+          premier.focus();
+        } else if (e.shiftKey && (actif === premier || actif === panneau.current)) {
+          e.preventDefault();
+          dernier.focus();
+        } else if (!e.shiftKey && actif === dernier) {
+          e.preventDefault();
+          premier.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
+
+  // Le focus ENTRE dans le dialogue à l'ouverture et REVIENT au déclencheur à
+  // la fermeture — sans quoi Tab continuait de parcourir la page recouverte
+  // et le clavier perdait sa position au retour.
+  useEffect(() => {
+    if (!open) return;
+    const declencheur =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panneau.current?.focus();
+    return () => declencheur?.focus();
+  }, [open]);
+
+  // Sur téléphone, la feuille plein écran SE LIT comme une page : le geste de
+  // retour doit la fermer, pas quitter l'écran entier. Une entrée d'historique
+  // est posée à l'ouverture et consommée à la fermeture, quel qu'en soit le
+  // chemin.
+  useEffect(() => {
+    if (!open) return;
+    let fermeParRetour = false;
+    window.history.pushState({ smTiroir: true }, "");
+    const onPop = () => {
+      if (gardeRef.current) {
+        // Sous garde, le retour ne jette rien : l'entrée est reposée.
+        window.history.pushState({ smTiroir: true }, "");
+        return;
+      }
+      fermeParRetour = true;
+      closeRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // Fermé par la croix ou Échap : l'entrée posée à l'ouverture se
+      // consomme, sinon le prochain retour système tournerait à vide.
+      if (!fermeParRetour) window.history.back();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -203,7 +282,9 @@ export function HqDrawer({
     >
       <div
         className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/60"
-        onClick={onClose}
+        onClick={() => {
+          if (!garde) onClose();
+        }}
         aria-hidden
       />
       {/*
@@ -215,12 +296,14 @@ export function HqDrawer({
         parce qu'un style en ligne l'imposerait aussi au téléphone.
       */}
       <div
-        className="absolute flex flex-col bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] max-md:inset-x-0 max-md:top-0 max-md:h-dvh max-md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:inset-y-0 md:right-0 md:w-[min(var(--sm-tiroir-l),100vw)] md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:rounded-l-panel"
+        ref={panneau}
+        tabIndex={-1}
+        className="absolute flex flex-col bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] outline-none max-md:inset-x-0 max-md:top-0 max-md:h-dvh max-md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:inset-y-0 md:right-0 md:w-[min(var(--sm-tiroir-l),100vw)] md:animate-[cf-slide-in_.28s_var(--sm-ease)_both] md:rounded-l-panel"
         style={{ "--sm-tiroir-l": `${width}px` } as CSSProperties}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line2 px-[18px] py-3.5">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-extrabold tracking-[-0.03em] text-ink">
+            <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-ink">
               {title}
             </h2>
             {sub && <p className="mt-0.5 truncate text-[13px] text-mut">{sub}</p>}
@@ -276,6 +359,9 @@ export function LeadDrawer({
   const [notes, setNotes] = useState("");
   const [touchType, setTouchType] = useState<LeadTouchType>("sms");
   const [touchNote, setTouchNote] = useState("");
+  // Le mot de passe « remis une fois » est à l'écran (panneau de signature) :
+  // le tiroir passe sous garde, un geste accidentel ne doit plus le fermer.
+  const [motDePasseAffiche, setMotDePasseAffiche] = useState(false);
 
   useEffect(() => {
     if (!lead) return;
@@ -286,7 +372,13 @@ export function LeadDrawer({
     setEmail(lead.contact.email);
     setNotes(lead.notes);
     setTouchNote("");
-  }, [lead]);
+    setMotDePasseAffiche(false);
+    // L'IDENTITÉ du lead, pas l'objet : chaque écriture du tiroir (relance,
+    // étape, place fondateur…) remonte un nouvel objet pour le MÊME lead, et
+    // resynchroniser dessus effacerait la note ou les coordonnées en cours de
+    // frappe sous les doigts de l'opérateur.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?._id]);
 
   if (!lead) return null;
 
@@ -306,8 +398,10 @@ export function LeadDrawer({
       reload();
       toast(message, { icon: "check" });
       return true;
-    } catch {
-      toast("Enregistrement impossible — réessayez");
+    } catch (e) {
+      // Le refus de schéma en français (champ nommé) plutôt qu'une phrase
+      // générique qui fait réessayer la même valeur.
+      toast(errText(e, "Enregistrement impossible — réessayez"));
       return false;
     } finally {
       setBusy(false);
@@ -320,6 +414,11 @@ export function LeadDrawer({
     phone !== lead.contact.phone ||
     email !== lead.contact.email ||
     notes !== lead.notes;
+
+  // Saisie non enregistrée (fiche ou relance) ou mot de passe à l'écran :
+  // voile, Échap et retour système ne ferment plus — la croix, geste
+  // délibéré, reste le seul chemin de sortie.
+  const garde = dirty || touchNote.trim() !== "" || motDePasseAffiche;
 
   function save() {
     const body: LeadUpdate = {};
@@ -341,6 +440,7 @@ export function LeadDrawer({
     <HqDrawer
       open
       onClose={onClose}
+      garde={garde}
       title={lead.restaurantName}
       sub={`Créé le ${fmtDay(lead.createdAt)} · ${lead.touches.length} relance${lead.touches.length > 1 ? "s" : ""}`}
       footer={
@@ -351,10 +451,10 @@ export function LeadDrawer({
             variant="primary"
             size="sm"
             icon="check"
-            disabled={!dirty || busy}
+            disabled={!dirty || busy || !name.trim()}
             onClick={save}
           >
-            Enregistrer
+            {busy ? "Enregistrement…" : "Enregistrer"}
           </Btn>
           {lead.contact.phone && (
             <a
@@ -370,7 +470,7 @@ export function LeadDrawer({
               href={`mailto:${lead.contact.email}`}
               className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
             >
-              <Icon name="edit" size={15} />
+              <Icon name="mail" size={15} />
               E-mail
             </a>
           )}
@@ -395,9 +495,9 @@ export function LeadDrawer({
                 )
               }
               className={cx(
-                // `py` élargi sous `md` : six pastilles serrées à 26 px de haut
-                // ne se visent pas au pouce.
-                "cf-press rounded-pill border-[1.5px] px-[11px] py-[5px] text-[11px] font-extrabold uppercase tracking-[0.06em] disabled:cursor-default max-md:px-3 max-md:py-2",
+                // `py` élargi et ≥ 44 px sous `md` : six pastilles serrées à
+                // 26 px de haut ne se visent pas au pouce (DA §7).
+                "cf-press rounded-pill border-[1.5px] px-[11px] py-[5px] text-[11px] font-extrabold uppercase tracking-[0.06em] disabled:cursor-default max-md:min-h-11 max-md:px-3 max-md:py-2",
                 on
                   ? STAGE_STYLE[stage]
                   : "border-transparent bg-white/6 text-mut hover:bg-white/12 hover:text-white",
@@ -408,7 +508,7 @@ export function LeadDrawer({
           );
         })}
       </div>
-      <div className="mt-2.5 flex gap-2">
+      <div className="mt-2.5 flex flex-wrap gap-2">
         {back && (
           <Btn
             variant="ghost"
@@ -448,14 +548,18 @@ export function LeadDrawer({
           <Rule />
           <ProposalPanel lead={lead} onChanged={onChanged} />
           <Rule />
-          <ConvertPanel lead={lead} onConverted={(updated) => onChanged(updated)} />
+          <ConvertPanel
+            lead={lead}
+            onConverted={(updated) => onChanged(updated)}
+            onMotDePasse={() => setMotDePasseAffiche(true)}
+          />
         </>
       )}
 
       <Rule />
 
       {/* ── Place fondateur ── */}
-      <div className="flex items-center gap-3 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
+      <Card flat className="flex items-center gap-3 p-3">
         {/*
           Le badge suit l'état du toggle : réservé, il s'allume ; libéré, il
           s'éteint. L'opérateur voit CE QU'IL ACCORDE au moment où il le fait,
@@ -483,14 +587,20 @@ export function LeadDrawer({
             )
           }
         />
-      </div>
+      </Card>
 
       <Rule />
 
       {/* ── Contact ── */}
       <Eyebrow>Contact</Eyebrow>
       <div className="mt-2 flex flex-col gap-3">
-        <Field label="Restaurant" htmlFor="lead-name">
+        {/* Vidé, le nom était écarté en silence à l'enregistrement — le champ
+            se marque en erreur et « Enregistrer » se ferme (voir le pied). */}
+        <Field
+          label="Restaurant"
+          htmlFor="lead-name"
+          error={name.trim() ? undefined : "Le nom ne peut pas rester vide."}
+        >
           <Input id="lead-name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
@@ -642,7 +752,7 @@ export function LeadDrawer({
                   </span>
                 </div>
                 {t.note && (
-                  <p className="mt-0.5 text-[13px] leading-[1.4] text-mut">{t.note}</p>
+                  <p className="mt-0.5 break-words text-[13px] leading-[1.4] text-mut">{t.note}</p>
                 )}
               </div>
             </li>
@@ -706,21 +816,36 @@ export function NewLeadDrawer({
       reload();
       toast(`${lead.restaurantName} entre au pipeline`, { icon: "check" });
       onClose();
-    } catch {
-      toast("Création impossible — vérifiez l'e-mail saisi");
+    } catch (e) {
+      // Le refus réel de l'API (champ nommé, en français) — deviner « l'e-mail »
+      // envoyait corriger un champ sain quand l'API était injoignable.
+      toast(errText(e, "Création impossible — réessayez"));
     } finally {
       setBusy(false);
     }
   }
 
+  // Formulaire entamé : voile, Échap et retour système ne jettent plus la
+  // saisie — Annuler et la croix, gestes délibérés, restent ouverts.
+  const entame =
+    Boolean(name.trim() || contactName.trim() || phone.trim() || email.trim() || notes.trim()) ||
+    founder ||
+    stage !== "nouveau";
+
   return (
     <HqDrawer
       open={open}
       onClose={onClose}
+      garde={entame}
       title="Nouveau lead"
       sub="Un prospect entre au pipeline"
       footer={
+        // Annuler à gauche, valider à droite — l'ordre de toutes les modales
+        // de la surface : l'habitude ne doit pas faire cliquer « Annuler ».
         <div className="flex items-center gap-2 max-md:[&>button]:min-h-11 max-md:[&>button]:flex-1">
+          <Btn variant="ghost" size="sm" onClick={onClose}>
+            Annuler
+          </Btn>
           <Btn
             variant="primary"
             size="sm"
@@ -729,9 +854,6 @@ export function NewLeadDrawer({
             onClick={() => void create()}
           >
             {busy ? "Création…" : "Créer le lead"}
-          </Btn>
-          <Btn variant="ghost" size="sm" onClick={onClose}>
-            Annuler
           </Btn>
         </div>
       }
@@ -806,8 +928,14 @@ export function NewLeadDrawer({
             onChange={(e) => setNotes(e.target.value)}
           />
         </Field>
-        <div className="flex items-center gap-3 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
-          <Icon name="star" size={18} className="shrink-0 text-accent" />
+        <Card flat className="flex items-center gap-3 p-3">
+          {/* Le même signe qu'à la fiche et qu'à la signature — l'étoile, elle,
+              sert déjà à « Signé ? Créer le restaurant » et ne dit rien. */}
+          <BadgeFondateur
+            statut="reserve"
+            size={24}
+            className={founder ? undefined : "opacity-30 grayscale"}
+          />
           <div className="min-w-0 flex-1 text-sm font-bold text-ink">
             Réserver une place fondateur
           </div>
@@ -816,7 +944,7 @@ export function NewLeadDrawer({
             label="Réserver une place fondateur"
             onChange={setFounder}
           />
-        </div>
+        </Card>
         {/* Soumission au clavier (Entrée) sans bouton visible en double. */}
         <button type="submit" className="sr-only" tabIndex={-1}>
           Créer le lead
@@ -1124,7 +1252,11 @@ function ProposalPanel({
     setServices(lead.proposal?.services ?? EMPTY_SERVICES);
     setNote(lead.proposal?.note ?? "");
     setEdit(false);
-  }, [lead]);
+    // Sur l'IDENTITÉ du lead : une écriture ailleurs dans le tiroir remonte
+    // un nouvel objet pour le même lead et refermerait ce formulaire en
+    // jetant la saisie en cours.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead._id]);
 
   async function poser() {
     if (busy) return;
@@ -1136,8 +1268,8 @@ function ProposalPanel({
       onChanged(updated);
       setEdit(false);
       toast("Proposition posée — elle pré-remplira la signature", { icon: "check" });
-    } catch {
-      toast("Enregistrement impossible — réessayez");
+    } catch (e) {
+      toast(errText(e, "Enregistrement impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -1146,7 +1278,7 @@ function ProposalPanel({
   if (lead.proposal && !edit) {
     const p = lead.proposal;
     return (
-      <div className="rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
+      <Card flat className="p-3">
         <div className="flex items-baseline justify-between gap-2">
           <Eyebrow>Proposition</Eyebrow>
           <span className="cf-fig shrink-0 text-[11px] text-mut">
@@ -1168,7 +1300,7 @@ function ProposalPanel({
         {resumeAtelier(p.services) && (
           <div className="mt-0.5 text-xs text-mut">Atelier : {resumeAtelier(p.services)}</div>
         )}
-        {p.note && <p className="mt-1.5 text-xs italic text-mut">« {p.note} »</p>}
+        {p.note && <p className="mt-1.5 break-words text-xs italic text-mut">« {p.note} »</p>}
         <div className="mt-2 flex items-center gap-2">
           <Btn
             variant="ink"
@@ -1193,7 +1325,7 @@ function ProposalPanel({
             Modifier
           </Btn>
         </div>
-      </div>
+      </Card>
     );
   }
 
@@ -1251,9 +1383,12 @@ function ProposalPanel({
 function ConvertPanel({
   lead,
   onConverted,
+  onMotDePasse,
 }: {
   lead: CrmLead;
   onConverted: (lead: CrmLead) => void;
+  /** Le mot de passe « remis une fois » vient d'apparaître : le tiroir se met sous garde. */
+  onMotDePasse?: () => void;
 }) {
   const toast = useToast();
   const { reload } = useHq();
@@ -1289,7 +1424,12 @@ function ConvertPanel({
     setFait(null);
     setErreur(null);
     setOpen(false);
-  }, [lead]);
+    // Sur l'IDENTITÉ du lead : chaque écriture du tiroir remonte un nouvel
+    // objet pour le même lead — resynchroniser dessus refermait ce panneau,
+    // jetait slug et e-mail corrigés, et EFFAÇAIT le mot de passe « remis une
+    // fois » à l'instant même où la signature venait de l'afficher.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead._id]);
 
   async function signer() {
     setBusy(true);
@@ -1306,13 +1446,16 @@ function ConvertPanel({
         services,
       });
       setFait(done);
+      onMotDePasse?.();
       // Le lead local suit ce que l'API vient d'écrire : signé, réservation
       // éteinte (la place vit désormais sur le restaurant).
       onConverted({ ...lead, stage: "signe", founderSeatReserved: false });
       reload();
       toast(`« ${done.name} » est né — notez le mot de passe`, { icon: "check" });
     } catch (e) {
-      setErreur(e instanceof Error ? e.message : "Création impossible — réessayez");
+      // Le refus traduit (champ nommé, en français) — jamais le « Validation
+      // failed » brut de Nest sur le geste le plus important du CRM.
+      setErreur(errText(e, "Création impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -1323,7 +1466,8 @@ function ConvertPanel({
       <div className="rounded-card border border-accent/40 bg-[image:var(--cf-elev-gradient)] p-4">
         <div className="text-sm font-bold text-ink">Restaurant créé — notez le mot de passe</div>
         <div className="mt-1 text-xs text-mut">
-          Il ne sera JAMAIS réaffiché. Compte gérant : {fait.ownerEmail} · essai jusqu&apos;au{" "}
+          Il ne sera JAMAIS réaffiché. Compte gérant :{" "}
+          <span className="break-all">{fait.ownerEmail}</span> · essai jusqu&apos;au{" "}
           {new Date(fait.trialEndsAt).toLocaleDateString("fr-FR")}.
         </div>
         <div className="mt-1 text-xs text-mut">
@@ -1339,9 +1483,16 @@ function ConvertPanel({
             variant="ghost"
             size="sm"
             onClick={() => {
+              // Un échec de copie DOIT se dire : sans retour, l'opérateur
+              // ferme le panneau en croyant le mot de passe au presse-papiers.
+              if (!navigator.clipboard) {
+                toast("Copie impossible — notez-le à la main");
+                return;
+              }
               void navigator.clipboard
-                ?.writeText(fait.password)
-                .then(() => toast("Mot de passe copié", { icon: "check" }));
+                .writeText(fait.password)
+                .then(() => toast("Mot de passe copié", { icon: "check" }))
+                .catch(() => toast("Copie impossible — notez-le à la main"));
             }}
           >
             Copier
@@ -1445,7 +1596,13 @@ function ConvertPanel({
         {phrasePrix({ plan, onlineOrdering, billing, services, founderSeat })}
         {resumeAtelier(services) ? ` · Atelier : ${resumeAtelier(services)}` : ""}
       </div>
-      {erreur && <div className="text-xs font-semibold text-alertt">{erreur}</div>}
+      {/* `role="alert"` : le refus s'ANNONCE au lecteur d'écran — sans lui,
+          seul le bouton redevenu libre « dit » que quelque chose s'est passé. */}
+      {erreur && (
+        <div role="alert" className="text-xs font-semibold text-alertt">
+          {erreur}
+        </div>
+      )}
       <div className="flex gap-2">
         <Btn type="submit" variant="ink" size="sm" disabled={busy || !slug || !ownerEmail}>
           {busy ? "Création…" : "Créer — mot de passe remis une fois"}

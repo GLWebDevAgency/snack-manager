@@ -136,12 +136,16 @@ export default function ProductionPage() {
 
   if (erreur) {
     return (
-      <EmptyState
-        icon="gear"
-        title="File de production indisponible"
-        hint="La route /crm/production ne répond pas — réessayez, ou vérifiez l'API."
-        action={<Btn variant="ghost" size="sm" onClick={() => load()}>Réessayer</Btn>}
-      />
+      <div className="p-[26px] max-md:p-4">
+        <Card>
+          <EmptyState
+            icon="gear"
+            title="File de production indisponible"
+            hint="La route /crm/production ne répond pas — réessayez, ou vérifiez l'API."
+            action={<Btn variant="ghost" size="sm" onClick={() => load()}>Réessayer</Btn>}
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -179,8 +183,8 @@ export default function ProductionPage() {
           </Btn>
           {/* La semaine PROCHAINE n'existe pas ici : rien ne se doit d'avance. */}
           {data.next && (
-            <Btn variant="ghost" size="sm" onClick={() => load(data.next ?? undefined)}>
-              Suivante →
+            <Btn variant="ghost" size="sm" iconRight="arrow" onClick={() => load(data.next ?? undefined)}>
+              Suivante
             </Btn>
           )}
           {!semaineCourante && (
@@ -193,11 +197,13 @@ export default function ProductionPage() {
 
       {/* ── La file, client par client ── */}
       {data.clients.length === 0 ? (
-        <EmptyState
-          icon="check"
-          title="Aucune promesse récurrente sur cette semaine"
-          hint="La file se remplit toute seule : dès qu'un client signe les réseaux sociaux ou la présence internet, son travail hebdomadaire apparaît ici."
-        />
+        <Card>
+          <EmptyState
+            icon="check"
+            title="Aucune promesse récurrente sur cette semaine"
+            hint="La file se remplit toute seule : dès qu'un client signe les réseaux sociaux ou la présence internet, son travail hebdomadaire apparaît ici."
+          />
+        </Card>
       ) : (
         data.clients.map((client) => (
           <Card key={client.tenantId} className="p-4">

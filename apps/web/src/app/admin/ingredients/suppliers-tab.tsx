@@ -4,7 +4,8 @@
  * Onglet Fournisseurs : cartes fournisseur (contact, conditions, jours de
  * livraison), table des références (conditionnement, prix colis, prix/unité,
  * mini historique — flèche ROUGE fonctionnelle si hausse), édition de prix
- * inline (l'API historise l'ancien prix) et ajout de référence.
+ * inline (l'API historise l'ancien prix), ajout, édition et retrait doux
+ * de référence.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -43,7 +44,11 @@ import {
   parseEurosToCents,
 } from "./shared";
 
-/** Dernier prix historisé d'une référence (null = jamais changé). */
+/**
+ * Dernier prix historisé d'une référence — null = jamais changé.
+ * `undefined` dans la table = historique NON chargé (échec réseau) :
+ * ne surtout pas afficher « Premier prix », qui serait une affirmation fausse.
+ */
 type PrevPrice = { packPriceCents: number; recordedAt: string } | null;
 
 type PriceHistoryResponse = {
@@ -68,21 +73,28 @@ export function SuppliersTab({
   const toast = useToast();
   const [suppliers, setSuppliers] = useState<SupplySupplier[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [prevPrices, setPrevPrices] = useState<Record<string, PrevPrice>>({});
+  const [prevPrices, setPrevPrices] = useState<
+    Record<string, PrevPrice | undefined>
+  >({});
   const [drawer, setDrawer] = useState<
     { mode: "create" } | { mode: "edit"; supplier: SupplySupplier } | null
   >(null);
-  const [itemModal, setItemModal] = useState<SupplySupplier | null>(null);
+  const [itemModal, setItemModal] = useState<{
+    supplier: SupplySupplier;
+    /** Référence à modifier — null pour une création. */
+    item: SupplySupplierItem | null;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const list = await api.get<SupplySupplier[]>("/supply/suppliers");
       setSuppliers(list);
-      // Mini historique : dernier prix historisé de chaque référence.
-      const items = list.flatMap((s) => s.items);
+      // Mini historique : dernier prix historisé de chaque référence active
+      // (les retirées ne sont plus affichées — inutile de les interroger).
+      const items = list.flatMap((s) => s.items.filter((it) => it.active));
       const entries = await Promise.all(
-        items.map(async (it): Promise<[string, PrevPrice]> => {
+        items.map(async (it): Promise<[string, PrevPrice | undefined]> => {
           try {
             const h = await api.get<PriceHistoryResponse>(
               `/supply/items/${it.id}/price-history`,
@@ -98,7 +110,8 @@ export function SuppliersTab({
                 : null,
             ];
           } catch {
-            return [it.id, null];
+            // Échec ≠ « jamais changé » : marquer l'historique comme non chargé.
+            return [it.id, undefined];
           }
         }),
       );
@@ -175,7 +188,10 @@ export function SuppliersTab({
   }
 
   // ── États chargement / erreur ──
-  if (error)
+  // Un échec de rechargement ne doit pas effacer les cartes déjà affichées :
+  // pleine page seulement tant qu'on n'a rien, bandeau au-dessus sinon
+  // (même règle que Menu et Planning).
+  if (error && !suppliers)
     return <ErrorState message={error} onRetry={() => void load()} />;
   if (!visible)
     return (
@@ -188,6 +204,14 @@ export function SuppliersTab({
 
   return (
     <div>
+      {error && (
+        <div className="mb-4 flex flex-col items-start gap-3 rounded-ctrl border border-alert/40 bg-alert/10 px-4 py-3">
+          <p className="text-sm text-alertt">{error}</p>
+          <Btn variant="ghost" size="sm" onClick={() => void load()}>
+            Réessayer
+          </Btn>
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
         {filterPriceUp && (
           <button
@@ -249,7 +273,11 @@ export function SuppliersTab({
               }}
               onAddItem={() => {
                 const full = suppliers?.find((x) => x.id === s.id) ?? s;
-                setItemModal(full);
+                setItemModal({ supplier: full, item: null });
+              }}
+              onEditItem={(item) => {
+                const full = suppliers?.find((x) => x.id === s.id) ?? s;
+                setItemModal({ supplier: full, item });
               }}
               onPriceSaved={(item, prev) => onPriceSaved(s.id, item, prev)}
             />
@@ -269,10 +297,11 @@ export function SuppliersTab({
       )}
       {itemModal && (
         <ItemModal
-          supplier={itemModal}
+          supplier={itemModal.supplier}
+          initial={itemModal.item}
           ingredients={ingredients}
           onClose={() => setItemModal(null)}
-          onAdded={() => {
+          onSaved={() => {
             setItemModal(null);
             // Rechargement : la réponse de création n'est pas hydratée
             // (ingredient/brand) — la liste complète l'est.
@@ -294,18 +323,23 @@ function SupplierCard({
   priceUpItemIds,
   onEdit,
   onAddItem,
+  onEditItem,
   onPriceSaved,
 }: {
   supplier: SupplySupplier;
-  prevPrices: Record<string, PrevPrice>;
+  prevPrices: Record<string, PrevPrice | undefined>;
   priceUpItemIds: ReadonlySet<string>;
   onEdit: () => void;
   onAddItem: () => void;
+  onEditItem: (item: SupplySupplierItem) => void;
   onPriceSaved: (item: SupplySupplierItem, previousCents: number) => void;
 }) {
   const contact = [supplier.contactName, supplier.phone, supplier.email]
     .filter(Boolean)
     .join(" · ");
+  // Le retrait d'une référence est une désactivation douce (pas de DELETE
+  // côté API) : seules les références actives s'affichent.
+  const items = supplier.items.filter((it) => it.active);
   return (
     <Panel
       title={supplier.name}
@@ -334,14 +368,18 @@ function SupplierCard({
             <Pill variant="out">Règlement : {supplier.paymentTerms}</Pill>
           )}
           {supplier.notes && (
-            <span className="text-[13px] text-mut" title={supplier.notes}>
+            // Une ligne au plus : le title livre le texte complet au survol.
+            <span
+              className="min-w-0 flex-1 truncate text-[13px] text-mut"
+              title={supplier.notes}
+            >
               {supplier.notes}
             </span>
           )}
         </div>
       )}
 
-      {supplier.items.length === 0 ? (
+      {items.length === 0 ? (
         <EmptyState
           icon="tag"
           title="Aucune référence"
@@ -350,7 +388,7 @@ function SupplierCard({
         />
       ) : (
         <div className="overflow-x-auto rounded-card border border-line2">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
+          <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-white/3">
                 <Th>Ingrédient</Th>
@@ -359,15 +397,19 @@ function SupplierCard({
                 <Th className="text-right">Prix du colis</Th>
                 <Th className="text-right">Prix / unité</Th>
                 <Th>Historique</Th>
+                <Th className="text-right">
+                  <span className="sr-only">Actions</span>
+                </Th>
               </tr>
             </thead>
             <tbody>
-              {supplier.items.map((it) => (
+              {items.map((it) => (
                 <ItemRow
                   key={it.id}
                   item={it}
-                  prev={prevPrices[it.id] ?? null}
+                  prev={prevPrices[it.id]}
                   highlight={priceUpItemIds.has(it.id)}
+                  onEdit={() => onEditItem(it)}
                   onPriceSaved={onPriceSaved}
                 />
               ))}
@@ -383,11 +425,13 @@ function ItemRow({
   item,
   prev,
   highlight,
+  onEdit,
   onPriceSaved,
 }: {
   item: SupplySupplierItem;
-  prev: PrevPrice;
+  prev: PrevPrice | undefined;
   highlight: boolean;
+  onEdit: () => void;
   onPriceSaved: (item: SupplySupplierItem, previousCents: number) => void;
 }) {
   const unit = item.ingredient ? UNIT_LABELS[item.ingredient.unit] : "";
@@ -427,12 +471,28 @@ function ItemRow({
       <td className="whitespace-nowrap px-4 py-2.5">
         <PriceTrend current={item.packPriceCents} prev={prev} />
       </td>
+      <td className="whitespace-nowrap px-4 py-2.5 text-right">
+        {/* Conditionnement, marque, SKU et retrait : tout sauf le prix,
+            qui garde son édition inline. */}
+        <Btn variant="ghost" size="sm" onClick={onEdit}>
+          Modifier
+        </Btn>
+      </td>
     </tr>
   );
 }
 
 /** Dernier vs précédent — flèche ROUGE fonctionnelle si hausse (spec). */
-function PriceTrend({ current, prev }: { current: number; prev: PrevPrice }) {
+function PriceTrend({
+  current,
+  prev,
+}: {
+  current: number;
+  prev: PrevPrice | undefined;
+}) {
+  // Historique non chargé (échec réseau) : ne pas affirmer « Premier prix ».
+  if (prev === undefined)
+    return <span className="text-mut">Historique indisponible</span>;
   if (!prev) return <span className="text-mut">Premier prix</span>;
   const diff = current - prev.packPriceCents;
   const pctText =
@@ -513,11 +573,13 @@ function PriceEditor({
         <span className="cf-fig text-[15px] font-extrabold text-ink">
           {fmtEuro(item.packPriceCents)}
         </span>
+        {/* 32 px minimum : le geste central de l'onglet doit rester
+            atteignable au doigt (la ligne py-2.5 absorbe la hauteur). */}
         <IconBtn
           icon="edit"
           label={`Modifier le prix — ${item.ingredient?.name ?? "référence"}`}
-          size={26}
-          iconSize={12}
+          size={32}
+          iconSize={15}
           onClick={start}
         />
       </span>
@@ -544,16 +606,16 @@ function PriceEditor({
       <IconBtn
         icon="check"
         label="Enregistrer le prix"
-        size={26}
-        iconSize={12}
+        size={32}
+        iconSize={15}
         disabled={saving}
         onClick={() => void save()}
       />
       <IconBtn
         icon="close"
         label="Annuler la modification"
-        size={26}
-        iconSize={12}
+        size={32}
+        iconSize={15}
         disabled={saving}
         onClick={() => setEditing(false)}
       />
@@ -578,7 +640,8 @@ function SupplierDrawer({
 }) {
   const toast = useToast();
   const isEdit = initial !== null;
-  const [draft, setDraft] = useState({
+  // Valeurs d'origine, conservées pour détecter une saisie non enregistrée.
+  const vierge = {
     name: initial?.name ?? "",
     contactName: initial?.contactName ?? "",
     phone: initial?.phone ?? "",
@@ -586,14 +649,37 @@ function SupplierDrawer({
     paymentTerms: initial?.paymentTerms ?? "",
     deliveryDays: initial?.deliveryDays ?? "",
     notes: initial?.notes ?? "",
-  });
+  };
+  const [draft, setDraft] = useState(vierge);
   const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const set = (key: keyof typeof draft, v: string) =>
     setDraft((d) => ({ ...d, [key]: v }));
+
+  const dirty = (Object.keys(vierge) as (keyof typeof vierge)[]).some(
+    (k) => draft[k] !== vierge[k],
+  );
+
+  /**
+   * Fermeture demandée (Échap, voile, croix, « Annuler ») — gardée :
+   * une confirmation ouverte garde la main (sinon l'Échap du Drawer, écouté
+   * sur window, démontait tiroir ET confirmation d'un coup), une requête en
+   * cours attend son dénouement, et une saisie modifiée doit être confirmée
+   * avant d'être jetée.
+   */
+  function requestClose() {
+    if (confirmDelete || confirmDiscard) return;
+    if (saving || deleting) return;
+    if (dirty) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -673,7 +759,7 @@ function SupplierDrawer({
     <>
       <Drawer
         open
-        onClose={onClose}
+        onClose={requestClose}
         title={isEdit ? "Modifier le fournisseur" : "Nouveau fournisseur"}
         footer={
           <div className="flex items-center gap-2">
@@ -686,7 +772,13 @@ function SupplierDrawer({
                 Supprimer
               </button>
             )}
-            <Btn variant="ghost" size="sm" onClick={onClose} className="ml-auto">
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={requestClose}
+              disabled={saving}
+              className="ml-auto"
+            >
               Annuler
             </Btn>
             <Btn type="submit" size="sm" form="sm-supplier-form" disabled={saving}>
@@ -796,33 +888,73 @@ function SupplierDrawer({
           de prix restent archivés (suppression douce).
         </p>
       </Modal>
+
+      {/* Garde-fou : Échap ou clic sur le voile avec une saisie modifiée. */}
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Abandonner les modifications ?"
+        destructive
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setConfirmDiscard(false)}>
+              Continuer la saisie
+            </Btn>
+            <DangerBtn onClick={onClose}>Abandonner</DangerBtn>
+          </>
+        }
+      >
+        <p className="text-mut">
+          La saisie de ce formulaire n’est pas enregistrée : fermer le tiroir
+          la jettera.
+        </p>
+      </Modal>
     </>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Modale « Nouvelle référence »
+// Modale référence (création / édition / retrait doux)
 // ─────────────────────────────────────────────────────────────
 
 function ItemModal({
   supplier,
+  initial,
   ingredients,
   onClose,
-  onAdded,
+  onSaved,
 }: {
   supplier: SupplySupplier;
+  /** Référence à modifier — null pour une création. */
+  initial: SupplySupplierItem | null;
   ingredients: SupplyIngredient[];
   onClose: () => void;
-  onAdded: () => void;
+  onSaved: () => void;
 }) {
   const toast = useToast();
-  const [ingredientId, setIngredientId] = useState("");
-  const [brandId, setBrandId] = useState("");
-  const [sku, setSku] = useState("");
-  const [packQtyRaw, setPackQtyRaw] = useState("");
-  const [priceRaw, setPriceRaw] = useState("");
+  const isEdit = initial !== null;
+  const [ingredientId, setIngredientId] = useState(initial?.ingredientId ?? "");
+  const [brandId, setBrandId] = useState(initial?.brandId ?? "");
+  const [sku, setSku] = useState(initial?.sku ?? "");
+  const [packQtyRaw, setPackQtyRaw] = useState(
+    initial ? String(initial.packQty).replace(".", ",") : "",
+  );
+  const [priceRaw, setPriceRaw] = useState(
+    initial ? centsToInput(initial.packPriceCents) : "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  // Sans ingrédient, le formulaire serait un cul-de-sac (« Choisissez un
+  // ingrédient » sans rien à choisir) : orienter vers l'onglet Ingrédients.
+  const aucunIngredient = !isEdit && ingredients.length === 0;
+
+  // Envoi en cours : « Annuler » n'annulerait pas la requête — on attend.
+  function requestClose() {
+    if (saving) return;
+    onClose();
+  }
 
   const selected = ingredients.find((i) => i.id === ingredientId) ?? null;
   const unit = selected ? UNIT_LABELS[selected.unit] : "";
@@ -850,126 +982,262 @@ function ItemModal({
     setError(null);
     setSaving(true);
     try {
-      await api.post(`/supply/suppliers/${supplier.id}/items`, {
-        ingredientId,
-        ...(brandId ? { brandId } : {}),
-        ...(sku.trim() ? { sku: sku.trim() } : {}),
-        packQty,
-        packPriceCents: priceCents,
-      });
-      toast("Référence ajoutée", { icon: "check" });
-      onAdded();
+      if (isEdit && initial) {
+        // Édition : on envoie ce qu'on affiche, effacements compris — le
+        // serveur ne patche que les clés reçues (cf. SupplierDrawer).
+        // L'ingrédient, lui, n'est pas patchable au contrat.
+        await api.patch(`/supply/items/${initial.id}`, {
+          brandId: brandId || null,
+          sku: sku.trim() || null,
+          packQty,
+          packPriceCents: priceCents,
+        });
+        toast("Référence mise à jour", { icon: "check" });
+      } else {
+        await api.post(`/supply/suppliers/${supplier.id}/items`, {
+          ingredientId,
+          ...(brandId ? { brandId } : {}),
+          ...(sku.trim() ? { sku: sku.trim() } : {}),
+          packQty,
+          packPriceCents: priceCents,
+        });
+        toast("Référence ajoutée", { icon: "check" });
+      }
+      onSaved();
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "Ajout impossible — réessayez.",
+        err instanceof ApiError
+          ? err.message
+          : isEdit
+            ? "Enregistrement impossible — réessayez."
+            : "Ajout impossible — réessayez.",
       );
       setSaving(false);
+    }
+  }
+
+  /** Retrait doux : pas de DELETE côté API — désactivation prévue au contrat. */
+  async function remove() {
+    if (!initial) return;
+    setSaving(true);
+    try {
+      await api.patch(`/supply/items/${initial.id}`, { active: false });
+      toast("Référence retirée — historique conservé", { icon: "check" });
+      onSaved();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Retrait impossible — réessayez.",
+      );
+      setSaving(false);
+      setConfirmRemove(false);
     }
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
-      title={`Nouvelle référence — ${supplier.name}`}
+      onClose={requestClose}
+      title={
+        isEdit
+          ? `Modifier la référence — ${initial?.ingredient?.name ?? supplier.name}`
+          : `Nouvelle référence — ${supplier.name}`
+      }
       width={480}
+      // Cinq champs de saisie : Échap et le clic sur le voile ne doivent pas
+      // les jeter sans prévenir — fermeture explicite uniquement (croix,
+      // « Annuler »), comme l'ImportModal du menu.
+      destructive
       footer={
-        <>
+        aucunIngredient ? (
           <Btn variant="ghost" onClick={onClose}>
-            Annuler
+            Fermer
           </Btn>
-          <Btn type="submit" form="sm-item-form" disabled={saving}>
-            {saving ? "Ajout…" : "Ajouter la référence"}
-          </Btn>
-        </>
+        ) : (
+          <>
+            <Btn variant="ghost" onClick={requestClose} disabled={saving}>
+              Annuler
+            </Btn>
+            <Btn type="submit" form="sm-item-form" disabled={saving}>
+              {saving
+                ? isEdit
+                  ? "Enregistrement…"
+                  : "Ajout…"
+                : isEdit
+                  ? "Enregistrer"
+                  : "Ajouter la référence"}
+            </Btn>
+          </>
+        )
       }
     >
-      <form id="sm-item-form" onSubmit={submit} className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Ingrédient" htmlFor="item-ing">
-            <Select
-              id="item-ing"
-              value={ingredientId}
-              onChange={(e) => {
-                setIngredientId(e.target.value);
-                setBrandId("");
-              }}
+      {aucunIngredient ? (
+        <EmptyState
+          icon="tag"
+          title="Aucun ingrédient à référencer"
+          hint="Créez d'abord un ingrédient dans l'onglet Ingrédients : chaque référence fournisseur s'y rattache."
+          className="p-6"
+        />
+      ) : (
+        <form id="sm-item-form" onSubmit={submit} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Ingrédient"
+              htmlFor="item-ing"
+              hint={
+                isEdit
+                  ? "Non modifiable — retirez la référence et recréez-la au besoin."
+                  : undefined
+              }
             >
-              <option value="">Choisir…</option>
-              {ingredients.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Marque (optionnel)" htmlFor="item-brand">
-            <Select
-              id="item-brand"
-              value={brandId}
-              onChange={(e) => setBrandId(e.target.value)}
-              disabled={!selected || selected.brands.length === 0}
-            >
-              <option value="">—</option>
-              {selected?.brands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <Field label="Référence / SKU (optionnel)" htmlFor="item-sku">
-          <Input
-            id="item-sku"
-            value={sku}
-            onChange={(e) => setSku(e.target.value)}
-            placeholder="Ex. MET-4521"
-            maxLength={80}
-          />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            label={`Conditionnement${unit ? ` (${unit} / colis)` : ""}`}
-            htmlFor="item-qty"
-            hint="Quantité par colis en unité de base."
-          >
+              <Select
+                id="item-ing"
+                value={ingredientId}
+                disabled={isEdit}
+                onChange={(e) => {
+                  setIngredientId(e.target.value);
+                  setBrandId("");
+                }}
+              >
+                <option value="">Choisir…</option>
+                {/* Ingrédient retiré de la liste : garder son option visible. */}
+                {isEdit && !selected && initial?.ingredient && (
+                  <option value={initial.ingredient.id}>
+                    {initial.ingredient.name}
+                  </option>
+                )}
+                {ingredients.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Marque (optionnel)" htmlFor="item-brand">
+              <Select
+                id="item-brand"
+                value={brandId}
+                onChange={(e) => setBrandId(e.target.value)}
+                disabled={!selected || selected.brands.length === 0}
+              >
+                <option value="">—</option>
+                {/* Marque retirée de la liste : garder son option visible. */}
+                {isEdit &&
+                  initial?.brand &&
+                  !selected?.brands.some((b) => b.id === initial.brand?.id) && (
+                    <option value={initial.brand.id}>
+                      {initial.brand.name}
+                    </option>
+                  )}
+                {selected?.brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Field label="Référence / SKU (optionnel)" htmlFor="item-sku">
             <Input
-              id="item-qty"
-              inputMode="decimal"
-              value={packQtyRaw}
-              onChange={(e) => setPackQtyRaw(e.target.value)}
-              placeholder="Ex. 10"
-              className="tabular-nums"
+              id="item-sku"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              placeholder="Ex. MET-4521"
+              maxLength={80}
             />
           </Field>
-          <Field label="Prix du colis (€ HT)" htmlFor="item-price">
-            <Input
-              id="item-price"
-              inputMode="decimal"
-              value={priceRaw}
-              onChange={(e) => setPriceRaw(e.target.value)}
-              placeholder="Ex. 24,90"
-              className="tabular-nums"
-            />
-          </Field>
-        </div>
-        <p className="text-[13px] text-mut tabular-nums" aria-live="polite">
-          {unitPriceCents !== null && selected && (
-            <>
-              Prix par {unit} :{" "}
-              <span className="font-bold text-ink">
-                {fmtEuro(unitPriceCents)}
-              </span>
-            </>
-          )}
-        </p>
-        {error && (
-          <p className="text-xs text-alertt" role="alert">
-            {error}
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label={`Conditionnement${unit ? ` (${unit} / colis)` : ""}`}
+              htmlFor="item-qty"
+              hint="Quantité par colis en unité de base."
+            >
+              <Input
+                id="item-qty"
+                inputMode="decimal"
+                value={packQtyRaw}
+                onChange={(e) => setPackQtyRaw(e.target.value)}
+                placeholder="Ex. 10"
+                className="tabular-nums"
+              />
+            </Field>
+            <Field label="Prix du colis (€ HT)" htmlFor="item-price">
+              <Input
+                id="item-price"
+                inputMode="decimal"
+                value={priceRaw}
+                onChange={(e) => setPriceRaw(e.target.value)}
+                placeholder="Ex. 24,90"
+                className="tabular-nums"
+              />
+            </Field>
+          </div>
+          <p className="text-[13px] text-mut tabular-nums" aria-live="polite">
+            {unitPriceCents !== null && selected && (
+              <>
+                Prix par {unit} :{" "}
+                <span className="font-bold text-ink">
+                  {fmtEuro(unitPriceCents)}
+                </span>
+              </>
+            )}
           </p>
-        )}
-      </form>
+          {error && (
+            <p className="text-xs text-alertt" role="alert">
+              {error}
+            </p>
+          )}
+
+          {/* Retrait doux — confirmation inline (motif ShiftEditor) : pas de
+              seconde modale empilée dont l'Échap démonterait tout. */}
+          {isEdit && (
+            <div className="rounded-ctrl border border-white/8 bg-[image:var(--cf-elev-gradient)] p-3">
+              {confirmRemove ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[13px] font-bold text-alertt">
+                    Retirer cette référence du catalogue ?
+                  </p>
+                  <div className="flex gap-2">
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmRemove(false)}
+                      disabled={saving}
+                    >
+                      Annuler
+                    </Btn>
+                    <Btn
+                      variant="ink"
+                      size="sm"
+                      className="text-alertt"
+                      onClick={() => void remove()}
+                      disabled={saving}
+                    >
+                      Confirmer le retrait
+                    </Btn>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[13px] text-mut">
+                    Créée par erreur ? Le retrait est doux : l’historique de
+                    prix reste archivé.
+                  </p>
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    icon="trash"
+                    className="border-alert/40 text-alertt hover:bg-alert/10"
+                    onClick={() => setConfirmRemove(true)}
+                    disabled={saving}
+                  >
+                    Retirer
+                  </Btn>
+                </div>
+              )}
+            </div>
+          )}
+        </form>
+      )}
     </Modal>
   );
 }

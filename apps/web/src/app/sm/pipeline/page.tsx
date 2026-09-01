@@ -27,10 +27,21 @@ import {
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
-import { Btn, Card, Icon, Input, Skeleton, useToast } from "@/components/ui";
+import { Btn, Card, Icon, IconBtn, Input, Skeleton, useToast } from "@/components/ui";
 import { crm, useHq } from "../crm";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import { LeadDrawer, NewLeadDrawer, StagePill } from "../parts";
+
+/**
+ * `smooth`, sauf quand le système demande moins de mouvement : un `behavior`
+ * passé en JavaScript ignore le `scroll-behavior: auto` que le CSS pose sous
+ * `prefers-reduced-motion` — la préférence se relit donc à chaque appel.
+ */
+function defilement(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+}
 
 export default function PipelinePage() {
   const toast = useToast();
@@ -38,6 +49,8 @@ export default function PipelinePage() {
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
   /** Le pipeline n'a pas pu être lu — distinct de « aucun lead ». */
   const [enPanne, setEnPanne] = useState(false);
+  /** Compteur de relances — « Réessayer » réarme l'effet de lecture. */
+  const [essai, setEssai] = useState(0);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -58,7 +71,7 @@ export default function PipelinePage() {
   useEffect(() => {
     pillRefs.current
       .get(stageVu)
-      ?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+      ?.scrollIntoView({ behavior: defilement(), inline: "nearest", block: "nearest" });
   }, [stageVu]);
 
   /** L'étape dont la colonne est la plus proche du centre du défilement. */
@@ -87,11 +100,14 @@ export default function PipelinePage() {
       .get(stage)
       // `block` au plus proche : seul l'axe horizontal doit bouger, la page
       // ne doit pas sursauter verticalement pour centrer la colonne.
-      ?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      ?.scrollIntoView({ behavior: defilement(), inline: "center", block: "nearest" });
   }
 
   useEffect(() => {
     let cancelled = false;
+    // Réarmé par « Réessayer » : le bandeau tombe, les squelettes reprennent.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- le bandeau doit tomber AVANT le départ de la requête ; un booléen, aucune cascade.
+    setEnPanne(false);
     crm
       .leads()
       .then((l) => {
@@ -106,7 +122,7 @@ export default function PipelinePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [essai]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -152,11 +168,22 @@ export default function PipelinePage() {
         tire naturellement devant un écran propre.
       */}
       {enPanne && (
-        <p className="shrink-0 border-b border-alert/30 bg-alert/10 px-[26px] py-2.5 text-[13px] text-alertt max-md:px-4">
-          Le pipeline n&apos;a pas pu être lu — <span className="cf-fig">/crm/leads</span>{" "}
-          n&apos;a pas répondu. Les colonnes ci-dessous sont vides par défaut d&apos;information,
-          pas par absence de prospects.
-        </p>
+        <div className="flex shrink-0 items-center gap-3 border-b border-alert/30 bg-alert/10 px-[26px] py-2.5 max-md:px-4">
+          <p className="min-w-0 flex-1 text-[13px] text-alertt">
+            Le pipeline n&apos;a pas pu être lu — <span className="cf-fig">/crm/leads</span>{" "}
+            n&apos;a pas répondu. Les colonnes ci-dessous sont vides par défaut d&apos;information,
+            pas par absence de prospects.
+          </p>
+          {/* La reprise sur place : relire /crm/leads sans exiger un F5. */}
+          <Btn
+            variant="ghost"
+            size="sm"
+            className="shrink-0 max-md:min-h-11"
+            onClick={() => setEssai((n) => n + 1)}
+          >
+            Réessayer
+          </Btn>
+        </div>
       )}
       {/* ── Barre d'outils ── */}
       <div className="flex shrink-0 items-center gap-3 px-[26px] pb-3 pt-[26px] max-md:flex-wrap max-md:gap-2 max-md:px-4 max-md:pb-2 max-md:pt-4">
@@ -176,8 +203,11 @@ export default function PipelinePage() {
           />
         </div>
         <span className="text-[13px] text-mut">
+          {/* En panne, « … » mentirait : le tiret dit qu'on ne sait pas. */}
           {leads === null
-            ? "…"
+            ? enPanne
+              ? "—"
+              : "…"
             : `${filtered.length} lead${filtered.length > 1 ? "s" : ""}${query ? " trouvés" : ""}`}
         </span>
         <Btn
@@ -287,7 +317,10 @@ export default function PipelinePage() {
                 </header>
 
                 <div className="cf-scroll flex min-h-[120px] flex-col gap-2.5 p-2.5 max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto">
-                  {leads === null ? (
+                  {/* En panne, pas de squelettes : un chargement qui ne
+                      finit jamais contredirait le bandeau — le tiret d'état
+                      vide reprend la main. */}
+                  {leads === null && !enPanne ? (
                     <>
                       <Skeleton className="h-[104px]" />
                       <Skeleton className="h-[104px]" />
@@ -363,9 +396,13 @@ function LeadCard({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Ouvrir la fiche de ${lead.restaurantName}`}
         className="cf-press-row block w-full text-left"
       >
+        {/* En sr-only et PAS en aria-label : l'attribut remplacerait tout le
+            contenu de la carte pour un lecteur d'écran — contact, proposition
+            et relance deviendraient muets. Le préfixe annonce l'action, le
+            contenu reste audible. */}
+        <span className="sr-only">Ouvrir la fiche — </span>
         <div className="flex items-start justify-between gap-2">
           <span className="min-w-0 truncate text-[14.5px] font-bold text-ink">
             {lead.restaurantName}
@@ -417,28 +454,30 @@ function LeadCard({
 
       <div className="mt-2.5 flex items-center gap-1.5 border-t border-line2 pt-2.5">
         {back && (
-          <button
-            type="button"
+          <IconBtn
+            icon="back"
+            label={`Reculer ${lead.restaurantName} sur « ${LEAD_STAGE_LABELS[back]} »`}
+            size={30}
+            iconSize={14}
             disabled={busy}
             onClick={() => onMove(back)}
-            title={`Reculer sur « ${LEAD_STAGE_LABELS[back]} »`}
-            aria-label={`Reculer ${lead.restaurantName} sur « ${LEAD_STAGE_LABELS[back]} »`}
-            className="cf-press grid size-[30px] shrink-0 place-items-center rounded-pill border border-line bg-white/3 text-mut hover:border-white/25 hover:text-white disabled:opacity-40 max-md:size-11"
-          >
-            <Icon name="back" size={14} />
-          </button>
+            /* `!` : IconBtn fige son côté en style inline — seule une classe
+               importante ramène la cible aux 44 px tactiles sous `md`. */
+            className="max-md:!size-11"
+          />
         )}
         {forward ? (
-          <button
-            type="button"
+          <Btn
+            variant="ink"
+            size="sm"
+            iconRight="arrow"
             disabled={busy}
             onClick={() => onMove(forward)}
             aria-label={`Avancer ${lead.restaurantName} sur « ${LEAD_STAGE_LABELS[forward]} »`}
-            className="cf-press inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-pill bg-btndark px-3 py-[7px] text-xs font-bold text-white hover:bg-[#333] disabled:opacity-40 max-md:min-h-11"
+            className="min-w-0 flex-1 max-md:min-h-11"
           >
-            <span className="truncate">Avancer</span>
-            <Icon name="arrow" size={14} className="shrink-0" />
-          </button>
+            Avancer
+          </Btn>
         ) : (
           <StagePill stage={lead.stage} className="ml-auto" />
         )}
