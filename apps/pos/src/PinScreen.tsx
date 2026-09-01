@@ -601,7 +601,17 @@ export function PinScreen({
                 kind="danger"
                 onPress={() => {
                   setConfirmUnpair(false);
-                  void forgetPairedDevice().then(onUnpair);
+                  setBusy(true);
+                  void forgetPairedDevice()
+                    .then(onUnpair)
+                    .catch((cause: unknown) => {
+                      setBusy(false);
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : 'Le désappairage est bloqué pour protéger les ventes.',
+                      );
+                    });
                 }}
               />
             </View>

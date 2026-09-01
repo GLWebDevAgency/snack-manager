@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SmClient, TransportUnreachable, type Transport } from './api';
 import { setStore, type KeyValueStore } from './storage';
+import { SYNC_QUEUE_STORAGE_KEY } from './sync-queue';
 
 function store(overrides: Partial<KeyValueStore> = {}): KeyValueStore {
   return {
@@ -70,5 +71,42 @@ describe('cache de lecture non critique', () => {
     const { api } = client({ send: async () => ({ status: 200, body: {} }) });
 
     await expect(api.cached('menu.demo')).resolves.toBeNull();
+  });
+});
+
+describe('montant local des mutations en file', () => {
+  it('survit au refus sans jamais entrer dans le body transporté', async () => {
+    const values = new Map<string, string>();
+    setStore({
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => void values.set(key, value),
+      removeItem: async (key) => void values.delete(key),
+    });
+    const send = vi.fn(async (_request: Parameters<Transport['send']>[0]) => ({
+      status: 409,
+      body: { message: 'Produit supprimé' },
+    }));
+    const { api } = client({ send });
+    const body = { clientId: 'c1', lines: [], payment: { method: 'counter' } };
+    const localDisplay = {
+      displayAmountCents: 1_850,
+      customerPhone: '+33600000000',
+      deviceToken: 'ne-doit-jamais-etre-persiste',
+    };
+
+    await api.post('/orders', body, 'order:c1', localDisplay);
+    await api.queue.flush();
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/orders', body }),
+    );
+    expect(send.mock.calls[0]![0].body).not.toHaveProperty('displayAmountCents');
+    expect(api.queue.getState().rejected[0]).toMatchObject({
+      displayAmountCents: 1_850,
+    });
+    expect(api.queue.getState().rejected[0]).not.toHaveProperty('customerPhone');
+    expect(api.queue.getState().rejected[0]).not.toHaveProperty('deviceToken');
+    expect(values.get(SYNC_QUEUE_STORAGE_KEY)).not.toContain('+33600000000');
+    expect(values.get(SYNC_QUEUE_STORAGE_KEY)).not.toContain('ne-doit-jamais-etre-persiste');
   });
 });

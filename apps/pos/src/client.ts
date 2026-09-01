@@ -106,6 +106,7 @@ function nativeStore(): KeyValueStore {
  * ressortir chez un autre : elle doit être vérifiable.
  */
 import { KEYS } from './pos-state';
+import { withDemoLoyalty } from './demo-loyalty';
 export { KEYS };
 
 export interface Session {
@@ -181,7 +182,7 @@ const BASE_URL = resolveBaseUrl();
 export const client = new SmClient({
   baseUrl: BASE_URL,
   queueScopeRequired: true,
-  ...(DEMO ? { transport: demoTransport() } : null),
+  ...(DEMO ? { transport: withDemoLoyalty(demoTransport()) } : null),
 });
 
 export interface PinLoginResponse {
@@ -404,16 +405,13 @@ export function installErrorReporting(): () => void {
  * sous-ensemble choisi : une clé ajoutée demain doit y entrer d'office.
  */
 export async function forgetPairedDevice(): Promise<void> {
-  // La file hors-ligne part avec l'appairage. Elle n'est pas cloisonnée par
-  // établissement : des mutations en attente de l'établissement A rejouées
-  // après ré-appairage chez B seraient des ventes écrites chez le mauvais
-  // commerçant — et sans le jeton de A, elles ne se rejoueraient de toute
-  // façon jamais correctement. On assume la perte : elle est visible (le
-  // badge « N en attente ») AVANT le désappairage, jamais silencieuse après.
+  // La file hors-ligne part avec l'appairage, mais uniquement lorsqu'elle est
+  // vide. Une révocation distante peut tomber pendant une vente : perdre son
+  // tenant est acceptable, effacer une commande encaissée ne l'est jamais.
   // IMPORTANT : la purge durable précède l'effacement de l'identité. Un crash
   // entre les deux laisse ainsi le poste chez A avec une file vide, jamais une
   // file A orpheline susceptible de repartir sous le jeton de B.
-  await client.queue.clear();
+  await client.queue.clear({ requireEmpty: true });
   await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device);
   await client.queue.completeClear();
   adopt(null);

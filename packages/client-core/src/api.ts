@@ -106,6 +106,14 @@ export interface ApiConfig {
   queueScopeRequired?: boolean;
 }
 
+export interface QueuedPostOptions {
+  /**
+   * Donnée locale d'affichage uniquement. Elle est persistée avec la file,
+   * mais n'entre jamais dans le corps HTTP de la mutation.
+   */
+  displayAmountCents?: number;
+}
+
 export class SmApiError extends Error {
   constructor(
     message: string,
@@ -245,8 +253,16 @@ export class SmClient {
 
   // ─── Écritures (toujours par la file) ───
 
-  post(path: string, body?: unknown, subject?: string) {
-    return this.queue.enqueue({ method: 'POST', path, body, subject });
+  post(path: string, body?: unknown, subject?: string, options?: QueuedPostOptions) {
+    return this.queue.enqueue({
+      method: 'POST',
+      path,
+      body,
+      subject,
+      ...(options?.displayAmountCents === undefined
+        ? null
+        : { displayAmountCents: options.displayAmountCents }),
+    });
   }
 
   patch(path: string, body?: unknown, subject?: string) {

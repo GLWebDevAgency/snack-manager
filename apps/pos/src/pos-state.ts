@@ -19,6 +19,8 @@ export const KEYS = {
   dayLog: 'sm.pos.daylog.v1',
   /** Ouverture du service courant — borne de découpe du Z. */
   serviceStart: 'sm.pos.servicestart.v1',
+  /** UUID opaque seulement ; permet de redériver un QR après réponse perdue. */
+  loyaltyEnrollmentRecovery: 'sm.pos.loyalty-enrollment-recovery.v1',
 } as const;
 
 /**
@@ -31,6 +33,7 @@ export const KEYS = {
  */
 import { uuid, type CartLine, type KeyValueStore } from '@sm/client-core';
 import { PAYMENT_DUE_LABEL, PAYMENT_TENDER_LABELS, type PaymentTender } from '@sm/contracts';
+import type { LoyaltyTicketState } from './loyalty-state';
 
 export type Mode = 'surplace' | 'emporter' | 'tel';
 
@@ -85,6 +88,8 @@ export interface DayEntry {
   /** Encaissement espèces : reçu et rendu, en centimes. */
   received?: number;
   change?: number;
+  /** Aucun identifiant client : uniquement l'état public relu par clientId. */
+  loyalty?: LoyaltyTicketState;
   at: number;
 }
 
@@ -97,6 +102,60 @@ export interface ParkedTicket {
   slot: string | null;
   note: string;
   at: number;
+}
+
+/**
+ * Les coordonnées de retrait n'existent que sur un ticket téléphone. Cette
+ * frontière empêche un changement de mode ou une vieille donnée locale de les
+ * associer ensuite à une carte fidélité au comptoir.
+ */
+export function customerFieldsForMode(
+  mode: Mode,
+  customerName: string,
+  customerPhone: string,
+  slot: string | null,
+): Pick<ParkedTicket, 'customerName' | 'customerPhone' | 'slot'> {
+  return mode === 'tel'
+    ? { customerName, customerPhone, slot }
+    : { customerName: '', customerPhone: '', slot: null };
+}
+
+/** Élimine les anciennes copies d'UUID membre/opération du journal local. */
+export function minimizeDayEntry(entry: DayEntry): DayEntry {
+  const { loyalty, ...publicEntry } = entry;
+  if (!loyalty) return publicEntry;
+  const state = ['awaiting_order', 'queued', 'credited', 'failed'].includes(loyalty.state)
+    ? loyalty.state
+    : 'failed';
+  const creditedUnits =
+    typeof loyalty.creditedUnits === 'number' &&
+    Number.isSafeInteger(loyalty.creditedUnits) &&
+    loyalty.creditedUnits >= 0
+      ? loyalty.creditedUnits
+      : undefined;
+  return {
+    ...publicEntry,
+    loyalty: {
+      state,
+      ...(creditedUnits === undefined ? null : { creditedUnits }),
+    },
+  };
+}
+
+/** Corrige aussi les tickets persistés par une ancienne version de la caisse. */
+export function minimizeParkedTicket(
+  ticket: ParkedTicket & { loyaltyMemberId?: unknown },
+): ParkedTicket {
+  const { loyaltyMemberId: _discarded, ...publicTicket } = ticket;
+  return {
+    ...publicTicket,
+    ...customerFieldsForMode(
+      ticket.mode,
+      ticket.customerName,
+      ticket.customerPhone,
+      ticket.slot,
+    ),
+  };
 }
 
 // ─── Persistance ───
@@ -123,6 +182,50 @@ export async function saveJson(
     await store.setItem(key, JSON.stringify(value));
   } catch {
     /* quota : on ne bloque jamais le service pour un échec d'écriture */
+  }
+}
+
+/**
+ * Commit critique d'une vente dans le journal du service.
+ *
+ * Contrairement aux préférences UI ci-dessus, cette écriture ne peut pas être
+ * best-effort : le verrou d'encaissement ne sera libéré qu'après sa réussite.
+ * L'entrée de file réseau est déjà durable à cet instant ; attendre ici évite
+ * qu'un verrouillage ou un désappairage démonte l'écran entre le setState et
+ * l'effet React chargé de persister le journal.
+ */
+export async function appendDayEntryDurably(
+  store: KeyValueStore,
+  current: readonly DayEntry[],
+  entry: DayEntry,
+  day = serviceDay(),
+): Promise<DayEntry[]> {
+  const next = [...current, entry];
+  await store.setItem(
+    KEYS.dayLog,
+    JSON.stringify({ day, entries: next }),
+  );
+  return next;
+}
+
+/**
+ * Après un enqueue réussi, un défaut du journal n'annule jamais la vente.
+ * L'appelant doit vider le ticket et afficher une alerte de journal dégradé :
+ * autoriser un nouvel essai créerait un nouvel UUID et donc un doublon.
+ */
+export async function commitQueuedSaleJournal(
+  store: KeyValueStore,
+  current: readonly DayEntry[],
+  entry: DayEntry,
+  day = serviceDay(),
+): Promise<{ entries: DayEntry[]; durable: boolean }> {
+  try {
+    return {
+      entries: await appendDayEntryDurably(store, current, entry, day),
+      durable: true,
+    };
+  } catch {
+    return { entries: [...current, entry], durable: false };
   }
 }
 
@@ -191,6 +294,10 @@ export function makeLine(input: Omit<CartLine, 'lineId'>): CartLine {
 
 export interface OrderBody {
   clientId: string;
+  /** UUID technique de la carte présentée avant encaissement, jamais son profil. */
+  loyaltyMemberId?: string;
+  /** Même écriture durable que la vente : aucun crash ne peut séparer les deux. */
+  loyaltyEarnOperationId?: string;
   channel: 'pos' | 'phone';
   type: 'surplace' | 'emporter' | 'pickup';
   lines: {
@@ -215,6 +322,8 @@ export interface OrderBody {
 
 export function buildOrderBody(params: {
   clientId: string;
+  loyaltyMemberId?: string | null;
+  loyaltyEarnOperationId?: string | null;
   mode: Mode;
   lines: CartLine[];
   note: string;
@@ -226,11 +335,28 @@ export function buildOrderBody(params: {
   /** Encaissement espèces : montant posé et rendu calculé localement. */
   cash?: { received: number; change: number };
 }): OrderBody {
-  const { clientId, mode, lines, note, customerName, customerPhone, slotIso, method, cash } =
-    params;
+  const {
+    clientId,
+    loyaltyMemberId,
+    loyaltyEarnOperationId,
+    mode,
+    lines,
+    note,
+    customerName,
+    customerPhone,
+    slotIso,
+    method,
+    cash,
+  } = params;
+  if (!!loyaltyMemberId !== !!loyaltyEarnOperationId) {
+    throw new Error('La carte fidélité et son opération de gain sont indissociables');
+  }
   const tender = PAY_TENDER[method];
   const body: OrderBody = {
     clientId,
+    ...(mode !== 'tel' && loyaltyMemberId && loyaltyEarnOperationId
+      ? { loyaltyMemberId, loyaltyEarnOperationId }
+      : null),
     channel: mode === 'tel' ? 'phone' : 'pos',
     type: mode === 'tel' ? 'pickup' : mode,
     lines: lines.map((l) => ({

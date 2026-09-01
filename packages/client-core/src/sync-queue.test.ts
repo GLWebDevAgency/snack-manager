@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PermanentError,
+  QueueContainsUnsyncedDataError,
   QueueScopeChangedError,
   QueueScopeNotBoundError,
   QueueScopeRetiredError,
@@ -98,6 +99,35 @@ describe('une mutation refusée définitivement', () => {
     expect(seconde.getState().rejected[0]!.reason).toBe('Produit supprimé');
   });
 
+  it('conserve son montant local numérique après rejet et redémarrage', async () => {
+    const envoyer = vi.fn().mockRejectedValue(new PermanentError('Produit supprimé', 409));
+    const premiere = new SyncQueue(envoyer);
+    await premiere.enqueue({ ...commande('c1'), displayAmountCents: 1_850 });
+    await laisserPartir();
+
+    expect(premiere.getState().rejected[0]).toMatchObject({
+      id: expect.any(String),
+      displayAmountCents: 1_850,
+    });
+    expect(lireEtat(donnees.get(SYNC_QUEUE_STORAGE_KEY)).rejected[0]).toMatchObject({
+      displayAmountCents: 1_850,
+    });
+
+    const reboot = new SyncQueue(vi.fn());
+    await reboot.pending();
+    expect(reboot.getState().rejected[0]).toMatchObject({ displayAmountCents: 1_850 });
+  });
+
+  it('refuse toute métadonnée de montant qui ne soit pas un entier en centimes', async () => {
+    const file = new SyncQueue(vi.fn());
+    await expect(
+      file.enqueue({
+        ...commande('c1'),
+        displayAmountCents: 'secret-ou-pii',
+      } as unknown as Omit<QueueEntry, 'id' | 'createdAt' | 'attempts'>),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
   it('ne perd aucun refus lors d’un incident de masse', async () => {
     const envoyer = vi.fn().mockRejectedValue(new PermanentError('Refus', 400));
     const file = new SyncQueue(envoyer);
@@ -163,6 +193,42 @@ describe('une panne passagère', () => {
     expect(envoyer).toHaveBeenCalledTimes(1);
     expect(envoyer.mock.calls[0]![0]).toMatchObject({ path: '/orders' });
     expect(file.getState().pending).toBe(2);
+  });
+});
+
+describe('purge protégée au désappairage', () => {
+  it('refuse atomiquement une vente en attente puis autorise la purge après preuve serveur', async () => {
+    const envoyer = vi.fn().mockRejectedValue(new Error('réseau'));
+    const file = new SyncQueue(envoyer);
+    await file.enqueue(commande('c1'));
+    await laisserPartir();
+
+    await expect(file.clear({ requireEmpty: true })).rejects.toMatchObject({
+      pending: 1,
+      rejected: 0,
+    });
+    expect(file.getState().pending).toBe(1);
+
+    // Le refus de purge n'a pas condamné la file : elle peut se synchroniser,
+    // puis le même clear protégé constate le snapshot vide sous verrou.
+    envoyer.mockResolvedValue(undefined);
+    await file.flush();
+    expect(file.getState().pending).toBe(0);
+    await expect(file.clear({ requireEmpty: true })).resolves.toBeUndefined();
+  });
+
+  it('conserve aussi les refus jusqu’à leur traitement explicite', async () => {
+    const envoyer = vi.fn().mockRejectedValue(new PermanentError('Refus', 409));
+    const file = new SyncQueue(envoyer);
+    await file.enqueue(commande('c1'));
+    await laisserPartir();
+
+    await expect(file.clear({ requireEmpty: true })).rejects.toBeInstanceOf(
+      QueueContainsUnsyncedDataError,
+    );
+    expect(file.getState().rejected).toHaveLength(1);
+    await file.acquitterRejets();
+    await expect(file.clear({ requireEmpty: true })).resolves.toBeUndefined();
   });
 });
 

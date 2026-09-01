@@ -17,6 +17,7 @@ import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme
 import { MODE_LABEL, lineDetail, pickupSlots, type Mode } from './pos-state';
 import { Btn, Chip, CloseBtn, EmptyState, Field, Press, Stepper } from './ui';
 import { useLayout, type Layout } from './useLayout';
+import type { LoyaltyTicketMember } from './loyalty-state';
 
 export function TicketPanel({
   lines,
@@ -36,6 +37,8 @@ export function TicketPanel({
   onClear,
   onPay,
   busy,
+  loyalty,
+  onLoyalty,
   onCollapse,
 }: {
   lines: CartLine[];
@@ -55,6 +58,8 @@ export function TicketPanel({
   onClear: () => void;
   onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
   busy: boolean;
+  loyalty: LoyaltyTicketMember | null;
+  onLoyalty: () => void;
   /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
   onCollapse?: () => void;
 }) {
@@ -135,6 +140,57 @@ export function TicketPanel({
         </View>
       ) : null}
       {mode === 'tel' ? <View style={sheet.hairline} /> : null}
+
+      {/* Le pilote crédite uniquement une vente POS : une prise de commande
+          téléphonique ne doit jamais persister identité client + UUID carte. */}
+      {mode !== 'tel' ? <Press
+        onPress={onLoyalty}
+        accessibilityLabel={
+          loyalty
+            ? `Fidélité rattachée à ${loyalty.alias}. Ouvrir la carte.`
+            : 'Rattacher une carte fidélité au ticket'
+        }
+        style={{
+          marginHorizontal: S.lg,
+          marginVertical: S.sm,
+          minHeight: L.touch(52),
+          paddingHorizontal: S.md,
+          paddingVertical: S.sm,
+          borderRadius: R.ctrl,
+          borderWidth: 1,
+          borderColor: loyalty ? withAlpha(brand.accent, 0.42) : palette.line2,
+          backgroundColor: loyalty ? withAlpha(brand.accent, 0.09) : '#101010',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: S.sm,
+        }}
+        activeStyle={{ backgroundColor: '#282828' }}
+      >
+        <View
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            backgroundColor: loyalty ? withAlpha(brand.accent, 0.18) : palette.surface2,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(17) }}>★</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.strong, { fontSize: L.fs(14) }]} numberOfLines={1}>
+            {loyalty ? loyalty.alias : 'Carte fidélité'}
+          </Text>
+          <Text style={[type.mut, { marginTop: 1, fontSize: L.fs(12) }]}>
+            {loyalty
+              ? `${loyalty.balanceUnits} unité${loyalty.balanceUnits > 1 ? 's' : ''} · rattachée`
+              : 'Scanner, rechercher ou créer'}
+          </Text>
+        </View>
+        <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(18) }}>›</Text>
+      </Press> : null}
+      {mode !== 'tel' ? <View style={sheet.hairline} /> : null}
 
       {/* Lignes */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: S.lg, paddingBottom: S.md }}>
@@ -418,6 +474,8 @@ export function TicketDock({
   busy,
   customerName,
   customerPhone,
+  loyalty,
+  onLoyalty,
   onOpen,
   onPay,
 }: {
@@ -427,6 +485,8 @@ export function TicketDock({
   busy: boolean;
   customerName: string;
   customerPhone: string;
+  loyalty: LoyaltyTicketMember | null;
+  onLoyalty: () => void;
   onOpen: () => void;
   onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
 }) {
@@ -449,6 +509,27 @@ export function TicketDock({
         borderTopColor: palette.line,
       }}
     >
+      {mode !== 'tel' ? <Press
+        onPress={onLoyalty}
+        accessibilityLabel={
+          loyalty
+            ? `Fidélité rattachée à ${loyalty.alias}`
+            : 'Rattacher une carte fidélité'
+        }
+        style={{
+          width: L.touch(52),
+          height: L.touch(52),
+          borderRadius: R.pill,
+          borderWidth: 1,
+          borderColor: loyalty ? withAlpha(brand.accent, 0.55) : palette.line,
+          backgroundColor: loyalty ? withAlpha(brand.accent, 0.13) : palette.surface2,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+        activeStyle={{ backgroundColor: '#282828' }}
+      >
+        <Text style={{ color: loyalty ? brand.accent : palette.mut, fontSize: L.fs(21) }}>★</Text>
+      </Press> : null}
       <Press
         onPress={onOpen}
         accessibilityLabel={`Ouvrir le ticket, ${count} article${count > 1 ? 's' : ''}, total ${euros(subtotal)}`}

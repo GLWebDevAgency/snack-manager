@@ -35,6 +35,7 @@ import {
 import { DemoBanner } from './src/DemoBanner';
 import { PairingScreen, PinScreen } from './src/PinScreen';
 import { PosScreen } from './src/PosScreen';
+import { createSaleInFlightGate } from './src/pos-safety';
 import { Loading, Press } from './src/ui';
 
 /** Le jeton staff vit 12 h ; au-delà, on redemande le PIN sans rien perdre. */
@@ -48,6 +49,20 @@ export default function App() {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const sync = useSyncState(client);
   const [lockNotice, setLockNotice] = useState<string | null>(null);
+  /**
+   * Barrière partagée avec l'écran de vente : un lock ne doit jamais
+   * démonter le composant pendant son commit local asynchrone.
+   */
+  const saleInFlight = useRef(createSaleInFlightGate()).current;
+  const [, refreshAfterSale] = useState(0);
+  const appAlive = useRef(true);
+
+  useEffect(() => {
+    appAlive.current = true;
+    return () => {
+      appAlive.current = false;
+    };
+  }, []);
 
   // Le rapporteur d'erreurs, pour toute la vie du poste — voir `client.ts`.
   useEffect(() => installErrorReporting(), []);
@@ -121,11 +136,13 @@ export default function App() {
   }, []);
 
   const onLock = useCallback((reason?: string) => {
-    client.setToken(null);
-    setLockNotice(reason ?? null);
-    setSession(null);
-    void client.tenantStore.removeItem(KEYS.session).catch(() => undefined);
-  }, []);
+    saleInFlight.deferUntilIdle(() => {
+      client.setToken(null);
+      setLockNotice(reason ?? null);
+      setSession(null);
+      void client.tenantStore.removeItem(KEYS.session).catch(() => undefined);
+    });
+  }, [saleInFlight]);
 
   /** Désappairage confirmé depuis l'écran de code équipier. */
   const onUnpair = useCallback(() => {
@@ -141,10 +158,39 @@ export default function App() {
    * incident possible sur ce poste est qu'il se taise —, et la marque revient
    * à jour, si bien qu'un changement de nom ou de couleur se propage sans
    * réappairage. Une révocation depuis le back-office (tablette perdue) ramène
-   * le poste à l'écran d'appairage, immédiatement.
+   * le poste à l'écran d'appairage dès que l'éventuel commit de vente en
+   * cours est durable.
    */
   const deviceRef = useRef(device);
   deviceRef.current = device;
+
+  const revokeDevice = useCallback(() => {
+    saleInFlight.deferUntilIdle(() => {
+      // On masque immédiatement la caisse pour qu'aucune nouvelle vente ne
+      // démarre, mais on conserve le jeton le temps de prouver les mutations
+      // déjà durables côté serveur. `forgetPairedDevice` refusera ensuite la
+      // purge de façon atomique s'il reste une entrée ou un rejet.
+      setRestoreError('Révocation détectée — sécurisation des ventes en cours.');
+      void client.queue
+        .flush()
+        .catch(() => undefined)
+        .then(() => forgetPairedDevice())
+        .then(() => {
+          if (!appAlive.current) return;
+          setSession(null);
+          setDevice(null);
+          setRestoreError(null);
+        })
+        .catch((error: unknown) => {
+          if (!appAlive.current) return;
+          setRestoreError(
+            error instanceof Error
+              ? `Désappairage bloqué sans effacer les ventes : ${error.message}. Rétablissez le réseau ou traitez les rejets, puis réessayez.`
+              : 'Le désappairage sécurisé doit être relancé.',
+          );
+        });
+    });
+  }, [saleInFlight]);
 
   useEffect(() => {
     if (!device) return;
@@ -165,22 +211,7 @@ export default function App() {
           // ne ferait qu'échouer à chaque saisie. L'écran reste BLOQUÉ jusqu'à
           // ce que clear + purge soient réellement terminés : présenter le
           // formulaire B avant cela créerait une course entre pair et purge.
-          setSession(null);
-          setRestoreError('Désappairage sécurisé du poste en cours.');
-          void forgetPairedDevice()
-            .then(() => {
-              if (!alive) return;
-              setDevice(null);
-              setRestoreError(null);
-            })
-            .catch((error: unknown) => {
-              if (!alive) return;
-              setRestoreError(
-                error instanceof Error
-                  ? error.message
-                  : 'Le désappairage sécurisé doit être relancé.',
-              );
-            });
+          revokeDevice();
         });
     };
 
@@ -196,7 +227,24 @@ export default function App() {
       clearInterval(id);
       sub.remove();
     };
-  }, [device]);
+  }, [device, revokeDevice]);
+
+  /**
+   * `scopeValid` et `suspended` verrouillent normalement par le rendu, sans
+   * callback. Si l'un bascule pendant une vente, on garde l'écran monté puis
+   * on force le rendu de verrouillage exactement après `finish()`.
+   */
+  const mustLeaveSaleScreen =
+    !restored || restoreError !== null || !sync.scopeValid || !device || device.suspended === true;
+  useEffect(() => {
+    if (!session || !mustLeaveSaleScreen) return;
+    saleInFlight.deferUntilIdle(() => refreshAfterSale((revision) => revision + 1));
+  }, [mustLeaveSaleScreen, saleInFlight, session]);
+
+  const protectActiveSale = session !== null && saleInFlight.active;
+  const posScreen = session ? (
+    <PosScreen session={session} onLock={onLock} saleInFlight={saleInFlight} />
+  ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -212,7 +260,9 @@ export default function App() {
         barre, et le retour reste atteignable même une modale ouverte.
       */}
       <DemoBanner />
-      {!restored ? (
+      {protectActiveSale ? (
+        posScreen
+      ) : !restored ? (
         <Loading label="Ouverture du poste…" />
       ) : restoreError ? (
         <RestoreError
@@ -233,7 +283,7 @@ export default function App() {
         // vivante ; la réactivation la rouvre au battement suivant, seule.
         <SuspendedScreen name={device.tenant.name} />
       ) : session ? (
-        <PosScreen session={session} onLock={onLock} />
+        posScreen
       ) : (
         <PinScreen
           onSession={onSession}

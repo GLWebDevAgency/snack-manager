@@ -30,6 +30,14 @@ export interface QueueEntry {
   body?: unknown;
   /** Regroupe les mutations d'un même objet pour préserver leur ordre. */
   subject?: string;
+  /**
+   * Montant local d'affichage, en centimes.
+   *
+   * Il reste dans la file : `SmClient` n'envoie au transport que `body`. Ce
+   * nombre sans PII permet d'identifier une vente refusée après minuit ou un
+   * redémarrage, sans ajouter de ligne au journal qui alimente le Z.
+   */
+  displayAmountCents?: number;
   createdAt: number;
   attempts: number;
   lastError?: string;
@@ -74,6 +82,8 @@ export interface RejectedEntry {
   path: string;
   /** Le corps refusé — c'est lui qui permet de ressaisir la vente perdue. */
   body?: unknown;
+  /** Copie locale sûre du montant, jamais envoyée au serveur ni comptée au Z. */
+  displayAmountCents?: number;
   /** Le motif rendu par le serveur, en toutes lettres. */
   reason: string;
   status: number;
@@ -139,6 +149,18 @@ export class QueueScopeRetiredError extends QueueScopeChangedError {
   }
 }
 
+/** Une purge protégée refuse d'effacer toute vente non prouvée côté serveur. */
+export class QueueContainsUnsyncedDataError extends Error {
+  constructor(
+    readonly pending: number,
+    readonly rejected: number,
+  ) {
+    super(
+      `${pending} mutation(s) en attente et ${rejected} rejet(s) doivent être traités avant le désappairage`,
+    );
+  }
+}
+
 export interface SyncQueueOptions {
   /** POS/KDS : aucune mutation n'est autorisée avant restauration de l'appairage. */
   requireScope?: boolean;
@@ -149,10 +171,19 @@ export interface BindQueueScopeOptions {
   freshPairing?: boolean;
 }
 
+export interface ClearQueueOptions {
+  /** Refuse atomiquement la purge si le snapshot durable contient une vente. */
+  requireEmpty?: boolean;
+}
+
 const METHODS: readonly QueueMethod[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOptionalDisplayAmount(value: unknown): boolean {
+  return value === undefined || (Number.isSafeInteger(value) && (value as number) >= 0);
 }
 
 function isQueueEntry(value: unknown): value is QueueEntry {
@@ -165,6 +196,7 @@ function isQueueEntry(value: unknown): value is QueueEntry {
     typeof value.path === 'string' &&
     value.path.startsWith('/') &&
     (value.subject === undefined || typeof value.subject === 'string') &&
+    isOptionalDisplayAmount(value.displayAmountCents) &&
     typeof value.createdAt === 'number' &&
     Number.isFinite(value.createdAt) &&
     typeof value.attempts === 'number' &&
@@ -181,6 +213,7 @@ function isRejectedEntry(value: unknown): value is RejectedEntry {
     value.id.length > 0 &&
     typeof value.path === 'string' &&
     value.path.startsWith('/') &&
+    isOptionalDisplayAmount(value.displayAmountCents) &&
     typeof value.reason === 'string' &&
     typeof value.status === 'number' &&
     Number.isInteger(value.status) &&
@@ -733,6 +766,11 @@ export class SyncQueue {
     await this.ensureScopeReady();
     if (this.clearing) throw new Error('Réinitialisation du poste en cours');
     await this.load();
+    if (!isOptionalDisplayAmount(input.displayAmountCents)) {
+      throw new TypeError(
+        "Le montant local d'affichage doit être un entier non négatif en centimes",
+      );
+    }
     const entry: QueueEntry = {
       ...input,
       id: uuid(),
@@ -857,6 +895,9 @@ export class SyncQueue {
                 id: entry.id,
                 path: entry.path,
                 body: entry.body,
+                ...(entry.displayAmountCents === undefined
+                  ? null
+                  : { displayAmountCents: entry.displayAmountCents }),
                 reason: err.message,
                 status: err.status,
                 at: Date.now(),
@@ -934,7 +975,7 @@ export class SyncQueue {
    * Les rejets partent avec : ils portent le corps de ventes d'un
    * établissement, et les laisser les ferait apparaître chez le suivant.
    */
-  clear(): Promise<void> {
+  clear(options: ClearQueueOptions = {}): Promise<void> {
     if (this.scopeInvalidated) return Promise.reject(new QueueScopeChangedError());
     if (this.options.requireScope && this.boundScope === null) {
       return Promise.reject(new QueueScopeNotBoundError());
@@ -949,14 +990,14 @@ export class SyncQueue {
     // résultat tardif ne pourra ni committer ni lancer l'entrée suivante.
     this.activeFlush = null;
 
-    const operation = this.runClear().finally(() => {
+    const operation = this.runClear(options.requireEmpty === true).finally(() => {
       if (this.activeClear === operation) this.activeClear = null;
     });
     this.activeClear = operation;
     return operation;
   }
 
-  private async runClear(): Promise<void> {
+  private async runClear(requireEmpty: boolean): Promise<void> {
     try {
       // Une corruption ne doit pas empêcher un désappairage volontaire : on
       // attend seulement la lecture pour qu'elle ne repeuple plus la mémoire.
@@ -974,7 +1015,9 @@ export class SyncQueue {
             current = parseState(currentRaw);
           } catch (error) {
             // Une purge volontaire reste autorisée sur un brut corrompu.
-            if (!(error instanceof QueueStorageCorruptedError)) throw error;
+            // Une purge protégée, elle, ne peut pas prouver l'absence de vente
+            // et doit donc échouer fermée.
+            if (requireEmpty || !(error instanceof QueueStorageCorruptedError)) throw error;
           }
           if (current) {
             // Un ancien onglet n'a aucune autorité pour vider la file créée
@@ -985,10 +1028,29 @@ export class SyncQueue {
             ) {
               throw this.invalidateScope();
             }
+            if (
+              requireEmpty &&
+              (current.entries.length > 0 || current.rejected.length > 0)
+            ) {
+              throw new QueueContainsUnsyncedDataError(
+                current.entries.length,
+                current.rejected.length,
+              );
+            }
             nextEpoch = current.epoch + 1;
           }
         } else if (this.storageEpoch !== 0 || retiringScope !== null) {
           throw this.invalidateScope();
+        } else if (requireEmpty) {
+          // Migration v1 : l'absence de snapshot v2 ne prouve pas que les
+          // anciennes clés soient vides.
+          const durable = await this.readDurableState();
+          if (durable.entries.length > 0 || durable.rejected.length > 0) {
+            throw new QueueContainsUnsyncedDataError(
+              durable.entries.length,
+              durable.rejected.length,
+            );
+          }
         }
         // Écrasement strict avant publication : même si removeItem est refusé,
         // les anciennes clés ne contiennent déjà plus aucune PII.
@@ -1023,6 +1085,12 @@ export class SyncQueue {
       // restent volontairement fermés jusqu'à `completeClear()`.
       if (!this.purgePending) this.clearing = false;
     } catch (error) {
+      if (error instanceof QueueContainsUnsyncedDataError) {
+        // Refus attendu et non destructif : la file reste exploitable pour
+        // retenter sa synchronisation ou traiter ses rejets.
+        this.clearing = false;
+        this.syncing = false;
+      }
       // Tant que la purge n'est pas durable, le poste reste volontairement
       // bloqué : il ne peut pas être réappairé à un autre restaurant.
       this.state.lastError = error instanceof Error ? error.message : String(error);

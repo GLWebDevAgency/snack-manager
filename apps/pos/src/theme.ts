@@ -10,6 +10,18 @@
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { palette, radius } from '@sm/client-core';
 
+/**
+ * Variantes réservées au texte fonctionnel sur les surfaces sombres du POS.
+ *
+ * Le rouge métier reste celui du socle partagé pour les aplats, bordures et
+ * repères. Sa variante claire atteint 7,3:1 sur `palette.surface` (contre
+ * 4,1:1 pour le rouge métier) et garde donc les petits libellés d'alerte au
+ * niveau AA, y compris sans graisse typographique.
+ */
+export const semanticText = {
+  danger: '#ff776b',
+} as const;
+
 /** Pile de polices : Inter si présente sur le poste, sinon la police système. */
 export const FONT: string = Platform.select({
   web: 'Inter, "SF Pro Display", -apple-system, "Segoe UI", Roboto, system-ui, sans-serif',

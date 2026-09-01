@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
+import type { OrderLoyaltyEarnStatus } from '@sm/contracts';
 import {
   SmApiError,
   cartTotal,
@@ -28,14 +29,31 @@ import { KEYS, client, TENANT_SLUG, type Session } from './client';
 import { S, makeBrand, palette } from './theme';
 import { Btn, Drawer, Loading, useToasts } from './ui';
 import { useLayout } from './useLayout';
+import { siteConfigure } from './demo-retour';
 import { TopBar } from './TopBar';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
 import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto, RejetsModal } from './modals';
+import { LoyaltyPanel } from './LoyaltyPanel';
+import {
+  rejectedOrderIds,
+  type LoyaltyEarnState,
+  type LoyaltyTicketMember,
+} from './loyalty-state';
+import {
+  pendingLoyaltyCount,
+  serviceCloseBlockReason,
+  serviceCloseStatus,
+  type SaleInFlightGate,
+} from './pos-safety';
 import {
   buildOrderBody,
+  commitQueuedSaleJournal,
+  customerFieldsForMode,
   loadJson,
+  minimizeDayEntry,
+  minimizeParkedTicket,
   parkCode,
   pickupSlots,
   saveJson,
@@ -79,7 +97,15 @@ interface ServerOrderRow extends ServiceOrderRow {
   trackingToken?: string | null;
 }
 
-export function PosScreen({ session, onLock }: { session: Session; onLock: (reason?: string) => void }) {
+export function PosScreen({
+  session,
+  onLock,
+  saleInFlight,
+}: {
+  session: Session;
+  onLock: (reason?: string) => void;
+  saleInFlight: SaleInFlightGate;
+}) {
   const brand = useMemo(
     () => makeBrand(session.tenantName, session.brandColor),
     [session.brandColor, session.tenantName],
@@ -107,6 +133,10 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [query, setQuery] = useState('');
   const [catId, setCatId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mutateTicket = useCallback(
+    (action: () => void) => saleInFlight.runWhenIdle(action),
+    [saleInFlight],
+  );
   /** Mode compact seulement : tiroir du ticket ouvert. */
   const [ticketOpen, setTicketOpen] = useState(false);
 
@@ -125,6 +155,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [sentClientId, setSentClientId] = useState<string | null>(null);
   const [ticketFor, setTicketFor] = useState<DayEntry | null>(null);
   const [discountFor, setDiscountFor] = useState<DayEntry | null>(null);
+  const [loyaltyOpen, setLoyaltyOpen] = useState(false);
+  /** Profil de présentation en mémoire uniquement — jamais sérialisé. */
+  const [loyaltyMember, setLoyaltyMember] = useState<LoyaltyTicketMember | null>(null);
 
   // ─── Journal du service + tickets en attente ───
   const [dayLog, setDayLog] = useState<DayEntry[]>([]);
@@ -138,8 +171,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const [serviceStart, setServiceStart] = useState(() => startOfDay());
   /** Dernière vue serveur des commandes du jour — base du Z (vente en ligne comprise). */
   const [serverRows, setServerRows] = useState<ServerOrderRow[] | null>(null);
-
   const dayLogRef = useRef<DayEntry[]>([]);
+  /** Verrou synchrone : aucune vente ne peut démarrer pendant une clôture. */
+  const serviceCloseGate = useRef(false);
   useEffect(() => {
     dayLogRef.current = dayLog;
   }, [dayLog]);
@@ -149,14 +183,20 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     let alive = true;
     void (async () => {
       const [log, park, start] = await Promise.all([
-        loadJson<DayLogFile>(client.tenantStore, KEYS.dayLog, { day: serviceDay(), entries: [] }),
+        loadJson<DayLogFile>(client.tenantStore, KEYS.dayLog, {
+          day: serviceDay(),
+          entries: [],
+        }),
         loadJson<ParkedTicket[]>(client.tenantStore, KEYS.parked, []),
-        loadJson<ServiceStartFile>(client.tenantStore, KEYS.serviceStart, { day: serviceDay(), at: startOfDay() }),
+        loadJson<ServiceStartFile>(client.tenantStore, KEYS.serviceStart, {
+          day: serviceDay(),
+          at: startOfDay(),
+        }),
       ]);
       if (!alive) return;
       const sameDay = log.day === serviceDay();
-      setDayLog(sameDay ? log.entries : []);
-      setParked(park);
+      setDayLog(sameDay ? log.entries.map(minimizeDayEntry) : []);
+      setParked(park.map(minimizeParkedTicket));
       // Un service jamais clôturé la veille repart de minuit, pas de son heure.
       setServiceStart(start.day === serviceDay() ? start.at : startOfDay());
       setReady(true);
@@ -167,7 +207,12 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   }, []);
 
   useEffect(() => {
-    if (ready) void saveJson(client.tenantStore, KEYS.dayLog, { day: serviceDay(), entries: dayLog } satisfies DayLogFile);
+    if (ready) {
+      void saveJson(client.tenantStore, KEYS.dayLog, {
+        day: serviceDay(),
+        entries: dayLog,
+      } satisfies DayLogFile);
+    }
   }, [dayLog, ready]);
 
   useEffect(() => {
@@ -176,7 +221,10 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
 
   useEffect(() => {
     if (ready) {
-      void saveJson(client.tenantStore, KEYS.serviceStart, { day: serviceDay(), at: serviceStart } satisfies ServiceStartFile);
+      void saveJson(client.tenantStore, KEYS.serviceStart, {
+        day: serviceDay(),
+        at: serviceStart,
+      } satisfies ServiceStartFile);
     }
   }, [ready, serviceStart]);
 
@@ -198,16 +246,79 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
    */
   const [serverMax, setServerMax] = useState(0);
 
+  const loyaltyStatusInFlight = useRef(new Set<string>());
+  const reconcileLoyaltyStatuses = useCallback(
+    async (entries: readonly DayEntry[]) => {
+      const candidates = entries.filter(
+        (entry) =>
+          entry.loyalty &&
+          entry.loyalty.state !== 'credited' &&
+          entry.loyalty.state !== 'failed' &&
+          !loyaltyStatusInFlight.current.has(entry.clientId),
+      );
+      if (candidates.length === 0) return;
+
+      const updates = await Promise.all(
+        candidates.map(async (entry) => {
+          loyaltyStatusInFlight.current.add(entry.clientId);
+          try {
+            const status = await client.get<OrderLoyaltyEarnStatus>(
+              `/orders/by-client/${encodeURIComponent(entry.clientId)}/loyalty`,
+            );
+            const state: LoyaltyEarnState =
+              status.state === 'completed'
+                ? 'credited'
+                : status.state === 'failed' ||
+                    status.state === 'cancelled' ||
+                    status.state === 'none'
+                  ? 'failed'
+                  : 'queued';
+            return { clientId: entry.clientId, state };
+          } catch (error) {
+            if (error instanceof SmApiError && error.status === 401) {
+              onLock('Session expirée — reconnectez-vous.');
+            }
+            // 404 = la commande attend encore dans la file locale. Toute
+            // autre panne garde aussi l'état prudent jusqu'au prochain tour.
+            return null;
+          } finally {
+            loyaltyStatusInFlight.current.delete(entry.clientId);
+          }
+        }),
+      );
+      const byClient = new Map(
+        updates
+          .filter((update): update is NonNullable<typeof update> => update !== null)
+          .map((update) => [update.clientId, update.state]),
+      );
+      if (byClient.size === 0) return;
+      setDayLog((current) =>
+        current.map((entry) => {
+          const state = byClient.get(entry.clientId);
+          return state && entry.loyalty
+            ? { ...entry, loyalty: { ...entry.loyalty, state } }
+            : entry;
+        }),
+      );
+    },
+    [onLock],
+  );
+
   const reconcile = useCallback(
     async (force = false) => {
-      if (!force && !dayLogRef.current.some((e) => !e.serverId)) return;
+      if (!force && !dayLogRef.current.some((e) => !e.serverId || e.loyalty)) {
+        return;
+      }
       try {
+        const todaySince = startOfDayIso();
         const res = await client.get<{ rows: ServerOrderRow[] }>(
-          `/orders?since=${encodeURIComponent(startOfDayIso())}`,
+          `/orders?since=${encodeURIComponent(todaySince)}`,
         );
         const byClient = new Map(res.rows.map((r) => [r.clientId, r]));
         setServerMax(res.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
         setServerRows(res.rows);
+
+        void reconcileLoyaltyStatuses(dayLogRef.current);
         setDayLog((cur) =>
           cur.map((e) => {
             const hit = byClient.get(e.clientId);
@@ -227,7 +338,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         if (err instanceof SmApiError && err.status === 401) onLock('Session expirée — reconnectez-vous.');
       }
     },
-    [onLock],
+    [onLock, reconcileLoyaltyStatuses],
   );
 
   useEffect(() => {
@@ -249,21 +360,92 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     if (sync.pending === 0) void reconcile();
   }, [reconcile, sync.pending]);
 
-  // ─── Panier ───
-  const addLine = useCallback((line: CartLine) => {
-    setLines((cur) => {
-      const idx = cur.findIndex((l) => sameConfiguration(l, line));
-      if (idx === -1) return [...cur, line];
-      const next = [...cur];
-      const current = next[idx];
-      if (current) next[idx] = { ...current, qty: Math.min(99, current.qty + line.qty) };
-      return next;
+  const rejectedLoyaltyKey = useMemo(
+    () => [...rejectedOrderIds(sync.rejected)].sort().join('|'),
+    [sync.rejected],
+  );
+  useEffect(() => {
+    if (!ready || !rejectedLoyaltyKey) return;
+    const rejectedLoyaltyOrders = new Set(rejectedLoyaltyKey.split('|'));
+    const changed = dayLogRef.current.some(
+      (entry) =>
+        entry.loyalty &&
+        entry.loyalty.state !== 'failed' &&
+        rejectedLoyaltyOrders.has(entry.clientId),
+    );
+    setDayLog((current) => {
+      let modified = false;
+      const next = current.map((entry) => {
+        if (!entry.loyalty || !rejectedLoyaltyOrders.has(entry.clientId)) return entry;
+        if (entry.loyalty.state === 'failed') return entry;
+        modified = true;
+        return {
+          ...entry,
+          loyalty: { ...entry.loyalty, state: 'failed' as const },
+        };
+      });
+      return modified ? next : current;
     });
-  }, []);
+    if (changed) push('Fidélité annulée : la vente a été refusée', 'bad');
+  }, [push, ready, rejectedLoyaltyKey]);
 
-  const setQty = useCallback((lineId: string, qty: number) => {
-    setLines((cur) => (qty <= 0 ? cur.filter((l) => l.lineId !== lineId) : cur.map((l) => (l.lineId === lineId ? { ...l, qty } : l))));
-  }, []);
+  // ─── Panier ───
+  const addLine = useCallback(
+    (line: CartLine) => {
+      mutateTicket(() => {
+        setLines((cur) => {
+          const idx = cur.findIndex((l) => sameConfiguration(l, line));
+          if (idx === -1) return [...cur, line];
+          const next = [...cur];
+          const current = next[idx];
+          if (current) next[idx] = { ...current, qty: Math.min(99, current.qty + line.qty) };
+          return next;
+        });
+      });
+    },
+    [mutateTicket],
+  );
+
+  const setQty = useCallback(
+    (lineId: string, qty: number) => {
+      mutateTicket(() => {
+        setLines((cur) =>
+          qty <= 0
+            ? cur.filter((l) => l.lineId !== lineId)
+            : cur.map((l) => (l.lineId === lineId ? { ...l, qty } : l)),
+        );
+      });
+    },
+    [mutateTicket],
+  );
+
+  const changeNote = useCallback(
+    (value: string) => {
+      mutateTicket(() => setNote(value));
+    },
+    [mutateTicket],
+  );
+
+  const changeCustomerName = useCallback(
+    (value: string) => {
+      mutateTicket(() => setCustomerName(value));
+    },
+    [mutateTicket],
+  );
+
+  const changeCustomerPhone = useCallback(
+    (value: string) => {
+      mutateTicket(() => setCustomerPhone(value));
+    },
+    [mutateTicket],
+  );
+
+  const changeSlot = useCallback(
+    (value: string) => {
+      mutateTicket(() => setSlotIso(value));
+    },
+    [mutateTicket],
+  );
 
   const resetTicket = useCallback(() => {
     setLines([]);
@@ -271,82 +453,158 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     setCustomerName('');
     setCustomerPhone('');
     setSlotIso(null);
+    setLoyaltyMember(null);
   }, []);
+
+  const clearTicket = useCallback(() => {
+    mutateTicket(() => {
+      resetTicket();
+      push('Ticket vidé');
+    });
+  }, [mutateTicket, push, resetTicket]);
+
+  const attachLoyalty = useCallback(
+    (member: LoyaltyTicketMember) => {
+      mutateTicket(() => {
+        if (mode === 'tel') {
+          push('La fidélité sera proposée au comptoir lors du retrait', 'warn');
+          return;
+        }
+        setLoyaltyMember(member);
+      });
+    },
+    [mode, mutateTicket, push],
+  );
+
+  const detachLoyalty = useCallback(() => {
+    mutateTicket(() => setLoyaltyMember(null));
+  }, [mutateTicket]);
+
+  const changeMode = useCallback(
+    (next: Mode) => {
+      mutateTicket(() => {
+        if (next === 'tel' && loyaltyMember) {
+          setLoyaltyMember(null);
+          setLoyaltyOpen(false);
+          push('Carte détachée : fidélité disponible au retrait au comptoir', 'warn');
+        }
+        if (mode === 'tel' && next !== 'tel') {
+          setCustomerName('');
+          setCustomerPhone('');
+          setSlotIso(null);
+        }
+        setMode(next);
+      });
+    },
+    [loyaltyMember, mode, mutateTicket, push],
+  );
+
+  const closeLoyalty = useCallback(() => setLoyaltyOpen(false), []);
+  const openLoyalty = useCallback(() => {
+    mutateTicket(() => {
+      setTicketOpen(false);
+      setLoyaltyOpen(true);
+    });
+  }, [mutateTicket]);
+  const loyaltyUnauthorized = useCallback(
+    () => onLock('Session expirée — reconnectez-vous.'),
+    [onLock],
+  );
 
   const openEdit = useCallback(
     (line: CartLine) => {
-      if (!menu) return;
-      for (const cat of menu.categories) {
-        const product = cat.products.find((p) => p._id === line.productId);
-        if (product) {
-          setConfig({
-            product,
-            categoryName: cat.name,
-            initial: {
-              lineId: line.lineId,
-              variantKey: line.variantKey,
-              options: line.options,
-              removed: line.removed,
-              note: line.note ?? '',
-              qty: line.qty,
-            },
-          });
-          return;
+      mutateTicket(() => {
+        if (!menu) return;
+        for (const cat of menu.categories) {
+          const product = cat.products.find((p) => p._id === line.productId);
+          if (product) {
+            setConfig({
+              product,
+              categoryName: cat.name,
+              initial: {
+                lineId: line.lineId,
+                variantKey: line.variantKey,
+                options: line.options,
+                removed: line.removed,
+                note: line.note ?? '',
+                qty: line.qty,
+              },
+            });
+            return;
+          }
         }
-      }
-      push('Produit introuvable dans le menu courant', 'warn');
+        push('Produit introuvable dans le menu courant', 'warn');
+      });
     },
-    [menu, push],
+    [menu, mutateTicket, push],
   );
 
   const submitConfig = useCallback(
     (draft: ConfigDraft) => {
-      if (!config) return;
-      const line = draftToLine(config.product, draft, draft.lineId ?? uuid());
-      if (draft.lineId) {
-        setLines((cur) => cur.map((l) => (l.lineId === draft.lineId ? line : l)));
-      } else {
-        addLine(line);
-      }
-      setConfig(null);
+      mutateTicket(() => {
+        if (!config) return;
+        const line = draftToLine(config.product, draft, draft.lineId ?? uuid());
+        if (draft.lineId) {
+          setLines((cur) => cur.map((l) => (l.lineId === draft.lineId ? line : l)));
+        } else {
+          addLine(line);
+        }
+        setConfig(null);
+      });
     },
-    [addLine, config],
+    [addLine, config, mutateTicket],
   );
 
   // ─── Tickets en attente ───
   const park = useCallback(() => {
-    if (lines.length === 0) return;
-    const ticket: ParkedTicket = {
-      code: parkCode(),
-      lines,
-      mode,
-      customerName,
-      customerPhone,
-      slot: slotIso,
-      note,
-      at: Date.now(),
-    };
-    setParked((cur) => [...cur, ticket]);
-    resetTicket();
-    push(`Ticket ${ticket.code} mis en attente`, 'warn');
-  }, [customerName, customerPhone, lines, mode, note, push, resetTicket, slotIso]);
+    mutateTicket(() => {
+      if (lines.length === 0) return;
+      const hadLoyalty = loyaltyMember !== null;
+      const customer = customerFieldsForMode(mode, customerName, customerPhone, slotIso);
+      const ticket = minimizeParkedTicket({
+        code: parkCode(),
+        lines,
+        mode,
+        ...customer,
+        note,
+        at: Date.now(),
+      });
+      setParked((cur) => [...cur, ticket]);
+      resetTicket();
+      push(
+        hadLoyalty
+          ? `Ticket ${ticket.code} mis en attente · carte à rescanner au rappel`
+          : `Ticket ${ticket.code} mis en attente`,
+        'warn',
+      );
+    });
+  }, [customerName, customerPhone, lines, loyaltyMember, mode, mutateTicket, note, push, resetTicket, slotIso]);
 
   const recall = useCallback(
     (ticket: ParkedTicket) => {
-      if (lines.length > 0) {
-        push('Terminez ou mettez en attente le ticket en cours', 'bad');
-        return;
-      }
-      setLines(ticket.lines);
-      setMode(ticket.mode);
-      setCustomerName(ticket.customerName);
-      setCustomerPhone(ticket.customerPhone);
-      setSlotIso(ticket.slot);
-      setNote(ticket.note);
-      setParked((cur) => cur.filter((t) => t.code !== ticket.code));
-      push(`Ticket ${ticket.code} rappelé`);
+      mutateTicket(() => {
+        if (lines.length > 0) {
+          push('Terminez ou mettez en attente le ticket en cours', 'bad');
+          return;
+        }
+        setLines(ticket.lines);
+        setMode(ticket.mode);
+        const customer = customerFieldsForMode(
+          ticket.mode,
+          ticket.customerName,
+          ticket.customerPhone,
+          ticket.slot,
+        );
+        setCustomerName(customer.customerName);
+        setCustomerPhone(customer.customerPhone);
+        setSlotIso(customer.slot);
+        setNote(ticket.note);
+        setLoyaltyMember(null);
+        setParked((cur) => cur.filter((t) => t.code !== ticket.code));
+        push(`Ticket ${ticket.code} rappelé`);
+      });
     },
-    [lines.length, push],
+    [lines.length, mutateTicket, push],
   );
 
   // ─── Envoi en cuisine ───
@@ -358,27 +616,48 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
   const send = useCallback(
     async (method: PayMethod, cash?: { received: number; change: number }) => {
       if (lines.length === 0 || busy) return;
+      if (serviceCloseGate.current) {
+        push('Terminez ou fermez la clôture de service avant d’encaisser', 'warn');
+        return;
+      }
+      if (!saleInFlight.tryStart()) return;
       setBusy(true);
-      const clientId = uuid();
-      const total = cartTotal(lines);
-      const items = lines.reduce((n, l) => n + l.qty, 0);
-      const body = buildOrderBody({
-        clientId,
-        mode,
-        lines,
-        note,
-        customerName,
-        customerPhone,
-        slotIso: slotIso ?? pickupSlots()[0]?.iso ?? null,
-        // Le moyen réellement encaissé part avec la commande : l'API la marque
-        // « payée » sur-le-champ, au lieu d'attendre la remise du plat.
-        method,
-        cash,
-      });
-
       try {
-        // Persistée AVANT toute tentative réseau : rien ne se perd.
-        await client.post('/orders', body, `order:${clientId}`);
+        const clientId = uuid();
+        const loyaltyIntent =
+          mode !== 'tel' && loyaltyMember?.status === 'active'
+            ? {
+                operationId: uuid(),
+                memberId: loyaltyMember.id,
+              }
+            : null;
+        const total = cartTotal(lines);
+        const items = lines.reduce((n, l) => n + l.qty, 0);
+        const body = buildOrderBody({
+          clientId,
+          loyaltyMemberId: loyaltyIntent?.memberId ?? null,
+          loyaltyEarnOperationId: loyaltyIntent?.operationId ?? null,
+          mode,
+          lines,
+          note,
+          customerName,
+          customerPhone,
+          slotIso: slotIso ?? pickupSlots()[0]?.iso ?? null,
+          // Le moyen réellement encaissé part avec la commande : l'API la marque
+          // « payée » sur-le-champ, au lieu d'attendre la remise du plat.
+          method,
+          cash,
+        });
+
+        // La vente, la carte et l'opération idempotente sont persistées dans
+        // UNE SEULE entrée de file puis UNE SEULE écriture Mongo. Un crash ne
+        // peut plus enregistrer la commande sans son futur gain.
+        await client.post('/orders', body, `order:${clientId}`, {
+          displayAmountCents: total,
+        });
+        const loyaltyState: DayEntry['loyalty'] | undefined = loyaltyIntent
+          ? { state: 'awaiting_order' }
+          : undefined;
         const entry: DayEntry = {
           clientId,
           localNumber: nextLocalNumber,
@@ -393,10 +672,30 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           total,
           items,
           customerName: mode === 'tel' ? customerName.trim() : null,
+          ...(loyaltyState ? { loyalty: loyaltyState } : null),
           ...(cash ? { received: cash.received, change: cash.change } : null),
           at: Date.now(),
         };
-        setDayLog((cur) => [...cur, entry]);
+        // Le setState seul n'est pas une frontière durable : un lock différé
+        // peut démonter l'écran avant l'effet React de persistance. On écrit
+        // donc le snapshot critique AVANT de libérer `saleInFlight`.
+        const journal = await commitQueuedSaleJournal(
+          client.tenantStore,
+          dayLogRef.current,
+          entry,
+        );
+        if (!journal.durable) {
+          // L'enqueue a déjà committé la vente. La présenter comme échouée
+          // laisserait le ticket intact et un second clic créerait un nouvel
+          // UUID — donc un doublon réel. On confirme la vente, garde sa copie
+          // en mémoire et signale uniquement le journal local dégradé.
+          push(
+            'Vente bien enregistrée — journal local indisponible. Ne la ressaisissez pas.',
+            'warn',
+          );
+        }
+        dayLogRef.current = journal.entries;
+        setDayLog(journal.entries);
         setSentClientId(clientId);
         setCashOpen(false);
         setTicketOpen(false);
@@ -404,21 +703,36 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
       } catch (e) {
         push(e instanceof Error ? e.message : "Impossible d'enregistrer la commande", 'bad');
       } finally {
+        saleInFlight.finish();
         setBusy(false);
       }
     },
-    [busy, customerName, customerPhone, lines, mode, nextLocalNumber, note, push, resetTicket, slotIso],
+    [
+      busy,
+      customerName,
+      customerPhone,
+      lines,
+      loyaltyMember,
+      mode,
+      nextLocalNumber,
+      note,
+      push,
+      resetTicket,
+      saleInFlight,
+      slotIso,
+    ],
   );
 
   const onPay = useCallback(
     (method: PayMethod) => {
+      if (saleInFlight.active) return;
       // En compact, l'encaissement se déclenche depuis la barre d'accès comme
       // depuis le tiroir : on referme le tiroir pour rendre la main à la vue.
       setTicketOpen(false);
       if (method === 'especes') setCashOpen(true);
       else void send(method);
     },
-    [send],
+    [saleInFlight, send],
   );
 
   // ─── Remise (PIN) ───
@@ -467,8 +781,39 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     () => (serverRows ? zFromServer(serverRows, serviceStart) : zFromJournal(dayLog)),
     [dayLog, serverRows, serviceStart],
   );
+  const pendingLoyalty = useMemo(() => pendingLoyaltyCount(dayLog), [dayLog]);
+
+  const dismissServiceClose = useCallback(() => {
+    serviceCloseGate.current = false;
+    setCloseOpen(false);
+  }, []);
+
+  const openServiceClose = useCallback(async () => {
+    if (busy || saleInFlight.active || serviceCloseGate.current) {
+      push('Une vente est encore en cours d’enregistrement', 'warn');
+      return;
+    }
+    serviceCloseGate.current = true;
+    setSentClientId(null);
+    setLoyaltyOpen(false);
+    // La fenêtre ne s'ouvre qu'après la photo serveur. Le verrou empêche une
+    // vente de se glisser entre cette photo et la décision de clôture.
+    await reconcile(true);
+    setCloseOpen(true);
+  }, [busy, push, reconcile, saleInFlight]);
 
   const closeService = useCallback(() => {
+    const safety = {
+      saleInFlight: busy || saleInFlight.active,
+      offline,
+      pendingSync: sync.pending,
+      rejectedSync: sync.rejected.length,
+      pendingLoyalty,
+    };
+    if (serviceCloseBlockReason(safety)) {
+      push(serviceCloseStatus(safety), 'warn');
+      return;
+    }
     const count = dayLog.length;
     setDayLog([]);
     // Le service suivant démarre ici : sans cette borne, le Z du soir
@@ -476,8 +821,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
     setServiceStart(Date.now());
     setServerRows(null);
     setCloseOpen(false);
+    serviceCloseGate.current = false;
     push(`Service clôturé · ${count} commande${count > 1 ? 's' : ''}`, 'good');
-  }, [dayLog.length, push]);
+  }, [busy, dayLog.length, offline, pendingLoyalty, push, saleInFlight, sync.pending, sync.rejected.length]);
 
   const sentEntry = sentClientId ? (dayLog.find((e) => e.clientId === sentClientId) ?? null) : null;
 
@@ -488,22 +834,21 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
       mode={mode}
       brand={brand}
       note={note}
-      onNote={setNote}
+      onNote={changeNote}
       customerName={customerName}
-      onCustomerName={setCustomerName}
+      onCustomerName={changeCustomerName}
       customerPhone={customerPhone}
-      onCustomerPhone={setCustomerPhone}
+      onCustomerPhone={changeCustomerPhone}
       slotIso={slotIso}
-      onSlot={setSlotIso}
+      onSlot={changeSlot}
       onQty={setQty}
       onEdit={openEdit}
       onPark={park}
-      onClear={() => {
-        resetTicket();
-        push('Ticket vidé');
-      }}
+      onClear={clearTicket}
       onPay={onPay}
       busy={busy}
+      loyalty={loyaltyMember}
+      onLoyalty={openLoyalty}
       {...(collapse ? { onCollapse: collapse } : null)}
     />
   );
@@ -536,7 +881,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         brand={brand}
         staffName={session.staffName}
         mode={mode}
-        onMode={setMode}
+        onMode={changeMode}
         pending={sync.pending}
         syncing={sync.syncing}
         offline={offline}
@@ -544,16 +889,7 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         onRejets={() => setRejetsOpen(true)}
         now={now}
         serviceCount={dayLog.length}
-        onService={() => {
-          // La barre haute reste active sous les surcouches : on referme la
-          // confirmation pour ne jamais empiler deux panneaux.
-          setSentClientId(null);
-          // Photo FRAÎCHE avant de clôturer : le Z se lit sur les commandes du
-          // serveur, et une vente en ligne passée depuis le dernier
-          // rafraîchissement manquerait au total qu'on s'apprête à recompter.
-          void reconcile(true);
-          setCloseOpen(true);
-        }}
+        onService={() => void openServiceClose()}
         onLock={() => onLock()}
       />
 
@@ -583,7 +919,9 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
             parked={parked}
             query={query}
             onQuery={setQuery}
-            onPick={(product, categoryName) => setConfig({ product, categoryName })}
+            onPick={(product, categoryName) => {
+              mutateTicket(() => setConfig({ product, categoryName }));
+            }}
             onRecall={recall}
           />
         </View>
@@ -636,9 +974,13 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
             entries={dayLog}
             z={z}
             pending={sync.pending}
+            rejected={sync.rejected.length}
+            pendingLoyalty={pendingLoyalty}
+            busy={busy}
+            offline={offline}
             brand={brand}
             staffName={session.staffName}
-            onClose={() => setCloseOpen(false)}
+            onClose={dismissServiceClose}
             onCloseService={closeService}
             onOpenTicket={setTicketFor}
             onOpenDiscount={setDiscountFor}
@@ -648,10 +990,11 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
         {rejetsOpen ? (
           <RejetsModal
             rejets={sync.rejected}
+            entries={dayLog}
             brand={brand}
             onClose={() => setRejetsOpen(false)}
-            onAcquitter={() => {
-              void client.queue.acquitterRejets();
+            onAcquitter={(ids) => {
+              void client.queue.acquitterRejets(ids);
               setRejetsOpen(false);
             }}
           />
@@ -681,8 +1024,28 @@ export function PosScreen({ session, onLock }: { session: Session; onLock: (reas
           busy={busy}
           customerName={customerName}
           customerPhone={customerPhone}
+          loyalty={loyaltyMember}
+          onLoyalty={openLoyalty}
           onOpen={() => setTicketOpen(true)}
           onPay={onPay}
+        />
+      ) : null}
+
+      {/* Au niveau racine : le panneau bloque aussi le dock compact et la
+          barre haute. Aucune action d'encaissement ne reste cliquable derrière
+          le panneau fidélité. */}
+      {loyaltyOpen && mode !== 'tel' ? (
+        <LoyaltyPanel
+          brand={brand}
+          tenantSlug={session.tenantSlug}
+          publicSiteOrigin={siteConfigure()}
+          offline={offline}
+          attached={loyaltyMember}
+          pendingEarns={pendingLoyalty}
+          onAttach={attachLoyalty}
+          onDetach={detachLoyalty}
+          onUnauthorized={loyaltyUnauthorized}
+          onClose={closeLoyalty}
         />
       ) : null}
 
