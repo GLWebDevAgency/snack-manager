@@ -44,12 +44,69 @@ function hidePrivateOrderFields(
   return returned;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Le masque d'identité — cinq rôles stockés, tout le reste dérivé
+// (packages/contracts/src/marque.ts). `null` tant que le tenant n'a pas
+// été repris : le résolveur retombe alors sur Nuit + brandColor + logoUrl.
+// ─────────────────────────────────────────────────────────────
+
+const LogoPair = new Schema(
+  {
+    light: { type: String, default: null },
+    dark: { type: String, default: null },
+  },
+  { _id: false },
+);
+
+export const BrandSub = new Schema(
+  {
+    mode: { type: String, enum: ['light', 'dark'], required: true },
+    palette: {
+      type: new Schema(
+        {
+          ground: { type: String, required: true },
+          surface: { type: String, required: true },
+          ink: { type: String, required: true },
+          accent: { type: String, required: true },
+          onAccent: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    type: {
+      type: new Schema({ pair: { type: String, required: true } }, { _id: false }),
+      required: true,
+    },
+    shape: { type: String, enum: ['net', 'doux', 'rond'], required: true },
+    motion: { type: String, enum: ['pose', 'vif'], required: true },
+    logo: {
+      type: new Schema(
+        {
+          mark: { type: LogoPair, required: true },
+          lockup: { type: LogoPair, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    hero: { type: String, default: null },
+    preset: {
+      type: String,
+      enum: ['brasserie', 'neon', 'atelier', 'marche', 'nuit', 'soleil', null],
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 export const TenantSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     logoUrl: { type: String, default: null },
     brandColor: { type: String, default: '#c9a15a' },
+    brand: { type: BrandSub, default: null },
     address: { type: String, default: '' },
     phones: { type: [String], default: [] },
     /**
