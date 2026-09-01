@@ -45,8 +45,11 @@ function request(
     cookie?: string;
     origin?: string;
     fetchSite?: string;
+    forwardedHost?: string;
+    forwardedProto?: string;
     realIp?: string;
     forwardedFor?: string;
+    url?: string;
   } = {},
 ) {
   const headers = new Headers({ Accept: "application/json" });
@@ -54,13 +57,19 @@ function request(
   if (options.cookie) headers.set("Cookie", options.cookie);
   if (options.origin) headers.set("Origin", options.origin);
   if (options.fetchSite) headers.set("Sec-Fetch-Site", options.fetchSite);
+  if (options.forwardedHost) headers.set("X-Forwarded-Host", options.forwardedHost);
+  if (options.forwardedProto) headers.set("X-Forwarded-Proto", options.forwardedProto);
   if (options.realIp) headers.set("X-Real-IP", options.realIp);
   if (options.forwardedFor) headers.set("X-Forwarded-For", options.forwardedFor);
-  return new NextRequest("https://commande.classfood.example/r/classfood/fidelite/card-session", {
-    method,
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  return new NextRequest(
+    options.url ??
+      "https://commande.classfood.example/r/classfood/fidelite/card-session",
+    {
+      method,
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    },
+  );
 }
 
 describe("relais de carte fidélité", () => {
@@ -98,6 +107,31 @@ describe("relais de carte fidélité", () => {
       "edge-ip:203.0.113.10",
     );
   });
+
+  it.each([
+    "https://web-staging-6f5f.up.railway.app",
+    "https://commande.classfood.example",
+  ])(
+    "accepte l’origine publique %s derrière le reverse proxy",
+    async (publicOrigin) => {
+      const { POST } = await import("./route");
+      const response = await POST(
+        request("POST", {
+          body: { qrToken: TOKEN },
+          origin: publicOrigin,
+          fetchSite: "same-origin",
+          forwardedHost: new URL(publicOrigin).host,
+          forwardedProto: "https",
+          realIp: "203.0.113.10",
+          url: "https://localhost:8080/r/classfood/fidelite/card-session",
+        }),
+        context(),
+      );
+
+      expect(response.status).toBe(200);
+      expect(api.load).toHaveBeenCalledOnce();
+    },
+  );
 
   it("rouvre une carte enregistrée sans exposer le QR dans l’URL", async () => {
     const { GET } = await import("./route");
@@ -151,6 +185,42 @@ describe("relais de carte fidélité", () => {
     expect(response.status).toBe(403);
     expect(api.load).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      origin: "https://attaque.example",
+      forwardedHost: "web-staging-6f5f.up.railway.app",
+      forwardedProto: "https",
+    },
+    {
+      origin: "https://web-staging-6f5f.up.railway.app",
+      forwardedHost:
+        "web-staging-6f5f.up.railway.app, attaque.example",
+      forwardedProto: "https",
+    },
+    {
+      origin: "https://web-staging-6f5f.up.railway.app",
+      forwardedHost: "web-staging-6f5f.up.railway.app",
+    },
+  ])(
+    "échoue fermé avec une origine proxy discordante ou ambiguë",
+    async (headers) => {
+      const { POST } = await import("./route");
+      const response = await POST(
+        request("POST", {
+          body: { qrToken: TOKEN },
+          fetchSite: "same-origin",
+          realIp: "203.0.113.10",
+          url: "https://localhost:8080/r/classfood/fidelite/card-session",
+          ...headers,
+        }),
+        context(),
+      );
+
+      expect(response.status).toBe(403);
+      expect(api.load).not.toHaveBeenCalled();
+    },
+  );
 
   it("refuse un jeton mal formé sans appel backend", async () => {
     const { POST } = await import("./route");
