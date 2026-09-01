@@ -78,3 +78,89 @@ describe('la couleur en pur', () => {
     expect(ajusterJusquaAA('#1F1A17', '#F5EFE3')).toBe('#1f1a17');
   });
 });
+
+import { contraste, resoudreMarque } from './marque';
+
+describe('contraste(brand)', () => {
+  it('donne cinq verdicts, tous vrais, sur une direction bien dessinée', () => {
+    const v = contraste(DIRECTIONS.brasserie);
+    expect(v.ok).toBe(true);
+    expect(v.verdicts).toHaveLength(5);
+    expect(v.verdicts.map((x) => x.couple)).toEqual([
+      'ink/ground', 'ink/surface', 'onAccent/accent', 'accentInk/ground', 'inkMut/ground',
+    ]);
+  });
+
+  it('propose la nuance la plus proche qui passe, et elle passe', () => {
+    const pale = { ...DIRECTIONS.marche, palette: { ...DIRECTIONS.marche.palette, ink: '#9aa79e' } };
+    const v = contraste(pale);
+    const raté = v.verdicts.find((x) => x.couple === 'ink/ground');
+    expect(raté?.ok).toBe(false);
+    expect(raté?.proposition).not.toBeNull();
+    expect(ratioContraste(raté!.proposition!, pale.palette.ground)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('resoudreMarque(brand)', () => {
+  it('pose les cinq rôles et le mode', () => {
+    const j = resoudreMarque(DIRECTIONS.neon);
+    expect(j.colorScheme).toBe('dark');
+    expect(j.vars['--cf-bg']).toBe('#0e1016');
+    expect(j.vars['--cf-surface']).toBe('#171a23');
+    expect(j.vars['--cf-text']).toBe('#f3f1ec');
+    expect(j.vars['--cf-accent']).toBe('#d8f04a');
+    expect(j.vars['--cf-on-accent']).toBe('#0e1016');
+  });
+
+  it('dérive les filets depuis l’encre, pas depuis le blanc — un fond clair a des filets sombres', () => {
+    const j = resoudreMarque(DIRECTIONS.brasserie);
+    expect(j.vars['--cf-line']).toBe('rgba(31, 26, 23, 0.12)');
+    expect(j.vars['--cf-line-2']).toBe('rgba(31, 26, 23, 0.06)');
+    expect(j.vars['--cf-surface-3']).toBe('rgba(31, 26, 23, 0.03)');
+  });
+
+  it('accentInk est AA sur le fond même quand l’accent ne l’est pas', () => {
+    const j = resoudreMarque(DIRECTIONS.soleil);
+    expect(ratioContraste(j.vars['--cf-accent-ink']!, '#F6EBD9')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('inkMut reste lisible : ramené à AA si le mélange descend trop bas', () => {
+    for (const key of PRESET_KEYS) {
+      const j = resoudreMarque(DIRECTIONS[key]);
+      expect(ratioContraste(j.vars['--cf-mut']!, DIRECTIONS[key].palette.ground)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('les couleurs sémantiques ne sont jamais la marque', () => {
+    const a = resoudreMarque(DIRECTIONS.neon).vars;
+    const b = resoudreMarque(DIRECTIONS.nuit).vars;
+    expect(a['--cf-green']).toBe(b['--cf-green']); // même mode → mêmes sémantiques
+    expect(a['--cf-green']).not.toBe(a['--cf-accent']);
+  });
+
+  it('la forme et le mouvement deviennent des variables', () => {
+    const net = resoudreMarque(DIRECTIONS.brasserie).vars;
+    const rond = resoudreMarque(DIRECTIONS.neon).vars;
+    expect(net['--cf-r-md']).toBe('4px');
+    expect(rond['--cf-r-md']).toBe('18px');
+    expect(net['--sm-t-fast']).toBe('240ms');
+    expect(rond['--sm-t-fast']).toBe('140ms');
+    expect(rond['--sm-ease']).toContain('1.4');
+  });
+
+  it('les polices pointent sur les variables next/font, avec leur repli', () => {
+    const j = resoudreMarque(DIRECTIONS.brasserie);
+    expect(j.vars['--cf-font-display']).toBe('var(--police-fraunces), Georgia, "Times New Roman", serif');
+    expect(j.vars['--cf-font-body']).toContain('var(--police-source-sans-3)');
+    expect(j.prixMono).toBe(false);
+    expect(resoudreMarque(DIRECTIONS.atelier).prixMono).toBe(true);
+    expect(resoudreMarque(DIRECTIONS.atelier).vars['--cf-font-mono']).toContain('var(--police-jetbrains-mono)');
+  });
+
+  it('LES SIX DIRECTIONS PASSENT AA — une direction qui échoue ne se merge pas', () => {
+    for (const key of PRESET_KEYS) {
+      const v = contraste(DIRECTIONS[key]);
+      expect(v.ok, `${key} : ${v.verdicts.filter((x) => !x.ok).map((x) => x.couple).join(', ')}`).toBe(true);
+    }
+  });
+});

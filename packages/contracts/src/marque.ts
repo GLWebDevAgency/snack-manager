@@ -227,3 +227,152 @@ export function ajusterJusquaAA(couleur: string, fond: string, seuil = WCAG_AA):
   }
   return pole;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Le résolveur — tout ce qui n'est pas stocké se calcule ici
+// ─────────────────────────────────────────────────────────────
+
+export type Verdict = {
+  couple: string;
+  avant: string;
+  arriere: string;
+  ratio: number;
+  ok: boolean;
+  /** La nuance la plus proche qui passe — `null` quand ça passe déjà. */
+  proposition: string | null;
+};
+
+/** Les dérivés dont dépend le contraste — calculés une fois, partagés. */
+function derives(p: BrandPalette) {
+  return {
+    accentInk: ajusterJusquaAA(p.accent, p.ground),
+    inkMut: ajusterJusquaAA(melanger(p.ink, p.ground, 0.5), p.ground),
+  };
+}
+
+export function contraste(brand: Brand): { ok: boolean; verdicts: Verdict[] } {
+  const p = brand.palette;
+  const d = derives(p);
+  const couples: [string, string, string][] = [
+    ['ink/ground', p.ink, p.ground],
+    ['ink/surface', p.ink, p.surface],
+    ['onAccent/accent', p.onAccent, p.accent],
+    ['accentInk/ground', d.accentInk, p.ground],
+    ['inkMut/ground', d.inkMut, p.ground],
+  ];
+  const verdicts = couples.map(([couple, avant, arriere]): Verdict => {
+    const ratio = Math.round(ratioContraste(avant, arriere) * 100) / 100;
+    const ok = ratio >= WCAG_AA;
+    return { couple, avant, arriere, ratio, ok, proposition: ok ? null : ajusterJusquaAA(avant, arriere) };
+  });
+  return { ok: verdicts.every((v) => v.ok), verdicts };
+}
+
+/** Rayons par forme — sm / md / lg ; la pilule ne change jamais. */
+const RAYONS: Record<BrandShape, [number, number, number]> = {
+  net: [2, 4, 6],
+  doux: [6, 10, 14],
+  rond: [12, 18, 24],
+};
+
+/** Durées (ms) base / entrée / fête, et courbe. */
+const MOUVEMENTS: Record<BrandMotion, { base: number; entree: number; fete: number; ease: string }> = {
+  pose: { base: 240, entree: 320, fete: 900, ease: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+  vif: { base: 140, entree: 200, fete: 600, ease: 'cubic-bezier(0.3, 1.4, 0.4, 1)' },
+};
+
+/** Sémantiques fixes par mode — un « payé » est vert chez tout le monde. */
+const SEMANTIQUES: Record<BrandMode, { green: string; red: string; amber: string }> = {
+  dark: { green: '#3fae4a', red: '#c94b3f', amber: '#e0973f' },
+  light: { green: '#2f8a3b', red: '#b7382e', amber: '#b8731f' },
+};
+
+export type JetonsMasque = {
+  vars: Record<string, string>;
+  colorScheme: BrandMode;
+  prixMono: boolean;
+};
+
+const police = (slug: string): string => `var(--police-${slug}), ${fallbackDe(slug)}`;
+
+export function resoudreMarque(brand: Brand): JetonsMasque {
+  const p = {
+    ground: brand.palette.ground.toLowerCase(),
+    surface: brand.palette.surface.toLowerCase(),
+    ink: brand.palette.ink.toLowerCase(),
+    accent: brand.palette.accent.toLowerCase(),
+    onAccent: brand.palette.onAccent.toLowerCase(),
+  };
+  const sombre = brand.mode === 'dark';
+  const d = derives(p);
+  const sem = SEMANTIQUES[brand.mode];
+  const [rSm, rMd, rLg] = RAYONS[brand.shape];
+  const m = MOUVEMENTS[brand.motion];
+  const pair = TYPE_PAIRS[brand.type.pair];
+  // Le texte posé sur une sémantique : noir ou blanc, par contraste réel.
+  const sur = (fond: string) => (ratioContraste('#000000', fond) >= ratioContraste('#ffffff', fond) ? '#000000' : '#ffffff');
+  const ombre = sombre ? 'rgba(0, 0, 0, 0.38)' : alpha(p.ink, 0.14);
+
+  const vars: Record<string, string> = {
+    // Neutres
+    '--cf-bg': p.ground,
+    '--cf-surface': p.surface,
+    '--cf-surface-2': melanger(p.surface, p.ink, 0.04),
+    '--cf-text': p.ink,
+    '--cf-ink-soft': melanger(p.ink, p.ground, 0.25),
+    '--cf-mut': d.inkMut,
+    '--cf-line': alpha(p.ink, 0.12),
+    '--cf-line-2': alpha(p.ink, 0.06),
+    '--cf-surface-3': alpha(p.ink, 0.03),
+    '--cf-surface-6': alpha(p.ink, 0.06),
+    '--cf-white-50': alpha(p.ink, 0.5),
+    '--cf-fill': sombre ? melanger(p.surface, p.ink, 0.06) : p.ink,
+    '--cf-on-fill': sombre ? p.ink : p.ground,
+    '--cf-btn-dark': sombre ? melanger(p.surface, p.ink, 0.1) : p.ink,
+    // Accent
+    '--cf-accent': p.accent,
+    '--cf-accent-hover': melanger(p.accent, sombre ? '#ffffff' : '#000000', 0.08),
+    '--cf-on-accent': p.onAccent,
+    '--cf-accent-ink': d.accentInk,
+    '--cf-accent-wash': alpha(p.accent, 0.12),
+    '--cf-focus': alpha(p.accent, 0.6),
+    // Sémantiques — fixes par mode, jamais la marque
+    '--cf-green': sem.green,
+    '--cf-red': sem.red,
+    '--cf-amber': sem.amber,
+    '--cf-green-t': ajusterJusquaAA(sem.green, p.ground),
+    '--cf-red-t': ajusterJusquaAA(sem.red, p.ground),
+    '--cf-amber-t': ajusterJusquaAA(sem.amber, p.ground),
+    '--cf-on-green': sur(sem.green),
+    '--cf-on-red': sur(sem.red),
+    '--cf-on-amber': sur(sem.amber),
+    // Surfaces composées — le voile suit l'encre, l'aplat suit la surface
+    '--cf-card-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.05)} 0%, ${alpha(p.ink, 0)} 62%), linear-gradient(0deg, ${p.surface}, ${p.surface})`,
+    '--cf-elev-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.045)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${melanger(p.surface, p.ink, 0.04)}, ${melanger(p.surface, p.ink, 0.04)})`,
+    '--cf-elev-hover': `linear-gradient(180deg, ${alpha(p.ink, 0.07)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${melanger(p.surface, p.ink, 0.08)}, ${melanger(p.surface, p.ink, 0.08)})`,
+    // Ombres
+    '--cf-shadow': `0 1px 0 ${ombre}, 0 10px 28px ${ombre}`,
+    '--cf-shadow-2': `0 2px 0 ${ombre}, 0 16px 40px ${ombre}`,
+    '--cf-shadow-soft': `0 12px 34px ${ombre}`,
+    '--cf-shadow-card': `0 1px 0 ${ombre}, 0 10px 26px ${ombre}`,
+    '--cf-shadow-accent': `0 0 0 1px ${p.accent}`,
+    '--cf-shadow-drawer': `-1px 0 0 ${alpha(p.ink, 0.08)}, -26px 0 60px ${ombre}`,
+    // Forme
+    '--cf-r-xs': `${rSm}px`,
+    '--cf-r-sm': `${rMd}px`,
+    '--cf-r-md': `${rMd}px`,
+    '--cf-r': `${rLg}px`,
+    '--cf-r-lg': `${rLg + 4}px`,
+    '--cf-r-pill': '999px',
+    // Mouvement
+    '--sm-ease': m.ease,
+    '--sm-t-fast': `${m.base}ms`,
+    '--sm-t-med': `${m.entree}ms`,
+    '--sm-t-slow': `${m.fete}ms`,
+    // Polices
+    '--cf-font-display': police(pair.display),
+    '--cf-font-body': police(pair.body),
+    '--cf-font-mono': police(pair.mono ?? 'jetbrains-mono'),
+  };
+  return { vars, colorScheme: brand.mode, prixMono: pair.prixMono };
+}
