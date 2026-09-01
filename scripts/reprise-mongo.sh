@@ -52,6 +52,7 @@ Tâches disponibles (voir packages/db/package.json) :
     backfill:founder   pose founderUntil et founderDiscountCents
     backfill:contact   reprend le téléphone du gérant depuis son lead
     backfill:tracking  pose les jetons de suivi manquants
+    backfill:brand     pose le masque d'identité (Nuit + accent + logo) sur les tenants d'avant
 
 Sans --appliquer, la tâche LIT et n'écrit rien. C'est le mode par défaut, et
 c'est celui par lequel on commence toujours.
