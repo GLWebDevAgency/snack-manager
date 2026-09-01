@@ -184,7 +184,7 @@ export function QuickConfig({
 
   return (
     // 520 px est une largeur SOUHAITÉE : `Overlay` la borne à l'écran.
-    <Overlay onClose={onClose} width={520}>
+    <Overlay onClose={onClose} accessibilityLabel={`Configurer ${product.name}`} width={520}>
       <PanelHead
         title={product.name}
         sub={[categoryName, product.description].filter(Boolean).join(' · ') || undefined}

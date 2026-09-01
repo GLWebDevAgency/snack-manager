@@ -40,7 +40,7 @@ export function CashModal({
   const digit = (d: string) => setReceived((cur) => Math.min(99_999_99, cur * 10 + Number(d)));
 
   return (
-    <Overlay onClose={onClose} width={460}>
+    <Overlay onClose={onClose} accessibilityLabel="Encaissement espèces" width={460}>
       <PanelHead title="Encaissement espèces" sub={`Total à encaisser · ${euros(total)}`} onClose={onClose} />
       <View style={sheet.hairline} />
 
@@ -199,7 +199,7 @@ export function SentOverlay({
   const number = entry.serverNumber ?? entry.localNumber;
 
   return (
-    <Overlay onClose={onClose} width={440} dim={0.72}>
+    <Overlay onClose={onClose} accessibilityLabel="Commande envoyée en cuisine" width={440} dim={0.72}>
       <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(28), alignItems: 'center' }}>
         <Animated.View
           style={{
@@ -361,7 +361,7 @@ export function DiscountModal({
     /^\d{4,6}$/.test(pin);
 
   return (
-    <Overlay onClose={onClose} width={440}>
+    <Overlay onClose={onClose} accessibilityLabel="Appliquer une remise" width={440}>
       <PanelHead
         title="Remise"
         sub={`Commande n° ${entry.serverNumber ?? entry.localNumber} · ${euros(entry.total)}`}
@@ -538,7 +538,7 @@ export function TicketPreview({
   }, [load]);
 
   return (
-    <Overlay onClose={onClose} width={430}>
+    <Overlay onClose={onClose} accessibilityLabel="Ticket client" width={430}>
       <PanelHead title="Ticket client" sub={`Commande n° ${entry.serverNumber ?? entry.localNumber}`} onClose={onClose} />
       <View style={sheet.hairline} />
 
@@ -734,7 +734,7 @@ export function CloseModal({
   }, [entries]);
 
   return (
-    <Overlay onClose={onClose} width={560}>
+    <Overlay onClose={onClose} accessibilityLabel="Clôture de service" width={560}>
       <PanelHead
         title="Clôture de service"
         sub={`${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
@@ -1028,7 +1028,7 @@ export function RejetsModal({
   };
 
   return (
-    <Overlay onClose={onClose} width={520}>
+    <Overlay onClose={onClose} accessibilityLabel="Ventes refusées par le serveur" width={520}>
       <PanelHead
         title="Ventes refusées par le serveur"
         sub={`${rejets.length} à traiter`}

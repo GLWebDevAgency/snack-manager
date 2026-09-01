@@ -571,7 +571,7 @@ export function PinScreen({
       </View>
 
       {confirmUnpair && (
-        <Overlay onClose={() => setConfirmUnpair(false)} width={460}>
+        <Overlay onClose={() => setConfirmUnpair(false)} accessibilityLabel="Changer d'établissement" width={460}>
           <PanelHead title="Changer d'établissement" onClose={() => setConfirmUnpair(false)} />
           <View style={{ padding: 20, gap: 14 }}>
             <View

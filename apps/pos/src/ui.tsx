@@ -306,6 +306,7 @@ export function Chip({
   onAccent,
   tone = 'accent',
   minHeight = TOUCH_MIN,
+  accessibilityRole = 'checkbox',
 }: {
   label: string;
   detail?: string;
@@ -316,6 +317,7 @@ export function Chip({
   onAccent?: string;
   tone?: 'accent' | 'red' | 'neutral';
   minHeight?: number;
+  accessibilityRole?: 'checkbox' | 'radio' | 'tab';
 }) {
   const L = useLayout();
   const activeBg =
@@ -326,7 +328,7 @@ export function Chip({
       onPress={onPress}
       disabled={disabled}
       selected={!!on}
-      accessibilityRole="checkbox"
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       style={{
         minHeight: L.touch(minHeight),
@@ -543,6 +545,12 @@ export function Field({
   invalid,
   accent,
   multiline,
+  secureTextEntry,
+  autoCapitalize,
+  autoCorrect,
+  autoComplete,
+  onSubmitEditing,
+  disabled,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -555,6 +563,13 @@ export function Field({
   invalid?: boolean;
   accent?: string;
   multiline?: boolean;
+  /** Jetons/scanners : le secret reste masqué pendant la saisie. */
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  autoCorrect?: boolean;
+  autoComplete?: 'off' | 'name' | 'tel';
+  onSubmitEditing?: () => void;
+  disabled?: boolean;
 }) {
   const L = useLayout();
   const [focus, setFocus] = useState(false);
@@ -570,6 +585,12 @@ export function Field({
         autoFocus={autoFocus}
         maxLength={maxLength}
         multiline={multiline}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        autoComplete={autoComplete}
+        onSubmitEditing={onSubmitEditing}
+        editable={!disabled}
         onFocus={() => setFocus(true)}
         onBlur={() => setFocus(false)}
         accessibilityLabel={label ?? placeholder}
@@ -585,6 +606,7 @@ export function Field({
           fontFamily: FONT,
           fontSize: L.fs(15),
           fontWeight: '600',
+          opacity: disabled ? 0.55 : 1,
           ...(multiline ? { textAlignVertical: 'top', minHeight: L.sp(64) } : null),
         }}
       />
@@ -606,19 +628,30 @@ export function Field({
 export function Overlay({
   onClose,
   children,
+  accessibilityLabel,
   width = 520,
   align = 'center',
   dim = 0.66,
+  initialFocus = 'first',
+  focusKey,
 }: {
   onClose: () => void;
   children: ReactNode;
+  accessibilityLabel: string;
   width?: number;
   align?: 'center' | 'top';
   dim?: number;
+  /** Les flux scanner/formulaire peuvent donner la priorité au premier champ. */
+  initialFocus?: 'first' | 'input';
+  /** Repositionne le focus lorsqu'une étape remplace le contenu du dialogue. */
+  focusKey?: string | number;
 }) {
   const L = useLayout();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const modalRoot = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     Animated.timing(v, {
@@ -629,20 +662,94 @@ export function Overlay({
     }).start();
   }, [reduced, v]);
 
-  // Échap ferme la surcouche (poste au clavier / démonstration navigateur).
+  // Échap, piège de focus, restitution du focus et arrière-plan inerte sur le
+  // poste web. Le même composant reste natif : cette branche ne s'y exécute
+  // jamais et `accessibilityViewIsModal` prend le relais pour VoiceOver.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const doc = (globalThis as { document?: Document }).document;
     if (!doc) return;
+    const root = modalRoot.current;
+    if (!root) return;
+    const previousFocus = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+    const previousOverflow = doc.body.style.overflow;
+    doc.body.style.overflow = 'hidden';
+
+    const siblings = root.parentElement
+      ? Array.from(root.parentElement.children)
+          .filter((element): element is HTMLElement => element instanceof HTMLElement && element !== root)
+          .map((element) => ({
+            element,
+            inert: element.inert,
+            ariaHidden: element.getAttribute('aria-hidden'),
+          }))
+      : [];
+    for (const sibling of siblings) {
+      sibling.element.inert = true;
+      sibling.element.setAttribute('aria-hidden', 'true');
+    }
+
+    const focusable = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.getAttribute('aria-hidden') !== 'true');
+
+    const frame = globalThis.requestAnimationFrame?.(() => {
+      const candidates = focusable();
+      const preferred =
+        initialFocus === 'input'
+          ? candidates.find((element) =>
+              element.matches('input:not([disabled]), textarea:not([disabled])'),
+            )
+          : null;
+      (preferred ?? candidates[0])?.focus();
+    });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
+      if (e.key !== 'Tab') return;
+      const candidates = focusable();
+      if (candidates.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = candidates[0]!;
+      const last = candidates[candidates.length - 1]!;
+      if (e.shiftKey && doc.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && doc.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    doc.addEventListener('keydown', onKey);
-    return () => doc.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    // Capture : un champ natif ou un lecteur scanner peut arrêter la
+    // propagation d'Échap. La sortie de la modale reste néanmoins garantie.
+    doc.addEventListener('keydown', onKey, true);
+    return () => {
+      doc.removeEventListener('keydown', onKey, true);
+      if (frame !== undefined) globalThis.cancelAnimationFrame?.(frame);
+      doc.body.style.overflow = previousOverflow;
+      for (const sibling of siblings) {
+        sibling.element.inert = sibling.inert;
+        if (sibling.ariaHidden === null) sibling.element.removeAttribute('aria-hidden');
+        else sibling.element.setAttribute('aria-hidden', sibling.ariaHidden);
+      }
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [focusKey, initialFocus]);
 
   return (
     <View
+      ref={(node) => {
+        modalRoot.current = node as unknown as HTMLElement | null;
+      }}
+      role="dialog"
+      aria-modal
+      aria-label={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityViewIsModal
       style={[
         StyleSheet.absoluteFill,
         { alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', zIndex: 70 },
@@ -651,6 +758,8 @@ export function Overlay({
       {/* Fond cliquable : purement pointeur, les lecteurs d'écran passent par
           le bouton « Fermer » explicite et la touche Échap. */}
       <Pressable
+        tabIndex={-1}
+        focusable={false}
         importantForAccessibility="no"
         accessibilityElementsHidden
         onPress={onClose}
@@ -719,6 +828,8 @@ export function Drawer({
   return (
     <View style={[StyleSheet.absoluteFill, { flexDirection: 'row', justifyContent: 'flex-end', zIndex: 60 }]}>
       <Pressable
+        tabIndex={-1}
+        focusable={false}
         importantForAccessibility="no"
         accessibilityElementsHidden
         onPress={onClose}
@@ -762,7 +873,7 @@ export function PanelHead({
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[type.h1, { fontSize: L.fs(20) }]}>{title}</Text>
+        <Text accessibilityRole="header" style={[type.h1, { fontSize: L.fs(20) }]}>{title}</Text>
         {sub ? <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(13) }]}>{sub}</Text> : null}
       </View>
       {right}
@@ -822,6 +933,9 @@ function ToastHost({ items }: { items: Toast[] }) {
         return (
           <Pop key={t.id}>
             <View
+              accessible
+              accessibilityLiveRegion={t.tone === 'bad' ? 'assertive' : 'polite'}
+              role={t.tone === 'bad' ? 'alert' : 'status'}
               style={[
                 {
                   flexDirection: 'row',
