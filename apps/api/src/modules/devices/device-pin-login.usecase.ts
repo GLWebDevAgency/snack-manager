@@ -71,6 +71,9 @@ export class DevicePinLogin {
           tenantId: device.tenantId,
           role: member.role,
           kind: 'staff',
+          staffSessionVersion: String(member.sessionVersion ?? '0'),
+          deviceId: device.id,
+          deviceSessionVersion: device.sessionVersion,
         };
         return {
           token: await this.jwt.signAsync(payload),

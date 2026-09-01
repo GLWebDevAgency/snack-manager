@@ -51,6 +51,7 @@ export function storedDevice(patch: Partial<StoredDevice> = {}): StoredDevice {
     paired: true,
     lastSeenAt: null,
     active: true,
+    sessionVersion: '0',
     appVersion: '',
     queueDepth: null,
     lastError: '',
@@ -100,6 +101,9 @@ export class FakeDevicesRepository {
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) Object.assign(updated, { [key]: value });
     }
+    if (patch.kind !== undefined || patch.active !== undefined) {
+      Object.assign(updated, { sessionVersion: `session-${++this.sequence}` });
+    }
     this.rows.set(id, updated);
     return updated;
   }
@@ -129,6 +133,7 @@ export class FakeDevicesRepository {
       pairingCodeExpiresAt: expiresAt,
       paired: false,
       lastSeenAt: null,
+      sessionVersion: `session-${++this.sequence}`,
     };
     this.rows.set(id, updated);
     return updated;

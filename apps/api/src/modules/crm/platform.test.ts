@@ -16,8 +16,9 @@ import {
   type JwtPayload,
   type PlatformSettingsUpdate,
 } from '@sm/contracts';
-import { AdminLogSchema, type AdminLog, type Device, type PlatformSettingsDoc, type Screen, type Tenant, type User } from '@sm/db';
+import { AdminLogSchema, type AdminLog, type Device, type PlatformSettingsDoc, type Screen, type Staff, type Tenant, type User } from '@sm/db';
 import { AuthGuard } from '../../common/auth';
+import { SessionAccessService } from '../../common/session-access';
 import { zod } from '../../common/zod.pipe';
 import { AdminService } from './admin.service';
 import { FakeCollection } from './admin.fakes';
@@ -40,6 +41,7 @@ const SM: JwtPayload = {
   tenantId: null,
   role: 'sm_admin',
   kind: 'user',
+  exp: 4_102_444_800,
 };
 
 const RESTO = '65f000000000000000000001';
@@ -50,6 +52,7 @@ const GERANT: JwtPayload = {
   tenantId: RESTO,
   role: 'owner',
   kind: 'user',
+  exp: 4_102_444_800,
 };
 
 const INSTAGRAM = 'https://www.instagram.com/snackmanager';
@@ -116,6 +119,8 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
     const tenants = {
       findById: () => ({ lean: async () => ({ account: { status: 'active' } }) }),
     } as unknown as Model<Tenant>;
+    const staff = { findOne: () => ({ lean: async () => null }) } as unknown as Model<Staff>;
+    const devices = { findOne: () => ({ lean: async () => null }) } as unknown as Model<Device>;
 
     const context = {
       switchToHttp: () => ({
@@ -128,7 +133,8 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
       getClass: () => route.target,
     } as unknown as ExecutionContext;
 
-    return new AuthGuard(jwt, new Reflector(), tenants).canActivate(context);
+    const sessions = new SessionAccessService(tenants, staff, devices);
+    return new AuthGuard(jwt, new Reflector(), sessions).canActivate(context);
   }
 
   /** PATCH /crm/platform/settings — l'écriture. */

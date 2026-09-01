@@ -382,6 +382,12 @@ export const StaffSchema = new Schema(
     pinHash: { type: String, required: true },
     active: { type: Boolean, default: true },
     /**
+     * Version opaque des sessions PIN. Tout changement de rôle, PIN ou état
+     * la remplace et rend immédiatement caducs les JWT déjà émis.
+     * `0` est volontairement compatible avec les documents historiques.
+     */
+    sessionVersion: { type: String, default: '0' },
+    /**
      * Coût horaire employeur, en CENTIMES — sans lui aucune projection de masse
      * salariale n'est possible.
      *
@@ -1176,6 +1182,12 @@ export const DeviceSchema = new Schema(
     queueDepth: { type: Number, default: null },
     lastError: { type: String, default: '' },
     active: { type: Boolean, default: true },
+    /**
+     * Version opaque de l'appairage. Elle change lors d'une désactivation,
+     * d'un changement de type ou d'un nouvel appairage afin qu'un ancien JWT
+     * staff ne puisse jamais redevenir valide après révocation.
+     */
+    sessionVersion: { type: String, default: '0' },
     // Dernière révocation prononcée depuis le back-office interne (tablette
     // perdue ou volée). Le détail « qui, quand, pourquoi » vit dans
     // `adminLogs` ; ces deux champs ne sont là que pour l'afficher sur la

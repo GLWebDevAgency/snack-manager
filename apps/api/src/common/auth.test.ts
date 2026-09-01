@@ -4,8 +4,9 @@ import type { JwtService } from '@nestjs/jwt';
 import type { Model } from 'mongoose';
 import { describe, expect, it } from 'vitest';
 import { ACCOUNT_SUSPENDED_CODE, ACCOUNT_SUSPENDED_MESSAGE, type JwtPayload } from '@sm/contracts';
-import type { Tenant } from '@sm/db';
+import type { Device, Staff, Tenant } from '@sm/db';
 import { AuthGuard, IS_PUBLIC, ROLES } from './auth';
+import { SessionAccessService } from './session-access';
 
 /**
  * LE STATUT DE COMPTE AU GUARD.
@@ -47,7 +48,14 @@ function makeGuard(tokens: Record<string, JwtPayload>, meta: Record<string, unkn
     }),
   } as unknown as Model<Tenant>;
 
-  return new AuthGuard(jwt, reflector, tenants);
+  const staff = {
+    findOne: () => ({ lean: async () => null }),
+  } as unknown as Model<Staff>;
+  const devices = {
+    findOne: () => ({ lean: async () => null }),
+  } as unknown as Model<Device>;
+
+  return new AuthGuard(jwt, reflector, new SessionAccessService(tenants, staff, devices));
 }
 
 function contextFor(token: string | null): ExecutionContext {
@@ -67,6 +75,7 @@ const gerant = (tenantId: string | null): JwtPayload => ({
   tenantId,
   role: 'owner',
   kind: 'user',
+  exp: 4_102_444_800,
 });
 
 const caissier = (tenantId: string): JwtPayload => ({
@@ -74,6 +83,7 @@ const caissier = (tenantId: string): JwtPayload => ({
   tenantId,
   role: 'caisse',
   kind: 'staff',
+  exp: 4_102_444_800,
 });
 
 const equipeSm = (tenantId: string | null = null): JwtPayload => ({
@@ -81,6 +91,7 @@ const equipeSm = (tenantId: string | null = null): JwtPayload => ({
   tenantId,
   role: 'sm_admin',
   kind: 'user',
+  exp: 4_102_444_800,
 });
 
 describe('Statut de compte au guard', () => {

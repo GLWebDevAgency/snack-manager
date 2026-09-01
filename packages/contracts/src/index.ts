@@ -465,6 +465,19 @@ export interface JwtPayload {
   tenantId: string | null;
   role: UserRole | StaffRole;
   kind: 'user' | 'staff';
+  /** Émis automatiquement par JwtService ; utilisé pour fermer le temps réel à échéance. */
+  iat?: number;
+  /** Émis automatiquement par JwtService ; exprimé en secondes Unix. */
+  exp?: number;
+  /**
+   * Une session PIN est liée à la personne ET à la tablette qui l'a ouverte.
+   * Les champs restent optionnels dans le type pour décoder proprement les
+   * anciens jetons ; l'autorisation serveur refuse toutefois un JWT staff qui
+   * ne les porte pas et demande une nouvelle saisie du PIN.
+   */
+  staffSessionVersion?: string;
+  deviceId?: string;
+  deviceSessionVersion?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

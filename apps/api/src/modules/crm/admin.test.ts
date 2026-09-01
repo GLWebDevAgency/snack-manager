@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Model } from 'mongoose';
 import {
   EMPTY_SERVICES,
   ACCOUNT_SUSPENDED_MESSAGE,
@@ -101,6 +102,44 @@ describe('Administration client', () => {
   // ─── Statut de compte ───
 
   describe('Suspension et réactivation', () => {
+    it('déconnecte le temps réel dès que la suspension est enregistrée', async () => {
+      const revocations = { tenant: vi.fn().mockResolvedValue(undefined) };
+      const avecEvenements = new AdminService(
+        tenants.asModel<Tenant>(),
+        devices.asModel<Device>(),
+        screens.asModel<Screen>(),
+        logs.asModel<AdminLog>(),
+        users.asModel<User>(),
+        revocations as never,
+      );
+
+      await avecEvenements.suspend(SM, CLASSFOOD, { reason: 'Impayé' });
+
+      expect(revocations.tenant).toHaveBeenCalledWith(CLASSFOOD);
+    });
+
+    it('publie la suspension même si le journal échoue ensuite', async () => {
+      const revocations = { tenant: vi.fn().mockResolvedValue(undefined) };
+      const logsIndisponibles = {
+        create: vi.fn().mockRejectedValue(new Error('journal indisponible')),
+      } as unknown as Model<AdminLog>;
+      const avecEvenements = new AdminService(
+        tenants.asModel<Tenant>(),
+        devices.asModel<Device>(),
+        screens.asModel<Screen>(),
+        logsIndisponibles,
+        users.asModel<User>(),
+        revocations as never,
+      );
+
+      await expect(
+        avecEvenements.suspend(SM, CLASSFOOD, { reason: 'Impayé' }),
+      ).rejects.toThrow(/journal indisponible/);
+
+      expect(revocations.tenant).toHaveBeenCalledWith(CLASSFOOD);
+      expect((tenants.rows[0]?.account as { status?: string })?.status).toBe('suspended');
+    });
+
     it('suspend un établissement en enregistrant le motif et la date', async () => {
       const view = await admin.suspend(SM, CLASSFOOD, { reason: 'Impayé — relance 3 sans réponse' });
 
@@ -416,6 +455,29 @@ describe('Administration client', () => {
       await expect(
         requirePairedDevice(repository, 'jeton-de-la-tablette-volée'),
       ).rejects.toThrow(/plus reconnu/);
+    });
+
+    it('publie la révocation même si son écriture au journal échoue ensuite', async () => {
+      seedCaisse();
+      const revocations = { device: vi.fn().mockResolvedValue(undefined) };
+      const logsIndisponibles = {
+        create: vi.fn().mockRejectedValue(new Error('journal indisponible')),
+      } as unknown as Model<AdminLog>;
+      const avecEvenements = new AdminService(
+        tenants.asModel<Tenant>(),
+        devices.asModel<Device>(),
+        screens.asModel<Screen>(),
+        logsIndisponibles,
+        users.asModel<User>(),
+        revocations as never,
+      );
+
+      await expect(
+        avecEvenements.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' }),
+      ).rejects.toThrow(/journal indisponible/);
+
+      expect(revocations.device).toHaveBeenCalledWith(CLASSFOOD, CAISSE);
+      expect(devices.rows.find((row) => row._id === CAISSE)?.paired).toBe(false);
     });
 
     it('repose l’appareil en attente d’appairage, avec un code frais à dicter', async () => {

@@ -1,9 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import * as argon2 from 'argon2';
 import type { Shift, Staff } from '@sm/db';
 import type { ShiftsQuery, StaffCreate, StaffUpdate } from './staff.dto';
+import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /** Arrondi à la demi-heure la plus proche — `round(x×2)/2` (spec backoffice §12.2). */
 const roundHalfHours = (ms: number) => Math.round((ms / 3_600_000) * 2) / 2;
@@ -23,6 +25,7 @@ export class StaffService {
   constructor(
     @InjectModel('Staff') private readonly staffModel: Model<Staff>,
     @InjectModel('Shift') private readonly shifts: Model<Shift>,
+    @Optional() private readonly revocations?: SessionRevocationPublisher,
   ) {}
 
   /**
@@ -65,7 +68,7 @@ export class StaffService {
     }
     const outByStaff = new Map(lastOut.map((s) => [String(s._id), s.clockOut]));
 
-    return members.map(({ pinHash: _pinHash, ...m }) => {
+    return members.map(({ pinHash: _pinHash, sessionVersion: _sessionVersion, ...m }) => {
       const shift = openByStaff.get(String(m._id));
       return {
         ...m,
@@ -84,7 +87,7 @@ export class StaffService {
       role: dto.role,
       pinHash,
     });
-    const { pinHash: _pinHash, ...member } = created.toObject();
+    const { pinHash: _pinHash, sessionVersion: _sessionVersion, ...member } = created.toObject();
     return { ...member, onDuty: null, lastClockOut: null };
   }
 
@@ -97,10 +100,17 @@ export class StaffService {
       await this.assertPinFree(tenantId, dto.pin, id);
       $set.pinHash = await argon2.hash(dto.pin);
     }
+    const invalidatesSession =
+      dto.role !== undefined || dto.active !== undefined || dto.pin !== undefined;
+    if (invalidatesSession) $set.sessionVersion = randomUUID();
     const member = await this.staffModel
       .findOneAndUpdate({ _id: id, tenantId }, { $set }, { new: true })
       .lean();
     if (!member) throw new NotFoundException('Membre introuvable');
+
+    // La version est persistée : la révocation part avant la clôture du shift,
+    // qui peut échouer sans rendre l'ancien JWT valide pour autant.
+    if (invalidatesSession) await this.revocations?.staff(tenantId, id);
 
     // Désactivation → clôture immédiate d'un éventuel shift ouvert.
     if (dto.active === false) {
@@ -109,7 +119,7 @@ export class StaffService {
         { $set: { clockOut: new Date() } },
       );
     }
-    const { pinHash: _pinHash, ...rest } = member;
+    const { pinHash: _pinHash, sessionVersion: _sessionVersion, ...rest } = member;
     return rest;
   }
 
