@@ -14,6 +14,7 @@ import type {
   StatsTopProduct,
 } from '@sm/contracts';
 import type { Category, Order, Product, Review } from '@sm/db';
+import { excelCsvCell, excelCsvNumber } from './excel-csv';
 
 const TZ = 'Europe/Paris';
 /** CA = commandes prêtes + livrées ; les annulées (et en cours) sont exclues. */
@@ -78,13 +79,7 @@ function deltaPct(current: number, previous: number): number | null {
 }
 
 /** Centimes → euros français « 12,50 ». */
-const euros = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
-
-/** Échappement CSV (séparateur « ; », compatible Excel FR). */
-function csv(v: string | number): string {
-  const s = String(v);
-  return /[;"\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+const euros = (cents: number) => excelCsvNumber((cents / 100).toFixed(2).replace('.', ','));
 
 const CHANNEL_FR: Record<string, string> = { pos: 'Caisse', online: 'En ligne', phone: 'Téléphone' };
 const TYPE_FR: Record<string, string> = { surplace: 'Sur place', emporter: 'À emporter', pickup: 'Retrait' };
@@ -495,10 +490,10 @@ export class StatsService {
         PAY_STATUS_FR[payment.status] ?? payment.status,
         o.pickup?.customerName ?? '',
       ]
-        .map(csv)
+        .map(excelCsvCell)
         .join(';');
     });
-    return BOM + `${[header.map(csv).join(';'), ...lines].join('\r\n')}\r\n`;
+    return BOM + `${[header.map(excelCsvCell).join(';'), ...lines].join('\r\n')}\r\n`;
   }
 
   async exportMenuCsv(tenantId: string): Promise<string> {
@@ -517,18 +512,18 @@ export class StatsService {
         for (const v of p.variants) {
           lines.push(
             [cat, p.name, p.description, v.name, euros(v.price), bool(p.active), bool(p.outOfStock)]
-              .map(csv)
+              .map(excelCsvCell)
               .join(';'),
           );
         }
       } else {
         lines.push(
           [cat, p.name, p.description, '', euros(p.price), bool(p.active), bool(p.outOfStock)]
-            .map(csv)
+            .map(excelCsvCell)
             .join(';'),
         );
       }
     }
-    return BOM + `${[header.map(csv).join(';'), ...lines].join('\r\n')}\r\n`;
+    return BOM + `${[header.map(excelCsvCell).join(';'), ...lines].join('\r\n')}\r\n`;
   }
 }
