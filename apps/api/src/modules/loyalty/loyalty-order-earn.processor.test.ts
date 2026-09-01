@@ -15,6 +15,7 @@ const MEMBER_ID = '22222222-2222-4222-8222-222222222222';
 const OPERATION_ID = '33333333-3333-4333-8333-333333333333';
 const ACTOR_ID = '65f000000000000000000010';
 const DEVICE_ID = '65f000000000000000000020';
+const LEASE_UNTIL = new Date('2026-09-01T08:01:00.000Z');
 
 function claimed(attempts = 1) {
   return {
@@ -26,6 +27,7 @@ function claimed(attempts = 1) {
     loyaltyActorRef: ACTOR_ID,
     loyaltyDeviceRef: DEVICE_ID,
     loyaltyEarnAttempts: attempts,
+    loyaltyEarnLeaseUntil: LEASE_UNTIL,
     totals: { total: 1_850 },
   };
 }
@@ -80,7 +82,10 @@ describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
       { source: 'pos', actorRef: ACTOR_ID, deviceRef: DEVICE_ID },
     );
     expect(orders.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({ loyaltyEarnOperationId: OPERATION_ID }),
+      expect.objectContaining({
+        loyaltyEarnOperationId: OPERATION_ID,
+        loyaltyEarnLeaseUntil: LEASE_UNTIL,
+      }),
       expect.objectContaining({
         $set: expect.objectContaining({ loyaltyEarnState: 'completed' }),
       }),
@@ -108,6 +113,21 @@ describe('LoyaltyOrderEarnProcessor — outbox serveur', () => {
         }),
       }),
     );
+  });
+
+  it('ne peut pas écraser le bail repris par un autre worker', async () => {
+    const { processor, orders } = harness([claimed(), null]);
+
+    await processor.drain();
+
+    const completionFilter = orders.updateOne.mock.calls.find(
+      ([filter]) =>
+        (filter as { loyaltyEarnOperationId?: string }).loyaltyEarnOperationId === OPERATION_ID,
+    )?.[0];
+    expect(completionFilter).toMatchObject({
+      loyaltyEarnState: 'processing',
+      loyaltyEarnLeaseUntil: LEASE_UNTIL,
+    });
   });
 
   it('ferme une intention corrompue sans appeler le ledger', async () => {

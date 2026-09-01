@@ -37,6 +37,7 @@ type ClaimedOrder = Order & {
   loyaltyActorRef: string | null;
   loyaltyDeviceRef: string | null;
   loyaltyEarnAttempts: number;
+  loyaltyEarnLeaseUntil: Date;
   totals: { total: number };
 };
 
@@ -194,6 +195,7 @@ export class LoyaltyOrderEarnProcessor
   }
 
   private async claimNext(now: Date): Promise<ClaimedOrder | null> {
+    const leaseUntil = new Date(now.getTime() + LEASE_MS);
     const query = this.orders.findOneAndUpdate(
       {
         loyaltyEarnState: 'pending',
@@ -208,7 +210,7 @@ export class LoyaltyOrderEarnProcessor
       {
         $set: {
           loyaltyEarnState: 'processing',
-          loyaltyEarnLeaseUntil: new Date(now.getTime() + LEASE_MS),
+          loyaltyEarnLeaseUntil: leaseUntil,
           loyaltyEarnLastError: null,
         },
         $inc: { loyaltyEarnAttempts: 1 },
@@ -216,7 +218,7 @@ export class LoyaltyOrderEarnProcessor
       { new: true, sort: { createdAt: 1 } },
     );
     return (await query.select(
-      '+loyaltyMemberId +loyaltyEarnOperationId +loyaltyActorRef +loyaltyDeviceRef +loyaltyEarnAttempts',
+      '+loyaltyMemberId +loyaltyEarnOperationId +loyaltyActorRef +loyaltyDeviceRef +loyaltyEarnAttempts +loyaltyEarnLeaseUntil',
     )) as ClaimedOrder | null;
   }
 
@@ -264,6 +266,7 @@ export class LoyaltyOrderEarnProcessor
           _id: order._id,
           loyaltyEarnOperationId: operationId,
           loyaltyEarnState: 'processing',
+          loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
         },
         {
           $set: {
@@ -280,7 +283,11 @@ export class LoyaltyOrderEarnProcessor
       const errorCode = loyaltyEarnSafeErrorCode(error);
       if (permanentFailure(error)) {
         await this.orders.updateOne(
-          { _id: order._id, loyaltyEarnState: 'processing' },
+          {
+            _id: order._id,
+            loyaltyEarnState: 'processing',
+            loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
+          },
           {
             $set: {
               loyaltyEarnState: 'failed',
@@ -298,7 +305,11 @@ export class LoyaltyOrderEarnProcessor
         Date.now() + loyaltyEarnRetryDelayMs(order.loyaltyEarnAttempts),
       );
       await this.orders.updateOne(
-        { _id: order._id, loyaltyEarnState: 'processing' },
+        {
+          _id: order._id,
+          loyaltyEarnState: 'processing',
+          loyaltyEarnLeaseUntil: order.loyaltyEarnLeaseUntil,
+        },
         {
           $set: {
             loyaltyEarnState: 'pending',
