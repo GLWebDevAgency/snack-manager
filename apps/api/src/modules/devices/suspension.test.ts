@@ -28,7 +28,7 @@ describe('Abonnement suspendu et appareils de terrain', () => {
     // de lecture. On appaire donc l'appareil comme le ferait la tablette, en
     // passant par le code, ce qui enregistre le jeton dans le dépôt.
     devices.seed(storedDevice({ id: 'device-1', paired: false, pairingCode: 'ABCDEF' }));
-    await devices.claim('device-1', 'ABCDEF', TOKEN, new Date(START));
+    await devices.claim('device-1', 'ABCDEF', 'pos', TOKEN, new Date(START));
     heartbeat = new HeartbeatDevice(clock, devices.asRepository(), tenants.asRepository());
   });
 

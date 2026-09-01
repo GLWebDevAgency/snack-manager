@@ -33,6 +33,7 @@ import {
   type Session,
 } from './src/client';
 import { DemoBanner } from './src/DemoBanner';
+import { belongsToApp } from './src/device-boundary';
 import { PairingScreen, PinScreen } from './src/PinScreen';
 import { PosScreen } from './src/PosScreen';
 import { createSaleInFlightGate } from './src/pos-safety';
@@ -84,7 +85,7 @@ export default function App() {
         if (!alive) return;
         setDevice(paired);
 
-        if (paired) {
+        if (paired && belongsToApp(paired.device)) {
           try {
             const raw = await client.tenantStore.getItem(KEYS.session);
             const saved = raw ? (JSON.parse(raw) as Session) : null;
@@ -106,6 +107,13 @@ export default function App() {
               throw error;
             }
           }
+        } else if (paired) {
+          // Migration sûre d'un ancien appairage croisé : on interdit toute
+          // reprise de session, mais on conserve encore l'identité et la file.
+          // Le heartbeat les fera passer par `revokeDevice`, qui synchronise
+          // les ventes avant le désappairage durable.
+          client.setToken(null);
+          await client.tenantStore.removeItem(KEYS.session);
         }
       } catch (error) {
         if (alive) {

@@ -12,6 +12,7 @@ import {
   type PairedDevice,
 } from './client';
 import { KEY_SESSION } from './config';
+import { belongsToApp } from './device-boundary';
 
 /**
  * Session cuisine — appairage de l'appareil, puis ouverture par PIN.
@@ -66,6 +67,14 @@ export function useSession(client: SmClient) {
       try {
         const paired = await loadPairedDevice();
         if (!paired) return;
+        if (!belongsToApp(paired.device)) {
+          // Ne jamais restaurer un JWT Cuisine sur l'ancien jeton d'une
+          // caisse. L'identité reste en place jusqu'au heartbeat, qui reprend
+          // le chemin de révocation et de purge déjà éprouvé.
+          client.setToken(null);
+          await client.tenantStore.removeItem(KEY_SESSION);
+          return;
+        }
         try {
           const raw = await client.tenantStore.getItem(KEY_SESSION);
           if (raw) {

@@ -27,6 +27,7 @@ import {
   withStoreLock,
 } from '@sm/client-core';
 import { API_URL, KEY_SESSION } from './config';
+import { belongsToApp, pairingRequest } from './device-boundary';
 
 /** Version du bundle, rapportée par le battement — même contrat que la caisse. */
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- lecture de la version au build, hors graphe ES
@@ -400,7 +401,16 @@ async function deviceFetch<T>(path: string, body: unknown, deviceToken?: string)
 
 /** Appairage : six caractères contre un jeton, une fois pour toutes. */
 export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
-  const result = await deviceFetch<DevicePaired>('/public/devices/pair', { pairingCode });
+  const result = await deviceFetch<DevicePaired>(
+    '/public/devices/pair',
+    pairingRequest(pairingCode),
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Ce code est réservé à l’application Caisse. Utilisez le code d’un écran cuisine.',
+      409,
+    );
+  }
   return persist({
     deviceToken: result.deviceToken,
     tenant: result.tenant,
@@ -440,6 +450,15 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
     if (e instanceof DeviceError && e.status === 401) throw e;
     return null;
   }
+  if (!belongsToApp(beat.device)) {
+    // Les appairages croisés créés par un ancien bundle empruntent le même
+    // chemin que toute révocation distante : désappairage durable avant de
+    // proposer un nouveau code, jamais une identité silencieusement écrasée.
+    throw new DeviceError(
+      "Cet appareil n'est pas un écran cuisine. Réappairez-le avec le bon code.",
+      401,
+    );
+  }
   return persist({
     ...device,
     tenant: beat.tenant,
@@ -457,5 +476,16 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
 export async function pinLogin(pin: string): Promise<DevicePinSession> {
   const device = current;
   if (!device) throw new DeviceError("Cet appareil n'est pas appairé.", 401);
-  return deviceFetch<DevicePinSession>('/public/devices/pin', { pin }, device.deviceToken);
+  const result = await deviceFetch<DevicePinSession>(
+    '/public/devices/pin',
+    { pin },
+    device.deviceToken,
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Cet appareil est enregistré comme caisse. Réappairez l’écran cuisine avec son propre code.',
+      409,
+    );
+  }
+  return result;
 }
