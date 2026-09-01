@@ -69,11 +69,16 @@ import {
   Tap,
 } from "./primitives";
 import { StripeCard } from "./StripeCard";
+import { TurnstileCheck } from "./TurnstileCheck";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
 /** Doit dépasser la durée d’animation de sortie de `Sheet`. */
 const SHEET_EXIT_MS = 340;
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
+const TURNSTILE_SITE_KEY =
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ??
+  (process.env.NODE_ENV === "production" ? "" : TURNSTILE_TEST_SITE_KEY);
 
 const STEPS: { id: Step; label: string }[] = [
   { id: "cart", label: "Panier" },
@@ -168,6 +173,8 @@ export function Checkout({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downgraded, setDowngraded] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
   /**
    * Le code promo saisi. Il part avec la commande et le serveur décide : le
    * montant n'est jamais calculé ici, comme les prix. Un refus revient nommé
@@ -253,6 +260,8 @@ export function Checkout({
     setError(null);
     setSlotIso(null);
     setDate(null);
+    setTurnstileToken(null);
+    setTurnstileReset((value) => value + 1);
     clientIdRef.current = null;
   }
 
@@ -305,17 +314,27 @@ export function Checkout({
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
     if (busy || !slotIso || !contactOk || cart.lines.length === 0) return;
+    const proof = demo ? "demo" : turnstileToken;
+    if (!proof) {
+      setError("La vérification de sécurité doit se terminer avant l’envoi.");
+      return;
+    }
     setBusy(true);
     setError(null);
+    // Le fournisseur rend chaque preuve utilisable une seule fois. On relance
+    // immédiatement un contrôle pour qu'un retry réseau dispose d'un jeton neuf.
+    if (!demo) {
+      setTurnstileToken(null);
+      setTurnstileReset((value) => value + 1);
+    }
     try {
       writeCustomer(customer);
       clientIdRef.current ??= uid();
       const created = await api.createOrder(slug, {
         clientId: clientIdRef.current,
-        channel: "online",
-        type: "pickup",
         lines: toOrderLines(cart.lines),
         payment: { method: chosenMethod },
+        turnstileToken: proof,
         pickup: {
           slot: slotIso,
           customerName: customer.name.trim(),
@@ -459,6 +478,7 @@ export function Checkout({
           order={order}
           embed={embed}
           demo={demo}
+          verified={demo || Boolean(turnstileToken)}
           onNext={(next) => {
             if (next === "customer") setTouched(false);
             setStep(next);
@@ -520,15 +540,25 @@ export function Checkout({
         )}
 
         {step === "pay" && (
-          <PayStep
-            cart={cart}
-            customer={customer}
-            slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
-            slotDate={slots?.date ?? null}
-            method={method}
-            onMethod={setWanted}
-            cardAvailable={probe !== "off"}
-          />
+          <div className="flex flex-col gap-6">
+            <PayStep
+              cart={cart}
+              customer={customer}
+              slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
+              slotDate={slots?.date ?? null}
+              method={method}
+              onMethod={setWanted}
+              cardAvailable={probe !== "off"}
+            />
+            {!demo && (
+              <TurnstileCheck
+                siteKey={TURNSTILE_SITE_KEY}
+                tenantSlug={slug}
+                resetKey={turnstileReset}
+                onToken={setTurnstileToken}
+              />
+            )}
+          </div>
         )}
 
         {step === "card" && intent && !intent.unavailable && intent.publishableKey && (
@@ -639,6 +669,7 @@ function Footer({
   order,
   embed,
   demo,
+  verified,
   onNext,
   onSubmit,
   onFinish,
@@ -654,6 +685,7 @@ function Footer({
   order: CreatedOrder | null;
   embed: boolean;
   demo: boolean;
+  verified: boolean;
   onNext: (next: Step) => void;
   onSubmit: () => void;
   onFinish: () => void;
@@ -722,13 +754,17 @@ function Footer({
 
   return (
     <PrimaryAction
-      disabled={blocked || !slotIso || !contactOk}
+      disabled={blocked || !slotIso || !contactOk || !verified}
       loading={busy}
       amount={cart.subtotal}
       icon={method === "online" ? "euro" : "check"}
       onClick={onSubmit}
     >
-      {method === "online" ? "Payer" : "Confirmer la commande"}
+      {!verified
+        ? "Vérification sécurisée…"
+        : method === "online"
+          ? "Payer"
+          : "Confirmer la commande"}
     </PrimaryAction>
   );
 }

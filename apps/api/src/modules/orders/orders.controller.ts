@@ -11,6 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  type CreatePublicOrder,
+  CreatePublicOrderSchema,
   CreateOrderSchema,
   type OrderCancel,
   OrderCancelSchema,
@@ -31,6 +33,7 @@ import { OrdersService } from './orders.service';
 import { AuthService } from '../auth/auth.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from '../ordering/slots.service';
+import { PublicOrderGate } from './public-order-gate';
 
 @Controller()
 export class OrdersController {
@@ -39,6 +42,7 @@ export class OrdersController {
     private readonly auth: AuthService,
     private readonly tenants: TenantsService,
     private readonly slots: SlotsService,
+    private readonly publicOrderGate: PublicOrderGate,
   ) {}
 
   // ─── Staff (POS / téléphone) ───
@@ -151,7 +155,10 @@ export class OrdersController {
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('public/tenants/:slug/orders')
-  async createOnline(@Param('slug') slug: string, @Body(zod(CreateOrderSchema)) body: CreateOrder) {
+  async createOnline(
+    @Param('slug') slug: string,
+    @Body(zod(CreatePublicOrderSchema)) body: CreatePublicOrder,
+  ) {
     const tenant = await this.tenants.bySlug(slug);
     // Pause volontaire du gérant OU suspension du compte par Snack Manager :
     // même fermeture propre côté client, messages distincts (le consommateur
@@ -161,6 +168,13 @@ export class OrdersController {
       message: tenant.settings?.pauseMessage ?? null,
     });
     if (gate.paused) return gate;
+
+    // Un POST dont la reponse s'est perdue garde la meme cle. La commande
+    // existe deja : ne pas redemander une preuve Turnstile a usage unique, ni
+    // recompter le quota ou la capacite du creneau.
+    const tenantId = String(tenant._id);
+    const existing = await this.orders.findByClientId(tenantId, body.clientId);
+    if (existing) return existing;
 
     // LE CRÉNEAU EST VÉRIFIÉ ICI, PAS SEULEMENT PROPOSÉ.
     //
@@ -175,10 +189,51 @@ export class OrdersController {
     // Le cas du client resté dix minutes sur l'étape paiement se referme du
     // même coup : son créneau est revérifié au moment où il valide, pas au
     // moment où il l'a choisi.
-    if (body.pickup) await this.slots.exigerDisponible(tenant, body.pickup.slot);
+    await this.slots.exigerDisponible(tenant, body.pickup.slot);
 
-    // Canal forcé : une commande postée sur la route publique est toujours « online »
-    return this.orders.create(String(tenant._id), { ...body, channel: 'online' }, 'online');
+    const proof = await this.publicOrderGate.authorize({
+      tenantId,
+      tenantSlug: slug,
+      turnstileToken: body.turnstileToken,
+    });
+
+    // Le jeton anti-robot n'entre jamais dans le document. Canal et type sont
+    // des faits de route, impossibles a choisir dans le corps public strict.
+    const { turnstileToken: _proof, ...trusted } = body;
+    try {
+      return await this.publicOrderGate.serializeSlot(
+        { tenantId, slot: body.pickup.slot },
+        async () => {
+          // Siteverify peut prendre plusieurs secondes. Une autre replique a
+          // pu prendre la derniere place entre-temps : seconde lecture SOUS
+          // verrou distribue, juste avant l'ecriture.
+          const raced = await this.orders.findByClientId(tenantId, body.clientId);
+          if (raced) {
+            await this.publicOrderGate.release(proof);
+            return raced;
+          }
+          await this.slots.exigerDisponible(tenant, body.pickup.slot);
+
+          const outcome = await this.orders.createWithOutcome(
+            tenantId,
+            {
+              ...trusted,
+              // `method` devient un fait seulement quand Stripe confirme. La
+              // valeur sure avant webhook est le repli au comptoir.
+              payment: { method: 'counter' },
+              channel: 'online',
+              type: 'pickup',
+            },
+            'online:turnstile',
+          );
+          if (!outcome.created) await this.publicOrderGate.release(proof);
+          return outcome.order;
+        },
+      );
+    } catch (err) {
+      await this.publicOrderGate.release(proof);
+      throw err;
+    }
   }
 
   /**

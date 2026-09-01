@@ -372,6 +372,39 @@ export const CreateOrderSchema = z.object({
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
 
 /**
+ * Contrat de la commande PUBLIQUE, volontairement distinct de celui du POS.
+ *
+ * Le navigateur ne choisit ni le canal, ni le type, ni un moyen effectivement
+ * encaisse, ni un statut. Ces faits sont poses par l'API. Reutiliser le DTO du
+ * poste authentifie permettait notamment d'omettre le retrait et d'injecter
+ * des tickets `surplace` directement dans la cuisine.
+ */
+export const CreatePublicOrderSchema = z
+  .object({
+    clientId: z.uuid(),
+    lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
+    payment: z
+      .object({
+        /** Intention du client ; le statut reste toujours calcule serveur. */
+        method: PaymentMethodSchema,
+      })
+      .strict(),
+    pickup: z
+      .object({
+        slot: z.iso.datetime(),
+        customerName: z.string().trim().min(2).max(80),
+        customerPhone: z.string().trim().min(6).max(32),
+      })
+      .strict(),
+    note: z.string().trim().max(500).optional(),
+    promoCode: z.string().trim().min(1).max(24).optional(),
+    /** Jeton Cloudflare Turnstile : 2 048 caracteres maximum selon Siteverify. */
+    turnstileToken: z.string().min(1).max(2_048),
+  })
+  .strict();
+export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
+
+/**
  * Les deux gestes qui MINORENT la recette — et qui n'étaient pas validés.
  *
  * Le corps arrivait en `@Body()` nu, sans schéma : `amount` pouvait être un

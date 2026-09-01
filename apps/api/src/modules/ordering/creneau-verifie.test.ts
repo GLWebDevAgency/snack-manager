@@ -85,6 +85,15 @@ describe('refuser un créneau qu’on ne peut pas honorer', () => {
     await expect(service(0).exigerDisponible(RESTAURANT, creneauDemain())).resolves.toBeUndefined();
   });
 
+  it('refuse un retrait artificiellement lointain qui encombrerait la cuisine maintenant', async () => {
+    const loin = new Date();
+    loin.setUTCDate(loin.getUTCDate() + 30);
+    loin.setUTCHours(10, 0, 0, 0);
+    await expect(service(0).exigerDisponible(RESTAURANT, loin.toISOString())).rejects.toThrow(
+      /14 jours/,
+    );
+  });
+
   it('refuse un jour de FERMETURE en donnant le motif au client', async () => {
     const demain = new Date();
     demain.setUTCDate(demain.getUTCDate() + 1);

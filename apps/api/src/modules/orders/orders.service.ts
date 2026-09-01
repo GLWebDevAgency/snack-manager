@@ -209,8 +209,21 @@ export class OrdersService {
    * Idempotente sur {tenantId, clientId} : le rejeu offline renvoie l'existante.
    */
   async create(tenantId: string, dto: CreateOrder, actor: string) {
+    return (await this.createWithOutcome(tenantId, dto, actor)).order;
+  }
+
+  /**
+   * Variante qui révèle uniquement si CET appel a créé le document.
+   *
+   * Le contrôleur public s'en sert pour rendre sa réservation anti-abus lors
+   * d'une course idempotente. Les autres appelants gardent l'API historique et
+   * ne voient que la commande.
+   */
+  async createWithOutcome(tenantId: string, dto: CreateOrder, actor: string) {
     const existing = await this.orders.findOne({ tenantId, clientId: dto.clientId });
-    if (existing) return this.withTrackingToken(existing); // rejeu de la file offline
+    if (existing) {
+      return { order: this.withTrackingToken(existing), created: false as const };
+    }
 
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
@@ -328,7 +341,7 @@ export class OrdersService {
         note: dto.note ?? null,
       });
       this.publish(tenantId, WS_EVENTS.orderCreated, order.toObject());
-      return order;
+      return { order, created: true as const };
     } catch (err: unknown) {
       // LA RÉSERVATION EST RENDUE : la commande n'existera pas.
       //
@@ -348,10 +361,24 @@ export class OrdersService {
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
         const raced = await this.orders.findOne({ tenantId, clientId: dto.clientId });
-        return raced ? this.withTrackingToken(raced) : raced;
+        if (raced) {
+          return { order: this.withTrackingToken(raced), created: false as const };
+        }
       }
       throw err;
     }
+  }
+
+  /**
+   * Rejeu public avant une preuve Turnstile neuve.
+   *
+   * Le token fournisseur est a usage unique. Si la reponse de creation s'est
+   * perdue, le meme `clientId` doit retrouver la commande existante sans
+   * consommer une seconde preuve, un second quota ou un second numero.
+   */
+  async findByClientId(tenantId: string, clientId: string) {
+    const existing = await this.orders.findOne({ tenantId, clientId });
+    return existing ? this.withTrackingToken(existing) : null;
   }
 
   /**

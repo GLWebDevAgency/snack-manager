@@ -295,7 +295,6 @@ function createOrder(state: DemoState, body: CreateOrderPayload, at: number): Cr
 
   const number = state.nextNumber++;
   const id = `demo-order-${number}`;
-  const method = body.payment?.method === "online" ? "online" : "counter";
   const order: DemoOrder = {
     _id: id,
     number,
@@ -306,7 +305,7 @@ function createOrder(state: DemoState, body: CreateOrderPayload, at: number): Cr
     totals: { subtotal, discount: null, total: subtotal },
     // Le paiement en ligne n'aboutit jamais ici (aucun Stripe en
     // démonstration) : l'argent est dû au comptoir, comme le dit l'écran.
-    payment: { method, status: "pending" },
+    payment: { method: "counter", status: "pending" },
     pickup: {
       slot: body.pickup.slot,
       customerName: body.pickup.customerName.trim(),
