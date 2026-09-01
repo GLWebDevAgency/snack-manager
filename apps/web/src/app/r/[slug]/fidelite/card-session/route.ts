@@ -28,6 +28,54 @@ function noStore(response: NextResponse): NextResponse {
   return response;
 }
 
+function singleForwardedValue(raw: string | null): string | null {
+  if (raw === null) return null;
+  const values = raw.split(",");
+  if (values.length !== 1) return null;
+  const value = values[0]?.trim() ?? "";
+  return value || null;
+}
+
+function normalizedHttpOrigin(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Railway termine TLS puis transmet l'hôte public dans X-Forwarded-Host.
+ * `request.nextUrl.origin` reste alors l'origine interne Next
+ * (`https://localhost:8080`) et ne peut pas servir de référence CSRF.
+ *
+ * Une paire forwarded partielle, multiple ou mal formée échoue fermée. Sans
+ * reverse proxy, l'origine native de Next reste la référence locale.
+ */
+function publicRequestOrigin(request: NextRequest): string | null {
+  const forwardedHostHeader = request.headers.get("x-forwarded-host");
+  const forwardedProtoHeader = request.headers.get("x-forwarded-proto");
+  if (forwardedHostHeader === null && forwardedProtoHeader === null) {
+    return request.nextUrl.origin;
+  }
+
+  const host = singleForwardedValue(forwardedHostHeader);
+  const proto = singleForwardedValue(forwardedProtoHeader);
+  if (!host || (proto !== "http" && proto !== "https")) return null;
+  return normalizedHttpOrigin(`${proto}://${host}`);
+}
+
 function rejectCrossSite(request: NextRequest): NextResponse | null {
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
@@ -35,8 +83,14 @@ function rejectCrossSite(request: NextRequest): NextResponse | null {
   }
 
   const origin = request.headers.get("origin");
-  if (origin && origin !== request.nextUrl.origin) {
-    return noStore(NextResponse.json({ message: "Origine refusée" }, { status: 403 }));
+  if (origin) {
+    const received = normalizedHttpOrigin(origin);
+    const expected = publicRequestOrigin(request);
+    if (!received || !expected || received !== expected) {
+      return noStore(
+        NextResponse.json({ message: "Origine refusée" }, { status: 403 }),
+      );
+    }
   }
   return null;
 }
