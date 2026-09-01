@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -73,6 +75,25 @@ export class OrdersController {
     @Query('since') since?: string,
   ) {
     return this.orders.list(tenantId, { status, since });
+  }
+
+  /**
+   * Réconciliation exacte d'une vente créée par une caisse hors ligne.
+   *
+   * La liste opérationnelle est volontairement plafonnée. Elle ne peut donc
+   * pas servir de preuve qu'une ancienne commande synchronisée existe encore
+   * dans un restaurant à fort débit. Le `clientId` UUID est la clé
+   * d'idempotence du poste et la recherche reste strictement tenant-scopée.
+   */
+  @Roles('owner', 'gerant', 'caisse')
+  @Get('orders/by-client/:clientId')
+  async byClientId(
+    @TenantId() tenantId: string,
+    @Param('clientId', new ParseUUIDPipe({ version: '4' })) clientId: string,
+  ) {
+    const order = await this.orders.findByClientId(tenantId, clientId);
+    if (!order) throw new NotFoundException('Commande introuvable');
+    return order;
   }
 
   @Roles('owner', 'gerant', 'caisse', 'cuisine')
