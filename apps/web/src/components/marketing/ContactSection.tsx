@@ -15,7 +15,7 @@ const PHONE_RE = /^[+0-9][0-9\s.\-()]{7,19}$/;
  *
  * Contrairement à la maquette (qui ne faisait que basculer un état visuel), le
  * formulaire poste réellement sur `/api/contact` — validation côté client
- * doublée côté serveur, honeypot invisible (`company`), états chargement /
+ * doublée côté serveur, états chargement /
  * succès / erreur explicites. CETTE MÉCANIQUE NE BOUGE PAS.
  *
  * TROIS RETOUCHES, ET UNE SEULE AJOUTE QUELQUE CHOSE. Le titre cesse
@@ -55,7 +55,6 @@ export function ContactSection() {
        * exactement le même test (`=== true`) sans faire confiance à celui-ci.
        */
       platforms: data.get(CONTACT_PLATFORMS.name) === "on",
-      company: String(data.get("company") ?? ""),
     };
 
     const next: Partial<Record<FieldName, string>> = {};
@@ -210,12 +209,6 @@ export function ContactSection() {
                 <p className="ct-checkhelp" id="ct-platforms-help">
                   {CONTACT_PLATFORMS.help}
                 </p>
-              </div>
-
-              {/* Honeypot : masqué visuellement, hors de l'ordre de tabulation. */}
-              <div className="ct-hp" aria-hidden="true">
-                <label htmlFor="ct-company">Ne remplissez pas ce champ</label>
-                <input id="ct-company" name="company" type="text" tabIndex={-1} autoComplete="off" />
               </div>
 
               {status === "error" ? (
