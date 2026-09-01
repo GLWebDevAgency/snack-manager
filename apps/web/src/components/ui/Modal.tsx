@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useId, type ReactNode, type RefObject } from "react";
 import { IconBtn } from "./IconBtn";
+import { useDialogLayer } from "./useDialogLayer";
 
 type ModalProps = {
   open: boolean;
@@ -11,12 +12,14 @@ type ModalProps = {
   /** Boutons d'action (alignés à droite). */
   footer?: ReactNode;
   /**
-   * Modale destructive (« Supprimer… ») : le clic sur l'overlay et Échap ne
-   * ferment PAS — fermeture explicite uniquement (croix ou bouton Annuler).
+   * Modale destructive (« Supprimer… ») : le clic sur l'overlay ne ferme pas.
+   * Échap reste un geste explicite d'annulation, comme la croix.
    */
   destructive?: boolean;
   /** Largeur max du panneau (défaut 440). */
   width?: number;
+  /** Cible de focus prioritaire à l'ouverture (optionnelle). */
+  initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
 /**
@@ -31,24 +34,22 @@ export function Modal({
   footer,
   destructive = false,
   width = 440,
+  initialFocusRef,
 }: ModalProps) {
-  useEffect(() => {
-    if (!open || destructive) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, destructive, onClose]);
+  const titleId = useId();
+  const dialogRef = useDialogLayer({ open, onClose, initialFocusRef });
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4"
+      ref={dialogRef}
+      inert
+      tabIndex={-1}
+      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
-      aria-label={typeof title === "string" ? title : undefined}
+      aria-labelledby={titleId}
       onClick={() => {
         if (!destructive) onClose();
       }}
@@ -75,12 +76,15 @@ export function Modal({
         fausse `vh`, et le pied repasserait sous elle.
       */}
       <div
-        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep"
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <h2 className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink">
+          <h2
+            id={titleId}
+            className="min-w-0 text-lg font-semibold tracking-[-0.03em] text-ink"
+          >
             {title}
           </h2>
           <IconBtn
@@ -93,11 +97,17 @@ export function Modal({
         </div>
         {/* `-mx-5 px-5` : la zone défilante va d'un bord à l'autre du panneau,
             sinon l'ascenseur apparaît à 20 px du bord et semble flotter. */}
-        <div className="cf-scroll -mx-5 min-h-0 flex-1 overflow-y-auto px-5 text-sm text-ink">
+        <div
+          data-dialog-content
+          className="cf-scroll -mx-5 min-h-0 flex-1 overflow-y-auto px-5 text-sm text-ink"
+        >
           {children}
         </div>
         {footer && (
-          <div className="mt-5 flex shrink-0 items-center justify-end gap-2">
+          <div
+            data-dialog-footer
+            className="mt-5 flex shrink-0 items-center justify-end gap-2"
+          >
             {footer}
           </div>
         )}
