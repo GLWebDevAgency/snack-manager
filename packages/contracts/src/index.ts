@@ -17,6 +17,8 @@ export * from './ops';
 export * from './tenant';
 export * from './encaissement';
 export * from './security';
+export * from './loyalty';
+export * from './loyalty-public';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
