@@ -77,13 +77,16 @@ jobs:
         # Digest multi-architecture officiel de postgres:17.6-alpine3.22.
         image: postgres:17.6-alpine3.22@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: loyalty-ci-only
+          # Identifiants volontairement génériques : ce conteneur éphémère
+          # n'est joignable que depuis le runner et ne doit pas apprendre au
+          # dépôt à tolérer des URL qui ressemblent à de vrais secrets.
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
           POSTGRES_DB: snackmanager_loyalty_test_ci
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d snackmanager_loyalty_test_ci"
+          --health-cmd "pg_isready -U user -d snackmanager_loyalty_test_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -156,7 +159,7 @@ jobs:
       # ayant été silencieusement ignorés.
       - name: Tests PostgreSQL réels — fidélité
         env:
-          LOYALTY_TEST_DATABASE_URL: postgresql://postgres:loyalty-ci-only@127.0.0.1:5432/snackmanager_loyalty_test_ci
+          LOYALTY_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
         run: |
           pnpm --filter @sm/loyalty exec vitest run src/schema.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
