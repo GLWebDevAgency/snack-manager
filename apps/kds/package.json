@@ -23,12 +23,12 @@
     "start": "node server.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web",
-    "dev": "expo start --web --port 8083",
+    "web": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-http://localhost:3000} expo start --web",
+    "dev": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-http://localhost:3000} expo start --web --port 8083",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "echo ok",
-    "build": "expo export --platform web --output-dir dist"
+    "build": "expo export --platform web --output-dir dist --clear"
   },
   "private": true
 }
