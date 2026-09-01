@@ -77,6 +77,13 @@ describe('la couleur en pur', () => {
   it('ne touche pas à une couleur déjà AA', () => {
     expect(ajusterJusquaAA('#1F1A17', '#F5EFE3')).toBe('#1f1a17');
   });
+
+  it('sur un fond gris moyen, essaie les DEUX pôles — et choisit le noir, pas le blanc', () => {
+    // #808080 a une luminance ≈ 0,216 : sous le test naïf (> 0.5 ⇒ noir), on
+    // partirait à tort vers le blanc et on plafonnerait sans jamais passer AA.
+    const ajuste = ajusterJusquaAA('#9aa79e', '#808080');
+    expect(ratioContraste(ajuste, '#808080')).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
 import { contraste, resoudreMarque } from './marque';
@@ -99,6 +106,16 @@ describe('contraste(brand)', () => {
     expect(raté?.proposition).not.toBeNull();
     expect(ratioContraste(raté!.proposition!, pale.palette.ground)).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('sur un fond gris moyen (#808080), chaque proposition passe vraiment, ou est null', () => {
+    const gris = { ...DIRECTIONS.marche, palette: { ...DIRECTIONS.marche.palette, ground: '#808080' } };
+    const v = contraste(gris);
+    for (const verdict of v.verdicts) {
+      if (!verdict.ok) {
+        expect(verdict.proposition === null || ratioContraste(verdict.proposition, verdict.arriere) >= 4.5).toBe(true);
+      }
+    }
+  });
 });
 
 describe('resoudreMarque(brand)', () => {
@@ -110,6 +127,63 @@ describe('resoudreMarque(brand)', () => {
     expect(j.vars['--cf-text']).toBe('#f3f1ec');
     expect(j.vars['--cf-accent']).toBe('#d8f04a');
     expect(j.vars['--cf-on-accent']).toBe('#0e1016');
+  });
+
+  it('émet exactement le jeu de variables attendu — aucune oubliée, aucune ajoutée', () => {
+    const j = resoudreMarque(DIRECTIONS.nuit);
+    expect(Object.keys(j.vars).sort()).toEqual([
+      '--cf-accent',
+      '--cf-accent-hover',
+      '--cf-accent-ink',
+      '--cf-accent-wash',
+      '--cf-amber',
+      '--cf-amber-t',
+      '--cf-bg',
+      '--cf-btn-dark',
+      '--cf-card-gradient',
+      '--cf-elev-gradient',
+      '--cf-elev-hover',
+      '--cf-fill',
+      '--cf-focus',
+      '--cf-font-body',
+      '--cf-font-display',
+      '--cf-font-mono',
+      '--cf-green',
+      '--cf-green-t',
+      '--cf-ink-soft',
+      '--cf-line',
+      '--cf-line-2',
+      '--cf-mut',
+      '--cf-on-accent',
+      '--cf-on-amber',
+      '--cf-on-fill',
+      '--cf-on-green',
+      '--cf-on-red',
+      '--cf-r',
+      '--cf-r-lg',
+      '--cf-r-md',
+      '--cf-r-pill',
+      '--cf-r-sm',
+      '--cf-r-xs',
+      '--cf-red',
+      '--cf-red-t',
+      '--cf-shadow',
+      '--cf-shadow-2',
+      '--cf-shadow-accent',
+      '--cf-shadow-card',
+      '--cf-shadow-drawer',
+      '--cf-shadow-soft',
+      '--cf-surface',
+      '--cf-surface-2',
+      '--cf-surface-3',
+      '--cf-surface-6',
+      '--cf-text',
+      '--cf-white-50',
+      '--sm-ease',
+      '--sm-t-fast',
+      '--sm-t-med',
+      '--sm-t-slow',
+    ]);
   });
 
   it('dérive les filets depuis l’encre, pas depuis le blanc — un fond clair a des filets sombres', () => {

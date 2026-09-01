@@ -213,19 +213,30 @@ export function alpha(hex: string, a: number): string {
 }
 
 /**
- * Rapproche `couleur` du pôle opposé à `fond` (noir sur fond clair, blanc sur
- * fond sombre) par pas de 1/200, jusqu'au seuil. Une couleur déjà conforme
- * revient telle quelle, en minuscules.
+ * Rapproche `couleur` du noir OU du blanc, par pas de 1/200, jusqu'au seuil —
+ * et retient celle des deux nuances qui l'atteint en le moins de pas (« la
+ * nuance la plus proche qui passe »). Un simple test de luminance sur `fond`
+ * (> 0.5 ⇒ noir) se trompe de pôle pour toute luminance entre ~0,18 et 0,5 —
+ * le point de croisement réel du ratio WCAG — d'où l'essai des deux. Une
+ * couleur déjà conforme revient telle quelle, en minuscules.
  */
 export function ajusterJusquaAA(couleur: string, fond: string, seuil = WCAG_AA): string {
   const depart = couleur.toLowerCase();
   if (ratioContraste(depart, fond) >= seuil) return depart;
-  const pole = luminance(fond) > 0.5 ? '#000000' : '#ffffff';
-  for (let pas = 1; pas <= 200; pas += 1) {
-    const candidat = melanger(depart, pole, pas / 200);
-    if (ratioContraste(candidat, fond) >= seuil) return candidat;
-  }
-  return pole;
+  const versPole = (pole: string): { candidat: string; pas: number } | null => {
+    for (let pas = 1; pas <= 200; pas += 1) {
+      const candidat = melanger(depart, pole, pas / 200);
+      if (ratioContraste(candidat, fond) >= seuil) return { candidat, pas };
+    }
+    return null;
+  };
+  const versNoir = versPole('#000000');
+  const versBlanc = versPole('#ffffff');
+  if (versNoir && versBlanc) return versNoir.pas <= versBlanc.pas ? versNoir.candidat : versBlanc.candidat;
+  if (versNoir) return versNoir.candidat;
+  if (versBlanc) return versBlanc.candidat;
+  // Ne devrait pas arriver pour seuil ≤ ~4.58 (AAA) : par honnêteté, le pôle le plus contrasté gagne.
+  return ratioContraste('#000000', fond) >= ratioContraste('#ffffff', fond) ? '#000000' : '#ffffff';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -238,7 +249,7 @@ export type Verdict = {
   arriere: string;
   ratio: number;
   ok: boolean;
-  /** La nuance la plus proche qui passe — `null` quand ça passe déjà. */
+  /** La nuance la plus proche qui passe — `null` sinon (ça passe déjà, ou rien ne passe). */
   proposition: string | null;
 };
 
@@ -261,9 +272,15 @@ export function contraste(brand: Brand): { ok: boolean; verdicts: Verdict[] } {
     ['inkMut/ground', d.inkMut, p.ground],
   ];
   const verdicts = couples.map(([couple, avant, arriere]): Verdict => {
-    const ratio = Math.round(ratioContraste(avant, arriere) * 100) / 100;
-    const ok = ratio >= WCAG_AA;
-    return { couple, avant, arriere, ratio, ok, proposition: ok ? null : ajusterJusquaAA(avant, arriere) };
+    // Le seuil compare la valeur BRUTE — l'arrondi n'habille que le champ rapporté.
+    const brut = ratioContraste(avant, arriere);
+    const ratio = Math.round(brut * 100) / 100;
+    const ok = brut >= WCAG_AA;
+    if (ok) return { couple, avant, arriere, ratio, ok, proposition: null };
+    const candidat = ajusterJusquaAA(avant, arriere);
+    // Garde : `proposition` n'est jamais rendue si elle ne passe pas vraiment.
+    const proposition = ratioContraste(candidat, arriere) >= WCAG_AA ? candidat : null;
+    return { couple, avant, arriere, ratio, ok, proposition };
   });
   return { ok: verdicts.every((v) => v.ok), verdicts };
 }
