@@ -27,6 +27,7 @@ import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { classesPolices } from "@/components/masque/polices";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { networkApi, type MenuProduct, type OrderingApi, type Site } from "./api";
 import {
@@ -270,6 +271,9 @@ export function Storefront({
         cart.count > 0 ? "pb-28" : "pb-10",
       )}
     >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={brand} />
       {demo && <DemoRibbon />}
 
       {embed ? (

@@ -155,7 +155,7 @@ export function MenuBoard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Un kebab ? Un tacos gratiné ?"
             aria-label="Rechercher dans la carte"
-            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-accent"
+            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
           />
           {query && (
             <Tap

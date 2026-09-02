@@ -10,6 +10,7 @@ import {
 } from "@sm/contracts";
 import { Btn, Card, Icon, Modal, Pill, Skeleton } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
@@ -257,6 +258,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         "font-body min-h-dvh overflow-x-clip bg-bg pb-[max(28px,env(safe-area-inset-bottom))] text-ink",
       )}
     >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={catalog.restaurant.brand} />
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-dialog-allow>
         {scanAnnouncement}
       </p>
@@ -317,7 +321,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           <>
             <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
               <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl" aria-hidden />
-              <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accentink" /></div>
+              <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accentink" /></div>
               <div className="relative mt-8"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Votre solde</p><p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em] text-ink">{card.member.balanceUnits.toLocaleString("fr-FR")}</p><p className="mt-1 text-sm font-bold text-accentink">{card.member.balanceUnits === 1 ? unitSingular : unitPlural}</p></div>
               <div className="relative mt-7"><div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full rounded-pill bg-accent transition-transform duration-slow ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} /></div><p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p></div>
               <Btn block icon="grid" className="relative mt-5" onClick={() => setQrOpen(true)}>

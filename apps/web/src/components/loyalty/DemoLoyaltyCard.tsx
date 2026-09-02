@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { Card, Icon, Pill } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 
 const rewards = [
@@ -35,6 +36,9 @@ export function DemoLoyaltyCard() {
       style={masque}
       className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink"
     >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      {brand && <FeuilleDuMasque brand={brand} />}
       <div className="border-b border-prep/30 bg-prep/10 px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-[0.1em] text-prept">
         Démonstration · données entièrement fictives
       </div>

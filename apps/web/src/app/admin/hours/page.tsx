@@ -175,8 +175,11 @@ function TimeInput({
         // 96 px : à 16 px de corps (anti-zoom iOS), « 06:00 » plus l'horloge
         // native débordaient des 92 px d'origine.
         "cf-fig w-[96px] rounded-ctrl border bg-white/5 px-2 py-1.5 text-center text-[13px] font-bold text-white outline-none transition-colors duration-200 ease-sm [color-scheme:dark]",
+        // `focus:border-accent` sur LES DEUX branches : avec `outline-none`,
+        // la bordure est le seul indicateur de focus (1.4.11) — un champ en
+        // erreur n'en avait aucun.
         invalid
-          ? "border-alert bg-alert/10"
+          ? "border-alert bg-alert/10 focus:border-accent"
           : "border-white/8 hover:border-white/16 focus:border-accent focus:bg-white/8",
       )}
     />

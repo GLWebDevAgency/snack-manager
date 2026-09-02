@@ -861,7 +861,7 @@ function CartStep({
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
-          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-accent"
+          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
         />
       </section>
 
@@ -893,7 +893,7 @@ function CartStep({
             placeholder="BIENVENUE10"
             value={promoCode}
             onChange={(e) => onPromoCode(e.target.value.toUpperCase())}
-            className="min-h-11 w-full rounded-input border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-accent focus:outline-none"
+            className="min-h-11 w-full rounded-input border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
@@ -1023,8 +1023,12 @@ function CustomerStep({
 }) {
   const nameError = touched && customer.name.trim().length < 2;
   const phoneError = touched && !phoneOk(customer.phone);
+  // `focus:border-focus` est DANS la base, pas dans la branche valide : avec
+  // `outline-none`, la bordure EST l'indicateur de focus (1.4.11, 2.4.13), et
+  // un champ en erreur en restait dépourvu — on ne voyait plus où l'on tapait
+  // au moment précis où il fallait corriger.
   const field =
-    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut";
+    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus";
 
   return (
     <div className="flex flex-col gap-5">
@@ -1050,7 +1054,7 @@ function CustomerStep({
           placeholder="Camille Durand"
           aria-invalid={nameError || undefined}
           aria-describedby={nameError ? "sm-name-err" : undefined}
-          className={cx(field, nameError ? "border-alert" : "border-ink/8 focus:border-accent")}
+          className={cx(field, nameError ? "border-alert" : "border-ink/8")}
         />
         {nameError && (
           <p id="sm-name-err" role="alert" className="text-[13px] text-alertt">
@@ -1078,7 +1082,7 @@ function CustomerStep({
           placeholder="06 12 34 56 78"
           aria-invalid={phoneError || undefined}
           aria-describedby={phoneError ? "sm-phone-err" : "sm-phone-hint"}
-          className={cx(field, phoneError ? "border-alert" : "border-ink/8 focus:border-accent")}
+          className={cx(field, phoneError ? "border-alert" : "border-ink/8")}
         />
         {phoneError ? (
           <p id="sm-phone-err" role="alert" className="text-[13px] text-alertt">
@@ -1438,11 +1442,16 @@ function DoneStep({
           la coche dessus rejoue donc exactement le couple `onAccent/accent`,
           celui que `contraste()` vérifie sur les six directions. Ailleurs,
           l'accent posé en texte tombe sur le FOND, où il n'a aucune garantie
-          (2,68:1 sur Soleil) — c'est `accentink` qui y va. La variable est
-          écrite en toutes lettres plutôt qu'en utilitaire d'accent pour que
-          le garde reste TOTAL, sans liste d'exceptions à rallonger.
+          (2,68:1 sur Soleil) — c'est `accentink` qui y va.
+
+          Le jeton `accentonaccent` (globals.css) EST cette exception, et son
+          nom dit sa condition d'emploi. Elle était écrite
+          `text-[color:var(--cf-accent)]` : la même couleur, mais invisible au
+          garde, dont le motif ne connaissait que la forme `text-accent`. Une
+          porte de service dans une règle qui se voulait totale — le garde
+          couvre désormais les deux formes.
         */}
-        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-[color:var(--cf-accent)] shadow-card">
+        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-accentonaccent shadow-card">
           <Icon name="check" size={38} stroke={3} />
         </span>
         <h3 className="font-display relative text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em]">

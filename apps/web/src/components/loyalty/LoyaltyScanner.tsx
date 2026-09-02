@@ -123,7 +123,7 @@ export function LoyaltyScanner({
         <details className="mt-3 rounded-card border border-ink/10 bg-ink/[0.035] p-3">
           <summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-mut">Utiliser le code de secours</summary>
           <form onSubmit={submitManual} className="mt-3 space-y-2">
-            <input type="password" autoComplete="off" spellCheck={false} aria-label="Code ou lien de secours" value={manual} maxLength={2048} onChange={(event) => setManual(event.target.value)} className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-bg/35 px-3.5 py-3 font-mono text-base text-ink outline-none focus:border-accent" />
+            <input type="password" autoComplete="off" spellCheck={false} aria-label="Code ou lien de secours" value={manual} maxLength={2048} onChange={(event) => setManual(event.target.value)} className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-bg/35 px-3.5 py-3 font-mono text-base text-ink outline-none focus:border-focus" />
             <Btn type="submit" block size="sm" disabled={!manual.trim()}>Afficher ma carte</Btn>
           </form>
         </details>

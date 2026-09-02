@@ -318,6 +318,7 @@ describe('resoudreMarque(brand)', () => {
       '--cf-scrim',
       '--cf-shadow-2',
       '--cf-shadow-card',
+      '--cf-shadow-cut',
       '--cf-shadow-drawer',
       '--cf-shadow-soft',
       '--cf-surface',

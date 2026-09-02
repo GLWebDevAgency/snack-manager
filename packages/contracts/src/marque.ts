@@ -467,24 +467,6 @@ function derives(brand: Brand) {
   const survol = elever(ELEVATION_SURVOL);
 
   /*
-   * TOUS les fonds sur lesquels une encre atténuée se pose vraiment.
-   *
-   * `--cf-mut` n'était jugé que sur `ground` et `surface`. Il est pourtant
-   * peint sur `bg-surface2` et sur le HAUT des dégradés `--cf-elev-*`, où il
-   * tombait entre 3,0 et 4,1:1 selon la direction. WCAG 1.4.3 exige 4,5:1 sur
-   * chaque fond où le texte se pose — alors on les liste tous, et le plus
-   * exigeant gagne.
-   */
-  const fondsTexte: readonly [string, ...string[]] = [
-    p.ground,
-    p.surface,
-    surface2,
-    melanger(p.surface, p.ink, VOILE_CARTE),
-    melanger(surface2, p.ink, VOILE_ELEMENT),
-    melanger(survol, p.ink, VOILE_SURVOL),
-  ];
-
-  /*
    * `accentInk` porte les titres et les prix, mais AUSSI le texte des
    * pastilles posées sur le lavis d'accent (`bg-accentwash text-accentink`) :
    * ce lavis est le fond le plus sombre où il atterrit en mode clair. Le juger
@@ -494,6 +476,31 @@ function derives(brand: Brand) {
   const lavisAccent: readonly [string, string] = [
     melanger(p.ground, p.accent, LAVIS_ACCENT),
     melanger(p.surface, p.accent, LAVIS_ACCENT),
+  ];
+
+  /*
+   * TOUS les fonds sur lesquels une encre atténuée se pose vraiment.
+   *
+   * `--cf-mut` n'était jugé que sur `ground` et `surface`. Il est pourtant
+   * peint sur `bg-surface2` et sur le HAUT des dégradés `--cf-elev-*`, où il
+   * tombait entre 3,0 et 4,1:1 selon la direction. WCAG 1.4.3 exige 4,5:1 sur
+   * chaque fond où le texte se pose — alors on les liste tous, et le plus
+   * exigeant gagne.
+   *
+   * LE LAVIS D'ACCENT EN FAIT PARTIE. Le halo de l'accroche (`.sm-hero`) est
+   * un lavis d'accent posé SOUS l'état de service et le rappel d'horaire,
+   * tous deux en `text-mut` : au cœur du halo, l'encre atténuée tombait à
+   * 1,96:1 sur Néon et 2,52 sur Nuit. Le halo vaut désormais exactement
+   * `--cf-accent-wash` (12 %), et ce lavis est jugé comme les autres fonds.
+   */
+  const fondsTexte: readonly [string, ...string[]] = [
+    p.ground,
+    p.surface,
+    surface2,
+    melanger(p.surface, p.ink, VOILE_CARTE),
+    melanger(surface2, p.ink, VOILE_ELEMENT),
+    melanger(survol, p.ink, VOILE_SURVOL),
+    ...lavisAccent,
   ];
 
   const sem = SEMANTIQUES[brand.mode];
@@ -710,6 +717,17 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     '--cf-shadow-soft': `0 12px 34px ${ombre}`,
     '--cf-shadow-card': `0 1px 0 ${ombre}, 0 10px 26px ${ombre}`,
     '--cf-shadow-drawer': `-1px 0 0 ${alpha(p.ink, 0.08)}, -26px 0 60px ${ombre}`,
+    /*
+     * L'OMBRE D'UN VISUEL DÉTOURÉ (`.sm-cut`) — un jeton à part, et pourquoi.
+     *
+     * `drop-shadow()` ne prend qu'UNE ombre, sans virgule : aucun des
+     * `--cf-shadow-*` ci-dessus, tous composés de deux couches, n'y entre.
+     * Elle était écrite `rgba(0, 0, 0, 0.6)` en dur dans `order.css` — une
+     * tache noire sous chaque plat d'une carte crème. Elle est plus dense que
+     * l'ombre de carte parce qu'elle assoit une découpe sans boîte : c'est
+     * elle seule qui décolle la photo du fond.
+     */
+    '--cf-shadow-cut': `0 6px 12px ${sombre ? 'rgba(0, 0, 0, 0.6)' : alpha(p.ink, 0.3)}`,
     /*
      * LE VOILE S'ASSOMBRIT TOUJOURS — il ne suit jamais le fond.
      *

@@ -173,14 +173,27 @@ export class BrandTheme {
   }
 
   /**
-   * Couleur du texte posé sur l'accent.
+   * Couleur du texte posé sur l'accent — PAR CONTRASTE RÉEL, jamais par un
+   * seuil de luminance.
    *
    * Un accent clair (le jaune d'un kebab, le vert pomme d'un poké) rendrait le
    * libellé blanc du bouton « Commander » illisible. On bascule sur le noir
-   * au-delà du seuil WCAG plutôt que d'imposer une palette au restaurateur.
+   * plutôt que d'imposer une palette au restaurateur.
+   *
+   * Le seuil valait `> 0,45`. Le croisement RÉEL des deux ratios WCAG entre le
+   * noir et le blanc est à 0,179 : toute la bande 0,18–0,45 — les rouges, les
+   * verts profonds, les bruns — recevait donc l'encre la MOINS lisible des
+   * deux. Comparer les deux ratios ne demande aucune constante à retenir, et
+   * ne peut pas se tromper de pôle.
    */
   onAccent(): HexColor {
-    return this.accent.luminance() > 0.45 ? color('#000000') : color('#ffffff');
+    const noir = color('#000000');
+    const blanc = color('#ffffff');
+    const contre = (encre: HexColor): number => {
+      const [clair, sombre] = [encre.luminance(), this.accent.luminance()].sort((a, b) => b - a);
+      return (clair! + 0.05) / (sombre! + 0.05);
+    };
+    return contre(noir) >= contre(blanc) ? noir : blanc;
   }
 
   /**

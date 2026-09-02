@@ -15,6 +15,7 @@ import { TYPE_PAIRS, type Brand, type OrderStatus, type OrderTicket } from "@sm/
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { loadTracking, type TrackingState } from "./api";
 import { hhmm } from "./helpers";
@@ -120,6 +121,9 @@ export function Tracking({
       // un conteneur de défilement (voir Storefront).
       className={cx(classesPolices, "font-body min-h-dvh overflow-x-clip bg-bg pb-16 text-ink")}
     >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={brand} />
       <header className="border-b border-ink/6 bg-surface px-4 pb-6 pt-6">
         <div className="mx-auto w-full max-w-[520px]">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
