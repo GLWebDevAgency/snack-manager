@@ -39,7 +39,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange?.(!on)}
       className={cx(
-        "relative h-[26px] w-[46px] shrink-0 rounded-pill border border-ink/6 transition-[background-color,opacity] duration-200 ease-sm",
+        "relative h-[26px] w-[46px] shrink-0 rounded-pill border border-ink/6 transition-[background-color,opacity] duration-fast ease-sm",
         on ? (danger ? "bg-alert" : "bg-ok") : "bg-ink/10 hover:bg-ink/16",
         disabled && "cursor-not-allowed opacity-40",
         className,
@@ -47,7 +47,7 @@ export function Toggle({
     >
       <span
         aria-hidden
-        className="absolute left-[2px] top-[2px] size-5 rounded-full bg-ink shadow-card transition-transform duration-200 ease-sm"
+        className="absolute left-[2px] top-[2px] size-5 rounded-full bg-ink shadow-card transition-transform duration-fast ease-sm"
         style={{ transform: `translateX(${on ? 20 : 0}px)` }}
       />
     </button>

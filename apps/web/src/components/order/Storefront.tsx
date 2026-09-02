@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TYPE_PAIRS } from "@sm/contracts";
+import { logoPour, TYPE_PAIRS } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
@@ -110,7 +110,15 @@ export function Storefront({
    */
   const masqueCapture = useMasqueDeCapture(demo);
   const brand = masqueCapture ?? site.tenant.brand;
-  const masque = styleDuMasque(brand);
+  /*
+   * MÉMORISÉ — `resoudreMarque()` recalcule une trentaine de mélanges et
+   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sans ce
+   * `useMemo`, la facture était payée à CHAQUE rendu de la racine — donc à
+   * chaque frappe dans le tunnel et à chaque tick du suivi — pour un objet
+   * identique. Sa référence sert aussi de `style` : la recréer forçait React
+   * à repeindre tout le sous-arbre.
+   */
+  const masque = useMemo(() => styleDuMasque(brand), [brand]);
   /*
    * `prixMono` est LU ICI, une seule fois, puis descendu en propriété. Deux
    * paires typographiques du masque sur dix posent les prix en chasse fixe :
@@ -122,6 +130,17 @@ export function Storefront({
    * pour un booléen serait payer une palette pour lire une police.
    */
   const { prixMono } = TYPE_PAIRS[brand.type.pair];
+  /*
+   * LE LOGO VIENT DU MASQUE, PAS DU CHAMP PLAT.
+   *
+   * `site.tenant.logoUrl` est un DÉRIVÉ de compatibilité (`logoUrlDe`) : il
+   * rend toujours la déclinaison sombre en premier, quel que soit le fond
+   * réellement peint. Un logo dessiné pour fond sombre disparaissait donc sur
+   * Brasserie ou Soleil — précisément ce que les quatre emplacements de
+   * `brand.logo` existent pour éviter. `logoPour()` suit le mode du masque,
+   * puis retombe sur l'autre déclinaison, puis sur l'autre format.
+   */
+  const logoMarque = logoPour(brand, "mark");
   /*
    * L'habillage du champ de carte est MÉMORISÉ : sa référence entre dans les
    * dépendances de l'effet qui monte le Payment Element. Un objet neuf à
@@ -257,13 +276,14 @@ export function Storefront({
         <EmbedHeader
           name={site.tenant.name}
           letter={letter}
-          logoUrl={site.tenant.logoUrl}
+          logoUrl={logoMarque}
           openNow={site.openNow}
           onClose={showClose ? closeEmbed : null}
         />
       ) : (
         <SiteHeader
           site={site}
+          logoUrl={logoMarque}
           letter={letter}
           cityName={cityName}
           paused={paused}
@@ -447,12 +467,15 @@ function DemoRibbon() {
  */
 function SiteHeader({
   site,
+  logoUrl,
   letter,
   cityName,
   paused,
   onOrder,
 }: {
   site: Site;
+  /** La déclinaison de `brand.logo` qui va avec le mode du masque. */
+  logoUrl: string | null;
   letter: string;
   cityName: string;
   /** Commande en ligne suspendue : l’appel à l’action ne promet plus rien. */
@@ -470,7 +493,7 @@ function SiteHeader({
       <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 pb-3 pt-4">
         <BrandMark
           name={site.tenant.name}
-          logoUrl={site.tenant.logoUrl}
+          logoUrl={logoUrl}
           letter={letter}
           size={44}
         />
@@ -486,7 +509,7 @@ function SiteHeader({
           <a
             href={telHref(phone)}
             aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
           >
             <Icon name="phone" size={18} />
           </a>
@@ -559,7 +582,7 @@ function SiteHeader({
                 <br />
                 Récupérez.
                 <br />
-                <span className="text-accent">Régalez-vous.</span>
+                <span className="text-accentink">Régalez-vous.</span>
               </p>
               <p className="mt-2.5 text-[14px] leading-relaxed text-mut">
                 {paused
@@ -582,7 +605,7 @@ function SiteHeader({
                 {paused && phone && (
                   <a
                     href={telHref(phone)}
-                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
                   >
                     <Icon name="phone" size={16} />
                     Appeler
@@ -700,7 +723,7 @@ function PauseCard({ site }: { site: Site }) {
               {phone && (
                 <a
                   href={telHref(phone)}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-accent px-4 text-[14px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-accent px-4 text-[14px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
                 >
                   <Icon name="phone" size={16} stroke={2.3} />
                   Commander par téléphone
@@ -731,7 +754,7 @@ function Reviews({ site }: { site: Site }) {
     <section aria-labelledby="avis" className="pt-11">
       <h2
         id="avis"
-        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accentink"
       >
         Ce qu’en disent les clients
       </h2>
@@ -739,7 +762,7 @@ function Reviews({ site }: { site: Site }) {
 
       <Surface className="p-5">
         <div className="flex items-center gap-3.5">
-          <span className="font-display text-[clamp(2rem,1.6rem+1.6vw,2.5rem)] font-black leading-none tracking-[-0.045em] tabular-nums text-accent">
+          <span className="font-display text-[clamp(2rem,1.6rem+1.6vw,2.5rem)] font-black leading-none tracking-[-0.045em] tabular-nums text-accentink">
             {site.reviews.avg.toLocaleString("fr-FR", {
               minimumFractionDigits: 1,
               maximumFractionDigits: 1,
@@ -792,7 +815,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
     <section aria-labelledby="infos" className="pt-11">
       <h2
         id="infos"
-        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accentink"
       >
         Infos pratiques
       </h2>
@@ -804,9 +827,9 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
             href={mapsHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-ink/[0.03]"
+            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-fast hover:bg-ink/[0.03]"
           >
-            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accentink">
               <Glyph name="pin" size={18} />
             </span>
             <span className="min-w-0 flex-1">
@@ -825,9 +848,9 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
           <a
             key={phone}
             href={telHref(phone)}
-            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-ink/[0.03]"
+            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-fast hover:bg-ink/[0.03]"
           >
-            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accentink">
               <Icon name="phone" size={17} />
             </span>
             <span className="min-w-0 flex-1">
@@ -844,7 +867,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
 
         <div className="px-4 py-4">
           <div className="flex items-center gap-3.5">
-            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
+            <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accentink">
               <Icon name="clock" size={17} />
             </span>
             <span className="min-w-0 flex-1">

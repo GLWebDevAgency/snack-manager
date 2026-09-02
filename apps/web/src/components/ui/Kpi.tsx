@@ -27,7 +27,7 @@ export function Kpi({ label, value, icon, delta, className }: KpiProps) {
         </div>
         {icon && (
           <div
-            className="grid size-[34px] shrink-0 place-items-center rounded-ctrl border border-ink/6 bg-[image:var(--cf-elev-gradient)] text-accent"
+            className="grid size-[34px] shrink-0 place-items-center rounded-ctrl border border-ink/6 bg-[image:var(--cf-elev-gradient)] text-accentink"
             aria-hidden
           >
             <Icon name={icon} size={18} />

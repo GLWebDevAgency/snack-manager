@@ -97,6 +97,14 @@
   /* Tiroir latéral : l'ombre porte la séparation, pas un filet blanc dur. */
   --cf-shadow-drawer: -1px 0 0 rgba(255, 255, 255, 0.08),
     -26px 0 60px rgba(0, 0, 0, 0.55);
+  /*
+   * Voile des dialogues (modale, tiroir, feuille du tunnel). Il ASSOMBRIT
+   * toujours ce qu'il recouvre : le poser en `bg-bg/N` marchait sur la marque
+   * grise, sombre par nature, et éclaircissait la page sous un masque clair —
+   * la feuille flottait alors sur un blanc laiteux, sans hiérarchie. Le
+   * résolveur surcharge cette valeur par tenant (`--cf-scrim`).
+   */
+  --cf-scrim: rgba(0, 0, 0, 0.72);
 
   /* ── Rayons : 8 / 10 / 12 / 16 / 20 / pilule ── */
   --cf-r-xs: 8px;
@@ -142,6 +150,7 @@
   --color-accentink: var(--cf-accent-ink);
   --color-accentwash: var(--cf-accent-wash);
   --color-focus: var(--cf-focus);
+  --color-scrim: var(--cf-scrim);
   --color-onok: var(--cf-on-green);
   --color-onalert: var(--cf-on-red);
   --color-onprep: var(--cf-on-amber);
@@ -151,9 +160,16 @@
   --font-display: var(--cf-font-display);
   --font-body: var(--cf-font-body);
   --font-mono: var(--cf-font-mono);
-  --duration-fast: var(--sm-t-fast);
-  --duration-med: var(--sm-t-med);
-  --duration-slow: var(--sm-t-slow);
+  /*
+   * `--transition-duration-*` et NON `--duration-*` : c'est l'espace de noms
+   * que Tailwind v4 interroge pour l'utilitaire `duration-*`. Écrites
+   * `--duration-*`, les trois durées étaient des déclarations MORTES —
+   * `duration-fast` ne produisait aucune règle, et la transition retombait
+   * sur les 150 ms par défaut du framework. Vérifié dans le CSS compilé.
+   */
+  --transition-duration-fast: var(--sm-t-fast);
+  --transition-duration-med: var(--sm-t-med);
+  --transition-duration-slow: var(--sm-t-slow);
 
   --font-sans: var(--font-inter), system-ui, sans-serif;
 
@@ -170,10 +186,16 @@
   --shadow-soft: var(--cf-shadow-soft);
   --shadow-deep: var(--cf-shadow-2);
 
-  /* Motion (ease-sm, animate-pop, animate-rise) — opacité + transformation seules */
+  /*
+   * Motion (ease-sm, animate-pop, animate-rise) — opacité + transformation
+   * seules. Les durées sont LUES dans le profil de mouvement du masque
+   * (`--sm-t-*`, posés par le résolveur) et non écrites en dur : un masque
+   * « vif » entre en 140 ms, un masque « posé » en 240 — sinon le choix du
+   * restaurateur s'arrêtait à la porte de la première carte qui apparaît.
+   */
   --ease-sm: var(--sm-ease);
-  --animate-pop: cf-pop 0.22s var(--sm-ease) both;
-  --animate-rise: cf-rise 0.32s var(--sm-ease) both;
+  --animate-pop: cf-pop var(--sm-t-fast) var(--sm-ease) both;
+  --animate-rise: cf-rise var(--sm-t-med) var(--sm-ease) both;
 }
 
 @keyframes cf-pop {

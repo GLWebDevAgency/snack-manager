@@ -34,6 +34,31 @@ const BRUT = [
   // Pas de `\b` en tête : le séparateur `_` de Tailwind (`shadow-[0_1px_…]`)
   // est un caractère de mot — la frontière n'existe jamais avant `rgba`.
   /rgba?\(\s*(?:255|0)\s*,\s*(?:255|0)\s*,\s*(?:255|0)/,
+  /*
+   * L'ACCENT N'EST JAMAIS DU TEXTE — c'est `accentInk` qui porte l'AA.
+   *
+   * `--cf-accent` est dessiné pour être un APLAT : sur Soleil, le safran sur
+   * le sable tombe à 2,68:1. Un titre de section, un prix, le numéro de
+   * retrait posés en `text-accent` étaient donc illisibles sur trois des six
+   * directions. `text-accentink` est la même couleur ramenée jusqu'à AA sur
+   * le fond — elle existe exactement pour ça (spec §4.1).
+   *
+   * `bg-accent`, `border-accent`, `bg-accent/N`, `ring-accent` et
+   * `text-onaccent` restent libres : ce sont des aplats et leur texte, dont
+   * `contraste()` vérifie le couple. `\b` en fin de motif suffit à épargner
+   * `text-accentink` et `text-onaccent`.
+   */
+  /\btext-accent\b/,
+  /*
+   * NI DURÉE ÉCRITE EN DUR — le mouvement appartient au masque.
+   *
+   * `motion: 'pose' | 'vif'` décide 240/320/900 ms ou 140/200/600 : un
+   * `duration-200` recopié dans une transition ignorait ce choix, et le
+   * masque « vif » d'un fast-food s'animait comme la brasserie d'à côté.
+   * `duration-fast/med/slow` lisent `--sm-t-*`. L'ADMIN garde ses littérales :
+   * il ne porte pas de masque, et ce garde ne parcourt que le client.
+   */
+  /\bduration-\d+\b/,
 ];
 
 function* fichiers(dir: string): Generator<string> {
@@ -44,7 +69,7 @@ function* fichiers(dir: string): Generator<string> {
   }
 }
 
-describe("aucune couleur brute dans les surfaces client", () => {
+describe("aucun jeton contourné dans les surfaces client", () => {
   for (const rep of REPERTOIRES) {
     it(`${rep} ne porte que des jetons`, () => {
       const fautes: string[] = [];

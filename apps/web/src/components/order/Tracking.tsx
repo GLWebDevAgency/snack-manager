@@ -10,7 +10,7 @@
  * pendant que le téléphone est dans la poche).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TYPE_PAIRS, type Brand, type OrderStatus, type OrderTicket } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
@@ -94,7 +94,15 @@ export function Tracking({
     };
   }, [finished, refresh]);
 
-  const masque = styleDuMasque(brand);
+  /*
+   * MÉMORISÉ — `resoudreMarque()` recalcule une trentaine de mélanges et
+   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sans ce
+   * `useMemo`, la facture était payée à CHAQUE rendu de la racine — donc à
+   * chaque frappe dans le tunnel et à chaque tick du suivi — pour un objet
+   * identique. Sa référence sert aussi de `style` : la recréer forçait React
+   * à repeindre tout le sous-arbre.
+   */
+  const masque = useMemo(() => styleDuMasque(brand), [brand]);
   // La règle des prix vient du masque : cette page est une racine, elle la
   // lit — dans la paire typographique, pas en résolvant la marque une
   // deuxième fois (`styleDuMasque()` vient de le faire).
@@ -135,7 +143,7 @@ export function Tracking({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             Numéro de retrait
           </p>
-          <p className="font-display mt-1 text-[clamp(3.5rem,3rem+2vw,4.25rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
+          <p className="font-display mt-1 text-[clamp(3.5rem,3rem+2vw,4.25rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {pickupNumber}
           </p>
           <p className="mt-3 flex items-center justify-center gap-2 text-[14px] text-mut">
@@ -171,7 +179,7 @@ export function Tracking({
                     <span
                       aria-hidden
                       className={cx(
-                        "relative grid size-8 shrink-0 place-items-center rounded-full transition-colors duration-300 ease-sm",
+                        "relative grid size-8 shrink-0 place-items-center rounded-full transition-colors duration-med ease-sm",
                         reached ? "bg-ok text-onok" : "bg-ink/10 text-mut",
                       )}
                     >
@@ -233,7 +241,7 @@ export function Tracking({
           <ul className="mt-3 flex flex-col gap-3">
             {ticket.lines.map((line, i) => (
               <li key={`${line.name}-${i}`} className="flex items-start gap-3">
-                <span className="min-w-6 shrink-0 text-[14px] font-extrabold tabular-nums text-accent">
+                <span className="min-w-6 shrink-0 text-[14px] font-extrabold tabular-nums text-accentink">
                   {line.qty}×
                 </span>
                 <span className="min-w-0 flex-1">
@@ -307,7 +315,7 @@ export function Tracking({
                 <a
                   key={phone}
                   href={`tel:${phone.replace(/\s/g, "")}`}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-ink/12 bg-surface2 px-3.5 py-2 text-[14px] font-bold tabular-nums text-ink transition-transform duration-200 ease-sm active:scale-[0.97]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-ink/12 bg-surface2 px-3.5 py-2 text-[14px] font-bold tabular-nums text-ink transition-transform duration-fast ease-sm active:scale-[0.97]"
                 >
                   <Icon name="phone" size={15} />
                   {phone}

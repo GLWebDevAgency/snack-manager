@@ -149,7 +149,7 @@ export function TurnstileCheck({
     <section
       aria-live="polite"
       className={cx(
-        "overflow-hidden rounded-panel border bg-surface2 transition-colors duration-300 ease-sm motion-reduce:transition-none",
+        "overflow-hidden rounded-panel border bg-surface2 transition-colors duration-med ease-sm motion-reduce:transition-none",
         verified ? "border-ok/35" : failed ? "border-alert/35" : "border-ink/8",
       )}
     >

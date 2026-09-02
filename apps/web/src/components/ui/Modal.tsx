@@ -53,7 +53,7 @@ export function Modal({
       ref={dialogRef}
       inert
       tabIndex={-1}
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-bg/65 p-4 outline-none motion-reduce:animate-none"
+      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-scrim p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

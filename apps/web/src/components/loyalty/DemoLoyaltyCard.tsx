@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { Card, Icon, Pill } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
@@ -20,9 +21,18 @@ export function DemoLoyaltyCard() {
    * vitrine — voir `useMasqueDeCapture` pour le piège d'hydratation évité.
    */
   const brand = useMasqueDeCapture(true);
+  /*
+   * MÉMORISÉ — `resoudreMarque()` recalcule une trentaine de mélanges et
+   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sans ce
+   * `useMemo`, la facture était payée à CHAQUE rendu de la racine — donc à
+   * chaque frappe dans le tunnel et à chaque tick du suivi — pour un objet
+   * identique. Sa référence sert aussi de `style` : la recréer forçait React
+   * à repeindre tout le sous-arbre.
+   */
+  const masque = useMemo(() => (brand ? styleDuMasque(brand) : undefined), [brand]);
   return (
     <div
-      style={brand ? styleDuMasque(brand) : undefined}
+      style={masque}
       className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink"
     >
       <div className="border-b border-prep/30 bg-prep/10 px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-[0.1em] text-prept">
@@ -47,12 +57,12 @@ export function DemoLoyaltyCard() {
               <Pill className="border-ok/30 bg-ok/10 text-okt">Carte fictive active</Pill>
               <h1 className="font-display mt-3 text-xl font-extrabold tracking-[-0.035em]">Bonjour Maya</h1>
             </div>
-            <Icon name="gift" size={28} className="text-accent" />
+            <Icon name="gift" size={28} className="text-accentink" />
           </div>
           <div className="relative mt-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Solde de démonstration</p>
             <p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em]">24</p>
-            <p className="mt-1 text-sm font-bold text-accent">points fictifs</p>
+            <p className="mt-1 text-sm font-bold text-accentink">points fictifs</p>
           </div>
           <div className="relative mt-7">
             <div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full w-4/5 rounded-pill bg-accent" /></div>
@@ -61,7 +71,7 @@ export function DemoLoyaltyCard() {
         </section>
 
         <section className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Aperçu client</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Aperçu client</p>
           <h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses du moment</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {rewards.map((reward) => (

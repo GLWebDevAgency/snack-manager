@@ -645,13 +645,13 @@ function Progress({
             >
               <span
                 className={cx(
-                  "block h-1 rounded-full transition-colors duration-300 ease-sm",
+                  "block h-1 rounded-full transition-colors duration-med ease-sm",
                   current || done ? "bg-accent" : "bg-ink/12",
                 )}
               />
               <span
                 className={cx(
-                  "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-300",
+                  "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-med",
                   current ? "text-ink" : done ? "text-mut" : "text-ink/25",
                 )}
               >
@@ -721,7 +721,7 @@ function Footer({
             href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
-            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
           >
             <Icon name="clock" size={17} stroke={2.4} />
             Suivre ma commande
@@ -861,7 +861,7 @@ function CartStep({
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
-          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 focus:border-accent"
+          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70 focus:border-accent"
         />
       </section>
 
@@ -1024,7 +1024,7 @@ function CustomerStep({
   const nameError = touched && customer.name.trim().length < 2;
   const phoneError = touched && !phoneOk(customer.phone);
   const field =
-    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70";
+    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70";
 
   return (
     <div className="flex flex-col gap-5">
@@ -1432,7 +1432,17 @@ function DoneStep({
         >
           OK
         </span>
-        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-accent shadow-card">
+        {/*
+          LA SEULE COCHE PEINTE À L'ACCENT PUR — et le garde l'interdirait à
+          juste titre partout ailleurs. Ce disque est peint en `on-accent` :
+          la coche dessus rejoue donc exactement le couple `onAccent/accent`,
+          celui que `contraste()` vérifie sur les six directions. Ailleurs,
+          l'accent posé en texte tombe sur le FOND, où il n'a aucune garantie
+          (2,68:1 sur Soleil) — c'est `accentink` qui y va. La variable est
+          écrite en toutes lettres plutôt qu'en utilitaire d'accent pour que
+          le garde reste TOTAL, sans liste d'exceptions à rallonger.
+        */}
+        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-[color:var(--cf-accent)] shadow-card">
           <Icon name="check" size={38} stroke={3} />
         </span>
         <h3 className="font-display relative text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em]">
@@ -1459,7 +1469,7 @@ function DoneStep({
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
             Numéro de retrait
           </p>
-          <p className="font-display mt-1 text-[clamp(3.25rem,2.8rem+1.8vw,3.875rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
+          <p className="font-display mt-1 text-[clamp(3.25rem,2.8rem+1.8vw,3.875rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {order.number}
           </p>
           {order.pickup?.slot && (

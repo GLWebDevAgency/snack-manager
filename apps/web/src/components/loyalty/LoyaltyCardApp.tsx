@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  logoPour,
   loyaltyTokenFromQrPayload,
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
@@ -225,7 +226,25 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
     setInstallPrompt(null);
   }
 
-  const masque = styleDuMasque(catalog.restaurant.brand);
+  /*
+   * MÉMORISÉ — `resoudreMarque()` recalcule une trentaine de mélanges et
+   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sans ce
+   * `useMemo`, la facture était payée à CHAQUE rendu de la racine — donc à
+   * chaque frappe dans le tunnel et à chaque tick du suivi — pour un objet
+   * identique. Sa référence sert aussi de `style` : la recréer forçait React
+   * à repeindre tout le sous-arbre.
+   */
+  const masque = useMemo(
+    () => styleDuMasque(catalog.restaurant.brand),
+    [catalog.restaurant.brand],
+  );
+  /*
+   * LE LOGO VIENT DU MASQUE, PAS DU CHAMP PLAT — `restaurant.logoUrl` est le
+   * dérivé de compatibilité (`logoUrlDe`), qui préfère toujours la
+   * déclinaison SOMBRE : sur une carte de fidélité peinte en clair, le logo
+   * du restaurant s'effaçait sur son propre fond. `logoPour()` suit le mode.
+   */
+  const logoMarque = logoPour(catalog.restaurant.brand, "mark");
   const unitPlural = catalog.program.unitLabelPlural;
   const unitSingular = catalog.program.unitLabelSingular;
 
@@ -244,14 +263,14 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
       <header className="sticky top-0 z-30 border-b border-ink/8 bg-bg/85 px-4 py-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[720px] items-center gap-3">
           <Link href={`/r/${encodeURIComponent(catalog.restaurant.slug)}`} aria-label={`Retour à ${catalog.restaurant.name}`} className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-ink/5 text-ink"><Icon name="back" size={18} /></Link>
-          {catalog.restaurant.logoUrl ? (
+          {logoMarque ? (
             // eslint-disable-next-line @next/next/no-img-element -- URL de marque tenant dynamique, déjà filtrée par l'API publique.
-            <img src={catalog.restaurant.logoUrl} alt="" className="size-9 rounded-card object-cover" />
+            <img src={logoMarque} alt="" className="size-9 rounded-card object-cover" />
           ) : (
             <span className="grid size-9 rounded-card bg-accent text-sm font-black text-onaccent place-items-center" aria-hidden>{catalog.restaurant.name.charAt(0).toUpperCase()}</span>
           )}
           <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{catalog.restaurant.name}</p><p className="font-display truncate text-[11px] text-mut">{catalog.program.name}</p></div>
-          {installPrompt && <button type="button" onClick={() => void install()} className="cf-press min-h-11 rounded-pill border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-bold text-accent">Installer</button>}
+          {installPrompt && <button type="button" onClick={() => void install()} className="cf-press min-h-11 rounded-pill border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-bold text-accentink">Installer</button>}
         </div>
       </header>
 
@@ -266,7 +285,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
             <section className="relative overflow-hidden rounded-wide border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
               <div className="absolute -right-20 -top-24 size-64 rounded-full bg-accent/12 blur-3xl" aria-hidden />
               <div className="relative">
-                <Pill className="border-accent/30 bg-accent/10 text-accent">Carte digitale · gratuite</Pill>
+                <Pill className="border-accent/30 bg-accent/10 text-accentink">Carte digitale · gratuite</Pill>
                 <h1 className="font-display mt-4 max-w-[560px] text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-black leading-[1.05] tracking-[-0.05em] text-ink">
                   Vos avantages {catalog.restaurant.name}, toujours à portée de main.
                 </h1>
@@ -280,10 +299,10 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
             {error && <div className="mt-4 rounded-card border border-alert/35 bg-alert/10 p-4"><p className="text-sm text-alertt" role="alert">{error}</p><Btn variant="ghost" size="sm" className="mt-3" onClick={() => setScannerOpen(true)}>Scanner un autre QR</Btn></div>}
 
             <section className="mt-6">
-              <div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">À débloquer</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Les récompenses du moment</h2></div>
+              <div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">À débloquer</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Les récompenses du moment</h2></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {catalog.rewards.map((reward) => (
-                  <Card key={reward.id} className="p-4"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-card bg-accent/12 text-accent"><Icon name="gift" size={19} /></span><div className="min-w-0"><p className="text-sm font-extrabold text-ink">{reward.name}</p><p className="mt-1 text-xs leading-5 text-mut">{benefit(reward)}</p><p className="cf-fig mt-3 text-sm font-black text-accent">{reward.costUnits.toLocaleString("fr-FR")} {reward.costUnits === 1 ? unitSingular : unitPlural}</p></div></div></Card>
+                  <Card key={reward.id} className="p-4"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-card bg-accent/12 text-accentink"><Icon name="gift" size={19} /></span><div className="min-w-0"><p className="text-sm font-extrabold text-ink">{reward.name}</p><p className="mt-1 text-xs leading-5 text-mut">{benefit(reward)}</p><p className="cf-fig mt-3 text-sm font-black text-accentink">{reward.costUnits.toLocaleString("fr-FR")} {reward.costUnits === 1 ? unitSingular : unitPlural}</p></div></div></Card>
                 ))}
               </div>
             </section>
@@ -298,21 +317,21 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           <>
             <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
               <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accent/15 blur-3xl" aria-hidden />
-              <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accent" /></div>
-              <div className="relative mt-8"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Votre solde</p><p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em] text-ink">{card.member.balanceUnits.toLocaleString("fr-FR")}</p><p className="mt-1 text-sm font-bold text-accent">{card.member.balanceUnits === 1 ? unitSingular : unitPlural}</p></div>
-              <div className="relative mt-7"><div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full rounded-pill bg-accent transition-transform duration-500 ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} /></div><p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p></div>
+              <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accentink" /></div>
+              <div className="relative mt-8"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Votre solde</p><p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em] text-ink">{card.member.balanceUnits.toLocaleString("fr-FR")}</p><p className="mt-1 text-sm font-bold text-accentink">{card.member.balanceUnits === 1 ? unitSingular : unitPlural}</p></div>
+              <div className="relative mt-7"><div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full rounded-pill bg-accent transition-transform duration-slow ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} /></div><p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p></div>
               <Btn block icon="grid" className="relative mt-5" onClick={() => setQrOpen(true)}>
                 Présenter ma carte
               </Btn>
-              <div className="relative mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-line2 pt-4"><p className="text-[11px] text-mut">{updatedAt ? `Actualisée à ${updatedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "Actualisée maintenant"}</p><div className="flex gap-2"><button type="button" onClick={() => void refresh()} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-accent">Actualiser</button><button type="button" onClick={() => setForgetOpen(true)} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-mut hover:text-ink">Retirer</button></div></div>
+              <div className="relative mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-line2 pt-4"><p className="text-[11px] text-mut">{updatedAt ? `Actualisée à ${updatedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "Actualisée maintenant"}</p><div className="flex gap-2"><button type="button" onClick={() => void refresh()} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-accentink">Actualiser</button><button type="button" onClick={() => setForgetOpen(true)} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-mut hover:text-ink">Retirer</button></div></div>
             </section>
 
-            <section className="mt-6"><div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Catalogue informatif</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses à venir</h2><p className="mt-2 text-xs leading-5 text-mut">Pendant le pilote, votre QR sert à rattacher vos achats. Aucun point n’est encore débité pour une récompense.</p></div><div className="space-y-3">{card.rewards.map((reward) => <Card key={reward.id} className={reward.affordable ? "border-ok/25 p-4" : "p-4 opacity-70"}><div className="flex items-center gap-3"><span className={reward.affordable ? "grid size-11 shrink-0 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 shrink-0 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.affordable ? "check" : "gift"} size={19} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-extrabold text-ink">{reward.name}</p><Pill className={reward.affordable ? "border-ok/30 bg-ok/10 text-okt" : ""}>{reward.affordable ? "Palier atteint" : `${reward.costUnits} ${unitPlural}`}</Pill></div><p className="mt-1 text-xs leading-5 text-mut">{reward.description || benefit(reward)}</p></div></div></Card>)}</div></section>
+            <section className="mt-6"><div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Catalogue informatif</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses à venir</h2><p className="mt-2 text-xs leading-5 text-mut">Pendant le pilote, votre QR sert à rattacher vos achats. Aucun point n’est encore débité pour une récompense.</p></div><div className="space-y-3">{card.rewards.map((reward) => <Card key={reward.id} className={reward.affordable ? "border-ok/25 p-4" : "p-4 opacity-70"}><div className="flex items-center gap-3"><span className={reward.affordable ? "grid size-11 shrink-0 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 shrink-0 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.affordable ? "check" : "gift"} size={19} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-extrabold text-ink">{reward.name}</p><Pill className={reward.affordable ? "border-ok/30 bg-ok/10 text-okt" : ""}>{reward.affordable ? "Palier atteint" : `${reward.costUnits} ${unitPlural}`}</Pill></div><p className="mt-1 text-xs leading-5 text-mut">{reward.description || benefit(reward)}</p></div></div></Card>)}</div></section>
 
             {card.activity.length > 0 && (
               <section className="mt-6">
                 <div className="mb-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Traçabilité</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Traçabilité</p>
                   <h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Activité récente</h2>
                 </div>
                 <Card className="overflow-hidden p-0">

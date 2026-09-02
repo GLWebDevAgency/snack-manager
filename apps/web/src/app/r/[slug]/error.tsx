@@ -31,7 +31,7 @@ export default function RestaurantError({
         <button
           type="button"
           onClick={reset}
-          className="mt-6 inline-flex items-center justify-center rounded-pill bg-accent px-5 py-3 text-[14px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97]"
+          className="mt-6 inline-flex items-center justify-center rounded-pill bg-accent px-5 py-3 text-[14px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97]"
         >
           Réessayer
         </button>

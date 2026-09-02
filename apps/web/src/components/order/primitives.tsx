@@ -42,11 +42,11 @@ import "./order.css";
 
 /** Enfoncement immédiat, relâchement doux — à poser sur tout élément appuyable. */
 export const TAP =
-  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:scale-[0.97] motion-reduce:active:scale-100";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-fast active:scale-[0.97] motion-reduce:active:scale-100";
 
 /** Variante « ligne » : une ligne pleine largeur s’enfonce, elle ne rétrécit pas. */
 export const TAP_ROW =
-  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:translate-y-px motion-reduce:active:translate-y-0";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-fast active:translate-y-px motion-reduce:active:translate-y-0";
 
 type TapProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
@@ -358,7 +358,7 @@ export function SectionHead({
       <div className="flex items-end justify-between gap-3">
         <h2
           id={id}
-          className="font-display text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+          className="font-display text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accentink"
         >
           {title}
         </h2>
@@ -637,7 +637,7 @@ export function OptionChip({
         disabled && "cursor-not-allowed opacity-35 active:scale-100",
       )}
     >
-      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accent" />}
+      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accentink" />}
       {children}
       {price !== undefined && price !== 0 && (
         <span
@@ -756,7 +756,7 @@ export function OptionRow({
       <span
         aria-hidden
         className={cx(
-          "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-200 ease-sm",
+          "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-fast ease-sm",
           radio ? "rounded-full" : "rounded-[7px]",
           on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
         )}
@@ -770,7 +770,7 @@ export function OptionRow({
         {sub && <span className="block truncate text-[13px] text-mut">{sub}</span>}
       </span>
       {price !== undefined && price !== 0 && (
-        <span className="shrink-0 text-[14px] font-bold tabular-nums text-accent">
+        <span className="shrink-0 text-[14px] font-bold tabular-nums text-accentink">
           +{eurosBare(price)} €
         </span>
       )}
@@ -819,7 +819,7 @@ export function ChoiceCard({
       <span
         className={cx(
           "grid size-10 shrink-0 place-items-center rounded-card",
-          on ? "bg-accent text-onaccent" : "bg-surface2 text-accent",
+          on ? "bg-accent text-onaccent" : "bg-surface2 text-accentink",
         )}
       >
         {glyph ? <Glyph name={glyph} size={19} /> : icon ? <Icon name={icon} size={19} /> : null}
@@ -831,7 +831,7 @@ export function ChoiceCard({
       <span
         aria-hidden
         className={cx(
-          "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200 ease-sm",
+          "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-fast ease-sm",
           on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
         )}
       >
@@ -991,7 +991,7 @@ export function Sheet({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-bg/72 transition-opacity duration-300 ease-sm"
+        className="absolute inset-0 bg-scrim transition-opacity duration-med ease-sm"
         style={{ opacity: shown ? Math.max(0, 1 - drag / 320) : 0 }}
       />
       <div
@@ -1054,7 +1054,7 @@ export function Sheet({
         ) : (
           <div
             className={cx(
-              "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-300 ease-sm",
+              "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-med ease-sm",
               sunk ? "border-b border-ink/8 bg-surface/95 backdrop-blur-md" : "",
             )}
             onPointerDown={onPointerDown}
@@ -1065,13 +1065,13 @@ export function Sheet({
             {/* Poignée : visible tant que le visuel occupe la tête de feuille. */}
             <span
               aria-hidden
-              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-ink/45 shadow-card transition-opacity duration-300"
+              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-ink/45 shadow-card transition-opacity duration-med"
               style={{ opacity: sunk ? 0 : 1 }}
             />
             {title && (
               <h2
                 id={titleId}
-                className="font-display min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-300"
+                className="font-display min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-med"
                 style={{ opacity: sunk ? 1 : 0 }}
               >
                 {title}
@@ -1081,7 +1081,7 @@ export function Sheet({
               onClick={onClose}
               aria-label="Fermer"
               className={cx(
-                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-300",
+                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-med",
                 sunk
                   ? "border-ink/12 bg-surface2 hover:border-ink/30"
                   : "border-ink/15 bg-bg/55 backdrop-blur-md hover:bg-bg/75",

@@ -155,7 +155,7 @@ export function MenuBoard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Un kebab ? Un tacos gratiné ?"
             aria-label="Rechercher dans la carte"
-            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent"
+            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/75 focus:border-accent"
           />
           {query && (
             <Tap
@@ -317,7 +317,7 @@ function ProductCard({
         // `@container` sur la CARTE : c'est SA colonne qu'elle interroge,
         // pas la largeur de la grille — deux cartes de la même page peuvent
         // ainsi tenir des dispositions différentes si la grille le veut.
-        "@container relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
+        "@container relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_90px)] shadow-card transition-colors duration-fast ease-sm",
         qty > 0 ? "border-accent/45" : "border-ink/6",
         unavailable && "opacity-55",
       )}

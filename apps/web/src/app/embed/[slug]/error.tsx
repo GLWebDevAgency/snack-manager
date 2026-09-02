@@ -14,7 +14,7 @@ export default function EmbedError({ reset }: { reset: () => void }) {
         <button
           type="button"
           onClick={reset}
-          className="mt-5 inline-flex items-center justify-center rounded-pill bg-accent px-5 py-2.5 text-[14px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97]"
+          className="mt-5 inline-flex items-center justify-center rounded-pill bg-accent px-5 py-2.5 text-[14px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97]"
         >
           Réessayer
         </button>

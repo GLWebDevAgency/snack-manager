@@ -175,7 +175,7 @@ export function ProductSheet({
             className="text-[16px] font-extrabold tracking-[-0.02em] text-ink"
           />
           {extras > 0 && (
-            <span className="text-[13px] font-semibold text-accent">
+            <span className="text-[13px] font-semibold text-accentink">
               + <Prix cents={extras} mono={prixMono} /> d’options
             </span>
           )}
@@ -331,7 +331,7 @@ export function ProductSheet({
             rows={2}
             maxLength={200}
             placeholder="Ex : bien cuit, sauce à part…"
-            className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 focus:border-accent"
+            className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70 focus:border-accent"
           />
         </section>
       </div>
@@ -557,7 +557,7 @@ function ExtraGroup({
       {foldable && hidden > 0 && (
         <Tap
           onClick={() => setExpanded(true)}
-          className="flex min-h-11 w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-accent"
+          className="flex min-h-11 w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-accentink"
         >
           Voir les {hidden} autres
           <Icon name="arrow" size={13} stroke={2.6} className="rotate-90" />

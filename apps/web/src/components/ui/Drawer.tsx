@@ -66,7 +66,7 @@ export function Drawer({
       aria-label={!title ? (label ?? "Panneau") : undefined}
     >
       <div
-        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-bg/55 motion-reduce:animate-none"
+        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-scrim motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden
       />
@@ -104,9 +104,15 @@ export function Drawer({
           {children}
         </div>
         {footer && (
+          /*
+           * Le pied est un RETRAIT dans le panneau, pas un voile : il se creuse
+           * à l'encre. En `bg-bg/25`, il empruntait le fond de PAGE — sur un
+           * masque clair, cela l'éclaircissait au-dessus de la carte au lieu
+           * de l'enfoncer, et la barre d'actions flottait sans assise.
+           */
           <div
             data-dialog-footer
-            className="shrink-0 border-t border-line2 bg-bg/25 px-[18px] py-3.5"
+            className="shrink-0 border-t border-line2 bg-ink/4 px-[18px] py-3.5"
           >
             {footer}
           </div>

@@ -272,7 +272,7 @@ export function StripeCard({
       <button
         type="button"
         onClick={onGiveUp}
-        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-200 hover:text-ink"
+        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
       >
         Je préfère régler au comptoir
       </button>
