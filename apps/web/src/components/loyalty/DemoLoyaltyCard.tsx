@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Card, Icon, Pill } from "@/components/ui";
+import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
 
 const rewards = [
   { name: "Boisson offerte", cost: 8, ready: true },
@@ -7,8 +11,20 @@ const rewards = [
 ];
 
 export function DemoLoyaltyCard() {
+  /*
+   * Cet aperçu ne lit AUCUNE marque : c'est `LoyaltyCardApp` qui porte le
+   * masque réel d'un programme, résolu depuis le tenant — cette carte-ci
+   * n'est jamais reliée à un vrai restaurant. Le seul besoin d'une marque ici
+   * est la matrice de captures (`scripts/capture-masque.mjs`) : `demo` vaut
+   * toujours vrai sur cette page, d'où le même levier `?masque=` que la
+   * vitrine — voir `useMasqueDeCapture` pour le piège d'hydratation évité.
+   */
+  const brand = useMasqueDeCapture(true);
   return (
-    <div className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink">
+    <div
+      style={brand ? styleDuMasque(brand) : undefined}
+      className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink"
+    >
       <div className="border-b border-prep/30 bg-prep/10 px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-[0.1em] text-prept">
         Démonstration · données entièrement fictives
       </div>

@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TYPE_PAIRS } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
+import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { networkApi, type MenuProduct, type OrderingApi, type Site } from "./api";
@@ -98,7 +99,18 @@ export function Storefront({
   demo?: boolean;
 }) {
   const embed = mode === "embed";
-  const masque = styleDuMasque(site.tenant.brand);
+  /*
+   * `?masque=<direction>` — LEVIER RÉSERVÉ À LA MATRICE DE CAPTURES
+   * (`scripts/capture-masque.mjs`). La démonstration ne porte qu'une seule
+   * marque en fixture (Nuit) ; prouver les six directions exigerait sinon six
+   * tenants. `useMasqueDeCapture` lit `?masque=` par `useSyncExternalStore` —
+   * voir sa documentation pour le piège d'hydratation que ce choix évite.
+   * Sans le paramètre (ou hors démo), elle rend `null` : aucun changement
+   * pour la page d'un vrai restaurant.
+   */
+  const masqueCapture = useMasqueDeCapture(demo);
+  const brand = masqueCapture ?? site.tenant.brand;
+  const masque = styleDuMasque(brand);
   /*
    * `prixMono` est LU ICI, une seule fois, puis descendu en propriété. Deux
    * paires typographiques du masque sur dix posent les prix en chasse fixe :
@@ -109,7 +121,7 @@ export function Storefront({
    * résout déjà la marque au-dessus, et refaire tous les mélanges de palette
    * pour un booléen serait payer une palette pour lire une police.
    */
-  const { prixMono } = TYPE_PAIRS[site.tenant.brand.type.pair];
+  const { prixMono } = TYPE_PAIRS[brand.type.pair];
   /*
    * L'habillage du champ de carte est MÉMORISÉ : sa référence entre dans les
    * dépendances de l'effet qui monte le Payment Element. Un objet neuf à
@@ -117,8 +129,8 @@ export function Storefront({
    * numéro de carte s'effacer sous ses doigts.
    */
   const stripeApparence = useMemo(
-    () => apparenceStripeDe(site.tenant.brand),
-    [site.tenant.brand],
+    () => apparenceStripeDe(brand),
+    [brand],
   );
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
