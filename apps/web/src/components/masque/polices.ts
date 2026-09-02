@@ -7,8 +7,11 @@
  * que les familles que le texte utilise réellement : celles de la paire du
  * tenant. Le résolveur (contracts) émet `var(--police-<slug>)`.
  *
- * Le test `polices.test.ts` garantit que FONT_FAMILIES (contracts) et cette
- * liste ne divergent jamais.
+ * Le test `polices.test.ts` garantit que FONT_FAMILIES (contracts) et les
+ * familles déclarées ici ne divergent jamais — en LISANT CE FICHIER en texte
+ * (next/font ne peut pas s'exécuter sous vitest), pas en l'important : `.variable`
+ * sur un objet next/font est un nom de CLASSE généré (haché), jamais la chaîne
+ * `--police-<slug>` — inutile d'en dériver quoi que ce soit au runtime.
  */
 import {
   Alegreya_Sans, Archivo, Archivo_Black, Bricolage_Grotesque, Cormorant_Garamond,
@@ -44,9 +47,6 @@ const TOUTES = [
   fraunces, sourceSans3, bricolage, archivo, alegreyaSans, jetbrains, outfit, manrope,
   cormorant, figtree, nunito, nunitoSans, playfair, familjen, instrument, libreBaskerville, lato, archivoBlack,
 ];
-
-/** Les slugs déclarés — pour le test de parité avec contracts. */
-export const SLUGS_DECLARES: readonly string[] = TOUTES.map((f) => f.variable.replace("--police-", "")).sort();
 
 /** À poser sur la racine de chaque surface client, à côté de `styleDuMasque()`. */
 export const classesPolices: string = TOUTES.map((f) => f.variable).join(" ");
