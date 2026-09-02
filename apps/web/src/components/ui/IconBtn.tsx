@@ -17,8 +17,14 @@ type IconBtnProps = Omit<
 };
 
 /**
- * Bouton icône rond (spec backoffice §4.2) : 40px pilule, niveau « élément »,
- * bord 1px blanc 10 %, hover bord clair + fond éclairci, appui enfoncé (DA §4).
+ * Bouton icône rond (spec backoffice §4.2) : 40px pilule, niveau « élément »
+ * (`--cf-elev-gradient`), appui enfoncé (DA §4).
+ *
+ * Le bord n'est plus « 1px blanc 10 % » mais `--cf-line`, l'ENCRE du
+ * restaurant à 12 % : un filet clair sur une peau sombre, sombre sur une peau
+ * claire. Au survol il se raffermit (`border-ink/40`) et le fond passe au
+ * dégradé de survol (`--cf-elev-hover`) — deux jetons, donc deux valeurs que
+ * le masque repeint.
  */
 export function IconBtn({
   icon,

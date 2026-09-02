@@ -10,10 +10,22 @@ const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
   new: { label: "Nouvelle", cls: "bg-alert text-onalert" },
   preparing: { label: "En prépa", cls: "bg-prep text-onprep" },
   ready: { label: "Prête", cls: "bg-ok text-onok" },
-  // `onfill` et non `ink` : le résolveur ajuste `mut` à ≥4,5:1 contre `ground`,
-  // et `onfill` VAUT `ground` en clair — AA garanti par construction, pas par
-  // coïncidence. En sombre, `onfill` = blanc = rendu identique à l'origine.
-  delivered: { label: "Remise", cls: "bg-mut text-onfill" },
+  /*
+   * `bg` et non `onfill` : le résolveur ajuste `mut` à ≥4,5:1 contre `ground`,
+   * et `ground` est précisément ce que nomme `text-bg` — l'AA vient donc de la
+   * construction, dans les DEUX modes.
+   *
+   * `text-onfill` ne tenait qu'en clair, où `onfill` vaut justement `ground`.
+   * En sombre `onfill` bascule sur l'encre, un couple que rien n'ajuste :
+   * mesuré 1,82 sur Nuit, 1,99 sur Néon, 2,85 en admin (#fff sur #999). Le
+   * commentaire promettait « AA par construction » là où il n'y avait qu'une
+   * coïncidence de mode.
+   *
+   * Conséquence assumée en back-office : le libellé « Remise » passe du blanc
+   * au noir sur sa pastille grise — c'est le sens de la correction, pas un
+   * effet de bord.
+   */
+  delivered: { label: "Remise", cls: "bg-mut text-bg" },
   cancelled: {
     label: "Annulée",
     cls: "border-[1.5px] border-alert bg-transparent text-alertt",

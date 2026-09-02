@@ -24,8 +24,13 @@ type DrawerProps = {
 /**
  * Tiroir latéral — positionné en fixe dans la fenêtre pour rester utilisable
  * quelle que soit la position de défilement du contenu.
- * Profondeur (DA §1) : voile noir, panneau de niveau 2 en dégradé, séparation
- * portée par l'ombre (filet blanc 8 %) plutôt que par un bord blanc dur.
+ *
+ * Profondeur (DA §1), en jetons et non plus en couleurs : le voile est
+ * `--cf-scrim` (`bg-scrim`), noir franc en sombre et encre du restaurant à
+ * 45 % en clair ; le panneau est au niveau carte (`--cf-card-gradient`) ; la
+ * séparation d'avec la page est portée par `--cf-shadow-drawer`, dont le filet
+ * est de l'ENCRE à 8 % — clair sur une peau sombre, sombre sur une peau claire
+ * — plutôt que par un bord dur.
  */
 export function Drawer({
   open,
@@ -65,13 +70,23 @@ export function Drawer({
       aria-labelledby={title ? titleId : undefined}
       aria-label={!title ? (label ?? "Panneau") : undefined}
     >
+      {/*
+        LES DEUX DURÉES VIENNENT DU MASQUE, PLUS D'UNE LITTÉRALE.
+
+        `.22s` et `.28s` étaient écrits à la main : le profil de mouvement du
+        restaurateur (« posé » 240/320 ms, « vif » 140/200) ne les atteignait
+        pas. Le garde `couleurs-brutes` ne les voyait pas non plus — il
+        surveille la forme `duration-<n>`, jamais la syntaxe `animate-[…]`.
+        Le voile prend la durée de BASE (`--sm-t-fast`), le panneau celle
+        d'ENTRÉE (`--sm-t-med`) : c'est le rôle que le résolveur leur donne.
+      */}
       <div
-        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-scrim motion-reduce:animate-none"
+        className="absolute inset-0 animate-[cf-fade_var(--sm-t-fast)_var(--sm-ease)_both] bg-scrim motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_.28s_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] motion-reduce:animate-none"
+        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_var(--sm-t-med)_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] motion-reduce:animate-none"
         style={{ width }}
       >
         <div
