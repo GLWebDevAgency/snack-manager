@@ -415,7 +415,10 @@ export default function DashboardPage() {
         summary.productsOutCount > 0 && {
           key: "menu",
           count: summary.productsOutCount,
-          pillCls: "bg-mut text-white",
+          // `text-white` sur `mut` mesurait 2,85:1 — la même paire non
+          // ajustée que `StatusBadge` portait. `onmut` est l'encre que le
+          // résolveur calcule pour ce fond (7,37:1 ici).
+          pillCls: "bg-mut text-onmut",
           label:
             summary.productsOutCount > 1
               ? "Ruptures à réactiver"

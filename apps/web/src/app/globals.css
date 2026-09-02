@@ -34,8 +34,29 @@
   --cf-surface-2: #1a1a1a;
   --cf-text: #fff;
   --cf-mut: #999;
+  /*
+   * L'encre posable SUR l'encre atténuée (pastille `bg-mut`). Le blanc y
+   * tombait à 2,85:1 ; le résolveur choisit ce noir ou ce blanc par contraste
+   * réel, jamais par un seuil de luminance.
+   */
+  --cf-on-mut: #000;
+  /*
+   * ── DEUX FILETS, ET LA DIFFÉRENCE EST L'INFORMATION ──
+   *
+   * `--cf-line` / `--cf-line-2` sont DÉCORATIFS : séparateurs de listes,
+   * contours de carte, traits de section. Rien n'y est un état, donc aucun
+   * plancher de contraste à tenir — une opacité suffit et doit rester légère.
+   *
+   * `--cf-line-firm` est l'autre moitié : la limite d'un CONTRÔLE et de ses
+   * états (case à cocher non cochée, bouton radio, bord d'un champ, onglet
+   * courant). WCAG 1.4.11 y exige 3:1, et une opacité ne le garantit sur aucun
+   * fond — d'où une valeur OPAQUE, que le résolveur ramène à 3:1 sur la page,
+   * la carte et la tuile de chaque restaurant. Ici, la marque grise : #666
+   * mesure 3,03:1 sur #1a1a1a, 3,29 sur #111, 3,66 sur #000.
+   */
   --cf-line: rgba(255, 255, 255, 0.1);
   --cf-line-2: rgba(255, 255, 255, 0.06);
+  --cf-line-firm: #666;
   --cf-fill: #1a1a1a;
   --cf-on-fill: #fff;
   --cf-btn: #262626;
@@ -62,6 +83,13 @@
    * fond ET sur la carte ; ici, le laiton de la marque grise (7,6:1 sur #111).
    */
   --cf-focus: #c9a15a;
+  /*
+   * La piste d'une jauge de fidélité. Seul jeton du masque jugé contre
+   * l'ACCENT et non contre un fond : ce qu'on doit voir d'une jauge, c'est où
+   * son remplissage — un aplat d'accent — s'arrête. Le résolveur garantit 3:1
+   * contre l'accent de chaque restaurant ; ici, 6,05:1 contre le laiton.
+   */
+  --cf-gauge-track: #292929;
   --cf-on-green: #000;
   --cf-on-red: #fff;
   --cf-on-amber: #000;
@@ -148,7 +176,18 @@
   /* Retour tactile (DA §4) : perçu en moins de 100 ms, jamais la durée de base. */
   --sm-t-snap: 0.08s;
   --sm-t-fast: 0.2s;
-  --sm-t-med: 0.45s;
+  /*
+   * Durée d'ENTRÉE — celle d'un tiroir, d'un panneau, d'une carte qui arrive.
+   * Elle valait 0,45 s alors que le résolveur n'émet jamais que 200 ms
+   * (masque « vif ») à 320 ms (masque « posé ») pour ce rôle : le back-office,
+   * qui ne porte pas de masque et retombe donc sur ce repli, ouvrait son
+   * `Drawer` plus d'une fois et demie plus lentement que n'importe quel
+   * restaurant. 0,28 s tombe dans la fourchette du résolveur, et c'est déjà la
+   * durée que les tiroirs voisins du back-office écrivent à la main
+   * (`app/sm/parts.tsx`, `app/sm/mobile.tsx` ; 0,26 s pour `app/admin`) : le
+   * repli ne fait que dire une fois ce que ces trois-là répètent.
+   */
+  --sm-t-med: 0.28s;
   --sm-t-slow: 0.6s;
 }
 
@@ -161,12 +200,24 @@
   --color-mut: var(--cf-mut);
   --color-line: var(--cf-line);
   --color-line2: var(--cf-line-2);
+  /*
+   * `border-linefirm` — le filet des CONTRÔLES (case, radio, champ, onglet
+   * courant), garanti 3:1 par le résolveur. `border-line` reste celui des
+   * séparateurs et des contours de carte : le seuil de 1.4.11 ne s'applique
+   * qu'à ce qui porte une information, et l'imposer partout cernerait chaque
+   * carte du produit d'un gris franc.
+   */
+  --color-linefirm: var(--cf-line-firm);
   --color-fill: var(--cf-fill);
   --color-onfill: var(--cf-on-fill);
   --color-btn: var(--cf-btn);
   --color-accent: var(--cf-accent);
   --color-accenthover: var(--cf-accent-hover);
   --color-onaccent: var(--cf-on-accent);
+  /* Le libellé d'une pastille `bg-mut` — voir `--cf-on-mut`. */
+  --color-onmut: var(--cf-on-mut);
+  /* `bg-gaugetrack` — la piste d'une jauge, garantie 3:1 contre son remplissage. */
+  --color-gaugetrack: var(--cf-gauge-track);
   --color-gold: var(--cf-gold);
   --color-ok: var(--cf-green);
   --color-alert: var(--cf-red);
@@ -242,6 +293,39 @@
   --ease-sm: var(--sm-ease);
   --animate-pop: cf-pop var(--sm-t-fast) var(--sm-ease) both;
   --animate-rise: cf-rise var(--sm-t-med) var(--sm-ease) both;
+  /*
+   * Les deux entrées de dialogue, nommées plutôt qu'écrites à la main.
+   *
+   * Modal et Drawer portaient `animate-[cf-fade_…_var(--sm-ease)_both]` : une
+   * animation composée en clair dans une valeur arbitraire, recopiée à trois
+   * endroits, et que le garde `couleurs-brutes` ne pouvait pas juger (son
+   * motif surveille `duration-<n>`, jamais la syntaxe `animate-[…]`). Deux
+   * jetons de plus, et la forme entière — image, durée, courbe — se déclare
+   * une fois. Le voile prend la durée de BASE, le panneau celle d'ENTRÉE :
+   * c'est le rôle que le résolveur donne à `--sm-t-fast` et `--sm-t-med`.
+   */
+  --animate-fade: cf-fade var(--sm-t-fast) var(--sm-ease) both;
+  --animate-slidein: cf-slide-in var(--sm-t-med) var(--sm-ease) both;
+}
+
+/*
+ * ── LA LARGEUR DE RÉFÉRENCE D'UNE CARTE PRODUIT ──
+ *
+ * `@theme` et non `@theme inline` : c'est la seule forme qui ÉMET la variable
+ * dans `:root`, et il faut qu'elle y soit pour que le minimum de piste de la
+ * grille (`minmax(min(100%, var(--container-carte)), 1fr)`) puisse la lire.
+ * Un `@theme inline` remplace le jeton par sa valeur dans les utilitaires
+ * générés et n'écrit rien : la piste aurait alors lu une variable inexistante.
+ *
+ * L'espace de noms `--container-*` est celui des requêtes de CONTENEUR de
+ * Tailwind v4 : il donne la variante `@carte:` en même temps que la variable.
+ * Les deux chiffres — le seuil auquel la carte se met en ligne et le minimum
+ * de piste de la grille — DOIVENT rester égaux, sans quoi la grille fabrique
+ * des colonnes que la carte refuse. Ils étaient écrits `17rem` cinq fois, avec
+ * un commentaire qui l'exigeait et rien qui le tienne.
+ */
+@theme {
+  --container-carte: 17rem;
 }
 
 @keyframes cf-pop {

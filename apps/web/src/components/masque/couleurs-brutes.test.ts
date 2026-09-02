@@ -101,6 +101,37 @@ const BRUT = [
    * (`border-ink/8`, `bg-ink/5`) reste libre : rien n'y est du texte.
    */
   /\btext-(?:mut|accentink)\/\d+\b/,
+  /*
+   * NI ANIMATION COMPOSÉE À LA MAIN — la porte de service de `duration-*`.
+   *
+   * Le motif précédent (`duration-\d+`) ne voit rien dans
+   * `animate-[cf-fade_.22s_var(--sm-ease)_both]` : la durée y est un morceau
+   * de valeur arbitraire, pas un utilitaire. Modal et Drawer ont porté cette
+   * forme tout du long, `.22s` et `.28s` figés, pendant que le fichier
+   * promettait que « le mouvement appartient au masque ».
+   *
+   * Ce motif ne refuse QUE la durée littérale : il exige un chiffre suivi de
+   * `s`/`ms` à l'intérieur des crochets. Une composition qui lit les jetons
+   * (`animate-[cf-pop_var(--sm-t-fast)_…]`) reste possible — mais les quatre
+   * formes du produit sont nommées dans `globals.css` (`animate-pop`,
+   * `animate-rise`, `animate-fade`, `animate-slidein`) et n'ont plus à être
+   * recomposées à l'emploi.
+   */
+  /\banimate-\[[^\]]*[\d.]+m?s[_\]]/,
+  /*
+   * NI SÉMANTIQUE NUE POSÉE EN TEXTE — c'est la variante `-t` qui est lisible.
+   *
+   * `--cf-green/red/amber` sont des APLATS : leur texte est `on-*`. Posés en
+   * couleur de texte sur une carte ou sur leur propre lavis à 10 %, ils
+   * tombent sous AA (le rouge à 2,97:1 sur Nuit, mesuré). Le résolveur émet
+   * pour cela `--cf-green-t/red-t/amber-t`, les mêmes teintes ramenées au
+   * plancher sur les trois fonds — `text-okt`, `text-alertt`, `text-prept`.
+   * Même règle et même raison que `text-accent` → `text-accentink`.
+   *
+   * `bg-ok`, `border-alert`, `text-onprep` restent libres : ce sont l'aplat et
+   * son encre, dont `contraste()` vérifie le couple.
+   */
+  /\btext-(?:ok|alert|prep)\b/,
 ];
 
 /*

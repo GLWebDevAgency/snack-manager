@@ -214,8 +214,12 @@ export function MenuBoard({
                     // sinon vingt pastilles d'ajout et un onglet doré se
                     // disputent l'œil.
                     "flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-[13.5px] font-bold",
+                    // Le filet FERME : c'est lui qui dit quelle catégorie
+                    // est à l'écran. À 45 % d'encre il tombait à 2,22
+                    // (Marché) et 2,48 (Soleil) — cinq directions sur six
+                    // sous le seuil de 1.4.11 pour un état de contrôle.
                     on
-                      ? "border-ink/45 bg-surface2 text-ink"
+                      ? "border-linefirm bg-surface2 text-ink"
                       : "border-transparent bg-surface2 text-mut hover:text-ink",
                   )}
                 >
@@ -261,13 +265,18 @@ export function MenuBoard({
               title={category.name}
               note={categoryNote(category)}
             />
-            {/* Aucun point de rupture : la grille se remplit de colonnes de
-                17 rem minimum — une sur téléphone, trois ou quatre sur un
+            {/* Aucun point de rupture : la grille se remplit de colonnes
+                d'une carte de large au minimum (`--container-carte`, déclarée
+                dans `globals.css`) — une sur téléphone, trois ou quatre sur un
                 écran large — et `min(100%,…)` empêche la colonne d'être plus
                 large que la place disponible, donc jamais de barre
                 horizontale. Une seule colonne de cartes au milieu d'un écran
-                de bureau ressemblait à une capture de téléphone sur un mur. */}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-2.5">
+                de bureau ressemblait à une capture de téléphone sur un mur.
+
+                La piste LIT le jeton, elle ne le recopie pas : c'est le même
+                chiffre que le seuil `@carte:` de la carte, et les deux doivent
+                rester égaux (voir `ProductCard`). */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,var(--container-carte)),1fr))] gap-2.5">
               {category.products.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -359,14 +368,15 @@ function ProductCard({
         onClick={onPick}
         disabled={!clickable}
         /* La disposition suit la COLONNE, pas l'écran — et le seuil vaut
-           EXACTEMENT le minimum de piste de la grille (17 rem), maintenant
-           que le filet ne mange plus la boîte de contenu (voir ci-dessus).
-           Les deux chiffres doivent rester égaux : plus haut, la grille
-           fabriquerait des colonnes que la disposition en ligne tient très
-           bien mais que la carte refuserait ; plus bas, elle se serrerait
-           dans une colonne trop étroite pour le nom du plat. */
+           EXACTEMENT le minimum de piste de la grille, maintenant que le filet
+           ne mange plus la boîte de contenu (voir ci-dessus). Les deux
+           chiffres ne peuvent plus diverger : `@carte:` et la piste lisent le
+           même `--container-carte`. Plus haut, la grille fabriquerait des
+           colonnes que la disposition en ligne tient très bien mais que la
+           carte refuserait ; plus bas, elle se serrerait dans une colonne trop
+           étroite pour le nom du plat. */
         className={cx(
-          "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @[17rem]:flex-row @[17rem]:gap-3.5",
+          "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @carte:flex-row @carte:gap-3.5",
           !clickable && "cursor-default active:scale-100",
         )}
       >
@@ -378,7 +388,7 @@ function ProductCard({
           /* Plateau LÉGÈREMENT paysage : les visuels détourés de la carte le
              sont presque tous (582×395, 665×329…). Dans un carré, ils
              s'inscrivent par la largeur et laissent deux bandes vides. */
-          className="h-[136px] w-full @[17rem]:h-[92px] @[17rem]:w-[104px]"
+          className="h-[136px] w-full @carte:h-[92px] @carte:w-[104px]"
         />
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">

@@ -331,9 +331,15 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
                     `role`/`aria-value*`, un lecteur d'écran ne rendait qu'une
                     div vide et la progression n'existait que pour l'œil. Les
                     bornes sont les unités réelles, pas le pourcentage affiché :
-                    « 24 sur 30 » se lit, « 80 » ne dit rien. */}
+                    « 24 sur 30 » se lit, « 80 » ne dit rien.
+
+                    La piste est `bg-gaugetrack`, garantie 3:1 contre l'ACCENT
+                    qui la remplit — ce qu'on doit voir d'une jauge, c'est où
+                    le remplissage s'arrête. À `bg-ink/10` le couple tombait à
+                    2,38:1 sur Soleil : un client y voyait une barre orange
+                    sans savoir jusqu'où elle allait. */}
                 <div
-                  className="h-2 overflow-hidden rounded-pill bg-ink/10"
+                  className="h-2 overflow-hidden rounded-pill bg-gaugetrack"
                   role="progressbar"
                   aria-label={nextReward ? `Progression vers « ${nextReward.name} »` : "Progression vers le prochain palier"}
                   aria-valuemin={0}

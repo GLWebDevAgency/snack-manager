@@ -75,18 +75,18 @@ export function Drawer({
 
         `.22s` et `.28s` étaient écrits à la main : le profil de mouvement du
         restaurateur (« posé » 240/320 ms, « vif » 140/200) ne les atteignait
-        pas. Le garde `couleurs-brutes` ne les voyait pas non plus — il
-        surveille la forme `duration-<n>`, jamais la syntaxe `animate-[…]`.
-        Le voile prend la durée de BASE (`--sm-t-fast`), le panneau celle
-        d'ENTRÉE (`--sm-t-med`) : c'est le rôle que le résolveur leur donne.
+        pas. Le voile prend la durée de BASE (`--sm-t-fast`), le panneau celle
+        d'ENTRÉE (`--sm-t-med`) : c'est le rôle que le résolveur leur donne, et
+        `animate-fade` / `animate-slidein` (globals.css) le déclarent une fois
+        pour les deux composants au lieu de le recomposer à chaque emploi.
       */}
       <div
-        className="absolute inset-0 animate-[cf-fade_var(--sm-t-fast)_var(--sm-ease)_both] bg-scrim motion-reduce:animate-none"
+        className="absolute inset-0 animate-fade bg-scrim motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="absolute inset-y-0 right-0 flex max-w-full animate-[cf-slide-in_var(--sm-t-med)_var(--sm-ease)_both] flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] motion-reduce:animate-none"
+        className="absolute inset-y-0 right-0 flex max-w-full animate-slidein flex-col rounded-l-panel bg-[image:var(--cf-card-gradient)] shadow-[var(--cf-shadow-drawer)] motion-reduce:animate-none"
         style={{ width }}
       >
         <div

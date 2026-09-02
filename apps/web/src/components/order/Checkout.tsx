@@ -909,7 +909,7 @@ function CartStep({
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
-          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
+          className="w-full resize-none rounded-card border border-linefirm bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
         />
       </section>
 
@@ -947,7 +947,7 @@ function CartStep({
                n'émettait rien et le champ restait à angles vifs sur les formes
                `doux` et `rond`. Une classe morte, invisible au premier coup
                d'œil parce qu'elle ressemble à un jeton. */
-            className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
+            className="min-h-11 w-full rounded-ctrl border border-linefirm bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
@@ -1081,6 +1081,10 @@ function CustomerStep({
   // `outline-none`, la bordure EST l'indicateur de focus (1.4.11, 2.4.13), et
   // un champ en erreur en restait dépourvu — on ne voyait plus où l'on tapait
   // au moment précis où il fallait corriger.
+  //
+  // La bordure au repos est le filet FERME : le bord d'un champ EST la limite
+  // du contrôle (1.4.11, 3:1). Il était posé à 8 % d'encre, soit 1,14 à
+  // 1,26:1 selon la direction — un champ dont on ne voyait pas le cadre.
   const field =
     "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus";
 
@@ -1108,7 +1112,7 @@ function CustomerStep({
           placeholder="Camille Durand"
           aria-invalid={nameError || undefined}
           aria-describedby={nameError ? "sm-name-err" : undefined}
-          className={cx(field, nameError ? "border-alert" : "border-ink/8")}
+          className={cx(field, nameError ? "border-alert" : "border-linefirm")}
         />
         {nameError && (
           <p id="sm-name-err" role="alert" className="text-[13px] text-alertt">
@@ -1136,7 +1140,7 @@ function CustomerStep({
           placeholder="06 12 34 56 78"
           aria-invalid={phoneError || undefined}
           aria-describedby={phoneError ? "sm-phone-err" : "sm-phone-hint"}
-          className={cx(field, phoneError ? "border-alert" : "border-ink/8")}
+          className={cx(field, phoneError ? "border-alert" : "border-linefirm")}
         />
         {phoneError ? (
           <p id="sm-phone-err" role="alert" className="text-[13px] text-alertt">

@@ -60,14 +60,17 @@ export function Modal({
      * à la main : le profil de mouvement du restaurateur vaut 140 ms en « vif »
      * et 240 en « posé », et une littérale ignorait ce choix — sur la carte de
      * fidélité, la modale du QR s'ouvrait à la même vitesse chez tout le monde.
-     * Le garde `couleurs-brutes` ne voyait pas la fuite : son motif surveille
-     * `duration-\d+`, et la syntaxe `animate-[…_.22s_…]` passait à côté.
+     *
+     * `animate-fade` plutôt que la valeur arbitraire qui composait l'animation
+     * ici même : la forme entière — image, durée, courbe — est déclarée une
+     * fois dans `globals.css`, et le garde `couleurs-brutes` sait désormais
+     * refuser une durée littérale écrite dans un `animate-[…]`.
      */
     <div
       ref={dialogRef}
       inert
       tabIndex={-1}
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_var(--sm-t-fast)_var(--sm-ease)_both] place-items-center bg-scrim p-4 outline-none motion-reduce:animate-none"
+      className="fixed inset-0 z-[60] grid animate-fade place-items-center bg-scrim p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

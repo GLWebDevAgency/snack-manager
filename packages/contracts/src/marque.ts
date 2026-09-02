@@ -15,6 +15,41 @@ import { z } from 'zod';
 export const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /**
+ * Le motif d'une URL d'image de masque — la forme SYNTAXIQUE, à part du schéma.
+ *
+ * `ImageUrl` (plus bas) est la garde des routes : zod, complète, avec la borne
+ * de longueur. Mais la base est écrite aussi par l'admin-cli, par un shell et
+ * par les scripts de reprise, qui ne passent PAS par zod : Mongoose a besoin du
+ * même refus sous la forme qu'il sait appliquer, un `match`. D'où ce motif,
+ * exporté à côté de `HEX` pour la même raison — la défense en profondeur du
+ * dépôt, pas un doublon de la validation d'entrée.
+ *
+ * Les deux doivent dire la MÊME chose sur le protocole ; `marque.test.ts` les
+ * confronte sur les mêmes URL pour qu'ils ne divergent pas.
+ */
+export const IMAGE_URL = /^https?:\/\//i;
+
+/**
+ * LE LAITON — l'accent de la marque Snack Manager, et le repli de tout tenant
+ * qui n'a pas encore posé le sien.
+ *
+ * Il vivait recopié à quatre endroits : une constante PRIVÉE au bas de ce
+ * fichier, l'accent de la direction Nuit trois cents lignes plus haut, le
+ * `default` de `brandColor` dans les schémas Mongoose, et le test de reprise
+ * qui épinglait le littéral. Une couleur de marque qui change doit changer une
+ * fois. Que ce soit AUSSI l'accent de Nuit n'est pas un hasard : Nuit est la
+ * direction la plus proche de notre propre identité, celle que porte un tenant
+ * non repris.
+ *
+ * Ce que la constante ne couvre PAS : les fixtures de test qui donnent cette
+ * teinte à un restaurant imaginaire (`loyalty-public.service.test.ts`,
+ * `screens.fakes.ts`…). Là, le laiton est une couleur de tenant parmi d'autres
+ * — n'importe quel hex ferait l'affaire — et l'y remplacer laisserait croire
+ * que le test dépend de notre marque.
+ */
+export const LAITON = '#c9a15a';
+
+/**
  * La casse d'un hex est normalisée ICI, à la frontière, et nulle part ailleurs.
  *
  * `#E07A1F` posé par le sélecteur de l'admin et `#e07a1f` rendu par le
@@ -235,7 +270,7 @@ export const DIRECTIONS: Record<PresetKey, Brand> = {
   },
   nuit: {
     mode: 'dark',
-    palette: { ground: '#14151a', surface: '#1d1f26', ink: '#f0ebe1', accent: '#c9a15a', onAccent: '#1c1612' },
+    palette: { ground: '#14151a', surface: '#1d1f26', ink: '#f0ebe1', accent: LAITON, onAccent: '#1c1612' },
     type: { pair: 'nuit' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'nuit',
   },
   soleil: {
@@ -433,6 +468,14 @@ const VOILE_SURVOL = 0.07;
 /** Le lavis d'accent (`--cf-accent-wash`, spec §4.1) et les lavis sémantiques (`bg-ok/10`). */
 const LAVIS_ACCENT = 0.12;
 const LAVIS_SEMANTIQUE = 0.1;
+/**
+ * Le filet FERME de la spec §4.1 (`ruleFirm`, 24 % d'encre) — le point de
+ * DÉPART de `--cf-line-firm`, pas sa valeur : 24 % d'encre ne mesure que 1,59 à
+ * 2,28:1 selon la direction, quand 1.4.11 en exige 3. Voir `derives()`.
+ */
+const FILET_FERME = 0.24;
+/** L'aplat de la piste de jauge, tel que `bg-ink/10` le rendait sur la carte. */
+const PISTE_JAUGE = 0.1;
 
 /**
  * Le socle de l'élévation : celle de {ground, surface} dont la valeur est la
@@ -513,6 +556,9 @@ function derives(brand: Brand) {
       melanger(p.surface, couleur, LAVIS_SEMANTIQUE),
     ]);
 
+  /* Hissée : `onMut` la relit, et un balayage de 200 nuances ne se fait pas deux fois. */
+  const inkMut = ajusterJusquaAA(melanger(p.ink, p.ground, 0.5), fondsTexte);
+
   return {
     surface2,
     survol,
@@ -520,9 +566,69 @@ function derives(brand: Brand) {
     lavisAccent,
     sem,
     accentInk: ajusterJusquaAA(p.accent, [p.ground, p.surface, ...lavisAccent]),
-    inkMut: ajusterJusquaAA(melanger(p.ink, p.ground, 0.5), fondsTexte),
+    inkMut,
+    /*
+     * L'ENCRE POSABLE SUR L'ENCRE ATTÉNUÉE — noir ou blanc, par contraste réel.
+     *
+     * Une pastille `bg-mut` porte un libellé. Il était écrit `text-on-fill`,
+     * une paire que rien n'ajuste : en mode sombre `on-fill` vaut l'encre, et
+     * le couple tombait à 1,99 (Néon), 1,82 (Nuit), 2,85 (marque grise). Le
+     * repli suivant fut `text-bg` — juste, mais par RICOCHET : il ne tient que
+     * parce que `inkMut` est ajusté contre `ground`. `on-mut` le dit
+     * directement, et `textePosableSur` garantit ≥ √21 ≈ 4,58:1 quelle que
+     * soit la palette, même celle où l'ajustement d'`inkMut` échouerait.
+     */
+    onMut: textePosableSur(inkMut.couleur),
     /* L'anneau de focus est un ÉLÉMENT, pas du texte : 3:1 suffit (1.4.11) — mais opaque. */
     focus: ajusterJusquaAA(p.accent, [p.ground, p.surface], WCAG_AA_NON_TEXTE),
+    /*
+     * LE FILET FERME — celui qui PORTE UNE INFORMATION, et lui seul.
+     *
+     * `--cf-line` (encre à 12 %) et `--cf-line-2` (6 %) restent les filets
+     * DÉCORATIFS : séparateurs de listes, contours de carte, traits de
+     * section. Rien n'y est un état, et 1.4.11 ne s'y applique pas.
+     *
+     * Ce jeton-ci est l'autre moitié : la limite d'un CONTRÔLE et de ses états
+     * — case à cocher non cochée, bouton radio non choisi, bord d'un champ de
+     * saisie, onglet courant. Mesuré avant : `border-ink/25` valait 1,52 à
+     * 2,16:1, `border-ink/8` 1,14 à 1,26, `border-ink/45` 2,22 à 3,88 (Néon
+     * seule au-dessus). On ne lisait pas si la case était cochée ; on devinait.
+     *
+     * OPAQUE, et pas une opacité : une même alpha rend un ratio différent sur
+     * chaque fond, donc ne garantit rien. Le départ est bien le `ruleFirm` de
+     * la spec (24 % d'encre sur le socle d'élévation) ; l'ajustement ne fait
+     * que l'empêcher de descendre sous 3:1 sur les trois fonds où ces
+     * contrôles se posent vraiment — la page, la carte, la tuile.
+     */
+    lineFirm: ajusterJusquaAA(
+      melanger(socle, p.ink, FILET_FERME),
+      [p.ground, p.surface, surface2],
+      WCAG_AA_NON_TEXTE,
+    ),
+    /*
+     * LA PISTE D'UNE JAUGE — jugée contre l'ACCENT, pas contre le fond.
+     *
+     * Le remplissage d'une jauge de fidélité est un aplat d'accent ; ce qu'on
+     * doit voir, c'est OÙ il s'arrête. L'information vit donc dans le couple
+     * remplissage/piste, et nulle part ailleurs (1.4.11). La piste était
+     * `bg-ink/10` : mesuré 7,50 (Brasserie), 10,37 (Néon), 5,23 (Nuit), 4,81
+     * (Atelier), 3,75 (Marché) — et 2,38 sur SOLEIL, où le safran sur le sable
+     * ne se détache plus.
+     *
+     * Aucun jeton existant ne rattrapait les six : les encres plus opaques
+     * aggravent Soleil (elles s'éloignent du fond, pas de l'accent), les
+     * aplats de bouton (`fill`, `btn`) corrigent Soleil à 4,72 mais cassent
+     * Brasserie (1,85), Marché (2,07) et Atelier (2,44), et l'anneau de focus
+     * EST l'accent (1,00). D'où ce dérivé de plus.
+     *
+     * Le départ vaut exactement ce que `bg-ink/10` rendait sur la carte : cinq
+     * directions sur six ne bougent pas d'un bit, seule Soleil est corrigée.
+     */
+    gaugeTrack: ajusterJusquaAA(
+      melanger(p.surface, p.ink, PISTE_JAUGE),
+      [p.accent],
+      WCAG_AA_NON_TEXTE,
+    ),
     green: teinte(sem.green),
     red: teinte(sem.red),
     amber: teinte(sem.amber),
@@ -544,11 +650,16 @@ export const COUPLES_CONTRASTE = [
   'inkMut/ground',
   'inkMut/surface',
   'inkMut/elevation',
+  'onMut/mut',
   'greenInk/greenWash',
   'redInk/redWash',
   'amberInk/amberWash',
   'focus/ground',
   'focus/surface',
+  'lineFirm/ground',
+  'lineFirm/surface',
+  'lineFirm/elevation',
+  'gaugeTrack/accent',
 ] as const;
 export type CoupleContraste = (typeof COUPLES_CONTRASTE)[number];
 
@@ -609,11 +720,24 @@ export function contraste(brand: Brand): { ok: boolean; verdicts: Verdict[] } {
       seuil: WCAG_AA,
       derive: true,
     },
+    // Le libellé d'une pastille `bg-mut` — noir ou blanc, choisi par contraste.
+    { couple: 'onMut/mut', avant: d.onMut, arriere: d.inkMut.couleur, seuil: WCAG_AA, derive: true },
     { couple: 'greenInk/greenWash', avant: d.green.couleur, arriere: lavisSem(d.sem.green), seuil: WCAG_AA, derive: true },
     { couple: 'redInk/redWash', avant: d.red.couleur, arriere: lavisSem(d.sem.red), seuil: WCAG_AA, derive: true },
     { couple: 'amberInk/amberWash', avant: d.amber.couleur, arriere: lavisSem(d.sem.amber), seuil: WCAG_AA, derive: true },
     { couple: 'focus/ground', avant: d.focus.couleur, arriere: p.ground, seuil: WCAG_AA_NON_TEXTE, derive: true },
     { couple: 'focus/surface', avant: d.focus.couleur, arriere: p.surface, seuil: WCAG_AA_NON_TEXTE, derive: true },
+    /*
+     * Le filet FERME sur les trois fonds où un contrôle se pose — 1.4.11.
+     * Le filet DÉCORATIF (`--cf-line`) n'a volontairement aucun verdict : un
+     * séparateur ne porte aucune information, lui imposer 3:1 rendrait toutes
+     * les cartes du produit cerclées de gris franc.
+     */
+    { couple: 'lineFirm/ground', avant: d.lineFirm.couleur, arriere: p.ground, seuil: WCAG_AA_NON_TEXTE, derive: true },
+    { couple: 'lineFirm/surface', avant: d.lineFirm.couleur, arriere: p.surface, seuil: WCAG_AA_NON_TEXTE, derive: true },
+    { couple: 'lineFirm/elevation', avant: d.lineFirm.couleur, arriere: d.surface2, seuil: WCAG_AA_NON_TEXTE, derive: true },
+    // La piste d'une jauge se juge contre son REMPLISSAGE, qui est l'accent.
+    { couple: 'gaugeTrack/accent', avant: d.gaugeTrack.couleur, arriere: p.accent, seuil: WCAG_AA_NON_TEXTE, derive: true },
   ];
 
   const verdicts = couples.map(({ couple, avant, arriere, seuil, derive }): Verdict => {
@@ -676,8 +800,17 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     '--cf-surface-2': d.surface2,
     '--cf-text': p.ink,
     '--cf-mut': d.inkMut.couleur,
+    '--cf-on-mut': d.onMut,
+    // Les deux filets DÉCORATIFS — séparateurs, contours de carte, traits de
+    // section. Une opacité suffit : rien ici ne porte d'information, donc
+    // aucun plancher de 1.4.11 à tenir (le filet qui, lui, en porte un est
+    // `--cf-line-firm`, juste en dessous).
     '--cf-line': alpha(p.ink, 0.12),
     '--cf-line-2': alpha(p.ink, 0.06),
+    // Le filet FERME — limite d'un CONTRÔLE et de ses états (case, radio,
+    // champ, onglet courant) : opaque, garanti 3:1 sur la page, la carte et la
+    // tuile. Voir `derives()` pour les mesures d'avant.
+    '--cf-line-firm': d.lineFirm.couleur,
     '--cf-surface-3': alpha(p.ink, 0.03),
     '--cf-surface-6': alpha(p.ink, 0.06),
     '--cf-fill': sombre ? melanger(p.surface, p.ink, 0.06) : p.ink,
@@ -696,6 +829,10 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     // À 60 % d'alpha il tombait à 1,75:1 sur Soleil — un anneau qu'on ne voit
     // pas n'est pas un focus visible (1.4.11, 2.4.13).
     '--cf-focus': d.focus.couleur,
+    // La piste d'une jauge : garantie 3:1 contre l'ACCENT, qui la remplit.
+    // C'est le seul jeton du masque jugé contre l'accent et non contre un fond
+    // — parce que c'est là qu'est l'information (« où le remplissage s'arrête »).
+    '--cf-gauge-track': d.gaugeTrack.couleur,
     // Sémantiques — fixes par mode, jamais la marque
     '--cf-green': d.sem.green,
     '--cf-red': d.sem.red,
@@ -769,8 +906,6 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
 // ─────────────────────────────────────────────────────────────
 // Le repli, le masque effectif, les champs plats
 // ─────────────────────────────────────────────────────────────
-
-const LAITON = '#c9a15a';
 
 /**
  * Tant qu'un tenant n'a pas été repris (brand = null), il porte Nuit — la

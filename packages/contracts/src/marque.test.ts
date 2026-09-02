@@ -13,6 +13,8 @@ import {
   FONT_FAMILIES,
   FONT_SLUGS,
   hexVersRgb,
+  IMAGE_URL,
+  LAITON,
   lireMarque,
   logoPour,
   logoUrlDe,
@@ -229,8 +231,15 @@ describe('contraste(brand)', () => {
     const v = contraste(DIRECTIONS.brasserie);
     expect(v.ok).toBe(true);
     expect(v.verdicts.map((x) => x.couple)).toEqual([...COUPLES_CONTRASTE]);
+    /*
+     * Le seuil dit la NATURE du couple : 4,5 pour du texte (1.4.3), 3 pour un
+     * élément non textuel (1.4.11) — l'anneau de focus, le filet ferme d'un
+     * contrôle, la piste d'une jauge contre son remplissage.
+     */
+    const ELEMENTS = ['focus/', 'lineFirm/', 'gaugeTrack/'];
     for (const verdict of v.verdicts) {
-      expect(verdict.seuil, verdict.couple).toBe(verdict.couple.startsWith('focus/') ? 3 : 4.5);
+      const element = ELEMENTS.some((p) => verdict.couple.startsWith(p));
+      expect(verdict.seuil, verdict.couple).toBe(element ? 3 : 4.5);
     }
   });
 
@@ -297,15 +306,18 @@ describe('resoudreMarque(brand)', () => {
       '--cf-font-body',
       '--cf-font-display',
       '--cf-font-mono',
+      '--cf-gauge-track',
       '--cf-green',
       '--cf-green-t',
       '--cf-line',
       '--cf-line-2',
+      '--cf-line-firm',
       '--cf-mut',
       '--cf-on-accent',
       '--cf-on-amber',
       '--cf-on-fill',
       '--cf-on-green',
+      '--cf-on-mut',
       '--cf-on-red',
       '--cf-r',
       '--cf-r-lg',
@@ -412,6 +424,48 @@ describe('resoudreMarque(brand)', () => {
     }
   });
 
+  it('le filet FERME atteint 3:1 sur la page, la carte et la tuile — le filet décoratif, non', () => {
+    for (const key of PRESET_KEYS) {
+      const { ground, surface } = DIRECTIONS[key].palette;
+      const vars = resoudreMarque(DIRECTIONS[key]).vars;
+      const firm = vars['--cf-line-firm']!;
+      // Opaque : une opacité rend un ratio différent sur chaque fond, donc ne
+      // garantit rien — c'est le défaut que ce jeton existe pour fermer.
+      expect(firm, key).toMatch(/^#[0-9a-f]{6}$/);
+      for (const fond of [ground, surface, vars['--cf-surface-2']!]) {
+        expect(ratioContraste(firm, fond), `${key} lineFirm sur ${fond}`).toBeGreaterThanOrEqual(3);
+      }
+      // Et il reste un FILET, pas de l'encre : plus clair que `mut`, qui porte
+      // du texte à 4,5:1. Sinon toute case à cocher deviendrait un trait noir.
+      expect(
+        ratioContraste(firm, ground) < ratioContraste(vars['--cf-mut']!, ground),
+        `${key} lineFirm plus léger que mut`,
+      ).toBe(true);
+    }
+  });
+
+  it('la piste de la jauge atteint 3:1 CONTRE L’ACCENT — le remplissage, pas le fond', () => {
+    for (const key of PRESET_KEYS) {
+      const { accent, surface, ink } = DIRECTIONS[key].palette;
+      const piste = resoudreMarque(DIRECTIONS[key]).vars['--cf-gauge-track']!;
+      expect(ratioContraste(accent, piste), `${key} accent/piste`).toBeGreaterThanOrEqual(3);
+      // Aucun jeton existant ne tenait les six : l'ancienne piste `bg-ink/10`
+      // valait 2,38 sur Soleil. Là où elle passait déjà, elle ne bouge pas.
+      const ancienne = melanger(surface, ink, 0.1);
+      if (ratioContraste(accent, ancienne) >= 3) expect(piste, key).toBe(ancienne);
+      else expect(piste, key).not.toBe(ancienne);
+    }
+  });
+
+  it('l’encre posable sur `mut` tient AA dans les DEUX modes', () => {
+    for (const key of PRESET_KEYS) {
+      const vars = resoudreMarque(DIRECTIONS[key]).vars;
+      // `text-onfill` ne tenait qu'en clair : 1,99 sur Néon, 1,82 sur Nuit.
+      expect(ratioContraste(vars['--cf-on-mut']!, vars['--cf-mut']!), key).toBeGreaterThanOrEqual(4.5);
+      expect(['#000000', '#ffffff']).toContain(vars['--cf-on-mut']);
+    }
+  });
+
   it('le voile s’assombrit toujours — jamais le fond, qui l’éclaircirait sur un masque clair', () => {
     expect(resoudreMarque(DIRECTIONS.nuit).vars['--cf-scrim']).toBe('rgba(0, 0, 0, 0.72)');
     // Soleil : l'encre marine du restaurant à 45 %, pas son sable.
@@ -476,8 +530,31 @@ describe('le repli — un tenant sans brand a quand même un masque', () => {
   });
 
   it('un accent invalide retombe sur le laiton', () => {
-    expect(marqueDeRepli('rouge', null).palette.accent).toBe('#c9a15a');
-    expect(marqueDeRepli(null, null).palette.accent).toBe('#c9a15a');
+    expect(marqueDeRepli('rouge', null).palette.accent).toBe(LAITON);
+    expect(marqueDeRepli(null, null).palette.accent).toBe(LAITON);
+    // Nuit EST notre identité : son accent et le repli sont la même constante.
+    expect(DIRECTIONS.nuit.palette.accent).toBe(LAITON);
+  });
+
+  it('IMAGE_URL et le schéma d’URL disent la MÊME chose sur le protocole', () => {
+    /*
+     * `IMAGE_URL` est destiné au `match` Mongoose — la défense en profondeur du
+     * dépôt, pour les écritures qui ne passent pas par zod (admin-cli, shell,
+     * scripts). Deux gardes qui divergent, c'est une porte : celle-ci l'empêche.
+     * Le repli du masque est le seul consommateur du schéma accessible d'ici,
+     * et il rend `null` exactement quand le schéma refuse.
+     */
+    const accepte = (u: string) => marqueDeRepli('#2e9e4f', u).logo.mark.dark !== null;
+    for (const u of [
+      'https://r2.example/logo.png',
+      'http://localhost:9000/logo.png',
+      'javascript:alert(1)',
+      'data:image/png;base64,AA',
+      'ftp://exemple/logo.png',
+      'https:/r2.example/logo.png',
+    ]) {
+      expect(IMAGE_URL.test(u), u).toBe(accepte(u));
+    }
   });
 
   it('un logoUrl legacy qui n’a jamais traversé le contrat est écarté', () => {

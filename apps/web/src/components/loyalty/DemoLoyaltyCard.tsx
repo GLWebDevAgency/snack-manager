@@ -85,9 +85,13 @@ export function DemoLoyaltyCard() {
           <div className="relative mt-7">
             {/* Une jauge est un composant, pas une décoration : sans
                 `role`/`aria-value*` un lecteur d'écran ne rendait qu'une div
-                vide, et la progression n'existait que pour l'œil. */}
+                vide, et la progression n'existait que pour l'œil.
+
+                Et même piste garantie que la vraie carte (`bg-gaugetrack`,
+                3:1 contre l'accent qui la remplit) : la démonstration montre
+                les six directions, c'est justement là qu'un écart se verrait. */}
             <div
-              className="h-2 overflow-hidden rounded-pill bg-ink/10"
+              className="h-2 overflow-hidden rounded-pill bg-gaugetrack"
               role="progressbar"
               aria-label="Progression vers « Menu signature offert »"
               aria-valuemin={0}

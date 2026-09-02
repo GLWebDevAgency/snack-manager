@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { describe, expect, it } from 'vitest';
-import { DIRECTIONS, contraste } from '@sm/contracts';
+import { DIRECTIONS, LAITON, contraste } from '@sm/contracts';
 import { classerMasque, filtreReparation, filtreReprise } from './backfill-brand';
 import { MODELS } from './schemas';
 
@@ -27,13 +27,12 @@ describe('la classification du masque stocké', () => {
   });
 
   it('un accent absent ou invalide retombe sur le laiton', () => {
-    const laiton = '#c9a15a';
     const accent = (t: Parameters<typeof classerMasque>[0]) => {
       const c = classerMasque(t);
       return c.etat === 'a-reprendre' ? c.brand.palette.accent : null;
     };
-    expect(accent({})).toBe(laiton);
-    expect(accent({ brandColor: 'bleu' })).toBe(laiton);
+    expect(accent({})).toBe(LAITON);
+    expect(accent({ brandColor: 'bleu' })).toBe(LAITON);
   });
 
   /**

@@ -5,6 +5,7 @@ import {
   BRAND_MOTIONS,
   BRAND_SHAPES,
   HEX,
+  LAITON,
   PLATFORM_SETTINGS_ID,
   PRESET_KEYS,
   SM_INVOICE_VAT,
@@ -137,7 +138,10 @@ export const TenantSchema = new Schema(
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     logoUrl: { type: String, default: null },
-    brandColor: { type: String, default: '#c9a15a' },
+    // Le laiton vient du CONTRAT : c'est la même constante que le repli du
+    // masque (`marqueDeRepli`) et que l'accent de la direction Nuit. Recopiée
+    // ici, elle divergeait le jour où la marque changeait de teinte.
+    brandColor: { type: String, default: LAITON },
     brand: { type: BrandSub, default: null },
     address: { type: String, default: '' },
     phones: { type: [String], default: [] },

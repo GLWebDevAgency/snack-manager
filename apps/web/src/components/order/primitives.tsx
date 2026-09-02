@@ -922,7 +922,11 @@ export function OptionRow({
         className={cx(
           "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-fast ease-sm",
           radio ? "rounded-full" : "rounded-[7px]",
-          on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
+          // `border-linefirm` et non `border-ink/25` : c'est cet anneau,
+          // et lui seul, qui dit « non coché ». À 25 % d'encre il mesurait
+          // 1,52 à 2,16:1 selon la direction — la case cochée se voyait
+          // (aplat d'accent), la case vide se devinait (1.4.11 exige 3:1).
+          on ? "border-accent bg-accent text-onaccent" : "border-linefirm",
         )}
       >
         {on && <Icon name="check" size={13} stroke={3} />}
@@ -1002,7 +1006,9 @@ export function ChoiceCard({
         aria-hidden
         className={cx(
           "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-fast ease-sm",
-          on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
+          // Même filet ferme que `OptionRow` ci-dessus, et pour la même
+          // raison : l'anneau vide est le seul signe de « non choisi ».
+          on ? "border-accent bg-accent text-onaccent" : "border-linefirm",
         )}
       >
         {on && <Icon name="check" size={12} stroke={3} />}
