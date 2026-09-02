@@ -278,17 +278,20 @@ délibérément : une reprise de données se relit avant d'être appliquée.
 # 1. LIRE d'abord — sans --appliquer, rien n'est écrit.
 scripts/reprise-mongo.sh staging backfill:founder
 scripts/reprise-mongo.sh staging backfill:contact
+scripts/reprise-mongo.sh staging backfill:brand
 
 # 2. Appliquer. Le script relance ensuite la tâche pour vérifier
 #    l'idempotence : elle ne doit plus rien trouver.
 scripts/reprise-mongo.sh staging backfill:founder --appliquer
 scripts/reprise-mongo.sh staging backfill:contact --appliquer
+scripts/reprise-mongo.sh staging backfill:brand --appliquer
 ```
 
 | Script | Ce qu'il répare | Ce qu'on voit sans lui |
 |---|---|---|
 | `backfill:founder` | pose `founderUntil` et `founderDiscountCents` | le fondateur lit « moitié prix » à côté d'un montant plein tarif |
 | `backfill:contact` | reprend le téléphone du gérant depuis son lead | le bouton « Appeler » reste masqué sur la fiche client |
+| `backfill:brand` | pose le masque d'identité (direction Nuit, accent et logo du tenant) sur les tenants d'avant le 01/09/2026 | rien ne casse sans lui — le résolveur dérive le même masque à la lecture ; avec lui, l'éditeur (plan B) a un objet à modifier |
 
 **Pourquoi un script et pas une suite de commandes à recopier.** Trois pièges,
 tous rencontrés en déroulant la procédure à la main le 28 août 2026, et tous
@@ -305,7 +308,7 @@ fermés par `scripts/reprise-mongo.sh` :
    `railway redeploy` a redéployé la production au lieu de staging. Le script
    POSE l'environnement, et fait taper « production » à la main quand c'est elle.
 
-Les deux reprises sont **idempotentes** : un client déjà traité n'est jamais
+Les trois reprises sont **idempotentes** : un client déjà traité n'est jamais
 recalculé. `backfill:contact` refuse en outre les rapprochements ambigus et le
 dit — un mauvais numéro sur une fiche client est pire que pas de numéro.
 
