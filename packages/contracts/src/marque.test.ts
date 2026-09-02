@@ -26,6 +26,18 @@ describe('le contrat brand', () => {
     }
   });
 
+  it('refuse une URL de logo qui n’est pas http(s) — un `javascript:` finirait en src', () => {
+    const avec = (url: string) => ({
+      ...DIRECTIONS.nuit,
+      logo: { ...DIRECTIONS.nuit.logo, mark: { light: null, dark: url } },
+    });
+    for (const mauvaise of ['javascript:alert(1)', 'data:image/svg+xml,<svg/>', 'ftp://r2/l.png']) {
+      expect(() => BrandSchema.parse(avec(mauvaise)), mauvaise).toThrow();
+    }
+    expect(() => BrandSchema.parse(avec('https://r2.example/logo.png'))).not.toThrow();
+    expect(() => BrandSchema.parse(avec('http://localhost:9000/logo.png'))).not.toThrow();
+  });
+
   it('les paires « prix en mono » déclarent une famille mono', () => {
     for (const key of TYPE_PAIR_KEYS) {
       const pair = TYPE_PAIRS[key];
@@ -86,15 +98,37 @@ describe('la couleur en pur', () => {
   });
 });
 
-import { contraste, resoudreMarque } from './marque';
+import { ajusterJusquaAASurDeux, contraste, resoudreMarque, textePosableSur } from './marque';
+
+describe('les deux outils partagés du résolveur', () => {
+  it('ajusterJusquaAASurDeux satisfait le plus exigeant des deux fonds', () => {
+    // Nuit : le gris atténué passait sur le fond (4,63) et échouait sur la
+    // carte (4,18) — c'est là qu'il est réellement posé.
+    const { ground, surface } = DIRECTIONS.nuit.palette;
+    const naif = ajusterJusquaAA('#807e7c', ground);
+    expect(ratioContraste(naif, surface)).toBeLessThan(4.5);
+    const deux = ajusterJusquaAASurDeux('#807e7c', ground, surface);
+    expect(ratioContraste(deux, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(ratioContraste(deux, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('textePosableSur tranche par contraste réel, pas par seuil de luminance', () => {
+    expect(textePosableSur('#c9a15a')).toBe('#000000');
+    expect(textePosableSur('#1a1a1a')).toBe('#ffffff');
+    // #808080 : luminance 0,216 — un seuil naïf « > 0,5 ⇒ noir » choisirait le
+    // blanc, qui n'y atteint que 3,95:1 quand le noir en fait 5,32.
+    expect(textePosableSur('#808080')).toBe('#000000');
+  });
+});
 
 describe('contraste(brand)', () => {
-  it('donne cinq verdicts, tous vrais, sur une direction bien dessinée', () => {
+  it('donne six verdicts, tous vrais, sur une direction bien dessinée', () => {
     const v = contraste(DIRECTIONS.brasserie);
     expect(v.ok).toBe(true);
-    expect(v.verdicts).toHaveLength(5);
+    expect(v.verdicts).toHaveLength(6);
     expect(v.verdicts.map((x) => x.couple)).toEqual([
-      'ink/ground', 'ink/surface', 'onAccent/accent', 'accentInk/ground', 'inkMut/ground',
+      'ink/ground', 'ink/surface', 'onAccent/accent', 'accentInk/ground',
+      'inkMut/ground', 'inkMut/surface',
     ]);
   });
 
@@ -167,6 +201,7 @@ describe('resoudreMarque(brand)', () => {
       '--cf-r-xs',
       '--cf-red',
       '--cf-red-t',
+      '--cf-scrim',
       '--cf-shadow',
       '--cf-shadow-2',
       '--cf-shadow-accent',
@@ -198,11 +233,30 @@ describe('resoudreMarque(brand)', () => {
     expect(ratioContraste(j.vars['--cf-accent-ink']!, '#F6EBD9')).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('inkMut reste lisible : ramené à AA si le mélange descend trop bas', () => {
+  it('inkMut reste lisible sur le fond ET sur la carte — le texte atténué vit dans les deux', () => {
     for (const key of PRESET_KEYS) {
+      const { ground, surface } = DIRECTIONS[key].palette;
       const j = resoudreMarque(DIRECTIONS[key]);
-      expect(ratioContraste(j.vars['--cf-mut']!, DIRECTIONS[key].palette.ground)).toBeGreaterThanOrEqual(4.5);
+      expect(ratioContraste(j.vars['--cf-mut']!, ground), `${key} sur ground`).toBeGreaterThanOrEqual(4.5);
+      expect(ratioContraste(j.vars['--cf-mut']!, surface), `${key} sur surface`).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('les teintes texte des sémantiques passent AA sur le fond ET sur la carte', () => {
+    for (const key of PRESET_KEYS) {
+      const { ground, surface } = DIRECTIONS[key].palette;
+      const j = resoudreMarque(DIRECTIONS[key]);
+      for (const jeton of ['--cf-green-t', '--cf-red-t', '--cf-amber-t'] as const) {
+        expect(ratioContraste(j.vars[jeton]!, ground), `${key} ${jeton} sur ground`).toBeGreaterThanOrEqual(4.5);
+        expect(ratioContraste(j.vars[jeton]!, surface), `${key} ${jeton} sur surface`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('le voile s’assombrit toujours — jamais le fond, qui l’éclaircirait sur un masque clair', () => {
+    expect(resoudreMarque(DIRECTIONS.nuit).vars['--cf-scrim']).toBe('rgba(0, 0, 0, 0.72)');
+    // Soleil : l'encre marine du restaurant à 45 %, pas son sable.
+    expect(resoudreMarque(DIRECTIONS.soleil).vars['--cf-scrim']).toBe('rgba(27, 42, 74, 0.45)');
   });
 
   it('les couleurs sémantiques ne sont jamais la marque', () => {
@@ -256,8 +310,14 @@ describe('le repli — un tenant sans brand a quand même un masque', () => {
     expect(marqueDeRepli(null, null).palette.accent).toBe('#c9a15a');
   });
 
-  it('un accent trop sombre pour Nuit est éclairci jusqu’à AA sur le fond', () => {
+  it('l’accent reste le sien — c’est accentInk qui porte l’AA', () => {
+    // Spec §8.1 : `accent = brandColor`. Un anthracite est un bouton
+    // parfaitement lisible (son `onAccent` est blanc) ; c'est seulement
+    // l'accent posé en TEXTE qui doit être éclairci, et `accentInk` — dérivé,
+    // jamais stocké — s'en charge. Réécrire l'accent stocké rendrait au
+    // restaurateur une couleur qu'il n'a pas choisie.
     const b = marqueDeRepli('#1a1a1a', null);
+    expect(b.palette.accent).toBe('#1a1a1a');
     expect(contraste(b).ok).toBe(true);
   });
 });

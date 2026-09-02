@@ -38,8 +38,26 @@ export const TypePairKeySchema = z.enum(TYPE_PAIR_KEYS);
 export type TypePairKey = z.infer<typeof TypePairKeySchema>;
 
 const Hex = z.string().trim().regex(HEX, 'Couleur attendue au format #rrggbb');
-/** URL interne d'image (R2) — jamais un lien externe sur un ticket. */
-const ImageUrl = z.string().trim().url().max(500).nullable();
+/**
+ * URL interne d'image (R2) — jamais un lien externe sur un ticket.
+ *
+ * Le schéma était `.url()` seul, qui accepte TOUT protocole : `javascript:…`
+ * posé dans `logo.mark.dark` finissait en `src` d'un `<img>` et en `src`
+ * d'icône de manifeste. Le refus est ici, au contrat, parce que c'est le seul
+ * point que traversent l'API, le web et la reprise.
+ *
+ * L'allowlist d'ORIGINE (n'accepter que notre bucket R2) est délibérément
+ * reportée au chemin de dépôt (`modules/tenants/logo.*`) : c'est lui qui
+ * connaît l'origine réellement servie, et l'y mettre ici casserait les
+ * environnements de développement qui servent leurs images ailleurs.
+ */
+const ImageUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(500)
+  .refine((u) => /^https?:\/\//i.test(u), 'URL http(s) attendue')
+  .nullable();
 
 export const BrandPaletteSchema = z
   .object({
@@ -236,6 +254,46 @@ export function ajusterJusquaAA(couleur: string, fond: string, seuil = WCAG_AA):
   if (versNoir) return versNoir.candidat;
   if (versBlanc) return versBlanc.candidat;
   // Ne devrait pas arriver pour seuil ≤ ~4.58 (AAA) : par honnêteté, le pôle le plus contrasté gagne.
+  return textePosableSur(fond);
+}
+
+/**
+ * AA sur les DEUX fonds d'une surface — le fond de page ET la carte.
+ *
+ * Une encre atténuée ne vit presque jamais sur `ground` : elle est dans une
+ * carte, donc sur `surface`. L'ajuster sur `ground` seul la laissait à 4,18:1
+ * sur la surface de Nuit et 4,25:1 sur celle de Marché — sous le seuil, là
+ * où le client la lit vraiment.
+ *
+ * Deux passes suffisent et ne peuvent pas osciller : `ground` et `surface`
+ * sont du même côté (deux clairs, ou deux sombres), donc la nuance qui
+ * satisfait le PLUS exigeant des deux satisfait l'autre. La boucle bornée
+ * n'est qu'une ceinture, jamais une convergence espérée.
+ */
+export function ajusterJusquaAASurDeux(
+  couleur: string,
+  fondA: string,
+  fondB: string,
+  seuil = WCAG_AA,
+): string {
+  let c = ajusterJusquaAA(couleur, fondA, seuil);
+  for (let passe = 0; passe < 3; passe += 1) {
+    if (ratioContraste(c, fondA) >= seuil && ratioContraste(c, fondB) >= seuil) break;
+    c = ajusterJusquaAA(c, ratioContraste(c, fondA) < seuil ? fondA : fondB, seuil);
+  }
+  return c;
+}
+
+/**
+ * Le texte posable sur un aplat : noir ou blanc, par CONTRASTE réel — jamais
+ * par un seuil de luminance, qui se trompe de pôle au milieu de l'échelle.
+ *
+ * Au niveau du module parce que trois appelants en dépendent : le résolveur
+ * (texte sur une sémantique), le repli (`onAccent` d'un tenant non repris) et
+ * l'API (`identiteAvecAccent`, quand le sélecteur de couleur de l'admin
+ * réécrit l'accent d'un masque déjà posé).
+ */
+export function textePosableSur(fond: string): '#000000' | '#ffffff' {
   return ratioContraste('#000000', fond) >= ratioContraste('#ffffff', fond) ? '#000000' : '#ffffff';
 }
 
@@ -256,8 +314,11 @@ export type Verdict = {
 /** Les dérivés dont dépend le contraste — calculés une fois, partagés. */
 function derives(p: BrandPalette) {
   return {
+    // `accentInk` reste jugé sur `ground` : c'est la lettre de la spec §4.1,
+    // et il porte surtout des titres et des prix posés sur le fond de page.
     accentInk: ajusterJusquaAA(p.accent, p.ground),
-    inkMut: ajusterJusquaAA(melanger(p.ink, p.ground, 0.5), p.ground),
+    // `inkMut` habite les cartes autant que la page — les deux fonds, donc.
+    inkMut: ajusterJusquaAASurDeux(melanger(p.ink, p.ground, 0.5), p.ground, p.surface),
   };
 }
 
@@ -270,6 +331,8 @@ export function contraste(brand: Brand): { ok: boolean; verdicts: Verdict[] } {
     ['onAccent/accent', p.onAccent, p.accent],
     ['accentInk/ground', d.accentInk, p.ground],
     ['inkMut/ground', d.inkMut, p.ground],
+    // Ajouté EN FIN de liste : l'ordre est lu par l'éditeur et par les tests.
+    ['inkMut/surface', d.inkMut, p.surface],
   ];
   const verdicts = couples.map(([couple, avant, arriere]): Verdict => {
     // Le seuil compare la valeur BRUTE — l'arrondi n'habille que le champ rapporté.
@@ -326,8 +389,6 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
   const [rSm, rMd, rLg] = RAYONS[brand.shape];
   const m = MOUVEMENTS[brand.motion];
   const pair = TYPE_PAIRS[brand.type.pair];
-  // Le texte posé sur une sémantique : noir ou blanc, par contraste réel.
-  const sur = (fond: string) => (ratioContraste('#000000', fond) >= ratioContraste('#ffffff', fond) ? '#000000' : '#ffffff');
   const ombre = sombre ? 'rgba(0, 0, 0, 0.38)' : alpha(p.ink, 0.14);
 
   const vars: Record<string, string> = {
@@ -357,12 +418,14 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     '--cf-green': sem.green,
     '--cf-red': sem.red,
     '--cf-amber': sem.amber,
-    '--cf-green-t': ajusterJusquaAA(sem.green, p.ground),
-    '--cf-red-t': ajusterJusquaAA(sem.red, p.ground),
-    '--cf-amber-t': ajusterJusquaAA(sem.amber, p.ground),
-    '--cf-on-green': sur(sem.green),
-    '--cf-on-red': sur(sem.red),
-    '--cf-on-amber': sur(sem.amber),
+    // Les teintes TEXTE des sémantiques vivent dans des pastilles posées sur
+    // une carte : elles se jugent sur `surface` autant que sur `ground`.
+    '--cf-green-t': ajusterJusquaAASurDeux(sem.green, p.ground, p.surface),
+    '--cf-red-t': ajusterJusquaAASurDeux(sem.red, p.ground, p.surface),
+    '--cf-amber-t': ajusterJusquaAASurDeux(sem.amber, p.ground, p.surface),
+    '--cf-on-green': textePosableSur(sem.green),
+    '--cf-on-red': textePosableSur(sem.red),
+    '--cf-on-amber': textePosableSur(sem.amber),
     // Surfaces composées — le voile suit l'encre, l'aplat suit la surface
     '--cf-card-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.05)} 0%, ${alpha(p.ink, 0)} 62%), linear-gradient(0deg, ${p.surface}, ${p.surface})`,
     '--cf-elev-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.045)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${melanger(p.surface, p.ink, 0.04)}, ${melanger(p.surface, p.ink, 0.04)})`,
@@ -374,6 +437,17 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     '--cf-shadow-card': `0 1px 0 ${ombre}, 0 10px 26px ${ombre}`,
     '--cf-shadow-accent': `0 0 0 1px ${p.accent}`,
     '--cf-shadow-drawer': `-1px 0 0 ${alpha(p.ink, 0.08)}, -26px 0 60px ${ombre}`,
+    /*
+     * LE VOILE S'ASSOMBRIT TOUJOURS — il ne suit jamais le fond.
+     *
+     * Les trois voiles (modale, tiroir, feuille du tunnel) étaient un
+     * `bg-bg/N` : sur un masque CLAIR, voiler le fond avec le fond ÉCLAIRCIT
+     * la page au lieu de la reculer, et la feuille flotte sur un blanc laiteux
+     * sans hiérarchie. En mode sombre, un noir franc ; en mode clair, l'encre
+     * du restaurant à 45 % — teintée par sa marque, mais toujours plus sombre
+     * que ce qu'elle recouvre.
+     */
+    '--cf-scrim': sombre ? 'rgba(0, 0, 0, 0.72)' : alpha(p.ink, 0.45),
     // Forme
     '--cf-r-xs': `${rSm}px`,
     '--cf-r-sm': `${rMd}px`,
@@ -411,8 +485,16 @@ export function marqueDeRepli(
 ): Brand {
   const nuit = DIRECTIONS.nuit;
   const brut = String(brandColor ?? '').trim().toLowerCase();
-  const accent = ajusterJusquaAA(HEX.test(brut) ? brut : LAITON, nuit.palette.ground);
-  const onAccent = ratioContraste('#000000', accent) >= ratioContraste('#ffffff', accent) ? '#000000' : '#ffffff';
+  /*
+   * L'accent STOCKÉ reste celui du restaurant — spec §8.1 : `accent =
+   * brandColor`. Il était ramené à AA sur le fond de Nuit, ce qui réécrivait
+   * silencieusement la couleur de marque : un tenant à l'accent sombre voyait
+   * `GET /tenants/me` lui rendre un `brandColor` qu'il n'a jamais posé, et le
+   * sélecteur de son admin s'ouvrait sur une autre couleur que la sienne.
+   * C'est `accentInk` (dérivé, jamais stocké) qui porte l'AA du texte.
+   */
+  const accent = HEX.test(brut) ? brut : LAITON;
+  const onAccent = textePosableSur(accent);
   return {
     ...nuit,
     palette: { ...nuit.palette, accent, onAccent },
