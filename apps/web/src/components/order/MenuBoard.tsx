@@ -40,7 +40,7 @@ export function MenuBoard({
   inCart,
   disabled = false,
   stickyTop = 0,
-  prixMono = false,
+  prixMono,
 }: {
   categories: MenuCategory[];
   onPick: (product: MenuProduct) => void;
@@ -49,8 +49,12 @@ export function MenuBoard({
   disabled?: boolean;
   /** Décalage vertical du bloc collant (en-tête d’embed au-dessus). */
   stickyTop?: number;
-  /** Paire typographique du masque qui pose les prix en chasse fixe. */
-  prixMono?: boolean;
+  /**
+   * Paire typographique du masque qui pose les prix en chasse fixe.
+   * OBLIGATOIRE : une valeur par défaut laisse un oubli passer en silence,
+   * et un prix retombé en police de corps ne se voit qu'à l'œil.
+   */
+  prixMono: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(categories[0]?.id ?? "");
@@ -322,13 +326,16 @@ function ProductCard({
         onClick={onPick}
         disabled={!clickable}
         aria-label={`${product.name}${product.configurable ? " — composer" : " — ajouter au panier"}`}
-        /* La disposition suit la COLONNE, pas l'écran. Au-delà de 20 rem
-           le visuel se range à gauche du texte — la liste dense, scannable,
-           du téléphone comme du bureau. En dessous (une grille à colonnes
-           serrées), le nom du plat n'aurait plus que ~130 px à côté de la
-           vignette : le visuel passe alors au-dessus, pleine largeur. */
+        /* La disposition suit la COLONNE, pas l'écran — et le seuil vaut
+           EXACTEMENT le minimum de piste de la grille (17 rem). Les deux
+           chiffres doivent rester égaux : plus haut, la grille fabriquerait
+           des colonnes que la disposition en ligne tient très bien mais que
+           la carte refuserait ; plus bas, elle se serrerait dans une colonne
+           trop étroite pour le nom du plat. Une colonne ne peut donc jamais
+           être plus étroite que ce que la ligne demande — et le seul cas qui
+           bascule est `min(100%, 17rem)`, quand la place manque vraiment. */
         className={cx(
-          "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @xs:flex-row @xs:gap-3.5",
+          "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @[17rem]:flex-row @[17rem]:gap-3.5",
           !clickable && "cursor-default active:scale-100",
         )}
       >
@@ -340,7 +347,7 @@ function ProductCard({
           /* Plateau LÉGÈREMENT paysage : les visuels détourés de la carte le
              sont presque tous (582×395, 665×329…). Dans un carré, ils
              s'inscrivent par la largeur et laissent deux bandes vides. */
-          className="h-[136px] w-full @xs:h-[92px] @xs:w-[104px]"
+          className="h-[136px] w-full @[17rem]:h-[92px] @[17rem]:w-[104px]"
         />
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -401,15 +408,15 @@ export function Highlights({
   products,
   inCart,
   disabled,
-  prixMono = false,
+  prixMono,
   onPick,
   onBrowse,
 }: {
   products: MenuProduct[];
   inCart: Record<string, number>;
   disabled: boolean;
-  /** Paire typographique du masque qui pose les prix en chasse fixe. */
-  prixMono?: boolean;
+  /** Paire typographique du masque — obligatoire, comme sur `MenuBoard`. */
+  prixMono: boolean;
   onPick: (product: MenuProduct) => void;
   onBrowse: () => void;
 }) {

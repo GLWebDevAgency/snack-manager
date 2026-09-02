@@ -122,9 +122,15 @@
   );
 }
 
-/* ── Grain très fin sur les grandes surfaces sombres (héro, bandeau) ────
- * Un aplat noir pur sur écran OLED « colle » ; ce bruit à 3 % casse la
- * bande sans jamais devenir visible.
+/* ── Grain très fin sur les grandes surfaces pleines (héro, bandeau) ────
+ * Écrit pour le noir : un aplat pur « colle » sur un écran OLED, et ce bruit
+ * à 3,5 % casse la bande sans jamais devenir visible.
+ *
+ * Depuis le masque d'identité, la même règle se pose sur des héros CLAIRS.
+ * Elle y reste, volontairement : à 3,5 % d'opacité, le bruit ne se lit pas
+ * comme du sale mais comme un grain de papier — exactement ce qu'une carte
+ * de brasserie crème demande. La bande, elle, existe dans les deux sens :
+ * un dégradé de crème sur crème l'accuse autant qu'un dégradé de noir.
  */
 .sm-grain::after {
   content: "";

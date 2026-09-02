@@ -125,6 +125,7 @@ export function StripeCard({
   stripeAccount,
   amount,
   apparence,
+  prixMono,
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
@@ -147,6 +148,8 @@ export function StripeCard({
    * démonterait et remonterait le champ de carte à chaque frappe.
    */
   apparence: ApparenceStripe;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
   returnUrl: string;
   onPaid: () => void;
   /** Repli explicite : « je réglerai au comptoir ». */
@@ -230,7 +233,7 @@ export function StripeCard({
           Votre commande est enregistrée : vous pourrez régler au comptoir au
           moment du retrait.
         </Banner>
-        <PrimaryAction icon="check" onClick={onGiveUp}>
+        <PrimaryAction icon="check" mono={prixMono} onClick={onGiveUp}>
           Continuer — je paie au comptoir
         </PrimaryAction>
       </div>
@@ -261,6 +264,7 @@ export function StripeCard({
         loading={paying}
         icon="check"
         amount={amount}
+        mono={prixMono}
       >
         Payer
       </PrimaryAction>

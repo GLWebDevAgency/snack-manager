@@ -1179,6 +1179,7 @@ export function PrimaryAction({
   loading,
   onClick,
   icon,
+  mono = false,
   type = "button",
 }: {
   children: ReactNode;
@@ -1188,6 +1189,12 @@ export function PrimaryAction({
   loading?: boolean;
   onClick?: () => void;
   icon?: IconName;
+  /**
+   * `prixMono` du masque. Le montant de ce bouton est un prix comme un autre :
+   * sans lui, le pied du tunnel restait en police de corps pendant que le
+   * total juste au-dessus passait en chasse fixe.
+   */
+  mono?: boolean;
   type?: "button" | "submit";
 }) {
   return (
@@ -1213,7 +1220,7 @@ export function PrimaryAction({
           <span aria-hidden className="opacity-45">
             ·
           </span>
-          <Money cents={amount} />
+          <Money cents={amount} mono={mono} />
         </>
       )}
     </button>

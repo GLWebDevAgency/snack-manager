@@ -488,6 +488,7 @@ export function Checkout({
           embed={embed}
           demo={demo}
           verified={demo || Boolean(turnstileToken)}
+          prixMono={prixMono}
           onNext={(next) => {
             if (next === "customer") setTouched(false);
             setStep(next);
@@ -579,6 +580,7 @@ export function Checkout({
             stripeAccount={intent.stripeAccount}
             amount={intent.amount}
             apparence={stripeApparence}
+            prixMono={prixMono}
             returnUrl={
               typeof window === "undefined" || !order
                 ? ""
@@ -683,6 +685,7 @@ function Footer({
   embed,
   demo,
   verified,
+  prixMono,
   onNext,
   onSubmit,
   onFinish,
@@ -699,6 +702,8 @@ function Footer({
   embed: boolean;
   demo: boolean;
   verified: boolean;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
   onNext: (next: Step) => void;
   onSubmit: () => void;
   onFinish: () => void;
@@ -734,6 +739,7 @@ function Footer({
         disabled={empty || blocked}
         amount={empty ? undefined : cart.subtotal}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("customer")}
       >
         {empty ? "Votre panier est vide" : "Continuer"}
@@ -746,6 +752,7 @@ function Footer({
       <PrimaryAction
         disabled={!contactOk || blocked}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("slot")}
       >
         {contactOk ? "Choisir le créneau" : "Nom et téléphone requis"}
@@ -758,6 +765,7 @@ function Footer({
       <PrimaryAction
         disabled={!slotIso || blocked}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("pay")}
       >
         {slotLabel ? `Continuer · retrait ${slotLabel}` : "Choisissez un créneau"}
@@ -771,6 +779,7 @@ function Footer({
       loading={busy}
       amount={cart.subtotal}
       icon={method === "online" ? "euro" : "check"}
+      mono={prixMono}
       onClick={onSubmit}
     >
       {!verified

@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { resoudreMarque } from "@sm/contracts";
+import { TYPE_PAIRS } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
@@ -104,8 +104,12 @@ export function Storefront({
    * paires typographiques du masque sur dix posent les prix en chasse fixe :
    * laisser chaque composant relire la marque disperserait la règle dans dix
    * fichiers, où elle finirait par diverger.
+   *
+   * Lu dans TYPE_PAIRS et non via `resoudreMarque()` : `styleDuMasque()`
+   * résout déjà la marque au-dessus, et refaire tous les mélanges de palette
+   * pour un booléen serait payer une palette pour lire une police.
    */
-  const { prixMono } = resoudreMarque(site.tenant.brand);
+  const { prixMono } = TYPE_PAIRS[site.tenant.brand.type.pair];
   /*
    * L'habillage du champ de carte est MÉMORISÉ : sa référence entre dans les
    * dépendances de l'effet qui monte le Payment Element. Un objet neuf à

@@ -42,7 +42,6 @@ import { euros } from "./helpers";
 const SUPPLEMENT_GROUP = "supplements";
 import {
   Badge,
-  Money,
   OptionChip,
   OptionRow,
   Plate,
@@ -85,15 +84,15 @@ export function ProductSheet({
   onSubmit,
   /** Commande suspendue : la configuration reste visible, l’ajout est bloqué. */
   blocked = false,
-  /** Paire typographique du masque qui pose les prix en chasse fixe. */
-  prixMono = false,
+  /** Paire typographique du masque — obligatoire, comme sur `MenuBoard`. */
+  prixMono,
 }: {
   draft: Draft | null;
   onChange: (next: Draft) => void;
   onClose: () => void;
   onSubmit: (line: CartLine) => void;
   blocked?: boolean;
-  prixMono?: boolean;
+  prixMono: boolean;
 }) {
   // Une copie figée survit à la fermeture le temps de l’animation de sortie
   // (motif « ajuster l’état pendant le rendu » de la doc React, pas un effet).
@@ -142,6 +141,7 @@ export function ProductSheet({
           />
           <div className="min-w-0 flex-1">
             <PrimaryAction
+              mono={prixMono}
               disabled={blocked || blocker !== null}
               amount={blocker || blocked ? undefined : unit * current.qty}
               icon={editing ? "check" : "cart"}
@@ -576,7 +576,3 @@ function ExtraGroup({
   );
 }
 
-/** Total unitaire réutilisable (récap panier). */
-export function UnitPrice({ cents }: { cents: number }) {
-  return <Money cents={cents} className="text-[15px]" />;
-}

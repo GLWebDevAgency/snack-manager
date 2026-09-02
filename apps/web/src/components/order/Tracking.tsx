@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resoudreMarque, type Brand, type OrderStatus, type OrderTicket } from "@sm/contracts";
+import { TYPE_PAIRS, type Brand, type OrderStatus, type OrderTicket } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
@@ -95,8 +95,10 @@ export function Tracking({
   }, [finished, refresh]);
 
   const masque = styleDuMasque(brand);
-  // La règle des prix vient du masque : cette page est une racine, elle la lit.
-  const { prixMono } = resoudreMarque(brand);
+  // La règle des prix vient du masque : cette page est une racine, elle la
+  // lit — dans la paire typographique, pas en résolvant la marque une
+  // deuxième fois (`styleDuMasque()` vient de le faire).
+  const { prixMono } = TYPE_PAIRS[brand.type.pair];
 
   const slotIso = ticket?.pickup?.slotIso ?? state.pickupSlot;
   const slotLabel = slotIso ? hhmm(slotIso) : null;
