@@ -9,6 +9,7 @@ type RoleProbe = {
   migration_rolcreatedb: unknown;
   migration_rolreplication: unknown;
   migration_has_role_membership: unknown;
+  migration_search_path: unknown;
   database_name: unknown;
   rolsuper: unknown;
   rolbypassrls: unknown;
@@ -67,6 +68,7 @@ async function assertLoyaltyRolesSafe(
               SELECT 1 FROM pg_catalog.pg_roles parent
                WHERE parent.oid <> m.oid AND pg_has_role(m.oid, parent.oid, 'MEMBER')
             ) AS migration_has_role_membership,
+            current_setting('search_path')::text AS migration_search_path,
             current_database()::text AS database_name,
             r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb, r.rolreplication,
             EXISTS (
@@ -107,6 +109,11 @@ async function assertLoyaltyRolesSafe(
     found.migration_rolcreatedb !== false ||
     found.migration_rolreplication !== false ||
     found.migration_has_role_membership !== false ||
+    typeof found.migration_search_path !== 'string' ||
+    found.migration_search_path
+      .split(',')
+      .map((schema) => schema.trim())
+      .join(',') !== 'public,pg_catalog' ||
     typeof found.database_name !== 'string' ||
     found.database_name.length === 0 ||
     found.rolsuper !== false ||

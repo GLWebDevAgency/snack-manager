@@ -16,6 +16,7 @@ function safeProbe() {
     migration_rolcreatedb: false,
     migration_rolreplication: false,
     migration_has_role_membership: false,
+    migration_search_path: 'public, pg_catalog',
     database_name: 'railway',
     rolsuper: false,
     rolbypassrls: false,
@@ -82,6 +83,22 @@ describe('rôle runtime des migrations supply', () => {
     ).rejects.toThrow(/absents ou privilégiés/);
     expect(query).toHaveBeenCalledOnce();
   });
+
+  it.each(['"$user", public', 'public, attacker, pg_catalog', 'pg_catalog, public'])(
+    'refuse un search_path migrateur non cloisonné : %s',
+    async (migrationSearchPath) => {
+      const query = vi.fn().mockResolvedValue({
+        rowCount: 1,
+        rows: [{ ...safeProbe(), migration_search_path: migrationSearchPath }],
+      });
+      const pool = { query } as unknown as Pick<Pool, 'query'>;
+
+      await expect(
+        assertSupplyMigrationRoleSafe(pool, 'snackmanager_staging_app'),
+      ).rejects.toThrow(/absents ou privilégiés/);
+      expect(query).toHaveBeenCalledOnce();
+    },
+  );
 
   it('active aussi le garde sur Railway staging', () => {
     expect(() => runtimeDatabaseRole({ RAILWAY_ENVIRONMENT_ID: 'env_staging' })).toThrow(/manquant/);
