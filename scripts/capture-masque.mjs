@@ -168,7 +168,16 @@ for (const direction of PRESET_KEYS) {
         );
         if (scrollX > 0) throw new Error(`défilement horizontal de ${scrollX}px`);
         const path = resolve(OUT, `${name}.png`);
-        await page.screenshot({ path, fullPage: true, animations: 'disabled' });
+        // `fullPage: false` — cadrer la FENÊTRE, pas la page. Mesuré (revue,
+        // tour 1) : le tunnel est un `Sheet` en `position: fixed`, mais
+        // Chromium compose `fullPage` contre la hauteur totale du DOM sous-
+        // jacent, pas contre le viewport visible ; sur cette page-là, ce DOM
+        // grimpe à 20 000+ px (ordinateur) et 39 000+ px (téléphone), et la
+        // feuille se retrouve composée à 75–85 % de l'image — hors du cadre
+        // que quiconque regarde. `fullPage: false` capture exactement ce que
+        // montre le viewport déclaré plus haut (`CADRES`), là où la feuille
+        // est réellement ancrée à l'écran.
+        await page.screenshot({ path, fullPage: false, animations: 'disabled' });
         const { size } = await stat(path);
         if (size < MIN_BYTES) throw new Error(`${size} o — surface probablement vide`);
         console.log(`  ✓ ${name} — ${(size / 1024).toFixed(0)} Ko`);
