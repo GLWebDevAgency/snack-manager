@@ -58,7 +58,13 @@ function toStored(raw: RawDomain): StoredDomain {
   };
 }
 
-function toIdentity(tenant: Tenant & { _id: unknown }): TenantIdentity {
+/**
+ * EXPORTÉE pour être testable sans Mongo : c'est la règle de dérivation des
+ * champs plats, et elle décide de la couleur qu'un restaurant porte sur son
+ * propre domaine. Un tenant repris rend l'accent de SON masque ; un tenant
+ * pas encore repris rend son `brandColor` BRUT, via le repli (spec §8.1).
+ */
+export function toIdentity(tenant: Tenant & { _id: unknown }): TenantIdentity {
   // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
   const brand = marqueEffective(tenant);
   return {

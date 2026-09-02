@@ -51,6 +51,35 @@ export interface BoardPromo {
   readonly value: number;
 }
 
+/**
+ * L'identité du restaurant telle que l'écran la reçoit — extraite du dépôt
+ * pour être TESTABLE sans Mongo.
+ *
+ * Les deux champs plats sont des dérivés du masque, jamais la colonne lue :
+ * un tenant repris peint son écran de menu avec l'accent de SON masque, et un
+ * tenant pas encore repris avec son `brandColor` brut, via le repli. Inline
+ * dans la requête, cette règle n'avait aucun test — et c'est exactement là
+ * qu'un « retour au champ plat, c'est plus simple » serait passé inaperçu.
+ */
+export function identiteDuTableau(
+  tenant: Partial<Tenant> & { _id: unknown },
+): BoardIdentity {
+  // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
+  const brand = marqueEffective(tenant);
+  return {
+    tenantId: String(tenant._id),
+    slug: String(tenant.slug ?? ''),
+    name: String(tenant.name ?? ''),
+    logoUrl: logoUrlDe(brand),
+    brandColor: brandColorDe(brand),
+    hours: (tenant.hours ?? []).map((h) => ({
+      day: Number(h?.day ?? 0),
+      lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
+      dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
+    })),
+  };
+}
+
 /** Tout ce qu'une résolution de contenu consomme, en une seule lecture. */
 export interface BoardSnapshot {
   readonly identity: BoardIdentity;
@@ -116,22 +145,8 @@ export class MenuBoardRepository {
 
     if (!tenant) return null;
 
-    // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
-    const brand = marqueEffective(tenant);
-
     return {
-      identity: {
-        tenantId: String(tenant._id),
-        slug: String(tenant.slug ?? ''),
-        name: String(tenant.name ?? ''),
-        logoUrl: logoUrlDe(brand),
-        brandColor: brandColorDe(brand),
-        hours: (tenant.hours ?? []).map((h) => ({
-          day: Number(h?.day ?? 0),
-          lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
-          dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
-        })),
-      },
+      identity: identiteDuTableau(tenant),
       categories: cats.map((c) => ({ id: String(c._id), name: String(c.name ?? '') })),
       products: prods.map((p) => ({
         id: String(p._id),

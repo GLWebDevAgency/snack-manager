@@ -1,7 +1,13 @@
 import { TenantSettingsUpdateSchema } from '@sm/contracts';
 import { TenantSchema } from '@sm/db';
 import { describe, expect, it } from 'vitest';
-import { REGLAGES_MODIFIABLES, TENANT_ME_FIELDS } from './tenants.service';
+import { DIRECTIONS, ratioContraste } from '@sm/contracts';
+import {
+  derivesDuMasque,
+  identiteAvecAccent,
+  REGLAGES_MODIFIABLES,
+  TENANT_ME_FIELDS,
+} from './tenants.service';
 
 /**
  * La route des réglages prend un corps NU — aucun schéma Zod ne la valide
@@ -164,5 +170,86 @@ describe('la fiche établissement rendue aux tablettes', () => {
         secret,
       );
     }
+  });
+});
+
+
+/**
+ * LE SÉLECTEUR DE COULEUR DOIT SURVIVRE À LA REPRISE.
+ *
+ * `brandColor` est devenu un DÉRIVÉ du masque à la lecture. Tant qu'un tenant
+ * n'a pas de `brand`, écrire la colonne suffit — le repli la relit. Dès que
+ * `backfill:brand` a posé un masque, c'est `brand.palette.accent` qui est
+ * rendu : le gérant changeait sa couleur dans `/admin/settings`, l'API
+ * répondait 200, et la page se rechargeait sur l'ancienne. Aucune erreur,
+ * aucun journal — le même défaut muet que `dailyGoalCents` plus haut.
+ *
+ * Le service n'a pas de banc d'essai (il parle à Mongoose) : c'est le
+ * fragment `$set`, pur, qui est verrouillé ici.
+ */
+describe('l’accent posé depuis l’admin', () => {
+  it('sans masque posé, n’écrit que le champ plat — le repli le relira', () => {
+    expect(identiteAvecAccent(null, '#2E9E4F')).toEqual({ brandColor: '#2E9E4F' });
+  });
+
+  it('avec un masque posé, écrit AUSSI l’accent du masque — sinon rien ne change à l’écran', () => {
+    const $set = identiteAvecAccent(DIRECTIONS.soleil, '#2E9E4F');
+    expect($set).toEqual({
+      brandColor: '#2E9E4F',
+      'brand.palette.accent': '#2e9e4f',
+      // Noir : sur ce vert, il fait 6,2:1 quand le blanc n'en fait que 3,4.
+      'brand.palette.onAccent': '#000000',
+    });
+  });
+
+  it('recalcule onAccent : garder l’ancien ferait du texte illisible sur la couleur neuve', () => {
+    // Nuit pose `onAccent: #1C1612` — presque noir. Un accent bordeaux le
+    // rendrait invisible : le texte doit basculer au blanc avec l'accent.
+    const $set = identiteAvecAccent(DIRECTIONS.nuit, '#5A1A16');
+    expect($set['brand.palette.onAccent']).toBe('#ffffff');
+    expect(
+      ratioContraste(String($set['brand.palette.onAccent']), String($set['brand.palette.accent'])),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * `GET /tenants/me` ET `PATCH /tenants/me/marque` rendent LA MÊME FORME.
+ *
+ * La lecture rendait le document projeté tel quel : ses champs plats dormaient
+ * en base d'avant la reprise. L'éditeur enregistrait un masque safran et
+ * relisait un laiton dans la réponse même de son enregistrement — il fallait
+ * recharger la page pour voir ce qu'on venait d'écrire.
+ */
+describe('les champs plats rendus par les routes du tenant', () => {
+  it('dérivent du masque quand il existe', () => {
+    const vue = derivesDuMasque({
+      slug: 'x',
+      name: 'X',
+      brandColor: '#c9a15a',
+      logoUrl: null,
+      brand: {
+        ...DIRECTIONS.soleil,
+        logo: { mark: { light: null, dark: 'https://r2/l.png' }, lockup: { light: null, dark: null } },
+      },
+    });
+    expect(vue.brandColor).toBe('#E07A1F');
+    expect(vue.logoUrl).toBe('https://r2/l.png');
+    expect(vue.brand.preset).toBe('soleil');
+    expect(vue.slug).toBe('x');
+  });
+
+  it('retombent sur le repli — l’accent BRUT du tenant — tant qu’aucun masque n’est posé', () => {
+    const vue = derivesDuMasque({
+      slug: 'y',
+      name: 'Y',
+      brandColor: '#7a2e2a',
+      logoUrl: 'https://r2/legacy.png',
+      brand: null,
+    });
+    // Brut, pas ajusté : spec §8.1, `accent = brandColor`.
+    expect(vue.brandColor).toBe('#7a2e2a');
+    expect(vue.logoUrl).toBe('https://r2/legacy.png');
+    expect(vue.brand.preset).toBe('nuit');
   });
 });

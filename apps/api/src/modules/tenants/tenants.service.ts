@@ -6,6 +6,7 @@ import {
   logoUrlDe,
   marqueEffective,
   publicOrderingState,
+  textePosableSur,
   type Brand,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
@@ -45,6 +46,57 @@ export const TENANT_ME_FIELDS = {
   settings: 1,
 } as const;
 
+/**
+ * Les champs plats, RECALCULÉS depuis le masque à la lecture (spec §8.3).
+ *
+ * `logoUrl` et `brandColor` restent dans tous les contrats — c'est le contrat
+ * « logo + accent » des outils du personnel — mais ils ne sont plus une
+ * source : ils dérivent de `brand`, comme partout ailleurs (`publicBySlug`,
+ * `toIdentity`, le tableau de menu). Les rendre tels qu'ils dorment en base
+ * faisait mentir la lecture dès la première reprise : le masque disait safran,
+ * la colonne disait laiton, et l'admin peignait le laiton.
+ *
+ * EXPORTÉE pour être testable : c'est la forme que voient `GET /tenants/me` ET
+ * `PATCH /tenants/me/marque`, et les deux doivent rester la même.
+ */
+export function derivesDuMasque(
+  doc: unknown,
+): Record<string, unknown> & { brand: Brand; logoUrl: string | null; brandColor: string } {
+  // Même ramener-à-l'objet-nu que `marqueEffective` : un sous-document
+  // HYDRATÉ porte des clés de prototype qu'un `...` recopierait.
+  const brut = doc as { toObject?: () => unknown } | null | undefined;
+  const nu = (brut && typeof brut.toObject === 'function' ? brut.toObject() : brut) as Record<
+    string,
+    unknown
+  >;
+  const brand = marqueEffective(nu);
+  return { ...nu, brand, logoUrl: logoUrlDe(brand), brandColor: brandColorDe(brand) };
+}
+
+/**
+ * Le fragment `$set` d'un changement d'accent depuis `/admin/settings`.
+ *
+ * Écrire `brandColor` seul suffisait tant que `brand` valait `null` — le repli
+ * le relisait. Une fois `backfill:brand` passé, c'est `brand.palette.accent`
+ * qui est rendu : le gérant changeait sa couleur, l'API répondait 200, et la
+ * page revenait à l'ancienne. Les deux s'écrivent donc ensemble.
+ *
+ * `onAccent` est recalculé dans la foulée : garder l'ancien ferait du texte
+ * blanc sur un jaune neuf. `textePosableSur` tranche par contraste réel — la
+ * même fonction que le résolveur, jamais un second seuil de luminance.
+ */
+export function identiteAvecAccent(
+  brand: unknown,
+  brandColor: string,
+): Record<string, unknown> {
+  const $set: Record<string, unknown> = { brandColor };
+  if (brand == null) return $set;
+  const accent = brandColor.trim().toLowerCase();
+  $set['brand.palette.accent'] = accent;
+  $set['brand.palette.onAccent'] = textePosableSur(accent);
+  return $set;
+}
+
 export const REGLAGES_MODIFIABLES = [
   'slotIntervalMin',
   'slotCapacity',
@@ -77,7 +129,7 @@ export class TenantsService {
   async byId(tenantId: string) {
     const t = await this.tenants.findById(tenantId, TENANT_ME_FIELDS);
     if (!t) throw new NotFoundException('Tenant introuvable');
-    return t;
+    return derivesDuMasque(t);
   }
 
   async bySlug(slug: string) {
@@ -140,9 +192,23 @@ export class TenantsService {
   async updateIdentity(tenantId: string, patch: TenantIdentityUpdate) {
     const $set: Record<string, unknown> = {};
     if (patch.name !== undefined) $set.name = patch.name;
-    if (patch.brandColor !== undefined) $set.brandColor = patch.brandColor;
     if (patch.address !== undefined) $set.address = patch.address;
     if (patch.phones !== undefined) $set.phones = patch.phones;
+    if (patch.brandColor !== undefined) {
+      /*
+       * LE SÉLECTEUR DE COULEUR DOIT SURVIVRE À LA REPRISE.
+       *
+       * `brandColor` est devenu un DÉRIVÉ du masque à la lecture
+       * (`brandColorDe`). Tant que `brand` est null, l'écrire seul suffit —
+       * le repli le relit. Mais dès que `backfill:brand` a posé un masque,
+       * c'est `brand.palette.accent` qui est rendu : le gérant changeait sa
+       * couleur dans `/admin/settings`, l'API répondait 200, et la page se
+       * rechargeait sur l'ancienne. Le champ plat et le masque s'écrivent
+       * donc ensemble, ou le champ plat devient un mensonge.
+       */
+      const tenant = await this.tenants.findById(tenantId, { brand: 1 });
+      Object.assign($set, identiteAvecAccent(tenant?.brand ?? null, patch.brandColor));
+    }
     if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
     return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
   }
@@ -164,11 +230,22 @@ export class TenantsService {
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant) throw new NotFoundException('Tenant introuvable');
     const aEnregistrer = masqueAEnregistrer(brand, tenant.logoUrl);
-    return this.tenants.findByIdAndUpdate(
+    const ecrit = await this.tenants.findByIdAndUpdate(
       tenantId,
       { $set: { brand: aEnregistrer } },
       { new: true, projection: TENANT_ME_FIELDS },
     );
+    if (!ecrit) throw new NotFoundException('Tenant introuvable');
+    /*
+     * LA MÊME FORME QUE `GET /tenants/me` — pas le document brut.
+     *
+     * Cette route rendait les champs PLATS tels qu'ils dorment en base
+     * (`logoUrl`, `brandColor` d'avant la reprise) quand la lecture, elle,
+     * les DÉRIVE du masque. L'éditeur enregistrait donc un accent et
+     * récupérait l'ancien dans la même réponse : il fallait recharger la page
+     * pour voir ce qu'on venait d'écrire.
+     */
+    return derivesDuMasque(ecrit);
   }
 
   /** Horaires hebdomadaires (vue Horaires du back-office). */
