@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FILE DE TRAVAIL — ce que l'équipe traite aujourd'hui.
+ * FILE DU JOUR — ce que l'équipe traite aujourd'hui.
  *
  * La liste des clients répond à « comment va le parc ? ». Cette page répond à
  * une autre question, plus étroite et plus utile le lundi matin : « qui
@@ -162,7 +162,7 @@ export default function SignalsPage() {
   return (
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/*
-        Pas de titre local : la coquille `/sm` titre déjà « File de travail »
+        Pas de titre local : la coquille `/sm` titre déjà « File du jour »
         (entrée `/sm/signals` de sa NAV). Ici, seulement le décompte — la
         charge du matin — et la porte vers le parc.
       */}
@@ -178,7 +178,7 @@ export default function SignalsPage() {
           className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
         >
           <Icon name="user" size={15} />
-          Restaurants clients
+          Restaurants
         </Link>
       </div>
 

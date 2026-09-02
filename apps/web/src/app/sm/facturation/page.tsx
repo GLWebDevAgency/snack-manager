@@ -3,7 +3,7 @@
 /**
  * FACTURATION — qui paie, qui doit, et depuis combien de jours.
  *
- * La liste des clients répond à « comment va le parc ? », la file de travail à
+ * La liste des clients répond à « comment va le parc ? », la file du jour à
  * « qui j'appelle aujourd'hui ? ». Cet écran-ci répond à la seule question qui
  * décide d'une suspension : « qui nous doit de l'argent, et depuis quand ? »
  *
@@ -317,7 +317,7 @@ export default function FacturationPage() {
                 className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
               >
                 <Icon name="user" size={15} />
-                Restaurants clients
+                Restaurants
               </Link>
             }
           />

@@ -689,7 +689,7 @@ export function SupplySection({ file }: { file: ClientFile }) {
 /**
  * CE QUI EST OUVERT SUR CE CLIENT, ET CE QU'ON EN DIT.
  *
- * La file de travail (`/sm/signals`) balaie tout le parc ; cette carte n'en
+ * La file du jour (`/sm/signals`) balaie tout le parc ; cette carte n'en
  * garde que ce restaurant, dans le MÊME ordre. C'est la première chose qu'on
  * lit en ouvrant la fiche parce que c'est la raison de l'appel.
  *
@@ -719,7 +719,7 @@ export function SignalsSection({ file }: { file: ClientFile }) {
       title="Signaux ouverts"
       sub={
         signals.length === 0
-          ? "Ce que la file de travail retient sur ce client"
+          ? "Ce que la file du jour retient sur ce client"
           : `${int(signals.length)} raison${signals.length > 1 ? "s" : ""} d'appeler, de la plus urgente à la moins urgente`
       }
       actions={
@@ -756,7 +756,7 @@ export function SignalsSection({ file }: { file: ClientFile }) {
               </div>
               <div className="mt-0.5 text-xs text-mut">
                 Ni impayé, ni décrochage, ni appareil muet, ni module dormant. Il
-                n&apos;apparaît dans aucune bande de la file de travail — un
+                n&apos;apparaît dans aucune bande de la file du jour — un
                 appel ici serait un appel de courtoisie, pas un rattrapage.
               </div>
             </div>
@@ -796,7 +796,7 @@ function SignalCard({ signal: s }: { signal: ClientSignal }) {
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         {/* La bande, en toutes lettres et en couleur fonctionnelle — la MÊME
-            pastille que la file de travail, point coloré compris. */}
+            pastille que la file du jour, point coloré compris. */}
         <SeverityPill severity={s.severity} label={s.severityLabel} className="shrink-0" />
         <span className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
           {s.kindLabel}

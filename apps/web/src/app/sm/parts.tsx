@@ -767,7 +767,7 @@ function Rule() {
   return <div className="my-4 h-px bg-line" aria-hidden />;
 }
 
-// ─── Création de lead ───
+// ─── Création de prospect ───
 
 export function NewLeadDrawer({
   open,
@@ -791,7 +791,7 @@ export function NewLeadDrawer({
 
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- remise à zéro d'un formulaire de saisie : les champs viennent de la frappe, rien ne les recalcule. Sans elle, rouvrir « Nouveau lead » après une création réafficherait les valeurs précédentes et créerait un doublon du restaurant qu'on vient d'enregistrer.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- remise à zéro d'un formulaire de saisie : les champs viennent de la frappe, rien ne les recalcule. Sans elle, rouvrir « Nouveau prospect » après une création réafficherait les valeurs précédentes et créerait un doublon du restaurant qu'on vient d'enregistrer.
     setName("");
     setContactName("");
     setPhone("");
@@ -837,7 +837,7 @@ export function NewLeadDrawer({
       open={open}
       onClose={onClose}
       garde={entame}
-      title="Nouveau lead"
+      title="Nouveau prospect"
       sub="Un prospect entre au pipeline"
       footer={
         // Annuler à gauche, valider à droite — l'ordre de toutes les modales
@@ -853,7 +853,7 @@ export function NewLeadDrawer({
             disabled={!name.trim() || busy}
             onClick={() => void create()}
           >
-            {busy ? "Création…" : "Créer le lead"}
+            {busy ? "Création…" : "Créer le prospect"}
           </Btn>
         </div>
       }
@@ -947,7 +947,7 @@ export function NewLeadDrawer({
         </Card>
         {/* Soumission au clavier (Entrée) sans bouton visible en double. */}
         <button type="submit" className="sr-only" tabIndex={-1}>
-          Créer le lead
+          Créer le prospect
         </button>
       </form>
     </HqDrawer>

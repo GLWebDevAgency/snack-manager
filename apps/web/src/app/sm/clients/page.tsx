@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * RESTAURANTS CLIENTS — la liste qu'on balaie avant de décrocher.
+ * RESTAURANTS — la liste du parc, celle qu'on balaie avant de décrocher.
  *
  * Le signal qui compte n'est pas l'abonnement (il court encore le jour où le
  * client décroche) mais l'ACTIVITÉ : sept jours sans une seule commande sur un
@@ -368,7 +368,7 @@ export default function ClientsPage() {
         <Kpi label="MRR estimé" value={failed ? "—" : euroRound(mrr)} icon="euro" />
       </div>
 
-      {/* ── Filtres, recherche, accès à la file de travail ── */}
+      {/* ── Filtres, recherche, accès à la file du jour ── */}
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
           const count = counts[f.key];
@@ -420,7 +420,7 @@ export default function ClientsPage() {
           className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8 max-md:min-h-10"
         >
           <Icon name="bell" size={15} />
-          File de travail
+          File du jour
           {(signals?.length ?? 0) > 0 && (
             <span
               className={cx(

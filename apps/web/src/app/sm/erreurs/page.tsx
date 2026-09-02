@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * JOURNAL D'ERREURS — ce qui a cassé, où, et combien de fois.
+ * ERREURS — le journal de ce qui a cassé, où, et combien de fois.
  *
  * Alimenté par trois sources qui ne se voient pas : le filtre d'exceptions de
  * l'API (source « API »), le guichet public des interfaces (web, caisse,
