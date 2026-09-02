@@ -10,7 +10,7 @@
  * pleine largeur) plutôt que de tronquer le mode de service, qui décide du
  * contenu de la commande.
  */
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { palette } from '@sm/client-core';
 import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
 import { MODE_LABEL, type Mode } from './pos-state';
@@ -25,6 +25,8 @@ export function TopBar({
   pending,
   syncing,
   offline,
+  rejets,
+  onRejets,
   now,
   serviceCount,
   onService,
@@ -37,6 +39,9 @@ export function TopBar({
   pending: number;
   syncing: boolean;
   offline: boolean;
+  /** Ventes refusées définitivement par le serveur — à ressaisir. */
+  rejets: number;
+  onRejets: () => void;
   now: number;
   serviceCount: number;
   onService: () => void;
@@ -64,6 +69,41 @@ export function TopBar({
       ]}
     />
   );
+
+  /**
+   * LES VENTES REFUSÉES — la pastille rouge qui n'existait pas.
+   *
+   * Un refus définitif du serveur retirait l'entrée de la file et la jetait :
+   * sur une commande déjà encaissée, l'argent est dans le tiroir, le client est
+   * parti, et la vente n'existe nulle part. Rien à l'écran ne le disait.
+   *
+   * Elle passe AVANT la pastille de file d'attente : « en attente » est un état
+   * normal du service, « refusée » demande un geste.
+   */
+  const rejetes =
+    rejets > 0 ? (
+      <Pressable
+        onPress={onRejets}
+        accessibilityRole="button"
+        accessibilityLabel={`${rejets} vente${rejets > 1 ? 's' : ''} refusée${rejets > 1 ? 's' : ''} — à ressaisir`}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          paddingHorizontal: 12,
+          minHeight: 36,
+          borderRadius: R.pill,
+          backgroundColor: withAlpha(palette.red, 0.14),
+          borderWidth: 1,
+          borderColor: withAlpha(palette.red, 0.4),
+        }}
+      >
+        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.red }} />
+        <Text style={{ fontFamily: FONT, color: palette.red, fontSize: L.fs(13), fontWeight: '700' }}>
+          {rejets} refusée{rejets > 1 ? 's' : ''}
+        </Text>
+      </Pressable>
+    ) : null;
 
   const status =
     pending > 0 || offline ? (
@@ -136,6 +176,7 @@ export function TopBar({
         {/* Mode de service — sur sa propre rangée en compact */}
         <View style={{ flex: 1, alignItems: 'center' }}>{compact ? null : segmented}</View>
 
+        {rejetes}
         {status}
 
         {/* Horloge — les secondes sautent en premier quand la place manque */}

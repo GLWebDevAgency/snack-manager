@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
-import { EMPTY_PARTY, EMPTY_SERVICES, type InvoiceParty } from '@sm/contracts';
+import {
+  EMPTY_PARTY,
+  EMPTY_SERVICES,
+  prixFondateurCents,
+  type InvoiceParty,
+} from '@sm/contracts';
 import { renderDevisPdf } from '../billing/devis-pdf';
 import { buildDevisDocument } from './devis.service';
 
@@ -191,5 +196,127 @@ describe('rendu PDF', () => {
     expect(pdf).toContain('DEVIS');
     expect(pdf).toContain('BON POUR ACCORD');
     expect(pdf).toContain('DEV-20260824-7b8c');
+  });
+});
+
+/**
+ * LE DEVIS FONDATEUR — la remise se montre, elle ne se cache pas dans le prix.
+ *
+ * Un devis qui afficherait directement 119 € ne dit rien : le prospect ne sait
+ * pas ce qu'il gagne. On imprime donc le tarif public, puis la remise en
+ * négatif, ligne par récurrence — c'est là que l'offre se vend.
+ *
+ * Une ligne de remise PAR récurrence, et non une seule globale : mélanger un
+ * mensuel, un annuel et un ponctuel dans un même total ferait un chiffre que
+ * personne ne peut vérifier.
+ */
+describe('le devis d’un fondateur', () => {
+  const PROPOSITION = {
+    plan: 'complet' as const,
+    onlineOrdering: true,
+    billing: 'mensuel' as const,
+    services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+    note: '',
+  };
+
+  it('imprime le tarif public, puis la remise en négatif', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const remises = doc.lignes.filter((l) => l.montantHtCents < 0);
+    expect(remises.length).toBeGreaterThan(0);
+    for (const r of remises) expect(r.designation).toContain('fondateur');
+    // Les lignes au tarif public sont intactes : le prospect voit les deux.
+    expect(doc.lignes.some((l) => l.montantHtCents === 15_900)).toBe(true);
+  });
+
+  it('une remise par récurrence — jamais un total qui mélange mois, an et ponctuel', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const parRecurrence = new Map<string, number>();
+    for (const l of doc.lignes) {
+      parRecurrence.set(l.recurrence, (parRecurrence.get(l.recurrence) ?? 0) + l.montantHtCents);
+    }
+    // Chaque récurrence utilisée est ramenée EXACTEMENT à la moitié.
+    const publie = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW);
+    const publieParRec = new Map<string, number>();
+    for (const l of publie.lignes) {
+      publieParRec.set(l.recurrence, (publieParRec.get(l.recurrence) ?? 0) + l.montantHtCents);
+    }
+    for (const [rec, total] of publieParRec) {
+      expect(parRecurrence.get(rec)).toBe(Math.round(total / 2));
+    }
+  });
+
+  it('l’annonce la condition : douze mois, puis le tarif public', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW, { founderSeat: true });
+    const texte = doc.conditions.join(' ');
+    expect(texte).toMatch(/fondateur/i);
+    expect(texte).toMatch(/douze mois|12 mois/i);
+  });
+
+  it('sans place fondateur, rien ne change — aucune ligne négative', () => {
+    const doc = buildDevisDocument(LEAD, PROPOSITION, ISSUER, NOW);
+    expect(doc.lignes.every((l) => l.montantHtCents > 0)).toBe(true);
+    expect(doc.conditions.join(' ')).not.toMatch(/fondateur/i);
+  });
+});
+
+/**
+ * LE DEVIS ET LES FACTURES DOIVENT TOMBER SUR LE MÊME TOTAL.
+ *
+ * Les pièces sont émises UNE PAR SERVICE — un abonnement, un mensuel Atelier,
+ * une mise en service, un ponctuel par prestation. Chacune est remisée pour son
+ * propre compte. Si le devis remisait sur le TOTAL d'une récurrence, les deux
+ * arrondis divergeraient d'un centime dès qu'un prix devient impair, et un
+ * devis qui ne tombe pas juste se fait recompter par le comptable d'en face.
+ *
+ * Aucun prix de la grille n'est impair aujourd'hui : ce test ne protège de rien
+ * à cet instant, et c'est exactement pourquoi il doit exister. Le jour d'une
+ * révision de grille — un prix psychologique à 14,99 €, une reprise de TVA —
+ * personne ne repensera à cet arrondi.
+ */
+describe('cohérence des arrondis de la remise fondateur', () => {
+  it('la remise du devis vaut la somme des remises ligne à ligne', () => {
+    const doc = buildDevisDocument(
+      LEAD,
+      {
+        plan: 'complet',
+        onlineOrdering: true,
+        billing: 'mensuel',
+        services: {
+          ...EMPTY_SERVICES,
+          siteVitrine: true,
+          identiteVisuelle: true,
+          presenceInternet: true,
+          reseauxSociaux: 'hebdo',
+        },
+        note: '',
+      },
+      ISSUER,
+      NOW,
+      { founderSeat: true },
+    );
+    const publiques = doc.lignes.filter((l) => l.montantHtCents > 0);
+    const remises = doc.lignes.filter((l) => l.montantHtCents < 0);
+
+    // Chaque récurrence : la remise doit égaler la somme des moitiés de CHAQUE
+    // ligne, pas la moitié de leur somme.
+    for (const r of remises) {
+      const attendu = publiques
+        .filter((l) => l.recurrence === r.recurrence)
+        .reduce((somme, l) => somme + (prixFondateurCents(l.montantHtCents) - l.montantHtCents), 0);
+      expect(r.montantHtCents, `récurrence « ${r.recurrence} »`).toBe(attendu);
+    }
+  });
+
+  it('reste juste avec des montants impairs — le cas qu’aucun prix ne produit encore', () => {
+    // Deux lignes à 9,99 €. Le demi-centime va au client (`Math.ceil` sur la
+    // REMISE), donc chaque ligne tombe à 4,99 € : 9,98 € par ligne contre
+    // 9,99 € si l'on avait arrondi sur leur somme. C'est ce centime-là qu'on
+    // verrouille — et il penche du bon côté, celui du client.
+    const parLigne = prixFondateurCents(999) + prixFondateurCents(999);
+    const surTotal = prixFondateurCents(999 + 999);
+    expect(parLigne).not.toBe(surTotal);
+    // Le devis doit suivre la règle « par ligne », celle des factures émises.
+    expect(parLigne).toBe(998);
+    expect(surTotal).toBe(999);
   });
 });

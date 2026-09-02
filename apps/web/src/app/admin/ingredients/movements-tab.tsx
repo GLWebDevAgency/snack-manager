@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  STOCK_MOVEMENT_TYPES,
+  STOCK_MOVEMENT_FILTERABLE,
   type StockMovementRow,
   type StockMovementType,
   type SupplyIngredient,
@@ -109,7 +109,7 @@ export function MovementsTab({
           className="w-[180px]"
         >
           <option value="">Tous les types</option>
-          {STOCK_MOVEMENT_TYPES.map((t) => (
+          {STOCK_MOVEMENT_FILTERABLE.map((t) => (
             <option key={t} value={t}>
               {MOVEMENT_META[t].label}
             </option>
@@ -138,7 +138,15 @@ export function MovementsTab({
           </div>
         )
       ) : (
-        <div className="flex flex-col gap-3">
+        // Estompé pendant un rechargement (changement de filtre, « charger
+        // plus ») : les lignes affichées peuvent appartenir à l'ancien filtre.
+        <div
+          className={cx(
+            "flex flex-col gap-3 transition-opacity duration-200 ease-sm",
+            busy && "opacity-60",
+          )}
+          aria-busy={busy}
+        >
           {error && <ErrorState message={error} onRetry={() => void load()} />}
           <Card>
             {visible.length === 0 ? (
@@ -199,13 +207,10 @@ export function MovementsTab({
                         <td className="whitespace-nowrap px-4 py-3 text-[13px] text-mut">
                           {m.ref ?? "—"}
                         </td>
-                        <td className="max-w-[280px] px-4 py-3 text-[13px] text-mut">
-                          <span
-                            className="block truncate"
-                            title={m.note ?? undefined}
-                          >
-                            {m.note ?? "—"}
-                          </span>
+                        {/* Note en entier (pas de truncate : le title seul
+                            n'est lisible ni au clavier ni au doigt). */}
+                        <td className="max-w-[280px] px-4 py-3 text-[13px] leading-snug text-mut">
+                          {m.note ?? "—"}
                         </td>
                       </tr>
                     ))}

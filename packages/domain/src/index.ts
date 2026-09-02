@@ -7,7 +7,7 @@
  *    plat : ces briques n'appartiennent à aucun contexte, tout le monde s'en
  *    sert, et `Money` doit rester `Money` partout.
  *
- *  - Les **contextes bornés** (menu, ordering, supply, tenancy) sont exportés
+ *  - Les **contextes bornés** (menu, ordering, supply, tenancy, loyalty) sont exportés
  *    en espaces de noms. Ce n'est pas une précaution technique contre les
  *    collisions : c'est le langage du métier. `menu.OptionGroup` est ce que le
  *    client choisit sur la carte (avec son supplément), `supply.OptionGroup`
@@ -41,3 +41,4 @@ export * as menu from './menu';
 export * as ordering from './ordering';
 export * as supply from './supply';
 export * as tenancy from './tenancy';
+export * as loyalty from './loyalty';

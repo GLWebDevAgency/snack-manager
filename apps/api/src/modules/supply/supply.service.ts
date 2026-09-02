@@ -49,6 +49,7 @@ import type {
 } from '@sm/contracts';
 import type { Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { SUPPLY_DB } from '../../supply-db.module';
 import { buildProductModifiers, modifierKey, type ModifierIngredient } from './menu-modifiers';
 
@@ -104,7 +105,8 @@ export class SupplyService {
   ) {}
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
-    void this.redis.publish(
+    void publishRedisBestEffort(
+      this.redis,
       ordersChannel(tenantId),
       JSON.stringify({ event: WS_EVENTS.menuUpdated, payload: meta }),
     );

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import type { DeviceKind, DeviceTelemetry } from '@sm/contracts';
 import type { Device } from '@sm/db';
 
@@ -22,6 +23,8 @@ export interface StoredDevice {
   readonly paired: boolean;
   readonly lastSeenAt: Date | null;
   readonly active: boolean;
+  /** Version serveur de l'appairage, jamais exposée dans les vues publiques. */
+  readonly sessionVersion: string;
   /** Télémétrie du dernier battement — vides tant qu'un client ne l'envoie pas. */
   readonly appVersion: string;
   readonly queueDepth: number | null;
@@ -54,6 +57,7 @@ function toStored(raw: RawDevice): StoredDevice {
     paired: raw.paired === true,
     lastSeenAt: raw.lastSeenAt ?? null,
     active: raw.active !== false,
+    sessionVersion: String(raw.sessionVersion ?? '0'),
     appVersion: String(raw.appVersion ?? ''),
     queueDepth: typeof raw.queueDepth === 'number' ? raw.queueDepth : null,
     lastError: String(raw.lastError ?? ''),
@@ -87,6 +91,12 @@ export class DevicesRepository {
     const $set: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) $set[key] = value;
+    }
+    // Type et activation changent les droits effectifs de l'appareil. Une
+    // nouvelle version empêche un JWT antérieur de ressusciter après retour
+    // à l'état actif.
+    if (patch.kind !== undefined || patch.active !== undefined) {
+      $set.sessionVersion = randomUUID();
     }
     const raw = await this.devices
       .findOneAndUpdate({ _id: id, tenantId }, { $set }, { new: true })
@@ -124,6 +134,7 @@ export class DevicesRepository {
             paired: false,
             deviceToken: null,
             lastSeenAt: null,
+            sessionVersion: randomUUID(),
           },
         },
         { new: true },
@@ -148,9 +159,18 @@ export class DevicesRepository {
    * quand on déballe la caisse et l'écran cuisine d'affilée — n'obtiennent
    * jamais deux jetons valides.
    */
-  async claim(id: string, code: string, deviceToken: string, at: Date): Promise<boolean> {
+  async claim(
+    id: string,
+    code: string,
+    expectedKind: DeviceKind,
+    deviceToken: string,
+    at: Date,
+  ): Promise<boolean> {
     const res = await this.devices.updateOne(
-      { _id: id, pairingCode: code },
+      // Le type participe à l'écriture conditionnelle : même si un autre
+      // administrateur le change entre la lecture du code et ce claim, aucun
+      // jeton de la mauvaise surface n'est délivré.
+      { _id: id, pairingCode: code, kind: expectedKind },
       {
         $set: {
           pairingCode: null,

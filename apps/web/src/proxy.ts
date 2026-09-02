@@ -95,9 +95,11 @@ import { RESERVED_LABELS } from "@sm/domain";
  * ─────────────────────────────────────────────────────────────
  * 3 · En-têtes
  * ─────────────────────────────────────────────────────────────
- * `/embed/*` et `/w.js` doivent pouvoir vivre dans le site d’un client :
- * `frame-ancestors *` est posé ici explicitement, plutôt que dans
- * `next.config.ts` (fichier partagé avec d’autres chantiers).
+ * Par défaut, toute page ne peut vivre que dans une page de la même origine :
+ * cela protège les interfaces authentifiées tout en conservant les démos de
+ * la vitrine. Seuls `/embed/<slug>` et `/w.js` restent ouverts à un site tiers.
+ * La politique est posée ici, sur la réponse finale de chaque branche, plutôt
+ * que partagée entre `next.config.ts` et les exceptions du proxy.
  */
 
 /** Domaine principal de la plateforme (sans protocole). */
@@ -384,7 +386,14 @@ type Verdict = "réécrire" | "laisser" | "refuser";
 function verdictPourRestaurant(pathname: string, slug: string): Verdict {
   if (pathname === "/") return "réécrire";
 
-  if (pathname === `/r/${slug}` || pathname === `/r/${slug}/`) return "laisser";
+  if (
+    pathname === `/r/${slug}` ||
+    pathname === `/r/${slug}/` ||
+    pathname === `/r/${slug}/fidelite` ||
+    pathname.startsWith(`/r/${slug}/fidelite/`)
+  ) {
+    return "laisser";
+  }
   if (pathname === "/w.js" || pathname === "/robots.txt") return "laisser";
   if (pathname === `/embed/${slug}` || pathname === `/embed/${slug}/`) return "laisser";
   if (pathname.startsWith("/t/") || pathname.startsWith("/photos/")) return "laisser";
@@ -473,14 +482,22 @@ function refusHoteInconnu(host: string): NextResponse {
   });
 }
 
-/** En-têtes d’embarquement — l’embed et son chargeur vivent dans un site tiers. */
-function entetesEmbed(pathname: string): NextResponse | null {
-  if (!pathname.startsWith("/embed/") && pathname !== "/w.js") return null;
-  const response = NextResponse.next();
-  response.headers.set("Content-Security-Policy", "frame-ancestors *");
-  response.headers.delete("X-Frame-Options");
-  if (pathname === "/w.js") {
+const EMBED_PATH = /^\/embed\/[^/]+\/?$/;
+
+/** Une seule politique, appliquée aux passages, réécritures, redirections et refus. */
+function appliquerPolitiqueCadre(pathname: string, response: NextResponse): NextResponse {
+  const embeddable = pathname === "/w.js" || EMBED_PATH.test(pathname);
+  if (embeddable) {
+    response.headers.set("Content-Security-Policy", "frame-ancestors *");
+    response.headers.delete("X-Frame-Options");
+  } else {
+    response.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+    response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  }
+
+  if (pathname === "/w.js" && !response.headers.has("Cache-Control")) {
     // Le chargeur change rarement : cache navigateur court + revalidation CDN.
+    // Un refus temporaire d'hôte porte déjà `no-store` et doit le conserver.
     response.headers.set(
       "Cache-Control",
       "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
@@ -500,20 +517,24 @@ export async function proxy(request: NextRequest) {
    */
   const hote = await classerHote(request);
 
+  let response: NextResponse;
   if (hote.type === "inconnu") {
-    return refusHoteInconnu(normalizeHost(request.headers.get("host")));
+    response = refusHoteInconnu(normalizeHost(request.headers.get("host")));
+  } else if (hote.type === "plateforme") {
+    response = NextResponse.next();
+  } else {
+    switch (verdictPourRestaurant(pathname, hote.slug)) {
+      case "réécrire":
+        response = rewriteToRestaurant(request, hote.slug);
+        break;
+      case "refuser":
+        response = refus(request);
+        break;
+      default:
+        response = NextResponse.next();
+    }
   }
-
-  if (hote.type === "plateforme") return entetesEmbed(pathname) ?? NextResponse.next();
-
-  switch (verdictPourRestaurant(pathname, hote.slug)) {
-    case "réécrire":
-      return rewriteToRestaurant(request, hote.slug);
-    case "refuser":
-      return refus(request);
-    default:
-      return entetesEmbed(pathname) ?? NextResponse.next();
-  }
+  return appliquerPolitiqueCadre(pathname, response);
 }
 
 function rewriteToRestaurant(request: NextRequest, slug: string) {

@@ -14,13 +14,11 @@ import {
   DeviceCreateSchema,
   DeviceHeartbeatBodySchema,
   DevicePinLoginSchema,
-  DeviceTokenBodySchema,
   DeviceUpdateSchema,
   PairDeviceSchema,
   type DeviceCreate,
   type DeviceHeartbeatBody,
   type DevicePinLogin as DevicePinLoginDto,
-  type DeviceTokenBody,
   type DeviceUpdate,
   type PairDevice,
 } from '@sm/contracts';
@@ -109,7 +107,7 @@ export class DevicesController {
   @HttpCode(200)
   @Post('public/devices/pair')
   pairDevice(@Body(zod(PairDeviceSchema)) body: unknown) {
-    return this.pair.execute((body as PairDevice).pairingCode);
+    return this.pair.execute(body as PairDevice);
   }
 
   @Public()

@@ -52,6 +52,9 @@ function trackingService() {
     ordersModel() as never,
     {} as never,
     {} as never,
+    // Les promotions : ce service-ci ne fait que du suivi public, il n'en
+    // résout aucune.
+    { find: () => ({ lean: async () => [] }) } as never,
     {} as never,
     {} as never,
   );

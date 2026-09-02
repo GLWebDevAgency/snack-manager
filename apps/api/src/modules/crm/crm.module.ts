@@ -16,6 +16,8 @@ import { PlatformService } from './platform.service';
 import { ProductionController } from './production.controller';
 import { ProductionService } from './production.service';
 import { SignalsService } from './signals.service';
+import { ContactIngestGuard } from './contact-ingest.guard';
+import { PublicLeadsController } from './public-leads.controller';
 
 /**
  * Back-office interne Snack Manager (CRM HQ) — pipeline commercial, places
@@ -40,6 +42,7 @@ import { SignalsService } from './signals.service';
     BillingController,
     PlatformController,
     PublicPlatformController,
+    PublicLeadsController,
     ProductionController,
   ],
   providers: [
@@ -57,6 +60,7 @@ import { SignalsService } from './signals.service';
     SignalsService,
     PlatformService,
     ProductionService,
+    ContactIngestGuard,
   ],
   // `AdminService` est exporté pour que toute autre surface du CRM qui ouvre le
   // dossier d'un client puisse tracer la consultation dans le même journal

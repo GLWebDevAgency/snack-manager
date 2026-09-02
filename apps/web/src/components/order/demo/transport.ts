@@ -295,7 +295,6 @@ function createOrder(state: DemoState, body: CreateOrderPayload, at: number): Cr
 
   const number = state.nextNumber++;
   const id = `demo-order-${number}`;
-  const method = body.payment?.method === "online" ? "online" : "counter";
   const order: DemoOrder = {
     _id: id,
     number,
@@ -306,7 +305,7 @@ function createOrder(state: DemoState, body: CreateOrderPayload, at: number): Cr
     totals: { subtotal, discount: null, total: subtotal },
     // Le paiement en ligne n'aboutit jamais ici (aucun Stripe en
     // démonstration) : l'argent est dû au comptoir, comme le dit l'écran.
-    payment: { method, status: "pending" },
+    payment: { method: "counter", status: "pending" },
     pickup: {
       slot: body.pickup.slot,
       customerName: body.pickup.customerName.trim(),
@@ -325,7 +324,9 @@ function projection(order: DemoOrder, at: number): CreatedOrder {
     _id: order._id,
     number: order.number,
     status: statusAt(order, at),
-    totals: { subtotal: order.totals.subtotal, total: order.totals.total },
+    // La démonstration ne joue aucune promotion : ses commandes sont au tarif
+    // de la carte, et une remise inventée ferait douter du chiffre montré.
+    totals: { subtotal: order.totals.subtotal, discount: null, total: order.totals.total },
     pickup: order.pickup
       ? { slot: order.pickup.slot, customerName: order.pickup.customerName }
       : null,

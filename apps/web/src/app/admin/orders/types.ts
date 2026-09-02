@@ -67,10 +67,10 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   ready: "delivered",
 };
 
-/** Libellé du bouton d'avancement selon le statut courant (spec §6.2). */
+/** Libellé du bouton d'avancement selon le statut courant (spec §6.2) — toujours un verbe. */
 export const ADVANCE_LABELS: Partial<Record<OrderStatus, string>> = {
   new: "Accepter",
-  preparing: "Prête",
+  preparing: "Marquer prête",
   ready: "Remettre",
 };
 

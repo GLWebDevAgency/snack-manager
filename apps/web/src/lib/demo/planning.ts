@@ -165,7 +165,7 @@ export function shiftsOfWeek(world: DemoWorld, monday: Date): PlanningShiftView[
       const minutes = end - start;
 
       for (const member of team) {
-        const cost = HOURLY_COST_CENTS[member.role] ?? null;
+        const cost = coutDe(member);
         rows.push({
           id: `pl${++n}-${key}`,
           staffId: member._id,
@@ -498,8 +498,32 @@ export function planningComparison(world: DemoWorld, week: string | null): Plann
 }
 
 // ─────────────────────────────────────────────────────────────
-// GET /planning/staff-costs
+// GET /planning/staff-costs · PUT /planning/staff-costs/:staffId
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Les coûts saisis pendant la session de démonstration, par membre.
+ *
+ * Ils SURCHARGENT le défaut par rôle : sans cela, saisir un coût n'aurait
+ * aucun effet visible, et la démonstration montrerait un écran qui accepte
+ * puis oublie — exactement le défaut qu'on répare côté production.
+ */
+const coutsSaisis = new Map<string, number | null>();
+
+/** Le coût d'un membre : ce qui a été saisi, sinon le défaut de son rôle. */
+const coutDe = (m: { _id: string; role: string }): number | null =>
+  coutsSaisis.has(m._id) ? (coutsSaisis.get(m._id) ?? null) : (HOURLY_COST_CENTS[m.role] ?? null);
+
+export function planningSetStaffCost(
+  world: DemoWorld,
+  staffId: string,
+  hourlyCostCents: number | null,
+) {
+  const membre = world.staff.find((m) => m._id === staffId);
+  if (!membre) return { ok: false as const, message: "Équipier introuvable" };
+  coutsSaisis.set(staffId, hourlyCostCents);
+  return { id: staffId, name: membre.name, hourlyCostCents };
+}
 
 export function planningStaffCosts(world: DemoWorld) {
   const members = world.staff
@@ -508,7 +532,7 @@ export function planningStaffCosts(world: DemoWorld) {
       id: m._id,
       name: m.name,
       role: m.role,
-      hourlyCostCents: HOURLY_COST_CENTS[m.role] ?? null,
+      hourlyCostCents: coutDe(m),
     }));
   const missingCost = members.filter((m) => m.hourlyCostCents === null).length;
   return {

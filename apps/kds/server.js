@@ -26,31 +26,86 @@ const TYPES = {
   '.ttf': 'font/ttf',
 };
 
-http
-  .createServer((req, res) => {
-    const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+function sendError(res, status, message) {
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(message);
+}
 
-    // Traversée de répertoire : on résout puis on vérifie qu'on est resté sous ROOT.
-    const requested = path.normalize(path.join(ROOT, url));
-    const target = requested.startsWith(ROOT) ? requested : ROOT;
+function createStaticServer({ root = ROOT } = {}) {
+  const safeRoot = path.resolve(root);
 
-    let file = target;
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-      file = path.join(ROOT, 'index.html'); // repli SPA
+  return http.createServer((req, res) => {
+    let url;
+    try {
+      // La query ne désigne jamais un fichier et peut contenir des `%` légitimes.
+      url = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    } catch (error) {
+      if (error instanceof URIError) {
+        sendError(res, 400, 'Bad Request');
+        return;
+      }
+      throw error;
+    }
+
+    let file;
+    try {
+      // Traversée de répertoire : le séparateur évite qu'un dossier `dist-*`
+      // soit pris pour un enfant de `dist` par une simple comparaison de préfixe.
+      const requested = path.normalize(path.join(safeRoot, url));
+      const insideRoot =
+        requested === safeRoot || requested.startsWith(`${safeRoot}${path.sep}`);
+      const target = insideRoot ? requested : safeRoot;
+
+      file = target;
+      try {
+        if (fs.statSync(file).isDirectory()) file = path.join(safeRoot, 'index.html');
+      } catch (error) {
+        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+          file = path.join(safeRoot, 'index.html'); // repli SPA
+        } else {
+          throw error;
+        }
+      }
+    } catch {
+      sendError(res, 500, 'Internal Server Error');
+      return;
     }
 
     const ext = path.extname(file);
     const isHashed = /-[a-f0-9]{16,}\./.test(path.basename(file));
+    const stream = fs.createReadStream(file);
 
-    res.writeHead(200, {
-      'Content-Type': TYPES[ext] ?? 'application/octet-stream',
-      // Les bundles portent un hachage dans leur nom : cache long sans risque.
-      // Le HTML, lui, doit toujours être revalidé pour livrer la nouvelle version.
-      'Cache-Control': isHashed ? 'public, max-age=31536000, immutable' : 'no-cache',
-      'X-Content-Type-Options': 'nosniff',
+    stream.once('error', () => sendError(res, 500, 'Internal Server Error'));
+    stream.once('open', () => {
+      if (res.destroyed) {
+        stream.destroy();
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': TYPES[ext] ?? 'application/octet-stream',
+        // Les bundles portent un hachage dans leur nom : cache long sans risque.
+        // Le HTML, lui, doit toujours être revalidé pour livrer la nouvelle version.
+        'Cache-Control': isHashed ? 'public, max-age=31536000, immutable' : 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      stream.pipe(res);
     });
-    fs.createReadStream(file).pipe(res);
-  })
-  .listen(PORT, '0.0.0.0', () => {
+    res.once('close', () => stream.destroy());
+  });
+}
+
+if (require.main === module) {
+  createStaticServer().listen(PORT, '0.0.0.0', () => {
     console.log(`Bundle web servi sur le port ${PORT}`);
   });
+}
+
+module.exports = { createStaticServer };

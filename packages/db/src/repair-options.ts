@@ -39,9 +39,6 @@ const key = (s: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 
-const cents = (v: string | number): number =>
-  Math.round(parseFloat(String(v).replace(/[+€\s]/g, '').replace(',', '.')) * 100);
-
 const choices = (names: string[], priceDelta = 0) =>
   names.map((n) => ({ key: key(n), name: n, priceDelta }));
 
@@ -257,7 +254,17 @@ async function main() {
   await mongoose.disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+/**
+ * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
+ *
+ * Sans cette garde, importer ce fichier — pour tester une de ses fonctions, ou
+ * par une chaîne d'imports involontaire — ouvre une connexion à la base pointée
+ * par l'environnement et LANCE le traitement. Sur un poste dont le `.env` vise
+ * la production, c'est un script d'administration qui part tout seul.
+ */
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

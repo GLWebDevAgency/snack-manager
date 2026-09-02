@@ -26,8 +26,10 @@ import { Splash } from "@/components/brand/Splash";
 import { consommerSplashDeTransition } from "@/components/brand/SplashAuPremierPassage";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
+import { tenantAccentPalette } from "@/lib/tenant-accent";
 import { useTenantSocket } from "@/lib/ws";
 import { Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
+import { clearAllEnrollmentRecoveries } from "./fidelite/clients/enrollment-recovery";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -46,36 +48,13 @@ const MOBILE_BAR: { id: string; short: string }[] = [
   { id: "menu", short: "Carte" },
 ];
 
-/**
- * Texte lisible sur l'accent tenant — même règle que `readableOn()` côté
- * caisse : un accent clair (laiton #c9a15a) réclame du texte sombre, le blanc
- * y tombe à 2,4:1, très en dessous du seuil WCAG.
- */
-function readableOnAccent(hex: string): string {
-  const raw = hex.replace("#", "");
-  const full =
-    raw.length === 3
-      ? raw
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : raw;
-  const n = Number.parseInt(full.slice(0, 6), 16);
-  if (!Number.isFinite(n)) return "#12100d";
-  const lin = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  const luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
-  return luminance > 0.18 ? "#12100d" : "#ffffff";
-}
-
 const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   { id: "dashboard", href: "/admin/dashboard", label: "Tableau de bord", icon: "home" },
   { id: "orders", href: "/admin/orders", label: "Commandes", icon: "ticket" },
   { id: "menu", href: "/admin/menu", label: "Menu & prix", icon: "grid" },
   { id: "ingredients", href: "/admin/ingredients", label: "Ingrédients & stocks", icon: "fries" },
   { id: "promos", href: "/admin/promos", label: "Promos", icon: "tag" },
+  { id: "loyalty", href: "/admin/fidelite", label: "Fidélité", icon: "gift" },
   { id: "hours", href: "/admin/hours", label: "Horaires", icon: "clock" },
   { id: "screens", href: "/admin/screens", label: "Écrans TV", icon: "tv" },
   { id: "devices", href: "/admin/devices", label: "Caisses & cuisine", icon: "print" },
@@ -86,6 +65,15 @@ const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
   // deux — prévu contre pointé — est justement ce que le planning affiche.
   { id: "planning", href: "/admin/planning", label: "Planning", icon: "clock" },
   { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },
+  // « Votre site web » était INATTEIGNABLE : la page existait, complète —
+  // adresse du site, nom de domaine, état de propagation DNS — et ne figurait
+  // dans aucune navigation. Le restaurateur qui achète un nom de domaine ne
+  // pouvait pas y arriver, sauf à connaître l'URL par cœur.
+  //
+  // Sa place est ici, entre les avis et l'argent : les trois entrées
+  // précédentes parlent de ce que le PUBLIC voit du restaurant — ses écrans,
+  // ses avis, son site — et les deux suivantes de ce qu'il encaisse.
+  { id: "site", href: "/admin/site", label: "Votre site web", icon: "home" },
   // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
   // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
   // trouver seul — la FAQ lui promet mot pour mot d'y retrouver ses factures.
@@ -190,6 +178,7 @@ function Shell({ children }: { children: ReactNode }) {
   // le jeton restait douze heures dans le navigateur — gênant sur un poste
   // partagé (un équipier qui emprunte la tablette du comptoir).
   const logout = () => {
+    clearAllEnrollmentRecoveries();
     clearToken();
     router.replace("/admin/login");
   };
@@ -232,14 +221,15 @@ function Shell({ children }: { children: ReactNode }) {
       .then((t) => {
         if (cancelled) return;
         setTenant(t);
-        const accent = t.brandColor || "#c9a15a";
+        const { accent, onAccent } = tenantAccentPalette(t.brandColor);
         const root = document.documentElement.style;
         root.setProperty("--cf-accent", accent);
-        root.setProperty("--cf-on-accent", readableOnAccent(accent));
+        root.setProperty("--cf-on-accent", onAccent);
       })
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof ApiError && e.status === 401) {
+          clearAllEnrollmentRecoveries();
           clearToken();
           router.replace("/admin/login");
         }
@@ -253,11 +243,17 @@ function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hasToken) return;
     let cancelled = false;
+    // `GET /orders` rend `{ rows, total }`, JAMAIS un tableau nu. Le code
+    // typait la réponse en tableau et se protégeait par `Array.isArray` : la
+    // garde était donc toujours fausse, `setNewIds` n'était jamais appelé, et
+    // le badge restait à zéro au chargement — sans erreur, sans journal. Le
+    // gérant qui ouvrait son back-office ne voyait aucune commande en attente
+    // tant qu'une nouvelle n'arrivait pas par le temps réel.
     api
-      .get<{ _id: string }[]>("/orders?status=new")
-      .then((orders) => {
-        if (!cancelled && Array.isArray(orders))
-          setNewIds(new Set(orders.map((o) => o._id)));
+      .get<{ rows?: { _id: string }[] }>("/orders?status=new")
+      .then((res) => {
+        const rows = res?.rows;
+        if (!cancelled && Array.isArray(rows)) setNewIds(new Set(rows.map((o) => o._id)));
       })
       .catch(() => {}); // badge à 0 si l'appel échoue — non bloquant
     return () => {

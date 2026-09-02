@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "echo ok"
+    "lint": "eslint --config ../../eslint.serveur.mjs src"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -24,6 +24,7 @@
     "@sm/contracts": "workspace:*",
     "@sm/db": "workspace:*",
     "@sm/domain": "workspace:*",
+    "@sm/loyalty": "workspace:*",
     "@sm/supply": "workspace:*",
     "argon2": "^0.44.0",
     "drizzle-orm": "^0.44.0",

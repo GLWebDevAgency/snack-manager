@@ -18,6 +18,9 @@ export class EngageController {
 
   // ─── Promotions (gérant) ───
 
+  // Les lectures ne portaient aucun rôle quand toutes les écritures en
+  // portaient un : promotions et avis clients sont du back-office gérant.
+  @Roles('owner', 'gerant')
   @Get('promotions')
   listPromotions(@TenantId() tenantId: string) {
     return this.engage.listPromotions(tenantId);
@@ -55,11 +58,13 @@ export class EngageController {
   // ─── Avis clients ───
 
   /** `?filter=pending` = avis sans réponse ; défaut : tous. */
+  @Roles('owner', 'gerant')
   @Get('reviews')
   listReviews(@TenantId() tenantId: string, @Query('filter') filter?: string) {
     return this.engage.listReviews(tenantId, filter === 'pending' ? 'pending' : 'all');
   }
 
+  @Roles('owner', 'gerant')
   @Get('reviews/summary')
   reviewsSummary(@TenantId() tenantId: string) {
     return this.engage.reviewsSummary(tenantId);

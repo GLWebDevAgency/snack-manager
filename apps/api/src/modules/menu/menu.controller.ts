@@ -18,6 +18,13 @@ export class MenuController {
     private readonly tenants: TenantsService,
   ) {}
 
+  /**
+   * La carte se lit par tout l'équipage : la caisse encaisse dessus, la
+   * cuisine y vérifie une composition. Déclaré plutôt que laissé vide — sans
+   * `@Roles`, le résultat était le même par accident, et un accident ne se
+   * relit pas.
+   */
+  @Roles('owner', 'gerant', 'caisse', 'cuisine')
   @Get('menu')
   fullMenu(@TenantId() tenantId: string) {
     return this.menu.fullMenu(tenantId);
@@ -88,7 +95,13 @@ export class MenuController {
     return this.menu.deleteProduct(tenantId, id);
   }
 
-  /** Rupture 1-tap — accessible caisse et cuisine aussi. */
+  /**
+   * Rupture 1-tap — accessible caisse et cuisine aussi.
+   *
+   * L'intention était écrite ici depuis l'origine et rien ne la portait : la
+   * route n'avait aucun décorateur. Un commentaire n'est pas un contrôle.
+   */
+  @Roles('owner', 'gerant', 'caisse', 'cuisine')
   @Post('products/:id/stock')
   setStock(
     @TenantId() tenantId: string,

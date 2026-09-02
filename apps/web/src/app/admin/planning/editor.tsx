@@ -20,7 +20,7 @@ import { PLANNING_POSITIONS, PLANNING_POSITION_LABELS, PLANNING_SERVICE_LABELS }
 import { api, ApiError } from "@/lib/api";
 import { fmtEuro } from "@/lib/format";
 import { cx } from "@/lib/cx";
-import { Btn, Field, IconBtn, Input, Modal, Select, useToast } from "@/components/ui";
+import { Btn, Field, IconBtn, Input, Label, Modal, Select, useToast } from "@/components/ui";
 import {
   fmtHours,
   fmtRange,
@@ -146,7 +146,16 @@ export function ShiftEditor({
           position,
           note: note.trim(),
         });
-        toast("Service modifié", { icon: "check" });
+        // Un service publié a pu être transmis par texte ou image : sans ce
+        // rappel, l'horaire change derrière un planning que l'équipe a déjà lu.
+        if (state.shift.status === "publie") {
+          toast("Service modifié — pensez à retransmettre le planning", {
+            icon: "check",
+            ms: 3500,
+          });
+        } else {
+          toast("Service modifié", { icon: "check" });
+        }
       } else {
         // Pas de `status` : l'API pose un BROUILLON par défaut, et c'est la
         // règle — poser un service ne le rend jamais visible à l'équipe.
@@ -191,7 +200,11 @@ export function ShiftEditor({
   return (
     <Modal
       open
-      onClose={onClose}
+      // Pendant l'enregistrement, aucune sortie ne ferme : Échap, le voile et
+      // la croix passent tous ici — même verrou que le bouton « Annuler ».
+      onClose={() => {
+        if (!saving) onClose();
+      }}
       width={540}
       title={isEdit ? "Modifier le service" : "Poser un service"}
       footer={
@@ -266,8 +279,10 @@ export function ShiftEditor({
           </div>
         </div>
 
-        {/* Ajustement au quart d'heure — cibles larges, pas de précision au pixel. */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Ajustement au quart d'heure — cibles larges, pas de précision au
+            pixel. Empilés sur téléphone : côte à côte, les deux boutons ± de
+            44 px ne laisseraient que ~50 px au champ heure, qui serait rogné. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TimeStepper label="Début" id="shift-start" value={start} onChange={setStart} />
           <TimeStepper label="Fin" id="shift-end" value={end} onChange={setEnd} />
         </div>
@@ -351,9 +366,10 @@ export function ShiftEditor({
                     Annuler
                   </Btn>
                   <Btn
-                    variant="ink"
                     size="sm"
-                    className="text-alertt"
+                    // Rouge fonctionnel imposé (§7.4), comme les suppressions
+                    // du Menu — jamais l'accent tenant.
+                    style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
                     onClick={() => void remove()}
                     disabled={saving}
                   >
@@ -402,9 +418,7 @@ function TimeStepper({
   const shift = (delta: number) => onChange(minutesToHm(hmToMinutes(value) + delta));
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="block text-xs font-bold uppercase tracking-[0.04em] text-mut">
-        {label}
-      </span>
+      <Label htmlFor={id}>{label}</Label>
       <div className="flex items-center gap-1.5">
         <IconBtn
           icon="minus"

@@ -16,6 +16,9 @@ export * from './platform';
 export * from './ops';
 export * from './tenant';
 export * from './encaissement';
+export * from './security';
+export * from './loyalty';
+export * from './loyalty-public';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -110,6 +113,37 @@ export const STAFF_ROLES = ['gerant', 'caisse', 'cuisine'] as const;
 export const StaffRoleSchema = z.enum(STAFF_ROLES);
 export type StaffRole = z.infer<typeof StaffRoleSchema>;
 
+/**
+ * CE QU'UN ÉQUIPIER PEUT ACCORDER DE REMISE, PAR RÔLE.
+ *
+ * `POST /orders/:id/discount` re-demandait le PIN — traçabilité NF525 — et
+ * s'arrêtait là : n'importe quel PIN actif du restaurant faisait l'affaire,
+ * cuisine comprise, et le seul plafond était le sous-total. Un équipier pouvait
+ * donc offrir la commande entière, avec son propre code, sans qu'aucun écran ne
+ * le signale au gérant.
+ *
+ * Re-saisir un code prouve QUI agit, jamais que cette personne en a le droit.
+ * Les deux contrôles sont distincts et il manquait le second.
+ *
+ * `null` = pas de plafond : le gérant assume les gestes commerciaux, c'est son
+ * métier. La cuisine ne touche pas aux montants — elle prépare. La caisse
+ * arrange un client mécontent à hauteur d'un plat, au-delà elle appelle le
+ * gérant, ce qui est exactement la conversation qu'on veut provoquer.
+ */
+export const REMISE_PLAFOND_CENTS: Record<StaffRole, number | null> = {
+  gerant: null,
+  caisse: 1_500,
+  cuisine: 0,
+};
+
+/** Le plafond en toutes lettres — pour l'écran qui demande le PIN. */
+export const plafondRemiseLabel = (role: StaffRole): string => {
+  const cents = REMISE_PLAFOND_CENTS[role];
+  if (cents === null) return 'sans plafond';
+  if (cents === 0) return 'aucune remise autorisée';
+  return `${(cents / 100).toFixed(2).replace('.', ',')} € maximum`;
+};
+
 export const USER_ROLES = ['owner', 'sm_admin'] as const;
 export const UserRoleSchema = z.enum(USER_ROLES);
 export type UserRole = z.infer<typeof UserRoleSchema>;
@@ -144,15 +178,55 @@ export const PerVariantRuleSchema = z.object({
 });
 export type PerVariantRule = z.infer<typeof PerVariantRuleSchema>;
 
-export const OptionGroupSchema = z.object({
-  key: z.string().min(1),
-  name: z.string().min(1),
-  type: z.enum(['single', 'multi']),
-  min: z.number().int().nonnegative().default(0),
-  max: z.number().int().positive().optional(),
-  choices: z.array(OptionChoiceSchema).min(1),
-  perVariant: z.record(z.string(), PerVariantRuleSchema).optional(),
-});
+export const OptionGroupSchema = z
+  .object({
+    key: z.string().min(1),
+    name: z.string().min(1),
+    type: z.enum(['single', 'multi']),
+    min: z.number().int().nonnegative().default(0),
+    max: z.number().int().positive().optional(),
+    choices: z.array(OptionChoiceSchema).min(1),
+    perVariant: z.record(z.string(), PerVariantRuleSchema).optional(),
+  })
+  /**
+   * UN GROUPE « UN SEUL » VAUT UN, PARTOUT.
+   *
+   * `type: 'single'` sans `max` était lu de trois façons : la page de commande
+   * en ligne n'autorisait qu'un choix, la caisse et l'API en acceptaient une
+   * infinité. L'éditeur y menait tout droit — son champ « Maximum » annonce
+   * « Vide = autant qu'on veut », ce qui est faux pour un groupe « un seul ».
+   *
+   * Le maximum se DÉDUIT donc du type plutôt que de rester au bon vouloir de
+   * chaque lecteur. Un `max` explicite plus grand que 1 sur un groupe « un
+   * seul » est une contradiction, pas une préférence : il est refusé.
+   */
+  .transform((g) => (g.type === 'single' && g.max === undefined ? { ...g, max: 1 } : g))
+  .superRefine((g, ctx) => {
+    if (g.type === 'single' && g.max !== undefined && g.max > 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max'],
+        message: 'Un groupe « un seul choix » ne peut pas accepter plus d’un choix',
+      });
+    }
+    // `min > max` rend le produit INVENDABLE : la commande exige plus de choix
+    // que le groupe n'en autorise, et refuse chaque tentative. Aucun écran ne
+    // prévenait — les deux champs étaient validés séparément.
+    if (g.max !== undefined && g.min > g.max) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['min'],
+        message: `Minimum (${g.min}) supérieur au maximum (${g.max}) — le produit serait invendable`,
+      });
+    }
+    if (g.max !== undefined && g.max > g.choices.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['max'],
+        message: `Maximum (${g.max}) supérieur au nombre de choix (${g.choices.length})`,
+      });
+    }
+  });
 export type OptionGroup = z.infer<typeof OptionGroupSchema>;
 
 export const ProductCreateSchema = z.object({
@@ -227,9 +301,26 @@ export const OrderLineInputSchema = z.object({
   options: z
     .array(z.object({ groupKey: z.string(), choiceKey: z.string() }))
     .default([]),
-  removed: z.array(z.string()).default([]),
+  /**
+   * Les retraits « sans oignons » — BORNÉS, comme la note deux lignes plus bas.
+   *
+   * C'était un tableau sans longueur de chaînes sans longueur, recopié tel quel
+   * sur la commande et imprimé tel quel sur le ticket cuisine. Un appel direct
+   * envoyait donc mille lignes de mille caractères vers l'imprimante du
+   * comptoir — et la note, elle, était plafonnée à deux cents caractères depuis
+   * toujours dans le même schéma.
+   */
+  removed: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   note: z.string().max(200).optional(),
-  qty: z.number().int().positive().default(1),
+  /**
+   * Un plafond haut, mais un plafond.
+   *
+   * Sans lui, un appel anonyme posait `qty: 1000000` sur un tacos à 8,90 € et
+   * créait une commande à 8 900 000 € qui partait en cuisine. Cinquante est
+   * au-delà de toute commande de comptoir réelle et en deçà de l'absurde ; une
+   * commande de groupe se saisit en plusieurs lignes.
+   */
+  qty: z.number().int().positive().max(50).default(1),
 });
 export type OrderLineInput = z.infer<typeof OrderLineInputSchema>;
 
@@ -254,6 +345,20 @@ export type CreateOrderPayment = z.infer<typeof CreateOrderPaymentSchema>;
 export const CreateOrderSchema = z.object({
   /** Clé d'idempotence générée par l'appareil — le rejeu offline ne crée jamais de doublon. */
   clientId: z.uuid(),
+  /**
+   * Carte présentée avant l'encaissement au comptoir.
+   *
+   * Le serveur la fige sur la vente : le crédit ne peut ainsi pas être
+   * détourné après coup vers une autre carte à partir de la liste des tickets.
+   * Ce champ n'existe volontairement pas dans le contrat public.
+   */
+  loyaltyMemberId: z.uuid().optional(),
+  /**
+   * Intention de gain embarquée dans LA MÊME écriture durable que la vente.
+   * Le serveur la traite après livraison ; aucun second outbox local ne peut
+   * donc être perdu entre deux écritures lors d'un crash de tablette.
+   */
+  loyaltyEarnOperationId: z.uuid().optional(),
   channel: OrderChannelSchema,
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),
@@ -266,10 +371,134 @@ export const CreateOrderSchema = z.object({
     })
     .optional(),
   note: z.string().max(500).optional(),
+  /**
+   * Le code promo saisi par le client, ou absent.
+   *
+   * Il manquait au corps de commande, et c'est la moitié du défaut : le
+   * back-office savait créer un code, l'activer et l'imprimer sur des flyers —
+   * aucune surface ne savait le RECEVOIR. Le restaurateur ne l'apprenait pas
+   * d'une erreur, il l'apprenait d'un client au téléphone.
+   *
+   * Le montant, lui, n'est jamais transmis : comme les prix, il est résolu par
+   * le serveur contre la promotion en base. Un client qui enverrait sa propre
+   * remise n'obtient rien.
+   */
+  promoCode: z.string().trim().min(1).max(24).optional(),
+}).superRefine((order, ctx) => {
+  const hasMember = order.loyaltyMemberId !== undefined;
+  const hasOperation = order.loyaltyEarnOperationId !== undefined;
+  if (hasMember !== hasOperation) {
+    ctx.addIssue({
+      code: 'custom',
+      path: hasMember ? ['loyaltyEarnOperationId'] : ['loyaltyMemberId'],
+      message: 'La carte et son intention de gain sont indissociables',
+    });
+  }
+  if (hasMember && order.channel !== 'pos') {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['channel'],
+      message: 'La fidélité du pilote exige une vente au comptoir authentifiée',
+    });
+  }
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
 
-export const UpdateOrderStatusSchema = z.object({ status: OrderStatusSchema });
+/**
+ * État public, sans identifiant membre ni détail technique, du gain porté
+ * par une vente POS. `processing` reste rejouable : il ne signifie jamais que
+ * les points sont acquis avant la validation du ledger PostgreSQL.
+ */
+export const OrderLoyaltyEarnStateSchema = z.enum([
+  'none',
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+export type OrderLoyaltyEarnState = z.infer<typeof OrderLoyaltyEarnStateSchema>;
+
+export const OrderLoyaltyEarnStatusSchema = z.object({
+  state: OrderLoyaltyEarnStateSchema,
+  attempts: z.number().int().nonnegative(),
+  /** Code fermé et non sensible ; jamais le message brut d'une dépendance. */
+  errorCode: z.string().regex(/^[a-z0-9_]{1,64}$/).nullable(),
+});
+export type OrderLoyaltyEarnStatus = z.infer<typeof OrderLoyaltyEarnStatusSchema>;
+
+/**
+ * Contrat de la commande PUBLIQUE, volontairement distinct de celui du POS.
+ *
+ * Le navigateur ne choisit ni le canal, ni le type, ni un moyen effectivement
+ * encaisse, ni un statut. Ces faits sont poses par l'API. Reutiliser le DTO du
+ * poste authentifie permettait notamment d'omettre le retrait et d'injecter
+ * des tickets `surplace` directement dans la cuisine.
+ */
+export const CreatePublicOrderSchema = z
+  .object({
+    clientId: z.uuid(),
+    lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
+    payment: z
+      .object({
+        /** Intention du client ; le statut reste toujours calcule serveur. */
+        method: PaymentMethodSchema,
+      })
+      .strict(),
+    pickup: z
+      .object({
+        slot: z.iso.datetime(),
+        customerName: z.string().trim().min(2).max(80),
+        customerPhone: z.string().trim().min(6).max(32),
+      })
+      .strict(),
+    note: z.string().trim().max(500).optional(),
+    promoCode: z.string().trim().min(1).max(24).optional(),
+    /** Jeton Cloudflare Turnstile : 2 048 caracteres maximum selon Siteverify. */
+    turnstileToken: z.string().min(1).max(2_048),
+  })
+  .strict();
+export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
+
+/**
+ * Les deux gestes qui MINORENT la recette — et qui n'étaient pas validés.
+ *
+ * Le corps arrivait en `@Body()` nu, sans schéma : `amount` pouvait être un
+ * flottant, une chaîne, ou manquer ; `reason` était facultative alors que
+ * NF525 exige qu'une minoration de recette soit motivée. Le domaine réclamait
+ * bien un motif — le service ne passait simplement pas par lui.
+ */
+export const OrderCancelSchema = z.object({
+  pin: z.string().regex(/^\d{4,6}$/, 'Code à 4 à 6 chiffres'),
+  reason: z.string().trim().min(3, 'Motif obligatoire').max(200),
+});
+export type OrderCancel = z.infer<typeof OrderCancelSchema>;
+
+export const OrderDiscountSchema = z.object({
+  pin: z.string().regex(/^\d{4,6}$/, 'Code à 4 à 6 chiffres'),
+  /** En CENTIMES, entier et positif — jamais des euros, jamais un flottant. */
+  amount: z.number().int().positive('Montant de remise invalide'),
+  reason: z.string().trim().min(3, 'Motif obligatoire').max(200),
+});
+export type OrderDiscount = z.infer<typeof OrderDiscountSchema>;
+
+/**
+ * L'AVANCEMENT D'UNE COMMANDE — et « annulée » n'en est pas un.
+ *
+ * Le schéma acceptait les cinq statuts, `cancelled` compris. Or la règle
+ * d'écriture compare les rangs, et `cancelled` vaut −1 : la demande était
+ * acceptée, puis JETÉE en silence, l'API rendant la commande inchangée avec un
+ * 200. L'équipe croyait avoir annulé.
+ *
+ * Annuler passe par `POST /orders/:id/cancel`, qui exige un motif et un code —
+ * une annulation sort une commande de la recette du jour, elle ne se fait pas
+ * d'un glissement d'écran. Le refus le dit plutôt que de laisser deviner.
+ */
+export const UpdateOrderStatusSchema = z.object({
+  status: OrderStatusSchema.refine((s) => s !== 'cancelled', {
+    message: 'Une annulation passe par « Annuler la commande » — avec un motif et un code.',
+  }),
+});
 
 // ─────────────────────────────────────────────────────────────
 // Auth
@@ -292,6 +521,25 @@ export interface JwtPayload {
   tenantId: string | null;
   role: UserRole | StaffRole;
   kind: 'user' | 'staff';
+  /** Émis automatiquement par JwtService ; utilisé pour fermer le temps réel à échéance. */
+  iat?: number;
+  /** Émis automatiquement par JwtService ; exprimé en secondes Unix. */
+  exp?: number;
+  /**
+   * Version de sécurité d'un compte email/mot de passe. Elle reste optionnelle
+   * dans le type pour décoder les anciens JWT, mais l'autorité serveur refuse
+   * désormais toute session `user` qui ne la porte pas.
+   */
+  userSessionVersion?: string;
+  /**
+   * Une session PIN est liée à la personne ET à la tablette qui l'a ouverte.
+   * Les champs restent optionnels dans le type pour décoder proprement les
+   * anciens jetons ; l'autorisation serveur refuse toutefois un JWT staff qui
+   * ne les porte pas et demande une nouvelle saisie du PIN.
+   */
+  staffSessionVersion?: string;
+  deviceId?: string;
+  deviceSessionVersion?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

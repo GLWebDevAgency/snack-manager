@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS } from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
+import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
 import { AuditService } from '../audit/audit.module';
 
@@ -45,7 +46,8 @@ export class MenuService {
   }
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
-    void this.redis.publish(
+    void publishRedisBestEffort(
+      this.redis,
       ordersChannel(tenantId),
       JSON.stringify({ event: WS_EVENTS.menuUpdated, payload: meta }),
     );
@@ -161,13 +163,43 @@ export class MenuService {
     // contrôle, « 8,90 € » ne prouve rien. Cette lecture ne coûte que si un
     // prix change ; l'en-tête du journal annonçait cette couverture depuis le
     // premier jour sans que personne ne l'écrive (diagnostic 24/08, P3).
-    const avant =
-      dto.price !== undefined
-        ? await this.products.findOne({ _id: id, tenantId }, { price: 1 }).lean()
-        : null;
+    // L'obligation de traçabilité porte sur le PRIX DE VENTE, pas sur le champ
+    // qui le porte. Un produit à variantes a un `price` mort — la création de
+    // commande exige une variante dès qu'il y en a — et son prix réel vit dans
+    // `variants[].price`. Ne journaliser que `price` laissait un trou : un
+    // tacos pouvait passer de 8,90 € à 12,90 € sans une ligne, tandis qu'un
+    // soda à 2 € était tracé.
+    const suitLePrix = dto.price !== undefined || dto.variants !== undefined;
+    const avant = suitLePrix
+      ? await this.products.findOne({ _id: id, tenantId }, { price: 1, variants: 1 }).lean()
+      : null;
+    // LE GROUPE RÉSERVÉ NE PASSE PAS PAR L'ÉCRAN.
+    //
+    // `GET /menu` retire `supplements` de `optionGroups` : un éditeur qui lit
+    // la carte puis renvoie les groupes tels quels EFFACE la seule source du
+    // prix des suppléments à la création de commande. Ce n'est pas une
+    // hypothèse — `packages/db/src/repair-options.ts` raconte l'incident :
+    // 32 produits privés de leur choix de pain et de leurs sauces, 19 sans
+    // aucune option, et la caisse refusant tout sandwich avec « Option
+    // inconnue ».
+    //
+    // La garantie vit ici, côté serveur, plutôt que dans la discipline de
+    // chaque écran qui écrira un jour un produit.
+    const $set: Record<string, unknown> = { ...dto };
+    if (Array.isArray(dto.optionGroups)) {
+      const entrant = dto.optionGroups as { key?: string }[];
+      if (!entrant.some((g) => g?.key === SUPPLEMENT_GROUP_KEY)) {
+        const actuel = await this.products.findOne({ _id: id, tenantId }, { optionGroups: 1 }).lean();
+        const reserve = (actuel?.optionGroups ?? []).find(
+          (g: { key?: string }) => g?.key === SUPPLEMENT_GROUP_KEY,
+        );
+        if (reserve) $set.optionGroups = [...entrant, reserve];
+      }
+    }
+
     const prod = await this.products.findOneAndUpdate(
       { _id: id, tenantId },
-      { $set: dto },
+      { $set },
       { new: true },
     );
     if (!prod) throw new NotFoundException('Produit introuvable');
@@ -178,6 +210,24 @@ export class MenuService {
         targetId: id,
         meta: { name: prod.name, fromCents: avant.price, toCents: dto.price },
       });
+    }
+    if (avant && Array.isArray(dto.variants)) {
+      // Une ligne PAR variante : « le tacos a changé » ne dit pas laquelle, et
+      // c'est la taille qui se défend en contrôle. Une variante ajoutée part
+      // de `null` — un prix qui apparaît est aussi un prix qui change.
+      const anciens = new Map(
+        ((avant.variants ?? []) as { key?: string; price?: number }[]).map((v) => [v.key, v.price]),
+      );
+      for (const v of dto.variants as { key: string; name: string; price: number }[]) {
+        const de = anciens.get(v.key) ?? null;
+        if (de === v.price) continue;
+        await this.audit.log({
+          tenantId,
+          action: 'price.change',
+          targetId: id,
+          meta: { name: prod.name, variantKey: v.key, variantName: v.name, fromCents: de, toCents: v.price },
+        });
+      }
     }
     this.publishMenuUpdated(tenantId, { scope: 'product', id });
     return prod;

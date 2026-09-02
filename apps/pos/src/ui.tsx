@@ -22,7 +22,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { TOUCH_MIN, palette } from '@sm/client-core';
-import { DUR, FONT, R, S, TABULAR, sheet, shadow, type, withAlpha } from './theme';
+import { DUR, FONT, R, S, TABULAR, semanticText, sheet, shadow, type, withAlpha } from './theme';
 import { useLayout } from './useLayout';
 
 // ─── Mouvement ───
@@ -205,7 +205,7 @@ export function Btn({
     kind === 'primary'
       ? (onAccent ?? '#12100d')
       : kind === 'danger'
-        ? palette.red
+        ? semanticText.danger
         : kind === 'positive'
           ? palette.green
           : kind === 'quiet'
@@ -306,6 +306,7 @@ export function Chip({
   onAccent,
   tone = 'accent',
   minHeight = TOUCH_MIN,
+  accessibilityRole = 'checkbox',
 }: {
   label: string;
   detail?: string;
@@ -316,17 +317,18 @@ export function Chip({
   onAccent?: string;
   tone?: 'accent' | 'red' | 'neutral';
   minHeight?: number;
+  accessibilityRole?: 'checkbox' | 'radio' | 'tab';
 }) {
   const L = useLayout();
   const activeBg =
     tone === 'red' ? withAlpha(palette.red, 0.18) : tone === 'neutral' ? '#efefef' : (accent ?? palette.gold);
-  const activeFg = tone === 'red' ? palette.red : tone === 'neutral' ? '#111' : (onAccent ?? '#12100d');
+  const activeFg = tone === 'red' ? semanticText.danger : tone === 'neutral' ? '#111' : (onAccent ?? '#12100d');
   return (
     <Press
       onPress={onPress}
       disabled={disabled}
       selected={!!on}
-      accessibilityRole="checkbox"
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       style={{
         minHeight: L.touch(minHeight),
@@ -543,6 +545,12 @@ export function Field({
   invalid,
   accent,
   multiline,
+  secureTextEntry,
+  autoCapitalize,
+  autoCorrect,
+  autoComplete,
+  onSubmitEditing,
+  disabled,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -555,6 +563,13 @@ export function Field({
   invalid?: boolean;
   accent?: string;
   multiline?: boolean;
+  /** Jetons/scanners : le secret reste masqué pendant la saisie. */
+  secureTextEntry?: boolean;
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  autoCorrect?: boolean;
+  autoComplete?: 'off' | 'name' | 'tel';
+  onSubmitEditing?: () => void;
+  disabled?: boolean;
 }) {
   const L = useLayout();
   const [focus, setFocus] = useState(false);
@@ -570,6 +585,12 @@ export function Field({
         autoFocus={autoFocus}
         maxLength={maxLength}
         multiline={multiline}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        autoComplete={autoComplete}
+        onSubmitEditing={onSubmitEditing}
+        editable={!disabled}
         onFocus={() => setFocus(true)}
         onBlur={() => setFocus(false)}
         accessibilityLabel={label ?? placeholder}
@@ -585,6 +606,7 @@ export function Field({
           fontFamily: FONT,
           fontSize: L.fs(15),
           fontWeight: '600',
+          opacity: disabled ? 0.55 : 1,
           ...(multiline ? { textAlignVertical: 'top', minHeight: L.sp(64) } : null),
         }}
       />
@@ -593,6 +615,319 @@ export function Field({
 }
 
 // ─── Overlay modal ───
+
+type ModalInitialFocus = 'first' | 'input';
+
+interface WebModalLayer {
+  root: HTMLElement;
+  close: () => void;
+  initialFocus: ModalInitialFocus;
+  previousFocus: HTMLElement | null;
+  fallbackFocus: HTMLElement | null;
+  cancelScheduledFocus?: () => void;
+  manager: WebModalManager;
+}
+
+interface WebModalManager {
+  register: (
+    root: HTMLElement,
+    close: () => void,
+    initialFocus: ModalInitialFocus,
+  ) => WebModalLayer;
+  unregister: (layer: WebModalLayer) => void;
+  refocus: (layer: WebModalLayer) => void;
+  isTop: (layer: WebModalLayer) => boolean;
+}
+
+interface IsolationSnapshot {
+  inert: boolean;
+  ariaHidden: string | null;
+}
+
+const webModalManagers = new WeakMap<Document, WebModalManager>();
+
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function scheduleOnNextFrame(doc: Document, callback: () => void): () => void {
+  let cancelled = false;
+  const win = doc.defaultView;
+  if (win?.requestAnimationFrame) {
+    const frame = win.requestAnimationFrame(() => {
+      if (!cancelled) callback();
+    });
+    return () => {
+      cancelled = true;
+      win.cancelAnimationFrame(frame);
+    };
+  }
+
+  const timeout = globalThis.setTimeout(() => {
+    if (!cancelled) callback();
+  }, 0);
+  return () => {
+    cancelled = true;
+    globalThis.clearTimeout(timeout);
+  };
+}
+
+function getWebModalManager(doc: Document): WebModalManager {
+  const known = webModalManagers.get(doc);
+  if (known) return known;
+
+  let layers: WebModalLayer[] = [];
+  let isolation = new Map<HTMLElement, IsolationSnapshot>();
+  let bodyOverflow: string | null = null;
+  let cancelScheduledRestore: (() => void) | undefined;
+  let redirectingFocus = false;
+
+  const top = (): WebModalLayer | undefined => {
+    for (let i = layers.length - 1; i >= 0; i -= 1) {
+      const layer = layers[i];
+      if (layer?.root.isConnected) return layer;
+    }
+    return undefined;
+  };
+
+  const restoreIsolation = () => {
+    for (const [element, snapshot] of isolation) {
+      element.inert = snapshot.inert;
+      if (snapshot.ariaHidden === null) element.removeAttribute('aria-hidden');
+      else element.setAttribute('aria-hidden', snapshot.ariaHidden);
+    }
+    isolation = new Map();
+  };
+
+  /**
+   * Rend inertes toutes les branches DOM qui ne mènent pas à la couche active.
+   * On remonte jusqu'au body : une modale rendue dans la zone centrale isole
+   * donc aussi la TopBar, et pas uniquement ses voisins immédiats.
+   */
+  const applyIsolation = () => {
+    restoreIsolation();
+    const active = top();
+    if (!active) return;
+
+    let branch: HTMLElement = active.root;
+    let parent = branch.parentElement;
+    while (parent) {
+      for (const child of Array.from(parent.children)) {
+        if (!(child instanceof HTMLElement) || child === branch) continue;
+        isolation.set(child, {
+          inert: child.inert,
+          ariaHidden: child.getAttribute('aria-hidden'),
+        });
+        child.inert = true;
+        child.setAttribute('aria-hidden', 'true');
+      }
+      if (parent === doc.body) break;
+      branch = parent;
+      parent = parent.parentElement;
+    }
+  };
+
+  const focusable = (layer: WebModalLayer): HTMLElement[] =>
+    Array.from(layer.root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (element) =>
+        element.getAttribute('aria-disabled') !== 'true' &&
+        !element.closest('[inert], [aria-hidden="true"]'),
+    );
+
+  const focusLayerNow = (layer: WebModalLayer) => {
+    if (top() !== layer || !layer.root.isConnected) return;
+    const candidates = focusable(layer);
+    const preferred =
+      layer.initialFocus === 'input'
+        ? candidates.find((element) =>
+            element.matches('input:not([disabled]), textarea:not([disabled])'),
+          )
+        : undefined;
+    (preferred ?? candidates[0] ?? layer.root).focus();
+  };
+
+  const scheduleLayerFocus = (layer: WebModalLayer) => {
+    layer.cancelScheduledFocus?.();
+    layer.cancelScheduledFocus = scheduleOnNextFrame(doc, () => focusLayerNow(layer));
+  };
+
+  const canRestore = (element: HTMLElement | null, active: WebModalLayer | undefined): element is HTMLElement =>
+    !!element &&
+    element.isConnected &&
+    !element.closest('[inert], [aria-hidden="true"]') &&
+    (!active || active.root.contains(element));
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    const active = top();
+    if (!active) return;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      active.close();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const candidates = focusable(active);
+    if (candidates.length === 0) {
+      event.preventDefault();
+      active.root.focus();
+      return;
+    }
+
+    const first = candidates[0]!;
+    const last = candidates[candidates.length - 1]!;
+    const current = doc.activeElement;
+    if (!active.root.contains(current)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    } else if (event.shiftKey && (current === first || current === active.root)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && current === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  // Le piège ne dépend pas uniquement de Tab : il ramène aussi un focus
+  // programmatique ou issu d'une extension dans la couche active.
+  const onFocusIn = (event: FocusEvent) => {
+    const active = top();
+    const target = event.target;
+    if (
+      !active ||
+      redirectingFocus ||
+      !(target instanceof Node) ||
+      active.root.contains(target)
+    ) {
+      return;
+    }
+    redirectingFocus = true;
+    focusLayerNow(active);
+    redirectingFocus = false;
+  };
+
+  const manager: WebModalManager = {
+    register(root, close, initialFocus) {
+      cancelScheduledRestore?.();
+      cancelScheduledRestore = undefined;
+
+      const activeBefore = top();
+      const activeElement = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+      const layer: WebModalLayer = {
+        root,
+        close,
+        initialFocus,
+        previousFocus: activeElement,
+        // Si plusieurs couches disparaissent dans le même rendu, cette cible
+        // reste hors de la pile et permet une restitution au déclencheur réel.
+        fallbackFocus: activeBefore?.fallbackFocus ?? activeElement,
+        manager,
+      };
+
+      if (layers.length === 0) {
+        bodyOverflow = doc.body.style.overflow;
+        doc.body.style.overflow = 'hidden';
+        doc.addEventListener('keydown', onKeyDown, true);
+        doc.addEventListener('focusin', onFocusIn, true);
+      }
+      layers.push(layer);
+      applyIsolation();
+      scheduleLayerFocus(layer);
+      return layer;
+    },
+
+    unregister(layer) {
+      // Au moment où React exécute un cleanup passif, le nœud peut déjà être
+      // détaché du document. L'ordre de pile reste alors la source de vérité
+      // pour savoir quelle couche doit restituer le focus.
+      const wasTop = layers[layers.length - 1] === layer;
+      layer.cancelScheduledFocus?.();
+      layers = layers.filter((candidate) => candidate !== layer);
+      applyIsolation();
+
+      if (layers.length === 0) {
+        doc.removeEventListener('keydown', onKeyDown, true);
+        doc.removeEventListener('focusin', onFocusIn, true);
+        if (bodyOverflow !== null) doc.body.style.overflow = bodyOverflow;
+        bodyOverflow = null;
+      }
+
+      if (!wasTop) return;
+      const activeAfter = top();
+      const restoreTarget = canRestore(layer.previousFocus, activeAfter)
+        ? layer.previousFocus
+        : canRestore(layer.fallbackFocus, activeAfter)
+          ? layer.fallbackFocus
+          : null;
+      cancelScheduledRestore = scheduleOnNextFrame(doc, () => {
+        const currentTop = top();
+        if (canRestore(restoreTarget, currentTop)) restoreTarget.focus();
+        else if (currentTop) focusLayerNow(currentTop);
+      });
+    },
+
+    refocus(layer) {
+      if (top() === layer) scheduleLayerFocus(layer);
+    },
+
+    isTop(layer) {
+      return top() === layer;
+    },
+  };
+
+  webModalManagers.set(doc, manager);
+  return manager;
+}
+
+function useWebModalLayer(
+  rootRef: { current: HTMLElement | null },
+  onClose: () => void,
+  initialFocus: ModalInitialFocus,
+  focusKey?: string | number,
+): () => void {
+  const onCloseRef = useRef(onClose);
+  const initialFocusRef = useRef(initialFocus);
+  const layerRef = useRef<WebModalLayer | null>(null);
+  onCloseRef.current = onClose;
+  initialFocusRef.current = initialFocus;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const doc = (globalThis as { document?: Document }).document;
+    const root = rootRef.current;
+    if (!doc || !root) return;
+
+    const manager = getWebModalManager(doc);
+    const layer = manager.register(root, () => onCloseRef.current(), initialFocusRef.current);
+    layerRef.current = layer;
+    return () => {
+      layerRef.current = null;
+      manager.unregister(layer);
+    };
+  }, [rootRef]);
+
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    layer.initialFocus = initialFocus;
+    layer.manager.refocus(layer);
+  }, [focusKey, initialFocus]);
+
+  return useCallback(() => {
+    const layer = layerRef.current;
+    if (Platform.OS === 'web' && layer && !layer.manager.isTop(layer)) return;
+    onCloseRef.current();
+  }, []);
+}
 
 /**
  * Surcouche modale — largeur FLUIDE bornée à l'écran.
@@ -606,19 +941,29 @@ export function Field({
 export function Overlay({
   onClose,
   children,
+  accessibilityLabel,
   width = 520,
   align = 'center',
   dim = 0.66,
+  initialFocus = 'first',
+  focusKey,
 }: {
   onClose: () => void;
   children: ReactNode;
+  accessibilityLabel: string;
   width?: number;
   align?: 'center' | 'top';
   dim?: number;
+  /** Les flux scanner/formulaire peuvent donner la priorité au premier champ. */
+  initialFocus?: 'first' | 'input';
+  /** Repositionne le focus lorsqu'une étape remplace le contenu du dialogue. */
+  focusKey?: string | number;
 }) {
   const L = useLayout();
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const modalRoot = useRef<HTMLElement | null>(null);
+  const requestClose = useWebModalLayer(modalRoot, onClose, initialFocus, focusKey);
 
   useEffect(() => {
     Animated.timing(v, {
@@ -629,20 +974,17 @@ export function Overlay({
     }).start();
   }, [reduced, v]);
 
-  // Échap ferme la surcouche (poste au clavier / démonstration navigateur).
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const doc = (globalThis as { document?: Document }).document;
-    if (!doc) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    doc.addEventListener('keydown', onKey);
-    return () => doc.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
     <View
+      ref={(node) => {
+        modalRoot.current = node as unknown as HTMLElement | null;
+      }}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal
+      aria-label={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityViewIsModal
       style={[
         StyleSheet.absoluteFill,
         { alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', zIndex: 70 },
@@ -651,9 +993,11 @@ export function Overlay({
       {/* Fond cliquable : purement pointeur, les lecteurs d'écran passent par
           le bouton « Fermer » explicite et la touche Échap. */}
       <Pressable
+        tabIndex={-1}
+        focusable={false}
         importantForAccessibility="no"
         accessibilityElementsHidden
-        onPress={onClose}
+        onPress={requestClose}
         style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${dim})` }]}
       />
       <Animated.View
@@ -688,13 +1032,17 @@ export function Drawer({
   onClose,
   children,
   width,
+  accessibilityLabel = 'Ticket en cours',
 }: {
   onClose: () => void;
   children: ReactNode;
   width: number;
+  accessibilityLabel?: string;
 }) {
   const reduced = useReducedMotion();
   const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const drawerRoot = useRef<HTMLElement | null>(null);
+  const requestClose = useWebModalLayer(drawerRoot, onClose, 'first');
 
   useEffect(() => {
     Animated.timing(v, {
@@ -705,23 +1053,25 @@ export function Drawer({
     }).start();
   }, [reduced, v]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const doc = (globalThis as { document?: Document }).document;
-    if (!doc) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    doc.addEventListener('keydown', onKey);
-    return () => doc.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <View style={[StyleSheet.absoluteFill, { flexDirection: 'row', justifyContent: 'flex-end', zIndex: 60 }]}>
+    <View
+      ref={(node) => {
+        drawerRoot.current = node as unknown as HTMLElement | null;
+      }}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal
+      aria-label={accessibilityLabel}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityViewIsModal
+      style={[StyleSheet.absoluteFill, { flexDirection: 'row', justifyContent: 'flex-end', zIndex: 60 }]}
+    >
       <Pressable
+        tabIndex={-1}
+        focusable={false}
         importantForAccessibility="no"
         accessibilityElementsHidden
-        onPress={onClose}
+        onPress={requestClose}
         style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
       />
       <Animated.View
@@ -762,7 +1112,7 @@ export function PanelHead({
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[type.h1, { fontSize: L.fs(20) }]}>{title}</Text>
+        <Text accessibilityRole="header" style={[type.h1, { fontSize: L.fs(20) }]}>{title}</Text>
         {sub ? <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(13) }]}>{sub}</Text> : null}
       </View>
       {right}
@@ -822,6 +1172,9 @@ function ToastHost({ items }: { items: Toast[] }) {
         return (
           <Pop key={t.id}>
             <View
+              accessible
+              accessibilityLiveRegion={t.tone === 'bad' ? 'assertive' : 'polite'}
+              role={t.tone === 'bad' ? 'alert' : 'status'}
               style={[
                 {
                   flexDirection: 'row',

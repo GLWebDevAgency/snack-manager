@@ -36,6 +36,7 @@ import { IssuerConfig } from './issuer.config';
 import { MyBillingService } from './my-billing.service';
 import { TenantSessionGuard } from './tenant-session.guard';
 import { renderInvoicePdf } from './invoice-pdf';
+import type { SessionAccessService } from '../../common/session-access';
 
 // ─────────────────────────────────────────────────────────────
 // Doublures — strictement le vocabulaire que le service emploie.
@@ -286,15 +287,29 @@ describe('Abonnement du gérant — le garde', () => {
       switchToHttp: () => ({ getRequest: () => ({ headers: { authorization } }) }),
     }) as unknown as ExecutionContext;
 
-  const guardFor = (payload: JwtPayload | Error): TenantSessionGuard =>
+  const guardFor = (
+    payload: JwtPayload | Error,
+    sessionAllowed = true,
+  ): TenantSessionGuard =>
     new TenantSessionGuard({
       verifyAsync: async () => {
         if (payload instanceof Error) throw payload;
         return payload;
       },
-    } as unknown as JwtService);
+    } as unknown as JwtService, {
+      assertUserSessionAllows: async () => {
+        if (!sessionAllowed) throw new UnauthorizedException();
+      },
+    } as unknown as SessionAccessService);
 
-  const OWNER: JwtPayload = { sub: 'u1', tenantId: CLASSFOOD, role: 'owner', kind: 'user' };
+  const OWNER: JwtPayload = {
+    sub: '65f0000000000000000000a1',
+    tenantId: CLASSFOOD,
+    role: 'owner',
+    kind: 'user',
+    userSessionVersion: 'owner-v1',
+    exp: 4_102_444_800,
+  };
 
   /**
    * LE CAS QUI JUSTIFIE TOUT CE GARDE. Le garde global refuse un établissement
@@ -308,6 +323,12 @@ describe('Abonnement du gérant — le garde', () => {
     const ctx = { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect((req as unknown as { user: JwtPayload }).user.tenantId).toBe(CLASSFOOD);
+  });
+
+  it('refuse un ancien JWT owner même sur la porte de facturation suspendue', async () => {
+    await expect(
+      guardFor(OWNER, false).canActivate(context('Bearer jeton')),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('refuse une session de tablette (PIN) : la caisse du comptoir n’est pas le bureau du patron', async () => {

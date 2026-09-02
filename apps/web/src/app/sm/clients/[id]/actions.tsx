@@ -23,20 +23,29 @@
 
 import { useState } from "react";
 import {
-  ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
+  INSTALL_FEE_CENTS,
+  INVOICE_KIND_LABELS,
+  ISSUABLE_INVOICE_KINDS,
   DEVICE_REVOKE_REASON_LABELS,
-  PLAN_LABELS,
-  PLAN_MRR_CENTS,
+  proposalCents,
   type AdminPlan,
   type DeviceRevokeReason,
+  type LeadServices,
+  type ProposalBilling,
+  remiseFondateurActive,
+  CHURN_CAUSES,
+  CHURN_CAUSE_LABELS,
+  CHURN_CAUSE_HINTS,
+  type ChurnCause,
 } from "@sm/contracts";
-import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import {
   Btn,
+  Chip,
   Field,
   Icon,
+  Input,
   Select,
   Textarea,
   Toggle,
@@ -46,7 +55,9 @@ import {
 // `md`, une feuille plein écran en dessous — un geste grave se confirme aussi
 // depuis un téléphone, sans panneau qui déborde.
 import { SheetModal } from "../../mobile";
-import { crm, euroRound } from "../../crm";
+import { OffreFields } from "../../parts";
+import { crm, errText, euroRound } from "../../crm";
+import { euros } from "../../facturation/data";
 import { clientsApi, type ParkDevice } from "../data";
 
 /** Longueur minimale d'un motif — alignée sur le schéma zod de l'API. */
@@ -67,12 +78,6 @@ type Common = {
   onDone: () => void;
 };
 
-/** Message d'erreur lisible — jamais un code HTTP nu devant un opérateur. */
-const errText = (e: unknown, fallback: string): string =>
-  e instanceof ApiError && typeof e.message === "string" && e.message.trim()
-    ? e.message
-    : fallback;
-
 // ─────────────────────────────────────────────────────────────
 // Suspendre
 // ─────────────────────────────────────────────────────────────
@@ -81,19 +86,21 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
   const toast = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const ok = reason.trim().length >= MIN_REASON;
 
   async function run() {
     if (!ok || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.suspend(tenantId, reason.trim());
       toast(`${tenantName} — accès suspendu`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Suspension impossible — réessayez"));
+      setRefusal(errText(e, "Suspension impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -113,7 +120,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
           <Btn
             size="sm"
             icon="close"
-            className="bg-alert text-white hover:opacity-85"
+            variant="danger"
             disabled={!ok || busy}
             onClick={() => void run()}
           >
@@ -148,6 +155,7 @@ export function SuspendModal({ tenantId, tenantName, onClose, onDone }: Common) 
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -160,19 +168,21 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
   const toast = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   const ok = reason.trim().length >= MIN_REASON;
 
   async function run() {
     if (!ok || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       await clientsApi.reactivate(tenantId, reason.trim());
       toast(`${tenantName} — accès rouvert`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Réactivation impossible — réessayez"));
+      setRefusal(errText(e, "Réactivation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -191,7 +201,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
           <Btn
             size="sm"
             icon="check"
-            className="bg-ok text-white hover:opacity-85"
+            variant="success"
             disabled={!ok || busy}
             onClick={() => void run()}
           >
@@ -225,6 +235,7 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -233,34 +244,99 @@ export function ReactivateModal({ tenantId, tenantName, onClose, onDone }: Commo
 // Changer de formule
 // ─────────────────────────────────────────────────────────────
 
-export function PlanModal({
+/**
+ * CHANGER L'OFFRE D'UN CLIENT — formule, module, engagement, services.
+ *
+ * Cette modale ne portait que la formule, et son sélecteur ne proposait même
+ * pas « sans formule » : le module de commande en ligne et les services de
+ * l'Atelier n'étaient ni affichables, ni activables, ni retirables après la
+ * signature. Un restaurateur qui prenait les réseaux sociaux six mois plus tard
+ * n'avait aucun chemin dans le logiciel — et comme toute la facturation lit ces
+ * champs, sa facture ne bougeait pas non plus.
+ *
+ * Les champs viennent de `OffreFields`, le même composant que le panneau de
+ * proposition : ce qu'on sait vendre, on sait le modifier.
+ */
+export function OffreModal({
   tenantId,
   tenantName,
   onClose,
   onDone,
   current,
-}: Common & { current: AdminPlan | null }) {
+}: Common & {
+  current: {
+    plan: AdminPlan | null;
+    onlineOrdering: boolean;
+    billingCycle: ProposalBilling;
+    services: LeadServices;
+    /** Fin de la remise fondateur, ou `null` — voir le chiffrage ci-dessous. */
+    founderUntil: string | null;
+    /** La remise MENSUELLE figée au contrat signé, ou `null`. */
+    founderDiscountCents: number | null;
+  };
+}) {
   const toast = useToast();
-  // Un client Atelier seul (`current: null`) s'ouvre sur Essentiel : ce modal
-  // ne sait qu'ATTRIBUER une formule — la vente sans formule se fait à la
-  // signature, pas ici.
-  const [plan, setPlan] = useState<AdminPlan>(current ?? "essentiel");
+  const [plan, setPlan] = useState<AdminPlan | null>(current.plan);
+  const [module, setModule] = useState(current.onlineOrdering);
+  const [billing, setBilling] = useState<ProposalBilling>(current.billingCycle);
+  const [services, setServices] = useState<LeadServices>(current.services);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
-  const changed = plan !== current;
-  const delta = PLAN_MRR_CENTS[plan] - (current ? PLAN_MRR_CENTS[current] : 0);
+  const avant = proposalCents({
+    plan: current.plan,
+    onlineOrdering: current.onlineOrdering,
+    services: current.services,
+  });
+  const apres = proposalCents({ plan, onlineOrdering: module, services });
+  const mrrAvant = avant.monthlyCents + avant.servicesMonthlyCents;
+  const mrrApres = apres.monthlyCents + apres.servicesMonthlyCents;
+  const delta = mrrApres - mrrAvant;
+
+  /**
+   * CE QU'IL PAIERA VRAIMENT — la fiche l'affiche deux lignes plus haut.
+   *
+   * La modale ne chiffrait qu'au tarif public : sur un fondateur, elle
+   * annonçait « 159 € → 238 € » à côté d'une fiche disant « 119 € par mois ».
+   * L'opérateur au téléphone lisait le mauvais chiffre au client.
+   *
+   * Le DELTA, lui, est déjà juste au tarif public — et c'est la règle : la
+   * remise est un montant figé au contrat signé, ce qui s'ajoute ensuite se
+   * paie plein tarif. C'est le total qu'il fallait corriger, pas l'écart.
+   */
+  const remise = remiseFondateurActive(current.founderUntil)
+    ? Math.min(current.founderDiscountCents ?? 0, mrrApres)
+    : 0;
+  const duApres = mrrApres - remise;
+  const duAvant = Math.max(0, mrrAvant - Math.min(current.founderDiscountCents ?? 0, mrrAvant));
+  const changed =
+    plan !== current.plan ||
+    module !== current.onlineOrdering ||
+    billing !== current.billingCycle ||
+    JSON.stringify(services) !== JSON.stringify(current.services);
 
   async function run() {
     if (!changed || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
-      await clientsApi.changePlan(tenantId, plan, reason.trim());
-      toast(`${tenantName} passe en ${PLAN_LABELS[plan]}`, { icon: "check" });
+      await clientsApi.changeOffre(tenantId, {
+        plan,
+        onlineOrdering: module,
+        billing,
+        services,
+        reason: reason.trim(),
+      });
+      toast(`Offre de ${tenantName} mise à jour`, { icon: "check" });
       onDone();
       onClose();
     } catch (e) {
-      toast(errText(e, "Changement de formule impossible — réessayez"));
+      // Le refus vient des règles de composition (module greffé sans
+      // intégration, offre vide…) : on l'affiche mot pour mot plutôt que de
+      // le paraphraser — l'API sait mieux que nous ce qu'elle a refusé — et
+      // il reste à l'écran le temps d'être relu.
+      setRefusal(errText(e, "Changement d’offre impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -270,7 +346,7 @@ export function PlanModal({
     <SheetModal
       open
       onClose={onClose}
-      title={`Formule de ${tenantName}`}
+      title={`Offre de ${tenantName}`}
       footer={
         <>
           <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
@@ -283,59 +359,265 @@ export function PlanModal({
             disabled={!changed || busy}
             onClick={() => void run()}
           >
-            {busy ? "Enregistrement…" : "Appliquer la formule"}
+            {busy ? "Enregistrement…" : "Appliquer l’offre"}
           </Btn>
         </>
       }
     >
       <p className="text-[13px] text-mut">
-        Changer de formule ouvre ou ferme des modules côté restaurant. Le statut
-        du compte n&apos;est pas touché : passer un client en Boost n&apos;est
-        pas une décision d&apos;accès.
+        Formule, module de commande en ligne et services de l&apos;Atelier — tout
+        ce que ce client achète. Le statut du compte n&apos;est pas touché :
+        passer un client en Boost n&apos;est pas une décision d&apos;accès.
       </p>
-      <Field className="mt-4" label="Formule" htmlFor="plan-select">
-        <Select
-          id="plan-select"
-          value={plan}
-          onChange={(e) => setPlan(e.target.value as AdminPlan)}
-        >
-          {ADMIN_PLANS.map((p) => (
-            <option key={p} value={p}>
-              {PLAN_LABELS[p]} — {euroRound(PLAN_MRR_CENTS[p])} / mois
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <div className="mt-4 flex flex-col gap-4">
+        <OffreFields
+          plan={plan}
+          setPlan={setPlan}
+          module={module}
+          setModule={setModule}
+          billing={billing}
+          setBilling={setBilling}
+          services={services}
+          setServices={setServices}
+          idPrefix="offre"
+        />
+      </div>
       {changed && (
         <div className="mt-3 flex items-center gap-2 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3 text-[13px]">
           <Icon name="euro" size={16} className="shrink-0 text-accent" />
           <span className="text-mut">
-            MRR estimé{" "}
-            <span className={cx("cf-fig font-extrabold", delta > 0 ? "text-okt" : "text-alertt")}>
-              {delta > 0 ? "+" : "−"}
-              {euroRound(Math.abs(delta))}
+            Récurrent {euroRound(remise > 0 ? duAvant : mrrAvant)} →{" "}
+            <span className="cf-fig font-extrabold text-ink">
+              {euroRound(remise > 0 ? duApres : mrrApres)}
             </span>{" "}
-            par mois — estimation d&apos;après la grille, la facturation reste
-            la source de vérité.
+            par mois
+            {delta !== 0 && (
+              <>
+                {" ("}
+                <span className={cx("cf-fig font-extrabold", delta > 0 ? "text-okt" : "text-alertt")}>
+                  {delta > 0 ? "+" : "−"}
+                  {euroRound(Math.abs(delta))}
+                </span>
+                {")"}
+              </>
+            )}{" "}
+            — d&apos;après la grille ; la facturation reste la source de vérité.
+            {remise > 0 && (
+              <>
+                {" "}
+                <span className="text-gold">
+                  Remise fondateur de {euroRound(remise)} déduite ({euroRound(mrrApres)} au tarif
+                  public). Elle est figée au contrat signé : ce qui s&apos;ajoute aujourd&apos;hui
+                  se paie plein tarif.
+                </span>
+              </>
+            )}
           </span>
         </div>
       )}
       <Field
         className="mt-3"
         label="Motif"
-        htmlFor="plan-reason"
+        htmlFor="offre-reason"
         hint="Facultatif — mais « demandé par le gérant au téléphone » vaut mieux que rien."
       >
         <Textarea
-          id="plan-reason"
+          id="offre-reason"
           rows={2}
-          placeholder="Le gérant veut la fidélité et les écrans de salle."
+          placeholder="Le gérant ajoute les réseaux sociaux."
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
+}
+
+/**
+ * ÉMETTRE UNE FACTURE — le geste qui n'existait nulle part.
+ *
+ * `POST /crm/tenants/:id/invoices` était écrit, testé, et n'avait AUCUN
+ * appelant dans toute l'application. Conséquences : les brouillons posés
+ * automatiquement à la signature ne pouvaient jamais partir, et l'abonnement du
+ * mois suivant n'était jamais facturé. La file de recouvrement pouvait rester
+ * vide non parce que le parc était à jour, mais parce que rien n'avait jamais
+ * été facturé.
+ *
+ * Le montant est FACULTATIF et c'est délibéré : laissé vide, l'API applique
+ * l'offre du client — formule, module, services et remise fondateur comprises.
+ * Le saisir à la main est l'exception, pas la règle : c'est ainsi qu'on évite
+ * de recopier de tête un chiffre que le serveur sait calculer.
+ */
+export function EmettreFactureModal({
+  tenantId,
+  tenantName,
+  onClose,
+  onDone,
+  mrrCents,
+}: Common & { mrrCents: number }) {
+  const toast = useToast();
+  const [kind, setKind] = useState<(typeof ISSUABLE_INVOICE_KINDS)[number]>("abonnement");
+  const [period, setPeriod] = useState(moisCourant());
+  const [montant, setMontant] = useState("");
+  const [label, setLabel] = useState("");
+  // BROUILLON PAR DÉFAUT, comme la passe mensuelle. Émettre crée une créance
+  // qui entre au recouvrement et ne s'efface pas — elle s'annule avec un
+  // motif, qui reste au dossier. Le geste sûr est celui qu'on propose ; l'autre
+  // reste à un clic, délibérément.
+  const [draft, setDraft] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  // Ce que l'API facturera si le champ reste vide — affiché pour que personne
+  // n'ait à le deviner, ni à le ressaisir « pour être sûr ».
+  //
+  // AU CENTIME, jamais arrondi à l'euro : sur un fondateur à 49,50 €, l'écran
+  // annonçait « 50 € » et l'API facturait 49,50 €. Un opérateur qui recopie ce
+  // qu'il lit fabrique alors un écart de cinquante centimes, sur une pièce
+  // comptable, sans que rien ne le signale.
+  const parDefaut = kind === "mise_en_place" ? INSTALL_FEE_CENTS : mrrCents;
+  // Un MRR à zéro, c'est aussi la ligne parc qui n'a pas chargé (le parent
+  // retombe sur 0) : promettre « 0,00 € » serait mentir — l'API, elle,
+  // facturera l'offre réelle. Sans chiffre sûr, on n'en écrit pas.
+  const defautConnu = kind === "mise_en_place" || mrrCents > 0;
+  const saisi = montant.trim() === "" ? null : Math.round(Number(montant.replace(",", ".")) * 100);
+  const montantInvalide = saisi !== null && (!Number.isFinite(saisi) || saisi < 0);
+
+  async function run() {
+    if (busy || montantInvalide) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await clientsApi.issueInvoice(tenantId, {
+        kind,
+        period,
+        label: label.trim(),
+        draft,
+        ...(saisi !== null ? { amountCents: saisi } : {}),
+      });
+      toast(draft ? `Brouillon posé pour ${tenantName}` : `Facture émise pour ${tenantName}`, {
+        icon: "check",
+      });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Émission impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      title={`Facturer ${tenantName}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={busy || montantInvalide}
+            onClick={() => void run()}
+          >
+            {busy
+              ? "Émission…"
+              : draft
+                ? "Poser le brouillon"
+                : saisi !== null || defautConnu
+                  ? `Émettre — ${euros(saisi ?? parDefaut)} dus`
+                  : "Émettre la facture"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[13px] text-mut">
+        Une facture émise crée une créance : elle entre dans la file de
+        recouvrement et compte dans l&apos;ardoise du client. Un brouillon, non
+        — il attend d&apos;être envoyé.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-3 max-md:grid-cols-1">
+        <Field label="Nature" htmlFor="fact-kind">
+          <Select
+            id="fact-kind"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as typeof kind)}
+          >
+            {ISSUABLE_INVOICE_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {INVOICE_KIND_LABELS[k]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Mois facturé" htmlFor="fact-period">
+          <Input
+            id="fact-period"
+            type="month"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
+        </Field>
+      </div>
+      <Field
+        className="mt-3"
+        label="Montant HT"
+        htmlFor="fact-montant"
+        error={montantInvalide ? "Montant invalide — saisissez un nombre, ou laissez vide." : undefined}
+        hint={
+          kind === "mise_en_place"
+            ? // La remise fondateur est figée au contrat signé : une prestation
+              // commandée APRÈS se paie plein tarif. Écrit, sinon un opérateur
+              // « corrige » la moitié à la main en croyant bien faire.
+              `Laissez vide pour le tarif de la mise en place — ${euros(parDefaut)}. Une prestation commandée après la signature n’est pas couverte par la remise fondateur.`
+            : defautConnu
+              ? `Laissez vide pour appliquer l’offre du client — ${euros(parDefaut)}, remise fondateur comprise.`
+              : "Laissez vide pour appliquer l’offre du client — montant calculé par l’API, remise fondateur comprise."
+        }
+      >
+        <Input
+          id="fact-montant"
+          inputMode="decimal"
+          aria-invalid={montantInvalide || undefined}
+          placeholder={defautConnu ? (parDefaut / 100).toFixed(2) : undefined}
+          value={montant}
+          onChange={(e) => setMontant(e.target.value)}
+        />
+      </Field>
+      <Field
+        className="mt-3"
+        label="Libellé"
+        htmlFor="fact-label"
+        hint="Facultatif — sinon l’intitulé se déduit de la nature et de la formule."
+      >
+        <Input
+          id="fact-label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Abonnement Complet — septembre 2026"
+        />
+      </Field>
+      <div className="mt-3 flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs text-mut">
+          Poser en brouillon — rien n&apos;est dû tant qu&apos;il n&apos;est pas
+          envoyé. Utile pour préparer une pièce avant la fin d&apos;essai.
+        </div>
+        <Toggle on={draft} label="Brouillon" onChange={setDraft} />
+      </div>
+      {refusal && <Refusal message={refusal} />}
+    </SheetModal>
+  );
+}
+
+/** Le mois courant en `AAAA-MM` — ce que l'API attend et ce qu'un `<input type="month">` rend. */
+function moisCourant(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -371,11 +653,17 @@ export function RevokeDeviceModal({
   const [note, setNote] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState<string | null>(null);
+  // `null` tant que rien n'est révoqué ; ensuite l'écran de fin, avec ou sans
+  // code — deux états distincts, sinon un succès sans code laisserait la
+  // modale sur « Révoquer maintenant » et l'opérateur re-cliquerait sur un
+  // appareil déjà coupé.
+  const [fin, setFin] = useState<{ code: string | null } | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   async function run() {
     if (!confirmed || busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       const res = await clientsApi.revokeDevice(tenantId, device, {
         reason,
@@ -384,24 +672,27 @@ export function RevokeDeviceModal({
       // Le code peut ne pas être renvoyé (écran, API plus ancienne) : la
       // révocation reste un succès, on ne bloque pas là-dessus.
       const pairing = (res as { pairing?: { code?: unknown } })?.pairing?.code;
-      setCode(typeof pairing === "string" ? pairing : null);
+      setFin({ code: typeof pairing === "string" ? pairing : null });
       toast(`${device.name} révoqué — ${DEVICE_REVOKE_REASON_LABELS[reason]}`, {
         icon: "check",
       });
       onDone();
     } catch (e) {
-      toast(errText(e, "Révocation impossible — réessayez"));
+      setRefusal(errText(e, "Révocation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
   }
 
   // ── Après coup : le code à dicter ──
-  if (code !== null) {
+  if (fin) {
     return (
       <SheetModal
         open
         onClose={onClose}
+        // Le CRM n'affiche ce code qu'ici : un Échap réflexe ou un clic à
+        // côté du panneau pendant l'appel le perdrait — fermeture explicite.
+        destructive
         title={`${device.name} est coupé`}
         footer={
           <Btn variant="primary" size="sm" icon="check" onClick={onClose}>
@@ -409,19 +700,30 @@ export function RevokeDeviceModal({
           </Btn>
         }
       >
-        <p className="text-[13px] text-mut">
-          Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
-          repart en attente d&apos;appairage. Dictez ce code au gérant pour
-          remettre un appareil en service maintenant.
-        </p>
-        <div className="mt-4 grid place-items-center rounded-card border border-accent/40 bg-accent/10 py-5">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-accent/80">
-            Code d&apos;appairage
-          </div>
-          <div className="cf-fig mt-1 text-[34px] font-extrabold tracking-[0.12em] text-accent">
-            {code}
-          </div>
-        </div>
+        {fin.code !== null ? (
+          <>
+            <p className="text-[13px] text-mut">
+              Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
+              repart en attente d&apos;appairage. Dictez ce code au gérant pour
+              remettre un appareil en service maintenant.
+            </p>
+            <div className="mt-4 grid place-items-center rounded-card border border-accent/40 bg-accent/10 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-accent/80">
+                Code d&apos;appairage
+              </div>
+              <div className="cf-fig mt-1 text-[34px] font-extrabold tracking-[0.12em] text-accent">
+                {fin.code}
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="text-[13px] text-mut">
+            Le jeton est détruit : cet appareil n&apos;accède plus à rien. Il
+            repart en attente d&apos;appairage — aucun code d&apos;appairage
+            renvoyé ici : le gérant le retrouve dans son back-office, écran
+            Appareils.
+          </p>
+        )}
       </SheetModal>
     );
   }
@@ -441,7 +743,7 @@ export function RevokeDeviceModal({
           <Btn
             size="sm"
             icon="trash"
-            className="bg-alert text-white hover:opacity-85"
+            variant="danger"
             disabled={!confirmed || busy}
             onClick={() => void run()}
           >
@@ -507,6 +809,7 @@ export function RevokeDeviceModal({
           onChange={setConfirmed}
         />
       </div>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }
@@ -557,6 +860,27 @@ function Consequences({
   );
 }
 
+/**
+ * LE REFUS DE L'API, AFFICHÉ TEL QUEL — le même motif que `facturation/ui.tsx`.
+ *
+ * Il reste À L'ÉCRAN, dans la modale, plutôt que de partir avec un toast de
+ * 2,2 s : un refus arrive au moment précis où l'on a besoin de relire ce qui
+ * a été refusé — et le formulaire reste là, prêt à être corrigé.
+ */
+function Refusal({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mt-4 flex items-start gap-2.5 rounded-card border border-alert/50 bg-alert/10 p-3"
+    >
+      <Icon name="bell" size={16} className="mt-px shrink-0 text-alertt" />
+      <p className="min-w-0 text-[13px] font-semibold leading-[1.45] text-alertt">
+        {message}
+      </p>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Mot de passe gérant
 // ─────────────────────────────────────────────────────────────
@@ -572,15 +896,17 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [fait, setFait] = useState<{ ownerEmail: string; password: string } | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
 
   async function run() {
     if (busy) return;
     setBusy(true);
+    setRefusal(null);
     try {
       setFait(await crm.resetOwner(tenantId));
       onDone();
     } catch (e) {
-      toast(errText(e, "Réinitialisation impossible — réessayez"));
+      setRefusal(errText(e, "Réinitialisation impossible — réessayez"));
     } finally {
       setBusy(false);
     }
@@ -590,6 +916,10 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
     <SheetModal
       open
       onClose={onClose}
+      // Une fois le mot de passe affiché, un Échap réflexe ou un clic sur le
+      // voile le perdrait — et il ne sera jamais réaffiché. Fermeture
+      // explicite uniquement, comme SuspendModal.
+      destructive={fait !== null}
       title={`Mot de passe gérant — ${tenantName}`}
       footer={
         fait ? (
@@ -611,8 +941,11 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
       {fait ? (
         <div>
           <p className="text-[13px] text-mut">
-            À dicter ou copier MAINTENANT pour <b className="text-ink">{fait.ownerEmail}</b> —
-            il ne sera jamais réaffiché.
+            À dicter ou copier MAINTENANT pour{" "}
+            {/* `break-all` : une adresse longue se replie au lieu de forcer
+                le corps de la modale à défiler horizontalement. */}
+            <b className="break-all text-ink">{fait.ownerEmail}</b> — il ne
+            sera jamais réaffiché.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">
@@ -632,19 +965,149 @@ export function ResetOwnerModal({ tenantId, tenantName, onClose, onDone }: Commo
           </div>
         </div>
       ) : (
-        <Consequences
-          tone="alert"
-          does={[
-            "Un nouveau mot de passe est fabriqué et remis UNE fois, ici.",
-            "L'ancien cesse de fonctionner à l'instant même.",
-            "Le geste s'inscrit au journal de l'établissement.",
-          ]}
-          doesNot={[
-            "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
-            "Personne n'est prévenu automatiquement — c'est vous qui remettez le mot de passe au gérant.",
-          ]}
-        />
+        <>
+          <Consequences
+            tone="alert"
+            does={[
+              "Un nouveau mot de passe est fabriqué et remis UNE fois, ici.",
+              "L'ancien cesse de fonctionner à l'instant même.",
+              "Le geste s'inscrit au journal de l'établissement.",
+            ]}
+            doesNot={[
+              "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
+              "Personne n'est prévenu automatiquement — c'est vous qui remettez le mot de passe au gérant.",
+            ]}
+          />
+          {refusal && <Refusal message={refusal} />}
+        </>
       )}
+    </SheetModal>
+  );
+}
+
+/**
+ * ACTER LE DÉPART D'UN CLIENT — et capter POURQUOI.
+ *
+ * `POST /crm/tenants/:id/churn` était écrite, testée, et n'avait aucun
+ * appelant : aucun écran ne permettait de sortir un client du parc. Il restait
+ * « actif », comptait dans le MRR, apparaissait dans la file de recouvrement —
+ * et sa raison de partir n'était consignée nulle part.
+ *
+ * ── La CAUSE, avant le détail ─────────────────────────────────────────────
+ *
+ * Un motif en texte libre ne s'agrège pas : six départs donnent six phrases, et
+ * aucun tableau. Or c'est la question qu'un éditeur doit pouvoir se poser au
+ * bout d'un an — prix, complexité, fonction manquante ? — et elle ne se répond
+ * qu'avec une cause structurée. La liste est courte : un menu de quinze causes
+ * se remplit au hasard.
+ *
+ * Le détail libre reste obligatoire. C'est lui qui porte le cas particulier, et
+ * c'est lui qu'on relit avant d'appeler pour tenter de récupérer le client.
+ *
+ * ── Ce geste ne coupe PAS l'accès ─────────────────────────────────────────
+ *
+ * Un départ n'est pas une suspension : il constate, il ne sanctionne pas. Le
+ * gérant qui part garde ses données le temps de les récupérer — et un client
+ * qu'on chasse est un client qui ne revient jamais.
+ */
+export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
+  const toast = useToast();
+  const [cause, setCause] = useState<ChurnCause | null>(null);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const pret = cause !== null && reason.trim().length >= MIN_REASON;
+
+  async function run() {
+    if (!pret || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await clientsApi.churn(tenantId, { cause, reason: reason.trim() });
+      toast(`${tenantName} est sorti du parc`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Impossible d’acter le départ — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      // Même verrou que Suspendre : trois lignes de verbatim tapées au
+      // téléphone ne doivent pas partir sur un Échap réflexe ou un clic à
+      // côté du panneau.
+      destructive
+      title={`Départ de ${tenantName}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            variant="primary"
+            size="sm"
+            icon="check"
+            disabled={!pret || busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Enregistrement…" : "Acter le départ"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="text-[13px] text-mut">
+        Le client sort du parc : il ne compte plus dans le MRR ni dans la file de
+        recouvrement. Son accès n&apos;est PAS coupé — un départ se constate, il ne se
+        sanctionne pas, et le gérant garde ses données le temps de les récupérer.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-1.5">
+        <span
+          id="churn-cause-label"
+          className="block text-xs font-bold uppercase tracking-[0.04em] text-mut"
+        >
+          Pourquoi part-il ?
+        </span>
+        {/* `role="group"` relié à la question : au lecteur d'écran, « Prix,
+            bouton » n'a de sens que rattaché à « Pourquoi part-il ? ». */}
+        <div role="group" aria-labelledby="churn-cause-label" className="flex flex-wrap gap-1.5">
+          {CHURN_CAUSES.map((c) => (
+            <Chip key={c} on={cause === c} onClick={() => setCause(c)}>
+              {CHURN_CAUSE_LABELS[c]}
+            </Chip>
+          ))}
+        </div>
+        {cause ? (
+          <p className="mt-1 text-[12px] text-mut">{CHURN_CAUSE_HINTS[cause]}</p>
+        ) : (
+          // Le bouton reste grisé tant qu'une cause manque : sans cette
+          // ligne, rien à l'écran ne le dit.
+          <p className="mt-1 text-[12px] text-mut">
+            Obligatoire — une seule cause, la principale.
+          </p>
+        )}
+      </div>
+
+      <Field
+        className="mt-3"
+        label="Ce qu’il a dit"
+        htmlFor="churn-reason"
+        hint="Obligatoire — ses mots, pas les vôtres : c’est ce qu’on relit avant de tenter de le récupérer."
+      >
+        <Textarea
+          id="churn-reason"
+          rows={3}
+          placeholder="« On a fermé le service du midi, le logiciel ne se rentabilise plus. »"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
+      {refusal && <Refusal message={refusal} />}
     </SheetModal>
   );
 }

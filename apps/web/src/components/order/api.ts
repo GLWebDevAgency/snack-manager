@@ -32,6 +32,7 @@
  */
 
 import type {
+  CreatePublicOrder,
   OrderStatus,
   OrderTicket,
   PaymentIntentResponse,
@@ -340,22 +341,20 @@ export type OrderLinePayload = {
   qty: number;
 };
 
-export type CreateOrderPayload = {
-  clientId: string;
-  channel: "online";
-  type: "pickup";
-  lines: OrderLinePayload[];
-  payment: { method: "online" | "counter" };
-  pickup: { slot: string; customerName: string; customerPhone?: string };
-  note?: string;
-};
+/** Même type que le pipe Zod API : aucun contrat navigateur parallèle ne dérive. */
+export type CreateOrderPayload = CreatePublicOrder;
 
 /** Commande créée telle que renvoyée par l’API (projection utile au client). */
 export type CreatedOrder = {
   _id: string;
   number: number;
   status: OrderStatus;
-  totals: { subtotal: number; total: number };
+  totals: {
+    subtotal: number;
+    /** La promotion retenue par le serveur, avec son libellé — `null` sinon. */
+    discount: { amount: number; reason: string } | null;
+    total: number;
+  };
   pickup: { slot: string; customerName: string } | null;
   /**
    * Secret de suivi remis une seule fois, à la création. L’identifiant de
@@ -539,9 +538,19 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
-  function createPaymentIntent(orderId: string): Promise<PaymentIntentResponse> {
+  /**
+   * Le jeton de suivi accompagne l'appel, comme sur le suivi et le ticket.
+   *
+   * Cette route était la seule à ouvrir une commande sur son seul identifiant :
+   * elle confirmait son existence et en révélait le montant à qui devinait un
+   * ObjectId — que `tracking.ts` décrit précisément comme devinable.
+   */
+  function createPaymentIntent(
+    orderId: string,
+    token: string,
+  ): Promise<PaymentIntentResponse> {
     return postJson<PaymentIntentResponse>(
-      `/public/orders/${encodeURIComponent(orderId)}/payment-intent`,
+      withToken(`/public/orders/${encodeURIComponent(orderId)}/payment-intent`, token),
       {},
     );
   }

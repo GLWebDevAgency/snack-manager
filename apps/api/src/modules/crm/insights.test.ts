@@ -49,8 +49,6 @@ const SM: JwtPayload = {
 };
 
 const NOW = new Date('2026-08-19T15:00:00.000Z');
-const DAY_MS = 86_400_000;
-const daysAgo = (n: number) => new Date(NOW.getTime() - n * DAY_MS);
 
 /** Répartition horaire réelle de Class'Food sur 30 jours (fuseau Paris). */
 const CLASSFOOD_HOURS = new Map<number, number>([

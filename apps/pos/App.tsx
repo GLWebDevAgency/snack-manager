@@ -20,7 +20,7 @@ import { AppState, Platform, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { activateKeepAwakeAsync } from 'expo-keep-awake';
 import { DEVICE_HEARTBEAT_INTERVAL_MS } from '@sm/contracts';
-import { getStore, palette } from '@sm/client-core';
+import { palette, useSyncState } from '@sm/client-core';
 import {
   DeviceError,
   KEYS,
@@ -33,9 +33,11 @@ import {
   type Session,
 } from './src/client';
 import { DemoBanner } from './src/DemoBanner';
+import { belongsToApp } from './src/device-boundary';
 import { PairingScreen, PinScreen } from './src/PinScreen';
 import { PosScreen } from './src/PosScreen';
-import { Loading } from './src/ui';
+import { createSaleInFlightGate } from './src/pos-safety';
+import { Loading, Press } from './src/ui';
 
 /** Le jeton staff vit 12 h ; au-delà, on redemande le PIN sans rien perdre. */
 const SESSION_TTL = 11 * 60 * 60 * 1000;
@@ -44,7 +46,24 @@ export default function App() {
   const [device, setDevice] = useState<PairedDevice | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const sync = useSyncState(client);
   const [lockNotice, setLockNotice] = useState<string | null>(null);
+  /**
+   * Barrière partagée avec l'écran de vente : un lock ne doit jamais
+   * démonter le composant pendant son commit local asynchrone.
+   */
+  const saleInFlight = useRef(createSaleInFlightGate()).current;
+  const [, refreshAfterSale] = useState(0);
+  const appAlive = useRef(true);
+
+  useEffect(() => {
+    appAlive.current = true;
+    return () => {
+      appAlive.current = false;
+    };
+  }, []);
 
   // Le rapporteur d'erreurs, pour toute la vie du poste — voir `client.ts`.
   useEffect(() => installErrorReporting(), []);
@@ -58,29 +77,60 @@ export default function App() {
    */
   useEffect(() => {
     let alive = true;
+    setRestored(false);
+    setRestoreError(null);
     void (async () => {
-      const paired = await loadPairedDevice();
-      if (!alive) return;
-      setDevice(paired);
+      try {
+        const paired = await loadPairedDevice();
+        if (!alive) return;
+        setDevice(paired);
 
-      if (paired) {
-        try {
-          const raw = await getStore().getItem(KEYS.session);
-          const saved = raw ? (JSON.parse(raw) as Session) : null;
-          if (alive && saved?.token && Date.now() - saved.at < SESSION_TTL) {
-            client.setToken(saved.token);
-            setSession(saved);
+        if (paired && belongsToApp(paired.device)) {
+          try {
+            const raw = await client.tenantStore.getItem(KEYS.session);
+            const saved = raw ? (JSON.parse(raw) as Session) : null;
+            if (
+              alive &&
+              saved?.token &&
+              saved.tenantSlug === paired.tenant.slug &&
+              Date.now() - saved.at < SESSION_TTL
+            ) {
+              client.setToken(saved.token);
+              setSession(saved);
+            } else if (raw) {
+              await client.tenantStore.removeItem(KEYS.session);
+            }
+          } catch (error) {
+            if (error instanceof SyntaxError) {
+              await client.tenantStore.removeItem(KEYS.session);
+            } else {
+              throw error;
+            }
           }
-        } catch {
-          /* session illisible : on repart sur l'écran de code équipier */
+        } else if (paired) {
+          // Migration sûre d'un ancien appairage croisé : on interdit toute
+          // reprise de session, mais on conserve encore l'identité et la file.
+          // Le heartbeat les fera passer par `revokeDevice`, qui synchronise
+          // les ventes avant le désappairage durable.
+          client.setToken(null);
+          await client.tenantStore.removeItem(KEYS.session);
         }
+      } catch (error) {
+        if (alive) {
+          setRestoreError(
+            error instanceof Error
+              ? error.message
+              : 'Le stockage sécurisé du poste est indisponible.',
+          );
+        }
+      } finally {
+        if (alive) setRestored(true);
       }
-      if (alive) setRestored(true);
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [restoreAttempt]);
 
   // L'écran d'un poste de caisse ne doit jamais s'éteindre pendant le service.
   useEffect(() => {
@@ -90,15 +140,17 @@ export default function App() {
   const onSession = useCallback((next: Session) => {
     setLockNotice(null);
     setSession(next);
-    void getStore().setItem(KEYS.session, JSON.stringify(next));
+    void client.tenantStore.setItem(KEYS.session, JSON.stringify(next)).catch(() => undefined);
   }, []);
 
   const onLock = useCallback((reason?: string) => {
-    client.setToken(null);
-    setLockNotice(reason ?? null);
-    setSession(null);
-    void getStore().removeItem(KEYS.session);
-  }, []);
+    saleInFlight.deferUntilIdle(() => {
+      client.setToken(null);
+      setLockNotice(reason ?? null);
+      setSession(null);
+      void client.tenantStore.removeItem(KEYS.session).catch(() => undefined);
+    });
+  }, [saleInFlight]);
 
   /** Désappairage confirmé depuis l'écran de code équipier. */
   const onUnpair = useCallback(() => {
@@ -114,10 +166,39 @@ export default function App() {
    * incident possible sur ce poste est qu'il se taise —, et la marque revient
    * à jour, si bien qu'un changement de nom ou de couleur se propage sans
    * réappairage. Une révocation depuis le back-office (tablette perdue) ramène
-   * le poste à l'écran d'appairage, immédiatement.
+   * le poste à l'écran d'appairage dès que l'éventuel commit de vente en
+   * cours est durable.
    */
   const deviceRef = useRef(device);
   deviceRef.current = device;
+
+  const revokeDevice = useCallback(() => {
+    saleInFlight.deferUntilIdle(() => {
+      // On masque immédiatement la caisse pour qu'aucune nouvelle vente ne
+      // démarre, mais on conserve le jeton le temps de prouver les mutations
+      // déjà durables côté serveur. `forgetPairedDevice` refusera ensuite la
+      // purge de façon atomique s'il reste une entrée ou un rejet.
+      setRestoreError('Révocation détectée — sécurisation des ventes en cours.');
+      void client.queue
+        .flush()
+        .catch(() => undefined)
+        .then(() => forgetPairedDevice())
+        .then(() => {
+          if (!appAlive.current) return;
+          setSession(null);
+          setDevice(null);
+          setRestoreError(null);
+        })
+        .catch((error: unknown) => {
+          if (!appAlive.current) return;
+          setRestoreError(
+            error instanceof Error
+              ? `Désappairage bloqué sans effacer les ventes : ${error.message}. Rétablissez le réseau ou traitez les rejets, puis réessayez.`
+              : 'Le désappairage sécurisé doit être relancé.',
+          );
+        });
+    });
+  }, [saleInFlight]);
 
   useEffect(() => {
     if (!device) return;
@@ -135,10 +216,10 @@ export default function App() {
         .catch((e: unknown) => {
           if (!alive || !(e instanceof DeviceError) || e.status !== 401) return;
           // Le jeton a été révoqué depuis le back-office : garder l'appairage
-          // ne ferait qu'échouer à chaque saisie. Retour à l'écran d'appairage.
-          setSession(null);
-          setDevice(null);
-          void forgetPairedDevice();
+          // ne ferait qu'échouer à chaque saisie. L'écran reste BLOQUÉ jusqu'à
+          // ce que clear + purge soient réellement terminés : présenter le
+          // formulaire B avant cela créerait une course entre pair et purge.
+          revokeDevice();
         });
     };
 
@@ -154,7 +235,24 @@ export default function App() {
       clearInterval(id);
       sub.remove();
     };
-  }, [device]);
+  }, [device, revokeDevice]);
+
+  /**
+   * `scopeValid` et `suspended` verrouillent normalement par le rendu, sans
+   * callback. Si l'un bascule pendant une vente, on garde l'écran monté puis
+   * on force le rendu de verrouillage exactement après `finish()`.
+   */
+  const mustLeaveSaleScreen =
+    !restored || restoreError !== null || !sync.scopeValid || !device || device.suspended === true;
+  useEffect(() => {
+    if (!session || !mustLeaveSaleScreen) return;
+    saleInFlight.deferUntilIdle(() => refreshAfterSale((revision) => revision + 1));
+  }, [mustLeaveSaleScreen, saleInFlight, session]);
+
+  const protectActiveSale = session !== null && saleInFlight.active;
+  const posScreen = session ? (
+    <PosScreen session={session} onLock={onLock} saleInFlight={saleInFlight} />
+  ) : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -170,8 +268,20 @@ export default function App() {
         barre, et le retour reste atteignable même une modale ouverte.
       */}
       <DemoBanner />
-      {!restored ? (
+      {protectActiveSale ? (
+        posScreen
+      ) : !restored ? (
         <Loading label="Ouverture du poste…" />
+      ) : restoreError ? (
+        <RestoreError
+          message={restoreError}
+          onRetry={() => setRestoreAttempt((attempt) => attempt + 1)}
+        />
+      ) : !sync.scopeValid ? (
+        <RestoreError
+          message="L’appairage a changé dans une autre fenêtre. Les données de cette fenêtre ont été verrouillées."
+          onRetry={() => globalThis.location?.reload()}
+        />
       ) : !device ? (
         <PairingScreen onPaired={setDevice} />
       ) : device.suspended ? (
@@ -181,7 +291,7 @@ export default function App() {
         // vivante ; la réactivation la rouvre au battement suivant, seule.
         <SuspendedScreen name={device.tenant.name} />
       ) : session ? (
-        <PosScreen session={session} onLock={onLock} />
+        posScreen
       ) : (
         <PinScreen
           onSession={onSession}
@@ -190,6 +300,35 @@ export default function App() {
           notice={lockNotice}
         />
       )}
+    </View>
+  );
+}
+
+function RestoreError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
+      <Text style={{ color: palette.text, fontSize: 22, fontWeight: '800', textAlign: 'center' }}>
+        Poste momentanément verrouillé
+      </Text>
+      <Text style={{ color: palette.mut, fontSize: 15, textAlign: 'center', maxWidth: 460 }}>
+        {message} Aucune donnée d’un autre établissement ne sera ouverte tant que la restauration
+        n’est pas terminée.
+      </Text>
+      <Press
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="Réessayer la restauration du poste"
+        style={{
+          minHeight: 48,
+          paddingHorizontal: 24,
+          borderRadius: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: palette.gold,
+        }}
+      >
+        <Text style={{ color: palette.bg, fontSize: 15, fontWeight: '800' }}>Réessayer</Text>
+      </Press>
     </View>
   );
 }

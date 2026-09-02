@@ -81,6 +81,32 @@ function lireCompte(raw: RawTenant | null): EncaissementCompte | null {
 const iso = (v: unknown): string =>
   v instanceof Date ? v.toISOString() : typeof v === 'string' ? v : new Date(0).toISOString();
 
+/**
+ * LE RACCORDEMENT EST-IL ROMPU, OU STRIPE EST-IL SIMPLEMENT MUET ?
+ *
+ * Distinction décisive : le premier cas doit fermer l'encaissement — laisser
+ * les drapeaux ouverts ferait proposer au client un paiement qui échouerait. Le
+ * second ne doit RIEN changer : une panne passagère chez Stripe n'est pas une
+ * décision du restaurateur, et fermer sur une absence de réponse coupe la
+ * commande en ligne de tout un parc pour la durée de l'incident.
+ *
+ * Le SDK Stripe type ses erreurs. On ne retient comme « rompu » que ce qui
+ * désigne le COMPTE : permission retirée, compte inexistant, requête invalide.
+ * Tout le reste — réseau, 5xx, quota, authentification de la plateforme —
+ * relève de l'indisponibilité, et l'INCONNU aussi : devant une erreur qu'on ne
+ * sait pas lire, ne rien changer est le choix sûr.
+ */
+export function raccordementRompu(error: unknown): boolean {
+  const e = error as { type?: unknown; statusCode?: unknown; code?: unknown } | null;
+  const type = typeof e?.type === 'string' ? e.type : '';
+  if (type === 'StripePermissionError' || type === 'StripeInvalidRequestError') return true;
+  if (e?.code === 'account_invalid' || e?.code === 'permission_error') return true;
+  // Un 401/403/404 sur la lecture d'un compte dit la même chose, quel que soit
+  // l'habillage du SDK.
+  const statut = typeof e?.statusCode === 'number' ? e.statusCode : 0;
+  return statut === 401 || statut === 403 || statut === 404;
+}
+
 @Injectable()
 export class EncaissementService {
   private readonly logger = new Logger(EncaissementService.name);
@@ -127,16 +153,42 @@ export class EncaissementService {
     const accountId = existant?.accountId ?? (await this.creerCompte(tenant));
 
     try {
-      const lien = await this.stripe.creerLien(accountId, this.config.retourUrl, this.config.retourUrl);
-      return { url: lien.url, expireLe: new Date(lien.expires_at * 1000).toISOString() };
+      return await this.lienVers(accountId);
     } catch (error) {
-      // Compte révoqué, clé invalide, panne : un message lisible plutôt qu'un
-      // 500 opaque devant lequel le gérant ne peut rien faire.
+      // UN DÉBRANCHEMENT NE DOIT PAS ÊTRE DÉFINITIF.
+      //
+      // L'identifiant du compte est conservé à la révocation — c'est voulu, il
+      // permet de reprendre. Mais si le restaurateur nous a retiré l'accès,
+      // Stripe refuse de nous ouvrir une page sur CE compte : on réessayait
+      // donc éternellement le même, et le gérant lisait « réessayez dans un
+      // instant » devant un geste qui ne marcherait jamais.
+      //
+      // Un raccordement rompu appelle un compte NEUF. L'ancien ne nous est plus
+      // accessible de toute façon : le garder ne conserve rien, il empêche
+      // seulement de repartir.
+      if (raccordementRompu(error)) {
+        this.logger.warn(
+          `Raccordement rompu sur ${accountId} — un nouveau compte est créé pour repartir.`,
+        );
+        const neuf = await this.creerCompte(tenant);
+        return await this.lienVers(neuf);
+      }
+      // Clé invalide, panne réseau : réessayer a du sens, et le message le dit.
       this.logger.warn(`Lien de raccordement impossible (${accountId}) : ${String(error)}`);
       throw new ServiceUnavailableException(
         'Stripe n’a pas pu ouvrir la page d’inscription — réessayez dans un instant.',
       );
     }
+  }
+
+  /** Le lien d'inscription Stripe d'un compte donné, à usage unique. */
+  private async lienVers(accountId: string): Promise<{ url: string; expireLe: string }> {
+    const lien = await this.stripe.creerLien(
+      accountId,
+      this.config.retourUrl,
+      this.config.retourUrl,
+    );
+    return { url: lien.url, expireLe: new Date(lien.expires_at * 1000).toISOString() };
   }
 
   /**
@@ -158,9 +210,24 @@ export class EncaissementService {
 
     const existant = lireCompte(tenant);
     const compte = await this.lireChezStripe(accountId);
-    if (!compte) {
-      // Stripe ne répond pas, ou le restaurateur nous a débranchés : on FERME
-      // l'encaissement plutôt que de laisser des drapeaux périmés ouverts.
+
+    // UN COMPTE RÉVOQUÉ ET UNE PANNE STRIPE NE SE TRAITENT PAS PAREIL.
+    //
+    // Les deux rendaient `null`, et les deux fermaient l'encaissement. Un
+    // incident passager chez Stripe coupait donc la commande en ligne de tous
+    // les restaurants dont un webhook passait pendant la panne — et rien ne la
+    // rouvrait tant que le gérant ne cliquait pas « vérifier ».
+    if (compte === 'indisponible') {
+      // On ne sait rien : on ne décide rien. Les drapeaux d'hier valent mieux
+      // qu'une fermeture fondée sur une absence de réponse.
+      this.logger.warn(
+        `Synchronisation de ${accountId} reportée — Stripe n'a pas répondu, l'état est inchangé.`,
+      );
+      return;
+    }
+    if (compte === 'rompu') {
+      // Le raccordement n'existe plus côté Stripe : laisser les drapeaux
+      // ouverts ferait proposer un paiement en ligne qui échouerait au client.
       await this.fermer(tenant._id, accountId, now, existant?.raccordeLe);
       return;
     }
@@ -321,12 +388,17 @@ export class EncaissementService {
    * durant — et le bouton « vérifier » du gérant tombait en erreur : il ne
    * pouvait ni comprendre ni corriger son état.
    */
-  private async lireChezStripe(accountId: string): Promise<StripeCompte | null> {
+  private async lireChezStripe(
+    accountId: string,
+  ): Promise<StripeCompte | 'rompu' | 'indisponible'> {
     try {
       return await this.stripe.lireCompte(accountId);
     } catch (error) {
-      this.logger.warn(`Lecture du compte ${accountId} impossible : ${String(error)}`);
-      return null;
+      const rompu = raccordementRompu(error);
+      this.logger.warn(
+        `Lecture du compte ${accountId} impossible (${rompu ? 'raccordement rompu' : 'Stripe indisponible'}) : ${String(error)}`,
+      );
+      return rompu ? 'rompu' : 'indisponible';
     }
   }
 

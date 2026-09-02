@@ -8,9 +8,11 @@
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
-    "lint": "echo ok",
+    "lint": "eslint --config ../../eslint.serveur.mjs src",
+    "test": "vitest run",
     "generate": "drizzle-kit generate",
     "migrate": "tsx src/migrate.ts",
+    "verify:migrations": "tsx src/verify-migrations.ts",
     "seed": "tsx src/seed.ts",
     "studio": "drizzle-kit studio"
   },
@@ -22,6 +24,7 @@
   "devDependencies": {
     "@types/pg": "^8.15.0",
     "drizzle-kit": "^0.31.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0"
   }
 }

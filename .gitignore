@@ -44,3 +44,9 @@ pos-demo.png
 # lieu de le régler. Les équivalents libres vivent dans
 # `apps/web/public/photos/libre/`, avec leur manifeste de provenance.
 design_handoff_snack_manager/photo-base/
+
+# Journaux et secrets des scripts de simulation (scripts/simulation/) : le mot
+# de passe du gérant n'est rendu qu'UNE fois par la conversion, et les jetons de
+# suivi des commandes ne se relisent par aucune route. Ces fichiers sont donc
+# précieux — et c'est exactement pour ça qu'ils ne doivent jamais être versionnés.
+.simulation/

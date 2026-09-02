@@ -12,7 +12,8 @@ import {
   FOUNDER_SEATS_TOTAL,
   LEAD_STAGES,
   LeadServicesSchema,
-  PLAN_MRR_CENTS,
+  mrrNormaliseCents,
+  offreClient,
   SCREEN_OFFLINE_AFTER_MS,
   type CrmClient,
   type CrmInvoice,
@@ -56,6 +57,34 @@ import { detailErreur } from '../../infrastructure/http-v4';
 
 /** Fenêtre d'activité d'un client : 30 jours glissants. */
 const ACTIVITY_WINDOW_DAYS = 30;
+
+/**
+ * Les champs du tenant que la liste des clients a besoin de lire.
+ *
+ * EXPORTÉE pour être testable. Une projection Mongo qui oublie un champ ne
+ * lève pas : elle rend `undefined`, et le calcul qui s'en sert retombe
+ * silencieusement sur une valeur par défaut. C'est ainsi que le MRR du parc a
+ * sous-estimé le chiffre réel — `onlineOrdering` et `atelier` n'étaient tout
+ * simplement pas chargés, et personne ne pouvait le voir.
+ */
+export const TENANT_FIELDS = {
+  name: 1,
+  slug: 1,
+  plan: 1,
+  founderSeat: 1,
+  founderUntil: 1,
+  // La PORTÉE de la remise fondateur et le CYCLE d'engagement : sans eux,
+  // `offreClient` lit `undefined`, la remise ne s'applique pas et un client
+  // annuel est compté à sa mensualité faciale. Le MRR du parc redevenait faux
+  // par la projection après avoir été corrigé dans le calcul — précisément le
+  // piège que le commentaire ci-dessus décrit.
+  founderDiscountCents: 1,
+  billingCycle: 1,
+  onlineOrdering: 1,
+  atelier: 1,
+  createdAt: 1,
+  account: 1,
+} as const;
 
 @Injectable()
 export class CrmService implements OnApplicationBootstrap {
@@ -297,7 +326,7 @@ export class CrmService implements OnApplicationBootstrap {
 
     const [tenants, activity, devices, screens, overdue] = await Promise.all([
       this.tenants
-        .find({}, { name: 1, slug: 1, plan: 1, founderSeat: 1, createdAt: 1, account: 1 })
+        .find({}, TENANT_FIELDS)
         .sort({ createdAt: 1 })
         .lean(),
       this.orders.aggregate<TenantActivityRow>([
@@ -396,7 +425,12 @@ export class CrmService implements OnApplicationBootstrap {
         name: t.name,
         slug: t.slug,
         plan,
-        mrrCents: plan ? (PLAN_MRR_CENTS[plan] ?? 0) : 0,
+        // L'offre ENTIÈRE, remise fondateur comprise : le MRR du parc
+        // sous-estimait le chiffre réel de tout ce qui n'était pas une
+        // formule — module à 79 €/mois et mensuels de l'Atelier.
+        // NORMALISÉ : un engagement annuel rapporte un sixième de moins par
+        // mois que sa mensualité faciale, et c'est ce chiffre-ci qu'on somme.
+        mrrCents: mrrNormaliseCents(offreClient(t), now),
         founderSeat: Boolean(t.founderSeat),
         since: iso((t as { createdAt?: Date }).createdAt) ?? now.toISOString(),
         orders30d: window30.orders,
@@ -406,6 +440,7 @@ export class CrmService implements OnApplicationBootstrap {
         health: clientHealth(lastOrderAt, now),
         accountStatus,
         score: score.value,
+        verdictLabel: score.verdictLabel,
         previousOrders: window30.previousOrders,
         ordersDeltaPct: window30.ordersDeltaPct,
         devicesOffline: fleet.offline,

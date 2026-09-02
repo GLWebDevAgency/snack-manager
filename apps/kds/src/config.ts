@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { purgeLegacyApiOverride, resolveApiOrigin } from './api-origin';
 
 /**
  * Configuration de l'appareil cuisine.
@@ -12,30 +13,27 @@ import { Platform } from 'react-native';
  * ferait silencieusement travailler une cuisine sur les commandes d'un autre
  * restaurant, et personne ne le verrait avant le premier ticket servi.
  *
- * Reste l'URL d'API, qui est bien une propriété de l'installation. En
- * développement web, on accepte une surcharge par paramètre d'URL
- * (`?api=http://localhost:3001`), mémorisée ensuite pour survivre aux
- * rechargements de Metro.
+ * Reste l'URL d'API, qui est bien une propriété du BUILD. Elle reçoit les
+ * secrets d'appareil et du personnel : elle n'est jamais lue depuis l'URL ni
+ * depuis un stockage modifiable par le navigateur. `api-origin.ts` tient la
+ * liste fermée des environnements exploités.
  */
 
-const DEFAULT_API = 'https://api-production-8949.up.railway.app';
-
-function override(key: 'api'): string | null {
-  if (Platform.OS !== 'web') return null;
-  const storeKey = `sm.kds.cfg.${key}`;
+if (Platform.OS === 'web') {
   try {
-    const fromQuery = new URL(globalThis.location.href).searchParams.get(key);
-    if (fromQuery) {
-      globalThis.localStorage?.setItem(storeKey, fromQuery);
-      return fromQuery;
-    }
-    return globalThis.localStorage?.getItem(storeKey) ?? null;
+    // Migration ponctuelle : cette ancienne valeur pouvait avoir ete choisie
+    // par `?api=…`. Ne supprimer aucune autre donnee (session, appareil, vue).
+    purgeLegacyApiOverride(globalThis.localStorage);
   } catch {
-    return null;
+    // Le stockage peut etre indisponible (navigation privee, politique MDM).
+    // La configuration compilee reste la seule autorite dans tous les cas.
   }
 }
 
-export const API_URL = override('api') ?? DEFAULT_API;
+export const API_URL = resolveApiOrigin(
+  process.env.EXPO_PUBLIC_API_URL,
+  process.env.EXPO_PUBLIC_ALLOW_LOCAL_API === '1',
+);
 
 /**
  * Les cadences de rafraîchissement du tableau (sondage de secours à 5 s,

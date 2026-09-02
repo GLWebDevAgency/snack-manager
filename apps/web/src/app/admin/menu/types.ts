@@ -5,6 +5,17 @@
 
 export type Variant = { key: string; name: string; price: number };
 
+/**
+ * Les groupes d'options, tels que la carte les sert.
+ *
+ * Le type les ignorait, et `normProduct` les jetait : le back-office ne les
+ * voyait littéralement jamais, alors que `ProductCreateSchema` les accepte
+ * pleinement depuis le premier jour. On reprend les types des contrats plutôt
+ * que d'en redéclarer des approximations — deux définitions du même objet
+ * finissent par diverger sur le champ qu'on utilise le moins.
+ */
+export type { OptionChoice, OptionGroup, PerVariantRule } from "@sm/contracts";
+
 export type Product = {
   _id: string;
   /** null = « Non rattaché » (orphelin après suppression de catégorie). */
@@ -14,6 +25,13 @@ export type Product = {
   /** Centimes — ignoré côté client si `variants` non vide. */
   price: number;
   variants: Variant[];
+  /**
+   * ATTENTION : la carte RETIRE le groupe réservé « supplements » de cette
+   * liste — il fait foi sur le prix côté serveur et s'expose ailleurs. Le
+   * renvoyer tel quel en écriture l'effacerait ; le service le réinjecte, mais
+   * n'ajoutez jamais un chemin qui compte dessus sans le savoir.
+   */
+  optionGroups: import("@sm/contracts").OptionGroup[];
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;

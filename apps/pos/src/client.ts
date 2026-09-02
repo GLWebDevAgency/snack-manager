@@ -43,17 +43,23 @@ import {
 import {
   DEMO_TENANT,
   SmClient,
+  QueueScopeRetiredError,
   demoStore,
   demoTransport,
   getStore,
   installClientErrorReporter,
   isDemoRequested,
+  purgeKeysWithIdentityLast,
+  restoreIdentityIfUnchanged,
+  restoreScopedIdentity,
   setStore,
   webStore,
   type KeyValueStore,
+  uuid,
+  withStoreLock,
 } from '@sm/client-core';
-
-const DEFAULT_API = 'https://api-production-8949.up.railway.app';
+import { API_URL } from './config';
+import { belongsToApp, pairingRequest } from './device-boundary';
 
 /**
  * Version du bundle, rapportée par le battement de cœur. La source est le
@@ -63,19 +69,6 @@ const DEFAULT_API = 'https://api-production-8949.up.railway.app';
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- lecture de la version au build, hors graphe ES
 const APP_VERSION: string = (require('../package.json') as { version: string }).version;
-
-/** Le poste peut être pointé vers une API locale sans rebuild (clé `sm.apiUrl`). */
-function resolveBaseUrl(): string {
-  if (Platform.OS === 'web') {
-    try {
-      const override = globalThis.localStorage?.getItem('sm.apiUrl');
-      if (override) return override;
-    } catch {
-      /* stockage bloqué : on garde l'URL par défaut */
-    }
-  }
-  return DEFAULT_API;
-}
 
 function nativeStore(): KeyValueStore {
   return {
@@ -91,15 +84,17 @@ function nativeStore(): KeyValueStore {
 
 // ─── Clés de persistance locale ───
 
-export const KEYS = {
-  session: 'sm.pos.session.v1',
-  /** Appairage de l'appareil — survit à la déconnexion de l'équipier. */
-  device: 'sm.pos.device.v1',
-  parked: 'sm.pos.parked.v1',
-  dayLog: 'sm.pos.daylog.v1',
-  /** Ouverture du service courant — borne de découpe du Z. */
-  serviceStart: 'sm.pos.servicestart.v1',
-} as const;
+/**
+ * Les clés de stockage de la caisse — définies dans `pos-state.ts`.
+ *
+ * Elles y vivent parce que ce module-là est PUR : `client.ts` tire React
+ * Native, que la configuration de test ne sait pas analyser. La liste des clés
+ * à purger au désappairage décide si les ventes d'un commerçant peuvent
+ * ressortir chez un autre : elle doit être vérifiable.
+ */
+import { KEYS } from './pos-state';
+import { withDemoLoyalty } from './demo-loyalty';
+export { KEYS };
 
 export interface Session {
   token: string;
@@ -169,11 +164,10 @@ setStore(
   DEMO ? demoStore(demoSeed()) : Platform.OS === 'web' ? webStore() : nativeStore(),
 );
 
-const BASE_URL = resolveBaseUrl();
-
 export const client = new SmClient({
-  baseUrl: BASE_URL,
-  ...(DEMO ? { transport: demoTransport() } : null),
+  baseUrl: API_URL,
+  queueScopeRequired: true,
+  ...(DEMO ? { transport: withDemoLoyalty(demoTransport()) } : null),
 });
 
 export interface PinLoginResponse {
@@ -191,6 +185,10 @@ export interface PairedDevice {
   deviceToken: string;
   tenant: DeviceTenantBrand;
   device: DeviceIdentity;
+  /** Génération locale opaque : un réappairage ne reprend jamais une vieille file. */
+  queueScope?: string;
+  /** Crash-safe : le bind frais sera repris au prochain démarrage. */
+  queueBindingPending?: boolean;
   /**
    * Abonnement suspendu côté Snack Manager. Porté par le battement de cœur :
    * c'est l'ÉCRAN qui se verrouille (contrat `DeviceHeartbeatResult`), pas
@@ -224,18 +222,61 @@ function adopt(next: PairedDevice | null): PairedDevice | null {
 
 export const pairedDevice = (): PairedDevice | null => current;
 
+function queueScopeOf(device: PairedDevice): string {
+  // Migration déterministe des postes déjà déployés : deux onglets qui ouvrent
+  // le même ancien appairage revendiquent exactement la même génération.
+  return device.queueScope?.trim() || `legacy:${device.device.id}`;
+}
+
+async function finishInterruptedUnpair(): Promise<void> {
+  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device);
+  await client.queue.completeClear();
+  adopt(null);
+  client.setToken(null);
+}
+
 /** Lecture de l'appairage persisté — appelée une fois au démarrage. */
 export async function loadPairedDevice(): Promise<PairedDevice | null> {
-  try {
-    const raw = await getStore().getItem(KEYS.device);
-    if (!raw) return adopt(null);
-    const parsed = JSON.parse(raw) as PairedDevice;
-    return adopt(parsed?.deviceToken && parsed.tenant?.slug ? parsed : null);
-  } catch {
-    // Appairage illisible : on repart sur l'écran d'appairage plutôt que de
-    // laisser le poste tourner sans savoir pour qui il encaisse.
+  const parsed = await restoreScopedIdentity(
+    getStore(),
+    Object.values(KEYS),
+    KEYS.device,
+    (raw): PairedDevice | null => {
+      const candidate = JSON.parse(raw) as PairedDevice;
+      return candidate?.deviceToken && candidate.tenant?.slug && candidate.device?.id
+        ? candidate
+        : null;
+    },
+  );
+  if (!parsed) {
+    // Une chute après la suppression de l'identité mais avant l'acquittement
+    // du tombstone reprend ici. Les clés ont déjà été assainies par
+    // `restoreScopedIdentity`, le prochain restaurant peut donc être libéré.
+    await client.queue.completeClear();
     return adopt(null);
   }
+
+  const scope = queueScopeOf(parsed);
+  try {
+    await client.queue.bindScope(scope, {
+      freshPairing: parsed.queueBindingPending === true,
+    });
+  } catch (error) {
+    if (error instanceof QueueScopeRetiredError) {
+      // `clear()` avait atteint le disque, puis le processus est tombé avant
+      // la suppression de la clé appareil : finir le désappairage est sûr.
+      await finishInterruptedUnpair();
+      return null;
+    }
+    throw error;
+  }
+
+  const restored: PairedDevice = { ...parsed, queueScope: scope };
+  delete restored.queueBindingPending;
+  if (parsed.queueScope !== scope || parsed.queueBindingPending) {
+    await client.tenantStore.setItem(KEYS.device, JSON.stringify(restored));
+  }
+  return adopt(restored);
 }
 
 /**
@@ -260,15 +301,54 @@ function sameDevice(a: PairedDevice, b: PairedDevice): boolean {
     a.device.id === b.device.id &&
     a.device.name === b.device.name &&
     a.device.kind === b.device.kind
+    && a.queueScope === b.queueScope
   );
 }
 
-async function persist(next: PairedDevice): Promise<PairedDevice> {
+async function persist(
+  next: PairedDevice,
+  options: { freshPairing?: boolean } = {},
+): Promise<PairedDevice> {
   const existing = current;
   if (existing && sameDevice(existing, next)) return existing;
-  adopt(next);
-  await getStore().setItem(KEYS.device, JSON.stringify(next));
-  return next;
+  const scope = next.queueScope?.trim() || existing?.queueScope || `legacy:${next.device.id}`;
+  const committed: PairedDevice = { ...next, queueScope: scope };
+
+  if (options.freshPairing) {
+    // Journal d'intention dans la même clé que l'appairage : après un crash,
+    // `loadPairedDevice` sait qu'il peut reprendre le bind frais exactement.
+    const store = getStore();
+    const pending = { ...committed, queueBindingPending: true } satisfies PairedDevice;
+    const pendingRaw = JSON.stringify(pending);
+    const previous = await withStoreLock(async () => {
+      const currentRaw = await store.getItem(KEYS.device);
+      await store.setItem(KEYS.device, pendingRaw);
+      return currentRaw;
+    });
+    let scopeCommitted = false;
+    try {
+      await client.queue.bindScope(scope, { freshPairing: true });
+      scopeCommitted = true;
+      await client.tenantStore.setItem(KEYS.device, JSON.stringify(committed));
+    } catch (error) {
+      // Après un bind durable, conserver l'intention pending permet au reboot
+      // de finaliser. La supprimer orphelinerait le scope et perdrait le jeton.
+      if (!scopeCommitted) {
+        await restoreIdentityIfUnchanged(
+          store,
+          KEYS.device,
+          pendingRaw,
+          previous,
+        ).catch(() => undefined);
+      }
+      throw error;
+    }
+  } else {
+    await client.queue.bindScope(scope);
+    await client.tenantStore.setItem(KEYS.device, JSON.stringify(committed));
+  }
+  adopt(committed);
+  return committed;
 }
 
 /**
@@ -287,7 +367,7 @@ export function installErrorReporting(): () => void {
   return installClientErrorReporter({
     source: 'pos',
     post: (body) => {
-      void fetch(`${BASE_URL}/public/client-errors`, {
+      void fetch(`${API_URL}/public/client-errors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -297,18 +377,30 @@ export function installErrorReporting(): () => void {
   });
 }
 
+/**
+ * DÉSAPPAIRER, c'est tout oublier de CET établissement.
+ *
+ * L'appairage, la session et la file partaient bien. Le reste — journal du
+ * service, tickets mis en attente, heure d'ouverture — restait en place et
+ * ressortait tel quel après ré-appairage chez un AUTRE commerçant : le Z du
+ * soir mélangeait deux restaurants, et un ticket parqué chez A se rappelait
+ * chez B avec ses lignes et le nom de son client.
+ *
+ * La liste est donc celle des clés `KEYS`, dans son ensemble, et non un
+ * sous-ensemble choisi : une clé ajoutée demain doit y entrer d'office.
+ */
 export async function forgetPairedDevice(): Promise<void> {
+  // La file hors-ligne part avec l'appairage, mais uniquement lorsqu'elle est
+  // vide. Une révocation distante peut tomber pendant une vente : perdre son
+  // tenant est acceptable, effacer une commande encaissée ne l'est jamais.
+  // IMPORTANT : la purge durable précède l'effacement de l'identité. Un crash
+  // entre les deux laisse ainsi le poste chez A avec une file vide, jamais une
+  // file A orpheline susceptible de repartir sous le jeton de B.
+  await client.queue.clear({ requireEmpty: true });
+  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device);
+  await client.queue.completeClear();
   adopt(null);
   client.setToken(null);
-  await getStore().removeItem(KEYS.device);
-  await getStore().removeItem(KEYS.session);
-  // La file hors-ligne part avec l'appairage. Elle n'est pas cloisonnée par
-  // établissement : des mutations en attente de l'établissement A rejouées
-  // après ré-appairage chez B seraient des ventes écrites chez le mauvais
-  // commerçant — et sans le jeton de A, elles ne se rejoueraient de toute
-  // façon jamais correctement. On assume la perte : elle est visible (le
-  // badge « N en attente ») AVANT le désappairage, jamais silencieuse après.
-  await client.queue.clear();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -330,7 +422,7 @@ async function deviceFetch<T>(path: string, body: unknown, deviceToken?: string)
   // « demo », `App.tsx` en conclurait une révocation et renverrait le visiteur
   // sur l'écran d'appairage, en pleine démonstration.
   if (DEMO) throw new DeviceError('Route indisponible en démonstration', 503);
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -357,12 +449,22 @@ export class DeviceError extends Error {
 
 /** Appairage : six caractères contre un jeton, une fois pour toutes. */
 export async function pairDevice(pairingCode: string): Promise<PairedDevice> {
-  const result = await deviceFetch<DevicePaired>('/public/devices/pair', { pairingCode });
+  const result = await deviceFetch<DevicePaired>(
+    '/public/devices/pair',
+    pairingRequest(pairingCode),
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Ce code est réservé à l’application Cuisine. Utilisez le code d’une caisse.',
+      409,
+    );
+  }
   return persist({
     deviceToken: result.deviceToken,
     tenant: result.tenant,
     device: result.device,
-  });
+    queueScope: `pair:${uuid()}`,
+  }, { freshPairing: true });
 }
 
 /**
@@ -398,6 +500,15 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
     if (e instanceof DeviceError && e.status === 401) throw e;
     return null;
   }
+  if (!belongsToApp(beat.device)) {
+    // Un ancien bundle a pu enregistrer un jeton KDS dans le POS. Le signaler
+    // comme une révocation fait passer par `revokeDevice` : la file de ventes
+    // est d'abord synchronisée, puis seulement l'identité locale est purgée.
+    throw new DeviceError(
+      "Cet appareil n'est pas une caisse. Réappairez-le avec le bon code.",
+      401,
+    );
+  }
   return persist({
     ...device,
     tenant: beat.tenant,
@@ -415,5 +526,16 @@ export async function deviceHeartbeat(): Promise<PairedDevice | null> {
 export async function pinLogin(pin: string): Promise<DevicePinSession> {
   const device = current;
   if (!device) throw new DeviceError("Cet appareil n'est pas appairé.", 401);
-  return deviceFetch<DevicePinSession>('/public/devices/pin', { pin }, device.deviceToken);
+  const result = await deviceFetch<DevicePinSession>(
+    '/public/devices/pin',
+    { pin },
+    device.deviceToken,
+  );
+  if (!belongsToApp(result.device)) {
+    throw new DeviceError(
+      'Cet appareil est enregistré comme écran cuisine. Réappairez la caisse avec son propre code.',
+      409,
+    );
+  }
+  return result;
 }

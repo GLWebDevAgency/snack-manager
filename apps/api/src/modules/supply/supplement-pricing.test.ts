@@ -170,6 +170,9 @@ function orders(produit: unknown) {
     } as never,
     { find: () => ({ lean: async () => [produit] }) } as never,
     { findOneAndUpdate: async () => ({ seq: 7 }) } as never,
+    // Aucune promotion au parc : ce test mesure le prix des SUPPLÉMENTS, et
+    // une remise viendrait fausser le sous-total qu'il vérifie.
+    { find: () => ({ lean: async () => [] }) } as never,
     { publish: () => {} } as never,
     {} as never,
   );

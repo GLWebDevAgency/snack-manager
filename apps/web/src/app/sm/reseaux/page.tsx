@@ -124,7 +124,7 @@ export default function ReseauxPage() {
           title="Réglages injoignables"
           sub="Les liens actuellement en ligne n’ont pas pu être lus."
           actions={
-            <Btn variant="ghost" size="sm" icon="arrow" onClick={load}>
+            <Btn variant="ghost" size="sm" onClick={load}>
               Réessayer
             </Btn>
           }
@@ -159,7 +159,7 @@ export default function ReseauxPage() {
         title="Comptes de la vitrine"
         sub="Collez l’adresse complète du profil. Un champ vide retire le pictogramme de la page d’accueil."
         actions={
-          <Btn icon="check" onClick={save} disabled={!dirty || saving}>
+          <Btn size="sm" icon="check" onClick={save} disabled={!dirty || saving}>
             {saving ? "Enregistrement…" : "Enregistrer"}
           </Btn>
         }

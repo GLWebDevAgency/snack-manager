@@ -1,0 +1,2540 @@
+{
+  "id": "e7e5b48a-997e-4a59-8d40-45100590d7bc",
+  "prevId": "cc373f6e-6b1c-4254-815e-3892b9a4dbc9",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "loyalty.consent_events": {
+      "name": "consent_events",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "consent_purpose",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "consent_decision",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notice_version": {
+          "name": "notice_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "ledger_source",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_ref": {
+          "name": "actor_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "consent_events_tenant_operation_uq": {
+          "name": "consent_events_tenant_operation_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_events_tenant_identity_uq": {
+          "name": "consent_events_tenant_identity_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "purpose",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decision",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "notice_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "consent_events_member_history_idx": {
+          "name": "consent_events_member_history_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "consent_events_tenant_member_fk": {
+          "name": "consent_events_tenant_member_fk",
+          "tableFrom": "consent_events",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_events_tenant_operation_fk": {
+          "name": "consent_events_tenant_operation_fk",
+          "tableFrom": "consent_events",
+          "tableTo": "operations",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "loyalty.consent_state": {
+      "name": "consent_state",
+      "schema": "loyalty",
+      "columns": {
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "consent_purpose",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "consent_decision",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notice_version": {
+          "name": "notice_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "consent_state_tenant_member_fk": {
+          "name": "consent_state_tenant_member_fk",
+          "tableFrom": "consent_state",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "consent_state_tenant_event_fk": {
+          "name": "consent_state_tenant_event_fk",
+          "tableFrom": "consent_state",
+          "tableTo": "consent_events",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "event_id",
+            "member_id",
+            "purpose",
+            "decision",
+            "notice_version"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id",
+            "member_id",
+            "purpose",
+            "decision",
+            "notice_version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "consent_state_tenant_ref_member_id_purpose_pk": {
+          "name": "consent_state_tenant_ref_member_id_purpose_pk",
+          "columns": [
+            "tenant_ref",
+            "member_id",
+            "purpose"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "loyalty.earn_receipts": {
+      "name": "earn_receipts",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "ledger_source",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "earn_receipts_tenant_source_external_ref_uq": {
+          "name": "earn_receipts_tenant_source_external_ref_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "earn_receipts_tenant_operation_uq": {
+          "name": "earn_receipts_tenant_operation_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "earn_receipts_tenant_member_idx": {
+          "name": "earn_receipts_tenant_member_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "claimed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "earn_receipts_tenant_operation_fk": {
+          "name": "earn_receipts_tenant_operation_fk",
+          "tableFrom": "earn_receipts",
+          "tableTo": "operations",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "earn_receipts_tenant_member_fk": {
+          "name": "earn_receipts_tenant_member_fk",
+          "tableFrom": "earn_receipts",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "loyalty.ledger_entries": {
+      "name": "ledger_entries",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "ledger_kind",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delta_units": {
+          "name": "delta_units",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_after": {
+          "name": "balance_after",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "ledger_source",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_ref": {
+          "name": "actor_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_ref": {
+          "name": "device_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rules_version": {
+          "name": "rules_version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wallet_version": {
+          "name": "wallet_version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "reward_snapshot": {
+          "name": "reward_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reversed_entry_id": {
+          "name": "reversed_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ledger_tenant_operation_uq": {
+          "name": "ledger_tenant_operation_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_tenant_id_uq": {
+          "name": "ledger_tenant_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_wallet_version_uq": {
+          "name": "ledger_wallet_version_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "wallet_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_tenant_member_program_id_uq": {
+          "name": "ledger_tenant_member_program_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_reversed_entry_uq": {
+          "name": "ledger_reversed_entry_uq",
+          "columns": [
+            {
+              "expression": "reversed_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"loyalty\".\"ledger_entries\".\"reversed_entry_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_member_history_idx": {
+          "name": "ledger_member_history_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_external_ref_idx": {
+          "name": "ledger_external_ref_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_earn_external_ref_uq": {
+          "name": "ledger_earn_external_ref_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"loyalty\".\"ledger_entries\".\"kind\" = 'earn' AND \"loyalty\".\"ledger_entries\".\"external_ref\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_redeem_external_ref_uq": {
+          "name": "ledger_redeem_external_ref_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"loyalty\".\"ledger_entries\".\"kind\" = 'redeem' AND \"loyalty\".\"ledger_entries\".\"external_ref\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ledger_tenant_member_fk": {
+          "name": "ledger_tenant_member_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ledger_tenant_program_fk": {
+          "name": "ledger_tenant_program_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "programs",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ledger_tenant_program_rules_fk": {
+          "name": "ledger_tenant_program_rules_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "program_versions",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id",
+            "rules_version"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "program_id",
+            "version"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ledger_tenant_operation_fk": {
+          "name": "ledger_tenant_operation_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "operations",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "ledger_reversal_origin_fk": {
+          "name": "ledger_reversal_origin_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "ledger_entries",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id",
+            "program_id",
+            "reversed_entry_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "member_id",
+            "program_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ledger_delta_nonzero": {
+          "name": "ledger_delta_nonzero",
+          "value": "\"loyalty\".\"ledger_entries\".\"delta_units\" <> 0"
+        },
+        "ledger_balance_nonnegative": {
+          "name": "ledger_balance_nonnegative",
+          "value": "\"loyalty\".\"ledger_entries\".\"balance_after\" >= 0"
+        },
+        "ledger_rules_version_positive": {
+          "name": "ledger_rules_version_positive",
+          "value": "\"loyalty\".\"ledger_entries\".\"rules_version\" > 0"
+        },
+        "ledger_wallet_version_positive": {
+          "name": "ledger_wallet_version_positive",
+          "value": "\"loyalty\".\"ledger_entries\".\"wallet_version\" > 0"
+        },
+        "ledger_delta_safe_integer": {
+          "name": "ledger_delta_safe_integer",
+          "value": "\"loyalty\".\"ledger_entries\".\"delta_units\" BETWEEN -9007199254740991 AND 9007199254740991"
+        },
+        "ledger_balance_safe_integer": {
+          "name": "ledger_balance_safe_integer",
+          "value": "\"loyalty\".\"ledger_entries\".\"balance_after\" <= 9007199254740991"
+        },
+        "ledger_rules_version_safe_integer": {
+          "name": "ledger_rules_version_safe_integer",
+          "value": "\"loyalty\".\"ledger_entries\".\"rules_version\" <= 9007199254740991"
+        },
+        "ledger_wallet_version_safe_integer": {
+          "name": "ledger_wallet_version_safe_integer",
+          "value": "\"loyalty\".\"ledger_entries\".\"wallet_version\" <= 9007199254740991"
+        },
+        "ledger_reversal_shape": {
+          "name": "ledger_reversal_shape",
+          "value": "(\n        (\"loyalty\".\"ledger_entries\".\"kind\" = 'reverse' AND \"loyalty\".\"ledger_entries\".\"reversed_entry_id\" IS NOT NULL)\n        OR (\"loyalty\".\"ledger_entries\".\"kind\" <> 'reverse' AND \"loyalty\".\"ledger_entries\".\"reversed_entry_id\" IS NULL)\n      )"
+        },
+        "ledger_kind_delta_shape": {
+          "name": "ledger_kind_delta_shape",
+          "value": "(\n        (\"loyalty\".\"ledger_entries\".\"kind\" IN ('earn', 'adjust_credit') AND \"loyalty\".\"ledger_entries\".\"delta_units\" > 0)\n        OR (\"loyalty\".\"ledger_entries\".\"kind\" IN ('redeem', 'adjust_debit', 'expire') AND \"loyalty\".\"ledger_entries\".\"delta_units\" < 0)\n        OR \"loyalty\".\"ledger_entries\".\"kind\" = 'reverse'\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.member_profiles": {
+      "name": "member_profiles",
+      "schema": "loyalty",
+      "columns": {
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "encrypted_payload": {
+          "name": "encrypted_payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone_lookup_hash": {
+          "name": "phone_lookup_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "member_profiles_tenant_phone_uq": {
+          "name": "member_profiles_tenant_phone_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "phone_lookup_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"loyalty\".\"member_profiles\".\"phone_lookup_hash\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "member_profiles_tenant_member_fk": {
+          "name": "member_profiles_tenant_member_fk",
+          "tableFrom": "member_profiles",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "member_profiles_key_version_positive": {
+          "name": "member_profiles_key_version_positive",
+          "value": "\"loyalty\".\"member_profiles\".\"key_version\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.member_tokens": {
+      "name": "member_tokens",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "token_status",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "member_tokens_hash_uq": {
+          "name": "member_tokens_hash_uq",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "member_tokens_tenant_member_idx": {
+          "name": "member_tokens_tenant_member_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "member_tokens_tenant_member_fk": {
+          "name": "member_tokens_tenant_member_fk",
+          "tableFrom": "member_tokens",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "member_tokens_status_timestamp_shape": {
+          "name": "member_tokens_status_timestamp_shape",
+          "value": "(\n        (\"loyalty\".\"member_tokens\".\"status\" = 'active' AND \"loyalty\".\"member_tokens\".\"revoked_at\" IS NULL)\n        OR (\"loyalty\".\"member_tokens\".\"status\" = 'revoked' AND \"loyalty\".\"member_tokens\".\"revoked_at\" IS NOT NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.members": {
+      "name": "members",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "member_status",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "joined_at": {
+          "name": "joined_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blocked_at": {
+          "name": "blocked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anonymized_at": {
+          "name": "anonymized_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "members_tenant_id_uq": {
+          "name": "members_tenant_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "members_tenant_activity_idx": {
+          "name": "members_tenant_activity_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_activity_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "members_status_timestamps_shape": {
+          "name": "members_status_timestamps_shape",
+          "value": "(\n        (\"loyalty\".\"members\".\"status\" = 'active' AND \"loyalty\".\"members\".\"blocked_at\" IS NULL AND \"loyalty\".\"members\".\"anonymized_at\" IS NULL)\n        OR (\"loyalty\".\"members\".\"status\" = 'blocked' AND \"loyalty\".\"members\".\"blocked_at\" IS NOT NULL AND \"loyalty\".\"members\".\"anonymized_at\" IS NULL)\n        OR (\"loyalty\".\"members\".\"status\" = 'anonymized' AND \"loyalty\".\"members\".\"anonymized_at\" IS NOT NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.membership_events": {
+      "name": "membership_events",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "membership_event_kind",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terms_notice_version": {
+          "name": "terms_notice_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "ledger_source",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_ref": {
+          "name": "actor_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "membership_events_tenant_operation_uq": {
+          "name": "membership_events_tenant_operation_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "membership_events_member_history_idx": {
+          "name": "membership_events_member_history_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "membership_events_tenant_member_fk": {
+          "name": "membership_events_tenant_member_fk",
+          "tableFrom": "membership_events",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "membership_events_tenant_operation_fk": {
+          "name": "membership_events_tenant_operation_fk",
+          "tableFrom": "membership_events",
+          "tableTo": "operations",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "membership_events_terms_shape": {
+          "name": "membership_events_terms_shape",
+          "value": "(\n        (\"loyalty\".\"membership_events\".\"kind\" = 'joined' AND \"loyalty\".\"membership_events\".\"terms_notice_version\" IS NOT NULL)\n        OR (\"loyalty\".\"membership_events\".\"kind\" <> 'joined' AND \"loyalty\".\"membership_events\".\"terms_notice_version\" IS NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.operations": {
+      "name": "operations",
+      "schema": "loyalty",
+      "columns": {
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "operation_kind",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_fingerprint": {
+          "name": "request_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "operation_status",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "result": {
+          "name": "result",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "operations_tenant_ref_operation_id_pk": {
+          "name": "operations_tenant_ref_operation_id_pk",
+          "columns": [
+            "tenant_ref",
+            "operation_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "operations_status_result_shape": {
+          "name": "operations_status_result_shape",
+          "value": "(\n        (\"loyalty\".\"operations\".\"status\" = 'pending' AND \"loyalty\".\"operations\".\"result\" IS NULL AND \"loyalty\".\"operations\".\"completed_at\" IS NULL)\n        OR (\"loyalty\".\"operations\".\"status\" = 'completed' AND \"loyalty\".\"operations\".\"result\" IS NOT NULL AND \"loyalty\".\"operations\".\"completed_at\" IS NOT NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.program_versions": {
+      "name": "program_versions",
+      "schema": "loyalty",
+      "columns": {
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mechanism": {
+          "name": "mechanism",
+          "type": "mechanism",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minimum_purchase_cents": {
+          "name": "minimum_purchase_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "maximum_units_per_purchase": {
+          "name": "maximum_units_per_purchase",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spend_step_cents": {
+          "name": "spend_step_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "units_per_step": {
+          "name": "units_per_step",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "units_per_visit": {
+          "name": "units_per_visit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit_label_singular": {
+          "name": "unit_label_singular",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_label_plural": {
+          "name": "unit_label_plural",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "terms_summary": {
+          "name": "terms_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "program_versions_tenant_identity_uq": {
+          "name": "program_versions_tenant_identity_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "program_versions_tenant_program_fk": {
+          "name": "program_versions_tenant_program_fk",
+          "tableFrom": "program_versions",
+          "tableTo": "programs",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "program_versions_program_id_version_pk": {
+          "name": "program_versions_program_id_version_pk",
+          "columns": [
+            "program_id",
+            "version"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "program_versions_version_positive": {
+          "name": "program_versions_version_positive",
+          "value": "\"loyalty\".\"program_versions\".\"version\" > 0"
+        },
+        "program_versions_version_safe_integer": {
+          "name": "program_versions_version_safe_integer",
+          "value": "\"loyalty\".\"program_versions\".\"version\" <= 9007199254740991"
+        },
+        "program_versions_minimum_nonnegative": {
+          "name": "program_versions_minimum_nonnegative",
+          "value": "\"loyalty\".\"program_versions\".\"minimum_purchase_cents\" >= 0"
+        },
+        "program_versions_cap_positive": {
+          "name": "program_versions_cap_positive",
+          "value": "\"loyalty\".\"program_versions\".\"maximum_units_per_purchase\" IS NULL OR \"loyalty\".\"program_versions\".\"maximum_units_per_purchase\" > 0"
+        },
+        "program_versions_mechanism_shape": {
+          "name": "program_versions_mechanism_shape",
+          "value": "(\n        (\"loyalty\".\"program_versions\".\"mechanism\" = 'points' AND \"loyalty\".\"program_versions\".\"spend_step_cents\" > 0 AND \"loyalty\".\"program_versions\".\"units_per_step\" > 0 AND \"loyalty\".\"program_versions\".\"units_per_visit\" IS NULL)\n        OR\n        (\"loyalty\".\"program_versions\".\"mechanism\" = 'stamps' AND \"loyalty\".\"program_versions\".\"units_per_visit\" > 0 AND \"loyalty\".\"program_versions\".\"spend_step_cents\" IS NULL AND \"loyalty\".\"program_versions\".\"units_per_step\" IS NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.programs": {
+      "name": "programs",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "program_status",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "current_version": {
+          "name": "current_version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "programs_tenant_uq": {
+          "name": "programs_tenant_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "programs_tenant_id_uq": {
+          "name": "programs_tenant_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "programs_current_version_positive": {
+          "name": "programs_current_version_positive",
+          "value": "\"loyalty\".\"programs\".\"current_version\" > 0"
+        },
+        "programs_current_version_safe_integer": {
+          "name": "programs_current_version_safe_integer",
+          "value": "\"loyalty\".\"programs\".\"current_version\" <= 9007199254740991"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.redemptions": {
+      "name": "redemptions",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reward_id": {
+          "name": "reward_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_id": {
+          "name": "operation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ledger_entry_id": {
+          "name": "ledger_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "redemption_status",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reward_snapshot": {
+          "name": "reward_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reserved_at": {
+          "name": "reserved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reversed_at": {
+          "name": "reversed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "redemptions_tenant_operation_uq": {
+          "name": "redemptions_tenant_operation_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "operation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "redemptions_ledger_uq": {
+          "name": "redemptions_ledger_uq",
+          "columns": [
+            {
+              "expression": "ledger_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"loyalty\".\"redemptions\".\"ledger_entry_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "redemptions_tenant_member_idx": {
+          "name": "redemptions_tenant_member_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "member_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "consumed_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "redemptions_tenant_member_fk": {
+          "name": "redemptions_tenant_member_fk",
+          "tableFrom": "redemptions",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "redemptions_tenant_reward_fk": {
+          "name": "redemptions_tenant_reward_fk",
+          "tableFrom": "redemptions",
+          "tableTo": "rewards",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id",
+            "reward_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "program_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "redemptions_tenant_ledger_fk": {
+          "name": "redemptions_tenant_ledger_fk",
+          "tableFrom": "redemptions",
+          "tableTo": "ledger_entries",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id",
+            "program_id",
+            "ledger_entry_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "member_id",
+            "program_id",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "redemptions_tenant_operation_fk": {
+          "name": "redemptions_tenant_operation_fk",
+          "tableFrom": "redemptions",
+          "tableTo": "operations",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "operation_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "redemptions_status_timestamps_shape": {
+          "name": "redemptions_status_timestamps_shape",
+          "value": "(\n        (\"loyalty\".\"redemptions\".\"status\" = 'reserved' AND \"loyalty\".\"redemptions\".\"ledger_entry_id\" IS NULL AND \"loyalty\".\"redemptions\".\"consumed_at\" IS NULL AND \"loyalty\".\"redemptions\".\"reversed_at\" IS NULL AND \"loyalty\".\"redemptions\".\"expires_at\" IS NOT NULL)\n        OR (\"loyalty\".\"redemptions\".\"status\" = 'consumed' AND \"loyalty\".\"redemptions\".\"ledger_entry_id\" IS NOT NULL AND \"loyalty\".\"redemptions\".\"consumed_at\" IS NOT NULL AND \"loyalty\".\"redemptions\".\"reversed_at\" IS NULL)\n        OR (\"loyalty\".\"redemptions\".\"status\" = 'reversed' AND \"loyalty\".\"redemptions\".\"ledger_entry_id\" IS NOT NULL AND \"loyalty\".\"redemptions\".\"consumed_at\" IS NOT NULL AND \"loyalty\".\"redemptions\".\"reversed_at\" IS NOT NULL)\n        OR (\"loyalty\".\"redemptions\".\"status\" = 'expired' AND \"loyalty\".\"redemptions\".\"ledger_entry_id\" IS NULL AND \"loyalty\".\"redemptions\".\"consumed_at\" IS NULL AND \"loyalty\".\"redemptions\".\"reversed_at\" IS NULL AND \"loyalty\".\"redemptions\".\"expires_at\" IS NOT NULL)\n      )"
+        },
+        "redemptions_timestamp_order": {
+          "name": "redemptions_timestamp_order",
+          "value": "(\n        (\"loyalty\".\"redemptions\".\"expires_at\" IS NULL OR \"loyalty\".\"redemptions\".\"expires_at\" > \"loyalty\".\"redemptions\".\"reserved_at\")\n        AND (\"loyalty\".\"redemptions\".\"consumed_at\" IS NULL OR \"loyalty\".\"redemptions\".\"consumed_at\" >= \"loyalty\".\"redemptions\".\"reserved_at\")\n        AND (\"loyalty\".\"redemptions\".\"reversed_at\" IS NULL OR (\"loyalty\".\"redemptions\".\"consumed_at\" IS NOT NULL AND \"loyalty\".\"redemptions\".\"reversed_at\" >= \"loyalty\".\"redemptions\".\"consumed_at\"))\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.rewards": {
+      "name": "rewards",
+      "schema": "loyalty",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "cost_units": {
+          "name": "cost_units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "reward_kind",
+          "typeSchema": "loyalty",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'custom'"
+        },
+        "value_cents": {
+          "name": "value_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_ref": {
+          "name": "product_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "rewards_tenant_id_uq": {
+          "name": "rewards_tenant_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rewards_tenant_program_id_uq": {
+          "name": "rewards_tenant_program_id_uq",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rewards_tenant_program_idx": {
+          "name": "rewards_tenant_program_idx",
+          "columns": [
+            {
+              "expression": "tenant_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "program_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "rewards_tenant_program_fk": {
+          "name": "rewards_tenant_program_fk",
+          "tableFrom": "rewards",
+          "tableTo": "programs",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "rewards_cost_positive": {
+          "name": "rewards_cost_positive",
+          "value": "\"loyalty\".\"rewards\".\"cost_units\" > 0"
+        },
+        "rewards_kind_shape": {
+          "name": "rewards_kind_shape",
+          "value": "(\n        (\"loyalty\".\"rewards\".\"kind\" = 'custom' AND \"loyalty\".\"rewards\".\"value_cents\" IS NULL AND \"loyalty\".\"rewards\".\"product_ref\" IS NULL)\n        OR (\"loyalty\".\"rewards\".\"kind\" = 'fixed_discount' AND \"loyalty\".\"rewards\".\"value_cents\" > 0 AND \"loyalty\".\"rewards\".\"product_ref\" IS NULL)\n        OR (\"loyalty\".\"rewards\".\"kind\" = 'product' AND \"loyalty\".\"rewards\".\"product_ref\" IS NOT NULL AND \"loyalty\".\"rewards\".\"value_cents\" IS NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "loyalty.wallets": {
+      "name": "wallets",
+      "schema": "loyalty",
+      "columns": {
+        "tenant_ref": {
+          "name": "tenant_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_id": {
+          "name": "member_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_units": {
+          "name": "balance_units",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "lifetime_earned_units": {
+          "name": "lifetime_earned_units",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "lifetime_redeemed_units": {
+          "name": "lifetime_redeemed_units",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "wallets_tenant_member_fk": {
+          "name": "wallets_tenant_member_fk",
+          "tableFrom": "wallets",
+          "tableTo": "members",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "member_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "wallets_tenant_program_fk": {
+          "name": "wallets_tenant_program_fk",
+          "tableFrom": "wallets",
+          "tableTo": "programs",
+          "schemaTo": "loyalty",
+          "columnsFrom": [
+            "tenant_ref",
+            "program_id"
+          ],
+          "columnsTo": [
+            "tenant_ref",
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "wallets_tenant_ref_member_id_program_id_pk": {
+          "name": "wallets_tenant_ref_member_id_program_id_pk",
+          "columns": [
+            "tenant_ref",
+            "member_id",
+            "program_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "wallets_balance_nonnegative": {
+          "name": "wallets_balance_nonnegative",
+          "value": "\"loyalty\".\"wallets\".\"balance_units\" >= 0"
+        },
+        "wallets_lifetime_earned_nonnegative": {
+          "name": "wallets_lifetime_earned_nonnegative",
+          "value": "\"loyalty\".\"wallets\".\"lifetime_earned_units\" >= 0"
+        },
+        "wallets_lifetime_redeemed_nonnegative": {
+          "name": "wallets_lifetime_redeemed_nonnegative",
+          "value": "\"loyalty\".\"wallets\".\"lifetime_redeemed_units\" >= 0"
+        },
+        "wallets_version_nonnegative": {
+          "name": "wallets_version_nonnegative",
+          "value": "\"loyalty\".\"wallets\".\"version\" >= 0"
+        },
+        "wallets_balance_safe_integer": {
+          "name": "wallets_balance_safe_integer",
+          "value": "\"loyalty\".\"wallets\".\"balance_units\" <= 9007199254740991"
+        },
+        "wallets_lifetime_earned_safe_integer": {
+          "name": "wallets_lifetime_earned_safe_integer",
+          "value": "\"loyalty\".\"wallets\".\"lifetime_earned_units\" <= 9007199254740991"
+        },
+        "wallets_lifetime_redeemed_safe_integer": {
+          "name": "wallets_lifetime_redeemed_safe_integer",
+          "value": "\"loyalty\".\"wallets\".\"lifetime_redeemed_units\" <= 9007199254740991"
+        },
+        "wallets_version_safe_integer": {
+          "name": "wallets_version_safe_integer",
+          "value": "\"loyalty\".\"wallets\".\"version\" <= 9007199254740991"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "loyalty.consent_decision": {
+      "name": "consent_decision",
+      "schema": "loyalty",
+      "values": [
+        "granted",
+        "withdrawn"
+      ]
+    },
+    "loyalty.consent_purpose": {
+      "name": "consent_purpose",
+      "schema": "loyalty",
+      "values": [
+        "marketing_sms",
+        "marketing_email"
+      ]
+    },
+    "loyalty.ledger_kind": {
+      "name": "ledger_kind",
+      "schema": "loyalty",
+      "values": [
+        "earn",
+        "redeem",
+        "adjust_credit",
+        "adjust_debit",
+        "reverse",
+        "expire"
+      ]
+    },
+    "loyalty.ledger_source": {
+      "name": "ledger_source",
+      "schema": "loyalty",
+      "values": [
+        "standalone",
+        "pos",
+        "online",
+        "admin",
+        "system"
+      ]
+    },
+    "loyalty.mechanism": {
+      "name": "mechanism",
+      "schema": "loyalty",
+      "values": [
+        "points",
+        "stamps"
+      ]
+    },
+    "loyalty.member_status": {
+      "name": "member_status",
+      "schema": "loyalty",
+      "values": [
+        "active",
+        "blocked",
+        "anonymized"
+      ]
+    },
+    "loyalty.membership_event_kind": {
+      "name": "membership_event_kind",
+      "schema": "loyalty",
+      "values": [
+        "joined",
+        "blocked",
+        "unblocked",
+        "anonymized"
+      ]
+    },
+    "loyalty.operation_kind": {
+      "name": "operation_kind",
+      "schema": "loyalty",
+      "values": [
+        "member_create",
+        "earn",
+        "redeem",
+        "adjust",
+        "consent",
+        "reservation",
+        "consume",
+        "reverse",
+        "program_publish"
+      ]
+    },
+    "loyalty.operation_status": {
+      "name": "operation_status",
+      "schema": "loyalty",
+      "values": [
+        "pending",
+        "completed"
+      ]
+    },
+    "loyalty.program_status": {
+      "name": "program_status",
+      "schema": "loyalty",
+      "values": [
+        "draft",
+        "active",
+        "paused"
+      ]
+    },
+    "loyalty.redemption_status": {
+      "name": "redemption_status",
+      "schema": "loyalty",
+      "values": [
+        "reserved",
+        "consumed",
+        "reversed",
+        "expired"
+      ]
+    },
+    "loyalty.reward_kind": {
+      "name": "reward_kind",
+      "schema": "loyalty",
+      "values": [
+        "custom",
+        "fixed_discount",
+        "product"
+      ]
+    },
+    "loyalty.token_status": {
+      "name": "token_status",
+      "schema": "loyalty",
+      "values": [
+        "active",
+        "revoked"
+      ]
+    }
+  },
+  "schemas": {
+    "loyalty": "loyalty"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -25,6 +25,13 @@ const PATHS = {
   star: [
     "m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z",
   ],
+  gift: [
+    "M4 10h16v11H4z",
+    "M2.5 6.5h19V10h-19z",
+    "M12 6.5V21",
+    "M12 6.5H8.6a2.1 2.1 0 1 1 2.1-2.1c0 1.4 1.3 2.1 1.3 2.1z",
+    "M12 6.5h3.4a2.1 2.1 0 1 0-2.1-2.1c0 1.4-1.3 2.1-1.3 2.1z",
+  ],
   check: ["m4 12.5 5 5L20 6.5"],
   plus: ["M12 5v14", "M5 12h14"],
   minus: ["M5 12h14"],
@@ -73,6 +80,19 @@ const PATHS = {
   trash: ["M4 7h16", "M9.5 7V4h5v3", "m6 7 1 14h10l1-14", "M10 11v6", "M14 11v6"],
   edit: ["M4 20l1.2-4.2L16.6 4.4a2.05 2.05 0 0 1 2.9 2.9L8.2 18.8z", "m14.5 6.5 3 3"],
   search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "m16.2 16.2 4.8 4.8"],
+  // L'enveloppe : l'e-mail, comme donnée ou comme geste d'envoi. Le crayon
+  // « edit » en tenait lieu et se lisait « modifier ce champ ».
+  mail: [
+    "M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 17V7A1.5 1.5 0 0 1 4 5.5z",
+    "m3.5 7.5 8.5 6 8.5-6",
+  ],
+  // Le triangle d'alerte : les incidents. « Erreurs » portait un rouage, qui
+  // se lisait comme des réglages — et le même rouage servait déjà trois sens.
+  alert: [
+    "M10.3 4.6 2.7 17.8a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0z",
+    "M12 9.5V14",
+    "M12 17.5h.01",
+  ],
   tv: [
     "M4 4.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 15V6A1.5 1.5 0 0 1 4 4.5z",
     "M12 16.5v4",

@@ -1,0 +1,192 @@
+"use client";
+
+import Script from "next/script";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cx } from "@/lib/cx";
+import { Icon } from "@/components/ui";
+import { Spinner } from "./primitives";
+
+const TURNSTILE_JS =
+  "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+
+type TurnstileApi = {
+  render(
+    target: HTMLElement,
+    options: {
+      sitekey: string;
+      action: string;
+      cData: string;
+      theme: "dark";
+      language: "fr";
+      size: "flexible";
+      appearance: "interaction-only";
+      retry: "auto";
+      "refresh-expired": "auto";
+      "refresh-timeout": "auto";
+      "response-field": false;
+      callback: (token: string) => void;
+      "expired-callback": () => void;
+      "timeout-callback": () => void;
+      "error-callback": (code?: string) => void;
+      "unsupported-callback": () => void;
+    },
+  ): string;
+  remove(widgetId: string): void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileApi;
+  }
+}
+
+type CheckState = "loading" | "ready" | "verified" | "error" | "unsupported";
+
+/**
+ * Verification humaine discrète, rendue explicitement car le tunnel est une
+ * feuille dynamique. Le jeton ne quitte ce composant que par `onToken` et ne
+ * vaut jamais autorisation : l'API le valide encore via Siteverify.
+ */
+export function TurnstileCheck({
+  siteKey,
+  tenantSlug,
+  resetKey,
+  onToken,
+}: {
+  siteKey: string;
+  tenantSlug: string;
+  /** Change après chaque tentative : un jeton Turnstile est à usage unique. */
+  resetKey: number;
+  onToken: (token: string | null) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const widget = useRef<string | null>(null);
+  const [scriptReady, setScriptReady] = useState(false);
+  const [state, setState] = useState<CheckState>(siteKey ? "loading" : "error");
+
+  const removeWidget = useCallback(() => {
+    if (widget.current && window.turnstile) {
+      try {
+        window.turnstile.remove(widget.current);
+      } catch {
+        /* le script peut s'être rechargé entre-temps */
+      }
+    }
+    widget.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!scriptReady || !siteKey || !container.current || !window.turnstile) return;
+    removeWidget();
+    onToken(null);
+    setState("ready");
+    let active = true;
+    try {
+      widget.current = window.turnstile.render(container.current, {
+        sitekey: siteKey,
+        action: "public-order",
+        cData: tenantSlug,
+        theme: "dark",
+        language: "fr",
+        size: "flexible",
+        appearance: "interaction-only",
+        retry: "auto",
+        "refresh-expired": "auto",
+        "refresh-timeout": "auto",
+        "response-field": false,
+        callback: (token) => {
+          onToken(token);
+          setState("verified");
+        },
+        "expired-callback": () => {
+          onToken(null);
+          setState("ready");
+        },
+        "timeout-callback": () => {
+          onToken(null);
+          setState("ready");
+        },
+        "error-callback": () => {
+          onToken(null);
+          setState("error");
+        },
+        "unsupported-callback": () => {
+          onToken(null);
+          setState("unsupported");
+        },
+      });
+    } catch {
+      // React 19 refuse une mise à jour synchrone dans l'effet. Le microtask
+      // transforme l'échec impératif du SDK en événement, comme ses callbacks.
+      queueMicrotask(() => {
+        if (!active) return;
+        onToken(null);
+        setState("error");
+      });
+    }
+    return () => {
+      active = false;
+      removeWidget();
+    };
+  }, [onToken, removeWidget, resetKey, scriptReady, siteKey, tenantSlug]);
+
+  const verified = state === "verified";
+  const failed = state === "error" || state === "unsupported";
+  const label = verified
+    ? "Commande sécurisée"
+    : failed
+      ? "Vérification indisponible"
+      : "Sécurisation de la commande…";
+  const detail = verified
+    ? "Votre commande peut être transmise à la cuisine."
+    : state === "unsupported"
+      ? "Ce navigateur ne permet pas la vérification. Appelez le restaurant pour commander."
+      : state === "error"
+        ? "La protection anti-robot ne répond pas. Vérifiez votre réseau puis réessayez."
+        : "Un contrôle anti-robot discret protège le restaurant des faux tickets.";
+
+  return (
+    <section
+      aria-live="polite"
+      className={cx(
+        "overflow-hidden rounded-panel border bg-surface2 transition-colors duration-300 ease-sm motion-reduce:transition-none",
+        verified ? "border-ok/35" : failed ? "border-alert/35" : "border-white/8",
+      )}
+    >
+      {siteKey && (
+        <Script
+          id="snackmanager-turnstile"
+          src={TURNSTILE_JS}
+          strategy="afterInteractive"
+          onReady={() => setScriptReady(true)}
+          onError={() => setState("error")}
+        />
+      )}
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <span
+          className={cx(
+            "grid size-9 shrink-0 place-items-center rounded-full border",
+            verified
+              ? "border-ok/30 bg-ok/10 text-ok"
+              : failed
+                ? "border-alert/30 bg-alert/10 text-alert"
+                : "border-white/8 bg-white/[0.035] text-mut",
+          )}
+        >
+          {verified ? (
+            <Icon name="check" size={17} stroke={2.5} />
+          ) : failed ? (
+            <Icon name="bell" size={16} stroke={2.2} />
+          ) : (
+            <Spinner />
+          )}
+        </span>
+        <span className="min-w-0">
+          <strong className="block text-[13px] font-extrabold text-ink">{label}</strong>
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-mut">{detail}</span>
+        </span>
+      </div>
+      <div ref={container} className="w-full px-3 pb-3 empty:hidden" />
+    </section>
+  );
+}

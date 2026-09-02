@@ -4,6 +4,11 @@ import * as schema from './schema';
 
 export type SupplyDb = NodePgDatabase<typeof schema>;
 
+/** Branche Supply sur un pool possédé par l'application hôte. */
+export function supplyDb(pool: Pool): SupplyDb {
+  return drizzle(pool, { schema, casing: 'snake_case' });
+}
+
 /**
  * Taille du pool PostgreSQL — configurable SANS redéploiement de code.
  *
@@ -21,6 +26,5 @@ function taillePool(): number {
 
 export function createSupplyDb(url: string): { db: SupplyDb; pool: Pool } {
   const pool = new Pool({ connectionString: url, max: taillePool() });
-  const db = drizzle(pool, { schema, casing: 'snake_case' });
-  return { db, pool };
+  return { db: supplyDb(pool), pool };
 }

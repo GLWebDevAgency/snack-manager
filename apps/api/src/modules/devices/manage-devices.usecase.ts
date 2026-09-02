@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   PAIRING_CODE_TTL_MS,
   type DeviceCreate,
@@ -9,6 +9,7 @@ import { CLOCK, type Clock } from './devices.tokens';
 import { generatePairingCode } from '../screens/pairing-code';
 import { DevicesRepository } from './devices.repository';
 import { toDeviceView } from './devices.view';
+import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /**
  * CAS D'USAGE — le back-office des appareils (rôles owner / gérant).
@@ -27,6 +28,7 @@ export class ManageDevices {
   constructor(
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly repository: DevicesRepository,
+    @Optional() private readonly revocations?: SessionRevocationPublisher,
   ) {}
 
   async list(tenantId: string): Promise<DeviceView[]> {
@@ -60,12 +62,16 @@ export class ManageDevices {
   async update(tenantId: string, id: string, dto: DeviceUpdate): Promise<DeviceView> {
     const updated = await this.repository.update(tenantId, id, dto);
     if (!updated) throw new NotFoundException('Appareil introuvable');
+    if (dto.active !== undefined || dto.kind !== undefined) {
+      await this.revocations?.device(tenantId, id);
+    }
     return toDeviceView(updated, this.clock.now());
   }
 
   async remove(tenantId: string, id: string): Promise<{ deleted: true }> {
     const removed = await this.repository.remove(tenantId, id);
     if (!removed) throw new NotFoundException('Appareil introuvable');
+    await this.revocations?.device(tenantId, id);
     return { deleted: true };
   }
 
@@ -85,6 +91,7 @@ export class ManageDevices {
       new Date(now.getTime() + PAIRING_CODE_TTL_MS),
     );
     if (!updated) throw new NotFoundException('Appareil introuvable');
+    await this.revocations?.device(tenantId, id);
     return toDeviceView(updated, now);
   }
 }

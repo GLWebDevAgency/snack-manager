@@ -3,22 +3,26 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.12.0"
   },
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
+    "migrate:postgres": "pnpm --filter @sm/supply migrate && pnpm --filter @sm/loyalty migrate",
+    "migrate:postgres:built": "node packages/supply/dist/migrate.js && node packages/loyalty/dist/migrate.js",
+    "verify:postgres:built": "node packages/supply/dist/verify-migrations.js && node packages/loyalty/dist/verify-migrations.js",
     "seed": "pnpm --filter @sm/db seed",
     "admin": "pnpm --filter @sm/db run admin",
     "test": "turbo test",
-    "verify": "turbo run typecheck lint test build --cache=local:rw,remote:",
+    "verify": "EXPO_PUBLIC_API_URL=${EXPO_PUBLIC_API_URL:-http://localhost:3001} EXPO_PUBLIC_ALLOW_LOCAL_API=${EXPO_PUBLIC_ALLOW_LOCAL_API:-1} EXPO_PUBLIC_SITE_URL=${EXPO_PUBLIC_SITE_URL:-http://localhost:3000} turbo run typecheck lint test build --cache=local:rw,remote:",
     "e2e": "node e2e/lancer.mjs",
     "e2e:demo": "node e2e/lancer.mjs --demo",
     "e2e:reel": "node e2e/lancer.mjs --reel",
     "e2e:local": "node e2e/lancer.mjs --local",
-    "e2e:navigateur": "node e2e/lancer.mjs --navigateur"
+    "e2e:navigateur": "node e2e/lancer.mjs --navigateur",
+    "verifier:argent": "node scripts/verifier-regles-argent.mjs"
   },
   "devDependencies": {
     "playwright": "^1.62.1",

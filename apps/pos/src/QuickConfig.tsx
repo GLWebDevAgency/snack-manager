@@ -96,13 +96,26 @@ export function QuickConfig({
 
   function pickVariant(key: string) {
     setVariantKey(key);
-    // Changer de taille resserre les règles : on tronque les groupes au nouveau plafond.
+    // Changer de taille resserre les règles : on tronque les groupes au nouveau
+    // plafond. Ce qui NE RELÈVE PAS d'un groupe de la carte est conservé tel
+    // quel — les suppléments, notamment.
     setOptions((cur) => {
       const kept: SelectedOption[] = [];
       const perGroup = new Map<string, number>();
       for (const opt of cur) {
         const group = groups.find((g) => g.key === opt.groupKey);
-        if (!group) continue;
+        if (!group) {
+          // LES SUPPLÉMENTS N'ONT PAS DE GROUPE DANS `optionGroups`, et c'est
+          // voulu : `GET /menu` retire le groupe réservé de la carte et les
+          // sert dans leur propre bloc. Ils tombaient donc dans ce `continue`
+          // et disparaissaient à chaque changement de taille — cheddar et
+          // steak effacés en silence, le client payait le tacos XL nu.
+          //
+          // Ils ne dépendent d'aucune règle de variante : rien à tronquer,
+          // rien à recalculer, on les garde.
+          kept.push(opt);
+          continue;
+        }
         const { max } = ruleFor(group, key);
         const used = perGroup.get(opt.groupKey) ?? 0;
         if (used >= max) continue;
@@ -171,7 +184,7 @@ export function QuickConfig({
 
   return (
     // 520 px est une largeur SOUHAITÉE : `Overlay` la borne à l'écran.
-    <Overlay onClose={onClose} width={520}>
+    <Overlay onClose={onClose} accessibilityLabel={`Configurer ${product.name}`} width={520}>
       <PanelHead
         title={product.name}
         sub={[categoryName, product.description].filter(Boolean).join(' · ') || undefined}

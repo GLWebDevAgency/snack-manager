@@ -18,10 +18,10 @@ async function bootstrap() {
   // donc un webhook rejeté à chaque appel. Voir
   // `modules/ordering/stripe-webhook.controller.ts`.
   const app = await NestFactory.create(AppModule, { rawBody: true });
-  // Derrière le proxy Railway, `req.ip` serait l'adresse DU PROXY pour tout le
-  // monde : la limitation de débit et le limiteur du guichet d'erreurs
-  // puniraient la planète entière pour un seul abuseur. `trust proxy` fait
-  // lire la vraie adresse dans X-Forwarded-For (premier saut uniquement).
+  // Nécessaire à `req.protocol` derrière Railway. Ce réglage NE décide plus
+  // l'identité des quotas : X-Forwarded-For peut avoir été fourni par le
+  // client. AppModule et le guichet d'erreurs utilisent exclusivement le
+  // X-Real-IP documenté/reconstruit par Railway, validé comme une vraie IP.
   (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set(
     'trust proxy',
     1,

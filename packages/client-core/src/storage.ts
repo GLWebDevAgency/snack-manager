@@ -13,6 +13,101 @@ export interface KeyValueStore {
   removeItem(key: string): Promise<void>;
 }
 
+const STORE_LOCK_NAME = 'sm.sync.state.v2.commit';
+let fallbackStoreTail: Promise<void> = Promise.resolve();
+
+/** Verrou commun à la file et aux données métier liées à son appairage. */
+export function withStoreLock<T>(work: () => Promise<T>): Promise<T> {
+  const locks = globalThis.navigator?.locks;
+  if (locks) {
+    return locks.request<Promise<T>>(STORE_LOCK_NAME, { mode: 'exclusive' }, work).then((v) => v);
+  }
+  const operation = fallbackStoreTail.then(work);
+  fallbackStoreTail = operation.then(
+    () => undefined,
+    () => undefined,
+  );
+  return operation;
+}
+
+async function purgeKeysWithIdentityLastUnlocked(
+  store: KeyValueStore,
+  keys: readonly string[],
+  identityKey: string,
+): Promise<void> {
+  const unique = [...new Set(keys)];
+  if (!identityKey || !unique.includes(identityKey)) {
+    throw new Error("La clé d'identité doit appartenir au périmètre de purge");
+  }
+  for (const key of unique) {
+    if (key !== identityKey) await store.removeItem(key);
+  }
+  await store.removeItem(identityKey);
+}
+
+/**
+ * Purge un périmètre locataire en gardant sa clé d'identité comme frontière.
+ *
+ * Si le processus tombe au milieu, l'identité reste présente : au prochain
+ * démarrage l'application sait qu'elle doit reprendre la purge. La supprimer
+ * avant les données autoriserait un nouvel appairage à voir les restes de
+ * l'ancien établissement.
+ */
+export async function purgeKeysWithIdentityLast(
+  store: KeyValueStore,
+  keys: readonly string[],
+  identityKey: string,
+): Promise<void> {
+  await withStoreLock(() => purgeKeysWithIdentityLastUnlocked(store, keys, identityKey));
+}
+
+/**
+ * Annule une écriture d'identité seulement si elle appartient encore à l'appelant.
+ *
+ * Deux onglets peuvent appairer A et B en parallèle. Le perdant ne doit jamais
+ * restaurer son ancien snapshot au-dessus de l'identité que le gagnant vient de
+ * committer. La comparaison et la restauration partagent donc le même verrou.
+ */
+export async function restoreIdentityIfUnchanged(
+  store: KeyValueStore,
+  identityKey: string,
+  expectedCurrentValue: string,
+  previousValue: string | null,
+): Promise<boolean> {
+  return withStoreLock(async () => {
+    if ((await store.getItem(identityKey)) !== expectedCurrentValue) return false;
+    if (previousValue === null) await store.removeItem(identityKey);
+    else await store.setItem(identityKey, previousValue);
+    return true;
+  });
+}
+
+/**
+ * Restaure une identité locataire ou assainit entièrement son ancien périmètre.
+ * Une clé absente, un JSON cassé ou une forme obsolète ne valent jamais
+ * autorisation d'appairer le tenant suivant au-dessus des données restantes.
+ */
+export async function restoreScopedIdentity<T>(
+  store: KeyValueStore,
+  keys: readonly string[],
+  identityKey: string,
+  decode: (raw: string) => T | null,
+): Promise<T | null> {
+  return withStoreLock(async () => {
+    const raw = await store.getItem(identityKey);
+    if (raw !== null) {
+      try {
+        const identity = decode(raw);
+        if (identity !== null) return identity;
+      } catch {
+        // La purge ci-dessous est volontairement stricte et doit, elle, remonter.
+      }
+    }
+    await purgeKeysWithIdentityLastUnlocked(store, keys, identityKey);
+    return null;
+  });
+}
+
 class MemoryStore implements KeyValueStore {
   private map = new Map<string, string>();
   async getItem(key: string) {
@@ -26,29 +121,31 @@ class MemoryStore implements KeyValueStore {
   }
 }
 
-/** localStorage enveloppé en promesses (navigateur, y compris react-native-web). */
+/**
+ * localStorage enveloppé en promesses (navigateur, y compris react-native-web).
+ *
+ * Une écriture qui échoue DOIT remonter. La file offline appelle `setItem`
+ * avant de rendre la main au POS : avaler un quota dépassé reviendrait à dire
+ * « vente enregistrée » alors qu'un redémarrage l'effacerait. Les caches non
+ * critiques peuvent choisir de gérer l'erreur chez eux ; le stockage partagé,
+ * lui, ne ment jamais sur la durabilité.
+ */
 export function webStore(): KeyValueStore {
+  const local = () => {
+    const store = globalThis.localStorage;
+    if (!store) throw new Error('Stockage local indisponible');
+    return store;
+  };
+
   return {
     async getItem(key) {
-      try {
-        return globalThis.localStorage?.getItem(key) ?? null;
-      } catch {
-        return null;
-      }
+      return local().getItem(key);
     },
     async setItem(key, value) {
-      try {
-        globalThis.localStorage?.setItem(key, value);
-      } catch {
-        // quota dépassé ou stockage bloqué : la file reste en mémoire
-      }
+      local().setItem(key, value);
     },
     async removeItem(key) {
-      try {
-        globalThis.localStorage?.removeItem(key);
-      } catch {
-        /* ignore */
-      }
+      local().removeItem(key);
     },
   };
 }

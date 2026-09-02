@@ -261,12 +261,39 @@ export function cityOf(address: string): string {
 // Divers
 // ─────────────────────────────────────────────────────────────
 
-/** Identifiant local court (lignes de panier, clés React) — pas de dépendance. */
+/**
+ * Identifiant local — lignes de panier, clés React, ET clé d'idempotence.
+ *
+ * Le repli produisait `l{base36}…`, qui n'est pas un UUID. Or `clientId` du
+ * corps de commande est validé par `z.uuid()` : sur tout navigateur sans
+ * `crypto.randomUUID` — contexte non sécurisé, WebView ancienne, HTTP en
+ * réseau local — la commande partait avec un identifiant que l'API refusait.
+ * Le client voyait « commande impossible » sans qu'aucun essai ne puisse
+ * aboutir, et rien ne pointait vers la cause.
+ *
+ * Le repli produit donc un UUID v4 en bonne et due forme. `crypto.randomUUID`
+ * reste préféré quand il existe : il tire du générateur du système.
+ */
 export function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
-  return `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  // Version 4, variante RFC 4122 : les positions 13 et 17 portent la version
+  // et la variante, le reste est aléatoire.
+  const octets = new Uint8Array(16);
+  // `crypto` est typé `never` dans cette branche — TypeScript a déduit de la
+  // condition précédente qu'on n'y arrive qu'avec `crypto` absent. Il a tort :
+  // un contexte non sécurisé expose `getRandomValues` sans `randomUUID`.
+  const source = (globalThis as { crypto?: Crypto }).crypto;
+  if (source?.getRandomValues) {
+    source.getRandomValues(octets);
+  } else {
+    for (let i = 0; i < 16; i += 1) octets[i] = Math.floor(Math.random() * 256);
+  }
+  octets[6] = (octets[6]! & 0x0f) | 0x40;
+  octets[8] = (octets[8]! & 0x3f) | 0x80;
+  const hex = [...octets].map((o) => o.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** Normalise pour la recherche : minuscules, sans accents. */

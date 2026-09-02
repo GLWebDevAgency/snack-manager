@@ -96,6 +96,22 @@ export interface ApiConfig {
   token?: string | null;
   /** Adaptateur de transport — HTTP réel par défaut. */
   transport?: Transport;
+  /** Observabilité des caches non critiques, sans casser la lecture réseau. */
+  onCacheError?: (context: {
+    operation: 'read' | 'write';
+    key: string;
+    error: unknown;
+  }) => void;
+  /** POS/KDS : interdit toute mutation avant restauration de l'appairage. */
+  queueScopeRequired?: boolean;
+}
+
+export interface QueuedPostOptions {
+  /**
+   * Donnée locale d'affichage uniquement. Elle est persistée avec la file,
+   * mais n'entre jamais dans le corps HTTP de la mutation.
+   */
+  displayAmountCents?: number;
 }
 
 export class SmApiError extends Error {
@@ -117,13 +133,18 @@ function messageOf(body: unknown, status: number): string {
 
 export class SmClient {
   readonly queue: SyncQueue;
+  /** Données UI tenant-scopées avec la même barrière durable que la file. */
+  readonly tenantStore: ReturnType<SyncQueue['scopedStore']>;
   private token: string | null;
   private readonly transport: Transport;
 
   constructor(private config: ApiConfig) {
     this.token = config.token ?? null;
     this.transport = config.transport ?? httpTransport();
-    this.queue = new SyncQueue((entry) => this.sendQueued(entry));
+    this.queue = new SyncQueue((entry) => this.sendQueued(entry), {
+      requireScope: config.queueScopeRequired === true,
+    });
+    this.tenantStore = this.queue.scopedStore();
   }
 
   setToken(token: string | null) {
@@ -149,6 +170,36 @@ export class SmClient {
       headers: this.headers(),
       ...(body === undefined ? null : { body }),
     });
+  }
+
+  private reportCacheError(
+    operation: 'read' | 'write',
+    key: string,
+    error: unknown,
+  ): void {
+    try {
+      this.config.onCacheError?.({ operation, key, error });
+    } catch {
+      // L'observabilité ne doit jamais transformer un cache facultatif en panne métier.
+    }
+  }
+
+  private async writeCache(key: string, data: unknown): Promise<void> {
+    try {
+      await getStore().setItem(key, JSON.stringify(data));
+    } catch (error) {
+      this.reportCacheError('write', key, error);
+    }
+  }
+
+  private async readCache<T>(key: string): Promise<T | null> {
+    try {
+      const cached = await getStore().getItem(key);
+      return cached ? (JSON.parse(cached) as T) : null;
+    } catch (error) {
+      this.reportCacheError('read', key, error);
+      return null;
+    }
   }
 
   /** Envoi d'une entrée de file : distingue coupure réseau et refus métier. */
@@ -182,12 +233,14 @@ export class SmClient {
         throw new SmApiError('Réponse illisible', res.status, undefined);
       }
       const data = res.body as T;
-      if (key) await getStore().setItem(key, JSON.stringify(data));
+      // Le cache est une optimisation : quota plein ou stockage privé refusé
+      // ne doit jamais invalider une réponse serveur fraîche et valide.
+      if (key) await this.writeCache(key, data);
       return data;
     } catch (err) {
       if (key) {
-        const cached = await getStore().getItem(key);
-        if (cached) return JSON.parse(cached) as T;
+        const cached = await this.readCache<T>(key);
+        if (cached !== null) return cached;
       }
       throw err;
     }
@@ -195,14 +248,21 @@ export class SmClient {
 
   /** Lecture du cache seul (démarrage hors ligne). */
   async cached<T>(cacheKey: string): Promise<T | null> {
-    const raw = await getStore().getItem(CACHE_PREFIX + cacheKey);
-    return raw ? (JSON.parse(raw) as T) : null;
+    return this.readCache<T>(CACHE_PREFIX + cacheKey);
   }
 
   // ─── Écritures (toujours par la file) ───
 
-  post(path: string, body?: unknown, subject?: string) {
-    return this.queue.enqueue({ method: 'POST', path, body, subject });
+  post(path: string, body?: unknown, subject?: string, options?: QueuedPostOptions) {
+    return this.queue.enqueue({
+      method: 'POST',
+      path,
+      body,
+      subject,
+      ...(options?.displayAmountCents === undefined
+        ? null
+        : { displayAmountCents: options.displayAmountCents }),
+    });
   }
 
   patch(path: string, body?: unknown, subject?: string) {

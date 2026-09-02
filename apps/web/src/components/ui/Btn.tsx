@@ -5,8 +5,9 @@ import { cx } from "@/lib/cx";
 import { Icon, type IconName } from "./icons";
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  /** primary = accent tenant (1 max/écran) · ink #262626 · ghost contour · gold fixe. */
-  variant?: "primary" | "ink" | "ghost" | "gold";
+  /** primary = accent tenant (1 max/écran) · ink #262626 · ghost contour ·
+   *  gold fixe · danger/success = verdicts rouge/vert des confirmations. */
+  variant?: "primary" | "ink" | "ghost" | "gold" | "danger" | "success";
   size?: "md" | "sm";
   /** Pleine largeur. */
   block?: boolean;
@@ -21,6 +22,11 @@ const VARIANTS: Record<NonNullable<BtnProps["variant"]>, string> = {
   ghost:
     "border border-line bg-white/3 text-white hover:border-white/25 hover:bg-white/8",
   gold: "bg-gold text-[#1C1612] shadow-card hover:opacity-85",
+  // Verdicts des confirmations (« Suspendre l'accès », « Rouvrir l'accès ») :
+  // les points d'appel écrasaient le fond du variant primary via className —
+  // un conflit que Tailwind tranche par l'ordre de la feuille, pas des classes.
+  danger: "bg-alert text-white shadow-card hover:opacity-85",
+  success: "bg-ok text-white shadow-card hover:opacity-85",
 };
 
 /**

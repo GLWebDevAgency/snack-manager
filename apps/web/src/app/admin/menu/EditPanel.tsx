@@ -5,7 +5,8 @@
  * section « Recette & marge » (contexte supply) : coût matière, marge %,
  * allergènes, éditeur de lignes de recette (GET/PUT /supply/products/:ref/bom).
  * Sauvegarde bufferisée : « Enregistrer » → PATCH produit (+ PUT bom si la
- * recette a changé) ; « Fermer » abandonne les modifications.
+ * recette a changé) ; « Fermer » abandonne les modifications — après
+ * confirmation dès que la fiche a changé.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -23,8 +24,25 @@ import { DAYPART_TAGS } from "@sm/contracts";
 import { api } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
-import { Btn, Field, Icon, Input, Pill, Select, Skeleton } from "@/components/ui";
-import { effectivePrice, type Category, type Product } from "./types";
+import {
+  Btn,
+  Chip,
+  Field,
+  IconBtn,
+  Input,
+  Modal,
+  Pill,
+  Select,
+  Skeleton,
+} from "@/components/ui";
+import {
+  effectivePrice,
+  type Category,
+  type OptionGroup,
+  type Product,
+  type Variant,
+} from "./types";
+import { EditeurOptions, EditeurVariantes, figerLesClefs } from "./VariantesOptions";
 
 type LineDraft = { ingredientId: string; qty: string; unit: MeasureUnit };
 
@@ -74,6 +92,17 @@ export function EditPanel({
   const [desc, setDesc] = useState(product?.description ?? "");
 
   /**
+   * Tailles et options — l'écran ne savait pas les éditer, alors que le
+   * contrat les accepte depuis le premier jour. Un produit à variantes voyait
+   * même son prix passer en lecture seule dans la grille, avec un message qui
+   * renvoyait vers CE panneau : le prix n'était modifiable nulle part.
+   */
+  const [variants, setVariants] = useState<Variant[]>(() => product?.variants ?? []);
+  const [groups, setGroups] = useState<OptionGroup[]>(() => product?.optionGroups ?? []);
+  const variantsInitiales = useMemo(() => JSON.stringify(product?.variants ?? []), [product]);
+  const groupsInitiaux = useMemo(() => JSON.stringify(product?.optionGroups ?? []), [product]);
+
+  /**
    * Services d'affichage sur les écrans de salle.
    *
    * La règle est celle de `DAYPART_TAGS` : un produit étiqueté « midi » ne
@@ -109,6 +138,8 @@ export function EditPanel({
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Garde-fou de « Fermer » : confirmation avant d'abandonner une saisie. */
+  const [confirmClose, setConfirmClose] = useState(false);
 
   const loadBom = useCallback(async () => {
     if (mode !== "edit" || !product) return;
@@ -165,6 +196,24 @@ export function EditPanel({
     return sum;
   }, [lines, ingredientById]);
 
+  /**
+   * Ce produit impose-t-il un choix qui COÛTE ?
+   *
+   * Le recalcul live ne compte que les lignes de RECETTE : les ingrédients
+   * consommés par une option obligatoire — la viande imposée d'un tacos — n'y
+   * entrent pas. L'API les compte, elle (`requiredOptionsCost`), et son
+   * commentaire dit pourquoi : « un tacos M sans sa viande imposée » ne doit
+   * pas afficher 90 % de marge.
+   *
+   * On ne peut pas les additionner ici sans refaire tout le chiffrage des
+   * recettes d'options. On le DIT donc, plutôt que d'annoncer une marge que le
+   * gérant croirait complète et sur laquelle il fixerait son prix.
+   */
+  const aDesChoixImposes = useMemo(
+    () => groups.some((g) => (g.min ?? 0) > 0),
+    [groups],
+  );
+
   const priceCents = product ? effectivePrice(product) : 0;
   const showBatchFigures = bomState !== "ready" && initialCost !== undefined;
   const costCents = showBatchFigures ? initialCost.costCents : liveCostCents;
@@ -173,6 +222,15 @@ export function EditPanel({
     : priceCents > 0
       ? Math.round(((priceCents - costCents) / priceCents) * 1000) / 10
       : null;
+
+  /**
+   * Chiffres seulement quand ils sont VRAIS : recette chargée, ou coût du lot
+   * en attendant. Sans ce garde, le chargement affichait « Coût matière
+   * 0,00 € » et « Marge 100 % » à côté des squelettes, corrigés ensuite sous
+   * les yeux du gérant.
+   */
+  const showFigures =
+    bomState === "ready" || (bomState === "loading" && showBatchFigures);
 
   const allergens = useMemo(() => {
     const set = new Set<Allergen>(optionAllergens);
@@ -233,6 +291,14 @@ export function EditPanel({
       if (desc.trim() !== product.description) patch.description = desc.trim();
       if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
       if (tagsChanged()) patch.tags = nextTags();
+      // Diff-only ici AUSSI, et ce n'est pas du zèle : envoyer `optionGroups`
+      // sans y toucher ferait passer la liste FILTRÉE de la carte — le groupe
+      // réservé « supplements » en moins. Le service le réinjecte, mais ne rien
+      // envoyer reste la meilleure façon de ne rien casser.
+      if (JSON.stringify(variants) !== variantsInitiales) patch.variants = variants;
+      if (JSON.stringify(groups) !== groupsInitiaux) {
+        patch.optionGroups = figerLesClefs(groups, product.optionGroups ?? []);
+      }
       if (Object.keys(patch).length > 0) {
         await api.patch(`/products/${product._id}`, patch);
       }
@@ -256,6 +322,29 @@ export function EditPanel({
 
   const detachDisabled = mode === "edit" && product?.categoryId != null;
 
+  /**
+   * « Fermer » démonte le panneau et tout son état bufferisé (nom, tailles,
+   * options, recette). Un clic machinal après dix minutes de saisie effaçait
+   * tout sans un mot : on ne ferme sans confirmation qu'une fiche intacte.
+   */
+  const estModifie = () =>
+    mode === "create"
+      ? name.trim() !== "" ||
+        desc.trim() !== "" ||
+        catId !== (createCategoryId ?? "") ||
+        tagsChanged()
+      : name !== (product?.name ?? "") ||
+        desc !== (product?.description ?? "") ||
+        catId !== (product?.categoryId ?? "") ||
+        tagsChanged() ||
+        JSON.stringify(variants) !== variantsInitiales ||
+        JSON.stringify(groups) !== groupsInitiaux ||
+        serializeLines(lines) !== origSerialized;
+  const demanderFermeture = () => {
+    if (estModifie()) setConfirmClose(true);
+    else onClose();
+  };
+
   return (
     /*
      * Panneau d'édition ouvert sous sa ligne : niveau « élément » + liseré
@@ -274,7 +363,18 @@ export function EditPanel({
             className="py-2"
           />
         </Field>
-        <Field label="Rattachement (catégorie)" htmlFor={`edit-cat-${product?._id ?? "new"}`}>
+        <Field
+          label="Rattachement (catégorie)"
+          htmlFor={`edit-cat-${product?._id ?? "new"}`}
+          // En clair sous le champ, pas dans un `title` d'<option> : les menus
+          // natifs ne le rendent presque jamais (et jamais au doigt) — le
+          // choix grisé restait inexpliqué.
+          hint={
+            detachDisabled
+              ? "Détachement possible uniquement via la suppression de sa catégorie."
+              : undefined
+          }
+        >
           <Select
             id={`edit-cat-${product?._id ?? "new"}`}
             value={catId}
@@ -282,15 +382,7 @@ export function EditPanel({
             className="py-2"
           >
             {mode === "edit" && (
-              <option
-                value=""
-                disabled={detachDisabled}
-                title={
-                  detachDisabled
-                    ? "Détachement possible uniquement via la suppression de sa catégorie"
-                    : undefined
-                }
-              >
+              <option value="" disabled={detachDisabled}>
                 Non rattaché
               </option>
             )}
@@ -304,7 +396,10 @@ export function EditPanel({
         <Field
           label="Composition / ingrédients"
           htmlFor={`edit-desc-${product?._id ?? "new"}`}
-          className="col-span-2"
+          // `md:` obligatoire : sous md, un span 2 dans la grille à 1 colonne
+          // crée une piste implicite dont la gouttière décale de 10 px le bord
+          // droit des champs non-spannés.
+          className="md:col-span-2"
         >
           <Input
             id={`edit-desc-${product?._id ?? "new"}`}
@@ -316,7 +411,7 @@ export function EditPanel({
         </Field>
 
         {/* Services d'affichage sur les écrans de salle (dayparting). */}
-        <div className="col-span-2">
+        <div className="md:col-span-2">
           <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[.04em] text-mut">
             Écrans de salle
           </span>
@@ -327,20 +422,13 @@ export function EditPanel({
                 ["Soir", dinner, setDinner] as const,
               ]
             ).map(([label, on, set]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() => set(!on)}
-                aria-pressed={on}
-                className={cx(
-                  "rounded-pill border px-3.5 py-1.5 text-sm font-bold transition duration-200 ease-sm active:scale-[0.97]",
-                  on
-                    ? "border-transparent bg-accent text-onaccent"
-                    : "border-line text-ink2 hover:bg-surface2 hover:text-ink",
-                )}
-              >
+              // Chip du DS, comme les allergènes du tiroir Ingrédient : même
+              // langage visuel pour la même bascule d'étiquette, et son
+              // `cf-press` porte l'exemption prefers-reduced-motion que le
+              // scale posé à la main ignorait.
+              <Chip key={label} on={on} onClick={() => set(!on)}>
                 {label}
-              </button>
+              </Chip>
             ))}
             <p className="text-xs text-mut">
               {lunch && !dinner
@@ -353,11 +441,20 @@ export function EditPanel({
         </div>
       </div>
 
+      {/* ─── Tailles et options ─── */}
+      {mode !== "create" && (
+        <>
+          <EditeurVariantes variants={variants} onChange={setVariants} />
+          <EditeurOptions groups={groups} onChange={setGroups} />
+        </>
+      )}
+
       {/* ─── Recette & marge (supply) ─── */}
       {mode === "create" ? (
         <p className="mt-3 border-t border-line pt-3 text-xs text-mut">
-          Enregistre d&apos;abord le produit — tu pourras définir sa recette et sa
-          marge juste après, avec le bouton Modifier.
+          Enregistre d&apos;abord le produit — tu pourras définir ses tailles,
+          ses options, sa recette et sa marge juste après, avec le bouton
+          Modifier.
         </p>
       ) : (
         <div className="mt-3 border-t border-line pt-3">
@@ -391,7 +488,7 @@ export function EditPanel({
             </div>
           )}
 
-          {bomState !== "error" && (
+          {showFigures && (
             <>
               <div className="mt-2.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
                 <span className="text-mut">
@@ -419,20 +516,32 @@ export function EditPanel({
                 </span>
                 <span className="text-xs text-mut">
                   sur prix de vente {fmtEuro(priceCents)}
+                  {aDesChoixImposes && !showBatchFigures && (
+                    <>
+                      {" · "}
+                      <span className="text-prept">
+                        hors choix imposés — la marge réelle est plus basse
+                      </span>
+                    </>
+                  )}
                 </span>
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {allergens.length === 0 ? (
-                  <span className="text-xs text-mut">Aucun allergène déclaré</span>
-                ) : (
-                  allergens.map((a) => (
-                    <Pill key={a} variant="out">
-                      {ALLERGEN_LABELS[a]}
-                    </Pill>
-                  ))
-                )}
-              </div>
+              {/* « Aucun allergène déclaré » est une affirmation INCO : on ne
+                  la fait qu'une fois la recette réellement chargée. */}
+              {bomState === "ready" && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {allergens.length === 0 ? (
+                    <span className="text-xs text-mut">Aucun allergène déclaré</span>
+                  ) : (
+                    allergens.map((a) => (
+                      <Pill key={a} variant="out">
+                        {ALLERGEN_LABELS[a]}
+                      </Pill>
+                    ))
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -446,7 +555,15 @@ export function EditPanel({
                     ? lineCostCents(qty, l.unit, ing.costPerUnitCents)
                     : null;
                 return (
-                  <div key={i} className="flex items-center gap-2">
+                  /*
+                   * `flex-wrap` + `basis-full` : sur téléphone, les largeurs
+                   * fixes (qté 76 + unité 76 + coût 64 + croix) ne laissaient
+                   * qu'~50 px au sélecteur — impossible de lire quel
+                   * ingrédient compose la ligne. Il prend donc toute la
+                   * largeur, les chiffres se replient dessous (motif DeviceRow
+                   * de la fiche client).
+                   */
+                  <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                     <Select
                       value={l.ingredientId}
                       onChange={(e) =>
@@ -457,7 +574,7 @@ export function EditPanel({
                         )
                       }
                       aria-label={`Ingrédient de la ligne ${i + 1}`}
-                      className="min-w-0 flex-1 py-2 text-[13px]"
+                      className="min-w-0 flex-1 basis-full py-2 text-[13px] md:basis-0"
                     >
                       <option value="">Choisir un ingrédient…</option>
                       {l.ingredientId && fallbackNames[l.ingredientId] && (
@@ -506,21 +623,23 @@ export function EditPanel({
                         </option>
                       ))}
                     </Select>
-                    <span
-                      className="cf-fig w-[64px] shrink-0 text-right text-xs font-semibold text-mut"
-                      aria-label="Coût de la ligne"
-                    >
+                    <span className="cf-fig w-[64px] shrink-0 text-right text-xs font-semibold text-mut">
+                      {/* sr-only et non aria-label : sur un span sans rôle,
+                          l'aria-label est ignoré des lecteurs d'écran (motif
+                          AllergenChips). */}
+                      <span className="sr-only">Coût de la ligne : </span>
                       {cost == null ? "—" : fmtEuro(cost)}
                     </span>
-                    <button
-                      type="button"
+                    {/* IconBtn 32 px : la croix nue faisait ~22 px, sous le
+                        minimum tactile — même composant que les suppressions
+                        de VariantesOptions. */}
+                    <IconBtn
+                      icon="close"
+                      label={`Retirer la ligne ${i + 1}`}
+                      size={32}
+                      iconSize={14}
                       onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
-                      aria-label={`Retirer la ligne ${i + 1}`}
-                      title="Retirer la ligne"
-                      className="cf-press shrink-0 rounded-xs p-1 text-mut hover:bg-alert/15 hover:text-alertt"
-                    >
-                      <Icon name="close" size={14} />
-                    </button>
+                    />
                   </div>
                 );
               })}
@@ -548,13 +667,41 @@ export function EditPanel({
       )}
 
       <div className="mt-3.5 flex items-center justify-end gap-2">
-        <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+        <Btn variant="ghost" size="sm" onClick={demanderFermeture} disabled={busy}>
           Fermer
         </Btn>
         <Btn size="sm" icon="check" onClick={() => void save()} disabled={busy}>
           {busy ? "Enregistrement…" : "Enregistrer"}
         </Btn>
       </div>
+
+      {/* Fermeture ≠ perte silencieuse : Échap et l'overlay ramènent à la
+          saisie (choix sûr), seul « Abandonner » jette les changements. */}
+      <Modal
+        open={confirmClose}
+        onClose={() => setConfirmClose(false)}
+        title="Abandonner les modifications ?"
+        footer={
+          <>
+            <Btn variant="ghost" size="sm" onClick={() => setConfirmClose(false)}>
+              Continuer la saisie
+            </Btn>
+            <Btn
+              size="sm"
+              // Rouge fonctionnel : le geste détruit la saisie en cours (§7.4).
+              style={{ background: "var(--cf-red)", color: "var(--cf-text)" }}
+              onClick={onClose}
+            >
+              Abandonner
+            </Btn>
+          </>
+        }
+      >
+        <p className="leading-[1.5] text-mut">
+          Cette fiche contient des changements non enregistrés — ils seront
+          perdus.
+        </p>
+      </Modal>
     </div>
   );
 }

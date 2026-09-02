@@ -8,7 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
-    "lint": "echo ok",
+    "lint": "eslint --config ../../eslint.serveur.mjs src",
     "seed": "tsx src/seed.ts",
     "seed:orders": "tsx src/seed-orders.ts",
     "photos": "tsx src/seed-photos.ts",
@@ -17,7 +17,9 @@
     "set:password": "tsx src/set-password.ts",
     "create:admin": "tsx src/create-admin.ts",
     "admin": "tsx src/admin-cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backfill:founder": "tsx src/backfill-founder.ts",
+    "backfill:contact": "tsx src/backfill-contact.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",

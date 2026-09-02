@@ -51,6 +51,7 @@ export function storedDevice(patch: Partial<StoredDevice> = {}): StoredDevice {
     paired: true,
     lastSeenAt: null,
     active: true,
+    sessionVersion: '0',
     appVersion: '',
     queueDepth: null,
     lastError: '',
@@ -100,6 +101,9 @@ export class FakeDevicesRepository {
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) Object.assign(updated, { [key]: value });
     }
+    if (patch.kind !== undefined || patch.active !== undefined) {
+      Object.assign(updated, { sessionVersion: `session-${++this.sequence}` });
+    }
     this.rows.set(id, updated);
     return updated;
   }
@@ -129,6 +133,7 @@ export class FakeDevicesRepository {
       pairingCodeExpiresAt: expiresAt,
       paired: false,
       lastSeenAt: null,
+      sessionVersion: `session-${++this.sequence}`,
     };
     this.rows.set(id, updated);
     return updated;
@@ -138,10 +143,16 @@ export class FakeDevicesRepository {
     return [...this.rows.values()].find((d) => d.pairingCode === code) ?? null;
   }
 
-  async claim(id: string, code: string, deviceToken: string, at: Date): Promise<boolean> {
+  async claim(
+    id: string,
+    code: string,
+    expectedKind: StoredDevice['kind'],
+    deviceToken: string,
+    at: Date,
+  ): Promise<boolean> {
     const row = this.rows.get(id);
     // Même condition que l'écriture Mongo : le code doit être ENCORE posé.
-    if (!row || row.pairingCode !== code) return false;
+    if (!row || row.pairingCode !== code || row.kind !== expectedKind) return false;
     this.rows.set(id, {
       ...row,
       pairingCode: null,

@@ -5,8 +5,13 @@
  *
  * `docs/specs/contraintes-business.md` §5 (FAQ #17) répond au restaurateur qui
  * demande à voir ses factures : « Back-office → Abonnement : toutes les
- * factures en PDF, le détail de votre formule, et votre statut fondateur
- * (tarif gelé) ». La page n'existait pas. Elle existe.
+ * factures en PDF, le détail de votre formule, et votre statut fondateur ».
+ * La page n'existait pas. Elle existe.
+ *
+ * Le statut fondateur valait « tarif gelé à vie » jusqu'au 27/08/2026 ; il vaut
+ * désormais MOITIÉ PRIX PENDANT DOUZE MOIS, sur tout le premier contrat. Le
+ * restaurateur doit lire la date de fin, pas seulement la mention : une remise
+ * qui s'arrête sans prévenir est une réclamation garantie.
  *
  * ─── SOBRE, PARCE QU'ON N'Y VIENT PAS SOUVENT ───
  *
@@ -34,10 +39,12 @@ import {
   type InvoiceStatus,
   type MyBilling,
   type TenantBillingIdentity,
+  remiseFondateurActive,
 } from "@sm/contracts";
 import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
   Btn,
   Card,
@@ -45,7 +52,6 @@ import {
   Field,
   Input,
   Panel,
-  Pill,
   Skeleton,
   useToast,
 } from "@/components/ui";
@@ -216,15 +222,51 @@ export default function AbonnementPage() {
             <span className="text-[30px] font-extrabold leading-[1.1] tracking-[-0.03em] text-ink">
               {sub.planLabel}
             </span>
-            {sub.founderSeat && (
-              <Pill className="border-gold/40 bg-gold/15 text-gold" title="Tarif gelé">
-                Fondateur
-              </Pill>
+            {/*
+              La pastille suit la REMISE, pas le droit. `founderSeat` est un
+              booléen, et un booléen n'expire pas : il affichait « moitié prix »
+              à vie, y compris à côté d'un montant redevenu plein tarif — au
+              restaurateur qui, lui, voyait son prélèvement doubler.
+            */}
+            {remiseFondateurActive(sub.founderUntil) && (
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-gold/40 bg-gold/15 px-2.5 py-[3px] text-[12px] font-semibold text-gold">
+                {/*
+                  Le MÊME badge que le CRM affiche sur sa fiche. Côté équipe
+                  Snack Manager, il identifie un client fondateur ; côté
+                  restaurateur, il lui rappelle qu'il en est un — c'est le même
+                  fait, vu des deux bords, et ce doit être le même signe.
+                */}
+                <BadgeFondateur size={18} />
+                Fondateur — moitié prix
+              </span>
             )}
           </div>
           <p className="cf-fig mt-1 text-[13px] text-mut">
             {fmtEuro(sub.mrrCents)} HT par mois · client depuis le {fmtJour(sub.since)}
           </p>
+          {/*
+            LA DATE DE FIN, ÉCRITE. Les conditions du devis promettent « au
+            terme, le tarif public s'applique sans autre formalité » : un
+            restaurateur qui découvrirait ce terme sur son relevé bancaire
+            aurait raison d'appeler. Elle reste affichée après l'échéance —
+            c'est justement le mois où il cherche l'explication.
+          */}
+          {sub.founderUntil && (
+            <p className="mt-1 text-[13px] text-mut">
+              {remiseFondateurActive(sub.founderUntil) ? (
+                <>
+                  Remise fondateur jusqu&apos;au{" "}
+                  <span className="cf-fig text-ink">{fmtJour(sub.founderUntil)}</span> — le tarif
+                  public s&apos;applique ensuite.
+                </>
+              ) : (
+                <>
+                  Remise fondateur terminée le{" "}
+                  <span className="cf-fig text-ink">{fmtJour(sub.founderUntil)}</span>.
+                </>
+              )}
+            </p>
+          )}
         </Card>
 
         <Card className="flex-1 p-[18px]">

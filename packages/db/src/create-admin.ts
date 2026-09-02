@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
-import * as argon2 from 'argon2';
 import mongoose from 'mongoose';
 import { MODELS } from './schemas';
 import { askHidden, complain } from './password-prompt';
+import { hashPassword } from './password-hash';
 
 // Même .env racine que les autres scripts du paquet (cf. `seed.ts`).
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
   await Users.create({
     email,
-    passwordHash: await argon2.hash(password),
+    passwordHash: await hashPassword(password),
     role: 'sm_admin',
     tenantId: null, // null = équipe Snack Manager, pas un restaurant
     name,
@@ -79,7 +79,17 @@ async function main(): Promise<void> {
   console.log(`\nCompte sm_admin ${email} créé. Connexion : /sm/login.`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+/**
+ * N'EXÉCUTE QUE LANCÉ DIRECTEMENT — jamais à l'import.
+ *
+ * Sans cette garde, importer ce fichier — pour tester une de ses fonctions, ou
+ * par une chaîne d'imports involontaire — ouvre une connexion à la base pointée
+ * par l'environnement et LANCE le traitement. Sur un poste dont le `.env` vise
+ * la production, c'est un script d'administration qui part tout seul.
+ */
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

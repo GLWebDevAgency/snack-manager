@@ -35,12 +35,19 @@ import { crm, euroRound, fmtDaysAgo, int, useHq } from "./crm";
 import { clientsApi } from "./clients/data";
 import { SeverityPill } from "./clients/ui";
 import { readWorkSignals, todaysMoves, type WorkSignal } from "./signals/data";
-import { Eyebrow, HealthPill } from "./parts";
+import { HealthPill } from "./parts";
 
 export default function HqDashboard() {
   const { overview, loading } = useHq();
   const [clients, setClients] = useState<CrmClient[] | null>(null);
   const [signals, setSignals] = useState<WorkSignal[] | null>(null);
+  /**
+   * La file n'a pas pu être lue — distinct de « la file est vide ».
+   *
+   * Sans cette distinction, un échec de `/crm/signals` affichait « Rien à
+   * traiter ce matin : pas d'impayé, pas de décrochage, pas d'appareil muet ».
+   */
+  const [signalsEnPanne, setSignalsEnPanne] = useState(false);
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
   const [funnel, setFunnel] = useState<OpsFunnelRow[] | null>(null);
 
@@ -81,7 +88,11 @@ export default function HqDashboard() {
         if (!cancelled) setSignals(readWorkSignals(raw));
       })
       .catch(() => {
-        if (!cancelled) setSignals([]);
+        // PAS `[]` : une file vide et une file illisible ne se ressemblent
+        // que sur cet écran. « Rien à traiter ce matin » devant une route
+        // tombée est le pire message possible — le fondateur referme son
+        // ordinateur en croyant son parc sain.
+        if (!cancelled) setSignalsEnPanne(true);
       });
     return () => {
       cancelled = true;
@@ -140,16 +151,18 @@ export default function HqDashboard() {
       <Panel
         title="Les gestes du jour"
         sub={
-          signals === null
-            ? "Lecture de la file de travail…"
-            : moves.length === 0
-              ? "Aucun signal ouvert sur le parc"
+          signalsEnPanne
+            ? "File de travail illisible"
+            : signals === null
+              ? "Lecture de la file de travail…"
+              : moves.length === 0
+                ? "Aucun signal ouvert sur le parc"
               : `${moves.length} appel${moves.length > 1 ? "s" : ""} à passer, du plus urgent au moins urgent`
         }
         actions={
           <Link
             href="/sm/signals"
-            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+            className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
             File de travail
             {(signals?.length ?? 0) > moves.length && (
@@ -162,7 +175,13 @@ export default function HqDashboard() {
         }
         bodyClassName="flex flex-col gap-1.5"
       >
-        {signals === null ? (
+        {signalsEnPanne ? (
+          <p className="text-[13px] text-alertt">
+            La file de travail n&apos;a pas pu être lue —{" "}
+            <span className="cf-fig">/crm/signals</span> n&apos;a pas répondu. Ne
+            concluez pas que le parc va bien : rechargez la page.
+          </p>
+        ) : signals === null ? (
           <Skeleton className="h-[52px]" />
         ) : moves.length === 0 ? (
           <p className="text-[13px] text-mut">
@@ -187,7 +206,7 @@ export default function HqDashboard() {
         actions={
           <Link
             href="/sm/pipeline"
-            className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+            className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
             Pipeline
             <Icon name="arrow" size={15} />
@@ -283,7 +302,7 @@ export default function HqDashboard() {
           actions={
             <Link
               href="/sm/pipeline"
-              className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+              className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
             >
               Ouvrir
               <Icon name="arrow" size={15} />
@@ -339,7 +358,7 @@ export default function HqDashboard() {
         <Panel
           className="flex-1"
           title="Programme fondateur"
-          sub="10 places à tarif gelé à vie"
+          sub="10 places à moitié prix la première année"
         >
           <div className="flex items-baseline gap-2">
             <span className="cf-fig text-[44px] font-extrabold leading-none text-accent">
@@ -389,7 +408,7 @@ export default function HqDashboard() {
           actions={
             <Link
               href="/sm/clients"
-              className="cf-press inline-flex items-center gap-1.5 rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"
+              className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
             >
               Détail
               <Icon name="arrow" size={15} />
@@ -510,10 +529,10 @@ export default function HqDashboard() {
         )}
       </Panel>
 
-      <Eyebrow className="pt-1">
+      <p className="pt-1 text-[13px] text-mut">
         MRR estimé d&apos;après le plan de chaque restaurant actif · source de vérité
         facturation : Stripe
-      </Eyebrow>
+      </p>
     </div>
   );
 }

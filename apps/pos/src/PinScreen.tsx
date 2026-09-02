@@ -571,7 +571,7 @@ export function PinScreen({
       </View>
 
       {confirmUnpair && (
-        <Overlay onClose={() => setConfirmUnpair(false)} width={460}>
+        <Overlay onClose={() => setConfirmUnpair(false)} accessibilityLabel="Changer d'établissement" width={460}>
           <PanelHead title="Changer d'établissement" onClose={() => setConfirmUnpair(false)} />
           <View style={{ padding: 20, gap: 14 }}>
             <View
@@ -601,7 +601,17 @@ export function PinScreen({
                 kind="danger"
                 onPress={() => {
                   setConfirmUnpair(false);
-                  void forgetPairedDevice().then(onUnpair);
+                  setBusy(true);
+                  void forgetPairedDevice()
+                    .then(onUnpair)
+                    .catch((cause: unknown) => {
+                      setBusy(false);
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : 'Le désappairage est bloqué pour protéger les ventes.',
+                      );
+                    });
                 }}
               />
             </View>

@@ -74,6 +74,7 @@ import {
 import { GridLegend, WeekGrid, type CellTarget } from "./grid";
 import { ShiftEditor, type EditorState } from "./editor";
 import { DuplicateModal, PublishShareModal } from "./actions";
+import { CoutsHorairesModal } from "./CoutsHoraires";
 
 /** Étiquette courte d'un rappel — le message complet vient de l'API, intact. */
 const REMINDER_LABEL: Readonly<Record<PlanningReminderKind, string>> = {
@@ -117,6 +118,21 @@ function readAccent(): string {
   );
 }
 
+/**
+ * Ancre de semaine initiale : l'URL d'abord (`?week=2026-09-07`), sinon la
+ * semaine courante. Sans elle, l'ancre ne vivait que dans l'état local : un
+ * F5 involontaire sur tablette ramenait silencieusement à la semaine en
+ * cours le gérant qui préparait la suivante — et sa pose de services
+ * reprenait sur la mauvaise semaine.
+ */
+function initialAnchor(): string {
+  const fallback = mondayIso(todayIso());
+  if (typeof window === "undefined") return fallback;
+  const week = new URLSearchParams(window.location.search).get("week");
+  if (!week || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return fallback;
+  return mondayIso(week);
+}
+
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
@@ -125,7 +141,7 @@ export default function PlanningPage() {
   const toast = useToast();
 
   const today = useMemo(() => todayIso(), []);
-  const [anchor, setAnchor] = useState(() => mondayIso(todayIso()));
+  const [anchor, setAnchor] = useState(initialAnchor);
 
   const [bundle, setBundle] = useState<WeekBundle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -164,6 +180,16 @@ export default function PlanningPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone rejoué à chaque changement de semaine, protégé par le ticket `reqRef` contre les réponses croisées. Hors de l'effet, l'appariement ticket/réponse serait rompu et une réponse en retard écraserait la semaine réellement affichée.
     void load(anchor);
   }, [anchor, load]);
+
+  // L'ancre vit aussi dans l'URL : rechargement comme lien partagé retombent
+  // sur la semaine consultée. `replaceState` natif — changer de semaine n'est
+  // pas une navigation — et la semaine courante reste l'adresse nue.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (anchor === mondayIso(todayIso())) url.searchParams.delete("week");
+    else url.searchParams.set("week", anchor);
+    window.history.replaceState(window.history.state, "", url);
+  }, [anchor]);
 
   const refresh = useCallback(async () => {
     await load(anchor);
@@ -206,6 +232,7 @@ export default function PlanningPage() {
 
   const week = bundle?.week ?? null;
   const payrollVisible = week?.payroll.visible ?? false;
+  const [coutsOuverts, setCoutsOuverts] = useState(false);
 
   const days = useMemo(() => week?.days.map((d) => d.date) ?? [], [week]);
   const rows = useMemo(
@@ -325,15 +352,20 @@ export default function PlanningPage() {
                     : undefined
               }
               tone={payrollVisible ? "accent" : "mut"}
+              // Région live permanente, vide au repos : montée en même temps
+              // que son contenu, elle ne serait jamais annoncée — le lecteur
+              // d'écran n'entendrait pas la variation qu'elle existe pour dire.
               extra={
-                costDelta != null ? (
-                  <span
-                    className="cf-fig animate-pop text-[12px] font-extrabold text-prept"
-                    aria-live="polite"
-                  >
-                    {fmtSignedEuro(costDelta)}
-                  </span>
-                ) : null
+                <span
+                  className={cx(
+                    "cf-fig text-[12px] font-extrabold text-prept",
+                    costDelta != null && "animate-pop",
+                  )}
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {costDelta != null && fmtSignedEuro(costDelta)}
+                </span>
               }
             />
             <MetricTile label="Heures prévues" value={fmtHours(week.totals.hours)} />
@@ -375,9 +407,29 @@ export default function PlanningPage() {
             </p>
           )}
           {payrollVisible && week.payroll.missingCost.length > 0 && (
-            <p className="flex items-center gap-1.5 text-[12.5px] text-prept">
+            <p className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-prept">
               <Icon name="euro" size={13} className="shrink-0" aria-hidden />
               {week.payroll.message}
+              {/* Le message signalait le manque sans offrir de chemin : la
+                  route de saisie existait, aucun écran ne l'appelait. */}
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // `staffCosts` peut manquer seul (son GET est dégradé en
+                  // null) alors que la modale l'exige : sans ce garde, le
+                  // clic ne rendait rien — un lien mort.
+                  if (bundle?.staffCosts) setCoutsOuverts(true);
+                  else {
+                    toast("Coûts horaires indisponibles — nouvel essai…", {
+                      icon: "euro",
+                    });
+                    void refresh();
+                  }
+                }}
+              >
+                Renseigner les coûts
+              </Btn>
             </p>
           )}
 
@@ -450,6 +502,7 @@ export default function PlanningPage() {
             payrollVisible={payrollVisible}
             payrollMessage={week.payroll.message}
             position={position}
+            onRetry={refresh}
           />
         )}
 
@@ -523,6 +576,7 @@ export default function PlanningPage() {
             payrollVisible={payrollVisible}
             payrollMessage={week.payroll.message}
             position={position}
+            onRetry={refresh}
           />
         )}
       </div>
@@ -539,6 +593,16 @@ export default function PlanningPage() {
           weekHours={week.totals.hours}
           onClose={() => setEditor(null)}
           onSaved={refresh}
+        />
+      )}
+
+      {/* La saisie des coûts horaires — la route existait, aucun écran ne
+          l'appelait, et tout le volet « coût de main-d'œuvre » restait à « — ». */}
+      {coutsOuverts && bundle?.staffCosts && (
+        <CoutsHorairesModal
+          costs={bundle.staffCosts}
+          onClose={() => setCoutsOuverts(false)}
+          onDone={() => void refresh()}
         />
       )}
 
@@ -735,11 +799,14 @@ function ComparisonPanel({
   payrollVisible,
   payrollMessage,
   position,
+  onRetry,
 }: {
   comparison: PlanningComparison | null;
   payrollVisible: boolean;
   payrollMessage: string;
   position: "passee" | "courante" | "future";
+  /** Relance le chargement — proposé quand la route a échoué pour un compte qui y a droit. */
+  onRetry: () => void | Promise<void>;
 }) {
   const title = "Prévu contre pointé";
   const sub =
@@ -760,19 +827,39 @@ function ComparisonPanel({
     );
   }
 
-  // Montants fermés : l'API refuse la route (403). La carte reste, avec sa
-  // raison — une carte vide passerait pour une panne.
+  // Pas de confrontation : soit la route a échoué pour un compte qui y a
+  // droit — ça se retente —, soit la session n'y a pas droit (403 attendu)
+  // — ça s'explique. Deux absences très différentes ; dans les deux cas la
+  // carte reste, car une carte vide passerait pour une panne.
   if (!comparison) {
+    if (payrollVisible) {
+      return (
+        <Panel title={title}>
+          <EmptyState
+            icon="clock"
+            title="Confrontation indisponible"
+            hint="La confrontation prévu / pointé n'a pas pu être chargée. Le reste de l'écran est à jour."
+            action={
+              <Btn
+                variant="ghost"
+                size="sm"
+                icon="arrow"
+                onClick={() => void onRetry()}
+              >
+                Réessayer
+              </Btn>
+            }
+          />
+        </Panel>
+      );
+    }
     return (
       <Panel title={title} sub="Réservé au compte propriétaire.">
         <p className="flex items-start gap-2 rounded-ctrl border border-white/8 bg-[image:var(--cf-elev-gradient)] p-3 text-[13px] text-mut">
           <Icon name="euro" size={14} className="mt-0.5 shrink-0" aria-hidden />
           <span>
-            {payrollVisible
-              ? "La confrontation prévu / pointé n'a pas pu être chargée. Le reste de l'écran est à jour."
-              : payrollMessage}{" "}
-            Cette confrontation chiffre des rémunérations ligne à ligne : elle n&apos;est pas
-            ouverte à une session de service.
+            {payrollMessage} Cette confrontation chiffre des rémunérations ligne à
+            ligne : elle n&apos;est pas ouverte à une session de service.
           </span>
         </p>
       </Panel>

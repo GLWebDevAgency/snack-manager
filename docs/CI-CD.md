@@ -98,10 +98,15 @@ Compilation        → turbo run build            bloquant
 
 Points à connaître :
 
-- **Node 22.** Le `package.json` racine déclare `engines.node: >=20`, qui est
-  une borne et non une version. La CI fige 22 (LTS), qui satisfait la borne.
-  Si un `.nvmrc` est ajouté un jour, c'est lui qui doit faire foi — pensez à
-  aligner `ci.yml`.
+- **Node 24.** `.nvmrc` fixe la version exacte commune aux postes et à tous les
+  workflows ; `.node-version` garde les autres gestionnaires alignés. Le
+  `package.json` racine annonce `engines.node: >=24.12.0`, borne compatible avec
+  les binaires Linux optionnels de Rollup et supérieure à celle imposée par
+  React Native 0.86. Railway/Railpack lit d'abord cette borne et la résout
+  sur le dernier Node 24 disponible ; `.nvmrc` vient ensuite dans son ordre de
+  résolution. Après une mise à niveau, vérifier la version exacte réellement
+  servie sur staging avant la production. Voir la
+  [résolution Node officielle de Railpack](https://railpack.com/languages/node/).
 - **pnpm n'est pas versionné dans le workflow.** `pnpm/action-setup` lit le
   champ `packageManager` du `package.json` racine. Une seule source de vérité.
 - **`pnpm install --frozen-lockfile`.** Si `pnpm-lock.yaml` ne correspond plus
@@ -123,8 +128,8 @@ l'autre par `actions/cache`.
 La clé est unique par commit avec un repli sur la précédente :
 
 ```
-key:          turbo-Linux-node22-<sha>
-restore-keys: turbo-Linux-node22-
+key:          turbo-Linux-node-<empreinte .nvmrc>-<sha>
+restore-keys: turbo-Linux-node-<empreinte .nvmrc>-
 ```
 
 La clé unique est nécessaire : `actions/cache` n'écrase jamais une entrée
@@ -260,6 +265,50 @@ protection côté serveur.
 
 ---
 
+### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
+
+Le job GitHub Actions `Migrations PostgreSQL privilégiées` migre les schémas
+**PostgreSQL** (supply puis fidélité), et eux seuls. L'identité DDL reste dans
+GitHub Secrets et n'est jamais injectée au conteneur API. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
+scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
+délibérément : une reprise de données se relit avant d'être appliquée.
+
+```bash
+# 1. LIRE d'abord — sans --appliquer, rien n'est écrit.
+scripts/reprise-mongo.sh staging backfill:founder
+scripts/reprise-mongo.sh staging backfill:contact
+
+# 2. Appliquer. Le script relance ensuite la tâche pour vérifier
+#    l'idempotence : elle ne doit plus rien trouver.
+scripts/reprise-mongo.sh staging backfill:founder --appliquer
+scripts/reprise-mongo.sh staging backfill:contact --appliquer
+```
+
+| Script | Ce qu'il répare | Ce qu'on voit sans lui |
+|---|---|---|
+| `backfill:founder` | pose `founderUntil` et `founderDiscountCents` | le fondateur lit « moitié prix » à côté d'un montant plein tarif |
+| `backfill:contact` | reprend le téléphone du gérant depuis son lead | le bouton « Appeler » reste masqué sur la fiche client |
+
+**Pourquoi un script et pas une suite de commandes à recopier.** Trois pièges,
+tous rencontrés en déroulant la procédure à la main le 28 août 2026, et tous
+fermés par `scripts/reprise-mongo.sh` :
+
+1. **`railway run` n'irait pas.** Il injecte les variables mais exécute en
+   local, où `mongodb.railway.internal` ne se résout pas. Il faut passer par le
+   proxy TCP public du service MongoDB.
+2. **L'URL du proxy ne porte aucun nom de base.** Sans lui, le script se
+   connecte à la base `test` et annonce sereinement « 0 client à reprendre ».
+   C'est le plus coûteux des trois : il ne lève pas, il rassure.
+3. **La CLI reste sur le dernier environnement utilisé.** Une commande lancée
+   sans vérifier vise la production sans le dire — c'est exactement ainsi qu'un
+   `railway redeploy` a redéployé la production au lieu de staging. Le script
+   POSE l'environnement, et fait taper « production » à la main quand c'est elle.
+
+Les deux reprises sont **idempotentes** : un client déjà traité n'est jamais
+recalculé. `backfill:contact` refuse en outre les rapprochements ambigus et le
+dit — un mauvais numéro sur une fiche client est pire que pas de numéro.
+
 ## 4 · Livrer un changement
 
 ```bash
@@ -291,6 +340,28 @@ Le gabarit de pull request (`.github/pull_request_template.md`) pose trois
 questions : ce que ça change, comment ça a été vérifié, ce que ça peut casser.
 La troisième est celle qu'on est tenté de sauter, et c'est celle qui sert le
 jour du retour arrière.
+
+### Avant une mise en production qui touche à l'argent
+
+```bash
+pnpm verifier:argent
+```
+
+Casse volontairement, une par une, les six règles du produit qui décident d'un
+montant — plafond de remise par rôle, remise fondateur figée, borne du
+sous-total, quota de promotion, MRR normalisé — et vérifie qu'un test tombe à
+chaque fois.
+
+**Une suite verte prouve que le code passe les tests ; elle ne prouve pas que
+les tests attraperaient une régression.** Un test qui ne vérifie rien reste vert
+quoi qu'il arrive, et c'est précisément ce qu'on ne voit jamais : deux tests
+écrits le 28/08/2026 étaient dans ce cas, trouvés en relisant plutôt qu'en
+exécutant. Une mutation qui passe inaperçue est une protection qui n'existe pas.
+
+Le harnais est lent — il reconstruit `@sm/contracts` et `@sm/domain` entre
+chaque mutation, parce qu'ils sont consommés depuis leur `dist/`. Il n'a donc
+pas sa place en CI : on le lance avant de fusionner vers `main`, et après tout
+remaniement de la facturation, des promotions ou des remises.
 
 **Une CI verte prouve que ça compile et que les tests passent. Elle ne prouve
 pas que ça marche.** Depuis le 20 août 2026, le workflow **Bout en bout**
@@ -379,7 +450,7 @@ pas cette règle — c'est vous qui décidez du moment où vous poussez.
 
 | Élément | Où | Quand le relever |
 |---|---|---|
-| Version de Node | `ci.yml` → `node-version` | passage d'une LTS à la suivante, ou ajout d'un `.nvmrc` |
+| Version de Node | `.nvmrc`, `.node-version`, puis `package.json` → `engines.node` | relever volontairement les trois lors d'un changement de version supportée |
 | Version de pnpm | `package.json` → `packageManager` | la CI suit automatiquement |
 | Versions des actions | `ci.yml`, `secrets.yml` | GitHub retire les anciens moteurs Node ; toutes les actions sont épinglées sur des versions à moteur Node 24 |
 | Version de gitleaks | `secrets.yml` → `VERSION_GITLEAKS` | de temps en temps, pour bénéficier des nouvelles règles |
@@ -512,7 +583,7 @@ gh run watch
 # 6. Essayer sur staging à la main : la caisse, l'écran cuisine, une commande
 #    en ligne. Le contrôle de santé (§ 11) dit que ça répond, pas que ça marche.
 
-# 7. Alors seulement, la production, par pull request (§ 4)
+# 7. Alors seulement, après un GO écrit, la production par pull request (§ 4)
 gh pr create --base main --fill
 gh pr checks --watch
 gh pr merge --squash --delete-branch   # ← déclenche le déploiement production
@@ -533,25 +604,28 @@ gh pr merge --squash --delete-branch   # ← déclenche le déploiement producti
 | 1 | **Cible du déploiement** | traduit la branche en environnement (`main`→production, `develop`→staging) | une référence inconnue arrête tout, immédiatement |
 | 2 | `verification` | **appelle `ci.yml`** : `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
 | 3 | `secrets` | **appelle `secrets.yml`** : gitleaks sur le diff puis sur l'arbre qui allait être téléversé | rien ne part |
-| 4 | **Mise en ligne** | pose `SM_REVISION` sur `api`, puis déploie `api` seul (migrations), puis `web`, `pos`, `kds` ensemble | les suivants ne partent pas ; l'ancienne version continue de servir |
-| 5 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | le déploiement est déclaré **EN ÉCHEC**, mais le code est **EN LIGNE** (§ 12) |
+| 4 | **Préflight Railway sans mutation** | impose l'environnement explicite, les quatre services et `pnpm verify:postgres:built` sur `api` | aucune migration ne part |
+| 5 | **Migrations PostgreSQL privilégiées** | applique supply puis fidélité depuis le runner, avec un credential DDL éphémère | aucun conteneur ne part ; le smoke contrôle l'ancien service |
+| 6 | **Mise en ligne** | publie uniquement les secrets runtime, pose `SM_REVISION`, déploie `api`, puis `web`, `pos`, `kds` | les suivants ne partent pas ; l'ancienne version continue de servir |
+| 7 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | l'exécution est déclarée **EN ÉCHEC**, mais le code peut être **EN LIGNE** (§ 12) |
 
 Les jobs 2 et 3 n'ont **aucune étape** : ce sont des appels. Dans l'interface
 GitHub ils apparaissent sous le nom du fichier appelé — `verification /
 Vérification du monorepo` et `secrets / Balayage des secrets`.
 
-Le job 5 tourne **aussi quand le job 4 a échoué** (`always()`). Un vendredi
+Le job 7 tourne **aussi quand les migrations ou le job 6 ont échoué**
+(`always()`). Un vendredi
 soir, la première question n'est pas « le déploiement est-il passé ? » mais
 « le restaurant peut-il encaisser ? ». Quand Railway refuse une mise en
 service, l'ancienne version continue de servir — et il faut le *savoir*, pas
 le supposer. Dans ce cas le job affiche un avertissement en tête : vert
 signifie alors « l'environnement répond », pas « le déploiement a réussi ».
-Si c'est la vérification qui a échoué, rien n'a été touché et le job 5 ne
+Si le préflight ou la vérification a échoué, rien n'a été touché et le job 7 ne
 tourne pas.
 
-Les jobs 4 et 5 sont branchés par `needs:` sur les jobs 2 et 3. Ce n'est pas
-une politesse : un job dont un `needs` échoue **ne démarre pas**. Le
-déploiement n'est pas « sauté », il est inatteignable.
+Les jobs 4 à 6 forment une chaîne stricte après les jobs 2 et 3. Ce n'est pas
+une politesse : un job dont un `needs` échoue **ne démarre pas**. Seul le smoke
+du job 7 utilise `always()` après qu'une migration a pu commencer.
 
 > **Tout push déploie, même un changement de documentation.** Il n'y a
 > volontairement aucun `paths-ignore` : le jour où une exclusion existe, la
@@ -564,19 +638,51 @@ déploiement n'est pas « sauté », il est inatteignable.
 > GitHub n'annulerait de toute façon pas le déploiement Railway déjà lancé, et
 > une migration peut être en cours.
 
-### Pourquoi `api` part seule, et en premier
+### Pourquoi les migrations partent avant `api`, puis `api` seule
 
-Le service `api` porte un `preDeployCommand` **posé côté Railway** (pas dans
-GitHub Actions, et il ne faut pas l'y déplacer) :
+Après la CI et le balayage des secrets, `deploy.yml` exécute d'abord un
+préflight Railway **sans mutation** : le jeton doit accéder aux quatre services
+dans l'environnement explicitement dérivé de la branche et le service `api`
+doit porter ce `preDeployCommand` en lecture seule :
 
 ```
-node packages/supply/dist/migrate.js
+pnpm verify:postgres:built
 ```
 
-Il s'exécute dans le conteneur Railway, où `DATABASE_URL` est déjà présente, et
-**il bloque la mise en service si la migration échoue**. Le schéma PostgreSQL
-est donc à jour avant que la nouvelle version serve la moindre requête, et
-avant que les trois interfaces se remettent à appeler l'API.
+Le job `Migrations PostgreSQL privilégiées` applique ensuite
+`pnpm migrate:postgres:built` depuis un runner GitHub. Il reçoit
+`SM_DATABASE_MIGRATION_URL_STAGING` ou `..._PRODUCTION` et la CA épinglée
+`SM_DATABASE_ROOT_CA_*` uniquement le temps de l'étape. Le workflow refuse les
+paramètres d'URL fournis par le secret, ajoute lui-même `verify-ca`, puis les
+migrateurs prouvent TLS 1.2+ avant le premier DDL. Le compte DDL est un rôle
+dédié, non-SUPERUSER et sans rôle hérité ; les migrateurs vérifient aussi que
+`DATABASE_RUNTIME_ROLE` existe, qu'il est distinct, sans contournement RLS ni
+DDL, puis lui accordent seulement `CONNECT`, `USAGE`, le CRUD et la lecture des
+journaux.
+
+Railway ne reçoit que `DATABASE_URL` du rôle applicatif. Son preDeploy compare
+alors, avec cette identité limitée, les hash et horodatages attendus des deux
+journaux Drizzle. **Une base absente, en retard ou différente bloque la mise en
+service.** Une migration future additive reste acceptée afin qu'un rollback de
+code demeure possible.
+
+> **Garde de livraison fidélité.** Avant le premier push, configurer sur
+> **staging uniquement** `pnpm verify:postgres:built`, sans déclencher un ancien
+> déploiement. La production ne doit être armée qu'après un GO écrit : ses
+> secrets DB, clés et variables `SM_DATABASE_MIGRATION_HOST_PRODUCTION` /
+> `_PORT_` sont alors créés sans déclencher de déploiement. Ne jamais copier une
+> clé entre environnements.
+
+> **Garde des surfaces publiques.** Le même préflight refuse désormais le
+> déploiement si le jeton serveur du formulaire ou la paire Turnstile de la
+> cible manque. Chaque environnement possède son propre
+> `SM_CONTACT_INGEST_TOKEN_*`, son propre `SM_TURNSTILE_SECRET_KEY_*`, ainsi que
+> les variables publiques `SM_TURNSTILE_SITE_KEY_*` et
+> `SM_TURNSTILE_ALLOWED_HOSTNAMES_*`. Les clés de test Cloudflare sont refusées
+> sur Railway et, dès que les deux site keys existent, leur réutilisation entre
+> staging et production est refusée. Après validation, le pipeline publie le
+> jeton contact sur `api` et `web`, le secret et l'allowlist Turnstile sur `api`,
+> puis la site key au build de `web`, sans journaliser aucune valeur.
 
 C'est aussi la raison de l'ordre : `web`, `pos` et `kds` ne partent qu'une fois
 l'`api` **en service**, pas seulement construite.
@@ -639,8 +745,9 @@ Quatre verrous, et il faut les franchir tous les quatre :
    Une référence inattendue donne la **chaîne vide**, et le job s'arrête avant
    d'appeler Railway. Surtout : chaque jeton de projet Railway est cloisonné sur
    **son** environnement. Même si cette correspondance était fausse, un jeton de
-   staging ne peut rien déployer en production. C'est pour cela qu'aucune
-   commande ne passe `--environment` : le jeton, et lui seul, désigne la cible.
+   staging ne peut rien déployer en production. Chaque commande passe en plus
+   `--environment "$ENVIRONNEMENT"` : le jeton et la cible explicite doivent donc
+   tous les deux correspondre avant que Railway accepte l'opération.
 
 ### Ce qui a été vérifié, et comment
 
@@ -655,7 +762,7 @@ Une chaîne de déploiement qu'on n'a pas vue tourner n'en est pas une.
 | Une mise en ligne en échec n'interrompt pas le service | l'ancien déploiement `api` a continué de servir ; contrôle de santé vert pendant toute la panne |
 | Déploiement complet | exécution `32303150404` : quatre services en 3 min 44, santé verte en 7 s |
 | Ordre `api` d'abord | `api` `SUCCESS` à 21:21:38, `web`/`pos`/`kds` lancés à 21:21:39 |
-| Migrations en pré-déploiement | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
+| Migrations en pré-déploiement (ancienne chaîne, historique) | `✓ Migrations supply appliquées` dans le journal du déploiement `660dd9d7` |
 | Retour arrière | § 12 — mesuré dans les deux sens, 29 s et 24 s |
 
 **Bascule vers les workflows appelés — 20 août 2026**, pull request d'essai
@@ -717,7 +824,7 @@ node scripts/smoke.mjs staging
 node scripts/smoke.mjs production
 ```
 
-Aucune dépendance à installer (Node ≥ 20 suffit), et il tourne aussi bien
+Aucune dépendance à installer (la cible du dépôt, Node ≥ 24.3, suffit), et il tourne aussi bien
 depuis un poste que dans la CI.
 
 | Contrôle | Ce qu'il prouve |
@@ -865,8 +972,10 @@ plus vite ; il ne défait rien tout seul.
 ### La règle qui compte : les migrations ne se défont pas
 
 Un retour arrière **remet le code d'avant. Il ne remet pas le schéma
-d'avant.** `packages/supply/dist/migrate.js` applique les migrations en avant,
-il n'a pas d'inverse, et Railway ne rejoue rien à l'envers.
+d'avant.** Le job GitHub `pnpm migrate:postgres:built` applique les migrations
+supply et fidélité en avant ; il n'a pas d'inverse, et Railway ne rejoue rien à
+l'envers. Le preDeploy Railway ne fait qu'en vérifier l'état avec le rôle
+runtime.
 
 Conséquence, en clair : après un retour arrière, **l'ancien code parle à la
 nouvelle base**. Ça se passe bien quand la migration était additive (une
@@ -915,9 +1024,10 @@ deux sens :
 | retour arrière `660dd9d7` → image de `3e48d02a` | `a98fd8ec` `SUCCESS` | **29 s** |
 | retour en avant → image de `660dd9d7` | `b7413695` `SUCCESS` | **24 s** |
 
-Contrôle de santé vert après chacun des deux. Le pré-déploiement rejoue les
-migrations à chaque fois (`✓ Migrations supply appliquées` dans le journal) :
-elles sont idempotentes, les rejouer ne coûte rien.
+Contrôle de santé vert après chacun des deux. Ces mesures datent de l'ancienne
+chaîne, où le pré-déploiement rejouait les migrations. Désormais un redéploiement
+Railway vérifie seulement les journaux ; une fusion via GitHub Actions applique
+d'abord les migrations, puis lance la même vérification.
 
 Notez ce que la mutation fait : elle **crée un nouveau déploiement** à partir
 de l'image visée. On ne « remonte » pas dans l'historique, on ajoute un
@@ -1034,8 +1144,9 @@ avant vous.
   donc le contrôle de révision — c'est le job `Mise en ligne` qui échoue alors,
   et lui seul, ce qui suffit à rendre l'exécution rouge.
 
-- **Le déploiement de `main` n'a jamais été exécuté, et n'est pas encore
-  armé** — `deploy.yml` n'est pas sur `main` (§ 10). Le chemin est identique à
-  celui de `develop`, au jeton et au nom d'environnement près, et il a été
-  vérifié sur staging. La première mise en production réelle reste à faire, et
-  elle ne se fait pas un vendredi soir.
+- **`main` déclenche bien le chemin production, sans approbation serveur.** Il
+  reste volontairement fermé tant que ses secrets fidélité/DB/contact, sa paire
+  Turnstile et les variables d'hôte attendues ne sont pas créés après un GO
+  écrit. Une fusion prématurée échoue fermée, mais reste interdite : la première
+  mise en production fidélité exige la recette staging et ne se fait jamais du
+  jeudi au dimanche.

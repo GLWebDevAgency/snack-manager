@@ -5,6 +5,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '../../common/auth';
+import { SessionAccessService } from '../../common/session-access';
+import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 @Global()
 @Module({
@@ -21,9 +23,11 @@ import { AuthGuard } from '../../common/auth';
   controllers: [AuthController],
   providers: [
     AuthService,
+    SessionAccessService,
+    SessionRevocationPublisher,
     // Guard global : toute route est authentifiée sauf @Public()
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [AuthService],
+  exports: [AuthService, SessionAccessService, SessionRevocationPublisher],
 })
 export class AuthModule {}

@@ -36,19 +36,15 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CLIENT_RISK_DAYS, type CrmClientHealth, type TenantAccountStatus } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Card, Chip, EmptyState, Icon, Input, Kpi, Skeleton } from "@/components/ui";
 import { euroRound, fmtMonth, int } from "../crm";
 import {
-  hydrateSummaries,
-  hydrationOrder,
   readWorkSignals,
   signalsByTenant,
   worstSeverity,
-  SUMMARY_BUDGET,
-  type TenantSummary,
   type WorkSignal,
 } from "../signals/data";
 import {
@@ -60,6 +56,7 @@ import {
   type ClientRow,
   type SignalSeverity,
 } from "./data";
+import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
   AccountPill,
   CallBackFlag,
@@ -78,6 +75,14 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: "ok", label: "Bonne santé" },
   { key: "suspendus", label: "Suspendus" },
 ];
+
+/**
+ * Position de travail (filtre + recherche), reprise au retour de la fiche.
+ * `sessionStorage` et non l'URL : c'est une position, pas une adresse à
+ * partager — et elle meurt avec l'onglet, comme la session d'appels.
+ */
+const FILTER_KEY = "sm.clients.filtre";
+const SEARCH_KEY = "sm.clients.recherche";
 
 /** Les décrochages d'abord : cette liste est celle des appels à passer. */
 const HEALTH_RANK: Record<CrmClientHealth, number> = {
@@ -143,9 +148,33 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [signals, setSignals] = useState<WorkSignal[] | null>(null);
-  const [summaries, setSummaries] = useState<Map<string, TenantSummary>>(new Map());
+  const [signalsFailed, setSignalsFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>("tous");
   const [q, setQ] = useState("");
+
+  /*
+   * Filtre et recherche survivent à l'aller-retour vers la fiche. Cet écran
+   * déroule des appels : on filtre « À rappeler », on ouvre une fiche, on
+   * revient — et l'App Router démonte la page à chaque navigation. Sans
+   * reprise, chaque retour repartait de « Tous » et il fallait refaire le
+   * filtrage après chaque appel.
+   */
+  useEffect(() => {
+    const filtre = sessionStorage.getItem(FILTER_KEY);
+    const recherche = sessionStorage.getItem(SEARCH_KEY);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reprise de position : `sessionStorage` n'existe pas au rendu serveur, la lire au rendu provoquerait un écart d'hydratation. Lue ici, APRÈS le montage, une seule fois.
+    if (FILTERS.some((f) => f.key === filtre)) setFilter(filtre as Filter);
+    if (recherche) setQ(recherche);
+  }, []);
+
+  const changeFilter = (f: Filter) => {
+    setFilter(f);
+    sessionStorage.setItem(FILTER_KEY, f);
+  };
+  const changeQ = (value: string) => {
+    setQ(value);
+    sessionStorage.setItem(SEARCH_KEY, value);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -161,14 +190,18 @@ export default function ClientsPage() {
       });
     // La file de signaux n'est pas indispensable à la liste : elle l'annote.
     // Son absence (service à l'arrêt) ne doit rien empêcher — d'où une liste
-    // vide plutôt qu'un `null` qui bloquerait l'hydratation des scores.
+    // vide plutôt qu'un `null` qui bloquerait l'hydratation des scores. Mais
+    // le repli SE DIT à l'écran (`signalsFailed`) : sans lui, les marqueurs
+    // rouges disparaissent en silence et la liste paraît en pleine santé.
     clientsApi
       .signals()
       .then((raw) => {
         if (!cancelled) setSignals(readWorkSignals(raw));
       })
       .catch(() => {
-        if (!cancelled) setSignals([]);
+        if (cancelled) return;
+        setSignals([]);
+        setSignalsFailed(true);
       });
     return () => {
       cancelled = true;
@@ -183,11 +216,6 @@ export default function ClientsPage() {
   // L'ordre attend que les DEUX premières routes aient répondu : il dépend des
   // signaux, et commencer sans eux reviendrait à dépenser le budget sur les
   // clients qui vont bien.
-  const order = useMemo(
-    () =>
-      clients === null || signals === null ? [] : hydrationOrder(clients, byTenant),
-    [clients, signals, byTenant],
-  );
 
   /**
    * Les clients dont la fiche est DEMANDÉE — dérivé, jamais stocké.
@@ -197,66 +225,56 @@ export default function ClientsPage() {
    * évite un rendu en cascade au montage : la file de rendu ne doit pas dépendre
    * d'un effet qui lui écrirait dessus.
    */
-  const queued = useMemo(
-    () => new Set(order.slice(0, SUMMARY_BUDGET)),
-    [order],
-  );
 
-  const cancelledRef = useRef(false);
-  useEffect(() => {
-    cancelledRef.current = false;
-    return () => {
-      cancelledRef.current = true;
-    };
-  }, []);
 
-  useEffect(() => {
-    if (order.length === 0) return;
-    void hydrateSummaries(
-      order,
-      (id, summary) => {
-        setSummaries((prev) => {
-          const next = new Map(prev);
-          next.set(id, summary);
-          return next;
-        });
-      },
-      () => cancelledRef.current,
-    );
-  }, [order]);
+  /*
+   * PLUS D'HYDRATATION CLIENT PAR CLIENT.
+   *
+   * L'écran rappelait `/crm/tenants/:id/health` pour chaque ligne — jusqu'à
+   * `SUMMARY_BUDGET` requêtes à l'ouverture de la liste. Deux conséquences.
+   *
+   * D'abord `/crm/tenants` rend DÉJÀ tout ce qui était demandé : score,
+   * verdict, statut de compte, tendance, appareils muets. Le calcul avait été
+   * rapatrié dans la liste précisément pour supprimer ces appels, et l'écran a
+   * continué de les faire.
+   *
+   * Ensuite, et c'est le plus grave : `tenantHealth` journalise une
+   * CONSULTATION DE DOSSIER (`recordDetailView`). Ouvrir la liste en
+   * fabriquait donc des dizaines, sur des clients que personne n'avait
+   * ouverts — le journal d'administration devenait illisible, et il est
+   * précisément ce qu'on relit quand on cherche qui a consulté quoi.
+   */
 
   const rows = useMemo<Row[]>(() => {
     return (clients ?? []).map((c) => {
-      const s = summaries.get(c._id) ?? null;
       const sig = byTenant.get(c._id) ?? [];
       const worst = worstSeverity(sig);
-      const score = s?.score ?? c.score;
-      // Le signal porte lui aussi le statut du compte : il arrive avec le
-      // premier appel, la fiche de santé avec le troisième. « Suspendu »
-      // s'affiche donc tout de suite sur le client concerné.
-      const accountStatus =
-        s?.accountStatus ?? sig[0]?.accountStatus ?? c.accountStatus;
+      const score = c.score;
+      // Le signal porte lui aussi le statut du compte, et il arrive parfois
+      // avant la liste : « suspendu » s'affiche donc tout de suite.
+      const accountStatus = sig[0]?.accountStatus ?? c.accountStatus;
       const tone = scoreHealth(score) ?? c.health;
       const callBack =
         worst === "critique" || accountStatus === "suspended" || tone === "risque";
       return {
         client: c,
         score,
-        verdict: s?.verdictLabel ?? "",
-        pending: s === null && queued.has(c._id),
+        verdict: c.verdictLabel,
+        // Plus rien à attendre : la ligne arrive complète.
+        pending: false,
         tone,
         accountStatus,
-        trendPct: s?.ordersDeltaPct ?? c.trendPct,
-        trendDays: s?.deltaDays ?? 30,
-        lastActivityAt: s?.lastOrderAt ?? c.lastActivityAt,
-        devicesOffline: s?.devicesOffline ?? c.devicesOffline,
+        trendPct: c.trendPct,
+        trendDays: 30,
+        lastActivityAt: c.lastActivityAt,
+        devicesOffline: c.devicesOffline,
         signals: sig,
         worst,
         callBack,
         bucket: bucketOf(callBack, worst, tone),
       };
     });
-  }, [clients, summaries, byTenant, queued]);
+  }, [clients, byTenant]);
 
   const sorted = useMemo(
     () =>
@@ -316,17 +334,24 @@ export default function ClientsPage() {
   return (
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/* ── Les quatre chiffres du parc — 2 × 2 sous `md` (DA §7 : rien ne
-          descend sous 13 px, donc jamais quatre cartes écrasées de front) ── */}
+          descend sous 13 px, donc jamais quatre cartes écrasées de front).
+          Parc en panne : « — », jamais des zéros affirmés — un « MRR estimé
+          0 € » pendant que l'API est tombée serait un mensonge chiffré (même
+          motif que la carte MRR de facturation, « Parc non chargé »). ── */}
       <div className="grid grid-cols-2 items-stretch gap-3 md:flex md:gap-4">
-        <Kpi label="Restaurants clients" value={int(rows.length)} icon="user" />
+        <Kpi
+          label="Restaurants clients"
+          value={failed ? "—" : int(rows.length)}
+          icon="user"
+        />
         <Kpi
           label="Actifs sur 30 jours"
-          value={int(rows.filter((r) => r.client.orders30d > 0).length)}
+          value={failed ? "—" : int(rows.filter((r) => r.client.orders30d > 0).length)}
           icon="check"
         />
         <Kpi
           label="À rappeler"
-          value={int(toCall)}
+          value={failed ? "—" : int(toCall)}
           icon="phone"
           delta={
             toCall > 0
@@ -340,22 +365,22 @@ export default function ClientsPage() {
               : undefined
           }
         />
-        <Kpi label="MRR estimé" value={euroRound(mrr)} icon="euro" />
+        <Kpi label="MRR estimé" value={failed ? "—" : euroRound(mrr)} icon="euro" />
       </div>
-
-      {failed && (
-        <Unavailable
-          title="Parc clients indisponible"
-          hint="L'API n'a pas répondu à /crm/tenants. Rechargez la page — si le problème persiste, vérifiez que le service tourne."
-        />
-      )}
 
       {/* ── Filtres, recherche, accès à la file de travail ── */}
       <div className="flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
           const count = counts[f.key];
           return (
-            <Chip key={f.key} on={filter === f.key} onClick={() => setFilter(f.key)}>
+            // Plancher tactile 44 px sous `md` (DA §7) : le gabarit du Chip
+            // fait ~36 px, trop bas pour un pouce au téléphone.
+            <Chip
+              key={f.key}
+              on={filter === f.key}
+              className="max-md:min-h-11"
+              onClick={() => changeFilter(f.key)}
+            >
               {f.label}
               {count > 0 && (
                 <span
@@ -383,10 +408,10 @@ export default function ClientsPage() {
           />
           <Input
             aria-label="Rechercher un restaurant"
-            placeholder="Rechercher — nom ou ville…"
+            placeholder="Rechercher un client…"
             className="w-[260px] !py-[9px] pl-9 text-[13px] max-md:w-full"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => changeQ(e.target.value)}
           />
         </div>
 
@@ -415,6 +440,18 @@ export default function ClientsPage() {
           {int(mute)} appareil{mute > 1 ? "s" : ""} hors ligne sur le parc — une
           caisse muette, c&apos;est un comptoir qui n&apos;encaisse plus.
         </p>
+      )}
+
+      {/*
+        La file de signaux est tombée : le dire, sinon la liste MENT — les
+        marqueurs rouges disparaissent et le parc paraît en pleine santé.
+        C'est le même refus du vide trompeur que la fiche client.
+      */}
+      {signalsFailed && (
+        <Unavailable
+          title="File de signaux indisponible"
+          hint="L'API n'a pas répondu à /crm/signals : les marqueurs « à rappeler » portés par les signaux ne sont pas affichés. Comptes suspendus et décrochages d'activité restent marqués."
+        />
       )}
 
       {/* ── Le parc ── */}
@@ -447,7 +484,20 @@ export default function ClientsPage() {
               <span className="w-[16px] shrink-0" aria-hidden />
             </div>
 
-            {shown.length === 0 ? (
+            {/*
+              La panne s'affiche À LA PLACE de la liste, jamais en état vide :
+              « Aucun restaurant client » pendant que /crm/tenants est tombée
+              affirmerait un parc vide alors qu'on ne sait rien. L'EmptyState
+              est réservé au cas où la route a RÉPONDU une liste vide.
+            */}
+            {failed ? (
+              <div className="border-t border-line p-[18px]">
+                <Unavailable
+                  title="Parc clients indisponible"
+                  hint="L'API n'a pas répondu à /crm/tenants. Rechargez la page — si le problème persiste, vérifiez que le service tourne."
+                />
+              </div>
+            ) : shown.length === 0 ? (
               <EmptyState
                 icon="user"
                 title={
@@ -470,12 +520,11 @@ export default function ClientsPage() {
 
       <p className="text-[13px] text-mut">
         Tri par urgence — les clients à rappeler sont en tête, avec la raison de
-        l&apos;appel sous leur nom. Le score vient de{" "}
-        <span className="cf-fig">/crm/tenants/:id/health</span>, lu après
-        l&apos;affichage pour les {SUMMARY_BUDGET} clients les plus urgents ; sans
-        lui, la santé retombe sur la dernière commande encaissée (bonne sous 2
-        jours, à suivre jusqu&apos;à {CLIENT_RISK_DAYS} jours, à risque au-delà).
-        MRR estimé d&apos;après la formule.
+        l&apos;appel sous leur nom. Score, verdict, tendance et appareils muets
+        arrivent avec la liste : ouvrir cet écran ne consulte AUCUN dossier. À
+        défaut de score, la santé retombe sur la dernière commande encaissée
+        (bonne sous 2 jours, à suivre jusqu&apos;à {CLIENT_RISK_DAYS} jours, à
+        risque au-delà). MRR estimé d&apos;après la formule.
       </p>
     </div>
   );
@@ -532,12 +581,7 @@ function ClientLine({ row: r }: { row: Row }) {
               {c.name}
             </span>
             {c.founderSeat && (
-              <Icon
-                name="star"
-                size={14}
-                className="shrink-0 text-accent"
-                aria-label="Client fondateur"
-              />
+              <BadgeFondateur size={20} />
             )}
             {mute && (
               <span
@@ -572,17 +616,26 @@ function ClientLine({ row: r }: { row: Row }) {
         </div>
       </div>
 
-      {/* ── Les colonnes calées au pixel — bureau seulement ── */}
+      {/*
+        ── Les colonnes calées au pixel — bureau seulement ──
+        Chaque cellule NOMME sa valeur en `sr-only`, comme la pile mobile le
+        dit en clair (« cmd / 30 j », « de CA », « MRR ») : l'en-tête visuel
+        n'est relié à aucune cellule, et sans libellé le CA et le MRR sont
+        deux montants indiscernables au lecteur d'écran.
+      */}
       <div className="hidden shrink-0 items-center gap-2.5 md:flex">
         <span className="w-[78px] shrink-0">
+          <span className="sr-only">Formule : </span>
           <PlanPill plan={c.plan} />
         </span>
 
         <span className="w-[86px] shrink-0">
+          <span className="sr-only">Statut : </span>
           <AccountPill status={r.accountStatus} />
         </span>
 
         <span className="flex w-[74px] shrink-0 justify-center">
+          <span className="sr-only">Santé : </span>
           <ScorePill
             score={r.score}
             health={c.health}
@@ -599,6 +652,7 @@ function ClientLine({ row: r }: { row: Row }) {
             )}
           >
             {int(c.orders30d)}
+            <span className="sr-only"> commandes sur 30 jours</span>
           </span>
           {/*
             La fenêtre est DITE quand elle n'est pas celle de la colonne : un
@@ -616,6 +670,7 @@ function ClientLine({ row: r }: { row: Row }) {
         {/* CA agrégé : arrondi à l'euro, les centimes n'apportent rien ici. */}
         <span className="cf-fig w-[92px] shrink-0 text-right text-sm font-bold text-ink">
           {euroRound(c.revenue30dCents)}
+          <span className="sr-only"> de CA sur 30 jours</span>
         </span>
 
         <span
@@ -630,10 +685,12 @@ function ClientLine({ row: r }: { row: Row }) {
           }
         >
           {fmtSince(r.lastActivityAt)}
+          <span className="sr-only"> depuis la dernière activité</span>
         </span>
 
         <span className="cf-fig w-[72px] shrink-0 text-right text-sm font-extrabold text-accent">
           {euroRound(c.mrrCents)}
+          <span className="sr-only"> de MRR</span>
         </span>
 
         <Icon name="arrow" size={16} className="w-[16px] shrink-0 text-mut" />

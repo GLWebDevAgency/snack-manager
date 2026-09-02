@@ -162,22 +162,17 @@ export default function SignalsPage() {
   return (
     <div className="flex flex-col gap-4 p-[26px] max-md:p-4">
       {/*
-        La coquille `/sm` titre d'après sa propre table de navigation, qui ne
-        connaît pas encore cette page : on repose donc un titre ici plutôt que
-        de laisser l'en-tête annoncer autre chose.
+        Pas de titre local : la coquille `/sm` titre déjà « File de travail »
+        (entrée `/sm/signals` de sa NAV). Ici, seulement le décompte — la
+        charge du matin — et la porte vers le parc.
       */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-2xl font-extrabold tracking-[-0.03em] text-ink">
-            File de travail
-          </h2>
-          <p className="mt-0.5 text-sm text-mut">
-            {total === 0
-              ? "Les signaux du parc, groupés par gravité — du plus urgent au simple prétexte d'appel."
-              : /* « signal » fait « signaux » : le pluriel anglais s'était glissé ici. */
-                `${int(total)} signa${total > 1 ? "ux" : "l"} ouvert${total > 1 ? "s" : ""} sur ${int(tenants)} restaurant${tenants > 1 ? "s" : ""} — du plus urgent au simple prétexte d'appel.`}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 text-sm text-mut">
+          {total === 0
+            ? "Les signaux du parc, groupés par gravité — du plus urgent au simple prétexte d'appel."
+            : /* « signal » fait « signaux » : le pluriel anglais s'était glissé ici. */
+              `${int(total)} signa${total > 1 ? "ux" : "l"} ouvert${total > 1 ? "s" : ""} sur ${int(tenants)} restaurant${tenants > 1 ? "s" : ""} — du plus urgent au simple prétexte d'appel.`}
+        </p>
         <Link
           href="/sm/clients"
           className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold text-white hover:border-white/25 hover:bg-white/8"

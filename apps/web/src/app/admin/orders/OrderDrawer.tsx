@@ -74,7 +74,7 @@ export function OrderDrawer({
       width={400}
       title={
         <span className="block whitespace-normal">
-          <span className="cf-fig block text-[32px] font-black leading-none text-gold">
+          <span className="cf-fig block text-[32px] font-black leading-none text-accent">
             n°{order.number}
           </span>
           <span className="mt-1 block text-base font-bold text-ink">
@@ -115,8 +115,8 @@ export function OrderDrawer({
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={order.status} />
           {isPaid(order) ? (
-            <Pill className="bg-ok text-white">
-              {order.payment.method === "online" ? "Payé en ligne" : "Payée"}
+            <Pill className="bg-ok text-[#0B1F0E]">
+              {order.payment.method === "online" ? "Payée en ligne" : "Payée"}
             </Pill>
           ) : order.payment.status === "refunded" ? (
             <Pill variant="out">Remboursée</Pill>

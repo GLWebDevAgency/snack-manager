@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -10,7 +10,12 @@ import {
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
   SOCIAL_CADENCE_LABELS,
+  FOUNDER_SEATS_TOTAL,
+  finRemiseFondateur,
+  remiseFondateurContrat,
   proposalCents,
+  chiffrageFondateur,
+  prixFondateurCents,
   servicesCents,
   yearlyCents,
   type JwtPayload,
@@ -84,6 +89,29 @@ export class ConversionService {
       throw new ConflictException(`L’e-mail « ${email} » a déjà un compte`);
     }
 
+    /**
+     * LES DIX PLACES SONT UNE PROMESSE PUBLIQUE, PAS UN COMPTEUR D'AFFICHAGE.
+     *
+     * La landing annonce « dix places fondateur », le CRM affiche le décompte
+     * restant — et rien, côté serveur, n'empêchait d'en signer une onzième. La
+     * rareté était donc un argument de vente que le logiciel ne tenait pas :
+     * c'est le genre d'écart qui se découvre le jour où un client compte.
+     *
+     * Le contrôle est ici et non au schéma parce qu'il dépend de l'ÉTAT du
+     * parc, pas de la forme du corps. Course possible entre deux conversions
+     * simultanées : à ce rythme de signature, une revue humaine du décompte
+     * vaut mieux qu'un verrou distribué — et le refus, lui, tient dans le cas
+     * qui se produit vraiment.
+     */
+    if (body.founderSeat) {
+      const prises = await this.tenants.countDocuments({ founderSeat: true });
+      if (prises >= FOUNDER_SEATS_TOTAL) {
+        throw new ConflictException(
+          `Les ${FOUNDER_SEATS_TOTAL} places fondateur sont prises — ce client se signe au tarif public.`,
+        );
+      }
+    }
+
     const password = generatePassword();
     const passwordHash = await this.hasher.hash(password);
     const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * DAY_MS);
@@ -92,8 +120,42 @@ export class ConversionService {
     const tenant = await this.tenants.create({
       slug: body.slug,
       name: lead.restaurantName,
+      // LE CONTACT SUIT LE CLIENT. Il était recueilli à la prospection puis
+      // perdu à la signature : la fiche client n'avait plus de numéro à
+      // composer, et le commercial rouvrait le pipeline pour retrouver ce
+      // qu'il venait de signer.
+      contact: {
+        name: lead.contact?.name ?? '',
+        phone: lead.contact?.phone ?? '',
+        email: lead.contact?.email ?? '',
+      },
       plan: body.plan,
       founderSeat: body.founderSeat,
+      // L'offre signée EN ENTIER, pas seulement sa formule. Le module et
+      // l'engagement se perdaient ici : le devis les chiffrait, les brouillons
+      // les facturaient, et le client naissait sans eux — après quoi toute la
+      // facturation récurrente retombait sur `plan` seul et sous-facturait.
+      onlineOrdering: body.onlineOrdering,
+      billingCycle: body.billing,
+      // La place fondateur donne le DROIT, cette date donne le TERME, et le
+      // montant ci-dessous donne la PORTÉE. Les trois sont posés ici une fois
+      // pour toutes : la remise d'un client se lit sur son contrat, jamais sur
+      // l'horloge du serveur ni sur l'offre qu'il possède aujourd'hui.
+      founderUntil: body.founderSeat ? finRemiseFondateur(now) : null,
+      // LA REMISE EST FIGÉE AU CONTRAT SIGNÉ, et c'est tout l'enjeu.
+      //
+      // Un taux appliqué à l'offre courante remiserait aussi le service ajouté
+      // le onzième mois, et donnerait à un fondateur le moyen de relancer sa
+      // remise en changeant d'offre — ce que le CRM permet en un clic. Le
+      // montant, lui, ne bouge plus : le dû grossit, la remise non, et le
+      // supplément se paie plein tarif de lui-même.
+      founderDiscountCents: body.founderSeat
+        ? remiseFondateurContrat({
+            plan: body.plan,
+            onlineOrdering: body.onlineOrdering,
+            atelier: body.services,
+          })
+        : null,
       account: {
         status: 'trial',
         since: now,
@@ -178,11 +240,20 @@ export class ConversionService {
     body: LeadConvert,
     trialEndsAt: Date,
   ): Promise<number> {
-    const prix = proposalCents({
+    const publie = proposalCents({
       plan: body.plan,
       onlineOrdering: body.onlineOrdering,
       services: body.services,
     });
+    // Le devis a promis moitié prix ; les premières factures doivent porter le
+    // même montant. Un client qui reçoit une pièce contredisant le document
+    // qu'il vient de signer appelle — et il a raison.
+    const prix = body.founderSeat ? chiffrageFondateur(publie) : publie;
+    const mention = body.founderSeat ? ' — offre fondateur, moitié prix' : '';
+    // Les pièces ponctuelles se chiffrent une à une : la remise s'applique
+    // donc à chacune, et non au total — c'est ce qui la rend lisible sur la
+    // facture que le client reçoit.
+    const remise = (cents: number) => (body.founderSeat ? prixFondateurCents(cents) : cents);
     const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
     const moduleFacture = body.onlineOrdering && body.plan !== 'boost';
 
@@ -204,7 +275,8 @@ export class ConversionService {
               ? `Abonnement ${PLAN_LABELS[body.plan]}` +
                 (moduleFacture ? ' + commande en ligne' : '')
               : 'Abonnement — module commande en ligne') +
-            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : ''),
+            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +
+            mention,
         });
         poses += 1;
       }
@@ -225,7 +297,7 @@ export class ConversionService {
           draft: true,
           dueAt: trialEndsAt,
           amountCents: prix.servicesMonthlyCents,
-          label: `Atelier (mensuel, sans engagement) — ${libelles.join(' ; ')}`,
+          label: `Atelier (mensuel, sans engagement) — ${libelles.join(' ; ')}${mention}`,
         });
         poses += 1;
       }
@@ -238,8 +310,8 @@ export class ConversionService {
           period,
           draft: true,
           dueAt: trialEndsAt,
-          amountCents: MODULE_ORDERING_SETUP_CENTS,
-          label: 'Mise en service — module commande en ligne',
+          amountCents: remise(MODULE_ORDERING_SETUP_CENTS),
+          label: `Mise en service — module commande en ligne${mention}`,
         });
         poses += 1;
       }
@@ -254,8 +326,8 @@ export class ConversionService {
           period,
           draft: true,
           dueAt: trialEndsAt,
-          amountCents: ATELIER_ONCE_CENTS[cle],
-          label: ATELIER_ONCE_LABELS[cle],
+          amountCents: remise(ATELIER_ONCE_CENTS[cle]),
+          label: `${ATELIER_ONCE_LABELS[cle]}${mention}`,
         });
         poses += 1;
       }
@@ -283,7 +355,17 @@ export class ConversionService {
 
     const password = generatePassword();
     const passwordHash = await this.hasher.hash(password);
-    await this.users.updateOne({ _id: owner._id }, { $set: { passwordHash } });
+    await this.users.updateOne(
+      { _id: owner._id },
+      {
+        $set: {
+          passwordHash,
+          // Même écriture Mongo que le secret : aucun instant ne peut exposer
+          // le nouveau mot de passe avec l'ancienne génération encore valide.
+          sessionVersion: randomUUID(),
+        },
+      },
+    );
 
     await this.admin.recordOwnerReset(actor, tenantId, owner.email);
     return { ownerEmail: owner.email, password };

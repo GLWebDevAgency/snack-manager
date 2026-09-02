@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -177,7 +177,62 @@ export class SlotsService {
    * Créneaux proposables pour `date` (défaut : aujourd'hui, heure du restaurant).
    * Ne lève jamais quand le restaurant est fermé : `closedToday` + `nextOpenDate`.
    */
-  async compute(tenant: TenantWithId, date?: string): Promise<SlotsResponse> {
+/**
+   * REFUSE un créneau que le restaurant ne peut pas honorer.
+   *
+   * `compute` savait déjà tout — capacité restante, fermetures exceptionnelles,
+   * délai de préparation — et rien ne le relisait au moment d'écrire la
+   * commande. Le tunnel grisait les créneaux pleins, ce qui arrête un client
+   * honnête et personne d'autre.
+   *
+   * ── Ce que ce contrôle ferme, et ce qu'il ne ferme pas ──────────────────
+   *
+   * Il ferme le créneau devenu plein pendant que le client réglait, la
+   * fermeture exceptionnelle, l'heure passée, le délai de préparation non
+   * tenu, et l'appel direct qui poserait des commandes sur un créneau complet.
+   *
+   * Il NE ferme PAS la course de la dernière place : deux clients qui valident
+   * à la même seconde passent tous deux le contrôle avant que l'un des deux
+   * n'écrive. La fenêtre tombe de plusieurs minutes à quelques millisecondes,
+   * ce qui est un autre ordre de grandeur, mais la fermer tout à fait
+   * demanderait un compteur atomique par créneau — à faire le jour où un
+   * restaurant vend assez vite pour que cette seconde-là compte.
+   */
+  async exigerDisponible(tenant: TenantWithId, iso: string): Promise<void> {
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) {
+      throw new BadRequestException('Créneau de retrait invalide.');
+    }
+
+    const requested = parisYmd(at);
+    const furthest = addDays(parisYmd(new Date()), NEXT_OPEN_LOOKAHEAD_DAYS);
+    if (compareDays(requested, furthest) > 0) {
+      throw new ConflictException(
+        `Les commandes ouvrent au maximum ${NEXT_OPEN_LOOKAHEAD_DAYS} jours a l avance.`,
+      );
+    }
+
+    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(requested));
+    const creneau = slots.find((s) => s.iso === at.toISOString());
+
+    if (!creneau) {
+      // Un créneau absent de la journée : fermé, passé, ou hors des heures.
+      // Le motif de fermeture prime quand il existe — c'est ce que le client
+      // a besoin de lire, et il est déjà rédigé pour lui.
+      throw new ConflictException(
+        closedToday && closureReason
+          ? closureReason
+          : 'Ce créneau n’est plus disponible — choisissez-en un autre.',
+      );
+    }
+    if (creneau.full) {
+      throw new ConflictException(
+        `Le créneau de ${creneau.label} vient d’être complet — choisissez-en un autre.`,
+      );
+    }
+  }
+
+    async compute(tenant: TenantWithId, date?: string): Promise<SlotsResponse> {
     const now = new Date();
     const today = parisYmd(now);
     const requested = date ? parseDay(date) : today;
