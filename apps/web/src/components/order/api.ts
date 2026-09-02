@@ -33,6 +33,7 @@
 
 import type {
   CreatePublicOrder,
+  MediaVue,
   OrderStatus,
   OrderTicket,
   PaymentIntentResponse,
@@ -179,6 +180,18 @@ export type SiteTenant = {
 export type Site = {
   tenant: SiteTenant;
   categories: MenuCategory[];
+  /**
+   * La médiathèque du restaurant, telle que `/site` la rend déjà — et jusqu'ici
+   * jetée à la porte du navigateur.
+   *
+   * Elle n'est PAS lue pour les photos de plats : `photoUrl` est un dérivé
+   * résolu côté serveur, et le rester évite de faire voyager le catalogue
+   * jusqu'à chaque carte. Elle sert au seul champ que le masque ne peut pas
+   * porter lui-même : `brand.hero` ne stocke qu'une URL, sans point d'intérêt,
+   * et c'est en la retrouvant ici qu'on rend le cadrage voulu par le
+   * restaurateur (voir `hero.ts`).
+   */
+  medias: MediaVue[];
   slots: SlotsResponse | null;
   reviews: { avg: number; count: number; latest: PublicSiteReview[] };
   ordering: { paused: boolean; message: string | null };
@@ -454,6 +467,7 @@ export function orderingApi(transport: Transport = httpTransport) {
           hours: site.tenant.hours ?? [],
         },
         categories: toCategories(site.menu),
+        medias: site.medias ?? [],
         slots: site.slots ?? null,
         reviews: site.reviews ?? { avg: 0, count: 0, latest: [] },
         ordering: site.ordering ?? { paused: false, message: null },
@@ -503,6 +517,9 @@ export function orderingApi(transport: Transport = httpTransport) {
         hours,
       },
       categories: toCategories(menu),
+      // Cette forme n'a jamais exposé de médiathèque : aucun point d'intérêt à
+      // retrouver, la bande d'accueil se recadrera au centre.
+      medias: [],
       slots,
       // Les avis ne sont pas exposés par l’API historique : section masquée.
       reviews: { avg: 0, count: 0, latest: [] },
