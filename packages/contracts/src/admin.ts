@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Brand } from './marque';
+import type { Brand, RepliMarque } from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Administration client — le socle du back-office interne « /sm ».
@@ -573,11 +573,26 @@ export type AdminTenantAccount = {
   statusLabel: string;
   atelier: AdminTenantAtelier | null;
   /**
-   * Le masque d'identité effectif — dérivé (`marqueEffective`), jamais un
-   * champ stocké à part. Porté par la fiche client pour le futur éditeur CRM
+   * Le masque d'identité effectif — dérivé (`lireMarque`), jamais un champ
+   * stocké à part. Porté par la fiche client pour le futur éditeur CRM
    * (plan B) : la même vérité que la vitrine publique du restaurant.
    */
   brand: Brand;
+  /**
+   * POURQUOI CE MASQUE N'EST PAS CELUI DE LA BASE.
+   *
+   * `null` : c'en est bien un. `absent` : l'établissement n'a pas encore été
+   * repris (`backfill:brand`) — normal, et attendu tant que la reprise n'a pas
+   * tourné. `invalide` : la base porte un masque que le contrat REFUSE, et le
+   * restaurant s'affiche donc en Nuit sur toutes ses surfaces clientes, sur un
+   * 200.
+   *
+   * Ce dernier cas était INVISIBLE : le repli était muet, et la fiche client
+   * montrait un Nuit indiscernable d'un Nuit choisi. Le drapeau existe pour
+   * qu'un humain sache quels établissements sont concernés sans ouvrir les
+   * journaux du serveur.
+   */
+  brandRepli: RepliMarque;
 };
 
 /**

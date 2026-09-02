@@ -8,6 +8,7 @@ import {
 } from '@sm/contracts';
 import type { AdminLog, Device, Order, Screen, Tenant, User } from '@sm/db';
 import type { SupplyDb } from '@sm/supply';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { FakeCollection, type Row } from './admin.fakes';
 import type { BillingService } from './billing.service';
@@ -726,6 +727,7 @@ describe('Fiche de santé', () => {
       screens.asModel<Screen>(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
     return new HealthService(
       tenants.asModel<Tenant>(),

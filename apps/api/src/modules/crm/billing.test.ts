@@ -29,6 +29,7 @@ import {
   ATELIER_PRESENCE_CENTS,
 } from '@sm/contracts';
 import type { AdminLog, Counter, Invoice, Tenant, User } from '@sm/db';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { BillingService } from './billing.service';
 import { FakeCollection, type Row } from './admin.fakes';
@@ -262,6 +263,7 @@ describe('Facturation', () => {
       new FakeCollection('screen').asModel(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
 
     billing = new BillingService(

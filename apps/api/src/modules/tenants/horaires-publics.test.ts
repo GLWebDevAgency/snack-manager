@@ -7,8 +7,10 @@ import { horairesPublics } from './horaires-publics';
  * La vitrine, l'écran de salle et la fiche publique rendaient les mêmes
  * horaires de trois façons — deux copies du même `map`, et une troisième qui
  * ne convertissait rien. Ce qui est verrouillé ici, ce n'est pas le `map` :
- * c'est ce qu'une donnée MAL FORMÉE devient en sortie, puisque la route qui
- * l'écrit prend encore un corps nu.
+ * c'est ce qu'une donnée MAL FORMÉE devient en sortie. La route qui écrit ces
+ * horaires est validée depuis (`TenantHoursUpdateSchema`), mais une garde
+ * d'ENTRÉE ne réécrit pas le passé : ce que la route nue a laissé en base y
+ * dort toujours, et c'est cette lecture-là qui sort vers le public.
  */
 describe('les horaires rendus au public', () => {
   it('rend la journée telle quelle quand elle est complète', () => {

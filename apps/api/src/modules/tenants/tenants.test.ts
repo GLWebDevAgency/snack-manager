@@ -1,7 +1,12 @@
+import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { DIRECTIONS, ratioContraste, TenantSettingsUpdateSchema } from '@sm/contracts';
 import { TenantSchema } from '@sm/db';
 import { describe, expect, it } from 'vitest';
+import { ZodValidationPipe } from '../../common/zod.pipe';
+import { TenantsController } from './tenants.controller';
+import { testOriginesImages } from './tenants.fakes';
 import {
   derivesDuMasque,
   identiteAvecAccent,
@@ -371,7 +376,9 @@ function fakeTenants(doc: Record<string, unknown>) {
 const DOCUMENT = {
   slug: 'chez-lima',
   name: 'Chez Lima',
-  logoUrl: 'https://r2.test/chez-lima/logo.png',
+  // Sous le domaine public : c'est la forme que `logo.service.ts` fabrique, et
+  // la seule que la liste blanche d'origines accepte de greffer.
+  logoUrl: 'https://api.snackmanager.fr/public/tenants/chez-lima/logo?v=17',
   brandColor: '#c9a15a',
   brand: null as unknown,
   address: '12 rue du Marché',
@@ -389,7 +396,7 @@ const DOCUMENT = {
 };
 
 const service = (tenants: ReturnType<typeof fakeTenants>) =>
-  new TenantsService(tenants.model as never);
+  new TenantsService(tenants.model as never, testOriginesImages());
 
 /** Les champs que la projection doit avoir laissés dehors, nommés un par un. */
 const SECRETS = [
@@ -416,7 +423,7 @@ describe('les réponses des routes qui écrivent sur le tenant', () => {
   const routes: [string, (svc: TenantsService) => Promise<Record<string, unknown>>][] = [
     ['settings', (svc) => svc.updateSettings(TENANT, { dailyGoalCents: 30_000 })],
     ['identity', (svc) => svc.updateIdentity(TENANT, { name: 'Chez Lima' })],
-    ['hours', (svc) => svc.updateHours(TENANT, [{ day: 1, lunch: null, dinner: null }])],
+    ['hours', (svc) => svc.updateHours(TENANT, { hours: [{ day: 1, lunch: null, dinner: null }] })],
     ['marque', (svc) => svc.updateMarque(TENANT, DIRECTIONS.soleil)],
   ];
 
@@ -475,8 +482,51 @@ describe('les réponses des routes qui écrivent sur le tenant', () => {
       NotFoundException,
     );
     await expect(
-      svc.updateHours('665f0d0a1c2b3d4e5f6a7b00', []),
+      svc.updateHours('665f0d0a1c2b3d4e5f6a7b00', { hours: [] }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+/**
+ * LES HORAIRES SONT VALIDÉS À L'ENTRÉE — et le service n'écrit que ce qu'on
+ * lui transmet.
+ *
+ * La route prenait un corps NU. Le schéma vit au contrat
+ * (`TenantHoursUpdateSchema`, testé là-bas) ; ce qui se vérifie ICI, c'est le
+ * CÂBLAGE — la route porte bien le pipe — et le geste du service : enregistrer
+ * ses horaires ne doit pas effacer les congés d'été.
+ */
+describe('les horaires posés depuis le back-office restaurateur', () => {
+  it('la route exige le schéma du contrat, pas un corps nu', () => {
+    // Le pipe se lit sur les métadonnées de la route : sans lui, `hours` et
+    // `closures` repartaient vers le public sans avoir été regardés. Le
+    // préfixe « 3: » est celui du corps dans `RouteParamtypes` de Nest — même
+    // lecture que `loyalty.controller.test.ts`, qui épingle « 4: » pour la
+    // requête.
+    const args = (Reflect.getMetadata(ROUTE_ARGS_METADATA, TenantsController, 'updateHours') ??
+      {}) as Record<string, { pipes?: unknown[] }>;
+    const corps = Object.entries(args).find(([clef]) => clef.startsWith('3:'))?.[1];
+    expect(corps?.pipes?.[0], 'PATCH /tenants/me/hours doit valider son corps').toBeInstanceOf(
+      ZodValidationPipe,
+    );
+  });
+
+  it('n’écrit les fermetures que si le corps les porte', async () => {
+    const tenants = fakeTenants({ ...DOCUMENT, closures: [{ from: new Date(), reason: 'Congés' }] });
+    await service(tenants).updateHours(TENANT, { hours: [{ day: 1, lunch: null, dinner: null }] });
+    expect(Object.keys(tenants.sets[0] ?? {})).toEqual(['hours']);
+  });
+
+  it('remplace la liste des fermetures quand elle est transmise', async () => {
+    const tenants = fakeTenants(DOCUMENT);
+    await service(tenants).updateHours(TENANT, {
+      hours: [],
+      closures: [{ from: '2026-08-14', to: '2026-08-16', reason: 'Congés d’été' }],
+    });
+    expect(tenants.sets[0]).toEqual({
+      hours: [],
+      closures: [{ from: '2026-08-14', to: '2026-08-16', reason: 'Congés d’été' }],
+    });
   });
 });
 
@@ -513,7 +563,10 @@ describe('le masque posé depuis le back-office restaurateur', () => {
         return tenants.model.findById(id, projection);
       },
     };
-    await new TenantsService(espion as never).updateMarque(TENANT, DIRECTIONS.soleil);
+    await new TenantsService(espion as never, testOriginesImages()).updateMarque(
+      TENANT,
+      DIRECTIONS.soleil,
+    );
     expect(lectures[0]).toEqual({ logoUrl: 1 });
   });
 

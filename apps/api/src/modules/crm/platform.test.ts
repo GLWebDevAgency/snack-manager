@@ -20,6 +20,7 @@ import { AdminLogSchema, type AdminLog, type Device, type PlatformSettingsDoc, t
 import { AuthGuard } from '../../common/auth';
 import { SessionAccessService } from '../../common/session-access';
 import { zod } from '../../common/zod.pipe';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { FakeCollection } from './admin.fakes';
 import { PlatformController, PublicPlatformController } from './platform.controller';
@@ -85,6 +86,7 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
       new FakeCollection('screen').asModel<Screen>(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
     platform = new PlatformService(settings.asModel<PlatformSettingsDoc>(), admin);
     controller = new PlatformController(platform);

@@ -27,6 +27,7 @@ import {
 import { AdminLogSchema, type AdminLog, type Device, type Screen, type Tenant, type User } from '@sm/db';
 import { requirePairedDevice } from '../devices/device-access';
 import type { DevicesRepository } from '../devices/devices.repository';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { FakeCollection } from './admin.fakes';
 
@@ -78,6 +79,7 @@ describe('Administration client', () => {
       screens.asModel<Screen>(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
   });
 
@@ -112,6 +114,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logs.asModel<AdminLog>(),
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 
@@ -131,6 +134,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logsIndisponibles,
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 
@@ -367,7 +371,9 @@ describe('Administration client', () => {
     it('hérite le logo legacy à la première pose — persisté, pas seulement rendu', async () => {
       // Le tenant porte un logo d'AVANT le masque (`logoUrl`, champ racine) ;
       // `DIRECTIONS.marche` n'en porte aucun dans ses quatre emplacements.
-      tenants.rows[0]!.logoUrl = 'https://r2.example/classfood/logo.png';
+      // Sous le domaine public — la seule origine que la liste blanche
+      // accepte de greffer (`OriginesImages`).
+      tenants.rows[0]!.logoUrl = 'https://api.snackmanager.fr/public/tenants/classfood/logo?v=3';
 
       await admin.changeMarque(SM, CLASSFOOD, DIRECTIONS.marche);
 
@@ -375,7 +381,9 @@ describe('Administration client', () => {
       // c'est ce qui sera relu à la prochaine ouverture de la fiche.
       const persiste = tenants.rows.find((r) => r._id === CLASSFOOD)!;
       const brand = persiste.brand as { logo: { mark: { light: unknown; dark: unknown } } };
-      expect(brand.logo.mark.dark).toBe('https://r2.example/classfood/logo.png');
+      expect(brand.logo.mark.dark).toBe(
+        'https://api.snackmanager.fr/public/tenants/classfood/logo?v=3',
+      );
       expect(brand.logo.mark.light).toBeNull();
     });
 
@@ -410,13 +418,51 @@ describe('Administration client', () => {
       tenants.rows[0]!.brand = DIRECTIONS.nuit;
       const avecLogo = {
         ...DIRECTIONS.nuit,
-        logo: { ...DIRECTIONS.nuit.logo, mark: { light: null, dark: 'https://r2.example/m.png' } },
+        logo: {
+          ...DIRECTIONS.nuit.logo,
+          mark: { light: null, dark: 'https://api.snackmanager.fr/public/tenants/classfood/logo?v=9' },
+        },
       };
 
       await admin.changeMarque(SM, CLASSFOOD, avecLogo);
 
       const [ligne] = await admin.journal(CLASSFOOD, TOUT);
       expect(ligne?.meta?.logosModifies).toBe(true);
+    });
+
+    /**
+     * UN MASQUE CORROMPU SE VOIT SUR LA FICHE, PAS SEULEMENT DANS LES LOGS.
+     *
+     * Le repli était muet : un restaurant dont le masque ne passe plus le
+     * contrat s'affichait en Nuit sur toutes ses surfaces clientes, sur un
+     * 200, et la fiche client montrait un Nuit indiscernable d'un Nuit
+     * choisi. `brandRepli` dit d'où vient ce Nuit-là.
+     */
+    it('dit POURQUOI la fiche montre Nuit — choisi, pas encore repris, ou illisible', async () => {
+      // Pas encore repris : normal, et à ne pas confondre avec un incident.
+      expect((await admin.account(SM, CLASSFOOD)).brandRepli).toBe('absent');
+
+      tenants.rows[0]!.brand = DIRECTIONS.soleil;
+      expect((await admin.account(SM, CLASSFOOD)).brandRepli).toBeNull();
+
+      // `mode` hors de l'énumération : `BrandSchema` refuse, le repli tombe.
+      tenants.rows[0]!.brand = { ...DIRECTIONS.soleil, mode: 'crepuscule' };
+      const vue = await admin.account(SM, CLASSFOOD);
+      expect(vue.brandRepli).toBe('invalide');
+      expect(vue.brand.preset).toBe('nuit');
+    });
+
+    it('refuse en 400 une image venue d’ailleurs, et n’écrit rien', async () => {
+      // Les DEUX routes `PATCH …/marque` écrivent `logo.*` et `hero` dans le
+      // même document, servi aux mêmes clients : une garde posée du seul côté
+      // restaurateur ne garderait rien — l'équipe SM passerait par ici.
+      const espion = {
+        ...DIRECTIONS.nuit,
+        hero: 'https://cdn.mechant.fr/pixel.png',
+      };
+      await expect(admin.changeMarque(SM, CLASSFOOD, espion)).rejects.toThrow(BadRequestException);
+      expect(tenants.rows.find((r) => r._id === CLASSFOOD)!.brand ?? null).toBeNull();
+      expect(logs.size).toBe(0);
     });
 
     it('refuse en 400 un masque qui échoue AA, et n’écrit rien au journal', async () => {
@@ -542,6 +588,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logsIndisponibles,
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 

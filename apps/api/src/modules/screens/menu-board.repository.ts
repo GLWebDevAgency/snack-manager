@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Category, Product, Promotion, Tenant } from '@sm/db';
-import { brandColorDe, logoUrlDe, marqueEffective } from '@sm/contracts';
+import { brandColorDe, logoUrlDe } from '@sm/contracts';
+import { marqueObservee } from '../../common/marque-observee';
 import { horairesPublics } from '../tenants/horaires-publics';
 import type { RawDayHours } from './daypart';
 
@@ -66,7 +67,7 @@ export function identiteDuTableau(
   tenant: Partial<Tenant> & { _id: unknown },
 ): BoardIdentity {
   // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
-  const brand = marqueEffective(tenant);
+  const brand = marqueObservee(tenant);
   return {
     tenantId: String(tenant._id),
     slug: String(tenant.slug ?? ''),

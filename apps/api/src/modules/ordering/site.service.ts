@@ -4,7 +4,6 @@ import { Model, Types } from 'mongoose';
 import {
   brandColorDe,
   logoUrlDe,
-  marqueEffective,
   publicOrderingState,
   type PublicSiteCategory,
   type PublicSiteProduct,
@@ -13,6 +12,7 @@ import {
   type PublicSiteTenant,
 } from '@sm/contracts';
 import type { Category, Product, Review } from '@sm/db';
+import { marqueObservee } from '../../common/marque-observee';
 import { horairesPublics } from '../tenants/horaires-publics';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from './slots.service';
@@ -30,7 +30,10 @@ export function tenantPublicDe(tenant: {
   slug?: unknown; name?: unknown; brand?: unknown; brandColor?: unknown; logoUrl?: unknown;
   address?: unknown; phones?: unknown[]; hours?: Parameters<typeof horairesPublics>[0];
 }): PublicSiteTenant {
-  const brand = marqueEffective({
+  const brand = marqueObservee({
+    // Le slug voyage avec : c'est lui qui NOMME le restaurant dans
+    // l'avertissement quand son masque est illisible.
+    slug: tenant.slug,
     brand: tenant.brand,
     brandColor: typeof tenant.brandColor === 'string' ? tenant.brandColor : null,
     logoUrl: typeof tenant.logoUrl === 'string' ? tenant.logoUrl : null,

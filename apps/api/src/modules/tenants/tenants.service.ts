@@ -4,16 +4,18 @@ import { Model } from 'mongoose';
 import {
   brandColorDe,
   logoUrlDe,
-  marqueEffective,
   publicOrderingState,
   textePosableSur,
   type Brand,
+  type TenantHoursUpdate,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
+import { marqueObservee } from '../../common/marque-observee';
 import { horairesPublics } from './horaires-publics';
 import { masqueAEnregistrer } from './marque';
+import { OriginesImages } from './origines-images';
 
 /**
  * Ce que `GET /tenants/me` a le droit de rendre — et, depuis, ce que rendent
@@ -53,14 +55,14 @@ export const TENANT_ME_FIELDS = {
 export function derivesDuMasque(
   doc: unknown,
 ): Record<string, unknown> & { brand: Brand; logoUrl: string | null; brandColor: string } {
-  // Même ramener-à-l'objet-nu que `marqueEffective` : un sous-document
-  // HYDRATÉ porte des clés de prototype qu'un `...` recopierait.
+  // Même ramener-à-l'objet-nu que `lireMarque` : un sous-document HYDRATÉ
+  // porte des clés de prototype qu'un `...` recopierait.
   const brut = doc as { toObject?: () => unknown } | null | undefined;
   const nu = (brut && typeof brut.toObject === 'function' ? brut.toObject() : brut) as Record<
     string,
     unknown
   >;
-  const brand = marqueEffective(nu);
+  const brand = marqueObservee(nu);
   return { ...nu, brand, logoUrl: logoUrlDe(brand), brandColor: brandColorDe(brand) };
 }
 
@@ -148,7 +150,10 @@ export const REGLAGES_MODIFIABLES = [
 
 @Injectable()
 export class TenantsService {
-  constructor(@InjectModel('Tenant') private readonly tenants: Model<Tenant>) {}
+  constructor(
+    @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
+    private readonly origines: OriginesImages,
+  ) {}
 
   /** L'établissement de la session (`GET /tenants/me`) — cf. `vueMe`. */
   async byId(tenantId: string) {
@@ -229,7 +234,7 @@ export class TenantsService {
       message: t.settings?.pauseMessage ?? null,
     });
     // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
-    const brand = marqueEffective(t);
+    const brand = marqueObservee(t);
     return {
       slug: t.slug,
       name: t.name,
@@ -294,8 +299,10 @@ export class TenantsService {
    * Le tenant est LU avant d'être écrit : un masque dont les quatre
    * emplacements de logo sont vides hérite du logo legacy — sinon la première
    * pose du masque effacerait le logo affiché depuis toujours, avant même que
-   * le restaurateur en pose un nouveau. Le contraste est rejoué ENSUITE, sur
-   * le masque tel qu'il sera vraiment enregistré (`masqueAEnregistrer`).
+   * le restaurateur en pose un nouveau. L'origine des images est exigée AVANT
+   * (une adresse arbitraire serait servie à tous ses clients) et le contraste
+   * rejoué APRÈS, sur le masque tel qu'il sera vraiment enregistré — les trois
+   * gestes sont dans `masqueAEnregistrer`, partagée avec la route du CRM.
    *
    * La réponse passe par `vueMe` comme les trois autres écritures : projetée,
    * et ses champs plats dérivés du masque qu'on vient d'enregistrer.
@@ -307,23 +314,27 @@ export class TenantsService {
     // paierait sur la première fiche client volumineuse.
     const tenant = await this.tenants.findById(tenantId, { logoUrl: 1 });
     if (!tenant) throw new NotFoundException('Tenant introuvable');
-    return this.vueMe(tenantId, { brand: masqueAEnregistrer(brand, tenant.logoUrl) });
+    return this.vueMe(tenantId, {
+      brand: masqueAEnregistrer(brand, tenant.logoUrl, this.origines.hotes),
+    });
   }
 
   /**
-   * Horaires hebdomadaires (vue Horaires du back-office).
+   * Horaires hebdomadaires et fermetures exceptionnelles (vue Horaires).
    *
-   * ATTENTION — la route qui appelle cette méthode prend encore un corps NU
-   * (`tenants.controller.ts`, `@Body()` sans pipe) : `hours` et `closures`
-   * arrivent en `unknown[]`, et ces tableaux repartent vers le PUBLIC
-   * (`publicBySlug`, `tenantPublicDe`, `SlotsService`). `runValidators` sur
-   * l'écriture est le seul rempart en attendant le schéma Zod
-   * (`TenantHoursUpdateSchema`) qui doit rendre le refus en 400 plutôt qu'en
-   * erreur d'écriture.
+   * Le corps est VALIDÉ en amont par `TenantHoursUpdateSchema`
+   * (`@Body(zod(...))` sur la route) : heure murale, ordre des bornes, jour ISO
+   * sans doublon, motif de fermeture borné. Ce qui arrive ici a donc la forme
+   * que `SlotsService` et la vitrine savent lire — ces deux tableaux sont
+   * PUBLICS une fois écrits.
+   *
+   * `hours` est remplacé EN ENTIER (l'écran envoie les sept jours) ; `closures`
+   * n'est touché que s'il est transmis — enregistrer les horaires ne doit pas
+   * effacer les congés d'été.
    */
-  async updateHours(tenantId: string, hours: unknown[], closures?: unknown[]) {
-    const $set: Record<string, unknown> = { hours };
-    if (closures) $set.closures = closures;
+  async updateHours(tenantId: string, patch: TenantHoursUpdate) {
+    const $set: Record<string, unknown> = { hours: patch.hours };
+    if (patch.closures !== undefined) $set.closures = patch.closures;
     return this.vueMe(tenantId, $set);
   }
 }

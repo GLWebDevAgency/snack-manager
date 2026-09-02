@@ -3,9 +3,12 @@ import type { PublicSiteHours } from '@sm/contracts';
 /**
  * Un créneau tel qu'il DORT en base — donc sans rien garantir de sa forme.
  *
- * `PATCH /tenants/me/hours` prend encore un corps nu : la base contient ce que
- * le back-office a bien voulu y mettre, et une plage à moitié saisie
- * (`{ open: '11:00' }`, `close` perdu) y est parfaitement possible.
+ * `PATCH /tenants/me/hours` valide désormais ce qu'il écrit
+ * (`TenantHoursUpdateSchema`), mais une garde d'ENTRÉE ne réécrit pas le
+ * passé : la base porte encore ce que la route nue y a laissé, plus ce que
+ * l'admin-cli et les scripts de reprise y posent sans passer par zod. Une
+ * plage à moitié saisie (`{ open: '11:00' }`, `close` perdu) reste donc
+ * possible à la LECTURE, et c'est cette lecture-là qui sort vers le public.
  */
 type CreneauStocke = { open?: unknown; close?: unknown } | null | undefined;
 
@@ -33,10 +36,11 @@ const creneauPublic = (c: CreneauStocke): { open: string; close: string } | null
  *
  * Ce qui sort d'ici est un objet NU, conforme au contrat `PublicSiteHours` :
  * `day` ramené à un nombre, et un service ramené à `null` dès qu'il lui manque
- * une borne. Ce dernier point est une garde, pas une coquetterie : tant que la
- * route d'écriture n'est pas validée, une journée à moitié saisie doit sortir
- * FERMÉE plutôt que de partir en `close: undefined` dans le calcul des
- * créneaux de toute une page de commande.
+ * une borne. Ce dernier point est une garde, pas une coquetterie : la route
+ * d'écriture est validée depuis, mais ce qu'elle a écrit AVANT dort toujours
+ * en base, et une journée à moitié saisie doit sortir FERMÉE plutôt que de
+ * partir en `close: undefined` dans le calcul des créneaux de toute une page
+ * de commande.
  */
 export function horairesPublics(
   hours: readonly JourStocke[] | null | undefined,

@@ -2,12 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   brandColorDe,
   logoUrlDe,
-  marqueEffective,
   LoyaltyCustomerCardSchema,
   LoyaltyPublicProgramSchema,
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
 } from '@sm/contracts';
+import { marqueObservee } from '../../common/marque-observee';
 import { TenantsService } from '../tenants/tenants.service';
 import { LoyaltyAdminService } from './loyalty-admin.service';
 import { LoyaltyMemberService } from './loyalty-member.service';
@@ -44,7 +44,7 @@ export class LoyaltyPublicService {
   async catalog(slug: string): Promise<LoyaltyPublicProgram> {
     const { tenant, program, rewards } = await this.context(slug);
     // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
-    const brand = marqueEffective(tenant);
+    const brand = marqueObservee(tenant);
     return LoyaltyPublicProgramSchema.parse({
       restaurant: {
         slug: String(tenant.slug),
@@ -88,7 +88,7 @@ export class LoyaltyPublicService {
     // Calculé une fois : le champ plat en dérive, jamais l'inverse. Pas de
     // `logoUrl` ici : `LoyaltyCustomerCardSchema.restaurant` (loyalty.ts) ne le
     // porte pas — l'ajouter ferait échouer le `.strict()` de ce contrat.
-    const brand = marqueEffective(tenant);
+    const brand = marqueObservee(tenant);
     return LoyaltyCustomerCardSchema.parse({
       restaurant: {
         slug: String(tenant.slug),

@@ -94,3 +94,155 @@ export const TenantSettingsUpdateSchema = z
   })
   .partial();
 export type TenantSettingsUpdate = z.infer<typeof TenantSettingsUpdateSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// LES HORAIRES ET LES FERMETURES — validés, enfin
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * L'heure MURALE d'un service, « HH:MM » sur 24 h.
+ *
+ * Murale et non instant : « on ouvre à 11:30 » ne dépend ni du jour ni de
+ * l'heure d'été. C'est la forme que le calcul des créneaux lit
+ * (`SlotsService.parseHm`), celle que le champ `<input type="time">` du
+ * back-office produit, et celle que la base stocke (`HoursSlot`, deux chaînes).
+ *
+ * Le motif est EXPORTÉ pour la même raison que `HEX` et `IMAGE_URL` : la
+ * frontière zod garde la route, mais la base est aussi écrite par l'admin-cli
+ * et par les scripts de reprise, qui ne passent pas par elle.
+ */
+export const HEURE_MURALE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const HeureMuraleSchema = z
+  .string()
+  .trim()
+  .regex(HEURE_MURALE, 'Heure attendue au format HH:MM (24 h)');
+
+/**
+ * Un service, ou son absence.
+ *
+ * `null` est la fermeture — « pas de midi le lundi » —, pas une valeur
+ * manquante : c'est ainsi que l'écran l'envoie et que la base le stocke.
+ *
+ * `close` doit SUIVRE `open`, et ce n'est pas une coquetterie : le calcul des
+ * créneaux ignore purement et simplement une fenêtre dont la fermeture précède
+ * l'ouverture (`closeMin < openMin` → `continue`). Sans ce refus, un service
+ * saisi « 18:00 → 02:00 » était accepté en 200, stocké, affiché sur la vitrine,
+ * et ne proposait AUCUN créneau — sans que rien ne le dise. Le service qui
+ * passe minuit n'est donc pas supporté ; le refus l'annonce au lieu de le
+ * laisser découvrir un vendredi soir.
+ */
+const CreneauServiceSchema = z
+  .object({ open: HeureMuraleSchema, close: HeureMuraleSchema })
+  .strict()
+  .refine((c) => c.open < c.close, {
+    message:
+      'La fermeture doit suivre l’ouverture — un service qui passe minuit n’est pas encore supporté',
+    path: ['close'],
+  })
+  .nullable();
+
+/**
+ * Une journée de la semaine — jour ISO, midi, soir.
+ *
+ * `.default(null)` sur les deux services : `hours` est REMPLACÉ en entier à
+ * chaque enregistrement, donc un service absent du corps est un service fermé.
+ * Le dire explicitement évite qu'un `undefined` parte dans le `$set`.
+ */
+const JourHorairesSchema = z
+  .object({
+    /** ISO : 1 = lundi … 7 = dimanche, comme en base et comme `PublicSiteHours`. */
+    day: z.number().int().min(1).max(7),
+    lunch: CreneauServiceSchema.default(null),
+    dinner: CreneauServiceSchema.default(null),
+  })
+  .strict();
+
+/**
+ * Une borne de fermeture exceptionnelle.
+ *
+ * DEUX formes, et les deux sont nécessaires — l'écran renvoie la liste
+ * ENTIÈRE à chaque geste, donc celles qu'il vient de saisir ET celles qu'il
+ * vient de relire :
+ *  - `2026-08-14`, ce que pose le champ date du back-office ;
+ *  - `2026-08-14T00:00:00.000Z`, ce que rend l'API au tour suivant (la base
+ *    stocke des `Date`).
+ *
+ * Une date-heure SANS fuseau est refusée : elle désigne un instant différent
+ * selon la machine qui la lit, et aucun des deux producteurs n'en émet.
+ * `SlotsService` étend ensuite les bornes date-seule aux limites du jour
+ * parisien — c'est lui qui connaît le fuseau du restaurant, pas ce contrat.
+ */
+const BorneFermetureSchema = z.union([z.iso.date(), z.iso.datetime({ offset: true })]);
+
+/**
+ * Une fermeture exceptionnelle : du … au …, et pourquoi.
+ *
+ * `reason` est BORNÉE parce qu'elle est PUBLIQUE : c'est le `closureReason`
+ * que la page de commande affiche au client quand la journée est fermée. Sans
+ * borne, elle partait sans longueur sur la page de tous les clients.
+ *
+ * `to` et `reason` restent facultatifs : la base porte des fermetures d'avant
+ * l'écran actuel, à qui il manque l'un ou l'autre, et l'écran les renvoie
+ * telles quelles dès qu'on ajoute une ligne. Les refuser rendrait impossible
+ * l'ajout d'une fermeture à un restaurant qui en a déjà une ancienne.
+ */
+const FermetureSchema = z
+  .object({
+    from: BorneFermetureSchema,
+    to: BorneFermetureSchema.nullish(),
+    reason: z.string().trim().max(200).nullish(),
+  })
+  .strict()
+  .refine((f) => f.to == null || Date.parse(f.to) >= Date.parse(f.from), {
+    message: 'La date de fin doit suivre la date de début',
+    path: ['to'],
+  });
+
+/**
+ * LES HORAIRES ET LES FERMETURES — la garde de `PATCH /tenants/me/hours`.
+ *
+ * C'était la DERNIÈRE route d'écriture du contrôleur à prendre un corps NU :
+ * `@Body()` sans pipe, puis `$set: { hours, closures }` tel quel. Or ces deux
+ * tableaux ne restent pas dans le back-office — ils repartent vers le PUBLIC
+ * (la fiche `publicBySlug`, la vitrine, le tableau de menu, et surtout le
+ * calcul des créneaux de retrait). Un corps mal formé ne cassait pas un écran
+ * d'administration : il cassait la commande en ligne de tous les clients d'un
+ * restaurant.
+ *
+ * `runValidators` côté service empêchait bien l'écriture hors schéma, mais
+ * TARD et MAL : une erreur de cast Mongoose n'est pas un 400 lisible, et le
+ * schéma Mongoose ne dit rien de la forme d'un créneau — `{ open: '25:99' }`
+ * y passe, deux entrées pour le même jour aussi.
+ *
+ * `.strict()` à tous les niveaux : une clé inattendue dans un corps de requête
+ * est une tentative, pas une tolérance (ASVS V5.1.3, mass assignment).
+ */
+export const TenantHoursUpdateSchema = z
+  .object({
+    /**
+     * Sept jours au plus, un par jour. Le doublon est refusé parce qu'il est
+     * SILENCIEUX : `windowsFor` fait un `.find()` sur le jour ISO, donc la
+     * seconde entrée d'un même jour ne serait jamais lue — le gérant verrait
+     * ses horaires du mardi enregistrés et son restaurant fermé le mardi.
+     */
+    hours: z
+      .array(JourHorairesSchema)
+      .max(7)
+      .refine((jours) => new Set(jours.map((j) => j.day)).size === jours.length, {
+        message: 'Deux entrées pour le même jour — seule la première serait lue',
+      }),
+    /**
+     * Absente = inchangée : l'écran des horaires enregistre les sept jours
+     * sans toucher aux fermetures, et le service ne pose alors rien dans le
+     * `$set`.
+     *
+     * Le plafond n'est pas cosmétique : la liste n'est jamais purgée (une
+     * fermeture passée reste), elle est relue à CHAQUE calcul de créneau, et
+     * elle repart en entier à chaque ajout. Deux cents lignes couvrent des
+     * années de congés et de jours fériés ; au-delà, c'est un envoi anormal.
+     */
+    closures: z.array(FermetureSchema).max(200).optional(),
+  })
+  .strict();
+export type TenantHoursUpdate = z.infer<typeof TenantHoursUpdateSchema>;

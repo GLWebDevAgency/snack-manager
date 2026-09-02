@@ -98,12 +98,18 @@ export type TypePairKey = z.infer<typeof TypePairKeySchema>;
  * il interdirait `http://localhost:9000` que servent les environnements de
  * développement.
  *
- * CE QUE CE SCHÉMA NE FAIT PAS : il ne restreint pas l'ORIGINE. Un `owner`
- * peut donc pointer son logo vers un hôte tiers, qui verra alors l'IP et l'UA
- * de ses clients. L'allowlist d'origine ne peut pas vivre ici — le contrat ne
- * connaît ni l'URL publique de l'API ni l'hôte R2 configuré : elle appartient
- * au chemin d'ÉCRITURE de l'API (`modules/tenants/marque.ts`), qui reçoit
- * cette configuration. Tant qu'elle n'y est pas, la garde est syntaxique.
+ * CE QUE CE SCHÉMA NE FAIT PAS : il ne restreint pas l'ORIGINE, et ne le peut
+ * pas — le contrat ne connaît ni le domaine public du déploiement ni l'hôte du
+ * magasin d'images. La liste blanche d'origines vit donc là où la
+ * configuration existe, sur le chemin d'ÉCRITURE de l'API
+ * (`modules/tenants/origines-images.ts`, exigée par `masqueAEnregistrer` pour
+ * les DEUX routes `PATCH …/marque`). Elle n'y est plus une dette : ici, la
+ * garde est syntaxique ; là-bas, elle est territoriale.
+ *
+ * La LECTURE, elle, reste volontairement tolérante à l'origine : un masque
+ * déjà stocké ne doit pas devenir invalide au gré d'un changement de
+ * configuration — il basculerait tout un restaurant sur le repli Nuit, sur un
+ * 200. C'est l'écriture suivante qui refuse.
  *
  * `.default(null)` : une clé purement ABSENTE vaut `null` à la lecture, parce
  * que `.lean()` ne pose pas les défauts Mongoose (cf. `lireMarque`).

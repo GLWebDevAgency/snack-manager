@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import {
   BrandStrictSchema,
   type Brand,
+  TenantHoursUpdateSchema,
+  type TenantHoursUpdate,
   TenantIdentityUpdateSchema,
   type TenantIdentityUpdate,
   TenantSettingsUpdateSchema,
@@ -70,22 +72,21 @@ export class TenantsController {
   /**
    * Les horaires hebdomadaires et les fermetures exceptionnelles.
    *
-   * SEULE route d'écriture de ce contrôleur à prendre encore un corps NU : le
-   * type ci-dessous est une déclaration d'intention, pas une garde. Ces deux
-   * tableaux repartent vers le PUBLIC (`publicBySlug`, la page de commande, le
-   * calcul des créneaux), donc un corps mal formé casse la commande en ligne
-   * de tous les clients d'un restaurant. En attendant
-   * `TenantHoursUpdateSchema` (contrats) qui rendra le refus en 400, c'est
-   * `runValidators` côté service qui empêche l'écriture — un refus tardif vaut
-   * mieux qu'une page cassée, il ne vaut pas une validation d'entrée.
+   * Elle prenait un corps NU — `@Body()` sans pipe, deux `unknown[]` recopiés
+   * dans un `$set`. Ces tableaux repartent vers le PUBLIC (`publicBySlug`, la
+   * vitrine, le tableau de menu, le calcul des créneaux de retrait) : un corps
+   * mal formé ne cassait pas un écran d'administration, il cassait la commande
+   * en ligne de tous les clients d'un restaurant. `runValidators` côté service
+   * refusait bien l'écriture hors schéma, mais tard et sans rien dire de la
+   * FORME d'un créneau — `{ open: '25:99' }` y passait.
    */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/hours')
   updateHours(
     @TenantId() tenantId: string,
-    @Body() body: { hours: unknown[]; closures?: unknown[] },
+    @Body(zod(TenantHoursUpdateSchema)) body: TenantHoursUpdate,
   ) {
-    return this.tenants.updateHours(tenantId, body.hours, body.closures);
+    return this.tenants.updateHours(tenantId, body);
   }
 
   @Public()

@@ -3,7 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import type { DomainStatus } from '@sm/domain';
 import type { Tenant } from '@sm/db';
-import { brandColorDe, logoUrlDe, marqueEffective } from '@sm/contracts';
+import { brandColorDe, logoUrlDe } from '@sm/contracts';
+import { marqueObservee } from '../../common/marque-observee';
 
 /**
  * Un domaine tel qu'il est stocké — forme neutre, sans document Mongoose.
@@ -66,7 +67,7 @@ function toStored(raw: RawDomain): StoredDomain {
  */
 export function toIdentity(tenant: Tenant & { _id: unknown }): TenantIdentity {
   // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
-  const brand = marqueEffective(tenant);
+  const brand = marqueObservee(tenant);
   return {
     tenantId: String(tenant._id),
     slug: tenant.slug,
