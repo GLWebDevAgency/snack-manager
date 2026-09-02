@@ -14,6 +14,21 @@ import { z } from 'zod';
 
 export const HEX = /^#[0-9a-fA-F]{6}$/;
 
+/**
+ * La casse d'un hex est normalisée ICI, à la frontière, et nulle part ailleurs.
+ *
+ * `#E07A1F` posé par le sélecteur de l'admin et `#e07a1f` rendu par le
+ * résolveur doivent être LA MÊME valeur : sans cette normalisation au contrat,
+ * `GET /tenants/me` rendait l'une ou l'autre forme selon le chemin d'écriture
+ * (PATCH du masque, PATCH de l'identité, reprise), et les tests épinglaient les
+ * deux. Une seule normalisation, donc — et plus aucun `.toLowerCase()` en aval.
+ */
+export const HexSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(HEX, 'Couleur attendue au format #rrggbb');
+
 export const BRAND_MODES = ['light', 'dark'] as const;
 export const BrandModeSchema = z.enum(BRAND_MODES);
 export type BrandMode = z.infer<typeof BrandModeSchema>;
@@ -37,100 +52,151 @@ export const TYPE_PAIR_KEYS = [
 export const TypePairKeySchema = z.enum(TYPE_PAIR_KEYS);
 export type TypePairKey = z.infer<typeof TypePairKeySchema>;
 
-const Hex = z.string().trim().regex(HEX, 'Couleur attendue au format #rrggbb');
 /**
- * URL interne d'image (R2) — jamais un lien externe sur un ticket.
+ * URL d'image d'un masque — le logo et la photo d'en-tête.
  *
- * Le schéma était `.url()` seul, qui accepte TOUT protocole : `javascript:…`
- * posé dans `logo.mark.dark` finissait en `src` d'un `<img>` et en `src`
- * d'icône de manifeste. Le refus est ici, au contrat, parce que c'est le seul
- * point que traversent l'API, le web et la reprise.
+ * `z.url()` NU accepte tout protocole : un `javascript:…` posé dans
+ * `logo.mark.dark` finissait en `src` d'un `<img>` et en `src` d'icône de
+ * manifeste. `protocol: /^https?$/` est la garde native de zod 4 — elle exige
+ * aussi le `://`, donc `https:/r2/x.png` est refusé, et elle rend la valeur
+ * déjà trimée (pas de `.trim()` en plus). On ne passe pas par `z.httpUrl()` :
+ * il interdirait `http://localhost:9000` que servent les environnements de
+ * développement.
  *
- * L'allowlist d'ORIGINE (n'accepter que notre bucket R2) est délibérément
- * reportée au chemin de dépôt (`modules/tenants/logo.*`) : c'est lui qui
- * connaît l'origine réellement servie, et l'y mettre ici casserait les
- * environnements de développement qui servent leurs images ailleurs.
+ * CE QUE CE SCHÉMA NE FAIT PAS : il ne restreint pas l'ORIGINE. Un `owner`
+ * peut donc pointer son logo vers un hôte tiers, qui verra alors l'IP et l'UA
+ * de ses clients. L'allowlist d'origine ne peut pas vivre ici — le contrat ne
+ * connaît ni l'URL publique de l'API ni l'hôte R2 configuré : elle appartient
+ * au chemin d'ÉCRITURE de l'API (`modules/tenants/marque.ts`), qui reçoit
+ * cette configuration. Tant qu'elle n'y est pas, la garde est syntaxique.
+ *
+ * `.default(null)` : une clé purement ABSENTE vaut `null` à la lecture, parce
+ * que `.lean()` ne pose pas les défauts Mongoose (cf. `lireMarque`).
  */
-const ImageUrl = z
-  .string()
-  .trim()
-  .url()
-  .max(500)
-  .refine((u) => /^https?:\/\//i.test(u), 'URL http(s) attendue')
-  .nullable();
+const ImageUrl = z.url({ protocol: /^https?$/ }).max(500).nullable().default(null);
 
-export const BrandPaletteSchema = z
-  .object({
-    ground: Hex,
-    surface: Hex,
-    ink: Hex,
-    accent: Hex,
-    onAccent: Hex,
-  })
-  .strict();
+export const BrandPaletteSchema = z.object({
+  ground: HexSchema,
+  surface: HexSchema,
+  ink: HexSchema,
+  accent: HexSchema,
+  onAccent: HexSchema,
+});
 export type BrandPalette = z.infer<typeof BrandPaletteSchema>;
 
-export const BrandSchema = z
-  .object({
-    mode: BrandModeSchema,
-    palette: BrandPaletteSchema,
-    type: z.object({ pair: TypePairKeySchema }).strict(),
-    shape: BrandShapeSchema,
-    motion: BrandMotionSchema,
-    logo: z
-      .object({
-        mark: z.object({ light: ImageUrl, dark: ImageUrl }).strict(),
-        lockup: z.object({ light: ImageUrl, dark: ImageUrl }).strict(),
-      })
-      .strict(),
-    hero: ImageUrl,
-    preset: PresetKeySchema.nullable(),
-  })
-  .strict();
+const LogoPairSchema = z.object({ light: ImageUrl, dark: ImageUrl });
+const LogoSchema = z.object({ mark: LogoPairSchema, lockup: LogoPairSchema });
+const BrandTypeSchema = z.object({ pair: TypePairKeySchema });
+
+/**
+ * LE SCHÉMA DE LECTURE — objet nu, donc les clés inconnues sont IGNORÉES.
+ *
+ * C'est ce schéma que `lireMarque` applique au document de la base. Il était
+ * `.strict()` : le jour où une clé additive apparaissait en base (champ d'une
+ * version suivante, script d'exploitation, shell), `safeParse` échouait et le
+ * restaurant basculait en silence sur Nuit — sur un 200, sur TOUTES ses
+ * surfaces. Zod 4, la règle : strict à l'ENTRÉE (contre le mass assignment),
+ * strip à la LECTURE d'une persistance qu'on ne contrôle pas au bit près.
+ */
+export const BrandSchema = z.object({
+  mode: BrandModeSchema,
+  palette: BrandPaletteSchema,
+  type: BrandTypeSchema,
+  shape: BrandShapeSchema,
+  motion: BrandMotionSchema,
+  logo: LogoSchema,
+  hero: ImageUrl,
+  preset: PresetKeySchema.nullable().default(null),
+});
 export type Brand = z.infer<typeof BrandSchema>;
+
+/**
+ * LE SCHÉMA D'ÉCRITURE — strict à tous les niveaux.
+ *
+ * Le pendant du précédent, et le SEUL à poser dans un `@Body(zod(…))` : une
+ * clé qu'on n'attend pas dans un corps de requête est une tentative, pas une
+ * tolérance (ASVS V5.1.3, mass assignment).
+ */
+export const BrandStrictSchema = BrandSchema.extend({
+  palette: BrandPaletteSchema.strict(),
+  type: BrandTypeSchema.strict(),
+  logo: LogoSchema.extend({
+    mark: LogoPairSchema.strict(),
+    lockup: LogoPairSchema.strict(),
+  }).strict(),
+}).strict();
 
 // ─────────────────────────────────────────────────────────────
 // Les paires typographiques curatées — jamais une police libre
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Les familles que le web déclare via next/font. Énumérées et non `string` :
+ * une faute dans un slug n'était vue par TypeScript nulle part — seulement, et
+ * plus tard, par le test texte du web qui compare les déclarations à cette
+ * liste. Le test `marque.test.ts` épingle en retour que chaque slug déclaré
+ * ici sert vraiment dans `TYPE_PAIRS` : pas de famille chargée pour rien.
+ */
+export const FONT_SLUGS = [
+  'alegreya-sans',
+  'archivo',
+  'archivo-black',
+  'bricolage-grotesque',
+  'cormorant-garamond',
+  'familjen-grotesk',
+  'figtree',
+  'fraunces',
+  'instrument-sans',
+  'jetbrains-mono',
+  'lato',
+  'libre-baskerville',
+  'manrope',
+  'nunito',
+  'nunito-sans',
+  'outfit',
+  'playfair-display',
+  'source-sans-3',
+] as const;
+export type FontSlug = (typeof FONT_SLUGS)[number];
+
+/** La mono servie aux paires qui n'en déclarent pas — les prix restent alignés. */
+export const MONO_PAR_DEFAUT: FontSlug = 'jetbrains-mono';
+
+/**
  * `display`/`body`/`mono` sont des SLUGS de famille : le web déclare chaque
  * famille via next/font avec la variable `--police-<slug>`, et le résolveur
- * émet `var(--police-<slug>), <repli>`. Les familles sont listées dans
- * FONT_FAMILIES pour que le web n'en oublie aucune.
+ * émet `var(--police-<slug>), <repli>`.
  */
 export type TypePair = {
-  display: string;
-  body: string;
-  mono: string | null;
+  display: FontSlug;
+  body: FontSlug;
+  mono: FontSlug | null;
   /** Certaines paires posent les prix en mono — l'artisan, le brut. */
   prixMono: boolean;
-  /** Le libellé montré dans l'éditeur (plan B). */
-  label: string;
 };
 
 export const TYPE_PAIRS: Record<TypePairKey, TypePair> = {
-  brasserie: { display: 'fraunces', body: 'source-sans-3', mono: null, prixMono: false, label: 'Fraunces · Source Sans' },
-  neon: { display: 'bricolage-grotesque', body: 'archivo', mono: null, prixMono: false, label: 'Bricolage · Archivo' },
-  atelier: { display: 'alegreya-sans', body: 'alegreya-sans', mono: 'jetbrains-mono', prixMono: true, label: 'Alegreya Sans · prix en mono' },
-  marche: { display: 'outfit', body: 'manrope', mono: null, prixMono: false, label: 'Outfit · Manrope' },
-  nuit: { display: 'cormorant-garamond', body: 'figtree', mono: null, prixMono: false, label: 'Cormorant · Figtree' },
-  soleil: { display: 'nunito', body: 'nunito-sans', mono: null, prixMono: false, label: 'Nunito · Nunito Sans' },
-  editorial: { display: 'playfair-display', body: 'source-sans-3', mono: null, prixMono: false, label: 'Playfair · Source Sans' },
-  moderne: { display: 'familjen-grotesk', body: 'instrument-sans', mono: null, prixMono: false, label: 'Familjen · Instrument' },
-  classique: { display: 'libre-baskerville', body: 'lato', mono: null, prixMono: false, label: 'Baskerville · Lato' },
-  brut: { display: 'archivo-black', body: 'archivo', mono: 'jetbrains-mono', prixMono: true, label: 'Archivo Black · prix en mono' },
+  brasserie: { display: 'fraunces', body: 'source-sans-3', mono: null, prixMono: false },
+  neon: { display: 'bricolage-grotesque', body: 'archivo', mono: null, prixMono: false },
+  atelier: { display: 'alegreya-sans', body: 'alegreya-sans', mono: 'jetbrains-mono', prixMono: true },
+  marche: { display: 'outfit', body: 'manrope', mono: null, prixMono: false },
+  nuit: { display: 'cormorant-garamond', body: 'figtree', mono: null, prixMono: false },
+  soleil: { display: 'nunito', body: 'nunito-sans', mono: null, prixMono: false },
+  editorial: { display: 'playfair-display', body: 'source-sans-3', mono: null, prixMono: false },
+  moderne: { display: 'familjen-grotesk', body: 'instrument-sans', mono: null, prixMono: false },
+  classique: { display: 'libre-baskerville', body: 'lato', mono: null, prixMono: false },
+  brut: { display: 'archivo-black', body: 'archivo', mono: 'jetbrains-mono', prixMono: true },
 };
 
 /** Toutes les familles à déclarer côté web — dérivé, jamais tenu à la main. */
-export const FONT_FAMILIES: readonly string[] = Array.from(
+export const FONT_FAMILIES: readonly FontSlug[] = Array.from(
   new Set(
     Object.values(TYPE_PAIRS).flatMap((p) => [p.display, p.body, ...(p.mono ? [p.mono] : [])]),
   ),
 ).sort();
 
 /** Pile de repli par genre — ce que voit le client avant que la police arrive. */
-export const FONT_FALLBACKS: Record<string, string> = {
+export const FONT_FALLBACKS: Partial<Record<FontSlug, string>> = {
   fraunces: 'Georgia, "Times New Roman", serif',
   'cormorant-garamond': 'Georgia, "Times New Roman", serif',
   'playfair-display': 'Georgia, "Times New Roman", serif',
@@ -138,7 +204,7 @@ export const FONT_FALLBACKS: Record<string, string> = {
   'jetbrains-mono': 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
 };
 const SANS_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-export const fallbackDe = (slug: string): string => FONT_FALLBACKS[slug] ?? SANS_FALLBACK;
+export const fallbackDe = (slug: FontSlug): string => FONT_FALLBACKS[slug] ?? SANS_FALLBACK;
 
 // ─────────────────────────────────────────────────────────────
 // Six directions artistiques — des objets brand COMPLETS
@@ -149,45 +215,44 @@ const sansLogos = { mark: { light: null, dark: null }, lockup: { light: null, da
 export const DIRECTIONS: Record<PresetKey, Brand> = {
   brasserie: {
     mode: 'light',
-    palette: { ground: '#F5EFE3', surface: '#FFFDF8', ink: '#1F1A17', accent: '#7A2E2A', onAccent: '#FFF8F0' },
+    palette: { ground: '#f5efe3', surface: '#fffdf8', ink: '#1f1a17', accent: '#7a2e2a', onAccent: '#fff8f0' },
     type: { pair: 'brasserie' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'brasserie',
   },
   neon: {
     mode: 'dark',
-    palette: { ground: '#0E1016', surface: '#171A23', ink: '#F3F1EC', accent: '#D8F04A', onAccent: '#0E1016' },
+    palette: { ground: '#0e1016', surface: '#171a23', ink: '#f3f1ec', accent: '#d8f04a', onAccent: '#0e1016' },
     type: { pair: 'neon' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'neon',
   },
   atelier: {
     mode: 'light',
-    palette: { ground: '#F7F3EC', surface: '#FFFFFF', ink: '#2B2B2B', accent: '#A8482A', onAccent: '#FFF4EC' },
+    palette: { ground: '#f7f3ec', surface: '#ffffff', ink: '#2b2b2b', accent: '#a8482a', onAccent: '#fff4ec' },
     type: { pair: 'atelier' }, shape: 'doux', motion: 'pose', logo: sansLogos, hero: null, preset: 'atelier',
   },
   marche: {
     mode: 'light',
-    palette: { ground: '#FFFFFF', surface: '#F4F8F4', ink: '#1E4D2B', accent: '#23843F', onAccent: '#FFFFFF' },
+    palette: { ground: '#ffffff', surface: '#f4f8f4', ink: '#1e4d2b', accent: '#23843f', onAccent: '#ffffff' },
     type: { pair: 'marche' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'marche',
   },
   nuit: {
     mode: 'dark',
-    palette: { ground: '#14151A', surface: '#1D1F26', ink: '#F0EBE1', accent: '#C9A15A', onAccent: '#1C1612' },
+    palette: { ground: '#14151a', surface: '#1d1f26', ink: '#f0ebe1', accent: '#c9a15a', onAccent: '#1c1612' },
     type: { pair: 'nuit' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'nuit',
   },
   soleil: {
     mode: 'light',
-    palette: { ground: '#F6EBD9', surface: '#FFF9F0', ink: '#1B2A4A', accent: '#E07A1F', onAccent: '#1B1206' },
+    palette: { ground: '#f6ebd9', surface: '#fff9f0', ink: '#1b2a4a', accent: '#e07a1f', onAccent: '#1b1206' },
     type: { pair: 'soleil' }, shape: 'doux', motion: 'vif', logo: sansLogos, hero: null, preset: 'soleil',
   },
-};
-
-export const PRESET_LABELS: Record<PresetKey, string> = {
-  brasserie: 'Brasserie', neon: 'Néon', atelier: 'Atelier', marche: 'Marché', nuit: 'Nuit', soleil: 'Soleil',
 };
 
 // ─────────────────────────────────────────────────────────────
 // La couleur en pur — WCAG 2.x, sans dépendance
 // ─────────────────────────────────────────────────────────────
 
+/** Le plancher du TEXTE — WCAG 1.4.3. */
 export const WCAG_AA = 4.5;
+/** Le plancher des éléments NON textuels — anneau de focus, filet d'état (1.4.11, 2.4.13). */
+export const WCAG_AA_NON_TEXTE = 3;
 
 export type Rgb = readonly [number, number, number];
 
@@ -202,27 +267,41 @@ export function rgbVersHex([r, g, b]: Rgb): string {
   return `#${c(r)}${c(g)}${c(b)}`;
 }
 
-/** Luminance relative WCAG — canal linéarisé, pondéré. */
-export function luminance(hex: string): number {
-  const [r, g, b] = hexVersRgb(hex).map((v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+const canalLineaire = (v: number): number => {
+  const s = v / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+};
+
+/**
+ * Luminance relative WCAG depuis des canaux 0-255 — sans détour par l'hex.
+ * L'ajustement balaie jusqu'à 400 nuances : ré-encoder puis re-parser une
+ * chaîne à chaque pas était l'essentiel du coût.
+ */
+export function luminanceRgb([r, g, b]: Rgb): number {
+  return 0.2126 * canalLineaire(r) + 0.7152 * canalLineaire(g) + 0.0722 * canalLineaire(b);
 }
 
-export function ratioContraste(a: string, b: string): number {
-  const la = luminance(a);
-  const lb = luminance(b);
-  const [clair, sombre] = la >= lb ? [la, lb] : [lb, la];
-  return (clair + 0.05) / (sombre + 0.05);
+/** Luminance relative WCAG — canal linéarisé, pondéré. */
+export function luminance(hex: string): number {
+  return luminanceRgb(hexVersRgb(hex));
 }
+
+const ratioLuminances = (a: number, b: number): number =>
+  (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+export function ratioContraste(a: string, b: string): number {
+  return ratioLuminances(luminance(a), luminance(b));
+}
+
+const melangerRgb = ([ar, ag, ab]: Rgb, [br, bg, bb]: Rgb, t: number): Rgb => [
+  Math.round(ar + (br - ar) * t),
+  Math.round(ag + (bg - ag) * t),
+  Math.round(ab + (bb - ab) * t),
+];
 
 /** Interpolation linéaire en sRGB — suffisante pour des teintes et des filets. */
 export function melanger(a: string, b: string, t: number): string {
-  const [ar, ag, ab] = hexVersRgb(a);
-  const [br, bg, bb] = hexVersRgb(b);
-  return rgbVersHex([ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t]);
+  return rgbVersHex(melangerRgb(hexVersRgb(a), hexVersRgb(b), t));
 }
 
 export function alpha(hex: string, a: number): string {
@@ -230,58 +309,86 @@ export function alpha(hex: string, a: number): string {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+/** Le résultat d'un ajustement : la nuance retenue, et si elle tient la promesse. */
+export type NuanceAjustee = {
+  couleur: string;
+  /** `false` : aucune nuance, jusqu'aux deux pôles, n'atteint le seuil sur TOUS les fonds. */
+  ok: boolean;
+};
+
+const PAS_AJUSTEMENT = 200;
+const NOIR = '#000000';
+const BLANC = '#ffffff';
+const NOIR_RGB: Rgb = [0, 0, 0];
+const BLANC_RGB: Rgb = [255, 255, 255];
+
 /**
- * Rapproche `couleur` du noir OU du blanc, par pas de 1/200, jusqu'au seuil —
- * et retient celle des deux nuances qui l'atteint en le moins de pas (« la
- * nuance la plus proche qui passe »). Un simple test de luminance sur `fond`
- * (> 0.5 ⇒ noir) se trompe de pôle pour toute luminance entre ~0,18 et 0,5 —
- * le point de croisement réel du ratio WCAG — d'où l'essai des deux. Une
- * couleur déjà conforme revient telle quelle, en minuscules.
+ * Rapproche `couleur` du noir OU du blanc, par pas de 1/200, jusqu'à ce que le
+ * seuil soit tenu sur TOUS les `fonds` À LA FOIS — et retient celle des deux
+ * nuances qui y arrive en le moins de pas (« la nuance la plus proche qui
+ * passe »). Une couleur déjà conforme revient telle quelle, en minuscules.
+ *
+ * POURQUOI LES DEUX PÔLES. Un simple test de luminance sur le fond (> 0,5 ⇒
+ * noir) se trompe de pôle pour toute luminance entre ~0,18 et 0,5 — le point
+ * de croisement réel du ratio WCAG.
+ *
+ * POURQUOI TOUS LES FONDS ENSEMBLE. La version précédente ajustait sur un fond
+ * puis sur l'autre, en trois passes, en supposant les deux fonds « du même
+ * côté ». Rien dans le schéma ne l'impose : avec ground #e0e0e0 et surface
+ * #404040 elle rendait une teinte à 1,74:1 sans le moindre signal. Le prédicat
+ * « tous les fonds passent » est jugé d'un bloc, et `ok` dit la vérité quand
+ * la palette rend la promesse impossible.
+ *
+ * POURQUOI UN BALAYAGE ET PAS UNE DICHOTOMIE. Sur un seul fond, « le ratio
+ * atteint le seuil » est faux-puis-vrai le long d'un pôle, et une recherche
+ * binaire suffirait. Sur PLUSIEURS fonds ce n'est plus vrai : dès qu'un fond
+ * est plus clair et l'autre plus sombre que la couleur, la conjonction peut
+ * être vraie au milieu du chemin et fausse au pôle (#999999 entre #ffffff et
+ * #000000 en est l'exemple). Le premier pas qui passe est la réponse ; seul un
+ * balayage ne peut pas le manquer. Le coût reste bas parce qu'on reste en RGB
+ * et que les luminances des fonds sont calculées une seule fois.
  */
-export function ajusterJusquaAA(couleur: string, fond: string, seuil = WCAG_AA): string {
+export function ajusterJusquaAA(
+  couleur: string,
+  fonds: readonly string[],
+  seuil: number = WCAG_AA,
+): NuanceAjustee {
   const depart = couleur.toLowerCase();
-  if (ratioContraste(depart, fond) >= seuil) return depart;
-  const versPole = (pole: string): { candidat: string; pas: number } | null => {
-    for (let pas = 1; pas <= 200; pas += 1) {
-      const candidat = melanger(depart, pole, pas / 200);
-      if (ratioContraste(candidat, fond) >= seuil) return { candidat, pas };
+  const luminancesFonds = fonds.map(luminance);
+  const passe = (l: number): boolean =>
+    luminancesFonds.every((lf) => ratioLuminances(l, lf) >= seuil);
+
+  const rgb = hexVersRgb(depart);
+  if (passe(luminanceRgb(rgb))) return { couleur: depart, ok: true };
+
+  const versPole = (pole: Rgb): { couleur: string; pas: number } | null => {
+    for (let pas = 1; pas <= PAS_AJUSTEMENT; pas += 1) {
+      const candidat = melangerRgb(rgb, pole, pas / PAS_AJUSTEMENT);
+      if (passe(luminanceRgb(candidat))) return { couleur: rgbVersHex(candidat), pas };
     }
     return null;
   };
-  const versNoir = versPole('#000000');
-  const versBlanc = versPole('#ffffff');
-  if (versNoir && versBlanc) return versNoir.pas <= versBlanc.pas ? versNoir.candidat : versBlanc.candidat;
-  if (versNoir) return versNoir.candidat;
-  if (versBlanc) return versBlanc.candidat;
-  // Ne devrait pas arriver pour seuil ≤ ~4.58 (AAA) : par honnêteté, le pôle le plus contrasté gagne.
-  return textePosableSur(fond);
-}
-
-/**
- * AA sur les DEUX fonds d'une surface — le fond de page ET la carte.
- *
- * Une encre atténuée ne vit presque jamais sur `ground` : elle est dans une
- * carte, donc sur `surface`. L'ajuster sur `ground` seul la laissait à 4,18:1
- * sur la surface de Nuit et 4,25:1 sur celle de Marché — sous le seuil, là
- * où le client la lit vraiment.
- *
- * Deux passes suffisent et ne peuvent pas osciller : `ground` et `surface`
- * sont du même côté (deux clairs, ou deux sombres), donc la nuance qui
- * satisfait le PLUS exigeant des deux satisfait l'autre. La boucle bornée
- * n'est qu'une ceinture, jamais une convergence espérée.
- */
-export function ajusterJusquaAASurDeux(
-  couleur: string,
-  fondA: string,
-  fondB: string,
-  seuil = WCAG_AA,
-): string {
-  let c = ajusterJusquaAA(couleur, fondA, seuil);
-  for (let passe = 0; passe < 3; passe += 1) {
-    if (ratioContraste(c, fondA) >= seuil && ratioContraste(c, fondB) >= seuil) break;
-    c = ajusterJusquaAA(c, ratioContraste(c, fondA) < seuil ? fondA : fondB, seuil);
+  const versNoir = versPole(NOIR_RGB);
+  const versBlanc = versPole(BLANC_RGB);
+  if (versNoir && versBlanc) {
+    return { couleur: versNoir.pas <= versBlanc.pas ? versNoir.couleur : versBlanc.couleur, ok: true };
   }
-  return c;
+  if (versNoir) return { couleur: versNoir.couleur, ok: true };
+  if (versBlanc) return { couleur: versBlanc.couleur, ok: true };
+
+  /*
+   * Aucun pôle ne tient la promesse. Sur UN SEUL fond, c'est impossible en
+   * dessous de √21 ≈ 4,58 : quel que soit le fond, le noir ou le blanc atteint
+   * au moins ce ratio — ce repli ne servirait donc qu'à un seuil supérieur
+   * (AAA = 7). Sur PLUSIEURS fonds, il est atteignable dès 4,5 : c'est
+   * exactement le cas que `ok: false` doit rendre visible. Par honnêteté, le
+   * pôle le moins mauvais gagne — celui dont le PIRE ratio est le meilleur.
+   */
+  const pireRatio = (c: string): number => {
+    const l = luminance(c);
+    return luminancesFonds.reduce((min, lf) => Math.min(min, ratioLuminances(l, lf)), Infinity);
+  };
+  return { couleur: pireRatio(NOIR) >= pireRatio(BLANC) ? NOIR : BLANC, ok: false };
 }
 
 /**
@@ -294,65 +401,240 @@ export function ajusterJusquaAASurDeux(
  * réécrit l'accent d'un masque déjà posé).
  */
 export function textePosableSur(fond: string): '#000000' | '#ffffff' {
-  return ratioContraste('#000000', fond) >= ratioContraste('#ffffff', fond) ? '#000000' : '#ffffff';
+  return ratioContraste(NOIR, fond) >= ratioContraste(BLANC, fond) ? NOIR : BLANC;
 }
 
 // ─────────────────────────────────────────────────────────────
 // Le résolveur — tout ce qui n'est pas stocké se calcule ici
 // ─────────────────────────────────────────────────────────────
 
+/** Sémantiques fixes par mode — un « payé » est vert chez tout le monde. */
+const SEMANTIQUES: Record<BrandMode, { green: string; red: string; amber: string }> = {
+  dark: { green: '#3fae4a', red: '#c94b3f', amber: '#e0973f' },
+  light: { green: '#2f8a3b', red: '#b7382e', amber: '#b8731f' },
+};
+
+/*
+ * L'ÉCHELLE D'ÉLÉVATION, en parts d'encre mêlées au socle.
+ *
+ * `--cf-surface-2` valait « surface + 4 % d'encre », dérivé sans regarder
+ * `ground`. Or sur Brasserie, Atelier et Soleil le fond de page est PLUS
+ * sombre que la carte : la tuile atterrissait à la valeur du fond (1,03:1 sur
+ * Atelier), et les chips de catégories, la barre de recherche et les pastilles
+ * posées sur `ground` s'effaçaient. La DA §1 l'interdit : deux surfaces
+ * adjacentes ne portent jamais la même valeur.
+ */
+const ELEVATION_ELEMENT = 0.06;
+const ELEVATION_SURVOL = 0.12;
+/** Les voiles des dégradés — le haut d'une carte est plus encré que son aplat. */
+const VOILE_CARTE = 0.05;
+const VOILE_ELEMENT = 0.045;
+const VOILE_SURVOL = 0.07;
+/** Le lavis d'accent (`--cf-accent-wash`, spec §4.1) et les lavis sémantiques (`bg-ok/10`). */
+const LAVIS_ACCENT = 0.12;
+const LAVIS_SEMANTIQUE = 0.1;
+
+/**
+ * Le socle de l'élévation : celle de {ground, surface} dont la valeur est la
+ * plus proche de l'encre. En clair c'est la plus sombre, en sombre la plus
+ * claire — dans les deux cas, s'en éloigner ENCORE vers l'encre s'éloigne
+ * aussi de l'autre. On le déduit des luminances plutôt que de `mode` : c'est
+ * la géométrie de la palette qui décide, pas une étiquette.
+ */
+function socleElevation(p: BrandPalette): string {
+  const encre = luminance(p.ink);
+  const dGround = Math.abs(luminance(p.ground) - encre);
+  const dSurface = Math.abs(luminance(p.surface) - encre);
+  return dGround <= dSurface ? p.ground : p.surface;
+}
+
+/** Parmi plusieurs fonds, celui sur lequel `couleur` est le moins lisible. */
+function fondLePlusExigeant(couleur: string, fonds: readonly [string, ...string[]]): string {
+  return fonds.reduce((pire, f) =>
+    ratioContraste(couleur, f) < ratioContraste(couleur, pire) ? f : pire,
+  );
+}
+
+/**
+ * Tout ce que `contraste()` et `resoudreMarque()` partagent — calculé UNE
+ * fois, ici, pour qu'un verdict porte sur la valeur RÉELLEMENT émise.
+ */
+function derives(brand: Brand) {
+  const p = brand.palette;
+  const socle = socleElevation(p);
+  const elever = (t: number): string => melanger(socle, p.ink, t);
+  const surface2 = elever(ELEVATION_ELEMENT);
+  const survol = elever(ELEVATION_SURVOL);
+
+  /*
+   * TOUS les fonds sur lesquels une encre atténuée se pose vraiment.
+   *
+   * `--cf-mut` n'était jugé que sur `ground` et `surface`. Il est pourtant
+   * peint sur `bg-surface2` et sur le HAUT des dégradés `--cf-elev-*`, où il
+   * tombait entre 3,0 et 4,1:1 selon la direction. WCAG 1.4.3 exige 4,5:1 sur
+   * chaque fond où le texte se pose — alors on les liste tous, et le plus
+   * exigeant gagne.
+   */
+  const fondsTexte: readonly [string, ...string[]] = [
+    p.ground,
+    p.surface,
+    surface2,
+    melanger(p.surface, p.ink, VOILE_CARTE),
+    melanger(surface2, p.ink, VOILE_ELEMENT),
+    melanger(survol, p.ink, VOILE_SURVOL),
+  ];
+
+  /*
+   * `accentInk` porte les titres et les prix, mais AUSSI le texte des
+   * pastilles posées sur le lavis d'accent (`bg-accentwash text-accentink`) :
+   * ce lavis est le fond le plus sombre où il atterrit en mode clair. Le juger
+   * sur `ground` seul, comme le faisait la lettre de la spec §4.1, le laissait
+   * sous le seuil là où le client le lit.
+   */
+  const lavisAccent: readonly [string, string] = [
+    melanger(p.ground, p.accent, LAVIS_ACCENT),
+    melanger(p.surface, p.accent, LAVIS_ACCENT),
+  ];
+
+  const sem = SEMANTIQUES[brand.mode];
+  /* Une teinte sémantique se lit sur son PROPRE lavis (`bg-ok/10 text-okt`). */
+  const teinte = (couleur: string): NuanceAjustee =>
+    ajusterJusquaAA(couleur, [
+      p.ground,
+      p.surface,
+      melanger(p.ground, couleur, LAVIS_SEMANTIQUE),
+      melanger(p.surface, couleur, LAVIS_SEMANTIQUE),
+    ]);
+
+  return {
+    surface2,
+    survol,
+    fondsTexte,
+    lavisAccent,
+    sem,
+    accentInk: ajusterJusquaAA(p.accent, [p.ground, p.surface, ...lavisAccent]),
+    inkMut: ajusterJusquaAA(melanger(p.ink, p.ground, 0.5), fondsTexte),
+    /* L'anneau de focus est un ÉLÉMENT, pas du texte : 3:1 suffit (1.4.11) — mais opaque. */
+    focus: ajusterJusquaAA(p.accent, [p.ground, p.surface], WCAG_AA_NON_TEXTE),
+    green: teinte(sem.green),
+    red: teinte(sem.red),
+    amber: teinte(sem.amber),
+  };
+}
+
+/**
+ * Les couples jugés, dans l'ordre où ils sortent — une union littérale et non
+ * `string` : les verdicts partent en 400 par l'API, et un consommateur doit
+ * pouvoir matcher un couple sans deviner son orthographe.
+ */
+export const COUPLES_CONTRASTE = [
+  'ink/ground',
+  'ink/surface',
+  'onAccent/accent',
+  'accentInk/ground',
+  'accentInk/surface',
+  'accentInk/accentWash',
+  'inkMut/ground',
+  'inkMut/surface',
+  'inkMut/elevation',
+  'greenInk/greenWash',
+  'redInk/redWash',
+  'amberInk/amberWash',
+  'focus/ground',
+  'focus/surface',
+] as const;
+export type CoupleContraste = (typeof COUPLES_CONTRASTE)[number];
+
 export type Verdict = {
-  couple: string;
+  couple: CoupleContraste;
+  /**
+   * Un couple DÉRIVÉ n'est pas actionnable : le restaurateur ne pose ni
+   * `inkMut`, ni `accentInk`, ni l'anneau de focus — c'est le résolveur qui
+   * les calcule. Un tel verdict n'échoue que si la palette rend la dérivation
+   * impossible, et il ne porte alors aucune `proposition`.
+   */
+  derive: boolean;
+  /** 4,5 pour du texte (1.4.3), 3 pour un élément (1.4.11). */
+  seuil: number;
   avant: string;
   arriere: string;
   ratio: number;
   ok: boolean;
-  /** La nuance la plus proche qui passe — `null` sinon (ça passe déjà, ou rien ne passe). */
+  /** La nuance la plus proche qui passe — `null` sinon (ça passe déjà, ou rien ne passe, ou c'est dérivé). */
   proposition: string | null;
 };
 
-/** Les dérivés dont dépend le contraste — calculés une fois, partagés. */
-function derives(p: BrandPalette) {
-  return {
-    // `accentInk` reste jugé sur `ground` : c'est la lettre de la spec §4.1,
-    // et il porte surtout des titres et des prix posés sur le fond de page.
-    accentInk: ajusterJusquaAA(p.accent, p.ground),
-    // `inkMut` habite les cartes autant que la page — les deux fonds, donc.
-    inkMut: ajusterJusquaAASurDeux(melanger(p.ink, p.ground, 0.5), p.ground, p.surface),
-  };
-}
-
 export function contraste(brand: Brand): { ok: boolean; verdicts: Verdict[] } {
   const p = brand.palette;
-  const d = derives(p);
-  const couples: [string, string, string][] = [
-    ['ink/ground', p.ink, p.ground],
-    ['ink/surface', p.ink, p.surface],
-    ['onAccent/accent', p.onAccent, p.accent],
-    ['accentInk/ground', d.accentInk, p.ground],
-    ['inkMut/ground', d.inkMut, p.ground],
-    // Ajouté EN FIN de liste : l'ordre est lu par l'éditeur et par les tests.
-    ['inkMut/surface', d.inkMut, p.surface],
+  const d = derives(brand);
+  const lavisSem = (couleur: string): string =>
+    fondLePlusExigeant(couleur, [
+      melanger(p.ground, couleur, LAVIS_SEMANTIQUE),
+      melanger(p.surface, couleur, LAVIS_SEMANTIQUE),
+    ]);
+
+  const couples: ReadonlyArray<{
+    couple: CoupleContraste;
+    avant: string;
+    arriere: string;
+    seuil: number;
+    derive: boolean;
+  }> = [
+    { couple: 'ink/ground', avant: p.ink, arriere: p.ground, seuil: WCAG_AA, derive: false },
+    { couple: 'ink/surface', avant: p.ink, arriere: p.surface, seuil: WCAG_AA, derive: false },
+    { couple: 'onAccent/accent', avant: p.onAccent, arriere: p.accent, seuil: WCAG_AA, derive: false },
+    { couple: 'accentInk/ground', avant: d.accentInk.couleur, arriere: p.ground, seuil: WCAG_AA, derive: true },
+    { couple: 'accentInk/surface', avant: d.accentInk.couleur, arriere: p.surface, seuil: WCAG_AA, derive: true },
+    {
+      couple: 'accentInk/accentWash',
+      avant: d.accentInk.couleur,
+      arriere: fondLePlusExigeant(d.accentInk.couleur, d.lavisAccent),
+      seuil: WCAG_AA,
+      derive: true,
+    },
+    { couple: 'inkMut/ground', avant: d.inkMut.couleur, arriere: p.ground, seuil: WCAG_AA, derive: true },
+    { couple: 'inkMut/surface', avant: d.inkMut.couleur, arriere: p.surface, seuil: WCAG_AA, derive: true },
+    {
+      // Le pire des fonds composés : surface-2 et le haut des dégradés d'élévation.
+      couple: 'inkMut/elevation',
+      avant: d.inkMut.couleur,
+      arriere: fondLePlusExigeant(d.inkMut.couleur, d.fondsTexte),
+      seuil: WCAG_AA,
+      derive: true,
+    },
+    { couple: 'greenInk/greenWash', avant: d.green.couleur, arriere: lavisSem(d.sem.green), seuil: WCAG_AA, derive: true },
+    { couple: 'redInk/redWash', avant: d.red.couleur, arriere: lavisSem(d.sem.red), seuil: WCAG_AA, derive: true },
+    { couple: 'amberInk/amberWash', avant: d.amber.couleur, arriere: lavisSem(d.sem.amber), seuil: WCAG_AA, derive: true },
+    { couple: 'focus/ground', avant: d.focus.couleur, arriere: p.ground, seuil: WCAG_AA_NON_TEXTE, derive: true },
+    { couple: 'focus/surface', avant: d.focus.couleur, arriere: p.surface, seuil: WCAG_AA_NON_TEXTE, derive: true },
   ];
-  const verdicts = couples.map(([couple, avant, arriere]): Verdict => {
+
+  const verdicts = couples.map(({ couple, avant, arriere, seuil, derive }): Verdict => {
     // Le seuil compare la valeur BRUTE — l'arrondi n'habille que le champ rapporté.
     const brut = ratioContraste(avant, arriere);
     const ratio = Math.round(brut * 100) / 100;
-    const ok = brut >= WCAG_AA;
-    if (ok) return { couple, avant, arriere, ratio, ok, proposition: null };
-    const candidat = ajusterJusquaAA(avant, arriere);
-    // Garde : `proposition` n'est jamais rendue si elle ne passe pas vraiment.
-    const proposition = ratioContraste(candidat, arriere) >= WCAG_AA ? candidat : null;
-    return { couple, avant, arriere, ratio, ok, proposition };
+    const ok = brut >= seuil;
+    if (ok || derive) return { couple, derive, seuil, avant, arriere, ratio, ok, proposition: null };
+    const candidat = ajusterJusquaAA(avant, [arriere], seuil);
+    return {
+      couple, derive, seuil, avant, arriere, ratio, ok,
+      proposition: candidat.ok ? candidat.couleur : null,
+    };
   });
   return { ok: verdicts.every((v) => v.ok), verdicts };
 }
 
-/** Rayons par forme — sm / md / lg ; la pilule ne change jamais. */
-const RAYONS: Record<BrandShape, [number, number, number]> = {
-  net: [2, 4, 6],
-  doux: [6, 10, 14],
-  rond: [12, 18, 24],
+/**
+ * Rayons par forme — cinq crans explicites, plus la pilule qui ne change
+ * jamais. La spec §4.1 n'en nomme que trois (Sm/Md/Lg = `xs`/`md`/`lg` ici) ;
+ * `sm` et `xl` étaient jusqu'ici l'un un doublon de `md`, l'autre un `lg + 4`
+ * inventé au moment de l'émission. Une échelle se pose, elle ne s'improvise
+ * pas à l'usage.
+ */
+const RAYONS: Record<BrandShape, { xs: number; sm: number; md: number; lg: number; xl: number }> = {
+  net: { xs: 2, sm: 3, md: 4, lg: 6, xl: 8 },
+  doux: { xs: 6, sm: 8, md: 10, lg: 14, xl: 18 },
+  rond: { xs: 12, sm: 15, md: 18, lg: 24, xl: 28 },
 };
 
 /** Durées (ms) base / entrée / fête, et courbe. */
@@ -361,32 +643,21 @@ const MOUVEMENTS: Record<BrandMotion, { base: number; entree: number; fete: numb
   vif: { base: 140, entree: 200, fete: 600, ease: 'cubic-bezier(0.3, 1.4, 0.4, 1)' },
 };
 
-/** Sémantiques fixes par mode — un « payé » est vert chez tout le monde. */
-const SEMANTIQUES: Record<BrandMode, { green: string; red: string; amber: string }> = {
-  dark: { green: '#3fae4a', red: '#c94b3f', amber: '#e0973f' },
-  light: { green: '#2f8a3b', red: '#b7382e', amber: '#b8731f' },
-};
-
 export type JetonsMasque = {
   vars: Record<string, string>;
   colorScheme: BrandMode;
   prixMono: boolean;
 };
 
-const police = (slug: string): string => `var(--police-${slug}), ${fallbackDe(slug)}`;
+const police = (slug: FontSlug): string => `var(--police-${slug}), ${fallbackDe(slug)}`;
 
 export function resoudreMarque(brand: Brand): JetonsMasque {
-  const p = {
-    ground: brand.palette.ground.toLowerCase(),
-    surface: brand.palette.surface.toLowerCase(),
-    ink: brand.palette.ink.toLowerCase(),
-    accent: brand.palette.accent.toLowerCase(),
-    onAccent: brand.palette.onAccent.toLowerCase(),
-  };
+  // La palette arrive déjà en minuscules : `HexSchema` normalise à la
+  // frontière, et `DIRECTIONS` comme `marqueDeRepli` sont écrits ainsi.
+  const p = brand.palette;
   const sombre = brand.mode === 'dark';
-  const d = derives(p);
-  const sem = SEMANTIQUES[brand.mode];
-  const [rSm, rMd, rLg] = RAYONS[brand.shape];
+  const d = derives(brand);
+  const r = RAYONS[brand.shape];
   const m = MOUVEMENTS[brand.motion];
   const pair = TYPE_PAIRS[brand.type.pair];
   const ombre = sombre ? 'rgba(0, 0, 0, 0.38)' : alpha(p.ink, 0.14);
@@ -395,47 +666,49 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
     // Neutres
     '--cf-bg': p.ground,
     '--cf-surface': p.surface,
-    '--cf-surface-2': melanger(p.surface, p.ink, 0.04),
+    '--cf-surface-2': d.surface2,
     '--cf-text': p.ink,
-    '--cf-ink-soft': melanger(p.ink, p.ground, 0.25),
-    '--cf-mut': d.inkMut,
+    '--cf-mut': d.inkMut.couleur,
     '--cf-line': alpha(p.ink, 0.12),
     '--cf-line-2': alpha(p.ink, 0.06),
     '--cf-surface-3': alpha(p.ink, 0.03),
     '--cf-surface-6': alpha(p.ink, 0.06),
-    '--cf-white-50': alpha(p.ink, 0.5),
     '--cf-fill': sombre ? melanger(p.surface, p.ink, 0.06) : p.ink,
     '--cf-on-fill': sombre ? p.ink : p.ground,
-    '--cf-btn-dark': sombre ? melanger(p.surface, p.ink, 0.1) : p.ink,
+    // Le bouton « encre » du produit : il vaut l'encre en clair, une surface
+    // relevée en sombre. Il s'appelait `--cf-btn-dark` — un nom qui mentait
+    // sur une Brasserie crème, où il n'a rien de sombre.
+    '--cf-btn': sombre ? melanger(p.surface, p.ink, 0.1) : p.ink,
     // Accent
     '--cf-accent': p.accent,
-    '--cf-accent-hover': melanger(p.accent, sombre ? '#ffffff' : '#000000', 0.08),
+    '--cf-accent-hover': melanger(p.accent, sombre ? BLANC : NOIR, 0.08),
     '--cf-on-accent': p.onAccent,
-    '--cf-accent-ink': d.accentInk,
-    '--cf-accent-wash': alpha(p.accent, 0.12),
-    '--cf-focus': alpha(p.accent, 0.6),
+    '--cf-accent-ink': d.accentInk.couleur,
+    '--cf-accent-wash': alpha(p.accent, LAVIS_ACCENT),
+    // L'anneau de focus : OPAQUE et garanti 3:1 sur le fond comme sur la carte.
+    // À 60 % d'alpha il tombait à 1,75:1 sur Soleil — un anneau qu'on ne voit
+    // pas n'est pas un focus visible (1.4.11, 2.4.13).
+    '--cf-focus': d.focus.couleur,
     // Sémantiques — fixes par mode, jamais la marque
-    '--cf-green': sem.green,
-    '--cf-red': sem.red,
-    '--cf-amber': sem.amber,
+    '--cf-green': d.sem.green,
+    '--cf-red': d.sem.red,
+    '--cf-amber': d.sem.amber,
     // Les teintes TEXTE des sémantiques vivent dans des pastilles posées sur
-    // une carte : elles se jugent sur `surface` autant que sur `ground`.
-    '--cf-green-t': ajusterJusquaAASurDeux(sem.green, p.ground, p.surface),
-    '--cf-red-t': ajusterJusquaAASurDeux(sem.red, p.ground, p.surface),
-    '--cf-amber-t': ajusterJusquaAASurDeux(sem.amber, p.ground, p.surface),
-    '--cf-on-green': textePosableSur(sem.green),
-    '--cf-on-red': textePosableSur(sem.red),
-    '--cf-on-amber': textePosableSur(sem.amber),
-    // Surfaces composées — le voile suit l'encre, l'aplat suit la surface
-    '--cf-card-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.05)} 0%, ${alpha(p.ink, 0)} 62%), linear-gradient(0deg, ${p.surface}, ${p.surface})`,
-    '--cf-elev-gradient': `linear-gradient(180deg, ${alpha(p.ink, 0.045)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${melanger(p.surface, p.ink, 0.04)}, ${melanger(p.surface, p.ink, 0.04)})`,
-    '--cf-elev-hover': `linear-gradient(180deg, ${alpha(p.ink, 0.07)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${melanger(p.surface, p.ink, 0.08)}, ${melanger(p.surface, p.ink, 0.08)})`,
+    // leur propre lavis, sur une carte ou sur la page : les trois fonds.
+    '--cf-green-t': d.green.couleur,
+    '--cf-red-t': d.red.couleur,
+    '--cf-amber-t': d.amber.couleur,
+    '--cf-on-green': textePosableSur(d.sem.green),
+    '--cf-on-red': textePosableSur(d.sem.red),
+    '--cf-on-amber': textePosableSur(d.sem.amber),
+    // Surfaces composées — le voile suit l'encre, l'aplat suit l'élévation
+    '--cf-card-gradient': `linear-gradient(180deg, ${alpha(p.ink, VOILE_CARTE)} 0%, ${alpha(p.ink, 0)} 62%), linear-gradient(0deg, ${p.surface}, ${p.surface})`,
+    '--cf-elev-gradient': `linear-gradient(180deg, ${alpha(p.ink, VOILE_ELEMENT)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${d.surface2}, ${d.surface2})`,
+    '--cf-elev-hover': `linear-gradient(180deg, ${alpha(p.ink, VOILE_SURVOL)} 0%, ${alpha(p.ink, 0)} 70%), linear-gradient(0deg, ${d.survol}, ${d.survol})`,
     // Ombres
-    '--cf-shadow': `0 1px 0 ${ombre}, 0 10px 28px ${ombre}`,
     '--cf-shadow-2': `0 2px 0 ${ombre}, 0 16px 40px ${ombre}`,
     '--cf-shadow-soft': `0 12px 34px ${ombre}`,
     '--cf-shadow-card': `0 1px 0 ${ombre}, 0 10px 26px ${ombre}`,
-    '--cf-shadow-accent': `0 0 0 1px ${p.accent}`,
     '--cf-shadow-drawer': `-1px 0 0 ${alpha(p.ink, 0.08)}, -26px 0 60px ${ombre}`,
     /*
      * LE VOILE S'ASSOMBRIT TOUJOURS — il ne suit jamais le fond.
@@ -449,21 +722,28 @@ export function resoudreMarque(brand: Brand): JetonsMasque {
      */
     '--cf-scrim': sombre ? 'rgba(0, 0, 0, 0.72)' : alpha(p.ink, 0.45),
     // Forme
-    '--cf-r-xs': `${rSm}px`,
-    '--cf-r-sm': `${rMd}px`,
-    '--cf-r-md': `${rMd}px`,
-    '--cf-r': `${rLg}px`,
-    '--cf-r-lg': `${rLg + 4}px`,
+    '--cf-r-xs': `${r.xs}px`,
+    '--cf-r-sm': `${r.sm}px`,
+    '--cf-r-md': `${r.md}px`,
+    '--cf-r': `${r.lg}px`,
+    '--cf-r-lg': `${r.xl}px`,
     '--cf-r-pill': '999px',
     // Mouvement
     '--sm-ease': m.ease,
+    /*
+     * Le retour tactile est une CLASSE À PART, pas la durée de base : la DA §4
+     * demande une réponse perçue en moins de 100 ms, et `active:duration-fast`
+     * l'étirait à 240 ms sur un masque posé — un bouton qui s'enfonce mollement.
+     * Un tiers de la base, donc : 80 ms posé, 47 ms vif.
+     */
+    '--sm-t-snap': `${Math.round(m.base / 3)}ms`,
     '--sm-t-fast': `${m.base}ms`,
     '--sm-t-med': `${m.entree}ms`,
     '--sm-t-slow': `${m.fete}ms`,
     // Polices
     '--cf-font-display': police(pair.display),
     '--cf-font-body': police(pair.body),
-    '--cf-font-mono': police(pair.mono ?? 'jetbrains-mono'),
+    '--cf-font-mono': police(pair.mono ?? MONO_PAR_DEFAUT),
   };
   return { vars, colorScheme: brand.mode, prixMono: pair.prixMono };
 }
@@ -484,7 +764,6 @@ export function marqueDeRepli(
   logoUrl: string | null | undefined,
 ): Brand {
   const nuit = DIRECTIONS.nuit;
-  const brut = String(brandColor ?? '').trim().toLowerCase();
   /*
    * L'accent STOCKÉ reste celui du restaurant — spec §8.1 : `accent =
    * brandColor`. Il était ramené à AA sur le fond de Nuit, ce qui réécrivait
@@ -493,32 +772,66 @@ export function marqueDeRepli(
    * sélecteur de son admin s'ouvrait sur une autre couleur que la sienne.
    * C'est `accentInk` (dérivé, jamais stocké) qui porte l'AA du texte.
    */
-  const accent = HEX.test(brut) ? brut : LAITON;
+  const lu = HexSchema.safeParse(brandColor ?? '');
+  const accent = lu.success ? lu.data : LAITON;
   const onAccent = textePosableSur(accent);
+  /*
+   * Le `logoUrl` legacy n'a JAMAIS traversé le contrat : le poser tel quel
+   * dans `logo.mark.dark` contournait le refus des schémas non http(s), et
+   * `logoPour` le rendait ensuite en `src` de vitrine et d'icône de manifeste.
+   * Le repli doit rendre un `Brand` que `BrandSchema` accepterait.
+   */
+  const logo = ImageUrl.safeParse(logoUrl ?? null);
   return {
     ...nuit,
     palette: { ...nuit.palette, accent, onAccent },
-    logo: { mark: { light: null, dark: logoUrl ?? null }, lockup: { light: null, dark: null } },
+    logo: {
+      mark: { light: null, dark: logo.success ? logo.data : null },
+      lockup: { light: null, dark: null },
+    },
     preset: 'nuit',
   };
 }
 
+/** Pourquoi le masque rendu n'est pas celui de la base. */
+export type RepliMarque = null | 'absent' | 'invalide';
+
+/**
+ * LE SEUL ADAPTATEUR DE LECTURE — et il dit POURQUOI il replie.
+ *
+ * Le masque lu en base est une donnée de FORME non fiable : Mongoose infère
+ * des clés optionnelles là où le contrat les veut présentes, `type.pair` en
+ * simple chaîne, et `.lean()` ne pose AUCUN défaut de schéma (d'où les
+ * `.default(null)` du contrat : une clé absente vaut `null` des deux côtés,
+ * sinon un même document rendait Soleil par `findById()` et Nuit par
+ * `.lean()`). Un sous-document HYDRATÉ porte en plus des clés de prototype
+ * ($__parent, save, toObject…) : on le ramène à un objet nu avant de le lire.
+ *
+ * Le repli était MUET : un `brand` stocké qui échoue le contrat rendait Nuit
+ * sur un 200, sans journal ni signal — l'identité d'un restaurant disparaissait
+ * et personne ne le savait. `repli` porte la cause pour que les adaptateurs de
+ * l'API la journalisent et que la fiche CRM puisse la dire.
+ */
+export function lireMarque(t: {
+  brand?: unknown;
+  brandColor?: string | null;
+  logoUrl?: string | null;
+}): { brand: Brand; repli: RepliMarque } {
+  const brut = t.brand as { toObject?: () => unknown } | null | undefined;
+  const nu = brut && typeof brut.toObject === 'function' ? brut.toObject() : brut;
+  if (nu == null) return { brand: marqueDeRepli(t.brandColor, t.logoUrl), repli: 'absent' };
+  const lu = BrandSchema.safeParse(nu);
+  if (lu.success) return { brand: lu.data, repli: null };
+  return { brand: marqueDeRepli(t.brandColor, t.logoUrl), repli: 'invalide' };
+}
+
+/** Le raccourci de `lireMarque` pour les appelants qui n'ont rien à journaliser. */
 export function marqueEffective(t: {
   brand?: unknown;
   brandColor?: string | null;
   logoUrl?: string | null;
 }): Brand {
-  // Le masque lu en base est une donnée de FORME non fiable : Mongoose infère
-  // des clés optionnelles là où le contrat les veut présentes, et `type.pair`
-  // en simple chaîne. Un seul adaptateur, ici — l'API ne caste jamais.
-  //
-  // Un sous-document Mongoose HYDRATÉ porte des clés de prototype ($__parent,
-  // save, toObject…) que le schéma strict refuse : on le ramène à un objet nu
-  // avant de le lire. Un objet déjà nu passe tel quel.
-  const brut = t.brand as { toObject?: () => unknown } | null | undefined;
-  const nu = brut && typeof brut.toObject === 'function' ? brut.toObject() : brut;
-  const lu = BrandSchema.safeParse(nu ?? null);
-  return lu.success ? lu.data : marqueDeRepli(t.brandColor, t.logoUrl);
+  return lireMarque(t).brand;
 }
 
 /** Le contrat « logo + accent » des outils du personnel : dérivé, jamais stocké à part. */

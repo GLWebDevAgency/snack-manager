@@ -721,7 +721,7 @@ function Footer({
             href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
-            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
           >
             <Icon name="clock" size={17} stroke={2.4} />
             Suivre ma commande

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HexSchema } from './marque';
 
 /**
  * IDENTITÉ DE L'ÉTABLISSEMENT — éditable par le gérant, enfin.
@@ -30,12 +31,13 @@ export const LOGO_MAX_OCTETS = 512 * 1024;
 export const LOGO_FORMATS_ADMIS = ['image/png', 'image/jpeg', 'image/webp'] as const;
 export const TenantIdentityUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
-  /** L'accent de marque — seul levier de personnalisation (charte DA §3). */
-  brandColor: z
-    .string()
-    .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'Couleur attendue au format #rrggbb')
-    .optional(),
+  /**
+   * L'accent de marque — seul levier de personnalisation (charte DA §3).
+   * `HexSchema` (et pas une regex recopiée) : la casse est normalisée une
+   * seule fois, au contrat, pour que la colonne plate `brandColor` et
+   * `brand.palette.accent` ne divergent jamais d'une majuscule.
+   */
+  brandColor: HexSchema.optional(),
   address: z.string().trim().max(200).optional(),
   /** Tels qu'ils s'impriment sur le ticket — le format reste libre. */
   phones: z.array(z.string().trim().min(1).max(20)).max(3).optional(),

@@ -433,7 +433,7 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
  */
 function DemoRibbon() {
   return (
-    <div className="border-b border-accent/25 bg-accent/10">
+    <div className="border-b border-accent/25 bg-accentwash">
       <p className="mx-auto flex w-full max-w-[1080px] items-center justify-center gap-2 px-4 py-2 text-center text-[12px] font-semibold leading-snug text-mut">
         <Dot tone="prep" />
         <span>
@@ -509,7 +509,7 @@ function SiteHeader({
           <a
             href={telHref(phone)}
             aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
+            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
           >
             <Icon name="phone" size={18} />
           </a>
@@ -605,7 +605,7 @@ function SiteHeader({
                 {paused && phone && (
                   <a
                     href={telHref(phone)}
-                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
+                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
                   >
                     <Icon name="phone" size={16} />
                     Appeler
@@ -723,7 +723,7 @@ function PauseCard({ site }: { site: Site }) {
               {phone && (
                 <a
                   href={telHref(phone)}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-accent px-4 text-[14px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-fast"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill bg-accent px-4 text-[14px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
                 >
                   <Icon name="phone" size={16} stroke={2.3} />
                   Commander par téléphone

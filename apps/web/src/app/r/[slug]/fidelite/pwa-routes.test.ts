@@ -42,8 +42,9 @@ describe("application fidélité installable", () => {
       scope: "/r/classfood/fidelite",
       display: "standalone",
       // Le thème de l'installation suit le masque du restaurant, pas la marque grise.
-      theme_color: "#F6EBD9",
-      background_color: "#F6EBD9",
+      // En minuscules : `HexSchema` normalise la casse au contrat, une seule fois.
+      theme_color: "#f6ebd9",
+      background_color: "#f6ebd9",
     });
     expect(manifest.icons).toHaveLength(1);
     expect(manifest.icons[0].src).toBe("/r/classfood/fidelite/icon.svg");

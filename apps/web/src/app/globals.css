@@ -20,10 +20,9 @@
   --cf-line-2: rgba(255, 255, 255, 0.06);
   --cf-fill: #1a1a1a;
   --cf-on-fill: #fff;
-  --cf-btn-dark: #262626;
+  --cf-btn: #262626;
   --cf-surface-3: rgba(255, 255, 255, 0.03);
   --cf-surface-6: rgba(255, 255, 255, 0.06);
-  --cf-white-50: rgba(255, 255, 255, 0.5);
 
   /*
    * ── Accent tenant (VARIABLE — remplacé au runtime par le layout admin) ──
@@ -36,10 +35,15 @@
   --cf-on-accent: #12100d;
 
   /* ── Masque d'identité : dérivés que le résolveur surcharge par tenant ── */
-  --cf-ink-soft: #cfcfcf;
   --cf-accent-ink: #dbc191;
   --cf-accent-wash: rgba(201, 161, 90, 0.12);
-  --cf-focus: rgba(201, 161, 90, 0.6);
+  /*
+   * L'anneau de focus (1.4.11, 2.4.13) : OPAQUE. À 60 % d'alpha, composé sur
+   * le fond d'un masque clair, il tombait à 1,75:1 — un focus qu'on ne voit
+   * pas. Le résolveur surcharge cette valeur par tenant, ramenée à 3:1 sur le
+   * fond ET sur la carte ; ici, le laiton de la marque grise (7,6:1 sur #111).
+   */
+  --cf-focus: #c9a15a;
   --cf-on-green: #000;
   --cf-on-red: #fff;
   --cf-on-amber: #000;
@@ -89,10 +93,10 @@
     linear-gradient(0deg, #262626, #262626);
 
   /* ── Ombres ── */
-  --cf-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.38);
   --cf-shadow-2: 0 2px 0 rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.45);
   --cf-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.4);
   --cf-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 10px 26px rgba(0, 0, 0, 0.32);
+  /* Lu par le seul back-office (ProgrammeForm) : jamais surchargé par un masque. */
   --cf-shadow-accent: 0 0 0 1px var(--cf-accent);
   /* Tiroir latéral : l'ombre porte la séparation, pas un filet blanc dur. */
   --cf-shadow-drawer: -1px 0 0 rgba(255, 255, 255, 0.08),
@@ -116,6 +120,8 @@
 
   /* ── Motion ── */
   --sm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Retour tactile (DA §4) : perçu en moins de 100 ms, jamais la durée de base. */
+  --sm-t-snap: 0.08s;
   --sm-t-fast: 0.2s;
   --sm-t-med: 0.45s;
   --sm-t-slow: 0.6s;
@@ -133,7 +139,7 @@
   --color-line2: var(--cf-line-2);
   --color-fill: var(--cf-fill);
   --color-onfill: var(--cf-on-fill);
-  --color-btndark: var(--cf-btn-dark);
+  --color-btn: var(--cf-btn);
   --color-accent: var(--cf-accent);
   --color-accenthover: var(--cf-accent-hover);
   --color-onaccent: var(--cf-on-accent);
@@ -146,7 +152,6 @@
   --color-prept: var(--cf-amber-t);
 
   /* Masque d'identité — mêmes conventions de nommage que ci-dessus */
-  --color-inksoft: var(--cf-ink-soft);
   --color-accentink: var(--cf-accent-ink);
   --color-accentwash: var(--cf-accent-wash);
   --color-focus: var(--cf-focus);
@@ -167,6 +172,7 @@
    * `duration-fast` ne produisait aucune règle, et la transition retombait
    * sur les 150 ms par défaut du framework. Vérifié dans le CSS compilé.
    */
+  --transition-duration-snap: var(--sm-t-snap);
   --transition-duration-fast: var(--sm-t-fast);
   --transition-duration-med: var(--sm-t-med);
   --transition-duration-slow: var(--sm-t-slow);
@@ -265,7 +271,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--cf-accent-hover);
+  outline: 2px solid var(--cf-focus);
   outline-offset: 2px;
 }
 

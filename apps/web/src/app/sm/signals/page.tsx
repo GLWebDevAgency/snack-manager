@@ -338,7 +338,7 @@ function AllClear({ parkSize }: { parkSize: number }) {
         </p>
         <Link
           href="/sm/clients"
-          className="cf-press mt-1 inline-flex items-center gap-[9px] rounded-pill bg-btndark px-3.5 py-[9px] text-[13px] font-bold text-white hover:bg-[#333]"
+          className="cf-press mt-1 inline-flex items-center gap-[9px] rounded-pill bg-btn px-3.5 py-[9px] text-[13px] font-bold text-white hover:bg-[#333]"
         >
           <Icon name="phone" size={15} />
           Choisir un client à appeler

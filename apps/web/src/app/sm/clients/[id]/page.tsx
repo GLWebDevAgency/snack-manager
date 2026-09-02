@@ -341,7 +341,7 @@ export default function ClientFilePage({
               {file.contact.phone && (
                 <a
                   href={`tel:${file.contact.phone.replace(/\s/g, "")}`}
-                  className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btndark px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
+                  className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btn px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
                 >
                   <Icon name="phone" size={15} />
                   Appeler

@@ -270,7 +270,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
             <span className="grid size-9 rounded-card bg-accent text-sm font-black text-onaccent place-items-center" aria-hidden>{catalog.restaurant.name.charAt(0).toUpperCase()}</span>
           )}
           <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{catalog.restaurant.name}</p><p className="font-display truncate text-[11px] text-mut">{catalog.program.name}</p></div>
-          {installPrompt && <button type="button" onClick={() => void install()} className="cf-press min-h-11 rounded-pill border border-accent/30 bg-accent/10 px-3 py-2 text-xs font-bold text-accentink">Installer</button>}
+          {installPrompt && <button type="button" onClick={() => void install()} className="cf-press min-h-11 rounded-pill border border-accent/30 bg-accentwash px-3 py-2 text-xs font-bold text-accentink">Installer</button>}
         </div>
       </header>
 
@@ -283,9 +283,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         {!card && !loading && !restoring && (
           <>
             <section className="relative overflow-hidden rounded-wide border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
-              <div className="absolute -right-20 -top-24 size-64 rounded-full bg-accent/12 blur-3xl" aria-hidden />
+              <div className="absolute -right-20 -top-24 size-64 rounded-full bg-accentwash blur-3xl" aria-hidden />
               <div className="relative">
-                <Pill className="border-accent/30 bg-accent/10 text-accentink">Carte digitale · gratuite</Pill>
+                <Pill className="border-accent/30 bg-accentwash text-accentink">Carte digitale · gratuite</Pill>
                 <h1 className="font-display mt-4 max-w-[560px] text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-black leading-[1.05] tracking-[-0.05em] text-ink">
                   Vos avantages {catalog.restaurant.name}, toujours à portée de main.
                 </h1>
@@ -302,7 +302,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
               <div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">À débloquer</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Les récompenses du moment</h2></div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {catalog.rewards.map((reward) => (
-                  <Card key={reward.id} className="p-4"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-card bg-accent/12 text-accentink"><Icon name="gift" size={19} /></span><div className="min-w-0"><p className="text-sm font-extrabold text-ink">{reward.name}</p><p className="mt-1 text-xs leading-5 text-mut">{benefit(reward)}</p><p className="cf-fig mt-3 text-sm font-black text-accentink">{reward.costUnits.toLocaleString("fr-FR")} {reward.costUnits === 1 ? unitSingular : unitPlural}</p></div></div></Card>
+                  <Card key={reward.id} className="p-4"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="gift" size={19} /></span><div className="min-w-0"><p className="text-sm font-extrabold text-ink">{reward.name}</p><p className="mt-1 text-xs leading-5 text-mut">{benefit(reward)}</p><p className="cf-fig mt-3 text-sm font-black text-accentink">{reward.costUnits.toLocaleString("fr-FR")} {reward.costUnits === 1 ? unitSingular : unitPlural}</p></div></div></Card>
                 ))}
               </div>
             </section>
@@ -316,7 +316,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         {card && !loading && (
           <>
             <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
-              <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accent/15 blur-3xl" aria-hidden />
+              <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl" aria-hidden />
               <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accentink" /></div>
               <div className="relative mt-8"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Votre solde</p><p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em] text-ink">{card.member.balanceUnits.toLocaleString("fr-FR")}</p><p className="mt-1 text-sm font-bold text-accentink">{card.member.balanceUnits === 1 ? unitSingular : unitPlural}</p></div>
               <div className="relative mt-7"><div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full rounded-pill bg-accent transition-transform duration-slow ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} /></div><p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p></div>

@@ -51,7 +51,7 @@ export function DemoLoyaltyCard() {
 
       <main className="mx-auto w-full max-w-[720px] px-4 pt-6">
         <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
-          <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accent/15 blur-3xl" aria-hidden />
+          <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl" aria-hidden />
           <div className="relative flex items-start justify-between gap-4">
             <div>
               <Pill className="border-ok/30 bg-ok/10 text-okt">Carte fictive active</Pill>

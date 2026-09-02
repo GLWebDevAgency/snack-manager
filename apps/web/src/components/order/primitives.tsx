@@ -42,11 +42,11 @@ import "./order.css";
 
 /** Enfoncement immédiat, relâchement doux — à poser sur tout élément appuyable. */
 export const TAP =
-  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-fast active:scale-[0.97] motion-reduce:active:scale-100";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-snap active:scale-[0.97] motion-reduce:active:scale-100";
 
 /** Variante « ligne » : une ligne pleine largeur s’enfonce, elle ne rétrécit pas. */
 export const TAP_ROW =
-  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-fast active:translate-y-px motion-reduce:active:translate-y-0";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-snap active:translate-y-px motion-reduce:active:translate-y-0";
 
 type TapProps = ButtonHTMLAttributes<HTMLButtonElement>;
 

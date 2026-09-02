@@ -43,12 +43,22 @@ const BRUT = [
    * directions. `text-accentink` est la même couleur ramenée jusqu'à AA sur
    * le fond — elle existe exactement pour ça (spec §4.1).
    *
-   * `bg-accent`, `border-accent`, `bg-accent/N`, `ring-accent` et
-   * `text-onaccent` restent libres : ce sont des aplats et leur texte, dont
-   * `contraste()` vérifie le couple. `\b` en fin de motif suffit à épargner
-   * `text-accentink` et `text-onaccent`.
+   * `bg-accent`, `border-accent`, `ring-accent` et `text-onaccent` restent
+   * libres : ce sont des aplats et leur texte, dont `contraste()` vérifie le
+   * couple. `\b` en fin de motif suffit à épargner `text-accentink` et
+   * `text-onaccent`.
    */
   /\btext-accent\b/,
+  /*
+   * NI LAVIS D'ACCENT IMPROVISÉ — il y en a UN, et il est au contrat.
+   *
+   * `bg-accent/10`, `/12` et `/15` cohabitaient sur sept surfaces pendant que
+   * `--cf-accent-wash` (spec §4.1, l'unique opacité 12 %) n'était lu nulle
+   * part. C'est sur CE lavis que `contraste()` prouve l'AA de `accentink` :
+   * une opacité inventée à l'usage se juge sur une valeur que personne ne
+   * peint. `bg-accentwash` est le seul lavis d'accent des surfaces client.
+   */
+  /\bbg-accent\/\d+\b/,
   /*
    * NI DURÉE ÉCRITE EN DUR — le mouvement appartient au masque.
    *
@@ -67,7 +77,7 @@ const BRUT = [
    * dessous, sur SIX directions à la fois. Les placeholders en
    * `placeholder:text-mut/70` descendaient à 3,2:1 — un champ de formulaire
    * dont on ne lit plus l'intitulé. Une opacité sur une COULEUR D'APLAT
-   * (`bg-accent/12`, `border-ink/8`) reste libre : rien n'y est du texte.
+   * (`border-ink/8`, `bg-ink/5`) reste libre : rien n'y est du texte.
    */
   /\btext-(?:mut|ink2|accentink)\/\d+\b/,
 ];

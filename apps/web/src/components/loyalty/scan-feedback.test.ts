@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { LoyaltyCustomerCard } from "@sm/contracts";
+import { DIRECTIONS, type LoyaltyCustomerCard } from "@sm/contracts";
 import { loyaltyScanSuccessAnnouncement } from "./scan-feedback";
 
 describe("retour accessible après scan", () => {
   it("annonce la carte et son solde sans répéter le secret QR", () => {
     const card = {
       member: { alias: "Maya", balanceUnits: 12 },
-      restaurant: { slug: "classfood", name: "Classfood", brandColor: "#c9a15a", brand: null },
+      restaurant: { slug: "classfood", name: "Classfood", brandColor: "#c9a15a", brand: DIRECTIONS.nuit },
       program: {
         name: "La carte",
         status: "active",

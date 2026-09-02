@@ -769,8 +769,10 @@ export const LoyaltyCustomerCardSchema = z
         slug: z.string(),
         name: z.string(),
         brandColor: z.string(),
-        // Nullable/repli : cette charge est aussi produite par des fixtures de test sans `brand`.
-        brand: BrandSchema.nullable().default(null),
+        // Toujours émis par l'API (`marqueEffective`, repli Nuit compris) :
+        // requis, comme le catalogue. Le rendre nullable « pour les fixtures »
+        // faisait porter au web un `null` qui n'existe pas en production.
+        brand: BrandSchema,
       })
       .strict(),
     program: z
