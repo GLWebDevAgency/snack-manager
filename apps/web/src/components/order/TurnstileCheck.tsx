@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BrandMode } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import { Spinner } from "./primitives";
@@ -16,7 +17,14 @@ type TurnstileApi = {
       sitekey: string;
       action: string;
       cData: string;
-      theme: "dark";
+      /*
+       * Le widget est un rectangle OPAQUE au milieu de l'étape paiement : son
+       * thème doit suivre le masque, sinon il ouvre un trou sombre dans une
+       * page crème sur Brasserie, Atelier, Marché et Soleil — précisément le
+       * défaut que le masque d'identité existe pour fermer. Le type était
+       * littéralement `"dark"`, ce qui rendait l'oubli indétectable.
+       */
+      theme: "dark" | "light";
       language: "fr";
       size: "flexible";
       appearance: "interaction-only";
@@ -50,11 +58,14 @@ type CheckState = "loading" | "ready" | "verified" | "error" | "unsupported";
 export function TurnstileCheck({
   siteKey,
   tenantSlug,
+  mode,
   resetKey,
   onToken,
 }: {
   siteKey: string;
   tenantSlug: string;
+  /** Mode du masque : le widget suit la peau du restaurant, pas la nôtre. */
+  mode: BrandMode;
   /** Change après chaque tentative : un jeton Turnstile est à usage unique. */
   resetKey: number;
   onToken: (token: string | null) => void;
@@ -86,7 +97,7 @@ export function TurnstileCheck({
         sitekey: siteKey,
         action: "public-order",
         cData: tenantSlug,
-        theme: "dark",
+        theme: mode === "dark" ? "dark" : "light",
         language: "fr",
         size: "flexible",
         appearance: "interaction-only",
@@ -128,7 +139,7 @@ export function TurnstileCheck({
       active = false;
       removeWidget();
     };
-  }, [onToken, removeWidget, resetKey, scriptReady, siteKey, tenantSlug]);
+  }, [mode, onToken, removeWidget, resetKey, scriptReady, siteKey, tenantSlug]);
 
   const verified = state === "verified";
   const failed = state === "error" || state === "unsupported";
@@ -163,13 +174,21 @@ export function TurnstileCheck({
         />
       )}
       <div className="flex items-center gap-3 px-4 py-3.5">
+        {/*
+          `okt` / `alertt` et non `ok` / `alert` : les teintes brutes sont
+          dessinées pour être des APLATS, et ces icônes sont posées SUR leur
+          propre lavis à 10 % — le rouge brut y tombe à 2,97:1 sur Nuit, sous
+          le 3:1 que 1.4.11 exige d'un pictogramme porteur de sens. Les teintes
+          en `-t` sont les mêmes couleurs ramenées à l'AA sur ce lavis par le
+          résolveur : elles existent exactement pour cet emploi.
+        */}
         <span
           className={cx(
             "grid size-9 shrink-0 place-items-center rounded-full border",
             verified
-              ? "border-ok/30 bg-ok/10 text-ok"
+              ? "border-ok/30 bg-ok/10 text-okt"
               : failed
-                ? "border-alert/30 bg-alert/10 text-alert"
+                ? "border-alert/30 bg-alert/10 text-alertt"
                 : "border-ink/8 bg-ink/[0.035] text-mut",
           )}
         >

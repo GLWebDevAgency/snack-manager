@@ -23,13 +23,19 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import type { OrderStatus, PaymentIntentResponse, SlotsResponse } from "@sm/contracts";
+import type {
+  BrandMode,
+  OrderStatus,
+  PaymentIntentResponse,
+  SlotsResponse,
+} from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import {
@@ -63,6 +69,7 @@ import {
   Plate,
   PrimaryAction,
   Prix,
+  RadioGroup,
   SectionLabel,
   Sheet,
   Spinner,
@@ -74,7 +81,12 @@ import { TurnstileCheck } from "./TurnstileCheck";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
-/** Doit dépasser la durée d’animation de sortie de `Sheet`. */
+/**
+ * Doit dépasser la durée d’animation de sortie de `Sheet`, qui vaut
+ * `--sm-t-med` — donc 200 ms sous un masque « vif » et 320 ms sous un masque
+ * « posé », les deux seuls profils de mouvement du contrat. 340 ms couvre le
+ * plus lent : le panier ne se vide pas sous les yeux du client qui referme.
+ */
 const SHEET_EXIT_MS = 340;
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
 const TURNSTILE_SITE_KEY =
@@ -114,6 +126,7 @@ export function Checkout({
   tenantName,
   tenantAddress,
   stripeApparence,
+  mode,
   prixMono,
   cart,
   paused,
@@ -137,6 +150,12 @@ export function Checkout({
    * remonte à chaque rendu du tunnel.
    */
   stripeApparence: ApparenceStripe;
+  /**
+   * Mode du masque. Il ne sert pas à peindre — les `--cf-*` s'en chargent —
+   * mais à habiller les widgets TIERS rendus dans leur propre iframe, que
+   * notre feuille de style n'atteint pas : ici le contrôle anti-robot.
+   */
+  mode: BrandMode;
   /** Paire typographique du masque qui pose les prix en chasse fixe. */
   prixMono: boolean;
   cart: CartApi;
@@ -566,6 +585,7 @@ export function Checkout({
               <TurnstileCheck
                 siteKey={TURNSTILE_SITE_KEY}
                 tenantSlug={slug}
+                mode={mode}
                 resetKey={turnstileReset}
                 onToken={setTurnstileToken}
               />
@@ -643,16 +663,31 @@ function Progress({
               /* 44 px : revenir corriger son téléphone se fait au pouce. */
               className={cx("block min-h-11 w-full text-left", done && "cursor-pointer")}
             >
+              {/*
+                `accentink` et non `accent` : cette barre de 1 px est un
+                indicateur porté par la SEULE couleur, donc soumise au 3:1 de
+                1.4.11 — or l'accent brut ne vaut que 2,55:1 sur le fond de
+                Soleil et 2,68 sur sa carte. `accentink` est la même teinte
+                ramenée par le résolveur jusqu'à 4,5:1 sur le fond comme sur la
+                carte : l'étape franchie se distingue à coup sûr de `bg-ink/12`.
+                `bg-accent` reste réservé aux aplats, qui portent `text-onaccent`.
+              */}
               <span
                 className={cx(
                   "block h-1 rounded-full transition-colors duration-med ease-sm",
-                  current || done ? "bg-accent" : "bg-ink/12",
+                  current || done ? "bg-accentink" : "bg-ink/12",
                 )}
               />
+              {/*
+                Les étapes à venir étaient en `text-ink/25` à 10 px, soit 1,5 à
+                2,1:1. Le bouton est bien `disabled` — mais ces mots ne sont pas
+                l'étiquette d'un contrôle grisé : ce sont l'information de
+                progression du tunnel, et 1.4.3 s'y applique sans exemption.
+              */}
               <span
                 className={cx(
                   "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-med",
-                  current ? "text-ink" : done ? "text-mut" : "text-ink/25",
+                  current ? "text-ink" : "text-mut",
                 )}
               >
                 {entry.label}
@@ -810,6 +845,8 @@ function CartStep({
   prixMono: boolean;
   onPromoCode: (v: string) => void;
 }) {
+  const noteId = useId();
+
   if (!cart.hydrated) {
     return (
       <div className="flex items-center gap-2.5 py-10 text-[14px] text-mut">
@@ -854,10 +891,21 @@ function CartStep({
       </div>
 
       <section className="flex flex-col gap-2.5">
-        <SectionLabel hint="facultatif">Instructions pour la cuisine</SectionLabel>
+        {/*
+          Le titre de section NOMME le champ (`aria-labelledby`). Le
+          `<textarea>` n'avait ni `<label>`, ni `aria-label`, ni relation avec
+          le `<h3>` posé juste au-dessus : son nom accessible était vide, et un
+          lecteur d'écran n'annonçait qu'« zone d'édition » (1.3.1, 4.1.2).
+          Le `placeholder` ne compte pas comme un nom : il disparaît à la
+          première frappe.
+        */}
+        <SectionLabel id={noteId} hint="facultatif">
+          Instructions pour la cuisine
+        </SectionLabel>
         <textarea
           value={cart.note}
           onChange={(e) => cart.setNote(e.target.value)}
+          aria-labelledby={noteId}
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
@@ -893,7 +941,13 @@ function CartStep({
             placeholder="BIENVENUE10"
             value={promoCode}
             onChange={(e) => onPromoCode(e.target.value.toUpperCase())}
-            className="min-h-11 w-full rounded-input border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
+            /* `rounded-ctrl` — le rayon des contrôles, que le résolveur
+               surcharge selon la forme choisie. Il était écrit `rounded-input`,
+               qui ne correspond à aucun `--radius-*` de `@theme` : Tailwind v4
+               n'émettait rien et le champ restait à angles vifs sur les formes
+               `doux` et `rond`. Une classe morte, invisible au premier coup
+               d'œil parce qu'elle ressemble à un jeton. */
+            className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
@@ -1350,9 +1404,14 @@ function PayStep({
       <section className="flex flex-col gap-2.5">
         <SectionLabel>Mode de paiement</SectionLabel>
         {cardAvailable ? (
-          <div role="radiogroup" aria-label="Mode de paiement" className="flex flex-col gap-2.5">
+          // `RadioGroup` et non une `<div role="radiogroup">` nue : les flèches
+          // doivent parcourir le groupe, et une seule des deux cartes prend la
+          // halte de tabulation (tabindex tournant, APG radiogroup). Sans cela,
+          // le groupe se traversait touche à touche comme deux boutons isolés.
+          <RadioGroup label="Mode de paiement" className="flex flex-col gap-2.5">
             <ChoiceCard
               on={method === "online"}
+              tabIndex={method === "online" ? 0 : -1}
               icon="euro"
               title="Carte bancaire"
               sub="Paiement sécurisé en ligne · Visa, Mastercard, CB"
@@ -1360,12 +1419,13 @@ function PayStep({
             />
             <ChoiceCard
               on={method === "counter"}
+              tabIndex={method === "counter" ? 0 : -1}
               glyph="bag"
               title="Payer au comptoir"
               sub="Carte ou espèces au moment du retrait"
               onClick={() => onMethod("counter")}
             />
-          </div>
+          </RadioGroup>
         ) : (
           <Banner icon="euro" title="Paiement au comptoir">
             Ce restaurant encaisse au moment du retrait — carte ou espèces.
@@ -1457,7 +1517,14 @@ function DoneStep({
         <h3 className="font-display relative text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em]">
           C’est envoyé en cuisine
         </h3>
-        <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
+        {/*
+          Aucune opacité : `text-onaccent` est déjà le MINIMUM que le résolveur
+          garantit sur l'aplat d'accent (le couple onAccent/accent tombe à
+          4,7:1 sur Marché). Rabattu à 90 %, ce paragraphe de 14 px passait à
+          4,16 — sous le seuil de 1.4.3, sur la phrase qui explique au client
+          ce qui va se passer maintenant.
+        */}
+        <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed">
           {/*
             AUCUN SMS NE PART. Le port `Notifier.notifyCustomer` est déclaré
             dans le domaine et n'a jamais eu d'adaptateur : le client lisait une
@@ -1491,18 +1558,37 @@ function DoneStep({
           )}
         </div>
 
+        {/*
+          LE CHANGEMENT DE STATUT DOIT S'ENTENDRE (4.1.3).
+
+          La commande passe « Reçue → En préparation → Prête » par sondage, et
+          rien n'annonçait ce changement : l'utilisateur de lecteur d'écran
+          n'apprenait jamais que son plat l'attendait au comptoir. Une région
+          vivante DISCRÈTE porte l'étape courante — plutôt qu'un `role=status`
+          sur la frise entière, qui relirait les trois étapes et leurs indices
+          à chaque avancement.
+        */}
+        <p aria-live="polite" aria-atomic="true" className="sr-only">
+          {`Statut de la commande : ${TIMELINE[rank]?.label ?? ""}. ${TIMELINE[rank]?.hint ?? ""}`}
+        </p>
+
         {/* Suivi : la première étape est acquise, les suivantes viennent du KDS. */}
         <ol className="mt-4 rounded-panel border border-ink/8 bg-surface2 px-4 py-2">
           {TIMELINE.map((entry, i) => {
             const reached = i <= rank;
             const current = i === rank;
             return (
+              /*
+                Pas d'opacité sur la ligne : elle ramenait `text-ink` à 2,06:1
+                et `text-mut` à 1,7 sur les étapes non atteintes — « En
+                préparation · Ça chauffe » devenait illisible. Ce ne sont pas
+                des contrôles désactivés, aucune exemption de 1.4.3 ne joue.
+                L'état se lit à la pastille (verte contre `bg-ink/12`) et à
+                l'encre du libellé, atténuée mais AA.
+              */
               <li
                 key={entry.label}
-                className={cx(
-                  "flex items-center gap-3 border-b border-ink/6 py-3 last:border-b-0",
-                  !reached && "opacity-45",
-                )}
+                className="flex items-center gap-3 border-b border-ink/6 py-3 last:border-b-0"
               >
                 <span
                   className={cx(
@@ -1522,7 +1608,12 @@ function DoneStep({
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-bold text-ink">
+                  <span
+                    className={cx(
+                      "block text-[15px] font-bold",
+                      reached ? "text-ink" : "text-mut",
+                    )}
+                  >
                     {entry.label}
                   </span>
                   <span className="block text-[13px] text-mut">{entry.hint}</span>

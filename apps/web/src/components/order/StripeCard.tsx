@@ -13,8 +13,8 @@
  * `PaymentIntent` confirmé côté Stripe.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { fallbackDe, resoudreMarque, TYPE_PAIRS, type Brand } from "@sm/contracts";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { fallbackDe, TYPE_PAIRS, type Brand } from "@sm/contracts";
 import { Banner, PrimaryAction, Spinner } from "./primitives";
 
 // ─── Surface minimale de Stripe.js réellement utilisée ───
@@ -93,9 +93,28 @@ function loadStripeJs(): Promise<void> {
  */
 export type ApparenceStripe = ReturnType<typeof apparenceStripeDe>;
 
-export function apparenceStripeDe(brand: Brand) {
-  const { vars } = resoudreMarque(brand);
+/**
+ * `vars` ARRIVE, elle n'est pas recalculée.
+ *
+ * Cette fonction appelait `resoudreMarque(brand)` alors que la vitrine venait
+ * de le faire à la ligne d'avant via `styleDuMasque()` : deux résolutions
+ * complètes — une trentaine de mélanges et jusqu'à quatre recherches d'AA
+ * chacune — pour le même objet, dans le même rendu. Le commentaire voisin
+ * refusait pourtant « de payer une palette pour lire une police ». Les
+ * variables déjà posées sur la racine suffisent ; il ne reste ici que le
+ * `mode` et la paire typographique, qui se lisent sur la marque sans rien
+ * résoudre.
+ */
+export function apparenceStripeDe(masque: CSSProperties, brand: Brand) {
+  /*
+   * `styleDuMasque()` rend la carte des `--cf-*` — c'est son contenu réel ;
+   * elle n'est typée `CSSProperties` que parce que React exige ce type pour
+   * un attribut `style` (le même transtypage y figure déjà). On la relit donc
+   * telle qu'elle est, plutôt que de refaire la résolution pour cinq valeurs.
+   */
+  const vars = masque as Record<string, string | undefined>;
   const accent = vars["--cf-accent"] ?? "";
+  const focus = vars["--cf-focus"] ?? accent;
   return {
     // Le thème de départ décide des valeurs que Stripe ne reçoit pas de nous
     // (icônes, états désactivés) : sur un masque clair, « night » les
@@ -113,7 +132,20 @@ export function apparenceStripeDe(brand: Brand) {
     },
     rules: {
       ".Input": { border: `1px solid ${vars["--cf-line"] ?? ""}`, boxShadow: "none" },
-      ".Input:focus": { border: `1px solid ${accent}`, boxShadow: "none" },
+      /*
+        LE CHAMP DE CARTE GARDE UN FOCUS VISIBLE.
+        `boxShadow: 'none'` supprimait l'anneau que Stripe pose par défaut, et
+        le remplaçait par un filet d'accent de 1 px — 2,88:1 sur la surface de
+        Soleil, sous le 3:1 de 1.4.11/2.4.13. Dans une iframe que notre feuille
+        de style n'atteint pas, le client ne voyait plus où il tapait son
+        numéro. `--cf-focus` est le seul jeton de marque qu'un résolveur
+        garantisse OPAQUE et ≥ 3:1 sur le fond comme sur la carte : il porte
+        donc le filet ET l'anneau, comme `focus:border-focus` ailleurs.
+      */
+      ".Input:focus": {
+        border: `1px solid ${focus}`,
+        boxShadow: `0 0 0 2px ${focus}`,
+      },
       ".Label": { color: vars["--cf-mut"] ?? "", fontWeight: "600" },
     },
   };

@@ -129,7 +129,22 @@ export function Tracking({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             {ticket?.header.tenantName ?? "Commande en ligne"}
           </p>
-          <h1 className="font-display mt-1 text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em] text-ink">
+          {/*
+            LE TITRE EST LA RÉGION VIVANTE (4.1.3).
+
+            Le statut change par sondage — « Commande en cours » devient
+            « Votre commande est prête » — et rien ne l'annonçait : le seul
+            `aria-live` de la page entourait une phrase FIXE (« Statut
+            actualisé toutes les 10 secondes »), qui ne change jamais et
+            n'émet donc jamais rien. Un utilisateur de lecteur d'écran ne
+            savait pas que son plat l'attendait au comptoir. `aria-atomic`
+            parce que la phrase entière fait sens, pas le mot qui a changé.
+          */}
+          <h1
+            aria-live="polite"
+            aria-atomic="true"
+            className="font-display mt-1 text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em] text-ink"
+          >
             {status === "cancelled"
               ? "Commande annulée"
               : status === "ready"
@@ -173,13 +188,15 @@ export function Tracking({
                 const reached = rank >= RANK[step.status];
                 const current = rank === RANK[step.status] && !finished;
                 return (
-                  <li
-                    key={step.status}
-                    className={cx(
-                      "flex items-center gap-3.5 py-2.5",
-                      !reached && "opacity-40",
-                    )}
-                  >
+                  /*
+                    Pas d'opacité sur les étapes à venir : à 40 %, le libellé
+                    `text-ink` tombait à 2,06:1 et l'indice `text-mut` à 1,7.
+                    Ce sont des lignes d'INFORMATION, pas des contrôles
+                    désactivés — 1.4.3 s'applique sans exemption. La hiérarchie
+                    vient de la pastille (verte contre `bg-ink/10`) et de
+                    l'encre atténuée du libellé, qui reste AA.
+                  */
+                  <li key={step.status} className="flex items-center gap-3.5 py-2.5">
                     <span
                       aria-hidden
                       className={cx(
@@ -207,7 +224,12 @@ export function Tracking({
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-bold text-ink">
+                      <span
+                        className={cx(
+                          "block text-[15px] font-bold",
+                          reached ? "text-ink" : "text-mut",
+                        )}
+                      >
                         {step.label}
                       </span>
                       <span className="block text-[13px] text-mut">{step.hint}</span>

@@ -21,7 +21,7 @@
  * les règles par variante (le nombre de viandes suit la taille du tacos).
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import type { MenuGroup } from "./api";
@@ -47,6 +47,7 @@ import {
   Plate,
   PrimaryAction,
   Prix,
+  RadioGroup,
   SectionLabel,
   Segmented,
   Sheet,
@@ -94,6 +95,9 @@ export function ProductSheet({
   blocked?: boolean;
   prixMono: boolean;
 }) {
+  const noteId = useId();
+  const retraitsId = useId();
+  const supplementsId = useId();
   // Une copie figée survit à la fermeture le temps de l’animation de sortie
   // (motif « ajuster l’état pendant le rendu » de la doc React, pas un effet).
   const [snapshot, setSnapshot] = useState<Draft | null>(draft);
@@ -235,8 +239,17 @@ export function ProductSheet({
 
             {product.removables.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                <SubLabel icon="minus">Ce que je retire</SubLabel>
-                <div className="flex flex-wrap gap-2">
+                <SubLabel id={retraitsId} icon="minus">
+                  Ce que je retire
+                </SubLabel>
+                {/* Les chips `aria-pressed` d'une même grappe forment un
+                    GROUPE, et il doit être nommé : sans lui, « sans oignons »
+                    se lisait sans qu'on sache de quel choix il relève. */}
+                <div
+                  role="group"
+                  aria-labelledby={retraitsId}
+                  className="flex flex-wrap gap-2"
+                >
                   <OptionChip
                     on={current.removed.length === 0}
                     onClick={() => onChange({ ...current, removed: [] })}
@@ -271,8 +284,14 @@ export function ProductSheet({
 
             {product.supplements.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                <SubLabel icon="plus">Suppléments</SubLabel>
-                <div className="flex flex-wrap gap-2">
+                <SubLabel id={supplementsId} icon="plus">
+                  Suppléments
+                </SubLabel>
+                <div
+                  role="group"
+                  aria-labelledby={supplementsId}
+                  className="flex flex-wrap gap-2"
+                >
                   {product.supplements.map((sup) => {
                     const on = (current.picked[SUPPLEMENT_GROUP] ?? []).includes(sup.key);
                     return (
@@ -324,10 +343,16 @@ export function ProductSheet({
 
         {/* ── Mot pour la cuisine ── */}
         <section className="flex flex-col gap-2.5">
-          <SectionLabel hint="facultatif">Un mot pour la cuisine</SectionLabel>
+          {/* Le titre de section NOMME le champ : sans `aria-labelledby`, ce
+              `<textarea>` n'avait aucun nom accessible (1.3.1, 4.1.2) — le
+              `<h3>` juste au-dessus ne lui était relié par rien. */}
+          <SectionLabel id={noteId} hint="facultatif">
+            Un mot pour la cuisine
+          </SectionLabel>
           <textarea
             value={current.note}
             onChange={(e) => onChange({ ...current, note: e.target.value })}
+            aria-labelledby={noteId}
             rows={2}
             maxLength={200}
             placeholder="Ex : bien cuit, sauce à part…"
@@ -343,12 +368,15 @@ export function ProductSheet({
 function SubLabel({
   children,
   icon,
+  id,
 }: {
   children: ReactNode;
   icon: "plus" | "minus";
+  /** Nomme la grappe de chips qui suit (`aria-labelledby`). */
+  id?: string;
 }) {
   return (
-    <p className="flex items-center gap-2 text-[13px] font-bold text-ink">
+    <p id={id} className="flex items-center gap-2 text-[13px] font-bold text-ink">
       <span
         aria-hidden
         className={cx(
@@ -420,6 +448,7 @@ function GroupSection({
   prixMono: boolean;
   onChange: (next: Draft) => void;
 }) {
+  const titreId = useId();
   const picked = draft.picked[group.key] ?? [];
   const { min, max } = groupRules(group, draft.variantKey);
   // Plafond atteint : seul un groupe à choix MULTIPLE grise les choix restants.
@@ -445,6 +474,7 @@ function GroupSection({
   return (
     <section className="flex flex-col gap-2.5">
       <SectionLabel
+        id={titreId}
         hint={
           <span className={cx("tabular-nums", !satisfied && "text-alertt")}>{hint}</span>
         }
@@ -468,7 +498,10 @@ function GroupSection({
           })}
         />
       ) : (
-        <div className="flex flex-wrap gap-2">
+        // Le groupe est NOMMÉ par son intitulé (« Sauces 1/2 ») : sans lui, un
+        // lecteur d'écran annonçait « Ketchup, non pressé » sans jamais dire à
+        // quel choix la chip appartenait.
+        <div role="group" aria-labelledby={titreId} className="flex flex-wrap gap-2">
           {group.choices.map((choice) => {
             const on = picked.includes(choice.key);
             return (
@@ -488,7 +521,9 @@ function GroupSection({
 
       {capped && (
         <p className="flex items-center gap-1.5 text-[12.5px] text-mut">
-          <Icon name="check" size={13} className="text-ok" />
+          {/* `okt`, la teinte TEXTE du vert : `ok` est un aplat, il ne tient
+              pas 3:1 sur la surface de la feuille. */}
+          <Icon name="check" size={13} className="text-okt" />
           Sélection complète — décochez pour changer.
         </p>
       )}
@@ -517,6 +552,7 @@ function ExtraGroup({
   /** Plusieurs groupes de suppléments : on rappelle lequel. */
   showName: boolean;
 }) {
+  const groupeId = useId();
   const [expanded, setExpanded] = useState(false);
   const picked = draft.picked[group.key] ?? [];
   const { max } = groupRules(group, draft.variantKey);
@@ -533,27 +569,44 @@ function ExtraGroup({
         );
   const hidden = group.choices.length - shown.length;
 
+  const radio = single && group.choices.length > 1;
+  /*
+   * Un `role="radio"` doit vivre dans un `radiogroup` — ces lignes n'en
+   * avaient aucun. `RadioGroup` le pose ET rend les flèches opérantes ; le
+   * tabindex tournant se calcule ici, seul endroit qui voie tout le groupe :
+   * la ligne cochée prend la halte de tabulation, ou la première quand rien
+   * n'est encore choisi (sinon le groupe devenait inatteignable au clavier).
+   */
+  const lignes = shown.map((choice, i) => {
+    const on = picked.includes(choice.key);
+    return (
+      <OptionRow
+        key={choice.key}
+        on={on}
+        radio={radio}
+        tabIndex={on || (picked.length === 0 && i === 0) ? 0 : -1}
+        disabled={!on && capped}
+        title={choice.name}
+        price={choicePrice(group, choice.key, draft.variantKey)}
+        onClick={() => onChange(toggleChoice(draft, group, choice.key))}
+      />
+    );
+  });
+
   return (
     <div className="border-b border-ink/6 px-3.5 last:border-b-0">
       {showName && (
-        <p className="pt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+        <p id={groupeId} className="pt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
           {group.name}
         </p>
       )}
-      {shown.map((choice) => {
-        const on = picked.includes(choice.key);
-        return (
-          <OptionRow
-            key={choice.key}
-            on={on}
-            radio={single && group.choices.length > 1}
-            disabled={!on && capped}
-            title={choice.name}
-            price={choicePrice(group, choice.key, draft.variantKey)}
-            onClick={() => onChange(toggleChoice(draft, group, choice.key))}
-          />
-        );
-      })}
+      {radio ? (
+        <RadioGroup label={showName ? undefined : group.name} labelledBy={showName ? groupeId : undefined}>
+          {lignes}
+        </RadioGroup>
+      ) : (
+        lignes
+      )}
       {foldable && hidden > 0 && (
         <Tap
           onClick={() => setExpanded(true)}

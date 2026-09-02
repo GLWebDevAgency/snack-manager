@@ -149,8 +149,11 @@ export function Storefront({
    * numéro de carte s'effacer sous ses doigts.
    */
   const stripeApparence = useMemo(
-    () => apparenceStripeDe(brand),
-    [brand],
+    // Le masque DÉJÀ résolu est réutilisé : `apparenceStripeDe` rappelait
+    // `resoudreMarque()` juste après `styleDuMasque()`, soit deux palettes
+    // complètes par marque et par rendu, pour cinq valeurs qui étaient déjà là.
+    () => apparenceStripeDe(masque, brand),
+    [masque, brand],
   );
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
@@ -378,7 +381,19 @@ export function Storefront({
               onClick={() => setTunnel(true)}
               className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-3.5 py-3 text-onaccent shadow-deep"
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-pill bg-bg/25 text-[14px] font-extrabold tabular-nums">
+              {/*
+                LA BULLE N'A PLUS D'APLAT — et c'est ce qui la rend juste dans
+                les deux modes.
+
+                Elle valait `bg-bg/25` : le fond de PAGE, posé sur l'accent.
+                En mode sombre il l'assombrissait, en mode clair il
+                l'ÉCLAIRCISSAIT — la sémantique s'inversait avec la peau du
+                restaurant, et le chiffre `text-onaccent` tombait à 3,04:1 sur
+                Marché, 3,38 sur Atelier. Un simple filet d'`onaccent` sur le
+                fond du bouton laisse le couple onAccent/accent intact, celui
+                que le résolveur garantit sur les six directions.
+              */}
+              <span className="grid size-8 shrink-0 place-items-center rounded-pill border-[1.5px] border-onaccent/50 text-[14px] font-extrabold tabular-nums">
                 {cart.count}
               </span>
               <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
@@ -411,6 +426,7 @@ export function Storefront({
         tenantName={site.tenant.name}
         tenantAddress={site.tenant.address}
         stripeApparence={stripeApparence}
+        mode={brand.mode}
         prixMono={prixMono}
         cart={cart}
         paused={paused}

@@ -27,6 +27,7 @@ import {
   PriceTag,
   Rail,
   SectionHead,
+  TAP,
   Tap,
 } from "./primitives";
 
@@ -58,7 +59,7 @@ export function MenuBoard({
 }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(categories[0]?.id ?? "");
-  const tabsRef = useRef<HTMLDivElement>(null);
+  const tabsRef = useRef<HTMLElement>(null);
   const lockRef = useRef(0);
   const spyOffset = stickyTop + SPY_BAR_H;
 
@@ -172,26 +173,46 @@ export function MenuBoard({
           )}
         </div>
 
+        {/*
+          ═══ CE N'EST PAS UN JEU D'ONGLETS, C'EST UNE NAVIGATION DE PAGE ═══
+
+          C'était un `role="tablist"` de `role="tab"` : sans `aria-controls`,
+          sans tabindex tournant, sans flèches. Un lecteur d'écran annonçait
+          donc vingt onglets qui ne commandaient aucun `tabpanel`, et la
+          tabulation s'arrêtait sur chacun d'eux. Or rien ici ne montre ni ne
+          cache un panneau — la carte entière reste affichée et la barre suit
+          le DÉFILEMENT. La forme juste est celle d'un sommaire : des liens
+          d'ancre dans un `<nav>` nommé, dont un porte `aria-current`.
+
+          Les liens gardent leur `href` : sans JavaScript, le saut d'ancre
+          fonctionne quand même (`.sm-anchor` porte déjà la marge de
+          défilement sous la barre collante). `goTo` ne fait qu'y substituer un
+          défilement doux et geler le repérage le temps du trajet.
+        */}
         {!query && categories.length > 1 && (
-          <div
+          <nav
             ref={tabsRef}
-            role="tablist"
             aria-label="Catégories de la carte"
             className="sm-rail sm-fade-x -mx-4 mt-2.5 flex gap-2 overflow-x-auto px-4 pb-1"
           >
             {categories.map((category) => {
               const on = active === category.id;
               return (
-                <Tap
+                <a
                   key={category.id}
-                  role="tab"
-                  aria-selected={on}
+                  href={`#cat-${category.id}`}
+                  aria-current={on ? "true" : undefined}
                   data-cat={category.id}
-                  onClick={() => goTo(category.id)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    goTo(category.id);
+                  }}
                   className={cx(
-                    // Onglet actif : filet blanc, pas d'aplat de marque. L'accent
-                    // reste réservé aux boutons d'ajout (DA §3) — sinon vingt
-                    // pastilles d'ajout et un onglet doré se disputent l'œil.
+                    TAP,
+                    // Catégorie visible : filet blanc, pas d'aplat de marque.
+                    // L'accent reste réservé aux boutons d'ajout (DA §3) —
+                    // sinon vingt pastilles d'ajout et un onglet doré se
+                    // disputent l'œil.
                     "flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-[13.5px] font-bold",
                     on
                       ? "border-ink/45 bg-surface2 text-ink"
@@ -199,18 +220,18 @@ export function MenuBoard({
                   )}
                 >
                   {category.name}
-                  <span
-                    className={cx(
-                      "text-[11px] font-extrabold tabular-nums",
-                      on ? "text-mut" : "text-ink/30",
-                    )}
-                  >
+                  {/* `text-mut` dans les deux états : le compteur d'une
+                      catégorie non courante était en `text-ink/30` à 11 px,
+                      soit 1,5 à 2,5:1 selon la direction — « 24 » et « 8 »
+                      quasi effacés (1.4.3). Ce sont le filet et l'encre du
+                      libellé qui distinguent la catégorie visible. */}
+                  <span className="text-[11px] font-extrabold tabular-nums text-mut">
                     {category.products.length}
                   </span>
-                </Tap>
+                </a>
               );
             })}
-          </div>
+          </nav>
         )}
       </div>
 
@@ -317,23 +338,33 @@ function ProductCard({
         // `@container` sur la CARTE : c'est SA colonne qu'elle interroge,
         // pas la largeur de la grille — deux cartes de la même page peuvent
         // ainsi tenir des dispositions différentes si la grille le veut.
-        "@container relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_90px)] shadow-card transition-colors duration-fast ease-sm",
-        qty > 0 ? "border-accent/45" : "border-ink/6",
+        //
+        // ═══ LE FILET EST UN ANNEAU, ET C'EST LA CONDITION DU SEUIL ═══
+        //
+        // Une requête de conteneur mesure la boîte de CONTENU. Avec une
+        // `border` de 1 px de chaque côté, une piste de 17 rem donnait un
+        // conteneur de 17 rem − 2 px : la carte retombait en colonne alors
+        // que la piste satisfaisait pile le minimum de la grille — une bande
+        // de ~6 px de largeur de fenêtre par nombre de colonnes où trois
+        // cartes serrées s'empilaient sans raison visible. `ring-inset` peint
+        // exactement le même filet en `box-shadow`, hors du flux : la boîte de
+        // contenu vaut désormais la piste, et les deux 17 rem sont vraiment
+        // égaux.
+        "@container relative h-full overflow-hidden rounded-panel ring-1 ring-inset bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_90px)] shadow-card transition-colors duration-fast ease-sm",
+        qty > 0 ? "ring-accent/45" : "ring-ink/6",
         unavailable && "opacity-55",
       )}
     >
       <Tap
         onClick={onPick}
         disabled={!clickable}
-        aria-label={`${product.name}${product.configurable ? " — composer" : " — ajouter au panier"}`}
         /* La disposition suit la COLONNE, pas l'écran — et le seuil vaut
-           EXACTEMENT le minimum de piste de la grille (17 rem). Les deux
-           chiffres doivent rester égaux : plus haut, la grille fabriquerait
-           des colonnes que la disposition en ligne tient très bien mais que
-           la carte refuserait ; plus bas, elle se serrerait dans une colonne
-           trop étroite pour le nom du plat. Une colonne ne peut donc jamais
-           être plus étroite que ce que la ligne demande — et le seul cas qui
-           bascule est `min(100%, 17rem)`, quand la place manque vraiment. */
+           EXACTEMENT le minimum de piste de la grille (17 rem), maintenant
+           que le filet ne mange plus la boîte de contenu (voir ci-dessus).
+           Les deux chiffres doivent rester égaux : plus haut, la grille
+           fabriquerait des colonnes que la disposition en ligne tient très
+           bien mais que la carte refuserait ; plus bas, elle se serrerait
+           dans une colonne trop étroite pour le nom du plat. */
         className={cx(
           "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @[17rem]:flex-row @[17rem]:gap-3.5",
           !clickable && "cursor-default active:scale-100",
@@ -385,13 +416,29 @@ function ProductCard({
             )}
             {clickable && <AddButton qty={qty} compose={product.configurable} />}
           </div>
+
+          {/*
+            LE NOM ACCESSIBLE VIENT DU CONTENU, PAS D'UN `aria-label`.
+
+            La carte portait `aria-label="{nom} — ajouter au panier"`, qui
+            REMPLACE tout ce qu'elle contient : le prix, le « dès », la
+            description, le badge « Nouveau » et la quantité déjà au panier
+            n'étaient JAMAIS lus — `AddButton` est `aria-hidden`, et le
+            `sr-only` posé hors du bouton ne redisait que le nom et le prix.
+            Sans `aria-label`, le lecteur d'écran annonce la carte telle
+            qu'elle est écrite ; ce complément n'ajoute donc que les deux
+            informations que la pastille porte en image.
+          */}
+          <span className="sr-only">
+            {qty > 0 ? `, ${qty} déjà au panier` : ""}
+            {clickable
+              ? product.configurable
+                ? ", composer"
+                : ", ajouter au panier"
+              : ""}
+          </span>
         </div>
       </Tap>
-
-      {/* Prix lisible par les moteurs (microdonnées portées par le JSON-LD). */}
-      <span className="sr-only">
-        {product.name} — {euros(product.fromPrice)}
-      </span>
     </article>
   );
 }
@@ -429,7 +476,12 @@ export function Highlights({
         aside={
           <Tap
             onClick={onBrowse}
-            className="shrink-0 pb-0.5 text-[13px] font-bold text-mut hover:text-ink"
+            /* 44 px de haut comme tout contrôle client (spec §7) : le lien
+               faisait 17 px, sous le minimum de 2.5.8 lui-même. La marge
+               négative reprend la hauteur ajoutée pour que le filet de
+               l'en-tête reste calé sur la ligne de base du titre — la cible
+               grandit, la mise en page ne bouge presque pas. */
+            className="-my-2.5 -mr-2 inline-flex min-h-11 shrink-0 items-center px-2 text-[13px] font-bold text-mut hover:text-ink"
           >
             Tout voir →
           </Tap>
@@ -444,7 +496,6 @@ export function Highlights({
               key={product.id}
               onClick={() => !disabled && onPick(product)}
               disabled={disabled}
-              aria-label={`${product.name} — ${euros(product.fromPrice)}`}
               className={cx(
                 "w-[172px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
                 qty > 0 ? "border-accent/45" : "border-ink/6",
@@ -488,6 +539,15 @@ export function Highlights({
                       <Icon name="plus" size={17} stroke={2.8} />
                     )}
                   </span>
+                </span>
+                {/* Même règle que sur la carte : le contenu porte le nom et le
+                    prix, le complément n'ajoute que ce que la pastille dit en
+                    image. L'`aria-label` d'avant les effaçait tous les deux —
+                    ni le « dès » d'un produit à variantes, ni la quantité déjà
+                    au panier n'étaient annoncés. */}
+                <span className="sr-only">
+                  {qty > 0 ? `, ${qty} déjà au panier` : ""}
+                  {disabled ? "" : product.configurable ? ", composer" : ", ajouter au panier"}
                 </span>
               </span>
             </Tap>

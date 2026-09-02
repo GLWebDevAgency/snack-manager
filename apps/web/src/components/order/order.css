@@ -193,10 +193,13 @@
   touch-action: none;
 }
 
-/* Barre de progression du tunnel : la teinte suit l'accent tenant. */
-.sm-step-on {
-  background: var(--cf-accent);
-}
+/*
+ * `.sm-step-on` a été retiré : aucune surface ne le portait (la barre du
+ * tunnel est peinte en `bg-accentink` dans `Checkout`), et il aurait posé
+ * l'accent PUR sur un indicateur d'un pixel — 2,55:1 sur Soleil, sous le 3:1
+ * de 1.4.11. Une règle morte qui documente un mauvais choix vaut moins que
+ * pas de règle du tout.
+ */
 
 @media (prefers-reduced-motion: reduce) {
   .sm-snap {
