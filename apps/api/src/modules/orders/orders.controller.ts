@@ -24,6 +24,7 @@ import {
   type JwtPayload,
   type OrderStatus,
   publicOrderingState,
+  aLaCapacite,
   TrackingTokenQuerySchema,
   type TrackingTokenQuery,
   UpdateOrderStatusSchema,
@@ -156,7 +157,7 @@ export class OrdersController {
         'Ce code ne permet pas d’annuler une commande — demandez à la caisse ou au gérant.',
       );
     }
-    return this.orders.cancel(tenantId, id, valideur.staffId, body.reason);
+    return this.orders.cancel(tenantId, id, valideur, body.reason);
   }
 
   /**
@@ -192,13 +193,22 @@ export class OrdersController {
     @Body(zod(CreatePublicOrderSchema)) body: CreatePublicOrder,
   ) {
     const tenant = await this.tenants.bySlug(slug);
-    // Pause volontaire du gérant OU suspension du compte par Snack Manager :
-    // même fermeture propre côté client, messages distincts (le consommateur
-    // ne doit jamais lire « impayé » — le litige ne le concerne pas).
-    const gate = publicOrderingState(tenant.account, {
-      paused: tenant.settings?.onlineOrderingPaused ?? false,
-      message: tenant.settings?.pauseMessage ?? null,
-    });
+    // Pause volontaire du gérant, suspension du compte par Snack Manager, ou
+    // commande en ligne non souscrite : même fermeture propre côté client,
+    // messages distincts (le consommateur ne doit jamais lire « impayé » ni
+    // « abonnement » — ni le litige ni le contrat ne le concernent).
+    //
+    // Une capacité manquante passe donc par la MÊME porte que la pause, et pas
+    // par un 403 de garde : le client qui valide son panier à 12h15 doit lire
+    // une phrase qui lui parle, pas recevoir une erreur.
+    const gate = publicOrderingState(
+      tenant.account,
+      {
+        paused: tenant.settings?.onlineOrderingPaused ?? false,
+        message: tenant.settings?.pauseMessage ?? null,
+      },
+      aLaCapacite(tenant, 'online'),
+    );
     if (gate.paused) return gate;
 
     // Un POST dont la reponse s'est perdue garde la meme cle. La commande

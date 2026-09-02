@@ -45,6 +45,7 @@
  * écran que personne n'ouvrira.
  */
 
+import type { Capacite } from "@sm/contracts";
 import type { IconName } from "@/components/ui";
 import type { RoleAdmin } from "./session";
 
@@ -61,9 +62,42 @@ export type NavItem = {
    * une politesse : ne pas proposer une porte qu'on fermera au nez.
    */
   roles?: readonly RoleAdmin[];
+  /**
+   * LE MODULE DE LA GRILLE TARIFAIRE qui ouvre cet écran. Absent = le socle.
+   *
+   * Second critère, et de nature TOTALEMENT différente du premier : `roles`
+   * dit qui a le droit, `capacite` dit ce que l'établissement a payé. D'où
+   * deux traitements opposés, et c'est la décision centrale de cette table :
+   *
+   *  · une entrée refusée par le RÔLE est MASQUÉE. Un équipier de cuisine n'a
+   *    pas à savoir que l'écran d'abonnement existe : ce n'est pas son métier,
+   *    et le lui montrer ne lui apprend rien d'utile ;
+   *  · une entrée non SOUSCRITE reste VISIBLE et VERROUILLÉE. Le restaurateur
+   *    vient de lire, sur notre grille tarifaire, que ces modules existent —
+   *    les faire disparaître de son back-office serait lui cacher ce qu'il
+   *    peut acheter. On ne vend pas ce qu'on cache.
+   *
+   * Absent quand la matrice publiée ne couvre PAS l'écran (`apps/web/src/
+   * components/marketing/content.ts`, `PLAN_MODULES`) : les avis, les écrans
+   * de salle, le site, l'équipe, les réglages, les horaires, les appareils et
+   * l'abonnement n'y ont pas de ligne. Rien ne leur a donc été promis, et rien
+   * ne doit leur être retiré — leur inventer un module fermerait une porte sur
+   * une promesse que personne n'a faite.
+   */
+  capacite?: Capacite;
 };
 
 export type NavGroupe = { titre: string; items: readonly NavItem[] };
+
+/**
+ * Une entrée telle que la barre la PEINT — avec son verrou.
+ *
+ * `verrouille` n'est pas un champ de la table : il dépend de la session, il se
+ * calcule à chaque rendu. Le distinguer de `NavItem` évite qu'un appelant
+ * croie lire une propriété de l'écran alors qu'il lit un fait du restaurant.
+ */
+export type NavItemAffiche = NavItem & { verrouille: boolean };
+export type NavGroupeAffiche = { titre: string; items: readonly NavItemAffiche[] };
 
 /**
  * L'écran d'abonnement, nommé à part : c'est le SEUL qui survit à une
@@ -81,8 +115,8 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // tableaux, il montre LA JOURNÉE — le chiffre du jour, l'objectif, les
       // commandes en cours. Et le nom tient sous le pouce, ce qui supprime le
       // libellé court « Accueil » qui le doublait dans la barre basse.
-      { href: "/admin/dashboard", label: "Aujourd’hui", icon: "home" },
-      { href: "/admin/orders", label: "Commandes", icon: "ticket" },
+      { href: "/admin/dashboard", label: "Aujourd’hui", icon: "home", capacite: "bo" },
+      { href: "/admin/orders", label: "Commandes", icon: "ticket", capacite: "bo" },
     ],
   },
   {
@@ -91,12 +125,12 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // « Carte », pas « Menu & prix » : c'est déjà le mot qu'emploient la
       // barre basse, la recherche de l'écran et la modale d'import. Le nom
       // était le seul endroit à dire autre chose.
-      { href: "/admin/menu", label: "Carte", icon: "grid" },
+      { href: "/admin/menu", label: "Carte", icon: "grid", capacite: "menu" },
       // « Stocks » voisine la carte parce que le prix de vente et le coût
       // matière sont le MÊME objet économique : on ne décide pas de l'un sans
       // regarder l'autre. « Ingrédients & stocks » nommait la matière, pas la
       // question qu'on vient s'y poser.
-      { href: "/admin/ingredients", label: "Stocks", icon: "fries" },
+      { href: "/admin/ingredients", label: "Stocks", icon: "fries", capacite: "stocks" },
     ],
   },
   {
@@ -105,8 +139,8 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
     // éloignés de la liste.
     titre: "Clients",
     items: [
-      { href: "/admin/fidelite", label: "Fidélité", icon: "gift" },
-      { href: "/admin/promos", label: "Promotions", icon: "tag" },
+      { href: "/admin/fidelite", label: "Fidélité", icon: "gift", capacite: "loyalty" },
+      { href: "/admin/promos", label: "Promotions", icon: "tag", capacite: "loyalty" },
       { href: "/admin/reviews", label: "Avis", icon: "star" },
     ],
   },
@@ -124,7 +158,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // (`payroll-access.ts`), et la semaine publiée est faite pour être lue
       // par les salariés. Masquer l'entrée retirerait à un équipier la seule
       // page qui lui dit quand il travaille.
-      { href: "/admin/planning", label: "Planning", icon: "check" },
+      { href: "/admin/planning", label: "Planning", icon: "check", capacite: "planning" },
     ],
   },
   {
@@ -132,7 +166,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
     // ni du service, ni de l'équipe, ni un réglage. Le ranger ailleurs lui
     // inventerait un propriétaire qu'il n'a pas.
     titre: "Analyse",
-    items: [{ href: "/admin/stats", label: "Statistiques", icon: "chart" }],
+    items: [{ href: "/admin/stats", label: "Statistiques", icon: "chart", capacite: "bo" }],
   },
   {
     // CE QUE LE PUBLIC VOIT du restaurant, et par où il paie. Les trois
@@ -152,11 +186,18 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // Réservé au propriétaire : `EncaissementController` porte
       // `@Roles('owner')` SUR SA CLASSE — toutes ses routes en héritent. Une
       // session de comptoir voyait l'entrée, cliquait, et recevait un 403.
+      // LES DEUX AXES SUR LA MÊME ENTRÉE, et c'est la seule de la barre.
+      // `roles` la masque à une session de comptoir (`EncaissementController`
+      // porte `@Roles('owner')`) ; `capacite` la VERROUILLE, sans la masquer,
+      // pour un propriétaire dont la formule ne comprend pas la commande en
+      // ligne — le raccordement Stripe n'existe que pour encaisser ces
+      // commandes-là, et l'API le refuse désormais franchement.
       {
         href: "/admin/encaissement",
         label: "Encaissement en ligne",
         icon: "euro",
         roles: ["owner"],
+        capacite: "online",
       },
     ],
   },
@@ -186,14 +227,14 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
 export const NAV: readonly NavItem[] = NAV_GROUPES.flatMap((g) => g.items);
 
 /**
- * CE QUE LA BARRE SAIT DE LA SESSION — deux faits, pas un de plus.
+ * CE QUE LA BARRE SAIT DE LA SESSION — trois faits, pas un de plus.
  *
- * Elle ne lit ni la formule souscrite ni le module de commande en ligne, et ce
- * n'est pas un oubli : AUCUNE route, AUCUN écran du back-office n'est gardé par
- * `plan` ou par `onlineOrdering` aujourd'hui. Ces deux champs ne servent qu'au
- * calcul commercial (devis, facturation, CRM). Masquer une entrée sur leur foi
- * inventerait une dépendance qui n'existe pas, et retirerait au restaurateur un
- * écran que l'API lui ouvre.
+ * Elle ne lit JAMAIS la formule souscrite, et c'est la règle d'or du produit :
+ * le code ne connaît pas le nom d'une formule, il connaît des capacités. Le
+ * serveur calcule la liste (`GET /tenants/me` → `capacites`), la barre la
+ * consomme. Rejouer le catalogue ici en ferait une seconde copie, qui
+ * divergerait de l'API au premier changement d'offre — la moitié des écrans
+ * verrouillés d'un côté, ouverts de l'autre, sans qu'un test ne rougisse.
  */
 export type ContexteNav = {
   /**
@@ -215,6 +256,18 @@ export type ContexteNav = {
    * seize autres entrées, c'est proposer seize refus.
    */
   suspendu: boolean;
+  /**
+   * CE QUE L'ÉTABLISSEMENT A SOUSCRIT — la liste, calculée par le serveur.
+   *
+   * `null` quand on ne sait pas encore, et les deux cas arrivent pour de vrai :
+   * la démonstration (aucun jeton, aucun appel) et l'instant qui précède la
+   * réponse de `GET /tenants/me`. Rien n'est alors verrouillé — un verrou qui
+   * apparaît une seconde après le chargement fait clignoter la barre, et
+   * verrouiller par défaut punirait un client en règle pour la lenteur du
+   * réseau. C'est la même règle que pour `role`, et pour la même raison :
+   * l'autorité est côté API, ici on ne fait que ne pas mentir.
+   */
+  capacites: readonly Capacite[] | null;
 };
 
 /** Une entrée est-elle proposée dans ce contexte ? */
@@ -229,13 +282,35 @@ function estVisible(item: NavItem, ctx: ContexteNav): boolean {
 }
 
 /**
+ * L'entrée est-elle VERROUILLÉE — visible, mais fermée faute d'abonnement ?
+ *
+ * Jamais masquée, et le contraste avec `estVisible` est tout le propos : un
+ * refus de droit se tait, un défaut de souscription se montre. La différence
+ * n'est pas une nuance d'interface, c'est la différence entre « ce n'est pas
+ * votre métier » et « voilà ce que vous pourriez avoir ».
+ */
+function estVerrouille(item: NavItem, ctx: ContexteNav): boolean {
+  if (!item.capacite || ctx.capacites === null) return false;
+  return !ctx.capacites.includes(item.capacite);
+}
+
+const affiche = (item: NavItem, ctx: ContexteNav): NavItemAffiche => ({
+  ...item,
+  verrouille: estVerrouille(item, ctx),
+});
+
+/**
  * Les groupes réellement affichés. Un groupe vidé par les règles disparaît
  * avec son intitulé : un titre sans entrée est un cul-de-sac.
+ *
+ * Une entrée VERROUILLÉE ne vide rien : elle reste dans son groupe, avec son
+ * nom et son icône, et porte seulement `verrouille: true`. C'est la barre qui
+ * décide comment le dire ; la table dit seulement que c'est le cas.
  */
-export function groupesVisibles(ctx: ContexteNav): readonly NavGroupe[] {
+export function groupesVisibles(ctx: ContexteNav): readonly NavGroupeAffiche[] {
   return NAV_GROUPES.map((g) => ({
     titre: g.titre,
-    items: g.items.filter((item) => estVisible(item, ctx)),
+    items: g.items.filter((item) => estVisible(item, ctx)).map((item) => affiche(item, ctx)),
   })).filter((g) => g.items.length > 0);
 }
 
@@ -275,10 +350,10 @@ export const MOBILE_HREFS: readonly string[] = [
 ];
 
 /** Les cases directes de la barre basse, filtrées comme le reste. */
-export function barreMobile(ctx: ContexteNav): readonly NavItem[] {
-  return MOBILE_HREFS.map((href) => NAV.find((n) => n.href === href)!).filter((item) =>
-    estVisible(item, ctx),
-  );
+export function barreMobile(ctx: ContexteNav): readonly NavItemAffiche[] {
+  return MOBILE_HREFS.map((href) => NAV.find((n) => n.href === href)!)
+    .filter((item) => estVisible(item, ctx))
+    .map((item) => affiche(item, ctx));
 }
 
 /**
@@ -288,7 +363,7 @@ export function barreMobile(ctx: ContexteNav): readonly NavItem[] {
  * Les entrées déjà sous le pouce en sont retirées, et les groupes ainsi vidés
  * disparaissent.
  */
-export function groupesMobileRestants(ctx: ContexteNav): readonly NavGroupe[] {
+export function groupesMobileRestants(ctx: ContexteNav): readonly NavGroupeAffiche[] {
   return groupesVisibles(ctx)
     .map((g) => ({
       titre: g.titre,

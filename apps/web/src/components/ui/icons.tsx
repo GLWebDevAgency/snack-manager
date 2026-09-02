@@ -98,6 +98,14 @@ const PATHS = {
     "M12 16.5v4",
     "M8.5 20.5h7",
   ],
+  // Le cadenas FERMÉ : une fonction du produit que le restaurant n'a pas
+  // souscrite. Il ne signale JAMAIS un manque de droit — une porte fermée à un
+  // rôle n'est pas montrée du tout, elle est absente de la barre. Ici l'écran
+  // reste visible exprès : on ne vend pas ce qu'on cache.
+  lock: [
+    "M5.5 10.5h13a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z",
+    "M8 10.5V7a4 4 0 0 1 8 0v3.5",
+  ],
 } as const;
 
 export type IconName = keyof typeof PATHS;

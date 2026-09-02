@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  aLaCapacite,
   brandColorDe,
   logoUrlDe,
   publicOrderingState,
@@ -78,12 +79,19 @@ export class SiteService {
       this.reviewsSummary(tenantId),
     ]);
 
-    // Suspension de compte = pause de service aux yeux du public (message
-    // neutre, jamais le motif du litige) — règle partagée des contrats.
-    const gate = publicOrderingState(tenant.account, {
-      paused: tenant.settings?.onlineOrderingPaused === true,
-      message: tenant.settings?.pauseMessage ?? null,
-    });
+    // Suspension de compte, ou commande en ligne non souscrite = pause de
+    // service aux yeux du public (message neutre, jamais le motif du litige ni
+    // la mention d'un abonnement) — règle partagée des contrats. Le menu, les
+    // horaires et les avis restent servis : on ferme un guichet, on n'efface
+    // pas un restaurant d'Internet.
+    const gate = publicOrderingState(
+      tenant.account,
+      {
+        paused: tenant.settings?.onlineOrderingPaused === true,
+        message: tenant.settings?.pauseMessage ?? null,
+      },
+      aLaCapacite(tenant, 'online'),
+    );
     const paused = gate.paused;
 
     return {
