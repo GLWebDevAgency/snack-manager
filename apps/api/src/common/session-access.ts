@@ -104,6 +104,15 @@ export class SessionAccessService {
 
     // L'absence du champ vaut « actif » pour le parc historique. Seul le
     // statut explicitement suspendu bloque ; trial et churned restent ouverts.
+    // ── POURQUOI LE STATUT STOCKÉ SUFFIT ICI ──
+    //
+    // `statutEffectif` (@sm/contracts) ne transforme QU'UN essai en actif, et
+    // `isAccessBlocked` répond faux aux deux : la dérivation ne changerait donc
+    // aucune décision de cette garde, tout en obligeant à ouvrir la projection
+    // sur `account.trialEndsAt` — un champ que la fiche des tenants tient
+    // délibérément hors de portée des surfaces de terrain (cf. `TENANT_FIELDS`,
+    // tenants.service). Une garde d'ACCÈS lit le statut stocké ; ce sont les
+    // surfaces qui FACTURENT ou qui AFFICHENT qui lisent l'effectif.
     if (isAccessBlocked(tenant.account?.status)) {
       throw new ForbiddenException({
         statusCode: 403,

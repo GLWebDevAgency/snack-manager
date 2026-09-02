@@ -11,6 +11,9 @@ import {
   invoiceTotals,
   invoiceView,
   isAccessBlocked,
+  isBillable,
+  statutEffectif,
+  type CompteLu,
   isTenantVisibleInvoice,
   nextInvoiceDue,
   planLabel,
@@ -114,8 +117,13 @@ export class MyBillingService {
     const due = dueRows.map((raw) => invoiceView(raw as StoredInvoice, now));
 
     const plan = planOf(tenant);
-    const status = accountStatusOf(tenant);
-    const billable = status === 'active' || status === 'suspended';
+    const status = accountStatusOf(tenant, now);
+    // La MÊME règle que la facturation de l'équipe (`isBillable`,
+    // @sm/contracts) : elle était recopiée ici, c'est-à-dire écrite deux fois
+    // pour le même client. Le jour où l'une des deux aurait bougé, il aurait
+    // lu « aucun prélèvement » sur l'écran même où nous lui préparions une
+    // facture.
+    const billable = isBillable(status);
     // L'offre ENTIÈRE, pas la formule seule : c'est le montant que le
     // restaurateur voit sur son écran « Abonnement », et il doit être celui
     // qu'on lui prélève. Il lisait 159 € là où on facturait 238 €.
@@ -286,13 +294,21 @@ const planOf = (tenant: RawTenant): BillingPlan | null =>
   (tenant.plan ?? null) as BillingPlan | null;
 
 /**
- * Statut de compte, absence comprise : les établissements créés avant le champ
- * `account` n'en ont pas en base, et `.lean()` ne matérialise pas les défauts
- * Mongoose. L'absence vaut « essai » — jamais une anomalie.
+ * Statut de compte, absence comprise, et EFFECTIF à l'instant `now`.
+ *
+ * Les établissements créés avant le champ `account` n'en ont pas en base, et
+ * `.lean()` ne matérialise pas les défauts Mongoose : l'absence vaut « essai »
+ * — jamais une anomalie.
+ *
+ * `statutEffectif` (@sm/contracts) et non la colonne, pour que le gérant lise
+ * SUR SON PROPRE ÉCRAN ce que notre équipe lit du sien. Le jour où son essai
+ * s'achève, sa page « Abonnement » annonce le prélèvement à venir au lieu de
+ * répéter « Essai — rien à facturer » jusqu'à ce qu'un humain bascule le
+ * champ à la main. Découvrir le prélèvement sur son relevé bancaire est
+ * exactement ce qu'on ne veut pas.
  */
-function accountStatusOf(tenant: RawTenant): TenantAccountStatus {
-  const account = tenant.account as { status?: string } | undefined;
-  return (account?.status ?? 'trial') as TenantAccountStatus;
+function accountStatusOf(tenant: RawTenant, now: Date): TenantAccountStatus {
+  return statutEffectif(tenant.account as CompteLu | undefined, now);
 }
 
 /**

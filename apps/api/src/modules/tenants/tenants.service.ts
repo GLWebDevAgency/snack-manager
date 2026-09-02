@@ -114,6 +114,14 @@ export const TENANT_ME_FIELDS = {
  * retombe sur `DEFAULT_TENANT_ACCOUNT_STATUS` — `trial`, le plus permissif :
  * un champ jamais écrit ne doit pas fermer un restaurant en plein service.
  *
+ * C'est le statut STOCKÉ, et non `statutEffectif` (@sm/contracts) : celui-là
+ * exige `account.trialEndsAt`, que la liste blanche ci-dessus tient
+ * délibérément hors de cette réponse — c'est le calendrier d'un litige
+ * commercial, il n'a rien à faire sur la tablette du comptoir. La perte est
+ * nulle : le seul lecteur de ce champ côté restaurateur est `isAccessBlocked`,
+ * qui répond faux à `trial` comme à `active`. Ce que le gérant lit de sa
+ * facturation vient, lui, de `GET /me/billing`, qui dérive bien l'effectif.
+ *
  * `capacites` est CALCULÉ ici, et c'est le seul endroit du produit où la
  * question « qu'a payé ce restaurant ? » se pose pour le front. Le navigateur
  * reçoit la LISTE de ce qu'il peut ouvrir — jamais la formule, jamais le

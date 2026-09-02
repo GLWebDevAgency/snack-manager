@@ -11,6 +11,8 @@ import {
   TENANT_ACCOUNT_STATUS_LABELS,
   daysSince,
   isAccessBlocked,
+  statutEffectif,
+  type CompteLu,
   summarizeOutstanding,
   type CrmOutstanding,
   type CrmQueueSignal,
@@ -148,13 +150,18 @@ const REVENUE_STATUSES = ['ready', 'delivered'];
 /**
  * DURÉE D'UNE PÉRIODE D'ESSAI, en jours.
  *
- * Convention ÉDITORIALE, pas une donnée : `docs/specs/contraintes-business.md`
- * §6.2 laisse le contenu des formules « à définir », et aucune date de fin
- * d'essai n'est stockée sur le tenant. Le chiffre réellement mesuré est
- * l'ANCIENNETÉ du statut « essai » (`account.since`), qui, elle, est en base ;
- * cette constante ne sert qu'à décider à partir de quand on en parle. Le jour
- * où l'offre fixe une durée — ou où le tenant porte un `trialEndsAt` —, c'est
- * cette ligne qui change, pas le raisonnement.
+ * Convention ÉDITORIALE pour le parc HISTORIQUE, donnée réelle pour le reste.
+ * `docs/specs/contraintes-business.md` §6.2 laisse le contenu des formules
+ * « à définir » ; les comptes nés du pipeline, eux, portent un `trialEndsAt`
+ * écrit à la conversion, et c'est lui qui fait foi (cf. le calcul du signal).
+ * Cette constante sert aux tenants d'avant ce champ, dont on ne mesure que
+ * l'ANCIENNETÉ du statut « essai » (`account.since`).
+ *
+ * C'est aussi la seule population sur laquelle « Essai dépassé » peut encore
+ * se déclencher : un compte qui porte un terme vaut `active` dès ce terme
+ * (`statutEffectif`, lu par `readAccount`), et sort donc du signal. Un essai
+ * sans terme écrit, lui, ne peut pas se clore tout seul — il faut continuer de
+ * le rappeler à l'équipe.
  */
 export const TRIAL_DAYS = 30;
 
@@ -670,11 +677,18 @@ export function signalsForClient(client: SignalClient, now: Date): CrmQueueSigna
   }
 
   // ─ Essai qui s'achève ─
+  //
+  // Le statut lu est l'EFFECTIF (`readAccount` → `statutEffectif`) : un compte
+  // dont le terme est passé vaut `active` et sort d'ici de lui-même. Le signal
+  // annonce donc une échéance À VENIR, au lieu de crier « essai dépassé »
+  // chaque matin sur un client entré en facturation depuis un an — c'est
+  // exactement ce qu'il faisait, et une file qu'on n'écoute plus ne sert plus.
   if (client.accountStatus === 'trial') {
     const inTrial = daysSince(client.accountSince ?? client.since, now);
     // L'échéance RÉELLE quand elle est en base (comptes créés depuis le
-    // pipeline), la convention TRIAL_DAYS sinon — c'était le plan écrit plus
-    // haut : « le jour où le tenant porte un trialEndsAt, cette ligne change ».
+    // pipeline), la convention TRIAL_DAYS sinon. « Essai dépassé » ci-dessous
+    // ne concerne donc plus QUE le second cas : un essai sans terme écrit ne
+    // peut se clore tout seul, et il faut bien que quelqu'un le rappelle.
     const remaining =
       client.trialEndsAt !== null
         ? Math.ceil((client.trialEndsAt.getTime() - now.getTime()) / 86_400_000)
@@ -881,13 +895,25 @@ const SCREEN_FIELDS = {
 type RawTenant = Tenant & { _id: unknown; createdAt?: Date };
 
 /**
- * Bloc `account` d'un tenant, absence comprise.
+ * Bloc `account` d'un tenant, absence comprise, et statut EFFECTIF.
  *
  * Les établissements créés avant ce champ n'en ont pas en base, et `.lean()` ne
  * matérialise pas les défauts Mongoose : l'absence vaut « essai », jamais
  * « anomalie » — même règle que dans `AdminService` et `HealthService`.
+ *
+ * Le statut passe par `statutEffectif` (@sm/contracts), et c'est ce qui EMPÊCHE
+ * le signal « essai qui s'achève » de hurler indéfiniment : passé le terme, le
+ * compte vaut `active` et le signal ne se déclenche plus. Il annonce donc une
+ * échéance à venir — ce qu'il est — au lieu de crier « essai dépassé » chaque
+ * matin sur un client entré en facturation depuis un an.
+ *
+ * `trialEndsAt` reste rendu tel quel : c'est lui qui donne les jours restants
+ * AVANT le terme, la fenêtre où le signal sert vraiment.
  */
-function readAccount(raw: RawTenant): {
+function readAccount(
+  raw: RawTenant,
+  now: Date,
+): {
   status: TenantAccountStatus;
   since: Date | null;
   trialEndsAt: Date | null;
@@ -897,7 +923,7 @@ function readAccount(raw: RawTenant): {
     | { status?: string; since?: Date; suspendedAt?: Date | null; trialEndsAt?: Date | null }
     | undefined;
   return {
-    status: (account?.status ?? 'trial') as TenantAccountStatus,
+    status: statutEffectif(raw.account as CompteLu | undefined, now),
     since: account?.since ?? null,
     trialEndsAt: account?.trialEndsAt ?? null,
     suspendedAt: account?.suspendedAt ?? null,
@@ -982,7 +1008,7 @@ export class SignalsService {
       const id = String(tenant._id);
       const activity = activityByTenant.get(id) ?? EMPTY_ACTIVITY;
       const fleet = fleetByTenant.get(id) ?? [];
-      const account = readAccount(tenant);
+      const account = readAccount(tenant, now);
 
       const modules = buildModules({
         posOrders: activity.posOrders30,

@@ -12,6 +12,9 @@ import {
   clientHealth,
   daysSince,
   isAccessBlocked,
+  statutEffectif,
+  essaiEchuLe,
+  type CompteLu,
   paiementAxis,
   type CrmActivityWindow,
   type CrmFleet,
@@ -913,7 +916,7 @@ export class HealthService {
       supply: supply.available ? supply : null,
     });
 
-    const account = readAccount(tenant);
+    const account = readAccount(tenant, now);
     const days = daysSince(activity.lastOrderAt, now);
     const health = clientHealth(activity.lastOrderAt, now);
 
@@ -1152,13 +1155,23 @@ export const SCREEN_FIELDS = {
 } as const;
 
 /**
- * Bloc `account` d'un tenant, absence comprise.
+ * Bloc `account` d'un tenant, absence comprise, et statut EFFECTIF.
  *
  * Les établissements créés avant ce champ n'en ont pas en base, et `.lean()`
  * ne matérialise pas les défauts Mongoose : l'absence vaut « essai », jamais
  * « anomalie » — même règle que dans `AdminService`.
+ *
+ * Le statut passe par `statutEffectif` (@sm/contracts), et c'est l'axe
+ * PAIEMENT du score qui en dépend : `paiementAxis` rend 100/100 et « période
+ * d'essai, rien à facturer » à tout compte `trial`. Un essai échu depuis six
+ * mois, avec trois factures en retard, ressortait donc en parfaite santé de
+ * paiement. `since` suit la même dérivation que la fiche client : sur un essai
+ * échu c'est le TERME, pas la date de signature.
  */
-function readAccount(raw: RawTenant): {
+function readAccount(
+  raw: RawTenant,
+  now: Date,
+): {
   status: TenantAccountStatus;
   since: Date | null;
   reason: string;
@@ -1168,8 +1181,8 @@ function readAccount(raw: RawTenant): {
     | { status?: string; since?: Date; reason?: string; suspendedAt?: Date | null }
     | undefined;
   return {
-    status: (account?.status ?? 'trial') as TenantAccountStatus,
-    since: account?.since ?? null,
+    status: statutEffectif(raw.account as CompteLu | undefined, now),
+    since: essaiEchuLe(raw.account as CompteLu | undefined, now) ?? account?.since ?? null,
     reason: account?.reason ?? '',
     suspendedAt: account?.suspendedAt ?? null,
   };

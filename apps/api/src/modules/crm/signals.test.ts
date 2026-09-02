@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { NO_OUTSTANDING, summarizeOutstanding, type CrmOutstanding } from '@sm/contracts';
+import {
+  NO_OUTSTANDING,
+  statutEffectif,
+  summarizeOutstanding,
+  type CrmOutstanding,
+} from '@sm/contracts';
 import type { Device, Order, Screen, SignalDismissal, Tenant } from '@sm/db';
 import type { SupplyDb } from '@sm/supply';
 import { FakeCollection, type Row } from './admin.fakes';
@@ -513,6 +518,19 @@ describe('Essai qui s’achève', () => {
   it('ne s’applique jamais à un client déjà abonné', () => {
     expect(only(signalsForClient(client({ accountStatus: 'active' }), NOW), 'essai_qui_sacheve'))
       .toHaveLength(0);
+  });
+
+  it('ne crie « essai dépassé » que sur un essai SANS terme en base', () => {
+    // Le signal lit le statut EFFECTIF (`readAccount` → `statutEffectif`) : un
+    // essai dont le terme est écrit vaut « actif » dès ce terme, et la file
+    // cesse donc de hurler sur des comptes désormais facturés. Ce qui reste
+    // ici, c'est le parc d'avant `trialEndsAt` — qu'aucune date ne peut clore
+    // tout seul, et qu'il faut donc continuer de rappeler.
+    expect(statutEffectif({ status: 'trial', trialEndsAt: daysAgo(2) }, NOW)).toBe('active');
+    expect(only(signalsForClient(client({ accountStatus: 'active' }), NOW), 'essai_qui_sacheve'))
+      .toHaveLength(0);
+    const [essai] = only(trial(TRIAL_DAYS + 12), 'essai_qui_sacheve');
+    expect(essai?.title).toBe('Essai dépassé');
   });
 });
 

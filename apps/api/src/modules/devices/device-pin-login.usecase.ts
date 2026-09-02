@@ -54,6 +54,11 @@ export class DevicePinLogin {
     // pour un client qu'on a coupé, ce qui viderait la suspension de son sens.
     // L'équipe lit le motif réel : elle est du côté du restaurant, c'est elle
     // qui préviendra le gérant.
+    //
+    // STATUT STOCKÉ, et c'est suffisant : `statutEffectif` ne transforme qu'un
+    // essai en actif, deux statuts auxquels `isAccessBlocked` répond faux. La
+    // dérivation ne changerait donc rien ici — et un essai échu ne doit surtout
+    // pas fermer une caisse en plein service.
     if (isAccessBlocked(await this.tenants.accountStatus(device.tenantId))) {
       throw new ForbiddenException(ACCOUNT_SUSPENDED_MESSAGE);
     }
