@@ -77,6 +77,8 @@ function enrollAndAcknowledge(
 
 /** Appels de LECTURE, écran par écran. */
 const READS: [string, string][] = [
+  // Médiathèque
+  ["GET", "/medias"],
   // Encaissement en ligne
   ["GET", "/encaissement/me"],
   ["POST", "/encaissement/me/synchroniser"],

@@ -3,6 +3,8 @@
  * Tous les montants circulent en CENTIMES (int).
  */
 
+import type { MediaVue, QuotaMedias } from "@sm/contracts";
+
 export type Variant = { key: string; name: string; price: number };
 
 /**
@@ -32,6 +34,29 @@ export type Product = {
    * n'ajoutez jamais un chemin qui compte dessus sans le savoir.
    */
   optionGroups: import("@sm/contracts").OptionGroup[];
+  /**
+   * Les photos du plat, DANS L'ORDRE — la première est la principale.
+   *
+   * Des identifiants et non des adresses : les médias voyagent à plat, à la
+   * racine de `GET /menu` (`MenuData.medias`), parce que trois galettes qui
+   * partagent le cliché du panneau mural ne doivent pas le faire transiter
+   * trois fois. L'adresse, le point d'intérêt et le texte alternatif se
+   * cherchent dans ce catalogue.
+   *
+   * Cette liste ne part JAMAIS dans le correctif du produit : elle a sa
+   * propre route (`PUT /products/:id/medias`), qui attache et réordonne d'un
+   * seul geste.
+   */
+  medias: string[];
+  /**
+   * `photoUrl` tel que l'API le rend — un champ DÉRIVÉ, jamais écrivable.
+   *
+   * Il ne sert plus qu'à une chose : les dix-neuf plats du pilote, dont la
+   * photo est un fichier versionné dans le paquet web et non un média. On le
+   * garde donc en lecture, et `photoUrlDe` le prend en repli quand aucune
+   * référence ne résout.
+   */
+  photoUrl: string | null;
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
@@ -49,7 +74,21 @@ export type Category = {
   products: Product[];
 };
 
-export type MenuData = { categories: Category[]; uncategorized: Product[] };
+/**
+ * La carte du back-office, plus le CATALOGUE DES MÉDIAS, à plat.
+ *
+ * Les photos sont à la racine et pas dans chaque produit : un même cliché sert
+ * plusieurs plats, et l'écran qui veut son point d'intérêt ou son texte
+ * alternatif le trouve au même endroit quelle que soit la surface.
+ */
+export type MenuData = {
+  categories: Category[];
+  uncategorized: Product[];
+  medias: MediaVue[];
+};
+
+/** `GET /medias` — la bibliothèque du restaurant et l'état de son quota. */
+export type Mediatheque = { medias: MediaVue[]; quota: QuotaMedias };
 
 /** Sentinelle de sélection pour la rangée spéciale « Non rattachés ». */
 export const UNCAT = "__uncat__";

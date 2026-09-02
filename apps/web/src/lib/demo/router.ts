@@ -79,6 +79,7 @@ import {
   type PlanningShiftView,
   type PlanningStatus,
   type SupplyIngredient,
+  QUOTA_MEDIAS_OCTETS,
 } from "@sm/contracts";
 import { loyalty as loyaltyDomain, Money } from "@sm/domain";
 import {
@@ -753,6 +754,26 @@ function dispatch(
   // ─── Établissement ───
 
   if (path === "/tenants/me" && method === "GET") return ok(w.tenant);
+
+  /*
+   * LA MÉDIATHÈQUE EN DÉMONSTRATION — VIDE, ET C'EST LA VÉRITÉ.
+   *
+   * Sans cette ligne, la section Photos du panneau d'édition tombe sur le 404
+   * générique et affiche son état d'erreur : le visiteur venu regarder le
+   * produit y verrait une panne. Une médiathèque vide, elle, montre l'état
+   * d'accueil — « aucune photo, déposez-en une » — qui est exactement ce
+   * qu'un restaurateur voit le premier jour.
+   *
+   * Le monde de démonstration n'a pas de médias parce que ses photos sont
+   * HÉRITÉES : des chemins relatifs vers les visuels versionnés, pas des
+   * objets déposés. Le dépôt, lui, refuse déjà honnêtement en démonstration.
+   */
+  if (path === "/medias" && method === "GET") {
+    return ok({
+      medias: [],
+      quota: { octetsUtilises: 0, octetsMax: QUOTA_MEDIAS_OCTETS, medias: 0 },
+    });
+  }
 
   if (path === "/tenants/me/settings" && method === "PATCH") {
     w.tenant.settings = { ...w.tenant.settings, ...(b as Partial<typeof w.tenant.settings>) };

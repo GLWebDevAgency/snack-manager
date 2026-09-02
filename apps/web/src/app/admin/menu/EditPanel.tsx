@@ -4,9 +4,14 @@
  * Panneau d'édition inline (spec backoffice-restaurant §7.3) enrichi de la
  * section « Recette & marge » (contexte supply) : coût matière, marge %,
  * allergènes, éditeur de lignes de recette (GET/PUT /supply/products/:ref/bom).
- * Sauvegarde bufferisée : « Enregistrer » → PATCH produit (+ PUT bom si la
- * recette a changé) ; « Fermer » abandonne les modifications — après
- * confirmation dès que la fiche a changé.
+ * Sauvegarde bufferisée : « Enregistrer » → PATCH produit (+ PUT medias si
+ * les photos ont bougé, + PUT bom si la recette a changé) ; « Fermer »
+ * abandonne les modifications — après confirmation dès que la fiche a changé.
+ *
+ * Chaque envoi est DIFFÉRENTIEL et chacun a sa route : le correctif du produit
+ * ne porte que ce que le gérant a touché (cf. `save()` et le groupe réservé
+ * « supplements »), les photos passent par la médiathèque, la recette par le
+ * contexte supply. Trois vérités, trois portes, aucune écrasée par mégarde.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -38,10 +43,12 @@ import {
 import {
   effectivePrice,
   type Category,
+  type Mediatheque,
   type OptionGroup,
   type Product,
   type Variant,
 } from "./types";
+import { PhotosDuPlat } from "./PhotosDuPlat";
 import { EditeurOptions, EditeurVariantes, figerLesClefs } from "./VariantesOptions";
 
 type LineDraft = { ingredientId: string; qty: string; unit: MeasureUnit };
@@ -57,6 +64,8 @@ type Props = {
   initialCost?: CostEntry;
   /** Liste d'ingrédients supply (mise en cache au niveau page). */
   loadIngredients: () => Promise<SupplyIngredient[]>;
+  /** Médiathèque du restaurant (mise en cache au niveau page). */
+  chargerMediatheque: (forcer?: boolean) => Promise<Mediatheque>;
   onClose: () => void;
   /** Sauvegarde réussie — le parent toaste, ferme et recharge. */
   onSaved: (message: string) => void;
@@ -82,6 +91,7 @@ export function EditPanel({
   categories,
   initialCost,
   loadIngredients,
+  chargerMediatheque,
   onClose,
   onSaved,
 }: Props) {
@@ -101,6 +111,19 @@ export function EditPanel({
   const [groups, setGroups] = useState<OptionGroup[]>(() => product?.optionGroups ?? []);
   const variantsInitiales = useMemo(() => JSON.stringify(product?.variants ?? []), [product]);
   const groupsInitiaux = useMemo(() => JSON.stringify(product?.optionGroups ?? []), [product]);
+
+  /**
+   * Les photos du plat — identifiants, DANS L'ORDRE, la première étant la
+   * principale.
+   *
+   * Elles ne rejoignent PAS le correctif du produit : `PUT
+   * /products/:id/medias` attache et réordonne d'un seul geste, et c'est la
+   * médiathèque — pas le menu — qui sait ce qu'est un média valide et à qui il
+   * appartient. Bufferisées ici comme le reste de la fiche : « Enregistrer »
+   * les envoie, « Fermer » les abandonne.
+   */
+  const [photos, setPhotos] = useState<string[]>(() => product?.medias ?? []);
+  const photosInitiales = useMemo(() => (product?.medias ?? []).join(","), [product]);
 
   /**
    * Services d'affichage sur les écrans de salle.
@@ -303,6 +326,19 @@ export function EditPanel({
         await api.patch(`/products/${product._id}`, patch);
       }
 
+      /*
+       * LES PHOTOS PASSENT PAR LEUR PROPRE ROUTE, ET C'EST LA MÊME DISCIPLINE.
+       *
+       * Rien dans le correctif ci-dessus ne les mentionne : `photoUrl` n'est
+       * plus écrivable (c'est ce qui ferme le contournement de la liste
+       * blanche d'origines) et la liste de médias se pose d'un seul geste,
+       * qui attache ET réordonne. On ne l'envoie que si elle a bougé — un PUT
+       * inutile republierait `menu.updated` à toutes les tablettes.
+       */
+      if (photos.join(",") !== photosInitiales) {
+        await api.put(`/products/${product._id}/medias`, { medias: photos });
+      }
+
       const keptSerialized = recipeLines
         ? JSON.stringify(recipeLines.map((l) => [l.ingredientId, l.qty, l.unit]))
         : null;
@@ -337,6 +373,7 @@ export function EditPanel({
         desc !== (product?.description ?? "") ||
         catId !== (product?.categoryId ?? "") ||
         tagsChanged() ||
+        photos.join(",") !== photosInitiales ||
         JSON.stringify(variants) !== variantsInitiales ||
         JSON.stringify(groups) !== groupsInitiaux ||
         serializeLines(lines) !== origSerialized;
@@ -441,6 +478,19 @@ export function EditPanel({
         </div>
       </div>
 
+      {/* ─── Photos ─── */}
+      {mode !== "create" && product && (
+        <PhotosDuPlat
+          // Le nom EN COURS DE SAISIE et non celui enregistré : c'est le repli
+          // du texte alternatif, et un gérant qui renomme son plat doit voir
+          // ce que les lecteurs d'écran annonceront après enregistrement.
+          produitNom={name.trim() || product.name}
+          photos={photos}
+          onChange={setPhotos}
+          chargerMediatheque={chargerMediatheque}
+        />
+      )}
+
       {/* ─── Tailles et options ─── */}
       {mode !== "create" && (
         <>
@@ -452,9 +502,9 @@ export function EditPanel({
       {/* ─── Recette & marge (supply) ─── */}
       {mode === "create" ? (
         <p className="mt-3 border-t border-line pt-3 text-xs text-mut">
-          Enregistre d&apos;abord le produit — tu pourras définir ses tailles,
-          ses options, sa recette et sa marge juste après, avec le bouton
-          Modifier.
+          Enregistre d&apos;abord le produit — tu pourras définir ses photos, ses
+          tailles, ses options, sa recette et sa marge juste après, avec le
+          bouton Modifier.
         </p>
       ) : (
         <div className="mt-3 border-t border-line pt-3">
