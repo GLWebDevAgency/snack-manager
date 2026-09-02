@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DIRECTIONS } from "@sm/contracts";
 
 const mocks = vi.hoisted(() => ({ load: vi.fn() }));
 
@@ -12,6 +13,7 @@ const CATALOG = {
     name: "Classfood",
     brandColor: "#c9a15a",
     logoUrl: null,
+    brand: DIRECTIONS.soleil,
   },
   program: {
     name: "La carte Classfood",
@@ -39,9 +41,37 @@ describe("application fidélité installable", () => {
       start_url: "/r/classfood/fidelite",
       scope: "/r/classfood/fidelite",
       display: "standalone",
-      theme_color: "#c9a15a",
+      // Le thème de l'installation suit le masque du restaurant, pas la marque grise.
+      theme_color: "#F6EBD9",
+      background_color: "#F6EBD9",
     });
     expect(manifest.icons[0].src).toBe("/r/classfood/fidelite/icon.svg");
+  });
+
+  it("expose le logo réel du restaurant comme icône quand il existe", async () => {
+    mocks.load.mockResolvedValueOnce({
+      ...CATALOG,
+      restaurant: {
+        ...CATALOG.restaurant,
+        brand: {
+          ...DIRECTIONS.soleil,
+          logo: {
+            ...DIRECTIONS.soleil.logo,
+            mark: { ...DIRECTIONS.soleil.logo.mark, light: "https://r2/logo.png" },
+          },
+        },
+      },
+    });
+    const { GET } = await import("./manifest.webmanifest/route");
+    const response = await GET(new Request("https://classfood.example/manifest"), context);
+    const manifest = await response.json();
+
+    expect(manifest.icons[0]).toEqual({
+      src: "https://r2/logo.png",
+      sizes: "512x512",
+      type: "image/png",
+      purpose: "any",
+    });
   });
 
   it("sert un worker borné à la fidélité et exclut explicitement la carte privée", async () => {

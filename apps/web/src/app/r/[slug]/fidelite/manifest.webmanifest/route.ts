@@ -1,3 +1,4 @@
+import { logoPour } from "@sm/contracts";
 import { loadPublicLoyalty } from "@/components/loyalty/public-api";
 
 export async function GET(
@@ -8,6 +9,10 @@ export async function GET(
   const catalog = await loadPublicLoyalty(slug).catch(() => null);
   if (!catalog) return new Response(null, { status: 404 });
   const path = `/r/${encodeURIComponent(catalog.restaurant.slug)}/fidelite`;
+  // L'installation prend le masque du restaurant, pas la marque grise de Snack Manager.
+  const brand = catalog.restaurant.brand;
+  const ground = brand.palette.ground;
+  const logo = logoPour(brand, "mark");
   return Response.json(
     {
       id: path,
@@ -19,18 +24,18 @@ export async function GET(
       start_url: path,
       scope: path,
       display: "standalone",
-      background_color: "#000000",
-      theme_color: /^#[0-9a-f]{6}$/i.test(catalog.restaurant.brandColor)
-        ? catalog.restaurant.brandColor
-        : "#000000",
-      icons: [
-        {
-          src: `${path}/icon.svg`,
-          sizes: "any",
-          type: "image/svg+xml",
-          purpose: "any maskable",
-        },
-      ],
+      background_color: ground,
+      theme_color: ground,
+      icons: logo
+        ? [{ src: logo, sizes: "512x512", type: "image/png", purpose: "any" }]
+        : [
+            {
+              src: `${path}/icon.svg`,
+              sizes: "any",
+              type: "image/svg+xml",
+              purpose: "any maskable",
+            },
+          ],
     },
     {
       headers: {
