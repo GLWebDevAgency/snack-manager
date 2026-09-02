@@ -68,6 +68,9 @@ function atelier(options: {
     // Les modificateurs dérivés des recettes ne sont pas le sujet ici.
     { modifiersForMenu: async () => new Map() } as never,
     audit,
+    // La médiathèque n'est pas le sujet : un catalogue vide suffit, et
+    // `photoUrlDe` retombe alors sur la chaîne héritée du produit.
+    { catalogue: async () => [] } as never,
   );
 
   return { service, lignes };

@@ -6,12 +6,18 @@ import {
   BRAND_MOTIONS,
   BRAND_SHAPES,
   CAPACITES,
+  EMPREINTE_RE,
   HEX,
   LAITON,
+  MEDIA_FORMATS_ADMIS,
+  MEDIA_GENRES,
+  MEDIAS_PAR_PRODUIT_MAX,
+  ORIGINES_MEDIA,
   PLATFORM_SETTINGS_ID,
   PRESET_KEYS,
   SENS_DEROGATION,
   SM_INVOICE_VAT,
+  STOCKAGES_MEDIA,
   TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
   isPlatformLogAction,
@@ -707,7 +713,41 @@ export const ProductSchema = new Schema(
     outOfStock: { type: Boolean, default: false }, // rupture 1-tap
     // 'manual' = coupé à la main · 'ingredient' = cascade rupture ingrédient (contexte supply)
     outOfStockSource: { type: String, enum: ['manual', 'ingredient', null], default: null },
+    /**
+     * LA CHAÎNE HÉRITÉE — lue en repli, PLUS JAMAIS écrite par une route.
+     *
+     * Elle porte les dix-neuf photos du pilote (`/photos/…`, posées par
+     * `seed-photos.ts`). `ProductCreateSchema` et `ProductUpdateSchema` ne la
+     * reçoivent plus : c'était une chaîne libre, sans validation d'URL ni de
+     * protocole, qui contournait la liste blanche d'origines appliquée aux
+     * images de marque. La photo se choisit désormais dans la médiathèque, et
+     * `photoUrl` sort DÉRIVÉ de `medias[0]` (`photoUrlDe`, @sm/contracts).
+     *
+     * La colonne reste : la vider d'un coup viderait la carte du pilote en
+     * service. C'est la reprise `backfill:medias` qui la remplace, produit par
+     * produit, par une vraie référence de médiathèque.
+     */
     photoUrl: { type: String, default: null },
+    /**
+     * LES PHOTOS DU PRODUIT — un à trois médias, le premier est le principal.
+     *
+     * Des RÉFÉRENCES, pas des copies : le même cliché sert plusieurs produits
+     * (trois galettes sur la photo du panneau mural), survit au renommage du
+     * plat et à sa mise hors carte, et se recadre une fois pour toutes les
+     * surfaces. Un attribut de produit n'aurait aucune de ces propriétés.
+     *
+     * La borne de trois est portée ICI en plus du contrat : la base est aussi
+     * écrite par l'admin-cli, par un shell et par les reprises, qui ne passent
+     * pas par zod — même défense en profondeur que `IMAGE_URL` plus haut.
+     */
+    medias: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Media' }],
+      default: [],
+      validate: {
+        validator: (v: unknown[]) => !Array.isArray(v) || v.length <= MEDIAS_PAR_PRODUIT_MAX,
+        message: `Un produit porte au plus ${MEDIAS_PAR_PRODUIT_MAX} photos`,
+      },
+    },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
@@ -715,6 +755,80 @@ export const ProductSchema = new Schema(
 );
 ProductSchema.index({ tenantId: 1, categoryId: 1, order: 1 });
 export type Product = InferSchemaType<typeof ProductSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// medias — la médiathèque d'un restaurant
+// ─────────────────────────────────────────────────────────────
+
+const PointInteretSub = new Schema(
+  {
+    x: { type: Number, default: 0.5, min: 0, max: 1 },
+    y: { type: Number, default: 0.5, min: 0, max: 1 },
+  },
+  { _id: false },
+);
+
+/**
+ * UN MÉDIA APPARTIENT AU RESTAURANT, PAS AU PRODUIT.
+ *
+ * Le même cliché sert en vignette carrée à la caisse, en carte sur la vitrine
+ * et en seize neuvièmes au téléviseur ; il survit au produit qu'on renomme,
+ * qu'on scinde en deux tailles ou qu'on retire de la carte pour l'hiver. D'où
+ * une collection à lui, cloisonnée par `tenantId` comme toutes les autres.
+ *
+ * ─── L'EMPREINTE EST UNE CLÉ, PAS UNE MÉTADONNÉE ───
+ *
+ * `(tenantId, empreinte)` est UNIQUE, et c'est ce qui fait le dédoublonnage :
+ * redéposer le même fichier retrouve la ligne existante au lieu d'en créer une
+ * seconde et de payer deux fois le même objet. L'unicité est portée par la
+ * BASE et pas seulement par le service — deux dépôts simultanés du même
+ * fichier (deux onglets, deux postes) arrivent sinon tous les deux à la
+ * conclusion « il n'existe pas encore ».
+ *
+ * L'index est PARTIEL : deux restaurants qui déposent la même photo de kebab
+ * gardent chacun la leur (le cloisonnement passe avant l'économie d'un objet),
+ * et une collection vide n'a pas à supporter un index sur un champ absent.
+ */
+export const MediaSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /** `photo` est public, `document` ne l'est JAMAIS — cf. `MEDIA_GENRES_PUBLICS`. */
+    genre: { type: String, enum: [...MEDIA_GENRES], required: true, default: 'photo' },
+    /** SHA-256 tronqué à 128 bits, hexadécimal minuscule : l'adresse en dérive. */
+    empreinte: {
+      type: String,
+      required: true,
+      match: [EMPREINTE_RE, 'Empreinte de média invalide'],
+    },
+    type: { type: String, enum: [...MEDIA_FORMATS_ADMIS], required: true },
+    octets: { type: Number, required: true, min: 1 },
+    /** Lues dans les octets quand l'en-tête du format les donne. */
+    largeur: { type: Number, default: null },
+    hauteur: { type: Number, default: null },
+    point: { type: PointInteretSub, default: () => ({ x: 0.5, y: 0.5 }) },
+    /** Libre et facultatif : la surface retombe sur le nom du produit. */
+    alt: { type: String, default: '', maxlength: 200 },
+    /** `objet` : les octets sont chez nous. `heritee` : dans le paquet web. */
+    stockage: { type: String, enum: [...STOCKAGES_MEDIA], required: true, default: 'objet' },
+    origine: { type: String, enum: [...ORIGINES_MEDIA], required: true, default: 'depot' },
+    /**
+     * L'origine http(s) SOUS LAQUELLE le média a été déposé, validée contre la
+     * liste blanche au moment du dépôt. Absolue pour la même raison que
+     * `logoUrl` : caisse, cuisine et téléviseur sont d'autres origines.
+     */
+    base: { type: String, default: null, ...IMAGE },
+    /** Le nom de fichier, pour les seuls médias hérités du pilote. */
+    fichier: { type: String, default: null, maxlength: 200 },
+    auteurId: { type: String, default: null },
+    auteurNom: { type: String, default: '' },
+  },
+  { timestamps: true },
+);
+/** La LISTE du gérant : sa médiathèque, du plus récent au plus ancien. */
+MediaSchema.index({ tenantId: 1, createdAt: -1 });
+/** Le DÉDOUBLONNAGE, et il est unique — voir l'en-tête. */
+MediaSchema.index({ tenantId: 1, empreinte: 1 }, { unique: true });
+export type Media = InferSchemaType<typeof MediaSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // orders
@@ -1779,6 +1893,7 @@ export const MODELS = {
   },
   Category: { name: 'Category', schema: CategorySchema, collection: 'categories' },
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
+  Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },

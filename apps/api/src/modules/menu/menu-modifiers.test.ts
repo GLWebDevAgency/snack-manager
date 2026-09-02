@@ -83,6 +83,8 @@ function menu(options: { fail?: boolean; produits?: number } = {}) {
     { publish: () => {} } as never,
     supply,
     { log: async () => {} } as never,
+    // Idem : la médiathèque n'est pas le sujet de ces tests.
+    { catalogue: async () => [] } as never,
   );
 }
 
@@ -200,6 +202,7 @@ describe('le groupe réservé survit à une mise à jour venue de l’écran', (
         journalMuet(),
       ),
       { log: async () => {} } as never,
+      { catalogue: async () => [] } as never,
     );
     return { service, vus };
   }
@@ -259,6 +262,7 @@ describe('journal des prix — les variantes aussi', () => {
         journalMuet(),
       ),
       { log: async (l: Record<string, unknown>) => void lignes.push(l) } as never,
+      { catalogue: async () => [] } as never,
     );
     return { service, lignes };
   }

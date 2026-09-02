@@ -45,6 +45,9 @@ export function toScreenProduct(product: BoardProduct): ScreenProduct {
     priceCents: price.min,
     priceMaxCents: price.max,
     photoUrl: product.photoUrl,
+    // Transporté jusqu'à la clé HDMI : c'est elle qui recadre en 16:9, et
+    // c'est donc elle qui a besoin de savoir où est le plat sur la photo.
+    photoPoint: product.photoPoint,
     isNew: product.isNew,
     // Marqué, jamais retiré : un produit qui disparaît de l'écran laisse penser
     // qu'il n'existe pas, et le client le redemande au comptoir. Grisé et

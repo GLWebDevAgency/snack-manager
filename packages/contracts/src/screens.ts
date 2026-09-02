@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// ⚠️ `import type` uniquement : `index.ts` réexporte ce fichier ET
+// `mediatheque.ts` ; un import de valeurs créerait un cycle CommonJS.
+import type { PointInteret } from './mediatheque';
 
 // ─────────────────────────────────────────────────────────────
 // Menu Board — les écrans TV accrochés en salle
@@ -262,6 +265,14 @@ export interface ScreenProduct {
   /** Centimes — égal à `priceCents` hors fourchette. */
   priceMaxCents: number;
   photoUrl: string | null;
+  /**
+   * OÙ RECADRER LA PHOTO — l'écran de salle est la surface la plus large
+   * (16:9) et donc celle qui coupe le plus. Sans ce point, elle centre son
+   * recadrage et tranche le plat ailleurs que la vignette carrée de la caisse,
+   * sur le même cliché. `null` : photo héritée ou absente, le centre s'applique
+   * (`cadrageCss`).
+   */
+  photoPoint: PointInteret | null;
   isNew: boolean;
   /** L'écran grise la ligne et pose le bandeau « EN RUPTURE ». */
   outOfStock: boolean;

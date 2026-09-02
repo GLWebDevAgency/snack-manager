@@ -72,6 +72,7 @@ export function boardProduct(patch: Partial<BoardProduct> & { id: string }): Boa
     priceCents: 850,
     variantPrices: [],
     photoUrl: null,
+    photoPoint: null,
     isNew: false,
     outOfStock: false,
     tags: [],

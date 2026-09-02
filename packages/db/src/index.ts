@@ -1,4 +1,5 @@
 export * from './schemas';
+export * from './media-empreinte';
 
 import mongoose from 'mongoose';
 

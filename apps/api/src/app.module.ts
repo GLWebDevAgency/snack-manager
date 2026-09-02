@@ -13,6 +13,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CapacitesModule } from './common/capacites.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
+import { MediathequeModule } from './modules/mediatheque/mediatheque.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
 import { EncaissementModule } from './modules/encaissement/encaissement.module';
@@ -79,6 +80,17 @@ import { validatePublicRelayEnvironment } from './common/verified-public-relay';
      */
     CapacitesModule,
     TenantsModule,
+    /*
+     * DÉCLARÉE ICI ALORS QUE TROIS MODULES L'IMPORTENT DÉJÀ, ET C'EST VOULU.
+     *
+     * Même leçon que `EncaissementModule` juste en dessous : Nest enregistre
+     * les contrôleurs des modules importés transitivement, donc les routes
+     * `/medias/*` répondraient — mais seulement PARCE QUE le menu, la vitrine
+     * et l'écran de salle ont besoin du service pour dériver `photoUrl`. Le
+     * jour où l'une de ces dépendances disparaît, le gérant perd sa
+     * médiathèque sans qu'aucun test ne rougisse : juste des 404.
+     */
+    MediathequeModule,
     MenuModule,
     OrdersModule,
     OrderingModule,

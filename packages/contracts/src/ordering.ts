@@ -11,6 +11,8 @@ import type {
 } from './index';
 // ⚠️ `import type` uniquement, même raison : `marque.ts` est réexporté par `index.ts`.
 import type { Brand } from './marque';
+// ⚠️ `import type` uniquement, même raison : `mediatheque.ts` l'est aussi.
+import type { MediaVue } from './mediatheque';
 
 // ─────────────────────────────────────────────────────────────
 // Commande en ligne — créneaux de retrait, paiement, impression
@@ -342,7 +344,19 @@ export interface PublicSiteProduct {
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
+  /**
+   * DÉRIVÉ de `medias[0]`, jamais la colonne lue — voir `photoUrlDe`. Repli sur
+   * la chaîne héritée des dix-neuf photos du pilote tant qu'elles n'ont pas été
+   * reprises. Prêt à peindre : l'usage « carte » est déjà résolu ici.
+   */
   photoUrl: string | null;
+  /**
+   * Les identifiants des médias du produit, dans l'ordre — le premier est la
+   * photo principale. Le détail vit UNE FOIS dans `PublicSiteResponse.medias`,
+   * jamais recopié par produit : trois produits qui partagent le cliché du
+   * panneau mural ne doivent pas le faire voyager trois fois.
+   */
+  medias: string[];
 }
 
 export interface PublicSiteCategory {
@@ -381,6 +395,12 @@ export interface PublicSiteTenant {
 export interface PublicSiteResponse {
   tenant: PublicSiteTenant;
   menu: { categories: PublicSiteCategory[] };
+  /**
+   * La médiathèque du restaurant, à plat et une seule fois : point d'intérêt,
+   * texte alternatif et les quatre adresses d'usage de chaque photo. Les
+   * produits n'en portent que les identifiants.
+   */
+  medias: MediaVue[];
   /** Créneaux du jour (même calcul que `GET /public/tenants/:slug/slots`). */
   slots: SlotsResponse;
   reviews: {

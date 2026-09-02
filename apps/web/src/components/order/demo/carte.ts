@@ -337,6 +337,10 @@ function hydrate(p: RawProduct): PublicSiteProduct {
     isNew: p.isNew ?? false,
     outOfStock: p.outOfStock ?? false,
     photoUrl: p.photo ?? null,
+    // La démonstration sert des photos DU PAQUET (`/photos/…`), pas des médias :
+    // elle n'a pas de médiathèque et n'en simule pas une. `photoUrl` est
+    // exactement le repli hérité que `photoUrlDe` rend dans ce cas.
+    medias: [],
   };
 }
 

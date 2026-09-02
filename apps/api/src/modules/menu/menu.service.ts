@@ -2,10 +2,19 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
-import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS, type JwtPayload } from '@sm/contracts';
+import {
+  catalogueMedias,
+  mediasDuProduit,
+  photoUrlDe,
+  SUPPLEMENT_GROUP_KEY,
+  type JwtPayload,
+  type MediaVue,
+  type UsageMedia,
+} from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
-import { publishRedisBestEffort } from '../../common/redis-best-effort';
+import { publierMenuMisAJour } from '../../common/menu-updated';
+import { MediasService } from '../mediatheque/medias.service';
 import { SupplyService, type ProductForModifiers } from '../supply/supply.service';
 import { AuditService } from '../audit/audit.module';
 
@@ -17,7 +26,39 @@ export class MenuService {
     @Inject(REDIS_PUB) private readonly redis: Redis,
     private readonly supply: SupplyService,
     private readonly audit: AuditService,
+    private readonly medias: MediasService,
   ) {}
+
+  /**
+   * `photoUrl`, DÉRIVÉ — et le catalogue des médias, servi UNE FOIS.
+   *
+   * La colonne `photoUrl` du produit n'est plus rendue telle quelle : elle
+   * était une chaîne libre qui contournait la liste blanche d'origines, et
+   * elle ne survit que comme repli des dix-neuf photos du pilote. La vérité
+   * est `medias[0]`, résolue par l'adaptateur unique `photoUrlDe`.
+   *
+   * Les médias voyagent À PLAT, à côté des catégories, et les produits n'en
+   * portent que les identifiants : trois galettes qui partagent le cliché du
+   * panneau mural ne doivent pas le faire transiter trois fois — et l'écran
+   * qui veut le point d'intérêt ou le texte alternatif le trouve au même
+   * endroit, quelle que soit la surface.
+   */
+  private async avecPhotos<T extends { photoUrl?: unknown; medias?: unknown }>(
+    tenantId: string,
+    prods: T[],
+    usage: UsageMedia,
+  ): Promise<{ produits: (Omit<T, 'photoUrl'> & { photoUrl: string | null; medias: string[] })[]; medias: MediaVue[] }> {
+    const medias = await this.medias.catalogue(tenantId);
+    const catalogue = catalogueMedias(medias);
+    return {
+      produits: prods.map((p) => ({
+        ...p,
+        photoUrl: photoUrlDe(p, catalogue, usage),
+        medias: mediasDuProduit(p),
+      })),
+      medias,
+    };
+  }
 
   /**
    * Joint à chaque produit les modificateurs DÉRIVÉS de sa recette.
@@ -46,11 +87,7 @@ export class MenuService {
   }
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
-    void publishRedisBestEffort(
-      this.redis,
-      ordersChannel(tenantId),
-      JSON.stringify({ event: WS_EVENTS.menuUpdated, payload: meta }),
-    );
+    publierMenuMisAJour(this.redis, tenantId, meta);
   }
 
   /** Menu complet (back-office) : toutes catégories + produits, y compris inactifs. */
@@ -59,7 +96,10 @@ export class MenuService {
       this.categories.find({ tenantId }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId }).sort({ order: 1 }).lean(),
     ]);
-    const prods = await this.withModifiers(tenantId, rawProds);
+    const avecModificateurs = await this.withModifiers(tenantId, rawProds);
+    // Usage « fiche » : le back-office montre les photos en grand dans
+    // l'éditeur d'un plat, c'est le plus exigeant de ses affichages.
+    const { produits: prods, medias } = await this.avecPhotos(tenantId, avecModificateurs, 'fiche');
     return {
       categories: cats.map((c) => ({
         ...c,
@@ -67,6 +107,7 @@ export class MenuService {
       })),
       // Produits « Non rattachés » (orphelins après suppression de catégorie)
       uncategorized: prods.filter((p) => !p.categoryId),
+      medias,
     };
   }
 
@@ -76,13 +117,21 @@ export class MenuService {
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
     ]);
-    const prods = await this.withModifiers(tenantId, rawProds);
+    const avecModificateurs = await this.withModifiers(tenantId, rawProds);
+    // Usage « vignette » : cette carte est celle de la CAISSE et du tunnel de
+    // commande, où une photo se lit dans une grille carrée.
+    const { produits: prods, medias } = await this.avecPhotos(
+      tenantId,
+      avecModificateurs,
+      'vignette',
+    );
     return {
       categories: cats.map((c) => ({
         _id: c._id,
         name: c.name,
         products: prods.filter((p) => String(p.categoryId) === String(c._id)),
       })),
+      medias,
     };
   }
 

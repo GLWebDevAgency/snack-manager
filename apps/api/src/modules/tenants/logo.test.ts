@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { JwtPayload } from '@sm/contracts';
+import { detecterImage, type JwtPayload } from '@sm/contracts';
 import { journalMuet } from '../audit/audit.fakes';
 import { LogoController } from './logo.controller';
 import type { OriginesImages } from './origines-images';
 import { createImageStore } from '../../infrastructure/images/image-store.factory';
 import { NoopImageStore, type ImageStore } from '../../infrastructure/images/image-store';
 import { R2ImageStore } from '../../infrastructure/images/r2-image-store';
-import { detecterImage } from './image-signature';
+
 import { LogoService } from './logo.service';
 
 /**

@@ -320,6 +320,8 @@ export function demoSite(now: Date, taken: (iso: string) => number): PublicSiteR
   return {
     tenant,
     menu: { categories: demoCategories() },
+    // Aucune médiathèque en démonstration — voir `carte.ts`.
+    medias: [],
     slots: demoSlots(now, null, taken),
     reviews: demoReviews(now),
     ordering: { paused: false, message: null },

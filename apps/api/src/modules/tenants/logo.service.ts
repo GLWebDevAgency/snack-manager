@@ -7,12 +7,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { LOGO_MAX_OCTETS, type JwtPayload } from '@sm/contracts';
+import { detecterImage, LOGO_MAX_OCTETS, type FormatImage, type JwtPayload } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 import { AuditService } from '../audit/audit.module';
 import { IMAGE_STORE } from '../../infrastructure/tokens';
 import type { ImageStore } from '../../infrastructure/images/image-store';
-import { detecterImage, type FormatImage } from './image-signature';
 import { identiteAvecLogo } from './tenants.service';
 
 /**

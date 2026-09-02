@@ -21,6 +21,8 @@ export * from './loyalty';
 export * from './loyalty-public';
 export * from './marque';
 export * from './capacites';
+export * from './mediatheque';
+export * from './mediatheque-octets';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -231,6 +233,28 @@ export const OptionGroupSchema = z
   });
 export type OptionGroup = z.infer<typeof OptionGroupSchema>;
 
+/**
+ * ─── `photoUrl` N'EST PLUS ÉCRIVABLE, ET C'EST UNE CORRECTION DE SÉCURITÉ ───
+ *
+ * Le champ était une CHAÎNE LIBRE : ni URL, ni protocole, ni origine vérifiés.
+ * Il finissait pourtant en `src` sur la vitrine du restaurant, sur son tableau
+ * de menu, dans ses données structurées et sur la tablette de sa caisse —
+ * c'est-à-dire au même endroit que les images de masque, auxquelles une liste
+ * blanche d'origines s'applique depuis le 01/09/2026 (`origines-images.ts`).
+ * Un `owner` pouvait donc faire télécharger l'image de son choix, depuis
+ * l'hôte de son choix, par tous ses clients : la garde posée sur les URL de
+ * masque ne gardait rien tant que celle-ci restait ouverte.
+ *
+ * Une photo de plat passe désormais par la MÉDIATHÈQUE (`mediatheque.ts`) :
+ * un fichier déposé sur sa propre route, stocké chez nous, servi par nous, et
+ * `photoUrl` devient un champ plat DÉRIVÉ de la première référence — comme
+ * `logoUrl` l'est de `brand.logo`. Le champ reste en base et reste LU en repli
+ * (les dix-neuf photos du pilote), il n'est simplement plus reçu d'un client.
+ *
+ * Zod ignore les clés inconnues : un ancien appelant qui l'envoie encore n'est
+ * pas mis en erreur, sa valeur est écartée. C'est le bon comportement — le
+ * seul appelant qui l'écrivait était un script de peuplement.
+ */
 export const ProductCreateSchema = z.object({
   categoryId: z.string().min(1),
   name: z.string().min(1),
@@ -241,7 +265,6 @@ export const ProductCreateSchema = z.object({
   removables: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   isNew: z.boolean().default(false),
-  photoUrl: z.string().optional(),
   order: z.number().int().default(0),
   active: z.boolean().default(true),
 });
@@ -269,7 +292,8 @@ export const ProductUpdateSchema = z.object({
   removables: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
   isNew: z.boolean().optional(),
-  photoUrl: z.string().optional(),
+  // `photoUrl` absent, comme à la création — voir la note ci-dessus. La photo
+  // se choisit par `PUT /products/:id/medias`, jamais par un champ de texte.
   order: z.number().int().optional(),
   active: z.boolean().optional(),
 });
