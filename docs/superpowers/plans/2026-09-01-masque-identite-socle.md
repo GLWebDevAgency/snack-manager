@@ -19,11 +19,15 @@
 | Lien Google Fonts (§4.1) | **`next/font/google`, familles déclarées statiquement, `preload: false`** | Convention exclusive du dépôt (zéro `<link>` fonts). Auto-hébergé, sans décalage de mise en page ; seules les familles réellement utilisées se téléchargent. |
 | Injection « par les layouts » (§4.3) | **par les composants racine** (`Storefront`, `Tracking`, `LoyaltyCardApp`) | Il n'existe aucun `layout.tsx` sous `/r`, `/embed`, `/t`, `/fidelite` ; l'injection actuelle vit exactement là. |
 | Icône PWA = `logo.mark` sur `ground` (§4.5) | **PNG du logo servi tel quel dans `icons[]`, sinon SVG généré sur `ground`** | Un SVG d'icône ne charge pas d'`<image>` externe. |
+| Dépôt d'images par déclinaison (§6.5) | **non livré — reporté au plan B ; seul `mark.dark` a un dépôt (`PUT /tenants/me/logo`)** | Les quatre autres emplacements (`mark.light`, `lockup.light`, `lockup.dark`, `hero`) ne se remplissent qu'en collant une URL dans `PATCH …/marque`. Deux conséquences assumées jusqu'à l'éditeur : l'allowlist d'ORIGINE reste OUVERTE — le contrat n'exige que `http(s)`, et `PATCH …/marque` écrit `logo.*` et `hero` sans passer par le chemin de dépôt, donc un `owner` peut pointer la vitrine, la carte de fidélité et l'icône du manifeste vers un hôte tiers (fuite d'IP et d'UA de ses clients) ; **DETTE OUVERTE : rejouer l'allowlist à l'écriture côté API** (`masqueAEnregistrer(brand, logoUrl, origines)`, origines injectées comme `SiteConfig`). Et `hero` est accepté et stocké alors qu'AUCUNE surface ne le rend. |
+| `text-ink-soft` (§4.1) | **jeton `--cf-ink-soft` NON émis** | Aucun consommateur dans `apps/web/src`, et aucune garde AA : `melanger(ink, ground, 0.25)` sur une encre tout juste conforme (#767676 sur blanc) donnait 2,88:1 — un trou d'accessibilité en attente d'un premier usage. `--cf-mut`, lui, est ramené à AA sur CHAQUE fond peint et couvre l'encre atténuée. |
+| `rule` 12 % / `ruleFirm` 24 % + lavis sémantiques (§4.1, §4.3) | **`--cf-line` 12 % et `--cf-line-2` 6 %, pas de `--cf-line-firm` ni de lavis sémantique émis** | Le filet FERME s'écrit `border-ink/25` à l'usage — l'opacité Tailwind le dérive de l'encre sans nouveau jeton. Les lavis sémantiques s'écrivent `bg-ok/10` : `contraste()` juge désormais `greenInk/greenWash`, `redInk/redWash` et `amberInk/amberWash` sur cette composition exacte, donc l'AA est prouvé sur le fond réellement peint sans le figer en variable. |
+| Rayons Sm / Md / Lg / Pill (§4.1) | **échelle explicite à cinq crans par forme (`xs`, `sm`, `md`, `lg`, `xl`) + pilule** | Le résolveur alimente CINQ jetons (`--cf-r-xs/-sm/-md/-r/-lg`) : avec trois valeurs, `rounded-ctrl` et `rounded-card` recevaient la même, et `--cf-r-lg` valait un `lg + 4` inventé à l'émission. Sm / Md / Lg de la spec sont `xs` / `md` / `lg` ; `sm` et `xl` sont posés au contrat au lieu d'être improvisés. |
 | Répertoires client (§4.4) | **+ `components/ui/**`** | La carte de fidélité est bâtie sur `@/components/ui` (Btn, Card, Pill…), pas sur `order/primitives` : sans eux, le masque a des trous. En mode sombre, `text-white → text-ink` ne change rien à l'admin. |
 
 ## Global Constraints
 
-- **Contraste AA 4,5:1** sur les cinq couples `ink/ground`, `ink/surface`, `onAccent/accent`, `accentInk/ground`, `inkMut/ground` — vérifié par le résolveur ET rejoué par l'API (400 avec nuances proposées).
+- **Contraste AA** sur les couples de `COUPLES_CONTRASTE` — trois STOCKÉS (`ink/ground`, `ink/surface`, `onAccent/accent`), actionnables, qui portent une nuance proposée ; les autres DÉRIVÉS (`accentInk`, `inkMut`, les teintes sémantiques, le focus), jugés sur chaque fond réellement peint : carte, tuile, haut des dégradés d'élévation, lavis d'accent, lavis sémantique. 4,5:1 pour du texte (1.4.3), 3:1 pour l'anneau de focus (1.4.11). Vérifié par le résolveur ET rejoué par l'API (400).
 - **Cinq rôles de couleur** stockés, tout le reste dérivé — jamais un dérivé en base.
 - **Aucune couleur brute** dans `app/r/**`, `app/embed/**`, `app/t/**`, `components/order/**`, `components/ui/**` — test bloquant.
 - **Les champs plats `brandColor` / `logoUrl` restent** dans tous les contrats existants, dérivés du masque.
@@ -1271,6 +1275,14 @@ git commit -m "feat : poser un masque — deux routes, et l'API rejoue le contra
 **Interfaces:**
 - Produces : `repriseMarque(tenant: { brand?: unknown; brandColor?: unknown; logoUrl?: unknown }): Brand | null` — `null` si déjà repris (idempotence par construction).
 
+> **Repris au ré-audit du 02/09/2026** — `repriseMarque` est devenu
+> `classerMasque(tenant): 'valide' | 'a-reprendre' | 'invalide'`. Tenir tout
+> `brand` non nul pour « déjà repris » cachait le cas qui compte : un masque
+> STOCKÉ qui ne satisfait plus le contrat n'était ni listé ni réparé, et le
+> compte rendu annonçait « 0 tenant sans masque » pendant que ces tenants-là
+> tombaient en repli Nuit à chaque lecture. Le code livré fait foi :
+> `packages/db/src/backfill-brand.ts`.
+
 - [ ] **Step 1 : Test**
 
 ```ts
@@ -2050,7 +2062,7 @@ git commit -m "docs : la reprise du masque, à lancer à la main après déploie
 
 ## Auto-relecture du plan
 
-**Couverture de la spec.** §3 données → Tasks 1, 5. §4.1 résolveur → Task 3. §4.2 contraste → Task 3. §4.3 espaces de noms → Task 9 (écart motivé). §4.4 discipline → Tasks 11-12. §4.5 PWA → Task 13. §5 directions et paires → Task 1 (+ AA en Task 3). §6 éditeur → **plan B**. §6.5 API → Task 7. §7 responsive → Task 12 (règles 1-5) et Task 14 (preuve). §8 reprise → Tasks 4 (repli), 8, 15. §9 tests → chaque tâche ; matrice en Task 14. Aucun trou pour le plan A.
+**Couverture de la spec.** §3 données → Tasks 1, 5. §4.1 résolveur → Task 3. §4.2 contraste → Task 3. §4.3 espaces de noms → Task 9 (écart motivé). §4.4 discipline → Tasks 11-12. §4.5 PWA → Task 13. §5 directions et paires → Task 1 (+ AA en Task 3). §6 éditeur → **plan B**. §6.5 API → Task 7, sauf le dépôt d'images par déclinaison (écart consigné en tête). §7 responsive → Task 12 (règles 1-5) et Task 14 (preuve). §8 reprise → Tasks 4 (repli), 8, 15. §9 tests → chaque tâche ; matrice en Task 14. Aucun trou pour le plan A.
 
 **Cohérence des noms.** `resoudreMarque`, `contraste`, `marqueDeRepli`, `marqueEffective`, `brandColorDe`, `logoUrlDe`, `logoPour`, `exigerAA`, `repriseMarque`, `styleDuMasque`, `classesPolices`, `tenantPublicDe` — chacun défini dans une tâche avant d'être consommé dans une suivante. Les variables CSS émises en Task 3 (`--cf-ink-soft`, `--cf-accent-ink`, `--cf-accent-wash`, `--cf-focus`, `--cf-on-green/red/amber`, `--cf-font-*`) sont celles que Task 9 déclare dans `:root` et mappe dans `@theme inline` ; `--cf-on-gold` est ajouté en Task 11.
 

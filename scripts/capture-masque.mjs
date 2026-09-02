@@ -6,7 +6,12 @@
  * `packages/contracts/src/marque.ts` (`DIRECTIONS`), sur trois vues qui
  * portent chacune leur propre masque, à trois largeurs de référence.
  *
+ *   pnpm --filter @sm/web build && pnpm --filter @sm/web start
  *   node scripts/capture-masque.mjs
+ *
+ * CONTRE UN BUILD, JAMAIS CONTRE `next dev` : le mode développement pose son
+ * badge « N » en bas à gauche de CHAQUE page, et il se retrouve sur les 54
+ * PNG — une preuve visuelle ne porte pas l'outillage de celui qui la produit.
  *
  * ─── LE LEVIER : `?masque=<direction>` ───
  *
@@ -47,7 +52,10 @@
  *     pire que pas de capture du tout.
  *
  * Et une quatrième, propre à cette matrice : AUCUN débordement horizontal
- * n'est toléré — la matrice sert aussi de garde responsive.
+ * n'est toléré — la matrice sert aussi de garde responsive. Il se mesure sur
+ * les RECTANGLES des éléments, jamais sur `scrollWidth` (voir plus bas : les
+ * racines client rognent, et une garde qui ne peut pas échouer n'en est pas
+ * une).
  */
 import { chromium } from 'playwright';
 import { mkdir, stat } from 'node:fs/promises';
@@ -163,10 +171,37 @@ for (const direction of PRESET_KEYS) {
         // « survolé » ne doit rester allumé sur la photo.
         await page.mouse.move(width - 2, height - 2);
         await page.waitForTimeout(800);
-        const scrollX = await page.evaluate(
-          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        );
-        if (scrollX > 0) throw new Error(`défilement horizontal de ${scrollX}px`);
+        // ── LA GARDE RESPONSIVE ──────────────────────────────────────
+        // `documentElement.scrollWidth` ne pouvait JAMAIS dépasser le
+        // viewport : chaque racine client pose `overflow-x-clip`, qui rogne
+        // le débordement bien avant qu'il atteigne le document. La garde
+        // était verte par construction. Les rectangles, eux, ignorent le
+        // rognage : on cherche le bord droit le plus lointain de la page, et
+        // on NOMME l'élément fautif — un pixel de trop sans son coupable
+        // n'est pas actionnable. 1 px de tolérance : les demi-pixels d'un
+        // deviceScaleFactor de 2 ne sont pas un défaut de mise en page.
+        const deborde = await page.evaluate(() => {
+          const limite = window.innerWidth;
+          let pire = null;
+          for (const el of document.querySelectorAll('body *')) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0) continue;
+            const trop = Math.round(r.right - limite);
+            if (trop <= 1 || (pire && trop <= pire.trop)) continue;
+            const classes = typeof el.className === 'string' ? el.className.trim() : '';
+            pire = {
+              trop,
+              quoi:
+                el.tagName.toLowerCase() +
+                (el.id ? `#${el.id}` : '') +
+                (classes ? `.${classes.split(/\s+/).slice(0, 3).join('.')}` : ''),
+            };
+          }
+          return pire;
+        });
+        if (deborde) {
+          throw new Error(`débordement horizontal de ${deborde.trop}px — ${deborde.quoi}`);
+        }
         const path = resolve(OUT, `${name}.png`);
         // `fullPage: false` — cadrer la FENÊTRE, pas la page. Mesuré (revue,
         // tour 1) : le tunnel est un `Sheet` en `position: fixed`, mais

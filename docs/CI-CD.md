@@ -280,18 +280,26 @@ scripts/reprise-mongo.sh staging backfill:founder
 scripts/reprise-mongo.sh staging backfill:contact
 scripts/reprise-mongo.sh staging backfill:brand
 
-# 2. Appliquer. Le script relance ensuite la tâche pour vérifier
-#    l'idempotence : elle ne doit plus rien trouver.
+# 2. Appliquer. Le script relance ensuite la tâche avec --exiger-zero :
+#    elle ne doit plus rien trouver, et sort en code 3 si elle trouve
+#    quelque chose — le script s'arrête là plutôt que de finir vert.
 scripts/reprise-mongo.sh staging backfill:founder --appliquer
 scripts/reprise-mongo.sh staging backfill:contact --appliquer
 scripts/reprise-mongo.sh staging backfill:brand --appliquer
+
+# 3. backfill:tracking n'a PAS de mode lecture : elle écrit dès le
+#    lancement. Elle n'AJOUTE qu'un jeton là où il manque, sans jamais
+#    remplacer une valeur existante — c'est ce qui la rend sans risque,
+#    et ce qui la sort de la règle « lire d'abord ».
+scripts/reprise-mongo.sh staging backfill:tracking
 ```
 
 | Script | Ce qu'il répare | Ce qu'on voit sans lui |
 |---|---|---|
 | `backfill:founder` | pose `founderUntil` et `founderDiscountCents` | le fondateur lit « moitié prix » à côté d'un montant plein tarif |
 | `backfill:contact` | reprend le téléphone du gérant depuis son lead | le bouton « Appeler » reste masqué sur la fiche client |
-| `backfill:brand` | pose le masque d'identité (direction Nuit, accent et logo du tenant) sur les tenants d'avant le 01/09/2026 | rien ne casse sans lui — le résolveur dérive le même masque à la lecture ; avec lui, l'éditeur (plan B) a un objet à modifier |
+| `backfill:brand` | pose le masque d'identité (direction Nuit, accent et logo du tenant) sur les tenants d'avant le 01/09/2026, et NOMME ceux dont le masque stocké ne satisfait plus le contrat | rien ne casse sans lui — le résolveur dérive le même masque à la lecture ; avec lui, l'éditeur (plan B) a un objet à modifier. Un masque stocké INVALIDE, lui, ne se voit nulle part : chaque lecture retombe en repli Nuit en silence |
+| `backfill:tracking` | pose le jeton de suivi des commandes créées avant qu'il existe | les liens de suivi et les tickets déjà en circulation répondent 404 |
 
 **Pourquoi un script et pas une suite de commandes à recopier.** Trois pièges,
 tous rencontrés en déroulant la procédure à la main le 28 août 2026, et tous
@@ -308,9 +316,28 @@ fermés par `scripts/reprise-mongo.sh` :
    `railway redeploy` a redéployé la production au lieu de staging. Le script
    POSE l'environnement, et fait taper « production » à la main quand c'est elle.
 
-Les trois reprises sont **idempotentes** : un client déjà traité n'est jamais
-recalculé. `backfill:contact` refuse en outre les rapprochements ambigus et le
-dit — un mauvais numéro sur une fiche client est pire que pas de numéro.
+Les quatre reprises sont **idempotentes** : un document déjà traité n'est
+jamais recalculé. Chaque écriture de `backfill:brand` porte en plus son
+invariant dans son filtre — elle ne s'applique que si le tenant n'a pas changé
+entre la lecture et l'écriture, et elle compte les écritures RÉELLEMENT
+appliquées, jamais la taille du lot.
+
+Deux tâches montrent ce qu'elles ne savent pas décider, plutôt que de trancher
+à votre place : `backfill:contact` refuse les rapprochements ambigus — un
+mauvais numéro sur une fiche client est pire que pas de numéro ; et
+`backfill:brand` liste les masques stockés INVALIDES avec le chemin fautif
+(`palette.accent`, `shape`, une clé inconnue…) sans jamais les écraser. Les
+remplacer par le repli demande un drapeau explicite :
+
+```bash
+scripts/reprise-mongo.sh staging backfill:brand --appliquer --reparer
+```
+
+**Les deux codes de sortie à connaître.** `2` = mauvais usage du script
+(environnement ou tâche inconnus). `3` = la relance de contrôle a encore trouvé
+du travail : soit des écritures ont été ignorées parce que le document avait
+changé entre-temps — relancer la tâche suffit —, soit des documents ne sont pas
+reprenables en l'état et la tâche dit lesquels.
 
 ## 4 · Livrer un changement
 
