@@ -1,9 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { marqueEffective } from "@sm/contracts";
-import { loadBrand, PublicApiError } from "@/components/order/api";
+import { marqueDeRepli } from "@sm/contracts";
+import { PublicApiError } from "@/components/order/api";
 import { Tracking } from "@/components/order/Tracking";
-import { loadTicket, loadTracking, readToken } from "./tracking-api";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
+import { cx } from "@/lib/cx";
+import { loadTicket, loadTracking, marqueDuSuivi, readToken } from "./tracking-api";
 
 /**
  * Suivi de commande — `/t/[id]?t=<trackingToken>`.
@@ -31,6 +35,41 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/*
+ * Sans jeton, aucun slug : le restaurant est inconnu, donc son masque aussi.
+ * C'est le REPLI NUIT et non la marque grise de Snack Manager — le pourquoi
+ * complet est dans `app/r/[slug]/not-found.tsx`. Calculé au module : cette
+ * peau-là ne dépend d'aucune donnée.
+ */
+const REPLI = marqueDeRepli(null, null);
+const MASQUE_DE_REPLI = styleDuMasque(REPLI);
+
+/**
+ * La barre du navigateur mobile prend la couleur du MASQUE, pas notre noir.
+ *
+ * Le suivi est la page qu'on garde ouverte, en haut de l'écran, pendant que
+ * la commande se prépare : sans `themeColor`, le chrome du navigateur restait
+ * peint hors du masque juste au-dessus d'un en-tête à la marque du
+ * restaurant. `colorScheme` fait suivre l'ascenseur et les contrôles natifs,
+ * que le `style` posé sur la racine cliente n'atteint pas.
+ *
+ * `marqueDuSuivi` est mémorisé par `cache()` : ce viewport et la page se
+ * partagent UN seul appel au ticket. Sans jeton — un lien tronqué en chemin —
+ * il n'y a rien à interroger, et c'est le repli Nuit, exactement ce que peint
+ * alors `IncompleteLink`.
+ */
+export async function generateViewport({ params, searchParams }: Params): Promise<Viewport> {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const token = readToken(query.t);
+  const brand = token ? await marqueDuSuivi(id, token) : REPLI;
+  return {
+    width: "device-width",
+    initialScale: 1,
+    themeColor: brand.palette.ground,
+    colorScheme: brand.mode,
+  };
+}
+
 export default async function TrackingPage({ params, searchParams }: Params) {
   const { id } = await params;
   const token = readToken((await searchParams).t);
@@ -52,11 +91,10 @@ export default async function TrackingPage({ params, searchParams }: Params) {
     throw err;
   }
 
+  // `loadTicket` et `marqueDuSuivi` sont mémorisés pour la requête : le ticket
+  // n'est demandé qu'une fois, ici comme dans `generateViewport`.
   const ticket = await loadTicket(id, token).catch(() => null);
-  // Sans ticket, pas de slug pour interroger l'API : le masque de repli seul.
-  const brand = ticket
-    ? await loadBrand(ticket.header.slug)
-    : marqueEffective({ brand: null, brandColor: null, logoUrl: null });
+  const brand = await marqueDuSuivi(id, token);
 
   return (
     <Tracking
@@ -72,7 +110,16 @@ export default async function TrackingPage({ params, searchParams }: Params) {
 /** Lien de suivi sans jeton — message clair, pas une erreur technique. */
 function IncompleteLink() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-6 text-center">
+    <main
+      style={MASQUE_DE_REPLI}
+      className={cx(
+        classesPolices,
+        "font-body grid min-h-dvh place-items-center bg-bg px-6 text-center text-ink",
+      )}
+    >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={REPLI} />
       <div className="max-w-[360px]">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
           Lien incomplet

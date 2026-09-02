@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Card, Icon, Pill } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
+import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
+import { cx } from "@/lib/cx";
 
 const rewards = [
   { name: "Boisson offerte", cost: 8, ready: true },
@@ -34,7 +36,19 @@ export function DemoLoyaltyCard() {
   return (
     <div
       style={masque}
-      className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink"
+      className={cx(
+        /*
+         * `classesPolices` ET `font-body` — les deux, comme sur toutes les
+         * autres racines client. Sans les dix-huit classes de next/font, les
+         * variables `--police-<slug>` n'existent pas dans ce sous-arbre :
+         * `--cf-font-display` retombait sur son repli et cet aperçu se peignait
+         * en Inter, quelle que soit la paire du masque. La matrice de captures
+         * (`?masque=`) partait d'ici : elle prouvait donc les couleurs, jamais
+         * la typographie.
+         */
+        classesPolices,
+        "font-body min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink",
+      )}
     >
       {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
           et contrôles natifs — voir `FeuilleDuMasque`. */}
@@ -69,7 +83,20 @@ export function DemoLoyaltyCard() {
             <p className="mt-1 text-sm font-bold text-accentink">points fictifs</p>
           </div>
           <div className="relative mt-7">
-            <div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full w-4/5 rounded-pill bg-accent" /></div>
+            {/* Une jauge est un composant, pas une décoration : sans
+                `role`/`aria-value*` un lecteur d'écran ne rendait qu'une div
+                vide, et la progression n'existait que pour l'œil. */}
+            <div
+              className="h-2 overflow-hidden rounded-pill bg-ink/10"
+              role="progressbar"
+              aria-label="Progression vers « Menu signature offert »"
+              aria-valuemin={0}
+              aria-valuemax={30}
+              aria-valuenow={24}
+              aria-valuetext="24 points fictifs sur 30"
+            >
+              <div className="h-full w-4/5 rounded-pill bg-accent" />
+            </div>
             <p className="mt-2 text-xs text-mut">Encore 6 points fictifs pour « Menu signature offert »</p>
           </div>
         </section>
@@ -77,9 +104,12 @@ export function DemoLoyaltyCard() {
         <section className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Aperçu client</p>
           <h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses du moment</h2>
+          {/* Pas d'`opacity` sur un palier non atteint : elle rabattait
+              `text-mut` — déjà AU plancher AA — sous les 3:1. Le cadeau, la
+              bordure neutre et le libellé disent « pas encore ». */}
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {rewards.map((reward) => (
-              <Card key={reward.name} className={reward.ready ? "border-ok/25 p-4" : "p-4 opacity-75"}>
+              <Card key={reward.name} className={reward.ready ? "border-ok/25 p-4" : "p-4"}>
                 <div className="flex items-center gap-3">
                   <span className={reward.ready ? "grid size-11 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.ready ? "check" : "gift"} size={19} /></span>
                   <div><p className="text-sm font-extrabold">{reward.name}</p><p className="mt-1 text-xs text-mut">{reward.cost} points · {reward.ready ? "palier atteint" : "bientôt disponible"}</p></div>

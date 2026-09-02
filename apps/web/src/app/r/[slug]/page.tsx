@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { loadSite, PublicApiError } from "@/components/order/api";
 import { cityOf, euros } from "@/components/order/helpers";
@@ -61,6 +61,34 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     },
     twitter: { card: "summary_large_image", title, description },
     robots: { index: true, follow: true },
+  };
+}
+
+/**
+ * La barre du navigateur mobile prend la couleur du MASQUE, pas notre noir.
+ *
+ * `/embed/[slug]` le faisait déjà ; la VITRINE référencée — celle qu'on
+ * partage et qu'on épingle — ne le faisait pas. Chrome Android peignait donc
+ * son chrome avec la couleur du thème par défaut au-dessus d'une carte crème.
+ * `colorScheme` fait suivre l'ascenseur du document et les contrôles natifs
+ * dès la première image, avant même la peinture de la racine cliente.
+ *
+ * L'appel à `loadSite` traverse le cache de requête de Next — c'est le même
+ * `fetch` mémorisé que sert déjà `generateMetadata`. Un restaurant introuvable
+ * ne pose aucune couleur : `notFound()` tranchera dans la page.
+ */
+export async function generateViewport({ params }: Params): Promise<Viewport> {
+  const { slug } = await params;
+  const site = await loadSite(slug).catch(() => null);
+  return {
+    width: "device-width",
+    initialScale: 1,
+    ...(site
+      ? {
+          themeColor: site.tenant.brand.palette.ground,
+          colorScheme: site.tenant.brand.mode,
+        }
+      : {}),
   };
 }
 

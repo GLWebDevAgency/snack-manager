@@ -300,7 +300,10 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
               </div>
             </section>
 
-            {error && <div className="mt-4 rounded-card border border-alert/35 bg-alert/10 p-4"><p className="text-sm text-alertt" role="alert">{error}</p><Btn variant="ghost" size="sm" className="mt-3" onClick={() => setScannerOpen(true)}>Scanner un autre QR</Btn></div>}
+            {/* Pas de `size="sm"` sur une surface CLIENT : 34 px de haut, sous
+                la cible de 44 px (WCAG 2.2 · 2.5.8). La taille `sm` reste
+                celle des barres d'outils denses de l'admin, à la souris. */}
+            {error && <div className="mt-4 rounded-card border border-alert/35 bg-alert/10 p-4"><p className="text-sm text-alertt" role="alert">{error}</p><Btn variant="ghost" className="mt-3" onClick={() => setScannerOpen(true)}>Scanner un autre QR</Btn></div>}
 
             <section className="mt-6">
               <div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">À débloquer</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Les récompenses du moment</h2></div>
@@ -323,14 +326,39 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
               <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl" aria-hidden />
               <div className="relative flex items-start justify-between gap-4"><div><Pill className="border-ok/30 bg-ok/10 text-okt">Carte active</Pill><h1 ref={cardHeadingRef} tabIndex={-1} className="font-display mt-3 rounded-xs text-xl font-extrabold tracking-[-0.035em] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus">Bonjour {card.member.alias}</h1></div><Icon name="gift" size={28} className="text-accentink" /></div>
               <div className="relative mt-8"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Votre solde</p><p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em] text-ink">{card.member.balanceUnits.toLocaleString("fr-FR")}</p><p className="mt-1 text-sm font-bold text-accentink">{card.member.balanceUnits === 1 ? unitSingular : unitPlural}</p></div>
-              <div className="relative mt-7"><div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full rounded-pill bg-accent transition-transform duration-slow ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} /></div><p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p></div>
+              <div className="relative mt-7">
+                {/* Une jauge est un COMPOSANT, pas une décoration : sans
+                    `role`/`aria-value*`, un lecteur d'écran ne rendait qu'une
+                    div vide et la progression n'existait que pour l'œil. Les
+                    bornes sont les unités réelles, pas le pourcentage affiché :
+                    « 24 sur 30 » se lit, « 80 » ne dit rien. */}
+                <div
+                  className="h-2 overflow-hidden rounded-pill bg-ink/10"
+                  role="progressbar"
+                  aria-label={nextReward ? `Progression vers « ${nextReward.name} »` : "Progression vers le prochain palier"}
+                  aria-valuemin={0}
+                  aria-valuemax={nextReward ? nextReward.costUnits : card.member.balanceUnits}
+                  aria-valuenow={card.member.balanceUnits}
+                  aria-valuetext={nextReward
+                    ? `${card.member.balanceUnits.toLocaleString("fr-FR")} sur ${nextReward.costUnits.toLocaleString("fr-FR")} ${unitPlural}`
+                    : "Tous les paliers publiés sont atteints"}
+                >
+                  <div className="h-full rounded-pill bg-accent transition-transform duration-slow ease-sm motion-reduce:transition-none" style={{ transform: `scaleX(${progress / 100})`, transformOrigin: "left" }} />
+                </div>
+                <p className="mt-2 text-xs text-mut">{nextReward ? `Encore ${(nextReward.costUnits - card.member.balanceUnits).toLocaleString("fr-FR")} ${unitPlural} pour « ${nextReward.name} »` : "Votre solde atteint tous les paliers publiés."}</p>
+              </div>
               <Btn block icon="grid" className="relative mt-5" onClick={() => setQrOpen(true)}>
                 Présenter ma carte
               </Btn>
               <div className="relative mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-line2 pt-4"><p className="text-[11px] text-mut">{updatedAt ? `Actualisée à ${updatedAt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "Actualisée maintenant"}</p><div className="flex gap-2"><button type="button" onClick={() => void refresh()} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-accentink">Actualiser</button><button type="button" onClick={() => setForgetOpen(true)} className="cf-press min-h-11 rounded-pill px-3 py-2 text-xs font-bold text-mut hover:text-ink">Retirer</button></div></div>
             </section>
 
-            <section className="mt-6"><div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Catalogue informatif</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses à venir</h2><p className="mt-2 text-xs leading-5 text-mut">Pendant le pilote, votre QR sert à rattacher vos achats. Aucun point n’est encore débité pour une récompense.</p></div><div className="space-y-3">{card.rewards.map((reward) => <Card key={reward.id} className={reward.affordable ? "border-ok/25 p-4" : "p-4 opacity-70"}><div className="flex items-center gap-3"><span className={reward.affordable ? "grid size-11 shrink-0 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 shrink-0 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.affordable ? "check" : "gift"} size={19} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-extrabold text-ink">{reward.name}</p><Pill className={reward.affordable ? "border-ok/30 bg-ok/10 text-okt" : ""}>{reward.affordable ? "Palier atteint" : `${reward.costUnits} ${unitPlural}`}</Pill></div><p className="mt-1 text-xs leading-5 text-mut">{reward.description || benefit(reward)}</p></div></div></Card>)}</div></section>
+            {/* Pas d'`opacity` sur un palier non atteint : elle rabattait
+                `text-mut` — déjà AU plancher AA — à 2,6:1, et le coût du
+                palier est justement l'information principale de la page. Le
+                cadeau, la bordure neutre et la pastille de coût suffisent à
+                dire « pas encore ». */}
+            <section className="mt-6"><div className="mb-3"><p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Catalogue informatif</p><h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses à venir</h2><p className="mt-2 text-xs leading-5 text-mut">Pendant le pilote, votre QR sert à rattacher vos achats. Aucun point n’est encore débité pour une récompense.</p></div><div className="space-y-3">{card.rewards.map((reward) => <Card key={reward.id} className={reward.affordable ? "border-ok/25 p-4" : "p-4"}><div className="flex items-center gap-3"><span className={reward.affordable ? "grid size-11 shrink-0 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 shrink-0 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.affordable ? "check" : "gift"} size={19} /></span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><p className="text-sm font-extrabold text-ink">{reward.name}</p><Pill className={reward.affordable ? "border-ok/30 bg-ok/10 text-okt" : ""}>{reward.affordable ? "Palier atteint" : `${reward.costUnits} ${unitPlural}`}</Pill></div><p className="mt-1 text-xs leading-5 text-mut">{reward.description || benefit(reward)}</p></div></div></Card>)}</div></section>
 
             {card.activity.length > 0 && (
               <section className="mt-6">
@@ -400,11 +428,14 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         footer={
           <>
             <Btn variant="ghost" onClick={() => setForgetOpen(false)}>Annuler</Btn>
-            <Btn
-              variant="ghost"
-              className="border-alert/40 bg-alert/10 text-alertt hover:bg-alert/15"
-              onClick={forget}
-            >
+            {/* `variant="danger"` et non un `className` qui repeint un ghost :
+                deux utilitaires de même propriété (`bg-ink/3` du variant et le
+                lavis d'alerte) ont la même spécificité, et c'est l'ordre de la
+                FEUILLE compilée qui tranche — pas l'ordre d'écriture. Le
+                verdict destructif perdait sa teinte au gré d'un jeton ajouté
+                ailleurs. Le variant porte déjà le couple `alert`/`on-alert`
+                dont `contraste()` prouve l'AA sur les six directions. */}
+            <Btn variant="danger" onClick={forget}>
               Retirer la carte
             </Btn>
           </>

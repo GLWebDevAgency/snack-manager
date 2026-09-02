@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
+import { marqueDeRepli } from "@sm/contracts";
 import { loadSite, PublicApiError } from "@/components/order/api";
 import { Storefront } from "@/components/order/Storefront";
 
@@ -44,17 +45,22 @@ export const metadata: Metadata = {
  *
  * Le site est rechargé ici — comme le fait déjà `generateMetadata` de
  * `/r/[slug]` : l'appel traverse le cache de requête de Next, et un tunnel
- * introuvable retombe simplement sur le noir plutôt que d'échouer au rendu.
+ * introuvable retombe sur le REPLI NUIT — la même peau que servent alors
+ * `error.tsx` et `not-found.tsx` de cette route — plutôt que d'échouer au
+ * rendu. `colorScheme` fait suivre l'ascenseur et les contrôles natifs de
+ * l'iframe, que le `style` posé sur la racine cliente n'atteint pas.
  */
 export async function generateViewport({ params }: Params): Promise<Viewport> {
   const { slug } = await params;
   const site = await loadSite(slug).catch(() => null);
+  const brand = site?.tenant.brand ?? marqueDeRepli(null, null);
   return {
     width: "device-width",
     initialScale: 1,
     // L’iframe est déjà contrainte par l’hôte : pas de zoom parasite au tap.
     maximumScale: 5,
-    themeColor: site?.tenant.brand.palette.ground ?? "#000000",
+    themeColor: brand.palette.ground,
+    colorScheme: brand.mode,
   };
 }
 

@@ -1,3 +1,36 @@
+import { marqueDeRepli } from "@sm/contracts";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
+import { cx } from "@/lib/cx";
+
+/**
+ * ═══ LE REPLI NUIT DES SURFACES SANS RESTAURANT — la référence ═══
+ *
+ * Les 404, les écrans d'erreur et le lien de suivi incomplet des quatre
+ * surfaces client sont les SEULES pages du domaine à ne porter aucun masque
+ * de restaurant : quand elles s'affichent, il n'y a par définition rien à
+ * charger — slug inconnu, service injoignable, jeton perdu en route.
+ *
+ * Elles rendaient alors les `--cf-*` déclarés dans `globals.css`, c'est-à-dire
+ * le noir et le laiton de SNACK MANAGER : un client de la Brasserie tombait
+ * sur une page noire au bouton doré, la marque de son FOURNISSEUR de logiciel.
+ * Le repli Nuit (`marqueDeRepli`, spec §8) est la seule direction qui ne
+ * suppose aucune donnée : elle tient la promesse « aucune surface ne casse »
+ * sans usurper l'identité de personne.
+ *
+ * Deux détails valent d'être dits, parce qu'ils se paient cher s'ils manquent :
+ *  · `classesPolices` accompagne toujours `styleDuMasque` — sans les dix-huit
+ *    variables `--police-<slug>`, la paire typographique retombe sur Inter ;
+ *  · `FeuilleDuMasque` hisse le fond jusqu'à `html`/`body` : sans elle, le
+ *    rebond élastique d'iOS découvre le canevas par défaut derrière la page.
+ *
+ * Les constantes sont calculées AU MODULE : `resoudreMarque()` est une
+ * trentaine de mélanges, et cette peau-là ne dépend d'aucune donnée.
+ */
+const REPLI = marqueDeRepli(null, null);
+const MASQUE_DE_REPLI = styleDuMasque(REPLI);
+
 /**
  * Slug inconnu — page franche, pas un écran d’erreur technique.
  *
@@ -20,7 +53,16 @@
  */
 export default function RestaurantNotFound() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-6 text-center">
+    <main
+      style={MASQUE_DE_REPLI}
+      className={cx(
+        classesPolices,
+        "font-body grid min-h-dvh place-items-center bg-bg px-6 text-center text-ink",
+      )}
+    >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={REPLI} />
       <div className="max-w-[380px]">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
           Erreur 404

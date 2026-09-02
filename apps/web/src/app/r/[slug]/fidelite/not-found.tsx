@@ -1,9 +1,31 @@
 import Link from "next/link";
+import { marqueDeRepli } from "@sm/contracts";
 import { Icon } from "@/components/ui";
+import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
+import { cx } from "@/lib/cx";
+
+/*
+ * Programme introuvable : aucun masque à charger. C'est le REPLI NUIT plutôt
+ * que la marque grise de Snack Manager — le pourquoi complet est dans
+ * `app/r/[slug]/not-found.tsx`.
+ */
+const REPLI = marqueDeRepli(null, null);
+const MASQUE_DE_REPLI = styleDuMasque(REPLI);
 
 export default function LoyaltyNotFound() {
   return (
-    <main className="grid min-h-dvh place-items-center bg-bg px-5 py-12 text-ink">
+    <main
+      style={MASQUE_DE_REPLI}
+      className={cx(
+        classesPolices,
+        "font-body grid min-h-dvh place-items-center bg-bg px-5 py-12 text-ink",
+      )}
+    >
+      {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
+          et contrôles natifs — voir `FeuilleDuMasque`. */}
+      <FeuilleDuMasque brand={REPLI} />
       <section className="w-full max-w-md rounded-wide border border-ink/10 bg-surface p-6 text-center shadow-deep sm:p-8">
         <span className="mx-auto grid size-14 place-items-center rounded-card bg-ink/6 text-mut">
           <Icon name="gift" size={24} />
