@@ -22,7 +22,13 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ACCOUNT_SUSPENDED_CODE, isAccessBlocked, type OrderStatus } from "@sm/contracts";
+import {
+  ACCOUNT_SUSPENDED_CODE,
+  CAPACITE_VERROU_INDICE,
+  isAccessBlocked,
+  type Capacite,
+  type OrderStatus,
+} from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
 import { BandeauDemo } from "@/lib/demo/BandeauDemo";
@@ -41,6 +47,7 @@ import {
   groupesMobileRestants,
   groupesVisibles,
   navActive,
+  type NavItemAffiche,
 } from "./navigation";
 import { roleAdmin } from "./session";
 
@@ -85,6 +92,70 @@ function SplashApresConnexion() {
   }, []);
   if (!entree) return null;
   return <Splash duree={3.6} annonce="Ouverture de votre back-office" onFini={() => setEntree(false)} />;
+}
+
+/**
+ * UNE ENTRÉE DE LA BARRE — un lien, ou un verrou.
+ *
+ * Les deux axes d'accès se peignent de façons opposées, et c'est délibéré :
+ *
+ *  · une entrée refusée par le RÔLE n'arrive jamais ici. La table l'a retirée,
+ *    et c'est juste : un équipier n'a pas à savoir ce que fait son patron ;
+ *  · une entrée non SOUSCRITE arrive ici avec `verrouille: true`. Elle reste
+ *    donc à sa place, avec son nom et son icône, et cesse seulement d'être
+ *    cliquable. Le restaurateur vient de lire sur notre grille tarifaire que
+ *    ce module existe — le faire disparaître de son back-office serait lui
+ *    cacher ce qu'il peut acheter.
+ *
+ * Le verrou n'est PAS une sécurité, exactement comme le filtrage par rôle :
+ * l'autorité est la garde de capacité côté API (`@Capacites(...)`), qui refuse
+ * quoi qu'affiche le navigateur. Ici on évite seulement de proposer une porte
+ * qui répondrait « ce n'est pas dans votre abonnement ».
+ *
+ * Un `<span>` et non un `<a aria-disabled>` : un lien désactivé reste
+ * atteignable au clavier et annoncé comme un lien par les lecteurs d'écran,
+ * qui promettent alors une navigation qui n'aura pas lieu. La raison, elle,
+ * est donnée en toutes lettres — `title` pour la souris, texte masqué pour la
+ * synthèse vocale.
+ */
+function EntreeBarre({
+  item,
+  className,
+  actif,
+  onClick,
+  montrerCadenas = true,
+  children,
+}: {
+  item: NavItemAffiche;
+  className: string;
+  actif: boolean;
+  onClick?: () => void;
+  montrerCadenas?: boolean;
+  children: ReactNode;
+}) {
+  if (!item.verrouille) {
+    return (
+      <Link
+        href={item.href}
+        title={item.label}
+        aria-current={actif ? "page" : undefined}
+        onClick={onClick}
+        className={className}
+      >
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <span
+      title={`${item.label} — ${CAPACITE_VERROU_INDICE}`}
+      className={cx(className, "cursor-not-allowed opacity-50")}
+    >
+      {children}
+      {montrerCadenas && <Icon name="lock" size={15} className="shrink-0" />}
+      <span className="sr-only">{CAPACITE_VERROU_INDICE}</span>
+    </span>
+  );
 }
 
 /** Store minimal pour lire un état navigateur sans mismatch d'hydratation. */
@@ -316,12 +387,22 @@ function Shell({ children }: { children: ReactNode }) {
   //
   // Trois vues d'une seule table : la colonne de bureau, les cases sous le
   // pouce, et le volet « Plus » qui reprend les MÊMES groupes que la colonne.
-  const groupes = useMemo(() => groupesVisibles({ role, suspendu }), [role, suspendu]);
-  const barre = useMemo(() => barreMobile({ role, suspendu }), [role, suspendu]);
-  const groupesPlus = useMemo(
-    () => groupesMobileRestants({ role, suspendu }),
-    [role, suspendu],
+  //
+  // `capacites` est ce que le SERVEUR a calculé (`GET /tenants/me`) : la barre
+  // ne rejoue jamais le catalogue, elle consomme son résultat. `null` tant que
+  // la réponse n'est pas là — rien n'est alors verrouillé, plutôt que de faire
+  // clignoter des cadenas sur le back-office d'un client en règle.
+  const capacites = useMemo<readonly Capacite[] | null>(
+    () => tenant?.capacites ?? null,
+    [tenant],
   );
+  const ctxNav = useMemo(
+    () => ({ role, suspendu, capacites }),
+    [role, suspendu, capacites],
+  );
+  const groupes = useMemo(() => groupesVisibles(ctxNav), [ctxNav]);
+  const barre = useMemo(() => barreMobile(ctxNav), [ctxNav]);
+  const groupesPlus = useMemo(() => groupesMobileRestants(ctxNav), [ctxNav]);
 
   // ── Titre / sous-titre de la topbar ──
   //
@@ -494,11 +575,11 @@ function Shell({ children }: { children: ReactNode }) {
                       const isActive = pathname.startsWith(item.href);
                       const badge = item.href === "/admin/orders" && newCount > 0;
                       return (
-                        <Link
+                        <EntreeBarre
                           key={item.href}
-                          href={item.href}
-                          title={item.label}
-                          aria-current={isActive ? "page" : undefined}
+                          item={item}
+                          actif={isActive}
+                          montrerCadenas={open}
                           className={cx(
                             "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
                             open ? "px-3" : "justify-center px-0",
@@ -530,7 +611,7 @@ function Shell({ children }: { children: ReactNode }) {
                                 aria-hidden
                               />
                             ))}
-                        </Link>
+                        </EntreeBarre>
                       );
                     })}
                   </div>
@@ -743,10 +824,16 @@ function Shell({ children }: { children: ReactNode }) {
           const isActive = pathname.startsWith(item.href);
           const badge = item.href === "/admin/orders" && newCount > 0;
           return (
-            <Link
+            // Le cadenas n'est PAS dessiné ici : la cellule fait 11 px de
+            // corps sous le pouce, une icône de plus y devient une tache. Le
+            // grisé et le texte masqué disent la même chose sans encombrer —
+            // et le cas est rare, ces trois écrans étant compris dans les
+            // trois formules de la grille.
+            <EntreeBarre
               key={item.href}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
+              item={item}
+              actif={isActive}
+              montrerCadenas={false}
               className={cx(
                 "cf-press flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px]",
                 isActive ? "font-extrabold text-accent" : "font-semibold text-mut",
@@ -767,7 +854,7 @@ function Shell({ children }: { children: ReactNode }) {
                   devenait « Accueil ». Les deux écrans portent désormais le
                   nom court dans la table, et il tient dans la cellule. */}
               <span className="max-w-full truncate">{item.label}</span>
-            </Link>
+            </EntreeBarre>
           );
         })}
         <button
@@ -856,11 +943,11 @@ function Shell({ children }: { children: ReactNode }) {
                       const isActive = pathname.startsWith(item.href);
                       const badge = item.href === "/admin/orders" && newCount > 0;
                       return (
-                        <Link
+                        <EntreeBarre
                           key={item.href}
-                          href={item.href}
+                          item={item}
+                          actif={isActive}
                           onClick={() => setMoreOpen(false)}
-                          aria-current={isActive ? "page" : undefined}
                           className={cx(
                             "cf-press-row flex shrink-0 items-center gap-2.5 rounded-ctrl px-3 py-3 text-sm",
                             isActive
@@ -883,7 +970,7 @@ function Shell({ children }: { children: ReactNode }) {
                               <span className="sr-only"> nouvelles commandes</span>
                             </span>
                           )}
-                        </Link>
+                        </EntreeBarre>
                       );
                     })}
                   </div>

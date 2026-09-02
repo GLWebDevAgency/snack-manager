@@ -18,31 +18,16 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { fmtEuro } from "@/lib/format";
 import { LOGO_FORMATS_ADMIS, LOGO_MAX_OCTETS, type AuditEntryView } from "@sm/contracts";
 import { api, envoiFichier, ApiError, type TenantMe } from "@/lib/api";
 import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
+import { phraseDuGeste, signatureDeLAuteur } from "./journal";
 
 /** Sans dièse ni casse imposée à la saisie — on normalise à l'envoi. */
 const normaliseCouleur = (raw: string): string => {
   const hex = raw.trim().replace(/^#?/, "#").toLowerCase();
   return /^#[0-9a-f]{6}$/.test(hex) ? hex : raw.trim();
 };
-
-/** La phrase du geste, tirée du `meta` — chiffres en euros, jamais en centimes. */
-function metaLigne(e: AuditEntryView): string {
-  const m = e.meta;
-  if (e.action === "price.change" && typeof m.fromCents === "number" && typeof m.toCents === "number") {
-    return `${String(m.name ?? "")} : ${fmtEuro(m.fromCents)} → ${fmtEuro(m.toCents)}`;
-  }
-  if (e.action === "order.discount" && typeof m.amount === "number") {
-    return `${fmtEuro(m.amount)}${m.reason ? ` — ${String(m.reason)}` : ""}`;
-  }
-  if (e.action === "order.cancel") {
-    return `${m.number ? `commande n° ${String(m.number)}` : ""}${m.reason ? ` — ${String(m.reason)}` : ""}`;
-  }
-  return "";
-}
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -301,17 +286,26 @@ export default function SettingsPage() {
         )}
       </Panel>
 
+      {/*
+        LE REGISTRE, ENFIN COMPLET.
+
+        Il ne montrait que trois gestes parce que le produit n'en écrivait que
+        trois : tout ce qui touchait au stock, aux ruptures, aux horaires ou à
+        l'identité passait sans laisser de trace. C'est le seul endroit où ce
+        travail devient visible pour le gérant — et la seule page qu'il ouvrira
+        le jour d'un contrôle ou d'un désaccord avec un équipier.
+      */}
       <Panel
         title="Journal des gestes sensibles"
-        sub="Annulations, remises, changements de prix — le registre NF525 de votre caisse"
+        sub="Prix, ruptures, stocks, horaires et identité — le registre de votre établissement, inaltérable"
         bodyClassName="flex flex-col gap-1.5"
       >
         {journal === null ? (
           <Skeleton className="h-[48px]" />
         ) : journal.length === 0 ? (
           <p className="text-[13px] text-mut">
-            Aucun geste sensible enregistré — le registre se remplit à la première annulation,
-            remise ou retouche de prix.
+            Aucun geste sensible enregistré — le registre se remplit au premier changement de
+            prix, à la première rupture ou au premier mouvement de stock.
           </p>
         ) : (
           journal.map((e) => (
@@ -320,8 +314,9 @@ export default function SettingsPage() {
               className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-card border border-white/6 bg-white/3 px-3.5 py-2"
             >
               <span className="text-[13px] font-bold text-ink">{e.actionLabel}</span>
-              {e.staffName && <span className="text-xs text-mut">par {e.staffName}</span>}
-              <span className="min-w-0 flex-1 truncate text-xs text-mut">{metaLigne(e)}</span>
+              {/* QUI, à quel titre, par quel moyen — les trois d'un coup. */}
+              <span className="text-xs text-mut">{signatureDeLAuteur(e)}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-mut">{phraseDuGeste(e)}</span>
               <span className="cf-fig shrink-0 text-xs text-mut">
                 {new Date(e.at).toLocaleString("fr-FR")}
               </span>

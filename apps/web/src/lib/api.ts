@@ -16,6 +16,9 @@
  * ni variable d'environnement, ni valeur persistée. Un gérant réel ne peut pas
  * y tomber par accident.
  */
+// `import type` : la liste des capacités est un TYPE ici, jamais une valeur —
+// le catalogue reste au contrat, le front n'en lit que le résultat.
+import type { Capacite } from "@sm/contracts";
 import { demoCsv, demoCsvName, demoRequest, isDemoActive } from "./demo";
 
 export const API_URL =
@@ -256,6 +259,25 @@ export type TenantMe = {
    * restaurant a acheté, là c'est ce qu'il a décidé ce soir.
    */
   onlineOrdering: boolean;
+  /**
+   * CE QUE L'ÉTABLISSEMENT A SOUSCRIT — calculé par le SERVEUR, jamais ici.
+   *
+   * Les modules de la grille tarifaire (`pos`, `menu`, `planning`, `stocks`,
+   * `online`, `loyalty`…) que ce restaurant peut réellement ouvrir : sa
+   * formule, plus ses options, plus les dérogations accordées, moins celles
+   * qui lui ont été retirées.
+   *
+   * Le front ne recalcule RIEN à partir de `plan` : c'est la règle d'or du
+   * produit (le code ne connaît pas le nom d'une formule), et c'est aussi la
+   * seule façon d'être sûr que la barre de navigation et les gardes de l'API
+   * disent la même chose. Le catalogue vit dans `@sm/contracts/capacites`.
+   *
+   * Facultatif dans le type : une API déployée avant ce champ ne le rend pas,
+   * et l'absence se lit comme « on ne sait pas » — donc rien de verrouillé —
+   * plutôt que comme « rien de souscrit », qui fermerait un back-office entier
+   * le temps d'un déploiement décalé.
+   */
+  capacites?: Capacite[];
   /**
    * L'état du compte — le seul champ qui décide de l'ACCÈS.
    *

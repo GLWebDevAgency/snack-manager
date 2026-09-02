@@ -20,6 +20,7 @@ import {
   isAccessBlocked,
   isPairingCodeShape,
   publicOrderingState,
+  PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE,
   type AdminInvoiceGesture,
   type AdminLogQuery,
   type JwtPayload,
@@ -870,10 +871,14 @@ describe('Règle d’accès', () => {
 });
 
 describe('Fermeture du site public', () => {
+  /** Le cas ordinaire : la commande en ligne est bien souscrite. */
+  const SOUSCRITE = true;
+
   it('ferme proprement la commande en ligne d’un restaurant suspendu', () => {
     const state = publicOrderingState(
       { status: 'suspended' },
       { paused: false, message: null },
+      SOUSCRITE,
     );
 
     expect(state.paused).toBe(true);
@@ -885,19 +890,54 @@ describe('Fermeture du site public', () => {
 
   it('laisse la pause du restaurateur inchangée quand le compte va bien', () => {
     const pause = { paused: true, message: 'Victimes de notre succès !' };
-    expect(publicOrderingState({ status: 'active' }, pause)).toEqual(pause);
-    expect(publicOrderingState(undefined, { paused: false, message: null })).toEqual({
-      paused: false,
-      message: null,
-    });
+    expect(publicOrderingState({ status: 'active' }, pause, SOUSCRITE)).toEqual(pause);
+    expect(
+      publicOrderingState(undefined, { paused: false, message: null }, SOUSCRITE),
+    ).toEqual({ paused: false, message: null });
   });
 
   it('prime sur une pause déjà posée par le restaurateur', () => {
     const state = publicOrderingState(
       { status: 'suspended' },
       { paused: true, message: 'Victimes de notre succès !' },
+      SOUSCRITE,
     );
     expect(state.message).toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+  });
+
+  /**
+   * LA COMMANDE EN LIGNE NON SOUSCRITE SUIT LE MÊME CHEMIN QUE LA SUSPENSION.
+   *
+   * Elle ne lève pas, elle ne rend pas un 403 : elle FERME la page comme une
+   * pause. Un client qui valide son panier à 12h15 doit lire une phrase qui
+   * lui parle, pas recevoir une erreur — et le menu, les horaires et les avis
+   * restent affichés : on ferme un guichet, on n'efface pas un restaurant.
+   */
+  it('annonce l’indisponibilité quand le module n’est pas souscrit', () => {
+    const state = publicOrderingState(
+      { status: 'active' },
+      { paused: false, message: null },
+      false,
+    );
+    expect(state.paused).toBe(true);
+    expect(state.message).toBe(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE);
+    // Le mangeur n'a pas à savoir ce que son restaurateur nous paie.
+    expect(state.message).not.toMatch(/abonnement|formule|souscri|module|impay/i);
+  });
+
+  it('ne promet pas un retour qui n’aura pas lieu, et ne sort pas le mot du gérant', () => {
+    // « Momentanément indisponible » est vrai d'une suspension (elle se lève
+    // quand la facture est réglée) et faux d'une fonction jamais achetée : le
+    // client reviendrait chaque semaine sur une page qui ne changera pas.
+    expect(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE).not.toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+    // Et « de retour à 18 h » ne doit jamais s'afficher sur une fonction qui
+    // ne reviendra pas : la non-souscription passe AVANT la pause du gérant.
+    const state = publicOrderingState(
+      { status: 'suspended' },
+      { paused: true, message: 'De retour à 18 h' },
+      false,
+    );
+    expect(state.message).toBe(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE);
   });
 });
 

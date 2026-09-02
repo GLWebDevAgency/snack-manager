@@ -117,6 +117,22 @@ export const ACCOUNT_SUSPENDED_CODE = 'tenant_suspended';
 export const PUBLIC_ORDERING_SUSPENDED_MESSAGE =
   'La commande en ligne est momentanément indisponible. Merci d’appeler directement le restaurant.';
 
+/**
+ * Message affiché au CONSOMMATEUR quand le restaurant n'a pas SOUSCRIT la
+ * commande en ligne.
+ *
+ * Voisin du précédent, et pourtant distinct mot pour mot : « momentanément
+ * indisponible » promet un retour, ce qui est vrai d'une suspension (elle se
+ * lève quand la facture est réglée) et faux d'une fonction jamais achetée. Le
+ * client reviendrait chaque semaine sur une page qui ne changera pas.
+ *
+ * Il n'y a ici NI reproche NI mention d'abonnement : le mangeur n'a pas à
+ * savoir ce que son restaurateur nous paie. Il lit que ce restaurant ne prend
+ * pas les commandes en ligne, et on lui laisse le téléphone.
+ */
+export const PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE =
+  'Ce restaurant ne prend pas les commandes en ligne. Merci de l’appeler directement.';
+
 /** L'état de compte tel qu'il circule dans les réponses d'API (dates ISO). */
 export type TenantAccount = {
   status: TenantAccountStatus;
@@ -138,11 +154,34 @@ export type TenantAccount = {
  *
  * Fonction pure et partagée pour que la règle ne soit écrite qu'une fois :
  * l'API la pose sur la page publique, le web peut la rejouer pour son rendu.
+ *
+ * ─── LA CAPACITÉ SUIT LE MÊME CHEMIN QUE LA SUSPENSION ───
+ *
+ * Une commande en ligne NON SOUSCRITE ne lève pas d'exception et ne rend pas
+ * un 403 : elle se ferme comme une pause, par la même porte. La raison est la
+ * même que pour la suspension, et elle est plus forte encore — la souscription
+ * peut cesser un mardi midi, et la page ne doit pas tomber en plein service
+ * devant des clients qui n'y sont pour rien. Le menu, les horaires et les avis
+ * restent affichés : on ferme un guichet, on n'efface pas un restaurant.
+ *
+ * `souscrite` est un paramètre OBLIGATOIRE, et c'était le choix à faire : une
+ * valeur par défaut à `true` aurait laissé chaque nouvel appelant ouvrir la
+ * porte en oubliant de poser la question. Ici le compilateur la pose pour lui.
+ *
+ * L'ordre compte. La non-souscription passe AVANT la suspension et avant la
+ * pause du gérant : elle est le fait le plus durable, elle ne doit pas
+ * emprunter le « momentanément » de la suspension, et surtout elle ne doit pas
+ * laisser sortir le message de pause du restaurateur — « de retour à 18 h » ne
+ * doit pas s'afficher sur une fonction qui ne reviendra pas.
  */
 export function publicOrderingState(
   account: { status?: TenantAccountStatus | null } | null | undefined,
   settings: { paused: boolean; message: string | null },
+  souscrite: boolean,
 ): { paused: boolean; message: string | null } {
+  if (!souscrite) {
+    return { paused: true, message: PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE };
+  }
   if (isAccessBlocked(account?.status)) {
     return { paused: true, message: PUBLIC_ORDERING_SUSPENDED_MESSAGE };
   }

@@ -20,6 +20,7 @@ export * from './security';
 export * from './loyalty';
 export * from './loyalty-public';
 export * from './marque';
+export * from './capacites';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

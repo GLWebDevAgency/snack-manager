@@ -8,8 +8,9 @@ import {
   type TenantIdentityUpdate,
   TenantSettingsUpdateSchema,
   type TenantSettingsUpdate,
+  type JwtPayload,
 } from '@sm/contracts';
-import { Public, Roles, TenantId } from '../../common/auth';
+import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
 import { TenantsService } from './tenants.service';
 
@@ -38,9 +39,10 @@ export class TenantsController {
   @Patch('tenants/me/settings')
   updateSettings(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(TenantSettingsUpdateSchema)) body: TenantSettingsUpdate,
   ) {
-    return this.tenants.updateSettings(tenantId, body);
+    return this.tenants.updateSettings(tenantId, body, user);
   }
 
   /**
@@ -52,9 +54,10 @@ export class TenantsController {
   @Patch('tenants/me/identity')
   updateIdentity(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(TenantIdentityUpdateSchema)) body: TenantIdentityUpdate,
   ) {
-    return this.tenants.updateIdentity(tenantId, body);
+    return this.tenants.updateIdentity(tenantId, body, user);
   }
 
   /**
@@ -65,8 +68,12 @@ export class TenantsController {
    */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/marque')
-  updateMarque(@TenantId() tenantId: string, @Body(zod(BrandStrictSchema)) body: Brand) {
-    return this.tenants.updateMarque(tenantId, body);
+  updateMarque(
+    @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body(zod(BrandStrictSchema)) body: Brand,
+  ) {
+    return this.tenants.updateMarque(tenantId, body, user);
   }
 
   /**
@@ -84,9 +91,10 @@ export class TenantsController {
   @Patch('tenants/me/hours')
   updateHours(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(TenantHoursUpdateSchema)) body: TenantHoursUpdate,
   ) {
-    return this.tenants.updateHours(tenantId, body);
+    return this.tenants.updateHours(tenantId, body, user);
   }
 
   @Public()

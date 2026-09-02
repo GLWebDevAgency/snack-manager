@@ -2,44 +2,155 @@ import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { z } from 'zod';
-import { AUDIT_ACTION_LABELS, type AuditEntryView } from '@sm/contracts';
-import type { AuditLog, Staff } from '@sm/db';
+import {
+  AUDIT_ACTION_LABELS,
+  type AuditAuthor,
+  type AuditAuthorMeans,
+  type AuditEntryView,
+  type JwtPayload,
+  type TenantAuditAction,
+} from '@sm/contracts';
+import type { AuditLog, Staff, User } from '@sm/db';
 import { Roles, TenantId } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
 
 /**
- * Journal append-only des actions sensibles (annulation, remise,
- * remboursement, changement de prix) — socle de la traçabilité NF525.
+ * QUI AGIT, réduit à ce que la ligne de journal a besoin de savoir.
+ *
+ * Un `JwtPayload` y répond directement — c'est le cas courant : le geste vient
+ * de la session posée sur la requête. Mais pas toujours, et c'est pour cela que
+ * le type est ce sous-ensemble plutôt que le jeton lui-même : une annulation de
+ * commande est validée par un PIN RE-SAISI par-dessus la session ouverte. La
+ * tablette est en session « caisse » quand le gérant vient taper son code ;
+ * l'auteur du geste est le gérant, pas la session. Exiger un jeton obligerait
+ * à en fabriquer un faux pour dire la vérité.
+ */
+export type AuditActor = Pick<JwtPayload, 'sub' | 'role' | 'kind'>;
+
+/**
+ * Journal append-only des gestes sensibles d'un restaurant — socle NF525.
  *
  * ÉCRIT depuis le premier jour, LISIBLE depuis le 24/08/2026 seulement : un
  * journal qu'aucun écran ne sait montrer ne protège personne au contrôle
  * (diagnostic quatre casquettes, P3). La lecture vit ici même, dans le module
  * du journal — la règle « qui écrit sait relire » évite un lecteur qui
  * réinterprète les entrées à sa façon.
+ *
+ * ─── CE QU'IL COUVRE ───
+ *
+ * `TENANT_AUDIT_ACTIONS` (@sm/contracts) énumère les gestes tracés et dit, en
+ * commentaire, la règle de périmètre et ce qui en est volontairement écarté.
+ * Le tour du produit avait longtemps été fait à moitié : quatre actions
+ * déclarées, TROIS écrites, par deux fichiers. Le même geste de masque
+ * produisait une ligne quand il venait du CRM et rien quand il venait du
+ * restaurateur.
  */
 @Injectable()
 export class AuditService {
   constructor(
     @InjectModel('AuditLog') private readonly logs: Model<AuditLog>,
     @InjectModel('Staff') private readonly staff: Model<Staff>,
+    @InjectModel('User') private readonly users: Model<User>,
   ) {}
 
+  /**
+   * ÉCRIT UNE LIGNE. Passage obligé de tout geste journalisé.
+   *
+   * ─── L'ORDRE : LA MUTATION D'ABORD, LE JOURNAL ENSUITE ───
+   *
+   * Repris tel quel du journal d'administration (`AdminService.record`), et
+   * pour la même raison : journaliser AVANT d'agir produirait, sur une
+   * écriture ratée, une ligne affirmant une rupture ou une remise qui n'a pas
+   * eu lieu. Un registre qui ment est pire qu'un registre incomplet.
+   *
+   * ─── ET L'ÉCHEC D'INSERTION REMONTE ───
+   *
+   * Aucun `try/catch` ici, aucun `void` chez les appelants : si le journal ne
+   * s'écrit pas, la requête échoue. C'est un choix ASSUMÉ et il a un coût —
+   * une panne du journal fait échouer un geste métier déjà appliqué en base,
+   * et le client verra une erreur sur une action qui a en partie réussi.
+   *
+   * On l'accepte parce que l'inverse coûte plus cher : avaler l'erreur
+   * fabriquerait un registre TROUÉ dont personne ne saurait qu'il l'est, et
+   * c'est exactement la propriété qu'un registre à valeur probante ne peut pas
+   * perdre. Une ligne manquante ne se voit qu'au contrôle, six mois trop tard.
+   * Une requête en erreur se voit tout de suite, et le geste se rejoue.
+   *
+   * (Corollaire déjà en place : le journal et la mutation ne partagent pas de
+   * transaction — Mongo n'en ouvre pas ici, et l'approvisionnement écrit même
+   * dans une AUTRE base. Un geste appliqué sans sa ligne reste donc possible
+   * sur panne franche ; il est signalé, ce qui est le point.)
+   */
   async log(entry: {
     tenantId: string;
+    action: TenantAuditAction;
+    /**
+     * LA SESSION À L'ORIGINE DU GESTE, telle que le garde l'a posée sur la
+     * requête. Optionnelle pour un appelant sans requête (tâche de fond), et
+     * la ligne porte alors `author: null` plutôt qu'un auteur inventé.
+     */
+    actor?: AuditActor | null;
+    /** L'équipier dont le PIN a re-validé un geste de caisse, s'il y en a un. */
     staffId?: string | null;
-    action: string;
     targetId?: string;
     meta?: unknown;
     pinVerifiedAt?: Date;
   }) {
-    await this.logs.create({ ...entry, at: new Date() });
+    const { actor, ...reste } = entry;
+    await this.logs.create({
+      ...reste,
+      author: actor ? await this.auteur(actor) : null,
+      at: new Date(),
+    });
   }
 
   /**
-   * Le journal d'un établissement, du plus récent au plus ancien, avec les
-   * NOMS d'équipiers résolus en une seule lecture : « Sarah » se défend en
-   * contrôle, un ObjectId non. Un équipier supprimé s'affiche « équipier
-   * supprimé » — le geste reste, c'est le principe même du registre.
+   * L'auteur RÉSOLU au moment du geste — nom et rôle recopiés dans la ligne.
+   *
+   * Une lecture de plus par geste journalisé, comme le journal d'administration
+   * en fait une pour `actorEmail`. Elle achète la propriété qui fait tout
+   * l'intérêt d'un registre : ce qui est écrit reste écrit, même après un
+   * renommage, un changement de rôle ou un départ.
+   *
+   * Le rôle vient du JETON et non du document : c'est le titre sous lequel la
+   * personne a réellement agi. Un gérant promu depuis n'aura pas rétroactivement
+   * agi en gérant.
+   */
+  private async auteur(actor: AuditActor): Promise<AuditAuthor> {
+    const means: AuditAuthorMeans = actor.kind === 'staff' ? 'pin' : 'password';
+    return {
+      id: String(actor.sub),
+      name: await this.nomDe(actor),
+      role: String(actor.role),
+      means,
+    };
+  }
+
+  /** Le nom affiché — vide si le compte a disparu entre le geste et sa lecture. */
+  private async nomDe(actor: AuditActor): Promise<string> {
+    if (!Types.ObjectId.isValid(actor.sub)) return '';
+    if (actor.kind === 'staff') {
+      const membre = await this.staff
+        .findById(actor.sub, { name: 1 })
+        .lean<{ name?: string } | null>();
+      return (membre?.name ?? '').trim();
+    }
+    const compte = await this.users
+      .findById(actor.sub, { name: 1 })
+      .lean<{ name?: string } | null>();
+    return (compte?.name ?? '').trim();
+  }
+
+  /**
+   * Le journal d'un établissement, du plus récent au plus ancien.
+   *
+   * Les NOMS d'équipiers sont résolus en une seule lecture pour les lignes
+   * ANCIENNES — celles écrites avant que l'auteur soit dénormalisé : « Sarah »
+   * se défend en contrôle, un ObjectId non. Un équipier supprimé s'affiche
+   * « équipier supprimé » — le geste reste, c'est le principe même du registre.
+   *
+   * Les lignes récentes portent leur auteur : aucune jointure ne les touche, et
+   * elles se relisent identiques dans dix ans.
    */
   async list(tenantId: string, limit = 100): Promise<AuditEntryView[]> {
     const docs = await this.logs
@@ -61,11 +172,32 @@ export class AuditService {
       _id: String(d._id),
       at: (d.at ?? new Date(0)).toISOString(),
       action: d.action ?? '',
-      actionLabel: AUDIT_ACTION_LABELS[d.action ?? ''] ?? d.action ?? '',
+      actionLabel: AUDIT_ACTION_LABELS[d.action as TenantAuditAction] ?? d.action ?? '',
       staffName: d.staffId ? (names.get(String(d.staffId)) ?? 'équipier supprimé') : '',
+      author: vueAuteur(d.author),
       meta: (d.meta ?? {}) as Record<string, unknown>,
     }));
   }
+}
+
+/**
+ * L'auteur d'une ligne, ramené à la forme du contrat.
+ *
+ * Défensif à dessein : la collection porte des lignes écrites AVANT ce champ
+ * (`author` absent) et le registre ne se réécrit pas pour rattraper une
+ * évolution de forme. Une ligne sans `id` exploitable vaut « pas d'auteur »,
+ * ce que l'écran sait dire.
+ */
+export function vueAuteur(brut: unknown): AuditAuthor | null {
+  if (brut === null || typeof brut !== 'object') return null;
+  const a = brut as Partial<AuditAuthor>;
+  if (!a.id || !a.means) return null;
+  return {
+    id: String(a.id),
+    name: String(a.name ?? ''),
+    role: String(a.role ?? ''),
+    means: a.means,
+  };
 }
 
 const AuditQuerySchema = z.object({

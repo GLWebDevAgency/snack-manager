@@ -50,7 +50,8 @@ type SensitiveAction = (service: OrdersService) => Promise<unknown>;
 const actions: [string, SensitiveAction][] = [
   [
     'annulation',
-    (service) => service.cancel(TENANT, ORDER, 'staff-caisse', 'Erreur de saisie'),
+    (service) =>
+      service.cancel(TENANT, ORDER, { staffId: 'staff-caisse', role: 'caisse' }, 'Erreur de saisie'),
   ],
   [
     'remise',

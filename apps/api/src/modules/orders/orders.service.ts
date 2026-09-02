@@ -614,7 +614,13 @@ export class OrdersService {
   }
 
   /** Annulation — action sensible : PIN re-validé en amont, journalisée. */
-  async cancel(tenantId: string, id: string, staffId: string, reason: string) {
+  async cancel(
+    tenantId: string,
+    id: string,
+    valideur: { staffId: string; role: StaffRole },
+    reason: string,
+  ) {
+    const { staffId } = valideur;
     const order = await this.byId(tenantId, id);
     if (order.status === 'delivered') {
       throw new ConflictException('Commande déjà servie — passer par un remboursement');
@@ -625,9 +631,13 @@ export class OrdersService {
     await this.audit.log({
       tenantId,
       staffId,
+      // L'AUTEUR est celui dont le PIN vient d'être re-saisi, pas la session
+      // ouverte sur la tablette : c'est le gérant qui autorise depuis un
+      // comptoir en session « caisse » que le registre doit nommer.
+      actor: { sub: staffId, role: valideur.role, kind: 'staff' },
       action: 'order.cancel',
       targetId: id,
-      meta: { reason, number: order.number, total: order.totals.total },
+      meta: { reason, number: order.number, total: order.totals.total, role: valideur.role },
       pinVerifiedAt: new Date(),
     });
     this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
@@ -701,6 +711,7 @@ export class OrdersService {
     await this.audit.log({
       tenantId,
       staffId: valideur.staffId,
+      actor: { sub: valideur.staffId, role: valideur.role, kind: 'staff' },
       action: 'order.discount',
       targetId: id,
       // Le RÔLE du valideur au journal : « qui » ne suffit pas à relire un

@@ -2,7 +2,7 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
-import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS } from '@sm/contracts';
+import { ordersChannel, SUPPLEMENT_GROUP_KEY, WS_EVENTS, type JwtPayload } from '@sm/contracts';
 import type { Category, Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
@@ -113,7 +113,7 @@ export class MenuService {
    * rattachés, sauf confirmation explicite `force` — les produits passent alors
    * en « Non rattachés » (categoryId null), jamais supprimés (spec maquette §7.4).
    */
-  async deleteCategory(tenantId: string, id: string, force: boolean) {
+  async deleteCategory(tenantId: string, id: string, force: boolean, actor?: JwtPayload) {
     const cat = await this.categories.findOne({ _id: id, tenantId });
     if (!cat) throw new NotFoundException('Catégorie introuvable');
     const attached = await this.products.countDocuments({ tenantId, categoryId: id });
@@ -125,6 +125,16 @@ export class MenuService {
     }
     await this.products.updateMany({ tenantId, categoryId: id }, { $set: { categoryId: null } });
     await cat.deleteOne();
+    // JOURNALISÉE, contrairement à la création et au renommage : les produits
+    // détachés quittent les écrans qui présentent la carte par catégorie —
+    // c'est une mise hors service en masse, et `detached` en donne l'ampleur.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'category.delete',
+      targetId: id,
+      meta: { name: cat.name, detached: attached },
+    });
     this.publishMenuUpdated(tenantId, { scope: 'category', id, deleted: true });
     return { deleted: true, detached: attached };
   }
@@ -145,15 +155,30 @@ export class MenuService {
 
   // ─── Produits ───
 
-  async createProduct(tenantId: string, dto: Record<string, unknown>) {
+  async createProduct(tenantId: string, dto: Record<string, unknown>, actor?: JwtPayload) {
     const cat = await this.categories.findOne({ _id: dto.categoryId, tenantId });
     if (!cat) throw new NotFoundException('Catégorie introuvable');
     const prod = await this.products.create({ ...dto, tenantId });
+    // Un article devient VENDABLE, avec un prix : c'est le même fait que le
+    // changement de prix, pris à sa naissance. Le journal porte donc le prix
+    // d'entrée — sans lui, la première ligne de l'histoire d'un tarif manque.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'product.create',
+      targetId: String(prod._id),
+      meta: { name: prod.name, priceCents: prod.price ?? null, categoryName: cat.name },
+    });
     this.publishMenuUpdated(tenantId, { scope: 'product', id: String(prod._id) });
     return prod;
   }
 
-  async updateProduct(tenantId: string, id: string, dto: Record<string, unknown>) {
+  async updateProduct(
+    tenantId: string,
+    id: string,
+    dto: Record<string, unknown>,
+    actor?: JwtPayload,
+  ) {
     if (dto.categoryId) {
       const cat = await this.categories.findOne({ _id: dto.categoryId, tenantId });
       if (!cat) throw new NotFoundException('Catégorie introuvable');
@@ -206,6 +231,7 @@ export class MenuService {
     if (avant && typeof dto.price === 'number' && avant.price !== dto.price) {
       await this.audit.log({
         tenantId,
+        actor,
         action: 'price.change',
         targetId: id,
         meta: { name: prod.name, fromCents: avant.price, toCents: dto.price },
@@ -223,6 +249,7 @@ export class MenuService {
         if (de === v.price) continue;
         await this.audit.log({
           tenantId,
+          actor,
           action: 'price.change',
           targetId: id,
           meta: { name: prod.name, variantKey: v.key, variantName: v.name, fromCents: de, toCents: v.price },
@@ -233,21 +260,54 @@ export class MenuService {
     return prod;
   }
 
-  async deleteProduct(tenantId: string, id: string) {
+  async deleteProduct(tenantId: string, id: string, actor?: JwtPayload) {
+    // LU AVANT d'être détruit : après le `deleteOne`, plus personne ne peut
+    // dire ce qui a disparu de la carte, et « produit 665f… supprimé » ne se
+    // défend pas devant un gérant six mois plus tard. Une lecture par
+    // suppression est un coût négligeable au regard du trou qu'elle comble.
+    const prod = await this.products
+      .findOne({ _id: id, tenantId }, { name: 1, price: 1 })
+      .lean<{ name?: string; price?: number } | null>();
     const res = await this.products.deleteOne({ _id: id, tenantId });
     if (res.deletedCount === 0) throw new NotFoundException('Produit introuvable');
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'product.delete',
+      targetId: id,
+      meta: { name: prod?.name ?? '', priceCents: prod?.price ?? null },
+    });
     this.publishMenuUpdated(tenantId, { scope: 'product', id, deleted: true });
     return { deleted: true };
   }
 
-  /** Rupture 1-tap. */
-  async setStock(tenantId: string, id: string, outOfStock: boolean) {
+  /**
+   * Rupture 1-tap.
+   *
+   * L'état d'AVANT est lu pour ne journaliser qu'un vrai changement : ce bouton
+   * est tapé du bout du doigt sur une tablette grasse, et une ligne par
+   * pression noierait le registre sous des « rupture → rupture ». Ce qui
+   * intéresse un gérant, c'est le MOMENT où un plat a cessé d'être vendable.
+   */
+  async setStock(tenantId: string, id: string, outOfStock: boolean, actor?: JwtPayload) {
+    const avant = await this.products
+      .findOne({ _id: id, tenantId }, { outOfStock: 1 })
+      .lean<{ outOfStock?: boolean } | null>();
     const prod = await this.products.findOneAndUpdate(
       { _id: id, tenantId },
       { $set: { outOfStock } },
       { new: true },
     );
     if (!prod) throw new NotFoundException('Produit introuvable');
+    if ((avant?.outOfStock ?? false) !== outOfStock) {
+      await this.audit.log({
+        tenantId,
+        actor,
+        action: 'product.stock',
+        targetId: id,
+        meta: { name: prod.name, outOfStock },
+      });
+    }
     this.publishMenuUpdated(tenantId, { scope: 'product', id, outOfStock });
     return prod;
   }

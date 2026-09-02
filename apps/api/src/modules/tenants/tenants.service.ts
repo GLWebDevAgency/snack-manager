@@ -2,18 +2,23 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
+  aLaCapacite,
   brandColorDe,
+  capacitesEffectives,
   DEFAULT_TENANT_ACCOUNT_STATUS,
   logoUrlDe,
   publicOrderingState,
   textePosableSur,
   type Brand,
+  type Capacite,
+  type JwtPayload,
   type TenantAccountStatus,
   type TenantHoursUpdate,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
+import { AuditService } from '../audit/audit.module';
 import { marqueObservee } from '../../common/marque-observee';
 import { horairesPublics } from './horaires-publics';
 import { masqueAEnregistrer } from './marque';
@@ -39,7 +44,7 @@ export const TENANT_ME_FIELDS = {
   closures: 1,
   settings: 1,
   /*
-   * CE QUE LA BARRE DE NAVIGATION DOIT SAVOIR — trois champs, et trois seulement.
+   * CE QUE LA BARRE DE NAVIGATION DOIT SAVOIR — l'étendue du service, rien d'autre.
    *
    * Le back-office affichait la même barre à tout le monde faute d'avoir la
    * donnée : une session de comptoir voyait « Encaissement en ligne » et
@@ -47,11 +52,11 @@ export const TENANT_ME_FIELDS = {
    * les écrans qui en dépendent, et un compte suspendu n'était signalé nulle
    * part alors qu'un seul écran lui reste ouvert.
    *
-   * Ces trois-là sont anodins pour une tablette de comptoir parce qu'ils ne
+   * Ces champs-là sont anodins pour une tablette de comptoir parce qu'ils ne
    * disent que l'ÉTENDUE du service — ce que le restaurant a le droit
    * d'utiliser, ce que ses écrans doivent donc montrer. Un équipier le déduit
-   * déjà de ce qu'il a sous les doigts. Aucun des trois ne dit combien on
-   * facture, à qui, ni pourquoi.
+   * déjà de ce qu'il a sous les doigts. Aucun ne dit combien on facture, à
+   * qui, ni pourquoi.
    *
    * Leurs voisins immédiats, eux, le disent — et c'est précisément pour eux
    * que cette liste est BLANCHE :
@@ -73,6 +78,17 @@ export const TENANT_ME_FIELDS = {
   plan: 1,
   /** Le module de commande en ligne : une SOUSCRIPTION, pas la pause du soir. */
   onlineOrdering: 1,
+  /**
+   * Les exceptions accordées ou retirées hors formule.
+   *
+   * Elles ne SORTENT PAS telles quelles — `derivesDuMasque` les consomme pour
+   * calculer `capacites` et les efface de la réponse. Elles portent un motif et
+   * un auteur, c'est-à-dire une conversation commerciale (« geste de reprise »,
+   * « retiré le temps du litige ») : rien qui ait sa place sur la tablette du
+   * comptoir. Elles sont projetées ici parce que le CALCUL en a besoin, pas
+   * parce que le front doit les lire.
+   */
+  derogationsCapacite: 1,
   /** L'état du compte, et lui seul (cf. `derivesDuMasque` pour sa forme). */
   'account.status': 1,
 } as const;
@@ -98,6 +114,26 @@ export const TENANT_ME_FIELDS = {
  * retombe sur `DEFAULT_TENANT_ACCOUNT_STATUS` — `trial`, le plus permissif :
  * un champ jamais écrit ne doit pas fermer un restaurant en plein service.
  *
+ * `capacites` est CALCULÉ ici, et c'est le seul endroit du produit où la
+ * question « qu'a payé ce restaurant ? » se pose pour le front. Le navigateur
+ * reçoit la LISTE de ce qu'il peut ouvrir — jamais la formule, jamais le
+ * catalogue, jamais les dérogations. Trois raisons, et la dernière suffirait :
+ *
+ *  · un front qui rejouerait le catalogue en aurait sa propre copie, et les
+ *    deux divergeraient au premier changement d'offre — la moitié des écrans
+ *    verrouillés d'un côté, ouverts de l'autre, sans qu'aucun test ne rougisse ;
+ *  · la formule est une donnée COMMERCIALE. Une tablette de comptoir n'a pas
+ *    à savoir combien son patron paie, et c'est déjà la règle de cette
+ *    projection (`billing`, `founderUntil`, `account.reason` en sont exclus) ;
+ *  · les dérogations portent un motif écrit par l'équipe SM — une phrase de
+ *    négociation, jamais destinée à l'écran d'un équipier.
+ *
+ * `plan` et `onlineOrdering` restent rendus tels quels : ils l'étaient déjà, la
+ * facturation vue par le gérant s'en sert, et les retirer casserait l'écran
+ * d'abonnement sans rien gagner — ce sont des faits de son propre contrat,
+ * qu'il lit chez nous comme sur sa facture. Ce que la règle d'or interdit,
+ * c'est d'en DÉDUIRE un droit ; c'est ce que `capacites` rend inutile.
+ *
  * EXPORTÉE pour être testable : c'est la forme que voient `GET /tenants/me` ET
  * `PATCH /tenants/me/marque`, et les deux doivent rester la même.
  */
@@ -108,6 +144,7 @@ export function derivesDuMasque(
   logoUrl: string | null;
   brandColor: string;
   account: { status: TenantAccountStatus };
+  capacites: readonly Capacite[];
 } {
   // Même ramener-à-l'objet-nu que `lireMarque` : un sous-document HYDRATÉ
   // porte des clés de prototype qu'un `...` recopierait.
@@ -118,12 +155,17 @@ export function derivesDuMasque(
   >;
   const brand = marqueObservee(nu);
   const compte = nu.account as { status?: TenantAccountStatus } | null | undefined;
+  const capacites = capacitesEffectives(nu);
+  // Les dérogations sont RETIRÉES de la réponse après avoir servi au calcul :
+  // elles n'ont pas été projetées pour être lues, mais pour être consommées.
+  const { derogationsCapacite: _derogations, ...visible } = nu;
   return {
-    ...nu,
+    ...visible,
     brand,
     logoUrl: logoUrlDe(brand),
     brandColor: brandColorDe(brand),
     account: { status: compte?.status ?? DEFAULT_TENANT_ACCOUNT_STATUS },
+    capacites,
   };
 }
 
@@ -214,6 +256,7 @@ export class TenantsService {
   constructor(
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     private readonly origines: OriginesImages,
+    private readonly audit: AuditService,
   ) {}
 
   /** L'établissement de la session (`GET /tenants/me`) — cf. `vueMe`. */
@@ -288,12 +331,18 @@ export class TenantsService {
   /** Vue publique (page de commande client) — pas de données internes. */
   async publicBySlug(slug: string) {
     const t = await this.bySlug(slug);
-    // Une suspension de compte se présente au public comme une pause de
-    // service — la page reste belle, le litige commercial reste privé.
-    const gate = publicOrderingState(t.account, {
-      paused: t.settings?.onlineOrderingPaused ?? false,
-      message: t.settings?.pauseMessage ?? null,
-    });
+    // Une suspension de compte — ou une commande en ligne non souscrite — se
+    // présente au public comme une pause de service : la page reste belle, le
+    // contrat commercial reste privé. Une capacité manquante ne casse jamais
+    // une vitrine en plein service.
+    const gate = publicOrderingState(
+      t.account,
+      {
+        paused: t.settings?.onlineOrderingPaused ?? false,
+        message: t.settings?.pauseMessage ?? null,
+      },
+      aLaCapacite(t, 'online'),
+    );
     // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
     const brand = marqueObservee(t);
     return {
@@ -318,12 +367,28 @@ export class TenantsService {
    * (`TenantSettingsUpdateSchema`) : `REGLAGES_MODIFIABLES` ne décide que des
    * champs ÉCRITS, le schéma décide des VALEURS.
    */
-  async updateSettings(tenantId: string, patch: TenantSettingsUpdate) {
+  async updateSettings(tenantId: string, patch: TenantSettingsUpdate, actor?: JwtPayload) {
     const $set: Record<string, unknown> = {};
     for (const k of REGLAGES_MODIFIABLES) {
       if (k in patch) $set[`settings.${k}`] = (patch as Record<string, unknown>)[k];
     }
-    return this.vueMe(tenantId, $set);
+    const vue = await this.vueMe(tenantId, $set);
+    // JOURNALISÉ parce que ces réglages décident si le restaurant PREND des
+    // commandes : `onlineOrderingPaused` ferme la vente en ligne, la capacité
+    // et l'intervalle de créneau décident combien de clients peuvent
+    // commander. Un PATCH qui n'a rien reconnu ne relit que la fiche — pas
+    // d'écriture, donc pas de ligne.
+    if (Object.keys($set).length > 0) {
+      await this.audit.log({
+        tenantId,
+        actor,
+        action: 'tenant.settings',
+        // Les CLÉS touchées, pas seulement le résultat : « la pause a été
+        // levée à 11h58 » ne se relit pas dans un état final.
+        meta: { reglages: Object.keys(patch), ...patch },
+      });
+    }
+    return vue;
   }
 
   /**
@@ -331,7 +396,7 @@ export class TenantsService {
    * réglages (`settings.*`). Seules les clés présentes s'écrivent : un PATCH
    * qui corrige l'adresse ne doit pas pouvoir vider les téléphones.
    */
-  async updateIdentity(tenantId: string, patch: TenantIdentityUpdate) {
+  async updateIdentity(tenantId: string, patch: TenantIdentityUpdate, actor?: JwtPayload) {
     const $set: Record<string, unknown> = {};
     if (patch.name !== undefined) $set.name = patch.name;
     if (patch.address !== undefined) $set.address = patch.address;
@@ -351,7 +416,13 @@ export class TenantsService {
       const tenant = await this.tenants.findById(tenantId, { brand: 1 });
       Object.assign($set, identiteAvecAccent(tenant?.brand ?? null, patch.brandColor));
     }
-    return this.vueMe(tenantId, $set);
+    const vue = await this.vueMe(tenantId, $set);
+    if (Object.keys($set).length > 0) {
+      // Le nom, l'adresse et les téléphones partent sur la vitrine, les
+      // tickets et les tablettes : c'est ce que le client voit et compose.
+      await this.audit.log({ tenantId, actor, action: 'tenant.identity', meta: { ...patch } });
+    }
+    return vue;
   }
 
   /**
@@ -368,16 +439,37 @@ export class TenantsService {
    * La réponse passe par `vueMe` comme les trois autres écritures : projetée,
    * et ses champs plats dérivés du masque qu'on vient d'enregistrer.
    */
-  async updateMarque(tenantId: string, brand: Brand) {
+  async updateMarque(tenantId: string, brand: Brand, actor?: JwtPayload) {
     // Seul le logo legacy sert ici (l'héritage de `masqueAEnregistrer`) : on
     // ne lit que lui, comme `updateIdentity` ne lit que `brand`. Une lecture
     // non projetée dans un fichier qui érige la projection en doctrine se
     // paierait sur la première fiche client volumineuse.
     const tenant = await this.tenants.findById(tenantId, { logoUrl: 1 });
     if (!tenant) throw new NotFoundException('Tenant introuvable');
-    return this.vueMe(tenantId, {
+    const vue = await this.vueMe(tenantId, {
       brand: masqueAEnregistrer(brand, tenant.logoUrl, this.origines.hotes),
     });
+    /*
+     * LE MÊME GESTE DES DEUX CÔTÉS DOIT LAISSER LA MÊME TRACE.
+     *
+     * Le CRM journalisait déjà le masque posé depuis la fiche client
+     * (`tenant.brand_change`, journal d'administration) ; la route du
+     * restaurateur, qui écrit exactement le même document, n'écrivait rien.
+     * Deux registres, un seul geste, une seule moitié tracée : c'est le trou
+     * que ce chantier ferme.
+     *
+     * Le masque ENTIER n'entre pas dans `meta` — c'est une arborescence de
+     * palettes, de typographies et de logos, illisible dans un registre. On
+     * garde ce qui se relit : l'accent et le mode, qui sont ce qu'un client
+     * remarque.
+     */
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'tenant.brand',
+      meta: { accent: vue.brand.palette.accent, mode: vue.brand.mode },
+    });
+    return vue;
   }
 
   /**
@@ -393,9 +485,24 @@ export class TenantsService {
    * n'est touché que s'il est transmis — enregistrer les horaires ne doit pas
    * effacer les congés d'été.
    */
-  async updateHours(tenantId: string, patch: TenantHoursUpdate) {
+  async updateHours(tenantId: string, patch: TenantHoursUpdate, actor?: JwtPayload) {
     const $set: Record<string, unknown> = { hours: patch.hours };
     if (patch.closures !== undefined) $set.closures = patch.closures;
-    return this.vueMe(tenantId, $set);
+    const vue = await this.vueMe(tenantId, $set);
+    // Les horaires décident des créneaux de retrait et de l'ouverture de la
+    // commande en ligne : un jour fermé par erreur, c'est une journée de
+    // chiffre d'affaires perdue et personne pour dire qui l'a fermé.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'tenant.hours',
+      // Le détail des sept jours ne se relit pas dans un registre ; ce qui se
+      // relit, c'est COMBIEN de jours servent et quelles fermetures sont posées.
+      meta: {
+        joursServis: patch.hours.filter((j) => j.lunch !== null || j.dinner !== null).length,
+        fermetures: patch.closures?.length ?? null,
+      },
+    });
+    return vue;
   }
 }

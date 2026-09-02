@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { LOGO_MAX_OCTETS } from '@sm/contracts';
+import { LOGO_MAX_OCTETS, type JwtPayload } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
+import { AuditService } from '../audit/audit.module';
 import { IMAGE_STORE } from '../../infrastructure/tokens';
 import type { ImageStore } from '../../infrastructure/images/image-store';
 import { detecterImage, type FormatImage } from './image-signature';
@@ -45,6 +46,7 @@ export class LogoService {
   constructor(
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     @Inject(IMAGE_STORE) private readonly store: ImageStore,
+    private readonly audit: AuditService,
   ) {}
 
   get actif(): boolean {
@@ -79,6 +81,7 @@ export class LogoService {
     origin: string,
     corps: Buffer,
     horloge: () => number = Date.now,
+    actor?: JwtPayload,
   ) {
     if (corps.length > LOGO_MAX_OCTETS) {
       throw new BadRequestException(
@@ -130,6 +133,18 @@ export class LogoService {
     if (ancienneVersion && ancienneVersion !== version) {
       await this.store.delete(LogoService.cleDe(tenantId, ancienneVersion)).catch(() => {});
     }
+    // Le logo part sur la vitrine, les tickets, la carte de fidélité et le
+    // tableau de menu : c'est l'identité visible du restaurant qui change.
+    // Journalisé APRÈS l'écriture, comme partout — le ménage du prédécesseur
+    // est le seul geste qui n'engage rien et qui peut donc rater en silence.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'tenant.logo',
+      // L'URL PORTE LA VERSION : deux lignes successives disent quel fichier
+      // remplace quel autre, ce qu'un « logo modifié » ne dit pas.
+      meta: { pose: true, de: ancienLogoUrl, vers: logoUrl, octets: corps.length, type },
+    });
     return doc;
   }
 
@@ -141,17 +156,24 @@ export class LogoService {
    * venait de supprimer de R2, donc une image cassée sur la vitrine, la carte
    * de fidélité et le tableau de menu.
    */
-  async retirer(tenantId: string) {
+  async retirer(tenantId: string, actor?: JwtPayload) {
     const tenant = await this.tenants.findById(tenantId);
     const ancienLogoUrl = tenant?.logoUrl ?? null;
     const version = ancienLogoUrl ? LogoService.versionDe(ancienLogoUrl) : null;
     if (version) await this.store.delete(LogoService.cleDe(tenantId, version)).catch(() => {});
     this.cache.delete(tenantId);
-    return this.tenants.findByIdAndUpdate(
+    const doc = await this.tenants.findByIdAndUpdate(
       tenantId,
       { $set: identiteAvecLogo(tenant?.brand ?? null, ancienLogoUrl, null) },
       { new: true, runValidators: true, context: 'query' },
     );
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'tenant.logo',
+      meta: { pose: false, de: ancienLogoUrl, vers: null },
+    });
+    return doc;
   }
 
   /**

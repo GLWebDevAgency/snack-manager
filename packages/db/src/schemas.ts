@@ -1,14 +1,18 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import {
   ADMIN_LOG_ACTIONS,
+  AUDIT_AUTHOR_MEANS,
   BRAND_MODES,
   BRAND_MOTIONS,
   BRAND_SHAPES,
+  CAPACITES,
   HEX,
   LAITON,
   PLATFORM_SETTINGS_ID,
   PRESET_KEYS,
+  SENS_DEROGATION,
   SM_INVOICE_VAT,
+  TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
   isPlatformLogAction,
   type SocialNetwork,
@@ -250,6 +254,48 @@ export const TenantSchema = new Schema(
      * c'est une SOUSCRIPTION.
      */
     onlineOrdering: { type: Boolean, default: false },
+    /**
+     * LES DÉROGATIONS DE CAPACITÉ — l'exception commerciale, tracée.
+     *
+     * `plan` dit la formule, `onlineOrdering` dit l'option ; les capacités
+     * EFFECTIVES s'en déduisent par le catalogue (`capacitesEffectives`,
+     * @sm/contracts) et ne sont JAMAIS stockées — une copie en base se
+     * désynchroniserait du catalogue au premier changement d'offre, en
+     * silence, sur les seuls tenants déjà créés.
+     *
+     * Reste ce qu'aucun catalogue ne peut porter : le cas particulier. Un geste
+     * commercial, une période d'essai sur une option, un ancien client gardé
+     * aux anciennes conditions, une fonction retirée le temps d'un litige. Sans
+     * ce champ, chacun de ces cas se réglait en changeant la FORMULE du
+     * client — ce qui fausse aussitôt sa facture et le MRR du CRM.
+     *
+     * `motif` et `auteur` sont exigés par le contrat, et ce n'est pas
+     * décoratif : une capacité ouverte hors formule est un manque à gagner, une
+     * capacité fermée malgré la formule est un litige. Dans les deux cas
+     * quelqu'un demandera « pourquoi ? » six mois plus tard.
+     *
+     * Les énumérations viennent du CONTRAT, jamais recopiées : une capacité
+     * ajoutée au produit doit être refusée ici tant qu'elle n'est pas au
+     * catalogue. Elles ne s'exécutent toutefois qu'à `save()` et sur les
+     * requêtes portant `runValidators` — la validation qui compte reste
+     * `DerogationCapaciteSchema` à la frontière.
+     */
+    derogationsCapacite: {
+      type: [
+        new Schema(
+          {
+            capacite: { type: String, enum: CAPACITES, required: true },
+            sens: { type: String, enum: SENS_DEROGATION, required: true },
+            motif: { type: String, required: true },
+            /** Qui l'a accordée — un membre de l'équipe Snack Manager, nommé. */
+            auteur: { type: String, required: true },
+            le: { type: Date, default: Date.now, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     /**
      * L'engagement signé : au mois, ou à l'année avec deux mois offerts.
      *
@@ -890,19 +936,112 @@ export type Counter = InferSchemaType<typeof CounterSchema>;
 // auditLog — append-only, socle NF525
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * L'AUTEUR D'UN GESTE — qui, à quel titre, par quel moyen.
+ *
+ * Le registre ne portait qu'un `staffId` : l'équipier dont le PIN validait une
+ * annulation. Tout ce qui se fait depuis le back-office — un prix, une
+ * rupture, un horaire — n'avait donc PAS d'auteur du tout, alors que c'est
+ * exactement la question qu'on pose à un registre.
+ *
+ * ─── POURQUOI DU TEXTE ET NON UN `ObjectId` ───
+ *
+ * `id` désigne aujourd'hui un compte (`users`) ou un membre d'équipe
+ * (`staff`), et demain, peut-être, une clé de connecteur pour un assistant
+ * agissant au nom du restaurant. Une clé n'aura pas la forme d'un ObjectId :
+ * typer ce champ en `ObjectId` obligerait à MIGRER la collection le jour de
+ * cet ajout — sur un registre append-only, c'est-à-dire à ne pas pouvoir le
+ * faire. Le texte accueille les trois sans rien réécrire. `means` porte la
+ * valeur `connector` pour la même raison, et aucun code ne l'écrit encore.
+ *
+ * `name` et `role` sont DÉNORMALISÉS (même règle que `adminLogs.actorEmail`) :
+ * un registre relu par jointure change de contenu quand un équipier est
+ * renommé, change de rôle ou quitte le restaurant.
+ */
+const AuditAuthorSub = new Schema(
+  {
+    id: { type: String, required: true },
+    name: { type: String, default: '' },
+    role: { type: String, default: '' },
+    means: { type: String, enum: [...AUDIT_AUTHOR_MEANS], required: true },
+  },
+  { _id: false },
+);
+
 export const AuditLogSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /**
+     * L'équipier dont le PIN a validé un geste de caisse. CONSERVÉ à côté de
+     * `author` : les lignes écrites avant lui ne portent que ça, et un
+     * registre append-only ne se rattrape pas par une reprise de données.
+     */
     staffId: { type: Schema.Types.ObjectId, default: null },
-    action: { type: String, required: true }, // order.cancel | order.discount | order.refund | price.change | …
+    action: {
+      type: String,
+      // La SOURCE, plus une recopie : une action ajoutée à
+      // `TENANT_AUDIT_ACTIONS` (@sm/contracts) existe ici sans geste
+      // supplémentaire. Le journal d'administration a payé cette leçon — une
+      // action déclarée au contrat mais absente d'une enum recopiée ici est
+      // refusée à l'écriture, et le geste passe sans laisser de trace.
+      enum: [...TENANT_AUDIT_ACTIONS],
+      required: true,
+    },
     targetId: { type: String, default: null },
     meta: { type: Schema.Types.Mixed, default: null },
+    /** `null` sur les lignes antérieures au champ, et sur les gestes sans PIN. */
+    author: { type: AuditAuthorSub, default: null },
     pinVerifiedAt: { type: Date, default: null },
     at: { type: Date, default: Date.now },
   },
   { timestamps: false },
 );
 AuditLogSchema.index({ tenantId: 1, at: -1 });
+
+/**
+ * APPEND-ONLY, garanti par l'ODM et pas seulement par la discipline.
+ *
+ * Un journal qu'on peut réécrire ne prouve rien. Ces hooks refusent toute mise
+ * à jour et toute suppression : la seule écriture possible est une insertion.
+ * Une correction se fait donc en AJOUTANT une ligne, comme dans un livre de
+ * comptes — jamais en effaçant la précédente.
+ *
+ * (Cela ne remplace pas des droits Mongo restrictifs en production ; cela
+ * ferme la porte au code applicatif, qui est la voie réellement empruntée.)
+ */
+const APPEND_ONLY_BLOCKED = [
+  'updateOne',
+  'updateMany',
+  'replaceOne',
+  'findOneAndUpdate',
+  'findOneAndReplace',
+  'deleteOne',
+  'deleteMany',
+  'findOneAndDelete',
+] as const;
+
+/**
+ * Pose les huit refus sur un schéma de registre.
+ *
+ * Écrite une fois et appliquée aux DEUX journaux — celui du restaurant et
+ * celui de l'équipe Snack Manager. Le second les avait, le premier non : la
+ * même promesse était tenue d'un côté et seulement affichée de l'autre, alors
+ * que c'est le registre du restaurant qu'on ouvre devant un contrôle de caisse.
+ * Recopier la boucle aurait laissé les deux diverger au premier ajout.
+ */
+function rendreAppendOnly(schema: Schema, collection: string): void {
+  for (const op of APPEND_ONLY_BLOCKED) {
+    // `as never` : la signature de `pre` est une union de littéraux que TS ne
+    // peut pas réduire depuis une variable de boucle. Le comportement, lui,
+    // est celui d'un middleware de requête ordinaire.
+    schema.pre(op as never, function blockMutation() {
+      throw new Error(`${collection} est append-only : « ${op} » est refusé.`);
+    });
+  }
+}
+
+rendreAppendOnly(AuditLogSchema, 'auditLogs');
+
 export type AuditLog = InferSchemaType<typeof AuditLogSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -1444,35 +1583,13 @@ AdminLogSchema.index({ tenantId: 1, at: -1 });
 AdminLogSchema.index({ at: -1 });
 
 /**
- * APPEND-ONLY, garanti par l'ODM et pas seulement par la discipline.
+ * APPEND-ONLY, par le même dispositif que le registre du restaurant.
  *
- * Un journal qu'on peut réécrire ne prouve rien. Ces hooks refusent toute
- * mise à jour et toute suppression : la seule écriture possible est une
- * insertion. Une correction se fait donc en AJOUTANT une ligne, comme dans un
- * livre de comptes — jamais en effaçant la précédente.
- *
- * (Cela ne remplace pas des droits Mongo restrictifs en production ; cela
- * ferme la porte au code applicatif, qui est la voie réellement empruntée.)
+ * Les huit refus vivent désormais dans `rendreAppendOnly` (déclaré plus haut,
+ * avec le journal `auditLogs`) : les deux registres tiennent une promesse
+ * identique, et une liste d'opérations recopiée aurait fini par diverger.
  */
-const APPEND_ONLY_BLOCKED = [
-  'updateOne',
-  'updateMany',
-  'replaceOne',
-  'findOneAndUpdate',
-  'findOneAndReplace',
-  'deleteOne',
-  'deleteMany',
-  'findOneAndDelete',
-] as const;
-
-for (const op of APPEND_ONLY_BLOCKED) {
-  // `as never` : la signature de `pre` est une union de littéraux que TS ne
-  // peut pas réduire depuis une variable de boucle. Le comportement, lui, est
-  // celui d'un middleware de requête ordinaire.
-  AdminLogSchema.pre(op as never, function blockMutation() {
-    throw new Error(`adminLogs est append-only : « ${op} » est refusé.`);
-  });
-}
+rendreAppendOnly(AdminLogSchema, 'adminLogs');
 
 export type AdminLog = InferSchemaType<typeof AdminLogSchema>;
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { JwtPayload } from '@sm/contracts';
+import { journalMuet } from '../audit/audit.fakes';
 import { LogoController } from './logo.controller';
 import type { OriginesImages } from './origines-images';
 import { createImageStore } from '../../infrastructure/images/image-store.factory';
@@ -17,6 +19,14 @@ import { LogoService } from './logo.service';
 
 const TENANT = '665f0d0a1c2b3d4e5f6a7b99';
 const ORIGIN = 'https://api.exemple.test';
+
+/** La session du gérant, telle que le garde la pose sur la requête. */
+const SESSION: JwtPayload = {
+  sub: '665f0d0a1c2b3d4e5f6a7b01',
+  tenantId: TENANT,
+  role: 'owner',
+  kind: 'user',
+};
 
 /** Un PNG minimal honnête : la signature, puis du remplissage. */
 const PNG = Buffer.concat([
@@ -91,7 +101,7 @@ function fakeTenants(doc: { slug: string; logoUrl: string | null } | null) {
 }
 
 function service(store: ImageStore, tenants: ReturnType<typeof fakeTenants>) {
-  return new LogoService(tenants.model as never, store);
+  return new LogoService(tenants.model as never, store, journalMuet());
 }
 
 describe('poser un logo', () => {
@@ -290,7 +300,7 @@ describe('adaptateur R2 (API REST Cloudflare)', () => {
  */
 describe('l’hôte d’où le logo est déposé', () => {
   const HOTES = ['snackmanager.fr', 'localhost'] as const;
-  type Req = Parameters<LogoController['poser']>[2];
+  type Req = Parameters<LogoController['poser']>[3];
 
   const poser = (headers: Record<string, string>) => {
     const service = { actif: true, poser: (_id: string, origin: string) => origin };
@@ -298,7 +308,12 @@ describe('l’hôte d’où le logo est déposé', () => {
     const ctrl = new LogoController(service as unknown as LogoService, {
       hotes: HOTES,
     } as OriginesImages);
-    return ctrl.poser('t1', { buffer: PNG, mimetype: 'image/png', size: PNG.length }, req as Req);
+    return ctrl.poser(
+      't1',
+      SESSION,
+      { buffer: PNG, mimetype: 'image/png', size: PNG.length },
+      req as Req,
+    );
   };
 
   it('accepte le domaine public et ses sous-domaines', async () => {

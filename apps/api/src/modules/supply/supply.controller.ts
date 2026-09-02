@@ -37,9 +37,10 @@ import {
   type SupplierItemCreate,
   type SupplierItemUpdate,
   type SupplierUpdate,
+  type JwtPayload,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
-import { Roles, TenantId } from '../../common/auth';
+import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { SupplyService } from './supply.service';
 
 @Controller('supply')
@@ -86,16 +87,21 @@ export class SupplyController {
   @Patch('ingredients/:id')
   updateIngredient(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body(zod(IngredientUpdateSchema)) body: IngredientUpdate,
   ) {
-    return this.supply.updateIngredient(tenantId, id, body);
+    return this.supply.updateIngredient(tenantId, id, body, user);
   }
 
   @Roles('owner', 'gerant')
   @Delete('ingredients/:id')
-  deleteIngredient(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.supply.deleteIngredient(tenantId, id);
+  deleteIngredient(
+    @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.supply.deleteIngredient(tenantId, id, user);
   }
 
   /** Rupture ingrédient + cascade produits — la cuisine peut la déclarer depuis le KDS. */
@@ -103,10 +109,11 @@ export class SupplyController {
   @Post('ingredients/:id/out')
   setIngredientOut(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body(zod(IngredientOutSchema)) body: IngredientOut,
   ) {
-    return this.supply.setIngredientOut(tenantId, id, body.isOut);
+    return this.supply.setIngredientOut(tenantId, id, body.isOut, user);
   }
 
   // ─── Marques ───
@@ -256,9 +263,10 @@ export class SupplyController {
   @Post('movements')
   createMovement(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(MovementCreateSchema)) body: MovementCreate,
   ) {
-    return this.supply.createMovement(tenantId, body);
+    return this.supply.createMovement(tenantId, body, user);
   }
 
   @Roles('owner', 'gerant')

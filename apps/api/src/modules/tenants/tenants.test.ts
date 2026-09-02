@@ -1,9 +1,15 @@
 import 'reflect-metadata';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
-import { DIRECTIONS, ratioContraste, TenantSettingsUpdateSchema } from '@sm/contracts';
+import {
+  CAPACITES_PAR_FORMULE,
+  DIRECTIONS,
+  ratioContraste,
+  TenantSettingsUpdateSchema,
+} from '@sm/contracts';
 import { TenantSchema } from '@sm/db';
 import { describe, expect, it } from 'vitest';
+import { journalMuet } from '../audit/audit.fakes';
 import { ZodValidationPipe } from '../../common/zod.pipe';
 import { TenantsController } from './tenants.controller';
 import { testOriginesImages } from './tenants.fakes';
@@ -145,6 +151,9 @@ describe('la fiche établissement rendue aux tablettes', () => {
         'brand',
         'brandColor',
         'closures',
+        // Lu pour CALCULER les capacités, puis retiré de la réponse : le motif
+        // d'une dérogation est une phrase de négociation commerciale.
+        'derogationsCapacite',
         'hours',
         'logoUrl',
         'name',
@@ -157,14 +166,53 @@ describe('la fiche établissement rendue aux tablettes', () => {
     );
   });
 
-  it('porte les trois champs dont la barre de navigation a besoin', () => {
+  it('porte ce dont la barre de navigation a besoin, sur ses DEUX axes', () => {
     // Sans eux, le front n'a pas la donnée et montre la même barre à tout le
     // monde : « Encaissement en ligne » sur une tablette de comptoir (403 au
     // clic), les écrans de commande en ligne à qui n'a pas le module, et rien
     // du tout pour signaler un compte suspendu.
-    for (const champ of ['plan', 'onlineOrdering', 'account.status']) {
+    //
+    // `derogationsCapacite` s'y ajoute non pour être AFFICHÉ mais pour être
+    // CALCULÉ : sans lui dans la projection, un client dont l'équipe SM a
+    // ouvert une fonction hors formule la verrait verrouillée.
+    for (const champ of ['plan', 'onlineOrdering', 'derogationsCapacite', 'account.status']) {
       expect(Object.keys(TENANT_ME_FIELDS), `« ${champ} » manque à la barre`).toContain(champ);
     }
+  });
+
+  /**
+   * LES CAPACITÉS SORTENT, LES DÉROGATIONS NON — et c'est le même geste.
+   *
+   * Le front doit savoir CE QU'IL PEUT OUVRIR, jamais pourquoi. Le motif d'une
+   * dérogation (« geste de reprise », « retiré le temps du litige ») est une
+   * conversation entre l'équipe Snack Manager et le gérant ; il n'a rien à
+   * faire dans une réponse que lit aussi la tablette du comptoir.
+   */
+  it('rend les capacités CALCULÉES, et jamais les dérogations qui les produisent', () => {
+    const vue = derivesDuMasque({
+      slug: 'chez-lima',
+      plan: 'essentiel',
+      onlineOrdering: false,
+      derogationsCapacite: [
+        {
+          capacite: 'loyalty',
+          sens: 'accordee',
+          motif: 'reprise de son ancien logiciel de fidélité',
+          auteur: 'Équipe SM',
+        },
+      ],
+    });
+
+    expect(vue.capacites).toEqual([...CAPACITES_PAR_FORMULE.essentiel, 'loyalty']);
+    expect(vue).not.toHaveProperty('derogationsCapacite');
+    // Et le motif ne se retrouve nulle part ailleurs dans la réponse.
+    expect(JSON.stringify(vue)).not.toContain('ancien logiciel');
+  });
+
+  it('ne rend aucune capacité à un établissement sans formule', () => {
+    // « Atelier seul » : il n'a pas de colonne dans la grille tarifaire. La
+    // barre le lui dira en verrouillant, jamais en masquant.
+    expect(derivesDuMasque({ slug: 'x', plan: null }).capacites).toEqual([]);
   });
 
   it('ne rend AUCUN des champs qui fuyaient', () => {
@@ -472,7 +520,7 @@ const DOCUMENT = {
 };
 
 const service = (tenants: ReturnType<typeof fakeTenants>) =>
-  new TenantsService(tenants.model as never, testOriginesImages());
+  new TenantsService(tenants.model as never, testOriginesImages(), journalMuet());
 
 /** Les champs que la projection doit avoir laissés dehors, nommés un par un. */
 const SECRETS = [
@@ -486,8 +534,22 @@ const SECRETS = [
 /**
  * Les clés RACINE de la réponse : un chemin pointé se relit sous sa racine une
  * fois l'objet reconstruit — `account.status` arrive dans `account`.
+ *
+ * Deux clés font exception, et les deux dans le même sens — la projection n'est
+ * pas la réponse :
+ *
+ *  · `derogationsCapacite` est LU pour calculer les capacités effectives, puis
+ *    RETIRÉ. Ces lignes portent un motif écrit par l'équipe SM (« geste de
+ *    reprise », « retiré le temps du litige ») : une phrase de négociation
+ *    commerciale n'a rien à faire sur la tablette du comptoir ;
+ *  · `capacites` n'est dans AUCUNE projection : il se calcule. C'est ce que le
+ *    front consomme — la liste de ce qu'il peut ouvrir, jamais la formule.
  */
-const CLES_RENDUES = [...new Set(Object.keys(TENANT_ME_FIELDS).map((c) => c.split('.')[0]!))];
+const CLES_RENDUES = [
+  ...new Set(Object.keys(TENANT_ME_FIELDS).map((c) => c.split('.')[0]!)),
+]
+  .filter((c) => c !== 'derogationsCapacite')
+  .concat('capacites');
 
 /**
  * LA PROJECTION VAUT AUSSI SUR LES ÉCRITURES.
@@ -573,6 +635,9 @@ describe('les réponses des cinq chemins de la vue de session', () => {
     expect(vue.plan).toBe('complet');
     expect(vue.onlineOrdering).toBe(true);
     expect(vue.account).toEqual({ status: 'suspended' });
+    // Et ce qu'elle CONSOMME désormais : la liste calculée par le serveur. Le
+    // front ne rejoue jamais le catalogue — c'est la règle d'or du produit.
+    expect(vue.capacites).toEqual([...CAPACITES_PAR_FORMULE.complet, 'online']);
 
     for (const secret of SECRETS) {
       expect(vue, `« ${secret} » ne doit pas sortir sur une tablette`).not.toHaveProperty(secret);
@@ -590,7 +655,7 @@ describe('les réponses des cinq chemins de la vue de session', () => {
         return tenants.model.findById(id, projection);
       },
     };
-    await new TenantsService(espion as never, testOriginesImages()).byId(TENANT);
+    await new TenantsService(espion as never, testOriginesImages(), journalMuet()).byId(TENANT);
     expect(lectures[0]).toEqual(TENANT_ME_FIELDS);
   });
 
@@ -690,7 +755,7 @@ describe('le masque posé depuis le back-office restaurateur', () => {
         return tenants.model.findById(id, projection);
       },
     };
-    await new TenantsService(espion as never, testOriginesImages()).updateMarque(
+    await new TenantsService(espion as never, testOriginesImages(), journalMuet()).updateMarque(
       TENANT,
       DIRECTIONS.soleil,
     );

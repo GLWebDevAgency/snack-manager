@@ -32,6 +32,7 @@ import {
   type JwtPayload,
 } from '@sm/contracts';
 import type { Invoice, Tenant } from '@sm/db';
+import { journalDeTest } from '../audit/audit.fakes';
 import { IssuerConfig } from './issuer.config';
 import { MyBillingService } from './my-billing.service';
 import { TenantSessionGuard } from './tenant-session.guard';
@@ -154,6 +155,14 @@ const fakeConfig = (values: Record<string, string> = {}): ConfigService =>
 // ─────────────────────────────────────────────────────────────
 
 const CLASSFOOD = '65f000000000000000000001';
+/** Le compte du gérant, tel que le garde le pose sur la requête. */
+const GERANT = '65f0000000000000000000a1';
+const SESSION_GERANT: JwtPayload = {
+  sub: GERANT,
+  tenantId: CLASSFOOD,
+  role: 'owner',
+  kind: 'user',
+};
 const VOISIN = '65f000000000000000000002';
 const NOW = new Date('2026-09-15T10:00:00.000Z');
 const TOUT = { limit: 200 } satisfies BillingHistoryQuery;
@@ -224,12 +233,17 @@ const tenantRow = (id: string, over: Row = {}): Row => ({
 function build(config: Record<string, string> = {}) {
   const invoices = new FakeInvoices();
   const tenants = new FakeTenants();
+  // Le VRAI service de journal, sur des collections en mémoire : c'est ce qui
+  // permet de vérifier le contenu des lignes — auteur compris — plutôt que le
+  // seul fait qu'un appel a eu lieu.
+  const { audit, lignes } = journalDeTest({ users: [{ _id: GERANT, name: 'Karim Belkacem' }] });
   const service = new MyBillingService(
     invoices.asModel(),
     tenants.asModel(),
     new IssuerConfig(fakeConfig(config)),
+    audit,
   );
-  return { invoices, tenants, service };
+  return { invoices, tenants, service, lignes };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -883,6 +897,25 @@ describe('Identité de facturation du client', () => {
     expect(tenant.plan).toBe('complet');
     expect(tenant.address).toContain('Perriers-sur-Andelle');
     expect((tenant.account as Record<string, unknown>).status).toBe('active');
+  });
+
+  it('laisse au registre l’avant ET l’après — un SIRET effacé ne se retrouve nulle part ailleurs', async () => {
+    // L'écriture est un REMPLACEMENT (`PUT`) : une chaîne vide y signifie
+    // « effacé ». Sans la transition au journal, un SIRET disparu d'une facture
+    // resterait inexplicable — le `$set` d'hier n'existe plus.
+    const { tenants, service, lignes } = build();
+    tenants.seed(tenantRow(CLASSFOOD, { billing: { ...IDENTITE, siret: '00000000000000' } }));
+    const parsed = TenantBillingIdentitySchema.parse(IDENTITE);
+
+    await service.updateIdentity(CLASSFOOD, parsed, SESSION_GERANT);
+
+    expect(lignes[0]).toMatchObject({
+      action: 'tenant.billing_identity',
+      author: { id: GERANT, name: 'Karim Belkacem', role: 'owner', means: 'password' },
+    });
+    const meta = lignes[0]!.meta as { avant: { siret: string }; apres: { siret: string } };
+    expect(meta.avant.siret).toBe('00000000000000');
+    expect(meta.apres.siret).toBe('73282932000074');
   });
 
   it('rend l’identité saisie sur l’écran du gérant, et la dit modifiable', async () => {

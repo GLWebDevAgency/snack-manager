@@ -1,6 +1,10 @@
 import { Body, Controller, Put } from '@nestjs/common';
-import { TenantBillingIdentitySchema, type TenantBillingIdentity } from '@sm/contracts';
-import { Roles, TenantId } from '../../common/auth';
+import {
+  TenantBillingIdentitySchema,
+  type JwtPayload,
+  type TenantBillingIdentity,
+} from '@sm/contracts';
+import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { zod } from '../../common/zod.pipe';
 import { MyBillingService } from './my-billing.service';
 
@@ -43,8 +47,9 @@ export class BillingIdentityController {
   @Put('me/identity')
   update(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Body(zod(TenantBillingIdentitySchema)) body: TenantBillingIdentity,
   ) {
-    return this.billing.updateIdentity(tenantId, body);
+    return this.billing.updateIdentity(tenantId, body, user);
   }
 }

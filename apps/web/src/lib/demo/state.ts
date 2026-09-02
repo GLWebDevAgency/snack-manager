@@ -725,6 +725,15 @@ export function createWorld(bootAt: number): DemoWorld {
     // de commande en ligne souscrit, compte en règle. Un compte suspendu ferait
     // visiter la porte fermée à qui vient voir le logiciel.
     onlineOrdering: true,
+    /*
+     * `capacites` est VOLONTAIREMENT absent, comme le rôle l'est déjà.
+     *
+     * La barre traite l'absence en « on ne sait pas » et ne verrouille rien —
+     * ce qui est exactement ce qu'on veut d'une démonstration : un visiteur
+     * venu voir le logiciel doit le voir en entier. Poser ici les capacités
+     * d'une formule reviendrait à lui montrer des cadenas avant même qu'il
+     * sache ce que chaque écran fait.
+     */
     account: { status: "active" },
     settings: { ...(S.SNAP_TENANT.settings as TenantMe["settings"]), dailyGoalCents: 90_000 },
   };
