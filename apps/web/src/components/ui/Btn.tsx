@@ -5,7 +5,7 @@ import { cx } from "@/lib/cx";
 import { Icon, type IconName } from "./icons";
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  /** primary = accent tenant (1 max/écran) · ink #262626 · ghost contour ·
+  /** primary = accent tenant (1 max/écran) · ink = fond btndark · ghost contour ·
    *  gold fixe · danger/success = verdicts rouge/vert des confirmations. */
   variant?: "primary" | "ink" | "ghost" | "gold" | "danger" | "success";
   size?: "md" | "sm";
@@ -18,7 +18,10 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS: Record<NonNullable<BtnProps["variant"]>, string> = {
   primary: "bg-accent text-onaccent shadow-card hover:opacity-85",
-  ink: "bg-btndark text-onfill hover:bg-fill",
+  // Même survol que primary/gold/danger/success — mode-agnostique : `bg-fill`
+  // s'inverse en clair (btndark = fill = ink chez le résolveur) et assombrit
+  // l'admin (#262626 → #1a1a1a, l'inverse du `#333` d'origine).
+  ink: "bg-btndark text-onfill hover:opacity-85",
   ghost:
     "border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8",
   gold: "bg-gold text-ongold shadow-card hover:opacity-85",

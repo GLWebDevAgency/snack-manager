@@ -51,7 +51,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className="flex animate-pop items-center gap-2 whitespace-nowrap rounded-pill border border-line bg-bg px-[18px] py-3 text-sm font-bold text-ink shadow-soft"
+            // `surface`, pas `bg` : le toast flotte AU-DESSUS du contenu — son
+            // niveau est celui d'une carte, pas celui du canevas.
+            className="flex animate-pop items-center gap-2 whitespace-nowrap rounded-pill border border-line bg-surface px-[18px] py-3 text-sm font-bold text-ink shadow-soft"
           >
             {t.icon && <Icon name={t.icon} size={17} className="text-gold" />}
             {t.msg}

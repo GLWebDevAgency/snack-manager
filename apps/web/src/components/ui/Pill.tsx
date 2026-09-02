@@ -2,7 +2,7 @@ import type { HTMLAttributes } from "react";
 import { cx } from "@/lib/cx";
 
 type PillProps = HTMLAttributes<HTMLSpanElement> & {
-  /** solid = fond #1a1a1a bordé · out = contour, texte #999. */
+  /** solid = fond `fill` bordé · out = contour, texte mut. */
   variant?: "solid" | "out";
 };
 
@@ -10,12 +10,13 @@ type PillProps = HTMLAttributes<HTMLSpanElement> & {
  * Pilule d'étiquette (spec backoffice §4.4) : Inter 600 uppercase 10px.
  * Les couleurs sémantiques se posent via className (ex. bg-gold text-ongold).
  *
- * Le filet blanc 12 % du variant plein n'est pas décoratif : la pilule vaut
- * #1a1a1a et se pose aussi bien sur une carte (#111) que sur une tuile de
- * niveau « élément » (#1a1a1a — carte membre de l'Équipe, tuile de promo).
- * Sans lui, elle disparaîtrait dans son support — deux surfaces adjacentes ne
- * portent jamais la même valeur (DA §1). Même épaisseur que le variant
- * contour : les deux variants s'alignent au pixel côte à côte.
+ * Le filet d'encre à 12 % du variant plein n'est pas décoratif : la pilule
+ * vaut le niveau « élément » (`fill`) et se pose aussi bien sur une carte
+ * (`surface`) que sur une tuile de ce même niveau (carte membre de l'Équipe,
+ * tuile de promo). Sans lui, elle disparaîtrait dans son support — deux
+ * surfaces adjacentes ne portent jamais la même valeur (DA §1). Même
+ * épaisseur que le variant contour : les deux variants s'alignent au pixel
+ * côte à côte.
  */
 export function Pill({ variant = "solid", className, ...rest }: PillProps) {
   return (

@@ -23,7 +23,6 @@ const EN_ATTENTE = new Set<string>([
   "components/order/ProductSheet.tsx",
   "components/order/StripeCard.tsx",
   "components/order/TurnstileCheck.tsx",
-  "app/r/[slug]/not-found.tsx",
   "app/r/[slug]/fidelite/not-found.tsx",
   "components/loyalty/LoyaltyCardApp.tsx",
   "components/loyalty/DemoLoyaltyCard.tsx",
@@ -31,11 +30,13 @@ const EN_ATTENTE = new Set<string>([
 ]);
 
 const BRUT = [
-  /\b(?:bg|text|border|divide|ring|from|to|via|fill|stroke)-(?:white|black)(?:\/\d+)?\b/,
+  /\b(?:bg|text|border(?:-[trblxy])?|divide|ring|outline|shadow|from|to|via|fill|stroke)-(?:white|black)(?:\/\d+)?\b/,
   /\b(?:bg|text|border|divide)-(?:neutral|zinc|gray|slate|stone)-\d+\b/,
   /\b(?:bg|text|border|from|to|via)-\[#[0-9a-fA-F]{3,8}\]/,
   /\[linear-gradient\([^\]]*#[0-9a-fA-F]{3,8}/,
-  /\brgba?\(\s*(?:255|0)\s*,\s*(?:255|0)\s*,\s*(?:255|0)/,
+  // Pas de `\b` en tête : le séparateur `_` de Tailwind (`shadow-[0_1px_…]`)
+  // est un caractère de mot — la frontière n'existe jamais avant `rgba`.
+  /rgba?\(\s*(?:255|0)\s*,\s*(?:255|0)\s*,\s*(?:255|0)/,
 ];
 
 function* fichiers(dir: string): Generator<string> {

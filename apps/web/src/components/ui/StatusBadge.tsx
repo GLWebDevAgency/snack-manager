@@ -10,7 +10,10 @@ const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
   new: { label: "Nouvelle", cls: "bg-alert text-onalert" },
   preparing: { label: "En prépa", cls: "bg-prep text-onprep" },
   ready: { label: "Prête", cls: "bg-ok text-onok" },
-  delivered: { label: "Remise", cls: "bg-mut text-ink" },
+  // `onfill` et non `ink` : le résolveur ajuste `mut` à ≥4,5:1 contre `ground`,
+  // et `onfill` VAUT `ground` en clair — AA garanti par construction, pas par
+  // coïncidence. En sombre, `onfill` = blanc = rendu identique à l'origine.
+  delivered: { label: "Remise", cls: "bg-mut text-onfill" },
   cancelled: {
     label: "Annulée",
     cls: "border-[1.5px] border-alert bg-transparent text-alertt",

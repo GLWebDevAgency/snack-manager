@@ -17,9 +17,9 @@ type ToggleProps = {
 };
 
 /**
- * Interrupteur 46×26 (spec backoffice §4.6) : off blanc 10 %, on VERT #3fae4a,
- * pouce blanc 20px. Le pouce se déplace en `translateX` — le mouvement ne porte
- * jamais sur une propriété de mise en page (DA §6).
+ * Interrupteur 46×26 (spec backoffice §4.6) : off encre à 10 %, on VERT
+ * #3fae4a, pouce couleur d'encre 20px. Le pouce se déplace en `translateX` —
+ * le mouvement ne porte jamais sur une propriété de mise en page (DA §6).
  */
 export function Toggle({
   on,
@@ -47,7 +47,7 @@ export function Toggle({
     >
       <span
         aria-hidden
-        className="absolute left-[2px] top-[2px] size-5 rounded-full bg-ink shadow-[0_1px_3px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-sm"
+        className="absolute left-[2px] top-[2px] size-5 rounded-full bg-ink shadow-card transition-transform duration-200 ease-sm"
         style={{ transform: `translateX(${on ? 20 : 0}px)` }}
       />
     </button>

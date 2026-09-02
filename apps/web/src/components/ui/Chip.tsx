@@ -9,8 +9,9 @@ type ChipProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 /**
- * Chip de filtre (spec backoffice §4.3) : pilule fond blanc 6 %, texte #999,
- * hover texte blanc + fond éclairci, actif blanc sur bord clair.
+ * Chip de filtre (spec backoffice §4.3) : pilule fond encre à 6 %, texte mut,
+ * hover texte encre + fond éclairci, actif encre sur bord clair — l'encre
+ * suit le mode, jamais un blanc qui disparaîtrait sur fond clair.
  * Retour tactile immédiat à l'appui (DA §4).
  */
 export function Chip({
