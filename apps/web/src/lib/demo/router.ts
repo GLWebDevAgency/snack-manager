@@ -738,6 +738,18 @@ function dispatch(
   const period = (q.get("period") ?? "7d") as "1d" | "7d" | "30d";
   const id = () => `demo-${++w.seq}`;
 
+  // ─── Session ───
+
+  /*
+   * QUI est connecté — la personne, pas l'établissement.
+   *
+   * Sans cette ligne, le pied des deux barres de navigation resterait sur son
+   * état neutre pendant toute la visite : la démonstration montrerait un
+   * back-office qui ne sait pas qui l'utilise, alors qu'un vrai compte le sait.
+   * La fixture est décrite au-dessus de `MOI`, dans `state.ts`.
+   */
+  if (path === "/auth/me" && method === "GET") return ok(w.moi);
+
   // ─── Établissement ───
 
   if (path === "/tenants/me" && method === "GET") return ok(w.tenant);

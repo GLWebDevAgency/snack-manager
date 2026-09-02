@@ -47,6 +47,7 @@
 import { PLAN_MRR_CENTS } from "@sm/contracts";
 import type {
   Allergen,
+  AuthMe,
   BaseUnit,
   CostsResponse,
   IngredientCategory,
@@ -316,6 +317,8 @@ export interface DemoWorld {
   /** Instant de démarrage — toutes les dates en découlent. */
   bootAt: number;
   tenant: TenantMe;
+  /** La personne que le visiteur incarne — réponse de `GET /auth/me`. */
+  moi: AuthMe;
   categories: DemoCategory[];
   products: DemoProduct[];
   boms: Record<string, DemoRecipe>;
@@ -669,6 +672,32 @@ function buildLoyalty(bootAt: number): DemoLoyaltyState {
 // Construction du monde
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * LA PERSONNE QUE LE VISITEUR INCARNE — réponse de `GET /auth/me`.
+ *
+ * La démonstration promet la vraie application : le pied de barre y montre
+ * donc une identité comme sur un vrai compte, plutôt qu'un tiret d'attente qui
+ * ferait croire à une fonction inachevée. Elle est FICTIVE au même titre que
+ * l'équipe (Karim, Sofia…), les fournisseurs et les clients de la fixture — et
+ * le bandeau de démonstration, au-dessus, dit en toutes lettres où l'on est.
+ *
+ * `owner` : c'est le back-office du PATRON qu'on fait visiter, celui qui ouvre
+ * l'encaissement et l'abonnement. Le prénom ne reprend aucun de ceux de
+ * l'équipe : deux « Karim » à deux endroits de l'écran feraient chercher un
+ * lien qui n'existe pas.
+ *
+ * Hors démonstration, rien de ceci n'est atteignable : `?demo=1` est le seul
+ * déclencheur, et il ne couvre que `/admin` (cf. `lib/demo/mode.ts`).
+ */
+const MOI: AuthMe = {
+  id: "u1",
+  nom: "Camille Fournier",
+  role: "owner",
+  genre: "user",
+  email: "camille@le-comptoir.fr",
+  tenantId: "t1",
+};
+
 export function createWorld(bootAt: number): DemoWorld {
   const iso = (ageMin: number) => at(bootAt, ageMin);
 
@@ -974,6 +1003,7 @@ export function createWorld(bootAt: number): DemoWorld {
   return {
     bootAt,
     tenant,
+    moi: MOI,
     categories,
     products,
     boms,

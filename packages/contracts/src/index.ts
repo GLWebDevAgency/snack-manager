@@ -543,6 +543,50 @@ export interface JwtPayload {
   deviceSessionVersion?: string;
 }
 
+/**
+ * QUI est devant l'écran — la PERSONNE, pas son restaurant.
+ *
+ * Réponse de `GET /auth/me`. Elle existe parce qu'aucune route ne la rendait :
+ * `GET /tenants/me` rend l'ÉTABLISSEMENT, et les deux back-offices affichaient
+ * donc une identité ÉCRITE EN DUR en pied de barre — « Le Gérant » côté
+ * restaurant, « Admin SM » côté équipe. Le jeton porte bien `sub`, `role` et
+ * `kind`, jamais le nom : il fallait aller le lire.
+ *
+ * ─── POURQUOI ELLE RESTE SÉPARÉE DE L'ÉTABLISSEMENT ───
+ *
+ * Une personne et un restaurant n'ont ni le même cycle de vie, ni le même
+ * public. `GET /tenants/me` est lu par toutes les tablettes du comptoir ; y
+ * greffer l'identité du porteur du jeton mêlerait deux natures de données dans
+ * une réponse partagée, et la prochaine personne ajoutée au restaurant
+ * obligerait à choisir laquelle des deux ce « me » désigne.
+ *
+ * ─── C'EST ICI QUE LES PERMISSIONS VIENDRONT ───
+ *
+ * Le chantier « plusieurs comptes par restaurant » ajoutera des rôles plus
+ * fins et des permissions. Elles se poseront SUR CETTE RÉPONSE — c'est le seul
+ * endroit qui répond déjà « qui es-tu », et l'écran qui peint une barre de
+ * navigation demande ensuite « qu'as-tu le droit d'ouvrir ». Aucun champ de
+ * permission n'existe aujourd'hui, volontairement : en inventer un maintenant
+ * figerait une forme avant d'avoir le besoin. Le rôle reste, comme partout,
+ * un indice d'affichage — l'autorité est `@Roles(...)` côté API.
+ */
+export type AuthMe = {
+  /** Identifiant du compte (`users`) ou du membre d'équipe (`staff`). */
+  id: string;
+  /** Le nom affiché. Peut être vide : un compte historique n'en porte pas. */
+  nom: string;
+  role: UserRole | StaffRole;
+  /**
+   * COMMENT la session a été ouverte — le `kind` du jeton.
+   * `user` : e-mail et mot de passe. `staff` : code sur tablette appairée.
+   */
+  genre: 'user' | 'staff';
+  /** `null` pour une session `staff` : un porteur de code n'a pas d'e-mail. */
+  email: string | null;
+  /** `null` pour l'équipe Snack Manager (`sm_admin`), qui n'a pas de restaurant. */
+  tenantId: string | null;
+};
+
 // ─────────────────────────────────────────────────────────────
 // Temps réel (WebSocket) — rooms par tenantId
 // ─────────────────────────────────────────────────────────────

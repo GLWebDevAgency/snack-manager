@@ -27,9 +27,10 @@ import type { CrmOverview } from "@sm/contracts";
 import { ApiError, clearToken, getToken } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
+import { initialeDe, libelleRole, nomAffichable, useIdentite } from "@/lib/identite";
 import { Icon, IconBtn, ToastProvider } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
-import { crm, euroRound, HqContext, isHqSession } from "./crm";
+import { crm, euroRound, HQ_ROLE, HqContext, isHqSession } from "./crm";
 import { BottomSheet } from "./mobile";
 import {
   libelleCourt,
@@ -128,6 +129,25 @@ function HqShell({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [mounted, allowed, router, tick]);
+
+  // ── Qui est connecté ──
+  //
+  // Le pied de barre annonçait « Admin SM » et « Fondateur » sous une pastille
+  // « A », en bureau comme en mobile : trois mots écrits en dur, vrais pour
+  // personne. `GET /auth/me` rend la personne derrière le jeton — le nom n'est
+  // dans aucune autre réponse, `GET /tenants/me` ne rendant que l'établissement
+  // (et cette surface n'en a pas : l'équipe Snack Manager porte `tenantId`
+  // null).
+  //
+  // Tant que la réponse n'est pas là, ou si elle n'arrive jamais, `nom` vaut
+  // `null` et la ligne affiche un tiret discret — jamais un nom deviné.
+  const identite = useIdentite(mounted && allowed);
+  const nom = nomAffichable(identite);
+  const initiale = initialeDe(identite);
+  // La seconde ligne, elle, n'a pas besoin d'attendre : cette coque ne se rend
+  // QUE si le jeton porte `sm_admin` (`allowed` ci-dessus). Le repli dit donc
+  // ce que le cloisonnement vient de vérifier, pas une supposition.
+  const role = libelleRole(identite?.role ?? (allowed ? HQ_ROLE : null));
 
   if (!mounted || !token || !allowed) return null;
 
@@ -237,15 +257,23 @@ function HqShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="mt-auto flex items-center gap-2.5 border-t border-line pt-3">
+            {/* L'initiale se DÉRIVE du nom reçu ; le tiret est l'état
+                d'attente, et celui de l'échec. Une lettre par défaut
+                dessinerait la pastille de quelqu'un qui n'existe pas. */}
             <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold text-accent"
+              className={cx(
+                "grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold",
+                initiale ? "text-accent" : "text-mut",
+              )}
               aria-hidden
             >
-              A
+              {initiale ?? "—"}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold text-ink">Admin SM</div>
-              <div className="truncate text-xs text-mut">Fondateur</div>
+              <div className={cx("truncate text-sm font-bold", nom ? "text-ink" : "text-mut")}>
+                {nom ?? "—"}
+              </div>
+              <div className="truncate text-xs text-mut">{role}</div>
             </div>
             <IconBtn
               icon="logout"
@@ -417,15 +445,22 @@ function HqShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="mt-3 flex items-center gap-2.5 border-t border-line px-1 pt-3">
+            {/* Même session, même état neutre que la barre de bureau : la
+                feuille mobile en est une VUE, pas une seconde source. */}
             <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold text-accent"
+              className={cx(
+                "grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold",
+                initiale ? "text-accent" : "text-mut",
+              )}
               aria-hidden
             >
-              A
+              {initiale ?? "—"}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold text-ink">Admin SM</div>
-              <div className="truncate text-xs text-mut">Fondateur</div>
+              <div className={cx("truncate text-sm font-bold", nom ? "text-ink" : "text-mut")}>
+                {nom ?? "—"}
+              </div>
+              <div className="truncate text-xs text-mut">{role}</div>
             </div>
             <button
               type="button"

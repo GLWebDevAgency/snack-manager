@@ -31,6 +31,7 @@ import { Splash } from "@/components/brand/Splash";
 import { consommerSplashDeTransition } from "@/components/brand/SplashAuPremierPassage";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
+import { initialeDe, nomAffichable, useIdentite } from "@/lib/identite";
 import { tenantAccentPalette } from "@/lib/tenant-accent";
 import { useTenantSocket } from "@/lib/ws";
 import { Icon, ToastProvider, useToast } from "@/components/ui";
@@ -330,6 +331,22 @@ function Shell({ children }: { children: ReactNode }) {
   const now = new Date();
   const subtitle = `${fmtDateFr(now)} · service du ${now.getHours() < 16 ? "midi" : "soir"}`;
 
+  // ── Qui est connecté ──
+  //
+  // La personne, pas l'établissement : `tenant` ci-dessus ne dit que le
+  // restaurant. Tant que la réponse n'est pas là — et si elle n'arrive
+  // jamais — `nom` et `initiale` valent `null`, et le pied de barre affiche un
+  // tiret à la place. Jamais « Le Gérant », qui n'était le nom de personne.
+  //
+  // EN DÉMONSTRATION, la coque appelle la route comme le reste : `hasToken`
+  // est vrai (cf. `isDemoActive`), et `lib/demo/router.ts` répond la
+  // propriétaire fictive du Comptoir. Le visiteur voit donc une barre
+  // complète, cohérente avec les équipiers, les fournisseurs et les clients de
+  // la fixture.
+  const identite = useIdentite(hasToken);
+  const nom = nomAffichable(identite);
+  const initiale = initialeDe(identite);
+
   const initial = (tenant?.name?.trim()?.[0] ?? "S").toUpperCase();
   const city =
     tenant?.address
@@ -521,29 +538,42 @@ function Shell({ children }: { children: ReactNode }) {
               ))}
             </nav>
 
-            {/* Pied : gérant + sortie + réduire */}
+            {/* Pied : la personne connectée + sortie + réduire */}
             <div
               className={cx(
                 "mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3",
                 !open && "flex-col",
               )}
             >
+              {/* L'initiale se DÉRIVE du nom reçu. Le tiret est l'état
+                  d'attente — et celui de l'échec : une lettre par défaut
+                  dessinerait la pastille de quelqu'un qui n'existe pas. */}
               <div
-                className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
+                className={cx(
+                  "grid size-[34px] shrink-0 place-items-center rounded-full text-[15px] font-extrabold",
+                  // La pastille neutre ne peut pas être `bg-fill` : c'est la
+                  // couleur de la barre elle-même, elle y disparaîtrait.
+                  initiale
+                    ? "bg-accent text-onaccent"
+                    : "border border-white/12 bg-white/6 text-mut",
+                )}
                 aria-hidden
               >
-                M
+                {initiale ?? "—"}
               </div>
               {open && (
                 <div className="min-w-0 flex-1">
-                  {/* ÉCRIT EN DUR — relevé, pas corrigé : le nom de la personne
-                      connectée n'est pas dans `GET /tenants/me`, qui rend
-                      l'ÉTABLISSEMENT. Le sortir d'ici demande une route ou une
-                      revendication de jeton, c'est-à-dire une décision d'API —
-                      hors du périmètre d'une refonte de navigation. La tuile
-                      « M » au-dessus tient la même promesse creuse. */}
-                  <div className="truncate text-sm font-bold text-ink">
-                    Le Gérant
+                  {/* Le nom de la personne connectée, enfin : `GET /auth/me`
+                      le rend, `GET /tenants/me` ne rendait que le restaurant.
+                      La ligne garde sa hauteur avant l'arrivée de la réponse —
+                      la barre ne doit pas sauter sous les doigts. */}
+                  <div
+                    className={cx(
+                      "truncate text-sm font-bold",
+                      nom ? "text-ink" : "text-mut",
+                    )}
+                  >
+                    {nom ?? "—"}
                   </div>
                   <div className="truncate text-xs text-mut">{city}</div>
                 </div>
@@ -862,15 +892,30 @@ function Shell({ children }: { children: ReactNode }) {
             </nav>
 
             <div className="mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3">
+              {/* Même identité que la barre de bureau, même état neutre :
+                  le volet mobile est une VUE de la même session, pas une
+                  seconde source. Voir son pied pour le raisonnement. */}
               <div
-                className="grid size-[34px] shrink-0 place-items-center rounded-full bg-accent text-[15px] font-extrabold text-onaccent"
+                className={cx(
+                  "grid size-[34px] shrink-0 place-items-center rounded-full text-[15px] font-extrabold",
+                  // La pastille neutre ne peut pas être `bg-fill` : c'est la
+                  // couleur de la barre elle-même, elle y disparaîtrait.
+                  initiale
+                    ? "bg-accent text-onaccent"
+                    : "border border-white/12 bg-white/6 text-mut",
+                )}
                 aria-hidden
               >
-                M
+                {initiale ?? "—"}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold text-ink">
-                  Le Gérant
+                <div
+                  className={cx(
+                    "truncate text-sm font-bold",
+                    nom ? "text-ink" : "text-mut",
+                  )}
+                >
+                  {nom ?? "—"}
                 </div>
                 <div className="truncate text-xs text-mut">{city}</div>
               </div>

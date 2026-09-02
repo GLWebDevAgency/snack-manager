@@ -81,6 +81,7 @@ const READS: [string, string][] = [
   ["GET", "/encaissement/me"],
   ["POST", "/encaissement/me/synchroniser"],
   // Shell
+  ["GET", "/auth/me"],
   ["GET", "/tenants/me"],
   ["GET", "/orders?status=new"],
   // Tableau de bord

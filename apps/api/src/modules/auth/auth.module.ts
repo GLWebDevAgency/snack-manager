@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { IdentiteController } from './identite.controller';
+import { IdentiteService } from './identite.service';
 import { AuthGuard } from '../../common/auth';
 import { SessionAccessService } from '../../common/session-access';
 import { SessionRevocationPublisher } from '../../common/session-revocation';
@@ -20,9 +22,13 @@ import { SessionRevocationPublisher } from '../../common/session-revocation';
       }),
     }),
   ],
-  controllers: [AuthController],
+  // `IdentiteController` est SÉPARÉ de `AuthController` : celui-ci limite le
+  // débit pour protéger la connexion, et ce plafond n'a rien à faire sur une
+  // lecture d'identité appelée à chaque ouverture d'écran. Voir son en-tête.
+  controllers: [AuthController, IdentiteController],
   providers: [
     AuthService,
+    IdentiteService,
     SessionAccessService,
     SessionRevocationPublisher,
     // Guard global : toute route est authentifiée sauf @Public()
