@@ -876,8 +876,9 @@ export function demoHref(origin: string): string {
  *     `DEMO_PARAM=demo`, `DEMO_VALUE=1`, et une borne de chemin `/admin` :
  *     le paramètre seul ne suffit pas, l'adresse doit être sous `/admin`.
  *     On vise `/admin/dashboard` et non `/admin` : la page d'index fait une
- *     redirection serveur vers `/admin/menu` qui perdrait la requête — donc
- *     le paramètre, donc la démonstration, remplacée par l'écran de connexion.
+ *     redirection serveur — vers ce même tableau de bord depuis la refonte de
+ *     la barre — et une redirection serveur perd la requête, donc le
+ *     paramètre, donc la démonstration, remplacée par l'écran de connexion.
  *
  *   · commande en ligne → `apps/web/src/components/order/demo/mode.ts`
  *     deux verrous : `?demo=1` ET le slug réservé `demo`. Sans les deux,

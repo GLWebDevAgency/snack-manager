@@ -88,7 +88,7 @@ import { RESERVED_LABELS } from "@sm/domain";
  *      (l’apex `laclassfood.fr` sans sous-domaine n’accepte pas de CNAME et
  *      casserait sa messagerie — `PublicDomain.create` le refuse d’ailleurs.)
  *   2. Le domaine est déclaré dans l’hébergement du front (certificat TLS
- *      automatique) ET enregistré côté API depuis l’écran « Votre site web ».
+ *      automatique) ET enregistré côté API depuis l’écran « Site web ».
  *   3. Il n’y a plus AUCUNE convention de nommage à respecter : l’étiquette du
  *      domaine n’a pas à ressembler au slug, c’est l’API qui fait le lien.
  *

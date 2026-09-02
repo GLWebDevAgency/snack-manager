@@ -802,7 +802,7 @@ export default function MenuPage() {
                         {ingredientOut ? (
                           <Pill
                             variant="out"
-                            title="Rupture héritée d'un ingrédient en rupture — lève-la depuis « Ingrédients & stocks »."
+                            title="Rupture héritée d'un ingrédient en rupture — lève-la depuis « Stocks »."
                             className="max-w-full whitespace-normal border-alert/60 text-center leading-[1.15] text-alertt"
                           >
                             rupture ingrédient

@@ -5,6 +5,11 @@
  * rétractable 66↔232px (ne pousse pas le contenu), topbar, thème tenant.
  * L'accent de marque est injecté au runtime : fetch /tenants/me →
  * --cf-accent / --cf-on-accent sur <html> (marque grise, spec DS §4).
+ *
+ * LA COQUE NE DÉCIDE PLUS DE LA NAVIGATION : les groupes, les noms, les icônes
+ * et les règles de visibilité vivent dans `./navigation`, qui se relit et se
+ * teste sans monter React. Ici ne restent que le rendu et les deux faits que
+ * la table réclame — quel rôle regarde, et si le compte est suspendu.
  */
 
 import Link from "next/link";
@@ -17,7 +22,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import type { OrderStatus } from "@sm/contracts";
+import { ACCOUNT_SUSPENDED_CODE, isAccessBlocked, type OrderStatus } from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
 import { BandeauDemo } from "@/lib/demo/BandeauDemo";
@@ -28,61 +33,19 @@ import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
 import { tenantAccentPalette } from "@/lib/tenant-accent";
 import { useTenantSocket } from "@/lib/ws";
-import { Icon, ToastProvider, useToast, type IconName } from "@/components/ui";
+import { Icon, ToastProvider, useToast } from "@/components/ui";
 import { clearAllEnrollmentRecoveries } from "./fidelite/clients/enrollment-recovery";
+import {
+  barreMobile,
+  groupesMobileRestants,
+  groupesVisibles,
+  navActive,
+} from "./navigation";
+import { roleAdmin } from "./session";
 
 const RAIL = 66;
 const PANEL = 232;
 const NAV_STORE = "sm-bo-nav";
-
-/**
- * Barre basse mobile : les trois pages que le gérant ouvre CHAQUE JOUR depuis
- * son téléphone (lire le service, suivre les commandes, mettre un produit en
- * rupture) — tout le reste vit derrière « Plus ». Les libellés sont courts à
- * dessein : quatre cases de ±97 px à 390 px de large ne logent pas
- * « Tableau de bord » sans écraser le corps de texte sous les 11 px lisibles.
- */
-const MOBILE_BAR: { id: string; short: string }[] = [
-  { id: "dashboard", short: "Accueil" },
-  { id: "orders", short: "Commandes" },
-  { id: "menu", short: "Carte" },
-];
-
-const NAV: { id: string; href: string; label: string; icon: IconName }[] = [
-  { id: "dashboard", href: "/admin/dashboard", label: "Tableau de bord", icon: "home" },
-  { id: "orders", href: "/admin/orders", label: "Commandes", icon: "ticket" },
-  { id: "menu", href: "/admin/menu", label: "Menu & prix", icon: "grid" },
-  { id: "ingredients", href: "/admin/ingredients", label: "Ingrédients & stocks", icon: "fries" },
-  { id: "promos", href: "/admin/promos", label: "Promos", icon: "tag" },
-  { id: "loyalty", href: "/admin/fidelite", label: "Fidélité", icon: "gift" },
-  { id: "hours", href: "/admin/hours", label: "Horaires", icon: "clock" },
-  { id: "screens", href: "/admin/screens", label: "Écrans TV", icon: "tv" },
-  { id: "devices", href: "/admin/devices", label: "Caisses & cuisine", icon: "print" },
-  { id: "stats", href: "/admin/stats", label: "Statistiques", icon: "chart" },
-  { id: "team", href: "/admin/team", label: "Équipe & pointage", icon: "user" },
-  // Juste après « Équipe & pointage », et les deux se répondent : là on badge
-  // ce qui s'est passé, ici on décide ce qui va se passer. L'écart entre les
-  // deux — prévu contre pointé — est justement ce que le planning affiche.
-  { id: "planning", href: "/admin/planning", label: "Planning", icon: "clock" },
-  { id: "reviews", href: "/admin/reviews", label: "Avis clients", icon: "star" },
-  // « Votre site web » était INATTEIGNABLE : la page existait, complète —
-  // adresse du site, nom de domaine, état de propagation DNS — et ne figurait
-  // dans aucune navigation. Le restaurateur qui achète un nom de domaine ne
-  // pouvait pas y arriver, sauf à connaître l'URL par cœur.
-  //
-  // Sa place est ici, entre les avis et l'argent : les trois entrées
-  // précédentes parlent de ce que le PUBLIC voit du restaurant — ses écrans,
-  // ses avis, son site — et les deux suivantes de ce qu'il encaisse.
-  { id: "site", href: "/admin/site", label: "Votre site web", icon: "home" },
-  // Dernier de la liste, et c'est voulu : le gérant y vient deux fois par an,
-  // alors qu'il ouvre les commandes et la carte chaque jour. Mais il DOIT le
-  // trouver seul — la FAQ lui promet mot pour mot d'y retrouver ses factures.
-  // Juste avant « Abonnement » : les deux parlent d'argent, mais dans deux
-  // sens opposés — ici c'est le CLIENT qui paie LE RESTAURANT, là c'est le
-  // restaurant qui nous paie. Les voisiner sans les confondre.
-  { id: "encaissement", href: "/admin/encaissement", label: "Encaissement en ligne", icon: "euro" },
-  { id: "abonnement", href: "/admin/abonnement", label: "Abonnement", icon: "euro" },
-];
 
 export default function AdminLayout({
   children,
@@ -136,6 +99,7 @@ function Shell({ children }: { children: ReactNode }) {
   const toast = useToast();
 
   const [tenant, setTenant] = useState<TenantMe | null>(null);
+  const [suspendu, setSuspendu] = useState(false);
   const [newIds, setNewIds] = useState<ReadonlySet<string>>(new Set());
   const [togglingOnline, setTogglingOnline] = useState(false);
 
@@ -162,6 +126,16 @@ function Shell({ children }: { children: ReactNode }) {
    * porte de sortie vers notre site commercial au-dessus de son back-office.
    */
   const demo = useSyncExternalStore(emptySubscribe, isDemoActive, () => false);
+
+  /**
+   * LE RÔLE — lu sur le jeton, sans appel réseau, comme `hasToken`.
+   *
+   * `null` en démonstration (le jeton l'est aussi, par conception) et pendant
+   * le rendu serveur : la table de navigation traite ce cas en montrant la
+   * barre COMPLÈTE, ce qui garde le rendu d'hydratation identique et évite de
+   * faire clignoter des entrées au montage.
+   */
+  const role = useSyncExternalStore(emptySubscribe, () => roleAdmin(), () => null);
 
   // ── Sidebar ouverte/fermée — persistée dans localStorage["sm-bo-nav"] ──
   const open = useSyncExternalStore(
@@ -199,9 +173,16 @@ function Shell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
 
-  // ── Garde session + redirection /admin → /admin/dashboard ──
+  // ── Garde de session ──
+  //
   // `mounted` évite de rediriger sur le rendu d'hydratation : localStorage
   // n'existe pas côté serveur, donc `hasToken` y vaut toujours false.
+  //
+  // La redirection `/admin` → tableau de bord vivait AUSSI ici, et c'était du
+  // code mort : `admin/page.tsx` redirige côté serveur, avant que cette coque
+  // ne soit montée. Les deux destinations divergeaient en silence (la page
+  // envoyait vers la carte, la coque vers le tableau de bord) ; il n'en reste
+  // qu'une, celle du serveur, et elle vise l'écran où mène déjà la connexion.
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau d'hydratation : sa valeur DOIT différer entre le rendu serveur et le client, aucun calcul au rendu ne peut donc le produire. Dérivé, la garde lirait `hasToken === false` au premier rendu et renverrait vers /admin/login un gérant pourtant connecté.
   useEffect(() => setMounted(true), []);
@@ -209,8 +190,7 @@ function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!mounted) return;
     if (!hasToken) router.replace("/admin/login");
-    else if (pathname === "/admin") router.replace("/admin/dashboard");
-  }, [mounted, hasToken, pathname, router]);
+  }, [mounted, hasToken, router]);
 
   // ── Tenant + thème (accent marque sur <html>) ──
   useEffect(() => {
@@ -221,6 +201,10 @@ function Shell({ children }: { children: ReactNode }) {
       .then((t) => {
         if (cancelled) return;
         setTenant(t);
+        // La règle de suspension n'est pas réécrite ici : `isAccessBlocked`
+        // (@sm/contracts) la porte pour toute la maison — seul `suspended`
+        // ferme, `churned` non.
+        setSuspendu(isAccessBlocked(t.account?.status));
         const { accent, onAccent } = tenantAccentPalette(t.brandColor);
         const root = document.documentElement.style;
         root.setProperty("--cf-accent", accent);
@@ -232,6 +216,22 @@ function Shell({ children }: { children: ReactNode }) {
           clearAllEnrollmentRecoveries();
           clearToken();
           router.replace("/admin/login");
+          return;
+        }
+        // LA SUSPENSION SE LIT SUR LE REFUS, PAS SUR LE TENANT.
+        //
+        // `GET /tenants/me` rend bien `account.status` — mais un compte
+        // suspendu n'atteint jamais la route : le garde global le refuse
+        // avant, et c'est ce refus qui porte le code. S'en remettre au seul
+        // champ laisserait donc la barre proposer seize entrées qui
+        // répondraient toutes la même chose, et laisserait invisible le seul
+        // écran qui survit — celui qui porte le montant à régler.
+        if (
+          e instanceof ApiError &&
+          e.status === 403 &&
+          (e.body as { code?: string } | null)?.code === ACCOUNT_SUSPENDED_CODE
+        ) {
+          setSuspendu(true);
         }
       });
     return () => {
@@ -311,11 +311,22 @@ function Shell({ children }: { children: ReactNode }) {
     }
   }
 
-  // ── Titre / sous-titre de la topbar ──
-  const active = useMemo(
-    () => NAV.find((n) => pathname.startsWith(n.href)),
-    [pathname],
+  // ── Ce que cette session voit de la barre ──
+  //
+  // Trois vues d'une seule table : la colonne de bureau, les cases sous le
+  // pouce, et le volet « Plus » qui reprend les MÊMES groupes que la colonne.
+  const groupes = useMemo(() => groupesVisibles({ role, suspendu }), [role, suspendu]);
+  const barre = useMemo(() => barreMobile({ role, suspendu }), [role, suspendu]);
+  const groupesPlus = useMemo(
+    () => groupesMobileRestants({ role, suspendu }),
+    [role, suspendu],
   );
+
+  // ── Titre / sous-titre de la topbar ──
+  //
+  // Le titre est LE LIBELLÉ CLIQUÉ, cherché dans la table entière : un écran
+  // que les règles masquent garde son nom si on y arrive par une adresse.
+  const active = useMemo(() => navActive(pathname), [pathname]);
   const now = new Date();
   const subtitle = `${fmtDateFr(now)} · service du ${now.getHours() < 16 ? "midi" : "soir"}`;
 
@@ -433,66 +444,84 @@ function Shell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            {/* Intitulé de section : 11px, 600, capitales, .06em, gris #999 (DA §2). */}
-            {open ? (
-              <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-                Gestion
-              </div>
-            ) : (
-              <div className="mx-1 mb-2.5 h-px shrink-0 bg-line" aria-hidden />
-            )}
+            {/*
+              ── SEPT INTITULÉS, LÀ OÙ « GESTION » COIFFAIT SEIZE ENTRÉES ──
 
-            {/* Navigation */}
+              Intitulés au format DA §2 : 11px, 600, capitales, .06em, gris.
+              Barre REPLIÉE, il n'y a plus la place d'un mot : chaque groupe se
+              dit alors par un filet. Le rythme des groupes survit donc au rail
+              de 66 px, et l'icône d'un écran garde sa position, dépliée ou non.
+            */}
             <nav
-              className="cf-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden"
+              className="cf-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden"
               aria-label="Navigation principale"
             >
-              {NAV.map((item) => {
-                const isActive = pathname.startsWith(item.href);
-                const badge = item.id === "orders" && newCount > 0;
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    title={item.label}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cx(
-                      "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
-                      open ? "px-3" : "justify-center px-0",
-                      isActive
-                        ? "bg-accent font-extrabold text-onaccent shadow-card"
-                        : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
-                    )}
-                  >
-                    <Icon
-                      name={item.icon}
-                      size={18}
-                      stroke={isActive ? 2.3 : 2}
-                      className="shrink-0"
-                    />
-                    {open && (
-                      <span className="min-w-0 flex-1 truncate whitespace-nowrap">
-                        {item.label}
-                      </span>
-                    )}
-                    {badge &&
-                      (open ? (
-                        <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
-                          {newCount}
-                          <span className="sr-only"> nouvelles commandes</span>
-                        </span>
-                      ) : (
-                        <span
-                          className="absolute right-3 top-[7px] size-2 rounded-full border-2 border-fill bg-gold"
-                          aria-hidden
-                        />
-                      ))}
-                  </Link>
-                );
-              })}
+              {groupes.map((groupe) => (
+                // `role="group"` + `aria-label` : le lecteur d'écran annonce le
+                // domaine en entrant dedans. L'intitulé visible est donc
+                // `aria-hidden`, sinon il serait lu deux fois — et il n'existe
+                // pas du tout barre repliée.
+                <div key={groupe.titre} role="group" aria-label={groupe.titre}>
+                  {open ? (
+                    <div
+                      className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut"
+                      aria-hidden
+                    >
+                      {groupe.titre}
+                    </div>
+                  ) : (
+                    <div className="mx-1 mb-2.5 h-px shrink-0 bg-line" aria-hidden />
+                  )}
+                  <div className="flex flex-col gap-[3px]">
+                    {groupe.items.map((item) => {
+                      const isActive = pathname.startsWith(item.href);
+                      const badge = item.href === "/admin/orders" && newCount > 0;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          title={item.label}
+                          aria-current={isActive ? "page" : undefined}
+                          className={cx(
+                            "cf-press-row relative flex shrink-0 items-center gap-2.5 rounded-ctrl py-[11px] text-sm",
+                            open ? "px-3" : "justify-center px-0",
+                            isActive
+                              ? "bg-accent font-extrabold text-onaccent shadow-card"
+                              : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
+                          )}
+                        >
+                          <Icon
+                            name={item.icon}
+                            size={18}
+                            stroke={isActive ? 2.3 : 2}
+                            className="shrink-0"
+                          />
+                          {open && (
+                            <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+                              {item.label}
+                            </span>
+                          )}
+                          {badge &&
+                            (open ? (
+                              <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
+                                {newCount}
+                                <span className="sr-only"> nouvelles commandes</span>
+                              </span>
+                            ) : (
+                              <span
+                                className="absolute right-3 top-[7px] size-2 rounded-full border-2 border-fill bg-gold"
+                                aria-hidden
+                              />
+                            ))}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
 
-            {/* Pied : gérant + réglages + réduire */}
+            {/* Pied : gérant + sortie + réduire */}
             <div
               className={cx(
                 "mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3",
@@ -507,24 +536,35 @@ function Shell({ children }: { children: ReactNode }) {
               </div>
               {open && (
                 <div className="min-w-0 flex-1">
+                  {/* ÉCRIT EN DUR — relevé, pas corrigé : le nom de la personne
+                      connectée n'est pas dans `GET /tenants/me`, qui rend
+                      l'ÉTABLISSEMENT. Le sortir d'ici demande une route ou une
+                      revendication de jeton, c'est-à-dire une décision d'API —
+                      hors du périmètre d'une refonte de navigation. La tuile
+                      « M » au-dessus tient la même promesse creuse. */}
                   <div className="truncate text-sm font-bold text-ink">
                     Le Gérant
                   </div>
                   <div className="truncate text-xs text-mut">{city}</div>
                 </div>
               )}
-              {/* Longtemps inerte — une promesse à l'écran sans fonction est
-                  un appel au support en puissance. Câblé le 24/08/2026. */}
-              <Link
-                href="/admin/settings"
-                title="Paramètres"
-                aria-label="Paramètres"
-                className="cf-press shrink-0 text-mut hover:text-white"
-              >
-                <Icon name="gear" size={17} />
-              </Link>
-              {/* La sortie teinte vers l'alerte au survol : voisine du rouage,
-                  elle ne doit pas s'y confondre sous un clic pressé. */}
+              {/*
+                ═══ LE ROUAGE A DISPARU D'ICI, ET C'EST LE POINT ═══
+
+                Il était la SEULE porte vers `/admin/settings` : muette, sans
+                libellé, en pied de barre, collée à la déconnexion. L'écran
+                n'étant dans aucune liste, la barre de titre affichait
+                « Back-office » une fois dedans — le seul écran du produit sans
+                nom.
+
+                Il s'appelle désormais « Établissement » et vit dans le groupe
+                « Réglages », avec un nom, une icône et un lien qui se surligne.
+                Le garder ici en plus laisserait deux portes vers le même écran
+                dont l'une n'apprend rien, à un pixel du seul geste qu'un
+                mis-clic rend coûteux.
+              */}
+              {/* La sortie teinte vers l'alerte au survol : dernière icône du
+                  pied, elle ne doit pas se confondre avec le repli. */}
               <button
                 type="button"
                 onClick={logout}
@@ -603,7 +643,7 @@ function Shell({ children }: { children: ReactNode }) {
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-4 py-3 md:gap-4 md:px-[26px] md:py-4">
             <div className="min-w-0">
               <h1 className="truncate text-xl font-extrabold tracking-[-0.03em] text-ink md:text-2xl">
-                {active?.label ?? "Back-office"}
+                {active.label}
               </h1>
               <p className="truncate text-sm text-mut" suppressHydrationWarning>
                 {subtitle}
@@ -669,14 +709,12 @@ function Shell({ children }: { children: ReactNode }) {
         aria-label="Navigation rapide"
         className="z-[45] flex shrink-0 border-t border-line2 bg-[image:var(--cf-card-gradient)] pb-[env(safe-area-inset-bottom)] md:hidden"
       >
-        {MOBILE_BAR.map(({ id, short }) => {
-          const item = NAV.find((n) => n.id === id);
-          if (!item) return null;
+        {barre.map((item) => {
           const isActive = pathname.startsWith(item.href);
-          const badge = item.id === "orders" && newCount > 0;
+          const badge = item.href === "/admin/orders" && newCount > 0;
           return (
             <Link
-              key={id}
+              key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cx(
@@ -693,7 +731,12 @@ function Shell({ children }: { children: ReactNode }) {
                   </span>
                 )}
               </span>
-              <span className="max-w-full truncate">{short}</span>
+              {/* LE NOM DE LA TABLE, tel quel : il n'existe plus de libellé
+                  court à côté. C'est lui qui faisait diverger les noms —
+                  « Menu & prix » devenait « Carte » ici, « Tableau de bord »
+                  devenait « Accueil ». Les deux écrans portent désormais le
+                  nom court dans la table, et il tient dans la cellule. */}
+              <span className="max-w-full truncate">{item.label}</span>
             </Link>
           );
         })}
@@ -704,9 +747,9 @@ function Shell({ children }: { children: ReactNode }) {
           aria-haspopup="dialog"
           className={cx(
             "cf-press flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 text-[11px]",
-            // « Plus » s'allume quand la page ouverte n'est PAS dans la barre :
-            // le gérant sur « Avis clients » doit voir d'où il est venu.
-            active && !MOBILE_BAR.some((b) => b.id === active.id)
+            // « Plus » s'allume quand la page ouverte vit dans SON volet : le
+            // gérant sur « Avis » doit voir d'où il est venu.
+            groupesPlus.some((g) => g.items.some((n) => n.href === active.href))
               ? "font-extrabold text-accent"
               : "font-semibold text-mut",
           )}
@@ -760,48 +803,62 @@ function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
 
-            <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-              Gestion
-            </div>
-
+            {/* LES MÊMES GROUPES ET LES MÊMES MOTS qu'au bureau : un écran
+                cherché sous « Présence » à l'ordinateur doit se retrouver sous
+                « Présence » au pouce. Le volet ne rejoue donc pas la liste
+                plate de seize qu'il rejouait — et les groupes que la barre
+                basse a vidés n'y figurent pas : un intitulé sans entrée est un
+                cul-de-sac. */}
             <nav
-              className="cf-scroll flex min-h-0 flex-1 flex-col gap-[3px] overflow-y-auto overflow-x-hidden"
+              className="cf-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden"
               aria-label="Navigation principale"
             >
-              {NAV.map((item) => {
-                const isActive = pathname.startsWith(item.href);
-                const badge = item.id === "orders" && newCount > 0;
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href}
-                    onClick={() => setMoreOpen(false)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cx(
-                      "cf-press-row flex shrink-0 items-center gap-2.5 rounded-ctrl px-3 py-3 text-sm",
-                      isActive
-                        ? "bg-accent font-extrabold text-onaccent shadow-card"
-                        : "font-semibold text-white/70",
-                    )}
+              {groupesPlus.map((groupe) => (
+                <div key={groupe.titre} role="group" aria-label={groupe.titre}>
+                  <div
+                    className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut"
+                    aria-hidden
                   >
-                    <Icon
-                      name={item.icon}
-                      size={18}
-                      stroke={isActive ? 2.3 : 2}
-                      className="shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate whitespace-nowrap">
-                      {item.label}
-                    </span>
-                    {badge && (
-                      <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
-                        {newCount}
-                        <span className="sr-only"> nouvelles commandes</span>
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
+                    {groupe.titre}
+                  </div>
+                  <div className="flex flex-col gap-[3px]">
+                    {groupe.items.map((item) => {
+                      const isActive = pathname.startsWith(item.href);
+                      const badge = item.href === "/admin/orders" && newCount > 0;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMoreOpen(false)}
+                          aria-current={isActive ? "page" : undefined}
+                          className={cx(
+                            "cf-press-row flex shrink-0 items-center gap-2.5 rounded-ctrl px-3 py-3 text-sm",
+                            isActive
+                              ? "bg-accent font-extrabold text-onaccent shadow-card"
+                              : "font-semibold text-white/70",
+                          )}
+                        >
+                          <Icon
+                            name={item.icon}
+                            size={18}
+                            stroke={isActive ? 2.3 : 2}
+                            className="shrink-0"
+                          />
+                          <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+                            {item.label}
+                          </span>
+                          {badge && (
+                            <span className="cf-fig shrink-0 rounded-pill bg-gold px-[7px] py-px text-[11px] font-extrabold text-[#1C1612]">
+                              {newCount}
+                              <span className="sr-only"> nouvelles commandes</span>
+                            </span>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
 
             <div className="mt-auto flex shrink-0 items-center gap-2.5 border-t border-line pt-3">
@@ -817,15 +874,9 @@ function Shell({ children }: { children: ReactNode }) {
                 </div>
                 <div className="truncate text-xs text-mut">{city}</div>
               </div>
-              <Link
-                href="/admin/settings"
-                onClick={() => setMoreOpen(false)}
-                title="Paramètres"
-                aria-label="Paramètres"
-                className="cf-press grid size-11 shrink-0 place-items-center text-mut hover:text-white"
-              >
-                <Icon name="gear" size={17} />
-              </Link>
+              {/* Pas de rouage ici non plus — « Établissement » est au-dessus,
+                  dans le groupe « Réglages ». Voir le pied de la barre de
+                  bureau pour le raisonnement complet. */}
               <button
                 type="button"
                 onClick={logout}
