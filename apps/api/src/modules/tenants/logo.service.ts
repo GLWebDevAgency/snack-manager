@@ -12,6 +12,7 @@ import type { Tenant } from '@sm/db';
 import { IMAGE_STORE } from '../../infrastructure/tokens';
 import type { ImageStore } from '../../infrastructure/images/image-store';
 import { detecterImage, type FormatImage } from './image-signature';
+import { identiteAvecLogo } from './tenants.service';
 
 /**
  * LE LOGO DE L'ENSEIGNE — hébergé par nous, servi par nous.
@@ -104,9 +105,17 @@ export class LogoService {
         "L'hébergement d'images n'a pas accepté le fichier — réessayez, et appelez-nous si ça persiste.",
       );
     }
-    const ancienneVersion = tenant.logoUrl ? LogoService.versionDe(tenant.logoUrl) : null;
+    const ancienLogoUrl = tenant.logoUrl ?? null;
+    const ancienneVersion = ancienLogoUrl ? LogoService.versionDe(ancienLogoUrl) : null;
     const logoUrl = `${origin}/public/tenants/${tenant.slug}/logo?v=${version}`;
-    const doc = await this.tenants.findByIdAndUpdate(tenantId, { $set: { logoUrl } }, { new: true });
+    // La colonne plate ET l'emplacement du masque : depuis que `logoUrl` est
+    // dérivé de `brand.logo`, n'écrire que la première rendait le dépôt
+    // invisible sur toutes les surfaces d'un tenant déjà repris.
+    const doc = await this.tenants.findByIdAndUpdate(
+      tenantId,
+      { $set: identiteAvecLogo(tenant.brand, ancienLogoUrl, logoUrl) },
+      { new: true },
+    );
 
     // Le service suivant n'a pas à relire R2 : on vient d'avoir les octets.
     this.cache.set(tenantId, { version: logoUrl, corps, type });
@@ -120,13 +129,25 @@ export class LogoService {
     return doc;
   }
 
-  /** Retire le logo — l'objet d'abord, l'URL ensuite, le cache avec. */
+  /**
+   * Retire le logo — l'objet d'abord, les DEUX écritures ensuite, le cache avec.
+   *
+   * L'emplacement du masque se vide en même temps que la colonne plate :
+   * l'oublier laissait `brand.logo.mark.dark` pointer sur un objet qu'on
+   * venait de supprimer de R2, donc une image cassée sur la vitrine, la carte
+   * de fidélité et le tableau de menu.
+   */
   async retirer(tenantId: string) {
     const tenant = await this.tenants.findById(tenantId);
-    const version = tenant?.logoUrl ? LogoService.versionDe(tenant.logoUrl) : null;
+    const ancienLogoUrl = tenant?.logoUrl ?? null;
+    const version = ancienLogoUrl ? LogoService.versionDe(ancienLogoUrl) : null;
     if (version) await this.store.delete(LogoService.cleDe(tenantId, version)).catch(() => {});
     this.cache.delete(tenantId);
-    return this.tenants.findByIdAndUpdate(tenantId, { $set: { logoUrl: null } }, { new: true });
+    return this.tenants.findByIdAndUpdate(
+      tenantId,
+      { $set: identiteAvecLogo(tenant?.brand ?? null, ancienLogoUrl, null) },
+      { new: true },
+    );
   }
 
   /**

@@ -97,6 +97,37 @@ export function identiteAvecAccent(
   return $set;
 }
 
+/**
+ * Le fragment `$set` d'un dépôt ou d'un retrait de logo depuis le back-office.
+ *
+ * Le pendant exact de `identiteAvecAccent`, pour la même raison : `logoUrl`
+ * est devenu un DÉRIVÉ du masque à la lecture (`logoUrlDe`). Tant que `brand`
+ * vaut `null`, écrire la colonne plate suffit. Une fois `backfill:brand`
+ * passé, c'est `brand.logo` qui est rendu : le gérant déposait un nouveau
+ * logo, l'API répondait 200, et aucune surface ne le montrait. Pire au
+ * retrait — l'objet disparaissait de R2 pendant que le masque continuait de
+ * pointer dessus, donc une image cassée partout.
+ *
+ * L'emplacement du masque n'est touché QUE s'il porte encore le logo legacy
+ * (vide, ou l'URL qu'on remplace) : une déclinaison posée exprès dans
+ * l'éditeur de marque ne doit pas s'effacer parce qu'on a changé le logo du
+ * back-office. C'est `avecLogoHerite` qui remplit cet emplacement, et c'est
+ * le même qu'on entretient ici.
+ */
+export function identiteAvecLogo(
+  brand: unknown,
+  ancienLogoUrl: string | null,
+  nouveauLogoUrl: string | null,
+): Record<string, unknown> {
+  const $set: Record<string, unknown> = { logoUrl: nouveauLogoUrl };
+  const marque = brand as { logo?: { mark?: { dark?: string | null } } } | null | undefined;
+  if (marque == null) return $set;
+  const pose = marque.logo?.mark?.dark ?? null;
+  if (pose !== null && pose !== ancienLogoUrl) return $set;
+  $set['brand.logo.mark.dark'] = nouveauLogoUrl;
+  return $set;
+}
+
 export const REGLAGES_MODIFIABLES = [
   'slotIntervalMin',
   'slotCapacity',

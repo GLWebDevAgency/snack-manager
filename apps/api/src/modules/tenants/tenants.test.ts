@@ -5,6 +5,7 @@ import { DIRECTIONS, ratioContraste } from '@sm/contracts';
 import {
   derivesDuMasque,
   identiteAvecAccent,
+  identiteAvecLogo,
   REGLAGES_MODIFIABLES,
   TENANT_ME_FIELDS,
 } from './tenants.service';
@@ -210,6 +211,53 @@ describe('l’accent posé depuis l’admin', () => {
     expect(
       ratioContraste(String($set['brand.palette.onAccent']), String($set['brand.palette.accent'])),
     ).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * LE LOGO DU BACK-OFFICE DOIT ARRIVER JUSQU'AUX SURFACES.
+ *
+ * `logoUrl` est dérivé de `brand.logo` à la lecture : n'écrire que la colonne
+ * plate rendait le dépôt invisible et le retrait pire encore — l'objet parti
+ * de R2, le masque pointant toujours dessus. Le fragment `$set` est verrouillé
+ * ici, comme celui de l'accent.
+ */
+describe('le logo déposé depuis le back-office', () => {
+  const LEGACY = 'https://api.test/public/tenants/chez-lima/logo?v=1';
+  const NEUF = 'https://api.test/public/tenants/chez-lima/logo?v=2';
+  const avecLogo = (url: string | null) => ({
+    ...DIRECTIONS.nuit,
+    logo: { ...DIRECTIONS.nuit.logo, mark: { light: null, dark: url } },
+  });
+
+  it('sans masque posé, n’écrit que le champ plat', () => {
+    expect(identiteAvecLogo(null, LEGACY, NEUF)).toEqual({ logoUrl: NEUF });
+  });
+
+  it('avec un masque vide, remplit l’emplacement hérité — sinon le dépôt ne se voit nulle part', () => {
+    expect(identiteAvecLogo(avecLogo(null), null, NEUF)).toEqual({
+      logoUrl: NEUF,
+      'brand.logo.mark.dark': NEUF,
+    });
+  });
+
+  it('remplace l’URL héritée quand elle porte encore le logo qu’on change', () => {
+    expect(identiteAvecLogo(avecLogo(LEGACY), LEGACY, NEUF)).toEqual({
+      logoUrl: NEUF,
+      'brand.logo.mark.dark': NEUF,
+    });
+  });
+
+  it('au retrait, vide les DEUX : l’objet R2 disparaît, le masque ne doit plus le montrer', () => {
+    expect(identiteAvecLogo(avecLogo(LEGACY), LEGACY, null)).toEqual({
+      logoUrl: null,
+      'brand.logo.mark.dark': null,
+    });
+  });
+
+  it('épargne une déclinaison posée exprès dans l’éditeur', () => {
+    const propre = 'https://cdn.test/chez-lima/marque-sombre.svg';
+    expect(identiteAvecLogo(avecLogo(propre), LEGACY, NEUF)).toEqual({ logoUrl: NEUF });
   });
 });
 
