@@ -56,7 +56,7 @@
 /* ── Typographie fantôme : contour, jamais lu, jamais cliquable ────────── */
 .sm-ghost {
   color: transparent;
-  -webkit-text-stroke: 1.4px rgba(255, 255, 255, 0.11);
+  -webkit-text-stroke: 1.4px color-mix(in srgb, var(--cf-text) 11%, transparent);
   text-transform: uppercase;
   letter-spacing: -0.04em;
   line-height: 0.78;
@@ -76,10 +76,14 @@
   background:
     radial-gradient(
       120% 92% at 50% 4%,
-      rgba(255, 255, 255, 0.075),
-      rgba(255, 255, 255, 0) 62%
+      color-mix(in srgb, var(--cf-text) 7.5%, transparent),
+      transparent 62%
     ),
-    linear-gradient(180deg, #1d1d1d 0%, #131313 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cf-text) 5%, var(--cf-surface)) 0%,
+      color-mix(in srgb, var(--cf-text) 1%, var(--cf-surface)) 100%
+    );
 }
 /* Halo neutre sous le plat : il l'assoit sans dépenser l'accent (DA §3). */
 .sm-plate::before {
@@ -89,8 +93,8 @@
   pointer-events: none;
   background: radial-gradient(
     62% 52% at 50% 62%,
-    rgba(255, 255, 255, 0.09),
-    rgba(255, 255, 255, 0) 72%
+    color-mix(in srgb, var(--cf-text) 9%, transparent),
+    transparent 72%
   );
 }
 /* Le visuel détouré porte son ombre : sinon il flotte, découpé au ciseau. */
@@ -102,7 +106,7 @@
 /* Repli sans photo : monogramme en contour — un parti pris, pas un trou. */
 .sm-mono {
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.28);
+  -webkit-text-stroke: 1.5px color-mix(in srgb, var(--cf-text) 28%, transparent);
   letter-spacing: -0.03em;
   user-select: none;
 }
@@ -111,9 +115,9 @@
 .sm-scrim {
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.15) 42%,
-    rgba(0, 0, 0, 0.72) 78%,
+    transparent 0%,
+    color-mix(in srgb, var(--cf-bg) 15%, transparent) 42%,
+    color-mix(in srgb, var(--cf-bg) 72%, transparent) 78%,
     var(--cf-surface) 100%
   );
 }
@@ -144,7 +148,12 @@
       color-mix(in srgb, var(--cf-accent) 26%, transparent),
       transparent 58%
     ),
-    linear-gradient(180deg, #171717 0%, #0c0c0c 62%, #080808 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cf-text) 4%, var(--cf-surface)) 0%,
+      color-mix(in srgb, var(--cf-bg) 30%, var(--cf-surface)) 62%,
+      color-mix(in srgb, var(--cf-bg) 55%, var(--cf-surface)) 100%
+    );
 }
 
 /* ── Ancrage de section sous les barres collantes ────────────────────────

@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { brandColorDe } from "@sm/contracts";
+import { brandColorDe, resoudreMarque } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
@@ -39,7 +39,6 @@ import {
 } from "./cart";
 import {
   cityOf,
-  euros,
   hhmm,
   initial,
   nextOpeningLabel,
@@ -57,6 +56,7 @@ import {
   Dot,
   Glyph,
   Money,
+  Prix,
   Surface,
   Tap,
 } from "./primitives";
@@ -98,6 +98,13 @@ export function Storefront({
 }) {
   const embed = mode === "embed";
   const masque = styleDuMasque(site.tenant.brand);
+  /*
+   * `prixMono` est LU ICI, une seule fois, puis descendu en propriété. Deux
+   * paires typographiques du masque sur dix posent les prix en chasse fixe :
+   * laisser chaque composant relire la marque disperserait la règle dans dix
+   * fichiers, où elle finirait par diverger.
+   */
+  const { prixMono } = resoudreMarque(site.tenant.brand);
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
 
@@ -209,7 +216,10 @@ export function Storefront({
       style={masque}
       className={cx(
         classesPolices,
-        "font-body min-h-dvh bg-bg text-ink",
+        // `clip` et non `hidden` : `overflow-x: hidden` force `overflow-y:
+        // auto` et fait de cette racine un conteneur de défilement — les
+        // barres collantes de la carte cesseraient alors de coller.
+        "font-body min-h-dvh overflow-x-clip bg-bg text-ink",
         // Dégage la barre de panier flottante.
         cart.count > 0 ? "pb-28" : "pb-10",
       )}
@@ -234,7 +244,9 @@ export function Storefront({
         />
       )}
 
-      <main className="mx-auto w-full max-w-[560px] px-4 lg:max-w-[1080px]">
+      {/* Une seule borne, jamais un point de rupture : la colonne suit la
+          fenêtre et la grille de la carte s'y remplit d'elle-même. */}
+      <main className="mx-auto w-full max-w-[1080px] px-4">
         {notice && (
           <div className="pt-4">
             <Banner
@@ -245,7 +257,7 @@ export function Storefront({
                 <Tap
                   onClick={cart.clearDropped}
                   aria-label="Masquer"
-                  className="grid size-7 place-items-center rounded-pill text-mut hover:text-ink"
+                  className="grid size-11 place-items-center rounded-pill text-mut hover:text-ink"
                 >
                   <Icon name="close" size={14} />
                 </Tap>
@@ -263,6 +275,7 @@ export function Storefront({
             products={highlights}
             inCart={inCart}
             disabled={blocked}
+            prixMono={prixMono}
             onPick={pick}
             onBrowse={scrollToMenu}
           />
@@ -287,6 +300,7 @@ export function Storefront({
               onPick={pick}
               inCart={inCart}
               disabled={blocked}
+              prixMono={prixMono}
               stickyTop={embed ? EMBED_HEADER_H : 0}
             />
           )}
@@ -300,7 +314,7 @@ export function Storefront({
               {site.reviews.count > 0 && <Reviews site={site} />}
               <Practical site={site} cityName={cityName} />
             </div>
-            <LegalFooter site={site} cityName={cityName} />
+            <LegalFooter site={site} cityName={cityName} prixMono={prixMono} />
           </>
         )}
       </main>
@@ -311,15 +325,15 @@ export function Storefront({
           <div className="mx-auto max-w-[560px]">
             <Tap
               onClick={() => setTunnel(true)}
-              className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-3.5 py-3 text-onaccent shadow-[0_16px_40px_rgba(0,0,0,0.6)]"
+              className="flex w-full animate-pop items-center gap-3 rounded-pill bg-accent px-3.5 py-3 text-onaccent shadow-deep"
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-pill bg-black/25 text-[14px] font-extrabold tabular-nums">
+              <span className="grid size-8 shrink-0 place-items-center rounded-pill bg-bg/25 text-[14px] font-extrabold tabular-nums">
                 {cart.count}
               </span>
               <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
                 Voir mon panier
               </span>
-              <Money cents={cart.subtotal} className="text-[16px]" />
+              <Money cents={cart.subtotal} mono={prixMono} className="text-[16px]" />
               <Icon name="arrow" size={16} stroke={2.4} className="opacity-70" />
             </Tap>
           </div>
@@ -371,7 +385,7 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
 function DemoRibbon() {
   return (
     <div className="border-b border-accent/25 bg-accent/10">
-      <p className="mx-auto flex w-full max-w-[560px] items-center justify-center gap-2 px-4 py-2 text-center text-[12px] font-semibold leading-snug text-mut lg:max-w-[1080px]">
+      <p className="mx-auto flex w-full max-w-[1080px] items-center justify-center gap-2 px-4 py-2 text-center text-[12px] font-semibold leading-snug text-mut">
         <Dot tone="prep" />
         <span>
           <span className="font-extrabold uppercase tracking-[0.14em] text-ink">
@@ -424,7 +438,7 @@ function SiteHeader({
   return (
     <header className="relative">
       {/* ── Barre d’identité ── */}
-      <div className="mx-auto flex w-full max-w-[560px] items-center gap-3 px-4 pb-3 pt-4 lg:max-w-[1080px]">
+      <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 pb-3 pt-4">
         <BrandMark
           name={site.tenant.name}
           logoUrl={site.tenant.logoUrl}
@@ -432,7 +446,7 @@ function SiteHeader({
           size={44}
         />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
+          <h1 className="font-display truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
             {site.tenant.name}
           </h1>
           <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
@@ -443,7 +457,7 @@ function SiteHeader({
           <a
             href={telHref(phone)}
             aria-label={`Appeler ${site.tenant.name} au ${phone}`}
-            className="grid size-11 shrink-0 place-items-center rounded-pill border border-white/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/12 bg-surface2 text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
           >
             <Icon name="phone" size={18} />
           </a>
@@ -451,12 +465,12 @@ function SiteHeader({
       </div>
 
       {/* ── Carte d’accroche ── */}
-      <div className="mx-auto w-full max-w-[560px] px-4 pb-1 lg:max-w-[1080px]">
-        <div className="sm-hero sm-grain relative overflow-hidden rounded-wide border border-white/8 shadow-card">
+      <div className="mx-auto w-full max-w-[1080px] px-4 pb-1">
+        <div className="sm-hero sm-grain relative overflow-hidden rounded-wide border border-ink/8 shadow-card">
           {/* Nom en typographie fantôme — profondeur, jamais lu. */}
           <span
             aria-hidden
-            className="sm-ghost absolute -left-2 top-14 text-[76px] font-black opacity-70 lg:text-[112px]"
+            className="sm-ghost font-display absolute -left-2 top-14 text-[clamp(4.75rem,3.5rem+3.5vw,7rem)] font-black opacity-70"
           >
             {site.tenant.name}
           </span>
@@ -474,7 +488,7 @@ function SiteHeader({
                       ? "border-prep/45 text-prept"
                       : site.openNow
                         ? "border-ok/40 text-okt"
-                        : "border-white/14 text-mut",
+                        : "border-ink/14 text-mut",
                   )}
                 >
                   <Dot tone={paused ? "prep" : site.openNow ? "ok" : "mut"} />
@@ -493,7 +507,7 @@ function SiteHeader({
                   )}
                 </span>
                 {site.reviews.count > 0 && (
-                  <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-white/12 px-3 text-[13px] font-bold text-ink">
+                  <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-ink/12 px-3 text-[13px] font-bold text-ink">
                     <Stars value={site.reviews.avg} size={12} />
                     <span className="tabular-nums">
                       {site.reviews.avg.toLocaleString("fr-FR", {
@@ -509,7 +523,9 @@ function SiteHeader({
               </div>
 
               {/* Promesse en trois temps — la copy de la maquette. */}
-              <p className="mt-4 text-[30px] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink lg:text-[40px]">
+              {/* Corps fluide : la promesse grandit avec la fenêtre au lieu
+                  de sauter d'un cran à 1 024 px. */}
+              <p className="font-display mt-4 text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink">
                 Commandez.
                 <br />
                 Récupérez.
@@ -537,7 +553,7 @@ function SiteHeader({
                 {paused && phone && (
                   <a
                     href={telHref(phone)}
-                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-white/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+                    className="flex min-h-[52px] shrink-0 items-center gap-2 rounded-pill border border-ink/14 bg-surface2 px-5 text-[14px] font-bold text-ink transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
                   >
                     <Icon name="phone" size={16} />
                     Appeler
@@ -590,8 +606,8 @@ function EmbedHeader({
   onClose: (() => void) | null;
 }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/6 bg-bg/95 backdrop-blur-md">
-      <div className="mx-auto flex w-full max-w-[560px] items-center gap-3 px-4 py-3">
+    <header className="sticky top-0 z-40 border-b border-ink/6 bg-bg/95 backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 py-3">
         <BrandMark name={name} logoUrl={logoUrl} letter={letter} size={34} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-bold tracking-[-0.02em] text-ink">
@@ -606,7 +622,7 @@ function EmbedHeader({
           <Tap
             onClick={onClose}
             aria-label="Fermer la commande"
-            className="grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+            className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
           >
             <Icon name="close" size={16} />
           </Tap>
@@ -661,7 +677,7 @@ function PauseCard({ site }: { site: Site }) {
                   Commander par téléphone
                 </a>
               )}
-              <span className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-white/10 bg-surface2 px-4 text-[13.5px] font-semibold text-mut">
+              <span className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-ink/10 bg-surface2 px-4 text-[13.5px] font-semibold text-mut">
                 <Icon name="clock" size={15} className="shrink-0" />
                 {site.openNow
                   ? `Aujourd’hui : ${hoursOfToday(site)}`
@@ -672,7 +688,7 @@ function PauseCard({ site }: { site: Site }) {
             </div>
           </div>
         </div>
-        <p className="border-t border-white/6 bg-white/[0.02] px-5 py-3 text-[13px] text-mut">
+        <p className="border-t border-ink/6 bg-ink/[0.02] px-5 py-3 text-[13px] text-mut">
           La carte ci-dessous reste à jour&nbsp;: prix, recettes et suppléments
           sont ceux du comptoir.
         </p>
@@ -686,7 +702,7 @@ function Reviews({ site }: { site: Site }) {
     <section aria-labelledby="avis" className="pt-11">
       <h2
         id="avis"
-        className="pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
       >
         Ce qu’en disent les clients
       </h2>
@@ -694,7 +710,7 @@ function Reviews({ site }: { site: Site }) {
 
       <Surface className="p-5">
         <div className="flex items-center gap-3.5">
-          <span className="text-[40px] font-black leading-none tracking-[-0.045em] tabular-nums text-accent">
+          <span className="font-display text-[clamp(2rem,1.6rem+1.6vw,2.5rem)] font-black leading-none tracking-[-0.045em] tabular-nums text-accent">
             {site.reviews.avg.toLocaleString("fr-FR", {
               minimumFractionDigits: 1,
               maximumFractionDigits: 1,
@@ -708,7 +724,7 @@ function Reviews({ site }: { site: Site }) {
           </div>
         </div>
 
-        <ul className="mt-4 flex flex-col gap-3.5 border-t border-white/8 pt-4">
+        <ul className="mt-4 flex flex-col gap-3.5 border-t border-ink/8 pt-4">
           {site.reviews.latest.map((review) => (
             <li key={review._id}>
               <div className="flex items-center gap-2">
@@ -723,7 +739,7 @@ function Reviews({ site }: { site: Site }) {
                 </p>
               )}
               {review.reply?.text && (
-                <p className="mt-2 rounded-card border-l-2 border-accent bg-white/[0.03] px-3 py-2 text-[13px] leading-relaxed text-mut">
+                <p className="mt-2 rounded-card border-l-2 border-accent bg-ink/[0.03] px-3 py-2 text-[13px] leading-relaxed text-mut">
                   <span className="font-bold text-ink">Réponse du restaurant : </span>
                   {review.reply.text}
                 </p>
@@ -747,19 +763,19 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
     <section aria-labelledby="infos" className="pt-11">
       <h2
         id="infos"
-        className="pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+        className="font-display pb-3 text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
       >
         Infos pratiques
       </h2>
       <div aria-hidden className="sm-rule mb-4" />
 
-      <Surface className="divide-y divide-white/6">
+      <Surface className="divide-y divide-ink/6">
         {site.tenant.address && (
           <a
             href={mapsHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-white/[0.03]"
+            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-ink/[0.03]"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
               <Glyph name="pin" size={18} />
@@ -780,7 +796,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
           <a
             key={phone}
             href={telHref(phone)}
-            className="flex items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-white/[0.03]"
+            className="flex min-h-11 items-center gap-3.5 px-4 py-4 transition-colors duration-200 hover:bg-ink/[0.03]"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-card bg-surface2 text-accent">
               <Icon name="phone" size={17} />
@@ -811,7 +827,7 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
               </span>
             </span>
           </div>
-          <ul className="mt-3 flex flex-col gap-1.5 border-t border-white/6 pt-3">
+          <ul className="mt-3 flex flex-col gap-1.5 border-t border-ink/6 pt-3">
             {week.map((row) => (
               <li
                 key={row.day}
@@ -853,15 +869,23 @@ function Practical({ site, cityName }: { site: Site; cityName: string }) {
   );
 }
 
-function LegalFooter({ site, cityName }: { site: Site; cityName: string }) {
+function LegalFooter({
+  site,
+  cityName,
+  prixMono,
+}: {
+  site: Site;
+  cityName: string;
+  prixMono: boolean;
+}) {
   const year = new Date().getFullYear();
   const lowest = lowestPrice(site);
   return (
-    <footer className="mt-12 border-t border-white/6 pt-7 text-center">
+    <footer className="mt-12 border-t border-ink/6 pt-7 text-center">
       {lowest > 0 && (
-        <p className="mb-4 inline-flex items-center gap-2 rounded-pill border border-white/10 bg-surface2 px-3.5 py-2 text-[13px] text-mut">
+        <p className="mb-4 inline-flex items-center gap-2 rounded-pill border border-ink/10 bg-surface2 px-3.5 py-2 text-[13px] text-mut">
           <Badge tone="hot">Dès</Badge>
-          <span className="font-extrabold tabular-nums text-ink">{euros(lowest)}</span>
+          <Prix cents={lowest} mono={prixMono} className="font-extrabold text-ink" />
         </p>
       )}
       <p className="text-[12px] leading-relaxed text-mut">

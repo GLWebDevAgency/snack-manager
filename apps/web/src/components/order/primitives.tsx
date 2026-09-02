@@ -33,7 +33,7 @@ import {
 } from "react";
 import { cx } from "@/lib/cx";
 import { Icon, type IconName } from "@/components/ui";
-import { eurosBare } from "./helpers";
+import { euros, eurosBare } from "./helpers";
 import "./order.css";
 
 // ─────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ export function Plate({
     <span
       aria-hidden
       className={cx(
-        "sm-plate relative grid shrink-0 place-items-center overflow-hidden border border-white/6",
+        "sm-plate relative grid shrink-0 place-items-center overflow-hidden border border-ink/6",
         radius,
         className,
       )}
@@ -231,15 +231,19 @@ export function Money({
   cents,
   className,
   symbol = true,
+  mono = false,
 }: {
   cents: number | null | undefined;
   className?: string;
   symbol?: boolean;
+  /** Chasse fixe : le masque du restaurant le dicte, jamais le composant. */
+  mono?: boolean;
 }) {
   return (
     <span
       className={cx(
         "font-extrabold tabular-nums tracking-[-0.02em] whitespace-nowrap",
+        mono && "font-mono",
         className,
       )}
     >
@@ -258,16 +262,19 @@ export function PriceTag({
   cents,
   from = false,
   size = "md",
+  mono = false,
 }: {
   cents: number | null | undefined;
   /** Produit à variantes : préfixe « dès ». */
   from?: boolean;
   size?: "sm" | "md";
+  /** `prixMono` du masque — descendu depuis la vitrine, jamais relu ici. */
+  mono?: boolean;
 }) {
   return (
     <span
       className={cx(
-        "inline-flex items-baseline gap-1 rounded-ctrl border border-white/6 bg-surface2 text-ink",
+        "inline-flex items-baseline gap-1 rounded-ctrl border border-ink/6 bg-surface2 text-ink",
         size === "sm" ? "px-2 py-[3px]" : "px-2.5 py-[5px]",
       )}
     >
@@ -276,7 +283,36 @@ export function PriceTag({
           dès
         </span>
       )}
-      <Money cents={cents} className={size === "sm" ? "text-[13px]" : "text-[15px]"} />
+      <Money
+        cents={cents}
+        mono={mono}
+        className={size === "sm" ? "text-[13px]" : "text-[15px]"}
+      />
+    </span>
+  );
+}
+
+/**
+ * Montant écrit en toutes lettres (« 9,50 € »), hors pastille.
+ *
+ * La chasse fixe n'est PAS un choix de composant : deux paires typographiques
+ * du masque sur dix posent les prix en mono (l'atelier, le brut). La vitrine
+ * lit `resoudreMarque(brand).prixMono` une seule fois et le descend ; aucun
+ * composant ne relit la marque pour son propre compte — sinon la règle se
+ * disperse dans vingt fichiers et diverge au premier oubli.
+ */
+export function Prix({
+  cents,
+  mono = false,
+  className,
+}: {
+  cents: number | null | undefined;
+  mono?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={cx("tabular-nums whitespace-nowrap", mono && "font-mono", className)}>
+      {euros(cents)}
     </span>
   );
 }
@@ -322,7 +358,7 @@ export function SectionHead({
       <div className="flex items-end justify-between gap-3">
         <h2
           id={id}
-          className="text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+          className="font-display text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
         >
           {title}
         </h2>
@@ -352,7 +388,7 @@ export function Surface({
     <div
       style={style}
       className={cx(
-        "rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_120px)] shadow-card",
+        "rounded-panel border border-ink/6 bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_120px)] shadow-card",
         className,
       )}
     >
@@ -373,7 +409,7 @@ export function Dot({
     ok: "bg-ok",
     prep: "bg-prep",
     alert: "bg-alert",
-    mut: "bg-white/25",
+    mut: "bg-ink/25",
   }[tone];
   return (
     <span
@@ -396,9 +432,9 @@ export function Badge({
 }) {
   const skin = {
     new: "bg-accent text-onaccent",
-    hot: "bg-white/12 text-ink",
-    out: "border border-white/15 text-mut",
-    ok: "bg-ok text-black",
+    hot: "bg-ink/12 text-ink",
+    out: "border border-ink/15 text-mut",
+    ok: "bg-ok text-onok",
   }[tone];
   return (
     <span
@@ -435,7 +471,7 @@ export function BrandMark({
         width={size}
         height={size}
         style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
-        className="shrink-0 border border-white/10 object-cover"
+        className="shrink-0 border border-ink/10 object-cover"
       />
     );
   }
@@ -500,10 +536,11 @@ export function Stepper({
   /** Contexte lu par les lecteurs d’écran (« Kebab »). */
   label: string;
 }) {
+  // 44 px : la cible tactile minimale, sur un contrôle qu'on martèle du pouce.
   const btn =
-    "grid size-10 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-white/10";
+    "grid size-11 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-ink/10";
   return (
-    <div className="inline-flex items-center rounded-pill border border-white/12 bg-surface2 p-0.5">
+    <div className="inline-flex items-center rounded-pill border border-ink/12 bg-surface2 p-0.5">
       <Tap
         className={btn}
         onClick={() => onChange(value - 1)}
@@ -596,7 +633,7 @@ export function OptionChip({
         "inline-flex min-h-11 items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[14px] font-semibold",
         on
           ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_20%,transparent)] text-ink"
-          : "border-white/10 bg-surface2 text-ink/85 hover:border-white/25",
+          : "border-ink/10 bg-surface2 text-ink/85 hover:border-ink/25",
         disabled && "cursor-not-allowed opacity-35 active:scale-100",
       )}
     >
@@ -637,7 +674,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className="grid gap-1.5 rounded-panel border border-white/8 bg-surface2 p-1.5"
+      className="grid gap-1.5 rounded-panel border border-ink/8 bg-surface2 p-1.5"
       style={{
         // Au-delà de trois segments, deux colonnes : quatre libellés côte à
         // côte à 390 px se réduisent à des moignons illisibles.
@@ -655,7 +692,7 @@ export function Segmented<T extends string>({
             className={cx(
               "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-card px-2 py-2 text-center",
               on
-                ? "bg-accent text-onaccent shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                ? "bg-accent text-onaccent shadow-card"
                 : "text-mut hover:text-ink",
             )}
           >
@@ -708,7 +745,7 @@ export function OptionRow({
       aria-checked={on}
       className={cx(
         TAP_ROW,
-        "flex min-h-[52px] w-full items-center gap-3 border-b border-white/6 py-3 text-left last:border-b-0",
+        "flex min-h-[52px] w-full items-center gap-3 border-b border-ink/6 py-3 text-left last:border-b-0",
         disabled && "cursor-not-allowed opacity-35",
       )}
     >
@@ -717,7 +754,7 @@ export function OptionRow({
         className={cx(
           "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-200 ease-sm",
           radio ? "rounded-full" : "rounded-[7px]",
-          on ? "border-accent bg-accent text-onaccent" : "border-white/25",
+          on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
         )}
       >
         {on && <Icon name="check" size={13} stroke={3} />}
@@ -771,7 +808,7 @@ export function ChoiceCard({
         "flex w-full items-center gap-3 rounded-panel border p-3.5 text-left",
         on
           ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_10%,var(--cf-surface))]"
-          : "border-white/8 bg-surface hover:border-white/20",
+          : "border-ink/8 bg-surface hover:border-ink/20",
         disabled && "cursor-not-allowed opacity-40",
       )}
     >
@@ -791,7 +828,7 @@ export function ChoiceCard({
         aria-hidden
         className={cx(
           "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200 ease-sm",
-          on ? "border-accent bg-accent text-onaccent" : "border-white/25",
+          on ? "border-accent bg-accent text-onaccent" : "border-ink/25",
         )}
       >
         {on && <Icon name="check" size={12} stroke={3} />}
@@ -950,7 +987,7 @@ export function Sheet({
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-black/72 transition-opacity duration-300 ease-sm"
+        className="absolute inset-0 bg-bg/72 transition-opacity duration-300 ease-sm"
         style={{ opacity: shown ? Math.max(0, 1 - drag / 320) : 0 }}
       />
       <div
@@ -960,7 +997,7 @@ export function Sheet({
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : label}
         tabIndex={-1}
-        className="relative flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-t-wide border-x border-t border-white/10 bg-surface shadow-[0_-20px_70px_rgba(0,0,0,0.72)] outline-none"
+        className="relative flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-t-wide border-x border-t border-ink/10 bg-surface shadow-deep outline-none"
         style={{
           maxHeight,
           height: fill ? maxHeight : undefined,
@@ -970,7 +1007,7 @@ export function Sheet({
       >
         {chrome === "bar" ? (
           <div
-            className="sm-grab relative shrink-0 border-b border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)] px-4 pb-3 pt-2.5"
+            className="sm-grab relative shrink-0 border-b border-ink/6 bg-[linear-gradient(180deg,var(--cf-surface-6),transparent)] px-4 pb-3 pt-2.5"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
@@ -978,14 +1015,14 @@ export function Sheet({
           >
             <span
               aria-hidden
-              className="mx-auto mb-3 block h-1 w-9 rounded-full bg-white/20"
+              className="mx-auto mb-3 block h-1 w-9 rounded-full bg-ink/20"
             />
             <div className="flex items-start gap-3">
               {onBack && (
                 <Tap
                   onClick={onBack}
                   aria-label="Étape précédente"
-                  className="-ml-1 grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+                  className="-ml-1 grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
                 >
                   <Icon name="back" size={16} />
                 </Tap>
@@ -994,7 +1031,7 @@ export function Sheet({
                 {title && (
                   <h2
                     id={titleId}
-                    className="truncate text-[19px] font-extrabold tracking-[-0.025em] text-ink"
+                    className="font-display truncate text-[19px] font-extrabold tracking-[-0.025em] text-ink"
                   >
                     {title}
                   </h2>
@@ -1004,7 +1041,7 @@ export function Sheet({
               <Tap
                 onClick={onClose}
                 aria-label="Fermer"
-                className="grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+                className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
               >
                 <Icon name="close" size={16} />
               </Tap>
@@ -1014,7 +1051,7 @@ export function Sheet({
           <div
             className={cx(
               "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-300 ease-sm",
-              sunk ? "border-b border-white/8 bg-surface/95 backdrop-blur-md" : "",
+              sunk ? "border-b border-ink/8 bg-surface/95 backdrop-blur-md" : "",
             )}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -1024,13 +1061,13 @@ export function Sheet({
             {/* Poignée : visible tant que le visuel occupe la tête de feuille. */}
             <span
               aria-hidden
-              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/45 shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-opacity duration-300"
+              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-ink/45 shadow-card transition-opacity duration-300"
               style={{ opacity: sunk ? 0 : 1 }}
             />
             {title && (
               <h2
                 id={titleId}
-                className="min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-300"
+                className="font-display min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-300"
                 style={{ opacity: sunk ? 1 : 0 }}
               >
                 {title}
@@ -1040,10 +1077,10 @@ export function Sheet({
               onClick={onClose}
               aria-label="Fermer"
               className={cx(
-                "ml-auto grid size-10 shrink-0 place-items-center rounded-pill border text-white transition-colors duration-300",
+                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-300",
                 sunk
-                  ? "border-white/12 bg-surface2 text-ink hover:border-white/30"
-                  : "border-white/15 bg-black/55 backdrop-blur-md hover:bg-black/75",
+                  ? "border-ink/12 bg-surface2 hover:border-ink/30"
+                  : "border-ink/15 bg-bg/55 backdrop-blur-md hover:bg-bg/75",
               )}
             >
               <Icon name="close" size={17} stroke={2.4} />
@@ -1066,7 +1103,7 @@ export function Sheet({
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(0deg,var(--cf-surface),var(--cf-surface))] px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
+          <div className="shrink-0 border-t border-ink/8 bg-[linear-gradient(0deg,var(--cf-surface),var(--cf-surface))] px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
             {footer}
           </div>
         )}
@@ -1094,7 +1131,7 @@ export function Banner({
   action?: ReactNode;
 }) {
   const ring = {
-    info: "border-white/10",
+    info: "border-ink/10",
     ok: "border-ok/35",
     prep: "border-prep/40",
     alert: "border-alert/45",
@@ -1196,7 +1233,7 @@ export function GhostAction({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "flex min-h-12 w-full items-center justify-center gap-2 rounded-pill border border-white/12 bg-surface2 px-5 text-[14px] font-bold text-ink hover:border-white/30",
+        "flex min-h-12 w-full items-center justify-center gap-2 rounded-pill border border-ink/12 bg-surface2 px-5 text-[14px] font-bold text-ink hover:border-ink/30",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100",
       )}
     >

@@ -40,6 +40,7 @@ export function MenuBoard({
   inCart,
   disabled = false,
   stickyTop = 0,
+  prixMono = false,
 }: {
   categories: MenuCategory[];
   onPick: (product: MenuProduct) => void;
@@ -48,6 +49,8 @@ export function MenuBoard({
   disabled?: boolean;
   /** Décalage vertical du bloc collant (en-tête d’embed au-dessus). */
   stickyTop?: number;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(categories[0]?.id ?? "");
@@ -134,7 +137,7 @@ export function MenuBoard({
       {/* ── Recherche + rail de catégories, collants sous l’en-tête ── */}
       <div
         style={{ top: stickyTop }}
-        className="sticky z-30 -mx-4 border-b border-white/6 bg-bg/95 px-4 pb-2 pt-3 backdrop-blur-md"
+        className="sticky z-30 -mx-4 border-b border-ink/6 bg-bg/95 px-4 pb-2 pt-3 backdrop-blur-md"
       >
         <div className="relative">
           <Icon
@@ -148,15 +151,19 @@ export function MenuBoard({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Un kebab ? Un tacos gratiné ?"
             aria-label="Rechercher dans la carte"
-            className="h-11 w-full rounded-pill border border-white/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent"
+            className="h-11 w-full rounded-pill border border-ink/8 bg-surface2 pl-10 pr-10 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/75 focus:border-accent"
           />
           {query && (
             <Tap
               onClick={() => setQuery("")}
               aria-label="Effacer la recherche"
-              className="absolute right-2.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-pill bg-white/8 text-mut hover:text-ink"
+              /* La cible fait 44 px, la pastille visible 28 : le pouce vise
+                 large sans qu'une gomme énorme s'installe dans le champ. */
+              className="absolute right-1 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-pill text-mut hover:text-ink"
             >
-              <Icon name="close" size={13} />
+              <span className="grid size-7 place-items-center rounded-pill bg-ink/8">
+                <Icon name="close" size={13} />
+              </span>
             </Tap>
           )}
         </div>
@@ -181,9 +188,9 @@ export function MenuBoard({
                     // Onglet actif : filet blanc, pas d'aplat de marque. L'accent
                     // reste réservé aux boutons d'ajout (DA §3) — sinon vingt
                     // pastilles d'ajout et un onglet doré se disputent l'œil.
-                    "flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-[13.5px] font-bold",
+                    "flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill border px-4 text-[13.5px] font-bold",
                     on
-                      ? "border-white/45 bg-surface2 text-ink"
+                      ? "border-ink/45 bg-surface2 text-ink"
                       : "border-transparent bg-surface2 text-mut hover:text-ink",
                   )}
                 >
@@ -191,7 +198,7 @@ export function MenuBoard({
                   <span
                     className={cx(
                       "text-[11px] font-extrabold tabular-nums",
-                      on ? "text-mut" : "text-white/30",
+                      on ? "text-mut" : "text-ink/30",
                     )}
                   >
                     {category.products.length}
@@ -229,16 +236,20 @@ export function MenuBoard({
               title={category.name}
               note={categoryNote(category)}
             />
-            {/* Deux colonnes au-delà de 1024 px : une seule colonne de cartes
-                au milieu d'un écran de bureau ressemble à une capture de
-                téléphone collée sur un mur. */}
-            <div className="grid gap-2.5 lg:grid-cols-2">
+            {/* Aucun point de rupture : la grille se remplit de colonnes de
+                17 rem minimum — une sur téléphone, trois ou quatre sur un
+                écran large — et `min(100%,…)` empêche la colonne d'être plus
+                large que la place disponible, donc jamais de barre
+                horizontale. Une seule colonne de cartes au milieu d'un écran
+                de bureau ressemblait à une capture de téléphone sur un mur. */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-2.5">
               {category.products.map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}
                   qty={inCart[product.id] ?? 0}
                   disabled={disabled}
+                  prixMono={prixMono}
                   onPick={() => onPick(product)}
                 />
               ))}
@@ -284,11 +295,13 @@ function ProductCard({
   product,
   qty,
   disabled,
+  prixMono,
   onPick,
 }: {
   product: MenuProduct;
   qty: number;
   disabled: boolean;
+  prixMono: boolean;
   onPick: () => void;
 }) {
   const unavailable = product.outOfStock;
@@ -297,8 +310,11 @@ function ProductCard({
   return (
     <article
       className={cx(
-        "relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
-        qty > 0 ? "border-accent/45" : "border-white/6",
+        // `@container` sur la CARTE : c'est SA colonne qu'elle interroge,
+        // pas la largeur de la grille — deux cartes de la même page peuvent
+        // ainsi tenir des dispositions différentes si la grille le veut.
+        "@container relative h-full overflow-hidden rounded-panel border bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_90px)] shadow-card transition-colors duration-200 ease-sm",
+        qty > 0 ? "border-accent/45" : "border-ink/6",
         unavailable && "opacity-55",
       )}
     >
@@ -306,25 +322,30 @@ function ProductCard({
         onClick={onPick}
         disabled={!clickable}
         aria-label={`${product.name}${product.configurable ? " — composer" : " — ajouter au panier"}`}
+        /* La disposition suit la COLONNE, pas l'écran. Au-delà de 20 rem
+           le visuel se range à gauche du texte — la liste dense, scannable,
+           du téléphone comme du bureau. En dessous (une grille à colonnes
+           serrées), le nom du plat n'aurait plus que ~130 px à côté de la
+           vignette : le visuel passe alors au-dessus, pleine largeur. */
         className={cx(
-          "flex h-full w-full items-stretch gap-3.5 p-3 text-left",
+          "flex h-full w-full flex-col items-stretch gap-3 p-3 text-left @xs:flex-row @xs:gap-3.5",
           !clickable && "cursor-default active:scale-100",
         )}
       >
         <Plate
           photoUrl={product.photoUrl}
           name={product.name}
-          mono={24}
+          mono={28}
           pad="p-[3%]"
           /* Plateau LÉGÈREMENT paysage : les visuels détourés de la carte le
              sont presque tous (582×395, 665×329…). Dans un carré, ils
              s'inscrivent par la largeur et laissent deux bandes vides. */
-          className="h-[92px] w-[104px]"
+          className="h-[136px] w-full @xs:h-[92px] @xs:w-[104px]"
         />
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-start gap-2">
-            <h3 className="min-w-0 flex-1 text-[16.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
+            <h3 className="font-display min-w-0 flex-1 text-[16.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
               {product.name}
             </h3>
             {product.isNew && !unavailable && (
@@ -349,7 +370,11 @@ function ProductCard({
               // Pas de mention « à composer » : sur cette carte, presque tout
               // se compose — la pastille à curseurs le dit déjà, un libellé
               // répété vingt fois n'informe plus, il encombre.
-              <PriceTag cents={product.fromPrice} from={product.variants.length > 0} />
+              <PriceTag
+                cents={product.fromPrice}
+                from={product.variants.length > 0}
+                mono={prixMono}
+              />
             )}
             {clickable && <AddButton qty={qty} compose={product.configurable} />}
           </div>
@@ -376,12 +401,15 @@ export function Highlights({
   products,
   inCart,
   disabled,
+  prixMono = false,
   onPick,
   onBrowse,
 }: {
   products: MenuProduct[];
   inCart: Record<string, number>;
   disabled: boolean;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono?: boolean;
   onPick: (product: MenuProduct) => void;
   onBrowse: () => void;
 }) {
@@ -412,7 +440,7 @@ export function Highlights({
               aria-label={`${product.name} — ${euros(product.fromPrice)}`}
               className={cx(
                 "w-[172px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
-                qty > 0 ? "border-accent/45" : "border-white/6",
+                qty > 0 ? "border-accent/45" : "border-ink/6",
               )}
             >
               {/* Le visuel occupe la moitié de la carte : c'est le rail qui
@@ -424,7 +452,7 @@ export function Highlights({
                   mono={46}
                   pad="p-[9%]"
                   radius="rounded-none"
-                  className="h-[130px] w-full border-0 border-b border-white/6"
+                  className="h-[130px] w-full border-0 border-b border-ink/6"
                 />
                 {product.isNew && (
                   <span className="absolute left-2 top-2">
@@ -433,7 +461,7 @@ export function Highlights({
                 )}
               </span>
               <span className="block px-3 pb-3 pt-2.5">
-                <span className="block truncate text-[14.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
+                <span className="font-display block truncate text-[14.5px] font-bold leading-tight tracking-[-0.02em] text-ink">
                   {product.name}
                 </span>
                 <span className="mt-2.5 flex items-center justify-between gap-2">
@@ -441,6 +469,7 @@ export function Highlights({
                     cents={product.fromPrice}
                     from={product.variants.length > 0}
                     size="sm"
+                    mono={prixMono}
                   />
                   <span
                     aria-hidden

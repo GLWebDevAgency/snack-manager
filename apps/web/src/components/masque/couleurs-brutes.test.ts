@@ -15,11 +15,8 @@ const REPERTOIRES = ["app/r", "app/embed", "app/t", "components/order", "compone
 
 /** Fichiers pas encore repassés — cette liste DOIT être vide à la fin de la Task 12. */
 const EN_ATTENTE = new Set<string>([
-  "components/order/primitives.tsx",
   "components/order/Checkout.tsx",
-  "components/order/Storefront.tsx",
   "components/order/Tracking.tsx",
-  "components/order/MenuBoard.tsx",
   "components/order/ProductSheet.tsx",
   "components/order/StripeCard.tsx",
   "components/order/TurnstileCheck.tsx",
