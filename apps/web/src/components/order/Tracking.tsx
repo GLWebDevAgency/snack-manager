@@ -11,13 +11,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OrderStatus, OrderTicket } from "@sm/contracts";
+import type { Brand, OrderStatus, OrderTicket } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { loadTracking, type TrackingState } from "./api";
-import { euros, hhmm, onAccent, safeColor } from "./helpers";
+import { euros, hhmm } from "./helpers";
 import { Banner, Dot, Money, Surface } from "./primitives";
-import type { CSSProperties } from "react";
 
 const POLL_MS = 10_000;
 
@@ -41,7 +42,7 @@ export function Tracking({
   trackingToken,
   ticket,
   initial,
-  accent,
+  brand,
 }: {
   orderId: string;
   /** Secret du lien de suivi : sans lui, le rafraîchissement reçoit un 404. */
@@ -54,7 +55,7 @@ export function Tracking({
   ticket: OrderTicket | null;
   /** Premier état connu — évite un écran vide au chargement. */
   initial: TrackingState;
-  accent: string;
+  brand: Brand;
 }) {
   const [state, setState] = useState<TrackingState>(initial);
   const [stale, setStale] = useState(false);
@@ -93,11 +94,7 @@ export function Tracking({
     };
   }, [finished, refresh]);
 
-  const themed = {
-    "--cf-accent": safeColor(accent),
-    "--cf-accent-hover": safeColor(accent),
-    "--cf-on-accent": onAccent(safeColor(accent)),
-  } as CSSProperties;
+  const masque = styleDuMasque(brand);
 
   const slotIso = ticket?.pickup?.slotIso ?? state.pickupSlot;
   const slotLabel = slotIso ? hhmm(slotIso) : null;
@@ -105,7 +102,10 @@ export function Tracking({
   const phones = ticket?.header.phones ?? [];
 
   return (
-    <main style={themed} className="min-h-dvh bg-bg pb-16 text-ink">
+    <main
+      style={masque}
+      className={cx(classesPolices, "font-body min-h-dvh bg-bg pb-16 text-ink")}
+    >
       <header className="border-b border-white/6 bg-[linear-gradient(180deg,#111,#000)] px-4 pb-6 pt-6">
         <div className="mx-auto w-full max-w-[520px]">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">

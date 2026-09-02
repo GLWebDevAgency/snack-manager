@@ -22,9 +22,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import { brandColorDe } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { networkApi, type MenuProduct, type OrderingApi, type Site } from "./api";
 import {
   draftFromLine,
@@ -41,8 +43,6 @@ import {
   hhmm,
   initial,
   nextOpeningLabel,
-  onAccent,
-  safeColor,
   telHref,
   weekSchedule,
 } from "./helpers";
@@ -97,7 +97,7 @@ export function Storefront({
   demo?: boolean;
 }) {
   const embed = mode === "embed";
-  const accent = safeColor(site.tenant.brandColor);
+  const masque = styleDuMasque(site.tenant.brand);
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
 
@@ -200,23 +200,16 @@ export function Storefront({
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  // Marque grise : SEUL l’accent change d’un restaurant à l’autre. Les couleurs
-  // fonctionnelles (vert prêt / rouge alerte / ambre préparation) restent fixes.
-  const themed = {
-    "--cf-accent": accent,
-    "--cf-accent-hover": accent,
-    "--cf-on-accent": onAccent(accent),
-  } as CSSProperties;
-
   const cityName = cityOf(site.tenant.address);
   const letter = initial(site.tenant.name);
 
   return (
     <div
       ref={rootRef}
-      style={themed}
+      style={masque}
       className={cx(
-        "min-h-dvh bg-bg text-ink",
+        classesPolices,
+        "font-body min-h-dvh bg-bg text-ink",
         // Dégage la barre de panier flottante.
         cart.count > 0 ? "pb-28" : "pb-10",
       )}
@@ -351,7 +344,7 @@ export function Storefront({
         slug={site.tenant.slug}
         tenantName={site.tenant.name}
         tenantAddress={site.tenant.address}
-        accent={accent}
+        accent={brandColorDe(site.tenant.brand)}
         cart={cart}
         paused={paused}
         pauseMessage={site.ordering.message}

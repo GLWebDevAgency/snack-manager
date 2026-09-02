@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { loadBrandColor, PublicApiError } from "@/components/order/api";
+import { marqueEffective } from "@sm/contracts";
+import { loadBrand, PublicApiError } from "@/components/order/api";
 import { Tracking } from "@/components/order/Tracking";
 import { loadTicket, loadTracking, readToken } from "./tracking-api";
 
@@ -52,7 +53,10 @@ export default async function TrackingPage({ params, searchParams }: Params) {
   }
 
   const ticket = await loadTicket(id, token).catch(() => null);
-  const accent = ticket ? await loadBrandColor(ticket.header.slug) : "#c9a15a";
+  // Sans ticket, pas de slug pour interroger l'API : le masque de repli seul.
+  const brand = ticket
+    ? await loadBrand(ticket.header.slug)
+    : marqueEffective({ brand: null, brandColor: null, logoUrl: null });
 
   return (
     <Tracking
@@ -60,7 +64,7 @@ export default async function TrackingPage({ params, searchParams }: Params) {
       trackingToken={token}
       ticket={ticket}
       initial={state}
-      accent={accent}
+      brand={brand}
     />
   );
 }

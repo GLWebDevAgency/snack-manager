@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loyaltyTokenFromQrPayload,
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
 } from "@sm/contracts";
 import { Btn, Card, Icon, Modal, Pill, Skeleton } from "@/components/ui";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
+import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
-import { tenantAccentPalette } from "@/lib/tenant-accent";
 import {
   LoyaltyCustomerSessionError,
   forgetCustomerLoyaltyCard,
@@ -223,17 +225,18 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
     setInstallPrompt(null);
   }
 
-  const { accent, onAccent } = tenantAccentPalette(catalog.restaurant.brandColor);
-  const style = {
-    "--cf-accent": accent,
-    "--cf-accent-hover": accent,
-    "--cf-on-accent": onAccent,
-  } as CSSProperties;
+  const masque = styleDuMasque(catalog.restaurant.brand);
   const unitPlural = catalog.program.unitLabelPlural;
   const unitSingular = catalog.program.unitLabelSingular;
 
   return (
-    <div style={style} className="min-h-dvh bg-bg pb-[max(28px,env(safe-area-inset-bottom))] text-ink">
+    <div
+      style={masque}
+      className={cx(
+        classesPolices,
+        "font-body min-h-dvh bg-bg pb-[max(28px,env(safe-area-inset-bottom))] text-ink",
+      )}
+    >
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true" data-dialog-allow>
         {scanAnnouncement}
       </p>

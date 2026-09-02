@@ -19,29 +19,30 @@ import {
   Libre_Baskerville, Manrope, Nunito, Nunito_Sans, Outfit, Playfair_Display, Source_Sans_3,
 } from "next/font/google";
 
-// `subsets` doit rester un tableau MUTABLE (littéral, pas `readonly`) : chaque
-// fonction next/font/google attend `Array<"latin" | ...>`, incompatible avec
-// le tuple `readonly ["latin"]` que produirait `as const` ici.
-const commun = { subsets: ["latin"] as Array<"latin">, display: "swap" as const, preload: false };
+// `next/font/google` analyse l'appel STATIQUEMENT (Turbopack/webpack) pour en
+// extraire la configuration au moment du build : l'objet passé doit donc être
+// un littéral, sans spread ni référence à une constante partagée — un
+// `{ ...commun, … }` fait échouer le build avec « Unexpected spread ». D'où
+// la répétition de `subsets`/`display`/`preload` sur chaque appel ci-dessous.
 
-const fraunces = Fraunces({ ...commun, variable: "--police-fraunces" });
-const sourceSans3 = Source_Sans_3({ ...commun, variable: "--police-source-sans-3" });
-const bricolage = Bricolage_Grotesque({ ...commun, variable: "--police-bricolage-grotesque" });
-const archivo = Archivo({ ...commun, variable: "--police-archivo" });
-const alegreyaSans = Alegreya_Sans({ ...commun, weight: ["400", "500", "700", "800"], variable: "--police-alegreya-sans" });
-const jetbrains = JetBrains_Mono({ ...commun, variable: "--police-jetbrains-mono" });
-const outfit = Outfit({ ...commun, variable: "--police-outfit" });
-const manrope = Manrope({ ...commun, variable: "--police-manrope" });
-const cormorant = Cormorant_Garamond({ ...commun, weight: ["400", "500", "600", "700"], variable: "--police-cormorant-garamond" });
-const figtree = Figtree({ ...commun, variable: "--police-figtree" });
-const nunito = Nunito({ ...commun, variable: "--police-nunito" });
-const nunitoSans = Nunito_Sans({ ...commun, variable: "--police-nunito-sans" });
-const playfair = Playfair_Display({ ...commun, variable: "--police-playfair-display" });
-const familjen = Familjen_Grotesk({ ...commun, variable: "--police-familjen-grotesk" });
-const instrument = Instrument_Sans({ ...commun, variable: "--police-instrument-sans" });
-const libreBaskerville = Libre_Baskerville({ ...commun, weight: ["400", "700"], variable: "--police-libre-baskerville" });
-const lato = Lato({ ...commun, weight: ["400", "700", "900"], variable: "--police-lato" });
-const archivoBlack = Archivo_Black({ ...commun, weight: "400", variable: "--police-archivo-black" });
+const fraunces = Fraunces({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-fraunces" });
+const sourceSans3 = Source_Sans_3({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-source-sans-3" });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-bricolage-grotesque" });
+const archivo = Archivo({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-archivo" });
+const alegreyaSans = Alegreya_Sans({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "500", "700", "800"], variable: "--police-alegreya-sans" });
+const jetbrains = JetBrains_Mono({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-jetbrains-mono" });
+const outfit = Outfit({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-outfit" });
+const manrope = Manrope({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-manrope" });
+const cormorant = Cormorant_Garamond({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "500", "600", "700"], variable: "--police-cormorant-garamond" });
+const figtree = Figtree({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-figtree" });
+const nunito = Nunito({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-nunito" });
+const nunitoSans = Nunito_Sans({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-nunito-sans" });
+const playfair = Playfair_Display({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-playfair-display" });
+const familjen = Familjen_Grotesk({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-familjen-grotesk" });
+const instrument = Instrument_Sans({ subsets: ["latin"], display: "swap", preload: false, variable: "--police-instrument-sans" });
+const libreBaskerville = Libre_Baskerville({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "700"], variable: "--police-libre-baskerville" });
+const lato = Lato({ subsets: ["latin"], display: "swap", preload: false, weight: ["400", "700", "900"], variable: "--police-lato" });
+const archivoBlack = Archivo_Black({ subsets: ["latin"], display: "swap", preload: false, weight: "400", variable: "--police-archivo-black" });
 
 const TOUTES = [
   fraunces, sourceSans3, bricolage, archivo, alegreyaSans, jetbrains, outfit, manrope,
