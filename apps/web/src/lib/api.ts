@@ -240,7 +240,30 @@ export type TenantMe = {
     dinner: { open: string; close: string } | null;
   }[];
   closures: { from?: string; to?: string; reason?: string }[];
-  plan: "essentiel" | "complet" | "boost";
+  /**
+   * LA FORMULE SOUSCRITE — `null` compris.
+   *
+   * `null` n'est pas une anomalie : un client peut n'acheter QUE des services
+   * de l'Atelier (site, présence, réseaux) sans formule logicielle. Le type
+   * l'omettait, et la barre de navigation aurait pris ce cas pour un
+   * « essentiel ».
+   */
+  plan: "essentiel" | "complet" | "boost" | null;
+  /**
+   * Le module de commande en ligne — une SOUSCRIPTION, vendue à part de la
+   * formule. À ne pas confondre avec `settings.onlineOrderingPaused`, qui est
+   * la pause d'exploitation d'un soir de coup de feu : ici c'est ce que le
+   * restaurant a acheté, là c'est ce qu'il a décidé ce soir.
+   */
+  onlineOrdering: boolean;
+  /**
+   * L'état du compte — le seul champ qui décide de l'ACCÈS.
+   *
+   * Réduit à son statut par l'API : le motif d'une suspension est un litige
+   * commercial, il ne descend pas jusqu'aux écrans. `trial` quand le compte
+   * n'a jamais été écrit — un champ manquant ne ferme pas un restaurant.
+   */
+  account: { status: "trial" | "active" | "suspended" | "churned" };
   settings: {
     slotIntervalMin: number;
     slotCapacity: number;

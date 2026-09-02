@@ -690,6 +690,13 @@ export function createWorld(bootAt: number): DemoWorld {
       reason: c.reason,
     })),
     plan: S.SNAP_TENANT.plan as TenantMe["plan"],
+    // Absents de l'instantané (photographié avant que `GET /tenants/me` ne les
+    // rende), et posés à la main comme les fermetures ci-dessus. Le Comptoir
+    // est le restaurant que la démonstration promet : formule Complet, module
+    // de commande en ligne souscrit, compte en règle. Un compte suspendu ferait
+    // visiter la porte fermée à qui vient voir le logiciel.
+    onlineOrdering: true,
+    account: { status: "active" },
     settings: { ...(S.SNAP_TENANT.settings as TenantMe["settings"]), dailyGoalCents: 90_000 },
   };
 

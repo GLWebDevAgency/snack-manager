@@ -140,6 +140,7 @@ describe('la fiche établissement rendue aux tablettes', () => {
     // toujours d'une projection Mongo et n'a pas à y figurer.
     expect(Object.keys(TENANT_ME_FIELDS).sort()).toEqual(
       [
+        'account.status',
         'address',
         'brand',
         'brandColor',
@@ -147,6 +148,7 @@ describe('la fiche établissement rendue aux tablettes', () => {
         'hours',
         'logoUrl',
         'name',
+        'onlineOrdering',
         'phones',
         'plan',
         'settings',
@@ -155,24 +157,52 @@ describe('la fiche établissement rendue aux tablettes', () => {
     );
   });
 
+  it('porte les trois champs dont la barre de navigation a besoin', () => {
+    // Sans eux, le front n'a pas la donnée et montre la même barre à tout le
+    // monde : « Encaissement en ligne » sur une tablette de comptoir (403 au
+    // clic), les écrans de commande en ligne à qui n'a pas le module, et rien
+    // du tout pour signaler un compte suspendu.
+    for (const champ of ['plan', 'onlineOrdering', 'account.status']) {
+      expect(Object.keys(TENANT_ME_FIELDS), `« ${champ} » manque à la barre`).toContain(champ);
+    }
+  });
+
   it('ne rend AUCUN des champs qui fuyaient', () => {
     // Nommés un par un : c'est la liste qu'un équipier de cuisine lisait, et
-    // celle qu'une régression rouvrirait.
+    // celle qu'une régression rouvrirait. `Object.keys` et non `toHaveProperty`
+    // — un point y est un chemin, et `account.reason` passerait tout seul.
+    const ouverts = Object.keys(TENANT_ME_FIELDS);
     for (const secret of [
       'billing',
       'siret',
       'tvaNumber',
       'stripe',
       'encaissement',
-      'account',
       'atelier',
       'founderDiscountCents',
       'founderUntil',
-      'onlineOrdering',
       'billingCycle',
     ]) {
-      expect(TENANT_ME_FIELDS, `« ${secret} » ne doit pas sortir sur une tablette`).not.toHaveProperty(
-        secret,
+      expect(ouverts, `« ${secret} » ne doit pas sortir sur une tablette`).not.toContain(secret);
+    }
+  });
+
+  it('n’ouvre du compte que son statut — jamais le sous-document entier', () => {
+    // `account` porte le motif de suspension (« Impayé de juillet »), la cause
+    // de départ et le calendrier d'essai. Projeter `account: 1` pour le seul
+    // statut rouvrirait la fuite, et la rouvrirait encore à chaque champ ajouté
+    // demain au sous-document.
+    const ouverts = Object.keys(TENANT_ME_FIELDS);
+    expect(ouverts, 'le sous-document `account` ne s’ouvre pas en entier').not.toContain('account');
+    for (const voisin of [
+      'account.reason',
+      'account.churnCause',
+      'account.suspendedAt',
+      'account.trialEndsAt',
+      'account.since',
+    ]) {
+      expect(ouverts, `« ${voisin} » relève du litige commercial, pas de l’écran`).not.toContain(
+        voisin,
       );
     }
   });
@@ -291,6 +321,26 @@ describe('les champs plats rendus par les routes du tenant', () => {
     expect(vue.slug).toBe('x');
   });
 
+  it('réduisent le compte à son statut — le motif d’une suspension n’est pas un affichage', () => {
+    // La projection ne demande déjà que `account.status`. Cette réduction tient
+    // la promesse une seconde fois, et surtout elle fixe LA FORME : sans elle,
+    // un tenant d'avant le champ `account` verrait Mongoose matérialiser le
+    // sous-document de défaut en entier, et la réponse changerait de forme d'un
+    // restaurant à l'autre.
+    const vue = derivesDuMasque({
+      slug: 'z',
+      brand: null,
+      account: { status: 'suspended', reason: 'Impayé de juillet', suspendedAt: '2026-08-01' },
+    });
+    expect(vue.account).toEqual({ status: 'suspended' });
+  });
+
+  it('rendent le statut le plus permissif quand le compte manque', () => {
+    // Les tenants créés avant le champ `account` n'en ont pas en base. Un champ
+    // jamais écrit ne doit pas fermer un restaurant en plein service.
+    expect(derivesDuMasque({ slug: 'z', brand: null }).account).toEqual({ status: 'trial' });
+  });
+
   it('retombent sur le repli — l’accent BRUT du tenant — tant qu’aucun masque n’est posé', () => {
     const vue = derivesDuMasque({
       slug: 'y',
@@ -340,12 +390,34 @@ function fakeTenants(doc: Record<string, unknown>) {
     }
   };
 
+  /*
+   * Les CHEMINS POINTÉS sont projetés comme Mongo le fait : `account.status`
+   * rend `{ account: { status } }` et laisse le motif de suspension en base.
+   * Une doublure qui recopierait le sous-document entier ferait passer pour
+   * une réussite exactement la fuite que la projection ferme.
+   */
   const projeter = (projection?: Record<string, unknown>) => {
     const vu = structuredClone(etat);
     if (!projection) return vu;
     const sortie: Record<string, unknown> = { _id: vu._id };
-    for (const [clef, garde] of Object.entries(projection)) {
-      if (garde === 1 && clef in vu) sortie[clef] = vu[clef];
+    for (const [chemin, garde] of Object.entries(projection)) {
+      if (garde !== 1) continue;
+      const segments = chemin.split('.');
+      let source: unknown = vu;
+      for (const segment of segments) {
+        if (source === null || typeof source !== 'object' || !(segment in source)) {
+          source = undefined;
+          break;
+        }
+        source = (source as Record<string, unknown>)[segment];
+      }
+      if (source === undefined) continue;
+      let cible = sortie;
+      for (const segment of segments.slice(0, -1)) {
+        if (cible[segment] === null || typeof cible[segment] !== 'object') cible[segment] = {};
+        cible = cible[segment] as Record<string, unknown>;
+      }
+      cible[segments[segments.length - 1]!] = source;
     }
     return sortie;
   };
@@ -372,7 +444,7 @@ function fakeTenants(doc: Record<string, unknown>) {
   };
 }
 
-/** Le document tel qu'il dort en base : onze champs utiles, le reste privé. */
+/** Le document tel qu'il dort en base : les champs utiles, le reste privé. */
 const DOCUMENT = {
   slug: 'chez-lima',
   name: 'Chez Lima',
@@ -386,13 +458,17 @@ const DOCUMENT = {
   hours: [],
   closures: [],
   plan: 'complet',
+  onlineOrdering: true,
   settings: { slotIntervalMin: 10, onlineOrderingPaused: false },
   // Ce qu'une tablette de comptoir n'a RIEN à lire.
   siret: '90210987600017',
   tvaNumber: 'FR12902109876',
   stripeAccountId: 'acct_1234567890',
   founderDiscountCents: 4_900,
-  account: { status: 'suspended', reason: 'Impayé de juillet' },
+  billingCycle: 'annuel',
+  // Le statut sort, le motif reste : ce restaurant est suspendu pour impayé,
+  // et son équipier de cuisine n'a pas à lire pourquoi.
+  account: { status: 'suspended', reason: 'Impayé de juillet', suspendedAt: '2026-08-01' },
 };
 
 const service = (tenants: ReturnType<typeof fakeTenants>) =>
@@ -404,8 +480,14 @@ const SECRETS = [
   'tvaNumber',
   'stripeAccountId',
   'founderDiscountCents',
-  'account',
+  'billingCycle',
 ] as const;
+
+/**
+ * Les clés RACINE de la réponse : un chemin pointé se relit sous sa racine une
+ * fois l'objet reconstruit — `account.status` arrive dans `account`.
+ */
+const CLES_RENDUES = [...new Set(Object.keys(TENANT_ME_FIELDS).map((c) => c.split('.')[0]!))];
 
 /**
  * LA PROJECTION VAUT AUSSI SUR LES ÉCRITURES.
@@ -417,9 +499,11 @@ const SECRETS = [
  * du comptoir.
  *
  * Ces tests parlent au service, pas à un fragment : c'est la RÉPONSE de la
- * route qu'ils inspectent, seul endroit où la fuite se voyait.
+ * route qu'ils inspectent, seul endroit où la fuite se voyait. Les CINQ
+ * chemins y passent — les quatre écritures et la lecture — parce qu'ils
+ * doivent rendre une seule et même forme.
  */
-describe('les réponses des routes qui écrivent sur le tenant', () => {
+describe('les réponses des cinq chemins de la vue de session', () => {
   const routes: [string, (svc: TenantsService) => Promise<Record<string, unknown>>][] = [
     ['settings', (svc) => svc.updateSettings(TENANT, { dailyGoalCents: 30_000 })],
     ['identity', (svc) => svc.updateIdentity(TENANT, { name: 'Chez Lima' })],
@@ -428,7 +512,7 @@ describe('les réponses des routes qui écrivent sur le tenant', () => {
   ];
 
   for (const [nom, appel] of routes) {
-    it(`${nom} ne rend aucun champ privé, et rend les onze champs de la lecture`, async () => {
+    it(`${nom} ne rend aucun champ privé, et rend la forme entière de la lecture`, async () => {
       const tenants = fakeTenants(DOCUMENT);
       const vue = await appel(service(tenants));
 
@@ -437,9 +521,12 @@ describe('les réponses des routes qui écrivent sur le tenant', () => {
           secret,
         );
       }
+      // Le compte sort RÉDUIT à son statut : le motif de la suspension
+      // (« Impayé de juillet ») est un litige commercial, pas un affichage.
+      expect(vue.account).toEqual({ status: 'suspended' });
       // La MÊME forme que `GET /tenants/me` : `_id` (toujours rendu par Mongo)
       // et la liste blanche, rien de plus.
-      expect(Object.keys(vue).sort()).toEqual(['_id', ...Object.keys(TENANT_ME_FIELDS)].sort());
+      expect(Object.keys(vue).sort()).toEqual(['_id', ...CLES_RENDUES].sort());
     });
 
     it(`${nom} demande la projection à Mongo, pas seulement au retour`, async () => {
@@ -473,6 +560,46 @@ describe('les réponses des routes qui écrivent sur le tenant', () => {
     expect(tenants.sets).toHaveLength(0);
     expect(vue).not.toHaveProperty('siret');
     expect(vue.slug).toBe('chez-lima');
+  });
+
+  it('la LECTURE rend la même forme que les écritures — cinquième chemin', async () => {
+    // `byId` est le chemin qui a été projeté le premier, et le seul que ce banc
+    // ne parcourait pas : les quatre PATCH y étaient comparés à une liste, pas
+    // à la lecture elle-même.
+    const tenants = fakeTenants(DOCUMENT);
+    const vue = await service(tenants).byId(TENANT);
+
+    // Ce dont la barre de navigation a besoin, et qu'elle n'avait pas.
+    expect(vue.plan).toBe('complet');
+    expect(vue.onlineOrdering).toBe(true);
+    expect(vue.account).toEqual({ status: 'suspended' });
+
+    for (const secret of SECRETS) {
+      expect(vue, `« ${secret} » ne doit pas sortir sur une tablette`).not.toHaveProperty(secret);
+    }
+    expect(Object.keys(vue).sort()).toEqual(['_id', ...CLES_RENDUES].sort());
+  });
+
+  it('la lecture demande la projection à Mongo, pas seulement au retour', async () => {
+    const tenants = fakeTenants(DOCUMENT);
+    const lectures: unknown[] = [];
+    const espion = {
+      ...tenants.model,
+      findById: async (id: string, projection?: Record<string, unknown>) => {
+        lectures.push(projection);
+        return tenants.model.findById(id, projection);
+      },
+    };
+    await new TenantsService(espion as never, testOriginesImages()).byId(TENANT);
+    expect(lectures[0]).toEqual(TENANT_ME_FIELDS);
+  });
+
+  it('sans compte en base, la lecture retombe sur le statut le plus permissif', async () => {
+    // Il en existe : tous les tenants créés avant le champ `account`.
+    const sansCompte: Record<string, unknown> = { ...DOCUMENT };
+    delete sansCompte.account;
+    const vue = await service(fakeTenants(sansCompte)).byId(TENANT);
+    expect(vue.account).toEqual({ status: 'trial' });
   });
 
   it('répond 404 sur un tenant disparu, plutôt qu’un corps vide en 200', async () => {

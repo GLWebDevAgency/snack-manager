@@ -3,10 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
   brandColorDe,
+  DEFAULT_TENANT_ACCOUNT_STATUS,
   logoUrlDe,
   publicOrderingState,
   textePosableSur,
   type Brand,
+  type TenantAccountStatus,
   type TenantHoursUpdate,
   type TenantIdentityUpdate,
   type TenantSettingsUpdate,
@@ -35,8 +37,44 @@ export const TENANT_ME_FIELDS = {
   phones: 1,
   hours: 1,
   closures: 1,
-  plan: 1,
   settings: 1,
+  /*
+   * CE QUE LA BARRE DE NAVIGATION DOIT SAVOIR — trois champs, et trois seulement.
+   *
+   * Le back-office affichait la même barre à tout le monde faute d'avoir la
+   * donnée : une session de comptoir voyait « Encaissement en ligne » et
+   * récoltait un 403, un restaurant sans le module de commande en ligne voyait
+   * les écrans qui en dépendent, et un compte suspendu n'était signalé nulle
+   * part alors qu'un seul écran lui reste ouvert.
+   *
+   * Ces trois-là sont anodins pour une tablette de comptoir parce qu'ils ne
+   * disent que l'ÉTENDUE du service — ce que le restaurant a le droit
+   * d'utiliser, ce que ses écrans doivent donc montrer. Un équipier le déduit
+   * déjà de ce qu'il a sous les doigts. Aucun des trois ne dit combien on
+   * facture, à qui, ni pourquoi.
+   *
+   * Leurs voisins immédiats, eux, le disent — et c'est précisément pour eux
+   * que cette liste est BLANCHE :
+   *  · `founderUntil` / `founderDiscountCents` : la remise négociée ;
+   *  · `billingCycle` : l'engagement signé ;
+   *  · `billing.*` : raison sociale, SIRET, TVA, adresse de facturation ;
+   *  · `stripe` / `encaissement` : nos identifiants de paiement ;
+   *  · `account.reason`, `account.churnCause`, `account.suspendedAt`,
+   *    `account.trialEndsAt` : le MOTIF et le calendrier d'un litige
+   *    commercial. « Impayé de juillet » n'a rien à faire sur l'écran d'un
+   *    équipier de cuisine — c'est un des champs qui fuyaient.
+   *
+   * D'où le chemin POINTÉ `account.status` plutôt que `account` : ouvrir le
+   * sous-document entier pour son seul statut rouvrirait la fuite qu'on vient
+   * de fermer, et la rouvrirait DE NOUVEAU, en silence, à chaque champ ajouté
+   * demain à `account`.
+   */
+  /** La formule souscrite — `null` pour un client qui n'achète que des services. */
+  plan: 1,
+  /** Le module de commande en ligne : une SOUSCRIPTION, pas la pause du soir. */
+  onlineOrdering: 1,
+  /** L'état du compte, et lui seul (cf. `derivesDuMasque` pour sa forme). */
+  'account.status': 1,
 } as const;
 
 /**
@@ -49,12 +87,28 @@ export const TENANT_ME_FIELDS = {
  * faisait mentir la lecture dès la première reprise : le masque disait safran,
  * la colonne disait laiton, et l'admin peignait le laiton.
  *
+ * `account` est RÉDUIT ici au seul statut, pour deux raisons qui tiennent
+ * ensemble. D'abord la forme : un tenant créé avant le champ n'a pas d'`account`
+ * en base, et Mongoose matérialise alors le sous-document de défaut EN ENTIER
+ * — `since`, `reason`, `suspendedAt` reparaissent, vides, chez ces tenants-là
+ * seulement. Rien de secret n'y transite (il n'y a rien à transiter), mais la
+ * réponse changerait de forme d'un restaurant à l'autre, et le front devrait
+ * deviner laquelle il lit. Ensuite la garde : la projection promet un seul
+ * champ, cette réduction le tient quoi qu'il arrive en amont. Le statut absent
+ * retombe sur `DEFAULT_TENANT_ACCOUNT_STATUS` — `trial`, le plus permissif :
+ * un champ jamais écrit ne doit pas fermer un restaurant en plein service.
+ *
  * EXPORTÉE pour être testable : c'est la forme que voient `GET /tenants/me` ET
  * `PATCH /tenants/me/marque`, et les deux doivent rester la même.
  */
 export function derivesDuMasque(
   doc: unknown,
-): Record<string, unknown> & { brand: Brand; logoUrl: string | null; brandColor: string } {
+): Record<string, unknown> & {
+  brand: Brand;
+  logoUrl: string | null;
+  brandColor: string;
+  account: { status: TenantAccountStatus };
+} {
   // Même ramener-à-l'objet-nu que `lireMarque` : un sous-document HYDRATÉ
   // porte des clés de prototype qu'un `...` recopierait.
   const brut = doc as { toObject?: () => unknown } | null | undefined;
@@ -63,7 +117,14 @@ export function derivesDuMasque(
     unknown
   >;
   const brand = marqueObservee(nu);
-  return { ...nu, brand, logoUrl: logoUrlDe(brand), brandColor: brandColorDe(brand) };
+  const compte = nu.account as { status?: TenantAccountStatus } | null | undefined;
+  return {
+    ...nu,
+    brand,
+    logoUrl: logoUrlDe(brand),
+    brandColor: brandColorDe(brand),
+    account: { status: compte?.status ?? DEFAULT_TENANT_ACCOUNT_STATUS },
+  };
 }
 
 /**
