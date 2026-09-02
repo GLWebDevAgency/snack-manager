@@ -8,50 +8,50 @@ const rewards = [
 
 export function DemoLoyaltyCard() {
   return (
-    <div className="min-h-dvh bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink">
+    <div className="min-h-dvh overflow-x-clip bg-bg pb-[max(32px,env(safe-area-inset-bottom))] text-ink">
       <div className="border-b border-prep/30 bg-prep/10 px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-[0.1em] text-prept">
         Démonstration · données entièrement fictives
       </div>
-      <header className="border-b border-white/8 bg-black/85 px-4 py-3 backdrop-blur-xl">
+      <header className="border-b border-ink/8 bg-bg/85 px-4 py-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[720px] items-center gap-3">
           <span className="grid size-10 place-items-center rounded-card bg-accent text-sm font-black text-onaccent" aria-hidden>CF</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-extrabold">Le Comptoir — restaurant fictif</p>
-            <p className="text-[11px] text-mut">Le Club Démo</p>
+            <p className="font-display text-[11px] text-mut">Le Club Démo</p>
           </div>
           <Pill className="border-prep/30 bg-prep/10 text-prept">Simulation</Pill>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-[720px] px-4 pt-6">
-        <section className="relative overflow-hidden rounded-[24px] border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
+        <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
           <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accent/15 blur-3xl" aria-hidden />
           <div className="relative flex items-start justify-between gap-4">
             <div>
               <Pill className="border-ok/30 bg-ok/10 text-okt">Carte fictive active</Pill>
-              <h1 className="mt-3 text-xl font-extrabold tracking-[-0.035em]">Bonjour Maya</h1>
+              <h1 className="font-display mt-3 text-xl font-extrabold tracking-[-0.035em]">Bonjour Maya</h1>
             </div>
             <Icon name="gift" size={28} className="text-accent" />
           </div>
           <div className="relative mt-8">
             <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Solde de démonstration</p>
-            <p className="cf-fig mt-1 text-[52px] font-black leading-none tracking-[-0.055em]">24</p>
+            <p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em]">24</p>
             <p className="mt-1 text-sm font-bold text-accent">points fictifs</p>
           </div>
           <div className="relative mt-7">
-            <div className="h-2 overflow-hidden rounded-pill bg-white/10"><div className="h-full w-4/5 rounded-pill bg-accent" /></div>
+            <div className="h-2 overflow-hidden rounded-pill bg-ink/10"><div className="h-full w-4/5 rounded-pill bg-accent" /></div>
             <p className="mt-2 text-xs text-mut">Encore 6 points fictifs pour « Menu signature offert »</p>
           </div>
         </section>
 
         <section className="mt-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accent">Aperçu client</p>
-          <h2 className="mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses du moment</h2>
+          <h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses du moment</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {rewards.map((reward) => (
               <Card key={reward.name} className={reward.ready ? "border-ok/25 p-4" : "p-4 opacity-75"}>
                 <div className="flex items-center gap-3">
-                  <span className={reward.ready ? "grid size-11 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 place-items-center rounded-card bg-white/6 text-mut"}><Icon name={reward.ready ? "check" : "gift"} size={19} /></span>
+                  <span className={reward.ready ? "grid size-11 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.ready ? "check" : "gift"} size={19} /></span>
                   <div><p className="text-sm font-extrabold">{reward.name}</p><p className="mt-1 text-xs text-mut">{reward.cost} points · {reward.ready ? "palier atteint" : "bientôt disponible"}</p></div>
                 </div>
               </Card>
@@ -62,7 +62,7 @@ export function DemoLoyaltyCard() {
         <Card className="mt-6 border-prep/25 bg-prep/5 p-4">
           <p className="text-sm font-extrabold text-prept">Ce parcours ne crée aucune vraie carte</p>
           <p className="mt-2 text-xs leading-5 text-mut">Le QR scanné sert uniquement à montrer l’expérience sur un second appareil. Aucun client, solde ou avantage n’est enregistré.</p>
-          <Link href="/" className="cf-press mt-4 inline-flex rounded-pill border border-white/10 px-4 py-2.5 text-xs font-bold text-ink hover:bg-white/5">Découvrir Snack Manager</Link>
+          <Link href="/" className="cf-press mt-4 inline-flex min-h-11 items-center rounded-pill border border-ink/10 px-4 py-2.5 text-xs font-bold text-ink hover:bg-ink/5">Découvrir Snack Manager</Link>
         </Card>
       </main>
     </div>

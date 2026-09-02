@@ -354,6 +354,38 @@ a {
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
+ * FIDÉLITÉ — LES DEUX SURFACES QUE LE MASQUE NE DOIT PAS REPEINDRE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Elles sont ici, en CSS et commentées, plutôt qu'en classes utilitaires :
+ * ce sont les seules exceptions du produit, et une exception se déclare une
+ * fois, au clair, au lieu de traîner en `bg-white` au milieu d'un composant
+ * où personne ne saura plus si elle est voulue.
+ */
+
+/*
+ * CADRE DU QR — lu par une caméra, pas par un œil.
+ *
+ * Le SVG n'emporte que 2 modules de marge (la norme en recommande 4) : ce
+ * cadre clair les complète. Sur une peau sombre, un cadre `bg-surface`
+ * réduirait la zone de silence à un liseré noir et ferait échouer des
+ * lecteurs — le blanc reste donc fixe, comme le QR lui-même.
+ */
+.sm-qr-frame {
+  background: #fff;
+}
+
+/*
+ * VISEUR DU SCANNER — le pourtour de la cible est assombri par une ombre
+ * géante. Sa teinte suit le FOND du masque : sur une peau crème, le voile est
+ * crème, jamais un carré noir posé au milieu d'une page ivoire.
+ */
+.sm-viseur {
+  box-shadow: 0 0 0 999px color-mix(in srgb, var(--cf-bg) 78%, transparent);
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
  * MARQUE — LE TICKET-BURGER
  * ═══════════════════════════════════════════════════════════════════════════
  *

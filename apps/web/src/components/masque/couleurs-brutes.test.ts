@@ -13,14 +13,18 @@ import { describe, expect, it } from "vitest";
 const SRC = join(__dirname, "..", "..");
 const REPERTOIRES = ["app/r", "app/embed", "app/t", "components/order", "components/ui", "components/loyalty"];
 
-/** Fichiers pas encore repassés — cette liste DOIT être vide à la fin de la Task 12. */
-const EN_ATTENTE = new Set<string>([
-  "components/order/Tracking.tsx",
-  "app/r/[slug]/fidelite/not-found.tsx",
-  "components/loyalty/LoyaltyCardApp.tsx",
-  "components/loyalty/DemoLoyaltyCard.tsx",
-  "components/loyalty/LoyaltyScanner.tsx",
-]);
+/*
+ * IL N'Y A PLUS DE LISTE D'ATTENTE — le garde est total.
+ *
+ * Elle a existé le temps de la migration : chaque tâche en retirait ses
+ * fichiers, et la Task 12 l'a vidée. La supprimer plutôt que la laisser vide
+ * n'est pas de la coquetterie — une liste vide est une porte entrouverte, et
+ * la première urgence y aurait glissé un fichier « pour l'instant ».
+ *
+ * Les deux seules exceptions du produit vivent en CSS, déclarées et
+ * commentées dans `globals.css` : le cadre clair du QR de fidélité (une
+ * caméra le lit, pas un œil) et le voile du viseur du scanner.
+ */
 
 const BRUT = [
   /\b(?:bg|text|border(?:-[trblxy])?|divide|ring|outline|shadow|from|to|via|fill|stroke)-(?:white|black)(?:\/\d+)?\b/,
@@ -46,7 +50,6 @@ describe("aucune couleur brute dans les surfaces client", () => {
       const fautes: string[] = [];
       for (const f of fichiers(join(SRC, rep))) {
         const rel = relative(SRC, f);
-        if (EN_ATTENTE.has(rel)) continue;
         const lignes = readFileSync(f, "utf8").split("\n");
         lignes.forEach((l, i) => {
           if (l.trimStart().startsWith("//") || l.trimStart().startsWith("*")) return;
@@ -56,8 +59,4 @@ describe("aucune couleur brute dans les surfaces client", () => {
       expect(fautes, fautes.join("\n")).toEqual([]);
     });
   }
-
-  it("la liste d’attente ne contient que des fichiers qui existent encore", () => {
-    for (const rel of EN_ATTENTE) expect(() => readFileSync(join(SRC, rel))).not.toThrow();
-  });
 });

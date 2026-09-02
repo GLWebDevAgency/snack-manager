@@ -11,14 +11,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Brand, OrderStatus, OrderTicket } from "@sm/contracts";
+import { resoudreMarque, type Brand, type OrderStatus, type OrderTicket } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { loadTracking, type TrackingState } from "./api";
-import { euros, hhmm } from "./helpers";
-import { Banner, Dot, Money, Surface } from "./primitives";
+import { hhmm } from "./helpers";
+import { Banner, Dot, Money, Prix, Surface } from "./primitives";
 
 const POLL_MS = 10_000;
 
@@ -95,6 +95,8 @@ export function Tracking({
   }, [finished, refresh]);
 
   const masque = styleDuMasque(brand);
+  // La règle des prix vient du masque : cette page est une racine, elle la lit.
+  const { prixMono } = resoudreMarque(brand);
 
   const slotIso = ticket?.pickup?.slotIso ?? state.pickupSlot;
   const slotLabel = slotIso ? hhmm(slotIso) : null;
@@ -104,14 +106,16 @@ export function Tracking({
   return (
     <main
       style={masque}
-      className={cx(classesPolices, "font-body min-h-dvh bg-bg pb-16 text-ink")}
+      // `clip` et non `hidden` : `overflow-x: hidden` ferait de cette racine
+      // un conteneur de défilement (voir Storefront).
+      className={cx(classesPolices, "font-body min-h-dvh overflow-x-clip bg-bg pb-16 text-ink")}
     >
-      <header className="border-b border-white/6 bg-[linear-gradient(180deg,#111,#000)] px-4 pb-6 pt-6">
+      <header className="border-b border-ink/6 bg-surface px-4 pb-6 pt-6">
         <div className="mx-auto w-full max-w-[520px]">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             {ticket?.header.tenantName ?? "Commande en ligne"}
           </p>
-          <h1 className="mt-1 text-[24px] font-extrabold tracking-[-0.035em] text-ink">
+          <h1 className="font-display mt-1 text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em] text-ink">
             {status === "cancelled"
               ? "Commande annulée"
               : status === "ready"
@@ -129,7 +133,7 @@ export function Tracking({
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
             Numéro de retrait
           </p>
-          <p className="mt-1 text-[68px] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
+          <p className="font-display mt-1 text-[clamp(3.5rem,3rem+2vw,4.25rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
             {pickupNumber}
           </p>
           <p className="mt-3 flex items-center justify-center gap-2 text-[14px] text-mut">
@@ -166,7 +170,7 @@ export function Tracking({
                       aria-hidden
                       className={cx(
                         "relative grid size-8 shrink-0 place-items-center rounded-full transition-colors duration-300 ease-sm",
-                        reached ? "bg-ok text-black" : "bg-white/10 text-mut",
+                        reached ? "bg-ok text-onok" : "bg-ink/10 text-mut",
                       )}
                     >
                       {reached && rank > RANK[step.status] ? (
@@ -175,7 +179,7 @@ export function Tracking({
                         <span
                           className={cx(
                             "block size-2 rounded-full",
-                            reached ? "bg-black" : "bg-white/40",
+                            reached ? "bg-onok" : "bg-ink/40",
                           )}
                         />
                       )}
@@ -183,7 +187,7 @@ export function Tracking({
                         <span
                           className={cx(
                             "absolute left-1/2 top-full h-2.5 w-0.5 -translate-x-1/2",
-                            rank > RANK[step.status] ? "bg-ok" : "bg-white/10",
+                            rank > RANK[step.status] ? "bg-ok" : "bg-ink/10",
                           )}
                         />
                       )}
@@ -207,7 +211,7 @@ export function Tracking({
 
             <p
               aria-live="polite"
-              className="mt-3 border-t border-white/8 pt-3 text-[12px] text-mut"
+              className="mt-3 border-t border-ink/8 pt-3 text-[12px] text-mut"
             >
               {finished
                 ? "Suivi terminé."
@@ -249,26 +253,34 @@ export function Tracking({
                     </span>
                   )}
                 </span>
-                <Money cents={line.lineTotal} className="shrink-0 text-[14px]" />
+                <Money cents={line.lineTotal} mono={prixMono} className="shrink-0 text-[14px]" />
               </li>
             ))}
           </ul>
 
           {ticket.note && (
-            <p className="mt-3 rounded-card border-l-2 border-accent bg-white/[0.03] px-3 py-2 text-[13px] leading-relaxed text-mut">
+            <p className="mt-3 rounded-card border-l-2 border-accent bg-ink/[0.03] px-3 py-2 text-[13px] leading-relaxed text-mut">
               <span className="font-bold text-ink">Note : </span>
               {ticket.note}
             </p>
           )}
 
-          <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3">
+          <div className="mt-4 flex items-center justify-between border-t border-ink/8 pt-3">
             <span className="text-[15px] font-semibold text-mut">Total</span>
-            <Money cents={ticket.totals.total} className="text-[22px] text-ink" />
+            <Money
+              cents={ticket.totals.total}
+              mono={prixMono}
+              className="text-[clamp(1.25rem,1.1rem+0.5vw,1.375rem)] text-ink"
+            />
           </div>
           <p className="mt-1 text-right text-[12px] text-mut">
-            {ticket.payment.paid
-              ? `${ticket.payment.methodLabel} · ${euros(ticket.totals.total)}`
-              : ticket.payment.methodLabel}
+            {ticket.payment.methodLabel}
+            {ticket.payment.paid && (
+              <>
+                {" · "}
+                <Prix cents={ticket.totals.total} mono={prixMono} />
+              </>
+            )}
           </p>
         </Surface>
         )}
@@ -293,7 +305,7 @@ export function Tracking({
                 <a
                   key={phone}
                   href={`tel:${phone.replace(/\s/g, "")}`}
-                  className="inline-flex items-center gap-2 rounded-pill border border-white/12 bg-surface2 px-3.5 py-2 text-[14px] font-bold tabular-nums text-ink transition-transform duration-200 ease-sm active:scale-[0.97]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-ink/12 bg-surface2 px-3.5 py-2 text-[14px] font-bold tabular-nums text-ink transition-transform duration-200 ease-sm active:scale-[0.97]"
                 >
                   <Icon name="phone" size={15} />
                   {phone}
