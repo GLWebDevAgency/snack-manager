@@ -177,6 +177,26 @@ jobs:
         || github.ref == 'refs/heads/develop' && secrets.RAILWAY_TOKEN_STAGING
         || '' }}
       ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+      CONTACT_INGEST_TOKEN: >-
+        ${{ github.ref == 'refs/heads/main' && secrets.SM_CONTACT_INGEST_TOKEN_PRODUCTION
+        || github.ref == 'refs/heads/develop' && secrets.SM_CONTACT_INGEST_TOKEN_STAGING
+        || '' }}
+      TURNSTILE_SECRET: >-
+        ${{ github.ref == 'refs/heads/main' && secrets.SM_TURNSTILE_SECRET_KEY_PRODUCTION
+        || github.ref == 'refs/heads/develop' && secrets.SM_TURNSTILE_SECRET_KEY_STAGING
+        || '' }}
+      TURNSTILE_SITE_KEY: >-
+        ${{ github.ref == 'refs/heads/main' && vars.SM_TURNSTILE_SITE_KEY_PRODUCTION
+        || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_SITE_KEY_STAGING
+        || '' }}
+      TURNSTILE_OTHER_SITE_KEY: >-
+        ${{ github.ref == 'refs/heads/main' && vars.SM_TURNSTILE_SITE_KEY_STAGING
+        || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_SITE_KEY_PRODUCTION
+        || '' }}
+      TURNSTILE_ALLOWED_HOSTS: >-
+        ${{ github.ref == 'refs/heads/main' && vars.SM_TURNSTILE_ALLOWED_HOSTNAMES_PRODUCTION
+        || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_ALLOWED_HOSTNAMES_STAGING
+        || '' }}
     steps:
       - name: Installer la CLI Railway vérifiée
         run: |
@@ -218,6 +238,84 @@ jobs:
             exit 1
           fi
           echo "✓ préflight Railway $ENVIRONNEMENT validé sans mutation"
+
+      - name: Vérifier contact et protection anti-robot
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const contactTokenRaw = process.env.CONTACT_INGEST_TOKEN ?? '';
+          const turnstileSecretRaw = process.env.TURNSTILE_SECRET ?? '';
+          const turnstileSiteKeyRaw = process.env.TURNSTILE_SITE_KEY ?? '';
+          const otherTurnstileSiteKeyRaw = process.env.TURNSTILE_OTHER_SITE_KEY ?? '';
+          const contactToken = contactTokenRaw.trim();
+          const turnstileSecret = turnstileSecretRaw.trim();
+          const turnstileSiteKey = turnstileSiteKeyRaw.trim();
+          const otherTurnstileSiteKey = otherTurnstileSiteKeyRaw.trim();
+          const allowedHosts = (process.env.TURNSTILE_ALLOWED_HOSTS ?? '')
+            .split(',')
+            .map((host) => host.trim().toLowerCase())
+            .filter(Boolean);
+          const expectedRoot =
+            process.env.ENVIRONNEMENT === 'staging'
+              ? 'staging.snackmanager.fr'
+              : process.env.ENVIRONNEMENT === 'production'
+                ? 'snackmanager.fr'
+                : '';
+
+          if (
+            contactTokenRaw !== contactToken ||
+            Buffer.byteLength(contactToken, 'utf8') < 32 ||
+            /\s/.test(contactToken)
+          ) {
+            throw new Error('SM_CONTACT_INGEST_TOKEN_* doit contenir au moins 32 octets sans espace');
+          }
+          for (const [name, raw, value] of [
+            ['SM_TURNSTILE_SECRET_KEY_*', turnstileSecretRaw, turnstileSecret],
+            ['SM_TURNSTILE_SITE_KEY_*', turnstileSiteKeyRaw, turnstileSiteKey],
+          ]) {
+            if (raw !== value || value.length < 20 || /\s/.test(value)) {
+              throw new Error(`${name} est absent ou invalide`);
+            }
+          }
+          const testSiteKeys = new Set([
+            '1x00000000000000000000AA',
+            '2x00000000000000000000AB',
+            '1x00000000000000000000BB',
+            '2x00000000000000000000BB',
+            '3x00000000000000000000FF',
+          ]);
+          const testSecretKeys = new Set([
+            '1x0000000000000000000000000000000AA',
+            '2x0000000000000000000000000000000AA',
+            '3x0000000000000000000000000000000AA',
+          ]);
+          if (testSiteKeys.has(turnstileSiteKey) || testSecretKeys.has(turnstileSecret)) {
+            throw new Error('Les clés de test Turnstile sont interdites sur Railway');
+          }
+          if (otherTurnstileSiteKey && otherTurnstileSiteKey === turnstileSiteKey) {
+            throw new Error('Les widgets Turnstile staging et production doivent être distincts');
+          }
+          if (new Set([contactToken, turnstileSecret, turnstileSiteKey]).size !== 3) {
+            throw new Error('Les identités contact et Turnstile doivent être indépendantes');
+          }
+          if (!expectedRoot || !allowedHosts.includes(expectedRoot)) {
+            throw new Error(`TURNSTILE_ALLOWED_HOSTNAMES doit contenir ${expectedRoot || 'la racine attendue'}`);
+          }
+          if (
+            new Set(allowedHosts).size !== allowedHosts.length ||
+            allowedHosts.some(
+              (host) =>
+                host.includes('*') ||
+                host.includes('://') ||
+                host.includes('/') ||
+                host.includes(':') ||
+                !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host),
+            )
+          ) {
+            throw new Error('TURNSTILE_ALLOWED_HOSTNAMES contient un hôte invalide ou dupliqué');
+          }
+          NODE
+          echo "✓ contact et Turnstile configurés pour $ENVIRONNEMENT"
 
   # ───────────────────────────────────────────────────────────────────────────
   # 3 · Les migrations privilégiées, hors du conteneur applicatif
@@ -569,6 +667,49 @@ jobs:
             exit 1
           fi
           echo "✓ secrets fidélité publiés sur api et web ($ENVIRONNEMENT)"
+
+      # Le formulaire public passe par le serveur Next, jamais directement par
+      # l'ingestion CRM. La commande publique, elle, doit présenter une preuve
+      # Turnstile liée au tenant et à l'hôte. Les deux paires sont distinctes
+      # entre staging et production et sont validées au préflight, avant le DDL.
+      - name: Publier contact et protection anti-robot
+        env:
+          CONTACT_INGEST_TOKEN: >-
+            ${{ github.ref == 'refs/heads/main' && secrets.SM_CONTACT_INGEST_TOKEN_PRODUCTION
+            || github.ref == 'refs/heads/develop' && secrets.SM_CONTACT_INGEST_TOKEN_STAGING
+            || '' }}
+          TURNSTILE_SECRET: >-
+            ${{ github.ref == 'refs/heads/main' && secrets.SM_TURNSTILE_SECRET_KEY_PRODUCTION
+            || github.ref == 'refs/heads/develop' && secrets.SM_TURNSTILE_SECRET_KEY_STAGING
+            || '' }}
+          TURNSTILE_SITE_KEY: >-
+            ${{ github.ref == 'refs/heads/main' && vars.SM_TURNSTILE_SITE_KEY_PRODUCTION
+            || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_SITE_KEY_STAGING
+            || '' }}
+          TURNSTILE_ALLOWED_HOSTS: >-
+            ${{ github.ref == 'refs/heads/main' && vars.SM_TURNSTILE_ALLOWED_HOSTNAMES_PRODUCTION
+            || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_ALLOWED_HOSTNAMES_STAGING
+            || '' }}
+        run: |
+          set -euo pipefail
+          if ! railway variables --environment "$ENVIRONNEMENT" --service api --skip-deploys \
+               --set "SM_CONTACT_INGEST_TOKEN=$CONTACT_INGEST_TOKEN" \
+               --set "TURNSTILE_SECRET_KEY=$TURNSTILE_SECRET" \
+               --set "TURNSTILE_ALLOWED_HOSTNAMES=$TURNSTILE_ALLOWED_HOSTS" \
+               > "$RUNNER_TEMP/variables-api-public.log" 2>&1; then
+            echo "::error title=Configuration publique non publiée::service api (sortie masquée). Rien ne part."
+            exit 1
+          fi
+
+          if ! railway variables --environment "$ENVIRONNEMENT" --service web --skip-deploys \
+               --set "SM_CONTACT_INGEST_TOKEN=$CONTACT_INGEST_TOKEN" \
+               --set 'API_URL=http://api.railway.internal:3001' \
+               --set "NEXT_PUBLIC_TURNSTILE_SITE_KEY=$TURNSTILE_SITE_KEY" \
+               > "$RUNNER_TEMP/variables-web-public.log" 2>&1; then
+            echo "::error title=Configuration publique non publiée::service web (sortie masquée). Rien ne part."
+            exit 1
+          fi
+          echo "✓ contact et Turnstile publiés sur api et web ($ENVIRONNEMENT)"
 
       # Les deux apps terrain embarquent leurs origines au BUILD. Elles ne
       # doivent jamais hériter d'une valeur laissée par un autre environnement :

@@ -668,9 +668,21 @@ code demeure possible.
 
 > **Garde de livraison fidélité.** Avant le premier push, configurer sur
 > **staging uniquement** `pnpm verify:postgres:built`, sans déclencher un ancien
-> déploiement. La production reste volontairement non armée : ses secrets DB,
-> clés et variables `SM_DATABASE_MIGRATION_HOST_PRODUCTION` / `_PORT_` ne sont
-> créés qu'après un GO écrit. Ne jamais copier une clé entre environnements.
+> déploiement. La production ne doit être armée qu'après un GO écrit : ses
+> secrets DB, clés et variables `SM_DATABASE_MIGRATION_HOST_PRODUCTION` /
+> `_PORT_` sont alors créés sans déclencher de déploiement. Ne jamais copier une
+> clé entre environnements.
+
+> **Garde des surfaces publiques.** Le même préflight refuse désormais le
+> déploiement si le jeton serveur du formulaire ou la paire Turnstile de la
+> cible manque. Chaque environnement possède son propre
+> `SM_CONTACT_INGEST_TOKEN_*`, son propre `SM_TURNSTILE_SECRET_KEY_*`, ainsi que
+> les variables publiques `SM_TURNSTILE_SITE_KEY_*` et
+> `SM_TURNSTILE_ALLOWED_HOSTNAMES_*`. Les clés de test Cloudflare sont refusées
+> sur Railway et, dès que les deux site keys existent, leur réutilisation entre
+> staging et production est refusée. Après validation, le pipeline publie le
+> jeton contact sur `api` et `web`, le secret et l'allowlist Turnstile sur `api`,
+> puis la site key au build de `web`, sans journaliser aucune valeur.
 
 C'est aussi la raison de l'ordre : `web`, `pos` et `kds` ne partent qu'une fois
 l'`api` **en service**, pas seulement construite.
@@ -733,8 +745,9 @@ Quatre verrous, et il faut les franchir tous les quatre :
    Une référence inattendue donne la **chaîne vide**, et le job s'arrête avant
    d'appeler Railway. Surtout : chaque jeton de projet Railway est cloisonné sur
    **son** environnement. Même si cette correspondance était fausse, un jeton de
-   staging ne peut rien déployer en production. C'est pour cela qu'aucune
-   commande ne passe `--environment` : le jeton, et lui seul, désigne la cible.
+   staging ne peut rien déployer en production. Chaque commande passe en plus
+   `--environment "$ENVIRONNEMENT"` : le jeton et la cible explicite doivent donc
+   tous les deux correspondre avant que Railway accepte l'opération.
 
 ### Ce qui a été vérifié, et comment
 
@@ -1132,7 +1145,8 @@ avant vous.
   et lui seul, ce qui suffit à rendre l'exécution rouge.
 
 - **`main` déclenche bien le chemin production, sans approbation serveur.** Il
-  reste volontairement fermé tant que ses secrets fidélité/DB et les variables
-  d'hôte attendues ne sont pas créés après un GO écrit. Une fusion prématurée
-  échoue fermée, mais reste interdite : la première mise en production fidélité
-  exige la recette staging et ne se fait jamais du jeudi au dimanche.
+  reste volontairement fermé tant que ses secrets fidélité/DB/contact, sa paire
+  Turnstile et les variables d'hôte attendues ne sont pas créés après un GO
+  écrit. Une fusion prématurée échoue fermée, mais reste interdite : la première
+  mise en production fidélité exige la recette staging et ne se fait jamais du
+  jeudi au dimanche.
