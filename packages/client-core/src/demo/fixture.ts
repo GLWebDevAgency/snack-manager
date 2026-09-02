@@ -61,6 +61,12 @@ function hydrateProduct(p: SnapshotProduct): Product {
     isNew: p.isNew ?? false,
     outOfStock: p.outOfStock ?? false,
     active: true,
+    // La démonstration sert des photos DU PAQUET WEB (`/photos/…`), pas des
+    // médias : elle n'a pas de médiathèque et n'en simule pas une. `photoUrl`
+    // est donc exactement ce que `photoUrlDe` rend dans ce cas — le repli
+    // hérité — et `medias` reste vide, comme sur la vitrine.
+    photoUrl: p.photo ?? null,
+    medias: [],
   };
 }
 

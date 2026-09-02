@@ -8,17 +8,29 @@ import {
   SCALE_MIN,
   TICKET_MAX,
   TICKET_MIN,
+  LARGEUR_NOM_MIN,
   TICKET_REF,
   TOPBAR_REF,
+  VIGNETTE_MAX,
+  VIGNETTE_MIN,
+  cadrageVignette,
   cardWidth,
   columnsFor,
   computeLayout,
+  vignetteTient,
 } from './layout';
 
 /** Largeur de grille telle que la mesure `onLayout` la rendra. */
 function gridWidth(w: number, h: number): number {
   const L = computeLayout(w, h);
   return L.width - L.railW - (L.compact ? 0 : L.ticketW) - L.gridPad * 2;
+}
+
+/** Largeur d'une tuile telle que la grille la calculera après mesure. */
+function cardOf(w: number, h: number): number {
+  const L = computeLayout(w, h);
+  const grid = gridWidth(w, h);
+  return cardWidth(grid, columnsFor(grid, L), L.gridGap);
 }
 
 describe('Référence 1280 × 800 — la maquette ne bouge pas', () => {
@@ -166,5 +178,105 @@ describe('Orientation et bornes générales', () => {
       // Rail + ticket ancré laissent toujours de la place à la grille.
       if (!L.compact) expect(w - L.railW - L.ticketW).toBeGreaterThan(320);
     }
+  });
+});
+
+describe('Vignette produit — carrée, et jamais au détriment du prix', () => {
+  it('reste dans ses bornes sur tout le parc', () => {
+    for (let w = 320; w <= 2560; w += 20) {
+      for (const h of [600, 800, 1080, 1200]) {
+        const L = computeLayout(w, h);
+        expect(L.vignette).toBeGreaterThanOrEqual(VIGNETTE_MIN);
+        expect(L.vignette).toBeLessThanOrEqual(VIGNETTE_MAX);
+        // LA contrainte : la vignette ouvre la rangée du nom, la rangée du
+        // prix vient dessous, et la tuile est écrêtée. Le prix est le seul
+        // chiffre dont l'équipier a besoin — il ne doit jamais sortir.
+        const interieur = L.cardH - L.sp(13) * 2;
+        const prix = L.fs(19) * 1.3 + 10;
+        expect(L.vignette + prix).toBeLessThanOrEqual(interieur);
+      }
+    }
+  });
+
+  it('laisse au nom la place de deux lignes à côté d’elle', () => {
+    const L = computeLayout(REFERENCE.width, REFERENCE.height);
+    expect(L.vignette).toBe(43);
+    // Deux lignes de nom (2 × 18) tiennent dans la hauteur de la vignette :
+    // la rangée ne grandit donc pas à cause du texte.
+    expect(L.fs(18) * 2).toBeLessThanOrEqual(L.vignette);
+  });
+
+  it('tient sur les tablettes et s’efface sur le téléphone du gérant', () => {
+    // Tablette de référence : 180 px de tuile, 105 px restent au nom.
+    const tablette = computeLayout(REFERENCE.width, REFERENCE.height);
+    expect(vignetteTient(cardOf(1280, 800), tablette)).toBe(true);
+    expect(vignetteTient(cardOf(1920, 1080), computeLayout(1920, 1080))).toBe(true);
+    expect(vignetteTient(cardOf(820, 1180), computeLayout(820, 1180))).toBe(true);
+    // Téléphone : 136 px de tuile, il ne resterait que 47 px au nom.
+    expect(vignetteTient(cardOf(390, 844), computeLayout(390, 844))).toBe(false);
+  });
+
+  it('ne laisse jamais moins que le minimum quand elle s’affiche', () => {
+    for (let w = 320; w <= 2560; w += 20) {
+      const L = computeLayout(w, 900);
+      const cw = cardOf(w, 900);
+      if (!vignetteTient(cw, L)) continue;
+      expect(cw - L.sp(13) * 2 - L.vignette - 6).toBeGreaterThanOrEqual(LARGEUR_NOM_MIN);
+    }
+  });
+});
+
+describe('Recadrage sur le point d’intérêt — le pendant RN d’object-position', () => {
+  it('couvre toujours le carré, sans laisser de liseré', () => {
+    for (const [lg, ht] of [[1600, 900], [900, 1600], [800, 800], [1601, 899]]) {
+      for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+        const c = cadrageVignette(43, lg, ht, p, p);
+        expect(c).not.toBeNull();
+        if (!c) continue;
+        expect(c.width).toBeGreaterThanOrEqual(43);
+        expect(c.height).toBeGreaterThanOrEqual(43);
+        // Bords : l'image commence à gauche du carré et finit à sa droite.
+        expect(c.left).toBeLessThanOrEqual(0);
+        expect(c.top).toBeLessThanOrEqual(0);
+        expect(c.left + c.width).toBeGreaterThanOrEqual(43);
+        expect(c.top + c.height).toBeGreaterThanOrEqual(43);
+      }
+    }
+  });
+
+  it('amène le point d’intérêt au centre quand la photo le permet', () => {
+    // Panoramique 2:1 dans un carré de 100 : 100 px débordent horizontalement.
+    // Point au quart : 0,25 × 200 = 50, qu'il faut ramener à 50 → décalage 0.
+    expect(cadrageVignette(100, 2000, 1000, 0.25, 0.5)).toEqual({
+      width: 200,
+      height: 100,
+      left: 0,
+      top: 0,
+    });
+    // Point au centre : recadrage centré, celui du navigateur sans consigne.
+    expect(cadrageVignette(100, 2000, 1000, 0.5, 0.5)?.left).toBe(-50);
+    // Point à droite : l'image se cale sur son bord droit, pas au-delà.
+    expect(cadrageVignette(100, 2000, 1000, 1, 0.5)?.left).toBe(-100);
+    // Et à gauche, symétriquement — le bridage empêche de découvrir le fond.
+    expect(cadrageVignette(100, 2000, 1000, 0, 0.5)?.left).toBe(0);
+  });
+
+  it('travaille aussi en hauteur sur une photo en portrait', () => {
+    expect(cadrageVignette(100, 1000, 2000, 0.5, 0)).toEqual({
+      width: 100,
+      height: 200,
+      left: 0,
+      top: 0,
+    });
+    expect(cadrageVignette(100, 1000, 2000, 0.5, 1)?.top).toBe(-100);
+  });
+
+  it('rend null quand les cotes manquent — la surface retombe sur « cover »', () => {
+    // `MediaVue.largeur` est `null` quand l'en-tête du fichier ne la donne
+    // pas, et une photo héritée du pilote n'est pas un média du tout.
+    expect(cadrageVignette(43, null, null, 0.5, 0.5)).toBeNull();
+    expect(cadrageVignette(43, 1600, null, 0.5, 0.5)).toBeNull();
+    expect(cadrageVignette(43, 0, 900, 0.5, 0.5)).toBeNull();
+    expect(cadrageVignette(0, 1600, 900, 0.5, 0.5)).toBeNull();
   });
 });

@@ -16,5 +16,13 @@ export function useLayout(): Layout {
   return useMemo(() => computeLayout(width, height), [height, width]);
 }
 
-export { columnsFor, cardWidth, computeLayout, COMPACT_W, REFERENCE } from './layout';
+export {
+  columnsFor,
+  cardWidth,
+  cadrageVignette,
+  vignetteTient,
+  computeLayout,
+  COMPACT_W,
+  REFERENCE,
+} from './layout';
 export type { Layout, Orientation, ScreenClass } from './layout';

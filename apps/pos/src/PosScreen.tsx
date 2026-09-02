@@ -914,6 +914,9 @@ export function PosScreen({
           ) : null}
           <ProductArea
             categories={menu.categories}
+            // Les médias voyagent à plat, à côté des catégories : c'est là que
+            // la grille trouve le point d'intérêt et les cotes d'une photo.
+            medias={menu.medias}
             activeId={catId}
             brand={brand}
             parked={parked}

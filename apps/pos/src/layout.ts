@@ -88,6 +88,55 @@ export const IDEAL_CARD = 190;
 export const SCALE_MIN = 0.94;
 export const SCALE_MAX = 1.18;
 
+/**
+ * LA VIGNETTE PRODUIT — carrée, et une FRACTION de la hauteur de la carte.
+ *
+ * Elle se pose en tête de la rangée du nom, pas en bandeau pleine largeur : la
+ * tuile fait 104 à 120 px de haut, et un bandeau obligerait à rouvrir la
+ * formule de `cardH` — donc à réduire le nombre de produits visibles sur une
+ * 10", qui est le poste de référence. Ce n'est pas la vignette qui doit dicter
+ * la densité de la grille.
+ *
+ * 40 % de la hauteur de carte, borné 40…56 : à 1280 × 800 cela donne 43 px, et
+ * la rangée du nom (deux lignes, 36 px) tient dessous. Le reste de la tuile —
+ * la rangée du prix et sa marge — garde alors ses ~35 px, marge comprise. Une
+ * fraction plus grande ferait sortir le prix de la tuile, qui est écrêtée
+ * (`overflow: hidden`) : on perdrait le seul chiffre dont l'équipier a besoin.
+ */
+export const VIGNETTE_PART = 0.4;
+export const VIGNETTE_MIN = 40;
+export const VIGNETTE_MAX = 56;
+
+/**
+ * Largeur minimale laissée au NOM à côté d'une vignette.
+ *
+ * Le nom est l'information de travail : c'est lui qu'on cherche du regard sous
+ * la pression du service, la photo ne fait que confirmer. Sur la tablette de
+ * référence il reste 105 px au nom, soit deux lignes d'une quinzaine de
+ * caractères — largement de quoi lire « Escalope Normande ». Sur le TÉLÉPHONE
+ * du gérant, où la tuile ne fait que 136 px de large, il n'en resterait que 47 :
+ * six caractères par ligne, un nom haché. La vignette s'efface alors, et la
+ * tuile redevient exactement celle d'avant.
+ *
+ * 80 px, et pas davantage : la largeur des tuiles saute avec le nombre de
+ * colonnes, et un seuil plus haut ferait apparaître et disparaître les photos
+ * au fil d'un redimensionnement, ce qui se voit bien plus qu'un nom serré.
+ */
+export const LARGEUR_NOM_MIN = 80;
+
+/**
+ * La tuile a-t-elle les moyens de sa vignette ?
+ *
+ * @param cardW largeur MESURÉE d'une tuile (la grille se mesure elle-même).
+ * @param gap   gouttière entre la vignette et le nom, telle que posée au rendu.
+ *
+ * `sp(13)` est la marge intérieure de la tuile, celle que `Catalog.tsx` lui
+ * pose : les deux doivent bouger ensemble, et c'est le seul couplage.
+ */
+export function vignetteTient(cardW: number, layout: Layout, gap = 6): boolean {
+  return cardW - layout.sp(13) * 2 - layout.vignette - gap >= LARGEUR_NOM_MIN;
+}
+
 /** Plancher absolu de taille de texte : rien d'utile en service en dessous. */
 const FONT_FLOOR = 12;
 
@@ -118,6 +167,8 @@ export interface Layout {
   gridPad: number;
   /** Hauteur commune des cartes produit (toutes identiques, quelle que soit la ligne). */
   cardH: number;
+  /** Côté de la vignette produit — carrée, en tête de la rangée du nom. */
+  vignette: number;
   /** Facteur typographique borné. */
   scale: number;
   /** Taille de texte adaptée, jamais sous 12 px. */
@@ -163,6 +214,54 @@ export function cardWidth(gridWidth: number, cols: number, gap: number): number 
   return (gridWidth - gap * (cols - 1)) / cols;
 }
 
+/**
+ * LE RECADRAGE D'UNE PHOTO AUTOUR DE SON POINT D'INTÉRÊT.
+ *
+ * Le pendant React Native de `cadrageCss` (contrat médiathèque). En CSS, la
+ * règle tient en deux mots — `object-fit: cover` plus `object-position` — et le
+ * navigateur fait le calcul. React Native n'a pas d'`object-position` : son
+ * `resizeMode="cover"` recadre TOUJOURS par le centre. Sur la surface la plus
+ * carrée du produit, celle qui coupe le plus, cela revient à ignorer le seul
+ * réglage que le restaurateur a posé sur sa photo.
+ *
+ * On refait donc le calcul à la main : l'image est posée en absolu, à la
+ * taille qui couvre exactement le carré, et décalée pour que le point
+ * d'intérêt tombe au CENTRE de la vignette — puis bridée aux bords, faute de
+ * quoi un point proche d'un coin découvrirait le fond.
+ *
+ * @param cote    côté du carré, en pixels.
+ * @param largeur cote intrinsèque de la photo (`MediaVue.largeur`).
+ * @param hauteur cote intrinsèque de la photo (`MediaVue.hauteur`).
+ * @param x       point d'intérêt, 0…1, origine en haut à gauche.
+ * @param y       idem, vertical.
+ * @returns `null` quand le calcul est impossible — cotes absentes de l'en-tête
+ *          du fichier, ou média inconnu. L'appelant retombe alors sur le
+ *          `resizeMode="cover"` du cadre, c'est-à-dire un recadrage centré :
+ *          le comportement du navigateur sans consigne, jamais un trou.
+ */
+export function cadrageVignette(
+  cote: number,
+  largeur: number | null | undefined,
+  hauteur: number | null | undefined,
+  x: number,
+  y: number,
+): { width: number; height: number; left: number; top: number } | null {
+  if (!(cote > 0) || !(largeur && largeur > 0) || !(hauteur && hauteur > 0)) return null;
+  const ratio = largeur / hauteur;
+  // `ceil` et non `round` : arrondir vers le bas laisserait un liseré de fond
+  // sur un bord, visible sur un aplat sombre.
+  const w = Math.ceil(ratio >= 1 ? cote * ratio : cote);
+  const h = Math.ceil(ratio >= 1 ? cote : cote / ratio);
+  const px = clamp(0, x, 1);
+  const py = clamp(0, y, 1);
+  return {
+    width: w,
+    height: h,
+    left: clamp(cote - w, Math.round(cote / 2 - px * w), 0),
+    top: clamp(cote - h, Math.round(cote / 2 - py * h), 0),
+  };
+}
+
 export function computeLayout(width: number, height: number): Layout {
   const w = Math.max(1, Math.round(width));
   const h = Math.max(1, Math.round(height));
@@ -201,6 +300,8 @@ export function computeLayout(width: number, height: number): Layout {
   const ideal = IDEAL_CARD * scale;
   const cols = clamp(minCols, Math.round((usable + gridGap) / (ideal + gridGap)), maxCols);
 
+  const cardH = clamp(104, Math.round(108 * spaceScale), 150);
+
   return {
     width: w,
     height: h,
@@ -219,7 +320,8 @@ export function computeLayout(width: number, height: number): Layout {
     maxCols,
     gridGap,
     gridPad,
-    cardH: clamp(104, Math.round(108 * spaceScale), 150),
+    cardH,
+    vignette: clamp(VIGNETTE_MIN, Math.round(cardH * VIGNETTE_PART), VIGNETTE_MAX),
     scale,
     fs,
     sp,
