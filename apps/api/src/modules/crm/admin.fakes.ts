@@ -57,8 +57,24 @@ function applySet(row: Row, $set: Row): void {
   }
 }
 
+/**
+ * Lecture d'un chemin, pointé ou non — `deep(row, 'account.status')`.
+ *
+ * Mongo filtre sur des chemins pointés aussi bien qu'il écrit dessus, et une
+ * doublure qui ne saurait que les écrire laisserait passer un filtre qui ne
+ * matcherait JAMAIS en production. C'est exactement ce que fait la
+ * réconciliation de fin d'essai : sa condition `account.status: 'trial'` voyage
+ * avec l'écriture, et c'est elle qui la rend idempotente.
+ */
+function deep(row: Row, path: string): unknown {
+  return path.split('.').reduce<unknown>((acc, key) => {
+    if (acc === null || typeof acc !== 'object') return undefined;
+    return (acc as Row)[key];
+  }, row);
+}
+
 function matches(row: Row, filter: Row): boolean {
-  return Object.entries(filter).every(([key, expected]) => same(row[key], expected));
+  return Object.entries(filter).every(([key, expected]) => same(deep(row, key), expected));
 }
 
 /** Dates comparées en millisecondes, identifiants en ordre lexicographique. */
@@ -199,9 +215,9 @@ export class FakeCollection {
    * 1. LES CHEMINS POINTÉS écrivent DANS le sous-objet sans le remplacer.
    *    `{ 'social.instagram': … }` ne doit toucher qu'Instagram ; c'est toute
    *    la différence entre modifier un réseau et effacer les trois autres.
-   *    (`findOneAndUpdate` les refuse au contraire : les appelants de cette
-   *    méthode-là écrivent des blocs entiers, un chemin pointé y serait une
-   *    erreur de frappe silencieuse.)
+   *    (`findOneAndUpdate` les écrit de la même façon, par la même fonction :
+   *    la fin d'essai réécrit `account.status` sans effacer `account.trialEndsAt`,
+   *    et ce chemin-là doit se comporter ici exactement comme en production.)
    *
    * 2. L'UPSERT crée le document quand il n'existe pas — l'état normal au
    *    tout premier enregistrement, celui où un `create()` marcherait et où

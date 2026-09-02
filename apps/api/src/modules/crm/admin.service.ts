@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -14,6 +14,15 @@ import {
   type TenantOffre,
   TENANT_ACCOUNT_STATUS_LABELS,
   isAccessBlocked,
+  statutEffectif,
+  essaiEchuLe,
+  detailCapacites,
+  appliquerDerogation,
+  capacitesEffectives,
+  CAPACITE_LABELS,
+  TRIAL_ENDED_REASON,
+  type CompteLu,
+  type TenantCapacite,
   type AdminInvoiceGesture,
   type AdminLogAction,
   type AdminLogEntry,
@@ -229,6 +238,66 @@ export class AdminService {
   }
 
   /**
+   * L'ESSAI QUI S'ACHÈVE — la réconciliation de ce que `statutEffectif` dit déjà.
+   *
+   * Ce geste n'invente rien : au terme convenu, le compte est DÉJÀ actif pour
+   * toutes les lectures du produit (`statutEffectif`, @sm/contracts), qui le
+   * dérivent sans écrire. Cette méthode aligne la colonne sur cette vérité, au
+   * seul endroit qui parcourt déjà tout le parc — la passe mensuelle de
+   * facturation. Il n'y a donc PAS de planificateur à surveiller : ce qui compte
+   * est vrai en lecture immédiatement, et la base rattrape au moment où l'on
+   * facture, c'est-à-dire au moment où cela pèse.
+   *
+   * CE QUE ÇA NE FAIT PAS : rien ne se ferme. `isAccessBlocked` répond faux à
+   * `trial` comme à `active` — la bascule ne peut donc pas couper un restaurant
+   * en plein service. Ce qu'elle change est la FACTURATION (`isBillable`), ce
+   * qui est exactement ce que le contrat signé prévoit.
+   *
+   * IDEMPOTENTE PAR LE FILTRE, et pas seulement par une lecture préalable :
+   * la condition `account.status: 'trial'` voyage AVEC l'écriture. Deux passes
+   * lancées en même temps ne produisent donc pas deux lignes de journal pour un
+   * même terme — la seconde ne trouve plus rien à mettre à jour et rend `false`
+   * sans rien écrire.
+   *
+   * `since` prend le TERME et non l'instant de la passe : le compte est devenu
+   * payant au jour convenu, pas au jour où on s'en est aperçu. C'est aussi ce
+   * que la fiche affichait déjà par dérivation — la date ne saute donc pas.
+   *
+   * Écriture par CHEMINS POINTÉS et non par bloc : `trialEndsAt` doit survivre.
+   * C'est la date contractuelle de l'essai, elle explique le `since` qu'on vient
+   * d'écrire, et l'effacer ferait disparaître la preuve du terme au moment même
+   * où on l'applique.
+   */
+  async acterFinEssai(actor: JwtPayload, tenantId: string, echuLe: Date): Promise<boolean> {
+    const oid = toObjectId(tenantId, 'Établissement introuvable');
+    const raw = await this.tenants
+      .findOneAndUpdate(
+        { _id: oid, 'account.status': 'trial' },
+        {
+          $set: {
+            'account.status': 'active',
+            'account.since': echuLe,
+            'account.reason': TRIAL_ENDED_REASON,
+            'account.suspendedAt': null,
+          },
+        },
+        { new: true, runValidators: true, context: 'query' },
+      )
+      .lean();
+    if (!raw) return false;
+
+    await this.record(actor, {
+      action: 'tenant.trial_end',
+      tenantId: String((raw as RawTenant)._id),
+      reason: TRIAL_ENDED_REASON,
+      // Le TERME au journal, en clair : c'est la date qui justifie la bascule,
+      // et elle n'est lisible nulle part ailleurs une fois l'essai passé.
+      meta: { trialEndsAt: echuLe.toISOString() },
+    });
+    return true;
+  }
+
+  /**
    * CHANGE L'OFFRE ENTIÈRE d'un client — formule, module, engagement, services.
    *
    * `changePlan` n'écrivait que `plan`, et son schéma excluait `null` : le
@@ -294,7 +363,7 @@ export class AdminService {
         ...deltaServices(before.atelier ?? null, body.services),
       },
     });
-    return toAccountView(tenant);
+    return toAccountView(tenant, now);
   }
 
   /**
@@ -330,6 +399,106 @@ export class AdminService {
       meta: deltaMasque(avant, aEnregistrer),
     });
     return toAccountView(tenant);
+  }
+
+  /**
+   * ACCORDER OU RETIRER UNE CAPACITÉ HORS FORMULE — l'exception commerciale.
+   *
+   * `derogationsCapacite` vivait en base depuis la mise en place des capacités,
+   * lue par tout le produit (`capacitesEffectives`) et écrite par AUCUNE route :
+   * le seul moyen de faire une exception commerciale était d'ouvrir Mongo. Deux
+   * cas l'attendaient dès le déploiement — un pilote en formule Complet qui fait
+   * tourner la fidélité vendue en Boost, un client sans formule qui doit éditer
+   * sa carte. Sans ce geste, la seule réponse était de leur inventer une formule
+   * qu'ils n'ont pas signée, ce qui fausse aussitôt leur facture et le MRR.
+   *
+   * UNE SEULE LIGNE PAR CAPACITÉ (`appliquerDerogation`) : le geste remplace ce
+   * qui existait au lieu de s'empiler dessus. C'est ce qui rend possible
+   * d'accorder par-dessus un retrait — sans quoi le retrait l'emporterait
+   * toujours et l'écran ne bougerait pas après un geste réussi. La règle
+   * « un retrait l'emporte » vaut contre l'ORDRE des lignes, pas contre une
+   * décision explicite, motivée et journalisée.
+   *
+   * L'AUTEUR VIENT DU JETON, jamais du corps : une exception commerciale se
+   * relit au litige, et sa signature ne peut pas venir de la même main que le
+   * geste. La date vient de l'horloge du serveur, pour la même raison.
+   *
+   * UN GESTE QUI NE CHANGE RIEN EST REFUSÉ. Accorder une capacité déjà comprise
+   * dans la formule, retirer une capacité qu'il n'a pas, reposer deux fois la
+   * même dérogation : l'écran ne bougerait pas, l'opérateur croirait avoir agi,
+   * et le journal porterait une ligne qui ne raconte rien. Le refus NOMME la
+   * source (`detailCapacites`) — c'est l'information qui manquait pour choisir
+   * le bon geste.
+   */
+  async changeCapacite(
+    actor: JwtPayload,
+    tenantId: string,
+    body: TenantCapacite,
+    now: Date = new Date(),
+  ): Promise<AdminTenantAccount> {
+    const before = await this.requireTenant(tenantId);
+    const avant = capacitesEffectives(before);
+    const detail = detailCapacites(before);
+    const ligne = detail.find((c) => c.capacite === body.capacite);
+    const libelle = CAPACITE_LABELS[body.capacite];
+
+    if (body.geste === 'levee' && !ligne?.derogation) {
+      throw new BadRequestException(
+        `« ${libelle} » ne porte aucune dérogation — il n’y a rien à lever.`,
+      );
+    }
+
+    // L'auteur DÉNORMALISÉ, comme dans le journal : ce qui est écrit reste
+    // écrit le jour où un compte d'équipe est renommé ou supprimé. Le repli sur
+    // l'identifiant garde la ligne signée quand l'e-mail est introuvable — la
+    // base exige un auteur, et « personne » n'est pas une réponse acceptable
+    // sur une exception commerciale.
+    const auteur = (await this.actorEmail(actor.sub)) || actor.sub;
+    const derogations = appliquerDerogation(before.derogationsCapacite, {
+      ...body,
+      auteur,
+      le: now.toISOString(),
+    });
+
+    const apres = capacitesEffectives({ ...before, derogationsCapacite: derogations });
+    if (body.geste !== 'levee' && apres.join() === avant.join()) {
+      const source =
+        // Le même geste reposé à l'identique — testé EN PREMIER : la ligne
+        // existe déjà, et « il ne l'a pas souscrite » serait faux sur une
+        // capacité que nous avons nous-mêmes fermée.
+        ligne?.derogation?.sens === body.geste
+          ? 'elle porte déjà cette dérogation — levez-la d’abord pour en changer le motif'
+          : ligne?.origine === 'formule'
+            ? 'elle est déjà comprise dans sa formule'
+            : ligne?.origine === 'option'
+              ? 'elle lui est déjà ouverte par une option souscrite'
+              : ligne?.acquise
+                ? 'elle lui est déjà accordée'
+                : 'il ne l’a pas souscrite';
+      throw new BadRequestException(
+        `« ${libelle} » : ${source} — cette dérogation ne changerait rien.`,
+      );
+    }
+
+    const tenant = await this.updateTenant(tenantId, { derogationsCapacite: derogations });
+
+    await this.record(actor, {
+      action: 'tenant.capacite_change',
+      tenantId: String(tenant._id),
+      // Le motif du geste EST la phrase du journal : c'est elle qu'on relit six
+      // mois plus tard, et la retaper ailleurs donnerait deux versions.
+      reason: body.motif,
+      meta: {
+        capacite: body.capacite,
+        geste: body.geste,
+        // L'ÉTAT AVANT ET APRÈS, en clair. Une ligne qui ne dirait que « loyalty
+        // accordée » obligerait à reconstituer de tête ce que le client avait ce
+        // jour-là — or c'est exactement la question qu'on pose au litige.
+        avant: [...avant],
+        apres: [...apres],
+      },
+    });
+    return toAccountView(tenant, now);
   }
 
   /**
@@ -720,19 +889,31 @@ const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;
 
 /**
- * Bloc `account` d'un tenant, absence comprise.
+ * Bloc `account` d'un tenant, absence comprise — et statut EFFECTIF.
  *
  * Les établissements créés avant ce champ n'en ont pas en base, et `.lean()`
  * ne matérialise pas les défauts Mongoose : la fiche doit les afficher comme
  * des comptes d'essai ordinaires, jamais comme une anomalie ni un blocage.
+ *
+ * Le statut passe par `statutEffectif` (@sm/contracts) et non par la colonne :
+ * un essai dont le terme est passé s'affiche « Actif », que la passe mensuelle
+ * l'ait réconcilié en base ou non. Sans cela, la fiche d'un client signé il y a
+ * six mois annonçait « Essai » à l'opérateur qui l'appelle pour un impayé.
+ *
+ * `since` suit la même règle : sur un essai échu, c'est le TERME et non la date
+ * de signature — le compte est devenu payant au jour convenu. C'est aussi la
+ * valeur que la réconciliation écrira, si bien que la date affichée ne bouge
+ * pas le jour où la passe tourne.
  */
-function toAccount(raw: RawTenant): TenantAccount {
+function toAccount(raw: RawTenant, now: Date = new Date()): TenantAccount {
   const account = raw.account as
     | { status?: string; since?: Date; reason?: string; suspendedAt?: Date | null }
     | undefined;
+  const echuLe = essaiEchuLe(raw.account as CompteLu | undefined, now);
   return {
-    status: (account?.status ?? 'trial') as TenantAccountStatus,
-    since: iso(account?.since) ?? iso(raw.createdAt) ?? new Date(0).toISOString(),
+    status: statutEffectif(raw.account as CompteLu | undefined, now),
+    since:
+      iso(echuLe) ?? iso(account?.since) ?? iso(raw.createdAt) ?? new Date(0).toISOString(),
     reason: account?.reason ?? '',
     suspendedAt: iso(account?.suspendedAt),
   };
@@ -820,8 +1001,8 @@ function deltaMasque(
   };
 }
 
-function toAccountView(raw: RawTenant): AdminTenantAccount {
-  const account = toAccount(raw);
+function toAccountView(raw: RawTenant, now: Date = new Date()): AdminTenantAccount {
+  const account = toAccount(raw, now);
   // Le masque ET la raison de son repli : le second est le drapeau de la fiche.
   const masque = lireMarqueObservee(raw);
   return {
@@ -860,6 +1041,12 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
      * QUELS établissements sont concernés, sans lire les journaux.
      */
     brandRepli: masque.repli,
+    // Les onze capacités AVEC leur provenance : c'est ce que le panneau
+    // « Accès et options » affiche, et il ne rejoue pas le catalogue de son
+    // côté — la règle d'or veut que le conditionnement se lise à un seul
+    // endroit. Le document `.lean()` est passé tel quel : le calcul est
+    // tolérant à un champ absent par construction (`SouscriptionLue`).
+    capacites: detailCapacites(raw),
     // Les clients d'avant l'Atelier n'ont rien en base : null, pas un objet
     // de faux — la fiche doit lire l'absence comme une absence.
     atelier: raw.atelier

@@ -280,6 +280,56 @@ export const DerogationCapaciteSchema = z
   .strict();
 export type DerogationCapacite = z.infer<typeof DerogationCapaciteSchema>;
 
+/**
+ * LES TROIS GESTES DE L'ÉQUIPE — accorder, retirer, et REVENIR EN ARRIÈRE.
+ *
+ * Les deux premiers sont les `SENS_DEROGATION` ci-dessus. Le troisième n'en est
+ * pas un : « lever » n'ouvre ni ne ferme rien, il EFFACE la ligne et rend la
+ * capacité à ce que la formule en dit. Sans lui, une dérogation posée par
+ * erreur — la mauvaise capacité, le mauvais client — ne pourrait se corriger
+ * qu'en posant la dérogation inverse, c'est-à-dire en empilant deux exceptions
+ * pour revenir à la règle. Le journal deviendrait illisible au moment précis où
+ * on lui demande de dire ce qui s'est passé.
+ *
+ * C'est aussi la seule façon de RENDRE une capacité retirée : un retrait
+ * l'emporte toujours sur un octroi, par construction (`capacitesEffectives`) —
+ * on ne le neutralise donc pas en accordant par-dessus, on le lève.
+ */
+export const GESTES_DEROGATION = [...SENS_DEROGATION, 'levee'] as const;
+export const GesteDerogationSchema = z.enum(GESTES_DEROGATION);
+export type GesteDerogation = z.infer<typeof GesteDerogationSchema>;
+
+/** Ce que l'équipe lit sur le bouton — un verbe, parce que c'est un geste. */
+export const GESTE_DEROGATION_LABELS: Record<GesteDerogation, string> = {
+  accordee: 'Accorder hors formule',
+  retiree: 'Retirer malgré la formule',
+  levee: 'Lever la dérogation',
+};
+
+/**
+ * LE CORPS DE LA ROUTE — et ce qu'il ne porte PAS.
+ *
+ * Ni `auteur` ni `le` : le premier vient du jeton de l'appelant, le second de
+ * l'horloge du serveur. Les accepter du client laisserait l'équipe — ou
+ * n'importe qui ayant un jeton `sm_admin` — signer une exception commerciale du
+ * nom d'un collègue, et l'antidater. Le motif d'une dérogation existe pour être
+ * relu au litige : sa signature ne peut pas venir de la même main que le geste.
+ *
+ * Le MOTIF est obligatoire pour les trois gestes, levée comprise, exactement
+ * comme sur la suspension (`TenantSuspendSchema`) et l'annulation d'une commande
+ * (`OrderCancelSchema`). « Pourquoi cette fonction a-t-elle rouvert le 12 mars »
+ * est la même question que « pourquoi a-t-elle fermé », et elle se pose aussi
+ * souvent.
+ */
+export const TenantCapaciteSchema = z
+  .object({
+    capacite: CapaciteSchema,
+    geste: GesteDerogationSchema,
+    motif: z.string().trim().min(3, 'Motif obligatoire').max(200),
+  })
+  .strict();
+export type TenantCapacite = z.infer<typeof TenantCapaciteSchema>;
+
 // ─────────────────────────────────────────────────────────────
 // Le calcul — pur, tolérant, et seule autorité
 // ─────────────────────────────────────────────────────────────
@@ -302,13 +352,41 @@ export type SouscriptionLue = {
   derogationsCapacite?: readonly unknown[] | null;
 };
 
-/** Une dérogation lisible, ou `null` — le reste du document est ignoré. */
-function derogationLue(brut: unknown): { capacite: Capacite; sens: SensDerogation } | null {
-  if (typeof brut !== 'object' || brut === null) return null;
-  const ligne = brut as { capacite?: unknown; sens?: unknown };
-  const capacite = CAPACITES.find((c) => c === ligne.capacite);
-  const sens = SENS_DEROGATION.find((s) => s === ligne.sens);
-  return capacite && sens ? { capacite, sens } : null;
+/**
+ * LES DÉROGATIONS LISIBLES D'UN DOCUMENT, dans l'ordre où elles sont stockées.
+ *
+ * Seuls `capacite` et `sens` conditionnent la lecture : sans eux la ligne ne
+ * veut rien dire et elle est ignorée. Le motif, l'auteur et la date sont rendus
+ * TELS QU'ILS SONT — même vides — parce que ce lecteur sert aussi à réécrire le
+ * tableau (`appliquerDerogation`) : y inventer une valeur de défaut ferait
+ * signer une exception commerciale par personne.
+ *
+ * `le` ressort en ISO, la convention des réponses d'API ; la base, elle, stocke
+ * un `Date` que Mongoose recastera à l'écriture.
+ */
+export function lireDerogations(brut: readonly unknown[] | null | undefined): DerogationCapacite[] {
+  const out: DerogationCapacite[] = [];
+  for (const item of brut ?? []) {
+    if (typeof item !== 'object' || item === null) continue;
+    const ligne = item as { capacite?: unknown; sens?: unknown; motif?: unknown; auteur?: unknown; le?: unknown };
+    const capacite = CAPACITES.find((c) => c === ligne.capacite);
+    const sens = SENS_DEROGATION.find((s) => s === ligne.sens);
+    if (!capacite || !sens) continue;
+    const le =
+      ligne.le instanceof Date
+        ? ligne.le.toISOString()
+        : typeof ligne.le === 'string'
+          ? ligne.le
+          : '';
+    out.push({
+      capacite,
+      sens,
+      motif: typeof ligne.motif === 'string' ? ligne.motif : '',
+      auteur: typeof ligne.auteur === 'string' ? ligne.auteur : '',
+      le,
+    });
+  }
+  return out;
 }
 
 /**
@@ -344,9 +422,7 @@ export function capacitesEffectives(souscription: SouscriptionLue): readonly Cap
   }
 
   const retirees = new Set<Capacite>();
-  for (const brut of souscription.derogationsCapacite ?? []) {
-    const lue = derogationLue(brut);
-    if (!lue) continue;
+  for (const lue of lireDerogations(souscription.derogationsCapacite)) {
     if (lue.sens === 'accordee') acquises.add(lue.capacite);
     else retirees.add(lue.capacite);
   }
@@ -364,6 +440,132 @@ export const souscrit = (
   capacites: readonly Capacite[] | null | undefined,
   capacite: Capacite,
 ): boolean => (capacites ?? []).includes(capacite);
+
+// ─────────────────────────────────────────────────────────────
+// D'où vient chaque capacité — ce que l'équipe doit voir avant d'agir
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * TROIS SOURCES POSSIBLES, et les distinguer change le geste.
+ *
+ * `formule` : c'est vendu dans son abonnement — la retirer est un litige ou une
+ * panne, pas un ajustement. `option` : il la paie à part (79 €/mois pour la
+ * commande en ligne) — la retirer, c'est cesser de facturer. `derogation` :
+ * c'est une exception que NOUS avons posée, avec un motif et un auteur — c'est
+ * la seule des trois qui se lève.
+ *
+ * Sans cette distinction, un panneau qui affiche onze pastilles vertes ne dit
+ * pas à l'opérateur ce qu'il s'apprête à faire : retirer une capacité de
+ * formule et lever une dérogation se ressemblent à l'écran et n'ont rien à voir
+ * au contrat.
+ */
+export const ORIGINES_CAPACITE = ['formule', 'option', 'derogation'] as const;
+export type OrigineCapacite = (typeof ORIGINES_CAPACITE)[number];
+
+export const ORIGINE_CAPACITE_LABELS: Record<OrigineCapacite, string> = {
+  formule: 'Comprise dans la formule',
+  option: 'Option souscrite',
+  derogation: 'Dérogation',
+};
+
+/** Une capacité, son état, et POURQUOI elle est dans cet état. */
+export type CapaciteEffective = {
+  capacite: Capacite;
+  /** Le libellé publié, mot pour mot — jamais la clé. */
+  label: string;
+  /** Le restaurant l'a-t-il, à cet instant ? */
+  acquise: boolean;
+  /** D'où elle vient, ou d'où vient son refus. `null` : rien ne la donne. */
+  origine: OrigineCapacite | null;
+  /**
+   * La ligne de dérogation qui la concerne, s'il y en a une — même quand elle
+   * ne change RIEN (une capacité déjà comprise dans la formule et accordée en
+   * plus par un geste ancien). C'est elle qu'on lève, et on ne peut pas lever
+   * ce que l'écran ne montre pas.
+   */
+  derogation: DerogationCapacite | null;
+};
+
+/**
+ * LES ONZE CAPACITÉS D'UN RESTAURANT, chacune avec sa provenance.
+ *
+ * Rend TOUTE la matrice, y compris ce qu'il n'a pas : c'est un écran de vente
+ * autant qu'un écran d'administration, et « non souscrit » est une information
+ * — la même que celle que le restaurateur voit verrouillée dans sa navigation.
+ *
+ * Le résultat suit l'ordre de `CAPACITES`, comme `capacitesEffectives`, et son
+ * champ `acquise` en est le MIROIR EXACT : cette fonction n'est pas une seconde
+ * autorité, c'est la même réponse enrichie de sa cause. Un test l'épingle sur le
+ * parc de cas.
+ */
+export function detailCapacites(souscription: SouscriptionLue): readonly CapaciteEffective[] {
+  const acquises = capacitesEffectives(souscription);
+  const derogations = lireDerogations(souscription.derogationsCapacite);
+  // La DERNIÈRE ligne posée sur une capacité fait foi pour l'affichage : la
+  // route n'en laisse jamais deux, mais un document repris à la main pourrait.
+  const parCapacite = new Map<Capacite, DerogationCapacite>();
+  for (const d of derogations) parCapacite.set(d.capacite, d);
+
+  const formule = FORMULES.find((f) => f === souscription.plan) ?? null;
+  const deLaFormule = new Set<Capacite>(
+    formule ? CAPACITES_PAR_FORMULE[formule] : CAPACITES_SANS_FORMULE,
+  );
+  const champs = souscription as Record<string, unknown>;
+  const desOptions = new Set<Capacite>();
+  for (const [champ, capacite] of Object.entries(CAPACITES_PAR_OPTION)) {
+    if (champs[champ] === true) desOptions.add(capacite);
+  }
+
+  return CAPACITES.map((capacite) => {
+    const derogation = parCapacite.get(capacite) ?? null;
+    const acquise = acquises.includes(capacite);
+    const origine: OrigineCapacite | null = !acquise
+      ? // Une capacité fermée n'a d'origine que si c'est NOUS qui l'avons
+        // fermée : sinon elle n'a simplement pas été vendue, et « rien » est la
+        // réponse juste — pas une source qu'on inventerait pour remplir la case.
+        derogation?.sens === 'retiree'
+        ? 'derogation'
+        : null
+      : deLaFormule.has(capacite)
+        ? 'formule'
+        : desOptions.has(capacite)
+          ? 'option'
+          : 'derogation';
+    return { capacite, label: CAPACITE_LABELS[capacite], acquise, origine, derogation };
+  });
+}
+
+/**
+ * LE TABLEAU DE DÉROGATIONS APRÈS UN GESTE — pur, et sans effet de bord.
+ *
+ * UNE SEULE LIGNE PAR CAPACITÉ, toujours : le geste remplace ce qui existait
+ * sur cette capacité-là au lieu de s'empiler dessus. La raison est la règle
+ * même du calcul — un retrait l'emporte sur un octroi quel que soit l'ordre —,
+ * si bien qu'empiler « accordée » sur « retirée » ne rendrait RIEN et laisserait
+ * l'opérateur devant un écran qui ne bouge pas après un geste réussi. On lève,
+ * puis on repose : deux lignes au journal, une seule vérité en base.
+ *
+ * Les dérogations des AUTRES capacités traversent intactes, motif et auteur
+ * compris : ce sont des exceptions commerciales distinctes, et ce geste-ci n'en
+ * sait rien.
+ */
+export function appliquerDerogation(
+  existantes: readonly unknown[] | null | undefined,
+  geste: TenantCapacite & { auteur: string; le: string },
+): DerogationCapacite[] {
+  const autres = lireDerogations(existantes).filter((d) => d.capacite !== geste.capacite);
+  if (geste.geste === 'levee') return autres;
+  return [
+    ...autres,
+    {
+      capacite: geste.capacite,
+      sens: geste.geste,
+      motif: geste.motif,
+      auteur: geste.auteur,
+      le: geste.le,
+    },
+  ];
+}
 
 // ─────────────────────────────────────────────────────────────
 // Le refus — une proposition commerciale, pas une porte claquée

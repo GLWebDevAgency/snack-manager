@@ -38,6 +38,8 @@ import {
   planChoiceLabel,
   isAccessBlocked,
   type AdminPlan,
+  type CapaciteEffective,
+  type GesteDerogation,
 } from "@sm/contracts";
 import { ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -48,6 +50,7 @@ import { loadClientFile, type ClientFile, type ParkDevice } from "../data";
 import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import { FacturesCard } from "./Factures";
 import {
+  CapaciteModal,
   EmettreFactureModal,
   OffreModal,
   ResetOwnerModal,
@@ -58,6 +61,7 @@ import {
 } from "./actions";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
 import {
+  AccesSection,
   AdoptionSection,
   AdviceSection,
   DevicesSection,
@@ -95,6 +99,14 @@ export default function ClientFilePage({
     "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | "churn" | null
   >(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
+  // La dérogation en cours de saisie — la capacité ET le geste que sa ligne
+  // appelait. Comme les autres modales, elle n'est montée qu'à l'ouverture :
+  // un motif qui survivrait à la fermeture finirait collé sur la mauvaise
+  // fonction du mauvais client.
+  const [deroge, setDeroge] = useState<{
+    capacite: CapaciteEffective;
+    geste: GesteDerogation;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -470,6 +482,14 @@ export default function ClientFilePage({
           <div className="flex min-w-0 flex-[1.5] flex-col gap-4">
             <HealthSection file={file} />
             <AdoptionSection file={file} />
+            {/*
+              ACCÈS ET OPTIONS — sous l'adoption, et c'est la bonne place :
+              « il s'en sert de quoi ? » appelle immédiatement « il a le droit
+              d'ouvrir quoi ? ». C'est aussi le seul écran d'où une dérogation
+              se pose — la route existait, la base la lisait, aucune surface ne
+              l'écrivait.
+            */}
+            <AccesSection file={file} onGeste={setDeroge} />
             <AdviceSection file={file} />
           </div>
 
@@ -581,6 +601,16 @@ export default function ClientFilePage({
           // plutôt qu'un faux « 0,00 € » — cf. `defautConnu` dans actions.tsx.
           mrrCents={row?.mrrCents ?? 0}
           onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
+      {deroge && (
+        <CapaciteModal
+          tenantId={id}
+          tenantName={name}
+          capacite={deroge.capacite}
+          geste={deroge.geste}
+          onClose={() => setDeroge(null)}
           onDone={reload}
         />
       )}

@@ -37,7 +37,11 @@ import {
   CHURN_CAUSES,
   CHURN_CAUSE_LABELS,
   CHURN_CAUSE_HINTS,
+  GESTE_DEROGATION_LABELS,
+  ORIGINE_CAPACITE_LABELS,
+  type CapaciteEffective,
   type ChurnCause,
+  type GesteDerogation,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import {
@@ -878,6 +882,149 @@ function Refusal({ message }: { message: string }) {
         {message}
       </p>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dérogation de capacité
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * OUVRIR OU FERMER UNE FONCTION HORS FORMULE — l'exception commerciale, tracée.
+ *
+ * Le geste est déjà DÉCIDÉ quand cette modale s'ouvre : la ligne du panneau
+ * savait laquelle des trois actions elle appelait. Il ne reste donc à saisir
+ * que ce qui manque vraiment — le motif —, et à lire ce que ça change.
+ *
+ * MOTIF OBLIGATOIRE SUR LES TROIS GESTES, levée comprise. Une capacité ouverte
+ * hors formule est un manque à gagner, une capacité fermée malgré la formule
+ * est un litige : dans les deux cas quelqu'un demandera « pourquoi ? » six mois
+ * plus tard. L'API l'exige aussi — cette modale ne fait pas semblant d'être la
+ * garde.
+ */
+export function CapaciteModal({
+  tenantId,
+  tenantName,
+  capacite,
+  geste,
+  onClose,
+  onDone,
+}: Common & { capacite: CapaciteEffective; geste: GesteDerogation }) {
+  const toast = useToast();
+  const [motif, setMotif] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  const ok = motif.trim().length >= MIN_REASON;
+  // Ce que la LEVÉE produit dépend de la formule : effacer un octroi ferme la
+  // fonction, effacer un retrait la rouvre. Le dire avant le bouton évite le
+  // geste qu'on croit neutre et qui coupe un module en plein service.
+  const leveeOuvre = capacite.derogation?.sens === "retiree";
+  const ferme = geste === "retiree" || (geste === "levee" && !leveeOuvre);
+
+  async function run() {
+    if (!ok || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await clientsApi.changeCapacite(tenantId, {
+        capacite: capacite.capacite,
+        geste,
+        motif: motif.trim(),
+      });
+      toast(`${capacite.label} — ${geste === "levee" ? "dérogation levée" : geste === "accordee" ? "accordée" : "retirée"}`, {
+        icon: "check",
+      });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Geste impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      destructive={ferme}
+      title={`${GESTE_DEROGATION_LABELS[geste]} — ${capacite.label}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            size="sm"
+            icon={ferme ? "close" : "check"}
+            variant={ferme ? "danger" : "success"}
+            disabled={!ok || busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Enregistrement…" : GESTE_DEROGATION_LABELS[geste]}
+          </Btn>
+        </>
+      }
+    >
+      <p className="mb-3 text-[13px] leading-[1.45] text-mut">
+        {tenantName} — aujourd&apos;hui{" "}
+        {capacite.acquise ? "ouvert" : "fermé"}
+        {capacite.origine ? ` (${ORIGINE_CAPACITE_LABELS[capacite.origine].toLowerCase()})` : ""}.
+      </p>
+
+      <Consequences
+        tone={ferme ? "alert" : "ok"}
+        does={
+          geste === "accordee"
+            ? [
+                `« ${capacite.label} » s'ouvre pour ce restaurant, sans changer sa formule.`,
+                "La ligne est datée, signée et motivée : elle se relit dans le journal du client.",
+              ]
+            : geste === "retiree"
+              ? [
+                  `« ${capacite.label} » se ferme, même si sa formule la comprend.`,
+                  "Le gérant voit l'entrée verrouillée avec la phrase de la grille, jamais une erreur technique.",
+                ]
+              : leveeOuvre
+                ? [
+                    "Le retrait est effacé : la fonction revient à ce que dit sa formule.",
+                    "La levée est journalisée comme les deux autres gestes, avec son motif.",
+                  ]
+                : [
+                    "L'octroi est effacé : la fonction revient à ce que dit sa formule.",
+                    "La levée est journalisée comme les deux autres gestes, avec son motif.",
+                  ]
+        }
+        doesNot={[
+          "Sa formule, son engagement et sa facture ne bougent pas — une dérogation est ce qui s'écarte de la grille, pas une vente.",
+          "Rien n'est effacé côté restaurant : ses données, son menu et son historique restent en place.",
+        ]}
+      />
+
+      <Field
+        className="mt-4"
+        label="Motif de la dérogation"
+        htmlFor="capacite-motif"
+        hint="Obligatoire — c'est ce qu'on relira quand quelqu'un demandera pourquoi ce client-là l'avait."
+      >
+        <Textarea
+          id="capacite-motif"
+          autoFocus
+          rows={3}
+          placeholder={
+            geste === "accordee"
+              ? "Pilote fidélité — vendue en Boost, tournée en Complet le temps de l'essai."
+              : geste === "retiree"
+                ? "Module coupé le temps du litige sur la facture de juillet."
+                : "Dérogation posée par erreur sur le mauvais établissement."
+          }
+          value={motif}
+          onChange={(e) => setMotif(e.target.value)}
+        />
+      </Field>
+      {refusal && <Refusal message={refusal} />}
+    </SheetModal>
   );
 }
 

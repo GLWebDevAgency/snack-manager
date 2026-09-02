@@ -8,9 +8,14 @@ import {
   CAPACITES_SANS_GARDE,
   DerogationCapaciteSchema,
   FORMULES,
+  GESTES_DEROGATION,
+  TenantCapaciteSchema,
   aLaCapacite,
+  appliquerDerogation,
   capacitesEffectives,
   capaciteNonSouscriteMessage,
+  detailCapacites,
+  lireDerogations,
   souscrit,
   type Capacite,
   type Formule,
@@ -302,5 +307,190 @@ describe('le refus d’une capacité', () => {
     // Un manque de capacité n'est pas un manque de droit : le mot ne doit pas
     // apparaître, sous peine de faire chercher au gérant une case à cocher.
     expect(message.toLowerCase()).not.toContain('droit');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// Le geste de l'équipe — accorder, retirer, lever
+// ─────────────────────────────────────────────────────────────
+
+describe('le corps de la route de dérogation', () => {
+  const corps = {
+    capacite: 'loyalty' as const,
+    geste: 'accordee' as const,
+    motif: 'Pilote fidélité — vendue en Boost, tournée en Complet',
+  };
+
+  it('accepte les trois gestes, et eux seuls', () => {
+    expect([...GESTES_DEROGATION]).toEqual(['accordee', 'retiree', 'levee']);
+    for (const geste of GESTES_DEROGATION) {
+      expect(TenantCapaciteSchema.safeParse({ ...corps, geste }).success).toBe(true);
+    }
+    expect(TenantCapaciteSchema.safeParse({ ...corps, geste: 'peut-etre' }).success).toBe(false);
+  });
+
+  it('exige un motif — sur les trois gestes, levée comprise', () => {
+    // « Pourquoi cette fonction a-t-elle rouvert le 12 mars » est la même
+    // question que « pourquoi a-t-elle fermé », et elle se pose aussi souvent.
+    for (const geste of GESTES_DEROGATION) {
+      expect(TenantCapaciteSchema.safeParse({ ...corps, geste, motif: '' }).success).toBe(false);
+      expect(TenantCapaciteSchema.safeParse({ ...corps, geste, motif: '  ' }).success).toBe(false);
+    }
+  });
+
+  it('refuse une capacité qui n’existe pas', () => {
+    expect(TenantCapaciteSchema.safeParse({ ...corps, capacite: 'inventee' }).success).toBe(false);
+  });
+
+  it('n’accepte NI l’auteur NI la date depuis le client', () => {
+    // Une exception commerciale se relit au litige : sa signature ne peut pas
+    // venir de la même main que le geste. L'auteur vient du jeton, la date de
+    // l'horloge du serveur.
+    expect(TenantCapaciteSchema.safeParse({ ...corps, auteur: 'Un collègue' }).success).toBe(false);
+    expect(
+      TenantCapaciteSchema.safeParse({ ...corps, le: '2020-01-01T00:00:00.000Z' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('appliquer un geste sur les dérogations', () => {
+  const signe = { auteur: 'sm@snackmanager.fr', le: '2026-09-02T10:00:00.000Z' };
+  const existante = {
+    capacite: 'stocks' as const,
+    sens: 'retiree' as const,
+    motif: 'litige en cours',
+    auteur: 'sm@snackmanager.fr',
+    le: '2026-06-01T08:00:00.000Z',
+  };
+
+  it('laisse UNE SEULE ligne par capacité — le geste remplace, il ne s’empile pas', () => {
+    // Sans ce remplacement, accorder par-dessus un retrait ne rendrait rien :
+    // le retrait l'emporte quel que soit l'ordre. L'opérateur verrait un geste
+    // réussi et un écran qui ne bouge pas.
+    const apres = appliquerDerogation([existante], {
+      capacite: 'stocks',
+      geste: 'accordee',
+      motif: 'litige clos, fonction rendue',
+      ...signe,
+    });
+    expect(apres).toHaveLength(1);
+    expect(apres[0]!.sens).toBe('accordee');
+    expect(aLaCapacite({ plan: 'complet', derogationsCapacite: apres }, 'stocks')).toBe(true);
+  });
+
+  it('lève une dérogation en la retirant, et rend la capacité à la formule', () => {
+    const apres = appliquerDerogation([existante], {
+      capacite: 'stocks',
+      geste: 'levee',
+      motif: 'posée par erreur sur le mauvais client',
+      ...signe,
+    });
+    expect(apres).toEqual([]);
+    expect(aLaCapacite({ plan: 'complet', derogationsCapacite: apres }, 'stocks')).toBe(true);
+  });
+
+  it('laisse intactes les dérogations des AUTRES capacités', () => {
+    // Ce sont des exceptions commerciales distinctes, avec leur propre motif et
+    // leur propre auteur : ce geste-ci n'en sait rien.
+    const apres = appliquerDerogation([existante], {
+      capacite: 'loyalty',
+      geste: 'accordee',
+      motif: 'pilote fidélité',
+      ...signe,
+    });
+    expect(apres).toHaveLength(2);
+    expect(apres.find((d) => d.capacite === 'stocks')).toEqual(existante);
+  });
+
+  it('signe la ligne posée avec l’auteur et la date qu’on lui donne', () => {
+    const [ligne] = appliquerDerogation(null, {
+      capacite: 'menu',
+      geste: 'accordee',
+      motif: 'client sans formule, doit éditer sa carte',
+      ...signe,
+    });
+    expect(DerogationCapaciteSchema.safeParse(ligne).success).toBe(true);
+    expect(ligne).toMatchObject({ capacite: 'menu', sens: 'accordee', ...signe });
+  });
+
+  it('lit une ligne stockée en base — `le` en Date, rendu en ISO', () => {
+    const lues = lireDerogations([{ ...existante, le: new Date(existante.le) }]);
+    expect(lues).toEqual([existante]);
+    expect(lireDerogations([null, {}, { capacite: 'inconnue', sens: 'retiree' }])).toEqual([]);
+  });
+});
+
+describe('d’où vient chaque capacité', () => {
+  it('nomme la formule, l’option et la dérogation — trois gestes différents', () => {
+    const detail = detailCapacites({
+      plan: 'essentiel',
+      onlineOrdering: true,
+      derogationsCapacite: [
+        { capacite: 'loyalty', sens: 'accordee', motif: 'pilote', auteur: 'sm', le: '2026-09-02' },
+      ],
+    });
+    const de = (c: Capacite) => detail.find((d) => d.capacite === c)!;
+    expect(de('pos')).toMatchObject({ acquise: true, origine: 'formule' });
+    expect(de('online')).toMatchObject({ acquise: true, origine: 'option' });
+    expect(de('loyalty')).toMatchObject({ acquise: true, origine: 'derogation' });
+    // Ni vendue, ni accordée : « rien » est la réponse juste — pas une source
+    // qu'on inventerait pour remplir la case.
+    expect(de('planning')).toMatchObject({ acquise: false, origine: null });
+  });
+
+  it('montre la dérogation qui FERME une capacité, avec son motif', () => {
+    const detail = detailCapacites({
+      plan: 'boost',
+      derogationsCapacite: [
+        { capacite: 'online', sens: 'retiree', motif: 'litige', auteur: 'sm', le: '2026-09-02' },
+      ],
+    });
+    const online = detail.find((d) => d.capacite === 'online')!;
+    expect(online.acquise).toBe(false);
+    expect(online.origine).toBe('derogation');
+    expect(online.derogation?.motif).toBe('litige');
+  });
+
+  it('montre AUSSI une dérogation devenue sans effet — c’est elle qu’on lève', () => {
+    // Une capacité comprise dans la formule et accordée en plus par un geste
+    // ancien : l'origine reste « formule », mais la ligne doit apparaître,
+    // sinon on ne peut pas la lever depuis l'écran.
+    const detail = detailCapacites({
+      plan: 'boost',
+      derogationsCapacite: [
+        { capacite: 'loyalty', sens: 'accordee', motif: 'geste', auteur: 'sm', le: '2026-09-02' },
+      ],
+    });
+    const loyalty = detail.find((d) => d.capacite === 'loyalty')!;
+    expect(loyalty).toMatchObject({ acquise: true, origine: 'formule' });
+    expect(loyalty.derogation?.sens).toBe('accordee');
+  });
+
+  it('est le MIROIR exact de `capacitesEffectives`, jamais une seconde autorité', () => {
+    for (const plan of [...FORMULES, null] as (Formule | null)[]) {
+      for (const onlineOrdering of [false, true]) {
+        const souscription = {
+          plan,
+          onlineOrdering,
+          derogationsCapacite: [
+            { capacite: 'stocks', sens: 'retiree', motif: 'm', auteur: 'a', le: '2026-09-02' },
+            { capacite: 'menu', sens: 'accordee', motif: 'm', auteur: 'a', le: '2026-09-02' },
+          ],
+        };
+        expect(
+          detailCapacites(souscription)
+            .filter((d) => d.acquise)
+            .map((d) => d.capacite),
+        ).toEqual([...capacitesEffectives(souscription)]);
+      }
+    }
+  });
+
+  it('rend TOUTE la matrice, y compris ce que le client n’a pas', () => {
+    // C'est un écran de vente autant qu'un écran d'administration : « non
+    // souscrit » est une information, la même que celle que le restaurateur
+    // voit verrouillée dans sa navigation.
+    expect(detailCapacites({ plan: null }).map((d) => d.capacite)).toEqual([...CAPACITES]);
+    expect(detailCapacites({ plan: null }).every((d) => !d.acquise)).toBe(true);
   });
 });
