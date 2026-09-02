@@ -34,13 +34,15 @@
  * laissé tel quel, jamais recalculé — un second passage ne peut donc pas
  * relancer une remise sur une offre entre-temps augmentée.
  *
- *   pnpm --filter @sm/db backfill:founder              # montre
- *   pnpm --filter @sm/db backfill:founder --appliquer  # écrit
+ *   pnpm --filter @sm/db backfill:founder                # montre
+ *   pnpm --filter @sm/db backfill:founder --appliquer    # écrit
+ *   pnpm --filter @sm/db backfill:founder --exiger-zero  # échoue s'il reste du travail
  */
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose from 'mongoose';
 import { finRemiseFondateur, offreClient, remiseFondateurContrat } from '@sm/contracts';
+import { exigerZero, lireDrapeaux } from './backfill-flags';
 import { MODELS } from './schemas';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -85,7 +87,7 @@ export function repriseFondateur(
 }
 
 async function main(): Promise<void> {
-  const appliquer = process.argv.includes('--appliquer');
+  const drapeaux = lireDrapeaux();
   // `MONGO_URL` — le nom que l'API et `seed.ts` lisent déjà, et celui que
   // Railway pose. Un second nom aurait créé deux conventions, et un script de
   // reprise qui ne démarre pas sur l'environnement où on veut le lancer.
@@ -103,12 +105,14 @@ async function main(): Promise<void> {
   // Les fondateurs à qui il manque l'un des deux champs. Un client qui a déjà
   // les deux est hors du lot : le recalculer serait précisément le défaut
   // qu'on répare — une remise qui suit l'offre courante.
+  //
+  // `null` en filtre Mongo apparie AUSSI la clé absente, et `undefined` n'est
+  // pas une valeur BSON (le driver le sérialise en null) : `{ champ: null }`
+  // couvre déjà « absent ou nul », et le `$in` n'ajoutait qu'une seconde
+  // convention à lire.
   const aReprendre = await Tenant.find({
     founderSeat: true,
-    $or: [
-      { founderUntil: { $in: [null, undefined] } },
-      { founderDiscountCents: { $in: [null, undefined] } },
-    ],
+    $or: [{ founderUntil: null }, { founderDiscountCents: null }],
   }).lean();
 
   console.log(
@@ -142,8 +146,9 @@ async function main(): Promise<void> {
     );
   }
 
-  if (!appliquer) {
+  if (!drapeaux.appliquer) {
     console.log('\nRien écrit. Relancer avec --appliquer pour enregistrer.\n');
+    exigerZero(drapeaux, aReprendre.length, 'client(s) fondateur restent à reprendre');
     await mongoose.disconnect();
     return;
   }

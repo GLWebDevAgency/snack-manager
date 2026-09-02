@@ -4,6 +4,7 @@ import {
   BRAND_MODES,
   BRAND_MOTIONS,
   BRAND_SHAPES,
+  HEX,
   PLATFORM_SETTINGS_ID,
   PRESET_KEYS,
   SM_INVOICE_VAT,
@@ -56,10 +57,32 @@ function hidePrivateOrderFields(
 // été repris : le résolveur retombe alors sur Nuit + brandColor + logoUrl.
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * DÉFENSE EN PROFONDEUR — la base refuse aussi ce que le contrat refuse.
+ *
+ * Le contrat (`marque.ts`) rejette déjà `bleu` et `javascript:…` sur toutes les
+ * routes. Mais `admin-cli`, un shell mongo et les scripts à venir écrivent SANS
+ * zod : sans contrainte ici, la base accepterait une couleur illisible ou un
+ * `src` dangereux — que le repli Nuit masquerait ensuite à chaque lecture, donc
+ * sans que personne le voie. `HEX` est importé du contrat ; la règle d'image y
+ * est plus riche (`ImageUrl` : URL, 500 caractères, http(s)) mais n'y est pas
+ * exportée, et la base en garde la moitié qui compte à l'écriture. Le jour où
+ * le contrat l'exporte, cette constante est le seul point à supprimer.
+ *
+ * Ces validateurs ne s'exécutent que sur un document Mongoose (`save`,
+ * `validateSync`) et sur un `updateOne` lancé avec `runValidators`.
+ */
+const IMAGE_URL = /^https?:\/\//i;
+const COULEUR = [HEX, 'Couleur attendue au format #rrggbb'] as const;
+const IMAGE = {
+  match: [IMAGE_URL, 'URL http(s) attendue'] as const,
+  maxlength: 500,
+};
+
 const LogoPair = new Schema(
   {
-    light: { type: String, default: null },
-    dark: { type: String, default: null },
+    light: { type: String, default: null, ...IMAGE },
+    dark: { type: String, default: null, ...IMAGE },
   },
   { _id: false },
 );
@@ -70,11 +93,11 @@ export const BrandSub = new Schema(
     palette: {
       type: new Schema(
         {
-          ground: { type: String, required: true },
-          surface: { type: String, required: true },
-          ink: { type: String, required: true },
-          accent: { type: String, required: true },
-          onAccent: { type: String, required: true },
+          ground: { type: String, required: true, match: COULEUR },
+          surface: { type: String, required: true, match: COULEUR },
+          ink: { type: String, required: true, match: COULEUR },
+          accent: { type: String, required: true, match: COULEUR },
+          onAccent: { type: String, required: true, match: COULEUR },
         },
         { _id: false },
       ),
@@ -99,7 +122,7 @@ export const BrandSub = new Schema(
       ),
       required: true,
     },
-    hero: { type: String, default: null },
+    hero: { type: String, default: null, ...IMAGE },
     preset: {
       type: String,
       enum: [...PRESET_KEYS, null],
