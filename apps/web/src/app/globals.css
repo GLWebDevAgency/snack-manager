@@ -35,6 +35,18 @@
   --cf-accent-hover: #e0b96f;
   --cf-on-accent: #12100d;
 
+  /* ── Masque d'identité : dérivés que le résolveur surcharge par tenant ── */
+  --cf-ink-soft: #cfcfcf;
+  --cf-accent-ink: #dbc191;
+  --cf-accent-wash: rgba(201, 161, 90, 0.12);
+  --cf-focus: rgba(201, 161, 90, 0.6);
+  --cf-on-green: #000;
+  --cf-on-red: #fff;
+  --cf-on-amber: #000;
+  --cf-font-display: var(--font-inter), system-ui, sans-serif;
+  --cf-font-body: var(--font-inter), system-ui, sans-serif;
+  --cf-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   /* ── Fonctionnelles (FIXES tous comptes — jamais l'accent) ── */
   --cf-gold: #c9a15a;
   --cf-green: #3fae4a;
@@ -122,6 +134,23 @@
   --color-okt: var(--cf-green-t);
   --color-alertt: var(--cf-red-t);
   --color-prept: var(--cf-amber-t);
+
+  /* Masque d'identité — mêmes conventions de nommage que ci-dessus */
+  --color-inksoft: var(--cf-ink-soft);
+  --color-accentink: var(--cf-accent-ink);
+  --color-accentwash: var(--cf-accent-wash);
+  --color-focus: var(--cf-focus);
+  --color-onok: var(--cf-on-green);
+  --color-onalert: var(--cf-on-red);
+  --color-onprep: var(--cf-on-amber);
+  --color-surface3: var(--cf-surface-3);
+  --color-surface6: var(--cf-surface-6);
+  --font-display: var(--cf-font-display);
+  --font-body: var(--cf-font-body);
+  --font-mono: var(--cf-font-mono);
+  --duration-fast: var(--sm-t-fast);
+  --duration-med: var(--sm-t-med);
+  --duration-slow: var(--sm-t-slow);
 
   --font-sans: var(--font-inter), system-ui, sans-serif;
 
