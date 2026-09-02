@@ -66,7 +66,7 @@ export function Drawer({
       aria-label={!title ? (label ?? "Panneau") : undefined}
     >
       <div
-        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-black/55 motion-reduce:animate-none"
+        className="absolute inset-0 animate-[cf-fade_.22s_var(--sm-ease)_both] bg-bg/55 motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden
       />
@@ -106,7 +106,7 @@ export function Drawer({
         {footer && (
           <div
             data-dialog-footer
-            className="shrink-0 border-t border-line2 bg-black/25 px-[18px] py-3.5"
+            className="shrink-0 border-t border-line2 bg-bg/25 px-[18px] py-3.5"
           >
             {footer}
           </div>

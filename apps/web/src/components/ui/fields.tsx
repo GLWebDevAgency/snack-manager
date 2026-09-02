@@ -15,7 +15,7 @@ import { cx } from "@/lib/cx";
  * focus (le seul emploi d'accent ici — élément actif, DA §3).
  */
 const CONTROL =
-  "rounded-ctrl border border-white/8 bg-white/5 px-3.5 py-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/8";
+  "rounded-ctrl border border-ink/8 bg-ink/5 px-3.5 py-3 text-sm font-medium text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-ink/16 focus:border-accent focus:bg-ink/8 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-ink/8";
 
 /**
  * Largeur par défaut `w-full`, SAUF si l'appelant pose déjà une largeur.

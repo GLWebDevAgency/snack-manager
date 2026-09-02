@@ -18,15 +18,15 @@ type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS: Record<NonNullable<BtnProps["variant"]>, string> = {
   primary: "bg-accent text-onaccent shadow-card hover:opacity-85",
-  ink: "bg-btndark text-white hover:bg-[#333]",
+  ink: "bg-btndark text-onfill hover:bg-fill",
   ghost:
-    "border border-line bg-white/3 text-white hover:border-white/25 hover:bg-white/8",
-  gold: "bg-gold text-[#1C1612] shadow-card hover:opacity-85",
+    "border border-line bg-ink/3 text-ink hover:border-ink/25 hover:bg-ink/8",
+  gold: "bg-gold text-ongold shadow-card hover:opacity-85",
   // Verdicts des confirmations (« Suspendre l'accès », « Rouvrir l'accès ») :
   // les points d'appel écrasaient le fond du variant primary via className —
   // un conflit que Tailwind tranche par l'ordre de la feuille, pas des classes.
-  danger: "bg-alert text-white shadow-card hover:opacity-85",
-  success: "bg-ok text-white shadow-card hover:opacity-85",
+  danger: "bg-alert text-onalert shadow-card hover:opacity-85",
+  success: "bg-ok text-onok shadow-card hover:opacity-85",
 };
 
 /**

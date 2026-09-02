@@ -53,7 +53,7 @@ export function Modal({
       ref={dialogRef}
       inert
       tabIndex={-1}
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4 outline-none motion-reduce:animate-none"
+      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-bg/65 p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -83,7 +83,7 @@ export function Modal({
         fausse `vh`, et le pied repasserait sous elle.
       */}
       <div
-        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-ink/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

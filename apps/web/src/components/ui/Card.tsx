@@ -18,7 +18,7 @@ export function Card({ flat = false, className, ...rest }: CardProps) {
   return (
     <div
       className={cx(
-        "overflow-hidden border border-white/6",
+        "overflow-hidden border border-ink/6",
         flat
           ? "rounded-card bg-[image:var(--cf-elev-gradient)]"
           : "rounded-panel bg-[image:var(--cf-card-gradient)] shadow-card",

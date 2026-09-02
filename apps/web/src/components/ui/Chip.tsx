@@ -28,8 +28,8 @@ export function Chip({
         // Graisse identique dans les deux états : bascule sans saut de largeur.
         "cf-press inline-flex select-none items-center gap-1.5 whitespace-nowrap rounded-pill border px-3.5 py-[7px] text-[13px] font-semibold",
         on
-          ? "border-white/55 bg-white/12 text-white"
-          : "border-transparent bg-white/6 text-mut hover:bg-white/10 hover:text-white",
+          ? "border-ink/55 bg-ink/12 text-ink"
+          : "border-transparent bg-ink/6 text-mut hover:bg-ink/10 hover:text-ink",
         className,
       )}
       {...rest}

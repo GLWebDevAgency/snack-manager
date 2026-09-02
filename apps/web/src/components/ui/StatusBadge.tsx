@@ -7,10 +7,10 @@ import { cx } from "@/lib/cx";
  * Statuts internes : new / preparing / ready / delivered / cancelled.
  */
 const STATUS: Record<OrderStatus, { label: string; cls: string }> = {
-  new: { label: "Nouvelle", cls: "bg-alert text-white" },
-  preparing: { label: "En prépa", cls: "bg-prep text-[#1C1612]" },
-  ready: { label: "Prête", cls: "bg-ok text-white" },
-  delivered: { label: "Remise", cls: "bg-mut text-white" },
+  new: { label: "Nouvelle", cls: "bg-alert text-onalert" },
+  preparing: { label: "En prépa", cls: "bg-prep text-onprep" },
+  ready: { label: "Prête", cls: "bg-ok text-onok" },
+  delivered: { label: "Remise", cls: "bg-mut text-ink" },
   cancelled: {
     label: "Annulée",
     cls: "border-[1.5px] border-alert bg-transparent text-alertt",

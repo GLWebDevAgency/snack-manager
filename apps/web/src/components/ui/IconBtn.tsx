@@ -37,7 +37,7 @@ export function IconBtn({
       style={{ width: size, height: size }}
       className={cx(
         "cf-press inline-flex shrink-0 items-center justify-center rounded-pill border border-line bg-[image:var(--cf-elev-gradient)] text-ink",
-        "hover:border-white/40 hover:bg-[image:var(--cf-elev-hover)]",
+        "hover:border-ink/40 hover:bg-[image:var(--cf-elev-hover)]",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line",
         className,
       )}

@@ -24,7 +24,7 @@ export function EmptyState({
       )}
     >
       <div
-        className="grid size-11 place-items-center rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] text-mut"
+        className="grid size-11 place-items-center rounded-card border border-ink/6 bg-[image:var(--cf-elev-gradient)] text-mut"
         aria-hidden
       >
         <Icon name={icon} size={20} />
