@@ -19,7 +19,8 @@ const tenant = (patch: Record<string, unknown>) =>
 describe('l’identité du tableau de menu', () => {
   it('un tenant repris peint l’écran avec l’accent de son masque', () => {
     const id = identiteDuTableau(tenant({ brand: DIRECTIONS.soleil, brandColor: '#c9a15a' }));
-    expect(id.brandColor).toBe('#E07A1F');
+    // L'accent DU MASQUE, pas la colonne du tenant (`#c9a15a` ci-dessus).
+    expect(id.brandColor).toBe(DIRECTIONS.soleil.palette.accent);
     expect(id.logoUrl).toBeNull();
     expect(id.tenantId).toBe('tv1');
   });

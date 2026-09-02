@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   AdminLogQuerySchema,
-  BrandSchema,
+  BrandStrictSchema,
   DeviceRevokeSchema,
   TenantChurnSchema,
   TenantNoteSchema,
@@ -113,12 +113,12 @@ export class AdminController {
     return this.admin.changeOffre(actor, id, body);
   }
 
-  /** Le masque posé à l'installation, depuis la fiche client du CRM. */
+  /** Le masque posé à l'installation, depuis la fiche client du CRM — schéma strict. */
   @Patch('tenants/:id/marque')
   changeMarque(
     @CurrentUser() actor: JwtPayload,
     @Param('id') id: string,
-    @Body(zod(BrandSchema)) body: Brand,
+    @Body(zod(BrandStrictSchema)) body: Brand,
   ) {
     return this.admin.changeMarque(actor, id, body);
   }

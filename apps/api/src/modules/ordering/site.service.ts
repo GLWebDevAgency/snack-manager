@@ -13,6 +13,7 @@ import {
   type PublicSiteTenant,
 } from '@sm/contracts';
 import type { Category, Product, Review } from '@sm/db';
+import { horairesPublics } from '../tenants/horaires-publics';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from './slots.service';
 import { parisYmd } from './paris-time';
@@ -27,7 +28,7 @@ const LATEST_REVIEWS = 3;
  */
 export function tenantPublicDe(tenant: {
   slug?: unknown; name?: unknown; brand?: unknown; brandColor?: unknown; logoUrl?: unknown;
-  address?: unknown; phones?: unknown[]; hours?: Array<{ day?: unknown; lunch?: { open: string; close: string } | null; dinner?: { open: string; close: string } | null } | null>;
+  address?: unknown; phones?: unknown[]; hours?: Parameters<typeof horairesPublics>[0];
 }): PublicSiteTenant {
   const brand = marqueEffective({
     brand: tenant.brand,
@@ -42,11 +43,10 @@ export function tenantPublicDe(tenant: {
     brandColor: brandColorDe(brand),
     address: String(tenant.address ?? ''),
     phones: (tenant.phones ?? []).map(String),
-    hours: (tenant.hours ?? []).map((h) => ({
-      day: Number(h?.day ?? 0),
-      lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
-      dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
-    })),
+    // Une seule conversion pour les trois surfaces publiques (`horaires-publics`) :
+    // cette copie-ci et celle de l'écran de salle avaient déjà divergé de la
+    // fiche publique, qui ne convertissait pas du tout.
+    hours: horairesPublics(tenant.hours),
   };
 }
 

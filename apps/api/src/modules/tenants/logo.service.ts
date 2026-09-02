@@ -111,10 +111,14 @@ export class LogoService {
     // La colonne plate ET l'emplacement du masque : depuis que `logoUrl` est
     // dérivé de `brand.logo`, n'écrire que la première rendait le dépôt
     // invisible sur toutes les surfaces d'un tenant déjà repris.
+    // `runValidators` : Mongoose n'exécute ses gardes (`required`, `enum`) sur
+    // AUCUNE requête de mise à jour sans cette option — les chemins écrits ici
+    // touchent le masque (`brand.logo.mark.dark`), et le schéma doit valoir
+    // pour eux comme pour un document hydraté.
     const doc = await this.tenants.findByIdAndUpdate(
       tenantId,
       { $set: identiteAvecLogo(tenant.brand, ancienLogoUrl, logoUrl) },
-      { new: true },
+      { new: true, runValidators: true, context: 'query' },
     );
 
     // Le service suivant n'a pas à relire R2 : on vient d'avoir les octets.
@@ -146,7 +150,7 @@ export class LogoService {
     return this.tenants.findByIdAndUpdate(
       tenantId,
       { $set: identiteAvecLogo(tenant?.brand ?? null, ancienLogoUrl, null) },
-      { new: true },
+      { new: true, runValidators: true, context: 'query' },
     );
   }
 

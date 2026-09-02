@@ -468,7 +468,7 @@ describe('Le journal accepte une action de plateforme, et rien de plus', () => {
     expect(doc.validateSync()?.errors.tenantId).toBeDefined();
   });
 
-  it('refuse une action inconnue — l’enum recopie bien le contrat', () => {
+  it('refuse une action inconnue — l’enum lit bien le contrat', () => {
     const doc = new AdminLogModel({ actorId: SM.sub, action: 'platform.inventée' });
     expect(doc.validateSync()?.errors.action).toBeDefined();
   });

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import {
-  BrandSchema,
+  BrandStrictSchema,
   type Brand,
   TenantIdentityUpdateSchema,
   type TenantIdentityUpdate,
@@ -57,15 +57,28 @@ export class TenantsController {
 
   /**
    * Le masque d'identité du restaurateur — ce que voient SES clients. Validé
-   * par le contrat, puis le contraste est REJOUÉ ici : l'API ne fait pas
-   * confiance à l'écran.
+   * par le contrat en version STRICTE (une clé inattendue dans un corps de
+   * requête est une tentative, pas une tolérance), puis le contraste est
+   * REJOUÉ ici : l'API ne fait pas confiance à l'écran.
    */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/marque')
-  updateMarque(@TenantId() tenantId: string, @Body(zod(BrandSchema)) body: Brand) {
+  updateMarque(@TenantId() tenantId: string, @Body(zod(BrandStrictSchema)) body: Brand) {
     return this.tenants.updateMarque(tenantId, body);
   }
 
+  /**
+   * Les horaires hebdomadaires et les fermetures exceptionnelles.
+   *
+   * SEULE route d'écriture de ce contrôleur à prendre encore un corps NU : le
+   * type ci-dessous est une déclaration d'intention, pas une garde. Ces deux
+   * tableaux repartent vers le PUBLIC (`publicBySlug`, la page de commande, le
+   * calcul des créneaux), donc un corps mal formé casse la commande en ligne
+   * de tous les clients d'un restaurant. En attendant
+   * `TenantHoursUpdateSchema` (contrats) qui rendra le refus en 400, c'est
+   * `runValidators` côté service qui empêche l'écriture — un refus tardif vaut
+   * mieux qu'une page cassée, il ne vaut pas une validation d'entrée.
+   */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/hours')
   updateHours(

@@ -33,7 +33,10 @@ describe('l’identité d’un établissement, dérivée du masque', () => {
         logoUrl: 'https://r2/legacy.png',
       }),
     );
-    expect(id.brandColor).toBe('#E07A1F');
+    // L'accent DU MASQUE, pas la colonne du tenant (`#c9a15a` ci-dessus) :
+    // c'est la seule chose que ce test doit prouver, et l'écrire en dur y
+    // ajoutait une casse d'hexadécimal que le contrat normalise.
+    expect(id.brandColor).toBe(DIRECTIONS.soleil.palette.accent);
     expect(id.logoUrl).toBe('https://r2/mark-dark.png');
     expect(id.tenantId).toBe('abc123');
     expect(id.slug).toBe('classfood');

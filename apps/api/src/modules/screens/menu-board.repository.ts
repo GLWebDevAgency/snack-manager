@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Category, Product, Promotion, Tenant } from '@sm/db';
 import { brandColorDe, logoUrlDe, marqueEffective } from '@sm/contracts';
+import { horairesPublics } from '../tenants/horaires-publics';
 import type { RawDayHours } from './daypart';
 
 /**
@@ -72,11 +73,9 @@ export function identiteDuTableau(
     name: String(tenant.name ?? ''),
     logoUrl: logoUrlDe(brand),
     brandColor: brandColorDe(brand),
-    hours: (tenant.hours ?? []).map((h) => ({
-      day: Number(h?.day ?? 0),
-      lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
-      dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
-    })),
+    // La même conversion que la vitrine et la fiche publique — elle vivait ici
+    // en copie, et le dayparting de l'écran de salle en dépend au caractère près.
+    hours: horairesPublics(tenant.hours),
   };
 }
 

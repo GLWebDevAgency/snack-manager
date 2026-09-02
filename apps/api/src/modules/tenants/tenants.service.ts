@@ -12,21 +12,12 @@ import {
   type TenantSettingsUpdate,
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
+import { horairesPublics } from './horaires-publics';
 import { masqueAEnregistrer } from './marque';
 
 /**
- * Les réglages de service qu'un gérant peut écrire. Tout ce qui n'est pas ici
- * est ignoré en silence — c'est voulu : la route prend un corps nu, sans schéma
- * Zod, et cette liste est le seul rempart.
- *
- * Elle est EXPORTÉE pour être testable. Une liste blanche qui autorise un champ
- * absent du schéma Mongoose produit le pire des défauts : la route répond 200,
- * le gérant croit avoir enregistré, et rien ne persiste. C'est arrivé à
- * `dailyGoalCents`, resté six semaines dans cette liste sans exister en base.
- * Le test `tenants.test.ts` verrouille désormais la correspondance.
- */
-/**
- * Ce que `GET /tenants/me` a le droit de rendre.
+ * Ce que `GET /tenants/me` a le droit de rendre — et, depuis, ce que rendent
+ * AUSSI les quatre routes qui écrivent (`vueMe` ci-dessous).
  *
  * EXPORTÉE pour être testable : cette liste décide de ce qu'une tablette de
  * comptoir peut lire sur son propre restaurant, et un champ de trop y est une
@@ -128,6 +119,23 @@ export function identiteAvecLogo(
   return $set;
 }
 
+/**
+ * Les clés de `settings.*` qui partent dans le `$set` — rien de plus.
+ *
+ * Le corps est VALIDÉ en amont par `TenantSettingsUpdateSchema`
+ * (`@Body(zod(...))` sur la route) : le schéma décide des VALEURS, cette liste
+ * décide des CHAMPS ÉCRITS. Les deux restent nécessaires, et pour des raisons
+ * différentes — sans le schéma, une capacité négative fermait la commande en
+ * ligne sans un mot ; sans la liste, n'importe quelle clé du corps atterrirait
+ * dans le document.
+ *
+ * EXPORTÉE pour être testable, et le test `tenants.test.ts` verrouille les
+ * deux bouts : une clé validée mais absente d'ici serait acceptée puis jetée
+ * en silence, et une clé d'ici absente du schéma MONGOOSE subirait le même
+ * sort en base. C'est exactement ce qui est arrivé à `dailyGoalCents`, resté
+ * six semaines dans cette liste sans exister en base : la route répondait 200,
+ * le gérant croyait avoir enregistré, et rien ne persistait.
+ */
 export const REGLAGES_MODIFIABLES = [
   'slotIntervalMin',
   'slotCapacity',
@@ -142,25 +150,67 @@ export const REGLAGES_MODIFIABLES = [
 export class TenantsService {
   constructor(@InjectModel('Tenant') private readonly tenants: Model<Tenant>) {}
 
-  /**
-   * L'ÉTABLISSEMENT DE LA SESSION — en liste blanche, jamais le document entier.
-   *
-   * Elle rendait le tenant complet. Or cette route sert TOUT l'équipage, y
-   * compris une session ouverte au code sur la tablette du comptoir : un
-   * équipier de cuisine lisait donc le SIRET, le numéro de TVA, l'identité de
-   * facturation, l'identifiant du compte Stripe du restaurant, le motif de sa
-   * suspension, et jusqu'au montant de sa remise fondateur.
-   *
-   * Rien de tout cela n'est utilisé par les écrans — ils lisent onze champs, et
-   * ce sont exactement ceux d'en dessous. La projection est écrite en liste
-   * BLANCHE, et non en retrait des champs sensibles : un champ ajouté demain au
-   * schéma ne doit pas partir sur une tablette parce que personne n'a pensé à
-   * l'exclure. C'est le même choix que pour la diffusion temps réel du suivi.
-   */
+  /** L'établissement de la session (`GET /tenants/me`) — cf. `vueMe`. */
   async byId(tenantId: string) {
-    const t = await this.tenants.findById(tenantId, TENANT_ME_FIELDS);
-    if (!t) throw new NotFoundException('Tenant introuvable');
-    return derivesDuMasque(t);
+    return this.vueMe(tenantId, {});
+  }
+
+  /**
+   * LA VUE DE LA SESSION — une seule forme, en lecture comme en écriture.
+   *
+   * Cette route sert TOUT l'équipage, y compris une session ouverte au code
+   * sur la tablette du comptoir. Elle rendait le tenant complet : un équipier
+   * de cuisine lisait le SIRET, le numéro de TVA, l'identité de facturation,
+   * l'identifiant du compte Stripe du restaurant, le motif de sa suspension,
+   * et jusqu'au montant de sa remise fondateur.
+   *
+   * La lecture a été projetée la première, puis `updateMarque` ; les TROIS
+   * autres écritures, non — `findByIdAndUpdate(…, { new: true })` sans
+   * projection. Changer un horaire, un téléphone ou l'objectif du jour rendait
+   * donc exactement ce qu'on venait de fermer en lecture. Une projection posée
+   * sur la seule lecture ne protège rien : c'est la RÉPONSE qui fuit, pas la
+   * route. Les cinq chemins passent donc par ici.
+   *
+   * Deux gestes, et les deux comptent :
+   *  - la projection `TENANT_ME_FIELDS`, écrite en liste BLANCHE et non en
+   *    retrait des champs sensibles — un champ ajouté demain au schéma ne
+   *    partira pas sur une tablette parce que personne n'aura pensé à
+   *    l'exclure ;
+   *  - `derivesDuMasque`, pour que `logoUrl` et `brandColor` soient DÉRIVÉS du
+   *    masque des deux côtés. Sans lui, l'éditeur enregistrait un accent et
+   *    relisait l'ancien dans la réponse de son propre enregistrement.
+   *
+   * Le `$set` vide n'est pas une écriture : un PATCH sans rien de reconnu se
+   * contente de relire — ce que faisait déjà l'ancien code, mais projeté.
+   */
+  private async vueMe(tenantId: string, $set: Record<string, unknown>) {
+    const doc =
+      Object.keys($set).length === 0
+        ? await this.tenants.findById(tenantId, TENANT_ME_FIELDS)
+        : await this.tenants.findByIdAndUpdate(
+            tenantId,
+            { $set },
+            {
+              new: true,
+              projection: TENANT_ME_FIELDS,
+              /*
+               * LES GARDES DU SCHÉMA NE S'EXÉCUTENT PAS TOUTES SEULES.
+               *
+               * Mongoose n'applique NI `required` NI `enum` sur une requête de
+               * mise à jour, seulement sur `save()`. Les enums de `BrandSub`
+               * (mode, shape, motion, type.pair, preset) — écrits ici par
+               * `updateMarque` et `updateIdentity` — ne se déclenchaient donc
+               * jamais : la base laissait passer ce que Zod n'avait pas vu, et
+               * le schéma faisait croire le contraire à quiconque le lisait.
+               * `context: 'query'` donne aux validateurs le `this` de la
+               * requête, seule forme correcte hors document hydraté.
+               */
+              runValidators: true,
+              context: 'query',
+            },
+          );
+    if (!doc) throw new NotFoundException('Tenant introuvable');
+    return derivesDuMasque(doc);
   }
 
   async bySlug(slug: string) {
@@ -188,7 +238,9 @@ export class TenantsService {
       brandColor: brandColorDe(brand),
       address: t.address,
       phones: t.phones,
-      hours: t.hours,
+      // La forme neutre, la même que la vitrine et l'écran de salle : cette
+      // route rendait le tableau de sous-documents Mongoose tel quel.
+      hours: horairesPublics(t.hours),
       onlineOrderingPaused: gate.paused,
       pauseMessage: gate.message,
       slotIntervalMin: t.settings?.slotIntervalMin ?? 10,
@@ -197,22 +249,15 @@ export class TenantsService {
 
   /**
    * Les réglages du service. Le corps est VALIDÉ en amont
-   * (`TenantSettingsUpdateSchema`) : cette liste ne décide plus que des champs
-   * ÉCRITS, ce qu'elle a toujours fait, et le schéma décide des VALEURS — ce
-   * que personne ne faisait.
-   *
-   * Les deux restent nécessaires et le test `tenants.test.ts` verrouille leur
-   * correspondance : une clé validée mais absente d'ici serait acceptée puis
-   * jetée en silence, et une clé d'ici absente du schéma Mongoose subirait le
-   * même sort en base — c'est exactement ce qui est arrivé à `dailyGoalCents`.
+   * (`TenantSettingsUpdateSchema`) : `REGLAGES_MODIFIABLES` ne décide que des
+   * champs ÉCRITS, le schéma décide des VALEURS.
    */
   async updateSettings(tenantId: string, patch: TenantSettingsUpdate) {
     const $set: Record<string, unknown> = {};
     for (const k of REGLAGES_MODIFIABLES) {
       if (k in patch) $set[`settings.${k}`] = (patch as Record<string, unknown>)[k];
     }
-    if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
-    return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+    return this.vueMe(tenantId, $set);
   }
 
   /**
@@ -240,8 +285,7 @@ export class TenantsService {
       const tenant = await this.tenants.findById(tenantId, { brand: 1 });
       Object.assign($set, identiteAvecAccent(tenant?.brand ?? null, patch.brandColor));
     }
-    if (Object.keys($set).length === 0) return this.tenants.findById(tenantId);
-    return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+    return this.vueMe(tenantId, $set);
   }
 
   /**
@@ -253,36 +297,33 @@ export class TenantsService {
    * le restaurateur en pose un nouveau. Le contraste est rejoué ENSUITE, sur
    * le masque tel qu'il sera vraiment enregistré (`masqueAEnregistrer`).
    *
-   * La réponse est PROJETÉE (`TENANT_ME_FIELDS`), pas le document entier :
-   * cette route répond à une session ouverte au code sur une tablette de
-   * comptoir, le même risque de fuite que documenté sur `byId` ci-dessus.
+   * La réponse passe par `vueMe` comme les trois autres écritures : projetée,
+   * et ses champs plats dérivés du masque qu'on vient d'enregistrer.
    */
   async updateMarque(tenantId: string, brand: Brand) {
-    const tenant = await this.tenants.findById(tenantId);
+    // Seul le logo legacy sert ici (l'héritage de `masqueAEnregistrer`) : on
+    // ne lit que lui, comme `updateIdentity` ne lit que `brand`. Une lecture
+    // non projetée dans un fichier qui érige la projection en doctrine se
+    // paierait sur la première fiche client volumineuse.
+    const tenant = await this.tenants.findById(tenantId, { logoUrl: 1 });
     if (!tenant) throw new NotFoundException('Tenant introuvable');
-    const aEnregistrer = masqueAEnregistrer(brand, tenant.logoUrl);
-    const ecrit = await this.tenants.findByIdAndUpdate(
-      tenantId,
-      { $set: { brand: aEnregistrer } },
-      { new: true, projection: TENANT_ME_FIELDS },
-    );
-    if (!ecrit) throw new NotFoundException('Tenant introuvable');
-    /*
-     * LA MÊME FORME QUE `GET /tenants/me` — pas le document brut.
-     *
-     * Cette route rendait les champs PLATS tels qu'ils dorment en base
-     * (`logoUrl`, `brandColor` d'avant la reprise) quand la lecture, elle,
-     * les DÉRIVE du masque. L'éditeur enregistrait donc un accent et
-     * récupérait l'ancien dans la même réponse : il fallait recharger la page
-     * pour voir ce qu'on venait d'écrire.
-     */
-    return derivesDuMasque(ecrit);
+    return this.vueMe(tenantId, { brand: masqueAEnregistrer(brand, tenant.logoUrl) });
   }
 
-  /** Horaires hebdomadaires (vue Horaires du back-office). */
+  /**
+   * Horaires hebdomadaires (vue Horaires du back-office).
+   *
+   * ATTENTION — la route qui appelle cette méthode prend encore un corps NU
+   * (`tenants.controller.ts`, `@Body()` sans pipe) : `hours` et `closures`
+   * arrivent en `unknown[]`, et ces tableaux repartent vers le PUBLIC
+   * (`publicBySlug`, `tenantPublicDe`, `SlotsService`). `runValidators` sur
+   * l'écriture est le seul rempart en attendant le schéma Zod
+   * (`TenantHoursUpdateSchema`) qui doit rendre le refus en 400 plutôt qu'en
+   * erreur d'écriture.
+   */
   async updateHours(tenantId: string, hours: unknown[], closures?: unknown[]) {
     const $set: Record<string, unknown> = { hours };
     if (closures) $set.closures = closures;
-    return this.tenants.findByIdAndUpdate(tenantId, { $set }, { new: true });
+    return this.vueMe(tenantId, $set);
   }
 }
