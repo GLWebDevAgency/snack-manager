@@ -500,7 +500,15 @@ export class StatsService {
     const tid = this.tid(tenantId);
     const [cats, prods] = await Promise.all([
       this.categories.find({ tenantId: tid }).sort({ order: 1 }).lean(),
-      this.products.find({ tenantId: tid }).sort({ order: 1 }).lean(),
+      /*
+       * MÊME BORNE QUE L'EXPORT DES COMMANDES, ET POUR LA MÊME RAISON.
+       *
+       * Celui-ci n'en avait aucune : une carte anormalement grosse — un import
+       * qui a doublé, une reprise ratée — ramenait tout en mémoire d'un coup.
+       * 20 000 produits sont hors d'atteinte d'une carte réelle ; la borne
+       * n'existe que pour qu'un accident ne devienne pas une panne.
+       */
+      this.products.find({ tenantId: tid }).sort({ order: 1 }).limit(20_000).lean(),
     ]);
     const catName = new Map(cats.map((c) => [String(c._id), c.name]));
     const header = ['Catégorie', 'Produit', 'Description', 'Variante', 'Prix (€)', 'Actif', 'Rupture'];
