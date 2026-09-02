@@ -35,13 +35,28 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  // L’iframe est déjà contrainte par l’hôte : pas de zoom parasite au tap.
-  maximumScale: 5,
-  themeColor: "#000000",
-};
+/**
+ * Le `themeColor` suit le MASQUE du restaurant, pas notre noir.
+ *
+ * Il était écrit `#000000` : sur iOS, la barre d'état de l'hôte se peignait
+ * en noir au-dessus d'un tunnel crème, et l'intégration se voyait. Le fond du
+ * masque (`brand.palette.ground`) est exactement ce que peint la page.
+ *
+ * Le site est rechargé ici — comme le fait déjà `generateMetadata` de
+ * `/r/[slug]` : l'appel traverse le cache de requête de Next, et un tunnel
+ * introuvable retombe simplement sur le noir plutôt que d'échouer au rendu.
+ */
+export async function generateViewport({ params }: Params): Promise<Viewport> {
+  const { slug } = await params;
+  const site = await loadSite(slug).catch(() => null);
+  return {
+    width: "device-width",
+    initialScale: 1,
+    // L’iframe est déjà contrainte par l’hôte : pas de zoom parasite au tap.
+    maximumScale: 5,
+    themeColor: site?.tenant.brand.palette.ground ?? "#000000",
+  };
+}
 
 export default async function EmbedPage({ params, searchParams }: Params) {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
