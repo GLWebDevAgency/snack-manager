@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { fallbackDe, resoudreMarque, TYPE_PAIRS, type Brand } from "@sm/contracts";
 import { Banner, PrimaryAction, Spinner } from "./primitives";
 
 // ─── Surface minimale de Stripe.js réellement utilisée ───
@@ -76,24 +77,44 @@ function loadStripeJs(): Promise<void> {
   return loader;
 }
 
-/** Habillage sombre de l’iframe Stripe, aligné sur la charte du tunnel. */
-function appearance(accent: string) {
+/**
+ * Habillage du champ de carte — les valeurs RÉSOLUES du masque, pas des jetons.
+ *
+ * Le Payment Element vit dans une iframe servie par Stripe : notre feuille de
+ * style ne l'atteint pas, `var(--cf-*)` n'y résout rien. Il faut donc lui
+ * passer des couleurs déjà calculées — c'est le seul endroit du produit où le
+ * masque sort en valeurs plates.
+ *
+ * Et la police : Stripe ne peut pas charger nos familles `next/font` (elles
+ * sont servies depuis notre origine, sous des noms hachés). On lui donne la
+ * PILE DE REPLI de la famille de corps — le champ carte garde donc la police
+ * système du genre choisi, ce qui est assumé : mieux vaut un repli cohérent
+ * qu'une police qui ne chargera jamais.
+ */
+export type ApparenceStripe = ReturnType<typeof apparenceStripeDe>;
+
+export function apparenceStripeDe(brand: Brand) {
+  const { vars } = resoudreMarque(brand);
+  const accent = vars["--cf-accent"] ?? "";
   return {
-    theme: "night",
+    // Le thème de départ décide des valeurs que Stripe ne reçoit pas de nous
+    // (icônes, états désactivés) : sur un masque clair, « night » les
+    // laisserait blanches sur crème.
+    theme: brand.mode === "dark" ? "night" : "stripe",
     variables: {
       colorPrimary: accent,
-      colorBackground: "#1a1a1a",
-      colorText: "#ffffff",
-      colorTextSecondary: "#999999",
-      colorDanger: "#c94b3f",
-      fontFamily: "Inter, system-ui, sans-serif",
-      borderRadius: "10px",
+      colorBackground: vars["--cf-surface"] ?? "",
+      colorText: vars["--cf-text"] ?? "",
+      colorTextSecondary: vars["--cf-mut"] ?? "",
+      colorDanger: vars["--cf-red"] ?? "",
+      fontFamily: fallbackDe(TYPE_PAIRS[brand.type.pair].body),
+      borderRadius: vars["--cf-r-md"] ?? "",
       spacingUnit: "4px",
     },
     rules: {
-      ".Input": { border: "1px solid rgba(255,255,255,0.1)", boxShadow: "none" },
+      ".Input": { border: `1px solid ${vars["--cf-line"] ?? ""}`, boxShadow: "none" },
       ".Input:focus": { border: `1px solid ${accent}`, boxShadow: "none" },
-      ".Label": { color: "#999999", fontWeight: "600" },
+      ".Label": { color: vars["--cf-mut"] ?? "", fontWeight: "600" },
     },
   };
 }
@@ -103,7 +124,7 @@ export function StripeCard({
   clientSecret,
   stripeAccount,
   amount,
-  accent,
+  apparence,
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
@@ -119,7 +140,13 @@ export function StripeCard({
    */
   stripeAccount: string;
   amount: number;
-  accent: string;
+  /**
+   * Le masque, déjà résolu par la vitrine. Il arrive en propriété — et non
+   * calculé ici — pour que sa référence soit stable : elle entre dans les
+   * dépendances de l'effet de montage, un objet neuf à chaque rendu
+   * démonterait et remonterait le champ de carte à chaque frappe.
+   */
+  apparence: ApparenceStripe;
   returnUrl: string;
   onPaid: () => void;
   /** Repli explicite : « je réglerai au comptoir ». */
@@ -143,10 +170,7 @@ export function StripeCard({
         const factory = window.Stripe;
         if (!factory) throw new Error("Stripe.js indisponible");
         const stripe = factory(publishableKey, { locale: "fr", stripeAccount });
-        const elements = stripe.elements({
-          clientSecret,
-          appearance: appearance(accent),
-        });
+        const elements = stripe.elements({ clientSecret, appearance: apparence });
         element = elements.create("payment", {
           layout: { type: "tabs", defaultCollapsed: false },
         });
@@ -167,7 +191,7 @@ export function StripeCard({
         /* démontage best-effort */
       }
     };
-  }, [publishableKey, clientSecret, stripeAccount, accent]);
+  }, [publishableKey, clientSecret, stripeAccount, apparence]);
 
   async function pay() {
     const stripe = stripeRef.current;
@@ -215,7 +239,7 @@ export function StripeCard({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-card border border-white/8 bg-surface2 p-3.5">
+      <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
           <p className="flex items-center gap-2.5 py-6 text-[14px] text-mut">
             <Spinner />
@@ -244,7 +268,7 @@ export function StripeCard({
       <button
         type="button"
         onClick={onGiveUp}
-        className="text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-200 hover:text-ink"
+        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-200 hover:text-ink"
       >
         Je préfère régler au comptoir
       </button>

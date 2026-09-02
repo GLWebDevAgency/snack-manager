@@ -663,11 +663,14 @@ export function Segmented<T extends string>({
   value,
   onChange,
   label,
+  mono = false,
 }: {
   options: { key: T; label: string; sub?: string }[];
   value: T | null;
   onChange: (next: T) => void;
   label: string;
+  /** `prixMono` du masque : le `sub` d'un segment porte un prix. */
+  mono?: boolean;
 }) {
   const wrap = options.length > 3;
   return (
@@ -703,6 +706,7 @@ export function Segmented<T extends string>({
               <span
                 className={cx(
                   "text-[12px] font-bold tabular-nums leading-none",
+                  mono && "font-mono",
                   on ? "opacity-80" : "text-mut",
                 )}
               >

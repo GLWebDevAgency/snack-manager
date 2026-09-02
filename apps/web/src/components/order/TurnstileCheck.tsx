@@ -150,7 +150,7 @@ export function TurnstileCheck({
       aria-live="polite"
       className={cx(
         "overflow-hidden rounded-panel border bg-surface2 transition-colors duration-300 ease-sm motion-reduce:transition-none",
-        verified ? "border-ok/35" : failed ? "border-alert/35" : "border-white/8",
+        verified ? "border-ok/35" : failed ? "border-alert/35" : "border-ink/8",
       )}
     >
       {siteKey && (
@@ -170,7 +170,7 @@ export function TurnstileCheck({
               ? "border-ok/30 bg-ok/10 text-ok"
               : failed
                 ? "border-alert/30 bg-alert/10 text-alert"
-                : "border-white/8 bg-white/[0.035] text-mut",
+                : "border-ink/8 bg-ink/[0.035] text-mut",
           )}
         >
           {verified ? (

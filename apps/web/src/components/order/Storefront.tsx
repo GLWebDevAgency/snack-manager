@@ -22,7 +22,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { brandColorDe, resoudreMarque } from "@sm/contracts";
+import { resoudreMarque } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
@@ -49,6 +49,7 @@ import { Checkout } from "./Checkout";
 import { armeFunnel, jalonFunnel } from "./funnel";
 import { Highlights, MenuBoard } from "./MenuBoard";
 import { ProductSheet } from "./ProductSheet";
+import { apparenceStripeDe } from "./StripeCard";
 import {
   Badge,
   Banner,
@@ -105,6 +106,16 @@ export function Storefront({
    * fichiers, où elle finirait par diverger.
    */
   const { prixMono } = resoudreMarque(site.tenant.brand);
+  /*
+   * L'habillage du champ de carte est MÉMORISÉ : sa référence entre dans les
+   * dépendances de l'effet qui monte le Payment Element. Un objet neuf à
+   * chaque rendu le démonterait et le remonterait — le client verrait son
+   * numéro de carte s'effacer sous ses doigts.
+   */
+  const stripeApparence = useMemo(
+    () => apparenceStripeDe(site.tenant.brand),
+    [site.tenant.brand],
+  );
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
 
@@ -343,6 +354,7 @@ export function Storefront({
       <ProductSheet
         draft={draft}
         blocked={blocked}
+        prixMono={prixMono}
         onChange={setDraft}
         onClose={() => setDraft(null)}
         onSubmit={(line) => {
@@ -358,7 +370,8 @@ export function Storefront({
         slug={site.tenant.slug}
         tenantName={site.tenant.name}
         tenantAddress={site.tenant.address}
-        accent={brandColorDe(site.tenant.brand)}
+        stripeApparence={stripeApparence}
+        prixMono={prixMono}
         cart={cart}
         paused={paused}
         pauseMessage={site.ordering.message}
