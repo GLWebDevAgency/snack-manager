@@ -18,6 +18,7 @@ import type { Request, Response } from 'express';
 import { LOGO_MAX_OCTETS } from '@sm/contracts';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { LogoService } from './logo.service';
+import { imageAutorisee, OriginesImages } from './origines-images';
 
 /**
  * Le fichier tel que multer le remet — réduit aux trois champs lus ici.
@@ -32,7 +33,10 @@ interface FichierRecu {
 
 @Controller()
 export class LogoController {
-  constructor(private readonly logo: LogoService) {}
+  constructor(
+    private readonly logo: LogoService,
+    private readonly origines: OriginesImages,
+  ) {}
 
   /**
    * PUT et non POST : poser le logo est idempotent — le nouveau remplace
@@ -60,13 +64,35 @@ export class LogoController {
     if (!fichier?.buffer?.length) {
       throw new BadRequestException('Aucun fichier reçu — choisissez une image.');
     }
-    // L'hôte public vient de la requête elle-même : l'URL suit le domaine
-    // réellement servi, sans variable à maintenir par environnement. Note :
-    // `trust proxy` ne résout que le protocole ; l'hôte se lit d'abord dans
-    // X-Forwarded-Host (si le proxy le pose), sinon dans Host — que Railway
-    // préserve.
+    /*
+     * L'HÔTE DE LA REQUÊTE EST UNE ENTRÉE, PAS UNE VÉRITÉ.
+     *
+     * L'URL suit le domaine réellement servi, sans variable à maintenir par
+     * environnement : `trust proxy` ne résout que le protocole, l'hôte se lit
+     * d'abord dans X-Forwarded-Host (si le proxy le pose), sinon dans Host —
+     * que Railway préserve. Mais ces deux en-têtes viennent du CLIENT. Un
+     * gérant qui envoyait `X-Forwarded-Host: mechant.fr` faisait écrire
+     * `https://mechant.fr/public/tenants/<slug>/logo?v=…` dans `logoUrl` ET
+     * dans `brand.logo.mark.dark` : l'image de sa vitrine, de sa carte de
+     * fidélité et de son tableau de menu était dès lors servie par un tiers,
+     * qui voyait l'IP de tous ses clients et décidait de ce qui s'affiche.
+     *
+     * C'était le contournement exact de la liste blanche que les deux routes
+     * `PATCH …/marque` appliquent (`origines-images.ts`) : là où une URL est
+     * REÇUE elle est vérifiée, ici elle était FABRIQUÉE et ne l'était pas. On
+     * la juge donc à la même aune. Refuser plutôt que corriger en silence :
+     * un hôte hors liste sur cette route signale une passerelle mal câblée,
+     * et lui substituer un domaine deviné servirait des logos introuvables
+     * sans que personne ne comprenne pourquoi.
+     */
     const forwardedHost = String(req.headers['x-forwarded-host'] ?? '').split(',')[0]?.trim();
     const origin = `${req.protocol}://${forwardedHost || req.get('host')}`;
+    if (!imageAutorisee(origin, this.origines.hotes)) {
+      throw new BadRequestException(
+        `Cette requête arrive d'un hôte que nous ne servons pas (${origin}) — ` +
+          'le logo aurait pointé ailleurs que chez nous.',
+      );
+    }
     return this.logo.poser(tenantId, origin, fichier.buffer);
   }
 

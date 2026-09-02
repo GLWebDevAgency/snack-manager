@@ -38,12 +38,14 @@ import { ConfigService } from '@nestjs/config';
  *
  * ═══ CE QUE CETTE GARDE NE FAIT PAS ═══
  *
- * Elle garde les deux routes `PATCH …/marque`, où une URL est REÇUE. Elle ne
- * couvre pas `PUT /tenants/me/logo`, qui n'en reçoit aucune : il FABRIQUE la
- * sienne à partir de l'hôte de la requête (`logo.controller.ts`,
- * `X-Forwarded-Host` puis `Host`). Cet hôte-là mériterait sa propre
- * vérification — c'est une question d'en-tête de requête et de confiance au
- * proxy, pas d'origine reçue d'un éditeur, et elle ne se traite pas ici.
+ * Elle garde les deux routes `PATCH …/marque`, où une URL est REÇUE, ET
+ * `PUT /tenants/me/logo`, qui n'en reçoit aucune mais FABRIQUE la sienne à
+ * partir de l'hôte de la requête (`logo.controller.ts`, `X-Forwarded-Host`
+ * puis `Host`). Ces deux en-têtes viennent du client : sans la même liste,
+ * un gérant faisait écrire l'URL de son choix, et une garde posée sur les
+ * seules URL reçues n'aurait rien gardé. La route de dépôt REFUSE un hôte
+ * hors liste au lieu d'en deviner un : sur ce chemin-là, un hôte inattendu
+ * signale une passerelle mal câblée, pas une envie d'un restaurateur.
  *
  * Elle ne s'applique qu'à l'ÉCRITURE. La LECTURE (`lireMarque`) reste
  * tolérante, et c'est délibéré : un masque déjà stocké qui pointerait ailleurs
