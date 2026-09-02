@@ -2,8 +2,21 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * LES PHOTOS D'UN PLAT — la réduction dans le navigateur, et rien d'autre
+ * LES IMAGES D'UN RESTAURANT — la réduction dans le navigateur, et rien d'autre
  * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ─── POURQUOI CE MODULE A QUITTÉ `app/admin/menu/` ─────────────────────────
+ *
+ * Il y est né avec les photos de plats, seul écran qui déposait alors. Depuis,
+ * l'éditeur de marque (« Établissement ») dépose et choisit dans la MÊME
+ * médiathèque, pour ses quatre logos et son image d'accueil. Deux écrans, un
+ * seul jeu de règles : ce qui décide du format, de la réduction et de l'état
+ * du quota n'appartient à aucun des deux. Le recopier aurait fait diverger les
+ * bornes le jour où l'une bouge ; l'importer depuis `app/` aurait fait
+ * dépendre un composant partagé d'un écran.
+ *
+ * Ce qui reste sous `app/admin/menu/` est ce qui parle vraiment de PLATS :
+ * l'ordre des photos d'un produit et le compte des produits sans photo.
  *
  * ─── POURQUOI CE FICHIER EXISTE, ET POURQUOI IL EST OBLIGATOIRE ────────────
  *
@@ -22,9 +35,8 @@
  * ─── CE QUI EST PUR, ET POURQUOI C'EST SÉPARÉ ──────────────────────────────
  *
  * Tout ce qui DÉCIDE (le format est-il admis, faut-il réduire, vers quelles
- * cotes, quel nom porte le fichier de sortie, combien de plats n'ont pas de
- * photo, où en est le quota) est écrit en fonctions pures, testées sans
- * navigateur. Seul le geste qui DESSINE — décoder, peindre dans un canevas,
+ * cotes, quel nom porte le fichier de sortie, où en est le quota) est écrit
+ * en fonctions pures, testées sans navigateur. Seul le geste qui DESSINE — décoder, peindre dans un canevas,
  * ré-encoder — a besoin d'un DOM, et il tient en trois fonctions à la fin du
  * fichier. C'est la frontière qui rend la partie difficile vérifiable.
  */
@@ -34,12 +46,11 @@ import {
   MEDIA_LARGEUR_CIBLE,
   MEDIA_MAX_OCTETS,
   MEDIA_QUALITE_CIBLE,
+  type MediaVue,
   detecterImage,
   dimensionsImage,
-  photoUrlDe,
   type Dimensions,
   type FormatImage,
-  type MediaVue,
   type QuotaMedias,
 } from "@sm/contracts";
 
@@ -153,6 +164,15 @@ export function nomDeSortie(nom: string, type: FormatImage): string {
 // Poids et quota — deux nombres, pas un tableau de bord
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * `GET /medias` — la bibliothèque du restaurant et l'état de son quota.
+ *
+ * Déclarée ici, une fois : deux écrans la consomment (les photos d'un plat,
+ * l'éditeur de marque) et une seconde déclaration finirait par diverger sur
+ * le champ qu'on lit le moins.
+ */
+export type Mediatheque = { medias: MediaVue[]; quota: QuotaMedias };
+
 /** 384 000 → « 375 Ko » · 3 400 000 → « 3,2 Mo ». */
 export function poids(octets: number): string {
   if (!Number.isFinite(octets) || octets < 0) return "—";
@@ -192,47 +212,6 @@ export function etatDuQuota(quota: QuotaMedias): EtatQuota {
       quota.octetsUtilises,
     )} sur ${poids(quota.octetsMax)}`,
   };
-}
-
-// ─────────────────────────────────────────────────────────────
-// L'ordre des photos d'un plat, et le compte de celles qui manquent
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Déplace une photo d'un cran — la PREMIÈRE est la principale.
- *
- * Réordonner n'est donc pas cosmétique : c'est le geste qui change la photo
- * affichée sur la caisse, la vitrine et le téléviseur, sans qu'aucune adresse
- * ne change (cf. `photoUrlDe`, qui prend la première référence résolue). Un
- * pas hors des bornes rend la liste INCHANGÉE plutôt qu'une liste tronquée :
- * une flèche grisée peut toujours être atteinte au clavier.
- */
-export function deplacer<T>(liste: readonly T[], index: number, pas: number): T[] {
-  const vers = index + pas;
-  if (index < 0 || index >= liste.length || vers < 0 || vers >= liste.length) {
-    return [...liste];
-  }
-  const suite = [...liste];
-  const [element] = suite.splice(index, 1);
-  suite.splice(vers, 0, element as T);
-  return suite;
-}
-
-/**
- * Combien de plats n'ont AUCUNE photo à montrer.
- *
- * Le compte passe par `photoUrlDe`, l'adaptateur de lecture unique, et pas par
- * `medias.length === 0` : les dix-neuf plats du pilote portent encore leur
- * chaîne héritée, ils ont bel et bien une photo à l'écran, et les compter
- * comme manquants enverrait le restaurateur chercher un problème qui n'existe
- * pas. Un média référencé mais disparu, lui, est bien compté comme manquant —
- * c'est ce que le mangeur voit.
- */
-export function produitsSansPhoto(
-  produits: readonly { medias?: unknown; photoUrl?: unknown }[],
-  catalogue: ReadonlyMap<string, MediaVue>,
-): number {
-  return produits.filter((p) => photoUrlDe(p, catalogue, "vignette") === null).length;
 }
 
 // ─────────────────────────────────────────────────────────────

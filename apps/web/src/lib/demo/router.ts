@@ -80,6 +80,10 @@ import {
   type PlanningStatus,
   type SupplyIngredient,
   QUOTA_MEDIAS_OCTETS,
+  BrandStrictSchema,
+  brandColorDe,
+  contraste,
+  logoUrlDe,
 } from "@sm/contracts";
 import { loyalty as loyaltyDomain, Money } from "@sm/domain";
 import {
@@ -777,6 +781,49 @@ function dispatch(
 
   if (path === "/tenants/me/settings" && method === "PATCH") {
     w.tenant.settings = { ...w.tenant.settings, ...(b as Partial<typeof w.tenant.settings>) };
+    return ok(w.tenant);
+  }
+
+  /*
+   * LE MASQUE D'IDENTITÉ — la démonstration l'enregistre POUR DE VRAI.
+   *
+   * Sans cette route, l'éditeur de marque tombait sur le 404 générique, et le
+   * visiteur venu regarder le produit lisait « ajoutez-la à lib/demo/router.ts »
+   * dans un écran de gérant. Or c'est l'écran le plus démonstratif du
+   * back-office : on y choisit une direction, on voit sa vitrine changer, on
+   * enregistre. Le refuser en aurait fait une maquette.
+   *
+   * Les DEUX gardes de l'API sont rejouées, avec les mêmes fonctions : le
+   * schéma STRICT (une clé inattendue est une tentative) et le contraste
+   * (`contraste`, celle qu'`exigerAA` appelle). La liste blanche d'origines,
+   * elle, n'a pas d'équivalent ici — la démonstration n'a pas de médiathèque,
+   * donc aucune adresse d'image ne peut être posée.
+   *
+   * `logoUrl` et `brandColor` sont RE-DÉRIVÉS, jamais recopiés : c'est la
+   * règle du contrat (`logoUrlDe`, `brandColorDe`), et les laisser figés ferait
+   * mentir la caisse et la cuisine de la démonstration au premier changement
+   * d'accent.
+   */
+  if (path === "/tenants/me/marque" && method === "PATCH") {
+    const lu = BrandStrictSchema.safeParse(b);
+    if (!lu.success) {
+      return refuse(400, "Ce masque n’a pas la forme attendue.");
+    }
+    const juge = contraste(lu.data);
+    if (!juge.ok) {
+      return {
+        status: 400,
+        body: {
+          message: "Contraste insuffisant",
+          statusCode: 400,
+          error: "Bad Request",
+          verdicts: juge.verdicts.filter((v) => !v.ok),
+        },
+      };
+    }
+    w.tenant.brand = lu.data;
+    w.tenant.logoUrl = logoUrlDe(lu.data);
+    w.tenant.brandColor = brandColorDe(lu.data);
     return ok(w.tenant);
   }
 

@@ -31,10 +31,9 @@
  *    croyait enlever d'un seul plat.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MEDIAS_PAR_PRODUIT_MAX,
-  MEDIA_FORMATS_ADMIS,
   cadrageCss,
   estPublic,
   texteAlternatif,
@@ -45,7 +44,9 @@ import { ApiError, api, envoiFichier } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { Btn, EmptyState, Icon, IconBtn, Modal, Pill, Skeleton } from "@/components/ui";
 import { CadragePhoto } from "./CadragePhoto";
-import { deplacer, etatDuQuota, poids, reduirePourEnvoi } from "./photos";
+import { etatDuQuota, poids, reduirePourEnvoi } from "@/components/mediatheque/photos";
+import { BoutonDepot } from "@/components/mediatheque/BoutonDepot";
+import { deplacer } from "./photos";
 import type { Mediatheque } from "./types";
 
 /** Ce que rend `POST /medias` — le média, le quota d'après, et le dédoublonnage. */
@@ -368,55 +369,6 @@ export function PhotosDuPlat({ produitNom, photos, onChange, chargerMediatheque 
         />
       )}
     </div>
-  );
-}
-
-/**
- * Le bouton de dépôt et SON champ de fichier.
- *
- * Les deux voyagent ensemble parce qu'un champ resté dans la page pendant
- * qu'une modale est ouverte serait rendu `inert` par la pile de dialogues :
- * le clic programmatique n'ouvrirait alors aucun sélecteur, sans le moindre
- * message. Chaque bouton porte donc le sien, là où il est.
- */
-function BoutonDepot({
-  envoi,
-  disabled = false,
-  titre,
-  onFichier,
-  children,
-}: {
-  envoi: boolean;
-  disabled?: boolean;
-  titre?: string;
-  onFichier: (fichier: File) => void;
-  children: ReactNode;
-}) {
-  const champ = useRef<HTMLInputElement>(null);
-  return (
-    <>
-      <Btn
-        variant="ghost"
-        size="sm"
-        icon="plus"
-        disabled={envoi || disabled}
-        title={titre}
-        onClick={() => champ.current?.click()}
-      >
-        {envoi ? "Envoi…" : children}
-      </Btn>
-      <input
-        ref={champ}
-        type="file"
-        accept={MEDIA_FORMATS_ADMIS.join(",")}
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = ""; // re-choisir le même fichier doit re-déclencher
-          if (f) onFichier(f);
-        }}
-      />
-    </>
   );
 }
 

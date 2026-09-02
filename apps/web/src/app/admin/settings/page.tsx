@@ -1,33 +1,45 @@
 "use client";
 
 /**
- * PARAMÈTRES — l'identité de l'enseigne, éditable par le gérant.
+ * ÉTABLISSEMENT — l'identité de l'enseigne, éditable par le gérant.
  *
  * Longtemps, le nom, la couleur, l'adresse et les téléphones étaient
  * consommés partout (caisse, cuisine, tickets, vitrine) et éditables nulle
  * part : chaque retouche passait par un appel à Snack Manager (diagnostic
  * quatre casquettes, P2). Cette page ferme cette dépendance.
  *
- * Deux choses ne s'éditent PAS ici, et la page dit pourquoi plutôt que de
- * les cacher : le slug (c'est l'adresse publique — la changer casse la fiche
- * Google et les QR imprimés, geste d'équipe) et le logo (pas d'hébergement
- * de fichiers encore — un champ URL inviterait des liens morts).
+ * ─── TROIS CHOSES QUI SE SONT DÉPLACÉES, ET POURQUOI ───────────────────────
  *
- * API : GET /tenants/me · PATCH /tenants/me/identity. Le nom et la couleur
- * repartent vers les tablettes au battement suivant, sans réappairage.
+ * 1. LA COULEUR DE MARQUE N'EST PLUS DANS « L'IDENTITÉ ». Elle y était un
+ *    sélecteur d'accent isolé, qui écrivait `brandColor` — lequel se recopie
+ *    depuis dans `brand.palette.accent` ET recalcule `onAccent`
+ *    (`identiteAvecAccent`, côté API). Deux écrans qui écrivent la même
+ *    couleur par deux chemins finissent par se contredire ; l'accent est donc
+ *    UN des cinq rôles de l'éditeur de marque, et rien d'autre ne l'écrit.
+ *
+ * 2. LE LOGO N'A PLUS SON PANNEAU. Il n'y en avait qu'UN (`PUT
+ *    /tenants/me/logo`, qui se pose dans `brand.logo.mark.dark`) alors que le
+ *    masque en porte QUATRE plus une image d'accueil, et les quatre autres ne
+ *    se remplissaient qu'en collant une adresse dans un appel direct.
+ *    L'éditeur les tient tous les cinq, choisis dans la médiathèque. Les deux
+ *    chemins de dépôt s'appuient sur le MÊME magasin d'objets (`IMAGE_STORE`) :
+ *    retirer l'ancien ne ferme donc aucune porte qui serait restée ouverte.
+ *
+ * 3. LE REGISTRE et « ce qui ne s'édite pas ici » restent en pied de page :
+ *    ce sont les deux choses qu'on vient relire, pas celles qu'on vient
+ *    changer.
+ *
+ * API : GET /tenants/me · PATCH /tenants/me/identity · PATCH /tenants/me/marque.
+ * Le nom et la couleur repartent vers les tablettes au battement suivant, sans
+ * réappairage.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { LOGO_FORMATS_ADMIS, LOGO_MAX_OCTETS, type AuditEntryView } from "@sm/contracts";
-import { api, envoiFichier, ApiError, type TenantMe } from "@/lib/api";
+import { useEffect, useState } from "react";
+import type { AuditEntryView } from "@sm/contracts";
+import { api, type TenantMe } from "@/lib/api";
 import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
+import { EditeurDeMarque, EditeurDeMarqueEnAttente } from "./EditeurDeMarque";
 import { phraseDuGeste, signatureDeLAuteur } from "./journal";
-
-/** Sans dièse ni casse imposée à la saisie — on normalise à l'envoi. */
-const normaliseCouleur = (raw: string): string => {
-  const hex = raw.trim().replace(/^#?/, "#").toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(hex) ? hex : raw.trim();
-};
 
 export default function SettingsPage() {
   const toast = useToast();
@@ -36,12 +48,9 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
 
   const [name, setName] = useState("");
-  const [brandColor, setBrandColor] = useState("#c9a15a");
   const [address, setAddress] = useState("");
   const [phones, setPhones] = useState<string[]>(["", "", ""]);
   const [journal, setJournal] = useState<AuditEntryView[] | null>(null);
-  const [logoBusy, setLogoBusy] = useState(false);
-  const logoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api
@@ -56,29 +65,27 @@ export default function SettingsPage() {
       .then((t) => {
         setMe(t);
         setName(t.name);
-        setBrandColor(t.brandColor || "#c9a15a");
         setAddress(t.address ?? "");
         setPhones([t.phones?.[0] ?? "", t.phones?.[1] ?? "", t.phones?.[2] ?? ""]);
       })
       .catch(() => setIndisponible(true));
   }, []);
 
-  const couleur = normaliseCouleur(brandColor);
-  const couleurValide = /^#[0-9a-f]{6}$/.test(couleur);
   const dirty =
     me !== null &&
     (name.trim() !== me.name ||
-      couleur !== me.brandColor ||
       address.trim() !== (me.address ?? "") ||
       phones.filter(Boolean).join("|") !== (me.phones ?? []).join("|"));
 
   async function save() {
-    if (!me || busy || !couleurValide || !name.trim()) return;
+    if (!me || busy || !name.trim()) return;
     setBusy(true);
     try {
+      // `brandColor` n'est plus envoyé : il appartient à l'éditeur de marque,
+      // qui écrit la palette entière. Le champ reste facultatif au contrat —
+      // ne pas l'envoyer laisse l'accent strictement inchangé.
       const next = await api.patch<TenantMe>("/tenants/me/identity", {
         name: name.trim(),
-        brandColor: couleur,
         address: address.trim(),
         phones: phones.map((p) => p.trim()).filter(Boolean),
       });
@@ -93,57 +100,10 @@ export default function SettingsPage() {
     }
   }
 
-  /**
-   * Les bornes se vérifient AVANT d'envoyer (message immédiat, pas d'aller-
-   * retour) ET côté API (la limite qui fait foi) — mêmes nombres, partagés
-   * par @sm/contracts. Le refus serveur s'affiche tel quel : il est déjà
-   * écrit pour un gérant.
-   */
-  async function envoyerLogo(f: File) {
-    if (!(LOGO_FORMATS_ADMIS as readonly string[]).includes(f.type)) {
-      toast("Format non pris en charge — envoyez un PNG, un JPEG ou un WebP");
-      return;
-    }
-    if (f.size > LOGO_MAX_OCTETS) {
-      toast(`Fichier trop lourd (${Math.round(f.size / 1024)} Ko) — 512 Ko maximum`);
-      return;
-    }
-    setLogoBusy(true);
-    try {
-      setMe(await envoiFichier<TenantMe>("PUT", "/tenants/me/logo", f));
-      toast("Logo en place — vos écrans suivent au prochain battement", { icon: "check" });
-    } catch (e) {
-      // Le 413 vient de multer, en anglais — la borne ayant déjà été vérifiée
-      // ici, il ne se voit qu'en la contournant ; on le traduit quand même.
-      toast(
-        e instanceof ApiError
-          ? e.status === 413
-            ? "Fichier trop lourd — 512 Ko maximum"
-            : e.message
-          : "Envoi impossible — réessayez",
-      );
-    } finally {
-      setLogoBusy(false);
-    }
-  }
-
-  async function retirerLogo() {
-    if (logoBusy) return;
-    setLogoBusy(true);
-    try {
-      setMe(await api.del<TenantMe>("/tenants/me/logo"));
-      toast("Logo retiré", { icon: "check" });
-    } catch {
-      toast("Retrait impossible — réessayez");
-    } finally {
-      setLogoBusy(false);
-    }
-  }
-
   if (indisponible) {
     return (
       <div className="p-4 md:p-[26px]">
-        <Panel title="Paramètres">
+        <Panel title="Établissement">
           <p className="text-[13px] text-mut">
             La fiche de l&apos;établissement n&apos;a pas répondu. Rechargez la page ; si ça
             persiste, appelez-nous.
@@ -154,10 +114,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex max-w-[720px] flex-col gap-4 p-4 md:p-[26px]">
+    <div className="flex flex-col gap-4 p-4 md:p-[26px]">
       <Panel
         title="L'identité de l'enseigne"
-        sub="Le nom et la couleur s'appliquent partout : caisse, cuisine, tickets, page de commande."
+        sub="Le nom s'applique partout : caisse, cuisine, tickets, page de commande."
+        className="max-w-[720px]"
         bodyClassName="flex flex-col gap-4"
       >
         {me === null ? (
@@ -169,32 +130,6 @@ export default function SettingsPage() {
           <>
             <Field label="Nom de l'enseigne" htmlFor="id-name">
               <Input id="id-name" value={name} onChange={(e) => setName(e.target.value)} required />
-            </Field>
-
-            <Field
-              label="Couleur de marque"
-              htmlFor="id-color"
-              hint="L'accent de vos écrans et de votre page de commande — le reste de l'interface ne change pas, pour que vos équipiers gardent leurs repères."
-            >
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="color"
-                  aria-label="Choisir la couleur de marque"
-                  value={couleurValide ? couleur : "#c9a15a"}
-                  onChange={(e) => setBrandColor(e.target.value)}
-                  className="size-[38px] shrink-0 cursor-pointer rounded-ctrl border border-white/12 bg-transparent p-1"
-                />
-                <Input
-                  id="id-color"
-                  value={brandColor}
-                  onChange={(e) => setBrandColor(e.target.value)}
-                  placeholder="#c9a15a"
-                  className="w-[130px]"
-                />
-                {!couleurValide && (
-                  <span className="text-xs font-semibold text-alertt">Format attendu : #rrggbb</span>
-                )}
-              </div>
             </Field>
 
             <Field label="Adresse du comptoir" htmlFor="id-address" hint="Telle qu'elle s'imprime sur les tickets.">
@@ -221,7 +156,7 @@ export default function SettingsPage() {
               <Btn
                 variant="ink"
                 icon="check"
-                disabled={!dirty || busy || !couleurValide || !name.trim()}
+                disabled={!dirty || busy || !name.trim()}
                 onClick={() => void save()}
               >
                 {busy ? "Enregistrement…" : "Enregistrer"}
@@ -232,59 +167,34 @@ export default function SettingsPage() {
         )}
       </Panel>
 
-      <Panel
-        title="Le logo"
-        sub="En en-tête de votre page de commande et de vos écrans — PNG, JPEG ou WebP, 512 Ko maximum."
-        bodyClassName="flex flex-col gap-3"
-      >
+      {/*
+        L'ÉDITEUR DE MARQUE — ce que voient VOS clients, et rien de ce que voit
+        votre équipe. Le back-office garde sa peau grise : un équipier ne doit
+        pas rechercher ses repères parce que le patron a changé sa vitrine.
+      */}
+      <div>
+        <h2 className="mb-1 text-lg font-semibold tracking-[-0.03em] text-ink">
+          Votre identité visuelle
+        </h2>
+        <p className="mb-3 max-w-[720px] text-[13px] leading-relaxed text-mut">
+          Elle habille ce que voient vos clients : page de commande, suivi, carte de fidélité,
+          écran de salle. Votre back-office, lui, ne change pas — vos équipiers gardent leurs
+          repères.
+        </p>
         {me === null ? (
-          <Skeleton className="h-[64px]" />
+          <EditeurDeMarqueEnAttente />
         ) : (
-          <>
-            {/* `flex-wrap` : aperçu (160 px) + « Remplacer » + « Retirer »
-                dépassent un écran de téléphone — les boutons passent dessous. */}
-            <div className="flex flex-wrap items-center gap-4">
-              {me.logoUrl ? (
-                // Un logo clair comme un logo sombre doit se voir : fond neutre.
-                // eslint-disable-next-line @next/next/no-img-element -- l'image vient de notre API, pas du build Next : next/image n'a rien à optimiser ici.
-                <img
-                  src={me.logoUrl}
-                  alt={`Logo de ${me.name}`}
-                  className="max-h-[64px] max-w-[160px] rounded-card border border-white/10 bg-white/90 p-2"
-                />
-              ) : (
-                <span className="text-[13px] text-mut">Aucun logo pour l&apos;instant.</span>
-              )}
-              <div className="ml-auto flex items-center gap-2">
-                <Btn
-                  variant="ink"
-                  icon="plus"
-                  disabled={logoBusy}
-                  onClick={() => logoInput.current?.click()}
-                >
-                  {logoBusy ? "Envoi…" : me.logoUrl ? "Remplacer" : "Choisir une image"}
-                </Btn>
-                {me.logoUrl && (
-                  <Btn disabled={logoBusy} onClick={() => void retirerLogo()}>
-                    Retirer
-                  </Btn>
-                )}
-              </div>
-            </div>
-            <input
-              ref={logoInput}
-              type="file"
-              accept={LOGO_FORMATS_ADMIS.join(",")}
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = ""; // re-choisir le même fichier doit re-déclencher
-                if (f) void envoyerLogo(f);
-              }}
-            />
-          </>
+          <EditeurDeMarque
+            me={me}
+            onEnregistre={(t) => {
+              setMe(t);
+              toast("Identité visuelle enregistrée — vos clients la verront à leur prochaine visite", {
+                icon: "check",
+              });
+            }}
+          />
         )}
-      </Panel>
+      </div>
 
       {/*
         LE REGISTRE, ENFIN COMPLET.
@@ -298,6 +208,7 @@ export default function SettingsPage() {
       <Panel
         title="Journal des gestes sensibles"
         sub="Prix, ruptures, stocks, horaires et identité — le registre de votre établissement, inaltérable"
+        className="max-w-[1040px]"
         bodyClassName="flex flex-col gap-1.5"
       >
         {journal === null ? (
@@ -311,7 +222,7 @@ export default function SettingsPage() {
           journal.map((e) => (
             <div
               key={e._id}
-              className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-card border border-white/6 bg-white/3 px-3.5 py-2"
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-card border border-line2 bg-ink/3 px-3.5 py-2"
             >
               <span className="text-[13px] font-bold text-ink">{e.actionLabel}</span>
               {/* QUI, à quel titre, par quel moyen — les trois d'un coup. */}
@@ -325,7 +236,7 @@ export default function SettingsPage() {
         )}
       </Panel>
 
-      <Panel title="Ce qui ne s'édite pas ici" bodyClassName="flex flex-col gap-2">
+      <Panel title="Ce qui ne s'édite pas ici" className="max-w-[720px]" bodyClassName="flex flex-col gap-2">
         <p className="text-[13px] leading-relaxed text-mut">
           <b className="text-ink">L&apos;adresse publique</b> ({me ? `${me.slug}.snackmanager.app` : "votre-slug.snackmanager.app"})
           ne se change pas seul : elle casse la fiche Google et les QR imprimés. Un appel, et on

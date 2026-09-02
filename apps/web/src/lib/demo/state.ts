@@ -44,7 +44,7 @@
  * promet une application et livre une image.
  */
 
-import { PLAN_MRR_CENTS } from "@sm/contracts";
+import { PLAN_MRR_CENTS, marqueDeRepli } from "@sm/contracts";
 import type {
   Allergen,
   AuthMe,
@@ -706,6 +706,17 @@ export function createWorld(bootAt: number): DemoWorld {
     _id: "t1",
     slug: S.SNAP_TENANT.slug,
     name: S.SNAP_TENANT.name,
+    /*
+     * LE MASQUE, CALCULÉ COMME L'API LE CALCULE.
+     *
+     * `marqueDeRepli` est exactement ce que `GET /tenants/me` rend pour un
+     * établissement dont la colonne `brand` est encore vide : la direction
+     * Nuit, avec SON accent et SON logo. Recopier ici un masque écrit à la
+     * main aurait fait diverger la démonstration du produit au premier
+     * ajustement du repli — et l'éditeur de marque montrerait alors une
+     * identité que personne n'a.
+     */
+    brand: marqueDeRepli(S.SNAP_TENANT.brandColor, S.SNAP_TENANT.logoUrl),
     logoUrl: S.SNAP_TENANT.logoUrl,
     brandColor: S.SNAP_TENANT.brandColor,
     address: S.SNAP_TENANT.address,

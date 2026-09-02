@@ -3,7 +3,7 @@
  * Tous les montants circulent en CENTIMES (int).
  */
 
-import type { MediaVue, QuotaMedias } from "@sm/contracts";
+import type { MediaVue } from "@sm/contracts";
 
 export type Variant = { key: string; name: string; price: number };
 
@@ -87,8 +87,8 @@ export type MenuData = {
   medias: MediaVue[];
 };
 
-/** `GET /medias` — la bibliothèque du restaurant et l'état de son quota. */
-export type Mediatheque = { medias: MediaVue[]; quota: QuotaMedias };
+/** `GET /medias` — déclarée avec le reste de la médiathèque, jamais deux fois. */
+export type { Mediatheque } from "@/components/mediatheque/photos";
 
 /** Sentinelle de sélection pour la rangée spéciale « Non rattachés ». */
 export const UNCAT = "__uncat__";

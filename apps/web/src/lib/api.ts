@@ -18,7 +18,7 @@
  */
 // `import type` : la liste des capacités est un TYPE ici, jamais une valeur —
 // le catalogue reste au contrat, le front n'en lit que le résultat.
-import type { Capacite } from "@sm/contracts";
+import type { Brand, Capacite } from "@sm/contracts";
 import { demoCsv, demoCsvName, demoRequest, isDemoActive } from "./demo";
 
 export const API_URL =
@@ -233,6 +233,21 @@ export type TenantMe = {
   _id: string;
   slug: string;
   name: string;
+  /**
+   * LE MASQUE D'IDENTITÉ — la source, dont `logoUrl` et `brandColor` dérivent.
+   *
+   * L'API le rend depuis la première livraison du masque (`vueMe`), et aucun
+   * écran ne le lisait : les deux champs plats en dessous suffisaient au
+   * personnel (« logo + accent », le contrat des tablettes). L'éditeur de
+   * marque, lui, édite le masque ENTIER — cinq rôles, accord typographique,
+   * forme, mouvement, cinq emplacements d'image — et le renvoie tel quel à
+   * `PATCH /tenants/me/marque`.
+   *
+   * Les deux champs plats restent, dérivés à la lecture : ils ne se mettent
+   * pas à jour tout seuls dans un état local, c'est la réponse de l'API qui
+   * les rapporte tous les trois d'un coup.
+   */
+  brand: Brand;
   logoUrl: string | null;
   brandColor: string;
   address: string;
