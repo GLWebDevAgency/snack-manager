@@ -357,7 +357,7 @@ export function Unavailable({
       <Icon name={icon} size={16} className="mt-px shrink-0 text-mut" />
       <div className="min-w-0">
         <div className="text-[13px] font-bold text-mut">{title}</div>
-        {hint && <div className="mt-0.5 text-xs text-mut/80">{hint}</div>}
+        {hint && <div className="mt-0.5 text-xs text-mut">{hint}</div>}
       </div>
     </div>
   );

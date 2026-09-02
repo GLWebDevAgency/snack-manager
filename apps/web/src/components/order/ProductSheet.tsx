@@ -331,7 +331,7 @@ export function ProductSheet({
             rows={2}
             maxLength={200}
             placeholder="Ex : bien cuit, sauce à part…"
-            className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70 focus:border-accent"
+            className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-accent"
           />
         </section>
       </div>

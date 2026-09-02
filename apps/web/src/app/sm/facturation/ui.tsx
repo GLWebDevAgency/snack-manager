@@ -194,7 +194,7 @@ const ACCOUNT_STYLE: Record<string, string> = {
   trial: "border-prep/50 bg-prep/12 text-prept",
   suspended: "border-alert/70 bg-alert/12 text-alertt",
   // Dé-emphase par la bordure et le fond seulement : à 10 px gras, un texte
-  // `text-mut/70` descendait sous les 4,5:1 de contraste exigés (WCAG AA).
+  // `text-mut` descendait sous les 4,5:1 de contraste exigés (WCAG AA).
   churned: "border-white/12 bg-transparent text-mut",
 };
 
@@ -251,7 +251,7 @@ export function Unavailable({
       <Icon name={icon} size={16} className="mt-px shrink-0 text-mut" />
       <div className="min-w-0">
         <div className="text-[13px] font-bold text-mut">{title}</div>
-        {hint && <div className="mt-0.5 text-xs text-mut/80">{hint}</div>}
+        {hint && <div className="mt-0.5 text-xs text-mut">{hint}</div>}
       </div>
     </div>
   );
@@ -367,7 +367,7 @@ export function OverdueLine({
           échue le <span className="cf-fig">{fmtDueDate(row.dueAt)}</span>
         </div>
         {row.label && (
-          <div className="truncate text-xs text-mut/80" title={row.label}>
+          <div className="truncate text-xs text-mut" title={row.label}>
             {row.label}
           </div>
         )}
@@ -470,7 +470,7 @@ function InvoiceRecap({ row }: { row: OverdueRow }) {
           {fmtDays(row.overdueDays)} de retard
         </span>
       </div>
-      {row.label && <div className="mt-1 text-xs text-mut/80">{row.label}</div>}
+      {row.label && <div className="mt-1 text-xs text-mut">{row.label}</div>}
     </div>
   );
 }

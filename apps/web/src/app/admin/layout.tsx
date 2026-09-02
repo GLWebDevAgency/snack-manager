@@ -581,7 +581,7 @@ function Shell({ children }: { children: ReactNode }) {
             */}
             <div
               className={cx(
-                "mt-3 flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-mut/70",
+                "mt-3 flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-mut",
                 open ? "px-1" : "justify-center",
               )}
             >
@@ -839,7 +839,7 @@ function Shell({ children }: { children: ReactNode }) {
 
             {/* Même signature discrète que la barre de bureau — voir le
                 plaidoyer complet au-dessus de sa jumelle. */}
-            <div className="mt-3 flex shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-mut/70">
+            <div className="mt-3 flex shrink-0 items-center gap-1.5 px-1 text-[11px] font-medium text-mut">
               <LogoMark size={14} className="shrink-0" />
               <span className="min-w-0 truncate whitespace-nowrap">
                 Snack Manager

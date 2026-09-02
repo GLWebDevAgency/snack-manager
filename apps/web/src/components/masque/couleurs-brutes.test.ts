@@ -59,6 +59,17 @@ const BRUT = [
    * il ne porte pas de masque, et ce garde ne parcourt que le client.
    */
   /\bduration-\d+\b/,
+  /*
+   * NI ENCRE ATTÉNUÉE — `mut`, `ink2` et `accentink` SONT le plancher AA.
+   *
+   * Ces trois nuances sortent de `resoudreMarque` déjà ramenées au ratio
+   * minimal sur leur fond : les poser à `/70` ou `/80` les fait repasser
+   * dessous, sur SIX directions à la fois. Les placeholders en
+   * `placeholder:text-mut/70` descendaient à 3,2:1 — un champ de formulaire
+   * dont on ne lit plus l'intitulé. Une opacité sur une COULEUR D'APLAT
+   * (`bg-accent/12`, `border-ink/8`) reste libre : rien n'y est du texte.
+   */
+  /\btext-(?:mut|ink2|accentink)\/\d+\b/,
 ];
 
 function* fichiers(dir: string): Generator<string> {

@@ -861,7 +861,7 @@ function CartStep({
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
-          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70 focus:border-accent"
+          className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-accent"
         />
       </section>
 
@@ -893,7 +893,7 @@ function CartStep({
             placeholder="BIENVENUE10"
             value={promoCode}
             onChange={(e) => onPromoCode(e.target.value.toUpperCase())}
-            className="min-h-11 w-full rounded-input border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut/60 focus:border-accent focus:outline-none"
+            className="min-h-11 w-full rounded-input border border-ink/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-accent focus:outline-none"
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
@@ -1024,7 +1024,7 @@ function CustomerStep({
   const nameError = touched && customer.name.trim().length < 2;
   const phoneError = touched && !phoneOk(customer.phone);
   const field =
-    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut/70";
+    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut";
 
   return (
     <div className="flex flex-col gap-5">

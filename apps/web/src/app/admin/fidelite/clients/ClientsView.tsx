@@ -198,7 +198,7 @@ export function ClientsView({ initialMemberId }: { initialMemberId: string | nul
               value={phone}
               disabled={searching}
               onChange={(event) => setPhone(event.target.value)}
-              className="min-w-0 flex-1 rounded-ctrl border border-white/8 bg-white/5 px-3.5 py-3 text-base font-medium text-white outline-none placeholder:text-mut/70 hover:border-white/16 focus:border-accent sm:text-sm"
+              className="min-w-0 flex-1 rounded-ctrl border border-white/8 bg-white/5 px-3.5 py-3 text-base font-medium text-white outline-none placeholder:text-mut hover:border-white/16 focus:border-accent sm:text-sm"
             />
             <Btn type="submit" icon="search" disabled={searching || !phone.trim()}>{searching ? "Recherche…" : "Rechercher"}</Btn>
           </form>

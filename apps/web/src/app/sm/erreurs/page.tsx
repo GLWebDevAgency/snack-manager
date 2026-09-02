@@ -115,7 +115,7 @@ export default function ErreursPage() {
               Tester le canal
             </button>
           ) : (
-            <div className="mt-1 text-xs text-mut/80">
+            <div className="mt-1 text-xs text-mut">
               Poser SM_ALERT_WEBHOOK ou BREVO_API_KEY + SM_ALERT_EMAIL_TO sur Railway — en deux
               minutes via GitHub → Actions → « Variable Railway », téléphone compris. Le veilleur
               dort tant qu’aucun canal n’existe.
