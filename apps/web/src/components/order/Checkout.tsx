@@ -1690,11 +1690,11 @@ function DoneStep({
           {/*
             LE SEUL ENDROIT DU TUNNEL OÙ LA FIDÉLITÉ A SA PLACE.
 
-            C’est le moment où l’achat existe et où le client va se déplacer :
-            la seule action utile qu’on puisse lui suggérer est de sortir son
-            QR au comptoir. Placé plus tôt — au panier, au paiement — ce
-            rappel aurait été une distraction dans un parcours qu’on passe son
-            temps à raccourcir.
+            C’est le moment où l’achat existe déjà. Le contrat ne permet donc
+            plus d’y rattacher une carte : on peut seulement expliquer que la
+            commande en ligne ne crédite pas le programme pendant le pilote et
+            ouvrir la consultation du solde et des récompenses. Placé plus tôt,
+            ce rappel resterait une distraction dans le parcours d’achat.
           */}
           {loyalty && <FideliteApresCommande resume={loyalty} />}
 

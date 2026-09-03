@@ -4,7 +4,16 @@ import {
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
 } from "@sm/contracts";
-import { promesseFidelite, resumeFidelite, soldeVitrine } from "./fidelite";
+import {
+  CONSEIL_FIDELITE_APRES_COMMANDE,
+  detailSoldeVitrine,
+  promesseFidelite,
+  provenanceSoldeVitrine,
+  resumeFidelite,
+  soldeVitrine,
+  soldeVitrineDepuisCache,
+  soldeVitrineDepuisReseau,
+} from "./fidelite";
 
 function recompense(id: string, nom: string, cout: number) {
   return {
@@ -38,6 +47,30 @@ function catalogue(
     },
     rewards: recompenses,
   } as LoyaltyPublicProgram;
+}
+
+function carte(solde: number, couts: number[]): LoyaltyCustomerCard {
+  return {
+    restaurant: {
+      slug: "classfood",
+      name: "Classfood",
+      brandColor: "#c9a15a",
+      brand: DIRECTIONS.nuit,
+    },
+    program: {
+      name: "Le Club",
+      mechanism: "points",
+      unitLabelSingular: "point",
+      unitLabelPlural: "points",
+      termsSummary: "",
+    },
+    member: { alias: "Maya", balanceUnits: solde },
+    rewards: couts.map((cout, index) => ({
+      ...recompense(`r${index}`, `Récompense ${index}`, cout),
+      affordable: cout <= solde,
+    })),
+    activity: [],
+  } as LoyaltyCustomerCard;
 }
 
 describe("ce que la vitrine reçoit du programme", () => {
@@ -96,30 +129,6 @@ describe("la promesse écrite sur la bande", () => {
 });
 
 describe("le solde affiché sur la vitrine", () => {
-  function carte(solde: number, couts: number[]): LoyaltyCustomerCard {
-    return {
-      restaurant: {
-        slug: "classfood",
-        name: "Classfood",
-        brandColor: "#c9a15a",
-        brand: DIRECTIONS.nuit,
-      },
-      program: {
-        name: "Le Club",
-        mechanism: "points",
-        unitLabelSingular: "point",
-        unitLabelPlural: "points",
-        termsSummary: "",
-      },
-      member: { alias: "Maya", balanceUnits: solde },
-      rewards: couts.map((cout, index) => ({
-        ...recompense(`r${index}`, `Récompense ${index}`, cout),
-        affordable: cout <= solde,
-      })),
-      activity: [],
-    } as LoyaltyCustomerCard;
-  }
-
   it("dit ce qui manque pour le prochain palier", () => {
     expect(soldeVitrine(carte(24, [8, 30]))).toEqual({
       solde: 24,
@@ -134,5 +143,66 @@ describe("le solde affiché sur la vitrine", () => {
 
   it("accorde l'unité sur le solde", () => {
     expect(soldeVitrine(carte(1, [8])).unite).toBe("point");
+  });
+});
+
+describe("provenance du solde dans la vitrine", () => {
+  const resume = resumeFidelite(
+    catalogue([recompense("a", "Boisson offerte", 30)]),
+  )!;
+  const vuA = "2026-09-03T11:50:00.000Z";
+  const maintenant = Date.parse("2026-09-03T12:00:00.000Z");
+
+  it("réserve la progression exacte à une réponse réseau", () => {
+    const reseau = soldeVitrineDepuisReseau(carte(24, [30]), vuA);
+    expect(reseau.source).toBe("reseau");
+    expect(detailSoldeVitrine(reseau, resume)).toContain(
+      "Encore 6 points pour « Récompense 0 »",
+    );
+    expect(provenanceSoldeVitrine(reseau, maintenant)).toBe(
+      "Source : réseau · vérifié il y a 10 min",
+    );
+  });
+
+  it("ne fabrique aucun palier à partir du cache minimal", () => {
+    const cache = soldeVitrineDepuisCache(
+      24,
+      resume.uniteSingulier,
+      resume.unitePluriel,
+      vuA,
+    );
+    expect(cache.source).toBe("cache");
+    expect(cache).not.toHaveProperty("reste");
+    expect(detailSoldeVitrine(cache, resume)).toBe(
+      "Ouvrez votre carte pour consulter les récompenses à jour.",
+    );
+    expect(detailSoldeVitrine(cache, resume)).not.toContain("Boisson offerte");
+    expect(provenanceSoldeVitrine(cache, maintenant)).toBe(
+      "Source : copie locale · solde vu il y a 10 min · vérification en cours",
+    );
+  });
+
+  it("rend visible l'échec du rafraîchissement de la copie locale", () => {
+    const cache = soldeVitrineDepuisCache(
+      24,
+      resume.uniteSingulier,
+      resume.unitePluriel,
+      vuA,
+      "echec",
+    );
+    expect(provenanceSoldeVitrine(cache, maintenant)).toBe(
+      "Source : copie locale · solde vu il y a 10 min · échec du rafraîchissement",
+    );
+  });
+});
+
+describe("la fidélité après une commande en ligne", () => {
+  it("ne prétend plus qu'un QR rattache rétroactivement la commande créée", () => {
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain(
+      "cette commande en ligne ne crédite pas la fidélité",
+    );
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).toContain("votre solde");
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).not.toMatch(/\bQR\b/i);
+    expect(CONSEIL_FIDELITE_APRES_COMMANDE).not.toContain("rattacher cette commande");
   });
 });

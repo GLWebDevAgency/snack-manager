@@ -47,6 +47,7 @@ import {
   phraseDeProgression,
   prochainPalier,
   progressionVers,
+  unitePour,
 } from "./paliers";
 import {
   dureeEnMs,
@@ -59,7 +60,12 @@ import {
   fraicheur,
   lireInstantane,
   oublierInstantane,
+  type InstantaneCarte,
 } from "./carte-locale";
+import {
+  scanAutorise,
+  supprimerCarteJusquAuVerdict,
+} from "./session-guards";
 import {
   contexteInstallation,
   modeInstallation,
@@ -140,6 +146,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
   const cheminVitrine = `/r/${encodeURIComponent(slug)}`;
 
   const abortRef = useRef<AbortController | null>(null);
+  const suppressionRef = useRef(false);
   const focusApresScanRef = useRef(false);
   /*
    * L'état PRÉCÉDENT de la carte, tenu hors de React.
@@ -173,13 +180,16 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
   const compteurRef = useRef(0);
 
   const [carte, setCarte] = useState<LoyaltyCustomerCard | null>(null);
+  const [instantaneLocal, setInstantaneLocal] = useState<InstantaneCarte | null>(null);
   const [vuA, setVuA] = useState<string | null>(null);
   const [horsLigne, setHorsLigne] = useState(false);
+  const [echecActualisationLocale, setEchecActualisationLocale] = useState(false);
   const [scannerOuvert, setScannerOuvert] = useState(false);
   const [qrOuvert, setQrOuvert] = useState(false);
   const [retraitOuvert, setRetraitOuvert] = useState(false);
   const [restauration, setRestauration] = useState(true);
   const [occupe, setOccupe] = useState(false);
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [invitePrompt, setInvitePrompt] = useState<InstallPromptEvent | null>(null);
   const [installEcartee, setInstallEcartee] = useState(false);
@@ -271,9 +281,11 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
 
       carteAvantRef.current = fraiche;
       setCarte(fraiche);
-      setVuA(new Date().toISOString());
+      setInstantaneLocal(null);
+      setEchecActualisationLocale(false);
+      const instantane = ecrireInstantane(slug, fraiche.member.balanceUnits);
+      setVuA(instantane.vuA);
       setHorsLigne(false);
-      ecrireInstantane(slug, fraiche);
 
       const changement = delta !== 0 || franchis.length > 0;
       if (annonce === "jamais") return;
@@ -355,15 +367,18 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
        * L'INSTANTANÉ EST PEINT AVANT LE RÉSEAU, TOUJOURS.
        *
        * Il n'attend pas l'échec : même en ligne, il supprime l'écran de
-       * chargement pour quelqu'un qui rouvre son application — la carte est
-       * là, datée, et le réseau ne fait que la corriger une seconde plus tard.
+       * chargement pour quelqu'un qui rouvre son application — le seul solde
+       * conservé est là, daté, et clairement séparé de la carte membre.
        * Un scan en cours (`fragmentToken`) passe outre : le client vient de
        * présenter un NOUVEAU QR, lui montrer l'ancienne carte serait faux.
        */
       const instantane = fragmentToken ? null : lireInstantane(slug);
       if (instantane && !controller.signal.aborted) {
-        carteAvantRef.current = instantane.carte;
-        setCarte(instantane.carte);
+        // Seul le solde est restauré. Le catalogue public courant vient de la
+        // page, mais aucun alias, historique, palier ou statut « acquis » n'est
+        // synthétisé avant la réponse membre du réseau.
+        setInstantaneLocal(instantane);
+        setEchecActualisationLocale(false);
         setVuA(instantane.vuA);
         setRestauration(false);
       }
@@ -398,10 +413,12 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           oublierInstantane(slug);
           carteAvantRef.current = null;
           setCarte(null);
+          setInstantaneLocal(null);
           setVuA(null);
         }
       } catch (cause) {
         if (controller.signal.aborted) return;
+        if (instantane) setEchecActualisationLocale(true);
         echouer(cause, "La carte enregistrée n’a pas pu être chargée.", instantane !== null);
       } finally {
         if (!controller.signal.aborted) setRestauration(false);
@@ -413,6 +430,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
 
   const chargerDepuisScan = useCallback(
     async (token: string) => {
+      // Le ref est lu avant tout `await` : même le clic qui précède le rendu
+      // « retrait en cours » ne peut lancer un POST face au DELETE.
+      if (!scanAutorise(suppressionRef)) return;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -467,6 +487,11 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
     [chargerDepuisScan],
   );
 
+  const ouvrirScanner = useCallback(() => {
+    if (!scanAutorise(suppressionRef)) return;
+    setScannerOuvert(true);
+  }, []);
+
   useEffect(() => {
     if (occupe || !carte || !focusApresScanRef.current) return;
     focusApresScanRef.current = false;
@@ -488,6 +513,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
     abortRef.current = controller;
     setOccupe(true);
     setErreur(null);
+    if (instantaneLocal) setEchecActualisationLocale(false);
     try {
       const fraiche = await loadRememberedCustomerLoyaltyCard(slug, controller.signal);
       if (controller.signal.aborted) return;
@@ -495,6 +521,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         oublierInstantane(slug);
         carteAvantRef.current = null;
         setCarte(null);
+        setInstantaneLocal(null);
         setVuA(null);
         setErreur("Cette carte n’est plus disponible. Scannez un nouveau QR.");
         return;
@@ -502,35 +529,53 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
       accueillir(fraiche, "toujours");
     } catch (cause) {
       if (controller.signal.aborted) return;
-      echouer(cause, "La carte n’a pas pu être actualisée.", carte !== null);
+      echouer(
+        cause,
+        "La carte n’a pas pu être actualisée.",
+        carte !== null || instantaneLocal !== null,
+      );
+      if (instantaneLocal) setEchecActualisationLocale(true);
     } finally {
       if (!controller.signal.aborted) setOccupe(false);
     }
   }
 
-  function retirer() {
-    abortRef.current?.abort();
-    /*
-     * L'INSTANTANÉ PART EN PREMIER — avant même la requête.
-     *
-     * « Retirer » est une promesse d'effacement local : si le réseau lâche
-     * pendant l'appel, le cookie restera (le message le dit) mais les données
-     * affichables, elles, ne doivent pas survivre à un clic explicite.
-     */
-    oublierInstantane(slug);
-    carteAvantRef.current = null;
-    setCarte(null);
-    setVuA(null);
-    setHorsLigne(false);
-    setErreur(null);
-    setAnnonce(null);
+  async function retirer() {
+    if (!scanAutorise(suppressionRef)) return;
+
+    const verdict = await supprimerCarteJusquAuVerdict(
+      suppressionRef,
+      () => forgetCustomerLoyaltyCard(slug),
+      () => {
+        /*
+         * Le verrou est déjà pris ici. L'instantané part avant le premier
+         * `await`, puis l'interface reste non scannable jusqu'au verdict
+         * terminal de DELETE — y compris quand ce verdict est un échec.
+         */
+        abortRef.current?.abort();
+        oublierInstantane(slug);
+        carteAvantRef.current = null;
+        setCarte(null);
+        setInstantaneLocal(null);
+        setVuA(null);
+        setHorsLigne(false);
+        setEchecActualisationLocale(false);
+        setErreur(null);
+        setAnnonce(null);
+        setQrOuvert(false);
+        setScannerOuvert(false);
+        setOccupe(false);
+        setSuppressionEnCours(true);
+      },
+    );
+
+    setSuppressionEnCours(false);
     setRetraitOuvert(false);
-    setQrOuvert(false);
-    void forgetCustomerLoyaltyCard(slug).catch(() => {
+    if (!verdict.ok) {
       setErreur(
         "La carte a été masquée, mais son retrait de cet appareil devra être réessayé.",
       );
-    });
+    }
   }
 
   async function installer() {
@@ -552,7 +597,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
   const annonceVisible = useDrapeauTemporaire(annonce?.cle ?? null, DUREE_ANNONCE_MS);
   const idsEnFete = enFete && fete ? fete.ids : [];
 
-  const squelette = restauration && !carte;
+  const squelette = restauration && !carte && !instantaneLocal;
 
   return (
     <div
@@ -597,9 +642,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
             <p className="text-sm leading-6 text-alertt" role="alert">
               {erreur}
             </p>
-            {!carte && (
-              <Btn variant="ghost" className="mt-3" onClick={() => setScannerOuvert(true)}>
-                Scanner un autre QR
+            {!carte && !instantaneLocal && (
+              <Btn variant="ghost" className="mt-3" disabled={suppressionEnCours} onClick={ouvrirScanner}>
+                {suppressionEnCours ? "Retrait en cours…" : "Scanner un autre QR"}
               </Btn>
             )}
           </div>
@@ -612,11 +657,24 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           </div>
         )}
 
-        {!squelette && !carte && (
+        {!squelette && !carte && !instantaneLocal && (
           <EtatSansCarte
             catalog={catalog}
             cheminVitrine={cheminVitrine}
-            onScanner={() => setScannerOuvert(true)}
+            scannerDesactive={suppressionEnCours}
+            onScanner={ouvrirScanner}
+          />
+        )}
+
+        {!carte && instantaneLocal && (
+          <CarteLocaleHorsLigne
+            catalog={catalog}
+            instantane={instantaneLocal}
+            cheminVitrine={cheminVitrine}
+            actualisationEchouee={echecActualisationLocale}
+            occupe={occupe}
+            onActualiser={() => void actualiser()}
+            onRetirer={() => setRetraitOuvert(true)}
           />
         )}
 
@@ -826,12 +884,14 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
 
       <Modal
         open={retraitOuvert}
-        onClose={() => setRetraitOuvert(false)}
+        onClose={() => {
+          if (!suppressionRef.current) setRetraitOuvert(false);
+        }}
         title="Retirer la carte de cet appareil ?"
         destructive
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setRetraitOuvert(false)}>
+            <Btn variant="ghost" disabled={suppressionEnCours} onClick={() => setRetraitOuvert(false)}>
               Annuler
             </Btn>
             {/* `variant="danger"` et non un `className` qui repeint un ghost :
@@ -839,8 +899,8 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
                 c'est l'ordre de la FEUILLE compilée qui tranche — pas l'ordre
                 d'écriture. Le variant porte déjà le couple `alert`/`on-alert`
                 dont `contraste()` prouve l'AA sur les six directions. */}
-            <Btn variant="danger" onClick={retirer}>
-              Retirer la carte
+            <Btn variant="danger" disabled={suppressionEnCours} onClick={() => void retirer()}>
+              {suppressionEnCours ? "Retrait…" : "Retirer la carte"}
             </Btn>
           </>
         }
@@ -851,6 +911,96 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           le QR pour afficher la carte ici.
         </p>
       </Modal>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Repli local minimal : un solde daté, jamais une fausse carte membre
+// ─────────────────────────────────────────────────────────────
+
+function CarteLocaleHorsLigne({
+  catalog,
+  instantane,
+  cheminVitrine,
+  actualisationEchouee,
+  occupe,
+  onActualiser,
+  onRetirer,
+}: {
+  catalog: LoyaltyPublicProgram;
+  instantane: InstantaneCarte;
+  cheminVitrine: string;
+  actualisationEchouee: boolean;
+  occupe: boolean;
+  onActualiser: () => void;
+  onRetirer: () => void;
+}) {
+  const age = fraicheur(instantane.vuA);
+  const unite = unitePour(
+    instantane.solde,
+    catalog.program.unitLabelSingular,
+    catalog.program.unitLabelPlural,
+  );
+
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-8">
+      <section className="relative overflow-hidden rounded-wide border border-prep/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
+        <Pill className="border-prep/30 bg-prep/10 text-prept">
+          Solde enregistré hors ligne
+        </Pill>
+        <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.09em] text-mut">
+          Dernier solde connu
+        </p>
+        <h1 className="cf-fig mt-2 text-[clamp(2.75rem,2.3rem+1.8vw,3.5rem)] font-black leading-none tracking-[-0.055em] text-ink">
+          <span className="sr-only">Dernier solde connu : </span>
+          {chiffre(instantane.solde)}{" "}
+          <span className="text-xl tracking-normal text-mut">{unite}</span>
+        </h1>
+        <p className="mt-4 text-xs leading-5 text-prept" role="status">
+          Source : copie locale · solde vu {age} · {actualisationEchouee
+            ? "échec du rafraîchissement"
+            : "vérification en cours"}
+        </p>
+        <p className="mt-3 text-xs leading-5 text-mut">
+          L’identité, l’historique et l’avancement des récompenses ne sont pas
+          conservés sur cet appareil. Ils réapparaîtront après vérification du réseau.
+        </p>
+        <div className="mt-6 grid gap-2">
+          <ActionCommander
+            href={cheminVitrine}
+            nomRestaurant={catalog.restaurant.name}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Btn variant="ghost" disabled={occupe} onClick={onActualiser}>
+              {occupe ? "Actualisation…" : "Actualiser"}
+            </Btn>
+            <Btn variant="ghost" onClick={onRetirer}>Retirer</Btn>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <TitreSection
+          sur="Catalogue public actuel"
+          note="Ces récompenses viennent du catalogue public de cette page. Leur état acquis n’est pas déduit du solde enregistré."
+        >
+          Vos récompenses
+        </TitreSection>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          {catalog.rewards.map((recompense) => (
+            <TuileRecompense
+              key={recompense.id}
+              nom={recompense.name}
+              detail={recompense.description || benefit(recompense)}
+              cout={recompense.costUnits}
+              uniteSingulier={catalog.program.unitLabelSingular}
+              unitePluriel={catalog.program.unitLabelPlural}
+              acquise={false}
+            />
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -919,10 +1069,12 @@ function PiedDeCarte({
 function EtatSansCarte({
   catalog,
   cheminVitrine,
+  scannerDesactive,
   onScanner,
 }: {
   catalog: LoyaltyPublicProgram;
   cheminVitrine: string;
+  scannerDesactive: boolean;
   onScanner: () => void;
 }) {
   const unitePlurielle = catalog.program.unitLabelPlural;
@@ -949,8 +1101,8 @@ function EtatSansCarte({
               cible de 44 px (WCAG 2.2 · 2.5.8). La taille `sm` reste celle des
               barres d'outils denses de l'admin, à la souris. */}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Btn icon="grid" onClick={onScanner}>
-              Afficher ma carte
+            <Btn icon="grid" disabled={scannerDesactive} onClick={onScanner}>
+              {scannerDesactive ? "Retrait en cours…" : "Afficher ma carte"}
             </Btn>
             {/* Le lien vers la vitrine existe AUSSI sans carte : quelqu'un qui
                 découvre le programme doit pouvoir aller commander, c'est même

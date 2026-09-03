@@ -1,35 +1,80 @@
 import { describe, expect, it } from "vitest";
-import { DIRECTIONS, type LoyaltyCustomerCard } from "@sm/contracts";
+import {
+  DIRECTIONS,
+  type LoyaltyCustomerCard,
+} from "@sm/contracts";
 import {
   analyserInstantane,
   cleInstantane,
   DUREE_DE_VIE_INSTANTANE_MS,
+  ecrireInstantaneDansStockage,
   fraicheur,
+  lireEtatInstantaneDepuisStockage,
+  lireInstantaneDepuisStockage,
+  TOLERANCE_FUTUR_INSTANTANE_MS,
+  type StockageInstantanes,
 } from "./carte-locale";
 
 const MAINTENANT = Date.parse("2026-09-03T12:00:00.000Z");
+const SECRET_QR = "s".repeat(43);
 
 const CARTE: LoyaltyCustomerCard = {
   restaurant: {
     slug: "classfood",
-    name: "Classfood",
+    name: "Ancien Classfood",
     brandColor: "#c9a15a",
     brand: DIRECTIONS.nuit,
   },
   program: {
-    name: "La carte",
+    name: "Ancienne carte",
     mechanism: "points",
     unitLabelSingular: "point",
     unitLabelPlural: "points",
-    termsSummary: "Conditions",
+    termsSummary: "Anciennes conditions",
   },
   member: { alias: "Maya", balanceUnits: 24 },
-  rewards: [],
-  activity: [],
-} as LoyaltyCustomerCard;
+  rewards: [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Ancienne récompense",
+      description: "",
+      costUnits: 20,
+      kind: "product",
+      valueCents: null,
+      productRef: null,
+      affordable: true,
+    },
+  ],
+  activity: [
+    {
+      kind: "earn",
+      deltaUnits: 4,
+      balanceAfter: 24,
+      label: "Ancien achat",
+      recordedAt: "2026-09-03T11:30:00.000Z",
+    },
+  ],
+};
 
-function instantane(vuA: string, carte: unknown = CARTE): string {
-  return JSON.stringify({ carte, vuA });
+function stockageMemoire(initial?: Record<string, string>): {
+  stockage: StockageInstantanes;
+  valeur: (cle: string) => string | null;
+} {
+  const valeurs = new Map(Object.entries(initial ?? {}));
+  return {
+    stockage: {
+      getItem: (cle) => valeurs.get(cle) ?? null,
+      setItem: (cle, valeur) => valeurs.set(cle, valeur),
+      removeItem: (cle) => {
+        valeurs.delete(cle);
+      },
+    },
+    valeur: (cle) => valeurs.get(cle) ?? null,
+  };
+}
+
+function v2(vuA: string, solde: unknown = 24): string {
+  return JSON.stringify({ version: 2, solde, vuA });
 }
 
 describe("la clé de stockage", () => {
@@ -39,59 +84,136 @@ describe("la clé de stockage", () => {
   });
 });
 
-describe("l'instantané est une entrée NON FIABLE, repassée par le contrat", () => {
-  it("accepte un instantané bien formé et récent", () => {
-    const lu = analyserInstantane(
-      instantane("2026-09-03T11:50:00.000Z"),
+describe("l'instantané v2 minimal", () => {
+  it("n'écrit que version, solde et vuA — jamais identité, historique, récompenses ou secret", () => {
+    const memoire = stockageMemoire();
+    ecrireInstantaneDansStockage(
+      memoire.stockage,
+      "classfood",
+      CARTE.member.balanceUnits,
       MAINTENANT,
     );
-    expect(lu?.carte.member.balanceUnits).toBe(24);
-    expect(lu?.vuA).toBe("2026-09-03T11:50:00.000Z");
+
+    const brut = memoire.valeur(cleInstantane("classfood"))!;
+    expect(JSON.parse(brut)).toEqual({
+      version: 2,
+      solde: 24,
+      vuA: "2026-09-03T12:00:00.000Z",
+    });
+    expect(brut).not.toContain(CARTE.member.alias);
+    expect(brut).not.toContain(CARTE.activity[0]!.label);
+    expect(brut).not.toContain(CARTE.rewards[0]!.name);
+    expect(brut).not.toContain(SECRET_QR);
   });
 
-  it("refuse tout ce qui n'est pas une carte du contrat", () => {
+  it("migre immédiatement l'ancienne carte complète vers la v2 minimale", () => {
+    const cle = cleInstantane("classfood");
+    const memoire = stockageMemoire({
+      [cle]: JSON.stringify({
+        carte: CARTE,
+        vuA: "2026-09-03T11:50:00.000Z",
+      }),
+    });
+
+    expect(
+      lireInstantaneDepuisStockage(memoire.stockage, "classfood", MAINTENANT),
+    ).toEqual({
+      version: 2,
+      solde: 24,
+      vuA: "2026-09-03T11:50:00.000Z",
+    });
+    const migre = memoire.valeur(cle)!;
+    expect(Object.keys(JSON.parse(migre))).toEqual(["version", "solde", "vuA"]);
+    expect(migre).not.toContain("Maya");
+    expect(migre).not.toContain("activity");
+    expect(migre).not.toContain("rewards");
+    expect(migre).not.toContain(SECRET_QR);
+  });
+
+});
+
+describe("validation, expiration et purge", () => {
+  it("refuse les charges et soldes invalides", () => {
     expect(analyserInstantane(null, MAINTENANT)).toBeNull();
     expect(analyserInstantane("", MAINTENANT)).toBeNull();
     expect(analyserInstantane("{ pas du json", MAINTENANT)).toBeNull();
     expect(analyserInstantane("[]", MAINTENANT)).toBeNull();
     expect(analyserInstantane('"chaine"', MAINTENANT)).toBeNull();
-    // Une charge sans date : rien ne pourrait dire au client si son solde
-    // date d'une minute ou d'un an.
-    expect(analyserInstantane(JSON.stringify({ carte: CARTE }), MAINTENANT)).toBeNull();
-    expect(analyserInstantane(instantane("hier"), MAINTENANT)).toBeNull();
-    // Une carte amputée, laissée par une version antérieure du produit.
+    expect(analyserInstantane(v2("hier"), MAINTENANT)).toBeNull();
+    expect(analyserInstantane(v2("2026-09-03T11:50:00.000Z", -1), MAINTENANT)).toBeNull();
+    expect(analyserInstantane(v2("2026-09-03T11:50:00.000Z", 1.5), MAINTENANT)).toBeNull();
     expect(
       analyserInstantane(
-        instantane("2026-09-03T11:50:00.000Z", { member: { alias: "Maya" } }),
+        JSON.stringify({ version: 3, solde: 24, vuA: "2026-09-03T11:50:00.000Z" }),
         MAINTENANT,
       ),
     ).toBeNull();
   });
 
-  it("oublie un instantané trop vieux plutôt que d'afficher un solde mort", () => {
+  it("purge une v2 enrichie d'un secret au lieu de l'utiliser", () => {
+    const cle = cleInstantane("classfood");
+    const memoire = stockageMemoire({
+      [cle]: JSON.stringify({
+        version: 2,
+        solde: 24,
+        vuA: "2026-09-03T11:50:00.000Z",
+        qrToken: SECRET_QR,
+      }),
+    });
+
+    expect(
+      lireEtatInstantaneDepuisStockage(memoire.stockage, "classfood", MAINTENANT),
+    ).toEqual({ etat: "invalide", instantane: null });
+    expect(memoire.valeur(cle)).toBeNull();
+  });
+
+  it("purge à la lecture un instantané expiré sans afficher son ancien solde", () => {
+    const cle = cleInstantane("classfood");
     const vieux = new Date(
       MAINTENANT - DUREE_DE_VIE_INSTANTANE_MS - 1_000,
     ).toISOString();
-    expect(analyserInstantane(instantane(vieux), MAINTENANT)).toBeNull();
+    const memoire = stockageMemoire({ [cle]: v2(vieux) });
 
-    const limite = new Date(MAINTENANT - DUREE_DE_VIE_INSTANTANE_MS + 1_000).toISOString();
-    expect(analyserInstantane(instantane(limite), MAINTENANT)).not.toBeNull();
+    expect(
+      lireEtatInstantaneDepuisStockage(memoire.stockage, "classfood", MAINTENANT),
+    ).toEqual({ etat: "expire", instantane: null });
+    expect(memoire.valeur(cle)).toBeNull();
   });
 
-  it("ne perd pas la carte pour une horloge déréglée en avance", () => {
-    const futur = new Date(MAINTENANT + 3_600_000).toISOString();
-    expect(analyserInstantane(instantane(futur), MAINTENANT)).not.toBeNull();
+  it("accepte la limite d'âge mais refuse et purge une date future de plus de cinq minutes", () => {
+    const limiteAge = new Date(
+      MAINTENANT - DUREE_DE_VIE_INSTANTANE_MS + 1_000,
+    ).toISOString();
+    expect(analyserInstantane(v2(limiteAge), MAINTENANT)).not.toBeNull();
+
+    const limiteFuture = new Date(
+      MAINTENANT + TOLERANCE_FUTUR_INSTANTANE_MS,
+    ).toISOString();
+    expect(analyserInstantane(v2(limiteFuture), MAINTENANT)).not.toBeNull();
+
+    const cle = cleInstantane("classfood");
+    const tropFuture = new Date(
+      MAINTENANT + TOLERANCE_FUTUR_INSTANTANE_MS + 1,
+    ).toISOString();
+    const memoire = stockageMemoire({ [cle]: v2(tropFuture) });
+    expect(
+      lireEtatInstantaneDepuisStockage(memoire.stockage, "classfood", MAINTENANT),
+    ).toEqual({ etat: "invalide", instantane: null });
+    expect(memoire.valeur(cle)).toBeNull();
   });
 });
 
 describe("la fraîcheur est dite honnêtement", () => {
-  it("ne prétend pas à une heure quand il s'agit de secondes", () => {
-    expect(fraicheur(new Date(MAINTENANT - 5_000).toISOString(), MAINTENANT)).toBe(
-      "à l'instant",
-    );
+  it("signale une petite dérive future au lieu de la faire passer pour une observation certaine", () => {
+    expect(
+      fraicheur(new Date(MAINTENANT + 60_000).toISOString(), MAINTENANT),
+    ).toBe("à l'instant (horloge décalée)");
   });
 
   it("monte de registre avec l'âge", () => {
+    expect(fraicheur(new Date(MAINTENANT - 5_000).toISOString(), MAINTENANT)).toBe(
+      "à l'instant",
+    );
     expect(fraicheur(new Date(MAINTENANT - 12 * 60_000).toISOString(), MAINTENANT)).toBe(
       "il y a 12 min",
     );
@@ -101,12 +223,5 @@ describe("la fraîcheur est dite honnêtement", () => {
     expect(fraicheur(new Date(MAINTENANT - 26 * 3_600_000).toISOString(), MAINTENANT)).toBe(
       "hier",
     );
-    expect(fraicheur(new Date(MAINTENANT - 5 * 86_400_000).toISOString(), MAINTENANT)).toBe(
-      "il y a 5 jours",
-    );
-  });
-
-  it("le dit plutôt que d'inventer une date", () => {
-    expect(fraicheur("n'importe quoi", MAINTENANT)).toBe("date inconnue");
   });
 });
