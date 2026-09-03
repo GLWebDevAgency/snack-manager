@@ -15,7 +15,7 @@
  * `?demo=1` doit SURVIVRE À LA NAVIGATION INTERNE. Le back-office navigue avec
  * le routeur Next, qui réécrit l'adresse en n'y remettant que le chemin
  * canonique : sans les deux filets posés dans `lib/demo/mode.ts`, le visiteur
- * qui clique « Tableau de bord » perd le paramètre, perd son jeton, et se fait
+ * qui clique « Aujourd’hui » perd le paramètre, perd son jeton, et se fait
  * éjecter vers la page de connexion. La démonstration s'arrête alors AU PREMIER
  * CLIC — et c'est la vitrine commerciale du produit.
  *
@@ -47,7 +47,7 @@ scenario(
     await page.goto(`${web}/admin/menu?demo=1`, { waitUntil: 'domcontentloaded' });
 
     // ── Le gérant est déjà entré : la démonstration ouvre sur son back-office ──
-    await page.getByRole('heading', { name: 'Menu & prix', level: 1 }).waitFor({ state: 'visible' });
+    await page.getByRole('heading', { name: 'Carte', level: 1 }).waitFor({ state: 'visible' });
 
     // `exact: true` n'est pas un détail : sans lui, « Prix de Kebab » désigne
     // aussi « Prix de Kebab Fromage », et Playwright refuse de trancher.
@@ -71,15 +71,15 @@ scenario(
     await attendreTexte(page, `Prix mis à jour — ${NOUVEAU_PRIX} €`);
 
     // ── On quitte l'écran, on y revient ──
-    await page.getByRole('link', { name: 'Tableau de bord' }).click();
-    await page.getByRole('heading', { name: 'Tableau de bord', level: 1 }).waitFor({ state: 'visible' });
+    await page.getByRole('link', { name: 'Aujourd’hui', exact: true }).click();
+    await page.getByRole('heading', { name: 'Aujourd’hui', level: 1 }).waitFor({ state: 'visible' });
 
     assert.ok(
       page.url().includes('demo=1'),
       `le paramètre « demo=1 » doit survivre à la navigation interne — adresse : ${page.url()}`,
     );
 
-    await page.getByRole('link', { name: 'Menu & prix' }).click();
+    await page.getByRole('link', { name: 'Carte', exact: true }).click();
     const relu = page.getByRole('textbox', { name: `Prix de ${PRODUIT}`, exact: true });
     await relu.waitFor({ state: 'visible' });
 

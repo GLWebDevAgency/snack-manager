@@ -64,9 +64,10 @@ crié « la production est en retard » le 26/08.
 
 La carte publique n'est pas contrôlée : la base de production a été remise à
 blanc, il n'y a aucun établissement à servir. **Le jour où le premier
-restaurant est en ligne**, mettre son slug dans `SLUG_CARTE`
-(`infra/sonde-cloudflare/worker.js`) et redéployer — le contrôle devient réel
-et traverse Mongo.
+restaurant est en ligne**, poser son slug dans la variable texte publique
+`SM_SLUG_CARTE_PRODUCTION` du Worker — le contrôle devient réel et traverse
+Mongo, sans modification du code. La variable GitHub du même nom arme en plus
+le catalogue et la PWA fidélité dans le smoke quotidien et post-déploiement.
 
 ## Les alertes
 
@@ -116,8 +117,9 @@ Très peu, et c'est le but.
 - **Quand ntfy sonne « Production en défaut »** : ouvrir le lien d'état, voir
   quel service est tombé et pourquoi, puis Railway pour ce service-là. La
   sonde vous redira d'elle-même quand c'est rentré dans l'ordre.
-- **Le jour du premier restaurant en ligne** : renseigner `SLUG_CARTE` et
-  redéployer (voir plus bas). C'est le seul changement de code prévu.
+- **Le jour du premier restaurant en ligne** : renseigner la variable texte
+  `SM_SLUG_CARTE_PRODUCTION` dans le tableau de bord. Aucun changement de code
+  ni redéploiement manuel n'est nécessaire pour cette activation.
 - **Une fois par mois, au hasard** : ouvrir le lien d'état et vérifier que
   l'horodatage a moins de 5 minutes. Une sonde qu'on ne vérifie jamais est une
   sonde dont on ignore qu'elle est morte.
@@ -147,9 +149,8 @@ connaît le rayon d'action le jour où il fuite.
 Pour redéployer, trois voies, de la plus simple à la plus outillée :
 
 1. **Le tableau de bord** — Workers & Pages → `sonde-snack-manager` → Edit
-   code. Aucun jeton, aucune installation. Suffisant pour changer une
-   constante comme `SLUG_CARTE`. Penser à reporter la modification ici, sinon
-   le dépôt et le déployé divergent en silence.
+   code ou Settings → Variables. Aucun jeton, aucune installation. Le slug de
+   production se configure dans Settings, sans éditer ce fichier.
 2. **Demander à Claude** — le connecteur redéploie depuis ce fichier en une
    commande, sans rien installer chez vous.
 3. **`wrangler`, en ligne de commande** — la seule voie qui demande un jeton,
@@ -162,10 +163,12 @@ cd infra/sonde-cloudflare
 CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npx --yes wrangler@4 deploy
 ```
 
-`wrangler.toml` porte déjà le cron, le nom et le rattachement KV — rien à
-retaper. Et si le message d'erreur parle d'une ressource introuvable plutôt
-que d'un droit manquant, c'est le jeton : Cloudflare ne distingue pas les deux
-cas dans sa réponse.
+`wrangler.toml` porte déjà le cron, le nom, le rattachement KV et
+`keep_vars = true` : un déploiement CLI conserve donc les variables texte
+posées dans le tableau de bord, dont `SM_SLUG_CARTE_PRODUCTION`. Les secrets
+chiffrés ne sont pas gouvernés par cette option. Et si le message d'erreur
+parle d'une ressource introuvable plutôt que d'un droit manquant, c'est le
+jeton : Cloudflare ne distingue pas les deux cas dans sa réponse.
 
 ## Les ressources Cloudflare
 
@@ -176,6 +179,7 @@ cas dans sa réponse.
 | Sous-domaine | `snackmanager.workers.dev` |
 | Déclencheur | `*/5 * * * *` |
 | Secrets | `SM_ALERT_WEBHOOK`, `DIAGNOSTIC_TOKEN` |
+| Variable texte publique | `SM_SLUG_CARTE_PRODUCTION` (absente avant le premier restaurant) |
 
 L'espace KV garde deux clefs : `etat` (`vert` / `rouge`) et `dernier-passage`
 (le détail complet). C'est cette mémoire qui permet de ne notifier qu'au

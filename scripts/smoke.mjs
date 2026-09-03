@@ -16,9 +16,9 @@
  *   2. l'API sert LA RÉVISION ATTENDUE → voir plus bas, c'est le seul contrôle
  *                                qui AFFIRME quelque chose sur le déploiement
  *                                plutôt que sur l'environnement ;
- *   3. la carte publique sort  → c'est la seule lecture qui traverse
- *                                Mongo de bout en bout ; si elle sort, la base
- *                                est jointe et le multi-établissement résout ;
+ *   3. les surfaces publiques d'un restaurant sortent, si son slug est
+ *                                configuré : carte, catalogue fidélité puis
+ *                                vraie PWA fidélité ;
  *   4. les trois interfaces servent leur page — et la bonne :
  *      on ne se contente pas d'un 200, on cherche le titre attendu, sinon un
  *      « 200 » servi par une page d'erreur d'infrastructure passerait pour un
@@ -75,8 +75,8 @@ const CIBLES = {
     // aujourd'hui AUCUN établissement, donc aucune carte publique à servir.
     // Le contrôle est alors annoncé « IGNORÉ », bruyamment, plutôt que rouge
     // pour une raison qui n'est pas une panne.
-    // Le jour où le premier restaurant est en ligne : mettre son slug ici (ou
-    // exporter SM_SLUG_CARTE) et le contrôle redevient réel. Voir § 11.
+    // Le jour où le premier restaurant est en ligne : renseigner la variable
+    // GitHub SM_SLUG_CARTE_PRODUCTION et le contrôle redevient réel. Voir § 11.
     slugCarte: '',
   },
 };
@@ -110,6 +110,7 @@ Usage :
 
 Surcharges facultatives (aucune n'est confidentielle) :
     SM_URL_API   SM_URL_WEB   SM_URL_POS   SM_URL_KDS   SM_SLUG_CARTE
+    SM_SLUG_CARTE_PRODUCTION — slug public de production ; vide = contrôles tenant ignorés
     SM_REVISION_ATTENDUE — le SHA que l'API doit servir ; vide = on n'affirme rien
     SM_TENTATIVES (${TENTATIVES})   SM_ATTENTE_MS (${ATTENTE_MS})   SM_DELAI_REQUETE_MS (${DELAI_REQUETE_MS})
 `);
@@ -122,13 +123,18 @@ function resoudreCible() {
   const base = CIBLES[nom];
   if (!base) usage(`Environnement « ${nom} » inconnu — attendu : staging ou production.`);
 
+  const slugConfigure =
+    process.env.SM_SLUG_CARTE ??
+    (nom === 'production' ? process.env.SM_SLUG_CARTE_PRODUCTION : undefined) ??
+    base.slugCarte;
+
   return {
     nom,
     api: process.env.SM_URL_API || base.api,
     web: process.env.SM_URL_WEB || base.web,
     pos: process.env.SM_URL_POS || base.pos,
     kds: process.env.SM_URL_KDS || base.kds,
-    slugCarte: (process.env.SM_SLUG_CARTE ?? base.slugCarte).trim(),
+    slugCarte: slugConfigure.trim(),
   };
 }
 
@@ -276,7 +282,7 @@ function controleCarte(cible) {
         '(voir scripts/smoke.mjs → CIBLES et docs/CI-CD.md § 11)',
     };
   }
-  const url = `${cible.api}/public/tenants/${cible.slugCarte}/menu`;
+  const url = `${cible.api}/public/tenants/${encodeURIComponent(cible.slugCarte)}/menu`;
   return {
     nom: 'La carte publique se sert',
     url,
@@ -297,6 +303,90 @@ function controleCarte(cible) {
         detail.push('⚠ carte vide (0 catégorie)');
       }
       detail.push(`${charge.categories.length} catégories · ${nbProduits} produits · ${ms} ms`);
+      return null;
+    },
+  };
+}
+
+function controleCatalogueFidelite(cible) {
+  if (!cible.slugCarte) {
+    return {
+      nom: 'Le catalogue fidélité public se sert',
+      url: '—',
+      ignore:
+        `aucun slug d'établissement configuré pour « ${cible.nom} » ` +
+        '(voir scripts/smoke.mjs → CIBLES et docs/CI-CD.md § 11)',
+    };
+  }
+  const url = `${cible.api}/public/tenants/${encodeURIComponent(cible.slugCarte)}/loyalty`;
+  return {
+    nom: 'Le catalogue fidélité public se sert',
+    url,
+    executer: async (detail) => {
+      const { statut, corps, ms } = await requete(url);
+      if (statut !== 200) return `HTTP ${statut} — ${corps.slice(0, 160)}`;
+      let charge;
+      try {
+        charge = JSON.parse(corps);
+      } catch {
+        return `réponse non-JSON : ${corps.slice(0, 120)}`;
+      }
+      if (charge?.restaurant?.slug !== cible.slugCarte) {
+        return `restaurant inattendu : slug=${String(charge?.restaurant?.slug)}`;
+      }
+      if (
+        typeof charge?.program?.name !== 'string' ||
+        charge.program.name.trim().length === 0 ||
+        !['points', 'stamps'].includes(charge.program.mechanism) ||
+        typeof charge.program.unitLabelSingular !== 'string' ||
+        typeof charge.program.unitLabelPlural !== 'string'
+      ) {
+        return 'charge sans programme fidélité public valide';
+      }
+      if (!Array.isArray(charge.rewards)) return 'charge sans tableau « rewards »';
+      const recompenseInvalide = charge.rewards.some(
+        (reward) =>
+          typeof reward?.id !== 'string' ||
+          typeof reward?.name !== 'string' ||
+          !Number.isInteger(reward?.costUnits) ||
+          reward.costUnits <= 0,
+      );
+      if (recompenseInvalide) return 'charge avec une récompense publique invalide';
+      if (charge.rewards.length === 0) detail.push('⚠ aucune récompense active');
+      detail.push(
+        `${charge.program.mechanism} · ${charge.rewards.length} récompense(s) · ${ms} ms`,
+      );
+      return null;
+    },
+  };
+}
+
+function controlePwaFidelite(cible) {
+  if (!cible.slugCarte) {
+    return {
+      nom: 'La PWA fidélité publique se sert',
+      url: '—',
+      ignore:
+        `aucun slug d'établissement configuré pour « ${cible.nom} » ` +
+        '(voir scripts/smoke.mjs → CIBLES et docs/CI-CD.md § 11)',
+    };
+  }
+  const url = `${cible.web}/r/${encodeURIComponent(cible.slugCarte)}/fidelite`;
+  return {
+    nom: 'La PWA fidélité publique se sert',
+    url,
+    executer: async (detail) => {
+      const { statut, corps, ms } = await requete(url);
+      if (statut !== 200) return `HTTP ${statut}`;
+      const titre = corps.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() ?? '';
+      if (!titre) return 'page servie sans titre fidélité';
+      if (/programme fidélité indisponible/i.test(titre)) {
+        return 'la page de repli « Programme fidélité indisponible » est servie';
+      }
+      if (!/Chargement de votre carte fidélité|Afficher ma carte/i.test(corps)) {
+        return 'page servie sans marqueur de la carte fidélité';
+      }
+      detail.push(`${ms} ms · empreinte ${empreinte(corps)}`);
       return null;
     },
   };
@@ -332,6 +422,8 @@ async function principal() {
     controleApi(cible),
     controleRevision(cible),
     controleCarte(cible),
+    controleCatalogueFidelite(cible),
+    controlePwaFidelite(cible),
     ...CONTROLES_INTERFACES.map((i) => controleInterface(cible, i)),
   ];
 

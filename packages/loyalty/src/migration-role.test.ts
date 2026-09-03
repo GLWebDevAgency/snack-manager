@@ -16,6 +16,7 @@ function safeProbe(roleName = 'snackmanager_staging_app') {
     migration_rolcreatedb: false,
     migration_rolreplication: false,
     migration_has_role_membership: false,
+    migration_has_role_members: false,
     migration_search_path: 'public, pg_catalog',
     database_name: 'railway',
     rolsuper: false,
@@ -24,6 +25,7 @@ function safeProbe(roleName = 'snackmanager_staging_app') {
     rolcreatedb: false,
     rolreplication: false,
     has_role_membership: false,
+    has_role_members: false,
     can_create_database_objects: false,
     can_create_public_schema: false,
     can_create_loyalty_schema: false,
@@ -62,6 +64,10 @@ describe('rôle runtime des migrations fidélité', () => {
 
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0]?.[1]).toEqual(['snackmanager_staging_app']);
+    const probe = String(query.mock.calls[0]?.[0]);
+    expect(probe).toMatch(/pg_auth_members membership[\s\S]*membership\.roleid = m\.oid/);
+    expect(probe).toMatch(/pg_auth_members membership[\s\S]*membership\.roleid = r\.oid/);
+    expect(probe).not.toMatch(/pg_has_role\(member\.oid/);
     const grants = String(query.mock.calls[1]?.[0]);
     expect(grants).toMatch(/GRANT USAGE ON SCHEMA loyalty/);
     expect(grants).toMatch(/GRANT CONNECT ON DATABASE "railway"/);
@@ -76,6 +82,8 @@ describe('rôle runtime des migrations fidélité', () => {
     { ...safeProbe('snackmanager_staging_app'), rolbypassrls: true },
     { ...safeProbe('snackmanager_staging_app'), rolcreaterole: true },
     { ...safeProbe('snackmanager_staging_app'), has_role_membership: true },
+    { ...safeProbe('snackmanager_staging_app'), migration_has_role_members: true },
+    { ...safeProbe('snackmanager_staging_app'), has_role_members: true },
     { ...safeProbe('snackmanager_staging_app'), migration_role: 'snackmanager_staging_app' },
   ])('refuse un rôle absent ou privilégié', async (role) => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1, rows: [role] });

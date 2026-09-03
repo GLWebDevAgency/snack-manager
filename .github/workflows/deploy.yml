@@ -347,7 +347,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Compiler les migrateurs
-        run: pnpm --filter @sm/supply build && pnpm --filter @sm/loyalty build
+        run: |
+          pnpm --filter @sm/postgres-bootstrap build
+          pnpm --filter @sm/supply build
+          pnpm --filter @sm/loyalty build
 
       - name: Préparer la connexion DDL authentifiée
         env:
@@ -447,6 +450,19 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV, `DATABASE_MIGRATION_URL=${securedUrl}\n`);
           NODE
 
+      - name: Vérifier le bootstrap PostgreSQL en lecture seule
+        env:
+          NODE_ENV: production
+          DATABASE_MIGRATION_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_migrator'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_migrator'
+            || '' }}
+          DATABASE_RUNTIME_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_app'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_app'
+            || '' }}
+        run: pnpm postgres:bootstrap:check:built
+
       - name: Appliquer supply puis fidélité
         env:
           NODE_ENV: production
@@ -457,6 +473,19 @@ jobs:
         run: |
           set -euo pipefail
           pnpm migrate:postgres:built
+
+      - name: Confirmer le bootstrap après migration
+        env:
+          NODE_ENV: production
+          DATABASE_MIGRATION_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_migrator'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_migrator'
+            || '' }}
+          DATABASE_RUNTIME_ROLE: >-
+            ${{ github.ref == 'refs/heads/develop' && 'snackmanager_staging_app'
+            || github.ref == 'refs/heads/main' && 'snackmanager_production_app'
+            || '' }}
+        run: pnpm postgres:bootstrap:check:built
 
   # ───────────────────────────────────────────────────────────────────────────
   # 4 · Le déploiement
@@ -987,6 +1016,10 @@ jobs:
           # s'annonce alors IGNORÉ, et la révision réellement servie reste
           # affichée dans le contrôle précédent.
           SM_REVISION_ATTENDUE: ${{ needs.deploiement.result == 'success' && github.sha || '' }}
+          # Variable PUBLIQUE, volontairement absente tant qu'aucun restaurant
+          # n'existe en production. Staging conserve son slug intégré au
+          # script ; une valeur vide garde les contrôles tenant en IGNORÉ.
+          SM_SLUG_CARTE_PRODUCTION: ${{ vars.SM_SLUG_CARTE_PRODUCTION }}
         run: node scripts/smoke.mjs "$ENVIRONNEMENT"
 
       - name: Annoncer la panne

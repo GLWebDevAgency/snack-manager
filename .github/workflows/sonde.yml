@@ -68,6 +68,10 @@ jobs:
       # (le script est fait pour) — entre deux déploiements, la question n'est
       # pas « est-ce ma version ? » mais « le restaurant peut-il encaisser ? ».
       - name: Contrôle de santé
+        env:
+          # Publique et vide tant que la production ne porte aucun restaurant.
+          # La renseigner arme en même temps menu, catalogue et PWA fidélité.
+          SM_SLUG_CARTE_PRODUCTION: ${{ vars.SM_SLUG_CARTE_PRODUCTION }}
         run: node scripts/smoke.mjs production
 
       # Le canal se cherche à DEUX endroits : le secret GitHub s'il existe,

@@ -153,14 +153,16 @@ jobs:
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
 
-      # Les suites générales restent rapides et hermétiques. Ces deux fichiers
-      # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : RLS,
-      # triggers, migrations et ledger ne peuvent plus se déclarer verts en
-      # ayant été silencieusement ignorés.
-      - name: Tests PostgreSQL réels — fidélité
+      # Les suites générales restent rapides et hermétiques. Ces trois fichiers
+      # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
+      # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et
+      # ledger ne peuvent plus se déclarer verts en ayant été ignorés.
+      - name: Tests PostgreSQL réels — bootstrap et fidélité
         env:
+          POSTGRES_BOOTSTRAP_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
           LOYALTY_TEST_DATABASE_URL: postgresql://user:password@127.0.0.1:5432/snackmanager_loyalty_test_ci
         run: |
+          pnpm --filter @sm/postgres-bootstrap exec vitest run src/bootstrap.integration.test.ts
           pnpm --filter @sm/loyalty exec vitest run src/schema.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/loyalty/loyalty-member.service.integration.test.ts
 

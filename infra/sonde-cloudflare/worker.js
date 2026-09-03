@@ -25,8 +25,9 @@
  *
  * La carte publique n'est pas contrôlée en production : la base a été remise
  * à blanc, il n'y a aucun établissement à servir. Le jour où le premier
- * restaurant est en ligne, ajouter son slug dans SLUG_CARTE ci-dessous —
- * le contrôle devient alors réel, et il traverse Mongo.
+ * restaurant est en ligne, poser la variable texte
+ * `SM_SLUG_CARTE_PRODUCTION` — le contrôle devient alors réel, et il traverse
+ * Mongo sans exiger un nouveau déploiement du Worker.
  *
  * ── Pourquoi une mémoire (KV) ───────────────────────────────────────────────
  *
@@ -48,9 +49,6 @@ const CIBLES = [
   { nom: 'Caisse', url: 'https://pos-production-a9d8.up.railway.app/' },
   { nom: 'Écran cuisine', url: 'https://kds-production-8991.up.railway.app/' },
 ];
-
-/** Slug d'un établissement en ligne, ou null tant que la base est vide. */
-const SLUG_CARTE = null;
 
 /** Au-delà, on considère le service perdu — Railway rend la main bien avant. */
 const DELAI_MS = 15_000;
@@ -82,9 +80,9 @@ async function controler(cible) {
 }
 
 /** La carte publique — le seul contrôle qui traverse vraiment Mongo. */
-async function controlerCarte() {
-  if (!SLUG_CARTE) return null;
-  const url = `https://api-production-8949.up.railway.app/public/tenants/${SLUG_CARTE}/menu`;
+async function controlerCarte(slug) {
+  if (!slug) return null;
+  const url = `https://api-production-8949.up.railway.app/public/tenants/${encodeURIComponent(slug)}/menu`;
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(DELAI_MS) });
     if (!r.ok) return { nom: 'Carte publique', raison: `HTTP ${r.status}` };
@@ -141,7 +139,7 @@ async function alerter(hook, titre, texte, urgent) {
 
 async function passage(env) {
   const resultats = await Promise.all(CIBLES.map(controler));
-  const carte = await controlerCarte();
+  const carte = await controlerCarte(env.SM_SLUG_CARTE_PRODUCTION?.trim());
   if (carte) resultats.push(carte);
 
   const echecs = resultats.filter((r) => r.raison);

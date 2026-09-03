@@ -507,7 +507,10 @@ export function Highlights({
               onClick={() => !disabled && onPick(product)}
               disabled={disabled}
               className={cx(
-                "w-[172px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
+                /* `sr-only` est positionné en absolu. Sans ce contenant, ses
+                   huit libellés prennent le rail entier comme repère et
+                   élargissent invisiblement le document mobile. */
+                "relative w-[172px] shrink-0 overflow-hidden rounded-panel border bg-surface text-left shadow-card",
                 qty > 0 ? "border-accent/45" : "border-ink/6",
               )}
             >
