@@ -1,0 +1,26 @@
+{
+  "name": "@sm/postgres-bootstrap",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --config ../../eslint.serveur.mjs src",
+    "test": "vitest run",
+    "test:integration": "vitest run src/bootstrap.integration.test.ts",
+    "check": "tsx src/check.ts",
+    "repair": "tsx src/repair.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.0.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0",
+    "drizzle-orm": "^0.44.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.2.0"
+  }
+}
