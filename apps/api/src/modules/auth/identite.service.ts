@@ -1,11 +1,16 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import type { AuthMe, JwtPayload, StaffRole, UserRole } from '@sm/contracts';
+import type { AuthMe, AuthMeUpdate, JwtPayload, StaffRole, UserRole } from '@sm/contracts';
 import type { Staff, User } from '@sm/db';
 
 /**
  * CE QU'ON A LE DROIT DE LIRE SUR UN COMPTE — liste BLANCHE, et c'est vital.
+ *
+ * Elle vaut aussi pour l'ÉCRITURE : `PATCH /auth/me` relit le document par
+ * cette même projection pour composer sa réponse. Un `findByIdAndUpdate` qui
+ * renverrait le document entier ferait sortir l'empreinte par la porte de
+ * derrière, alors même que la lecture, elle, resterait irréprochable.
  *
  * Le document `users` porte `passwordHash` : l'empreinte Argon2id du mot de
  * passe du gérant. Elle ne doit jamais quitter le serveur, ni dans cette
@@ -80,6 +85,59 @@ export class IdentiteService {
     return session.kind === 'staff' ? this.membreDEquipe(session) : this.compte(session);
   }
 
+  /**
+   * POSER SON PROPRE NOM — `PATCH /auth/me`.
+   *
+   * `users.name` n'avait qu'UN seul auteur : la conversion d'un lead, depuis
+   * un champ facultatif de la modale du CRM. Aucune route ne le mettait à
+   * jour, si bien qu'un nom laissé vide à la signature l'était pour toujours —
+   * et se lisait comme un tiret en pied des deux barres.
+   *
+   * ─── CE QUE CETTE ROUTE DEVIENDRA (ET NE FAIT PAS ENCORE) ───
+   *
+   * Le chantier « plusieurs comptes par restaurant » ajoutera des rôles plus
+   * fins. Cette route ne changera PAS de nature : elle restera « je pose mon
+   * propre nom », sujet pris au jeton. Ce qui viendra à côté, c'est un
+   * renommage d'AUTRUI — un identifiant dans le chemin, une permission qui le
+   * garde, et sa place naturelle est l'écran Équipe, là où vivent déjà les
+   * membres. La réponse, elle, s'enrichira des permissions (cf. `AuthMe`), que
+   * l'écran lira pour peindre sa barre. Rien de tout cela n'est écrit
+   * aujourd'hui : aucune table, aucun rôle, aucun champ inventé d'avance.
+   *
+   * ─── UNE SESSION OUVERTE AU CODE N'ÉCRIT RIEN ICI ───
+   *
+   * Un porteur de code n'a pas de compte dans `users` : son nom vit dans
+   * `staff`, et `StaffController` porte `@Roles('owner', 'gerant')` — le nom
+   * d'un équipier est posé par celui qui l'embauche, sur l'écran Équipe. Le
+   * laisser se renommer depuis la tablette du comptoir donnerait à qui connaît
+   * quatre chiffres le pouvoir de réécrire le nom qui signe le journal des
+   * gestes sensibles et les pointages. Le refus est donc net, et le message
+   * dit où le nom se change vraiment.
+   */
+  async poserMonNom(session: JwtPayload, body: AuthMeUpdate): Promise<AuthMe> {
+    if (session.kind === 'staff') {
+      throw new ForbiddenException(
+        'Une session ouverte au code ne change pas son nom : il se pose sur l’écran Équipe.',
+      );
+    }
+
+    const compte = await this.users
+      .findByIdAndUpdate(
+        session.sub,
+        { $set: { name: body.nom } },
+        // La MÊME liste blanche qu'à la lecture, et `new` pour rendre ce qui
+        // vient d'être écrit plutôt que ce qui l'était avant.
+        { new: true, projection: IDENTITE_COMPTE_FIELDS },
+      )
+      .lean<CompteLu | null>();
+
+    // Le compte a disparu entre le garde et cette écriture : rien n'a été
+    // écrit, et il n'y a personne à nommer.
+    if (!compte) throw new UnauthorizedException();
+
+    return this.depuisLeCompte(compte);
+  }
+
   /** Session e-mail + mot de passe : propriétaire ou équipe Snack Manager. */
   private async compte(session: JwtPayload): Promise<AuthMe> {
     const compte = await this.users
@@ -88,6 +146,17 @@ export class IdentiteService {
 
     if (!compte) throw new UnauthorizedException();
 
+    return this.depuisLeCompte(compte);
+  }
+
+  /**
+   * La réponse composée CHAMP PAR CHAMP depuis le document projeté.
+   *
+   * Partagée par la lecture et l'écriture : deux copies de ce mapping
+   * divergeraient au premier champ ajouté à `AuthMe`, et c'est la réponse
+   * d'écriture — la moins relue des deux — qui garderait l'ancienne forme.
+   */
+  private depuisLeCompte(compte: CompteLu): AuthMe {
     return {
       id: String(compte._id),
       nom: (compte.name ?? '').trim(),

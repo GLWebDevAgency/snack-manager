@@ -39,8 +39,39 @@ import { useEffect, useState } from "react";
 import type { AuthMe } from "@sm/contracts";
 import { api } from "./api";
 
-/** La seule route qui dise qui est connecté. */
+/** La seule route qui dise qui est connecté — et, en PATCH, qui l'écrive. */
 export const CHEMIN_IDENTITE = "/auth/me";
+
+/**
+ * LES BARRES OUVERTES, PRÉVENUES D'UN NOM QUI VIENT DE CHANGER.
+ *
+ * `useIdentite` lit la route une fois, à l'ouverture de la coque. L'écran qui
+ * pose le nom, lui, vit DANS cette coque : sans ce carnet d'abonnés, la
+ * personne enregistrerait son nom et continuerait de lire un tiret au-dessus
+ * du bouton de déconnexion jusqu'au prochain rechargement complet — le défaut
+ * qu'on répare, réapparu à l'écran une seconde après avoir été corrigé.
+ *
+ * Un `Set` de `setState` plutôt qu'un contexte : la barre et le formulaire ne
+ * partagent ni arbre ni cycle de vie (l'un est dans `layout`, l'autre dans une
+ * page), et un contexte les forcerait à se remonter ensemble. Le carnet se
+ * vide de lui-même au démontage.
+ */
+const abonnes = new Set<(moi: AuthMe) => void>();
+
+/**
+ * Poser son propre nom, et prévenir tout ce qui l'affiche.
+ *
+ * Le sujet vient du jeton : cette fonction n'a pas d'identifiant à passer, et
+ * ne peut donc renommer personne d'autre. Elle laisse remonter l'échec — c'est
+ * l'écran qui sait quoi en dire, et il n'y en a qu'un.
+ */
+export async function poserMonNom(nom: string): Promise<AuthMe> {
+  const moi = await api.patch<AuthMe>(CHEMIN_IDENTITE, { nom });
+  // Copie du carnet : un abonné qui se démonte pendant la boucle ne doit pas
+  // faire tomber l'enregistrement qui vient d'aboutir.
+  for (const prevenir of [...abonnes]) prevenir(moi);
+  return moi;
+}
 
 /**
  * Le nom à afficher, ou `null` s'il n'y en a pas.
@@ -108,6 +139,16 @@ const LIBELLES_ROLE: Record<string, string> = {
  */
 export function useIdentite(actif: boolean): AuthMe | null {
   const [identite, setIdentite] = useState<AuthMe | null>(null);
+
+  // Abonnement AU CARNET, sans condition sur `actif` : une coque qui n'a pas
+  // encore de jeton au premier rendu doit tout de même entendre le nom posé
+  // ensuite, et `setIdentite` est stable d'un rendu à l'autre.
+  useEffect(() => {
+    abonnes.add(setIdentite);
+    return () => {
+      abonnes.delete(setIdentite);
+    };
+  }, []);
 
   useEffect(() => {
     if (!actif) return;

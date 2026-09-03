@@ -32,6 +32,7 @@
  */
 
 import {
+  AuthMeUpdateSchema,
   DEVICE_KIND_LABELS,
   DEVICE_OFFLINE_AFTER_MS,
   LoyaltyAdminAdjustmentSchema,
@@ -754,6 +755,23 @@ function dispatch(
    * La fixture est décrite au-dessus de `MOI`, dans `state.ts`.
    */
   if (path === "/auth/me" && method === "GET") return ok(w.moi);
+
+  /*
+   * ET LA POSER — la section « Votre compte » de l'écran Établissement.
+   *
+   * Sans cette ligne, le seul champ du back-office qui répare une identité
+   * vide tomberait sur le 404 générique pendant la visite : le visiteur y
+   * lirait un message adressé aux développeurs. La démonstration enregistre
+   * donc pour de vrai, dans son monde en mémoire, et le pied de barre suit
+   * sous ses yeux — c'est exactement ce que fait un vrai compte.
+   *
+   * Le schéma est celui de l'API, pas une recopie : la borne et le refus du
+   * vide sont donc les mêmes ici et là-bas.
+   */
+  if (path === "/auth/me" && method === "PATCH") {
+    w.moi = { ...w.moi, nom: parseDemoBody(AuthMeUpdateSchema, b).nom };
+    return ok(w.moi);
+  }
 
   // ─── Établissement ───
 

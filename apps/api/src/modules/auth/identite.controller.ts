@@ -1,10 +1,11 @@
-import { Controller, Get } from '@nestjs/common';
-import type { AuthMe, JwtPayload } from '@sm/contracts';
+import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { AuthMeUpdateSchema, type AuthMe, type AuthMeUpdate, type JwtPayload } from '@sm/contracts';
 import { CurrentUser } from '../../common/auth';
+import { zod } from '../../common/zod.pipe';
 import { IdentiteService } from './identite.service';
 
 /**
- * `GET /auth/me` — la personne connectée.
+ * `GET /auth/me` — la personne connectée. `PATCH /auth/me` — son nom.
  *
  * ─── AUCUN `@Roles`, ET C'EST LE POINT ───
  *
@@ -14,6 +15,11 @@ import { IdentiteService } from './identite.service';
  * à quelqu'un qui vient de le prouver. Le garde global suffit : sans jeton
  * valide, on n'entre pas ; avec, on ne lit que SOI — le sujet vient du jeton,
  * jamais d'un paramètre.
+ *
+ * L'ÉCRITURE SUIT LA MÊME RÈGLE, et pour la même raison : poser son propre nom
+ * n'est pas un privilège de rôle. Ce qui la borne n'est donc pas un `@Roles`
+ * mais la NATURE de la session — un porteur de code n'a pas de compte à
+ * renommer, et le service le refuse en le disant (voir `poserMonNom`).
  *
  * ─── POURQUOI UN CONTRÔLEUR À PART ───
  *
@@ -36,5 +42,18 @@ export class IdentiteController {
   @Get('me')
   moi(@CurrentUser() session: JwtPayload): Promise<AuthMe> {
     return this.identite.moi(session);
+  }
+
+  /**
+   * Le nom de la personne connectée — le seul champ qu'elle écrit sur
+   * elle-même. La réponse est celle de `GET /auth/me`, projetée à l'identique :
+   * l'écran qui vient d'enregistrer repart avec l'état qu'il aurait relu.
+   */
+  @Patch('me')
+  poserMonNom(
+    @CurrentUser() session: JwtPayload,
+    @Body(zod(AuthMeUpdateSchema)) body: AuthMeUpdate,
+  ): Promise<AuthMe> {
+    return this.identite.poserMonNom(session, body);
   }
 }

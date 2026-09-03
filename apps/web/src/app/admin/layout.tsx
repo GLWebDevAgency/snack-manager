@@ -321,8 +321,26 @@ function Shell({ children }: { children: ReactNode }) {
     // le badge restait à zéro au chargement — sans erreur, sans journal. Le
     // gérant qui ouvrait son back-office ne voyait aucune commande en attente
     // tant qu'une nouvelle n'arrivait pas par le temps réel.
+    /*
+     * LA MÊME FENÊTRE QUE L'ÉCRAN, SINON LA PASTILLE MENT.
+     *
+     * L'écran des commandes charge depuis MINUIT (`orders/page.tsx`), la
+     * pastille chargeait sans borne de temps. Sur un parc de recette, elle
+     * annonçait onze commandes en attente là où l'écran n'en montrait aucune :
+     * onze lignes réelles, restées au statut « nouvelle » depuis quinze jours.
+     *
+     * Une pastille qui affiche en permanence un nombre que l'écran contredit
+     * n'alerte plus personne — c'est le pire état pour un signal. Les deux
+     * fenêtres sont donc les mêmes, et la borne est calculée ici plutôt
+     * qu'importée : deux lignes de code qui disent minuit chacune de leur côté
+     * finiraient par diverger d'un fuseau.
+     */
+    const debutDuJour = new Date();
+    debutDuJour.setHours(0, 0, 0, 0);
     api
-      .get<{ rows?: { _id: string }[] }>("/orders?status=new")
+      .get<{ rows?: { _id: string }[] }>(
+        `/orders?status=new&since=${encodeURIComponent(debutDuJour.toISOString())}`,
+      )
       .then((res) => {
         const rows = res?.rows;
         if (!cancelled && Array.isArray(rows)) setNewIds(new Set(rows.map((o) => o._id)));

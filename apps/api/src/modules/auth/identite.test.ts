@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { RequestMethod, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, RequestMethod, UnauthorizedException } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import type { Model } from 'mongoose';
 import { describe, expect, it } from 'vitest';
@@ -50,6 +50,7 @@ const MEMBRE_EN_BASE = {
 };
 
 type Lecture = { filtre: unknown; projection: unknown };
+type Ecriture = { id: unknown; maj: unknown; options: unknown };
 
 /**
  * Service doublé, avec le JOURNAL des lectures : les tests ci-dessous
@@ -60,8 +61,9 @@ type Lecture = { filtre: unknown; projection: unknown };
  */
 function service(
   docs: { compte?: Record<string, unknown> | null; membre?: Record<string, unknown> | null } = {},
-): { service: IdentiteService; lectures: Lecture[] } {
+): { service: IdentiteService; lectures: Lecture[]; ecritures: Ecriture[] } {
   const lectures: Lecture[] = [];
+  const ecritures: Ecriture[] = [];
   const compte = docs.compte === undefined ? COMPTE_EN_BASE : docs.compte;
   const membre = docs.membre === undefined ? MEMBRE_EN_BASE : docs.membre;
 
@@ -69,6 +71,15 @@ function service(
     findById: (filtre: unknown, projection: unknown) => {
       lectures.push({ filtre, projection });
       return { lean: async () => compte };
+    },
+    // Même parti pris que la lecture : le double rend le document ENTIER, sans
+    // appliquer la projection. Un service qui recopierait ce que Mongo lui tend
+    // laisserait donc passer `passwordHash` — et c'est ce qu'on veut voir
+    // tomber, sur le chemin d'écriture comme sur celui de lecture.
+    findByIdAndUpdate: (id: unknown, maj: unknown, options: unknown) => {
+      ecritures.push({ id, maj, options });
+      const nom = (maj as { $set?: { name?: string } }).$set?.name;
+      return { lean: async () => (compte ? { ...compte, name: nom } : null) };
     },
   } as unknown as Model<User>;
 
@@ -79,7 +90,7 @@ function service(
     },
   } as unknown as Model<Staff>;
 
-  return { service: new IdentiteService(users, staff), lectures };
+  return { service: new IdentiteService(users, staff), lectures, ecritures };
 }
 
 const sessionCompte = (patch: Partial<JwtPayload> = {}): JwtPayload => ({
@@ -257,6 +268,84 @@ describe('quand la personne n’existe plus', () => {
 });
 
 /**
+ * ─── POSER SON PROPRE NOM ───
+ *
+ * `users.name` n'avait qu'un seul auteur — la conversion d'un lead — et aucune
+ * route ne le mettait à jour : laissé vide à la signature, il l'était pour
+ * toujours, et se lisait comme un tiret en pied des deux barres.
+ */
+describe('PATCH /auth/me — le nom de la personne connectée', () => {
+  it('écrit le nom et rend l’identité à jour', async () => {
+    const { service: identite } = service();
+    await expect(
+      identite.poserMonNom(sessionCompte(), { nom: 'Camille F. Dupont' }),
+    ).resolves.toEqual({
+      id: OWNER,
+      nom: 'Camille F. Dupont',
+      role: 'owner',
+      genre: 'user',
+      email: 'patron@le-comptoir.fr',
+      tenantId: TENANT,
+    });
+  });
+
+  it('écrit SUR SOI, et seulement le nom', async () => {
+    // Le sujet vient du jeton : aucun identifiant ne circule dans le corps, et
+    // le `$set` ne porte qu'une clé — le rôle, l'établissement et l'empreinte
+    // ne sont pas des champs que l'on se donne à soi-même.
+    const { service: identite, ecritures } = service();
+    await identite.poserMonNom(sessionCompte(), { nom: 'Camille' });
+    expect(ecritures).toHaveLength(1);
+    expect(ecritures[0]?.id).toBe(OWNER);
+    expect(ecritures[0]?.maj).toEqual({ $set: { name: 'Camille' } });
+  });
+
+  it('relit par la MÊME liste blanche que la lecture', async () => {
+    // Sans cette projection, `findByIdAndUpdate` rend le document entier : la
+    // réponse d'écriture ferait sortir l'empreinte par une porte que la
+    // lecture, elle, tient fermée. `new: true` rend ce qui vient d'être écrit.
+    const { service: identite, ecritures } = service();
+    await identite.poserMonNom(sessionCompte(), { nom: 'Camille' });
+    expect(ecritures[0]?.options).toEqual({ new: true, projection: IDENTITE_COMPTE_FIELDS });
+  });
+
+  it('ne rend jamais l’empreinte du mot de passe', async () => {
+    const { service: identite } = service();
+    const rendu = await identite.poserMonNom(sessionCompte(), { nom: 'Camille' });
+    expect(JSON.stringify(rendu)).not.toContain('argon2');
+    expect(rendu).not.toHaveProperty('passwordHash');
+    expect(Object.keys(rendu).sort()).toEqual([
+      'email',
+      'genre',
+      'id',
+      'nom',
+      'role',
+      'tenantId',
+    ]);
+  });
+
+  it('refuse une session ouverte au CODE — et n’écrit rien', async () => {
+    // Un porteur de code n'a pas de compte dans `users` : son nom vit dans
+    // `staff`, posé par celui qui l'embauche (`StaffController` porte
+    // `@Roles('owner', 'gerant')`). Le laisser se renommer depuis la tablette
+    // du comptoir donnerait à qui connaît quatre chiffres le pouvoir de
+    // réécrire le nom qui signe le journal et les pointages.
+    const { service: identite, ecritures } = service();
+    await expect(identite.poserMonNom(sessionEquipe(), { nom: 'Sofia B.' })).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(ecritures).toEqual([]);
+  });
+
+  it('refuse plutôt que de nommer un compte disparu entre-temps', async () => {
+    const { service: identite } = service({ compte: null });
+    await expect(identite.poserMonNom(sessionCompte(), { nom: 'Camille' })).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+});
+
+/**
  * ─── LA ROUTE ELLE-MÊME ───
  *
  * Ces trois cas ne testent pas du code, ils testent des DÉCISIONS : l'adresse
@@ -272,11 +361,22 @@ describe('la route d’identité', () => {
     expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.GET);
   });
 
+  it('écrit à la MÊME adresse — PATCH /auth/me', () => {
+    // La même chose, lue et posée au même endroit : une route « /auth/nom » à
+    // côté ferait deux vérités sur un seul champ.
+    const handler = IdentiteController.prototype.poserMonNom;
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe('me');
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.PATCH);
+  });
+
   it('n’est réservée à AUCUN rôle — savoir qui l’on est n’est pas un privilège', () => {
     // Un `@Roles(...)` ici cacherait son propre nom à une session qui vient de
     // le prouver : la caisse et la cuisine ouvrent la même barre que le patron.
+    // L'écriture suit la même règle : ce qui la borne est la NATURE de la
+    // session (un code n'a pas de compte), pas un rôle.
     expect(Reflect.getMetadata(ROLES, IdentiteController)).toBeUndefined();
     expect(Reflect.getMetadata(ROLES, IdentiteController.prototype.moi)).toBeUndefined();
+    expect(Reflect.getMetadata(ROLES, IdentiteController.prototype.poserMonNom)).toBeUndefined();
   });
 
   it('reste authentifiée — jamais `@Public()`', () => {
@@ -284,6 +384,9 @@ describe('la route d’identité', () => {
     // valide, il n'y a personne à nommer : la route n'a pas de sens ouverte.
     expect(Reflect.getMetadata(IS_PUBLIC, IdentiteController)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC, IdentiteController.prototype.moi)).toBeUndefined();
+    expect(
+      Reflect.getMetadata(IS_PUBLIC, IdentiteController.prototype.poserMonNom),
+    ).toBeUndefined();
   });
 
   it('vit hors du contrôleur de connexion, dont le plafond de débit n’est pas le sien', () => {
