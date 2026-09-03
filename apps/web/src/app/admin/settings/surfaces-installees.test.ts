@@ -49,40 +49,48 @@ describe("le nom sous l’icône", () => {
 });
 
 describe("quelle icône chaque surface montre", () => {
-  it("l’écran d’accueil montre TOUJOURS notre dessin, logo posé ou non", () => {
+  const SURFACES = ["lanceur", "onglet", "chargement"] as const;
+  const DECLINAISONS = ["mark.light", "mark.dark", "lockup.light", "lockup.dark"] as const;
+
+  it("l’écran d’accueil montre le LOGO dès qu’il y en a un — la route le compose", () => {
     /*
-     * C'est le fait qui surprend, et l'aperçu ne doit pas le cacher : le
-     * lanceur lit le rôle masquable, que le logo déposé n'occupe jamais.
+     * C'était LA règle qui surprenait, et elle a cessé d'être vraie : le
+     * lanceur lit le rôle masquable, que `icon.svg` compose désormais autour du
+     * logo (fond du masque sur tout le canevas, logo ajusté dans la zone sûre).
+     * Si cette attente redevenait « genere », l'aperçu recommencerait à
+     * annoncer une absence que le téléphone dément.
      */
     expect(sourceDe(nu(), "lanceur")).toBe("genere");
-    for (const ou of ["mark.light", "mark.dark", "lockup.light", "lockup.dark"] as const) {
-      expect(sourceDe(avecLogo(ou), "lanceur")).toBe("genere");
+    for (const ou of DECLINAISONS) {
+      expect(sourceDe(avecLogo(ou), "lanceur")).toBe("logo");
     }
   });
 
-  it("l’onglet et l’ouverture montrent le logo dès qu’une SEULE déclinaison est posée", () => {
-    expect(sourceDe(nu(), "onglet")).toBe("genere");
-    expect(sourceDe(nu(), "chargement")).toBe("genere");
-    for (const ou of ["mark.light", "mark.dark", "lockup.light", "lockup.dark"] as const) {
-      expect(sourceDe(avecLogo(ou), "onglet")).toBe("logo");
-      expect(sourceDe(avecLogo(ou), "chargement")).toBe("logo");
-      expect(logoPose(avecLogo(ou))).toBe(true);
+  it("les trois surfaces disent la même chose, dans les deux états", () => {
+    for (const surface of SURFACES) {
+      expect(sourceDe(nu(), surface)).toBe("genere");
+      for (const ou of DECLINAISONS) {
+        expect(sourceDe(avecLogo(ou), surface), `${surface} · ${ou}`).toBe("logo");
+        expect(logoPose(avecLogo(ou))).toBe(true);
+      }
     }
   });
 
-  it("la phrase du lanceur change avec l’état, et ne promet rien de faux", () => {
+  it("la phrase du lanceur promet l’écran d’accueil, et garde sa réserve", () => {
     expect(phraseDuLanceur(nu())).toContain("Aucun logo posé");
     const dit = phraseDuLanceur(avecLogo("mark.light"));
     expect(dit).toContain("onglet");
-    expect(dit).toContain("notre dessin");
     /*
-     * Ce qui compte n'est pas l'absence d'un mot, c'est que la phrase qui
-     * parle de l'écran d'accueil dise NOTRE dessin. Une expression trop
-     * gourmande échouait sur une phrase pourtant honnête — elle enjambait
-     * la ponctuation entre les deux propositions.
+     * Elle doit dire les trois surfaces, dire que le logo n'est pas recadré —
+     * c'est la promesse que `preserveAspectRatio=\"meet\"` tient — et NE PAS
+     * promettre sans condition : la composition peut retomber sur notre dessin
+     * quand le fichier est trop lourd ou illisible.
      */
+    expect(dit).toContain("écran d’accueil");
+    expect(dit).toContain("jamais recadré");
+    expect(dit).toContain("notre dessin");
     const apresAccueil = dit.slice(dit.indexOf("écran d’accueil"));
-    expect(apresAccueil).toContain("notre dessin");
+    expect(apresAccueil).toMatch(/trop lourd|illisible/);
   });
 });
 

@@ -46,7 +46,7 @@ import {
   SectionHead,
   Surface,
 } from "@/components/order/primitives";
-import { initial } from "@/components/order/helpers";
+import { Verrou, verrouPour } from "@/components/ui";
 
 /*
  * `font-body` ET `classesPolices` — les deux, comme sur toutes les racines
@@ -74,7 +74,21 @@ export function ApercuDeMarque({ brand, nom }: { brand: Brand; nom: string }) {
   // la palette pour un booléen serait payer une palette pour lire une police.
   const { prixMono } = TYPE_PAIRS[brand.type.pair];
   const logo = logoPour(brand, "mark");
-  const lettre = initial(nom);
+  /*
+   * LE VERROU, S'IL EST POSÉ — et l'aperçu doit le montrer, sinon le
+   * restaurateur pose « son logo avec le nom » à l'aveugle : c'est la seule
+   * surface où il verra que son bloc remplace la tuile ET le nom écrit avant
+   * de l'envoyer à ses clients.
+   */
+  const verrou = verrouPour(brand);
+
+  /* La ligne d'état — sous le nom écrit comme sous le verrou. */
+  const sousTitre = (
+    <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-mut">
+      <Dot tone="ok" />
+      Ouvert · retrait en 15 min
+    </div>
+  );
 
   return (
     <div
@@ -84,18 +98,28 @@ export function ApercuDeMarque({ brand, nom }: { brand: Brand; nom: string }) {
     >
       {/* En-tête : la tuile de marque suit le MODE du masque (`logoPour`), pas
           le champ plat `logoUrl` — un logo dessiné pour fond sombre
-          disparaîtrait sur une Brasserie crème. */}
+          disparaîtrait sur une Brasserie crème. Le logo y est AJUSTÉ, jamais
+          recadré, exactement comme sur la vitrine : les deux aperçus de cette
+          page se contredisaient — l'un rognait le fichier, l'autre l'ajustait,
+          à huit pixels l'un de l'autre. */}
       <div className="flex items-center gap-3 px-4 pt-4">
-        <BrandMark name={nom} logoUrl={logo} letter={lettre} size={44} />
-        <div className="min-w-0 flex-1">
-          <div className="font-display truncate text-[17px] font-extrabold tracking-[-0.01em]">
-            {nom}
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-mut">
-            <Dot tone="ok" />
-            Ouvert · retrait en 15 min
-          </div>
-        </div>
+        <Verrou
+          src={verrou}
+          nom={nom}
+          hauteur={44}
+          sous={sousTitre}
+          replier={
+            <>
+              <BrandMark name={nom} logoUrl={logo} size={44} />
+              <div className="min-w-0 flex-1">
+                <div className="font-display truncate text-[17px] font-extrabold tracking-[-0.01em]">
+                  {nom}
+                </div>
+                {sousTitre}
+              </div>
+            </>
+          }
+        />
       </div>
 
       {brand.hero && (

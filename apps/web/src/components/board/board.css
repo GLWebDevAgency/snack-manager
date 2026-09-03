@@ -107,11 +107,18 @@
   min-width: 0;
 }
 
+/* Un logo recadré n'est plus un logo — la règle vaut ici aussi.
+
+   Le pictogramme du pilote est plus large que haut : en « remplissage », le
+   disque lui coupait ses flancs, comme il les coupait sur la vitrine. En
+   « ajusté », il tient entier, plus petit. Le disque reste : c'est la géométrie
+   de cet écran, et un logo complet dans un disque vaut mieux qu'un logo amputé
+   qui le remplit. */
 .bd-logo {
   width: var(--bd-logo);
   height: var(--bd-logo);
   border-radius: 999px;
-  object-fit: cover;
+  object-fit: contain;
   background: #1a1a1a;
   flex: 0 0 auto;
 }
@@ -690,11 +697,14 @@
   gap: calc(var(--bd-title-size) * 0.32);
 }
 
+/* Même règle que `.bd-logo` : ce second emplacement portait le MÊME défaut et
+   avait échappé au relevé. Un défaut corrigé à un seul de ses deux endroits
+   revient par l'autre. */
 .bd-plate-logo {
   width: calc(var(--bd-title-size) * 2.2);
   height: calc(var(--bd-title-size) * 2.2);
   border-radius: 999px;
-  object-fit: cover;
+  object-fit: contain;
   animation: bd-pill-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 

@@ -20,3 +20,11 @@ export { Drawer } from "./Drawer";
 export { Modal } from "./Modal";
 export { Skeleton } from "./Skeleton";
 export { EmptyState } from "./EmptyState";
+/*
+ * L'identité du restaurant — sa tuile de logo et son verrou. Elles vivent
+ * ici, et non dans `components/order`, parce que les TROIS surfaces qui
+ * montrent un logo s'en servent : la vitrine, la carte de fidélité et les
+ * aperçus du back-office. Voir l'en-tête de `identite.tsx`.
+ */
+export { TuileDeLogo, Verrou } from "./identite";
+export { verrouPour } from "./verrou";

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DIRECTIONS } from "@sm/contracts";
 
 const mocks = vi.hoisted(() => ({ load: vi.fn() }));
@@ -128,9 +128,22 @@ describe("application fidélité installable", () => {
       ["https://r2/logo.svg", { sizes: "any", type: "image/svg+xml" }],
       ["https://r2/logo.jpeg", { sizes: "512x512", type: "image/jpeg" }],
       ["https://r2/logo.webp", { sizes: "512x512", type: "image/webp" }],
-      // Une URL signée, sans extension lisible : on retombe sur le format que
-      // produit notre chaîne de dépôt plutôt que de mentir sur un autre.
-      ["https://r2/9f2c1b?sig=abc", { sizes: "512x512", type: "image/png" }],
+      ["https://r2/logo.png", { sizes: "512x512", type: "image/png" }],
+      /*
+       * SANS EXTENSION LISIBLE, ON NE DÉCLARE RIEN — et c'est le correctif.
+       *
+       * Ce test attendait « image/png », au motif que c'était le format de
+       * notre chaîne de dépôt. C'était faux : la médiathèque admet PNG, JPEG
+       * ET WebP, et sert les octets d'origine sous une adresse SANS extension.
+       * Le logo du pilote est un WebP : il était donc annoncé PNG, très
+       * exactement le refus d'Android que ce fichier documente par ailleurs.
+       *
+       * La spécification ne rend obligatoire que `src`. Omettre `type` et
+       * `sizes` laisse le navigateur lire les octets — déclarer faux est pire
+       * que ne rien déclarer.
+       */
+      ["https://r2/9f2c1b?sig=abc", {}],
+      ["https://api.exemple.fr/public/medias/abc/def", {}],
     ] as const;
     for (const [url, forme] of attendus) {
       mocks.load.mockResolvedValueOnce(avecLogo(url));
@@ -276,6 +289,119 @@ describe("application fidélité installable", () => {
     expect(source).toContain('const CACHE_PREFIX = "sm-loyalty:foo:";');
     expect(source).toContain('const LEGACY_CACHE_NAME = "sm-loyalty-foo-v1";');
     expect(source).not.toContain('startsWith("sm-loyalty-foo-")');
+  });
+
+  /**
+   * ═══════════════════════════════════════════════════════════════════════
+   * L'ICÔNE MASQUABLE COMPOSÉE AVEC LE LOGO
+   * ═══════════════════════════════════════════════════════════════════════
+   *
+   * C'est le rôle que Chrome sur Android préfère pour l'écran d'accueil. Tant
+   * qu'il rendait notre seul dessin, déposer son logo ne changeait rien là où
+   * le restaurateur regardait. Ces tests tiennent les deux bouts : le logo
+   * entre quand il le doit, et RIEN d'autre n'entre jamais.
+   */
+  describe("l’icône de lancement", () => {
+    const ICONE = "https://classfood.example/r/classfood/fidelite/icon.svg";
+    /** Un WebP minimal, servi par l'hôte de l'API que ce Web interroge. */
+    const OCTETS = (() => {
+      const b = Buffer.alloc(32);
+      b.write("RIFF", 0, "latin1");
+      b.write("WEBP", 8, "latin1");
+      return Uint8Array.from(b);
+    })();
+    const LOGO = "http://localhost:3001/public/medias/t1/9f2c1b";
+
+    const servirLogo = (impl: () => Promise<Response>) => {
+      const espion = vi.fn(impl);
+      vi.stubGlobal("fetch", espion);
+      return espion;
+    };
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    const icone = async (query: string) => {
+      const { GET } = await import("./icon.svg/route");
+      return GET(new Request(`${ICONE}${query}`), context);
+    };
+
+    it("incorpore le logo en `data:` et l’AJUSTE dans la zone sûre", async () => {
+      /*
+       * Un SVG servi comme image ne charge aucune ressource externe : un
+       * `href` http y rendrait du vide. L'incorporation n'est donc pas une
+       * optimisation, c'est la seule voie — et le test la vérifie sur la
+       * sortie réelle de la route, pas sur l'intention.
+       */
+      mocks.load.mockResolvedValueOnce(avecLogo(LOGO));
+      servirLogo(async () => new Response(OCTETS, { status: 200 }));
+      const reponse = await icone("?forme=masquable");
+      const svg = await reponse.text();
+
+      expect(svg).toContain("<image href=\"data:image/webp;base64,");
+      expect(svg).toContain('preserveAspectRatio="xMidYMid meet"');
+      expect(svg).not.toContain(LOGO);
+      // Le fond couvre tout le carré : le lanceur rogne sans trouver de vide.
+      expect(svg).toContain('<rect width="512" height="512" fill=');
+      expect(reponse.headers.get("Cache-Control")).toBe(
+        "public, max-age=300, stale-while-revalidate=86400",
+      );
+    });
+
+    it("ne va chercher le logo QUE pour le rôle masquable", async () => {
+      /*
+       * L'URL nue sert de favicon à chaque ouverture de la page. Lui faire
+       * télécharger une image serait payer un appel réseau pour un dessin que
+       * le manifeste ne lui demande même pas.
+       */
+      mocks.load.mockResolvedValue(avecLogo(LOGO));
+      const espion = servirLogo(async () => new Response(OCTETS, { status: 200 }));
+      const svg = await (await icone("")).text();
+      expect(espion).not.toHaveBeenCalled();
+      expect(svg).not.toContain("<image");
+      expect(svg).toContain("<path");
+    });
+
+    it("retombe sur le dessin généré quand la récupération échoue, et le dit au cache", async () => {
+      /*
+       * Une icône qui ne rend rien est pire qu'une icône générique : Android
+       * fige ce qu'il a reçu à l'installation. Le repli est donc un vrai
+       * dessin — et il n'est mis en cache qu'une minute, parce qu'un réseau
+       * coupé pendant deux secondes ne doit pas coûter une journée
+       * d'installations.
+       */
+      mocks.load.mockResolvedValueOnce(avecLogo(LOGO));
+      servirLogo(async () => {
+        throw new Error("réseau");
+      });
+      const reponse = await icone("?forme=masquable");
+      const svg = await reponse.text();
+
+      expect(svg).not.toContain("<image");
+      expect(svg).toContain("<path");
+      expect(reponse.headers.get("Cache-Control")).toBe("public, max-age=60");
+    });
+
+    it("n’incorpore RIEN qui vienne d’un autre hôte que le nôtre", async () => {
+      mocks.load.mockResolvedValueOnce(avecLogo("https://mechant.fr/logo.png"));
+      const espion = servirLogo(async () => new Response(OCTETS, { status: 200 }));
+      const svg = await (await icone("?forme=masquable")).text();
+      expect(espion, "notre serveur est allé chercher chez un tiers").not.toHaveBeenCalled();
+      expect(svg).not.toContain("<image");
+    });
+
+    it("garde l’en-tête long quand AUCUN logo n’est posé — c’est un état stable", async () => {
+      const reponse = await icone("?forme=masquable");
+      expect(reponse.headers.get("Cache-Control")).toBe(
+        "public, max-age=300, stale-while-revalidate=86400",
+      );
+      expect(reponse.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(reponse.headers.get("Content-Type")).toContain("image/svg+xml");
+    });
+
+    it("ne publie pas d’icône pour un programme inactif", async () => {
+      mocks.load.mockRejectedValueOnce(new Error("inactive"));
+      expect((await icone("?forme=masquable")).status).toBe(404);
+    });
   });
 
   it("ne publie ni manifeste ni worker pour un programme inactif", async () => {

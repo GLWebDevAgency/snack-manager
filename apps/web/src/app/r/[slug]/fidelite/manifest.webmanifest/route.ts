@@ -2,24 +2,41 @@ import { logoPour } from "@sm/contracts";
 import { loadPublicLoyalty } from "@/components/loyalty/public-api";
 
 /**
- * Le type MIME d'une icône, DÉDUIT de son extension.
+ * Le type MIME d'une icône — DÉCLARÉ SEULEMENT QUAND ON LE SAIT.
  *
  * Le manifeste déclarait tout logo comme `image/png` en `512x512` : un SVG y
  * était annoncé raster, et un logo de 300 px annoncé 512. Android refuse
  * l'icône dont le type déclaré ne correspond pas au fichier servi — le client
  * installait la carte du restaurant et retrouvait une pastille grise.
  *
- * Une extension inconnue (une URL signée sans suffixe, par exemple) est
- * traitée en PNG : c'est le format que produit notre chaîne de dépôt, et le
- * pire cas reste une icône que le système redimensionne lui-même.
+ * LE CORRECTIF SUIVANT ÉTAIT LUI-MÊME FAUX, ET IL L'ÉTAIT SUR LE PILOTE.
+ *
+ * Il traitait toute extension inconnue en PNG, « le format que produit notre
+ * chaîne de dépôt ». C'est inexact : `detecterImage` admet PNG, JPEG ET WebP,
+ * et la médiathèque sert les octets d'origine tels quels, sous une adresse
+ * SANS extension (`/public/medias/<établissement>/<empreinte>`). Le logo du
+ * pilote est un WebP de 860 octets : il était donc déclaré `image/png` — très
+ * exactement le refus que ce commentaire décrit trois lignes plus haut.
+ *
+ * On ne devine donc plus. Quand l'extension ne dit rien, `type` et `sizes`
+ * sont OMIS : la spécification ne rend obligatoire que `src`, et le navigateur
+ * lit alors les octets. Déclarer faux est pire que ne rien déclarer.
  */
-function iconeDe(src: string): { src: string; sizes: string; type: string; purpose: string } {
+function iconeDe(src: string): { src: string; sizes?: string; type?: string; purpose: string } {
   const chemin = src.split("?")[0] ?? src;
   const ext = /\.([a-z0-9]+)$/i.exec(chemin)?.[1]?.toLowerCase();
   if (ext === "svg") return { src, sizes: "any", type: "image/svg+xml", purpose: "any" };
   const type =
-    ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
-  return { src, sizes: "512x512", type, purpose: "any" };
+    ext === "png"
+      ? "image/png"
+      : ext === "jpg" || ext === "jpeg"
+        ? "image/jpeg"
+        : ext === "webp"
+          ? "image/webp"
+          : null;
+  // Sans type sûr, pas de `sizes` non plus : la taille était devinée dans le
+  // même mouvement, et un logo de 300 px annoncé 512 est le second mensonge.
+  return type ? { src, sizes: "512x512", type, purpose: "any" } : { src, purpose: "any" };
 }
 
 /**
@@ -74,14 +91,26 @@ export async function GET(
    * `icon.svg` rend donc deux dessins, choisis par `?forme=` : la même
    * géométrie, deux échelles et deux fonds (voir `icone-carte.ts`).
    *
-   * ═══ ET LE LOGO GARDE TOUJOURS LA PREMIÈRE PLACE ═══
+   * ═══ ET LE LOGO EST DANS LES DEUX, MAIS PAS DE LA MÊME FAÇON ═══
    *
-   * Quand le restaurateur a déposé un vrai logo, c'est LUI qu'on veut voir :
-   * il reste seul en rôle `any`. On n'ajoute pas la variante `plein` derrière
-   * lui — deux entrées `any` mettraient Chrome en position d'arbitrer, et un
-   * SVG en `sizes: "any"` l'emporte souvent sur un PNG de 512. La variante
-   * masquable, elle, reste indispensable : on ne peut pas ajouter de marge au
-   * logo d'un tiers, et sans elle Android rognerait son carré dans un cercle.
+   * Quand le restaurateur a déposé un vrai logo, c'est LUI qu'on veut voir.
+   *
+   * En rôle `any`, il reste seul et POINTÉ DIRECTEMENT : cette icône n'est
+   * jamais rognée, elle n'a donc besoin ni de notre fond ni d'une marge, et le
+   * fichier du restaurateur est ce qu'il y a de plus juste à y mettre. On
+   * n'ajoute pas la variante `plein` derrière lui — deux entrées `any`
+   * mettraient Chrome en position d'arbitrer, et un SVG en `sizes: "any"`
+   * l'emporte souvent sur un PNG de 512.
+   *
+   * En rôle `maskable`, l'entrée ne change pas d'adresse : c'est toujours
+   * `icon.svg?forme=masquable`. Mais ce que cette route rend, elle, a changé —
+   * elle COMPOSE l'icône autour du logo (fond du masque sur tout le canevas,
+   * logo ajusté dans la zone sûre) au lieu de servir seulement notre dessin.
+   * La marge que « le logo d'un tiers » ne pouvait pas recevoir, le SVG la lui
+   * donne sans toucher au fichier ni rastériser quoi que ce soit. C'est ce qui
+   * met enfin le logo sur l'écran d'accueil, que Chrome sur Android peint
+   * depuis le rôle masquable. Le repli, quand la composition échoue, reste ce
+   * même dessin généré — l'entrée du manifeste est vraie dans les deux cas.
    */
   const genere = (forme: "plein" | "masquable", purpose: string) => ({
     src: `${path}/icon.svg?forme=${forme}`,

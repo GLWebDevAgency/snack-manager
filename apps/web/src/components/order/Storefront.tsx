@@ -40,7 +40,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { logoPour, TYPE_PAIRS } from "@sm/contracts";
 import { cx } from "@/lib/cx";
-import { Icon, Stars } from "@/components/ui";
+import { Icon, Stars, Verrou, verrouPour } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { classesPolices } from "@/components/masque/polices";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
@@ -58,7 +58,6 @@ import {
 import {
   cityOf,
   hhmm,
-  initial,
   nextOpeningLabel,
   telHref,
   weekSchedule,
@@ -88,6 +87,18 @@ const WIDGET_ORIGIN_TAG = "snackmanager";
 
 /** Hauteur de l’en-tête collant de l’embed — décale les éléments collants. */
 const EMBED_HEADER_H = 58;
+
+/**
+ * La même barre AVEC un verrou : le sous-titre passe SOUS le bloc d’identité
+ * au lieu d’être à côté de la tuile, donc une ligne de plus.
+ *
+ * Deux constantes plutôt qu’une mesure : ce nombre ne sert qu’à décaler le
+ * rail de catégories collant, et le sens de l’erreur est asymétrique — trop
+ * BAS, le rail glisserait sous l’en-tête ; trop haut, il reste un peu d’air.
+ * Si le fichier du verrou est mort, `Verrou` replie sur la tuile et c’est ce
+ * peu d’air qu’on voit : le défaut visible reste du bon côté.
+ */
+const EMBED_HEADER_VERROU_H = 76;
 
 /** Nombre de produits mis en avant sur la vitrine. */
 const HIGHLIGHT_COUNT = 8;
@@ -173,6 +184,15 @@ export function Storefront({
    * puis retombe sur l'autre déclinaison, puis sur l'autre format.
    */
   const logoMarque = logoPour(brand, "mark");
+  /*
+   * LE VERROU — « logo avec le nom », posé ou non.
+   *
+   * `verrouPour` et non `logoPour(brand, "lockup")` : ce dernier retombe sur
+   * la MARQUE quand aucun verrou n'est posé, et un pictogramme carré servi à
+   * la place d'un verrou effacerait le nom écrit de l'en-tête. Rien de posé,
+   * rien ne change — voir `components/ui/verrou`.
+   */
+  const verrouMarque = verrouPour(brand);
   /*
    * L'habillage du champ de carte est MÉMORISÉ : sa référence entre dans les
    * dépendances de l'effet qui monte le Payment Element. Un objet neuf à
@@ -289,7 +309,6 @@ export function Storefront({
   }
 
   const cityName = cityOf(site.tenant.address);
-  const letter = initial(site.tenant.name);
 
   /*
    * L'IMAGE D'ACCUEIL — lue sur LE MASQUE, comme le logo juste au-dessus.
@@ -329,8 +348,8 @@ export function Storefront({
       {embed ? (
         <EmbedHeader
           name={site.tenant.name}
-          letter={letter}
           logoUrl={logoMarque}
+          verrouUrl={verrouMarque}
           openNow={site.openNow}
           onClose={showClose ? closeEmbed : null}
         />
@@ -341,7 +360,7 @@ export function Storefront({
           heroCadrage={heroCadrage}
           heroAlt={heroAlt}
           logoUrl={logoMarque}
-          letter={letter}
+          verrouUrl={verrouMarque}
           cityName={cityName}
           paused={paused}
           onOrder={scrollToMenu}
@@ -426,7 +445,7 @@ export function Storefront({
               inCart={inCart}
               disabled={blocked}
               prixMono={prixMono}
-              stickyTop={embed ? EMBED_HEADER_H : 0}
+              stickyTop={embed ? (verrouMarque ? EMBED_HEADER_VERROU_H : EMBED_HEADER_H) : 0}
             />
           )}
         </section>
@@ -578,7 +597,7 @@ function SiteHeader({
   heroCadrage,
   heroAlt,
   logoUrl,
-  letter,
+  verrouUrl,
   cityName,
   paused,
   onOrder,
@@ -592,7 +611,8 @@ function SiteHeader({
   heroAlt: string;
   /** La déclinaison de `brand.logo` qui va avec le mode du masque. */
   logoUrl: string | null;
-  letter: string;
+  /** Le VERROU du masque — « logo avec le nom » — ou `null` s’il n’y en a pas. */
+  verrouUrl: string | null;
   cityName: string;
   /** Commande en ligne suspendue : l’appel à l’action ne promet plus rien. */
   paused: boolean;
@@ -684,24 +704,42 @@ function SiteHeader({
     </div>
   );
 
+  /* La ville — écrite UNE fois : elle se pose sous le nom écrit comme sous le
+     verrou, et doit rester lisible sous un verrou plus large qu’une tuile. */
+  const sousTitre = (
+    <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
+      {cityName || "Click & collect"}
+    </p>
+  );
+
   return (
     <header className="relative">
-      {/* ── Barre d’identité ── */}
+      {/* ── Barre d’identité ──
+          Avec un VERROU posé, l’en-tête l’emploie TEL QUEL à la place de la
+          tuile plus le nom : le graphiste du restaurant a déjà composé les
+          deux, les recomposer en police du produit défait son travail. Le nom
+          reste lu — il est l’`alt` du verrou, et le verrou est posé DANS le
+          `h1`, qui garde donc son rôle et son texte accessible.
+          Sans verrou (l’immense majorité), rien ne change. */}
       <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 pb-3 pt-4">
-        <BrandMark
-          name={site.tenant.name}
-          logoUrl={logoUrl}
-          letter={letter}
-          size={44}
+        <Verrou
+          src={verrouUrl}
+          nom={site.tenant.name}
+          hauteur={44}
+          balise="h1"
+          sous={sousTitre}
+          replier={
+            <>
+              <BrandMark name={site.tenant.name} logoUrl={logoUrl} size={44} />
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
+                  {site.tenant.name}
+                </h1>
+                {sousTitre}
+              </div>
+            </>
+          }
         />
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display truncate text-[19px] font-extrabold leading-tight tracking-[-0.03em] text-ink">
-            {site.tenant.name}
-          </h1>
-          <p className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
-            {cityName || "Click & collect"}
-          </p>
-        </div>
         {phone && (
           <a
             href={telHref(phone)}
@@ -862,30 +900,48 @@ function hoursOfToday(site: Site): string {
 
 function EmbedHeader({
   name,
-  letter,
   logoUrl,
+  verrouUrl,
   openNow,
   onClose,
 }: {
   name: string;
-  letter: string;
   logoUrl: string | null;
+  /** Le VERROU du masque — l’embarqué l’emploie comme la vitrine. */
+  verrouUrl: string | null;
   openNow: boolean;
   onClose: (() => void) | null;
 }) {
+  /* L’état du service — sous le nom écrit comme sous le verrou. */
+  const sousTitre = (
+    <p className="flex items-center gap-1.5 text-[12px] font-semibold text-mut">
+      <Dot tone={openNow ? "ok" : "mut"} />
+      {openNow ? "Ouvert" : "Fermé"}
+    </p>
+  );
   return (
     <header className="sticky top-0 z-40 border-b border-ink/6 bg-bg/95 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-[1080px] items-center gap-3 px-4 py-3">
-        <BrandMark name={name} logoUrl={logoUrl} letter={letter} size={34} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold tracking-[-0.02em] text-ink">
-            {name}
-          </p>
-          <p className="flex items-center gap-1.5 text-[12px] font-semibold text-mut">
-            <Dot tone={openNow ? "ok" : "mut"} />
-            {openNow ? "Ouvert" : "Fermé"}
-          </p>
-        </div>
+        {/* 34 px : la hauteur de la tuile que le verrou remplace. La barre
+            grandit alors d’une ligne, et c’est `EMBED_HEADER_VERROU_H` qui
+            décale les éléments collants. */}
+        <Verrou
+          src={verrouUrl}
+          nom={name}
+          hauteur={34}
+          sous={sousTitre}
+          replier={
+            <>
+              <BrandMark name={name} logoUrl={logoUrl} size={34} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-bold tracking-[-0.02em] text-ink">
+                  {name}
+                </p>
+                {sousTitre}
+              </div>
+            </>
+          }
+        />
         {onClose && (
           <Tap
             onClick={onClose}
