@@ -306,6 +306,42 @@
    */
   --animate-fade: cf-fade var(--sm-t-fast) var(--sm-ease) both;
   --animate-slidein: cf-slide-in var(--sm-t-med) var(--sm-ease) both;
+  /*
+   * ── LES TROIS GESTES DE LA FÊTE — et pourquoi ils lisent `--sm-t-slow` ──
+   *
+   * Le résolveur nomme ce rôle `fete` (900 ms posé, 600 ms vif) et le produit
+   * ne le dépensait que sur une barre de progression : le jeton de
+   * célébration payait un remplissage de jauge, et rien d'autre n'existait.
+   *
+   *   `animate-fete`  — l'objet qui vient d'être GAGNÉ respire une fois. Une
+   *                     mise à l'échelle courte, jamais une boucle : ce qui
+   *                     bouge en permanence cesse d'être un événement.
+   *   `animate-eclat` — l'onde qui part du solde au moment où un palier est
+   *                     franchi. Opacité + échelle, sur un disque décoratif,
+   *                     `pointer-events: none` à l'emploi.
+   *   `animate-halo`  — le voile vert du scan réussi, posé sur le viseur : la
+   *                     seule confirmation était jusqu'ici le démontage du
+   *                     scanner, c'est-à-dire rien.
+   *
+   * `--animate-battement` est d'un autre ordre : c'est le SQUELETTE, la seule
+   * boucle du lot. Sa durée est `calc(--sm-t-slow × 2)` — une respiration, pas
+   * une célébration — mais elle reste DÉRIVÉE du profil du masque au lieu des
+   * 2 s fixes d'`animate-pulse` de Tailwind, qui battaient au même rythme chez
+   * un fast-food « vif » et chez une brasserie « posée ».
+   */
+  /*
+   * L'ARRIVÉE D'UNE CARTE — et le seul jeton qui restait sans emploi.
+   *
+   * `--sm-t-med` est la durée d'ENTRÉE du masque (320 ms « posé », 200 ms
+   * « vif ») : celle d'un tiroir, d'un panneau, d'une carte qui apparaît. La
+   * surface de fidélité ne la dépensait nulle part — le squelette et la carte
+   * se remplaçaient au même tick, sans transition d'aucune sorte.
+   */
+  --animate-carte: cf-carte var(--sm-t-med) var(--sm-ease) both;
+  --animate-fete: cf-fete var(--sm-t-slow) var(--sm-ease) both;
+  --animate-eclat: cf-eclat var(--sm-t-slow) var(--sm-ease) both;
+  --animate-halo: cf-halo var(--sm-t-slow) var(--sm-ease) both;
+  --animate-battement: cf-battement calc(var(--sm-t-slow) * 2) ease-in-out infinite;
 }
 
 /*
@@ -358,6 +394,80 @@
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+/*
+ * Arrivée d'une carte : elle monte de dix pixels en se révélant. Opacité et
+ * transformation seules (DA §6) — jamais une hauteur, qui ferait sauter tout
+ * ce qui la suit pendant la course.
+ */
+@keyframes cf-carte {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Fête — l'objet gagné respire UNE fois. Amplitude volontairement basse
+ * (6 %) : c'est une carte de récompense, pas un jouet, et au-delà l'élément
+ * chevauche ses voisins pendant la course.
+ */
+@keyframes cf-fete {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* L'onde d'un palier franchi : elle part du solde et se dissout. */
+@keyframes cf-eclat {
+  from {
+    opacity: 0.5;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+/* Le voile de confirmation du scanner : il monte vite et s'efface. */
+@keyframes cf-halo {
+  0% {
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/*
+ * Respiration d'un squelette. Le plancher est à 45 % et non à 0 : un bloc qui
+ * disparaît complètement se lit comme un clignotement, et 2.3.1 compte les
+ * clignotements. Opacité seule — la silhouette ne doit pas bouger, sinon elle
+ * promet une mise en page que le contenu ne tiendra pas.
+ */
+@keyframes cf-battement {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
   }
 }
 
@@ -508,8 +618,26 @@
     opacity var(--sm-t-fast) var(--sm-ease),
     color var(--sm-t-fast) var(--sm-ease);
 }
+/*
+ * ═══ L'ENFONCEMENT PREND `--sm-t-snap`, LE RELÂCHEMENT GARDE `--sm-t-fast` ═══
+ *
+ * La déclaration ci-dessus ne portait QUE la transformation : l'appui héritait
+ * donc de la durée de base, 140 ms en « vif » et 240 en « posé ». Le tunnel de
+ * commande, lui, écrit `active:duration-snap` sur chacun de ses boutons
+ * (`primitives.tsx`, TAP) et répond en 47 à 80 ms. Deux surfaces du MÊME
+ * produit, sous le MÊME masque, avec un rapport de trois entre leurs retours
+ * tactiles — et c'est `.cf-press` qui habille toute la fidélité et tout le
+ * back-office.
+ *
+ * La DA §4 est explicite : « chaque appui répond en moins de 100 ms ». C'est
+ * exactement le rôle que le résolveur donne à `--sm-t-snap` (un tiers de la
+ * base). La surcharge ne vaut QUE pour l'état enfoncé : au relâchement, la
+ * règle de base reprend la main et la remontée reste douce — un aller sec, un
+ * retour souple, ce qui est le geste d'un bouton physique.
+ */
 .cf-press:active:not(:disabled):not([aria-disabled="true"]) {
   transform: scale(0.97);
+  transition-duration: var(--sm-t-snap);
 }
 /* Variante « ligne » : une ligne pleine largeur ne se met pas à l'échelle. */
 .cf-press-row {
@@ -521,6 +649,7 @@
 }
 .cf-press-row:active:not(:disabled) {
   transform: translateY(1px);
+  transition-duration: var(--sm-t-snap);
 }
 
 /* Select : chevron gris intégré (spec design-system §6.7) */

@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { loadSite, PublicApiError } from "@/components/order/api";
 import { cityOf, euros } from "@/components/order/helpers";
 import { altDuHero, imageDePartage } from "@/components/order/hero";
+import { resumeFidelite } from "@/components/order/fidelite";
 import { restaurantJsonLd, serializeJsonLd } from "@/components/order/jsonld";
 import { Storefront } from "@/components/order/Storefront";
+import { loadPublicLoyalty } from "@/components/loyalty/public-api";
 
 /**
  * Site public d’un restaurant — `/r/[slug]`.
@@ -123,9 +125,33 @@ export async function generateViewport({ params }: Params): Promise<Viewport> {
 export default async function RestaurantPage({ params }: Params) {
   const { slug } = await params;
 
+  /*
+   * LA VITRINE APPREND ENFIN QUE LE RESTAURANT A UN PROGRAMME.
+   *
+   * La charge `/site` ne porte aucun champ de fidélité : la page ignorait
+   * jusqu'à l'existence du programme, et le lien n'allait donc que dans un
+   * sens — la carte pointait vers la vitrine, rien ne ramenait vers la carte.
+   * Plutôt que d'ajouter un champ au contrat de `/site`, que quatre autres
+   * consommateurs auraient à ignorer, on interroge la route qui existe déjà.
+   *
+   * ═══ POURQUOI CELA NE COÛTE NI LATENCE NI CACHE ═══
+   *
+   * Les deux appels partent ENSEMBLE (`Promise.all`) : le second n'ajoute donc
+   * pas son aller-retour à celui du premier. `loadPublicLoyalty` est mémorisé
+   * par `cache()` et revalidé toutes les 60 s comme n'importe quelle donnée
+   * publique — aucun cookie n'est lu, la page reste statiquement rendue, et
+   * rien de ce qui la fait indexer ne change.
+   *
+   * Un restaurant sans programme (l'immense majorité) répond 404 : on retombe
+   * sur `null`, et la vitrine est au pixel celle d'hier.
+   */
   let site;
+  let fidelite;
   try {
-    site = await loadSite(slug);
+    [site, fidelite] = await Promise.all([
+      loadSite(slug),
+      loadPublicLoyalty(slug).catch(() => null),
+    ]);
   } catch (err) {
     // 404 côté API = restaurant inconnu ; toute autre panne remonte à error.tsx.
     if (err instanceof PublicApiError && err.status === 404) notFound();
@@ -143,7 +169,7 @@ export default async function RestaurantPage({ params }: Params) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />
-      <Storefront site={site} mode="site" />
+      <Storefront site={site} mode="site" loyalty={resumeFidelite(fidelite)} />
     </>
   );
 }

@@ -55,6 +55,8 @@ import {
   type CartLine,
   type Customer,
 } from "./cart";
+import { FideliteApresCommande } from "./FideliteVitrine";
+import type { VitrineFidelite } from "./fidelite";
 import { jalonFunnel } from "./funnel";
 import { hhmm, parisParts, phoneOk, uid } from "./helpers";
 import {
@@ -133,6 +135,7 @@ export function Checkout({
   pauseMessage,
   initialSlots,
   embed = false,
+  loyalty = null,
   api = networkApi,
   demo = false,
   onClose,
@@ -164,6 +167,12 @@ export function Checkout({
   /** Créneaux déjà connus (rendus avec la page) — évite une attente à l’ouverture. */
   initialSlots: SlotsResponse | null;
   embed?: boolean;
+  /**
+   * Le programme de fidélité du restaurant, résumé — `null` s’il n’en a pas.
+   * Il n’est lu qu’à la CONFIRMATION : le tunnel appartient à la commande, et
+   * rien n’a à s’intercaler entre le panier et le paiement.
+   */
+  loyalty?: VitrineFidelite | null;
   /** Client des routes publiques — le réseau partout, sauf en démonstration. */
   api?: OrderingApi;
   /**
@@ -623,6 +632,7 @@ export function Checkout({
             downgraded={downgraded}
             demo={demo}
             demoCard={demo && method === "online"}
+            loyalty={loyalty}
           />
         )}
       </div>
@@ -1475,6 +1485,7 @@ function DoneStep({
   demo,
   demoCard,
   prixMono,
+  loyalty,
 }: {
   order: CreatedOrder;
   /** Avancement en cuisine — n’avance que là où un suivi alimente l’écran. */
@@ -1486,6 +1497,8 @@ function DoneStep({
   demoCard: boolean;
   /** Paire typographique du masque qui pose les prix en chasse fixe. */
   prixMono: boolean;
+  /** Programme de fidélité du restaurant — `null` s’il n’en a pas. */
+  loyalty: VitrineFidelite | null;
 }) {
   const rank = Math.max(
     0,
@@ -1673,6 +1686,17 @@ function DoneStep({
               moment du retrait.
             </Banner>
           )}
+
+          {/*
+            LE SEUL ENDROIT DU TUNNEL OÙ LA FIDÉLITÉ A SA PLACE.
+
+            C’est le moment où l’achat existe et où le client va se déplacer :
+            la seule action utile qu’on puisse lui suggérer est de sortir son
+            QR au comptoir. Placé plus tôt — au panier, au paiement — ce
+            rappel aurait été une distraction dans un parcours qu’on passe son
+            temps à raccourcir.
+          */}
+          {loyalty && <FideliteApresCommande resume={loyalty} />}
 
           {demo && (
             <p className="text-center text-[12px] leading-relaxed text-mut">

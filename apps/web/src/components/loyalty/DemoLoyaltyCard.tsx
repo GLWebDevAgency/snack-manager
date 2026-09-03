@@ -1,38 +1,104 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
+import { useMemo } from "react";
 import { Card, Icon, Pill } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { cx } from "@/lib/cx";
+import {
+  ActionCommander,
+  EnTeteFidelite,
+  SoldeCarte,
+  TitreSection,
+  TuileRecompense,
+} from "./carte-visuelle";
+import { dureeEnMs, useCompteAnime } from "./mouvement";
+import { phraseDeProgression, progressionVers, type Recompense } from "./paliers";
 
-const rewards = [
-  { name: "Boisson offerte", cost: 8, ready: true },
-  { name: "Menu signature offert", cost: 30, ready: false },
+/** Repli de la durée « fête » quand aucun masque n'est demandé par l'URL. */
+const FETE_PAR_DEFAUT_MS = 900;
+
+const SOLDE = 24;
+const UNITE_SINGULIER = "point fictif";
+const UNITE_PLURIEL = "points fictifs";
+
+/*
+ * Des récompenses de démonstration, à la FORME du contrat — le composant de
+ * tuile est le même que celui du produit, il attend donc les mêmes champs.
+ * Les identifiants sont figés : rien ici n'atteint jamais une base.
+ */
+const RECOMPENSES: Recompense[] = [
+  {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "Boisson offerte",
+    description: "À retirer au comptoir avec votre commande",
+    costUnits: 8,
+    kind: "product",
+    valueCents: null,
+    productRef: "Boisson 33 cl",
+    affordable: true,
+  },
+  {
+    id: "22222222-2222-4222-8222-222222222222",
+    name: "Menu signature offert",
+    description: "Le menu du moment, entièrement offert",
+    costUnits: 30,
+    kind: "product",
+    valueCents: null,
+    productRef: "Menu signature",
+    affordable: false,
+  },
 ];
 
+const PALIER = RECOMPENSES[1] ?? null;
+
+/**
+ * L'APERÇU N'EST PLUS UNE MAQUETTE — c'est la carte, avec d'autres chiffres.
+ *
+ * Cette page rendait sa PROPRE composition, écrite à la main à côté de celle
+ * du produit. Les deux avaient déjà divergé (pastilles de 40 px ici, 44 là,
+ * hiérarchies différentes, aucun mouvement des deux côtés), si bien que la
+ * matrice de captures — dont c'est l'unique entrée fidélité
+ * (`scripts/capture-masque.mjs`) — prouvait les six directions d'un écran qui
+ * n'existait nulle part, et qu'un prospect voyait une démonstration qui n'était
+ * pas le produit qu'on lui vendait.
+ *
+ * Les pièces viennent maintenant de `carte-visuelle.tsx`, partagées avec
+ * `LoyaltyCardApp` : une divergence n'est plus possible, et la démonstration
+ * montre enfin le mouvement (le solde qui monte, la jauge qui le suit) sur
+ * chacune des six directions.
+ */
 export function DemoLoyaltyCard() {
   /*
-   * Cet aperçu ne lit AUCUNE marque : c'est `LoyaltyCardApp` qui porte le
-   * masque réel d'un programme, résolu depuis le tenant — cette carte-ci
-   * n'est jamais reliée à un vrai restaurant. Le seul besoin d'une marque ici
-   * est la matrice de captures (`scripts/capture-masque.mjs`) : `demo` vaut
-   * toujours vrai sur cette page, d'où le même levier `?masque=` que la
-   * vitrine — voir `useMasqueDeCapture` pour le piège d'hydratation évité.
+   * Cet aperçu ne lit AUCUNE marque de restaurant : c'est `LoyaltyCardApp` qui
+   * porte le masque réel d'un programme, résolu depuis le tenant — cette
+   * carte-ci n'est jamais reliée à un vrai établissement. Le seul besoin d'une
+   * marque ici est la matrice de captures (`scripts/capture-masque.mjs`) :
+   * `demo` vaut toujours vrai sur cette page, d'où le même levier `?masque=`
+   * que la vitrine — voir `useMasqueDeCapture` pour le piège d'hydratation
+   * évité.
    */
   const brand = useMasqueDeCapture(true);
   /*
    * MÉMORISÉ — `resoudreMarque()` recalcule une trentaine de mélanges et
-   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sans ce
-   * `useMemo`, la facture était payée à CHAQUE rendu de la racine — donc à
-   * chaque frappe dans le tunnel et à chaque tick du suivi — pour un objet
-   * identique. Sa référence sert aussi de `style` : la recréer forçait React
-   * à repeindre tout le sous-arbre.
+   * jusqu'à quatre recherches d'AA par pas de 1/200 (~0,5 ms). Sa référence
+   * sert aussi de `style` : la recréer forçait React à repeindre tout le
+   * sous-arbre à chaque image de la montée du solde.
    */
   const masque = useMemo(() => (brand ? styleDuMasque(brand) : undefined), [brand]);
+  const dureeFete = useMemo(
+    () =>
+      dureeEnMs(
+        (masque as Record<string, unknown> | undefined)?.["--sm-t-slow"],
+        FETE_PAR_DEFAUT_MS,
+      ),
+    [masque],
+  );
+  const soldeAffiche = useCompteAnime(SOLDE, dureeFete);
+
   return (
     <div
       style={masque}
@@ -56,78 +122,78 @@ export function DemoLoyaltyCard() {
       <div className="border-b border-prep/30 bg-prep/10 px-4 py-2.5 text-center text-[11px] font-extrabold uppercase tracking-[0.1em] text-prept">
         Démonstration · données entièrement fictives
       </div>
-      <header className="border-b border-ink/8 bg-bg/85 px-4 py-3 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[720px] items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-card bg-accent text-sm font-black text-onaccent" aria-hidden>CF</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold">Le Comptoir — restaurant fictif</p>
-            <p className="font-display text-[11px] text-mut">Le Club Démo</p>
+
+      <EnTeteFidelite
+        nom="Le Comptoir — restaurant fictif"
+        programme="Le Club Démo"
+        logoUrl={null}
+        aside={<Pill className="border-prep/30 bg-prep/10 text-prept">Simulation</Pill>}
+      />
+
+      <main className="mx-auto w-full max-w-[1080px] px-4 pt-6">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-8">
+          <div className="lg:sticky lg:top-24">
+            <SoldeCarte
+              alias="Maya"
+              soldeAffiche={soldeAffiche}
+              soldeReel={SOLDE}
+              uniteSingulier={UNITE_SINGULIER}
+              unitePluriel={UNITE_PLURIEL}
+              palier={PALIER}
+              progression={progressionVers(soldeAffiche, PALIER)}
+              phrase={phraseDeProgression(SOLDE, PALIER, UNITE_SINGULIER, UNITE_PLURIEL)}
+              fete={false}
+              /*
+               * « Commander » mène à la VITRINE de démonstration, pas à la page
+               * marketing : c'est le trajet réel du produit, et c'est
+               * précisément ce que la démonstration doit montrer — les deux
+               * surfaces se répondent.
+               */
+              action={<ActionCommander href="/r/demo?demo=1" nomRestaurant="Le Comptoir" />}
+            />
           </div>
-          <Pill className="border-prep/30 bg-prep/10 text-prept">Simulation</Pill>
+
+          <div>
+            <section>
+              <TitreSection
+                sur="Aperçu client"
+                note="Le QR scanné sert uniquement à montrer l’expérience sur un second appareil. Aucun client, solde ou avantage n’est enregistré."
+              >
+                Récompenses du moment
+              </TitreSection>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                {RECOMPENSES.map((recompense) => (
+                  <TuileRecompense
+                    key={recompense.id}
+                    nom={recompense.name}
+                    detail={recompense.description}
+                    cout={recompense.costUnits}
+                    uniteSingulier={UNITE_SINGULIER}
+                    unitePluriel={UNITE_PLURIEL}
+                    acquise={recompense.affordable}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <Card className="mt-10 border-prep/25 bg-prep/5 p-5 shadow-card">
+              <p className="text-sm font-extrabold text-prept">
+                Ce parcours ne crée aucune vraie carte
+              </p>
+              <p className="mt-3 text-xs leading-5 text-mut">
+                Chez un vrai restaurant, ce même écran affiche le solde réel du
+                client, son historique et le QR à présenter en caisse.
+              </p>
+              <Link
+                href="/"
+                className="cf-press mt-4 inline-flex min-h-11 items-center gap-2 rounded-pill border border-ink/10 px-4 py-2.5 text-xs font-bold text-ink hover:bg-ink/5"
+              >
+                Découvrir Snack Manager
+                <Icon name="arrow" size={14} stroke={2.4} />
+              </Link>
+            </Card>
+          </div>
         </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-[720px] px-4 pt-6">
-        <section className="relative overflow-hidden rounded-wide border border-accent/30 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep sm:p-7">
-          <div className="absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl" aria-hidden />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <Pill className="border-ok/30 bg-ok/10 text-okt">Carte fictive active</Pill>
-              <h1 className="font-display mt-3 text-xl font-extrabold tracking-[-0.035em]">Bonjour Maya</h1>
-            </div>
-            <Icon name="gift" size={28} className="text-accentink" />
-          </div>
-          <div className="relative mt-8">
-            <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-mut">Solde de démonstration</p>
-            <p className="cf-fig font-display mt-1 text-[clamp(2.75rem,2.3rem+1.8vw,3.25rem)] font-black leading-none tracking-[-0.055em]">24</p>
-            <p className="mt-1 text-sm font-bold text-accentink">points fictifs</p>
-          </div>
-          <div className="relative mt-7">
-            {/* Une jauge est un composant, pas une décoration : sans
-                `role`/`aria-value*` un lecteur d'écran ne rendait qu'une div
-                vide, et la progression n'existait que pour l'œil.
-
-                Et même piste garantie que la vraie carte (`bg-gaugetrack`,
-                3:1 contre l'accent qui la remplit) : la démonstration montre
-                les six directions, c'est justement là qu'un écart se verrait. */}
-            <div
-              className="h-2 overflow-hidden rounded-pill bg-gaugetrack"
-              role="progressbar"
-              aria-label="Progression vers « Menu signature offert »"
-              aria-valuemin={0}
-              aria-valuemax={30}
-              aria-valuenow={24}
-              aria-valuetext="24 points fictifs sur 30"
-            >
-              <div className="h-full w-4/5 rounded-pill bg-accent" />
-            </div>
-            <p className="mt-2 text-xs text-mut">Encore 6 points fictifs pour « Menu signature offert »</p>
-          </div>
-        </section>
-
-        <section className="mt-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">Aperçu client</p>
-          <h2 className="font-display mt-1 text-xl font-extrabold tracking-[-0.035em]">Récompenses du moment</h2>
-          {/* Pas d'`opacity` sur un palier non atteint : elle rabattait
-              `text-mut` — déjà AU plancher AA — sous les 3:1. Le cadeau, la
-              bordure neutre et le libellé disent « pas encore ». */}
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {rewards.map((reward) => (
-              <Card key={reward.name} className={reward.ready ? "border-ok/25 p-4" : "p-4"}>
-                <div className="flex items-center gap-3">
-                  <span className={reward.ready ? "grid size-11 place-items-center rounded-card bg-ok/12 text-okt" : "grid size-11 place-items-center rounded-card bg-ink/6 text-mut"}><Icon name={reward.ready ? "check" : "gift"} size={19} /></span>
-                  <div><p className="text-sm font-extrabold">{reward.name}</p><p className="mt-1 text-xs text-mut">{reward.cost} points · {reward.ready ? "palier atteint" : "bientôt disponible"}</p></div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        <Card className="mt-6 border-prep/25 bg-prep/5 p-4">
-          <p className="text-sm font-extrabold text-prept">Ce parcours ne crée aucune vraie carte</p>
-          <p className="mt-2 text-xs leading-5 text-mut">Le QR scanné sert uniquement à montrer l’expérience sur un second appareil. Aucun client, solde ou avantage n’est enregistré.</p>
-          <Link href="/" className="cf-press mt-4 inline-flex min-h-11 items-center rounded-pill border border-ink/10 px-4 py-2.5 text-xs font-bold text-ink hover:bg-ink/5">Découvrir Snack Manager</Link>
-        </Card>
       </main>
     </div>
   );

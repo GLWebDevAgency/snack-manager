@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import type { IScannerControls } from "@zxing/browser";
 import { loyaltyTokenFromQrPayload } from "@sm/contracts";
 import { Btn, Icon } from "@/components/ui";
 import { useDialogLayer } from "@/components/ui/useDialogLayer";
+import { VIBRATION_SCAN, vibrer } from "./haptique";
 
 export function LoyaltyScanner({
   expectedSlug,
@@ -21,6 +29,37 @@ export function LoyaltyScanner({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [fileBusy, setFileBusy] = useState(false);
+  /*
+   * ═══ LE SCAN N'AVAIT AUCUN RETOUR — le succès était un DÉMONTAGE ═══
+   *
+   * Le seul signal qu'un QR avait été reconnu était la disparition du
+   * scanner : rien ne confirmait la lecture, et le téléphone est justement
+   * tenu à bout de bras, écran tourné vers la caisse, au moment où ça se
+   * produit. Trois canaux partent désormais ensemble — un voile vert sur le
+   * viseur, une coche, et une impulsion haptique comme le tunnel de commande
+   * en fait une à la confirmation d'une commande.
+   *
+   * L'état survit à l'appel de `onToken` : le parent garde le scanner monté le
+   * temps de charger la carte, et cet écran devient l'attente. Sans lui,
+   * l'application retombait sur un squelette pleine page et l'utilisateur ne
+   * savait pas si son geste avait porté.
+   */
+  const [reconnu, setReconnu] = useState(false);
+
+  /**
+   * Le passage de relais, écrit UNE fois pour les trois entrées (caméra,
+   * photo, code de secours) : elles s'étaient déjà écartées l'une de l'autre
+   * sur l'arrêt de la caméra.
+   */
+  const accepter = useCallback(
+    (token: string) => {
+      controlsRef.current?.stop();
+      setReconnu(true);
+      vibrer(VIBRATION_SCAN);
+      onToken(token);
+    },
+    [onToken],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -39,8 +78,7 @@ export function LoyaltyScanner({
               setCameraError("Ce QR ne correspond pas à une carte fidélité Snack Manager.");
               return;
             }
-            controlsRef.current?.stop();
-            onToken(token);
+            accepter(token);
           },
         );
         if (cancelled) controls.stop();
@@ -58,7 +96,15 @@ export function LoyaltyScanner({
       controlsRef.current?.stop();
       controlsRef.current = null;
     };
-  }, [expectedSlug, onToken]);
+    /*
+     * `accepter` est MÉMORISÉ, et c'est ce qui rend cet effet stable.
+     *
+     * Il dépend du seul `onToken`, que le parent mémorise lui aussi. Une
+     * fonction recréée à chaque rendu aurait relancé cet effet — donc ARRÊTÉ
+     * puis REDÉMARRÉ la caméra — à chaque battement d'état du parent, pendant
+     * que l'utilisateur cadre son QR.
+     */
+  }, [expectedSlug, accepter]);
 
   async function scanFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -72,8 +118,7 @@ export function LoyaltyScanner({
       const result = await new BrowserQRCodeReader().decodeFromImageUrl(url);
       const token = loyaltyTokenFromQrPayload(result.getText(), expectedSlug);
       if (!token) throw new Error("invalid-card");
-      controlsRef.current?.stop();
-      onToken(token);
+      accepter(token);
     } catch {
       setCameraError("Aucune carte fidélité valide n’a été reconnue sur cette image.");
     } finally {
@@ -89,8 +134,7 @@ export function LoyaltyScanner({
       setCameraError("Le code ou le lien ne correspond pas à une carte de ce restaurant.");
       return;
     }
-    controlsRef.current?.stop();
-    onToken(token);
+    accepter(token);
   }
 
   return (
@@ -109,8 +153,37 @@ export function LoyaltyScanner({
             <span className="absolute -right-0.5 -top-0.5 size-12 rounded-tr-wide border-r-4 border-t-4 border-accent" />
             <span className="absolute -bottom-0.5 -left-0.5 size-12 rounded-bl-wide border-b-4 border-l-4 border-accent" />
             <span className="absolute -bottom-0.5 -right-0.5 size-12 rounded-br-wide border-b-4 border-r-4 border-accent" />
+            {reconnu && (
+              <>
+                <span className="absolute inset-0 animate-halo rounded-wide bg-ok/25 motion-reduce:animate-none" />
+                {/*
+                  LA COCHE EST AU CENTRE DU VISEUR, pas en marge de l'écran :
+                  c'est l'objet qu'on vient de cadrer qui est reconnu, et
+                  l'œil est déjà là. Posée sous le cadre, elle chevauchait ses
+                  angles et se lisait comme un bouton.
+                */}
+                <span className="absolute left-1/2 top-1/2 grid size-16 -translate-x-1/2 -translate-y-1/2 animate-pop place-items-center rounded-full bg-ok text-onok shadow-soft motion-reduce:animate-none">
+                  <Icon name="check" size={32} stroke={3} />
+                </span>
+              </>
+            )}
           </div>
         </div>
+        {/*
+          LA CONFIRMATION VISIBLE — verte, et non à l'accent du restaurant.
+
+          « Le QR a été lu » est un verdict de SERVICE, pas une marque : c'est
+          exactement ce que la DA §3 réserve au vert fonctionnel, sur les six
+          directions et sur l'admin. L'accent aurait dit « c'est joli chez
+          nous » là où il faut dire « c'est bon, ça a marché ».
+        */}
+        {reconnu && (
+          <div className="absolute inset-x-0 bottom-5 flex justify-center px-4">
+            <p className="animate-pop rounded-pill border border-ok/30 bg-surface px-4 py-2.5 text-sm font-extrabold text-ink shadow-soft motion-reduce:animate-none">
+              Carte reconnue · chargement…
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="cf-scroll max-h-[44dvh] overflow-y-auto border-t border-ink/10 bg-surface p-4 pb-[max(18px,env(safe-area-inset-bottom))]">
