@@ -18,6 +18,8 @@
 # Le secret SM_ALERT_WEBHOOK ne figure pas ici, et ne doit jamais y figurer :
 #   npx wrangler@4 secret put SM_ALERT_WEBHOOK
 # ou, plus simplement, par le tableau de bord (Settings → Variables → Encrypt).
+# Le slug du premier restaurant, lui, sera une variable TEXTE publique nommée
+# SM_SLUG_CARTE_PRODUCTION. Tant qu'elle est absente, sa carte est ignorée.
 
 name = "sonde-snack-manager"
 main = "worker.js"

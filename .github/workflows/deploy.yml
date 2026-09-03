@@ -987,6 +987,10 @@ jobs:
           # s'annonce alors IGNORÉ, et la révision réellement servie reste
           # affichée dans le contrôle précédent.
           SM_REVISION_ATTENDUE: ${{ needs.deploiement.result == 'success' && github.sha || '' }}
+          # Variable PUBLIQUE, volontairement absente tant qu'aucun restaurant
+          # n'existe en production. Staging conserve son slug intégré au
+          # script ; une valeur vide garde les contrôles tenant en IGNORÉ.
+          SM_SLUG_CARTE_PRODUCTION: ${{ vars.SM_SLUG_CARTE_PRODUCTION }}
         run: node scripts/smoke.mjs "$ENVIRONNEMENT"
 
       - name: Annoncer la panne

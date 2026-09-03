@@ -396,9 +396,11 @@ remaniement de la facturation, des promotions ou des remises.
 **Une CI verte prouve que ça compile et que les tests passent. Elle ne prouve
 pas que ça marche.** Depuis le 20 août 2026, le workflow **Bout en bout**
 (`e2e.yml`) joue les parcours qui coûtent de l'argent — commande, cuisine,
-suspension — dans un vrai navigateur, après chaque déploiement. Mais il tourne
-*après* la mise en ligne et ne bloque rien (§ 9) : la vérification à la main
-sur staging avant `main` reste la règle.
+suspension — dans un vrai navigateur, après chaque déploiement. Sur `main`, il
+ne joue automatiquement que les quatre démonstrations sans secret ni écriture ;
+les parcours qui mutent un restaurant restent limités à staging. Mais il tourne
+*après* la mise en ligne et ne bloque rien (§ 9) : la vérification à la main sur
+staging avant `main` reste la règle.
 
 Ce paragraphe décrit le trajet jusqu'à `main`. **La suite — de `main` jusqu'au
 restaurant en service — est au § 10**, et elle est automatique : la fusion
@@ -862,6 +864,8 @@ depuis un poste que dans la CI.
 | `GET /health` | l'API répond, et c'est bien **notre** API (`service: snack-manager-api`) |
 | `GET /health` → **révision** | c'est bien **la révision qu'on vient de pousser** qui sert, pas celle d'avant |
 | `GET /public/tenants/<slug>/menu` | la lecture traverse Mongo de bout en bout et le multi-établissement résout |
+| `GET /public/tenants/<slug>/loyalty` | le programme fidélité actif et ses récompenses sont publiés avec un contrat valide |
+| `GET /r/<slug>/fidelite` | la vraie PWA fidélité est rendue ; son écran de repli HTTP 200 est explicitement refusé |
 | `GET /` sur `web`, `pos`, `kds` | chaque interface sert **sa** page — le titre attendu est vérifié |
 
 **Un 200 ne suffit pas.** Une page d'erreur d'infrastructure en renvoie un
@@ -964,6 +968,8 @@ confidentiel :
 - `SM_URL_API`, `SM_URL_WEB`, `SM_URL_POS`, `SM_URL_KDS` — viser d'autres
   adresses, un domaine personnalisé par exemple ;
 - `SM_SLUG_CARTE` — l'établissement dont on vérifie la carte ;
+- `SM_SLUG_CARTE_PRODUCTION` — variable GitHub publique utilisée uniquement
+  pour la production quand `SM_SLUG_CARTE` n'est pas fourni ;
 - `SM_REVISION_ATTENDUE` — le SHA que l'API doit servir ; vide, le contrôle de
   révision s'annonce `IGNORÉ` ;
 - `SM_TENTATIVES`, `SM_ATTENTE_MS`, `SM_DELAI_REQUETE_MS` — la patience du
@@ -978,14 +984,15 @@ confidentiel :
 > n'ajoute une exclusion dans `.github/gitleaks.toml` que si la forme est
 > inévitable, et alors étroite et commentée (§ 6).
 
-> **La carte publique est « IGNORÉE » en production, et ce n'est pas un
+> **Les trois surfaces du restaurant sont « IGNORÉES » en production, et ce n'est pas un
 > oubli.** La base de production a été remise à blanc (commit `7b1c6dc`) : il
-> n'y a aujourd'hui aucun établissement, donc aucune carte à servir. Le
-> contrôle s'annonce alors `IGNORÉ` — bruyamment, avec une annotation — plutôt
-> que rouge pour une raison qui n'est pas une panne. **Le jour où le premier
-> restaurant est en ligne**, renseigner son slug dans `scripts/smoke.mjs`
-> (`CIBLES.production.slugCarte`) et le contrôle redevient réel. Un contrôle
-> qui ne peut pas tourner n'est pas un contrôle qui passe.
+> n'y a aujourd'hui aucun établissement, donc ni carte, ni catalogue fidélité,
+> ni PWA à servir. Les contrôles s'annoncent alors `IGNORÉ` — bruyamment, avec
+> une annotation — plutôt que rouges pour une raison qui n'est pas une panne.
+> **Le jour où le premier restaurant est en ligne**, créer la variable GitHub
+> `SM_SLUG_CARTE_PRODUCTION` avec son slug. Le déploiement et la sonde quotidienne
+> arment alors les trois contrôles sans changement de code. Un contrôle qui ne
+> peut pas tourner n'est pas un contrôle qui passe.
 
 Chaque interface est aussi accompagnée d'une **empreinte** (12 caractères de
 SHA-256 du corps servi). Elle ne sert à rien au quotidien, et à tout le jour où

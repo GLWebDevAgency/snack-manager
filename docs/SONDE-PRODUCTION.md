@@ -64,9 +64,10 @@ crié « la production est en retard » le 26/08.
 
 La carte publique n'est pas contrôlée : la base de production a été remise à
 blanc, il n'y a aucun établissement à servir. **Le jour où le premier
-restaurant est en ligne**, mettre son slug dans `SLUG_CARTE`
-(`infra/sonde-cloudflare/worker.js`) et redéployer — le contrôle devient réel
-et traverse Mongo.
+restaurant est en ligne**, poser son slug dans la variable texte publique
+`SM_SLUG_CARTE_PRODUCTION` du Worker — le contrôle devient réel et traverse
+Mongo, sans modification du code. La variable GitHub du même nom arme en plus
+le catalogue et la PWA fidélité dans le smoke quotidien et post-déploiement.
 
 ## Les alertes
 
@@ -147,9 +148,8 @@ connaît le rayon d'action le jour où il fuite.
 Pour redéployer, trois voies, de la plus simple à la plus outillée :
 
 1. **Le tableau de bord** — Workers & Pages → `sonde-snack-manager` → Edit
-   code. Aucun jeton, aucune installation. Suffisant pour changer une
-   constante comme `SLUG_CARTE`. Penser à reporter la modification ici, sinon
-   le dépôt et le déployé divergent en silence.
+   code ou Settings → Variables. Aucun jeton, aucune installation. Le slug de
+   production se configure dans Settings, sans éditer ce fichier.
 2. **Demander à Claude** — le connecteur redéploie depuis ce fichier en une
    commande, sans rien installer chez vous.
 3. **`wrangler`, en ligne de commande** — la seule voie qui demande un jeton,
@@ -176,6 +176,7 @@ cas dans sa réponse.
 | Sous-domaine | `snackmanager.workers.dev` |
 | Déclencheur | `*/5 * * * *` |
 | Secrets | `SM_ALERT_WEBHOOK`, `DIAGNOSTIC_TOKEN` |
+| Variable texte publique | `SM_SLUG_CARTE_PRODUCTION` (absente avant le premier restaurant) |
 
 L'espace KV garde deux clefs : `etat` (`vert` / `rouge`) et `dernier-passage`
 (le détail complet). C'est cette mémoire qui permet de ne notifier qu'au
