@@ -32,7 +32,12 @@ function catalogueValide() {
   };
 }
 
-async function jouerSmoke({ environnement = 'staging', catalogue, pageFidelite } = {}) {
+async function jouerSmoke({
+  environnement = 'staging',
+  catalogue,
+  pageFidelite,
+  slugProduction = '',
+} = {}) {
   const appels = [];
   const serveur = createServer((requete, reponse) => {
     const chemin = new URL(requete.url ?? '/', 'http://local').pathname;
@@ -77,21 +82,24 @@ async function jouerSmoke({ environnement = 'staging', catalogue, pageFidelite }
   if (!adresse || typeof adresse === 'string') throw new Error('Adresse de test indisponible');
   const base = `http://127.0.0.1:${adresse.port}`;
 
+  const variables = {
+    ...process.env,
+    SM_URL_API: `${base}/api`,
+    SM_URL_WEB: `${base}/web`,
+    SM_URL_POS: `${base}/pos`,
+    SM_URL_KDS: `${base}/kds`,
+    SM_SLUG_CARTE_PRODUCTION: slugProduction,
+    SM_REVISION_ATTENDUE: '',
+    SM_TENTATIVES: '1',
+    SM_ATTENTE_MS: '0',
+    SM_DELAI_REQUETE_MS: '1000',
+    GITHUB_ACTIONS: 'false',
+  };
+  if (environnement === 'production') delete variables.SM_SLUG_CARTE;
+  else variables.SM_SLUG_CARTE = 'classfood';
+
   const enfant = spawn(process.execPath, [SMOKE, environnement], {
-    env: {
-      ...process.env,
-      SM_URL_API: `${base}/api`,
-      SM_URL_WEB: `${base}/web`,
-      SM_URL_POS: `${base}/pos`,
-      SM_URL_KDS: `${base}/kds`,
-      SM_SLUG_CARTE: environnement === 'production' ? '' : 'classfood',
-      SM_SLUG_CARTE_PRODUCTION: '',
-      SM_REVISION_ATTENDUE: '',
-      SM_TENTATIVES: '1',
-      SM_ATTENTE_MS: '0',
-      SM_DELAI_REQUETE_MS: '1000',
-      GITHUB_ACTIONS: 'false',
-    },
+    env: variables,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let sortie = '';
@@ -153,5 +161,18 @@ describe('smoke public', () => {
     expect(resultat.sortie).toMatch(/La PWA fidélité publique se sert — IGNORÉ/);
     expect(resultat.appels.some((chemin) => chemin.includes('/tenants/'))).toBe(false);
     expect(resultat.appels.some((chemin) => chemin.includes('/fidelite'))).toBe(false);
+  });
+
+  it('arme les trois surfaces tenant via la variable dédiée de production', async () => {
+    const resultat = await jouerSmoke({
+      environnement: 'production',
+      slugProduction: 'classfood',
+    });
+
+    expect(resultat.code, resultat.erreur || resultat.sortie).toBe(0);
+    expect(resultat.appels).toContain('/api/public/tenants/classfood/menu');
+    expect(resultat.appels).toContain('/api/public/tenants/classfood/loyalty');
+    expect(resultat.appels).toContain('/web/r/classfood/fidelite');
+    expect(resultat.sortie).not.toContain('tenant ignorés');
   });
 });

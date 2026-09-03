@@ -75,8 +75,8 @@ const CIBLES = {
     // aujourd'hui AUCUN établissement, donc aucune carte publique à servir.
     // Le contrôle est alors annoncé « IGNORÉ », bruyamment, plutôt que rouge
     // pour une raison qui n'est pas une panne.
-    // Le jour où le premier restaurant est en ligne : mettre son slug ici (ou
-    // exporter SM_SLUG_CARTE) et le contrôle redevient réel. Voir § 11.
+    // Le jour où le premier restaurant est en ligne : renseigner la variable
+    // GitHub SM_SLUG_CARTE_PRODUCTION et le contrôle redevient réel. Voir § 11.
     slugCarte: '',
   },
 };

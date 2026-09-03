@@ -25,6 +25,16 @@ name = "sonde-snack-manager"
 main = "worker.js"
 compatibility_date = "2026-08-01"
 
+# Préserve les variables texte configurées dans le tableau de bord lors d'un
+# futur `wrangler deploy`. Sans ce garde, le slug fidélité pourrait disparaître
+# silencieusement. Les secrets chiffrés suivent leur cycle Wrangler séparé.
+keep_vars = true
+
+# Exposé sur snackmanager.workers.dev pour consulter l'état depuis un
+# téléphone. Aucune donnée sensible : les mêmes surfaces publiques que
+# `scripts/smoke.mjs`, rien de plus.
+workers_dev = true
+
 # Toutes les 5 minutes. Le plan gratuit l'autorise sans quota : 8 640 passages
 # par mois pour 100 000 requêtes par jour incluses.
 [triggers]
@@ -35,8 +45,3 @@ crons = ["*/5 * * * *"]
 [[kv_namespaces]]
 binding = "SONDE"
 id = "563f07d5244e4d1582eac6dd8189f586"
-
-# Exposé sur snackmanager.workers.dev pour consulter l'état depuis un
-# téléphone. Aucune donnée sensible : les mêmes surfaces publiques que
-# `scripts/smoke.mjs`, rien de plus.
-workers_dev = true

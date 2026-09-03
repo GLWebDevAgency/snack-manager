@@ -117,8 +117,9 @@ Très peu, et c'est le but.
 - **Quand ntfy sonne « Production en défaut »** : ouvrir le lien d'état, voir
   quel service est tombé et pourquoi, puis Railway pour ce service-là. La
   sonde vous redira d'elle-même quand c'est rentré dans l'ordre.
-- **Le jour du premier restaurant en ligne** : renseigner `SLUG_CARTE` et
-  redéployer (voir plus bas). C'est le seul changement de code prévu.
+- **Le jour du premier restaurant en ligne** : renseigner la variable texte
+  `SM_SLUG_CARTE_PRODUCTION` dans le tableau de bord. Aucun changement de code
+  ni redéploiement manuel n'est nécessaire pour cette activation.
 - **Une fois par mois, au hasard** : ouvrir le lien d'état et vérifier que
   l'horodatage a moins de 5 minutes. Une sonde qu'on ne vérifie jamais est une
   sonde dont on ignore qu'elle est morte.
@@ -162,10 +163,12 @@ cd infra/sonde-cloudflare
 CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… npx --yes wrangler@4 deploy
 ```
 
-`wrangler.toml` porte déjà le cron, le nom et le rattachement KV — rien à
-retaper. Et si le message d'erreur parle d'une ressource introuvable plutôt
-que d'un droit manquant, c'est le jeton : Cloudflare ne distingue pas les deux
-cas dans sa réponse.
+`wrangler.toml` porte déjà le cron, le nom, le rattachement KV et
+`keep_vars = true` : un déploiement CLI conserve donc les variables texte
+posées dans le tableau de bord, dont `SM_SLUG_CARTE_PRODUCTION`. Les secrets
+chiffrés ne sont pas gouvernés par cette option. Et si le message d'erreur
+parle d'une ressource introuvable plutôt que d'un droit manquant, c'est le
+jeton : Cloudflare ne distingue pas les deux cas dans sa réponse.
 
 ## Les ressources Cloudflare
 
