@@ -3,12 +3,36 @@ import { describe, expect, it, vi } from "vitest";
 /*
  * Le client d'API est DOUBLÉ : ces cas ne testent que la dérivation du nom et
  * de l'initiale, et charger `./api` ferait entrer tout le mode démonstration
- * dans un test de trois fonctions pures. Aucun d'eux n'appelle le réseau.
+ * dans un test de quelques fonctions pures. Aucun d'eux n'appelle le réseau —
+ * le double journalise ce qu'on lui demande d'écrire, et rien ne part.
  */
-vi.mock("./api", () => ({ api: { get: async () => null } }));
+const journal = vi.hoisted(() => ({ ecritures: [] as { chemin: string; corps: unknown }[] }));
+
+vi.mock("./api", () => ({
+  api: {
+    get: async () => null,
+    patch: async (chemin: string, corps: unknown) => {
+      journal.ecritures.push({ chemin, corps });
+      return {
+        id: "u1",
+        nom: "Camille F. Dupont",
+        role: "owner",
+        genre: "user",
+        email: "camille@le-comptoir.fr",
+        tenantId: "t1",
+      };
+    },
+  },
+}));
 
 import type { AuthMe } from "@sm/contracts";
-import { initialeDe, libelleRole, nomAffichable } from "./identite";
+import {
+  CHEMIN_IDENTITE,
+  initialeDe,
+  libelleRole,
+  nomAffichable,
+  poserMonNom,
+} from "./identite";
 
 const personne = (patch: Partial<AuthMe> = {}): AuthMe => ({
   id: "u1",
@@ -89,5 +113,25 @@ describe("le rôle en toutes lettres", () => {
     expect(libelleRole("responsable_salle")).toBeNull();
     expect(libelleRole(null)).toBeNull();
     expect(libelleRole(undefined)).toBeNull();
+  });
+});
+
+/**
+ * ─── POSER SON PROPRE NOM ───
+ *
+ * `users.name` n'avait qu'un auteur, la conversion d'un lead, et aucune route
+ * ne le mettait à jour : laissé vide à la signature, il l'était pour toujours.
+ * Ce cas garde la seule chose que cette fonction décide — l'adresse écrite, et
+ * ce qui part dans le corps.
+ */
+describe("poser son propre nom", () => {
+  it("écrit à l’adresse de l’identité, et n’envoie QUE le nom", async () => {
+    // Aucun identifiant dans le corps : le sujet vient du jeton, et cette
+    // fonction ne peut donc renommer personne d'autre.
+    const moi = await poserMonNom("Camille F. Dupont");
+    expect(journal.ecritures).toEqual([
+      { chemin: CHEMIN_IDENTITE, corps: { nom: "Camille F. Dupont" } },
+    ]);
+    expect(nomAffichable(moi)).toBe("Camille F. Dupont");
   });
 });

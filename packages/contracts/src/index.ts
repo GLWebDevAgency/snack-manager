@@ -612,6 +612,47 @@ export type AuthMe = {
   tenantId: string | null;
 };
 
+/**
+ * POSER SON PROPRE NOM — corps de `PATCH /auth/me`.
+ *
+ * `users.name` n'était écrit qu'UNE fois, à la conversion d'un lead, depuis un
+ * champ facultatif de la modale du CRM. Aucune route ne le mettait à jour :
+ * les deux seules écritures de la collection touchent la version de session et
+ * l'empreinte du mot de passe. Laissé vide à la signature, il l'était pour
+ * toujours — et depuis que le pied des deux barres affiche l'identité de la
+ * personne connectée, il s'y lisait comme un tiret que rien ne permettait de
+ * remplir.
+ *
+ * ─── LE SUJET VIENT DU JETON, JAMAIS DU CORPS ───
+ *
+ * Aucun identifiant ici : on écrit le nom de la session qui appelle, comme
+ * `GET /auth/me` ne lit que la sienne. Un `id` dans ce corps ferait de cette
+ * route un renommage d'autrui, et la porte serait ouverte avant que la règle
+ * qui la garde n'existe.
+ *
+ * ─── LA BORNE : 120, ET C'EST CELLE DE LA SIGNATURE ───
+ *
+ * `LeadConvertSchema.ownerName` écrit cette même colonne, borné à 120. Deux
+ * bornes différentes sur une seule colonne laisseraient le CRM poser un nom
+ * que son porteur ne pourrait plus réenregistrer — un champ qui refuse ce
+ * qu'il affiche. Les barres, elles, tronquent à l'écran : cette borne protège
+ * la base et le journal, pas la mise en page.
+ *
+ * `.strict()` comme partout ailleurs : une clé inattendue dans un corps de
+ * requête est une tentative, pas une tolérance.
+ */
+export const AuthMeUpdateSchema = z
+  .object({
+    /**
+     * Au moins un caractère : le nom vide est l'état qu'on répare, pas un
+     * choix qu'on offre. Qui veut se retirer du pied de barre n'a rien à y
+     * gagner — l'écran retomberait sur le tiret d'avant.
+     */
+    nom: z.string().trim().min(1, 'Votre nom ne peut pas rester vide.').max(120),
+  })
+  .strict();
+export type AuthMeUpdate = z.infer<typeof AuthMeUpdateSchema>;
+
 // ─────────────────────────────────────────────────────────────
 // Temps réel (WebSocket) — rooms par tenantId
 // ─────────────────────────────────────────────────────────────

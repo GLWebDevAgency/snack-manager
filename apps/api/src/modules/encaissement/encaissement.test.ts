@@ -230,8 +230,27 @@ describe('le compte sur lequel encaisser — l’interface étroite du module', 
   });
 });
 
+/*
+ * CES DEUX TESTS MESURENT UNE DÉCLARATION, PAS UNE DURÉE.
+ *
+ * Ils chargent à froid un graphe de modules entier — `AppModule` tire tout le
+ * serveur — puis lisent des métadonnées. Sous `pnpm turbo lint test build`,
+ * les builds Next et les autres suites tournent en parallèle, et l'import a
+ * dépassé son budget trois fois dans la même journée : 5 086 ms pour l'un,
+ * 15 030 ms pour l'autre, alors qu'ils passent en 1,5 s lancés seuls.
+ *
+ * Un dépassement n'est donc JAMAIS un signal ici, seulement du bruit — et un
+ * test qui crie sans raison finit par être ignoré le jour où il a raison. Le
+ * budget est large et local, pas relevé pour toute la suite : ce qu'on
+ * vérifie est qu'un contrôleur est déclaré, et un import lent n'est pas un
+ * défaut de déclaration.
+ */
+const BUDGET_GRAPHE_MS = 60_000;
+
 describe('le câblage Nest — un contrôleur non déclaré est une route 404 silencieuse', () => {
-  it('les DEUX webhooks Stripe sont déclarés dans le module de commande', async () => {
+  it(
+    'les DEUX webhooks Stripe sont déclarés dans le module de commande',
+    async () => {
     // `StripeWebhookController` ne l'était pas : la route /public/stripe/webhook
     // répondait 404 en production et les commandes payées en ligne restaient
     // « en attente » sans le moindre message. Ce test empêche la récidive —
@@ -243,9 +262,11 @@ describe('le câblage Nest — un contrôleur non déclaré est une route 404 si
       '../ordering/stripe-connect-webhook.controller'
     );
     const declares = Reflect.getMetadata('controllers', OrderingModule) as unknown[];
-    expect(declares).toContain(StripeWebhookController);
-    expect(declares).toContain(StripeConnectWebhookController);
-  });
+      expect(declares).toContain(StripeWebhookController);
+      expect(declares).toContain(StripeConnectWebhookController);
+    },
+    BUDGET_GRAPHE_MS,
+  );
 
   it(
     'l’application déclare le module d’encaissement SANS passer par `ordering`',
@@ -255,15 +276,14 @@ describe('le câblage Nest — un contrôleur non déclaré est une route 404 si
       // et Nest enregistre au passage ses contrôleurs. Le jour où cette
       // dépendance se déplace, le raccordement disparaît du back-office en
       // silence — des 404 sur les routes qui décident où va l'argent.
-      // Ce test charge volontairement tout AppModule à froid. Sous `pnpm verify`,
-      // les builds Next et les autres suites tournent en parallèle : son budget
-      // est donc local et explicite, sans relever le délai de tous les tests.
+      // Ce test charge volontairement tout AppModule à froid — voir le budget
+      // commenté au-dessus du describe.
       const { AppModule } = await import('../../app.module');
       const { EncaissementModule } = await import('./encaissement.module');
       const importes = Reflect.getMetadata('imports', AppModule) as unknown[];
       expect(importes).toContain(EncaissementModule);
     },
-    15_000,
+    BUDGET_GRAPHE_MS,
   );
 });
 

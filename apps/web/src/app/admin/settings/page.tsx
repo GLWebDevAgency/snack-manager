@@ -37,6 +37,7 @@
 import { useEffect, useState } from "react";
 import type { AuditEntryView } from "@sm/contracts";
 import { api, type TenantMe } from "@/lib/api";
+import { nomAffichable, poserMonNom, useIdentite } from "@/lib/identite";
 import { Btn, Field, Input, Panel, Skeleton, useToast } from "@/components/ui";
 import { EditeurDeMarque, EditeurDeMarqueEnAttente } from "./EditeurDeMarque";
 import { phraseDuGeste, signatureDeLAuteur } from "./journal";
@@ -51,6 +52,63 @@ export default function SettingsPage() {
   const [address, setAddress] = useState("");
   const [phones, setPhones] = useState<string[]>(["", "", ""]);
   const [journal, setJournal] = useState<AuditEntryView[] | null>(null);
+
+  /*
+   * ── VOTRE COMPTE : LA PERSONNE, PAS L'ENSEIGNE ──
+   *
+   * `users.name` n'avait qu'un auteur — la conversion d'un lead, depuis un
+   * champ FACULTATIF de la modale du CRM — et aucune route ne le mettait à
+   * jour. Laissé vide à la signature, il l'était pour toujours, et se lisait
+   * comme un tiret sous la pastille, en pied de barre.
+   *
+   * POURQUOI SUR CET ÉCRAN, qui porte pourtant l'identité de l'ENSEIGNE. Un
+   * nom de personne n'est pas un nom d'établissement, et l'argument de les
+   * séparer est réel. Trois faits l'emportent quand même :
+   *
+   *  · un écran dédié à UN champ coûte une entrée dans la barre — le rail
+   *    replié n'a que son icône pour repère, et `navigation.ts` demande une
+   *    icône distincte par écran. On ouvrirait une porte de plus pour un
+   *    formulaire d'une ligne ;
+   *  · « Réglages » est déjà nommé « ce qu'on règle une fois puis presque
+   *    jamais » : poser son nom en fait partie, très exactement ;
+   *  · c'est le seul écran de réglages ouvert à TOUS les rôles — donc le seul
+   *    où la question « où paramètre-t-on son compte ? » se pose à qui la pose.
+   *
+   * La séparation se tient alors par le PANNEAU, pas par l'écran : titre,
+   * sous-titre et libellés disent la personne, à côté d'un panneau qui dit
+   * l'enseigne. Le jour où le compte porte plus qu'un nom (mot de passe,
+   * courriel, préférences), il méritera son écran — et cette section y
+   * déménagera d'un bloc.
+   */
+  const identite = useIdentite(true);
+  const nomActuel = nomAffichable(identite) ?? "";
+  /*
+   * `null` = « rien n'a été tapé », et c'est ce qui évite un effet de
+   * resynchronisation : la valeur affichée retombe alors sur celle du serveur,
+   * y compris après l'enregistrement. Le brouillon ne survit pas à ce qu'il a
+   * produit.
+   */
+  const [brouillonNom, setBrouillonNom] = useState<string | null>(null);
+  const [busyNom, setBusyNom] = useState(false);
+  const nomSaisi = brouillonNom ?? nomActuel;
+  const nomDirty = nomSaisi.trim() !== "" && nomSaisi.trim() !== nomActuel;
+
+  async function enregistrerNom() {
+    if (busyNom || !nomDirty) return;
+    setBusyNom(true);
+    try {
+      // `poserMonNom` prévient toutes les barres ouvertes : sans cela, la
+      // personne enregistrerait son nom et continuerait de lire un tiret
+      // au-dessus du bouton de déconnexion.
+      await poserMonNom(nomSaisi.trim());
+      setBrouillonNom(null);
+      toast("Votre nom est enregistré — il s’affiche en bas de la barre", { icon: "check" });
+    } catch {
+      toast("Enregistrement impossible — réessayez");
+    } finally {
+      setBusyNom(false);
+    }
+  }
 
   useEffect(() => {
     api
@@ -162,6 +220,65 @@ export default function SettingsPage() {
                 {busy ? "Enregistrement…" : "Enregistrer"}
               </Btn>
               {!dirty && <span className="text-xs text-mut">Rien à enregistrer.</span>}
+            </div>
+          </>
+        )}
+      </Panel>
+
+      <Panel
+        title="Votre compte"
+        sub="Le nom de la personne connectée — celui qui s'affiche sous votre pastille, en bas de la barre. Ce n'est pas le nom de l'enseigne."
+        className="max-w-[720px]"
+        bodyClassName="flex flex-col gap-4"
+      >
+        {identite === null ? (
+          // L'attente et l'échec se ressemblent ici, comme en pied de barre :
+          // l'écran ne fabrique pas un nom qu'il n'a pas.
+          <Skeleton className="h-[52px]" />
+        ) : identite.genre === "staff" ? (
+          /*
+            UNE SESSION OUVERTE AU CODE N'A PAS DE COMPTE À NOMMER.
+            Le nom d'un équipier vit dans l'équipe, pas dans les comptes, et
+            c'est le propriétaire ou le gérant qui le pose (l'API réserve les
+            routes d'équipe à ces deux rôles). Le laisser se renommer depuis la
+            tablette du comptoir donnerait à qui connaît quatre chiffres le
+            moyen de réécrire le nom qui signe le registre ci-dessous et les
+            pointages. On ne propose donc pas ici une porte qu'on fermerait.
+          */
+          <p className="text-[13px] leading-relaxed text-mut">
+            Vous êtes connecté avec un code, sur une tablette appairée. Votre nom est celui de
+            votre fiche d&apos;équipe : il se pose sur l&apos;écran <b className="text-ink">Équipe</b>,
+            par le propriétaire ou le gérant.
+          </p>
+        ) : (
+          <>
+            <Field
+              label="Votre nom"
+              htmlFor="compte-nom"
+              hint="Tel que vous voulez le lire en bas de la barre. Il ne sort pas du back-office : vos clients ne le voient nulle part."
+            >
+              <Input
+                id="compte-nom"
+                value={nomSaisi}
+                placeholder="Camille Fournier"
+                onChange={(e) => setBrouillonNom(e.target.value)}
+                required
+              />
+            </Field>
+            <div className="flex items-center gap-3">
+              <Btn
+                variant="ink"
+                icon="check"
+                disabled={!nomDirty || busyNom}
+                onClick={() => void enregistrerNom()}
+              >
+                {busyNom ? "Enregistrement…" : "Enregistrer"}
+              </Btn>
+              {!nomDirty && (
+                <span className="text-xs text-mut">
+                  {nomActuel ? "Rien à enregistrer." : "Votre nom n’est pas encore renseigné."}
+                </span>
+              )}
             </div>
           </>
         )}

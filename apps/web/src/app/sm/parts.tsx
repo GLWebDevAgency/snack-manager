@@ -58,6 +58,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
+import { termesSignes } from "./signature";
 import { crm, errText, fmtDay, useHq } from "./crm";
 
 // ─── Pastilles ───
@@ -1220,10 +1221,56 @@ export function resumeAtelier(s: LeadServices): string {
 }
 
 /**
+ * L'OFFRE EN LECTURE — les mêmes lignes sous la proposition et sous la
+ * signature.
+ *
+ * Extrait pour la raison qui a fait extraire `OffreFields` juste au-dessus :
+ * deux écrans qui décrivent la même offre l'écrivent tôt ou tard de deux
+ * façons, et c'est au moment de signer qu'un écart se paie. Le panneau de
+ * conversion ne peut plus, lui, dire autre chose que la carte du prospect.
+ *
+ * `founderSeat` ne change RIEN au contenu, seulement au chiffrage : la carte de
+ * proposition affiche le tarif public (c'est ce que porte le devis PDF), la
+ * signature affiche le prix réellement facturé.
+ */
+function ResumeDeLOffre({
+  offre,
+  founderSeat = false,
+}: {
+  offre: {
+    plan: (typeof PLANS)[number] | null;
+    onlineOrdering: boolean;
+    billing: ProposalBilling;
+    services: LeadServices;
+  };
+  founderSeat?: boolean;
+}) {
+  return (
+    <>
+      <div className="text-sm font-bold text-ink">
+        {planChoiceLabel(offre.plan)}
+        {offre.plan === "boost"
+          ? " — commande en ligne comprise"
+          : offre.onlineOrdering
+            ? " + commande en ligne"
+            : ""}
+        {/* L'engagement ne concerne que le logiciel : sur une offre services
+            seuls, l'afficher promettrait un abonnement absent. */}
+        {offre.plan || offre.onlineOrdering ? ` · ${PROPOSAL_BILLING_LABELS[offre.billing]}` : ""}
+      </div>
+      <div className="mt-0.5 text-xs text-mut">{phrasePrix({ ...offre, founderSeat })}</div>
+      {resumeAtelier(offre.services) && (
+        <div className="mt-0.5 text-xs text-mut">Atelier : {resumeAtelier(offre.services)}</div>
+      )}
+    </>
+  );
+}
+
+/**
  * LA PROPOSITION SUR LA TABLE — le maillon qui manquait entre « Proposition »
  * et « Signé » : l'étape disait qu'une offre existait, jamais laquelle. Posée
  * ici, elle s'affiche sur la carte du pipeline, se relit à chaque appel, et
- * pré-remplit le panneau de signature.
+ * c'est elle, telle quelle, que la signature reprend.
  */
 function ProposalPanel({
   lead,
@@ -1285,21 +1332,9 @@ function ProposalPanel({
             posée le {new Date(p.at).toLocaleDateString("fr-FR")}
           </span>
         </div>
-        <div className="mt-1 text-sm font-bold text-ink">
-          {planChoiceLabel(p.plan)}
-          {p.plan === "boost"
-            ? " — commande en ligne comprise"
-            : p.onlineOrdering
-              ? " + commande en ligne"
-              : ""}
-          {/* L'engagement ne concerne que le logiciel : sur une proposition
-              services seuls, l'afficher promettrait un abonnement absent. */}
-          {p.plan || p.onlineOrdering ? ` · ${PROPOSAL_BILLING_LABELS[p.billing]}` : ""}
+        <div className="mt-1">
+          <ResumeDeLOffre offre={p} />
         </div>
-        <div className="mt-0.5 text-xs text-mut">{phrasePrix(p)}</div>
-        {resumeAtelier(p.services) && (
-          <div className="mt-0.5 text-xs text-mut">Atelier : {resumeAtelier(p.services)}</div>
-        )}
         {p.note && <p className="mt-1.5 break-words text-xs italic text-mut">« {p.note} »</p>}
         <div className="mt-2 flex items-center gap-2">
           <Btn
@@ -1400,27 +1435,34 @@ function ConvertPanel({
   const [slug, setSlug] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  // `null` = signé sans formule — un client Atelier seul entre aussi au parc.
-  const [plan, setPlan] = useState<(typeof PLANS)[number] | null>("essentiel");
-  const [founderSeat, setFounderSeat] = useState(false);
-  const [onlineOrdering, setOnlineOrdering] = useState(false);
-  const [billing, setBilling] = useState<ProposalBilling>("mensuel");
-  const [services, setServices] = useState<LeadServices>(EMPTY_SERVICES);
+
+  /*
+   * LES TERMES NE SONT PLUS UN ÉTAT DE FORMULAIRE — ils se DÉRIVENT du lead.
+   *
+   * Ils l'étaient, pré-remplis depuis la proposition puis rejouables un à un :
+   * la modale qui crée le client redemandait la formule, l'engagement, le
+   * module, l'Atelier et la place fondateur — c'est-à-dire tout ce qui venait
+   * d'être négocié, imprimé sur un devis et accepté.
+   *
+   * Les dériver plutôt que les copier ferme aussi un défaut discret : l'état
+   * ne se resynchronisait que sur `lead._id`, si bien qu'une proposition
+   * corrigée pendant que ce panneau était ouvert partait à la signature dans sa
+   * version périmée. Ici, il n'y a plus de copie à périmer.
+   *
+   * `null` = rien sur la table : le panneau refuse alors de s'ouvrir (voir
+   * plus bas). Ce n'est pas la formule qui manque — un client de l'Atelier
+   * seul signe légitimement sans formule — c'est la proposition.
+   */
+  const termes = termesSignes(lead);
 
   // Re-proposé à chaque lead ouvert — un tiroir réutilisé ne doit pas garder
-  // le slug du restaurant précédent. Les termes partent de la PROPOSITION :
-  // ce qui a été négocié n'a pas à se re-saisir, seulement à se confirmer.
+  // le slug du restaurant précédent. Ces trois champs sont les SEULS que la
+  // signature saisit : ils ne viennent pas de la proposition.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire : mêmes raisons que le brouillon d'édition du tiroir.
     setSlug(slugifie(lead.restaurantName));
     setOwnerEmail(lead.contact.email);
     setOwnerName(lead.contact.name);
-    setFounderSeat(lead.founderSeatReserved);
-    // Pas de « ?? » : une proposition sans formule doit signer sans formule.
-    setPlan(lead.proposal ? lead.proposal.plan : "essentiel");
-    setOnlineOrdering(lead.proposal?.onlineOrdering ?? false);
-    setBilling(lead.proposal?.billing ?? "mensuel");
-    setServices(lead.proposal?.services ?? EMPTY_SERVICES);
     setFait(null);
     setErreur(null);
     setOpen(false);
@@ -1432,6 +1474,9 @@ function ConvertPanel({
   }, [lead._id]);
 
   async function signer() {
+    // Le bouton n'existe pas sans termes ; la garde est là pour que la
+    // fonction reste vraie toute seule, sans dépendre du rendu.
+    if (!termes) return;
     setBusy(true);
     setErreur(null);
     try {
@@ -1439,11 +1484,7 @@ function ConvertPanel({
         slug,
         ownerEmail,
         ownerName,
-        plan,
-        founderSeat,
-        onlineOrdering,
-        billing,
-        services,
+        ...termes,
       });
       setFait(done);
       onMotDePasse?.();
@@ -1510,6 +1551,27 @@ function ConvertPanel({
     );
   }
 
+  /*
+   * PAS DE PROPOSITION, PAS DE SIGNATURE — et on le dit AVANT le clic.
+   *
+   * La modale ne porte plus aucun contrôle d'offre : sans proposition, elle
+   * n'aurait rien à envoyer. Le contrat le refuserait de toute façon
+   * (`propositionNonVide` : ni formule, ni module, ni service = rien à
+   * chiffrer), mais un « Validation failed » traduit après coup vaut moins
+   * qu'une phrase qui désigne le geste manquant — il est juste au-dessus.
+   */
+  if (!termes) {
+    return (
+      // Aussi discret que le bouton qu'il remplace : ce panneau se rend sur
+      // CHAQUE prospect ouvert, y compris ceux qu'on vient de créer.
+      <p className="text-xs text-mut">
+        <b className="text-ink">Rien à signer pour l’instant.</b> La signature reprend la
+        proposition — posez-la d’abord, juste au-dessus. Un client de l’Atelier seul se signe
+        très bien sans formule, mais pas sans proposition.
+      </p>
+    );
+  }
+
   if (!open) {
     return (
       <Btn variant="ink" size="sm" icon="star" onClick={() => setOpen(true)}>
@@ -1527,6 +1589,43 @@ function ConvertPanel({
       }}
     >
       <Eyebrow>Créer le restaurant</Eyebrow>
+
+      {/*
+        ── CE QUI A ÉTÉ SIGNÉ, EN LECTURE ──
+
+        Le récapitulatif remplace les contrôles d'offre que ce panneau offrait :
+        on ne redemande pas au moment de créer le client ce qui a été négocié,
+        chiffré sur un devis et accepté. Ce qui doit encore bouger se corrige
+        là où il a été décidé — la proposition juste au-dessus, la place
+        fondateur dans le tiroir — et l'offre d'un client déjà signé se change
+        ensuite sur sa fiche (« Changer l'offre »).
+      */}
+      <Card flat className="p-3">
+        {/* La date de la proposition n'est pas répétée : elle est sur la carte
+            juste au-dessus, dans le même tiroir. */}
+        <Eyebrow>Ce qui a été proposé</Eyebrow>
+        <div className="mt-1">
+          <ResumeDeLOffre offre={termes} founderSeat={termes.founderSeat} />
+        </div>
+        {/*
+          La place fondateur SE RELIT ici, elle ne se coche plus : sa case
+          vivait à la fois dans le tiroir du prospect et dans cette modale,
+          deux contrôles pour un seul état. Le tiroir est son seul lieu — c'est
+          là qu'on la réserve, bien avant de signer.
+        */}
+        <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2">
+          <BadgeFondateur
+            size={22}
+            className={termes.founderSeat ? undefined : "opacity-30 grayscale"}
+          />
+          <div className="min-w-0 flex-1 text-xs text-mut">
+            {termes.founderSeat
+              ? "Place fondateur réservée — moitié prix douze mois. Elle se libère dans le tiroir."
+              : "Sans place fondateur — elle se réserve dans le tiroir, plus bas."}
+          </div>
+        </div>
+      </Card>
+
       <Field label="Slug (l'adresse publique)" htmlFor="convert-slug">
         <Input
           id="convert-slug"
@@ -1546,6 +1645,10 @@ function ConvertPanel({
             required
           />
         </Field>
+        {/* Le nom du gérant se pose ici parce que rien d'autre ne le pose : la
+            conversion est le seul auteur de `users.name` côté CRM. Il n'est
+            plus pour autant sans recours — la personne connectée le corrige
+            elle-même depuis Établissement (`PATCH /auth/me`). */}
         <Field label="Nom du gérant" htmlFor="convert-name">
           <Input
             id="convert-name"
@@ -1553,48 +1656,6 @@ function ConvertPanel({
             onChange={(e) => setOwnerName(e.target.value)}
           />
         </Field>
-      </div>
-      <Field label="Formule" htmlFor="convert-plan">
-        <Select
-          id="convert-plan"
-          value={plan ?? "aucune"}
-          onChange={(e) => {
-            const suivant =
-              e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
-            setPlan(suivant);
-            // Sans formule, le module ne vit que greffé sur le site existant
-            // (même règle qu'à la proposition) : signé « seul », il tombe.
-            if (suivant === null && onlineOrdering && !services.integrationCommande) {
-              setOnlineOrdering(false);
-            }
-          }}
-        >
-          <option value="aucune">{PLAN_NONE_LABEL}</option>
-          {PLANS.map((p) => (
-            <option key={p} value={p}>
-              {PLAN_LABELS[p]}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <div className="flex items-center gap-3">
-        {/* Le même badge qu'à la réservation et qu'à la fiche client : c'est en
-            le revoyant au moment de signer qu'il devient un repère. */}
-        <BadgeFondateur
-          size={24}
-          className={founderSeat ? undefined : "opacity-30 grayscale"}
-        />
-        <div className="min-w-0 flex-1 text-xs text-mut">
-          Place fondateur — moitié prix sur tout le contrat, douze mois durant.
-        </div>
-        <Toggle on={founderSeat} label="Place fondateur" onChange={setFounderSeat} />
-      </div>
-      {/* Les termes signés partent de la proposition (module, engagement,
-          Atelier) — on les CHIFFRE sous les yeux de l'opérateur : c'est ce
-          montant-là que les brouillons de factures vont porter. */}
-      <div className="text-xs font-semibold text-accent">
-        {phrasePrix({ plan, onlineOrdering, billing, services, founderSeat })}
-        {resumeAtelier(services) ? ` · Atelier : ${resumeAtelier(services)}` : ""}
       </div>
       {/* `role="alert"` : le refus s'ANNONCE au lecteur d'écran — sans lui,
           seul le bouton redevenu libre « dit » que quelque chose s'est passé. */}
