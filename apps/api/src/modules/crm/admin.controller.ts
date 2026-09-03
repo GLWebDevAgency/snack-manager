@@ -2,6 +2,9 @@ import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query } from '@nes
 import {
   AdminLogQuerySchema,
   BrandStrictSchema,
+  CompteCreateSchema,
+  CompteRevokeSchema,
+  CompteRoleSchema,
   DeviceRevokeSchema,
   TenantCapaciteSchema,
   TenantChurnSchema,
@@ -11,6 +14,9 @@ import {
   TenantSuspendSchema,
   type AdminLogQuery,
   type Brand,
+  type CompteCreate,
+  type CompteRevoke,
+  type CompteRole,
   type DeviceRevoke,
   type JwtPayload,
   type TenantCapacite,
@@ -23,6 +29,7 @@ import {
 import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Roles } from '../../common/auth';
 import { AdminService } from './admin.service';
+import { ComptesService } from './comptes.service';
 import { ConversionService } from './conversion.service';
 
 /**
@@ -52,6 +59,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly conversion: ConversionService,
+    private readonly comptes: ComptesService,
   ) {}
 
   // ─── Statut de compte ───
@@ -197,6 +205,87 @@ export class AdminController {
   @Post('tenants/:id/owner-reset')
   resetOwner(@CurrentUser() actor: JwtPayload, @Param('id') id: string) {
     return this.conversion.resetOwnerPassword(actor, id);
+  }
+
+  // ─── Comptes du restaurant ───
+
+  /**
+   * LES COMPTES D'UN RESTAURANT — qui a une clé, et combien il en reste.
+   *
+   * Un restaurant n'avait qu'UN compte à mot de passe, celui du propriétaire :
+   * un cogérant travaillait donc avec le mot de passe du patron, et le registre
+   * des gestes sensibles nommait le patron pour des gestes qu'il n'avait pas
+   * faits. Ces quatre routes ferment ce trou.
+   *
+   * C'est le SUPPORT qui les ouvre, pas le restaurateur depuis son back-office —
+   * ce qui dispense de tout courriel transactionnel : le mot de passe est
+   * fabriqué et rendu une fois, comme à la signature.
+   */
+  @Get('tenants/:id/comptes')
+  comptesDe(@Param('id') id: string) {
+    return this.comptes.list(id);
+  }
+
+  /**
+   * OUVRIR UN COMPTE — le mot de passe est dans la réponse, et nulle part
+   * ailleurs. Refus CHIFFRÉ si la formule n'ouvre plus de place, refus NOMMÉ si
+   * l'adresse appartient déjà à un autre établissement.
+   *
+   * `@HttpCode(200)` comme ses voisines : la réponse porte le compte créé ET le
+   * secret à dicter, elle n'est pas une redirection vers une nouvelle adresse.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/comptes')
+  creerCompte(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body(zod(CompteCreateSchema)) body: CompteCreate,
+  ) {
+    return this.comptes.create(actor, id, body);
+  }
+
+  /**
+   * CHANGER LE RÔLE d'un compte. Motif obligatoire — le geste retire ou accorde
+   * des droits sur l'outil de travail de quelqu'un, et coupe ses sessions au
+   * passage. `PATCH` comme `/offre` et `/marque` : une facette d'un compte qui
+   * existe.
+   */
+  @Patch('tenants/:id/comptes/:compteId')
+  changerRoleCompte(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Param('compteId') compteId: string,
+    @Body(zod(CompteRoleSchema)) body: CompteRole,
+  ) {
+    return this.comptes.changeRole(actor, id, compteId, body);
+  }
+
+  /**
+   * RÉVOQUER un compte. Motif obligatoire, sessions coupées immédiatement, et
+   * le compte propriétaire est refusé — c'est lui qui porte l'abonnement.
+   *
+   * `POST …/revoke` et non `DELETE`, exactement comme la révocation d'un
+   * appareil ou d'un écran juste au-dessus. Deux raisons, et la seconde décide :
+   *
+   *  · le geste EXIGE UN MOTIF, donc un corps. `DELETE` en accepte un au sens
+   *    strict de la norme, mais c'est la partie de la norme que les
+   *    intermédiaires traitent le moins bien — un mandataire qui l'écarte
+   *    transformerait une révocation motivée en 400 illisible, et le défaut ne
+   *    se verrait qu'en production ;
+   *  · le verbe cesse d'être le seul endroit qui distingue ce geste de ses
+   *    voisins. La différence réelle (une tablette révoquée revient en
+   *    appairage, un compte révoqué est supprimé) se lit dans la réponse et
+   *    dans la modale, pas dans une lettre de méthode HTTP.
+   */
+  @HttpCode(200)
+  @Post('tenants/:id/comptes/:compteId/revoke')
+  revoquerCompte(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Param('compteId') compteId: string,
+    @Body(zod(CompteRevokeSchema)) body: CompteRevoke,
+  ) {
+    return this.comptes.revoke(actor, id, compteId, body);
   }
 
   // ─── Journal ───

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import type { JwtPayload } from '@sm/contracts';
+import { roleSatisfait, type JwtPayload } from '@sm/contracts';
 import { SessionAccessService } from './session-access';
 
 export const IS_PUBLIC = 'isPublic';
@@ -17,7 +17,14 @@ export const IS_PUBLIC = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
 
 export const ROLES = 'roles';
-/** Restreint une route à certains rôles (`gerant`, `owner`, `sm_admin`, …). */
+/**
+ * Restreint une route à certains rôles (`gerant`, `owner`, `sm_admin`, …).
+ *
+ * Le rôle du jeton n'est PAS confronté tel quel à cette liste : il est d'abord
+ * étendu de ce qu'il subsume (`rolesEndosses`, @sm/contracts). Un décorateur
+ * `@Roles('owner', 'gerant')` ouvre donc aussi à `cogerant`, sans que la ligne
+ * change — voir `AuthGuard.canActivate` pour ce que ce choix coûte et rapporte.
+ */
 export const Roles = (...roles: string[]) => SetMetadata(ROLES, roles);
 
 export interface AuthedRequest {
@@ -67,7 +74,20 @@ export class AuthGuard implements CanActivate {
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    if (roles?.length && !roles.includes(req.user.role)) {
+    // ─── LA SUBSOMPTION S'APPLIQUE ICI, ET NULLE PART AILLEURS ───
+    //
+    // `cogerant` peut tout ce que peut `gerant`. Cette phrase s'écrit UNE fois,
+    // en donnée (`ROLES_SUBSUMES`, @sm/contracts), et se relit ici : les 67
+    // décorateurs `@Roles('owner', 'gerant')` de l'API restent intacts et
+    // continuent de dire vrai. Les modifier un à un aurait été 67 occasions
+    // d'en oublier un — et l'oubli est muet : la route refuse un rôle légitime
+    // sur un écran qu'on n'ouvre pas tous les jours.
+    //
+    // Ce qu'elle n'atteint pas : `@Roles('owner')` reste `owner` seul. Un rôle
+    // qui subsume `gerant` n'hérite de rien d'autre, donc l'encaissement,
+    // l'identité de facturation et les rémunérations restent fermés — un test
+    // le prouve route par route (`roles-subsomption.test.ts`).
+    if (roles?.length && !roleSatisfait(req.user.role, roles)) {
       throw new ForbiddenException();
     }
     return true;

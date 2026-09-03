@@ -10,6 +10,7 @@ const TENANT = '65f000000000000000000001';
 const STAFF_A = '65f000000000000000000011';
 const STAFF_B = '65f000000000000000000012';
 const DEVICE = '65f000000000000000000021';
+const COGERANT = '65f000000000000000000031';
 
 type Handler = (...args: string[]) => void;
 
@@ -105,6 +106,18 @@ function staffPayload(sub = STAFF_A): JwtPayload {
   };
 }
 
+/** Un compte à mot de passe — cogérant du même restaurant, sans tablette. */
+function comptePayload(sub = COGERANT): JwtPayload {
+  return {
+    sub,
+    tenantId: TENANT,
+    role: 'cogerant',
+    kind: 'user',
+    exp: Math.floor(Date.now() / 1_000) + 3_600,
+    userSessionVersion: 'user-v1',
+  };
+}
+
 function build(payloads: Record<string, JwtPayload>) {
   const subscriber = new FakeSubscriber();
   const server = new FakeServer();
@@ -188,6 +201,60 @@ describe('autorisation continue des rooms tenant', () => {
     expect(a.disconnect).toHaveBeenCalledWith(true);
     expect(b.disconnect).toHaveBeenCalledWith(true);
     expect(publicSocket.disconnect).not.toHaveBeenCalled();
+    gateway.onModuleDestroy();
+  });
+
+  /**
+   * LA RÉVOCATION D'UN COMPTE COUPE SA SOCKET, ET SEULEMENT LA SIENNE.
+   *
+   * Une socket ouverte n'émet aucune requête HTTP : elle attend des commandes,
+   * parfois des heures. Sans cet événement, un cogérant révoqué continuerait de
+   * voir défiler le service de son ancien restaurant jusqu'à la revalidation
+   * périodique. C'est le quatrième périmètre du canal, à côté du tenant, du
+   * membre d'équipe et de l'appareil.
+   */
+  it('coupe la socket du compte révoqué, sans toucher aux tablettes', async () => {
+    const { gateway, subscriber, server } = build({
+      compte: comptePayload(),
+      tablette: staffPayload(),
+    });
+    const compte = new FakeSocket('socket-compte', 'compte');
+    const tablette = new FakeSocket('socket-tablette', 'tablette');
+    server.add(compte);
+    server.add(tablette);
+    await gateway.handleConnection(compte.asSocket());
+    await gateway.handleConnection(tablette.asSocket());
+    await gateway.onModuleInit();
+
+    subscriber.fire(
+      'message',
+      SESSION_REVOCATION_CHANNEL,
+      JSON.stringify({ scope: 'user', tenantId: TENANT, userId: COGERANT }),
+    );
+
+    expect(compte.disconnect).toHaveBeenCalledWith(true);
+    // La caisse du comptoir n'a rien à voir avec le départ d'un cogérant : la
+    // couper en plein service serait un dégât collatéral, pas une sécurité.
+    expect(tablette.disconnect).not.toHaveBeenCalled();
+    gateway.onModuleDestroy();
+  });
+
+  it('ne confond pas un compte et un équipier qui porteraient le même identifiant', async () => {
+    // Les deux vivent dans des collections différentes : rien n'interdit à un
+    // `staff` de porter l'ObjectId d'un `user`. Le GENRE de session départage.
+    const { gateway, subscriber, server } = build({ tablette: staffPayload(COGERANT) });
+    const tablette = new FakeSocket('socket-tablette', 'tablette');
+    server.add(tablette);
+    await gateway.handleConnection(tablette.asSocket());
+    await gateway.onModuleInit();
+
+    subscriber.fire(
+      'message',
+      SESSION_REVOCATION_CHANNEL,
+      JSON.stringify({ scope: 'user', tenantId: TENANT, userId: COGERANT }),
+    );
+
+    expect(tablette.disconnect).not.toHaveBeenCalled();
     gateway.onModuleDestroy();
   });
 

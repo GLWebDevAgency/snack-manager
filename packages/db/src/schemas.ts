@@ -20,6 +20,7 @@ import {
   STOCKAGES_MEDIA,
   TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
+  USER_ROLES,
   isPlatformLogAction,
   type SocialNetwork,
 } from '@sm/contracts';
@@ -517,15 +518,52 @@ TenantSchema.index({ 'domains.hostname': 1 });
 export type Tenant = InferSchemaType<typeof TenantSchema>;
 
 // ─────────────────────────────────────────────────────────────
-// users — comptes email + mot de passe (gérants, équipe SM)
+// users — comptes email + mot de passe (restaurant, équipe SM)
 // ─────────────────────────────────────────────────────────────
 
 export const UserSchema = new Schema(
   {
+    /**
+     * L'ADRESSE EST L'IDENTIFIANT DE CONNEXION, et son unicité est MONDIALE.
+     *
+     * `AuthService.login` cherche un compte par son seul e-mail, sans
+     * établissement : deux documents portant la même adresse rendraient l'un
+     * des deux au hasard du moteur, et la personne atterrirait un jour sur deux
+     * dans le mauvais back-office. L'index unique n'est donc pas une hygiène de
+     * base, c'est ce qui rend la connexion déterministe.
+     *
+     * Conséquence assumée : une adresse ne peut appartenir qu'à UN restaurant.
+     * Le refus est rendu en clair par le CRM (`courrielDejaPris`,
+     * @sm/contracts), qui nomme l'établissement propriétaire de l'adresse.
+     */
     email: { type: String, required: true, unique: true, lowercase: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['owner', 'sm_admin'], required: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null }, // null = équipe Snack Manager
+    /**
+     * QUATRE RÔLES, dont trois vivent dans un restaurant.
+     *
+     * `owner` naît à la signature et porte l'abonnement ; `cogerant` porte tout
+     * l'opérationnel ; `comptable` ne lit que l'argent ; `sm_admin` est
+     * l'équipe Snack Manager, sans établissement. L'énumération et ce qu'elle
+     * implique se lisent dans `packages/contracts/src/comptes.ts` — cette liste
+     * en est le miroir en base, et un test de contrat vérifie qu'elles ne
+     * divergent pas.
+     *
+     * À NE PAS CONFONDRE avec `StaffSchema.role` (`gerant`, `caisse`,
+     * `cuisine`) : ce sont des porteurs de code sur tablette, sans mot de passe.
+     * `cogerant` s'écrit sans « é » et sans trait d'union précisément pour ne
+     * jamais être lu comme le `gerant` de la tablette.
+     */
+    role: { type: String, enum: [...USER_ROLES], required: true },
+    /**
+     * L'ÉTABLISSEMENT DU COMPTE — `null` = équipe Snack Manager.
+     *
+     * UN SEUL, et c'est la couture que le chantier « appartenance » ouvrira :
+     * ce champ deviendra alors une table `(compte, établissement, rôle)`,
+     * permettant à une personne d'appartenir à plusieurs restaurants avec un
+     * rôle propre à chacun. Rien n'est préparé ici pour ce jour-là — une
+     * jointure inventée d'avance serait une jointure vide à maintenir.
+     */
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null },
     name: { type: String, default: '' },
     /**
      * Génération opaque des sessions email/mot de passe. Un changement de

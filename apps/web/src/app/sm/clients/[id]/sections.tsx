@@ -27,8 +27,10 @@ import {
   CLIENT_HEALTH_LABELS,
   GESTE_DEROGATION_LABELS,
   ORIGINE_CAPACITE_LABELS,
+  ROLE_COMPTE_HINTS,
   type AdminLogEntry,
   type CapaciteEffective,
+  type CompteRestaurant,
   type GesteDerogation,
   type OrigineCapacite,
 } from "@sm/contracts";
@@ -1102,6 +1104,161 @@ function CapaciteRow({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Comptes du restaurant
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * QUI A UNE CLÉ DE CE RESTAURANT — et combien il en reste à donner.
+ *
+ * Sous « Accès et options », et l'ordre raconte quelque chose : cette
+ * section-là dit ce que l'ÉTABLISSEMENT a le droit d'ouvrir, celle-ci dit qui
+ * peut le faire. Deux questions voisines qui se posaient jusqu'ici l'une sans
+ * l'autre — un restaurant n'avait qu'un compte, celui du propriétaire, et le
+ * cogérant travaillait donc avec le mot de passe du patron.
+ *
+ * LE PROPRIÉTAIRE N'A PAS DE BOUTONS, et c'est la règle qui se voit le plus
+ * vite à l'écran : il porte l'abonnement et l'encaissement, un restaurant sans
+ * lui n'est plus facturable. L'API le refuse aussi — l'écran ne fait ici que ne
+ * pas proposer un geste qui serait rejeté.
+ */
+export function ComptesSection({
+  file,
+  onCreer,
+  onRole,
+  onRevoquer,
+}: {
+  file: ClientFile;
+  onCreer: () => void;
+  onRole: (compte: CompteRestaurant) => void;
+  onRevoquer: (compte: CompteRestaurant) => void;
+}) {
+  const vue = file.comptes;
+  const total = vue?.comptes.length ?? 0;
+  const complet = vue !== null && vue.restants === 0;
+
+  return (
+    <Panel
+      title="Comptes"
+      sub={
+        vue === null
+          ? "Qui peut ouvrir le back-office de ce restaurant"
+          : `${total} compte${total > 1 ? "s" : ""} sur ${vue.max}` +
+            (complet
+              ? " · plafond atteint"
+              : ` · ${vue.restants} à ouvrir`)
+      }
+      actions={
+        vue === null ? undefined : (
+          <Btn
+            size="sm"
+            variant="ghost"
+            icon="user"
+            className="max-md:min-h-11"
+            disabled={complet}
+            onClick={onCreer}
+            title={
+              complet
+                ? `L’offre de ce client ouvre ${vue.max} compte${vue.max > 1 ? "s" : ""}, tous pris.`
+                : "Ouvrir un compte — le mot de passe est remis une seule fois"
+            }
+          >
+            Ouvrir un compte
+          </Btn>
+        )
+      }
+      bodyClassName="-mx-[18px] -mb-[18px]"
+    >
+      {vue === null ? (
+        <div className="px-[18px] pb-[18px]">
+          <Unavailable
+            icon="user"
+            title="Comptes indisponibles"
+            hint="La route /crm/tenants/:id/comptes n'a pas répondu : impossible de dire qui peut ouvrir ce back-office, ni d'y toucher."
+          />
+        </div>
+      ) : (
+        <ul>
+          {vue.comptes.map((c) => (
+            <CompteRow key={c.id} compte={c} onRole={onRole} onRevoquer={onRevoquer} />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+function CompteRow({
+  compte: c,
+  onRole,
+  onRevoquer,
+}: {
+  compte: CompteRestaurant;
+  onRole: (compte: CompteRestaurant) => void;
+  onRevoquer: (compte: CompteRestaurant) => void;
+}) {
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-[18px] py-3 first:border-t-0">
+      {/* `lock` sur la ligne du propriétaire : c'est la seule qui ne se touche
+          pas, et l'icône le dit avant même qu'on cherche les boutons. */}
+      <Icon
+        name={c.proprietaire ? "lock" : "user"}
+        size={17}
+        className="shrink-0 text-mut"
+      />
+      <div className="min-w-[168px] flex-1 basis-[168px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-semibold text-ink">{c.nom || "—"}</span>
+          <span className="inline-flex items-center whitespace-nowrap rounded-pill border-[1.5px] border-white/20 bg-white/6 px-[9px] py-[2px] text-[10px] font-extrabold uppercase tracking-[0.06em] text-mut">
+            {c.roleLabel}
+          </span>
+        </div>
+        {/* `break-all` : une adresse longue se replie au lieu de pousser les
+            boutons hors de la colonne étroite de la fiche. */}
+        <p className="mt-0.5 break-all text-[12px] text-mut" title={c.email}>
+          {c.email}
+          {c.creeLe && ` · depuis le ${fmtDay(c.creeLe)}`}
+        </p>
+        {/* CE QUE CE RÔLE OUVRE, en une phrase — la même que l'écran de
+            création. L'opérateur au téléphone doit pouvoir répondre à « il
+            pourra voir mes factures ? » sans ouvrir une autre page. */}
+        <p className="mt-0.5 text-[12px] leading-[1.45] text-mut">{ROLE_COMPTE_HINTS[c.role]}</p>
+      </div>
+
+      {c.proprietaire ? (
+        // Ni rôle ni révocation : c'est lui qui porte l'abonnement et
+        // l'encaissement. Le dire vaut mieux que deux boutons grisés — un
+        // bouton désactivé laisse croire qu'il s'activera un jour.
+        <span className="shrink-0 text-right text-[12px] text-mut">
+          Compte du contrat — pour son mot de passe, « Mot de passe » en tête de fiche.
+        </span>
+      ) : (
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+          <Btn
+            size="sm"
+            variant="ghost"
+            className="max-md:min-h-11"
+            onClick={() => onRole(c)}
+            title="Changer le rôle — motif obligatoire, sessions coupées"
+          >
+            Changer de rôle
+          </Btn>
+          <Btn
+            size="sm"
+            variant="ghost"
+            icon="trash"
+            className="border-alert/40 text-alertt hover:border-alert hover:bg-alert/12 max-md:min-h-11"
+            onClick={() => onRevoquer(c)}
+            title="Révoquer — motif obligatoire, sessions coupées"
+          >
+            Révoquer
+          </Btn>
+        </div>
+      )}
+    </li>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Notes internes & journal
 // ─────────────────────────────────────────────────────────────
 
@@ -1208,7 +1365,19 @@ export function NotesSection({
 }
 
 /** Les gestes qui ferment une porte se relisent en rouge, des mois plus tard. */
-const HEAVY_ACTIONS = new Set(["tenant.suspend", "device.revoke", "screen.revoke"]);
+/**
+ * Les gestes qui FERMENT une porte — pastille et libellé en rouge dans le fil.
+ *
+ * `tenant.compte_revoke` en fait partie au même titre qu'une tablette coupée :
+ * quelqu'un a perdu son accès. L'ouverture d'un compte, elle, reste neutre —
+ * elle est tracée, mais elle ne retire rien à personne.
+ */
+const HEAVY_ACTIONS = new Set([
+  "tenant.suspend",
+  "device.revoke",
+  "screen.revoke",
+  "tenant.compte_revoke",
+]);
 
 function JournalRow({
   entry: e,

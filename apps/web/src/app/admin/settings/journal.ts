@@ -162,13 +162,28 @@ export function phraseDuGeste(e: AuditEntryView): string {
  * (`staffName`) : elles existent, le registre ne se réécrit pas, et elles ne
  * doivent pas s'afficher anonymes.
  */
+/*
+ * EN MINUSCULES, parce qu'ils s'écrivent AU MILIEU d'une phrase : « par Karim
+ * Belkacem (propriétaire, depuis le back-office) ». Ils ne dérivent donc pas de
+ * `ROLE_COMPTE_LABELS` (@sm/contracts), qui sont des titres de colonne dans le
+ * CRM. Un test vérifie qu'aucun rôle du produit ne manque ici — sans quoi le
+ * registre afficherait la clé brute (« cogerant ») au moment précis où il doit
+ * nommer quelqu'un.
+ */
 const ROLE_LABELS: Record<string, string> = {
   owner: "propriétaire",
+  // Le compte à mot de passe, à ne pas confondre avec le `gerant` juste
+  // dessous : celui-ci est un code à quatre chiffres sur une tablette.
+  cogerant: "cogérant",
+  comptable: "comptable",
   gerant: "gérant",
   caisse: "caisse",
   cuisine: "cuisine",
   sm_admin: "équipe Snack Manager",
 };
+
+/** Exportée pour le contrôle d'exhaustivité — jamais lue ailleurs. */
+export const ROLES_NOMMES: readonly string[] = Object.keys(ROLE_LABELS);
 
 export function signatureDeLAuteur(e: AuditEntryView): string {
   if (!e.author) return e.staffName ? `par ${e.staffName}` : "";

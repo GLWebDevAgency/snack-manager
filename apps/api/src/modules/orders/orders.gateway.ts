@@ -242,7 +242,15 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
     for (const socket of this.server.sockets.sockets.values()) {
       const session = this.sessionFrom(socket.data);
       if (!session || session.tenantId !== event.tenantId) continue;
-      if (event.scope === 'staff' && session.sub !== event.staffId) continue;
+      // Le GENRE de session est comparé en plus de l'identifiant : un
+      // événement `user` ne doit pas couper une session de tablette dont le
+      // `sub` ressemblerait au compte visé, et réciproquement.
+      if (event.scope === 'user' && (session.kind !== 'user' || session.sub !== event.userId)) {
+        continue;
+      }
+      if (event.scope === 'staff' && (session.kind !== 'staff' || session.sub !== event.staffId)) {
+        continue;
+      }
       if (event.scope === 'device' && session.deviceId !== event.deviceId) continue;
       this.disconnectSessionSocket(socket);
     }

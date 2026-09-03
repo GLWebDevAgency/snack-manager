@@ -208,8 +208,20 @@ const AuditQuerySchema = z.object({
  * Lecture du journal par LE GÉRANT — c'est SON registre : la conformité de
  * caisse protège son établissement, il doit pouvoir le montrer sans nous.
  * Tenant-scoped par le jeton, comme toutes ses routes.
+ *
+ * ─── ET PAR LE COMPTABLE, qui est celui qui le PRODUIT au contrôle ───
+ *
+ * Le registre des gestes sensibles est la pièce NF525 : annulations, remises,
+ * changements de prix. Quand l'administration la demande, c'est le comptable
+ * qui la sort — lui refuser la seule route qui la rend obligerait le
+ * restaurateur à se reconnecter pour faire une copie d'écran, c'est-à-dire à
+ * partager son mot de passe, c'est-à-dire exactement le défaut que ces comptes
+ * séparés existent pour fermer.
+ *
+ * Une seule route, un seul `@Get`, aucune écriture : `AuditService.log` n'est
+ * appelé que depuis les gestes eux-mêmes, jamais depuis une route.
  */
-@Roles('owner', 'gerant')
+@Roles('owner', 'gerant', 'comptable')
 @Controller('audit')
 export class AuditController {
   constructor(private readonly audit: AuditService) {}

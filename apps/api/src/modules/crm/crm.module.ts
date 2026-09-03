@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { ComptesService } from './comptes.service';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 import { ConversionService } from './conversion.service';
@@ -59,6 +60,10 @@ import { PublicLeadsController } from './public-leads.controller';
     // servies aux mêmes clients. `OriginesImages` est sans état.
     OriginesImages,
     AdminService,
+    // Les comptes d'un restaurant. Séparé d'`AdminService` — qui tient le STATUT
+    // du compte commercial — parce que ce sont deux objets différents : l'un
+    // décide si l'établissement travaille, l'autre qui peut ouvrir la porte.
+    ComptesService,
     HealthService,
     InsightsService,
     BillingService,

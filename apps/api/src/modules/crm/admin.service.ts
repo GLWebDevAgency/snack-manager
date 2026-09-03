@@ -23,6 +23,7 @@ import {
   TRIAL_ENDED_REASON,
   type CompteLu,
   type TenantCapacite,
+  type AdminCompteGesture,
   type AdminInvoiceGesture,
   type AdminLogAction,
   type AdminLogEntry,
@@ -574,6 +575,30 @@ export class AdminService {
       tenantId,
       reason: `Créé depuis le pipeline (${meta.slug})`,
       meta,
+    });
+  }
+
+  /**
+   * UN GESTE SUR LES COMPTES d'un restaurant — ouverture, rôle, révocation.
+   *
+   * Même frontière que `recordInvoiceGesture` : `ComptesService` rédige la
+   * phrase et connaît la rubrique, ce service tient le registre et n'a pas à
+   * connaître les règles des comptes. Le `targetId` porte le COMPTE, si bien
+   * que « ouvert le 3, passé comptable le 12, révoqué le 30 » se relit comme un
+   * fil, y compris après la suppression du document.
+   */
+  async recordCompteGesture(
+    actor: JwtPayload,
+    tenantId: string,
+    gesture: AdminCompteGesture,
+  ): Promise<AdminLogEntry> {
+    const tenant = await this.requireTenant(tenantId);
+    return this.record(actor, {
+      action: gesture.action,
+      tenantId: String(tenant._id),
+      targetId: gesture.compteId,
+      reason: gesture.summary,
+      meta: { ...gesture.meta },
     });
   }
 

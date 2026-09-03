@@ -55,11 +55,20 @@ export type NavItem = {
   label: string;
   icon: IconName;
   /**
-   * Les rôles qui voient l'entrée. Absent = tout le monde.
+   * Les rôles qui voient l'entrée. Absent = tous les rôles OPÉRATIONNELS.
    *
    * Ce n'est PAS de la sécurité — la garde qui compte est `@Roles(...)` côté
    * API, qui refuse quoi qu'affiche le navigateur (cf. `session.ts`). C'est
    * une politesse : ne pas proposer une porte qu'on fermera au nez.
+   *
+   * ── POURQUOI « ABSENT » NE VEUT PLUS DIRE « TOUT LE MONDE » ──
+   *
+   * Cinq des six rôles travaillent DANS le service : ils ouvrent des écrans,
+   * l'un plus que l'autre, et le défaut « visible » leur convient — au pire une
+   * entrée de trop. Le sixième, `comptable`, ne peut RIEN ouvrir de ce qui
+   * n'est pas explicitement à lui : le défaut lui proposerait quinze portes
+   * pour quinze refus, ce qui n'est plus une imprécision d'affichage mais un
+   * écran qui ment. La liste des rôles opérationnels vit ci-dessous.
    */
   roles?: readonly RoleAdmin[];
   /**
@@ -104,6 +113,26 @@ export type NavGroupeAffiche = { titre: string; items: readonly NavItemAffiche[]
  * suspension de compte, et deux règles le désignent plus bas.
  */
 export const HREF_ABONNEMENT = "/admin/abonnement";
+
+/**
+ * LES RÔLES QUI FONT TOURNER LE SERVICE.
+ *
+ * Ce sont eux que sert le défaut « pas de `roles` sur l'entrée = visible » :
+ * ils ouvrent des écrans, l'un plus que l'autre, et une entrée de trop leur
+ * coûte au pire un refus lisible.
+ *
+ * `comptable` n'y est PAS, et c'est toute la règle : il ne fait rien tourner,
+ * il lit l'argent. Tout ce qu'il peut ouvrir est donc NOMMÉ entrée par entrée
+ * (aujourd'hui les statistiques et l'abonnement), et le reste lui est masqué au
+ * lieu de lui être proposé pour rien.
+ */
+export const ROLES_OPERATIONNELS: readonly RoleAdmin[] = [
+  "owner",
+  "cogerant",
+  "gerant",
+  "caisse",
+  "cuisine",
+];
 
 export const NAV_GROUPES: readonly NavGroupe[] = [
   {
@@ -166,7 +195,20 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
     // ni du service, ni de l'équipe, ni un réglage. Le ranger ailleurs lui
     // inventerait un propriétaire qu'il n'a pas.
     titre: "Analyse",
-    items: [{ href: "/admin/stats", label: "Statistiques", icon: "chart", capacite: "bo" }],
+    items: [
+      // Le SEUL écran de service ouvert au comptable : le chiffre d'affaires,
+      // les canaux et les deux exports CSV — le fichier qu'il ouvre dans un
+      // tableur. Les cinq autres rôles y entrent aussi, d'où la liste complète
+      // plutôt qu'une absence de `roles` : sans elle, l'entrée resterait
+      // proposée à qui ne peut ouvrir que celle-ci et l'abonnement.
+      {
+        href: "/admin/stats",
+        label: "Statistiques",
+        icon: "chart",
+        capacite: "bo",
+        roles: [...ROLES_OPERATIONNELS, "comptable"],
+      },
+    ],
   },
   {
     // CE QUE LE PUBLIC VOIT du restaurant, et par où il paie. Les trois
@@ -218,7 +260,16 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // les factures du patron ne s'ouvrent pas depuis la tablette du
       // comptoir. Dernier de la liste, et c'est voulu : on y vient deux fois
       // par an, mais la FAQ promet mot pour mot d'y retrouver ses factures.
-      { href: HREF_ABONNEMENT, label: "Abonnement", icon: "mail", roles: ["owner"] },
+      // Le comptable y entre avec le propriétaire, et personne d'autre :
+      // `TenantSessionGuard` accepte exactement ces deux rôles
+      // (`ROLES_LECTURE_FACTURATION`, côté API). Un cogérant ne voit pas
+      // l'abonnement — il tient le service, il ne négocie pas le contrat.
+      {
+        href: HREF_ABONNEMENT,
+        label: "Abonnement",
+        icon: "mail",
+        roles: ["owner", "comptable"],
+      },
     ],
   },
 ];
@@ -277,8 +328,13 @@ function estVisible(item: NavItem, ctx: ContexteNav): boolean {
   // c'est exact : l'abonnement lui est fermé aussi, et c'est au propriétaire,
   // depuis son propre compte, de régulariser.
   if (ctx.suspendu && item.href !== HREF_ABONNEMENT) return false;
-  if (!item.roles || ctx.role === null) return true;
-  return item.roles.includes(ctx.role);
+  // Rôle inconnu (démonstration) : la barre reste COMPLÈTE — masquer des
+  // entrées montrerait un logiciel vide à qui vient le regarder.
+  if (ctx.role === null) return true;
+  if (item.roles) return item.roles.includes(ctx.role);
+  // Aucune liste sur l'entrée : le défaut ne vaut que pour les rôles qui font
+  // tourner le service. Voir `ROLES_OPERATIONNELS`.
+  return ROLES_OPERATIONNELS.includes(ctx.role);
 }
 
 /**

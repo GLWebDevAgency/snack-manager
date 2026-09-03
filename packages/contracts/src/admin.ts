@@ -400,6 +400,22 @@ export const ADMIN_LOG_ACTIONS = [
   'tenant.note',
   'tenant.detail_view',
   'tenant.owner_reset',
+  /*
+   * LES COMPTES DU RESTAURANT — trois actions, et pas une seule.
+   *
+   * « Le support a touché aux accès » ne se relit pas : au litige, la question
+   * est « QUI a ouvert un accès, QUI l'a fermé, et qui a changé de rôle entre
+   * les deux ». Une action unique obligerait à lire le `meta` de chaque ligne
+   * pour trier, et le filtre `?action=` du journal ne servirait plus à rien.
+   *
+   * La création n'est pas moins grave que la révocation : c'est elle qui donne
+   * à quelqu'un les clés du back-office d'un commerçant. Elle porte l'adresse
+   * et le rôle en `meta` — jamais le mot de passe, qui n'existe qu'une fois,
+   * dans la réponse, et nulle part ailleurs.
+   */
+  'tenant.compte_create',
+  'tenant.compte_role',
+  'tenant.compte_revoke',
   // Le masque d'identité posé depuis la fiche client — même geste que la route
   // du restaurateur, tracé sous son propre nom plutôt que noyé dans
   // `tenant.plan_change`, qui ne parle que de formule.
@@ -430,6 +446,9 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
   'tenant.owner_reset': 'Réinitialisation du mot de passe gérant',
+  'tenant.compte_create': 'Ouverture d’un compte',
+  'tenant.compte_role': 'Changement de rôle d’un compte',
+  'tenant.compte_revoke': 'Révocation d’un compte',
   'tenant.brand_change': 'Masque d’identité modifié',
   // Apostrophe TYPOGRAPHIQUE (’) et non droite : ces libellés s'affichent tels
   // quels dans la fiche d'un client, à côté de phrases qui l'emploient déjà.
@@ -580,6 +599,53 @@ export type AdminInvoiceGesture = {
   /** La phrase française, telle qu'elle se lira dans le journal. */
   summary: string;
   meta: AdminInvoiceLogMeta;
+};
+
+/**
+ * LES GESTES SUR LES COMPTES D'UN RESTAURANT, tracés sous leur vrai nom.
+ *
+ * Même montage que `INVOICE_LOG_ACTIONS` : l'appelant rédige la phrase et
+ * connaît la rubrique, le journal tient le registre. Ce qui change d'une
+ * famille à l'autre, c'est le `targetId` — ici l'identifiant du COMPTE, ce qui
+ * permet de relire l'histoire d'un accès précis (« ouvert le 3, passé comptable
+ * le 12, révoqué le 30 ») dans un fil unique.
+ *
+ * Le compte peut avoir DISPARU au moment de la relecture — une révocation le
+ * supprime. C'est précisément pourquoi `meta` porte l'adresse, le nom et le
+ * rôle : la ligne doit se comprendre seule, sans jointure vers un document qui
+ * n'existe plus.
+ */
+export const COMPTE_LOG_ACTIONS = [
+  'tenant.compte_create',
+  'tenant.compte_role',
+  'tenant.compte_revoke',
+] as const satisfies readonly AdminLogAction[];
+export type CompteLogAction = (typeof COMPTE_LOG_ACTIONS)[number];
+
+/**
+ * Ce que le geste de compte demande au journal d'écrire.
+ *
+ * `summary` est la phrase telle qu'elle se lira : le MOTIF saisi par
+ * l'opérateur pour un changement de rôle ou une révocation, une phrase dérivée
+ * pour une ouverture (qui n'exige pas de motif — voir `CompteCreateSchema`).
+ *
+ * Aucun secret n'entre ici, et il n'y a rien à filtrer : le mot de passe n'est
+ * jamais passé à cette structure, il ne quitte pas la réponse de création.
+ */
+export type AdminCompteGesture = {
+  action: CompteLogAction;
+  /** Identifiant du compte concerné — devient le `targetId` de la ligne. */
+  compteId: string;
+  /** La phrase française, telle qu'elle se lira dans le journal. */
+  summary: string;
+  meta: {
+    email: string;
+    nom: string;
+    /** Le rôle APRÈS le geste (ou celui du compte révoqué). */
+    role: string;
+    /** Le rôle d'avant — changement de rôle uniquement. */
+    roleAvant?: string;
+  };
 };
 
 /**

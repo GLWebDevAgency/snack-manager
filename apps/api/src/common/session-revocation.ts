@@ -6,6 +6,23 @@ export const SESSION_REVOCATION_CHANNEL = 'sessions:revocations';
 
 export type SessionRevocation =
   | { scope: 'tenant'; tenantId: string }
+  /**
+   * UN COMPTE À MOT DE PASSE — révoqué, ou changé de rôle.
+   *
+   * Le quatrième périmètre, ajouté avec les comptes multiples par restaurant.
+   * Il ne remplace rien : côté HTTP, `SessionAccessService` relit déjà le
+   * document à chaque requête et refuse un compte disparu ou dont le rôle a
+   * bougé. Mais une socket ouverte ne fait aucune requête HTTP — elle attend
+   * des commandes, parfois des heures. Sans cet événement, un cogérant révoqué
+   * continuerait de voir défiler les commandes de son ancien restaurant jusqu'à
+   * la revalidation périodique.
+   *
+   * `staff` et `user` restent DEUX périmètres et non un « compte » unifié : un
+   * porteur de code et un compte à mot de passe ne vivent pas dans la même
+   * collection, et confondre leurs identifiants ferait couper la mauvaise
+   * session le jour où deux ObjectId se ressemblent.
+   */
+  | { scope: 'user'; tenantId: string; userId: string }
   | { scope: 'staff'; tenantId: string; staffId: string }
   | { scope: 'device'; tenantId: string; deviceId: string };
 
@@ -14,6 +31,9 @@ export function parseSessionRevocation(raw: string): SessionRevocation | null {
     const value = JSON.parse(raw) as Record<string, unknown>;
     if (typeof value.tenantId !== 'string') return null;
     if (value.scope === 'tenant') return { scope: 'tenant', tenantId: value.tenantId };
+    if (value.scope === 'user' && typeof value.userId === 'string') {
+      return { scope: 'user', tenantId: value.tenantId, userId: value.userId };
+    }
     if (value.scope === 'staff' && typeof value.staffId === 'string') {
       return { scope: 'staff', tenantId: value.tenantId, staffId: value.staffId };
     }
@@ -35,6 +55,11 @@ export class SessionRevocationPublisher {
 
   tenant(tenantId: string): Promise<void> {
     return this.publish({ scope: 'tenant', tenantId });
+  }
+
+  /** Un compte à mot de passe révoqué ou changé de rôle. */
+  user(tenantId: string, userId: string): Promise<void> {
+    return this.publish({ scope: 'user', tenantId, userId });
   }
 
   staff(tenantId: string, staffId: string): Promise<void> {
