@@ -18,6 +18,10 @@ import {
   invoiceVatOf,
   invoiceView,
   isAccessBlocked,
+  isBillable,
+  statutEffectif,
+  essaiEchuLe,
+  type CompteLu,
   formatInvoiceNumber,
   LEGACY_INVOICE_VAT,
   monthKey,
@@ -194,7 +198,7 @@ export class BillingService {
     const outstanding = summarizeOutstanding(due, now);
 
     const plan = planOf(tenant);
-    const status = accountStatusOf(tenant);
+    const status = accountStatusOf(tenant, now);
     const billable = isBillable(status);
 
     return {
@@ -292,7 +296,7 @@ export class BillingService {
       if (view.status !== 'en_retard') continue;
       const tenant = byTenant.get(view.tenantId);
       const plan = tenant ? planOf(tenant) : null;
-      const status = tenant ? accountStatusOf(tenant) : ('trial' as TenantAccountStatus);
+      const status = tenant ? accountStatusOf(tenant, now) : ('trial' as TenantAccountStatus);
       invoices.push({
         ...view,
         tenant: {
@@ -353,7 +357,23 @@ export class BillingService {
     for (const tenant of tenants) {
       const nom = String(tenant.name ?? '');
       const slug = String(tenant.slug ?? '');
-      if (!isBillable(accountStatusOf(tenant))) {
+
+      // ── L'ESSAI ÉCHU SE CLÔT ICI, ET NULLE PART AILLEURS ──
+      //
+      // Le dépôt n'a pas de planificateur et n'en veut pas (voir
+      // `BillingRunSchema`) : cette passe est le seul geste qui parcourt déjà
+      // tout le parc, et c'est au moment où l'on facture que la colonne doit
+      // cesser de mentir. La vérité, elle, n'a pas attendu — `statutEffectif`
+      // la rend depuis le terme, partout, sans écrire.
+      //
+      // AVANT le test de facturabilité, et c'est tout l'objet : sans cette
+      // ligne, `isBillable('trial')` sauterait précisément le client qu'on
+      // vient de faire entrer en facturation. `acterFinEssai` ne touche que
+      // les essais réellement échus et se protège lui-même du doublon.
+      const echuLe = essaiEchuLe(tenant.account as CompteLu | undefined, now);
+      if (echuLe) await this.admin.acterFinEssai(actor, String(tenant._id), echuLe);
+
+      if (!isBillable(accountStatusOf(tenant, now))) {
         ignores.push({ slug, name: nom, raison: 'non_facturable' });
         continue;
       }
@@ -1122,23 +1142,25 @@ const mrrOf = (tenant: RawTenant, now: Date = new Date()): number =>
   mrrNormaliseCents(offreClient(tenant), now);
 
 /**
- * Statut de compte, absence comprise : les établissements créés avant le champ
- * `account` n'en ont pas en base et `.lean()` ne matérialise pas les défauts
- * Mongoose. Ils sont traités comme des comptes d'essai — jamais comme une
- * anomalie.
+ * Statut de compte, absence comprise, et EFFECTIF à l'instant `now`.
+ *
+ * Les établissements créés avant le champ `account` n'en ont pas en base et
+ * `.lean()` ne matérialise pas les défauts Mongoose : ils sont traités comme
+ * des comptes d'essai — jamais comme une anomalie.
+ *
+ * `statutEffectif` (@sm/contracts) et non la colonne : un essai dont le terme
+ * est passé vaut `active`, donc facturable. C'est le trou que cette lecture
+ * ferme — `isBillable` exclut `trial`, aucun planificateur ne closait l'essai,
+ * et un restaurant signé que personne ne basculait à la main n'était jamais
+ * facturé. La colonne, elle, se réconcilie dans `runMensuel`.
+ *
+ * `now` est OBLIGATOIRE et non défauté à `new Date()` : chaque appelant de ce
+ * fichier travaille déjà à un instant donné (les tests en dépendent), et un
+ * défaut silencieux ferait diverger la fiche de la passe qui la suit.
  */
-function accountStatusOf(tenant: RawTenant): TenantAccountStatus {
-  const account = tenant.account as { status?: string } | undefined;
-  return (account?.status ?? 'trial') as TenantAccountStatus;
+function accountStatusOf(tenant: RawTenant, now: Date): TenantAccountStatus {
+  return statutEffectif(tenant.account as CompteLu | undefined, now);
 }
-
-/**
- * Un compte en essai ne se facture pas, un compte parti non plus. Un compte
- * SUSPENDU, si : c'est justement parce qu'il doit de l'argent qu'il est
- * suspendu, et arrêter de facturer un impayé reviendrait à l'effacer.
- */
-const isBillable = (status: TenantAccountStatus): boolean =>
-  status === 'active' || status === 'suspended';
 
 /**
  * Document Mongo → forme d'API, statut effectif recalculé à l'instant `now`.

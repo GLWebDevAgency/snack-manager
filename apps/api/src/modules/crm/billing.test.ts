@@ -1228,6 +1228,123 @@ describe('Facturation', () => {
       ]);
     });
 
+    /**
+     * L'ESSAI ÉCHU SE CLÔT ICI, ET NULLE PART AILLEURS.
+     *
+     * `trialEndsAt` était écrit à la conversion et lu par aucune garde ; aucun
+     * planificateur ne closait l'essai, et `isBillable` exclut `trial`. Un
+     * restaurant signé que personne ne basculait à la main n'était donc JAMAIS
+     * facturé — accès complet, gratuit, permanent. Cette passe est le seul geste
+     * qui parcourt tout le parc : c'est là que la colonne se réconcilie, au
+     * moment même où l'on facture.
+     */
+    describe('L’essai qui s’achève', () => {
+      const TERME = new Date('2026-07-31T09:00:00Z');
+      /** Le Voisin, signé début juillet, terme dépassé au 19 août. */
+      const enEssaiEchu = () => {
+        tenants.rows[1]!.account = {
+          status: 'trial',
+          since: new Date('2026-07-01T09:00:00Z'),
+          reason: 'Créé depuis le pipeline',
+          suspendedAt: null,
+          trialEndsAt: TERME,
+        };
+      };
+
+      it('facture un essai dont le terme est passé — le trou que ça ferme', async () => {
+        await sansAmorce();
+        enEssaiEchu();
+        const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+        expect(bilan.emises.map((e) => e.slug).sort()).toEqual(['classfood', 'voisin']);
+      });
+
+      it('laisse tranquille un essai encore en cours', async () => {
+        await sansAmorce();
+        tenants.rows[1]!.account = {
+          status: 'trial',
+          since: LE_19_AOUT,
+          trialEndsAt: new Date('2026-09-18T09:00:00Z'),
+        };
+        const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+        expect(bilan.emises.map((e) => e.slug)).toEqual(['classfood']);
+        expect(bilan.ignores).toEqual([
+          { slug: 'voisin', name: 'Le Voisin', raison: 'non_facturable' },
+        ]);
+        // Rien n'a été écrit : la passe ne touche QUE les essais réellement échus.
+        expect((tenants.rows[1]!.account as { status: string }).status).toBe('trial');
+      });
+
+      it('réconcilie la colonne, datée du terme, et le dit au journal', async () => {
+        await sansAmorce();
+        enEssaiEchu();
+        await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+
+        const compte = tenants.rows[1]!.account as { status: string; since: Date };
+        expect(compte.status).toBe('active');
+        // Le terme, pas le jour de la passe : la fiche affichait déjà cette
+        // date par dérivation, elle ne doit pas sauter.
+        expect(compte.since).toEqual(TERME);
+
+        const ligne = (await admin.journal(VOISIN, TOUT)).find(
+          (e) => e.action === 'tenant.trial_end',
+        );
+        expect(ligne?.actionLabel).toBe('Fin de la période d’essai');
+        expect(ligne?.meta).toMatchObject({ trialEndsAt: TERME.toISOString() });
+      });
+
+      it('relancée, elle n’écrit pas une seconde ligne de fin d’essai', async () => {
+        await sansAmorce();
+        enEssaiEchu();
+        await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+        await billing.runMensuel(SM, { period: '2026-10', draft: false }, LE_19_AOUT);
+
+        const lignes = (await admin.journal(VOISIN, TOUT)).filter(
+          (e) => e.action === 'tenant.trial_end',
+        );
+        expect(lignes).toHaveLength(1);
+      });
+
+      it('ne ressuscite pas un client PARTI dont l’essai était échu', async () => {
+        // Le piège de cette dérivation : un départ acté par un humain ne
+        // s'annule pas parce qu'une date est passée. Le facturer de nouveau
+        // serait une créance sur un client qui nous a quittés.
+        await sansAmorce();
+        tenants.rows[1]!.account = {
+          status: 'churned',
+          since: LE_19_AOUT,
+          trialEndsAt: TERME,
+        };
+        const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+        expect(bilan.emises.map((e) => e.slug)).toEqual(['classfood']);
+        expect((tenants.rows[1]!.account as { status: string }).status).toBe('churned');
+      });
+
+      it('sort de l’essai un client sans rien à facturer — le fait est indépendant', async () => {
+        // Un client Atelier ponctuel n'a rien de récurrent : la passe le saute
+        // pour la facture, mais son essai s'est bien achevé, et sa fiche doit
+        // le dire.
+        await sansAmorce();
+        enEssaiEchu();
+        tenants.rows[1]!.plan = null;
+        tenants.rows[1]!.atelier = null;
+        const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
+        expect(bilan.ignores.map((i) => i.raison)).toEqual(['rien_a_facturer']);
+        expect((tenants.rows[1]!.account as { status: string }).status).toBe('active');
+      });
+
+      it('rend la fiche facturation d’un essai échu FACTURABLE, avant même la passe', async () => {
+        // La lecture n'attend pas l'écriture : c'est tout l'objet de
+        // `statutEffectif`. La fiche annonce donc la prochaine échéance le jour
+        // du terme, pas le jour où la passe tourne.
+        await sansAmorce();
+        enEssaiEchu();
+        const fiche = await billing.tenantBilling(SM, VOISIN, TOUT, LE_19_AOUT);
+        expect(fiche.subscription.accountStatus).toBe('active');
+        expect(fiche.subscription.billable).toBe(true);
+        expect(fiche.nextDue).not.toBeNull();
+      });
+    });
+
     it('saute un client qui n’a rien de récurrent — un Atelier ponctuel ne s’abonne pas', async () => {
       await sansAmorce();
       tenants.rows[1]!.plan = null;

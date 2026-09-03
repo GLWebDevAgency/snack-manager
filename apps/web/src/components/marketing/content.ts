@@ -15,8 +15,13 @@
  */
 
 // `import type` UNIQUEMENT : effacé à la compilation, donc zod ne descend pas
-// dans le paquet client de la page d'accueil. Voir `GRILLES_ACCORDÉES`.
-import type { PLAN_MRR_CENTS as PlanMrrCents } from "@sm/contracts";
+// dans le paquet client de la page d'accueil. Voir `GRILLES_ACCORDÉES` et
+// `CATALOGUE_ACCORDÉ`.
+import type {
+  PLAN_MRR_CENTS as PlanMrrCents,
+  CAPACITES as CapacitesContrat,
+  CAPACITES_PAR_FORMULE as CatalogueContrat,
+} from "@sm/contracts";
 
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
 
@@ -876,8 +881,9 @@ export function demoHref(origin: string): string {
  *     `DEMO_PARAM=demo`, `DEMO_VALUE=1`, et une borne de chemin `/admin` :
  *     le paramètre seul ne suffit pas, l'adresse doit être sous `/admin`.
  *     On vise `/admin/dashboard` et non `/admin` : la page d'index fait une
- *     redirection serveur vers `/admin/menu` qui perdrait la requête — donc
- *     le paramètre, donc la démonstration, remplacée par l'écran de connexion.
+ *     redirection serveur — vers ce même tableau de bord depuis la refonte de
+ *     la barre — et une redirection serveur perd la requête, donc le
+ *     paramètre, donc la démonstration, remplacée par l'écran de connexion.
  *
  *   · commande en ligne → `apps/web/src/components/order/demo/mode.ts`
  *     deux verrous : `?demo=1` ET le slug réservé `demo`. Sans les deux,
@@ -1497,7 +1503,28 @@ export const COMPARE = {
  */
 export type PlanModule = { id: string; label: string };
 
-export const PLAN_MODULES: readonly PlanModule[] = [
+/**
+ * ═══ CETTE LISTE N'EST PLUS LA SOURCE — ELLE EN EST LA COPIE AFFICHABLE ═══
+ *
+ * Elle l'a été, et c'était le défaut : la matrice de conditionnement ne vivait
+ * QUE dans ce fichier, donc rien de ce qu'elle promet n'était appliqué. Un
+ * restaurant à 99 € disposait du planning, des stocks, de la commande en ligne
+ * et de la fidélité — les quatre lignes que sa colonne affiche « Non inclus »,
+ * sous ses yeux, sur la page qui l'a décidé à signer.
+ *
+ * La source est désormais `CAPACITES` dans `packages/contracts/src/capacites.ts` :
+ * c'est elle que lisent les gardes de l'API et la barre du back-office. On ne
+ * l'IMPORTE pas ici, et c'est le même arbitrage que pour la grille de prix —
+ * `@sm/contracts` embarque zod, `content.ts` est lu par des composants clients,
+ * et le paquet n'expose pas de sous-chemin.
+ *
+ * Les identifiants sont donc recopiés, dans le MÊME ORDRE, et l'assertion de
+ * type `CATALOGUE_ACCORDÉ` casse le typecheck le jour où les deux listes
+ * divergent. Les libellés, eux, n'ont pas de jumeau à tenir : le contrat les
+ * reprend mot pour mot (`CAPACITE_LABELS`) pour que le refus affiché au
+ * restaurateur nomme la ligne qu'il a lue avant de signer.
+ */
+export const PLAN_MODULES = [
   { id: "pos", label: "Caisse (POS)" },
   // « Écran cuisine » désignait ici un MODULE du logiciel, alors que la section
   // matériel utilise le mot pour un objet à acheter. Le catalogue dit déjà
@@ -1512,7 +1539,26 @@ export const PLAN_MODULES: readonly PlanModule[] = [
   { id: "online", label: "Commande en ligne & click and collect" },
   { id: "loyalty", label: "Fidélité, codes promo & comptes clients" },
   { id: "priority", label: "Support prioritaire" },
-] as const;
+] as const satisfies readonly PlanModule[];
+
+/**
+ * Les identifiants seuls, en TUPLE — un type mappé sur `PLAN_MODULES` plutôt
+ * qu'une seconde liste écrite à la main : une liste de plus serait un
+ * troisième endroit où diverger, et c'est précisément ce qu'on répare.
+ */
+type IdsDe<T extends readonly PlanModule[]> = { readonly [K in keyof T]: T[K]["id"] };
+type ModuleIds = IdsDe<typeof PLAN_MODULES>;
+
+/**
+ * LE GARDE-FOU QUI REND LA RECOPIE HONNÊTE — jumeau de `GRILLES_ACCORDÉES`.
+ *
+ * Il ne coûte pas un octet à l'exécution (`import type` est effacé à la
+ * compilation) et coûte une erreur de typecheck franche le jour où la grille
+ * affichée cesse de décrire ce que le logiciel ouvre vraiment. C'est
+ * exactement le prix qu'on veut payer : entre une promesse commerciale et une
+ * garde technique, la divergence ne doit pas pouvoir passer la CI.
+ */
+export const CATALOGUE_ACCORDÉ: MêmeGrille<ModuleIds, typeof CapacitesContrat> = true;
 
 /**
  * LES DEUX PÉRIODICITÉS DU SÉLECTEUR — et « Par an » n'est pas une deuxième
@@ -1626,20 +1672,45 @@ function planPrices(monthlyCents: number) {
  * écarts croissants et produit l'effet inverse — c'est aussi ce qui rend Boost
  * moins cher que Complet plus le module (voir `PRICING_MATH`).
  */
+/*
+ * LES TROIS COLONNES, ÉCRITES EN CUMUL — « Tout l'Essentiel, plus… ».
+ *
+ * C'est la phrase de la grille, et c'est maintenant la forme du code : Complet
+ * PART d'Essentiel, Boost PART de Complet. Trois listes recopiées à plat
+ * laissaient une ligne se perdre en silence à la première révision — le lecteur
+ * ne compare pas onze identifiants trois fois.
+ *
+ * Elles sont accordées au catalogue du contrat par `FORMULES_ACCORDÉES` : ce
+ * qu'affiche cette page et ce qu'ouvre le logiciel ne peuvent plus diverger.
+ */
+const MODULES_ESSENTIEL = ["pos", "kds", "print", "offline", "bo", "menu"] as const;
+const MODULES_COMPLET = [...MODULES_ESSENTIEL, "planning", "stocks"] as const;
+const MODULES_BOOST = [...MODULES_COMPLET, "online", "loyalty", "priority"] as const;
+
+/** Le jumeau de `CATALOGUE_ACCORDÉ`, pour le contenu de chaque colonne. */
+export const FORMULES_ACCORDÉES: MêmeGrille<
+  {
+    essentiel: typeof MODULES_ESSENTIEL;
+    complet: typeof MODULES_COMPLET;
+    boost: typeof MODULES_BOOST;
+  },
+  typeof CatalogueContrat
+> = true;
+
 export const PLANS: Plan[] = [
   {
     id: "essentiel",
     name: "Essentiel",
     ...planPrices(PLAN_MONTHLY_CENTS.essentiel),
     desc: "La caisse, la cuisine et le back-office. De quoi tenir un service.",
-    modules: ["pos", "kds", "print", "offline", "bo", "menu"],
+    modules: MODULES_ESSENTIEL,
   },
   {
     id: "complet",
     name: "Complet",
     ...planPrices(PLAN_MONTHLY_CENTS.complet),
     desc: "Tout l'Essentiel, plus ce qui fait décider : le planning et le coût matière.",
-    modules: ["pos", "kds", "print", "offline", "bo", "menu", "planning", "stocks"],
+    modules: MODULES_COMPLET,
     popular: true,
   },
   {
@@ -1647,19 +1718,7 @@ export const PLANS: Plan[] = [
     name: "Boost",
     ...planPrices(PLAN_MONTHLY_CENTS.boost),
     desc: "Tout, commande en ligne comprise. Vos clients commandent chez vous.",
-    modules: [
-      "pos",
-      "kds",
-      "print",
-      "offline",
-      "bo",
-      "menu",
-      "planning",
-      "stocks",
-      "online",
-      "loyalty",
-      "priority",
-    ],
+    modules: MODULES_BOOST,
   },
 ];
 

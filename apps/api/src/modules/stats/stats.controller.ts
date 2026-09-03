@@ -1,4 +1,5 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   StatsExportOrdersQuerySchema,
   StatsPeriodQuerySchema,
@@ -63,8 +64,22 @@ export class StatsController {
     return this.stats.summaryLive(tenantId);
   }
 
+  /*
+   * LES DEUX EXPORTS SONT LES SEULES ROUTES QUI BALAIENT TOUTE UNE COLLECTION.
+   *
+   * L'export des commandes est borné à 20 000 lignes ; celui de la carte ne
+   * l'était par rien, et aucun des deux n'était limité en débit. Un onglet
+   * gardé ouvert sur un rafraîchissement automatique suffisait à faire relire
+   * l'intégralité des commandes d'un restaurant en boucle.
+   *
+   * Quatre par minute : on exporte pour ouvrir un tableur, pas pour alimenter
+   * un flux. Les écrans de statistiques, eux, ne sont pas limités — ils lisent
+   * des agrégats, pas des collections.
+   */
   // ─── Exports CSV (Excel FR : BOM UTF-8 + séparateur « ; ») ───
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 4, ttl: 60_000 } })
   @Get('export/orders.csv')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="commandes.csv"')
@@ -75,6 +90,8 @@ export class StatsController {
     return this.stats.exportOrdersCsv(tenantId, q);
   }
 
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 4, ttl: 60_000 } })
   @Get('export/menu.csv')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="menu.csv"')

@@ -10,6 +10,22 @@
  *   `mode="embed"` → /embed/[slug] : la même carte et le même tunnel, sans
  *                    en-tête ni pied de page, calibrés pour une iframe.
  *
+ * ─── POURQUOI L’EMBED NE PORTE PAS LA BANDE D’ACCUEIL ───
+ *
+ * Ce n’est ni la même page ni le même visiteur. L’embed est posé DANS le site
+ * du restaurateur : celui qui le voit vient de traverser les photos, le logo
+ * et le décor de ce site — la photo d’établissement, il l’a déjà vue, souvent
+ * la même. Trois raisons de plus, dans l’ordre de leur poids :
+ *   · l’iframe remonte sa hauteur à la page hôte (`postMessage`/`resize`) :
+ *     une bande de plus, c’est 130 px poussés dans la mise en page de
+ *     QUELQU’UN D’AUTRE, sans qu’il l’ait demandé ;
+ *   · jusqu’à 2 Mo non redimensionnés seraient facturés au chargement d’une
+ *     page qui n’est pas la nôtre, pour une image qu’elle affiche déjà ;
+ *   · l’embed est délibérément amputé (ni incontournables, ni avis, ni
+ *     mentions) : c’est la carte et le tunnel, rien d’autre. Une vitrine
+ *     complète y serait un doublon, pas un service.
+ * La bande vit donc dans `SiteHeader` seul, jamais dans `EmbedHeader`.
+ *
  * Hiérarchie de la page (maquette `docs/specs/commande-en-ligne.md` §5.1) :
  *   en-tête de restaurant (identité + état + héro + appel à l’action)
  *   ├ bandeau d’état (pause, fermeture, panier réconcilié)
@@ -49,6 +65,7 @@ import {
 } from "./helpers";
 import { Checkout } from "./Checkout";
 import { armeFunnel, jalonFunnel } from "./funnel";
+import { altDuHero, cadrageDuHero } from "./hero";
 import { Highlights, MenuBoard } from "./MenuBoard";
 import { ProductSheet } from "./ProductSheet";
 import { apparenceStripeDe } from "./StripeCard";
@@ -260,6 +277,22 @@ export function Storefront({
   const cityName = cityOf(site.tenant.address);
   const letter = initial(site.tenant.name);
 
+  /*
+   * L'IMAGE D'ACCUEIL — lue sur LE MASQUE, comme le logo juste au-dessus.
+   *
+   * `brand` et non `site.tenant.brand` : sous `?masque=<direction>`, la
+   * matrice de captures rend une direction de référence, dont le `hero` est
+   * `null` par construction (`DIRECTIONS`). Les six captures restent donc
+   * exactement ce qu'elles étaient — la bande n'apparaît que sur la marque
+   * réellement stockée par un restaurant.
+   *
+   * Le cadrage passe par la médiathèque de la charge `/site` : `brand.hero` ne
+   * stocke qu'une URL, sans point d'intérêt (voir `hero.ts`).
+   */
+  const hero = brand.hero;
+  const heroCadrage = useMemo(() => cadrageDuHero(hero, site.medias), [hero, site.medias]);
+  const heroAlt = useMemo(() => altDuHero(hero, site.medias), [hero, site.medias]);
+
   return (
     <div
       ref={rootRef}
@@ -290,6 +323,9 @@ export function Storefront({
       ) : (
         <SiteHeader
           site={site}
+          hero={hero}
+          heroCadrage={heroCadrage}
+          heroAlt={heroAlt}
           logoUrl={logoMarque}
           letter={letter}
           cityName={cityName}
@@ -484,9 +520,27 @@ function DemoRibbon() {
  *
  * Le nom du restaurant reste le `h1` (c’est la page référencée) ; la promesse
  * est une accroche, pas un titre de document.
+ *
+ * ═══ LA BANDE D’ACCUEIL NE COÛTE QUE SA DIFFÉRENCE ═══
+ *
+ * Quand le restaurant a posé une image d’accueil (`brand.hero`), elle prend la
+ * tête de CETTE carte — pas un étage de plus au-dessus d’elle. Et les deux
+ * pastilles (« c’est ouvert ? », « c’est bon ? ») descendent SUR la photo au
+ * lieu d’ouvrir le corps de la carte : la bande ne coûte donc au premier écran
+ * que sa hauteur MOINS la place qu’elles laissent (48 px sur une ligne, 88 sur
+ * deux). Mesuré sur un téléphone de 390 px : une bande de 130 px alourdit
+ * l’en-tête de 41 px, et le premier plateau du rail passe de 647 à 689 px du
+ * haut — il reste au premier écran.
+ *
+ * Sans image, rien ne bouge — pas de réceptacle vide, pas de hauteur réservée :
+ * l’immense majorité des restaurants n’en aura pas avant longtemps, et leur
+ * vitrine reste au pixel celle d’hier.
  */
 function SiteHeader({
   site,
+  hero,
+  heroCadrage,
+  heroAlt,
   logoUrl,
   letter,
   cityName,
@@ -494,6 +548,12 @@ function SiteHeader({
   onOrder,
 }: {
   site: Site;
+  /** L’image d’accueil du masque — `null` pour l’immense majorité des cartes. */
+  hero: string | null;
+  /** `object-position` issu du point d’intérêt de la médiathèque. */
+  heroCadrage: string;
+  /** Vide tant que le restaurateur n’a rien saisi : la bande est décorative. */
+  heroAlt: string;
   /** La déclinaison de `brand.logo` qui va avec le mode du masque. */
   logoUrl: string | null;
   letter: string;
@@ -506,6 +566,87 @@ function SiteHeader({
   const lead = site.slots?.leadTimeMin ?? 15;
   const nextSlot = site.slots?.slots.find((s) => !s.full)?.iso ?? null;
   const reopen = site.openNow ? null : nextOpeningLabel(site.tenant.hours);
+
+  /*
+   * UNE IMAGE D’ACCUEIL QUI NE CHARGE PAS NE LAISSE PAS DE TROU.
+   *
+   * Même motif que `Plate` : l’état porte l’URL qu’il juge, et le nœud est
+   * relu au montage — la page est rendue côté serveur, donc une image morte a
+   * déjà échoué quand React s’attache et `onError` ne se déclenchera jamais.
+   * L’enjeu est ici plus grand que sur un plateau de produit : la bande
+   * retirée, les pastilles retournent DANS la carte et la vitrine redevient
+   * exactement celle d’un restaurant sans photo, au lieu de garder un cadre
+   * vide de 130 px en tête de page.
+   */
+  const [etat, setEtat] = useState({ url: hero, casse: false });
+  if (etat.url !== hero) setEtat({ url: hero, casse: false });
+  const bande = hero && !etat.casse ? hero : null;
+  const casse = () => setEtat({ url: hero, casse: true });
+
+  /*
+   * Les deux questions que le client se pose avant de lire quoi que ce soit —
+   * « c’est ouvert ? » et « c’est bon ? ». Elles restent visibles à 390 px, et
+   * elles restent PREMIÈRES dans l’ordre de lecture, sur la photo comme dans
+   * la carte.
+   *
+   * `bg-surface` quand elles se posent sur la photo : une plaque OPAQUE, et
+   * c’est ce qui rend leur texte lisible sur n’importe quel cliché. Le voile
+   * du masque assombrit toujours, mais `--cf-text` suit le MODE du restaurant :
+   * sur les quatre directions claires, l’encre tombe entre 1,13:1 et 1,70:1
+   * sur une photo SOMBRE voilée, et remonte à 5,35–6,00 sur une photo blanche
+   * — c’est la photo qui déciderait, et on ne la choisit pas. Sur la plaque,
+   * le couple redevient `ink/surface` : 9,10:1 au pire des six directions,
+   * garanti par `contraste()` (mesures dans `hero.test.ts`).
+   */
+  const pastilles = (
+    <div className="flex flex-wrap items-center gap-2">
+      <span
+        className={cx(
+          "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
+          bande && "bg-surface",
+          paused
+            ? "border-prep/45 text-prept"
+            : site.openNow
+              ? "border-ok/40 text-okt"
+              : "border-ink/14 text-mut",
+        )}
+      >
+        <Dot tone={paused ? "prep" : site.openNow ? "ok" : "mut"} />
+        {paused
+          ? "Commande en ligne suspendue"
+          : site.openNow
+            ? "Ouvert maintenant"
+            : "Fermé"}
+        {!paused && site.openNow && nextSlot && (
+          <span className="font-extrabold tabular-nums text-ink">
+            · retrait {hhmm(nextSlot)}
+          </span>
+        )}
+        {!paused && !site.openNow && reopen && (
+          <span className="font-semibold text-mut">· {reopen}</span>
+        )}
+      </span>
+      {site.reviews.count > 0 && (
+        <span
+          className={cx(
+            "inline-flex h-8 items-center gap-1.5 rounded-pill border border-ink/12 px-3 text-[13px] font-bold text-ink",
+            bande && "bg-surface",
+          )}
+        >
+          <Stars value={site.reviews.avg} size={12} />
+          <span className="tabular-nums">
+            {site.reviews.avg.toLocaleString("fr-FR", {
+              minimumFractionDigits: 1,
+              maximumFractionDigits: 1,
+            })}
+          </span>
+          <span className="font-semibold tabular-nums text-mut">
+            ({site.reviews.count})
+          </span>
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <header className="relative">
@@ -539,65 +680,84 @@ function SiteHeader({
       {/* ── Carte d’accroche ── */}
       <div className="mx-auto w-full max-w-[1080px] px-4 pb-1">
         <div className="sm-hero sm-grain relative overflow-hidden rounded-wide border border-ink/8 shadow-card">
-          {/* Nom en typographie fantôme — profondeur, jamais lu. */}
-          <span
-            aria-hidden
-            className="sm-ghost font-display absolute -left-2 top-14 text-[clamp(4.75rem,3.5rem+3.5vw,7rem)] font-black opacity-70"
-          >
-            {site.tenant.name}
-          </span>
+          {bande ? (
+            /*
+              La bande d’accueil. Rapport fixé et plafonné : 130 px sur un
+              téléphone de 390 px, 220 px au plus sur un écran large. Le client
+              vient commander, pas admirer — une photo pleine hauteur repousse
+              le premier plat sous la ligne de flottaison.
+            */
+            <div className="relative aspect-[16/6] max-h-[220px] w-full">
+              <div className="sm-hero-media absolute inset-0 overflow-hidden">
+                {/*
+                  Photo de restaurant : domaine non maîtrisé, `next/image`
+                  imposerait une liste blanche — <img> volontaire, avec repli
+                  à l’erreur, comme `Plate`.
+
+                  CHARGEMENT DÉLIBÉRÉMENT EFFACÉ. C’est la plus grosse image de
+                  la page — jusqu’à 2 Mo, et rien ne la redimensionne encore
+                  (`MEDIA_LARGEUR_CIBLE` attend son transformateur). Elle ne
+                  doit donc pas passer devant les photos de plats, ni devant le
+                  script de paiement, sur la 4G d’un trottoir : `lazy` la fait
+                  charger APRÈS la mise en page, `fetchPriority="low"` la range
+                  derrière le reste, `decoding="async"` empêche son décodage de
+                  bloquer le fil principal. Le cadre, lui, est déjà à sa
+                  hauteur définitive : aucun décalage à l’arrivée, et pendant
+                  l’attente c’est le dégradé de `.sm-hero` qu’on voit — la
+                  carte d’hier, pas un trou gris.
+                */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={bande}
+                  /* Vide tant que le restaurateur n’a rien saisi : un `alt`
+                     vide RETIRE l’image de l’arbre d’accessibilité, ce qui est
+                     exactement ce qu’on veut d’un décor. Y recopier le nom du
+                     restaurant le ferait annoncer deux fois — il est déjà le
+                     `h1` deux lignes plus haut. */
+                  alt={heroAlt}
+                  loading="lazy"
+                  fetchPriority="low"
+                  decoding="async"
+                  onError={casse}
+                  ref={(node) => {
+                    if (node?.complete && node.naturalWidth === 0) casse();
+                  }}
+                  style={{ objectPosition: heroCadrage }}
+                  className="size-full object-cover"
+                />
+                <span aria-hidden className="sm-hero-voile absolute inset-0" />
+              </div>
+              <div className="absolute inset-x-0 bottom-0 px-5 pb-4 lg:px-7">
+                {pastilles}
+              </div>
+            </div>
+          ) : (
+            /* Nom en typographie fantôme — profondeur, jamais lu. Il tient le
+               rôle que la photo tient quand elle existe : sous une vraie
+               image, ce contour la salirait. */
+            <span
+              aria-hidden
+              className="sm-ghost font-display absolute -left-2 top-14 text-[clamp(4.75rem,3.5rem+3.5vw,7rem)] font-black opacity-70"
+            >
+              {site.tenant.name}
+            </span>
+          )}
 
           <div className="relative flex flex-col gap-5 p-5 lg:flex-row lg:items-end lg:justify-between lg:p-7">
             <div className="min-w-0">
-              {/* État de service et note : les deux questions que le client se
-                  pose avant de lire quoi que ce soit — « c’est ouvert ? » et
-                  « c’est bon ? ». Elles restent visibles à 390 px. */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={cx(
-                    "inline-flex h-8 items-center gap-2 rounded-pill border px-3 text-[13px] font-bold",
-                    paused
-                      ? "border-prep/45 text-prept"
-                      : site.openNow
-                        ? "border-ok/40 text-okt"
-                        : "border-ink/14 text-mut",
-                  )}
-                >
-                  <Dot tone={paused ? "prep" : site.openNow ? "ok" : "mut"} />
-                  {paused
-                    ? "Commande en ligne suspendue"
-                    : site.openNow
-                      ? "Ouvert maintenant"
-                      : "Fermé"}
-                  {!paused && site.openNow && nextSlot && (
-                    <span className="font-extrabold tabular-nums text-ink">
-                      · retrait {hhmm(nextSlot)}
-                    </span>
-                  )}
-                  {!paused && !site.openNow && reopen && (
-                    <span className="font-semibold text-mut">· {reopen}</span>
-                  )}
-                </span>
-                {site.reviews.count > 0 && (
-                  <span className="inline-flex h-8 items-center gap-1.5 rounded-pill border border-ink/12 px-3 text-[13px] font-bold text-ink">
-                    <Stars value={site.reviews.avg} size={12} />
-                    <span className="tabular-nums">
-                      {site.reviews.avg.toLocaleString("fr-FR", {
-                        minimumFractionDigits: 1,
-                        maximumFractionDigits: 1,
-                      })}
-                    </span>
-                    <span className="font-semibold tabular-nums text-mut">
-                      ({site.reviews.count})
-                    </span>
-                  </span>
-                )}
-              </div>
+              {!bande && pastilles}
 
               {/* Promesse en trois temps — la copy de la maquette. */}
               {/* Corps fluide : la promesse grandit avec la fenêtre au lieu
                   de sauter d'un cran à 1 024 px. */}
-              <p className="font-display mt-4 text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink">
+              <p
+                className={cx(
+                  "font-display text-[clamp(1.875rem,1.4rem+2vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-ink",
+                  // La marge séparait la promesse des pastilles ; parties sur
+                  // la photo, elle n’a plus rien à écarter.
+                  !bande && "mt-4",
+                )}
+              >
                 Commandez.
                 <br />
                 Récupérez.

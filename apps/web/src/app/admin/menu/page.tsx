@@ -3,10 +3,15 @@
 /**
  * Vue « Menu & prix » — /admin/menu (spec backoffice-restaurant §7).
  *
- * Layout : bandeau « {n} prix à définir » + « Importer CSV / XML » (§7.1),
- * puis deux colonnes — carte Catégories 268 px fixe (§7.2) et carte Produits
- * `flex: 1` (§7.3). La recherche cherche dans TOUTE la carte et ignore alors
- * la catégorie sélectionnée.
+ * Layout : bandeaux « {n} prix à définir » et « {n} sans photo » + « Importer
+ * CSV / XML » (§7.1), puis deux colonnes — carte Catégories 268 px fixe (§7.2)
+ * et carte Produits `flex: 1` (§7.3). La recherche cherche dans TOUTE la carte
+ * et ignore alors la catégorie sélectionnée.
+ *
+ * Chaque ligne porte sa VIGNETTE, résolue par les adaptateurs du contrat
+ * (`photoUrlDe`, `photoPointDe`) depuis le catalogue de médias que `GET /menu`
+ * rend à plat : c'est ici que le gérant voit sa carte entière, donc ici que ce
+ * qui manque doit se voir.
  *
  * Écritures : PATCH /products/:id (prix au blur/Enter, dispo), POST
  * /products/:id/stock (rupture 1-tap) — toutes optimistes avec rollback et
@@ -20,7 +25,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CostsResponse, SupplyIngredient } from "@sm/contracts";
+import type { CostsResponse, MediaVue, SupplyIngredient } from "@sm/contracts";
+import {
+  cadrageCss,
+  catalogueMedias,
+  mediasDuProduit,
+  photoPointDe,
+  photoUrlDe,
+} from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
@@ -47,9 +59,11 @@ import {
   isPriceToDefine,
   priceToInput,
   type Category,
+  type Mediatheque,
   type MenuData,
   type Product,
 } from "./types";
+import { produitsSansPhoto } from "./photos";
 
 /**
  * Largeurs de colonnes exactes de la spec §7.3 (le titre prend le reste) —
@@ -79,6 +93,8 @@ type RawMenu = {
     products?: RawProduct[];
   })[];
   uncategorized?: RawProduct[];
+  /** Le catalogue des photos, à plat — voir `MenuData.medias`. */
+  medias?: MediaVue[];
 };
 
 const normProduct = (p: RawProduct, categoryId: string | null): Product => ({
@@ -91,6 +107,10 @@ const normProduct = (p: RawProduct, categoryId: string | null): Product => ({
   // Conservés : ils étaient jetés ici, ce qui rendait les groupes d'options
   // invisibles du back-office quoi que l'API en dise.
   optionGroups: p.optionGroups ?? [],
+  // Nettoyées et bornées à trois par le contrat : le back-office lit les
+  // références du produit avec la MÊME fonction que les charges publiques.
+  medias: mediasDuProduit(p),
+  photoUrl: typeof p.photoUrl === "string" ? p.photoUrl : null,
   tags: p.tags ?? [],
   isNew: p.isNew === true,
   outOfStock: p.outOfStock === true,
@@ -98,6 +118,54 @@ const normProduct = (p: RawProduct, categoryId: string | null): Product => ({
   order: typeof p.order === "number" ? p.order : 0,
   active: p.active !== false,
 });
+
+/**
+ * LA VIGNETTE D'UNE LIGNE — et le trou, quand il n'y en a pas.
+ *
+ * La liste ne montrait aucune photo, alors que c'est ici que le gérant voit sa
+ * carte en entier : ce qui manque doit se lire d'un coup d'œil, sans ouvrir
+ * une fiche. D'où la case en pointillés plutôt qu'un vide — un trou dessiné se
+ * remarque, une absence ne se remarque pas.
+ *
+ * `alt=""` : la vignette est DÉCORATIVE ici. Le nom du plat la suit
+ * immédiatement, et un texte alternatif ferait annoncer « Kebab Fromage » deux
+ * fois de suite à un lecteur d'écran. Il reprend tout son sens là où l'image
+ * est seule — la caisse, la vitrine, l'aperçu de cadrage.
+ */
+function Vignette({
+  produit,
+  catalogue,
+}: {
+  produit: Product;
+  catalogue: ReadonlyMap<string, MediaVue>;
+}) {
+  // L'usage JUSTE : cette case fait 44 px de côté. Les quatre adresses sont
+  // identiques aujourd'hui — le jour où un transformateur d'images se branche,
+  // cette ligne demandera déjà la bonne.
+  const url = photoUrlDe(produit, catalogue, "vignette");
+  return (
+    <div
+      className={cx(
+        "size-11 shrink-0 overflow-hidden rounded-ctrl border",
+        url ? "border-line bg-surface2" : "border-dashed border-line bg-ink/3",
+      )}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- l'image vient de notre API (ou du paquet web pour les photos du pilote) : next/image n'a rien à y optimiser, et le recadrage est le nôtre.
+        <img
+          src={url}
+          alt=""
+          style={{ objectPosition: cadrageCss(photoPointDe(produit, catalogue)) }}
+          className="size-full object-cover"
+        />
+      ) : (
+        <span aria-hidden className="grid size-full place-items-center text-mut">
+          <Icon name="fries" size={16} />
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** Minuscules sans accents — recherche insensible à la casse (§7.3). */
 const searchKey = (s: string) =>
@@ -142,6 +210,9 @@ export default function MenuPage() {
           products: (c.products ?? []).map((p) => normProduct(p, String(c._id))),
         })),
         uncategorized: (data.uncategorized ?? []).map((p) => normProduct(p, null)),
+        // Une API déployée avant la médiathèque ne rend pas ce champ : la
+        // liste affiche alors les plats sans vignette, plutôt que de casser.
+        medias: data.medias ?? [],
       });
       setError(null);
     } catch (e) {
@@ -176,6 +247,14 @@ export default function MenuPage() {
     [categories, menu],
   );
 
+  /**
+   * Le catalogue des photos, dans la forme qu'attendent les adaptateurs du
+   * contrat (`photoUrlDe`, `photoPointDe`). Les médias voyagent à plat à la
+   * racine de `GET /menu` : un cliché partagé par trois plats n'est transporté
+   * qu'une fois, et c'est ici qu'on le retrouve.
+   */
+  const catalogue = useMemo(() => catalogueMedias(menu?.medias ?? []), [menu]);
+
   // ─── Coût matière / marge du lot (contexte supply) — best-effort ───
   const refsKey = useMemo(() => allProducts.map((p) => p._id).join(","), [allProducts]);
 
@@ -206,6 +285,24 @@ export default function MenuPage() {
         throw e;
       });
     return ingredientsRef.current;
+  }, []);
+
+  /**
+   * La médiathèque du restaurant, mutualisée comme les ingrédients.
+   *
+   * Elle est chargée par la PAGE et non par chaque panneau : ouvrir cinq
+   * fiches d'affilée ne doit pas retélécharger cinq fois la bibliothèque, qui
+   * est la même pour toute la carte. `forcer` la relit après un dépôt ou un
+   * retrait — c'est le seul moment où elle change, et le quota avec elle.
+   */
+  const mediathequeRef = useRef<Promise<Mediatheque> | null>(null);
+  const chargerMediatheque = useCallback((forcer = false) => {
+    if (forcer) mediathequeRef.current = null;
+    mediathequeRef.current ??= api.get<Mediatheque>("/medias").catch((e: unknown) => {
+      mediathequeRef.current = null; // un échec ne doit pas être mis en cache
+      throw e;
+    });
+    return mediathequeRef.current;
   }, []);
 
   // ─── Temps réel : on diffère tant que l'utilisateur manipule la vue ───
@@ -253,6 +350,7 @@ export default function MenuPage() {
       if (!m) return m;
       const apply = (p: Product) => (p._id === id ? { ...p, ...patch } : p);
       return {
+        ...m,
         categories: m.categories.map((c) => ({ ...c, products: c.products.map(apply) })),
         uncategorized: m.uncategorized.map(apply),
       };
@@ -421,6 +519,13 @@ export default function MenuPage() {
       : (selectedCat?.name ?? "Produits");
 
   const toDefine = allProducts.filter(isPriceToDefine).length;
+  /**
+   * Les plats qui n'ont RIEN à montrer — comptés par le même adaptateur que
+   * les surfaces clientes, donc sur ce que le mangeur voit réellement (les
+   * dix-neuf photos héritées du pilote comptent, un média disparu ne compte
+   * pas).
+   */
+  const sansPhoto = produitsSansPhoto(allProducts, catalogue);
   const catNameById = useMemo(
     () => new Map(categories.map((c) => [c._id, c.name])),
     [categories],
@@ -436,6 +541,11 @@ export default function MenuPage() {
   async function afterSaved(message: string) {
     setEditor(null);
     toast(message, { icon: "check" });
+    // L'enregistrement a pu attacher ou détacher des photos : le nombre de
+    // plats qui emploient chaque média n'est donc plus celui qu'on a en cache.
+    // On l'oublie sans le relire — la prochaine ouverture de fiche s'en
+    // chargera, et rien n'a besoin de ce comptage entre-temps.
+    mediathequeRef.current = null;
     await load();
   }
 
@@ -473,7 +583,7 @@ export default function MenuPage() {
       <div className="mb-4 flex flex-wrap items-center gap-3.5">
         {toDefine > 0 && (
           <div
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-card border border-gold px-3.5 py-2.5"
+            className="flex min-w-0 flex-1 basis-[280px] items-center gap-2.5 rounded-card border border-gold px-3.5 py-2.5"
             style={{
               background: "color-mix(in srgb, var(--cf-gold) 18%, var(--cf-surface))",
             }}
@@ -485,10 +595,30 @@ export default function MenuPage() {
             </p>
           </div>
         )}
+        {/*
+          MÊME BANDEAU, TON DÉLIBÉRÉMENT PLUS BAS.
+
+          Le laiton du bandeau voisin annonce un BLOCAGE : sans prix, le
+          produit n'est pas vendable, il est absent de la commande client.
+          Un plat sans photo, lui, se vend — moins bien, mais il se vend. Lui
+          donner la même alarme diluerait le seul signal que le gérant doit
+          traiter avant le service (DA §3 : le laiton se mérite). Même
+          géométrie, même compteur, même phrase-conséquence ; ton neutre.
+        */}
+        {sansPhoto > 0 && (
+          <div className="flex min-w-0 flex-1 basis-[280px] items-center gap-2.5 rounded-card border border-line bg-ink/5 px-3.5 py-2.5">
+            <Icon name="fries" size={17} className="shrink-0 text-mut" />
+            <p className="text-sm text-ink">
+              <b className="cf-fig">{sansPhoto} sans photo</b> — ces produits
+              s&apos;affichent avec leur nom seul, à la caisse comme sur votre page de
+              commande.
+            </p>
+          </div>
+        )}
         <Btn
           size="sm"
           icon="arrow"
-          className={toDefine > 0 ? undefined : "ml-auto"}
+          className={toDefine > 0 || sansPhoto > 0 ? undefined : "ml-auto"}
           onClick={() => setImportOpen(true)}
         >
           Importer CSV / XML
@@ -580,6 +710,7 @@ export default function MenuPage() {
                 createCategoryId={editor.categoryId}
                 categories={categories}
                 loadIngredients={loadIngredients}
+                chargerMediatheque={chargerMediatheque}
                 onClose={() => setEditor(null)}
                 onSaved={(m) => void afterSaved(m)}
               />
@@ -636,6 +767,11 @@ export default function MenuPage() {
                         p.outOfStock && "opacity-50",
                       )}
                     >
+                      {/* La vignette — sans classe d'ordre : `order: 0` par
+                          défaut la place avant le nom (`lg:order-1`) sur
+                          grand écran comme en carte. */}
+                      <Vignette produit={p} catalogue={catalogue} />
+
                       {/* Nom + pill de catégorie + composition */}
                       <div className="min-w-0 flex-1 lg:order-1">
                         <div className="flex items-center gap-2">
@@ -802,7 +938,7 @@ export default function MenuPage() {
                         {ingredientOut ? (
                           <Pill
                             variant="out"
-                            title="Rupture héritée d'un ingrédient en rupture — lève-la depuis « Ingrédients & stocks »."
+                            title="Rupture héritée d'un ingrédient en rupture — lève-la depuis « Stocks »."
                             className="max-w-full whitespace-normal border-alert/60 text-center leading-[1.15] text-alertt"
                           >
                             rupture ingrédient
@@ -827,6 +963,7 @@ export default function MenuPage() {
                         categories={categories}
                         initialCost={costs[p._id]}
                         loadIngredients={loadIngredients}
+                        chargerMediatheque={chargerMediatheque}
                         onClose={() => setEditor(null)}
                         onSaved={(m) => void afterSaved(m)}
                       />

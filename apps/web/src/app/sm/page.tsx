@@ -3,10 +3,10 @@
 /**
  * Tableau de bord HQ — ce que l'équipe regarde en arrivant le matin.
  *
- * En TÊTE, les gestes du jour : trois à cinq appels tirés de la file de
- * signaux, dans l'ordre où on décroche. Le reste répond à « où en est la
- * société ? » — places fondateur restantes, MRR estimé, clients actifs, leads
- * en cours, pipeline, santé du parc, dernières relances.
+ * En TÊTE, les gestes du jour : trois à cinq appels tirés de la file du jour,
+ * dans l'ordre où on décroche. Le reste répond à « où en est la société ? » —
+ * places fondateur restantes, MRR estimé, clients actifs, prospects en cours,
+ * prospection, santé du parc, dernières relances.
  *
  * L'ordre n'est pas cosmétique : un tableau de bord qui ouvre sur des totaux
  * se regarde, un tableau de bord qui ouvre sur des appels se traite.
@@ -79,7 +79,7 @@ export default function HqDashboard() {
       .catch(() => {
         if (!cancelled) setLeads([]);
       });
-    // La file de travail annote le tableau de bord ; son absence ne doit pas
+    // La file du jour annote le tableau de bord ; son absence ne doit pas
     // l'empêcher de s'afficher. Une liste vide se lit « rien à traiter », et
     // c'est une information juste tant que la route répond.
     clientsApi
@@ -152,9 +152,9 @@ export default function HqDashboard() {
         title="Les gestes du jour"
         sub={
           signalsEnPanne
-            ? "File de travail illisible"
+            ? "File du jour illisible"
             : signals === null
-              ? "Lecture de la file de travail…"
+              ? "Lecture de la file du jour…"
               : moves.length === 0
                 ? "Aucun signal ouvert sur le parc"
               : `${moves.length} appel${moves.length > 1 ? "s" : ""} à passer, du plus urgent au moins urgent`
@@ -164,7 +164,7 @@ export default function HqDashboard() {
             href="/sm/signals"
             className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
-            File de travail
+            File du jour
             {(signals?.length ?? 0) > moves.length && (
               <span className="cf-fig rounded-pill bg-white/15 px-1.5 text-[11px] font-extrabold">
                 {signals!.length}
@@ -177,7 +177,7 @@ export default function HqDashboard() {
       >
         {signalsEnPanne ? (
           <p className="text-[13px] text-alertt">
-            La file de travail n&apos;a pas pu être lue —{" "}
+            La file du jour n&apos;a pas pu être lue —{" "}
             <span className="cf-fig">/crm/signals</span> n&apos;a pas répondu. Ne
             concluez pas que le parc va bien : rechargez la page.
           </p>
@@ -201,14 +201,14 @@ export default function HqDashboard() {
             ? "Lecture du pipeline…"
             : aRelancer.length === 0
               ? "Toutes les cadences de relance sont tenues"
-              : `${aRelancer.length} lead${aRelancer.length > 1 ? "s" : ""} au-delà de sa cadence — le plus en retard d'abord`
+              : `${aRelancer.length} prospect${aRelancer.length > 1 ? "s" : ""} au-delà de sa cadence — le plus en retard d'abord`
         }
         actions={
           <Link
             href="/sm/pipeline"
             className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill border border-line bg-white/3 px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:border-white/25 hover:bg-white/8"
           >
-            Pipeline
+            Prospection
             <Icon name="arrow" size={15} />
           </Link>
         }
@@ -218,7 +218,7 @@ export default function HqDashboard() {
           <Skeleton className="h-[52px]" />
         ) : aRelancer.length === 0 ? (
           <p className="text-[13px] text-mut">
-            Personne n&apos;attend : chaque lead ouvert a été touché dans les délais de sa
+            Personne n&apos;attend : chaque prospect ouvert a été touché dans les délais de sa
             séquence (A à J+3, B à J+7, C au mois, une semaine sans séquence).
           </p>
         ) : (
@@ -263,7 +263,7 @@ export default function HqDashboard() {
         )}
         {aRelancer.length > 8 && (
           <p className="text-xs text-mut">
-            … et {aRelancer.length - 8} de plus — le pipeline les liste tous.
+            … et {aRelancer.length - 8} de plus — la prospection les liste tous.
           </p>
         )}
       </Panel>
@@ -290,15 +290,15 @@ export default function HqDashboard() {
               : undefined
           }
         />
-        <Kpi label="Leads en cours" value={int(overview.leadsOpen)} icon="grid" />
+        <Kpi label="Prospects en cours" value={int(overview.leadsOpen)} icon="grid" />
       </div>
 
       {/* ── Pipeline + places fondateur — empilés sous `md` ── */}
       <div className="flex items-start gap-4 max-md:flex-col max-md:items-stretch">
         <Panel
           className="flex-[1.4]"
-          title="Pipeline en un coup d'œil"
-          sub={`${int(overview.leadsTotal)} leads au total · ${int(overview.stages.signe)} signé${overview.stages.signe > 1 ? "s" : ""}`}
+          title="Prospection en un coup d'œil"
+          sub={`${int(overview.leadsTotal)} prospects au total · ${int(overview.stages.signe)} signé${overview.stages.signe > 1 ? "s" : ""}`}
           actions={
             <Link
               href="/sm/pipeline"
@@ -347,7 +347,7 @@ export default function HqDashboard() {
             })}
             {overview.stages.perdu > 0 && (
               <div className="mt-1 border-t border-line2 pt-2.5 text-[13px] text-mut">
-                {int(overview.stages.perdu)} lead
+                {int(overview.stages.perdu)} prospect
                 {overview.stages.perdu > 1 ? "s" : ""} perdu
                 {overview.stages.perdu > 1 ? "s" : ""} — à reprendre en séquence C
               </div>

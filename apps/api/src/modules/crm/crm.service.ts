@@ -15,6 +15,8 @@ import {
   mrrNormaliseCents,
   offreClient,
   SCREEN_OFFLINE_AFTER_MS,
+  statutEffectif,
+  type CompteLu,
   type CrmClient,
   type CrmInvoice,
   type CrmLead,
@@ -24,7 +26,6 @@ import {
   type LeadTouchCreate,
   type LeadUpdate,
   type RevocableDeviceKind,
-  type TenantAccountStatus,
 } from '@sm/contracts';
 import type { Device, Lead, Order, Screen, Tenant } from '@sm/db';
 import { BillingService } from './billing.service';
@@ -376,9 +377,10 @@ export class CrmService implements OnApplicationBootstrap {
       const fleet = buildFleet(fleets.get(id) ?? []);
       // L'absence de bloc `account` vaut « essai », jamais « anomalie » : les
       // tenants créés avant ce champ n'en ont pas, et `.lean()` ne matérialise
-      // pas les défauts Mongoose. Même lecture que `AdminService`.
-      const accountStatus = ((t.account as { status?: string } | undefined)?.status ??
-        'trial') as TenantAccountStatus;
+      // pas les défauts Mongoose. Même lecture que `AdminService` — statut
+      // EFFECTIF compris : la liste du parc affichait « Essai » sur des clients
+      // que la fiche, la facturation et le score comptent comme actifs.
+      const accountStatus = statutEffectif(t.account as CompteLu | undefined, now);
 
       const modules = buildModules({
         posOrders: a.posOrders30,

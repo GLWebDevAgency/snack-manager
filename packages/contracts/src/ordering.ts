@@ -11,6 +11,8 @@ import type {
 } from './index';
 // ⚠️ `import type` uniquement, même raison : `marque.ts` est réexporté par `index.ts`.
 import type { Brand } from './marque';
+// ⚠️ `import type` uniquement, même raison : `mediatheque.ts` l'est aussi.
+import type { MediaVue } from './mediatheque';
 
 // ─────────────────────────────────────────────────────────────
 // Commande en ligne — créneaux de retrait, paiement, impression
@@ -342,7 +344,19 @@ export interface PublicSiteProduct {
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
+  /**
+   * DÉRIVÉ de `medias[0]`, jamais la colonne lue — voir `photoUrlDe`. Repli sur
+   * la chaîne héritée des dix-neuf photos du pilote tant qu'elles n'ont pas été
+   * reprises. Prêt à peindre : l'usage « carte » est déjà résolu ici.
+   */
   photoUrl: string | null;
+  /**
+   * Les identifiants des médias du produit, dans l'ordre — le premier est la
+   * photo principale. Le détail vit UNE FOIS dans `PublicSiteResponse.medias`,
+   * jamais recopié par produit : trois produits qui partagent le cliché du
+   * panneau mural ne doivent pas le faire voyager trois fois.
+   */
+  medias: string[];
 }
 
 export interface PublicSiteCategory {
@@ -381,6 +395,12 @@ export interface PublicSiteTenant {
 export interface PublicSiteResponse {
   tenant: PublicSiteTenant;
   menu: { categories: PublicSiteCategory[] };
+  /**
+   * La médiathèque du restaurant, à plat et une seule fois : point d'intérêt,
+   * texte alternatif et les quatre adresses d'usage de chaque photo. Les
+   * produits n'en portent que les identifiants.
+   */
+  medias: MediaVue[];
   /** Créneaux du jour (même calcul que `GET /public/tenants/:slug/slots`). */
   slots: SlotsResponse;
   reviews: {
@@ -406,17 +426,195 @@ export interface PublicSiteResponse {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Les actions du journal d'audit (collection `auditlogs`). Écrit depuis le
- * premier jour, LISIBLE nulle part jusqu'au 24/08/2026 : un journal de
- * traçabilité qu'aucun écran ne sait montrer ne protège personne au contrôle
- * (diagnostic quatre casquettes, P3). `price.change` entre au journal le même
- * jour — l'en-tête du module l'annonçait sans que personne ne l'écrive.
+ * ═══ LE REGISTRE DU RESTAURANT — CE QU'IL COUVRE, ET POURQUOI PAS TOUT ═══
+ *
+ * Les actions du journal d'audit (collection `auditlogs`). À ne pas confondre
+ * avec `ADMIN_LOG_ACTIONS` (admin.ts), qui trace ce que fait l'ÉQUIPE SNACK
+ * MANAGER sur les comptes de ses clients. Ici, c'est le registre du
+ * RESTAURATEUR : ce que son équipe et lui font dans leur propre établissement.
+ *
+ * ─── LA RÈGLE DE PÉRIMÈTRE ───
+ *
+ * Est journalisé CE QUI TOUCHE À L'ARGENT OU À LA DISPONIBILITÉ. Rien d'autre.
+ *
+ * Un journal exhaustif n'est pas un meilleur journal : tracer chaque frappe de
+ * clavier (un nom de produit corrigé, une photo remplacée, une catégorie
+ * réordonnée) gonfle la collection de lignes que personne ne lira jamais et
+ * NOIE celles qui se défendent en contrôle. Le registre du CRM tient la même
+ * discipline — dix-huit gestes nommés, pas un champ modifié.
+ *
+ * Concrètement, une action entre ici si elle change :
+ *   · un PRIX payé par le client (produit, variante, supplément) ;
+ *   · CE QUI EST VENDABLE à l'instant (rupture, article créé ou retiré) ;
+ *   · le STOCK, qui est de l'argent en réserve (mouvement, correction) ;
+ *   · CE QUE VOIT LE CLIENT et qui engage le restaurant (identité, horaires,
+ *     pause de la commande en ligne, masque, logo, identité de facturation).
+ *
+ * ─── CE QUI EN EST ÉCARTÉ, ET POUR QUELLE RAISON ───
+ *
+ *   · Nom, description, photo, ordre d'affichage d'un produit ou d'une
+ *     catégorie ; création et renommage d'une catégorie. Aucune conséquence
+ *     sur l'argent ni sur la disponibilité — c'est de la mise en page.
+ *   · Fiche d'un ingrédient hors stock et hors prix de supplément (libellé,
+ *     catégorie, seuil d'alerte, allergènes, marques). Même raison. Les
+ *     ALLERGÈNES sont un sujet de sécurité alimentaire et non d'argent : s'ils
+ *     doivent être tracés un jour, ce sera sous une action à eux, avec la
+ *     rétention et l'écran qui vont avec — pas glissés ici par commodité.
+ *   · Fournisseurs, articles fournisseurs et PRIX D'ACHAT. Ils ont DÉJÀ leur
+ *     registre dédié, `supplier_price_history` (PostgreSQL, @sm/supply) :
+ *     doubler la trace, c'est fabriquer deux registres qui finiront par se
+ *     contredire, et le jour du litige on ne saura pas lequel croire.
+ *   · Recettes et nomenclatures d'options (BOM). Elles ne déplacent aucun
+ *     stock et ne changent aucun prix de vente au moment où on les écrit :
+ *     elles changent le coût matière AFFICHÉ. Le geste qui compte — le prix de
+ *     vente qui en découle — est journalisé, lui.
+ *   · La CONSULTATION d'un écran. Le CRM trace ses consultations parce que
+ *     nous regardons le dossier d'un tiers ; un gérant qui ouvre sa propre
+ *     caisse ne rend de comptes à personne, et une ligne par ouverture d'écran
+ *     rendrait ce registre illisible en une matinée.
+ *   · Le changement de FORMULE. Il n'existe pas de route par laquelle un
+ *     restaurateur change la sienne : c'est un geste d'équipe SM, déjà tracé
+ *     sous `tenant.plan_change` dans le journal d'administration. L'inventer
+ *     ici créerait une action que rien n'écrit.
  */
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
+export const TENANT_AUDIT_ACTIONS = [
+  // ─── Commandes : l'argent qui sort de la recette du jour ───
+  'order.cancel',
+  'order.discount',
+  /**
+   * DÉCLARÉE, JAMAIS ÉCRITE À CE JOUR — et c'est dit plutôt que caché.
+   *
+   * Aucune route de remboursement n'existe encore dans l'API : le libellé est
+   * conservé parce qu'il sera exact le jour où elle naîtra, et parce qu'une
+   * ligne posée à la main en base doit se lire en français à l'écran. Le test
+   * de couverture (`audit.test.ts`) la nomme explicitement pour qu'elle ne
+   * passe pas pour un oubli.
+   */
+  'order.refund',
+
+  // ─── Prix de vente ───
+  /**
+   * Prix d'un produit, d'une variante, ou d'un SUPPLÉMENT payant. Les trois
+   * sont le même fait pour le client : ce qu'il paie a changé. Trois actions
+   * distinctes obligeraient l'écran à raconter trois fois la même histoire.
+   */
+  'price.change',
+
+  // ─── Ce qui est vendable ───
+  'product.create',
+  'product.delete',
+  /** Rupture ou retour d'un produit, posée à la main depuis la caisse ou le KDS. */
+  'product.stock',
+  /**
+   * Une catégorie supprimée détache ses produits (`categoryId: null`) : ils
+   * disparaissent des écrans qui présentent la carte par catégorie. C'est une
+   * mise hors service en masse, pas une retouche de mise en page — d'où la
+   * différence de traitement avec sa création et son renommage.
+   */
+  'category.delete',
+
+  // ─── Le stock, c'est-à-dire l'argent en réserve ───
+  /** Achat, perte, inventaire — le geste déclaré, par `POST /supply/movements`. */
+  'stock.movement',
+  /**
+   * Le stock corrigé depuis l'ÉDITEUR d'ingrédient, hors mouvement.
+   *
+   * C'était le seul chemin par lequel une quantité changeait sans laisser la
+   * moindre trace, ni dans `stock_movements` ni ailleurs : une perte pouvait
+   * s'effacer d'un `PATCH`. Il porte donc sa propre action — confondre une
+   * correction de fiche avec un mouvement déclaré ferait mentir l'inventaire.
+   */
+  'stock.adjust',
+  /** Rupture d'ingrédient : elle coupe d'un geste tous les produits qui en dépendent. */
+  'ingredient.out',
+  /** Sortie du catalogue (suppression douce) — le stock qu'il portait cesse d'être suivi. */
+  'ingredient.delete',
+
+  // ─── Ce que voit le client, et ce qui engage le restaurant ───
+  'tenant.identity',
+  'tenant.hours',
+  'tenant.settings',
+  'tenant.brand',
+  'tenant.logo',
+  /** Raison sociale, SIRET, TVA : ce qui s'imprime sur les factures qu'il émet. */
+  'tenant.billing_identity',
+] as const;
+
+export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
+
+/**
+ * Rédigés — jamais un code machine devant un gérant.
+ *
+ * `Record<TenantAuditAction, string>` et non `Record<string, string>` : une
+ * action ajoutée à la liste ci-dessus sans libellé ne compile plus. La version
+ * permissive laissait au contraire s'afficher `product.stock` en toutes
+ * lettres dans le registre d'un restaurateur.
+ */
+export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.cancel': 'Annulation de commande',
   'order.discount': 'Remise',
   'order.refund': 'Remboursement',
   'price.change': 'Changement de prix',
+  'product.create': 'Produit ajouté à la carte',
+  'product.delete': 'Produit retiré de la carte',
+  'product.stock': 'Rupture ou retour d’un produit',
+  'category.delete': 'Catégorie supprimée',
+  'stock.movement': 'Mouvement de stock',
+  'stock.adjust': 'Stock corrigé à la main',
+  'ingredient.out': 'Rupture d’ingrédient',
+  'ingredient.delete': 'Ingrédient retiré du catalogue',
+  'tenant.identity': 'Identité de l’enseigne',
+  'tenant.hours': 'Horaires et fermetures',
+  'tenant.settings': 'Réglages du service',
+  'tenant.brand': 'Masque d’identité',
+  'tenant.logo': 'Logo',
+  'tenant.billing_identity': 'Identité de facturation',
+};
+
+/**
+ * ═══ PAR QUEL MOYEN L'AUTEUR A OUVERT SA SESSION ═══
+ *
+ * « Qui » ne suffit pas à relire un geste six mois plus tard : le même nom
+ * peut agir depuis le back-office avec son mot de passe ou depuis la tablette
+ * du comptoir avec un code à quatre chiffres, et les deux n'engagent pas la
+ * même chose. Le moyen dit AUSSI dans quel référentiel lire `id` :
+ * `password` → un compte (`users`), `pin` → un membre d'équipe (`staff`).
+ *
+ * ─── LA PLACE DÉJÀ RÉSERVÉE, SANS RIEN CONSTRUIRE ───
+ *
+ * `connector` existe ici et n'est écrit par AUCUN code aujourd'hui : il n'y a
+ * ni clé de connecteur, ni route qui en accepte une, et ce chantier n'en
+ * ajoute pas. Il est déclaré pour que le jour où un assistant agira au nom
+ * d'un restaurant, la ligne de journal se pose SANS MIGRATION — l'auteur est
+ * stocké en TEXTE (et non en `ObjectId`), précisément pour qu'un identifiant
+ * de clé, qui n'aura pas cette forme, y tienne. Le champ `name` nommera alors
+ * l'assistant, `role` le titre sous lequel il a agi.
+ */
+export const AUDIT_AUTHOR_MEANS = ['password', 'pin', 'connector'] as const;
+export type AuditAuthorMeans = (typeof AUDIT_AUTHOR_MEANS)[number];
+
+export const AUDIT_AUTHOR_MEANS_LABELS: Record<AuditAuthorMeans, string> = {
+  password: 'depuis le back-office',
+  pin: 'au code, sur tablette',
+  connector: 'par un assistant connecté',
+};
+
+/**
+ * L'AUTEUR D'UN GESTE, tel qu'il est ÉCRIT dans la ligne.
+ *
+ * `name` et `role` sont DÉNORMALISÉS, exactement pour la raison qui vaut
+ * `actorEmail` au journal d'administration : un registre qui se relit à
+ * travers une jointure CHANGE DE CONTENU le jour où un équipier est renommé,
+ * change de rôle ou quitte le restaurant. Ce qui est écrit reste écrit.
+ */
+export type AuditAuthor = {
+  /** `users._id`, `staff._id`, ou demain un identifiant de clé de connecteur. */
+  id: string;
+  /** Le nom AU MOMENT DU GESTE. Peut être vide : un compte historique n'en porte pas. */
+  name: string;
+  /** À quel titre — `owner`, `gerant`, `caisse`, `cuisine`… */
+  role: string;
+  means: AuditAuthorMeans;
 };
 
 /** Une ligne du journal telle que l'écran du gérant la lit. */
@@ -426,7 +624,16 @@ export type AuditEntryView = {
   action: string;
   /** Rédigé — jamais un code machine devant un gérant. */
   actionLabel: string;
-  /** L'équipier dont le PIN a validé le geste — '' pour un geste sans PIN. */
+  /**
+   * L'équipier dont le PIN a validé le geste — '' pour un geste sans PIN.
+   *
+   * CONSERVÉ malgré `author` : les lignes écrites avant ce champ n'ont que
+   * `staffId`, et un registre append-only ne se réécrit pas pour rattraper une
+   * évolution de forme. L'écran affiche `author` quand il existe, ce nom
+   * sinon.
+   */
   staffName: string;
+  /** `null` sur les lignes antérieures au champ — voir `staffName`. */
+  author: AuditAuthor | null;
   meta: Record<string, unknown>;
 };

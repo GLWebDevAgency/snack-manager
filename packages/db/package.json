@@ -20,7 +20,8 @@
     "test": "vitest run",
     "backfill:founder": "tsx src/backfill-founder.ts",
     "backfill:contact": "tsx src/backfill-contact.ts",
-    "backfill:brand": "tsx src/backfill-brand.ts"
+    "backfill:brand": "tsx src/backfill-brand.ts",
+    "backfill:medias": "tsx src/backfill-medias.ts"
   },
   "dependencies": {
     "@sm/contracts": "workspace:*",

@@ -9,6 +9,8 @@ import {
   productionTasksFor,
   productionWeekLabel,
   productionWeekOf,
+  statutEffectif,
+  type CompteLu,
   type CrmProductionClient,
   type CrmProductionTask,
   type CrmProductionWeek,
@@ -73,8 +75,18 @@ type RawTick = AtelierTick & { _id: unknown };
 const iso = (d: Date | string | null | undefined): string | null =>
   d ? new Date(d).toISOString() : null;
 
-const statusOf = (raw: RawTenant): TenantAccountStatus =>
-  ((raw.account as { status?: string } | undefined)?.status ?? 'trial') as TenantAccountStatus;
+/**
+ * Statut EFFECTIF du compte (`statutEffectif`, @sm/contracts), et non la
+ * colonne : la file de production affiche le statut à côté du travail dû, et
+ * l'équipe la lit le même matin que la fiche client. Deux écrans du même CRM
+ * qui répondent « Essai » et « Actif » pour le même restaurant, c'est le genre
+ * d'écart qu'on découvre au téléphone.
+ *
+ * D'où la projection de `account.trialEndsAt` en plus de `account.status` dans
+ * les deux requêtes de ce fichier : sans le terme, rien à dériver.
+ */
+const statusOf = (raw: RawTenant, now: Date): TenantAccountStatus =>
+  statutEffectif(raw.account as CompteLu | undefined, now);
 
 const signedAtOf = (raw: RawTenant): Date | null =>
   (raw.atelier as { signedAt?: Date | null } | null)?.signedAt ?? null;
@@ -134,7 +146,7 @@ export class ProductionService {
             { 'atelier.reseauxSociaux': { $in: ['hebdo', 'bihebdo'] } },
           ],
         },
-        { name: 1, slug: 1, atelier: 1, 'account.status': 1 },
+        { name: 1, slug: 1, atelier: 1, 'account.status': 1, 'account.trialEndsAt': 1 },
       )
       .sort({ name: 1 })
       .lean()) as RawTenant[];
@@ -147,7 +159,7 @@ export class ProductionService {
       // Un client parti (churned) sort de la semaine COURANTE — plus rien ne
       // lui est dû — mais reste dans les semaines passées : son historique de
       // promesses tenues ne s'évapore pas avec son départ.
-      const accountStatus = statusOf(row);
+      const accountStatus = statusOf(row, now);
       if (accountStatus === 'churned' && week.key === current.key) continue;
 
       // Une promesse signée APRÈS la semaine regardée n'y était pas due — les
@@ -209,13 +221,13 @@ export class ProductionService {
     const { week } = this.resolveWeek(body.week, now);
 
     const tenant = (await this.tenants
-      .findById(tenantId, { atelier: 1, 'account.status': 1 })
+      .findById(tenantId, { atelier: 1, 'account.status': 1, 'account.trialEndsAt': 1 })
       .lean()) as RawTenant | null;
     if (!tenant) throw new NotFoundException('Établissement introuvable');
 
     // Les MÊMES règles de dû que la lecture (`duesPour` + les deux gardes de
     // la file) : ce qui ne s'affiche pas ne se coche pas.
-    if (statusOf(tenant) === 'churned') {
+    if (statusOf(tenant, now) === 'churned') {
       throw new BadRequestException('Ce client a quitté le parc — plus rien ne lui est dû.');
     }
     const signedAt = signedAtOf(tenant);

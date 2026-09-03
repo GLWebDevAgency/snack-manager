@@ -53,6 +53,10 @@ export class HeartbeatDevice {
       device: toDeviceIdentity(device),
       // Volontairement `true` ou absent, jamais `false` : la caisse d'un client
       // à jour ne transporte rien de plus à chaque battement.
+      //
+      // Statut STOCKÉ : seule la suspension compte pour une tablette, et
+      // `statutEffectif` ne joue qu'entre essai et actif — deux états qui
+      // n'ont jamais suspendu personne.
       ...(isAccessBlocked(status) ? { suspended: true } : {}),
     };
   }

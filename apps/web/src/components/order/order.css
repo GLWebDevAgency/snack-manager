@@ -180,6 +180,46 @@
     );
 }
 
+/* ── Bande d'accueil : la photo du restaurant en tête de la carte ────────
+ * `brand.hero` est stockée et validée depuis la livraison du masque, et aucune
+ * surface ne la rendait. Elle se pose ICI, DANS la carte d'accroche et non
+ * au-dessus : la vitrine ne gagne qu'une bande, pas un étage, et le premier
+ * plat reste au premier écran d'un téléphone.
+ *
+ * ═══ LE BAS DE LA BANDE EST UN MASQUE, PAS UN DÉGRADÉ DE COULEUR ═══
+ *
+ * Un fondu vers `--cf-surface` aurait laissé une couture : le fond de la carte
+ * à cette hauteur n'est pas la surface nue mais le dégradé de `.sm-hero`, un
+ * mélange de `--cf-bg` qui varie avec la marque. En retirant l'ALPHA de la
+ * photo et de son voile, c'est le dégradé de la carte lui-même qui reprend la
+ * main — exact sur les six directions, sans qu'aucune valeur ne soit à tenir
+ * en double. Même geste que `.sm-fade-x` : le `#000` d'un masque n'est pas du
+ * noir, c'est « opaque ».
+ */
+.sm-hero-media {
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+}
+
+/* ── Le voile du masque, étalé sur la photo ──────────────────────────────
+ * Nul en haut — la photo d'un restaurant n'a pas à être vue à travers une
+ * vitre teintée — et plein en bas, là où se posent les pastilles d'état et de
+ * note. `--cf-scrim` ASSOMBRIT toujours, quel que soit le mode : c'est ce qui
+ * rend son effet prévisible sur une photo qu'on ne choisit pas.
+ *
+ * Il ne PORTE PAS le texte, et c'est mesuré. `--cf-text` suit le MODE du
+ * restaurant pendant que le voile, lui, assombrit toujours : sur une direction
+ * claire, l'encre sombre posée sur une photo SOMBRE voilée tombe à 1,13:1
+ * (Brasserie), 1,31 (Atelier, Soleil), 1,70 (Marché) — alors que la même encre
+ * passe à 5,35–6,00 sur une photo BLANCHE. C'est la photo, qu'on ne choisit
+ * pas, qui déciderait de la lisibilité. Le texte se pose donc sur une plaque
+ * OPAQUE (`bg-surface`), où le couple redevient `ink/surface` — 9,10:1 au pire
+ * des six directions, et c'est `contraste()` qui le garantit (`hero.test.ts`).
+ */
+.sm-hero-voile {
+  background: linear-gradient(180deg, transparent 8%, var(--cf-scrim) 72%);
+}
+
 /* ── Ancrage de section sous les barres collantes ────────────────────────
  * `--sm-anchor` est posé par le composant : la hauteur exacte de la barre de
  * recherche + rail de catégories, en-tête d'embed comprise.

@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * PRODUCTION DE L'ATELIER — « qu'est-ce que je dois à mes clients cette
- * semaine ? », le pendant TENUE DE PROMESSE du pipeline commercial.
+ * PRODUCTION — « qu'est-ce que je dois à mes clients cette semaine ? », le
+ * pendant TENUE DE PROMESSE de la prospection (groupe Atelier de la colonne).
  *
  * Depuis que « réseaux, 2 publications/semaine » ou « présence internet,
  * rapport mensuel » se signent, il y a une promesse récurrente à tenir — et

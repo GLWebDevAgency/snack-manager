@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { photoHeritee } from '@sm/contracts';
 import { SmClient, type Transport } from '../api';
 import { setStore } from '../storage';
 import { SUPPLEMENT_GROUP, type Menu, type Order, type Product } from '../types';
@@ -67,6 +68,31 @@ describe('carte de démonstration', () => {
     expect(products.some((p) => (p.supplements?.length ?? 0) > 0)).toBe(true);
     expect(products.some((p) => (p.removables?.length ?? 0) > 0)).toBe(true);
     expect(products.some((p) => (p.variants?.length ?? 0) > 0)).toBe(true);
+  });
+
+  it('porte des photos, sous la forme exacte du repli hérité', async () => {
+    const menu = await menuOf(transport());
+    const products = menu.categories.flatMap((c) => c.products);
+    const avecPhoto = products.filter((p) => p.photoUrl);
+
+    // Une carte sans aucune photo ne montrerait pas la vignette de la caisse
+    // au prospect, et une carte tout en photos ne ressemblerait à aucun snack :
+    // c'est la MIXITÉ qui doit tenir — des tuiles illustrées à côté de tuiles
+    // purement typographiques, comme dans un vrai établissement.
+    expect(avecPhoto.length).toBeGreaterThan(20);
+    expect(avecPhoto.length).toBeLessThan(products.length);
+
+    for (const p of avecPhoto) {
+      // `photoHeritee` rend la chaîne INCHANGÉE quand elle est servable, et
+      // `null` sinon : l'égalité vérifie donc d'un coup la forme admise et
+      // l'absence de contournement (`//hôte-tiers`, `javascript:`…).
+      expect(photoHeritee(p.photoUrl)).toBe(p.photoUrl);
+      expect(p.photoUrl?.startsWith('/photos/')).toBe(true);
+    }
+    // Aucune médiathèque simulée : le point d'intérêt et le texte alternatif
+    // n'existent pas ici, et les surfaces doivent rester lisibles sans eux.
+    expect(products.every((p) => (p.medias?.length ?? 0) === 0)).toBe(true);
+    expect(menu.medias ?? []).toEqual([]);
   });
 
   it("n'expose aucune identité réelle", async () => {

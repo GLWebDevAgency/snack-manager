@@ -3,6 +3,7 @@ import {
   AdminLogQuerySchema,
   BrandStrictSchema,
   DeviceRevokeSchema,
+  TenantCapaciteSchema,
   TenantChurnSchema,
   TenantNoteSchema,
   TenantOffreSchema,
@@ -12,6 +13,7 @@ import {
   type Brand,
   type DeviceRevoke,
   type JwtPayload,
+  type TenantCapacite,
   type TenantChurn,
   type TenantNote,
   type TenantOffre,
@@ -111,6 +113,29 @@ export class AdminController {
     @Body(zod(TenantOffreSchema)) body: TenantOffre,
   ) {
     return this.admin.changeOffre(actor, id, body);
+  }
+
+  /**
+   * ACCORDER, RETIRER OU LEVER une capacité hors formule. Motif obligatoire.
+   *
+   * `derogationsCapacite` était lu par tout le produit et écrit par aucune
+   * route : une exception commerciale se posait dans Mongo, ou pas du tout.
+   *
+   * Nommée `/capacites` au PLURIEL et non `/derogations` : ce que l'équipe
+   * ouvre est l'écran des capacités d'un client, la dérogation n'en est que le
+   * moyen — et la réponse rend bien l'état complet des onze, pas la ligne
+   * qu'on vient de poser.
+   *
+   * `PATCH` comme `/offre` et `/marque` : on modifie une facette d'un compte
+   * qui existe, on ne crée pas de ressource à une nouvelle adresse.
+   */
+  @Patch('tenants/:id/capacites')
+  changeCapacite(
+    @CurrentUser() actor: JwtPayload,
+    @Param('id') id: string,
+    @Body(zod(TenantCapaciteSchema)) body: TenantCapacite,
+  ) {
+    return this.admin.changeCapacite(actor, id, body);
   }
 
   /** Le masque posé à l'installation, depuis la fiche client du CRM — schéma strict. */

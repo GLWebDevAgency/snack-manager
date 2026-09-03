@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * RÉSEAUX SOCIAUX DE LA VITRINE — back-office INTERNE Snack Manager.
+ * VITRINE SNACK MANAGER — les réseaux sociaux publiés sur notre page
+ * d'accueil, réglés depuis le back-office INTERNE.
  *
  * Quatre champs, un par réseau, et une seule question à laquelle l'écran doit
  * répondre en partant : « qu'est-ce qui est PUBLIC en ce moment ? ». Ce qui

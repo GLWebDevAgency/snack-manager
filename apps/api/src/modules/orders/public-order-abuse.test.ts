@@ -47,6 +47,10 @@ function setup(
       _id: TENANT,
       account: { status: 'active' },
       settings: { onlineOrderingPaused: false },
+      // Le module de commande en ligne SOUSCRIT : sans lui, la page se ferme
+      // proprement (« ce restaurant ne prend pas les commandes en ligne ») et
+      // aucun des contrôles anti-abus testés ici ne s'exécute.
+      onlineOrdering: true,
     }),
   };
   const slots = {

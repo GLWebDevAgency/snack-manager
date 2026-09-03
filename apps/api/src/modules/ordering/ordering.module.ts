@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { EncaissementModule } from '../encaissement/encaissement.module';
 import { TenantsModule } from '../tenants/tenants.module';
+// La vitrine DÉRIVE `photoUrl` de la médiathèque (`site.service.ts`).
+import { MediathequeModule } from '../mediatheque/mediatheque.module';
 import { OrderingController } from './ordering.controller';
 import { StripeConnectWebhookController } from './stripe-connect-webhook.controller';
 import { StripeWebhookController } from './stripe-webhook.controller';
@@ -18,7 +20,7 @@ import { TicketService } from './ticket.service';
  * ou vérifier un créneau sans repasser par HTTP.
  */
 @Module({
-  imports: [TenantsModule, EncaissementModule],
+  imports: [TenantsModule, EncaissementModule, MediathequeModule],
   // LES DEUX WEBHOOKS SONT DÉCLARÉS ICI, ET C'EST VITAL.
   //
   // `StripeWebhookController` ne l'était PAS : sa route répondait 404 en

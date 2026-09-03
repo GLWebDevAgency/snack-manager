@@ -49,6 +49,8 @@ import {
   type LeadServices,
   type ProposalBilling,
   type AdminTenantAccount,
+  type Capacite,
+  type GesteDerogation,
   type CrmActivityWindow,
   type CrmClient,
   type CrmClientHealth,
@@ -460,6 +462,21 @@ export const clientsApi = {
       reason: string;
     },
   ) => api.patch<unknown>(`/crm/tenants/${id}/offre`, body),
+  /**
+   * ACCORDER, RETIRER OU LEVER une capacité hors formule.
+   *
+   * `derogationsCapacite` était lu par tout le produit et écrit par aucune
+   * route : une exception commerciale se posait dans Mongo, ou pas du tout.
+   * Distinct de `changeOffre` — une dérogation ne change NI la formule NI la
+   * facture, c'est précisément ce qui s'écarte de la grille.
+   *
+   * Ni auteur ni date dans le corps : l'API les tient du jeton et de son
+   * horloge. Une signature transmise par le navigateur n'en serait pas une.
+   */
+  changeCapacite: (
+    id: string,
+    body: { capacite: Capacite; geste: GesteDerogation; motif: string },
+  ) => api.patch<unknown>(`/crm/tenants/${id}/capacites`, body),
   /**
    * LA FICHE FACTURATION D'UN CLIENT — pièces, ardoise, prochaine échéance.
    *

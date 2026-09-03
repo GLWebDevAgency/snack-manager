@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { loadSite, PublicApiError } from "@/components/order/api";
 import { cityOf, euros } from "@/components/order/helpers";
+import { altDuHero, imageDePartage } from "@/components/order/hero";
 import { restaurantJsonLd, serializeJsonLd } from "@/components/order/jsonld";
 import { Storefront } from "@/components/order/Storefront";
 
@@ -46,6 +47,28 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
   const url = `${siteOrigin()}/r/${site.tenant.slug}`;
 
+  /*
+   * LA VIGNETTE DE PARTAGE — la photo d'accueil d'abord, le logo en repli.
+   *
+   * Cette page déclarait `summary_large_image` — un emplacement de 1200×630,
+   * donc du seize neuvièmes — en n'y mettant QUE `logoUrl`, c'est-à-dire une
+   * marque carrée. Sur WhatsApp, Messenger et X, le premier contact d'un
+   * client avec le restaurant était donc un logo tronqué par le milieu ou
+   * flottant entre deux bandes grises. `brand.hero` est précisément une photo
+   * d'établissement en paysage : elle passe devant.
+   *
+   * Le format de carte SUIT l'image retenue au lieu de la contredire : sans
+   * photo d'accueil, `summary` cadre le logo carré tel qu'il est, ce qui est
+   * le bon rendu d'une marque carrée. Et `twitter.images` est posé
+   * explicitement plutôt que laissé à l'héritage d'Open Graph — l'`alt` que le
+   * restaurateur a écrit dans sa médiathèque part avec.
+   */
+  const partage = imageDePartage(site.tenant.brand.hero, site.tenant.logoUrl);
+  const alt = partage?.paysage
+    ? altDuHero(site.tenant.brand.hero, site.medias) || site.tenant.name
+    : site.tenant.name;
+  const images = partage ? [{ url: partage.url, alt }] : [];
+
   return {
     title,
     description,
@@ -57,9 +80,14 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       description,
       url,
       locale: "fr_FR",
-      ...(site.tenant.logoUrl ? { images: [site.tenant.logoUrl] } : {}),
+      images,
     },
-    twitter: { card: "summary_large_image", title, description },
+    twitter: {
+      card: partage?.paysage ? "summary_large_image" : "summary",
+      title,
+      description,
+      images,
+    },
     robots: { index: true, follow: true },
   };
 }

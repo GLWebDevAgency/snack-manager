@@ -2,9 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  aLaCapacite,
   brandColorDe,
+  catalogueMedias,
   logoUrlDe,
+  mediasDuProduit,
+  photoUrlDe,
   publicOrderingState,
+  type MediaVue,
   type PublicSiteCategory,
   type PublicSiteProduct,
   type PublicSiteResponse,
@@ -13,6 +18,7 @@ import {
 } from '@sm/contracts';
 import type { Category, Product, Review } from '@sm/db';
 import { marqueObservee } from '../../common/marque-observee';
+import { MediasService } from '../mediatheque/medias.service';
 import { horairesPublics } from '../tenants/horaires-publics';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from './slots.service';
@@ -66,29 +72,38 @@ export class SiteService {
     @InjectModel('Review') private readonly reviews: Model<Review>,
     private readonly tenants: TenantsService,
     private readonly slots: SlotsService,
+    private readonly medias: MediasService,
   ) {}
 
   async build(slug: string, date?: string): Promise<PublicSiteResponse> {
     const tenant = await this.tenants.bySlug(slug);
     const tenantId = String(tenant._id);
 
-    const [menu, slots, reviews] = await Promise.all([
+    const [{ menu, medias }, slots, reviews] = await Promise.all([
       this.publicMenu(tenantId),
       this.slots.compute(tenant, date),
       this.reviewsSummary(tenantId),
     ]);
 
-    // Suspension de compte = pause de service aux yeux du public (message
-    // neutre, jamais le motif du litige) — règle partagée des contrats.
-    const gate = publicOrderingState(tenant.account, {
-      paused: tenant.settings?.onlineOrderingPaused === true,
-      message: tenant.settings?.pauseMessage ?? null,
-    });
+    // Suspension de compte, ou commande en ligne non souscrite = pause de
+    // service aux yeux du public (message neutre, jamais le motif du litige ni
+    // la mention d'un abonnement) — règle partagée des contrats. Le menu, les
+    // horaires et les avis restent servis : on ferme un guichet, on n'efface
+    // pas un restaurant d'Internet.
+    const gate = publicOrderingState(
+      tenant.account,
+      {
+        paused: tenant.settings?.onlineOrderingPaused === true,
+        message: tenant.settings?.pauseMessage ?? null,
+      },
+      aLaCapacite(tenant, 'online'),
+    );
     const paused = gate.paused;
 
     return {
       tenant: tenantPublicDe(tenant),
       menu,
+      medias,
       slots,
       reviews,
       ordering: {
@@ -106,11 +121,17 @@ export class SiteService {
    * Miroir de `MenuService.publicMenu` — ce service n'est pas exporté par
    * `MenuModule`, la requête est donc reprise ici (cf. `issues`).
    */
-  private async publicMenu(tenantId: string): Promise<{ categories: PublicSiteCategory[] }> {
-    const [cats, prods] = await Promise.all([
+  private async publicMenu(
+    tenantId: string,
+  ): Promise<{ menu: { categories: PublicSiteCategory[] }; medias: MediaVue[] }> {
+    const [cats, prods, medias] = await Promise.all([
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
+      this.medias.catalogue(tenantId),
     ]);
+    // L'usage « carte » : la vitrine présente ses plats en grille 4:3, et c'est
+    // la seule décision de recadrage que le serveur prend pour elle.
+    const catalogue = catalogueMedias(medias);
 
     const byCategory = new Map<string, PublicSiteProduct[]>();
     for (const p of prods) {
@@ -132,17 +153,23 @@ export class SiteService {
         tags: (p.tags ?? []).map(String),
         isNew: p.isNew === true,
         outOfStock: p.outOfStock === true,
-        photoUrl: p.photoUrl ?? null,
+        // DÉRIVÉ de `medias[0]`, jamais la colonne lue — `photoUrlDe` est le
+        // seul adaptateur, et il retombe sur la chaîne héritée du pilote.
+        photoUrl: photoUrlDe(p, catalogue, 'carte'),
+        medias: mediasDuProduit(p),
       });
       byCategory.set(key, list);
     }
 
     return {
-      categories: cats.map((c) => ({
-        _id: String(c._id),
-        name: String(c.name ?? ''),
-        products: byCategory.get(String(c._id)) ?? [],
-      })),
+      menu: {
+        categories: cats.map((c) => ({
+          _id: String(c._id),
+          name: String(c.name ?? ''),
+          products: byCategory.get(String(c._id)) ?? [],
+        })),
+      },
+      medias,
     };
   }
 

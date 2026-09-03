@@ -7,7 +7,9 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { zod } from '../../common/zod.pipe';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { DomainAddSchema, type DomainAdd } from './site.dto';
@@ -42,13 +44,31 @@ export class SiteController {
     return this.listAddresses.execute(tenantId);
   }
 
+  /*
+   * CES DEUX ROUTES PARLENT À UN FOURNISSEUR EXTERNE, ET LUI COÛTE.
+   *
+   * Rattacher un domaine et en vérifier la propagation appellent le registrar
+   * (Railway ou Cloudflare selon la configuration) à CHAQUE requête. Sans
+   * limite, un écran qui boucle ou une main lourde sur le bouton épuise notre
+   * quota d'API fournisseur — et le quota est partagé par tout le parc, donc
+   * un seul restaurant peut empêcher les autres de rattacher leur domaine.
+   *
+   * Six par minute laissent tout le confort d'usage : on rattache un domaine
+   * une fois, et on vérifie sa propagation toutes les quelques minutes, pas
+   * toutes les secondes. Les lectures et le détachement ne sont pas limités,
+   * ils ne sortent pas de chez nous.
+   */
   @Roles('owner', 'gerant')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @Post('site/domains')
   add(@TenantId() tenantId: string, @Body(zod(DomainAddSchema)) body: unknown) {
     return this.addDomain.execute(tenantId, (body as DomainAdd).hostname);
   }
 
   @Roles('owner', 'gerant')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @Post('site/domains/:id/check')
   check(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.checkDomain.execute(tenantId, id);

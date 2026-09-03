@@ -608,7 +608,13 @@ async function main() {
       Product.deleteMany({ tenantId: tid }),
       Staff.deleteMany({ tenantId: tid }),
       Order.deleteMany({ tenantId: tid }),
-      AuditLog.deleteMany({ tenantId: tid }),
+      // SOUS l'ODM, délibérément : `auditlogs` est append-only (huit hooks
+      // Mongoose refusent toute suppression), et c'est bien ce qu'on veut du
+      // code applicatif. Le seed n'en est pas — c'est un outil de remise à
+      // zéro d'un jeu de démonstration, qui détruit aussi le tenant. Passer
+      // par `.collection` rend le contournement VISIBLE ici plutôt que de
+      // désarmer la garantie pour tout le monde.
+      AuditLog.collection.deleteMany({ tenantId: tid }),
       User.deleteMany({ tenantId: tid }),
       Tenant.deleteOne({ _id: tid }),
     ]);
@@ -630,6 +636,18 @@ async function main() {
     phones: MENU.brand.phones,
     hours,
     plan: 'complet',
+    /*
+     * LE MODULE DE COMMANDE EN LIGNE, EXPLICITEMENT SOUSCRIT.
+     *
+     * Le pilote prend des commandes en ligne depuis le premier jour — c'est le
+     * module vendu 79 €/mois par-dessus la formule (`MODULE_ORDERING_CENTS`).
+     * Le drapeau restait à son défaut `false` parce que rien ne le lisait ;
+     * depuis que les capacités sont appliquées, il DÉCIDE : sans lui, la page
+     * publique du restaurant se ferme proprement (« ce restaurant ne prend pas
+     * les commandes en ligne ») et la base d'amorçage décrirait un pilote qui
+     * n'existe pas.
+     */
+    onlineOrdering: true,
     founderSeat: true, // le pilote est la place fondateur n°1
   });
 

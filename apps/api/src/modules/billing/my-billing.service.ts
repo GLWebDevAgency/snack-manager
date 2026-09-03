@@ -11,6 +11,9 @@ import {
   invoiceTotals,
   invoiceView,
   isAccessBlocked,
+  isBillable,
+  statutEffectif,
+  type CompteLu,
   isTenantVisibleInvoice,
   nextInvoiceDue,
   planLabel,
@@ -26,9 +29,11 @@ import {
   type MyBilling,
   type StoredInvoice,
   type TenantAccountStatus,
+  type JwtPayload,
   type TenantBillingIdentity,
 } from '@sm/contracts';
 import type { Invoice, Tenant } from '@sm/db';
+import { AuditService } from '../audit/audit.module';
 import { IssuerConfig } from './issuer.config';
 
 /** Historique du gérant : la plus récente échéance en tête, `_id` départage. */
@@ -78,6 +83,7 @@ export class MyBillingService {
     @InjectModel('Invoice') private readonly invoices: Model<Invoice>,
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     private readonly issuerConfig: IssuerConfig,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -111,8 +117,13 @@ export class MyBillingService {
     const due = dueRows.map((raw) => invoiceView(raw as StoredInvoice, now));
 
     const plan = planOf(tenant);
-    const status = accountStatusOf(tenant);
-    const billable = status === 'active' || status === 'suspended';
+    const status = accountStatusOf(tenant, now);
+    // La MÊME règle que la facturation de l'équipe (`isBillable`,
+    // @sm/contracts) : elle était recopiée ici, c'est-à-dire écrite deux fois
+    // pour le même client. Le jour où l'une des deux aurait bougé, il aurait
+    // lu « aucun prélèvement » sur l'écran même où nous lui préparions une
+    // facture.
+    const billable = isBillable(status);
     // L'offre ENTIÈRE, pas la formule seule : c'est le montant que le
     // restaurateur voit sur son écran « Abonnement », et il doit être celui
     // qu'on lui prélève. Il lisait 159 € là où on facturait 238 €.
@@ -178,6 +189,7 @@ export class MyBillingService {
   async updateIdentity(
     tenantId: string,
     identity: TenantBillingIdentity,
+    actor?: JwtPayload,
   ): Promise<TenantBillingIdentity> {
     const tenant = await this.requireTenant(tenantId);
 
@@ -188,11 +200,39 @@ export class MyBillingService {
     const mismatch = billingIdentityMismatch(identity);
     if (mismatch) throw new BadRequestException(mismatch);
 
+    /*
+     * L'ÉTAT D'AVANT, FIGÉ AVANT L'ÉCRITURE.
+     *
+     * `billingIdentityOf` construit un objet neuf de chaînes : le lire APRÈS
+     * le `updateOne` rendrait la valeur nouvelle si le document en mémoire
+     * partage un sous-objet avec ce que la base vient d'écrire. La transition
+     * serait alors « 73282932000074 → 73282932000074 », c'est-à-dire un
+     * registre qui ment sans que rien ne le signale.
+     */
+    const avant = billingIdentityOf(tenant.billing);
+
     const $set: Record<string, string> = {};
     for (const [key, value] of Object.entries(identity)) {
       $set[`billing.${key}`] = value;
     }
     await this.tenants.updateOne({ _id: tenant._id }, { $set });
+
+    /*
+     * JOURNALISÉ : c'est ce qui s'imprime sur les factures que le restaurant
+     * émet, et l'écriture est un REMPLACEMENT (`PUT`) — une chaîne vide y
+     * signifie « effacé ». Un SIRET disparu d'une facture ne se retrouve pas
+     * dans un `$set` d'hier ; il se retrouve dans le registre.
+     *
+     * L'état d'AVANT part au journal en même temps que le nouveau : ce sont
+     * quelques champs textuels, pas un document, et la transition est ce qui
+     * se relit. `requireTenant` l'a déjà lu — aucune requête de plus.
+     */
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'tenant.billing_identity',
+      meta: { avant, apres: identity },
+    });
 
     return identity;
   }
@@ -254,13 +294,21 @@ const planOf = (tenant: RawTenant): BillingPlan | null =>
   (tenant.plan ?? null) as BillingPlan | null;
 
 /**
- * Statut de compte, absence comprise : les établissements créés avant le champ
- * `account` n'en ont pas en base, et `.lean()` ne matérialise pas les défauts
- * Mongoose. L'absence vaut « essai » — jamais une anomalie.
+ * Statut de compte, absence comprise, et EFFECTIF à l'instant `now`.
+ *
+ * Les établissements créés avant le champ `account` n'en ont pas en base, et
+ * `.lean()` ne matérialise pas les défauts Mongoose : l'absence vaut « essai »
+ * — jamais une anomalie.
+ *
+ * `statutEffectif` (@sm/contracts) et non la colonne, pour que le gérant lise
+ * SUR SON PROPRE ÉCRAN ce que notre équipe lit du sien. Le jour où son essai
+ * s'achève, sa page « Abonnement » annonce le prélèvement à venir au lieu de
+ * répéter « Essai — rien à facturer » jusqu'à ce qu'un humain bascule le
+ * champ à la main. Découvrir le prélèvement sur son relevé bancaire est
+ * exactement ce qu'on ne veut pas.
  */
-function accountStatusOf(tenant: RawTenant): TenantAccountStatus {
-  const account = tenant.account as { status?: string } | undefined;
-  return (account?.status ?? 'trial') as TenantAccountStatus;
+function accountStatusOf(tenant: RawTenant, now: Date): TenantAccountStatus {
+  return statutEffectif(tenant.account as CompteLu | undefined, now);
 }
 
 /**

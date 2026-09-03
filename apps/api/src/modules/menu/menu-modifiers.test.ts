@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SUPPLEMENT_GROUP_KEY } from '@sm/contracts';
+import { journalMuet } from '../audit/audit.fakes';
 import { SupplyService } from '../supply/supply.service';
 import { MenuService } from './menu.service';
 
@@ -73,6 +74,7 @@ function menu(options: { fail?: boolean; produits?: number } = {}) {
     supplyDb(options) as never,
     products as never,
     { publish: () => {} } as never,
+    journalMuet(),
   );
   // Le journal NF525 n'est pas le sujet de ces tests : une doublure muette suffit.
   return new MenuService(
@@ -81,6 +83,8 @@ function menu(options: { fail?: boolean; produits?: number } = {}) {
     { publish: () => {} } as never,
     supply,
     { log: async () => {} } as never,
+    // Idem : la médiathèque n'est pas le sujet de ces tests.
+    { catalogue: async () => [] } as never,
   );
 }
 
@@ -191,8 +195,14 @@ describe('le groupe réservé survit à une mise à jour venue de l’écran', (
       { find: () => ({ sort: () => ({ lean: async () => [] }) }) } as never,
       productsAvecRetour as never,
       { publish: () => {} } as never,
-      new SupplyService(supplyDb() as never, productsAvecRetour as never, { publish: () => {} } as never),
+      new SupplyService(
+        supplyDb() as never,
+        productsAvecRetour as never,
+        { publish: () => {} } as never,
+        journalMuet(),
+      ),
       { log: async () => {} } as never,
+      { catalogue: async () => [] } as never,
     );
     return { service, vus };
   }
@@ -245,8 +255,14 @@ describe('journal des prix — les variantes aussi', () => {
       { find: () => ({ sort: () => ({ lean: async () => [] }) }) } as never,
       products as never,
       { publish: () => {} } as never,
-      new SupplyService(supplyDb() as never, products as never, { publish: () => {} } as never),
+      new SupplyService(
+        supplyDb() as never,
+        products as never,
+        { publish: () => {} } as never,
+        journalMuet(),
+      ),
       { log: async (l: Record<string, unknown>) => void lignes.push(l) } as never,
+      { catalogue: async () => [] } as never,
     );
     return { service, lignes };
   }

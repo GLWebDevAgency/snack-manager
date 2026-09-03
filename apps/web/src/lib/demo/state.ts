@@ -44,9 +44,10 @@
  * promet une application et livre une image.
  */
 
-import { PLAN_MRR_CENTS } from "@sm/contracts";
+import { PLAN_MRR_CENTS, marqueDeRepli } from "@sm/contracts";
 import type {
   Allergen,
+  AuthMe,
   BaseUnit,
   CostsResponse,
   IngredientCategory,
@@ -316,6 +317,8 @@ export interface DemoWorld {
   /** Instant de démarrage — toutes les dates en découlent. */
   bootAt: number;
   tenant: TenantMe;
+  /** La personne que le visiteur incarne — réponse de `GET /auth/me`. */
+  moi: AuthMe;
   categories: DemoCategory[];
   products: DemoProduct[];
   boms: Record<string, DemoRecipe>;
@@ -669,6 +672,32 @@ function buildLoyalty(bootAt: number): DemoLoyaltyState {
 // Construction du monde
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * LA PERSONNE QUE LE VISITEUR INCARNE — réponse de `GET /auth/me`.
+ *
+ * La démonstration promet la vraie application : le pied de barre y montre
+ * donc une identité comme sur un vrai compte, plutôt qu'un tiret d'attente qui
+ * ferait croire à une fonction inachevée. Elle est FICTIVE au même titre que
+ * l'équipe (Karim, Sofia…), les fournisseurs et les clients de la fixture — et
+ * le bandeau de démonstration, au-dessus, dit en toutes lettres où l'on est.
+ *
+ * `owner` : c'est le back-office du PATRON qu'on fait visiter, celui qui ouvre
+ * l'encaissement et l'abonnement. Le prénom ne reprend aucun de ceux de
+ * l'équipe : deux « Karim » à deux endroits de l'écran feraient chercher un
+ * lien qui n'existe pas.
+ *
+ * Hors démonstration, rien de ceci n'est atteignable : `?demo=1` est le seul
+ * déclencheur, et il ne couvre que `/admin` (cf. `lib/demo/mode.ts`).
+ */
+const MOI: AuthMe = {
+  id: "u1",
+  nom: "Camille Fournier",
+  role: "owner",
+  genre: "user",
+  email: "camille@le-comptoir.fr",
+  tenantId: "t1",
+};
+
 export function createWorld(bootAt: number): DemoWorld {
   const iso = (ageMin: number) => at(bootAt, ageMin);
 
@@ -677,6 +706,17 @@ export function createWorld(bootAt: number): DemoWorld {
     _id: "t1",
     slug: S.SNAP_TENANT.slug,
     name: S.SNAP_TENANT.name,
+    /*
+     * LE MASQUE, CALCULÉ COMME L'API LE CALCULE.
+     *
+     * `marqueDeRepli` est exactement ce que `GET /tenants/me` rend pour un
+     * établissement dont la colonne `brand` est encore vide : la direction
+     * Nuit, avec SON accent et SON logo. Recopier ici un masque écrit à la
+     * main aurait fait diverger la démonstration du produit au premier
+     * ajustement du repli — et l'éditeur de marque montrerait alors une
+     * identité que personne n'a.
+     */
+    brand: marqueDeRepli(S.SNAP_TENANT.brandColor, S.SNAP_TENANT.logoUrl),
     logoUrl: S.SNAP_TENANT.logoUrl,
     brandColor: S.SNAP_TENANT.brandColor,
     address: S.SNAP_TENANT.address,
@@ -690,6 +730,22 @@ export function createWorld(bootAt: number): DemoWorld {
       reason: c.reason,
     })),
     plan: S.SNAP_TENANT.plan as TenantMe["plan"],
+    // Absents de l'instantané (photographié avant que `GET /tenants/me` ne les
+    // rende), et posés à la main comme les fermetures ci-dessus. Le Comptoir
+    // est le restaurant que la démonstration promet : formule Complet, module
+    // de commande en ligne souscrit, compte en règle. Un compte suspendu ferait
+    // visiter la porte fermée à qui vient voir le logiciel.
+    onlineOrdering: true,
+    /*
+     * `capacites` est VOLONTAIREMENT absent, comme le rôle l'est déjà.
+     *
+     * La barre traite l'absence en « on ne sait pas » et ne verrouille rien —
+     * ce qui est exactement ce qu'on veut d'une démonstration : un visiteur
+     * venu voir le logiciel doit le voir en entier. Poser ici les capacités
+     * d'une formule reviendrait à lui montrer des cadenas avant même qu'il
+     * sache ce que chaque écran fait.
+     */
+    account: { status: "active" },
     settings: { ...(S.SNAP_TENANT.settings as TenantMe["settings"]), dailyGoalCents: 90_000 },
   };
 
@@ -967,6 +1023,7 @@ export function createWorld(bootAt: number): DemoWorld {
   return {
     bootAt,
     tenant,
+    moi: MOI,
     categories,
     products,
     boms,

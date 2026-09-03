@@ -63,31 +63,31 @@ const PAR_PRODUIT: Record<string, string> = {
   Beldi: 'sandwichs3.jpeg',
 
   // Burgers
-  'Le Black': 'black-burger.png',
-  Fish: 'fish-burger.png',
-  'Le 180': 'mega-burger-long.png',
-  'Le 360': 'mega-burger-long.png',
-  'Le 540': 'mega-burger-long.png',
-  'Le Smash': 'smash-burger.png',
-  'Le Smash Chicken': 'smash-burger.png',
-  'Le Double Kif': 'smash-burger.png',
-  "Bun's": 'mega-burger-long.png',
+  'Le Black': 'black-burger.webp',
+  Fish: 'fish-burger.webp',
+  'Le 180': 'mega-burger-long.webp',
+  'Le 360': 'mega-burger-long.webp',
+  'Le 540': 'mega-burger-long.webp',
+  'Le Smash': 'smash-burger.webp',
+  'Le Smash Chicken': 'smash-burger.webp',
+  'Le Double Kif': 'smash-burger.webp',
+  "Bun's": 'mega-burger-long.webp',
 
   // Plats
-  'Compose ton Tacos': 'tacos-hero.png',
+  'Compose ton Tacos': 'tacos-hero.webp',
   // Le tacos gratiné n'est aujourd'hui qu'une option de « Compose ton Tacos ».
   // L'entrée reste pour le jour où il devient un produit à part entière.
-  'Tacos Gratiné': 'tacos-gratine-hero.png',
-  'Crousty One': 'crousty-riz.png',
+  'Tacos Gratiné': 'tacos-gratine-hero.webp',
+  'Crousty One': 'crousty-riz.webp',
   'Class Bowl': 'bowls-suedois.jpeg',
   'Pain Suédois': 'bowls-suedois.jpeg',
-  'Panini au choix': 'panini-menu.png',
-  'Salade César': 'salade-cesar.png',
+  'Panini au choix': 'panini-menu.webp',
+  'Salade César': 'salade-cesar.webp',
 
   // Tex-Mex & sucré
   Nuggets: 'nuggets.avif',
-  'Mozza sticks': 'mozza-stick.png',
-  'Tarte au Daim': 'tarte-daim.png',
+  'Mozza sticks': 'mozza-stick.webp',
+  'Tarte au Daim': 'tarte-daim.webp',
   'Milkshake Oréo ou Bueno': 'milkshake-oreo.webp',
 };
 
@@ -98,14 +98,14 @@ const PAR_PRODUIT: Record<string, string> = {
 
 const PAR_CATEGORIE: Record<string, string> = {
   Sandwichs: 'sandwichs1.jpeg',
-  'Gourmets Burgers': 'black-burger.png',
+  'Gourmets Burgers': 'black-burger.webp',
   'Les Classiques': 'classiques.jpeg',
   'Class Bowl': 'bowls-suedois.jpeg',
   'Compose ton Tacos': 'tacos.jpeg',
   Assiettes: 'paninis.jpeg', // le panneau « Assiettes » est sur ce cliché
-  "Bun's": 'mega-burger-long.png',
+  "Bun's": 'mega-burger-long.webp',
   Paninis: 'paninis.jpeg',
-  Hummers: 'hummers-stack.png',
+  Hummers: 'hummers-stack.webp',
   Salades: 'salades-barquettes.jpeg',
   Barquettes: 'salades-barquettes.jpeg',
   'Pain Suédois': 'bowls-suedois.jpeg',
@@ -113,14 +113,14 @@ const PAR_CATEGORIE: Record<string, string> = {
   // Aucun visuel de hot dog dans le lot : le panneau mural reste le choix
   // honnête — il montre la carte, pas un plat qu'on ne sert pas.
   'Hot Dogs': 'sandwichs3.jpeg',
-  'Les Signatures': 'smash-burger.png',
-  'Crousty One': 'crousty-riz.png',
+  'Les Signatures': 'smash-burger.webp',
+  'Crousty One': 'crousty-riz.webp',
   'Tex-Mex': 'hummers-texmex.jpeg',
   'Box à Partager': 'hummers-texmex.jpeg',
   Glaces: 'enfant-glaces.jpeg',
   Desserts: 'enfant-glaces.jpeg', // la tarte au Daim garde la sienne
   Milkshakes: 'milkshake-oreo.webp',
-  Boissons: 'boissons.png',
+  Boissons: 'boissons.webp',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -143,8 +143,33 @@ const norm = (s: string): string =>
 const index = (table: Record<string, string>): Map<string, string> =>
   new Map(Object.entries(table).map(([k, v]) => [norm(k), v]));
 
-const PRODUIT_IDX = index(PAR_PRODUIT);
-const CATEGORIE_IDX = index(PAR_CATEGORIE);
+/**
+ * Les fichiers réellement présents. Une table qui pointe vers un visuel absent
+ * ne doit pas écrire de chemin mort — mais elle ne doit pas non plus empêcher
+ * le script de tourner : les visuels de repli par catégorie sont des clichés
+ * de panneaux muraux, non versionnés faute de licence, et leur absence ne
+ * justifie pas de priver de photo les produits qui en ont une. Un produit sans
+ * photo tombe sur son monogramme, ce que les surfaces savent faire depuis
+ * toujours.
+ */
+const DISPONIBLES: ReadonlySet<string> = existsSync(PHOTOS_DIR)
+  ? new Set(readdirSync(PHOTOS_DIR))
+  : new Set();
+
+/** Ce que la table demande et que le dossier ne contient pas. */
+function absents(table: Record<string, string>): string[] {
+  if (DISPONIBLES.size === 0) return [];
+  return [...new Set(Object.values(table))].filter((f) => !DISPONIBLES.has(f)).sort();
+}
+
+/** La table, privée de ses entrées sans fichier. */
+function retenus(table: Record<string, string>): Record<string, string> {
+  if (DISPONIBLES.size === 0) return table;
+  return Object.fromEntries(Object.entries(table).filter(([, f]) => DISPONIBLES.has(f)));
+}
+
+const PRODUIT_IDX = index(retenus(PAR_PRODUIT));
+const CATEGORIE_IDX = index(retenus(PAR_CATEGORIE));
 
 const url = (file: string): string => `/photos/${file}`;
 
@@ -156,19 +181,35 @@ const SANS_PHOTO = {
 // ─────────────────────────────────────────────────────────────
 
 async function main() {
-  // Les fichiers sont la source de vérité : une table qui pointe vers un
-  // visuel absent produirait des vignettes cassées en production. On refuse
-  // de démarrer plutôt que d'écrire des chemins morts.
-  if (existsSync(PHOTOS_DIR)) {
-    const disponibles = new Set(readdirSync(PHOTOS_DIR));
-    const manquants = [...new Set([...Object.values(PAR_PRODUIT), ...Object.values(PAR_CATEGORIE)])]
-      .filter((f) => !disponibles.has(f))
-      .sort();
-    if (manquants.length > 0) {
-      throw new Error(`Visuels introuvables dans apps/web/public/photos : ${manquants.join(', ')}`);
-    }
-  } else {
+  /*
+   * LES FICHIERS SONT LA SOURCE DE VÉRITÉ, PAS LES TABLES.
+   *
+   * Une entrée qui pointe vers un visuel absent est ÉCARTÉE, jamais écrite :
+   * un chemin mort donnerait une vignette cassée en production. Mais elle
+   * n'interrompt pas le script. Les dix clichés de panneaux muraux (.jpeg) ne
+   * sont pas versionnés — leur licence ne le permet pas — et le script refusait
+   * de démarrer pour eux, ce qui le rendait tout simplement inexécutable alors
+   * que seize visuels parfaitement présents attendaient d'être rattachés.
+   *
+   * Un produit sans photo tombe sur son monogramme, ce que les surfaces savent
+   * faire depuis toujours. Ne rien attacher du tout, en revanche, est le signe
+   * d'un dossier vide ou d'un chemin faux : là, on refuse.
+   */
+  if (DISPONIBLES.size === 0) {
     console.warn(`⚠ ${PHOTOS_DIR} introuvable — vérification des fichiers ignorée.`);
+  } else {
+    const manquants = [...new Set([...absents(PAR_PRODUIT), ...absents(PAR_CATEGORIE)])].sort();
+    if (manquants.length > 0) {
+      console.warn(`⚠ ${manquants.length} visuel(s) référencé(s) sans fichier, écarté(s) :`);
+      for (const f of manquants) console.warn(`    ${f}`);
+      console.warn('  Les produits concernés garderont leur monogramme.');
+    }
+    if (PRODUIT_IDX.size === 0 && CATEGORIE_IDX.size === 0) {
+      throw new Error(
+        `Aucun visuel exploitable dans ${PHOTOS_DIR} — dossier vide, ou les tables ne ` +
+          'correspondent à aucun fichier.',
+      );
+    }
   }
 
   const uri = process.env.MONGO_URL;

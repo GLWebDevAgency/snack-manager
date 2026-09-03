@@ -27,66 +27,25 @@ import type { CrmOverview } from "@sm/contracts";
 import { ApiError, clearToken, getToken } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtDateFr } from "@/lib/format";
-import { Icon, IconBtn, ToastProvider, type IconName } from "@/components/ui";
+import { initialeDe, libelleRole, nomAffichable, useIdentite } from "@/lib/identite";
+import { Icon, IconBtn, ToastProvider } from "@/components/ui";
 import { LogoLockup } from "@/components/brand/Logo";
-import { crm, euroRound, HqContext, isHqSession } from "./crm";
+import { crm, euroRound, HQ_ROLE, HqContext, isHqSession } from "./crm";
 import { BottomSheet } from "./mobile";
+import {
+  libelleCourt,
+  MOBILE_MORE,
+  MOBILE_MORE_GROUPES,
+  MOBILE_NAV,
+  NAV_ACCUEIL,
+  NAV_GROUPES,
+  navActive,
+  type NavItem,
+} from "./navigation";
 
 /** Accent de la maison — jamais thémable par un restaurant (spec crm-sm §2.4). */
 const HQ_ACCENT = "#c9a15a";
 const HQ_ON_ACCENT = "#12100d";
-
-/**
- * LA TABLE DE NAVIGATION — et la source du titre de l'en-tête.
- *
- * Elle sert deux fois : à dessiner la colonne de gauche, et à TITRER l'écran
- * (`active.title`). Une page absente de cette table hérite donc du premier
- * item : `/sm/signals` s'intitulait « Tableau de bord » et surlignait le
- * mauvais lien tant qu'elle n'y figurait pas. Toute page ajoutée sous `/sm/`
- * doit y entrer le jour où elle est livrée.
- *
- * L'ordre est celui de la journée de travail : on regarde le parc, on vend, on
- * suit ses clients, on traite les signaux du jour, on encaisse.
- */
-const NAV: { href: string; label: string; icon: IconName; title: string }[] = [
-  { href: "/sm", label: "Tableau de bord", icon: "home", title: "Tableau de bord" },
-  { href: "/sm/pipeline", label: "Pipeline", icon: "grid", title: "Pipeline commercial" },
-  { href: "/sm/clients", label: "Clients", icon: "user", title: "Restaurants clients" },
-  { href: "/sm/signals", label: "Signaux", icon: "bell", title: "File de travail" },
-  // Après les signaux : on a écouté le parc, on TIENT ensuite les promesses
-  // récurrentes de l'Atelier — publications, fiche Google, rapports.
-  { href: "/sm/production", label: "Production", icon: "check", title: "Production de l'Atelier" },
-  { href: "/sm/erreurs", label: "Erreurs", icon: "alert", title: "Journal d'erreurs" },
-  {
-    href: "/sm/facturation",
-    label: "Facturation",
-    icon: "euro",
-    title: "Facturation et recouvrement",
-  },
-  // En DERNIER, et c'est voulu : la vitrine n'est pas un geste de la journée
-  // de travail, c'est un réglage de la maison. Il se visite quand un compte
-  // ouvre ou ferme, pas tous les matins.
-  {
-    href: "/sm/reseaux",
-    label: "Vitrine",
-    icon: "gear",
-    title: "Réseaux sociaux de la vitrine",
-  },
-];
-
-/**
- * LA BARRE BASSE ne porte que CINQ entrées — la règle des grandes applications
- * mobiles, et elle n'est pas esthétique : à six, chaque cible passe sous les
- * 44 px de pouce sur un écran de 390. Les quatre gestes quotidiens (regarder,
- * vendre, suivre, encaisser) + « Plus » qui ouvre une feuille avec le reste.
- * Les entrées sont TIRÉES de `NAV`, jamais recopiées : un intitulé qui change
- * change aux deux endroits.
- */
-const MOBILE_NAV_HREFS = ["/sm", "/sm/pipeline", "/sm/clients", "/sm/facturation"];
-const MOBILE_NAV = MOBILE_NAV_HREFS.map(
-  (href) => NAV.find((n) => n.href === href)!,
-);
-const MOBILE_MORE = NAV.filter((n) => !MOBILE_NAV_HREFS.includes(n.href));
 
 export default function SmLayout({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = usePathname();
@@ -171,12 +130,28 @@ function HqShell({ children }: { children: ReactNode }) {
     };
   }, [mounted, allowed, router, tick]);
 
+  // ── Qui est connecté ──
+  //
+  // Le pied de barre annonçait « Admin SM » et « Fondateur » sous une pastille
+  // « A », en bureau comme en mobile : trois mots écrits en dur, vrais pour
+  // personne. `GET /auth/me` rend la personne derrière le jeton — le nom n'est
+  // dans aucune autre réponse, `GET /tenants/me` ne rendant que l'établissement
+  // (et cette surface n'en a pas : l'équipe Snack Manager porte `tenantId`
+  // null).
+  //
+  // Tant que la réponse n'est pas là, ou si elle n'arrive jamais, `nom` vaut
+  // `null` et la ligne affiche un tiret discret — jamais un nom deviné.
+  const identite = useIdentite(mounted && allowed);
+  const nom = nomAffichable(identite);
+  const initiale = initialeDe(identite);
+  // La seconde ligne, elle, n'a pas besoin d'attendre : cette coque ne se rend
+  // QUE si le jeton porte `sm_admin` (`allowed` ci-dessus). Le repli dit donc
+  // ce que le cloisonnement vient de vérifier, pas une supposition.
+  const role = libelleRole(identite?.role ?? (allowed ? HQ_ROLE : null));
+
   if (!mounted || !token || !allowed) return null;
 
-  const active =
-    [...NAV].sort((a, b) => b.href.length - a.href.length).find((n) =>
-      n.href === "/sm" ? pathname === "/sm" : pathname.startsWith(n.href),
-    ) ?? NAV[0]!;
+  const active = navActive(pathname);
 
   const seats = overview?.founderSeats;
   const openLeads = overview?.leadsOpen ?? 0;
@@ -225,69 +200,80 @@ function HqShell({ children }: { children: ReactNode }) {
           <div className="px-2 text-ink">
             <LogoLockup size={28} />
           </div>
-          <div className="px-2 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-            Interne · HQ
-          </div>
 
-          <nav className="flex flex-col gap-[3px]" aria-label="Navigation interne">
-            {NAV.map((item) => {
-              const on = item.href === active.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={on ? "page" : undefined}
-                  className={cx(
-                    "cf-press-row flex items-center gap-[11px] rounded-ctrl px-3 py-[11px] text-sm",
-                    on
-                      ? "bg-accent font-extrabold text-onaccent shadow-card"
-                      : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
-                  )}
-                >
-                  <Icon name={item.icon} size={18} stroke={on ? 2.3 : 2} />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.href === "/sm/pipeline" && openLeads > 0 && (
-                    <span
-                      className={cx(
-                        "cf-fig shrink-0 rounded-pill px-[7px] py-px text-[11px] font-extrabold",
-                        on ? "bg-black/25 text-onaccent" : "bg-fill text-mut",
-                      )}
-                    >
-                      {openLeads}
-                      <span className="sr-only"> leads en cours</span>
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+          {/*
+            CE QUI DÉFILE, c'est la navigation ET le bloc des places — pas le
+            pied de colonne, qui porte la sortie et doit rester atteignable.
+            Les cinq intitulés ajoutent ~120 px à la colonne : sur un portable
+            de 720 px, l'ancienne colonne rigide aurait poussé « Se déconnecter »
+            sous le bord de l'écran.
+          */}
+          <div className="cf-scroll -mr-1 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+            <nav className="mt-3 flex flex-col gap-3" aria-label="Navigation interne">
+              {/* Le tableau de bord : au-dessus des intitulés, sans en porter
+                  un — il résume les cinq domaines au lieu d'en habiter un. */}
+              <LienColonne item={NAV_ACCUEIL} active={active} openLeads={openLeads} />
 
-          {/* ── Places fondateur : le chiffre que le fondateur regarde en premier ── */}
-          <div className="mt-4 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
-              Places fondateur
+              {NAV_GROUPES.map((groupe) => (
+                // `role="group"` + `aria-label` : le lecteur d'écran annonce le
+                // domaine en entrant dedans. L'intitulé visible est donc
+                // `aria-hidden`, sinon il serait lu deux fois de suite.
+                <div key={groupe.titre} role="group" aria-label={groupe.titre}>
+                  <div
+                    className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut"
+                    aria-hidden
+                  >
+                    {groupe.titre}
+                  </div>
+                  <div className="flex flex-col gap-[3px]">
+                    {groupe.items.map((item) => (
+                      <LienColonne
+                        key={item.href}
+                        item={item}
+                        active={active}
+                        openLeads={openLeads}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </nav>
+
+            {/* ── Places fondateur : le chiffre que le fondateur regarde en premier ── */}
+            <div className="mt-4 rounded-card border border-white/6 bg-[image:var(--cf-elev-gradient)] p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
+                Places fondateur
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-1.5">
+                <span className="cf-fig text-2xl font-extrabold text-accent">
+                  {seats ? seats.remaining : "—"}
+                </span>
+                <span className="text-[13px] font-semibold text-mut">
+                  / {seats?.total ?? 10} libres
+                </span>
+              </div>
+              <SeatMeter taken={seats?.taken ?? 0} total={seats?.total ?? 10} />
             </div>
-            <div className="mt-1.5 flex items-baseline gap-1.5">
-              <span className="cf-fig text-2xl font-extrabold text-accent">
-                {seats ? seats.remaining : "—"}
-              </span>
-              <span className="text-[13px] font-semibold text-mut">
-                / {seats?.total ?? 10} libres
-              </span>
-            </div>
-            <SeatMeter taken={seats?.taken ?? 0} total={seats?.total ?? 10} />
           </div>
 
           <div className="mt-auto flex items-center gap-2.5 border-t border-line pt-3">
+            {/* L'initiale se DÉRIVE du nom reçu ; le tiret est l'état
+                d'attente, et celui de l'échec. Une lettre par défaut
+                dessinerait la pastille de quelqu'un qui n'existe pas. */}
             <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold text-accent"
+              className={cx(
+                "grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold",
+                initiale ? "text-accent" : "text-mut",
+              )}
               aria-hidden
             >
-              A
+              {initiale ?? "—"}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold text-ink">Admin SM</div>
-              <div className="truncate text-xs text-mut">Fondateur</div>
+              <div className={cx("truncate text-sm font-bold", nom ? "text-ink" : "text-mut")}>
+                {nom ?? "—"}
+              </div>
+              <div className="truncate text-xs text-mut">{role}</div>
             </div>
             <IconBtn
               icon="logout"
@@ -306,8 +292,10 @@ function HqShell({ children }: { children: ReactNode }) {
               resserrée — rien ne doit pousser la ligne à déborder. */}
           <header className="flex shrink-0 items-center justify-between gap-4 border-b border-line2 bg-[image:var(--cf-card-gradient)] px-[26px] py-4 max-md:gap-2.5 max-md:px-4 max-md:py-2.5">
             <div className="min-w-0">
+              {/* LE MÊME MOT que le lien cliqué : le titre n'est plus une
+                  seconde façon de nommer l'écran, c'est `label`. */}
               <h1 className="truncate text-2xl font-extrabold tracking-[-0.03em] text-ink max-md:text-lg">
-                {active.title}
+                {active.label}
               </h1>
               <p className="truncate text-sm text-mut max-md:hidden" suppressHydrationWarning>
                 {fmtDateFr(new Date())} · interne Snack Manager
@@ -358,12 +346,14 @@ function HqShell({ children }: { children: ReactNode }) {
                     {item.href === "/sm/pipeline" && openLeads > 0 && (
                       <span className="cf-fig absolute -right-2.5 -top-1.5 rounded-pill bg-accent px-[5px] text-[9px] font-extrabold leading-[14px] text-onaccent">
                         {openLeads}
-                        <span className="sr-only"> leads en cours</span>
+                        <span className="sr-only"> prospects en cours</span>
                       </span>
                     )}
                   </span>
+                  {/* Le libellé vient de la table (`court` quand le nom
+                      complet ne tient pas) : plus aucune coupe au rendu. */}
                   <span className="text-[10px] font-bold leading-none tracking-[-0.01em]">
-                    {item.label === "Tableau de bord" ? "Tableau" : item.label}
+                    {libelleCourt(item)}
                   </span>
                 </Link>
               );
@@ -376,7 +366,8 @@ function HqShell({ children }: { children: ReactNode }) {
               className={cx(
                 "cf-press flex min-h-[54px] flex-col items-center justify-center gap-1 px-1 pb-1.5 pt-2",
                 // « Plus » s'allume quand la page ACTIVE vit dans sa feuille :
-                // sinon Signaux ou Erreurs sembleraient n'exister nulle part.
+                // sinon « File du jour » ou « Erreurs » sembleraient n'exister
+                // nulle part.
                 MOBILE_MORE.some((n) => n.href === active.href)
                   ? "text-accent"
                   : "text-white/60",
@@ -397,28 +388,43 @@ function HqShell({ children }: { children: ReactNode }) {
 
         {/* ── La feuille « Plus » : le reste de la navigation, et la sortie ── */}
         <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Plus">
-          <div className="flex flex-col gap-0.5">
-            {MOBILE_MORE.map((item) => {
-              const on = item.href === active.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={on ? "page" : undefined}
-                  onClick={() => setMoreOpen(false)}
-                  className={cx(
-                    "cf-press-row flex min-h-12 items-center gap-3 rounded-ctrl px-3 py-2.5 text-sm",
-                    on
-                      ? "bg-accent font-extrabold text-onaccent"
-                      : "font-semibold text-white/80 hover:bg-white/8",
-                  )}
+          {/* LES MÊMES GROUPES ET LES MÊMES MOTS qu'au bureau : un écran
+              cherché sous « Plateforme » sur l'ordinateur doit se retrouver
+              sous « Plateforme » au pouce. */}
+          <div className="flex flex-col gap-3">
+            {MOBILE_MORE_GROUPES.map((groupe) => (
+              <div key={groupe.titre} role="group" aria-label={groupe.titre}>
+                <div
+                  className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-mut"
+                  aria-hidden
                 >
-                  <Icon name={item.icon} size={19} stroke={on ? 2.3 : 2} />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  <Icon name="arrow" size={15} className={on ? "" : "text-mut"} />
-                </Link>
-              );
-            })}
+                  {groupe.titre}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {groupe.items.map((item) => {
+                    const on = item.href === active.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        aria-current={on ? "page" : undefined}
+                        onClick={() => setMoreOpen(false)}
+                        className={cx(
+                          "cf-press-row flex min-h-12 items-center gap-3 rounded-ctrl px-3 py-2.5 text-sm",
+                          on
+                            ? "bg-accent font-extrabold text-onaccent"
+                            : "font-semibold text-white/80 hover:bg-white/8",
+                        )}
+                      >
+                        <Icon name={item.icon} size={19} stroke={on ? 2.3 : 2} />
+                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                        <Icon name="arrow" size={15} className={on ? "" : "text-mut"} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Le chiffre que le fondateur regarde en premier suit la navigation
@@ -439,15 +445,22 @@ function HqShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="mt-3 flex items-center gap-2.5 border-t border-line px-1 pt-3">
+            {/* Même session, même état neutre que la barre de bureau : la
+                feuille mobile en est une VUE, pas une seconde source. */}
             <div
-              className="grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold text-accent"
+              className={cx(
+                "grid size-[34px] shrink-0 place-items-center rounded-full bg-fill text-sm font-extrabold",
+                initiale ? "text-accent" : "text-mut",
+              )}
               aria-hidden
             >
-              A
+              {initiale ?? "—"}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold text-ink">Admin SM</div>
-              <div className="truncate text-xs text-mut">Fondateur</div>
+              <div className={cx("truncate text-sm font-bold", nom ? "text-ink" : "text-mut")}>
+                {nom ?? "—"}
+              </div>
+              <div className="truncate text-xs text-mut">{role}</div>
             </div>
             <button
               type="button"
@@ -461,6 +474,53 @@ function HqShell({ children }: { children: ReactNode }) {
         </BottomSheet>
       </div>
     </HqContext.Provider>
+  );
+}
+
+/**
+ * UNE ENTRÉE DE LA COLONNE DE BUREAU — extraite parce qu'elle est désormais
+ * rendue à deux endroits : le tableau de bord, seul au-dessus des intitulés, et
+ * les entrées de chacun des cinq groupes.
+ *
+ * Le badge n'appartient qu'à la prospection : c'est le seul compteur qui
+ * réclame un geste le jour même — un prospect ouvert qu'on ne rappelle pas se
+ * refroidit.
+ */
+function LienColonne({
+  item,
+  active,
+  openLeads,
+}: {
+  item: NavItem;
+  active: NavItem;
+  openLeads: number;
+}) {
+  const on = item.href === active.href;
+  return (
+    <Link
+      href={item.href}
+      aria-current={on ? "page" : undefined}
+      className={cx(
+        "cf-press-row flex items-center gap-[11px] rounded-ctrl px-3 py-[11px] text-sm",
+        on
+          ? "bg-accent font-extrabold text-onaccent shadow-card"
+          : "font-semibold text-white/70 hover:bg-white/8 hover:text-white",
+      )}
+    >
+      <Icon name={item.icon} size={18} stroke={on ? 2.3 : 2} />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.href === "/sm/pipeline" && openLeads > 0 && (
+        <span
+          className={cx(
+            "cf-fig shrink-0 rounded-pill px-[7px] py-px text-[11px] font-extrabold",
+            on ? "bg-black/25 text-onaccent" : "bg-fill text-mut",
+          )}
+        >
+          {openLeads}
+          <span className="sr-only"> prospects en cours</span>
+        </span>
+      )}
+    </Link>
   );
 }
 

@@ -2,6 +2,7 @@ import { Controller, Get, Post } from '@nestjs/common';
 import type { EncaissementFiche, EncaissementLien } from '@sm/contracts';
 
 import { Roles, TenantId } from '../../common/auth';
+import { Capacites } from '../../common/capacites';
 import { EncaissementService } from './encaissement.service';
 
 /**
@@ -27,8 +28,28 @@ import { EncaissementService } from './encaissement.service';
  * comptoir pouvait ouvrir ce compte et y déclarer SES coordonnées bancaires
  * comme compte de versement du restaurant. Le garde global ne filtre que si
  * l'annotation existe : son absence était une porte ouverte, pas un défaut.
+ *
+ * ─── LES DEUX AXES, L'UN SOUS L'AUTRE ───
+ *
+ * `@Roles('owner')` dit qui a le DROIT ; `@Capacites('online')` dit ce
+ * que l'établissement a PAYÉ. Le contrôle est un ET, et les deux refus ne se
+ * ressemblent pas : au premier, un équipier lit qu'il n'a pas accès ; au
+ * second, le propriétaire lit que la fonction n'est pas dans son abonnement et
+ * à qui parler pour l'ajouter.
+ *
+ * La capacité est celle de la COMMANDE EN LIGNE, et non une capacité
+ * « encaissement » de plus : le raccordement Stripe n'a pas de vie propre — il
+ * n'existe que pour encaisser les commandes de la page publique, et l'offre ne
+ * le vend pas séparément (cf. `crm.ts`). Un restaurant sans commande en ligne
+ * qui raccorderait un compte marchand ouvrirait une entité bancaire pour rien.
+ *
+ * Le refus est FRANC ici, alors qu'il est doux sur la page publique
+ * (`publicOrderingState`), et la distinction est délibérée : devant cet écran
+ * il y a le restaurateur, à qui la phrase est adressée et qui peut agir.
+ * Devant l'autre il y a un client qui a faim.
  */
 @Roles('owner')
+@Capacites('online')
 @Controller('encaissement')
 export class EncaissementController {
   constructor(private readonly encaissement: EncaissementService) {}

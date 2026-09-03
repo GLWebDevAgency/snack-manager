@@ -3,6 +3,7 @@
  * Volontairement souples (documents Mongo « lean ») : on ne dépend pas des
  * types Mongoose côté client.
  */
+import type { MediaVue } from '@sm/contracts';
 
 export interface Variant {
   key: string;
@@ -61,6 +62,28 @@ export interface Product {
   outOfStock?: boolean;
   outOfStockSource?: 'manual' | 'ingredient' | null;
   active?: boolean;
+  /**
+   * L'adresse de la photo principale, DÉJÀ DÉRIVÉE par le serveur.
+   *
+   * `menu.service.ts` la calcule avec `photoUrlDe(produit, catalogue, usage)`
+   * et l'usage retenu pour la carte publique est `vignette` — celui de la
+   * grille de la caisse. Une surface terrain ne refait donc pas la résolution :
+   * elle LIT ce champ, exactement comme la vitrine lit le sien. Le refaire ici
+   * ferait deux règles pour un seul fait, et c'est précisément l'incident que
+   * `photoUrlDe` a fermé.
+   *
+   * Deux formes possibles, et le poste doit savoir traiter les deux :
+   * une URL http(s) absolue (média de la médiathèque, servi par l'API), ou un
+   * chemin RACINE-RELATIF `/photos/…` hérité du pilote — servi par le paquet
+   * web, donc par une AUTRE origine que la caisse (`photo.ts` côté POS).
+   */
+  photoUrl?: string | null;
+  /**
+   * Les identifiants des médias du produit, le premier étant la photo
+   * principale. Ils pointent dans `Menu.medias` : c'est là que vivent le point
+   * d'intérêt et le texte alternatif, jamais sur le produit.
+   */
+  medias?: string[];
 }
 
 export interface Category {
@@ -72,6 +95,17 @@ export interface Category {
 export interface Menu {
   categories: Category[];
   uncategorized?: Product[];
+  /**
+   * LES MÉDIAS DU RESTAURANT, À PLAT ET UNE SEULE FOIS.
+   *
+   * Trois galettes qui partagent le cliché du panneau mural ne le font pas
+   * transiter trois fois : les produits ne portent que des identifiants, et
+   * l'écran qui veut le point d'intérêt ou les cotes d'une photo les trouve
+   * ici. Facultatif : une réponse d'API antérieure au socle de médiathèque, ou
+   * un cache local écrit avant lui, n'en porte pas — et la carte reste
+   * lisible sans, puisque `photoUrl` est déjà résolu.
+   */
+  medias?: MediaVue[];
 }
 
 export type OrderStatus = 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';

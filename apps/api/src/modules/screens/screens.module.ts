@@ -8,6 +8,9 @@ import { BuildScreenContent } from './build-screen-content.usecase';
 import { HeartbeatScreen } from './heartbeat-screen.usecase';
 import { ManageScreens } from './manage-screens.usecase';
 import { PairScreenDevice } from './pair-screen.usecase';
+// L'écran de salle DÉRIVE `photoUrl` et le point de recadrage 16:9 de la
+// médiathèque (`menu-board.repository.ts`).
+import { MediathequeModule } from '../mediatheque/mediatheque.module';
 
 /**
  * « Menu Board » — les écrans TV accrochés en salle.
@@ -25,6 +28,7 @@ import { PairScreenDevice } from './pair-screen.usecase';
  * Les modèles Mongoose viennent de `DatabaseModule` (@Global).
  */
 @Module({
+  imports: [MediathequeModule],
   controllers: [ScreensController],
   providers: [
     { provide: CLOCK, useValue: systemClock },

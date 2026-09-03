@@ -30,6 +30,7 @@ import {
   SUPPLEMENT_GROUP_KEY,
   SUPPLEMENT_GROUP_NAME,
   WS_EVENTS,
+  type JwtPayload,
   type ProductModifiers,
 } from '@sm/contracts';
 import type {
@@ -51,7 +52,9 @@ import type { Product } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { SUPPLY_DB } from '../../supply-db.module';
+import { AuditService } from '../audit/audit.module';
 import { buildProductModifiers, modifierKey, type ModifierIngredient } from './menu-modifiers';
+import { lignesDeLEditeurDIngredient } from './journal-approvisionnement';
 
 type IngredientRow = typeof ingredients.$inferSelect;
 
@@ -102,6 +105,13 @@ export class SupplyService {
     @Inject(SUPPLY_DB) private readonly db: SupplyDb,
     @InjectModel('Product') private readonly products: Model<Product>,
     @Inject(REDIS_PUB) private readonly redis: Redis,
+    /**
+     * LE REGISTRE VIT DANS UNE AUTRE BASE que l'approvisionnement (Mongo ici,
+     * PostgreSQL là) : aucune transaction ne peut couvrir les deux. La ligne
+     * s'écrit donc APRÈS la mutation, jamais dans la transaction — voir
+     * `AuditService.log` pour l'ordre retenu et ce qu'il coûte.
+     */
+    private readonly audit: AuditService,
   ) {}
 
   private publishMenuUpdated(tenantId: string, meta: Record<string, unknown>) {
@@ -173,8 +183,31 @@ export class SupplyService {
     }
   }
 
-  async updateIngredient(tenantId: string, id: string, dto: IngredientUpdate) {
+  async updateIngredient(
+    tenantId: string,
+    id: string,
+    dto: IngredientUpdate,
+    actor?: JwtPayload,
+  ) {
     this.assertUuid(id);
+    /*
+     * L'ÉTAT D'AVANT, LU SEULEMENT QUAND IL SERT.
+     *
+     * `.returning()` rend la ligne d'APRÈS : la transition « 12 kg → 9 kg »,
+     * qui est tout ce qui se défend en contrôle, n'était récupérable nulle
+     * part. Cette lecture ne coûte que sur un PATCH qui touche le stock ou le
+     * prix d'un supplément — les deux seuls champs journalisés de cet éditeur.
+     * C'est le motif exact que `MenuService.updateProduct` applique au prix.
+     */
+    const suitLeJournal = dto.currentStock !== undefined || dto.supplementPriceCents !== undefined;
+    const avantRow = suitLeJournal
+      ? await this.db.query.ingredients.findFirst({
+          where: (t, { and: andOp, eq: eqOp }) =>
+            andOp(eqOp(t.id, id), eqOp(t.tenantRef, tenantId)),
+          columns: { name: true, unit: true, currentStock: true, supplementPriceCents: true },
+        })
+      : undefined;
+
     const patch: Partial<typeof ingredients.$inferInsert> = { updatedAt: new Date() };
     if (dto.name !== undefined) patch.name = dto.name;
     if (dto.category !== undefined) patch.category = dto.category;
@@ -211,7 +244,25 @@ export class SupplyService {
         await this.refreshSupplementProjection(tenantId);
         this.publishMenuUpdated(tenantId, { scope: 'supply', ingredientId: id });
       }
-      return this.mapIngredient({ ...row, brands });
+      const vue = this.mapIngredient({ ...row, brands });
+      if (avantRow) {
+        // Le stock est ARRONDI comme il l'a été à l'écriture : comparer une
+        // saisie non arrondie à une valeur stockée au millième produirait une
+        // ligne « 9 → 9 » à chaque enregistrement du formulaire.
+        const lignes = lignesDeLEditeurDIngredient(
+          {
+            name: avantRow.name,
+            unit: avantRow.unit,
+            currentStock: num(avantRow.currentStock),
+            supplementPriceCents: avantRow.supplementPriceCents,
+          },
+          { ...dto, currentStock: dto.currentStock === undefined ? undefined : round3(dto.currentStock) },
+        );
+        for (const ligne of lignes) {
+          await this.audit.log({ tenantId, actor, targetId: id, ...ligne });
+        }
+      }
+      return vue;
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException('Un ingrédient porte déjà ce nom');
       throw err;
@@ -219,16 +270,39 @@ export class SupplyService {
   }
 
   /** Suppression douce : l'ingrédient reste référencé par les recettes et l'historique. */
-  async deleteIngredient(tenantId: string, id: string) {
+  async deleteIngredient(tenantId: string, id: string, actor?: JwtPayload) {
     this.assertUuid(id);
     const [row] = await this.db
       .update(ingredients)
       .set({ active: false, updatedAt: new Date() })
       .where(and(eq(ingredients.id, id), eq(ingredients.tenantRef, tenantId)))
-      .returning({ id: ingredients.id, supplementPriceCents: ingredients.supplementPriceCents });
+      .returning({
+        id: ingredients.id,
+        name: ingredients.name,
+        unit: ingredients.unit,
+        currentStock: ingredients.currentStock,
+        supplementPriceCents: ingredients.supplementPriceCents,
+      });
     if (!row) throw new NotFoundException('Ingrédient introuvable');
     // Un ingrédient retiré du catalogue ne doit plus être encaissable.
     if (row.supplementPriceCents !== null) await this.refreshSupplementProjection(tenantId);
+    // Le STOCK QU'IL PORTAIT part au journal avec lui : la suppression est
+    // douce, mais l'ingrédient sort des alertes et de l'inventaire — sa
+    // quantité cesse d'être suivie, et c'est un montant qui disparaît de la
+    // réserve sans mouvement. Un supplément tarifé quitte aussi la caisse au
+    // même instant, d'où le prix dans la ligne.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'ingredient.delete',
+      targetId: id,
+      meta: {
+        name: row.name,
+        unit: row.unit,
+        stock: num(row.currentStock),
+        supplementPriceCents: row.supplementPriceCents,
+      },
+    });
     return { deleted: true };
   }
 
@@ -239,7 +313,7 @@ export class SupplyService {
    * isOut=false → seuls les produits en rupture source 'ingredient' dont plus
    * AUCUN ingrédient requis n'est en rupture sont réactivés.
    */
-  async setIngredientOut(tenantId: string, id: string, isOut: boolean) {
+  async setIngredientOut(tenantId: string, id: string, isOut: boolean, actor?: JwtPayload) {
     this.assertUuid(id);
     const [ing] = await this.db
       .update(ingredients)
@@ -288,6 +362,17 @@ export class SupplyService {
     // du produit — sans quoi on encaisserait un cheddar qu'on n'a plus.
     if (ing.supplementPriceCents !== null) await this.refreshSupplementProjection(tenantId);
 
+    // LE GESTE LE PLUS COÛTEUX DE L'APPROVISIONNEMENT, et il n'était pas tracé.
+    // Une rupture d'ingrédient coupe D'UN SEUL TAP tous les produits qui en
+    // dépendent — `productsUpdated` en donne l'ampleur, et c'est cette ampleur
+    // qu'un gérant cherche quand sa carte s'est vidée pendant le coup de feu.
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'ingredient.out',
+      targetId: id,
+      meta: { name: ing.name, isOut, productsUpdated },
+    });
     this.publishMenuUpdated(tenantId, { scope: 'supply', ingredientId: id, isOut, productsUpdated });
     return { ingredient: this.mapIngredient({ ...ing }), productsUpdated };
   }
@@ -1224,8 +1309,8 @@ export class SupplyService {
    * (le mouvement enregistré est le delta). Verrou ligne (FOR UPDATE) pour
    * sérialiser les mouvements concurrents sur un même ingrédient.
    */
-  async createMovement(tenantId: string, dto: MovementCreate) {
-    return this.db.transaction(async (tx) => {
+  async createMovement(tenantId: string, dto: MovementCreate, actor?: JwtPayload) {
+    const resultat = await this.db.transaction(async (tx) => {
       const [ing] = await tx
         .select()
         .from(ingredients)
@@ -1271,8 +1356,40 @@ export class SupplyService {
         movement: { ...inserted, qty: num(inserted.qty) },
         currentStock: newStock,
         belowPar: newStock < num(ing.parLevel),
+        // Pour le journal seulement — retiré de la réponse juste après.
+        journal: { name: ing.name, unit: ing.unit, avant: current },
       };
     });
+
+    /*
+     * HORS DE LA TRANSACTION, et il ne peut pas en être autrement : le registre
+     * vit dans Mongo, le stock dans PostgreSQL. Écrire la ligne DEDANS ne
+     * l'aurait de toute façon pas rendue atomique — cela aurait seulement
+     * allongé un verrou de ligne (`FOR UPDATE`) le temps d'un aller-retour
+     * vers une autre base, en plein service.
+     *
+     * L'ordre reste celui du reste du logiciel : le mouvement d'abord, la ligne
+     * ensuite. Elle porte le stock AVANT et APRÈS, ce que `stock_movements` ne
+     * garde pas — la table n'a que le delta, et reconstituer un solde à une
+     * date donnée demanderait de rejouer toute la colonne.
+     */
+    const { journal, ...reponse } = resultat;
+    await this.audit.log({
+      tenantId,
+      actor,
+      action: 'stock.movement',
+      targetId: dto.ingredientId,
+      meta: {
+        name: journal.name,
+        unit: journal.unit,
+        type: dto.type,
+        qty: reponse.movement.qty,
+        de: journal.avant,
+        vers: reponse.currentStock,
+        note: dto.note ?? null,
+      },
+    });
+    return reponse;
   }
 
   async listMovements(tenantId: string, ingredientId?: string, limit = 50) {

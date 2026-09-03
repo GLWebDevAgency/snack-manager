@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import { SUPPLEMENT_GROUP_KEY, type CreateOrder } from '@sm/contracts';
+import { journalMuet } from '../audit/audit.fakes';
 import { OrdersService } from '../orders/orders.service';
 import { SupplyService } from './supply.service';
 
@@ -126,7 +127,7 @@ function produitMongo(optionGroups: OptionGroup[] = []) {
 }
 
 function supply(db: unknown, products: unknown) {
-  return new SupplyService(db as never, products as never, { publish: () => {} } as never);
+  return new SupplyService(db as never, products as never, { publish: () => {} } as never, journalMuet());
 }
 
 /** Commande d'un sandwich, options et retraits au choix. */

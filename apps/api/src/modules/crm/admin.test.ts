@@ -15,11 +15,13 @@ import {
   PUBLIC_ORDERING_SUSPENDED_MESSAGE,
   TENANT_ACCOUNT_STATUSES,
   TENANT_LOG_ACTIONS,
+  TenantCapaciteSchema,
   TenantChurnSchema,
   TenantSuspendSchema,
   isAccessBlocked,
   isPairingCodeShape,
   publicOrderingState,
+  PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE,
   type AdminInvoiceGesture,
   type AdminLogQuery,
   type JwtPayload,
@@ -367,6 +369,258 @@ describe('Administration client', () => {
     });
   });
 
+  // ─── Dérogations de capacité ───
+
+  /**
+   * L'EXCEPTION COMMERCIALE, ENFIN ÉCRITE PAR UNE ROUTE.
+   *
+   * `derogationsCapacite` vivait en base, lue par tout le produit et écrite par
+   * personne : la seule façon d'ouvrir la fidélité au pilote ou l'éditeur de
+   * carte à un client sans formule était d'ouvrir Mongo. Ces tests vérifient le
+   * COMPORTEMENT — ce que le geste change dans les capacités effectives — et
+   * pas qu'une méthode existe.
+   */
+  describe('Dérogations de capacité', () => {
+    /** Le geste courant : ouvrir la fidélité à un client qui n'y a pas droit. */
+    const pilote = {
+      capacite: 'loyalty',
+      geste: 'accordee',
+      motif: 'Pilote fidélité — vendue en Boost, tournée en Complet',
+    } as const;
+
+    it('ouvre une capacité hors formule — le cas du pilote', async () => {
+      // Class'Food est en « essentiel » : la fidélité ne lui est pas vendue.
+      const avant = await admin.account(SM, CLASSFOOD);
+      expect(avant.capacites.find((c) => c.capacite === 'loyalty')).toMatchObject({
+        acquise: false,
+        origine: null,
+      });
+
+      const view = await admin.changeCapacite(SM, CLASSFOOD, pilote);
+
+      expect(view.capacites.find((c) => c.capacite === 'loyalty')).toMatchObject({
+        acquise: true,
+        origine: 'derogation',
+      });
+      // La formule n'a PAS bougé : une dérogation n'est pas un changement
+      // d'offre, et la facture du client ne doit pas se mettre à mentir.
+      expect(view.plan).toBe('essentiel');
+    });
+
+    it('ouvre l’éditeur de carte à un client SANS formule', async () => {
+      // L'autre cas connu du déploiement : un client Atelier seul, qui n'a
+      // aucune colonne dans la grille, et qui doit pourtant tenir sa carte.
+      tenants.rows[0]!.plan = null;
+      const view = await admin.changeCapacite(SM, CLASSFOOD, {
+        capacite: 'menu',
+        geste: 'accordee',
+        motif: 'Client Atelier seul — tient sa carte chez nous',
+      });
+      expect(view.capacites.find((c) => c.capacite === 'menu')?.acquise).toBe(true);
+    });
+
+    it('ferme une capacité MALGRÉ la formule — et le retrait l’emporte', async () => {
+      await admin.changeCapacite(SM, CLASSFOOD, pilote);
+      const view = await admin.changeCapacite(SM, CLASSFOOD, {
+        capacite: 'loyalty',
+        geste: 'retiree',
+        motif: 'Pilote suspendu le temps du litige',
+      });
+
+      expect(view.capacites.find((c) => c.capacite === 'loyalty')).toMatchObject({
+        acquise: false,
+        origine: 'derogation',
+      });
+      // UNE SEULE LIGNE en base : le geste remplace au lieu de s'empiler. Sans
+      // ce remplacement, accorder ensuite ne rendrait rien — le retrait
+      // l'emporte quel que soit l'ordre des lignes.
+      expect(tenants.rows[0]!.derogationsCapacite).toHaveLength(1);
+    });
+
+    it('lève une dérogation posée par erreur, et rend la capacité à la formule', async () => {
+      // « complet » comprend le coût matière : le retrait a donc un effet, et
+      // sa levée doit rendre la capacité à la formule — pas la laisser fermée.
+      tenants.rows[0]!.plan = 'complet';
+      await admin.changeCapacite(SM, CLASSFOOD, {
+        capacite: 'stocks',
+        geste: 'retiree',
+        motif: 'Mauvais client — erreur de saisie',
+      });
+      expect((await admin.account(SM, CLASSFOOD)).capacites.find((c) => c.capacite === 'stocks')
+        ?.acquise).toBe(false);
+
+      const view = await admin.changeCapacite(SM, CLASSFOOD, {
+        capacite: 'stocks',
+        geste: 'levee',
+        motif: 'Dérogation posée sur le mauvais client',
+      });
+
+      expect(view.capacites.find((c) => c.capacite === 'stocks')).toMatchObject({
+        acquise: true,
+        origine: 'formule',
+      });
+      expect(tenants.rows[0]!.derogationsCapacite).toEqual([]);
+    });
+
+    it('refuse d’accorder une capacité déjà comprise dans la formule', async () => {
+      // L'écran ne bougerait pas, l'opérateur croirait avoir agi, et le journal
+      // porterait une ligne qui ne raconte rien. Le refus NOMME la source.
+      await expect(
+        admin.changeCapacite(SM, CLASSFOOD, {
+          capacite: 'pos',
+          geste: 'accordee',
+          motif: 'Geste commercial',
+        }),
+      ).rejects.toThrow(/déjà comprise dans sa formule/);
+      expect(tenants.rows[0]!.derogationsCapacite).toBeUndefined();
+    });
+
+    it('refuse de retirer une capacité qu’il n’a pas souscrite', async () => {
+      await expect(
+        admin.changeCapacite(SM, CLASSFOOD, {
+          capacite: 'loyalty',
+          geste: 'retiree',
+          motif: 'Litige',
+        }),
+      ).rejects.toThrow(/ne l’a pas souscrite/);
+    });
+
+    it('refuse de reposer deux fois la même dérogation', async () => {
+      // La ligne existe déjà : l'écran ne bougerait pas, et le journal
+      // porterait une seconde ligne qui ne raconte rien. Le refus dit le
+      // chemin — lever, puis reposer.
+      await admin.changeCapacite(SM, CLASSFOOD, pilote);
+      await expect(admin.changeCapacite(SM, CLASSFOOD, pilote)).rejects.toThrow(
+        /porte déjà cette dérogation/,
+      );
+      expect(tenants.rows[0]!.derogationsCapacite).toHaveLength(1);
+    });
+
+    it('refuse de lever une dérogation qui n’existe pas', async () => {
+      await expect(
+        admin.changeCapacite(SM, CLASSFOOD, {
+          capacite: 'loyalty',
+          geste: 'levee',
+          motif: 'Nettoyage',
+        }),
+      ).rejects.toThrow(/rien à lever/);
+    });
+
+    it('refuse une capacité inconnue AVANT d’atteindre le service', () => {
+      // La garde est au contrat : une capacité inventée ne doit pas descendre
+      // jusqu'à une écriture qui l'accepterait faute d'énumération en base.
+      expect(
+        TenantCapaciteSchema.safeParse({ ...pilote, capacite: 'fidelite' }).success,
+      ).toBe(false);
+      expect(TenantCapaciteSchema.safeParse({ ...pilote, motif: '' }).success).toBe(false);
+    });
+
+    it('écrit au journal la capacité, le sens, et l’état avant/après', async () => {
+      await admin.changeCapacite(SM, CLASSFOOD, pilote);
+
+      const entry = (await admin.journal(CLASSFOOD, TOUT)).find(
+        (e) => e.action === 'tenant.capacite_change',
+      );
+      expect(entry?.actionLabel).toBe('Dérogation de capacité');
+      // Le motif EST la phrase du journal : c'est elle qu'on relit au litige.
+      expect(entry?.reason).toBe(pilote.motif);
+      expect(entry?.meta).toMatchObject({ capacite: 'loyalty', geste: 'accordee' });
+      const meta = entry?.meta as { avant: string[]; apres: string[] };
+      // L'état complet des deux côtés : « loyalty accordée » seul obligerait à
+      // reconstituer de tête ce que le client avait ce jour-là.
+      expect(meta.avant).not.toContain('loyalty');
+      expect(meta.apres).toContain('loyalty');
+    });
+
+    it('signe la dérogation de l’auteur du JETON, jamais d’une valeur transmise', async () => {
+      await admin.changeCapacite(SM, CLASSFOOD, pilote);
+      const [ligne] = tenants.rows[0]!.derogationsCapacite as {
+        auteur: string;
+        motif: string;
+        le: string;
+      }[];
+      expect(ligne!.auteur).toBe('admin@snackmanager.fr');
+      expect(ligne!.motif).toBe(pilote.motif);
+      expect(Date.parse(ligne!.le)).not.toBeNaN();
+    });
+
+    it('rend 404 sur un établissement inconnu', async () => {
+      await expect(admin.changeCapacite(SM, AUTRE_RESTO + 'x', pilote)).rejects.toThrow(
+        /introuvable/,
+      );
+    });
+  });
+
+  // ─── Fin d'essai ───
+
+  /**
+   * L'ESSAI QUI S'ACHÈVE — la réconciliation de ce que la lecture dit déjà.
+   *
+   * Elle ne décide rien : `statutEffectif` rend « actif » dès le terme, partout,
+   * sans écrire. Ce geste aligne la colonne, et il est appelé par la seule passe
+   * qui parcourt tout le parc (`BillingService.runMensuel`).
+   */
+  describe('Fin de la période d’essai', () => {
+    const TERME = new Date('2026-07-31T09:00:00Z');
+    const enEssai = () => {
+      tenants.rows[0]!.account = {
+        status: 'trial',
+        since: new Date('2026-07-01T09:00:00Z'),
+        reason: 'Créé depuis le pipeline',
+        suspendedAt: null,
+        trialEndsAt: TERME,
+      };
+    };
+
+    it('bascule le compte en actif, daté du TERME et non du jour de la passe', async () => {
+      enEssai();
+      expect(await admin.acterFinEssai(SM, CLASSFOOD, TERME)).toBe(true);
+
+      const compte = tenants.rows[0]!.account as { status: string; since: Date };
+      expect(compte.status).toBe('active');
+      // Le compte est devenu payant au jour convenu : la date affichée sur la
+      // fiche ne saute donc pas le jour où la passe tourne.
+      expect(compte.since).toEqual(TERME);
+    });
+
+    it('garde le terme en base — c’est la preuve de ce qu’on vient d’appliquer', async () => {
+      enEssai();
+      await admin.acterFinEssai(SM, CLASSFOOD, TERME);
+      expect((tenants.rows[0]!.account as { trialEndsAt: Date }).trialEndsAt).toEqual(TERME);
+    });
+
+    it('est IDEMPOTENT : relancé, il n’écrit pas une seconde ligne', async () => {
+      enEssai();
+      expect(await admin.acterFinEssai(SM, CLASSFOOD, TERME)).toBe(true);
+      expect(await admin.acterFinEssai(SM, CLASSFOOD, TERME)).toBe(false);
+
+      const lignes = (await admin.journal(CLASSFOOD, TOUT)).filter(
+        (e) => e.action === 'tenant.trial_end',
+      );
+      expect(lignes).toHaveLength(1);
+      expect(lignes[0]?.meta).toMatchObject({ trialEndsAt: TERME.toISOString() });
+    });
+
+    it('ne touche NI un compte suspendu NI un compte parti', async () => {
+      // La condition voyage avec l'écriture : un compte qui n'est plus en essai
+      // n'est même pas trouvé. Une suspension motivée ne se lève pas parce
+      // qu'une date est passée.
+      for (const status of ['suspended', 'churned', 'active'] as const) {
+        tenants.rows[0]!.account = { status, since: new Date(), trialEndsAt: TERME };
+        expect(await admin.acterFinEssai(SM, CLASSFOOD, TERME)).toBe(false);
+        expect((tenants.rows[0]!.account as { status: string }).status).toBe(status);
+      }
+    });
+
+    it('ne ferme rien : le compte reste ouvert, il devient seulement facturable', async () => {
+      enEssai();
+      await admin.acterFinEssai(SM, CLASSFOOD, TERME);
+      const view = await admin.account(SM, CLASSFOOD);
+      expect(view.accessBlocked).toBe(false);
+      expect(view.statusLabel).toBe('Actif');
+    });
+  });
+
   describe('Le masque d’identité (CRM)', () => {
     it('hérite le logo legacy à la première pose — persisté, pas seulement rendu', async () => {
       // Le tenant porte un logo d'AVANT le masque (`logoUrl`, champ racine) ;
@@ -705,6 +959,23 @@ describe('Administration client', () => {
       screens.seed({ _id: ECRAN, tenantId: CLASSFOOD, name: 'Écran', paired: true });
 
       await admin.account(SM, CLASSFOOD);
+      // L'essai qui s'achève : la réconciliation exige un compte RÉELLEMENT en
+      // essai, son terme passé. Posé ici, avant les gestes qui changent le
+      // statut — un compte parti ne redevient pas actif parce qu'une date est
+      // passée, et c'est justement la règle.
+      tenants.rows[0]!.account = {
+        status: 'trial',
+        since: new Date('2026-07-01T09:00:00Z'),
+        trialEndsAt: new Date('2026-07-31T09:00:00Z'),
+      };
+      await admin.acterFinEssai(SM, CLASSFOOD, new Date('2026-07-31T09:00:00Z'));
+      // La dérogation de capacité : Class'Food est en « essentiel », la
+      // fidélité n'y est pas comprise — l'octroi change donc quelque chose.
+      await admin.changeCapacite(SM, CLASSFOOD, {
+        capacite: 'loyalty',
+        geste: 'accordee',
+        motif: 'Pilote fidélité — vendue en Boost, tournée en Complet',
+      });
       await admin.recordTenantCreation(SM, CLASSFOOD, {
         slug: 'classfood',
         plan: 'complet',
@@ -870,10 +1141,14 @@ describe('Règle d’accès', () => {
 });
 
 describe('Fermeture du site public', () => {
+  /** Le cas ordinaire : la commande en ligne est bien souscrite. */
+  const SOUSCRITE = true;
+
   it('ferme proprement la commande en ligne d’un restaurant suspendu', () => {
     const state = publicOrderingState(
       { status: 'suspended' },
       { paused: false, message: null },
+      SOUSCRITE,
     );
 
     expect(state.paused).toBe(true);
@@ -885,19 +1160,54 @@ describe('Fermeture du site public', () => {
 
   it('laisse la pause du restaurateur inchangée quand le compte va bien', () => {
     const pause = { paused: true, message: 'Victimes de notre succès !' };
-    expect(publicOrderingState({ status: 'active' }, pause)).toEqual(pause);
-    expect(publicOrderingState(undefined, { paused: false, message: null })).toEqual({
-      paused: false,
-      message: null,
-    });
+    expect(publicOrderingState({ status: 'active' }, pause, SOUSCRITE)).toEqual(pause);
+    expect(
+      publicOrderingState(undefined, { paused: false, message: null }, SOUSCRITE),
+    ).toEqual({ paused: false, message: null });
   });
 
   it('prime sur une pause déjà posée par le restaurateur', () => {
     const state = publicOrderingState(
       { status: 'suspended' },
       { paused: true, message: 'Victimes de notre succès !' },
+      SOUSCRITE,
     );
     expect(state.message).toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+  });
+
+  /**
+   * LA COMMANDE EN LIGNE NON SOUSCRITE SUIT LE MÊME CHEMIN QUE LA SUSPENSION.
+   *
+   * Elle ne lève pas, elle ne rend pas un 403 : elle FERME la page comme une
+   * pause. Un client qui valide son panier à 12h15 doit lire une phrase qui
+   * lui parle, pas recevoir une erreur — et le menu, les horaires et les avis
+   * restent affichés : on ferme un guichet, on n'efface pas un restaurant.
+   */
+  it('annonce l’indisponibilité quand le module n’est pas souscrit', () => {
+    const state = publicOrderingState(
+      { status: 'active' },
+      { paused: false, message: null },
+      false,
+    );
+    expect(state.paused).toBe(true);
+    expect(state.message).toBe(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE);
+    // Le mangeur n'a pas à savoir ce que son restaurateur nous paie.
+    expect(state.message).not.toMatch(/abonnement|formule|souscri|module|impay/i);
+  });
+
+  it('ne promet pas un retour qui n’aura pas lieu, et ne sort pas le mot du gérant', () => {
+    // « Momentanément indisponible » est vrai d'une suspension (elle se lève
+    // quand la facture est réglée) et faux d'une fonction jamais achetée : le
+    // client reviendrait chaque semaine sur une page qui ne changera pas.
+    expect(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE).not.toBe(PUBLIC_ORDERING_SUSPENDED_MESSAGE);
+    // Et « de retour à 18 h » ne doit jamais s'afficher sur une fonction qui
+    // ne reviendra pas : la non-souscription passe AVANT la pause du gérant.
+    const state = publicOrderingState(
+      { status: 'suspended' },
+      { paused: true, message: 'De retour à 18 h' },
+      false,
+    );
+    expect(state.message).toBe(PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE);
   });
 });
 

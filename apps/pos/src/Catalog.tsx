@@ -6,13 +6,32 @@
  * référence 1280, 5 à 6 sur un grand écran de comptoir. Les colonnes fixes en
  * pourcentage n'existent pas en RN, et un nombre figé donnerait soit des
  * cartes étirées, soit des noms tronqués.
+ *
+ * ─── LA VIGNETTE ───
+ *
+ * Une tuile qui a une photo la porte en CARRÉ, en tête de la rangée du nom.
+ * Une tuile qui n'en a pas reste ce qu'elle était : nom, badge, prix, sur
+ * toute la largeur. C'est un parti pris, et il tient à la géométrie — un
+ * réceptacle vide posé sur chaque tuile volerait la moitié de la largeur du
+ * nom des quatre-vingts pour cent de produits qui n'auront jamais de photo,
+ * pour ne rien montrer. La régularité de la grille est portée par la HAUTEUR
+ * commune des tuiles, qui elle ne bouge pas.
  */
 import { useMemo, useState } from 'react';
-import { ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Image, ScrollView, Text, View, type LayoutChangeEvent } from 'react-native';
 import { basePrice, euros, palette, type Category, type Product } from '@sm/client-core';
+import { catalogueMedias, estPublic, mediasDuProduit, POINT_CENTRE, type MediaVue } from '@sm/contracts';
+import { photoDuPoste, monogramme } from './photo';
 import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme';
 import { EmptyState, Field, Press, Sheen } from './ui';
-import { cardWidth, columnsFor, useLayout, type Layout } from './useLayout';
+import {
+  cadrageVignette,
+  cardWidth,
+  columnsFor,
+  useLayout,
+  vignetteTient,
+  type Layout,
+} from './useLayout';
 import type { ParkedTicket } from './pos-state';
 
 /** Étiquette courte du rail : « Compose ton Tacos » → « Tacos ». */
@@ -124,8 +143,29 @@ export function CategoryRail({
   );
 }
 
+/**
+ * Le média qui a produit `photoUrl` — même traversée que `photoUrlDe`.
+ *
+ * La caisse a besoin du média ENTIER (ses cotes ET son point d'intérêt) pour
+ * recadrer, là où le contrat n'expose que des extraits (`photoPointDe` rend le
+ * point seul). La condition est donc recopiée telle quelle, `estPublic`
+ * compris : sans elle on recadrerait d'après un média que le serveur n'a pas
+ * servi, et le cadrage ne correspondrait pas à l'image affichée.
+ */
+function mediaDeTete(
+  product: Product,
+  catalogue: ReadonlyMap<string, MediaVue>,
+): MediaVue | null {
+  for (const id of mediasDuProduit(product)) {
+    const media = catalogue.get(id);
+    if (media && estPublic(media.genre) && media.urls.vignette) return media;
+  }
+  return null;
+}
+
 export function ProductArea({
   categories,
+  medias,
   activeId,
   brand,
   parked,
@@ -135,6 +175,8 @@ export function ProductArea({
   onQuery,
 }: {
   categories: Category[];
+  /** Les médias du restaurant, à plat — voir `Menu.medias`. */
+  medias?: MediaVue[];
   activeId: string | null;
   brand: Brand;
   parked: ParkedTicket[];
@@ -145,6 +187,9 @@ export function ProductArea({
 }) {
   const L = useLayout();
   const [gridWidth, setGridWidth] = useState(0);
+  // Indexé UNE FOIS par charge de carte, pas une fois par tuile : une
+  // recherche affiche jusqu'à cent produits d'un coup.
+  const catalogue = useMemo(() => catalogueMedias(medias ?? []), [medias]);
 
   const activeCat = categories.find((c) => c._id === activeId) ?? categories[0];
 
@@ -285,6 +330,7 @@ export function ProductArea({
               <ProductCard
                 key={product._id}
                 product={product}
+                catalogue={catalogue}
                 width={cardW}
                 layout={L}
                 brand={brand}
@@ -298,14 +344,102 @@ export function ProductArea({
   );
 }
 
+/**
+ * LA VIGNETTE — carrée, recadrée sur le point d'intérêt, jamais cassée.
+ *
+ * ─── LE RECADRAGE ───
+ *
+ * `resizeMode="cover"` recadre par le centre, ce qui coupe le plat au mauvais
+ * endroit dès que le sujet n'est pas centré — et la caisse est la surface la
+ * plus carrée du produit, donc celle qui coupe le plus. Quand on connaît les
+ * cotes de la photo (`MediaVue.largeur/hauteur`, lues dans les octets au
+ * dépôt), on pose donc l'image en absolu à la taille qui couvre le carré et on
+ * la décale pour amener le point d'intérêt au centre (`cadrageVignette`).
+ * Sans cotes — en-tête muet, ou photo héritée du pilote qui n'est pas un
+ * média — on retombe sur le recadrage centré du cadre : ce que fait un
+ * navigateur sans consigne, et ce que la caisse faisait avant.
+ *
+ * ─── LA CASSE ───
+ *
+ * `onError` suffit ici, là où la vitrine a besoin d'une SECONDE garde : sa
+ * page est rendue côté serveur, une image déjà morte quand React s'attache
+ * n'émet plus d'événement, et il faut relire l'état du nœud au montage. La
+ * caisse n'a pas ce problème — rien n'est rendu avant elle, l'élément est créé
+ * par React et son échec lui revient toujours. Le repli est le même : le
+ * monogramme du plat, pas un cadre vide et surtout pas l'icône d'image cassée.
+ *
+ * L'état porte l'URL qu'il juge : une carte rechargée peut changer la photo
+ * d'un produit sans démonter sa tuile, et une photo cassée ne doit pas
+ * condamner celle qui la remplace.
+ */
+function Vignette({ uri, cote, media, nom }: {
+  uri: string;
+  cote: number;
+  media: MediaVue | null;
+  nom: string;
+}) {
+  const [etat, setEtat] = useState({ uri, casse: false });
+  if (etat.uri !== uri) setEtat({ uri, casse: false });
+  const point = media?.point ?? POINT_CENTRE;
+  const cadre = etat.casse
+    ? null
+    : cadrageVignette(cote, media?.largeur, media?.hauteur, point.x, point.y);
+
+  return (
+    <View
+      style={{
+        width: cote,
+        height: cote,
+        borderRadius: R.ctrl,
+        overflow: 'hidden',
+        backgroundColor: palette.surface2,
+        borderWidth: 1,
+        borderColor: palette.line2,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {etat.casse ? (
+        <Text
+          style={{
+            fontFamily: FONT,
+            color: palette.mut,
+            fontSize: Math.round(cote * 0.34),
+            fontWeight: '800',
+            letterSpacing: -0.5,
+          }}
+        >
+          {monogramme(nom)}
+        </Text>
+      ) : (
+        <Image
+          source={{ uri }}
+          // Décorative : le nom du plat est à côté, et la tuile entière porte
+          // déjà son libellé d'accessibilité. L'annoncer une seconde fois
+          // ferait dire deux fois « Kebab Fromage » au lecteur d'écran.
+          accessible={false}
+          onError={() => setEtat({ uri, casse: true })}
+          // Le fondu d'apparition d'Android (300 ms) sur quarante tuiles qui
+          // changent de catégorie fait un scintillement, pas une transition.
+          fadeDuration={0}
+          resizeMode="cover"
+          style={cadre ? { position: 'absolute', ...cadre } : { width: '100%', height: '100%' }}
+        />
+      )}
+    </View>
+  );
+}
+
 function ProductCard({
   product,
+  catalogue,
   width,
   layout: L,
   brand,
   onPress,
 }: {
   product: Product;
+  catalogue: ReadonlyMap<string, MediaVue>;
   width: number;
   layout: Layout;
   brand: Brand;
@@ -316,6 +450,12 @@ function ProductCard({
   const price = basePrice(product, product.variants?.[0]?.key ?? null);
   /** Un groupe obligatoire signale une carte qui exigera un choix. */
   const required = (product.optionGroups ?? []).some((g) => (g.min ?? 0) > 0);
+  // `photoUrl` est déjà DÉRIVÉ par le serveur (usage « vignette ») : la caisse
+  // ne refait pas la résolution, elle rend seulement le chemin hérité du
+  // pilote atteignable depuis SON origine (`photo.ts`). Et la tuile doit avoir
+  // les moyens de la vignette : sur le téléphone du gérant, elle mangerait le
+  // nom du plat, qui est l'information de travail.
+  const photo = vignetteTient(width, L) ? photoDuPoste(product.photoUrl) : null;
 
   return (
     <Press
@@ -346,6 +486,17 @@ function ProductCard({
       {!out ? <Sheen /> : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+        {/* Pas de réceptacle vide quand il n'y a pas de photo : la tuile
+            garde alors toute sa largeur pour le nom, exactement comme avant
+            la médiathèque. */}
+        {photo ? (
+          <Vignette
+            uri={photo}
+            cote={L.vignette}
+            media={mediaDeTete(product, catalogue)}
+            nom={product.name}
+          />
+        ) : null}
         <Text
           numberOfLines={2}
           style={{
@@ -360,20 +511,7 @@ function ProductCard({
         >
           {product.name}
         </Text>
-        {product.isNew && !out ? (
-          <View
-            style={{
-              paddingHorizontal: 7,
-              paddingVertical: 3,
-              borderRadius: R.pill,
-              backgroundColor: withAlpha(palette.green, 0.14),
-            }}
-          >
-            <Text style={{ fontFamily: FONT, color: palette.green, fontSize: L.fs(11), fontWeight: '800' }}>
-              NOUV.
-            </Text>
-          </View>
-        ) : required && !out ? (
+        {required && !out ? (
           // Pastille discrète : ce produit ouvrira une configuration obligatoire.
           <View
             style={{
@@ -387,6 +525,16 @@ function ProductCard({
         ) : null}
       </View>
 
+      {/* LE BADGE « NOUV. » A CHANGÉ DE RANGÉE, ET CE N'EST PAS UN DÉTAIL.
+          Il partageait la rangée du nom, où il coûtait une cinquantaine de
+          pixels sur les cent-cinquante d'une tuile de référence. Avec la
+          vignette en tête de cette rangée, il ne restait plus que trois ou
+          quatre caractères au nom d'une nouveauté illustrée : « Galette
+          Burrata » devenait « Galet… ». La rangée du prix, elle, avait sa
+          moitié droite VIDE. Le badge y descend donc, pour toutes les tuiles
+          et pas seulement les illustrées — deux tuiles voisines qui posent la
+          même information à deux endroits différents se lisent mal. Les tuiles
+          sans photo y gagnent la largeur que le badge leur prenait. */}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 10 }}>
         {out ? (
           <View
@@ -422,6 +570,21 @@ function ProductCard({
             </Text>
           </View>
         )}
+
+        {product.isNew && !out ? (
+          <View
+            style={{
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: R.pill,
+              backgroundColor: withAlpha(palette.green, 0.14),
+            }}
+          >
+            <Text style={{ fontFamily: FONT, color: palette.green, fontSize: L.fs(11), fontWeight: '800' }}>
+              NOUV.
+            </Text>
+          </View>
+        ) : null}
       </View>
     </Press>
   );

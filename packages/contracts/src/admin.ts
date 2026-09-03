@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Brand, RepliMarque } from './marque';
+import type { CapaciteEffective } from './capacites';
 
 // ─────────────────────────────────────────────────────────────
 // Administration client — le socle du back-office interne « /sm ».
@@ -62,6 +63,137 @@ export const isAccessBlocked = (status: TenantAccountStatus | null | undefined):
   status === 'suspended';
 
 /**
+ * UN COMPTE FACTURABLE — actif, ou suspendu.
+ *
+ * Un compte en essai ne se facture pas, un compte parti non plus. Un compte
+ * SUSPENDU, si : c'est justement parce qu'il doit de l'argent qu'il est
+ * suspendu, et arrêter de facturer un impayé reviendrait à l'effacer.
+ *
+ * Vit ICI, à côté d'`isAccessBlocked`, et non dans le service de facturation
+ * où elle est née : elle y était recopiée à l'identique par la surface du
+ * gérant (`my-billing.service`), c'est-à-dire écrite deux fois pour le même
+ * client. Le jour où l'une des deux bougerait, un restaurateur lirait
+ * « prochain prélèvement : aucun » sur l'écran même où nous lui préparons une
+ * facture.
+ */
+export const isBillable = (status: TenantAccountStatus | null | undefined): boolean =>
+  status === 'active' || status === 'suspended';
+
+// ─── Le terme de l'essai ───
+
+/**
+ * CE QUE LE CALCUL LIT DU COMPTE — deux champs, et rien de plus.
+ *
+ * Les valeurs sont `unknown` volontairement, comme `SouscriptionLue`
+ * (`capacites.ts`) : cette lecture est nourrie par un document Mongo `.lean()`
+ * qui ne matérialise pas les défauts de schéma et porte le parc historique. Un
+ * champ absent, `null`, ou d'un type inattendu doit produire un résultat,
+ * jamais une exception — c'est ce calcul qui décide si l'on facture.
+ */
+export type CompteLu = {
+  /** Le statut STOCKÉ. Absent sur les tenants d'avant le champ `account`. */
+  status?: unknown;
+  /** Le terme de l'essai, posé à la conversion. `null` : rien à dériver. */
+  trialEndsAt?: unknown;
+};
+
+/** Le statut tel qu'il DORT en base, valeur inconnue ramenée au défaut. */
+const statutStocke = (compte: CompteLu | null | undefined): TenantAccountStatus =>
+  TENANT_ACCOUNT_STATUSES.find((s) => s === compte?.status) ?? DEFAULT_TENANT_ACCOUNT_STATUS;
+
+/** Une date lisible, ou `null` — une date invalide vaut une absence. */
+function dateLue(valeur: unknown): Date | null {
+  if (valeur instanceof Date) return Number.isNaN(valeur.getTime()) ? null : valeur;
+  if (typeof valeur !== 'string' || valeur.trim() === '') return null;
+  const d = new Date(valeur);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * LE TERME D'UN ESSAI DÉJÀ PASSÉ, ou `null`.
+ *
+ * Rend la DATE et non un booléen : c'est elle qui devient le `since` du statut
+ * actif — le compte est devenu payant au terme convenu, pas le jour où une
+ * lecture s'en est aperçue. Sans cela, la fiche client verrait sa date « actif
+ * depuis » sauter au moment où la passe mensuelle réconcilie la base, pour un
+ * fait qui, lui, n'a pas bougé.
+ *
+ * Trois cas rendent `null`, et chacun est une décision :
+ *  · le compte n'est pas en essai — un compte SUSPENDU ou PARTI dont l'essai
+ *    est échu ne redevient pas actif : sa suspension a été décidée par un
+ *    humain avec un motif, son départ acté de même, et une date qui passe
+ *    n'annule ni l'une ni l'autre ;
+ *  · le terme n'est pas en base (`null`) — c'est le cas de tout le parc
+ *    d'avant `trialEndsAt`. Un essai sans terme écrit ne peut pas s'achever
+ *    tout seul : on ne devine pas une échéance contractuelle ;
+ *  · le terme n'est pas encore atteint.
+ */
+export function essaiEchuLe(
+  compte: CompteLu | null | undefined,
+  now: Date = new Date(),
+): Date | null {
+  if (statutStocke(compte) !== 'trial') return null;
+  const terme = dateLue(compte?.trialEndsAt);
+  if (terme === null || terme.getTime() > now.getTime()) return null;
+  return terme;
+}
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  LE STATUT EFFECTIF D'UN COMPTE — un essai dont le terme est passé vaut  ║
+ * ║  `active`. C'est la seule lecture de statut qui fasse foi.               ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * ─── LE DÉFAUT QUE CETTE FONCTION FERME ───
+ *
+ * `trialEndsAt` était écrit à la conversion, lu par un seul signal du CRM, et
+ * par AUCUNE garde. Aucun planificateur ne closait l'essai — le dépôt n'en a
+ * aucun, et n'en veut pas (cf. `BillingRunSchema`). Les seules écritures de
+ * statut étaient suspendre, réactiver et acter un départ, toutes manuelles. Or
+ * `isBillable` exclut `trial` : un restaurant signé que personne ne basculait à
+ * la main gardait donc un accès complet, gratuit et PERMANENT.
+ *
+ * ─── L'ARBITRAGE : ON FACTURE, ON NE FERME RIEN ───
+ *
+ * Au terme, le compte devient FACTURABLE, et rien ne se ferme. Le contrat est
+ * signé à la conversion : la formule, l'engagement et la remise y sont déjà
+ * figés (`ConversionService`), l'essai est un premier mois offert et non une
+ * évaluation. Couper l'accès d'un restaurant en plein service parce qu'une date
+ * est passée serait une faute ; le facturer est ce que les deux parties ont
+ * convenu. C'est aussi pourquoi cette dérivation ne peut RIEN casser :
+ * `isAccessBlocked` répond faux à `trial` comme à `active`.
+ *
+ * ─── LA FORME : DÉRIVER, PAS STOCKER ───
+ *
+ * Même idiome que `marqueEffective` (un adaptateur de lecture unique qui dérive
+ * au lieu de stocker) et que `remiseFondateurDue` (qui rend zéro hors période,
+ * donc s'éteint d'elle-même sans que personne ne l'éteigne). La vérité est
+ * immédiate partout, sans écriture sur un chemin de lecture, et sans automate à
+ * surveiller. La valeur STOCKÉE, elle, se réconcilie au seul endroit qui
+ * parcourt déjà tout le parc et où cela compte : la passe mensuelle de
+ * facturation (`BillingService.runMensuel`).
+ */
+export function statutEffectif(
+  compte: CompteLu | null | undefined,
+  now: Date = new Date(),
+): TenantAccountStatus {
+  return essaiEchuLe(compte, now) !== null ? 'active' : statutStocke(compte);
+}
+
+/**
+ * Le motif inscrit sur le compte ET au journal quand l'essai s'achève.
+ *
+ * Écrit ici parce que la phrase appartient à la RÈGLE, pas à la passe de
+ * facturation qui se trouve l'appliquer : elle dit ce qui s'est produit (un
+ * terme atteint) et ce que ça change (le compte entre en facturation), sans
+ * jamais laisser croire à une sanction. La date, elle, est déjà portée par le
+ * `since` du compte — la répéter dans la phrase donnerait deux vérités à
+ * maintenir.
+ */
+export const TRIAL_ENDED_REASON =
+  'Fin de la période d’essai — le compte devient facturable, l’accès reste ouvert.';
+
+/**
  * CE QU'UNE SUSPENSION FERME, ET CE QU'ELLE LAISSE OUVERT.
  *
  * La règle tient en une phrase : **on ferme ce qui encaisse, on laisse ouvert
@@ -117,10 +249,39 @@ export const ACCOUNT_SUSPENDED_CODE = 'tenant_suspended';
 export const PUBLIC_ORDERING_SUSPENDED_MESSAGE =
   'La commande en ligne est momentanément indisponible. Merci d’appeler directement le restaurant.';
 
+/**
+ * Message affiché au CONSOMMATEUR quand le restaurant n'a pas SOUSCRIT la
+ * commande en ligne.
+ *
+ * Voisin du précédent, et pourtant distinct mot pour mot : « momentanément
+ * indisponible » promet un retour, ce qui est vrai d'une suspension (elle se
+ * lève quand la facture est réglée) et faux d'une fonction jamais achetée. Le
+ * client reviendrait chaque semaine sur une page qui ne changera pas.
+ *
+ * Il n'y a ici NI reproche NI mention d'abonnement : le mangeur n'a pas à
+ * savoir ce que son restaurateur nous paie. Il lit que ce restaurant ne prend
+ * pas les commandes en ligne, et on lui laisse le téléphone.
+ */
+export const PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE =
+  'Ce restaurant ne prend pas les commandes en ligne. Merci de l’appeler directement.';
+
 /** L'état de compte tel qu'il circule dans les réponses d'API (dates ISO). */
 export type TenantAccount = {
+  /**
+   * Le statut EFFECTIF (`statutEffectif`), jamais la colonne brute : un essai
+   * dont le terme est passé sort d'ici en « Actif », que la base ait été
+   * réconciliée ou non. Les deux écrans de l'équipe et celui du gérant lisent
+   * donc la même chose le même jour.
+   */
   status: TenantAccountStatus;
-  /** Début du statut COURANT — remis à jour à chaque changement. */
+  /**
+   * Début du statut COURANT — remis à jour à chaque changement.
+   *
+   * Sur un essai échu que la base n'a pas encore rattrapé, c'est le TERME de
+   * l'essai et non la date de signature : le compte est devenu payant au jour
+   * convenu, pas au jour où on l'a regardé. C'est aussi exactement ce que la
+   * réconciliation écrira, si bien que la date ne bouge pas quand elle passe.
+   */
   since: string;
   /** Motif du dernier changement de statut, saisi par l'équipe SM. */
   reason: string;
@@ -138,11 +299,34 @@ export type TenantAccount = {
  *
  * Fonction pure et partagée pour que la règle ne soit écrite qu'une fois :
  * l'API la pose sur la page publique, le web peut la rejouer pour son rendu.
+ *
+ * ─── LA CAPACITÉ SUIT LE MÊME CHEMIN QUE LA SUSPENSION ───
+ *
+ * Une commande en ligne NON SOUSCRITE ne lève pas d'exception et ne rend pas
+ * un 403 : elle se ferme comme une pause, par la même porte. La raison est la
+ * même que pour la suspension, et elle est plus forte encore — la souscription
+ * peut cesser un mardi midi, et la page ne doit pas tomber en plein service
+ * devant des clients qui n'y sont pour rien. Le menu, les horaires et les avis
+ * restent affichés : on ferme un guichet, on n'efface pas un restaurant.
+ *
+ * `souscrite` est un paramètre OBLIGATOIRE, et c'était le choix à faire : une
+ * valeur par défaut à `true` aurait laissé chaque nouvel appelant ouvrir la
+ * porte en oubliant de poser la question. Ici le compilateur la pose pour lui.
+ *
+ * L'ordre compte. La non-souscription passe AVANT la suspension et avant la
+ * pause du gérant : elle est le fait le plus durable, elle ne doit pas
+ * emprunter le « momentanément » de la suspension, et surtout elle ne doit pas
+ * laisser sortir le message de pause du restaurateur — « de retour à 18 h » ne
+ * doit pas s'afficher sur une fonction qui ne reviendra pas.
  */
 export function publicOrderingState(
   account: { status?: TenantAccountStatus | null } | null | undefined,
   settings: { paused: boolean; message: string | null },
+  souscrite: boolean,
 ): { paused: boolean; message: string | null } {
+  if (!souscrite) {
+    return { paused: true, message: PUBLIC_ORDERING_UNSUBSCRIBED_MESSAGE };
+  }
   if (isAccessBlocked(account?.status)) {
     return { paused: true, message: PUBLIC_ORDERING_SUSPENDED_MESSAGE };
   }
@@ -205,6 +389,14 @@ export const ADMIN_LOG_ACTIONS = [
   // Le DÉPART d'un client — il nous quitte, on garde tout, on ne coupe rien.
   'tenant.churn',
   'tenant.plan_change',
+  // L'essai qui s'achève de lui-même : la réconciliation de `statutEffectif`
+  // par la passe mensuelle. Sous son PROPRE nom, et non `tenant.reactivate` —
+  // personne n'a réactivé quoi que ce soit, un terme est arrivé.
+  'tenant.trial_end',
+  // Une capacité ouverte ou fermée HORS formule — le geste commercial tracé.
+  // Distinct de `tenant.plan_change`, qui ne parle que de ce qui est vendu :
+  // une dérogation est précisément ce qui s'écarte de la grille.
+  'tenant.capacite_change',
   'tenant.note',
   'tenant.detail_view',
   'tenant.owner_reset',
@@ -233,6 +425,8 @@ export const ADMIN_LOG_ACTION_LABELS: Record<AdminLogAction, string> = {
   'tenant.reactivate': 'Réactivation du compte',
   'tenant.churn': 'Départ du client',
   'tenant.plan_change': 'Changement de formule',
+  'tenant.trial_end': 'Fin de la période d’essai',
+  'tenant.capacite_change': 'Dérogation de capacité',
   'tenant.note': 'Note interne',
   'tenant.detail_view': 'Consultation de la fiche',
   'tenant.owner_reset': 'Réinitialisation du mot de passe gérant',
@@ -593,6 +787,18 @@ export type AdminTenantAccount = {
    * journaux du serveur.
    */
   brandRepli: RepliMarque;
+  /**
+   * LES ONZE CAPACITÉS, avec ce qui les donne ou les refuse.
+   *
+   * Calculées côté API (`detailCapacites`), jamais rejouées par le front : la
+   * règle d'or du catalogue veut que le conditionnement se lise à un seul
+   * endroit, et un back-office qui refait le calcul en aurait sa propre copie.
+   *
+   * Portées par la fiche COMPTE et non par une route à part parce que c'est la
+   * même question que `plan` et `onlineOrdering` juste au-dessus — « qu'a-t-il
+   * acheté ? » — et que le panneau qui les affiche vit sur cet écran-là.
+   */
+  capacites: readonly CapaciteEffective[];
 };
 
 /**

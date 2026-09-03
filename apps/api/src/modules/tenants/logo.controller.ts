@@ -15,8 +15,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { LOGO_MAX_OCTETS } from '@sm/contracts';
-import { Public, Roles, TenantId } from '../../common/auth';
+import { LOGO_MAX_OCTETS, type JwtPayload } from '@sm/contracts';
+import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { LogoService } from './logo.service';
 import { imageAutorisee, OriginesImages } from './origines-images';
 
@@ -53,6 +53,7 @@ export class LogoController {
   )
   async poser(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @UploadedFile() fichier: FichierRecu | undefined,
     @Req() req: Request,
   ) {
@@ -93,13 +94,13 @@ export class LogoController {
           'le logo aurait pointé ailleurs que chez nous.',
       );
     }
-    return this.logo.poser(tenantId, origin, fichier.buffer);
+    return this.logo.poser(tenantId, origin, fichier.buffer, Date.now, user);
   }
 
   @Roles('owner', 'gerant')
   @Delete('tenants/me/logo')
-  retirer(@TenantId() tenantId: string) {
-    return this.logo.retirer(tenantId);
+  retirer(@TenantId() tenantId: string, @CurrentUser() user: JwtPayload) {
+    return this.logo.retirer(tenantId, user);
   }
 
   /**

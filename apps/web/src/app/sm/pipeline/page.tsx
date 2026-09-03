@@ -1,10 +1,13 @@
 "use client";
 
 /**
- * Pipeline commercial — une colonne par étape, les cartes se déplacent au
- * bouton (« Avancer → »), pas au glisser-déposer : sur un pipeline de quelques
- * dizaines de leads, un bouton est plus rapide, accessible au clavier et
- * impossible à rater d'un geste imprécis.
+ * PROSPECTION — une colonne par étape, les cartes se déplacent au bouton
+ * (« Avancer → »), pas au glisser-déposer : sur quelques dizaines de prospects,
+ * un bouton est plus rapide, accessible au clavier et impossible à rater d'un
+ * geste imprécis.
+ *
+ * La route reste `/sm/pipeline` et le type reste `CrmLead` : on a renommé ce
+ * que l'utilisateur lit, pas ce qui s'exécute.
  *
  * L'écriture est OPTIMISTE : la carte change de colonne à l'instant du clic,
  * la réponse serveur ne fait que confirmer. Un aller-retour réseau ne doit pas
@@ -47,7 +50,7 @@ export default function PipelinePage() {
   const toast = useToast();
   const { reload } = useHq();
   const [leads, setLeads] = useState<CrmLead[] | null>(null);
-  /** Le pipeline n'a pas pu être lu — distinct de « aucun lead ». */
+  /** Le pipeline n'a pas pu être lu — distinct de « aucun prospect ». */
   const [enPanne, setEnPanne] = useState(false);
   /** Compteur de relances — « Réessayer » réarme l'effet de lecture. */
   const [essai, setEssai] = useState(0);
@@ -115,7 +118,7 @@ export default function PipelinePage() {
       })
       .catch(() => {
         // PAS `[]` : « la prospection est vide » et « la route est tombée » ne
-        // se ressemblent que sur cet écran, qui afficherait « 0 lead » et six
+        // se ressemblent que sur cet écran, qui afficherait « 0 prospect » et six
         // colonnes vides sans rien distinguer.
         if (!cancelled) setEnPanne(true);
       });
@@ -135,7 +138,7 @@ export default function PipelinePage() {
     );
   }, [leads, query]);
 
-  /** Remplace un lead en place — la liste ne se recharge jamais entièrement. */
+  /** Remplace un prospect en place — la liste ne se recharge jamais entièrement. */
   const merge = (updated: CrmLead) =>
     setLeads((prev) =>
       (prev ?? []).map((l) => (l._id === updated._id ? updated : l)),
@@ -163,7 +166,7 @@ export default function PipelinePage() {
     <div className="flex h-full min-h-0 flex-col">
       {/*
         La route est tombée : on le DIT, au lieu d'afficher six colonnes vides
-        et « 0 lead ». Rien ne distinguait « la prospection n'a pas commencé »
+        et « 0 prospect ». Rien ne distinguait « la prospection n'a pas commencé »
         de « l'API ne répond pas » — et la première conclusion est celle qu'on
         tire naturellement devant un écran propre.
       */}
@@ -208,7 +211,7 @@ export default function PipelinePage() {
             ? enPanne
               ? "—"
               : "…"
-            : `${filtered.length} lead${filtered.length > 1 ? "s" : ""}${query ? " trouvés" : ""}`}
+            : `${filtered.length} prospect${filtered.length > 1 ? "s" : ""}${query ? " trouvés" : ""}`}
         </span>
         <Btn
           className="ml-auto max-md:min-h-11"
@@ -217,7 +220,7 @@ export default function PipelinePage() {
           icon="plus"
           onClick={() => setCreating(true)}
         >
-          Nouveau lead
+          Nouveau prospect
         </Btn>
       </div>
 

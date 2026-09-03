@@ -5,9 +5,10 @@ import {
   ProductCreateSchema,
   ProductUpdateSchema,
   ReorderSchema,
+  type JwtPayload,
 } from '@sm/contracts';
 import { zod } from '../../common/zod.pipe';
-import { Public, Roles, TenantId } from '../../common/auth';
+import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { MenuService } from './menu.service';
 import { TenantsService } from '../tenants/tenants.service';
 
@@ -65,34 +66,44 @@ export class MenuController {
   @Delete('categories/:id')
   deleteCategory(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Query('force') force?: string,
   ) {
-    return this.menu.deleteCategory(tenantId, id, force === 'true');
+    return this.menu.deleteCategory(tenantId, id, force === 'true', user);
   }
 
   // ─── Produits (gérant) ───
 
   @Roles('owner', 'gerant')
   @Post('products')
-  createProduct(@TenantId() tenantId: string, @Body(zod(ProductCreateSchema)) body: unknown) {
-    return this.menu.createProduct(tenantId, body as Record<string, unknown>);
+  createProduct(
+    @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body(zod(ProductCreateSchema)) body: unknown,
+  ) {
+    return this.menu.createProduct(tenantId, body as Record<string, unknown>, user);
   }
 
   @Roles('owner', 'gerant')
   @Patch('products/:id')
   updateProduct(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body(zod(ProductUpdateSchema)) body: Record<string, unknown>,
   ) {
-    return this.menu.updateProduct(tenantId, id, body);
+    return this.menu.updateProduct(tenantId, id, body, user);
   }
 
   @Roles('owner', 'gerant')
   @Delete('products/:id')
-  deleteProduct(@TenantId() tenantId: string, @Param('id') id: string) {
-    return this.menu.deleteProduct(tenantId, id);
+  deleteProduct(
+    @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.menu.deleteProduct(tenantId, id, user);
   }
 
   /**
@@ -105,9 +116,10 @@ export class MenuController {
   @Post('products/:id/stock')
   setStock(
     @TenantId() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() body: { outOfStock: boolean },
   ) {
-    return this.menu.setStock(tenantId, id, !!body.outOfStock);
+    return this.menu.setStock(tenantId, id, !!body.outOfStock, user);
   }
 }

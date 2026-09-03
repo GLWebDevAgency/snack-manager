@@ -1,14 +1,24 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import {
   ADMIN_LOG_ACTIONS,
+  AUDIT_AUTHOR_MEANS,
   BRAND_MODES,
   BRAND_MOTIONS,
   BRAND_SHAPES,
+  CAPACITES,
+  EMPREINTE_RE,
   HEX,
   LAITON,
+  MEDIA_FORMATS_ADMIS,
+  MEDIA_GENRES,
+  MEDIAS_PAR_PRODUIT_MAX,
+  ORIGINES_MEDIA,
   PLATFORM_SETTINGS_ID,
   PRESET_KEYS,
+  SENS_DEROGATION,
   SM_INVOICE_VAT,
+  STOCKAGES_MEDIA,
+  TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
   isPlatformLogAction,
   type SocialNetwork,
@@ -250,6 +260,48 @@ export const TenantSchema = new Schema(
      * c'est une SOUSCRIPTION.
      */
     onlineOrdering: { type: Boolean, default: false },
+    /**
+     * LES DÉROGATIONS DE CAPACITÉ — l'exception commerciale, tracée.
+     *
+     * `plan` dit la formule, `onlineOrdering` dit l'option ; les capacités
+     * EFFECTIVES s'en déduisent par le catalogue (`capacitesEffectives`,
+     * @sm/contracts) et ne sont JAMAIS stockées — une copie en base se
+     * désynchroniserait du catalogue au premier changement d'offre, en
+     * silence, sur les seuls tenants déjà créés.
+     *
+     * Reste ce qu'aucun catalogue ne peut porter : le cas particulier. Un geste
+     * commercial, une période d'essai sur une option, un ancien client gardé
+     * aux anciennes conditions, une fonction retirée le temps d'un litige. Sans
+     * ce champ, chacun de ces cas se réglait en changeant la FORMULE du
+     * client — ce qui fausse aussitôt sa facture et le MRR du CRM.
+     *
+     * `motif` et `auteur` sont exigés par le contrat, et ce n'est pas
+     * décoratif : une capacité ouverte hors formule est un manque à gagner, une
+     * capacité fermée malgré la formule est un litige. Dans les deux cas
+     * quelqu'un demandera « pourquoi ? » six mois plus tard.
+     *
+     * Les énumérations viennent du CONTRAT, jamais recopiées : une capacité
+     * ajoutée au produit doit être refusée ici tant qu'elle n'est pas au
+     * catalogue. Elles ne s'exécutent toutefois qu'à `save()` et sur les
+     * requêtes portant `runValidators` — la validation qui compte reste
+     * `DerogationCapaciteSchema` à la frontière.
+     */
+    derogationsCapacite: {
+      type: [
+        new Schema(
+          {
+            capacite: { type: String, enum: CAPACITES, required: true },
+            sens: { type: String, enum: SENS_DEROGATION, required: true },
+            motif: { type: String, required: true },
+            /** Qui l'a accordée — un membre de l'équipe Snack Manager, nommé. */
+            auteur: { type: String, required: true },
+            le: { type: Date, default: Date.now, required: true },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
     /**
      * L'engagement signé : au mois, ou à l'année avec deux mois offerts.
      *
@@ -661,7 +713,41 @@ export const ProductSchema = new Schema(
     outOfStock: { type: Boolean, default: false }, // rupture 1-tap
     // 'manual' = coupé à la main · 'ingredient' = cascade rupture ingrédient (contexte supply)
     outOfStockSource: { type: String, enum: ['manual', 'ingredient', null], default: null },
+    /**
+     * LA CHAÎNE HÉRITÉE — lue en repli, PLUS JAMAIS écrite par une route.
+     *
+     * Elle porte les dix-neuf photos du pilote (`/photos/…`, posées par
+     * `seed-photos.ts`). `ProductCreateSchema` et `ProductUpdateSchema` ne la
+     * reçoivent plus : c'était une chaîne libre, sans validation d'URL ni de
+     * protocole, qui contournait la liste blanche d'origines appliquée aux
+     * images de marque. La photo se choisit désormais dans la médiathèque, et
+     * `photoUrl` sort DÉRIVÉ de `medias[0]` (`photoUrlDe`, @sm/contracts).
+     *
+     * La colonne reste : la vider d'un coup viderait la carte du pilote en
+     * service. C'est la reprise `backfill:medias` qui la remplace, produit par
+     * produit, par une vraie référence de médiathèque.
+     */
     photoUrl: { type: String, default: null },
+    /**
+     * LES PHOTOS DU PRODUIT — un à trois médias, le premier est le principal.
+     *
+     * Des RÉFÉRENCES, pas des copies : le même cliché sert plusieurs produits
+     * (trois galettes sur la photo du panneau mural), survit au renommage du
+     * plat et à sa mise hors carte, et se recadre une fois pour toutes les
+     * surfaces. Un attribut de produit n'aurait aucune de ces propriétés.
+     *
+     * La borne de trois est portée ICI en plus du contrat : la base est aussi
+     * écrite par l'admin-cli, par un shell et par les reprises, qui ne passent
+     * pas par zod — même défense en profondeur que `IMAGE_URL` plus haut.
+     */
+    medias: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Media' }],
+      default: [],
+      validate: {
+        validator: (v: unknown[]) => !Array.isArray(v) || v.length <= MEDIAS_PAR_PRODUIT_MAX,
+        message: `Un produit porte au plus ${MEDIAS_PAR_PRODUIT_MAX} photos`,
+      },
+    },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
@@ -669,6 +755,80 @@ export const ProductSchema = new Schema(
 );
 ProductSchema.index({ tenantId: 1, categoryId: 1, order: 1 });
 export type Product = InferSchemaType<typeof ProductSchema>;
+
+// ─────────────────────────────────────────────────────────────
+// medias — la médiathèque d'un restaurant
+// ─────────────────────────────────────────────────────────────
+
+const PointInteretSub = new Schema(
+  {
+    x: { type: Number, default: 0.5, min: 0, max: 1 },
+    y: { type: Number, default: 0.5, min: 0, max: 1 },
+  },
+  { _id: false },
+);
+
+/**
+ * UN MÉDIA APPARTIENT AU RESTAURANT, PAS AU PRODUIT.
+ *
+ * Le même cliché sert en vignette carrée à la caisse, en carte sur la vitrine
+ * et en seize neuvièmes au téléviseur ; il survit au produit qu'on renomme,
+ * qu'on scinde en deux tailles ou qu'on retire de la carte pour l'hiver. D'où
+ * une collection à lui, cloisonnée par `tenantId` comme toutes les autres.
+ *
+ * ─── L'EMPREINTE EST UNE CLÉ, PAS UNE MÉTADONNÉE ───
+ *
+ * `(tenantId, empreinte)` est UNIQUE, et c'est ce qui fait le dédoublonnage :
+ * redéposer le même fichier retrouve la ligne existante au lieu d'en créer une
+ * seconde et de payer deux fois le même objet. L'unicité est portée par la
+ * BASE et pas seulement par le service — deux dépôts simultanés du même
+ * fichier (deux onglets, deux postes) arrivent sinon tous les deux à la
+ * conclusion « il n'existe pas encore ».
+ *
+ * L'index est PARTIEL : deux restaurants qui déposent la même photo de kebab
+ * gardent chacun la leur (le cloisonnement passe avant l'économie d'un objet),
+ * et une collection vide n'a pas à supporter un index sur un champ absent.
+ */
+export const MediaSchema = new Schema(
+  {
+    tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /** `photo` est public, `document` ne l'est JAMAIS — cf. `MEDIA_GENRES_PUBLICS`. */
+    genre: { type: String, enum: [...MEDIA_GENRES], required: true, default: 'photo' },
+    /** SHA-256 tronqué à 128 bits, hexadécimal minuscule : l'adresse en dérive. */
+    empreinte: {
+      type: String,
+      required: true,
+      match: [EMPREINTE_RE, 'Empreinte de média invalide'],
+    },
+    type: { type: String, enum: [...MEDIA_FORMATS_ADMIS], required: true },
+    octets: { type: Number, required: true, min: 1 },
+    /** Lues dans les octets quand l'en-tête du format les donne. */
+    largeur: { type: Number, default: null },
+    hauteur: { type: Number, default: null },
+    point: { type: PointInteretSub, default: () => ({ x: 0.5, y: 0.5 }) },
+    /** Libre et facultatif : la surface retombe sur le nom du produit. */
+    alt: { type: String, default: '', maxlength: 200 },
+    /** `objet` : les octets sont chez nous. `heritee` : dans le paquet web. */
+    stockage: { type: String, enum: [...STOCKAGES_MEDIA], required: true, default: 'objet' },
+    origine: { type: String, enum: [...ORIGINES_MEDIA], required: true, default: 'depot' },
+    /**
+     * L'origine http(s) SOUS LAQUELLE le média a été déposé, validée contre la
+     * liste blanche au moment du dépôt. Absolue pour la même raison que
+     * `logoUrl` : caisse, cuisine et téléviseur sont d'autres origines.
+     */
+    base: { type: String, default: null, ...IMAGE },
+    /** Le nom de fichier, pour les seuls médias hérités du pilote. */
+    fichier: { type: String, default: null, maxlength: 200 },
+    auteurId: { type: String, default: null },
+    auteurNom: { type: String, default: '' },
+  },
+  { timestamps: true },
+);
+/** La LISTE du gérant : sa médiathèque, du plus récent au plus ancien. */
+MediaSchema.index({ tenantId: 1, createdAt: -1 });
+/** Le DÉDOUBLONNAGE, et il est unique — voir l'en-tête. */
+MediaSchema.index({ tenantId: 1, empreinte: 1 }, { unique: true });
+export type Media = InferSchemaType<typeof MediaSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // orders
@@ -890,19 +1050,112 @@ export type Counter = InferSchemaType<typeof CounterSchema>;
 // auditLog — append-only, socle NF525
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * L'AUTEUR D'UN GESTE — qui, à quel titre, par quel moyen.
+ *
+ * Le registre ne portait qu'un `staffId` : l'équipier dont le PIN validait une
+ * annulation. Tout ce qui se fait depuis le back-office — un prix, une
+ * rupture, un horaire — n'avait donc PAS d'auteur du tout, alors que c'est
+ * exactement la question qu'on pose à un registre.
+ *
+ * ─── POURQUOI DU TEXTE ET NON UN `ObjectId` ───
+ *
+ * `id` désigne aujourd'hui un compte (`users`) ou un membre d'équipe
+ * (`staff`), et demain, peut-être, une clé de connecteur pour un assistant
+ * agissant au nom du restaurant. Une clé n'aura pas la forme d'un ObjectId :
+ * typer ce champ en `ObjectId` obligerait à MIGRER la collection le jour de
+ * cet ajout — sur un registre append-only, c'est-à-dire à ne pas pouvoir le
+ * faire. Le texte accueille les trois sans rien réécrire. `means` porte la
+ * valeur `connector` pour la même raison, et aucun code ne l'écrit encore.
+ *
+ * `name` et `role` sont DÉNORMALISÉS (même règle que `adminLogs.actorEmail`) :
+ * un registre relu par jointure change de contenu quand un équipier est
+ * renommé, change de rôle ou quitte le restaurant.
+ */
+const AuditAuthorSub = new Schema(
+  {
+    id: { type: String, required: true },
+    name: { type: String, default: '' },
+    role: { type: String, default: '' },
+    means: { type: String, enum: [...AUDIT_AUTHOR_MEANS], required: true },
+  },
+  { _id: false },
+);
+
 export const AuditLogSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
+    /**
+     * L'équipier dont le PIN a validé un geste de caisse. CONSERVÉ à côté de
+     * `author` : les lignes écrites avant lui ne portent que ça, et un
+     * registre append-only ne se rattrape pas par une reprise de données.
+     */
     staffId: { type: Schema.Types.ObjectId, default: null },
-    action: { type: String, required: true }, // order.cancel | order.discount | order.refund | price.change | …
+    action: {
+      type: String,
+      // La SOURCE, plus une recopie : une action ajoutée à
+      // `TENANT_AUDIT_ACTIONS` (@sm/contracts) existe ici sans geste
+      // supplémentaire. Le journal d'administration a payé cette leçon — une
+      // action déclarée au contrat mais absente d'une enum recopiée ici est
+      // refusée à l'écriture, et le geste passe sans laisser de trace.
+      enum: [...TENANT_AUDIT_ACTIONS],
+      required: true,
+    },
     targetId: { type: String, default: null },
     meta: { type: Schema.Types.Mixed, default: null },
+    /** `null` sur les lignes antérieures au champ, et sur les gestes sans PIN. */
+    author: { type: AuditAuthorSub, default: null },
     pinVerifiedAt: { type: Date, default: null },
     at: { type: Date, default: Date.now },
   },
   { timestamps: false },
 );
 AuditLogSchema.index({ tenantId: 1, at: -1 });
+
+/**
+ * APPEND-ONLY, garanti par l'ODM et pas seulement par la discipline.
+ *
+ * Un journal qu'on peut réécrire ne prouve rien. Ces hooks refusent toute mise
+ * à jour et toute suppression : la seule écriture possible est une insertion.
+ * Une correction se fait donc en AJOUTANT une ligne, comme dans un livre de
+ * comptes — jamais en effaçant la précédente.
+ *
+ * (Cela ne remplace pas des droits Mongo restrictifs en production ; cela
+ * ferme la porte au code applicatif, qui est la voie réellement empruntée.)
+ */
+const APPEND_ONLY_BLOCKED = [
+  'updateOne',
+  'updateMany',
+  'replaceOne',
+  'findOneAndUpdate',
+  'findOneAndReplace',
+  'deleteOne',
+  'deleteMany',
+  'findOneAndDelete',
+] as const;
+
+/**
+ * Pose les huit refus sur un schéma de registre.
+ *
+ * Écrite une fois et appliquée aux DEUX journaux — celui du restaurant et
+ * celui de l'équipe Snack Manager. Le second les avait, le premier non : la
+ * même promesse était tenue d'un côté et seulement affichée de l'autre, alors
+ * que c'est le registre du restaurant qu'on ouvre devant un contrôle de caisse.
+ * Recopier la boucle aurait laissé les deux diverger au premier ajout.
+ */
+function rendreAppendOnly(schema: Schema, collection: string): void {
+  for (const op of APPEND_ONLY_BLOCKED) {
+    // `as never` : la signature de `pre` est une union de littéraux que TS ne
+    // peut pas réduire depuis une variable de boucle. Le comportement, lui,
+    // est celui d'un middleware de requête ordinaire.
+    schema.pre(op as never, function blockMutation() {
+      throw new Error(`${collection} est append-only : « ${op} » est refusé.`);
+    });
+  }
+}
+
+rendreAppendOnly(AuditLogSchema, 'auditLogs');
+
 export type AuditLog = InferSchemaType<typeof AuditLogSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -1444,35 +1697,13 @@ AdminLogSchema.index({ tenantId: 1, at: -1 });
 AdminLogSchema.index({ at: -1 });
 
 /**
- * APPEND-ONLY, garanti par l'ODM et pas seulement par la discipline.
+ * APPEND-ONLY, par le même dispositif que le registre du restaurant.
  *
- * Un journal qu'on peut réécrire ne prouve rien. Ces hooks refusent toute
- * mise à jour et toute suppression : la seule écriture possible est une
- * insertion. Une correction se fait donc en AJOUTANT une ligne, comme dans un
- * livre de comptes — jamais en effaçant la précédente.
- *
- * (Cela ne remplace pas des droits Mongo restrictifs en production ; cela
- * ferme la porte au code applicatif, qui est la voie réellement empruntée.)
+ * Les huit refus vivent désormais dans `rendreAppendOnly` (déclaré plus haut,
+ * avec le journal `auditLogs`) : les deux registres tiennent une promesse
+ * identique, et une liste d'opérations recopiée aurait fini par diverger.
  */
-const APPEND_ONLY_BLOCKED = [
-  'updateOne',
-  'updateMany',
-  'replaceOne',
-  'findOneAndUpdate',
-  'findOneAndReplace',
-  'deleteOne',
-  'deleteMany',
-  'findOneAndDelete',
-] as const;
-
-for (const op of APPEND_ONLY_BLOCKED) {
-  // `as never` : la signature de `pre` est une union de littéraux que TS ne
-  // peut pas réduire depuis une variable de boucle. Le comportement, lui, est
-  // celui d'un middleware de requête ordinaire.
-  AdminLogSchema.pre(op as never, function blockMutation() {
-    throw new Error(`adminLogs est append-only : « ${op} » est refusé.`);
-  });
-}
+rendreAppendOnly(AdminLogSchema, 'adminLogs');
 
 export type AdminLog = InferSchemaType<typeof AdminLogSchema>;
 
@@ -1662,6 +1893,7 @@ export const MODELS = {
   },
   Category: { name: 'Category', schema: CategorySchema, collection: 'categories' },
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
+  Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },

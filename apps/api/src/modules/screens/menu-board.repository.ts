@@ -2,8 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Category, Product, Promotion, Tenant } from '@sm/db';
-import { brandColorDe, logoUrlDe } from '@sm/contracts';
+import {
+  brandColorDe,
+  catalogueMedias,
+  logoUrlDe,
+  photoPointDe,
+  photoUrlDe,
+  type PointInteret,
+} from '@sm/contracts';
 import { marqueObservee } from '../../common/marque-observee';
+import { MediasService } from '../mediatheque/medias.service';
 import { horairesPublics } from '../tenants/horaires-publics';
 import type { RawDayHours } from './daypart';
 
@@ -39,7 +47,14 @@ export interface BoardProduct {
   readonly priceCents: number;
   /** Centimes, une entrée par variante : source de la fourchette affichée. */
   readonly variantPrices: number[];
+  /** DÉRIVÉ de `medias[0]`, usage « bandeau » — voir `photoUrlDe`. */
   readonly photoUrl: string | null;
+  /**
+   * OÙ RECADRER — l'écran de salle est la surface la plus large (16:9) et
+   * donc celle qui coupe le plus. Sans point commun, elle tranche le plat
+   * ailleurs que la vignette carrée de la caisse, sur le même cliché.
+   */
+  readonly photoPoint: PointInteret | null;
   readonly isNew: boolean;
   readonly outOfStock: boolean;
   readonly tags: string[];
@@ -95,6 +110,7 @@ export class MenuBoardRepository {
     @InjectModel('Category') private readonly categories: Model<Category>,
     @InjectModel('Product') private readonly products: Model<Product>,
     @InjectModel('Promotion') private readonly promotions: Model<Promotion>,
+    private readonly medias: MediasService,
   ) {}
 
   /**
@@ -105,7 +121,7 @@ export class MenuBoardRepository {
    * transiter une carte d'hiver désactivée jusqu'à une clé HDMI.
    */
   async snapshot(tenantId: string, now: Date): Promise<BoardSnapshot | null> {
-    const [tenant, cats, prods, promos] = await Promise.all([
+    const [tenant, cats, prods, promos, medias] = await Promise.all([
       this.tenants.findById(tenantId).lean(),
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
@@ -141,9 +157,12 @@ export class MenuBoardRepository {
         })
         .sort({ createdAt: -1 })
         .lean(),
+      this.medias.catalogue(tenantId),
     ]);
 
     if (!tenant) return null;
+
+    const catalogue = catalogueMedias(medias);
 
     return {
       identity: identiteDuTableau(tenant),
@@ -155,7 +174,8 @@ export class MenuBoardRepository {
         description: String(p.description ?? ''),
         priceCents: Number(p.price ?? 0),
         variantPrices: (p.variants ?? []).map((v) => Number(v?.price ?? 0)),
-        photoUrl: p.photoUrl ?? null,
+        photoUrl: photoUrlDe(p, catalogue, 'bandeau'),
+        photoPoint: photoPointDe(p, catalogue),
         isNew: p.isNew === true,
         outOfStock: p.outOfStock === true,
         tags: (p.tags ?? []).map((t) => String(t)),

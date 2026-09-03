@@ -16,6 +16,9 @@
  * ni variable d'environnement, ni valeur persistée. Un gérant réel ne peut pas
  * y tomber par accident.
  */
+// `import type` : la liste des capacités est un TYPE ici, jamais une valeur —
+// le catalogue reste au contrat, le front n'en lit que le résultat.
+import type { Brand, Capacite } from "@sm/contracts";
 import { demoCsv, demoCsvName, demoRequest, isDemoActive } from "./demo";
 
 export const API_URL =
@@ -230,6 +233,21 @@ export type TenantMe = {
   _id: string;
   slug: string;
   name: string;
+  /**
+   * LE MASQUE D'IDENTITÉ — la source, dont `logoUrl` et `brandColor` dérivent.
+   *
+   * L'API le rend depuis la première livraison du masque (`vueMe`), et aucun
+   * écran ne le lisait : les deux champs plats en dessous suffisaient au
+   * personnel (« logo + accent », le contrat des tablettes). L'éditeur de
+   * marque, lui, édite le masque ENTIER — cinq rôles, accord typographique,
+   * forme, mouvement, cinq emplacements d'image — et le renvoie tel quel à
+   * `PATCH /tenants/me/marque`.
+   *
+   * Les deux champs plats restent, dérivés à la lecture : ils ne se mettent
+   * pas à jour tout seuls dans un état local, c'est la réponse de l'API qui
+   * les rapporte tous les trois d'un coup.
+   */
+  brand: Brand;
   logoUrl: string | null;
   brandColor: string;
   address: string;
@@ -240,7 +258,49 @@ export type TenantMe = {
     dinner: { open: string; close: string } | null;
   }[];
   closures: { from?: string; to?: string; reason?: string }[];
-  plan: "essentiel" | "complet" | "boost";
+  /**
+   * LA FORMULE SOUSCRITE — `null` compris.
+   *
+   * `null` n'est pas une anomalie : un client peut n'acheter QUE des services
+   * de l'Atelier (site, présence, réseaux) sans formule logicielle. Le type
+   * l'omettait, et la barre de navigation aurait pris ce cas pour un
+   * « essentiel ».
+   */
+  plan: "essentiel" | "complet" | "boost" | null;
+  /**
+   * Le module de commande en ligne — une SOUSCRIPTION, vendue à part de la
+   * formule. À ne pas confondre avec `settings.onlineOrderingPaused`, qui est
+   * la pause d'exploitation d'un soir de coup de feu : ici c'est ce que le
+   * restaurant a acheté, là c'est ce qu'il a décidé ce soir.
+   */
+  onlineOrdering: boolean;
+  /**
+   * CE QUE L'ÉTABLISSEMENT A SOUSCRIT — calculé par le SERVEUR, jamais ici.
+   *
+   * Les modules de la grille tarifaire (`pos`, `menu`, `planning`, `stocks`,
+   * `online`, `loyalty`…) que ce restaurant peut réellement ouvrir : sa
+   * formule, plus ses options, plus les dérogations accordées, moins celles
+   * qui lui ont été retirées.
+   *
+   * Le front ne recalcule RIEN à partir de `plan` : c'est la règle d'or du
+   * produit (le code ne connaît pas le nom d'une formule), et c'est aussi la
+   * seule façon d'être sûr que la barre de navigation et les gardes de l'API
+   * disent la même chose. Le catalogue vit dans `@sm/contracts/capacites`.
+   *
+   * Facultatif dans le type : une API déployée avant ce champ ne le rend pas,
+   * et l'absence se lit comme « on ne sait pas » — donc rien de verrouillé —
+   * plutôt que comme « rien de souscrit », qui fermerait un back-office entier
+   * le temps d'un déploiement décalé.
+   */
+  capacites?: Capacite[];
+  /**
+   * L'état du compte — le seul champ qui décide de l'ACCÈS.
+   *
+   * Réduit à son statut par l'API : le motif d'une suspension est un litige
+   * commercial, il ne descend pas jusqu'aux écrans. `trial` quand le compte
+   * n'a jamais été écrit — un champ manquant ne ferme pas un restaurant.
+   */
+  account: { status: "trial" | "active" | "suspended" | "churned" };
   settings: {
     slotIntervalMin: number;
     slotCapacity: number;

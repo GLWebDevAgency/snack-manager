@@ -10,8 +10,10 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { HealthController } from './modules/health/health.controller';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CapacitesModule } from './common/capacites.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MenuModule } from './modules/menu/menu.module';
+import { MediathequeModule } from './modules/mediatheque/mediatheque.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { OrderingModule } from './modules/ordering/ordering.module';
 import { EncaissementModule } from './modules/encaissement/encaissement.module';
@@ -69,7 +71,26 @@ import { validatePublicRelayEnvironment } from './common/verified-public-relay';
     InfrastructureModule,
     AuditModule,
     AuthModule,
+    /*
+     * LE SECOND AXE D'ACCÈS — les capacités, à côté des permissions.
+     *
+     * Déclaré juste après `AuthModule` et jamais dedans : l'un dit ce que la
+     * PERSONNE a le droit de faire, l'autre ce que l'ÉTABLISSEMENT a payé. Les
+     * deux gardent des routes, et c'est leur seul point commun.
+     */
+    CapacitesModule,
     TenantsModule,
+    /*
+     * DÉCLARÉE ICI ALORS QUE TROIS MODULES L'IMPORTENT DÉJÀ, ET C'EST VOULU.
+     *
+     * Même leçon que `EncaissementModule` juste en dessous : Nest enregistre
+     * les contrôleurs des modules importés transitivement, donc les routes
+     * `/medias/*` répondraient — mais seulement PARCE QUE le menu, la vitrine
+     * et l'écran de salle ont besoin du service pour dériver `photoUrl`. Le
+     * jour où l'une de ces dépendances disparaît, le gérant perd sa
+     * médiathèque sans qu'aucun test ne rougisse : juste des 404.
+     */
+    MediathequeModule,
     MenuModule,
     OrdersModule,
     OrderingModule,

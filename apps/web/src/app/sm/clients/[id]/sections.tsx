@@ -23,8 +23,14 @@ import Link from "next/link";
 import { useState } from "react";
 import {
   ADMIN_LOG_ACTION_LABELS,
+  CAPACITES_SANS_GARDE,
   CLIENT_HEALTH_LABELS,
+  GESTE_DEROGATION_LABELS,
+  ORIGINE_CAPACITE_LABELS,
   type AdminLogEntry,
+  type CapaciteEffective,
+  type GesteDerogation,
+  type OrigineCapacite,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { fmtEuro, timeAgo } from "@/lib/format";
@@ -51,6 +57,7 @@ import {
   type SupplyAlertKind,
   type TenantActivity,
 } from "../data";
+import { gestePour } from "../capacites";
 import { Eyebrow, Meter, ScorePill, SeverityPill, Trend, Unavailable } from "../ui";
 
 // ─────────────────────────────────────────────────────────────
@@ -689,7 +696,7 @@ export function SupplySection({ file }: { file: ClientFile }) {
 /**
  * CE QUI EST OUVERT SUR CE CLIENT, ET CE QU'ON EN DIT.
  *
- * La file de travail (`/sm/signals`) balaie tout le parc ; cette carte n'en
+ * La file du jour (`/sm/signals`) balaie tout le parc ; cette carte n'en
  * garde que ce restaurant, dans le MÊME ordre. C'est la première chose qu'on
  * lit en ouvrant la fiche parce que c'est la raison de l'appel.
  *
@@ -719,7 +726,7 @@ export function SignalsSection({ file }: { file: ClientFile }) {
       title="Signaux ouverts"
       sub={
         signals.length === 0
-          ? "Ce que la file de travail retient sur ce client"
+          ? "Ce que la file du jour retient sur ce client"
           : `${int(signals.length)} raison${signals.length > 1 ? "s" : ""} d'appeler, de la plus urgente à la moins urgente`
       }
       actions={
@@ -756,7 +763,7 @@ export function SignalsSection({ file }: { file: ClientFile }) {
               </div>
               <div className="mt-0.5 text-xs text-mut">
                 Ni impayé, ni décrochage, ni appareil muet, ni module dormant. Il
-                n&apos;apparaît dans aucune bande de la file de travail — un
+                n&apos;apparaît dans aucune bande de la file du jour — un
                 appel ici serait un appel de courtoisie, pas un rattrapage.
               </div>
             </div>
@@ -796,7 +803,7 @@ function SignalCard({ signal: s }: { signal: ClientSignal }) {
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         {/* La bande, en toutes lettres et en couleur fonctionnelle — la MÊME
-            pastille que la file de travail, point coloré compris. */}
+            pastille que la file du jour, point coloré compris. */}
         <SeverityPill severity={s.severity} label={s.severityLabel} className="shrink-0" />
         <span className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
           {s.kindLabel}
@@ -944,6 +951,152 @@ function AdviceCard({ advice: r }: { advice: Recommendation }) {
           )}
         </div>
       </div>
+    </li>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Accès et options
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * CE QUE CE RESTAURANT A LE DROIT D'OUVRIR — et pourquoi.
+ *
+ * Le catalogue des capacités décidait déjà de tout : la navigation du gérant,
+ * les routes de l'API, la vitrine de commande. Les DÉROGATIONS, elles, vivaient
+ * en base sans aucun écran — le seul moyen d'ouvrir la fidélité au pilote ou
+ * l'éditeur de carte à un client sans formule était d'ouvrir Mongo. Ce panneau
+ * est le seul endroit où ce travail devient utilisable.
+ *
+ * ─── POURQUOI L'ORIGINE EST AFFICHÉE, ET PAS SEULEMENT L'ÉTAT ───
+ *
+ * Onze pastilles vertes ne disent pas à l'opérateur ce qu'il s'apprête à faire.
+ * Retirer une fonction COMPRISE DANS LA FORMULE est un litige ou une panne ;
+ * retirer une OPTION, c'est cesser de facturer 79 €/mois ; lever une
+ * DÉROGATION, c'est effacer une exception qu'on a nous-mêmes posée. Trois
+ * gestes différents derrière la même couleur.
+ *
+ * ─── UN SEUL BOUTON PAR LIGNE, ET C'EST LE BON ───
+ *
+ * Le geste se déduit de l'état : une fonction fermée s'accorde, une fonction
+ * ouverte par la formule se retire, une ligne de dérogation se lève. L'écran ne
+ * demande donc jamais « quel geste ? » — il demande « sur quelle fonction ? »,
+ * qui est la seule question que l'opérateur se pose au téléphone.
+ */
+export function AccesSection({
+  file,
+  onGeste,
+}: {
+  file: ClientFile;
+  onGeste: (geste: { capacite: CapaciteEffective; geste: GesteDerogation }) => void;
+}) {
+  const capacites = file.account?.capacites ?? [];
+  const ouvertes = capacites.filter((c) => c.acquise).length;
+  const derogations = capacites.filter((c) => c.derogation).length;
+
+  return (
+    <Panel
+      title="Accès et options"
+      sub={
+        capacites.length === 0
+          ? "Ce que ce restaurant a le droit d'ouvrir"
+          : `${ouvertes} module${ouvertes > 1 ? "s" : ""} sur ${capacites.length}` +
+            (derogations > 0
+              ? ` · ${derogations} dérogation${derogations > 1 ? "s" : ""}`
+              : " · aucune dérogation")
+      }
+      bodyClassName="-mx-[18px] -mb-[18px]"
+    >
+      {capacites.length === 0 ? (
+        <div className="px-[18px] pb-[18px]">
+          <Unavailable
+            icon="gear"
+            title="Capacités indisponibles"
+            hint="La route /crm/tenants/:id/account n'a pas rendu les capacités : impossible de dire ce que ce restaurant a souscrit, ni d'y déroger."
+          />
+        </div>
+      ) : (
+        <ul>
+          {capacites.map((c) => (
+            <CapaciteRow key={c.capacite} capacite={c} onGeste={onGeste} />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+const ORIGINE_STYLE: Record<OrigineCapacite, string> = {
+  formule: "border-white/20 bg-white/6 text-mut",
+  option: "border-accent/50 bg-accent/12 text-accent",
+  derogation: "border-prep/55 bg-prep/12 text-prept",
+};
+
+function CapaciteRow({
+  capacite: c,
+  onGeste,
+}: {
+  capacite: CapaciteEffective;
+  onGeste: (geste: { capacite: CapaciteEffective; geste: GesteDerogation }) => void;
+}) {
+  const geste = gestePour(c);
+  const sansGarde = CAPACITES_SANS_GARDE.includes(c.capacite);
+
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-[18px] py-3 first:border-t-0">
+      <span
+        className={cx(
+          "size-[9px] shrink-0 rounded-full",
+          c.acquise ? "bg-ok" : "bg-white/18",
+        )}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Le libellé PUBLIÉ, mot pour mot : c'est celui que le restaurateur
+              a lu sur la grille avant de signer, et celui que son verrou de
+              navigation lui répète. */}
+          <span className="text-[13px] font-semibold text-ink">{c.label}</span>
+          {c.origine && (
+            <span
+              className={cx(
+                "inline-flex items-center whitespace-nowrap rounded-pill border-[1.5px] px-[9px] py-[2px] text-[10px] font-extrabold uppercase tracking-[0.06em]",
+                ORIGINE_STYLE[c.origine],
+              )}
+            >
+              {ORIGINE_CAPACITE_LABELS[c.origine]}
+            </span>
+          )}
+        </div>
+        {/* LE MOTIF DE LA DÉROGATION, SIGNÉ ET DATÉ. C'est ce qu'on relit six
+            mois plus tard quand quelqu'un demande « pourquoi celui-là l'a ? » —
+            et « je crois que c'était pour la reprise de son ancien logiciel »
+            n'est pas une réponse. */}
+        {c.derogation && (
+          <p className="mt-0.5 text-[12px] leading-[1.45] text-mut">
+            {c.derogation.sens === "accordee" ? "Accordée" : "Retirée"} par{" "}
+            {c.derogation.auteur || "—"}
+            {c.derogation.le && ` le ${fmtDay(c.derogation.le)}`} — {c.derogation.motif}
+          </p>
+        )}
+        {/* « Support prioritaire » n'est pas une fonction logicielle : aucune
+            route ne s'y adosse. Le dire évite d'y chercher un effet qui ne
+            viendra jamais. */}
+        {sansGarde && !c.derogation && (
+          <p className="mt-0.5 text-[12px] text-mut">
+            Niveau de service humain — aucun écran ne s&apos;y verrouille.
+          </p>
+        )}
+      </div>
+      <Btn
+        size="sm"
+        variant="ghost"
+        className="max-md:min-h-11"
+        onClick={() => onGeste({ capacite: c, geste })}
+        title={`${GESTE_DEROGATION_LABELS[geste]} — motif obligatoire`}
+      >
+        {geste === "levee" ? "Lever" : geste === "retiree" ? "Retirer" : "Accorder"}
+      </Btn>
     </li>
   );
 }
