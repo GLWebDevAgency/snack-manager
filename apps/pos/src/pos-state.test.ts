@@ -329,6 +329,44 @@ describe('Z — ventilation par moyen de paiement', () => {
     expect(z.discounts).toBe(250);
   });
 
+  /**
+   * LE PLAFOND DE 200 COMMANDES — un défaut d'argent, pas d'affichage.
+   *
+   * `GET /orders` ne renvoie que les 200 commandes les plus RÉCENTES et annonce
+   * la coupe. La caisse typait la réponse `{ rows }` et jetait `total` et
+   * `truncated` : au-delà, le chiffre d'affaires, les espèces, la carte et les
+   * titres-restaurant étaient calculés sur une fenêtre amputée de ses lignes
+   * les plus anciennes, en silence. Le gérant recomptait son tiroir contre un
+   * total faux.
+   */
+  describe('quand la fenêtre serveur est plafonnée', () => {
+    it('ne se déclare pas amputé sur une journée normale', () => {
+      const z = zFromServer(rows, since, { total: 4, truncated: false, received: 4 });
+      expect(z.partial).toBe(false);
+      expect(z.missing).toBe(0);
+    });
+
+    it('dit qu’il est amputé, et de combien de commandes', () => {
+      const z = zFromServer(rows, since, { total: 253, truncated: true, received: 200 });
+      expect(z.partial).toBe(true);
+      expect(z.missing).toBe(53);
+    });
+
+    it('reste exact — et muet — quand le serveur ne dit rien de la fenêtre', () => {
+      // Compatibilité descendante : sans information de fenêtre, on suppose
+      // la liste complète, ce qui était le comportement d'avant et reste vrai
+      // tant que la journée tient sous le plafond.
+      const z = zFromServer(rows, since);
+      expect(z.partial).toBe(false);
+      expect(z.missing).toBe(0);
+    });
+
+    it('n’invente pas de commandes manquantes sur un total incohérent', () => {
+      const z = zFromServer(rows, since, { total: 3, truncated: false, received: 200 });
+      expect(z.missing).toBe(0);
+    });
+  });
+
   it('hors ligne, le repli local se déclare comme tel', () => {
     const entries: DayEntry[] = [
       { clientId: 'a', localNumber: 1, serverId: null, serverNumber: null, mode: 'surplace', method: 'cb', paid: true, total: 900, items: 1, at: 1 },
@@ -347,6 +385,11 @@ describe('Z — ventilation par moyen de paiement', () => {
     // `local` doit rester visible à l'écran : ce zéro « en ligne » est une
     // absence d'information, pas un fait comptable.
     expect(z.source).toBe('local');
+    // Le journal local n'est jamais TRONQUÉ : il contient exactement ce que ce
+    // poste a encaissé. Il est incomplet pour une autre raison — la vente en
+    // ligne lui échappe —, et c'est `source` qui le dit, pas `partial`.
+    expect(z.partial).toBe(false);
+    expect(z.missing).toBe(0);
   });
 
   it('le repli local déduit les remises appliquées après coup', () => {

@@ -20,6 +20,7 @@ export {
   columnsFor,
   cardWidth,
   cadrageVignette,
+  serviceColumns,
   vignetteTient,
   computeLayout,
   COMPACT_W,

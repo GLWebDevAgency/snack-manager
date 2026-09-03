@@ -375,6 +375,15 @@ export function Chip({
 
 // ─── Segmented ───
 
+/**
+ * Sélecteur segmenté. Un onglet peut porter un `detail` — un compteur — rendu
+ * en PASTILLE à côté du libellé, sur la même ligne : posé dessous, il doublait
+ * la hauteur du contrôle et cassait l'alignement de la barre haute.
+ *
+ * `badge` colore cette pastille quand le compteur demande un geste (une
+ * commande prête à appeler, par exemple). Sans lui, elle reste discrète : un
+ * compteur toujours coloré ne signale plus rien.
+ */
 export function Segmented<T extends string>({
   value,
   options,
@@ -383,6 +392,7 @@ export function Segmented<T extends string>({
   onAccent,
   height = TOUCH_MIN,
   flex,
+  badge,
 }: {
   value: T;
   options: { key: T; label: string; detail?: string }[];
@@ -391,6 +401,7 @@ export function Segmented<T extends string>({
   onAccent: string;
   height?: number;
   flex?: boolean;
+  badge?: string;
 }) {
   const L = useLayout();
   const h = L.touch(height);
@@ -415,15 +426,17 @@ export function Segmented<T extends string>({
             onPress={() => onChange(opt.key)}
             selected={on}
             accessibilityRole="tab"
-            accessibilityLabel={opt.label}
+            accessibilityLabel={opt.detail ? `${opt.label}, ${opt.detail}` : opt.label}
             scale={0.98}
             style={{
               minHeight: h - 6,
-              paddingHorizontal: L.sp(16),
+              paddingHorizontal: L.sp(opt.detail ? 12 : 16),
               borderRadius: R.pill,
               backgroundColor: on ? accent : 'transparent',
+              flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
+              gap: 7,
               flex: flex ? 1 : undefined,
             }}
             activeStyle={{ backgroundColor: on ? accent : '#2a2a2a' }}
@@ -436,23 +449,35 @@ export function Segmented<T extends string>({
                 fontWeight: on ? '700' : '600',
                 color: on ? onAccent : palette.mut,
                 letterSpacing: -0.1,
+                flexShrink: 1,
               }}
             >
               {opt.label}
             </Text>
             {opt.detail ? (
-              <Text
+              <View
                 style={{
-                  fontFamily: FONT,
-                  fontSize: L.fs(12),
-                  fontWeight: '700',
-                  color: on ? onAccent : palette.mut,
-                  opacity: 0.75,
-                  ...TABULAR,
+                  minWidth: L.sp(22),
+                  paddingHorizontal: 6,
+                  paddingVertical: 1,
+                  borderRadius: R.pill,
+                  alignItems: 'center',
+                  backgroundColor: badge ?? (on ? withAlpha('#000000', 0.22) : palette.line),
                 }}
               >
-                {opt.detail}
-              </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontFamily: FONT,
+                    fontSize: L.fs(12.5),
+                    fontWeight: '800',
+                    color: badge ? '#08120a' : on ? onAccent : palette.text,
+                    ...TABULAR,
+                  }}
+                >
+                  {opt.detail}
+                </Text>
+              </View>
             ) : null}
           </Press>
         );

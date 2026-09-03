@@ -430,9 +430,35 @@ export interface ServiceZ {
    * comprise. `local` : repli hors ligne sur le seul journal de ce poste.
    */
   source: 'server' | 'local';
+  /**
+   * LE Z EST-IL UN TOTAL, OU UN MINIMUM ?
+   *
+   * `GET /orders` plafonne sa réponse à 200 commandes, les plus RÉCENTES, et
+   * annonce la coupe (`total`, `truncated`). La caisse typait la réponse
+   * `{ rows }` et jetait les deux : au-delà de 200 commandes dans la journée,
+   * le chiffre d'affaires, les espèces, la carte et les titres-restaurant
+   * étaient calculés sur une fenêtre amputée de ses lignes les PLUS ANCIENNES,
+   * en silence. Le gérant recomptait son tiroir contre un total faux.
+   *
+   * Quand `partial` est vrai, aucun montant de ce Z n'est un total : ce sont
+   * tous des minima, et l'écran doit le dire au lieu de conclure.
+   */
+  partial: boolean;
+  /** Commandes de la journée absentes de la fenêtre (`0` si rien n'est coupé). */
+  missing: number;
 }
 
-const EMPTY_Z: Omit<ServiceZ, 'source'> = {
+/** Ce que le serveur dit de la fenêtre qu'il vient de servir. */
+export interface ZWindow {
+  /** Nombre exact de commandes correspondant à la requête, côté serveur. */
+  total: number;
+  /** `true` quand les lignes reçues ne sont qu'une fenêtre. */
+  truncated: boolean;
+  /** Nombre de lignes réellement reçues. */
+  received: number;
+}
+
+const EMPTY_Z: Omit<ServiceZ, 'source' | 'partial' | 'missing'> = {
   orders: 0,
   ca: 0,
   cash: 0,
@@ -459,9 +485,22 @@ export interface ServiceOrderRow {
  * back-office. Les commandes annulées en sortent — elles n'ont encaissé rien.
  *
  * @param since début du service en ms (la clôture précédente, ou minuit).
+ * @param fenetre ce que le serveur a dit de la coupe. Facultatif : sans lui, on
+ *        suppose la fenêtre complète — c'était le comportement d'avant, et il
+ *        reste exact tant que la journée tient sous le plafond. Le fournir est
+ *        ce qui permet au Z de dire « au moins » plutôt que d'affirmer.
  */
-export function zFromServer(rows: ServiceOrderRow[], since: number): ServiceZ {
-  const z = { ...EMPTY_Z, source: 'server' as const };
+export function zFromServer(
+  rows: ServiceOrderRow[],
+  since: number,
+  fenetre?: ZWindow,
+): ServiceZ {
+  const z = {
+    ...EMPTY_Z,
+    source: 'server' as const,
+    partial: fenetre?.truncated === true,
+    missing: fenetre ? Math.max(0, fenetre.total - fenetre.received) : 0,
+  };
   for (const row of rows) {
     if (row.status === 'cancelled') continue;
     const at = row.createdAt ? Date.parse(row.createdAt) : Number.NaN;
@@ -494,7 +533,10 @@ export function zFromServer(rows: ServiceOrderRow[], since: number): ServiceZ {
  * un zéro qui passerait pour un fait.
  */
 export function zFromJournal(entries: DayEntry[]): ServiceZ {
-  const z = { ...EMPTY_Z, source: 'local' as const };
+  // Le journal local n'est jamais tronqué : il contient exactement ce que CE
+  // poste a encaissé. Il est incomplet pour une autre raison — la vente en
+  // ligne lui échappe —, et c'est `source: 'local'` qui le dit.
+  const z = { ...EMPTY_Z, source: 'local' as const, partial: false, missing: 0 };
   for (const entry of entries) {
     const net = entry.total - (entry.discount ?? 0);
     z.orders += 1;

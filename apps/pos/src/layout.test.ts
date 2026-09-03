@@ -6,17 +6,21 @@ import {
   REFERENCE,
   SCALE_MAX,
   SCALE_MIN,
+  SERVICE_COLS_MAX,
   TICKET_MAX,
   TICKET_MIN,
   LARGEUR_NOM_MIN,
   TICKET_REF,
   TOPBAR_REF,
+  TOPBAR_SELECTORS_SPLIT_W,
+  TOPBAR_SPLIT_W,
   VIGNETTE_MAX,
   VIGNETTE_MIN,
   cadrageVignette,
   cardWidth,
   columnsFor,
   computeLayout,
+  serviceColumns,
   vignetteTient,
 } from './layout';
 
@@ -101,6 +105,77 @@ describe('Mode compact — le ticket devient escamotable sous 900 px', () => {
     expect(phone.ticketW).toBeLessThan(390);
     expect(phone.ticketW).toBeGreaterThanOrEqual(300);
     expect(computeLayout(820, 1180).ticketW).toBeLessThanOrEqual(TICKET_MAX);
+  });
+});
+
+describe('Barre haute — deux sélecteurs, trois compositions', () => {
+  it('garde tout sur une rangée sur la tablette de RÉFÉRENCE', () => {
+    // C'est la contrainte qui a fixé le seuil à 1180 et non à 1280 : la
+    // 10" du comptoir ne devait pas gagner une rangée en même temps que
+    // la caisse gagnait une vue.
+    const L = computeLayout(REFERENCE.width, REFERENCE.height);
+    expect(L.topbarStacked).toBe(false);
+    expect(L.topbarSelectorsSplit).toBe(false);
+  });
+
+  it('bascule exactement aux deux seuils documentés', () => {
+    expect(computeLayout(TOPBAR_SPLIT_W, 800).topbarStacked).toBe(false);
+    expect(computeLayout(TOPBAR_SPLIT_W - 1, 800).topbarStacked).toBe(true);
+    expect(computeLayout(TOPBAR_SELECTORS_SPLIT_W, 900).topbarSelectorsSplit).toBe(false);
+    expect(computeLayout(TOPBAR_SELECTORS_SPLIT_W - 1, 900).topbarSelectorsSplit).toBe(true);
+  });
+
+  it('laisse ≈ 100 px par onglet au pire cas de la rangée partagée', () => {
+    // Cinq onglets (2 pour la vue, 3 pour le mode) se partagent la seconde
+    // rangée entre 560 et 1180 px. À la borne basse, « À emporter » doit
+    // encore tenir sans se couper en plein mot.
+    const L = computeLayout(TOPBAR_SELECTORS_SPLIT_W, 900);
+    const utile = L.width - 16 * 2 - 8; // marges de la barre + gouttière
+    expect(utile / 5).toBeGreaterThanOrEqual(96);
+  });
+
+  it('ne partage jamais une rangée quand elle n’existe pas', () => {
+    // Au-dessus du seuil de repli, la question du partage ne se pose pas :
+    // les deux sélecteurs sont sur la rangée d'identité.
+    for (let w = TOPBAR_SPLIT_W; w <= 2560; w += 40) {
+      const L = computeLayout(w, 900);
+      expect(L.topbarStacked).toBe(false);
+      expect(L.topbarSelectorsSplit).toBe(false);
+    }
+  });
+});
+
+describe('Vue du service — cartes larges, jamais étirées', () => {
+  const cases: [string, number, number, number][] = [
+    // écran, largeur, hauteur, colonnes attendues
+    ['10" paysage (référence)', 1280, 800, 3],
+    ['10" portrait', 820, 1180, 2],
+    ['24" comptoir', 1920, 1080, 4],
+    ['téléphone du gérant', 390, 844, 1],
+  ];
+
+  for (const [label, w, h, expected] of cases) {
+    it(`${label} (${w}×${h}) → ${expected} colonne(s)`, () => {
+      const L = computeLayout(w, h);
+      expect(serviceColumns(w - L.gridPad * 2, L)).toBe(expected);
+    });
+  }
+
+  it('garde une carte assez large pour un numéro lisible à un mètre', () => {
+    for (let w = 320; w <= 2560; w += 20) {
+      const L = computeLayout(w, 900);
+      const dispo = w - L.gridPad * 2;
+      const cols = serviceColumns(dispo, L);
+      expect(cols).toBeGreaterThanOrEqual(1);
+      expect(cols).toBeLessThanOrEqual(SERVICE_COLS_MAX);
+      const carte = (dispo - L.gridGap * (cols - 1)) / cols;
+      // Plancher mesuré du parc : 251 px, atteint à 544 px de large, juste
+      // après le passage à deux colonnes. C'est encore assez pour porter le
+      // numéro (30 px) et le minuteur (20 px) sur la même rangée. Le plafond
+      // empêche un très grand écran de rendre quatre cartes presque vides.
+      expect(carte).toBeGreaterThanOrEqual(250);
+      expect(carte).toBeLessThanOrEqual(640);
+    }
   });
 });
 
