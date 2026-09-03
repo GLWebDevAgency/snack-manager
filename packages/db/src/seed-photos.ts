@@ -178,6 +178,35 @@ const SANS_PHOTO = {
   $or: [{ photoUrl: null }, { photoUrl: { $exists: false } }, { photoUrl: '' }],
 };
 
+/**
+ * UNE PHOTO QUI POINTE VERS UN FICHIER DISPARU VAUT UNE ABSENCE DE PHOTO.
+ *
+ * Le 03/09/2026, la carte est passée en WebP : les treize `.png` ont été
+ * convertis puis supprimés, et les tables de ce script ont suivi. Mais les
+ * lignes DÉJÀ écrites en base, elles, pointaient toujours vers les `.png` —
+ * trente-huit produits de staging affichaient une image morte, sans que rien
+ * ne le signale.
+ *
+ * Le script applique donc aux photos déjà posées la règle qu'il applique déjà
+ * aux tables : les fichiers sont la source de vérité. Une adresse relative
+ * `/photos/<fichier>` dont le fichier n'est plus là est réattribuée comme si
+ * le produit n'avait jamais eu de photo. Une adresse ABSOLUE, elle, n'est
+ * jamais touchée : elle désigne un média déposé, que ce dossier ne connaît pas.
+ */
+const PREFIXE_PHOTOS = '/photos/';
+
+function fichierHerite(url: unknown): string | null {
+  if (typeof url !== 'string' || !url.startsWith(PREFIXE_PHOTOS)) return null;
+  return url.slice(PREFIXE_PHOTOS.length).split('?')[0] ?? null;
+}
+
+/** L'adresse pointe-t-elle vers un visuel que le dossier ne contient plus ? */
+function photoMorte(url: unknown): boolean {
+  if (DISPONIBLES.size === 0) return false;
+  const fichier = fichierHerite(url);
+  return fichier !== null && !DISPONIBLES.has(fichier);
+}
+
 // ─────────────────────────────────────────────────────────────
 
 async function main() {
@@ -228,9 +257,32 @@ async function main() {
   const nomCategorie = new Map(categories.map((c) => [String(c._id), String(c.name)]));
 
   const products = db.collection('products');
-  const produits = await products
-    .find({ tenantId, ...SANS_PHOTO }, { projection: { _id: 1, name: 1, categoryId: 1 } })
+
+  /*
+   * Deux populations, une seule règle : le produit n'a pas de photo servable.
+   * Celui qui n'en a jamais eu, et celui dont le fichier a disparu du dossier.
+   * Les seconds sont relevés en mémoire — Mongo ne sait pas juger l'existence
+   * d'un fichier — puis traités comme les premiers.
+   */
+  const avecPhoto = await products
+    .find(
+      { tenantId, photoUrl: { $exists: true, $nin: [null, ''] } },
+      { projection: { _id: 1, name: 1, categoryId: 1, photoUrl: 1 } },
+    )
     .toArray();
+  const mortes = avecPhoto.filter((p) => photoMorte(p.photoUrl));
+  if (mortes.length > 0) {
+    console.warn(`⚠ ${mortes.length} produit(s) pointent vers un visuel disparu — réattribué(s) :`);
+    for (const p of mortes.slice(0, 10)) console.warn(`    ${String(p.name)} → ${String(p.photoUrl)}`);
+    if (mortes.length > 10) console.warn(`    … et ${mortes.length - 10} autre(s)`);
+  }
+
+  const produits = [
+    ...(await products
+      .find({ tenantId, ...SANS_PHOTO }, { projection: { _id: 1, name: 1, categoryId: 1 } })
+      .toArray()),
+    ...mortes,
+  ];
 
   const dejaServis = await products.countDocuments({
     tenantId,
@@ -261,7 +313,16 @@ async function main() {
       updateOne: {
         // Le filtre RE-VÉRIFIE l'absence de photo : entre la lecture et
         // l'écriture, le gérant a pu en choisir une dans le back-office.
-        filter: { _id: p._id, ...SANS_PHOTO },
+        /*
+         * Le filtre voyage AVEC l'écriture — une photo choisie à la main entre
+         * la lecture et l'écriture ne doit pas être écrasée. Il accepte les
+         * deux populations : jamais photographié, ou pointant vers un fichier
+         * que le dossier ne contient plus.
+         */
+        filter: {
+          _id: p._id,
+          $or: [...SANS_PHOTO.$or, { photoUrl: { $in: mortes.map((m) => m.photoUrl) } }],
+        },
         update: { $set: { photoUrl: url(fichier) } },
       },
     });
@@ -302,7 +363,15 @@ async function main() {
       (inutilises.length > 0 ? ` — non employés : ${inutilises.join(', ')}` : ''),
   );
 
-  const restants = await products.countDocuments({ tenantId, ...SANS_PHOTO });
+  const apres = await products
+    .find(
+      { tenantId, photoUrl: { $exists: true, $nin: [null, ''] } },
+      { projection: { _id: 1, photoUrl: 1 } },
+    )
+    .toArray();
+  const restants =
+    (await products.countDocuments({ tenantId, ...SANS_PHOTO })) +
+    apres.filter((p) => photoMorte(p.photoUrl)).length;
   console.log(`\nProduits encore sans photo après passage : ${DRY ? '(simulation)' : restants}`);
 
   await mongoose.disconnect();
