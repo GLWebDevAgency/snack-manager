@@ -53,8 +53,9 @@ name: Bout en bout
 # volontairement laissé à qui le relira. Voir la section « travail restant ».
 #
 # ⚠️ Comme `deploy.yml`, ce fichier ne se déclenche que dans sa version présente
-# sur la branche par défaut : tant qu'il n'est pas fusionné dans `main`,
-# `workflow_run` n'existe pour personne. Utilisez `workflow_dispatch` d'ici là.
+# sur la branche par défaut. Une modification de ce déclenchement doit donc être
+# validée manuellement avant sa fusion dans `main` ; elle deviendra automatique
+# à partir du déploiement principal suivant.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -156,21 +157,13 @@ jobs:
             else
               case "$BRANCHE" in
                 main)
-                  # ⚠️ PRODUCTION N'EST PAS CONTRÔLÉE AUTOMATIQUEMENT, ET CE
-                  # N'EST PAS UN OUBLI. Au 20 août 2026, `main` ne porte pas
-                  # encore le mode démonstration (`?demo=1`) : la caisse de
-                  # production répond son écran d'appairage, `/r/demo` répond
-                  # 404, et les quatre parcours seraient rouges pour une raison
-                  # qui n'est pas une panne — exactement ce qui apprend à
-                  # ignorer le rouge. Le parc réel, lui, n'a aucun
-                  # établissement depuis la remise à blanc de la base.
-                  #
-                  # LE JOUR OÙ `develop` EST FUSIONNÉE DANS `main` : remplacer
-                  # ces quatre lignes par `environnement=production`, et
-                  # vérifier d'abord d'un coup de `workflow_dispatch`.
-                  echo "::notice title=Production non contrôlée::« main » ne porte pas encore les démonstrations (?demo=1). Lancez ce workflow à la main sur « production » pour vérifier où en est cette version."
-                  jouable=non
-                  environnement=aucun
+                  # Les démonstrations sont sans compte, sans secret et sans
+                  # écriture serveur. Elles ont été validées manuellement sur
+                  # production avant d'armer ce déclenchement automatique.
+                  # `serie=demo` ferme ici la porte au parc réel une première
+                  # fois ; son propre job exige aussi staging plus bas.
+                  environnement=production
+                  serie=demo
                   ;;
                 develop) environnement=staging ;;
                 *)

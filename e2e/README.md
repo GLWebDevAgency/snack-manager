@@ -114,12 +114,15 @@ dossier — un prix resté à 7,63 € sur staging.
 ## Intégration continue
 
 `.github/workflows/e2e.yml` — déclenché quand « Déploiement » a fini en vert sur
-`develop`, ou à la main (`workflow_dispatch`).
+`develop` ou `main`, ou à la main (`workflow_dispatch`). Sur `main`, seules les
+démonstrations sans secret et sans écriture sont jouées automatiquement ; le
+parc réel reste strictement limité à staging.
 
 ⚠️ **Il ne fait pas encore échouer le déploiement** : il tourne à côté, après.
 Le rendre bloquant tient en trois lignes dans `deploy.yml`, que ce workflow
 prévoit déjà (`workflow_call`) — voir l'en-tête de `e2e.yml`.
 
-⚠️ **La production n'est pas contrôlée automatiquement** : `main` ne porte pas
-encore le mode démonstration, et sa base n'a aucun établissement. Le jour où
-`develop` y est fusionnée, quatre lignes à changer dans le job `cible`.
+La production a d'abord été validée par `workflow_dispatch` avec les quatre
+démonstrations vertes. Ce passage manuel est la condition préalable à toute
+évolution future de la série automatique ; il ne donne jamais l'autorisation
+de lancer les scénarios du parc réel en production.
