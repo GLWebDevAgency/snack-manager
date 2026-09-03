@@ -26,14 +26,15 @@ import {
   useId,
   useRef,
   useState,
-  type ButtonHTMLAttributes,
+  type ComponentPropsWithRef,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { cx } from "@/lib/cx";
 import { Icon, type IconName } from "@/components/ui";
-import { eurosBare } from "./helpers";
+import { useDialogLayer } from "@/components/ui/useDialogLayer";
+import { euros, eurosBare } from "./helpers";
 import "./order.css";
 
 // ─────────────────────────────────────────────────────────────
@@ -42,13 +43,18 @@ import "./order.css";
 
 /** Enfoncement immédiat, relâchement doux — à poser sur tout élément appuyable. */
 export const TAP =
-  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:scale-[0.97] motion-reduce:active:scale-100";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-snap active:scale-[0.97] motion-reduce:active:scale-100";
 
 /** Variante « ligne » : une ligne pleine largeur s’enfonce, elle ne rétrécit pas. */
 export const TAP_ROW =
-  "transition-[transform,background-color,border-color,color,opacity] duration-200 ease-sm active:duration-75 active:translate-y-px motion-reduce:active:translate-y-0";
+  "transition-[transform,background-color,border-color,color,opacity] duration-fast ease-sm active:duration-snap active:translate-y-px motion-reduce:active:translate-y-0";
 
-type TapProps = ButtonHTMLAttributes<HTMLButtonElement>;
+/**
+ * `ComponentPropsWithRef` et non `ButtonHTMLAttributes` : en React 19, `ref`
+ * est une propriété ordinaire des composants de fonction. Le tabindex
+ * tournant de `Segmented` doit pouvoir donner le focus au segment voisin.
+ */
+type TapProps = ComponentPropsWithRef<"button">;
 
 /** `<button>` nu doté du retour tactile (aucun style de surface imposé). */
 export function Tap({ className, type = "button", ...rest }: TapProps) {
@@ -183,7 +189,7 @@ export function Plate({
     <span
       aria-hidden
       className={cx(
-        "sm-plate relative grid shrink-0 place-items-center overflow-hidden border border-white/6",
+        "sm-plate relative grid shrink-0 place-items-center overflow-hidden border border-ink/6",
         radius,
         className,
       )}
@@ -231,20 +237,32 @@ export function Money({
   cents,
   className,
   symbol = true,
+  mono = false,
 }: {
   cents: number | null | undefined;
   className?: string;
   symbol?: boolean;
+  /** Chasse fixe : le masque du restaurant le dicte, jamais le composant. */
+  mono?: boolean;
 }) {
   return (
     <span
       className={cx(
         "font-extrabold tabular-nums tracking-[-0.02em] whitespace-nowrap",
+        mono && "font-mono",
         className,
       )}
     >
       {eurosBare(cents)}
-      {symbol && <span className="ml-0.5 font-bold opacity-70">€</span>}
+      {/*
+        LE SYMBOLE FAIT PARTIE DU PRIX — il ne s'atténue donc pas.
+        Il était posé à `opacity-70`. Sur les boutons d'accent (barre de
+        panier, « Continuer · 3,50 € ») le couple onAccent/accent n'a que le
+        minimum garanti par le résolveur : rabattu à 70 %, le € tombait sous
+        4,5:1 sur quatre directions. La hiérarchie passe donc par le CORPS et
+        la GRAISSE — jamais par la couleur, qui reste celle du montant.
+      */}
+      {symbol && <span className="ml-0.5 text-[0.85em] font-bold">€</span>}
     </span>
   );
 }
@@ -258,16 +276,19 @@ export function PriceTag({
   cents,
   from = false,
   size = "md",
+  mono = false,
 }: {
   cents: number | null | undefined;
   /** Produit à variantes : préfixe « dès ». */
   from?: boolean;
   size?: "sm" | "md";
+  /** `prixMono` du masque — descendu depuis la vitrine, jamais relu ici. */
+  mono?: boolean;
 }) {
   return (
     <span
       className={cx(
-        "inline-flex items-baseline gap-1 rounded-ctrl border border-white/6 bg-surface2 text-ink",
+        "inline-flex items-baseline gap-1 rounded-ctrl border border-ink/6 bg-surface2 text-ink",
         size === "sm" ? "px-2 py-[3px]" : "px-2.5 py-[5px]",
       )}
     >
@@ -276,24 +297,65 @@ export function PriceTag({
           dès
         </span>
       )}
-      <Money cents={cents} className={size === "sm" ? "text-[13px]" : "text-[15px]"} />
+      <Money
+        cents={cents}
+        mono={mono}
+        className={size === "sm" ? "text-[13px]" : "text-[15px]"}
+      />
     </span>
   );
 }
 
-/** Intitulé de section : capitales espacées, gris — l’ossature de la page. */
+/**
+ * Montant écrit en toutes lettres (« 9,50 € »), hors pastille.
+ *
+ * La chasse fixe n'est PAS un choix de composant : deux paires typographiques
+ * du masque sur dix posent les prix en mono (l'atelier, le brut). La vitrine
+ * lit `TYPE_PAIRS[brand.type.pair].prixMono` une seule fois et le descend en
+ * propriété — dans la table des paires, et surtout PAS via `resoudreMarque()`,
+ * qui refait toute la palette pour un booléen (voir le commentaire de
+ * `Storefront`). Aucun composant ne relit la marque pour son propre compte,
+ * sinon la règle se disperse dans vingt fichiers et diverge au premier oubli.
+ */
+export function Prix({
+  cents,
+  mono = false,
+  className,
+}: {
+  cents: number | null | undefined;
+  mono?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={cx("tabular-nums whitespace-nowrap", mono && "font-mono", className)}>
+      {euros(cents)}
+    </span>
+  );
+}
+
+/**
+ * Intitulé de section : capitales espacées, gris — l’ossature de la page.
+ *
+ * `id` est posé sur le `<h3>` et non sur l'enveloppe : c'est le TITRE qui
+ * nomme le champ ou le groupe qui suit (`aria-labelledby`). Sans lui, les
+ * `<textarea>` du tunnel et de la fiche produit n'avaient aucun nom
+ * accessible (1.3.1, 4.1.2) et les grappes de chips n'appartenaient à aucun
+ * groupe annoncé — « Ketchup » se lisait sans qu'on sache de quel choix.
+ */
 export function SectionLabel({
   children,
   hint,
   className,
+  id,
 }: {
   children: ReactNode;
   hint?: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
     <div className={cx("flex items-baseline justify-between gap-3", className)}>
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
+      <h3 id={id} className="text-[11px] font-bold uppercase tracking-[0.16em] text-mut">
         {children}
       </h3>
       {hint && <span className="shrink-0 text-[13px] text-mut">{hint}</span>}
@@ -322,7 +384,7 @@ export function SectionHead({
       <div className="flex items-end justify-between gap-3">
         <h2
           id={id}
-          className="text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accent"
+          className="font-display text-[19px] font-extrabold uppercase leading-none tracking-[-0.01em] text-accentink"
         >
           {title}
         </h2>
@@ -352,7 +414,7 @@ export function Surface({
     <div
       style={style}
       className={cx(
-        "rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.04),transparent_120px)] shadow-card",
+        "rounded-panel border border-ink/6 bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_120px)] shadow-card",
         className,
       )}
     >
@@ -373,7 +435,7 @@ export function Dot({
     ok: "bg-ok",
     prep: "bg-prep",
     alert: "bg-alert",
-    mut: "bg-white/25",
+    mut: "bg-ink/25",
   }[tone];
   return (
     <span
@@ -396,14 +458,23 @@ export function Badge({
 }) {
   const skin = {
     new: "bg-accent text-onaccent",
-    hot: "bg-white/12 text-ink",
-    out: "border border-white/15 text-mut",
-    ok: "bg-ok text-black",
+    hot: "bg-ink/12 text-ink",
+    out: "border border-ink/15 text-mut",
+    ok: "bg-ok text-onok",
   }[tone];
   return (
     <span
+      /*
+        11 px, et non 10 : l'en-tête de ce fichier pose « rien sous 13 px pour
+        une information utile », et ces badges en portent une — « Bientôt »
+        REMPLACE le prix sur une carte en rupture, « Nouveau » et « En cours »
+        ne sont écrits nulle part ailleurs. On ne peut pas descendre à 13 px
+        sans casser la pastille ; on remonte donc au plus haut que la forme
+        supporte, et l'interlettrage est desserré d'autant moins (0,06 em au
+        lieu de 0,09) pour que le mot ne s'étale pas.
+      */
       className={cx(
-        "inline-flex shrink-0 items-center rounded-pill px-2 py-[3px] text-[10px] font-extrabold uppercase leading-none tracking-[0.09em]",
+        "inline-flex shrink-0 items-center rounded-pill px-2 py-[3px] text-[11px] font-extrabold uppercase leading-none tracking-[0.06em]",
         skin,
       )}
     >
@@ -435,7 +506,7 @@ export function BrandMark({
         width={size}
         height={size}
         style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
-        className="shrink-0 border border-white/10 object-cover"
+        className="shrink-0 border border-ink/10 object-cover"
       />
     );
   }
@@ -455,7 +526,21 @@ export function BrandMark({
   );
 }
 
-/** Rail horizontal : défilement au doigt, bords fondus, pas de barre. */
+/**
+ * Rail horizontal : défilement au doigt, bords fondus, pas de barre.
+ *
+ * ═══ UN NOM EXIGE UN RÔLE ═══
+ *
+ * `aria-label` était posé sur une `<div>` nue. ARIA l'interdit sur un élément
+ * générique et les technologies d'assistance l'ignorent : le rail n'avait
+ * donc AUCUN nom, malgré l'intention. `role="group"` est le rôle exact d'un
+ * ensemble d'objets d'interface qui se tiennent — et non `region`, qui
+ * ajouterait un point de repère de page pour une bande de six cartes.
+ *
+ * Pas de `tabIndex={0}` : la zone défilante contient des boutons, donc elle
+ * est déjà atteignable et défilée au clavier (2.1.1). L'ajouter ne ferait
+ * qu'intercaler une halte de tabulation vide avant chaque carte.
+ */
 export function Rail({
   children,
   className,
@@ -464,11 +549,13 @@ export function Rail({
 }: {
   children: ReactNode;
   className?: string;
+  /** Nom du rail. Sans lui, pas de `role` non plus : un groupe anonyme n'aide personne. */
   label?: string;
   snap?: boolean;
 }) {
   return (
     <div
+      role={label ? "group" : undefined}
       aria-label={label}
       className={cx(
         "sm-rail -mx-4 flex gap-2.5 overflow-x-auto px-4",
@@ -500,10 +587,11 @@ export function Stepper({
   /** Contexte lu par les lecteurs d’écran (« Kebab »). */
   label: string;
 }) {
+  // 44 px : la cible tactile minimale, sur un contrôle qu'on martèle du pouce.
   const btn =
-    "grid size-10 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-white/10";
+    "grid size-11 place-items-center rounded-pill text-ink disabled:opacity-30 disabled:active:scale-100 hover:bg-ink/10";
   return (
-    <div className="inline-flex items-center rounded-pill border border-white/12 bg-surface2 p-0.5">
+    <div className="inline-flex items-center rounded-pill border border-ink/12 bg-surface2 p-0.5">
       <Tap
         className={btn}
         onClick={() => onChange(value - 1)}
@@ -594,13 +682,17 @@ export function OptionChip({
       aria-pressed={on}
       className={cx(
         "inline-flex min-h-11 items-center gap-1.5 rounded-pill border px-3.5 py-2 text-[14px] font-semibold",
+        // Le lavis d'accent est celui du contrat (`--cf-accent-wash`, 12 %) et
+        // pas une opacité improvisée : c'est sur CETTE valeur que le résolveur
+        // prouve l'AA de `mut` et d'`accentink`. À 20 %, la chip sélectionnée
+        // était plus dense que tout ce que le résolveur avait jugé.
         on
-          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_20%,transparent)] text-ink"
-          : "border-white/10 bg-surface2 text-ink/85 hover:border-white/25",
+          ? "border-accent bg-accentwash text-ink"
+          : "border-ink/10 bg-surface2 text-ink/85 hover:border-ink/25",
         disabled && "cursor-not-allowed opacity-35 active:scale-100",
       )}
     >
-      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accent" />}
+      {on && <Icon name="check" size={13} stroke={3} className="-ml-0.5 text-accentink" />}
       {children}
       {price !== undefined && price !== 0 && (
         <span
@@ -617,56 +709,162 @@ export function OptionChip({
 }
 
 /**
- * Contrôle segmenté — le sélecteur de format. Deux à quatre segments égaux,
- * le curseur actif porte l’accent : c’est le choix qui pilote le prix, il doit
- * se lire avant tout le reste de la fiche.
+ * Le pas d'une flèche dans un groupe de boutons radio (APG radiogroup).
+ * `null` quand la touche n'est pas une flèche : l'appelant laisse passer.
+ */
+function pasDeFleche(key: string): number | null {
+  if (key === "ArrowRight" || key === "ArrowDown") return 1;
+  if (key === "ArrowLeft" || key === "ArrowUp") return -1;
+  return null;
+}
+
+/**
+ * Enveloppe `role="radiogroup"` qui rend les flèches opérantes (APG).
+ *
+ * Elle sert les groupes dont les boutons sont posés par l'APPELANT
+ * (`ChoiceCard`, `OptionRow` en mode radio) : le clavier se gouverne au
+ * niveau du groupe, en interrogeant les `role="radio"` réellement rendus —
+ * aucun composant enfant n'a donc à connaître ses frères. `Segmented`, qui
+ * possède déjà ses options, gère ses flèches lui-même.
+ *
+ * Le tabindex tournant reste à la charge de l'appelant (`tabIndex` sur chaque
+ * ligne) : lui seul sait laquelle est cochée, et quelle ligne prend la halte
+ * de tabulation quand aucune ne l'est.
+ */
+export function RadioGroup({
+  label,
+  labelledBy,
+  className,
+  children,
+}: {
+  label?: string;
+  labelledBy?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-labelledby={labelledBy}
+      className={className}
+      onKeyDown={(e) => {
+        const pas = pasDeFleche(e.key);
+        if (pas === null || e.altKey || e.ctrlKey || e.metaKey) return;
+        const radios = [
+          ...e.currentTarget.querySelectorAll<HTMLElement>(
+            '[role="radio"]:not([disabled]):not([aria-disabled="true"])',
+          ),
+        ];
+        const depuis = radios.indexOf(
+          e.currentTarget.ownerDocument.activeElement as HTMLElement,
+        );
+        if (depuis < 0) return;
+        e.preventDefault();
+        // La boucle est circulaire, comme le veut l'APG : en bout de groupe la
+        // flèche revient au premier plutôt que de ne rien faire.
+        const cible = radios[(depuis + pas + radios.length) % radios.length];
+        // Dans un radiogroup, déplacer le focus SÉLECTIONNE : le clic est donc
+        // la bonne primitive — il rejoue exactement ce que fait la souris.
+        cible?.click();
+        cible?.focus();
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Contrôle segmenté — le sélecteur de format. Le curseur actif porte
+ * l’accent : c’est le choix qui pilote le prix, il doit se lire avant tout le
+ * reste de la fiche.
+ *
+ * ═══ LA GRILLE SUIT LE CONTENEUR, PAS LE NOMBRE D'OPTIONS ═══
+ *
+ * Elle valait `repeat(n, minmax(0,1fr))` : trois formats longs à 390 px
+ * devenaient « Gran… / Gran… / Gran… », indistinguables. `auto-fit` pose
+ * autant de colonnes de 6,5 rem que la place en accepte, replie le contrôle
+ * sur deux lignes quand elle manque, et — les pistes vides étant effondrées —
+ * deux options occupent toujours toute la largeur. Le libellé se coupe sur
+ * deux lignes au lieu d'être tronqué : mieux vaut lire en deux temps que ne
+ * pas lire.
  */
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
   label,
+  mono = false,
 }: {
   options: { key: T; label: string; sub?: string }[];
   value: T | null;
   onChange: (next: T) => void;
   label: string;
+  /** `prixMono` du masque : le `sub` d'un segment porte un prix. */
+  mono?: boolean;
 }) {
-  const wrap = options.length > 3;
+  const segments = useRef<(HTMLButtonElement | null)[]>([]);
+  /*
+   * Le tabindex TOURNANT (APG) : le groupe entier ne prend qu'UNE halte de
+   * tabulation, sur le segment coché — ou, si rien n'est coché, sur le
+   * premier, sinon le contrôle deviendrait inatteignable au clavier.
+   */
+  const coche = options.findIndex((o) => o.key === value);
+  const tournant = coche >= 0 ? coche : 0;
+
+  const deplacer = (depuis: number, pas: number) => {
+    const cible = (depuis + pas + options.length) % options.length;
+    const option = options[cible];
+    if (!option) return;
+    onChange(option.key);
+    segments.current[cible]?.focus();
+  };
+
   return (
     <div
       role="radiogroup"
       aria-label={label}
-      className="grid gap-1.5 rounded-panel border border-white/8 bg-surface2 p-1.5"
-      style={{
-        // Au-delà de trois segments, deux colonnes : quatre libellés côte à
-        // côte à 390 px se réduisent à des moignons illisibles.
-        gridTemplateColumns: `repeat(${wrap ? 2 : options.length}, minmax(0,1fr))`,
-      }}
+      className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1.5 rounded-panel border border-ink/8 bg-surface2 p-1.5"
     >
-      {options.map((option) => {
+      {options.map((option, i) => {
         const on = option.key === value;
         return (
           <Tap
             key={option.key}
+            ref={(node) => {
+              segments.current[i] = node;
+            }}
             role="radio"
             aria-checked={on}
+            tabIndex={i === tournant ? 0 : -1}
             onClick={() => onChange(option.key)}
+            onKeyDown={(e) => {
+              const pas = pasDeFleche(e.key);
+              if (pas === null || e.altKey || e.ctrlKey || e.metaKey) return;
+              e.preventDefault();
+              deplacer(i, pas);
+            }}
             className={cx(
               "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-card px-2 py-2 text-center",
               on
-                ? "bg-accent text-onaccent shadow-[0_2px_10px_rgba(0,0,0,0.35)]"
+                ? "bg-accent text-onaccent shadow-card"
                 : "text-mut hover:text-ink",
             )}
           >
-            <span className="max-w-full truncate text-[13.5px] font-bold leading-tight">
+            <span className="line-clamp-2 max-w-full break-words text-[13.5px] font-bold leading-tight">
               {option.label}
             </span>
             {option.sub && (
+              // Sur le segment actif, le prix reste en `onaccent` PLEIN : il
+              // pilote le prix de la fiche, et à 80 % d'opacité il tombait à
+              // 3,63:1 sur Marché. La hiérarchie tient au corps et à la
+              // graisse — semi-gras contre le gras du libellé.
               <span
                 className={cx(
-                  "text-[12px] font-bold tabular-nums leading-none",
-                  on ? "opacity-80" : "text-mut",
+                  "text-[12px] font-semibold tabular-nums leading-none",
+                  mono && "font-mono",
+                  !on && "text-mut",
                 )}
               >
                 {option.sub}
@@ -688,6 +886,7 @@ export function OptionRow({
   sub,
   price,
   onClick,
+  tabIndex,
 }: {
   on: boolean;
   /** Rendu en pastille ronde plutôt que carrée (choix exclusif). */
@@ -698,6 +897,11 @@ export function OptionRow({
   /** Centimes ; `undefined` ⇒ aucun prix affiché. */
   price?: number;
   onClick: () => void;
+  /**
+   * Tabindex tournant d'un `RadioGroup` (APG) : `0` sur la ligne cochée, `-1`
+   * sur les autres. Seul l'appelant, qui voit tout le groupe, peut le poser.
+   */
+  tabIndex?: number;
 }) {
   return (
     <button
@@ -706,18 +910,23 @@ export function OptionRow({
       disabled={disabled}
       role={radio ? "radio" : "checkbox"}
       aria-checked={on}
+      tabIndex={radio ? tabIndex : undefined}
       className={cx(
         TAP_ROW,
-        "flex min-h-[52px] w-full items-center gap-3 border-b border-white/6 py-3 text-left last:border-b-0",
+        "flex min-h-[52px] w-full items-center gap-3 border-b border-ink/6 py-3 text-left last:border-b-0",
         disabled && "cursor-not-allowed opacity-35",
       )}
     >
       <span
         aria-hidden
         className={cx(
-          "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-200 ease-sm",
+          "grid size-[22px] shrink-0 place-items-center border-2 transition-colors duration-fast ease-sm",
           radio ? "rounded-full" : "rounded-[7px]",
-          on ? "border-accent bg-accent text-onaccent" : "border-white/25",
+          // `border-linefirm` et non `border-ink/25` : c'est cet anneau,
+          // et lui seul, qui dit « non coché ». À 25 % d'encre il mesurait
+          // 1,52 à 2,16:1 selon la direction — la case cochée se voyait
+          // (aplat d'accent), la case vide se devinait (1.4.11 exige 3:1).
+          on ? "border-accent bg-accent text-onaccent" : "border-linefirm",
         )}
       >
         {on && <Icon name="check" size={13} stroke={3} />}
@@ -729,7 +938,7 @@ export function OptionRow({
         {sub && <span className="block truncate text-[13px] text-mut">{sub}</span>}
       </span>
       {price !== undefined && price !== 0 && (
-        <span className="shrink-0 text-[14px] font-bold tabular-nums text-accent">
+        <span className="shrink-0 text-[14px] font-bold tabular-nums text-accentink">
           +{eurosBare(price)} €
         </span>
       )}
@@ -750,6 +959,7 @@ export function ChoiceCard({
   sub,
   onClick,
   disabled,
+  tabIndex,
 }: {
   on: boolean;
   icon?: IconName;
@@ -758,6 +968,8 @@ export function ChoiceCard({
   sub?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** Tabindex tournant du `RadioGroup` qui l'entoure (APG). */
+  tabIndex?: number;
 }) {
   return (
     <button
@@ -765,20 +977,23 @@ export function ChoiceCard({
       role="radio"
       aria-checked={on}
       disabled={disabled}
+      tabIndex={tabIndex}
       onClick={onClick}
       className={cx(
         TAP_ROW,
         "flex w-full items-center gap-3 rounded-panel border p-3.5 text-left",
+        // Même lavis unique que partout ailleurs (`--cf-accent-wash`, 12 %),
+        // et non une troisième force inventée ici.
         on
-          ? "border-accent bg-[color-mix(in_srgb,var(--cf-accent)_10%,var(--cf-surface))]"
-          : "border-white/8 bg-surface hover:border-white/20",
+          ? "border-accent bg-accentwash"
+          : "border-ink/8 bg-surface hover:border-ink/20",
         disabled && "cursor-not-allowed opacity-40",
       )}
     >
       <span
         className={cx(
           "grid size-10 shrink-0 place-items-center rounded-card",
-          on ? "bg-accent text-onaccent" : "bg-surface2 text-accent",
+          on ? "bg-accent text-onaccent" : "bg-surface2 text-accentink",
         )}
       >
         {glyph ? <Glyph name={glyph} size={19} /> : icon ? <Icon name={icon} size={19} /> : null}
@@ -790,8 +1005,10 @@ export function ChoiceCard({
       <span
         aria-hidden
         className={cx(
-          "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-200 ease-sm",
-          on ? "border-accent bg-accent text-onaccent" : "border-white/25",
+          "grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-colors duration-fast ease-sm",
+          // Même filet ferme que `OptionRow` ci-dessus, et pour la même
+          // raison : l'anneau vide est le seul signe de « non choisi ».
+          on ? "border-accent bg-accent text-onaccent" : "border-linefirm",
         )}
       >
         {on && <Icon name="check" size={12} stroke={3} />}
@@ -804,7 +1021,17 @@ export function ChoiceCard({
 // Feuille (bottom sheet)
 // ─────────────────────────────────────────────────────────────
 
-const SHEET_MS = 300;
+/**
+ * SECOURS de démontage, et rien d'autre — ce n'est PAS la durée de sortie.
+ *
+ * La sortie dure `--sm-t-med`, posé par le masque (200 ms « vif », 320 ms
+ * « posé ») : la feuille est démontée sur son `transitionend`. Ce délai ne
+ * sert qu'au cas où l'événement ne vient jamais — ouverture puis fermeture
+ * dans la même image, avant que la transition ait commencé. Il est donc
+ * volontairement plus long que le plus lent des masques : mieux vaut un
+ * nœud invisible 400 ms de trop qu'une feuille qui ne se démonte plus.
+ */
+const SORTIE_SECOURS_MS = 700;
 /** Course au-delà de laquelle le relâchement ferme la feuille. */
 const DISMISS_PX = 96;
 
@@ -814,8 +1041,18 @@ const DISMISS_PX = 96;
  * sert donc la page plein écran et le widget embarqué, sans code spécifique.
  *
  * Fermeture : croix, Échap, appui sur le fond, **et glissement vers le bas
- * depuis la poignée ou l’en-tête** (le geste attendu sur un téléphone). Le
- * focus part sur le panneau et revient à l’élément déclencheur à la fermeture.
+ * depuis la poignée ou l’en-tête** (le geste attendu sur un téléphone).
+ *
+ * ═══ LA FEUILLE EST UN DIALOGUE, ET ELLE EN PORTE LE CONTRAT ═══
+ *
+ * Elle se déclarait `role="dialog" aria-modal` sans rien tenir : la
+ * tabulation sortait du panneau et se promenait dans la vitrine masquée par
+ * le voile (2.4.3, APG dialog). `useDialogLayer` — déjà employé par `Modal`,
+ * `Drawer` et le scanner de fidélité — apporte la pile, le piège de focus,
+ * `inert` sur le reste de la page, Échap, le verrou de défilement et la
+ * restitution du focus au déclencheur. La feuille client, la plus utilisée du
+ * produit, était la seule à ne pas l'employer ; elle ne réécrit donc plus ces
+ * quatre mécanismes pour son compte.
  *
  * En mode `float`, la barre de tête est transparente sur le visuel puis se
  * solidifie dès que le contenu défile dessous — la croix ne se retrouve jamais
@@ -865,53 +1102,49 @@ export function Sheet({
   /** Mode `float` : le visuel de tête est-il déjà passé sous la barre ? */
   const [sunk, setSunk] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-  const restoreRef = useRef<HTMLElement | null>(null);
   const dragFrom = useRef<number | null>(null);
   const titleId = useId();
+  /*
+   * Le focus d'ouverture reste le PANNEAU, comme avant : la feuille produit
+   * s'ouvre sur son visuel, pas sur la première chip de sauce. Sans cette
+   * cible, `useDialogLayer` irait au premier élément tabulable du contenu.
+   */
+  const layerRef = useDialogLayer({
+    open: mounted,
+    onClose,
+    initialFocusRef: panelRef,
+  });
 
   useEffect(() => {
     if (open) {
-      restoreRef.current = document.activeElement as HTMLElement | null;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- `mounted` et `shown` sont deux temps d'animation pilotés par requestAnimationFrame et un setTimeout de SHEET_MS : le démontage doit attendre la fin de la transition de sortie, ce qu'aucun calcul au rendu ne peut exprimer.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- `mounted` et `shown` sont deux temps d'animation pilotés par requestAnimationFrame puis par `transitionend` : le démontage doit attendre la fin de la transition de sortie, ce qu'aucun calcul au rendu ne peut exprimer.
       setMounted(true);
       setDrag(0);
       const raf = requestAnimationFrame(() => setShown(true));
       return () => cancelAnimationFrame(raf);
     }
     setShown(false);
-    const timer = window.setTimeout(() => setMounted(false), SHEET_MS);
-    return () => window.clearTimeout(timer);
+    /*
+     * LE DÉMONTAGE SUIT LA TRANSITION, PAS UN CHRONOMÈTRE ÉCRIT ICI.
+     *
+     * Il attendait 300 ms en dur pendant que la sortie durait `--sm-t-med` :
+     * le masque « posé » (320 ms) se faisait couper net, et le choix de
+     * mouvement du restaurateur s'arrêtait à la porte de sa propre feuille.
+     * `transitionend` est la seule source qui dise VRAIMENT quand elle est
+     * finie — mouvement réduit compris, où la durée tombe à 0,01 ms.
+     */
+    const panneau = panelRef.current;
+    const fini = (e?: TransitionEvent) => {
+      if (e && e.propertyName !== "transform") return;
+      setMounted(false);
+    };
+    panneau?.addEventListener("transitionend", fini);
+    const secours = window.setTimeout(fini, SORTIE_SECOURS_MS);
+    return () => {
+      panneau?.removeEventListener("transitionend", fini);
+      window.clearTimeout(secours);
+    };
   }, [open]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mounted, onClose]);
-
-  // Le fond ne défile pas sous la feuille (sinon le menu « fuit » à l’ouverture).
-  useEffect(() => {
-    if (!mounted) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [mounted]);
-
-  useEffect(() => {
-    if (!shown) return;
-    panelRef.current?.focus({ preventScroll: true });
-    return () => {
-      restoreRef.current?.focus?.({ preventScroll: true });
-    };
-  }, [shown]);
 
   // ── Glisser pour fermer ──
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
@@ -944,13 +1177,19 @@ export function Sheet({
 
   return (
     <div
+      ref={layerRef}
+      /* Retiré par `useDialogLayer` au moment d'isoler le fond : il empêche un
+         `autoFocus` du contenu de voler le focus avant que la cible de retour
+         soit lue (même contrat que `Modal` et `Drawer`). */
+      inert
+      tabIndex={-1}
       style={{ zIndex }}
-      className="fixed inset-0 flex flex-col items-center justify-end"
+      className="fixed inset-0 flex flex-col items-center justify-end outline-none"
     >
       <div
         aria-hidden
         onClick={onClose}
-        className="absolute inset-0 bg-black/72 transition-opacity duration-300 ease-sm"
+        className="absolute inset-0 bg-scrim transition-opacity duration-med ease-sm"
         style={{ opacity: shown ? Math.max(0, 1 - drag / 320) : 0 }}
       />
       <div
@@ -960,17 +1199,19 @@ export function Sheet({
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : label}
         tabIndex={-1}
-        className="relative flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-t-wide border-x border-t border-white/10 bg-surface shadow-[0_-20px_70px_rgba(0,0,0,0.72)] outline-none"
+        className="relative flex max-h-full w-full max-w-[560px] flex-col overflow-hidden rounded-t-wide border-x border-t border-ink/10 bg-surface shadow-deep outline-none"
         style={{
           maxHeight,
           height: fill ? maxHeight : undefined,
           transform: shown ? `translateY(${drag}px)` : "translateY(100%)",
-          transition: dragging ? "none" : `transform ${SHEET_MS}ms var(--sm-ease)`,
+          // La durée vient du masque comme la courbe : elle était écrite en dur
+          // (300 ms) à côté d'un `var(--sm-ease)` qui, lui, suivait déjà.
+          transition: dragging ? "none" : "transform var(--sm-t-med) var(--sm-ease)",
         }}
       >
         {chrome === "bar" ? (
           <div
-            className="sm-grab relative shrink-0 border-b border-white/6 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent)] px-4 pb-3 pt-2.5"
+            className="sm-grab relative shrink-0 border-b border-ink/6 bg-[linear-gradient(180deg,var(--cf-surface-6),transparent)] px-4 pb-3 pt-2.5"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
@@ -978,14 +1219,14 @@ export function Sheet({
           >
             <span
               aria-hidden
-              className="mx-auto mb-3 block h-1 w-9 rounded-full bg-white/20"
+              className="mx-auto mb-3 block h-1 w-9 rounded-full bg-ink/20"
             />
             <div className="flex items-start gap-3">
               {onBack && (
                 <Tap
                   onClick={onBack}
                   aria-label="Étape précédente"
-                  className="-ml-1 grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+                  className="-ml-1 grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
                 >
                   <Icon name="back" size={16} />
                 </Tap>
@@ -994,7 +1235,7 @@ export function Sheet({
                 {title && (
                   <h2
                     id={titleId}
-                    className="truncate text-[19px] font-extrabold tracking-[-0.025em] text-ink"
+                    className="font-display truncate text-[19px] font-extrabold tracking-[-0.025em] text-ink"
                   >
                     {title}
                   </h2>
@@ -1004,7 +1245,7 @@ export function Sheet({
               <Tap
                 onClick={onClose}
                 aria-label="Fermer"
-                className="grid size-9 shrink-0 place-items-center rounded-pill border border-white/10 bg-surface2 text-ink hover:border-white/30"
+                className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
               >
                 <Icon name="close" size={16} />
               </Tap>
@@ -1013,8 +1254,8 @@ export function Sheet({
         ) : (
           <div
             className={cx(
-              "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-300 ease-sm",
-              sunk ? "border-b border-white/8 bg-surface/95 backdrop-blur-md" : "",
+              "sm-grab absolute inset-x-0 top-0 z-20 flex h-14 items-center gap-3 px-3 transition-colors duration-med ease-sm",
+              sunk ? "border-b border-ink/8 bg-surface/95 backdrop-blur-md" : "",
             )}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -1024,13 +1265,13 @@ export function Sheet({
             {/* Poignée : visible tant que le visuel occupe la tête de feuille. */}
             <span
               aria-hidden
-              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-white/45 shadow-[0_1px_3px_rgba(0,0,0,0.6)] transition-opacity duration-300"
+              className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-ink/45 shadow-card transition-opacity duration-med"
               style={{ opacity: sunk ? 0 : 1 }}
             />
             {title && (
               <h2
                 id={titleId}
-                className="min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-300"
+                className="font-display min-w-0 flex-1 truncate text-[16px] font-extrabold tracking-[-0.025em] text-ink transition-opacity duration-med"
                 style={{ opacity: sunk ? 1 : 0 }}
               >
                 {title}
@@ -1040,10 +1281,10 @@ export function Sheet({
               onClick={onClose}
               aria-label="Fermer"
               className={cx(
-                "ml-auto grid size-10 shrink-0 place-items-center rounded-pill border text-white transition-colors duration-300",
+                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-med",
                 sunk
-                  ? "border-white/12 bg-surface2 text-ink hover:border-white/30"
-                  : "border-white/15 bg-black/55 backdrop-blur-md hover:bg-black/75",
+                  ? "border-ink/12 bg-surface2 hover:border-ink/30"
+                  : "border-ink/15 bg-bg/55 backdrop-blur-md hover:bg-bg/75",
               )}
             >
               <Icon name="close" size={17} stroke={2.4} />
@@ -1052,6 +1293,7 @@ export function Sheet({
         )}
 
         <div
+          data-dialog-content
           className="cf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
           onScroll={
             chrome === "float"
@@ -1066,7 +1308,10 @@ export function Sheet({
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-white/8 bg-[linear-gradient(0deg,var(--cf-surface),var(--cf-surface))] px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
+          <div
+            data-dialog-footer
+            className="shrink-0 border-t border-ink/8 bg-[linear-gradient(0deg,var(--cf-surface),var(--cf-surface))] px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3"
+          >
             {footer}
           </div>
         )}
@@ -1094,7 +1339,7 @@ export function Banner({
   action?: ReactNode;
 }) {
   const ring = {
-    info: "border-white/10",
+    info: "border-ink/10",
     ok: "border-ok/35",
     prep: "border-prep/40",
     alert: "border-alert/45",
@@ -1138,6 +1383,7 @@ export function PrimaryAction({
   loading,
   onClick,
   icon,
+  mono = false,
   type = "button",
 }: {
   children: ReactNode;
@@ -1147,6 +1393,12 @@ export function PrimaryAction({
   loading?: boolean;
   onClick?: () => void;
   icon?: IconName;
+  /**
+   * `prixMono` du masque. Le montant de ce bouton est un prix comme un autre :
+   * sans lui, le pied du tunnel restait en police de corps pendant que le
+   * total juste au-dessus passait en chasse fixe.
+   */
+  mono?: boolean;
   type?: "button" | "submit";
 }) {
   return (
@@ -1172,7 +1424,7 @@ export function PrimaryAction({
           <span aria-hidden className="opacity-45">
             ·
           </span>
-          <Money cents={amount} />
+          <Money cents={amount} mono={mono} />
         </>
       )}
     </button>
@@ -1196,7 +1448,7 @@ export function GhostAction({
       onClick={onClick}
       disabled={disabled}
       className={cx(
-        "flex min-h-12 w-full items-center justify-center gap-2 rounded-pill border border-white/12 bg-surface2 px-5 text-[14px] font-bold text-ink hover:border-white/30",
+        "flex min-h-12 w-full items-center justify-center gap-2 rounded-pill border border-ink/12 bg-surface2 px-5 text-[14px] font-bold text-ink hover:border-ink/30",
         "disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100",
       )}
     >

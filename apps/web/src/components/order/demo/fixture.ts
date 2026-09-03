@@ -35,6 +35,7 @@ import type {
   SlotsResponse,
 } from "@sm/contracts";
 import {
+  DIRECTIONS,
   NEXT_OPEN_LOOKAHEAD_DAYS,
   RESTAURANT_TZ,
   SLOT_LEAD_TIME_MIN,
@@ -69,6 +70,7 @@ export function demoTenant(now: Date): PublicSiteTenant {
   return {
     slug: DEMO_SLUG,
     name: "Le Comptoir",
+    brand: DIRECTIONS.nuit,
     logoUrl: null,
     brandColor: "#c9a15a",
     address: "14 rue des Halles — 76000 Rouen",

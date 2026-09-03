@@ -23,8 +23,14 @@ type ModalProps = {
 };
 
 /**
- * Modale (règle DS : « Danger réservé aux destructions avec confirmation ») —
- * overlay noir 60 % z-60, panneau carte gradient, animation pop.
+ * Modale (règle DS : « Danger réservé aux destructions avec confirmation »).
+ *
+ * Le voile n'est plus « noir 60 % » : c'est `--cf-scrim` (`bg-scrim`), que le
+ * résolveur pose par mode — un noir franc en sombre, l'ENCRE du restaurant à
+ * 45 % en clair. Un voile doit toujours assombrir ce qu'il recouvre ; le noir
+ * en dur ne le faisait que sur une peau sombre.
+ * Le panneau reste au niveau carte (`--cf-card-gradient`), cerné d'un filet
+ * d'encre à 10 % — de l'encre, donc clair sur une Brasserie crème.
  */
 export function Modal({
   open,
@@ -49,11 +55,22 @@ export function Modal({
   if (!open) return null;
 
   return (
+    /*
+     * La DURÉE du voile vient du masque (`--sm-t-fast`), pas d'un `.22s` écrit
+     * à la main : le profil de mouvement du restaurateur vaut 140 ms en « vif »
+     * et 240 en « posé », et une littérale ignorait ce choix — sur la carte de
+     * fidélité, la modale du QR s'ouvrait à la même vitesse chez tout le monde.
+     *
+     * `animate-fade` plutôt que la valeur arbitraire qui composait l'animation
+     * ici même : la forme entière — image, durée, courbe — est déclarée une
+     * fois dans `globals.css`, et le garde `couleurs-brutes` sait désormais
+     * refuser une durée littérale écrite dans un `animate-[…]`.
+     */
     <div
       ref={dialogRef}
       inert
       tabIndex={-1}
-      className="fixed inset-0 z-[60] grid animate-[cf-fade_.22s_var(--sm-ease)_both] place-items-center bg-black/65 p-4 outline-none motion-reduce:animate-none"
+      className="fixed inset-0 z-[60] grid animate-fade place-items-center bg-scrim p-4 outline-none motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -83,7 +100,7 @@ export function Modal({
         fausse `vh`, et le pied repasserait sous elle.
       */}
       <div
-        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-white/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
+        className="flex max-h-[calc(100dvh-32px)] w-full animate-pop flex-col rounded-panel border border-ink/10 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none"
         style={{ maxWidth: width }}
         onClick={(e) => e.stopPropagation()}
       >

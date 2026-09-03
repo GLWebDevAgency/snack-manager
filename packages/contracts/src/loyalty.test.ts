@@ -24,6 +24,7 @@ import {
   LoyaltyRedeemSchema,
   LoyaltyRewardCreateSchema,
 } from './loyalty';
+import { DIRECTIONS } from './marque';
 
 describe('contrats fidélité', () => {
   it('impose un seul mécanisme de gain cohérent', () => {
@@ -524,7 +525,7 @@ describe('contrats fidélité', () => {
 
   it('borne la carte publique aux données réellement utiles au client', () => {
     const card = {
-      restaurant: { slug: 'classfood', name: 'Classfood', brandColor: '#c9a15a' },
+      restaurant: { slug: 'classfood', name: 'Classfood', brandColor: '#c9a15a', brand: DIRECTIONS.nuit },
       program: {
         name: 'La carte Classfood',
         mechanism: 'points',
@@ -555,6 +556,13 @@ describe('contrats fidélité', () => {
       LoyaltyCustomerCardSchema.safeParse({
         ...card,
         activity: [{ ...card.activity[0], externalRef: 'ticket-interne-42' }],
+      }).success,
+    ).toBe(false);
+    // Le masque n'est pas optionnel : le web n'a pas de branche « sans marque ».
+    expect(
+      LoyaltyCustomerCardSchema.safeParse({
+        ...card,
+        restaurant: { ...card.restaurant, brand: null },
       }).success,
     ).toBe(false);
   });

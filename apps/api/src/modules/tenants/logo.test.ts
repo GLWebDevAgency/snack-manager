@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { LogoController } from './logo.controller';
+import type { OriginesImages } from './origines-images';
 import { createImageStore } from '../../infrastructure/images/image-store.factory';
 import { NoopImageStore, type ImageStore } from '../../infrastructure/images/image-store';
 import { R2ImageStore } from '../../infrastructure/images/r2-image-store';
@@ -273,5 +275,50 @@ describe('adaptateur R2 (API REST Cloudflare)', () => {
     const store = (impl: typeof fetch) => new R2ImageStore('j', 'c', 'b', impl);
     await store(fauxFetch([{ status: 404 }]).impl).delete('x');
     await expect(store(fauxFetch([{ status: 403 }]).impl).delete('x')).rejects.toThrow('HTTP 403');
+  });
+});
+
+/**
+ * L'HÔTE DE LA REQUÊTE EST UNE ENTRÉE, PAS UNE VÉRITÉ.
+ *
+ * `PUT /tenants/me/logo` ne reçoit aucune URL : il en FABRIQUE une à partir
+ * de `X-Forwarded-Host` puis de `Host`, deux en-têtes que le client contrôle.
+ * L'URL obtenue part ensuite dans `logoUrl` ET dans `brand.logo.mark.dark`,
+ * donc sur la vitrine, la carte de fidélité et le tableau de menu. C'était le
+ * contournement exact de la liste blanche que les routes de masque appliquent
+ * sur une URL REÇUE.
+ */
+describe('l’hôte d’où le logo est déposé', () => {
+  const HOTES = ['snackmanager.fr', 'localhost'] as const;
+  type Req = Parameters<LogoController['poser']>[2];
+
+  const poser = (headers: Record<string, string>) => {
+    const service = { actif: true, poser: (_id: string, origin: string) => origin };
+    const req = { protocol: 'https', headers, get: (n: string) => headers[n.toLowerCase()] };
+    const ctrl = new LogoController(service as unknown as LogoService, {
+      hotes: HOTES,
+    } as OriginesImages);
+    return ctrl.poser('t1', { buffer: PNG, mimetype: 'image/png', size: PNG.length }, req as Req);
+  };
+
+  it('accepte le domaine public et ses sous-domaines', async () => {
+    await expect(poser({ host: 'api.snackmanager.fr' })).resolves.toBe(
+      'https://api.snackmanager.fr',
+    );
+  });
+
+  it('refuse un X-Forwarded-Host forgé — le logo aurait été servi par un tiers', async () => {
+    await expect(
+      poser({ 'x-forwarded-host': 'mechant.fr', host: 'api.snackmanager.fr' }),
+    ).rejects.toThrow(/hôte que nous ne servons pas/);
+  });
+
+  it('refuse un faux sous-domaine : le point du suffixe n’est pas décoratif', async () => {
+    await expect(poser({ host: 'evilsnackmanager.fr' })).rejects.toThrow(
+      /hôte que nous ne servons pas/,
+    );
+    await expect(poser({ host: 'snackmanager.fr.mechant.fr' })).rejects.toThrow(
+      /hôte que nous ne servons pas/,
+    );
   });
 });

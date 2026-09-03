@@ -23,13 +23,19 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import type { OrderStatus, PaymentIntentResponse, SlotsResponse } from "@sm/contracts";
+import type {
+  BrandMode,
+  OrderStatus,
+  PaymentIntentResponse,
+  SlotsResponse,
+} from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import {
@@ -50,7 +56,7 @@ import {
   type Customer,
 } from "./cart";
 import { jalonFunnel } from "./funnel";
-import { euros, hhmm, parisParts, phoneOk, uid } from "./helpers";
+import { hhmm, parisParts, phoneOk, uid } from "./helpers";
 import {
   Badge,
   Banner,
@@ -62,18 +68,25 @@ import {
   Money,
   Plate,
   PrimaryAction,
+  Prix,
+  RadioGroup,
   SectionLabel,
   Sheet,
   Spinner,
   Stepper,
   Tap,
 } from "./primitives";
-import { StripeCard } from "./StripeCard";
+import { StripeCard, type ApparenceStripe } from "./StripeCard";
 import { TurnstileCheck } from "./TurnstileCheck";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
-/** Doit dépasser la durée d’animation de sortie de `Sheet`. */
+/**
+ * Doit dépasser la durée d’animation de sortie de `Sheet`, qui vaut
+ * `--sm-t-med` — donc 200 ms sous un masque « vif » et 320 ms sous un masque
+ * « posé », les deux seuls profils de mouvement du contrat. 340 ms couvre le
+ * plus lent : le panier ne se vide pas sous les yeux du client qui referme.
+ */
 const SHEET_EXIT_MS = 340;
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
 const TURNSTILE_SITE_KEY =
@@ -112,7 +125,9 @@ export function Checkout({
   slug,
   tenantName,
   tenantAddress,
-  accent,
+  stripeApparence,
+  mode,
+  prixMono,
   cart,
   paused,
   pauseMessage,
@@ -129,7 +144,20 @@ export function Checkout({
   tenantName: string;
   /** Adresse affichée sur la carte « où retirer » de l’étape créneau. */
   tenantAddress: string;
-  accent: string;
+  /**
+   * Le masque résolu pour le champ de carte Stripe. Il vient d'en haut plutôt
+   * que d'ici : la référence doit rester stable, sinon le Payment Element se
+   * remonte à chaque rendu du tunnel.
+   */
+  stripeApparence: ApparenceStripe;
+  /**
+   * Mode du masque. Il ne sert pas à peindre — les `--cf-*` s'en chargent —
+   * mais à habiller les widgets TIERS rendus dans leur propre iframe, que
+   * notre feuille de style n'atteint pas : ici le contrôle anti-robot.
+   */
+  mode: BrandMode;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
   cart: CartApi;
   paused: boolean;
   pauseMessage: string | null;
@@ -479,6 +507,7 @@ export function Checkout({
           embed={embed}
           demo={demo}
           verified={demo || Boolean(turnstileToken)}
+          prixMono={prixMono}
           onNext={(next) => {
             if (next === "customer") setTouched(false);
             setStep(next);
@@ -512,6 +541,7 @@ export function Checkout({
             onBrowse={onBrowse}
             onEditLine={onEditLine}
             promoCode={promoCode}
+            prixMono={prixMono}
             onPromoCode={setPromoCode}
           />
         )}
@@ -549,11 +579,13 @@ export function Checkout({
               method={method}
               onMethod={setWanted}
               cardAvailable={probe !== "off"}
+              prixMono={prixMono}
             />
             {!demo && (
               <TurnstileCheck
                 siteKey={TURNSTILE_SITE_KEY}
                 tenantSlug={slug}
+                mode={mode}
                 resetKey={turnstileReset}
                 onToken={setTurnstileToken}
               />
@@ -567,7 +599,8 @@ export function Checkout({
             clientSecret={intent.clientSecret}
             stripeAccount={intent.stripeAccount}
             amount={intent.amount}
-            accent={accent}
+            apparence={stripeApparence}
+            prixMono={prixMono}
             returnUrl={
               typeof window === "undefined" || !order
                 ? ""
@@ -585,6 +618,7 @@ export function Checkout({
           <DoneStep
             order={order}
             status={status}
+            prixMono={prixMono}
             paidOnline={paidOnline}
             downgraded={downgraded}
             demo={demo}
@@ -626,18 +660,34 @@ function Progress({
               disabled={!done}
               onClick={() => onJump(entry.id)}
               aria-current={current ? "step" : undefined}
-              className={cx("block w-full text-left", done && "cursor-pointer")}
+              /* 44 px : revenir corriger son téléphone se fait au pouce. */
+              className={cx("block min-h-11 w-full text-left", done && "cursor-pointer")}
             >
+              {/*
+                `accentink` et non `accent` : cette barre de 1 px est un
+                indicateur porté par la SEULE couleur, donc soumise au 3:1 de
+                1.4.11 — or l'accent brut ne vaut que 2,55:1 sur le fond de
+                Soleil et 2,68 sur sa carte. `accentink` est la même teinte
+                ramenée par le résolveur jusqu'à 4,5:1 sur le fond comme sur la
+                carte : l'étape franchie se distingue à coup sûr de `bg-ink/12`.
+                `bg-accent` reste réservé aux aplats, qui portent `text-onaccent`.
+              */}
               <span
                 className={cx(
-                  "block h-1 rounded-full transition-colors duration-300 ease-sm",
-                  current || done ? "bg-accent" : "bg-white/12",
+                  "block h-1 rounded-full transition-colors duration-med ease-sm",
+                  current || done ? "bg-accentink" : "bg-ink/12",
                 )}
               />
+              {/*
+                Les étapes à venir étaient en `text-ink/25` à 10 px, soit 1,5 à
+                2,1:1. Le bouton est bien `disabled` — mais ces mots ne sont pas
+                l'étiquette d'un contrôle grisé : ce sont l'information de
+                progression du tunnel, et 1.4.3 s'y applique sans exemption.
+              */}
               <span
                 className={cx(
-                  "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-300",
-                  current ? "text-ink" : done ? "text-mut" : "text-white/25",
+                  "mt-1.5 block truncate text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-med",
+                  current ? "text-ink" : "text-mut",
                 )}
               >
                 {entry.label}
@@ -670,6 +720,7 @@ function Footer({
   embed,
   demo,
   verified,
+  prixMono,
   onNext,
   onSubmit,
   onFinish,
@@ -686,6 +737,8 @@ function Footer({
   embed: boolean;
   demo: boolean;
   verified: boolean;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
   onNext: (next: Step) => void;
   onSubmit: () => void;
   onFinish: () => void;
@@ -703,7 +756,7 @@ function Footer({
             href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
-            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-200 ease-sm active:scale-[0.97] active:duration-75"
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"
           >
             <Icon name="clock" size={17} stroke={2.4} />
             Suivre ma commande
@@ -721,6 +774,7 @@ function Footer({
         disabled={empty || blocked}
         amount={empty ? undefined : cart.subtotal}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("customer")}
       >
         {empty ? "Votre panier est vide" : "Continuer"}
@@ -733,6 +787,7 @@ function Footer({
       <PrimaryAction
         disabled={!contactOk || blocked}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("slot")}
       >
         {contactOk ? "Choisir le créneau" : "Nom et téléphone requis"}
@@ -745,6 +800,7 @@ function Footer({
       <PrimaryAction
         disabled={!slotIso || blocked}
         icon="arrow"
+        mono={prixMono}
         onClick={() => onNext("pay")}
       >
         {slotLabel ? `Continuer · retrait ${slotLabel}` : "Choisissez un créneau"}
@@ -758,6 +814,7 @@ function Footer({
       loading={busy}
       amount={cart.subtotal}
       icon={method === "online" ? "euro" : "check"}
+      mono={prixMono}
       onClick={onSubmit}
     >
       {!verified
@@ -778,14 +835,18 @@ function CartStep({
   onBrowse,
   onEditLine,
   promoCode,
+  prixMono,
   onPromoCode,
 }: {
   cart: CartApi;
   onBrowse: () => void;
   onEditLine: (line: CartLine) => void;
   promoCode: string;
+  prixMono: boolean;
   onPromoCode: (v: string) => void;
 }) {
+  const noteId = useId();
+
   if (!cart.hydrated) {
     return (
       <div className="flex items-center gap-2.5 py-10 text-[14px] text-mut">
@@ -821,6 +882,7 @@ function CartStep({
           <CartRow
             key={line.lineId}
             line={line}
+            prixMono={prixMono}
             onQty={(qty) => cart.setQty(line.lineId, qty)}
             onEdit={() => onEditLine(line)}
             onRemove={() => cart.remove(line.lineId)}
@@ -829,14 +891,25 @@ function CartStep({
       </div>
 
       <section className="flex flex-col gap-2.5">
-        <SectionLabel hint="facultatif">Instructions pour la cuisine</SectionLabel>
+        {/*
+          Le titre de section NOMME le champ (`aria-labelledby`). Le
+          `<textarea>` n'avait ni `<label>`, ni `aria-label`, ni relation avec
+          le `<h3>` posé juste au-dessus : son nom accessible était vide, et un
+          lecteur d'écran n'annonçait qu'« zone d'édition » (1.3.1, 4.1.2).
+          Le `placeholder` ne compte pas comme un nom : il disparaît à la
+          première frappe.
+        */}
+        <SectionLabel id={noteId} hint="facultatif">
+          Instructions pour la cuisine
+        </SectionLabel>
         <textarea
           value={cart.note}
           onChange={(e) => cart.setNote(e.target.value)}
+          aria-labelledby={noteId}
           rows={2}
           maxLength={500}
           placeholder="Ex : sans oignons sur tout, sauces à part…"
-          className="w-full resize-none rounded-card border border-white/8 bg-white/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 focus:border-accent"
+          className="w-full resize-none rounded-card border border-linefirm bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
         />
       </section>
 
@@ -850,9 +923,9 @@ function CartStep({
         Volontairement discret et replié : la majorité des clients n'en a pas,
         et un champ vide mis en avant fait douter — « ai-je raté une offre ? ».
       */}
-      <details className="group mb-3 rounded-panel border border-white/8 bg-surface2 px-4 py-3">
-        <summary className="cursor-pointer list-none text-[14px] text-mut marker:content-none">
-          <span className="underline decoration-white/25 underline-offset-4 group-open:no-underline">
+      <details className="group mb-3 rounded-panel border border-ink/8 bg-surface2 px-4 py-3">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center text-[14px] text-mut marker:content-none">
+          <span className="underline decoration-ink/25 underline-offset-4 group-open:no-underline">
             J&apos;ai un code promo
           </span>
         </summary>
@@ -868,7 +941,13 @@ function CartStep({
             placeholder="BIENVENUE10"
             value={promoCode}
             onChange={(e) => onPromoCode(e.target.value.toUpperCase())}
-            className="w-full rounded-input border border-white/12 bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut/60 focus:border-accent focus:outline-none"
+            /* `rounded-ctrl` — le rayon des contrôles, que le résolveur
+               surcharge selon la forme choisie. Il était écrit `rounded-input`,
+               qui ne correspond à aucun `--radius-*` de `@theme` : Tailwind v4
+               n'émettait rien et le champ restait à angles vifs sur les formes
+               `doux` et `rond`. Une classe morte, invisible au premier coup
+               d'œil parce qu'elle ressemble à un jeton. */
+            className="min-h-11 w-full rounded-ctrl border border-linefirm bg-surface px-3 py-2.5 text-[15px] uppercase tracking-[0.08em] text-ink placeholder:tracking-normal placeholder:text-mut focus:border-focus focus:outline-none"
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
@@ -876,7 +955,7 @@ function CartStep({
         </p>
       </details>
 
-      <section className="rounded-panel border border-white/8 bg-surface2 p-4">
+      <section className="rounded-panel border border-ink/8 bg-surface2 p-4">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[14px] text-mut">
             Sous-total ·{" "}
@@ -884,13 +963,17 @@ function CartStep({
               {cart.count} article{cart.count > 1 ? "s" : ""}
             </span>
           </span>
-          <Money cents={cart.subtotal} className="text-[15px] text-mut" />
+          <Money cents={cart.subtotal} mono={prixMono} className="text-[15px] text-mut" />
         </div>
-        <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-white/8 pt-3">
+        <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-ink/8 pt-3">
           <span className="text-[16px] font-extrabold uppercase tracking-[0.04em] text-ink">
             Total
           </span>
-          <Money cents={cart.subtotal} className="text-[26px] text-ink" />
+          <Money
+            cents={cart.subtotal}
+            mono={prixMono}
+            className="text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] text-ink"
+          />
         </div>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
           Prix TTC, service compris. Le montant est recalculé par le restaurant à
@@ -904,18 +987,20 @@ function CartStep({
 /** Ligne de panier : vignette, récap des options, quantité, reprise. */
 function CartRow({
   line,
+  prixMono,
   onQty,
   onEdit,
   onRemove,
 }: {
   line: CartLine;
+  prixMono: boolean;
   onQty: (qty: number) => void;
   onEdit: () => void;
   onRemove: () => void;
 }) {
   const summary = lineSummary(line);
   return (
-    <article className="overflow-hidden rounded-panel border border-white/6 bg-surface bg-[linear-gradient(180deg,rgba(255,255,255,0.035),transparent_80px)] p-3 shadow-card">
+    <article className="overflow-hidden rounded-panel border border-ink/6 bg-surface bg-[linear-gradient(180deg,var(--cf-surface-3),transparent_80px)] p-3 shadow-card">
       <div className="flex items-start gap-3">
         {/* Même plateau que la carte : le plat se reconnaît d'un écran à
             l'autre, et une photo morte n'y laisse jamais un cadre cassé. */}
@@ -932,7 +1017,11 @@ function CartRow({
             <p className="min-w-0 text-[15px] font-bold leading-tight text-ink">
               {line.name}
             </p>
-            <Money cents={lineTotal(line)} className="shrink-0 text-[16px] text-ink" />
+            <Money
+              cents={lineTotal(line)}
+              mono={prixMono}
+              className="shrink-0 text-[16px] text-ink"
+            />
           </div>
           {summary && (
             <p className="mt-1 text-[13px] leading-snug text-mut">{summary}</p>
@@ -946,12 +1035,12 @@ function CartRow({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/6 pt-3">
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-ink/6 pt-3">
         <Stepper value={line.qty} min={0} label={line.name} onChange={onQty} />
         <div className="flex items-center gap-1.5">
           <Tap
             onClick={onEdit}
-            className="inline-flex h-9 items-center gap-1.5 rounded-pill border border-white/12 px-3 text-[13px] font-bold text-mut hover:text-ink"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-ink/12 px-3 text-[13px] font-bold text-mut hover:text-ink"
           >
             <Icon name="edit" size={14} />
             Modifier
@@ -959,7 +1048,7 @@ function CartRow({
           <Tap
             onClick={onRemove}
             aria-label={`Retirer ${line.name}`}
-            className="grid size-9 place-items-center rounded-pill text-mut hover:text-alertt"
+            className="grid size-11 place-items-center rounded-pill text-mut hover:text-alertt"
           >
             <Icon name="trash" size={16} />
           </Tap>
@@ -988,8 +1077,16 @@ function CustomerStep({
 }) {
   const nameError = touched && customer.name.trim().length < 2;
   const phoneError = touched && !phoneOk(customer.phone);
+  // `focus:border-focus` est DANS la base, pas dans la branche valide : avec
+  // `outline-none`, la bordure EST l'indicateur de focus (1.4.11, 2.4.13), et
+  // un champ en erreur en restait dépourvu — on ne voyait plus où l'on tapait
+  // au moment précis où il fallait corriger.
+  //
+  // La bordure au repos est le filet FERME : le bord d'un champ EST la limite
+  // du contrôle (1.4.11, 3:1). Il était posé à 8 % d'encre, soit 1,14 à
+  // 1,26:1 selon la direction — un champ dont on ne voyait pas le cadre.
   const field =
-    "w-full rounded-card border bg-white/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70";
+    "min-h-11 w-full rounded-card border bg-ink/5 px-3.5 py-3.5 text-[16px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus";
 
   return (
     <div className="flex flex-col gap-5">
@@ -1015,7 +1112,7 @@ function CustomerStep({
           placeholder="Camille Durand"
           aria-invalid={nameError || undefined}
           aria-describedby={nameError ? "sm-name-err" : undefined}
-          className={cx(field, nameError ? "border-alert" : "border-white/8 focus:border-accent")}
+          className={cx(field, nameError ? "border-alert" : "border-linefirm")}
         />
         {nameError && (
           <p id="sm-name-err" role="alert" className="text-[13px] text-alertt">
@@ -1043,7 +1140,7 @@ function CustomerStep({
           placeholder="06 12 34 56 78"
           aria-invalid={phoneError || undefined}
           aria-describedby={phoneError ? "sm-phone-err" : "sm-phone-hint"}
-          className={cx(field, phoneError ? "border-alert" : "border-white/8 focus:border-accent")}
+          className={cx(field, phoneError ? "border-alert" : "border-linefirm")}
         />
         {phoneError ? (
           <p id="sm-phone-err" role="alert" className="text-[13px] text-alertt">
@@ -1137,7 +1234,7 @@ function SlotStep({
   return (
     <div className={cx("flex flex-col gap-5", state === "loading" && "opacity-60")}>
       {/* Où retirer — le client vérifie l’adresse avant de choisir l’heure. */}
-      <div className="flex items-center gap-3 rounded-panel border border-white/8 bg-surface2 p-3.5">
+      <div className="flex items-center gap-3 rounded-panel border border-ink/8 bg-surface2 p-3.5">
         <span className="grid size-11 shrink-0 place-items-center rounded-pill bg-accent text-onaccent">
           <Glyph name="pin" size={20} />
         </span>
@@ -1160,7 +1257,7 @@ function SlotStep({
                 "min-h-11 flex-1 rounded-card border px-3 text-[14px] font-bold",
                 ymd === slots.date
                   ? "border-accent bg-accent text-onaccent"
-                  : "border-white/8 bg-surface2 text-mut hover:text-ink",
+                  : "border-ink/8 bg-surface2 text-mut hover:text-ink",
               )}
             >
               {dayLabelOf(ymd)}
@@ -1216,7 +1313,7 @@ function SlotStep({
                         "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-card border",
                         on
                           ? "border-accent bg-accent"
-                          : "border-white/8 bg-surface2 hover:border-white/25",
+                          : "border-ink/8 bg-surface2 hover:border-ink/25",
                         slot.full && "cursor-not-allowed opacity-30 active:scale-100",
                       )}
                     >
@@ -1267,6 +1364,7 @@ function PayStep({
   method,
   onMethod,
   cardAvailable,
+  prixMono,
 }: {
   cart: CartApi;
   customer: Customer;
@@ -1275,10 +1373,11 @@ function PayStep({
   method: "online" | "counter";
   onMethod: (next: "online" | "counter") => void;
   cardAvailable: boolean;
+  prixMono: boolean;
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-panel border border-white/8 bg-surface2 p-4">
+      <section className="rounded-panel border border-ink/8 bg-surface2 p-4">
         <SectionLabel className="mb-3">Récapitulatif</SectionLabel>
         <dl className="flex flex-col gap-2.5 text-[14px]">
           <Row label="Retrait">
@@ -1294,20 +1393,29 @@ function PayStep({
             <span className="font-semibold tabular-nums text-ink">{cart.count}</span>
           </Row>
         </dl>
-        <div className="mt-3.5 flex items-baseline justify-between border-t border-white/8 pt-3.5">
+        <div className="mt-3.5 flex items-baseline justify-between border-t border-ink/8 pt-3.5">
           <span className="text-[15px] font-extrabold uppercase tracking-[0.04em] text-ink">
             Total à régler
           </span>
-          <Money cents={cart.subtotal} className="text-[24px] text-ink" />
+          <Money
+            cents={cart.subtotal}
+            mono={prixMono}
+            className="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] text-ink"
+          />
         </div>
       </section>
 
       <section className="flex flex-col gap-2.5">
         <SectionLabel>Mode de paiement</SectionLabel>
         {cardAvailable ? (
-          <div role="radiogroup" aria-label="Mode de paiement" className="flex flex-col gap-2.5">
+          // `RadioGroup` et non une `<div role="radiogroup">` nue : les flèches
+          // doivent parcourir le groupe, et une seule des deux cartes prend la
+          // halte de tabulation (tabindex tournant, APG radiogroup). Sans cela,
+          // le groupe se traversait touche à touche comme deux boutons isolés.
+          <RadioGroup label="Mode de paiement" className="flex flex-col gap-2.5">
             <ChoiceCard
               on={method === "online"}
+              tabIndex={method === "online" ? 0 : -1}
               icon="euro"
               title="Carte bancaire"
               sub="Paiement sécurisé en ligne · Visa, Mastercard, CB"
@@ -1315,12 +1423,13 @@ function PayStep({
             />
             <ChoiceCard
               on={method === "counter"}
+              tabIndex={method === "counter" ? 0 : -1}
               glyph="bag"
               title="Payer au comptoir"
               sub="Carte ou espèces au moment du retrait"
               onClick={() => onMethod("counter")}
             />
-          </div>
+          </RadioGroup>
         ) : (
           <Banner icon="euro" title="Paiement au comptoir">
             Ce restaurant encaisse au moment du retrait — carte ou espèces.
@@ -1365,6 +1474,7 @@ function DoneStep({
   downgraded,
   demo,
   demoCard,
+  prixMono,
 }: {
   order: CreatedOrder;
   /** Avancement en cuisine — n’avance que là où un suivi alimente l’écran. */
@@ -1374,6 +1484,8 @@ function DoneStep({
   demo: boolean;
   /** Démonstration où le visiteur avait choisi la carte bancaire. */
   demoCard: boolean;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
 }) {
   const rank = Math.max(
     0,
@@ -1384,17 +1496,39 @@ function DoneStep({
       <div className="sm-grain relative overflow-hidden bg-accent px-6 pb-16 pt-9 text-center text-onaccent">
         <span
           aria-hidden
-          className="pointer-events-none absolute -right-4 -top-6 select-none text-[132px] font-black leading-none tracking-[-0.05em] text-white/15"
+          className="font-display pointer-events-none absolute -right-4 -top-6 select-none text-[clamp(6rem,4.5rem+4vw,8.25rem)] font-black leading-none tracking-[-0.05em] text-onaccent/15"
         >
           OK
         </span>
-        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-accent shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+        {/*
+          LA SEULE COCHE PEINTE À L'ACCENT PUR — et le garde l'interdirait à
+          juste titre partout ailleurs. Ce disque est peint en `on-accent` :
+          la coche dessus rejoue donc exactement le couple `onAccent/accent`,
+          celui que `contraste()` vérifie sur les six directions. Ailleurs,
+          l'accent posé en texte tombe sur le FOND, où il n'a aucune garantie
+          (2,68:1 sur Soleil) — c'est `accentink` qui y va.
+
+          Le jeton `accentonaccent` (globals.css) EST cette exception, et son
+          nom dit sa condition d'emploi. Elle était écrite
+          `text-[color:var(--cf-accent)]` : la même couleur, mais invisible au
+          garde, dont le motif ne connaissait que la forme `text-accent`. Une
+          porte de service dans une règle qui se voulait totale — le garde
+          couvre désormais les deux formes.
+        */}
+        <span className="relative mx-auto mb-4 grid size-[76px] animate-pop place-items-center rounded-full bg-[color-mix(in_srgb,var(--cf-on-accent)_92%,transparent)] text-accentonaccent shadow-card">
           <Icon name="check" size={38} stroke={3} />
         </span>
-        <h3 className="relative text-[24px] font-extrabold tracking-[-0.035em]">
+        <h3 className="font-display relative text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em]">
           C’est envoyé en cuisine
         </h3>
-        <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed opacity-90">
+        {/*
+          Aucune opacité : `text-onaccent` est déjà le MINIMUM que le résolveur
+          garantit sur l'aplat d'accent (le couple onAccent/accent tombe à
+          4,7:1 sur Marché). Rabattu à 90 %, ce paragraphe de 14 px passait à
+          4,16 — sous le seuil de 1.4.3, sur la phrase qui explique au client
+          ce qui va se passer maintenant.
+        */}
+        <p className="relative mx-auto mt-1.5 max-w-[280px] text-[14px] leading-relaxed">
           {/*
             AUCUN SMS NE PART. Le port `Notifier.notifyCustomer` est déclaré
             dans le domaine et n'a jamais eu d'adaptateur : le client lisait une
@@ -1411,11 +1545,11 @@ function DoneStep({
       <div className="px-4">
         {/* `relative` obligatoire : le bandeau accent est positionné, il
             passerait sinon par-dessus la carte qui le chevauche. */}
-        <div className="relative -mt-11 rounded-panel border border-white/10 bg-surface px-5 py-5 text-center shadow-[0_18px_44px_rgba(0,0,0,0.55)]">
+        <div className="relative -mt-11 rounded-panel border border-ink/10 bg-surface px-5 py-5 text-center shadow-deep">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
             Numéro de retrait
           </p>
-          <p className="mt-1 text-[62px] font-black leading-none tracking-[-0.05em] tabular-nums text-accent">
+          <p className="font-display mt-1 text-[clamp(3.25rem,2.8rem+1.8vw,3.875rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {order.number}
           </p>
           {order.pickup?.slot && (
@@ -1428,23 +1562,42 @@ function DoneStep({
           )}
         </div>
 
+        {/*
+          LE CHANGEMENT DE STATUT DOIT S'ENTENDRE (4.1.3).
+
+          La commande passe « Reçue → En préparation → Prête » par sondage, et
+          rien n'annonçait ce changement : l'utilisateur de lecteur d'écran
+          n'apprenait jamais que son plat l'attendait au comptoir. Une région
+          vivante DISCRÈTE porte l'étape courante — plutôt qu'un `role=status`
+          sur la frise entière, qui relirait les trois étapes et leurs indices
+          à chaque avancement.
+        */}
+        <p aria-live="polite" aria-atomic="true" className="sr-only">
+          {`Statut de la commande : ${TIMELINE[rank]?.label ?? ""}. ${TIMELINE[rank]?.hint ?? ""}`}
+        </p>
+
         {/* Suivi : la première étape est acquise, les suivantes viennent du KDS. */}
-        <ol className="mt-4 rounded-panel border border-white/8 bg-surface2 px-4 py-2">
+        <ol className="mt-4 rounded-panel border border-ink/8 bg-surface2 px-4 py-2">
           {TIMELINE.map((entry, i) => {
             const reached = i <= rank;
             const current = i === rank;
             return (
+              /*
+                Pas d'opacité sur la ligne : elle ramenait `text-ink` à 2,06:1
+                et `text-mut` à 1,7 sur les étapes non atteintes — « En
+                préparation · Ça chauffe » devenait illisible. Ce ne sont pas
+                des contrôles désactivés, aucune exemption de 1.4.3 ne joue.
+                L'état se lit à la pastille (verte contre `bg-ink/12`) et à
+                l'encre du libellé, atténuée mais AA.
+              */
               <li
                 key={entry.label}
-                className={cx(
-                  "flex items-center gap-3 border-b border-white/6 py-3 last:border-b-0",
-                  !reached && "opacity-45",
-                )}
+                className="flex items-center gap-3 border-b border-ink/6 py-3 last:border-b-0"
               >
                 <span
                   className={cx(
                     "grid size-7 shrink-0 place-items-center rounded-full",
-                    reached ? "bg-ok text-black" : "bg-white/12",
+                    reached ? "bg-ok text-onok" : "bg-ink/12",
                   )}
                 >
                   {i < rank ? (
@@ -1453,13 +1606,18 @@ function DoneStep({
                     <span
                       className={cx(
                         "size-2 rounded-full",
-                        reached ? "bg-black" : "bg-white/50",
+                        reached ? "bg-onok" : "bg-ink/50",
                       )}
                     />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-bold text-ink">
+                  <span
+                    className={cx(
+                      "block text-[15px] font-bold",
+                      reached ? "text-ink" : "text-mut",
+                    )}
+                  >
                     {entry.label}
                   </span>
                   <span className="block text-[13px] text-mut">{entry.hint}</span>
@@ -1484,8 +1642,8 @@ function DoneStep({
             <span className="min-w-0 text-[13px] text-okt">
               {order.totals.discount.reason}
             </span>
-            <span className="shrink-0 text-[15px] font-extrabold tabular-nums text-okt">
-              −{euros(order.totals.discount.amount)}
+            <span className="shrink-0 text-[15px] font-extrabold text-okt">
+              −<Prix cents={order.totals.discount.amount} mono={prixMono} />
             </span>
           </div>
         )}
@@ -1495,8 +1653,9 @@ function DoneStep({
             <Banner tone="prep" icon="euro" title="Paiement par carte — hors démonstration">
               En service réel, le paiement sécurisé s’ouvrirait ici et la
               commande arriverait déjà réglée en cuisine. La démonstration
-              n’appelle aucun prestataire de paiement : {euros(order.totals?.total ?? 0)}{" "}
-              resteraient dus au comptoir.
+              n’appelle aucun prestataire de paiement :{" "}
+              <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> resteraient
+              dus au comptoir.
             </Banner>
           ) : downgraded ? (
             <Banner tone="prep" icon="euro" title="À régler au comptoir">
@@ -1505,12 +1664,13 @@ function DoneStep({
             </Banner>
           ) : paidOnline ? (
             <Banner tone="ok" icon="check" title="Paiement accepté">
-              {euros(order.totals?.total ?? 0)} réglés en ligne. Présentez votre
-              numéro de retrait au comptoir.
+              <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> réglés en
+              ligne. Présentez votre numéro de retrait au comptoir.
             </Banner>
           ) : (
             <Banner icon="euro" title="À régler au comptoir">
-              {euros(order.totals?.total ?? 0)} à régler au moment du retrait.
+              <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> à régler au
+              moment du retrait.
             </Banner>
           )}
 

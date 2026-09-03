@@ -303,7 +303,7 @@ function LigneReseau({
           "mt-[26px] grid size-10 shrink-0 place-items-center rounded-ctrl border transition-colors duration-200 ease-sm",
           rempli
             ? "border-accent/45 bg-accent/12 text-accent"
-            : "border-white/8 bg-white/4 text-mut/60",
+            : "border-white/8 bg-white/4 text-mut",
         )}
         aria-hidden
       >

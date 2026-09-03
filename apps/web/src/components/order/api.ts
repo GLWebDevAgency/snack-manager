@@ -41,6 +41,7 @@ import type {
   PublicSiteReview,
   SlotsResponse,
 } from "@sm/contracts";
+import { marqueEffective, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -165,6 +166,8 @@ export type MenuCategory = { id: string; name: string; products: MenuProduct[] }
 export type SiteTenant = {
   slug: string;
   name: string;
+  /** Le masque d'identité — résolu une fois pour toutes (repli Nuit sinon). */
+  brand: Brand;
   logoUrl: string | null;
   brandColor: string;
   address: string;
@@ -439,6 +442,11 @@ export function orderingApi(transport: Transport = httpTransport) {
         tenant: {
           slug: site.tenant.slug,
           name: site.tenant.name,
+          brand: marqueEffective({
+            brand: site.tenant.brand ?? null,
+            brandColor: site.tenant.brandColor,
+            logoUrl: site.tenant.logoUrl,
+          }),
           logoUrl: site.tenant.logoUrl,
           brandColor: site.tenant.brandColor,
           address: site.tenant.address,
@@ -482,6 +490,12 @@ export function orderingApi(transport: Transport = httpTransport) {
       tenant: {
         slug: tenant.slug,
         name: tenant.name,
+        // Cette forme n'a jamais porté de masque : repli déduit de l'accent seul.
+        brand: marqueEffective({
+          brand: null,
+          brandColor: tenant.brandColor,
+          logoUrl: tenant.logoUrl,
+        }),
         logoUrl: tenant.logoUrl ?? null,
         brandColor: tenant.brandColor ?? "#c9a15a",
         address: tenant.address ?? "",
@@ -500,18 +514,18 @@ export function orderingApi(transport: Transport = httpTransport) {
   }
 
   /**
-   * Accent de marque seul (page de suivi : le ticket ne porte pas la couleur).
-   * Un échec retombe sur l’accent par défaut — jamais sur une page cassée.
+   * Le masque seul (page de suivi : le ticket ne porte pas la marque).
+   * Un échec retombe sur le masque de repli — jamais sur une page cassée.
    */
-  async function loadBrandColor(slug: string): Promise<string> {
+  async function loadBrand(slug: string): Promise<Brand> {
     try {
-      const tenant = await getJson<{ brandColor?: string }>(
+      const tenant = await getJson<{ brand?: Brand | null; brandColor?: string; logoUrl?: string | null }>(
         `/public/tenants/${encodeURIComponent(slug)}`,
         { revalidate: SITE_TTL },
       );
-      return tenant.brandColor ?? "#c9a15a";
+      return marqueEffective({ brand: tenant.brand ?? null, brandColor: tenant.brandColor ?? null, logoUrl: tenant.logoUrl ?? null });
     } catch {
-      return "#c9a15a";
+      return marqueEffective({ brand: null, brandColor: null, logoUrl: null });
     }
   }
 
@@ -575,7 +589,7 @@ export function orderingApi(transport: Transport = httpTransport) {
 
   return {
     loadSite,
-    loadBrandColor,
+    loadBrand,
     loadSlots,
     createOrder,
     createPaymentIntent,
@@ -594,7 +608,7 @@ export type OrderingApi = ReturnType<typeof orderingApi>;
 export const networkApi: OrderingApi = orderingApi();
 
 export const loadSite = networkApi.loadSite;
-export const loadBrandColor = networkApi.loadBrandColor;
+export const loadBrand = networkApi.loadBrand;
 export const loadSlots = networkApi.loadSlots;
 export const createOrder = networkApi.createOrder;
 export const createPaymentIntent = networkApi.createPaymentIntent;

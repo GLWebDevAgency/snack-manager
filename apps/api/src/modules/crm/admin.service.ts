@@ -21,6 +21,7 @@ import {
   type AdminPlan,
   type AdminRevokedDevice,
   type AdminTenantAccount,
+  type Brand,
   type DeviceRevoke,
   type JwtPayload,
   type PlatformLogAction,
@@ -34,7 +35,10 @@ import {
   type ChurnCause,
 } from '@sm/contracts';
 import type { AdminLog, Device, Screen, Tenant, User } from '@sm/db';
+import { lireMarqueObservee, marqueObservee } from '../../common/marque-observee';
 import { generatePairingCode } from '../screens/pairing-code';
+import { masqueAEnregistrer } from '../tenants/marque';
+import { OriginesImages } from '../tenants/origines-images';
 import { SessionRevocationPublisher } from '../../common/session-revocation';
 
 /**
@@ -90,6 +94,12 @@ export class AdminService {
     @InjectModel('Screen') private readonly screens: Model<Screen>,
     @InjectModel('AdminLog') private readonly logs: Model<AdminLog>,
     @InjectModel('User') private readonly users: Model<User>,
+    /**
+     * La liste blanche d'origines d'images — la MÊME que la route du
+     * restaurateur. Elle n'est pas `@Optional()` à dessein : une garde de
+     * sécurité qui disparaît quand on oublie de la câbler n'en est pas une.
+     */
+    private readonly origines: OriginesImages,
     @Optional() private readonly revocations?: SessionRevocationPublisher,
   ) {}
 
@@ -283,6 +293,41 @@ export class AdminService {
         // signature comprise : cette perte doit se lire quelque part.
         ...deltaServices(before.atelier ?? null, body.services),
       },
+    });
+    return toAccountView(tenant);
+  }
+
+  /**
+   * Le masque posé à l'installation, depuis la fiche client du CRM.
+   *
+   * Même garde que la route du restaurateur (`TenantsService.updateMarque`) :
+   * le tenant est LU avant d'être écrit, un masque sans aucun logo hérite du
+   * logo legacy, l'origine des images est tenue à la liste blanche, et le
+   * contraste est REJOUÉ ici — l'API ne fait confiance ni à l'écran du
+   * restaurateur, ni à celui de l'équipe SM (`masqueAEnregistrer`, partagée
+   * entre les deux services : une garde posée d'un seul côté ne garde rien,
+   * les DEUX routes écrivent `logo.*` et `hero` dans le même document).
+   *
+   * Le journal reprend EXACTEMENT le motif de `changeOffre` : même méthode
+   * (`record`), même établissement (`tenantId`), et un `from`/`to` qui rend la
+   * ligne relisible seule. `meta.preset` seul ne suffisait pas : un masque sur
+   * mesure (`preset: null`) donnait une ligne qui ne disait RIEN de ce qui
+   * avait changé, dans le seul registre qu'on ouvre en cas de litige — et
+   * c'est justement le masque sur mesure qu'un restaurateur conteste.
+   */
+  async changeMarque(actor: JwtPayload, tenantId: string, brand: Brand): Promise<AdminTenantAccount> {
+    const before = await this.requireTenant(tenantId);
+    // Le masque EFFECTIF d'avant, pas la colonne brute : un tenant pas encore
+    // repris part du repli, et le journal doit dire de quoi il partait
+    // vraiment — c'est le même résolveur que toutes les surfaces.
+    const avant = marqueObservee(before);
+    const aEnregistrer = masqueAEnregistrer(brand, before.logoUrl, this.origines.hotes);
+    const tenant = await this.updateTenant(tenantId, { brand: aEnregistrer });
+
+    await this.record(actor, {
+      action: 'tenant.brand_change',
+      tenantId: String(tenant._id),
+      meta: deltaMasque(avant, aEnregistrer),
     });
     return toAccountView(tenant);
   }
@@ -629,9 +674,22 @@ export class AdminService {
     return this.updateTenant(tenantId, { account });
   }
 
+  /**
+   * La SEULE écriture sur un tenant depuis le CRM — et elle valide.
+   *
+   * Mongoose n'exécute NI `required` NI `enum` sur une requête de mise à jour,
+   * seulement sur `save()` : les gardes du schéma (statut de compte, formule,
+   * cycle de facturation, et tous les enums de `BrandSub` écrits par
+   * `changeMarque`) ne se déclenchaient JAMAIS en production. La base n'avait
+   * que Zod pour rempart, et le schéma faisait croire le contraire à
+   * quiconque le lisait. `context: 'query'` donne aux validateurs le `this` de
+   * la requête, seule forme correcte hors document hydraté.
+   */
   private async updateTenant(tenantId: string, $set: Record<string, unknown>): Promise<RawTenant> {
     const oid = toObjectId(tenantId, 'Établissement introuvable');
-    const raw = await this.tenants.findOneAndUpdate({ _id: oid }, { $set }, { new: true }).lean();
+    const raw = await this.tenants
+      .findOneAndUpdate({ _id: oid }, { $set }, { new: true, runValidators: true, context: 'query' })
+      .lean();
     if (!raw) throw new NotFoundException('Établissement introuvable');
     return raw as RawTenant;
   }
@@ -716,8 +774,56 @@ function deltaServices(
   };
 }
 
+/**
+ * Le RÉSUMÉ d'un masque, tel qu'il se relit dans le journal.
+ *
+ * Ce qui a été DÉCIDÉ — la direction, le mode, la palette, le couple
+ * typographique, les formes, le mouvement — et rien de ce que le résolveur en
+ * dérive : une ligne de registre doit dire le geste, pas son rendu. La palette
+ * y est en ENTIER, car un litige sur une identité visuelle porte sur des
+ * couleurs et « accent seul » ne dirait rien d'un fond changé.
+ *
+ * Les deux rôles restants (logos et visuel d'accueil) sont des URL versionnées,
+ * illisibles telles quelles : `deltaMasque` les rend en booléens.
+ */
+function resumeMasque(b: Brand): Record<string, unknown> {
+  return {
+    preset: b.preset,
+    mode: b.mode,
+    pair: b.type.pair,
+    shape: b.shape,
+    motion: b.motion,
+    palette: b.palette,
+  };
+}
+
+/**
+ * Ce qui a changé entre deux masques — le motif de `deltaServices`.
+ *
+ * La ligne portait le seul `preset` du masque posé. Sur un masque SUR MESURE
+ * (`preset: null`), elle ne disait donc rien du tout : ni d'où l'on partait,
+ * ni ce qui avait bougé. Un registre append-only qu'on ne peut pas relire au
+ * litige ne protège personne.
+ *
+ * Les logos sont comparés en BLOC plutôt que listés : ce qui compte au litige
+ * est « on y a touché », pas laquelle des quatre déclinaisons.
+ */
+function deltaMasque(
+  avant: Brand,
+  apres: Brand,
+): { from: Record<string, unknown>; to: Record<string, unknown>; logosModifies: boolean; heroModifie: boolean } {
+  return {
+    from: resumeMasque(avant),
+    to: resumeMasque(apres),
+    logosModifies: JSON.stringify(avant.logo) !== JSON.stringify(apres.logo),
+    heroModifie: avant.hero !== apres.hero,
+  };
+}
+
 function toAccountView(raw: RawTenant): AdminTenantAccount {
   const account = toAccount(raw);
+  // Le masque ET la raison de son repli : le second est le drapeau de la fiche.
+  const masque = lireMarqueObservee(raw);
   return {
     tenantId: String(raw._id),
     name: String(raw.name ?? ''),
@@ -739,6 +845,21 @@ function toAccountView(raw: RawTenant): AdminTenantAccount {
     account,
     accessBlocked: isAccessBlocked(account.status),
     statusLabel: TENANT_ACCOUNT_STATUS_LABELS[account.status],
+    // Dérivé, jamais stocké à part : même résolveur que la vitrine publique.
+    // Le futur éditeur CRM (plan B) en a besoin.
+    brand: masque.brand,
+    /*
+     * POURQUOI CE RESTAURANT PORTE NUIT SANS L'AVOIR CHOISI.
+     *
+     * `null` : c'est bien son masque. `absent` : il n'a pas encore été repris
+     * (`backfill:brand`) — normal, et attendu. `invalide` : la base porte un
+     * masque que le contrat REFUSE, donc le restaurant s'affiche en Nuit sur
+     * toutes ses surfaces clientes, sur un 200. C'était invisible : le repli
+     * était muet, et la fiche client montrait un masque Nuit indiscernable
+     * d'un masque Nuit choisi. Le drapeau remonte ici pour qu'un humain sache
+     * QUELS établissements sont concernés, sans lire les journaux.
+     */
+    brandRepli: masque.repli,
     // Les clients d'avant l'Atelier n'ont rien en base : null, pas un objet
     // de faux — la fiche doit lire l'absence comme une absence.
     atelier: raw.atelier

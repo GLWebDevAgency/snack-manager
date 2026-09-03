@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Model } from 'mongoose';
+import { BadRequestException } from '@nestjs/common';
+import { model, type Model } from 'mongoose';
 import {
   EMPTY_SERVICES,
   ACCOUNT_SUSPENDED_MESSAGE,
@@ -7,6 +8,7 @@ import {
   ADMIN_LOG_ACTION_LABELS,
   ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
+  DIRECTIONS,
   INVOICE_LOG_ACTIONS,
   PAIRING_CODE_TTL_MS,
   PLANS,
@@ -25,6 +27,7 @@ import {
 import { AdminLogSchema, type AdminLog, type Device, type Screen, type Tenant, type User } from '@sm/db';
 import { requirePairedDevice } from '../devices/device-access';
 import type { DevicesRepository } from '../devices/devices.repository';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { FakeCollection } from './admin.fakes';
 
@@ -76,6 +79,7 @@ describe('Administration client', () => {
       screens.asModel<Screen>(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
   });
 
@@ -110,6 +114,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logs.asModel<AdminLog>(),
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 
@@ -129,6 +134,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logsIndisponibles,
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 
@@ -361,6 +367,119 @@ describe('Administration client', () => {
     });
   });
 
+  describe('Le masque d’identité (CRM)', () => {
+    it('hérite le logo legacy à la première pose — persisté, pas seulement rendu', async () => {
+      // Le tenant porte un logo d'AVANT le masque (`logoUrl`, champ racine) ;
+      // `DIRECTIONS.marche` n'en porte aucun dans ses quatre emplacements.
+      // Sous le domaine public — la seule origine que la liste blanche
+      // accepte de greffer (`OriginesImages`).
+      tenants.rows[0]!.logoUrl = 'https://api.snackmanager.fr/public/tenants/classfood/logo?v=3';
+
+      await admin.changeMarque(SM, CLASSFOOD, DIRECTIONS.marche);
+
+      // Vérifié sur le DOCUMENT PERSISTÉ, pas seulement sur la vue rendue :
+      // c'est ce qui sera relu à la prochaine ouverture de la fiche.
+      const persiste = tenants.rows.find((r) => r._id === CLASSFOOD)!;
+      const brand = persiste.brand as { logo: { mark: { light: unknown; dark: unknown } } };
+      expect(brand.logo.mark.dark).toBe(
+        'https://api.snackmanager.fr/public/tenants/classfood/logo?v=3',
+      );
+      expect(brand.logo.mark.light).toBeNull();
+    });
+
+    it('consigne d’où l’on part et où l’on va — y compris sur un masque sur mesure', async () => {
+      // La ligne ne portait que `meta.preset`. Sur un masque SUR MESURE
+      // (`preset: null`) elle ne disait donc rien du tout : ni la direction
+      // d'origine, ni ce qui avait bougé. Un registre append-only qu'on ne
+      // peut pas relire au litige ne protège personne — `changeOffre`, le
+      // motif que ce service reprend, consigne `from`/`to` depuis toujours.
+      tenants.rows[0]!.brand = DIRECTIONS.nuit;
+      const surMesure = {
+        ...DIRECTIONS.marche,
+        preset: null,
+        palette: { ...DIRECTIONS.marche.palette, accent: '#1b5e20' },
+      };
+
+      await admin.changeMarque(SM, CLASSFOOD, surMesure);
+
+      const [ligne] = await admin.journal(CLASSFOOD, TOUT);
+      expect(ligne?.action).toBe('tenant.brand_change');
+      expect(ligne?.meta?.from).toMatchObject({ preset: 'nuit', mode: 'dark' });
+      expect(ligne?.meta?.to).toMatchObject({ preset: null, pair: 'marche' });
+      // La palette EN ENTIER : un litige d'identité visuelle porte sur des
+      // couleurs, et « accent seul » ne dirait rien d'un fond changé.
+      expect((ligne?.meta?.to as { palette: { accent: string } }).palette.accent).toBe('#1b5e20');
+      expect(ligne?.meta?.logosModifies).toBe(false);
+    });
+
+    it('signale une retouche de logo, sans dérouler quatre URL versionnées', async () => {
+      // Ce qui compte au litige est « on y a touché », pas laquelle des quatre
+      // déclinaisons : les URL portent un `?v=` illisible dans un journal.
+      tenants.rows[0]!.brand = DIRECTIONS.nuit;
+      const avecLogo = {
+        ...DIRECTIONS.nuit,
+        logo: {
+          ...DIRECTIONS.nuit.logo,
+          mark: { light: null, dark: 'https://api.snackmanager.fr/public/tenants/classfood/logo?v=9' },
+        },
+      };
+
+      await admin.changeMarque(SM, CLASSFOOD, avecLogo);
+
+      const [ligne] = await admin.journal(CLASSFOOD, TOUT);
+      expect(ligne?.meta?.logosModifies).toBe(true);
+    });
+
+    /**
+     * UN MASQUE CORROMPU SE VOIT SUR LA FICHE, PAS SEULEMENT DANS LES LOGS.
+     *
+     * Le repli était muet : un restaurant dont le masque ne passe plus le
+     * contrat s'affichait en Nuit sur toutes ses surfaces clientes, sur un
+     * 200, et la fiche client montrait un Nuit indiscernable d'un Nuit
+     * choisi. `brandRepli` dit d'où vient ce Nuit-là.
+     */
+    it('dit POURQUOI la fiche montre Nuit — choisi, pas encore repris, ou illisible', async () => {
+      // Pas encore repris : normal, et à ne pas confondre avec un incident.
+      expect((await admin.account(SM, CLASSFOOD)).brandRepli).toBe('absent');
+
+      tenants.rows[0]!.brand = DIRECTIONS.soleil;
+      expect((await admin.account(SM, CLASSFOOD)).brandRepli).toBeNull();
+
+      // `mode` hors de l'énumération : `BrandSchema` refuse, le repli tombe.
+      tenants.rows[0]!.brand = { ...DIRECTIONS.soleil, mode: 'crepuscule' };
+      const vue = await admin.account(SM, CLASSFOOD);
+      expect(vue.brandRepli).toBe('invalide');
+      expect(vue.brand.preset).toBe('nuit');
+    });
+
+    it('refuse en 400 une image venue d’ailleurs, et n’écrit rien', async () => {
+      // Les DEUX routes `PATCH …/marque` écrivent `logo.*` et `hero` dans le
+      // même document, servi aux mêmes clients : une garde posée du seul côté
+      // restaurateur ne garderait rien — l'équipe SM passerait par ici.
+      const espion = {
+        ...DIRECTIONS.nuit,
+        hero: 'https://cdn.mechant.fr/pixel.png',
+      };
+      await expect(admin.changeMarque(SM, CLASSFOOD, espion)).rejects.toThrow(BadRequestException);
+      expect(tenants.rows.find((r) => r._id === CLASSFOOD)!.brand ?? null).toBeNull();
+      expect(logs.size).toBe(0);
+    });
+
+    it('refuse en 400 un masque qui échoue AA, et n’écrit rien au journal', async () => {
+      const pale = {
+        ...DIRECTIONS.marche,
+        palette: { ...DIRECTIONS.marche.palette, ink: '#9aa79e' },
+      };
+      // Même registre qui ne doit pas mentir que pour les autres gestes :
+      // un masque refusé ne doit laisser aucune trace d'un changement qui
+      // n'a pas eu lieu.
+      await expect(admin.changeMarque(SM, CLASSFOOD, pale)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(logs.size).toBe(0);
+    });
+  });
+
   describe('Notes internes', () => {
     it('écrit la note dans le journal, sans collection parallèle', async () => {
       const entry = await admin.addNote(SM, CLASSFOOD, { note: 'Gérant promet de régler vendredi' });
@@ -469,6 +588,7 @@ describe('Administration client', () => {
         screens.asModel<Screen>(),
         logsIndisponibles,
         users.asModel<User>(),
+        testOriginesImages(),
         revocations as never,
       );
 
@@ -603,6 +723,7 @@ describe('Administration client', () => {
         services: EMPTY_SERVICES,
         reason: '',
       });
+      await admin.changeMarque(SM, CLASSFOOD, DIRECTIONS.marche);
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });
@@ -800,14 +921,25 @@ describe('Vocabulaire d’administration', () => {
     }
   });
 
-  it('laisse la base accepter chaque action déclarée', () => {
-    // PIÈGE RÉEL, rencontré sur ce tour : `adminLogs.action` porte un `enum`
-    // Mongoose qui RECOPIE cette liste (packages/db/src/schemas.ts). Une action
-    // déclarée ici mais absente là-bas ne se voit ni au typecheck ni dans les
-    // tests à doublure — elle tombe en ValidationError à la première écriture
-    // réelle, APRÈS que la facture a été créée et son numéro consommé.
-    const path = AdminLogSchema.path('action') as unknown as { enumValues: string[] };
-    expect([...path.enumValues].sort()).toEqual([...ADMIN_LOG_ACTIONS].sort());
+  it('laisse la base écrire la nouvelle action du masque', () => {
+    // PIÈGE RÉEL, rencontré sur ce tour : `adminLogs.action` portait un `enum`
+    // Mongoose qui RECOPIAIT `ADMIN_LOG_ACTIONS`. Une action déclarée au
+    // contrat mais absente là-bas ne se voyait ni au typecheck ni dans les
+    // tests à doublure — elle tombait en ValidationError à la première
+    // écriture RÉELLE, après que la facture a été créée et son numéro
+    // consommé. Depuis, le schéma étale la source (`[...ADMIN_LOG_ACTIONS]`) :
+    // comparer l'enum à la constante qu'il étale ne prouverait plus rien.
+    //
+    // Ce qui reste à vérifier, c'est le COMPORTEMENT : qu'une ligne réelle
+    // portant la dernière action ajoutée passe la validation Mongoose. Un
+    // retour à la recopie la ferait échouer ici, avant la production.
+    const M = model('AdminLogAdminTest', AdminLogSchema);
+    const ligne = new M({
+      actorId: SM.sub,
+      action: 'tenant.brand_change',
+      tenantId: CLASSFOOD,
+    });
+    expect(ligne.validateSync()).toBeUndefined();
   });
 
   it('nomme en français chaque statut et chaque motif de révocation', () => {

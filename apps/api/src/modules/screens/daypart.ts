@@ -1,5 +1,5 @@
 import { tenancy } from '@sm/domain';
-import type { ScreenNextOpening, ScreenService } from '@sm/contracts';
+import type { PublicSiteHours, ScreenNextOpening, ScreenService } from '@sm/contracts';
 
 /**
  * DAYPARTING — quel service tourne à cet instant, et quand on rouvre.
@@ -11,12 +11,14 @@ import type { ScreenNextOpening, ScreenService } from '@sm/contracts';
  * qu'un téléviseur doit afficher.
  */
 
-/** Horaires tels qu'ils sont stockés sur le tenant. */
-export interface RawDayHours {
-  day: number; // ISO : 1 = lundi … 7 = dimanche
-  lunch: { open: string; close: string } | null;
-  dinner: { open: string; close: string } | null;
-}
+/**
+ * Horaires d'une journée, dans la forme neutre que rend `horairesPublics`.
+ *
+ * C'est un ALIAS, pas une seconde déclaration : l'écran de salle lit
+ * exactement les horaires que rendent la vitrine et la fiche publique, et deux
+ * interfaces jumelles finissaient toujours par diverger d'un champ.
+ */
+export type RawDayHours = PublicSiteHours;
 
 /**
  * Construit les horaires hebdomadaires depuis la saisie du back-office.

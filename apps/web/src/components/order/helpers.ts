@@ -196,36 +196,17 @@ export function initial(name: string): string {
   return (letter || "S").toUpperCase();
 }
 
-/**
- * Couleur de texte lisible sur l’accent tenant. Un accent doré (#c9a15a) exige
- * du texte noir ; un accent bordeaux exige du blanc. Calcul par luminance
- * relative WCAG — c’est ce qui empêche un compte d’avoir des boutons illisibles.
+/*
+ * `onAccent()` et `safeColor()` VIVAIENT ICI — supprimés avec le masque.
+ *
+ * Les deux dataient du temps où la vitrine peignait elle-même l'accent du
+ * tenant : elles validaient un hex et choisissaient noir ou blanc par un
+ * SEUIL de luminance (0,45), qui se trompe de pôle au milieu de l'échelle.
+ * Le masque résout les deux en amont et mieux — `BrandPaletteSchema` valide
+ * l'hex, `textePosableSur()` tranche par contraste réel — et plus personne ne
+ * les appelait. Les garder aurait invité la prochaine surface à recalculer
+ * une couleur que le contrat rend déjà.
  */
-export function onAccent(hex: string): "#000" | "#fff" {
-  const clean = hex.replace("#", "").trim();
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : clean;
-  if (!/^[0-9a-f]{6}$/i.test(full)) return "#fff";
-  const channel = (start: number) => {
-    const v = parseInt(full.slice(start, start + 2), 16) / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance =
-    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
-  // Seuil 0,45 : au-delà, le noir passe mieux que le blanc sur l’aplat.
-  return luminance > 0.45 ? "#000" : "#fff";
-}
-
-/** Accent tenant validé — une couleur invalide ne doit pas casser la page. */
-export function safeColor(hex: string | null | undefined, fallback = "#c9a15a"): string {
-  const value = String(hex ?? "").trim();
-  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : fallback;
-}
 
 /** `tel:` normalisé (« 09 84 36 49 76 » → « tel:+33984364976 » quand c’est possible). */
 export function telHref(phone: string): string {

@@ -20,6 +20,7 @@ import { AdminLogSchema, type AdminLog, type Device, type PlatformSettingsDoc, t
 import { AuthGuard } from '../../common/auth';
 import { SessionAccessService } from '../../common/session-access';
 import { zod } from '../../common/zod.pipe';
+import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { FakeCollection } from './admin.fakes';
 import { PlatformController, PublicPlatformController } from './platform.controller';
@@ -85,6 +86,7 @@ describe('Réglages de plateforme — réseaux sociaux de la vitrine', () => {
       new FakeCollection('screen').asModel<Screen>(),
       logs.asModel<AdminLog>(),
       users.asModel<User>(),
+      testOriginesImages(),
     );
     platform = new PlatformService(settings.asModel<PlatformSettingsDoc>(), admin);
     controller = new PlatformController(platform);
@@ -468,7 +470,7 @@ describe('Le journal accepte une action de plateforme, et rien de plus', () => {
     expect(doc.validateSync()?.errors.tenantId).toBeDefined();
   });
 
-  it('refuse une action inconnue — l’enum recopie bien le contrat', () => {
+  it('refuse une action inconnue — l’enum lit bien le contrat', () => {
     const doc = new AdminLogModel({ actorId: SM.sub, action: 'platform.inventée' });
     expect(doc.validateSync()?.errors.action).toBeDefined();
   });

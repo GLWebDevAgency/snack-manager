@@ -30,6 +30,11 @@ apps/*/dist/
 pos-demo.png
 .playwright-mcp/
 
+# Matrice de captures du masque (scripts/capture-masque.mjs) : 54 PNG
+# reproductibles à volonté, jamais la référence — les regarder à l'œil suffit,
+# les versionner gonflerait le dépôt pour rien.
+docs/superpowers/captures/
+
 # ─── Bibliothèque de références du fondateur — JAMAIS versionnée ───
 #
 # `design_handoff_snack_manager/photo-base/` contient 24 fichiers dont la

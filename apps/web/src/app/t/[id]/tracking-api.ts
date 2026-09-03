@@ -1,5 +1,11 @@
-import type { OrderTicket, OrderTracking } from "@sm/contracts";
-import { API_URL, PublicApiError } from "@/components/order/api";
+import { cache } from "react";
+import {
+  marqueDeRepli,
+  type Brand,
+  type OrderTicket,
+  type OrderTracking,
+} from "@sm/contracts";
+import { API_URL, loadBrand, PublicApiError } from "@/components/order/api";
 
 /**
  * Accès aux routes publiques de suivi, jeton compris.
@@ -41,13 +47,38 @@ export function loadTracking(
   );
 }
 
-/** Récapitulatif nominatif (lignes, totaux, restaurant) — bonus, jamais bloquant. */
-export function loadTicket(id: string, token: string): Promise<OrderTicket> {
-  return getJson<OrderTicket>(
-    `/public/orders/${encodeURIComponent(id)}/ticket`,
-    token,
-  );
-}
+/**
+ * Récapitulatif nominatif (lignes, totaux, restaurant) — bonus, jamais bloquant.
+ *
+ * MÉMORISÉ POUR LA REQUÊTE (`cache()` de React, pas le cache HTTP — le `fetch`
+ * reste `no-store`) : la page ET son `generateViewport` ont besoin du même
+ * ticket, l'un pour le récapitulatif, l'autre pour le slug qui mène au masque.
+ * Sans cette mémorisation, ouvrir un suivi coûtait deux appels nominatifs.
+ */
+export const loadTicket = cache(
+  (id: string, token: string): Promise<OrderTicket> =>
+    getJson<OrderTicket>(
+      `/public/orders/${encodeURIComponent(id)}/ticket`,
+      token,
+    ),
+);
+
+/**
+ * Le masque de la commande — mémorisé lui aussi, et jamais bloquant.
+ *
+ * Le slug du restaurant n'est connu que par le ticket : sans lui (lien sans
+ * jeton, ticket indisponible), il ne reste que le repli NUIT — la seule
+ * direction qui ne suppose aucune donnée (spec §8). C'est cette même peau que
+ * servent `not-found.tsx` et le message « lien incomplet » de cette route :
+ * une surface de suivi n'est jamais grise.
+ */
+export const marqueDuSuivi = cache(
+  async (id: string, token: string): Promise<Brand> => {
+    const ticket = await loadTicket(id, token).catch(() => null);
+    // `loadBrand` ne lève jamais : il retombe lui-même sur ce repli.
+    return ticket ? loadBrand(ticket.header.slug) : marqueDeRepli(null, null);
+  },
+);
 
 /**
  * Jeton lu depuis l’URL. Next livre `string | string[] | undefined` : un lien

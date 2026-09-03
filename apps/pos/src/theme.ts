@@ -9,6 +9,7 @@
  */
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { palette, radius } from '@sm/client-core';
+import { ratioContraste } from '@sm/contracts';
 
 /**
  * Variantes réservées au texte fonctionnel sur les surfaces sombres du POS.
@@ -59,20 +60,24 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function luminance(hex: string): number {
-  const [r, g, b] = channels(hex).map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+/** Les deux encres de la caisse — un noir teinté, jamais le noir pur. */
+const ENCRE_SOMBRE = '#12100d';
+const ENCRE_CLAIRE = '#ffffff';
 
 /**
  * Texte lisible sur l'accent. Un accent doré (#c9a15a) réclame du texte
  * sombre : le blanc y tombe à 2,4:1, très en dessous du seuil WCAG.
+ *
+ * Le choix se fait PAR CONTRASTE RÉEL, avec `ratioContraste` du contrat, et
+ * non par une luminance recopiée ici comparée à un seuil : `0,18` était le
+ * croisement du noir PUR et du blanc, alors que l'encre de la caisse est
+ * `#12100d` — le vrai croisement est à 0,191, et la bande entre les deux
+ * recevait l'encre la MOINS lisible des deux.
  */
 export function readableOn(hex: string): string {
-  return luminance(hex) > 0.18 ? '#12100d' : '#ffffff';
+  return ratioContraste(ENCRE_SOMBRE, hex) >= ratioContraste(ENCRE_CLAIRE, hex)
+    ? ENCRE_SOMBRE
+    : ENCRE_CLAIRE;
 }
 
 export interface Brand {

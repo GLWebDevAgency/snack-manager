@@ -9,6 +9,8 @@ import type {
   PaymentStatus,
   PaymentTender,
 } from './index';
+// ⚠️ `import type` uniquement, même raison : `marque.ts` est réexporté par `index.ts`.
+import type { Brand } from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Commande en ligne — créneaux de retrait, paiement, impression
@@ -367,6 +369,8 @@ export interface PublicSiteHours {
 export interface PublicSiteTenant {
   slug: string;
   name: string;
+  /** Le masque d'identité — toujours présent côté API (repli Nuit sinon). */
+  brand: Brand;
   logoUrl: string | null;
   brandColor: string;
   address: string;

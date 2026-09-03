@@ -35,26 +35,45 @@
 #
 #   scripts/reprise-mongo.sh staging backfill:founder
 #   scripts/reprise-mongo.sh staging backfill:founder --appliquer
+#   scripts/reprise-mongo.sh staging backfill:brand --appliquer --reparer
 #
 set -euo pipefail
 
 ENVIRONNEMENT="${1:-}"
 TACHE="${2:-}"
-APPLIQUER="${3:-}"
 BASE="${SM_MONGO_BASE:-snackmanager}"
+
+# Les drapeaux qui suivent sont passés TELS QUELS à la tâche : ce script n'a
+# pas à connaître ceux qui n'appartiennent qu'à une reprise (`--reparer`). Il
+# ne repère que `--appliquer`, dont il tire la confirmation de production et la
+# relance de contrôle.
+OPTIONS=()
+if [[ $# -gt 2 ]]; then
+  shift 2
+  OPTIONS=("$@")
+fi
+APPLIQUER=non
+for drapeau in ${OPTIONS[@]+"${OPTIONS[@]}"}; do
+  if [[ "$drapeau" == "--appliquer" ]]; then APPLIQUER=oui; fi
+done
 
 if [[ -z "$ENVIRONNEMENT" || -z "$TACHE" ]]; then
   cat <<'USAGE'
 Usage :
-    scripts/reprise-mongo.sh <staging|production> <tâche> [--appliquer]
+    scripts/reprise-mongo.sh <staging|production> <tâche> [drapeaux…]
 
 Tâches disponibles (voir packages/db/package.json) :
     backfill:founder   pose founderUntil et founderDiscountCents
     backfill:contact   reprend le téléphone du gérant depuis son lead
-    backfill:tracking  pose les jetons de suivi manquants
+    backfill:brand     pose le masque d'identité (Nuit + accent + logo) sur les
+                       tenants d'avant, et NOMME ceux dont le masque stocké est
+                       invalide (--reparer pour les remplacer)
+    backfill:tracking  pose les jetons de suivi manquants — ÉCRIT DÈS LE LANCEMENT
 
 Sans --appliquer, la tâche LIT et n'écrit rien. C'est le mode par défaut, et
-c'est celui par lequel on commence toujours.
+c'est celui par lequel on commence toujours. SEULE EXCEPTION :
+backfill:tracking n'a pas de mode lecture — elle n'ajoute qu'un secret là où
+il manque, sans jamais remplacer une valeur existante.
 USAGE
   exit 2
 fi
@@ -78,30 +97,76 @@ if [[ "$ENVIRONNEMENT" == "production" ]]; then
 fi
 
 # ── L'accès, composé depuis le proxy TCP public ──────────────────────────
-# `--kv` rend `CLE=valeur` : on ne garde que les quatre nécessaires, et rien
-# n'est affiché.
-eval "$(railway variables --service MongoDB --kv \
-  | grep -E '^(MONGOUSER|MONGOPASSWORD|RAILWAY_TCP_PROXY_DOMAIN|RAILWAY_TCP_PROXY_PORT)=' \
-  | sed 's/^/export /')"
+#
+# `--kv` rend une ligne `CLE=valeur` par variable, qu'on lit une par une.
+# PAS d'`eval` : il faisait réinterpréter les VALEURS par le shell — un mot de
+# passe contenant `$`, un accent grave, `;` ou une espace en ressortait
+# transformé, et une sous-commande y aurait été exécutée. Rien n'est affiché,
+# et rien n'est exporté : le mot de passe ne quitte pas ce script.
+mongo_utilisateur=''
+mongo_motdepasse=''
+proxy_domaine=''
+proxy_port=''
 
-for requis in MONGOUSER MONGOPASSWORD RAILWAY_TCP_PROXY_DOMAIN RAILWAY_TCP_PROXY_PORT; do
-  [[ -n "${!requis:-}" ]] || { echo "  ✗ ${requis} introuvable sur le service MongoDB." >&2; exit 1; }
+# `IFS='='` coupe au PREMIER `=` : le reste de la ligne — signes `=` compris —
+# reste dans la valeur.
+while IFS='=' read -r cle valeur; do
+  case "$cle" in
+    MONGOUSER) mongo_utilisateur="$valeur" ;;
+    MONGOPASSWORD) mongo_motdepasse="$valeur" ;;
+    RAILWAY_TCP_PROXY_DOMAIN) proxy_domaine="$valeur" ;;
+    RAILWAY_TCP_PROXY_PORT) proxy_port="$valeur" ;;
+  esac
+done < <(railway variables --service MongoDB --kv)
+
+for requis in \
+  mongo_utilisateur:MONGOUSER \
+  mongo_motdepasse:MONGOPASSWORD \
+  proxy_domaine:RAILWAY_TCP_PROXY_DOMAIN \
+  proxy_port:RAILWAY_TCP_PROXY_PORT
+do
+  # `variable_locale:NOM_RAILWAY` — le nom local est déréférencé, le nom
+  # Railway est celui que l'opérateur ira chercher dans le tableau de bord.
+  locale="${requis%%:*}"
+  [[ -n "${!locale}" ]] || {
+    echo "  ✗ ${requis##*:} introuvable sur le service MongoDB." >&2
+    exit 1
+  }
 done
 
-hote="${RAILWAY_TCP_PROXY_DOMAIN}:${RAILWAY_TCP_PROXY_PORT}"
+hote="${proxy_domaine}:${proxy_port}"
 echo "  proxy : ${hote}"
 
+# ── RFC 3986 : le userinfo d'une URI s'ENCODE ────────────────────────────
+# Un mot de passe contenant `@`, `:`, `/` ou `?` — Railway en génère — coupe
+# l'URI en deux : la connexion part sur un hôte fantôme, ou échoue sans dire
+# pourquoi. Le secret est passé à node sur son ENTRÉE STANDARD ; en argument,
+# il aurait été lisible dans `ps` par tout le poste.
+encoder() { printf %s "$1" | node -p 'encodeURIComponent(require("fs").readFileSync(0, "utf8"))'; }
+
 # L'URL vit dans l'environnement du processus enfant, et nulle part ailleurs.
-identifiants="${MONGOUSER}:${MONGOPASSWORD}"
-export MONGO_URL="mongodb://${identifiants}@${hote}/${BASE}?authSource=admin"
-unset MONGOPASSWORD identifiants
+export MONGO_URL="mongodb://$(encoder "$mongo_utilisateur"):$(encoder "$mongo_motdepasse")@${hote}/${BASE}?authSource=admin"
+unset mongo_motdepasse
 
 echo
-if [[ "$APPLIQUER" == "--appliquer" ]]; then
-  pnpm --filter @sm/db "$TACHE" -- --appliquer
+if [[ "$APPLIQUER" == "oui" ]]; then
+  pnpm --filter @sm/db "$TACHE" -- ${OPTIONS[@]+"${OPTIONS[@]}"}
   echo
   echo "▶ Relance de contrôle — une reprise idempotente ne doit plus rien trouver."
-  pnpm --filter @sm/db "$TACHE"
+  # `--exiger-zero` fait SORTIR la relance en échec s'il reste du travail.
+  # Sans lui, elle se contentait d'afficher son décompte : une reprise non
+  # idempotente, ou des écritures ignorées parce que le document avait changé
+  # entre la lecture et l'écriture, laissaient le script vert et c'est l'œil
+  # de l'opérateur qui devait repérer la ligne « N document(s) ».
+  if ! pnpm --filter @sm/db "$TACHE" -- --exiger-zero; then
+    echo
+    echo "  ✗ La relance de contrôle a ENCORE trouvé du travail." >&2
+    echo "    Relire son compte rendu ci-dessus : soit des écritures ont été ignorées" >&2
+    echo "    (le document avait changé entre-temps — relancer la tâche suffit), soit" >&2
+    echo "    des documents ne sont pas reprenables en l'état et la tâche dit lesquels" >&2
+    echo "    (backfill:brand : un masque stocké INVALIDE, que --reparer remplace)." >&2
+    exit 3
+  fi
 else
   pnpm --filter @sm/db "$TACHE"
 fi

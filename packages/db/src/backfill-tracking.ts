@@ -8,12 +8,20 @@
  *
  * Idempotent : ne touche que les documents dépourvus de jeton.
  *
+ * ATTENTION — seule reprise SANS mode lecture : elle écrit dès qu'elle est
+ * lancée. C'est tenable parce qu'elle ne fait qu'AJOUTER un secret là où il
+ * manque, sans jamais remplacer une valeur existante ; mais c'est ce qui la
+ * sort du « lire d'abord » des autres `backfill:*`, et `docs/CI-CD.md` le dit
+ * à l'opérateur plutôt que de la ranger dans la même colonne.
+ *
  *   pnpm --filter @sm/db backfill:tracking
+ *   pnpm --filter @sm/db backfill:tracking --exiger-zero  # échoue s'il en reste
  */
 import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose from 'mongoose';
+import { exigerZero, lireDrapeaux } from './backfill-flags';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
 
@@ -21,6 +29,7 @@ const BATCH = 500;
 const missing = { $or: [{ trackingToken: null }, { trackingToken: { $exists: false } }] };
 
 async function main() {
+  const drapeaux = lireDrapeaux();
   const uri = process.env.MONGO_URL;
   if (!uri) throw new Error('MONGO_URL manquant');
   await mongoose.connect(uri);
@@ -60,6 +69,7 @@ async function main() {
 
   const rest = await orders.countDocuments(missing);
   console.log(rest === 0 ? '✓ Toutes les commandes ont un jeton' : `⚠ ${rest} restantes`);
+  exigerZero(drapeaux, rest, 'commande(s) restent sans jeton');
   await mongoose.disconnect();
 }
 

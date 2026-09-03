@@ -11,11 +11,21 @@ import { cx } from "@/lib/cx";
 
 /**
  * Style commun des contrôles de saisie (spec backoffice §4.5) : niveau
- * « élément » posé sur la carte, bord qui s'éclaircit au survol, accent au
+ * « élément » posé sur la carte, bord qui s'affirme au survol, accent au
  * focus (le seul emploi d'accent ici — élément actif, DA §3).
+ *
+ * ── LE BORD D'UN CHAMP EST LA LIMITE D'UN CONTRÔLE, PAS UNE DÉCORATION ──
+ *
+ * Il était posé à 8 % d'encre : 1,14 à 1,26:1 sur les six directions, et
+ * 1,17 sur la marque grise — WCAG 1.4.11 en exige 3. On ne voyait pas où
+ * commençait le champ ; seul le fond légèrement creusé le suggérait.
+ * `border-linefirm` est ce même filet, ramené à 3:1 par le résolveur sur
+ * chaque fond où un champ se pose. Le survol monte d'un cran sur `mut`,
+ * l'encre atténuée (≥ 4,5:1) — une opacité de plus aurait ré-inventé le
+ * défaut qu'on vient de fermer.
  */
 const CONTROL =
-  "rounded-ctrl border border-white/8 bg-white/5 px-3.5 py-3 text-sm font-medium text-white outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 hover:border-white/16 focus:border-accent focus:bg-white/8 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/8";
+  "rounded-ctrl border border-linefirm bg-ink/5 px-3.5 py-3 text-sm font-medium text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut hover:border-mut focus:border-focus focus:bg-ink/8 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-linefirm";
 
 /**
  * Largeur par défaut `w-full`, SAUF si l'appelant pose déjà une largeur.

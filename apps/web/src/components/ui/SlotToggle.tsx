@@ -43,7 +43,7 @@ export function SlotToggle({
         "cf-press inline-flex items-center gap-2 whitespace-nowrap rounded-pill border-[1.5px] px-3.5 py-1.5 text-[13px] font-bold",
         on
           ? "border-ok text-okt"
-          : "border-line bg-surface2 text-mut hover:border-white/25 hover:text-ink",
+          : "border-line bg-surface2 text-mut hover:border-ink/25 hover:text-ink",
         className,
       )}
       {...rest}

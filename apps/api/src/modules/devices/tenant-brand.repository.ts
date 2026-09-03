@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { DeviceTenantBrand, TenantAccountStatus } from '@sm/contracts';
+import { brandColorDe, logoUrlDe, type DeviceTenantBrand, type TenantAccountStatus } from '@sm/contracts';
+import { marqueObservee } from '../../common/marque-observee';
 import type { Tenant } from '@sm/db';
 
 /**
@@ -20,16 +21,17 @@ export class TenantBrandRepository {
     if (!Types.ObjectId.isValid(tenantId)) return null;
     const raw = await this.tenants
       .findById(tenantId)
-      .select({ slug: 1, name: 1, brandColor: 1, logoUrl: 1 })
+      .select({ slug: 1, name: 1, brand: 1, brandColor: 1, logoUrl: 1 })
       .lean();
     if (!raw) return null;
+    // Le contrat `devices.ts` ne change pas — seules ses valeurs sont
+    // dérivées du masque (le repli Nuit gère déjà l'accent vide en base).
+    const brand = marqueObservee(raw);
     return {
       slug: String(raw.slug),
       name: String(raw.name),
-      // Un accent vide en base ferait retomber la caisse sur du noir sur noir :
-      // on rend l'or par défaut de la charte plutôt qu'une chaîne vide.
-      brandColor: raw.brandColor || '#c9a15a',
-      logoUrl: raw.logoUrl ?? null,
+      brandColor: brandColorDe(brand),
+      logoUrl: logoUrlDe(brand),
     };
   }
 

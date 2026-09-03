@@ -8,6 +8,7 @@ import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
 import { DevisService } from './devis.service';
 import { IssuerConfig } from '../billing/issuer.config';
+import { OriginesImages } from '../tenants/origines-images';
 import { HealthController } from './health.controller';
 import { HealthService } from './health.service';
 import { InsightsService } from './insights.service';
@@ -53,6 +54,10 @@ import { PublicLeadsController } from './public-leads.controller';
     // `IssuerConfig` est sans état (huit lectures d'environnement), le fournir
     // ici aussi coûte moins qu'un couplage de modules pour un singleton de plus.
     IssuerConfig,
+    // Même raison, et la même liste que la route du restaurateur : la fiche
+    // client pose un masque sur le MÊME document, avec les mêmes URL d'images
+    // servies aux mêmes clients. `OriginesImages` est sans état.
+    OriginesImages,
     AdminService,
     HealthService,
     InsightsService,

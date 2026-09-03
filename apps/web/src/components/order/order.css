@@ -56,7 +56,7 @@
 /* ── Typographie fantôme : contour, jamais lu, jamais cliquable ────────── */
 .sm-ghost {
   color: transparent;
-  -webkit-text-stroke: 1.4px rgba(255, 255, 255, 0.11);
+  -webkit-text-stroke: 1.4px color-mix(in srgb, var(--cf-text) 11%, transparent);
   text-transform: uppercase;
   letter-spacing: -0.04em;
   line-height: 0.78;
@@ -76,10 +76,14 @@
   background:
     radial-gradient(
       120% 92% at 50% 4%,
-      rgba(255, 255, 255, 0.075),
-      rgba(255, 255, 255, 0) 62%
+      color-mix(in srgb, var(--cf-text) 7.5%, transparent),
+      transparent 62%
     ),
-    linear-gradient(180deg, #1d1d1d 0%, #131313 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cf-text) 5%, var(--cf-surface)) 0%,
+      color-mix(in srgb, var(--cf-text) 1%, var(--cf-surface)) 100%
+    );
 }
 /* Halo neutre sous le plat : il l'assoit sans dépenser l'accent (DA §3). */
 .sm-plate::before {
@@ -89,20 +93,28 @@
   pointer-events: none;
   background: radial-gradient(
     62% 52% at 50% 62%,
-    rgba(255, 255, 255, 0.09),
-    rgba(255, 255, 255, 0) 72%
+    color-mix(in srgb, var(--cf-text) 9%, transparent),
+    transparent 72%
   );
 }
-/* Le visuel détouré porte son ombre : sinon il flotte, découpé au ciseau. */
+/*
+ * Le visuel détouré porte son ombre : sinon il flotte, découpé au ciseau.
+ *
+ * `drop-shadow()` ne prend qu'UNE ombre, sans virgule : aucun des
+ * `--cf-shadow-*` composés n'y entre, d'où le jeton dédié. Il était écrit
+ * `rgba(0, 0, 0, .6)` en dur — un noir à 60 % sous chacun des 46 plats, qui
+ * faisait tache sur la carte crème d'une brasserie. Le résolveur le repeint
+ * à l'encre du restaurant en mode clair, au noir en mode sombre.
+ */
 .sm-cut {
   position: relative;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(var(--cf-shadow-cut));
 }
 
 /* Repli sans photo : monogramme en contour — un parti pris, pas un trou. */
 .sm-mono {
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.28);
+  -webkit-text-stroke: 1.5px color-mix(in srgb, var(--cf-text) 28%, transparent);
   letter-spacing: -0.03em;
   user-select: none;
 }
@@ -111,16 +123,22 @@
 .sm-scrim {
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.15) 42%,
-    rgba(0, 0, 0, 0.72) 78%,
+    transparent 0%,
+    color-mix(in srgb, var(--cf-bg) 15%, transparent) 42%,
+    color-mix(in srgb, var(--cf-bg) 72%, transparent) 78%,
     var(--cf-surface) 100%
   );
 }
 
-/* ── Grain très fin sur les grandes surfaces sombres (héro, bandeau) ────
- * Un aplat noir pur sur écran OLED « colle » ; ce bruit à 3 % casse la
- * bande sans jamais devenir visible.
+/* ── Grain très fin sur les grandes surfaces pleines (héro, bandeau) ────
+ * Écrit pour le noir : un aplat pur « colle » sur un écran OLED, et ce bruit
+ * à 3,5 % casse la bande sans jamais devenir visible.
+ *
+ * Depuis le masque d'identité, la même règle se pose sur des héros CLAIRS.
+ * Elle y reste, volontairement : à 3,5 % d'opacité, le bruit ne se lit pas
+ * comme du sale mais comme un grain de papier — exactement ce qu'une carte
+ * de brasserie crème demande. La bande, elle, existe dans les deux sens :
+ * un dégradé de crème sur crème l'accuse autant qu'un dégradé de noir.
  */
 .sm-grain::after {
   content: "";
@@ -136,15 +154,30 @@
  * l'accroche tient dans ~300 px, si bien que le premier plat apparaît dès le
  * premier écran. Le halo prend la couleur du restaurant, sans jamais devenir
  * un aplat de marque.
+ *
+ * ═══ LE HALO EST LE LAVIS D'ACCENT DU CONTRAT, ET PAS UNE AUTRE OPACITÉ ═══
+ *
+ * Il valait `color-mix(accent 26 %)`, une opacité inventée ici. Or l'état de
+ * service, le rappel d'horaire et le nom du restaurant se posent DESSUS, en
+ * `text-mut` : au cœur du halo, l'encre atténuée tombait à 1,96:1 sur Néon et
+ * 2,52 sur Nuit, et `accentink` à 2,99 sur Marché — sans qu'aucun verdict du
+ * résolveur ne le voie, puisqu'il ne connaissait pas ce fond. `--cf-accent-wash`
+ * est le lavis UNIQUE du produit (12 %), et `contraste()` juge `mut` comme
+ * `accentink` dessus, sur les six directions.
  */
 .sm-hero {
   background:
     radial-gradient(
       120% 120% at 88% -10%,
-      color-mix(in srgb, var(--cf-accent) 26%, transparent),
+      var(--cf-accent-wash),
       transparent 58%
     ),
-    linear-gradient(180deg, #171717 0%, #0c0c0c 62%, #080808 100%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--cf-text) 4%, var(--cf-surface)) 0%,
+      color-mix(in srgb, var(--cf-bg) 30%, var(--cf-surface)) 62%,
+      color-mix(in srgb, var(--cf-bg) 55%, var(--cf-surface)) 100%
+    );
 }
 
 /* ── Ancrage de section sous les barres collantes ────────────────────────
@@ -160,10 +193,13 @@
   touch-action: none;
 }
 
-/* Barre de progression du tunnel : la teinte suit l'accent tenant. */
-.sm-step-on {
-  background: var(--cf-accent);
-}
+/*
+ * `.sm-step-on` a été retiré : aucune surface ne le portait (la barre du
+ * tunnel est peinte en `bg-accentink` dans `Checkout`), et il aurait posé
+ * l'accent PUR sur un indicateur d'un pixel — 2,55:1 sur Soleil, sous le 3:1
+ * de 1.4.11. Une règle morte qui documente un mauvais choix vaut moins que
+ * pas de règle du tout.
+ */
 
 @media (prefers-reduced-motion: reduce) {
   .sm-snap {

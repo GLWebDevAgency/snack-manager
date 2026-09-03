@@ -17,6 +17,7 @@
  */
 import { Platform, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 import { palette, radius, space, TOUCH_MIN } from '@sm/client-core';
+import { ratioContraste } from '@sm/contracts';
 
 export { palette, radius, space, TOUCH_MIN };
 
@@ -233,22 +234,25 @@ function channels(hex: string): [number, number, number] {
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
-/** Luminance relative WCAG. */
-function luminance(hex: string): number {
-  const [r, g, b] = channels(hex).map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+/** Les deux encres de l'écran de cuisine — un noir teinté, jamais le noir pur. */
+const ENCRE_SOMBRE = '#0b0a08';
+const ENCRE_CLAIRE = '#ffffff';
 
 /**
  * Encre lisible sur un aplat donné. Indispensable : l'accent vient du tenant,
  * et du texte blanc sur un accent doré (#c9a15a → 2,4:1) serait illisible sous
- * les néons. Le seuil 0,179 est le point de croisement exact des deux ratios.
+ * les néons.
+ *
+ * Le choix se fait PAR CONTRASTE RÉEL, avec `ratioContraste` du contrat.
+ * C'était une luminance recopiée ici comparée à un seuil : le seuil 0,179 est
+ * bien le croisement du noir PUR et du blanc, mais l'encre de cet écran est
+ * `#0b0a08` — le croisement y est ailleurs, et une cinquième copie de WCAG
+ * dans le dépôt finit toujours par diverger de la sienne d'un dixième.
  */
 export function contrastOn(background: string): string {
-  return luminance(background) > 0.179 ? '#0b0a08' : '#ffffff';
+  return ratioContraste(ENCRE_SOMBRE, background) >= ratioContraste(ENCRE_CLAIRE, background)
+    ? ENCRE_SOMBRE
+    : ENCRE_CLAIRE;
 }
 
 /** `#c9a15a` + 0.14 → `rgba(201,161,90,0.14)` — voiles et fonds teintés. */

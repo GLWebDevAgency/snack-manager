@@ -3,22 +3,25 @@ import { cx } from "@/lib/cx";
 
 type CardProps = HTMLAttributes<HTMLDivElement> & {
   /**
-   * flat = tuile INTERNE, posée dans une carte : niveau « élément » #1a1a1a,
-   * rayon 12. Jamais #111 — deux surfaces adjacentes ne portent jamais la même
-   * valeur (DA §1). Sinon : carte de niveau 2 (#111), rayon 16, ombre douce.
+   * flat = tuile INTERNE, posée dans une carte : niveau « élément »
+   * (dégradé `--cf-elev-gradient`), rayon 12. Jamais le même niveau que le
+   * fond qui la porte — deux surfaces adjacentes ne portent jamais la même
+   * valeur (DA §1). Sinon : carte de niveau 2 (`--cf-card-gradient`), rayon
+   * 16, ombre douce.
    */
   flat?: boolean;
 };
 
 /**
  * Carte SM Dark (spec backoffice §4.8) : dégradé vertical très discret
- * (voile blanc 5 % en haut), bord blanc 6 %, rayon 16, ombre carte.
+ * (voile d'encre à 5 % en haut), bord d'encre à 6 %, rayon 16, ombre carte —
+ * l'encre suit le mode, jamais un blanc fixe.
  */
 export function Card({ flat = false, className, ...rest }: CardProps) {
   return (
     <div
       className={cx(
-        "overflow-hidden border border-white/6",
+        "overflow-hidden border border-ink/6",
         flat
           ? "rounded-card bg-[image:var(--cf-elev-gradient)]"
           : "rounded-panel bg-[image:var(--cf-card-gradient)] shadow-card",

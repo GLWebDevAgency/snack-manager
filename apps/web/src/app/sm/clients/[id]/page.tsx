@@ -333,6 +333,24 @@ export default function ClientFilePage({
                   </span>
                 </p>
               )}
+
+              {/* LE MASQUE ILLISIBLE — le seul repli qui soit un incident.
+                  `absent` est normal (établissement pas encore repris) et ne
+                  s'affiche pas ; `invalide` veut dire que ce restaurant sert
+                  l'identité Nuit à TOUS ses clients — vitrine, commande,
+                  fidélité, tableau de menu — sans l'avoir choisie. Ça ne se
+                  voyait nulle part : le repli était muet, et un Nuit subi est
+                  indiscernable d'un Nuit voulu. */}
+              {account?.brandRepli === "invalide" && (
+                <p className="mt-2.5 flex items-start gap-2 rounded-card border border-alert/45 bg-alert/10 p-2.5 text-[13px] font-bold text-alertt">
+                  <Icon name="alert" size={15} className="mt-px shrink-0" />
+                  <span>
+                    Masque d’identité illisible — ce restaurant s’affiche en
+                    Nuit sur toutes ses surfaces clientes. À reprendre depuis
+                    l’éditeur de marque.
+                  </span>
+                </p>
+              )}
             </div>
 
             {/* ── Les actions — pleine largeur sous `md`, « Appeler » en tête et
@@ -341,7 +359,7 @@ export default function ClientFilePage({
               {file.contact.phone && (
                 <a
                   href={`tel:${file.contact.phone.replace(/\s/g, "")}`}
-                  className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btndark px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
+                  className="cf-press inline-flex items-center gap-[9px] whitespace-nowrap rounded-pill bg-btn px-3.5 py-[9px] text-[13px] font-bold tracking-[-0.01em] text-white hover:bg-[#333]"
                 >
                   <Icon name="phone" size={15} />
                   Appeler

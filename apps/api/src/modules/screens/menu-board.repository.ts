@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Category, Product, Promotion, Tenant } from '@sm/db';
+import { brandColorDe, logoUrlDe } from '@sm/contracts';
+import { marqueObservee } from '../../common/marque-observee';
+import { horairesPublics } from '../tenants/horaires-publics';
 import type { RawDayHours } from './daypart';
 
 /**
@@ -48,6 +51,33 @@ export interface BoardPromo {
   readonly description: string;
   readonly kind: 'percent' | 'amount' | 'offered_item';
   readonly value: number;
+}
+
+/**
+ * L'identité du restaurant telle que l'écran la reçoit — extraite du dépôt
+ * pour être TESTABLE sans Mongo.
+ *
+ * Les deux champs plats sont des dérivés du masque, jamais la colonne lue :
+ * un tenant repris peint son écran de menu avec l'accent de SON masque, et un
+ * tenant pas encore repris avec son `brandColor` brut, via le repli. Inline
+ * dans la requête, cette règle n'avait aucun test — et c'est exactement là
+ * qu'un « retour au champ plat, c'est plus simple » serait passé inaperçu.
+ */
+export function identiteDuTableau(
+  tenant: Partial<Tenant> & { _id: unknown },
+): BoardIdentity {
+  // Calculé une fois : les champs plats en dérivent, jamais l'inverse.
+  const brand = marqueObservee(tenant);
+  return {
+    tenantId: String(tenant._id),
+    slug: String(tenant.slug ?? ''),
+    name: String(tenant.name ?? ''),
+    logoUrl: logoUrlDe(brand),
+    brandColor: brandColorDe(brand),
+    // La même conversion que la vitrine et la fiche publique — elle vivait ici
+    // en copie, et le dayparting de l'écran de salle en dépend au caractère près.
+    hours: horairesPublics(tenant.hours),
+  };
 }
 
 /** Tout ce qu'une résolution de contenu consomme, en une seule lecture. */
@@ -116,18 +146,7 @@ export class MenuBoardRepository {
     if (!tenant) return null;
 
     return {
-      identity: {
-        tenantId: String(tenant._id),
-        slug: String(tenant.slug ?? ''),
-        name: String(tenant.name ?? ''),
-        logoUrl: tenant.logoUrl ?? null,
-        brandColor: tenant.brandColor ?? '#c9a15a',
-        hours: (tenant.hours ?? []).map((h) => ({
-          day: Number(h?.day ?? 0),
-          lunch: h?.lunch ? { open: h.lunch.open, close: h.lunch.close } : null,
-          dinner: h?.dinner ? { open: h.dinner.open, close: h.dinner.close } : null,
-        })),
-      },
+      identity: identiteDuTableau(tenant),
       categories: cats.map((c) => ({ id: String(c._id), name: String(c.name ?? '') })),
       products: prods.map((p) => ({
         id: String(p._id),

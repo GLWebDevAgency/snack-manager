@@ -31,12 +31,14 @@
  * commercial a pu le corriger à la main depuis, et sa saisie prime sur le
  * souvenir du pipeline.
  *
- *   pnpm --filter @sm/db backfill:contact              # montre
- *   pnpm --filter @sm/db backfill:contact --appliquer  # écrit
+ *   pnpm --filter @sm/db backfill:contact                # montre
+ *   pnpm --filter @sm/db backfill:contact --appliquer    # écrit
+ *   pnpm --filter @sm/db backfill:contact --exiger-zero  # échoue s'il reste du travail
  */
 import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose from 'mongoose';
+import { exigerZero, lireDrapeaux } from './backfill-flags';
 import { MODELS } from './schemas';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
@@ -63,7 +65,7 @@ export function dejaJoignable(tenant: { contact?: { phone?: unknown; email?: unk
 }
 
 async function main(): Promise<void> {
-  const appliquer = process.argv.includes('--appliquer');
+  const drapeaux = lireDrapeaux();
   // `MONGO_URL` — le nom que l'API et `seed.ts` lisent déjà, et celui que
   // Railway pose. Un second nom aurait créé deux conventions, et un script de
   // reprise qui ne démarre pas sur l'environnement où on veut le lancer.
@@ -149,8 +151,13 @@ async function main(): Promise<void> {
     console.log(`\n${sansTrace.length} client(s) sans lead exploitable : ${sansTrace.join(', ')}`);
   }
 
-  if (!appliquer) {
+  if (!drapeaux.appliquer) {
     console.log('\nRien écrit. Relancer avec --appliquer pour enregistrer.\n');
+    // Le lot SEUL, pas tous les clients sans contact : un rapprochement ambigu
+    // ou un client sans lead exploitable ne sera jamais repris par ce script,
+    // et faire échouer la relance de contrôle là-dessus la rendrait rouge pour
+    // toujours — donc illisible le jour où elle dit quelque chose.
+    exigerZero(drapeaux, lot.length, 'contact(s) restent à reprendre');
     await mongoose.disconnect();
     return;
   }

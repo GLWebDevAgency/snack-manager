@@ -1,5 +1,9 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import {
+  BrandStrictSchema,
+  type Brand,
+  TenantHoursUpdateSchema,
+  type TenantHoursUpdate,
   TenantIdentityUpdateSchema,
   type TenantIdentityUpdate,
   TenantSettingsUpdateSchema,
@@ -53,13 +57,36 @@ export class TenantsController {
     return this.tenants.updateIdentity(tenantId, body);
   }
 
+  /**
+   * Le masque d'identité du restaurateur — ce que voient SES clients. Validé
+   * par le contrat en version STRICTE (une clé inattendue dans un corps de
+   * requête est une tentative, pas une tolérance), puis le contraste est
+   * REJOUÉ ici : l'API ne fait pas confiance à l'écran.
+   */
+  @Roles('owner', 'gerant')
+  @Patch('tenants/me/marque')
+  updateMarque(@TenantId() tenantId: string, @Body(zod(BrandStrictSchema)) body: Brand) {
+    return this.tenants.updateMarque(tenantId, body);
+  }
+
+  /**
+   * Les horaires hebdomadaires et les fermetures exceptionnelles.
+   *
+   * Elle prenait un corps NU — `@Body()` sans pipe, deux `unknown[]` recopiés
+   * dans un `$set`. Ces tableaux repartent vers le PUBLIC (`publicBySlug`, la
+   * vitrine, le tableau de menu, le calcul des créneaux de retrait) : un corps
+   * mal formé ne cassait pas un écran d'administration, il cassait la commande
+   * en ligne de tous les clients d'un restaurant. `runValidators` côté service
+   * refusait bien l'écriture hors schéma, mais tard et sans rien dire de la
+   * FORME d'un créneau — `{ open: '25:99' }` y passait.
+   */
   @Roles('owner', 'gerant')
   @Patch('tenants/me/hours')
   updateHours(
     @TenantId() tenantId: string,
-    @Body() body: { hours: unknown[]; closures?: unknown[] },
+    @Body(zod(TenantHoursUpdateSchema)) body: TenantHoursUpdate,
   ) {
-    return this.tenants.updateHours(tenantId, body.hours, body.closures);
+    return this.tenants.updateHours(tenantId, body);
   }
 
   @Public()

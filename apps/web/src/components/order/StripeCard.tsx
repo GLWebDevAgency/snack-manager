@@ -13,7 +13,8 @@
  * `PaymentIntent` confirmé côté Stripe.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { fallbackDe, TYPE_PAIRS, type Brand } from "@sm/contracts";
 import { Banner, PrimaryAction, Spinner } from "./primitives";
 
 // ─── Surface minimale de Stripe.js réellement utilisée ───
@@ -76,24 +77,76 @@ function loadStripeJs(): Promise<void> {
   return loader;
 }
 
-/** Habillage sombre de l’iframe Stripe, aligné sur la charte du tunnel. */
-function appearance(accent: string) {
+/**
+ * Habillage du champ de carte — les valeurs RÉSOLUES du masque, pas des jetons.
+ *
+ * Le Payment Element vit dans une iframe servie par Stripe : notre feuille de
+ * style ne l'atteint pas, `var(--cf-*)` n'y résout rien. Il faut donc lui
+ * passer des couleurs déjà calculées — c'est le seul endroit du produit où le
+ * masque sort en valeurs plates.
+ *
+ * Et la police : Stripe ne peut pas charger nos familles `next/font` (elles
+ * sont servies depuis notre origine, sous des noms hachés). On lui donne la
+ * PILE DE REPLI de la famille de corps — le champ carte garde donc la police
+ * système du genre choisi, ce qui est assumé : mieux vaut un repli cohérent
+ * qu'une police qui ne chargera jamais.
+ */
+export type ApparenceStripe = ReturnType<typeof apparenceStripeDe>;
+
+/**
+ * `vars` ARRIVE, elle n'est pas recalculée.
+ *
+ * Cette fonction appelait `resoudreMarque(brand)` alors que la vitrine venait
+ * de le faire à la ligne d'avant via `styleDuMasque()` : deux résolutions
+ * complètes — une trentaine de mélanges et jusqu'à quatre recherches d'AA
+ * chacune — pour le même objet, dans le même rendu. Le commentaire voisin
+ * refusait pourtant « de payer une palette pour lire une police ». Les
+ * variables déjà posées sur la racine suffisent ; il ne reste ici que le
+ * `mode` et la paire typographique, qui se lisent sur la marque sans rien
+ * résoudre.
+ */
+export function apparenceStripeDe(masque: CSSProperties, brand: Brand) {
+  /*
+   * `styleDuMasque()` rend la carte des `--cf-*` — c'est son contenu réel ;
+   * elle n'est typée `CSSProperties` que parce que React exige ce type pour
+   * un attribut `style` (le même transtypage y figure déjà). On la relit donc
+   * telle qu'elle est, plutôt que de refaire la résolution pour cinq valeurs.
+   */
+  const vars = masque as Record<string, string | undefined>;
+  const accent = vars["--cf-accent"] ?? "";
+  const focus = vars["--cf-focus"] ?? accent;
   return {
-    theme: "night",
+    // Le thème de départ décide des valeurs que Stripe ne reçoit pas de nous
+    // (icônes, états désactivés) : sur un masque clair, « night » les
+    // laisserait blanches sur crème.
+    theme: brand.mode === "dark" ? "night" : "stripe",
     variables: {
       colorPrimary: accent,
-      colorBackground: "#1a1a1a",
-      colorText: "#ffffff",
-      colorTextSecondary: "#999999",
-      colorDanger: "#c94b3f",
-      fontFamily: "Inter, system-ui, sans-serif",
-      borderRadius: "10px",
+      colorBackground: vars["--cf-surface"] ?? "",
+      colorText: vars["--cf-text"] ?? "",
+      colorTextSecondary: vars["--cf-mut"] ?? "",
+      colorDanger: vars["--cf-red"] ?? "",
+      fontFamily: fallbackDe(TYPE_PAIRS[brand.type.pair].body),
+      borderRadius: vars["--cf-r-md"] ?? "",
       spacingUnit: "4px",
     },
     rules: {
-      ".Input": { border: "1px solid rgba(255,255,255,0.1)", boxShadow: "none" },
-      ".Input:focus": { border: `1px solid ${accent}`, boxShadow: "none" },
-      ".Label": { color: "#999999", fontWeight: "600" },
+      ".Input": { border: `1px solid ${vars["--cf-line"] ?? ""}`, boxShadow: "none" },
+      /*
+        LE CHAMP DE CARTE GARDE UN FOCUS VISIBLE.
+        `boxShadow: 'none'` supprimait l'anneau que Stripe pose par défaut, et
+        le remplaçait par un filet d'accent de 1 px — 2,88:1 sur la surface de
+        Soleil, sous le 3:1 de 1.4.11/2.4.13. Dans une iframe que notre feuille
+        de style n'atteint pas, le client ne voyait plus où il tapait son
+        numéro. `--cf-focus` est le seul jeton de marque qu'un résolveur
+        garantisse OPAQUE et ≥ 3:1 sur le fond comme sur la carte : il porte
+        donc le filet ET l'anneau, comme `focus:border-focus` ailleurs.
+      */
+      ".Input:focus": {
+        border: `1px solid ${focus}`,
+        boxShadow: `0 0 0 2px ${focus}`,
+      },
+      ".Label": { color: vars["--cf-mut"] ?? "", fontWeight: "600" },
     },
   };
 }
@@ -103,7 +156,8 @@ export function StripeCard({
   clientSecret,
   stripeAccount,
   amount,
-  accent,
+  apparence,
+  prixMono,
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
@@ -119,7 +173,15 @@ export function StripeCard({
    */
   stripeAccount: string;
   amount: number;
-  accent: string;
+  /**
+   * Le masque, déjà résolu par la vitrine. Il arrive en propriété — et non
+   * calculé ici — pour que sa référence soit stable : elle entre dans les
+   * dépendances de l'effet de montage, un objet neuf à chaque rendu
+   * démonterait et remonterait le champ de carte à chaque frappe.
+   */
+  apparence: ApparenceStripe;
+  /** Paire typographique du masque qui pose les prix en chasse fixe. */
+  prixMono: boolean;
   returnUrl: string;
   onPaid: () => void;
   /** Repli explicite : « je réglerai au comptoir ». */
@@ -143,10 +205,7 @@ export function StripeCard({
         const factory = window.Stripe;
         if (!factory) throw new Error("Stripe.js indisponible");
         const stripe = factory(publishableKey, { locale: "fr", stripeAccount });
-        const elements = stripe.elements({
-          clientSecret,
-          appearance: appearance(accent),
-        });
+        const elements = stripe.elements({ clientSecret, appearance: apparence });
         element = elements.create("payment", {
           layout: { type: "tabs", defaultCollapsed: false },
         });
@@ -167,7 +226,7 @@ export function StripeCard({
         /* démontage best-effort */
       }
     };
-  }, [publishableKey, clientSecret, stripeAccount, accent]);
+  }, [publishableKey, clientSecret, stripeAccount, apparence]);
 
   async function pay() {
     const stripe = stripeRef.current;
@@ -206,7 +265,7 @@ export function StripeCard({
           Votre commande est enregistrée : vous pourrez régler au comptoir au
           moment du retrait.
         </Banner>
-        <PrimaryAction icon="check" onClick={onGiveUp}>
+        <PrimaryAction icon="check" mono={prixMono} onClick={onGiveUp}>
           Continuer — je paie au comptoir
         </PrimaryAction>
       </div>
@@ -215,7 +274,7 @@ export function StripeCard({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-card border border-white/8 bg-surface2 p-3.5">
+      <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
           <p className="flex items-center gap-2.5 py-6 text-[14px] text-mut">
             <Spinner />
@@ -237,6 +296,7 @@ export function StripeCard({
         loading={paying}
         icon="check"
         amount={amount}
+        mono={prixMono}
       >
         Payer
       </PrimaryAction>
@@ -244,7 +304,7 @@ export function StripeCard({
       <button
         type="button"
         onClick={onGiveUp}
-        className="text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-200 hover:text-ink"
+        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
       >
         Je préfère régler au comptoir
       </button>

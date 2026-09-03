@@ -1,4 +1,6 @@
 import { z } from 'zod';
+// Import de valeur : `marque.ts` n'importe rien de `loyalty.ts`, pas de cycle.
+import { BrandSchema } from './marque';
 
 export const LOYALTY_MECHANISMS = ['points', 'stamps'] as const;
 export const LoyaltyMechanismSchema = z.enum(LOYALTY_MECHANISMS);
@@ -762,7 +764,17 @@ export type LoyaltyDashboard = z.infer<typeof LoyaltyDashboardSchema>;
 /** Vue minimale de la carte client : aucun téléphone ni identifiant interne exposé. */
 export const LoyaltyCustomerCardSchema = z
   .object({
-    restaurant: z.object({ slug: z.string(), name: z.string(), brandColor: z.string() }).strict(),
+    restaurant: z
+      .object({
+        slug: z.string(),
+        name: z.string(),
+        brandColor: z.string(),
+        // Toujours émis par l'API (`marqueEffective`, repli Nuit compris) :
+        // requis, comme le catalogue. Le rendre nullable « pour les fixtures »
+        // faisait porter au web un `null` qui n'existe pas en production.
+        brand: BrandSchema,
+      })
+      .strict(),
     program: z
       .object({
         name: z.string(),

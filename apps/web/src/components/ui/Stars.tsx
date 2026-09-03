@@ -1,6 +1,24 @@
 /**
- * Note en étoiles (spec backoffice §4.11) : remplies fill+stroke GOLD #c9a15a
- * (fixe, pas l'accent tenant), vides contour --cf-line 1.5.
+ * Note en étoiles (spec backoffice §4.11) — un `role="img"` dont le DESSIN
+ * porte l'information : combien d'étoiles sur cinq. À ce titre il relève de
+ * WCAG 1.4.11 (3:1), sur la page comme sur la carte.
+ *
+ * ── POURQUOI NI LE LAITON NI LE FILET ─────────────────────────────────────
+ *
+ * Les étoiles étaient peintes en `--cf-gold`, le laiton FIXE de Snack Manager
+ * — un jeton que le résolveur n'émet pas, donc jamais repeint par le masque.
+ * Sur la vitrine d'un restaurant clair, ce laiton posé sur la page mesure 2,04
+ * (Soleil), 2,10 (Brasserie), 2,18 (Atelier), 2,41 (Marché) : notre couleur de
+ * marque, illisible, sur la page de quelqu'un d'autre.
+ * Les étoiles vides suivaient `--cf-line`, l'encre à 12 % : 1,2:1, invisibles.
+ * On ne pouvait donc pas lire « 3 sur 5 » — seulement « 3 ».
+ *
+ * Remplies → `--cf-amber-t`, la teinte AMBRE que le résolveur ajuste par mode
+ * et vérifie sur la page comme sur la carte (mesuré 5,01 à 7,85 sur les six
+ * directions). Elle reste une sémantique fixe : la note n'est pas l'accent du
+ * restaurant, et un 2/5 en couleur de marque serait un contresens.
+ * Vides → `--cf-mut`, l'encre atténuée, seule nuance sortie du résolveur déjà
+ * ramenée au plancher AA sur tous les fonds (mesuré 6,17 à 8,47).
  */
 export function Stars({
   value,
@@ -29,8 +47,8 @@ export function Stars({
             width={size}
             height={size}
             aria-hidden="true"
-            fill={on ? "var(--cf-gold)" : "none"}
-            stroke={on ? "var(--cf-gold)" : "var(--cf-line)"}
+            fill={on ? "var(--cf-amber-t)" : "none"}
+            stroke={on ? "var(--cf-amber-t)" : "var(--cf-mut)"}
             strokeWidth={on ? 1 : 1.5}
             strokeLinejoin="round"
           >

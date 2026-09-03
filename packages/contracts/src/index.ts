@@ -19,6 +19,7 @@ export * from './encaissement';
 export * from './security';
 export * from './loyalty';
 export * from './loyalty-public';
+export * from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

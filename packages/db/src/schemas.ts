@@ -1,7 +1,15 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import {
+  ADMIN_LOG_ACTIONS,
+  BRAND_MODES,
+  BRAND_MOTIONS,
+  BRAND_SHAPES,
+  HEX,
+  LAITON,
   PLATFORM_SETTINGS_ID,
+  PRESET_KEYS,
   SM_INVOICE_VAT,
+  TYPE_PAIR_KEYS,
   isPlatformLogAction,
   type SocialNetwork,
 } from '@sm/contracts';
@@ -44,12 +52,97 @@ function hidePrivateOrderFields(
   return returned;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Le masque d'identité — cinq rôles stockés, tout le reste dérivé
+// (packages/contracts/src/marque.ts). `null` tant que le tenant n'a pas
+// été repris : le résolveur retombe alors sur Nuit + brandColor + logoUrl.
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * DÉFENSE EN PROFONDEUR — la base refuse aussi ce que le contrat refuse.
+ *
+ * Le contrat (`marque.ts`) rejette déjà `bleu` et `javascript:…` sur toutes les
+ * routes. Mais `admin-cli`, un shell mongo et les scripts à venir écrivent SANS
+ * zod : sans contrainte ici, la base accepterait une couleur illisible ou un
+ * `src` dangereux — que le repli Nuit masquerait ensuite à chaque lecture, donc
+ * sans que personne le voie. `HEX` est importé du contrat ; la règle d'image y
+ * est plus riche (`ImageUrl` : URL, 500 caractères, http(s)) mais n'y est pas
+ * exportée, et la base en garde la moitié qui compte à l'écriture. Le jour où
+ * le contrat l'exporte, cette constante est le seul point à supprimer.
+ *
+ * Ces validateurs ne s'exécutent que sur un document Mongoose (`save`,
+ * `validateSync`) et sur un `updateOne` lancé avec `runValidators`.
+ */
+const IMAGE_URL = /^https?:\/\//i;
+const COULEUR = [HEX, 'Couleur attendue au format #rrggbb'] as const;
+const IMAGE = {
+  match: [IMAGE_URL, 'URL http(s) attendue'] as const,
+  maxlength: 500,
+};
+
+const LogoPair = new Schema(
+  {
+    light: { type: String, default: null, ...IMAGE },
+    dark: { type: String, default: null, ...IMAGE },
+  },
+  { _id: false },
+);
+
+export const BrandSub = new Schema(
+  {
+    mode: { type: String, enum: [...BRAND_MODES], required: true },
+    palette: {
+      type: new Schema(
+        {
+          ground: { type: String, required: true, match: COULEUR },
+          surface: { type: String, required: true, match: COULEUR },
+          ink: { type: String, required: true, match: COULEUR },
+          accent: { type: String, required: true, match: COULEUR },
+          onAccent: { type: String, required: true, match: COULEUR },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    type: {
+      type: new Schema(
+        { pair: { type: String, enum: [...TYPE_PAIR_KEYS], required: true } },
+        { _id: false },
+      ),
+      required: true,
+    },
+    shape: { type: String, enum: [...BRAND_SHAPES], required: true },
+    motion: { type: String, enum: [...BRAND_MOTIONS], required: true },
+    logo: {
+      type: new Schema(
+        {
+          mark: { type: LogoPair, required: true },
+          lockup: { type: LogoPair, required: true },
+        },
+        { _id: false },
+      ),
+      required: true,
+    },
+    hero: { type: String, default: null, ...IMAGE },
+    preset: {
+      type: String,
+      enum: [...PRESET_KEYS, null],
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 export const TenantSchema = new Schema(
   {
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     logoUrl: { type: String, default: null },
-    brandColor: { type: String, default: '#c9a15a' },
+    // Le laiton vient du CONTRAT : c'est la même constante que le repli du
+    // masque (`marqueDeRepli`) et que l'accent de la direction Nuit. Recopiée
+    // ici, elle divergeait le jour où la marque changeait de teinte.
+    brandColor: { type: String, default: LAITON },
+    brand: { type: BrandSub, default: null },
     address: { type: String, default: '' },
     phones: { type: [String], default: [] },
     /**
@@ -1311,29 +1404,9 @@ export const AdminLogSchema = new Schema(
     actorEmail: { type: String, default: '' },
     action: {
       type: String,
-      // RECOPIE de `ADMIN_LOG_ACTIONS` (@sm/contracts) : toute action ajoutée
-      // là-bas doit l'être ici, sinon l'écriture tombe en ValidationError APRÈS
-      // la mutation qu'elle devait tracer. `admin.test.ts` épingle l'égalité
-      // des deux listes.
-      enum: [
-        'tenant.create',
-        'tenant.suspend',
-        'tenant.reactivate',
-        'tenant.churn',
-        'tenant.plan_change',
-        'tenant.note',
-        'tenant.detail_view',
-        'tenant.owner_reset',
-        'device.revoke',
-        'screen.revoke',
-        'invoice.issue',
-        'invoice.send',
-        'invoice.remind',
-        'invoice.pay',
-        'invoice.cancel',
-        'invoice.credit',
-        'platform.social_change',
-      ],
+      // La SOURCE, plus une recopie : une action ajoutée à `ADMIN_LOG_ACTIONS`
+      // (@sm/contracts) existe ici sans geste supplémentaire.
+      enum: [...ADMIN_LOG_ACTIONS],
       required: true,
     },
     /**

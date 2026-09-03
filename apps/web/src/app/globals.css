@@ -4,10 +4,28 @@
  * Tokens EFFECTIFS « SM Dark » — valeurs littérales des maquettes
  * (docs/specs/design-system.md §2, docs/specs/backoffice-restaurant.md §2).
  *
- * Marque grise : SEUL --cf-accent (+ --cf-on-accent) change par tenant — il est
- * injecté au runtime par le layout admin (fetch /tenants/me → style sur <html>).
- * Les couleurs FONCTIONNELLES sont fixes sur tous les comptes :
- *   vert #3fae4a = prêt/positif · rouge #c94b3f = urgent/alerte · ambre #e0973f = attente.
+ * ═══ DEUX PORTÉES, ET IL FAUT SAVOIR LAQUELLE ON LIT ═══
+ *
+ * 1. ADMIN / CRM / MARKETING — la marque grise de Snack Manager. Ce `:root`
+ *    EST la peau : noirs stratifiés, encre blanche, Inter. Seuls `--cf-accent`
+ *    et `--cf-on-accent` changent par tenant, injectés au runtime par le
+ *    layout admin (fetch /tenants/me → style sur <html>).
+ *
+ * 2. SURFACES CLIENT (vitrine, tunnel, suivi, fidélité) — le MASQUE
+ *    D'IDENTITÉ. `resoudreMarque()` (packages/contracts/src/marque.ts) dérive
+ *    la cinquantaine de `--cf-*` / `--sm-*` de ce fichier depuis les cinq
+ *    rôles stockés du restaurant, et `styleDuMasque()` les surcharge sur la
+ *    racine de la surface : tout le sous-arbre change de peau, y compris le
+ *    fond du document (voir `components/masque/FeuilleDuMasque.tsx`). Les
+ *    valeurs ci-dessous n'y sont donc plus qu'un repli — celui de l'admin.
+ *
+ * Le jeu de clés des deux portées est ÉPINGLÉ l'un sur l'autre par
+ * `components/masque/styleDuMasque.test.ts` : une variable déclarée ici sans
+ * être émise par le résolveur (ou l'inverse) fait échouer le test.
+ *
+ * Les couleurs FONCTIONNELLES gardent leur SENS sur les deux portées (le
+ * résolveur n'en change que la valeur, par mode) :
+ *   vert = prêt/positif · rouge = urgent/alerte · ambre = attente.
  */
 :root {
   /* ── Neutres (fixes) ── */
@@ -16,14 +34,34 @@
   --cf-surface-2: #1a1a1a;
   --cf-text: #fff;
   --cf-mut: #999;
+  /*
+   * L'encre posable SUR l'encre atténuée (pastille `bg-mut`). Le blanc y
+   * tombait à 2,85:1 ; le résolveur choisit ce noir ou ce blanc par contraste
+   * réel, jamais par un seuil de luminance.
+   */
+  --cf-on-mut: #000;
+  /*
+   * ── DEUX FILETS, ET LA DIFFÉRENCE EST L'INFORMATION ──
+   *
+   * `--cf-line` / `--cf-line-2` sont DÉCORATIFS : séparateurs de listes,
+   * contours de carte, traits de section. Rien n'y est un état, donc aucun
+   * plancher de contraste à tenir — une opacité suffit et doit rester légère.
+   *
+   * `--cf-line-firm` est l'autre moitié : la limite d'un CONTRÔLE et de ses
+   * états (case à cocher non cochée, bouton radio, bord d'un champ, onglet
+   * courant). WCAG 1.4.11 y exige 3:1, et une opacité ne le garantit sur aucun
+   * fond — d'où une valeur OPAQUE, que le résolveur ramène à 3:1 sur la page,
+   * la carte et la tuile de chaque restaurant. Ici, la marque grise : #666
+   * mesure 3,03:1 sur #1a1a1a, 3,29 sur #111, 3,66 sur #000.
+   */
   --cf-line: rgba(255, 255, 255, 0.1);
   --cf-line-2: rgba(255, 255, 255, 0.06);
+  --cf-line-firm: #666;
   --cf-fill: #1a1a1a;
   --cf-on-fill: #fff;
-  --cf-btn-dark: #262626;
+  --cf-btn: #262626;
   --cf-surface-3: rgba(255, 255, 255, 0.03);
   --cf-surface-6: rgba(255, 255, 255, 0.06);
-  --cf-white-50: rgba(255, 255, 255, 0.5);
 
   /*
    * ── Accent tenant (VARIABLE — remplacé au runtime par le layout admin) ──
@@ -34,6 +72,32 @@
   --cf-accent: #c9a15a;
   --cf-accent-hover: #e0b96f;
   --cf-on-accent: #12100d;
+
+  /* ── Masque d'identité : dérivés que le résolveur surcharge par tenant ── */
+  --cf-accent-ink: #dbc191;
+  --cf-accent-wash: rgba(201, 161, 90, 0.12);
+  /*
+   * L'anneau de focus (1.4.11, 2.4.13) : OPAQUE. À 60 % d'alpha, composé sur
+   * le fond d'un masque clair, il tombait à 1,75:1 — un focus qu'on ne voit
+   * pas. Le résolveur surcharge cette valeur par tenant, ramenée à 3:1 sur le
+   * fond ET sur la carte ; ici, le laiton de la marque grise (7,6:1 sur #111).
+   */
+  --cf-focus: #c9a15a;
+  /*
+   * La piste d'une jauge de fidélité. Seul jeton du masque jugé contre
+   * l'ACCENT et non contre un fond : ce qu'on doit voir d'une jauge, c'est où
+   * son remplissage — un aplat d'accent — s'arrête. Le résolveur garantit 3:1
+   * contre l'accent de chaque restaurant ; ici, 6,05:1 contre le laiton.
+   */
+  --cf-gauge-track: #292929;
+  --cf-on-green: #000;
+  --cf-on-red: #fff;
+  --cf-on-amber: #000;
+  /* Laiton FIXE (jamais l'accent tenant) : son texte est fixe aussi. */
+  --cf-on-gold: #1c1612;
+  --cf-font-display: var(--font-inter), system-ui, sans-serif;
+  --cf-font-body: var(--font-inter), system-ui, sans-serif;
+  --cf-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* ── Fonctionnelles (FIXES tous comptes — jamais l'accent) ── */
   --cf-gold: #c9a15a;
@@ -75,14 +139,29 @@
     linear-gradient(0deg, #262626, #262626);
 
   /* ── Ombres ── */
-  --cf-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.38);
   --cf-shadow-2: 0 2px 0 rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.45);
   --cf-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.4);
   --cf-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.3), 0 10px 26px rgba(0, 0, 0, 0.32);
+  /* Lu par le seul back-office (ProgrammeForm) : jamais surchargé par un masque. */
   --cf-shadow-accent: 0 0 0 1px var(--cf-accent);
   /* Tiroir latéral : l'ombre porte la séparation, pas un filet blanc dur. */
   --cf-shadow-drawer: -1px 0 0 rgba(255, 255, 255, 0.08),
     -26px 0 60px rgba(0, 0, 0, 0.55);
+  /*
+   * Ombre d'un visuel DÉTOURÉ (`.sm-cut`, order.css) : `drop-shadow()` ne
+   * prend qu'UNE ombre, sans virgule — aucun des jetons composés ci-dessus
+   * n'y entre, d'où celui-ci. Le résolveur le repeint à l'encre du restaurant
+   * en mode clair ; ici, le noir de la marque grise.
+   */
+  --cf-shadow-cut: 0 6px 12px rgba(0, 0, 0, 0.6);
+  /*
+   * Voile des dialogues (modale, tiroir, feuille du tunnel). Il ASSOMBRIT
+   * toujours ce qu'il recouvre : le poser en `bg-bg/N` marchait sur la marque
+   * grise, sombre par nature, et éclaircissait la page sous un masque clair —
+   * la feuille flottait alors sur un blanc laiteux, sans hiérarchie. Le
+   * résolveur surcharge cette valeur par tenant (`--cf-scrim`).
+   */
+  --cf-scrim: rgba(0, 0, 0, 0.72);
 
   /* ── Rayons : 8 / 10 / 12 / 16 / 20 / pilule ── */
   --cf-r-xs: 8px;
@@ -94,27 +173,51 @@
 
   /* ── Motion ── */
   --sm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Retour tactile (DA §4) : perçu en moins de 100 ms, jamais la durée de base. */
+  --sm-t-snap: 0.08s;
   --sm-t-fast: 0.2s;
-  --sm-t-med: 0.45s;
+  /*
+   * Durée d'ENTRÉE — celle d'un tiroir, d'un panneau, d'une carte qui arrive.
+   * Elle valait 0,45 s alors que le résolveur n'émet jamais que 200 ms
+   * (masque « vif ») à 320 ms (masque « posé ») pour ce rôle : le back-office,
+   * qui ne porte pas de masque et retombe donc sur ce repli, ouvrait son
+   * `Drawer` plus d'une fois et demie plus lentement que n'importe quel
+   * restaurant. 0,28 s tombe dans la fourchette du résolveur, et c'est déjà la
+   * durée que les tiroirs voisins du back-office écrivent à la main
+   * (`app/sm/parts.tsx`, `app/sm/mobile.tsx` ; 0,26 s pour `app/admin`) : le
+   * repli ne fait que dire une fois ce que ces trois-là répètent.
+   */
+  --sm-t-med: 0.28s;
   --sm-t-slow: 0.6s;
 }
 
 @theme inline {
-  /* Couleurs — mêmes noms que les utilitaires déjà en usage (bg-surface, text-ink2…) */
+  /* Couleurs — mêmes noms que les utilitaires déjà en usage (bg-surface, text-mut…) */
   --color-bg: var(--cf-bg);
   --color-surface: var(--cf-surface);
   --color-surface2: var(--cf-surface-2);
   --color-ink: var(--cf-text);
-  --color-ink2: var(--cf-mut);
   --color-mut: var(--cf-mut);
   --color-line: var(--cf-line);
   --color-line2: var(--cf-line-2);
+  /*
+   * `border-linefirm` — le filet des CONTRÔLES (case, radio, champ, onglet
+   * courant), garanti 3:1 par le résolveur. `border-line` reste celui des
+   * séparateurs et des contours de carte : le seuil de 1.4.11 ne s'applique
+   * qu'à ce qui porte une information, et l'imposer partout cernerait chaque
+   * carte du produit d'un gris franc.
+   */
+  --color-linefirm: var(--cf-line-firm);
   --color-fill: var(--cf-fill);
   --color-onfill: var(--cf-on-fill);
-  --color-btndark: var(--cf-btn-dark);
+  --color-btn: var(--cf-btn);
   --color-accent: var(--cf-accent);
   --color-accenthover: var(--cf-accent-hover);
   --color-onaccent: var(--cf-on-accent);
+  /* Le libellé d'une pastille `bg-mut` — voir `--cf-on-mut`. */
+  --color-onmut: var(--cf-on-mut);
+  /* `bg-gaugetrack` — la piste d'une jauge, garantie 3:1 contre son remplissage. */
+  --color-gaugetrack: var(--cf-gauge-track);
   --color-gold: var(--cf-gold);
   --color-ok: var(--cf-green);
   --color-alert: var(--cf-red);
@@ -122,6 +225,48 @@
   --color-okt: var(--cf-green-t);
   --color-alertt: var(--cf-red-t);
   --color-prept: var(--cf-amber-t);
+
+  /* Masque d'identité — mêmes conventions de nommage que ci-dessus */
+  --color-accentink: var(--cf-accent-ink);
+  --color-accentwash: var(--cf-accent-wash);
+  /*
+   * `border-focus`, `outline-focus` — l'anneau et la bordure de focus. Le
+   * jeton est OPAQUE et ramené à 3:1 sur le fond comme sur la carte par le
+   * résolveur : c'est la seule teinte de marque qui tienne 1.4.11 / 2.4.13.
+   * `focus:border-accent` ne le tenait pas (2,55:1 sur Soleil).
+   */
+  --color-focus: var(--cf-focus);
+  --color-scrim: var(--cf-scrim);
+  --color-onok: var(--cf-on-green);
+  --color-onalert: var(--cf-on-red);
+  --color-onprep: var(--cf-on-amber);
+  --color-ongold: var(--cf-on-gold);
+  /*
+   * L'ACCENT POSÉ EN TEXTE — l'unique cas, et il est nommé.
+   *
+   * `text-accent` est interdit par le garde (`couleurs-brutes.test.ts`) :
+   * l'accent est dessiné pour être un APLAT, et sur le fond il tombe à
+   * 2,68:1. La coche de confirmation du tunnel est l'exception : son disque
+   * est peint en `on-accent`, si bien que la coche rejoue le couple INVERSE
+   * `onAccent/accent` — celui que `contraste()` vérifie sur les six
+   * directions. Ce nom dit la condition d'emploi ; l'écrire
+   * `text-[color:var(--cf-accent)]` la taisait, et le garde ne voyait rien.
+   */
+  --color-accentonaccent: var(--cf-accent);
+  --font-display: var(--cf-font-display);
+  --font-body: var(--cf-font-body);
+  --font-mono: var(--cf-font-mono);
+  /*
+   * `--transition-duration-*` et NON `--duration-*` : c'est l'espace de noms
+   * que Tailwind v4 interroge pour l'utilitaire `duration-*`. Écrites
+   * `--duration-*`, les trois durées étaient des déclarations MORTES —
+   * `duration-fast` ne produisait aucune règle, et la transition retombait
+   * sur les 150 ms par défaut du framework. Vérifié dans le CSS compilé.
+   */
+  --transition-duration-snap: var(--sm-t-snap);
+  --transition-duration-fast: var(--sm-t-fast);
+  --transition-duration-med: var(--sm-t-med);
+  --transition-duration-slow: var(--sm-t-slow);
 
   --font-sans: var(--font-inter), system-ui, sans-serif;
 
@@ -138,10 +283,49 @@
   --shadow-soft: var(--cf-shadow-soft);
   --shadow-deep: var(--cf-shadow-2);
 
-  /* Motion (ease-sm, animate-pop, animate-rise) — opacité + transformation seules */
+  /*
+   * Motion (ease-sm, animate-pop, animate-rise) — opacité + transformation
+   * seules. Les durées sont LUES dans le profil de mouvement du masque
+   * (`--sm-t-*`, posés par le résolveur) et non écrites en dur : un masque
+   * « vif » entre en 140 ms, un masque « posé » en 240 — sinon le choix du
+   * restaurateur s'arrêtait à la porte de la première carte qui apparaît.
+   */
   --ease-sm: var(--sm-ease);
-  --animate-pop: cf-pop 0.22s var(--sm-ease) both;
-  --animate-rise: cf-rise 0.32s var(--sm-ease) both;
+  --animate-pop: cf-pop var(--sm-t-fast) var(--sm-ease) both;
+  --animate-rise: cf-rise var(--sm-t-med) var(--sm-ease) both;
+  /*
+   * Les deux entrées de dialogue, nommées plutôt qu'écrites à la main.
+   *
+   * Modal et Drawer portaient `animate-[cf-fade_…_var(--sm-ease)_both]` : une
+   * animation composée en clair dans une valeur arbitraire, recopiée à trois
+   * endroits, et que le garde `couleurs-brutes` ne pouvait pas juger (son
+   * motif surveille `duration-<n>`, jamais la syntaxe `animate-[…]`). Deux
+   * jetons de plus, et la forme entière — image, durée, courbe — se déclare
+   * une fois. Le voile prend la durée de BASE, le panneau celle d'ENTRÉE :
+   * c'est le rôle que le résolveur donne à `--sm-t-fast` et `--sm-t-med`.
+   */
+  --animate-fade: cf-fade var(--sm-t-fast) var(--sm-ease) both;
+  --animate-slidein: cf-slide-in var(--sm-t-med) var(--sm-ease) both;
+}
+
+/*
+ * ── LA LARGEUR DE RÉFÉRENCE D'UNE CARTE PRODUIT ──
+ *
+ * `@theme` et non `@theme inline` : c'est la seule forme qui ÉMET la variable
+ * dans `:root`, et il faut qu'elle y soit pour que le minimum de piste de la
+ * grille (`minmax(min(100%, var(--container-carte)), 1fr)`) puisse la lire.
+ * Un `@theme inline` remplace le jeton par sa valeur dans les utilitaires
+ * générés et n'écrit rien : la piste aurait alors lu une variable inexistante.
+ *
+ * L'espace de noms `--container-*` est celui des requêtes de CONTENEUR de
+ * Tailwind v4 : il donne la variante `@carte:` en même temps que la variable.
+ * Les deux chiffres — le seuil auquel la carte se met en ligne et le minimum
+ * de piste de la grille — DOIVENT rester égaux, sans quoi la grille fabrique
+ * des colonnes que la carte refuse. Ils étaient écrits `17rem` cinq fois, avec
+ * un commentaire qui l'exigeait et rien qui le tienne.
+ */
+@theme {
+  --container-carte: 17rem;
 }
 
 @keyframes cf-pop {
@@ -189,64 +373,107 @@
   }
 }
 
-/* ── Polish global (spec design-system §7.4) ── */
+/*
+ * ── Polish global (spec design-system §7.4) ──
+ *
+ * ═══ POURQUOI TOUT CE BLOC EST DANS `@layer base` ═══
+ *
+ * Une règle écrite HORS `@layer` l'emporte sur TOUTE couche, quelle que soit
+ * sa spécificité — y compris sur la couche `utilities` de Tailwind v4. Les
+ * règles d'éléments ci-dessous étaient donc intouchables : `outline-none` sur
+ * le conteneur d'une modale (focus programmatique, aucun anneau attendu) et
+ * `focus-visible:outline-*` sur un titre étaient des déclarations MORTES, et
+ * les champs du tunnel cumulaient une bordure d'accent ET un contour.
+ *
+ * Dans `base` — la couche même du reset de Tailwind — elles redeviennent ce
+ * qu'elles doivent être : des DÉFAUTS d'élément, qu'un utilitaire surcharge.
+ * En échange, un `outline-none` retire vraiment l'anneau : là où il est posé,
+ * l'indicateur de focus doit être porté autrement (`focus:border-focus`, ≥ 3:1
+ * garanti par le résolveur — jamais `focus:border-accent`, à 2,55:1 sur
+ * Soleil).
+ *
+ * `html`/`body` restent aussi surchargeables par la feuille de document du
+ * masque, qui est hissée par React 19 et donc HORS couche
+ * (`components/masque/FeuilleDuMasque.tsx`).
+ */
+@layer base {
+  html {
+    color-scheme: dark;
+  }
 
-html {
-  color-scheme: dark;
+  body {
+    background: var(--cf-bg);
+    color: var(--cf-text);
+  }
+
+  ::selection {
+    background: var(--cf-accent);
+    color: var(--cf-on-accent);
+  }
+
+  input,
+  textarea {
+    caret-color: var(--cf-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--cf-focus);
+    outline-offset: 2px;
+  }
+
+  button,
+  a {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /*
+   * Scrollbars globales (10px) — L'ASCENSEUR SUIT L'ENCRE DU MASQUE.
+   *
+   * Il était peint en `rgba(255,255,255,.14)` : sur les quatre directions
+   * claires, du blanc sur crème, soit 1,00 à 1,02:1 — un ascenseur
+   * littéralement invisible, dans le tiroir, la modale, la feuille du tunnel
+   * et le scanner. `color-mix` sur `--cf-text` le fait suivre le mode, comme
+   * `.sm-viseur` le fait déjà pour le fond. Sur la marque grise
+   * (`--cf-text: #fff`), le rendu de l'admin est inchangé.
+   */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--cf-text) 14%, transparent);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
 }
 
-body {
-  background: var(--cf-bg);
-  color: var(--cf-text);
-}
-
-::selection {
-  background: var(--cf-accent);
-  color: var(--cf-on-accent);
-}
-
-input,
-textarea {
-  caret-color: var(--cf-accent);
-}
-
-:focus-visible {
-  outline: 2px solid var(--cf-accent-hover);
-  outline-offset: 2px;
-}
-
-button,
-a {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Scrollbars globales (10px) */
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 99px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-
-/* Scrollbar fine des zones de contenu (spec backoffice §3.4) */
+/*
+ * Scrollbar fine des zones de contenu (spec backoffice §3.4) — même encre.
+ *
+ * `.cf-scroll` est le corps défilant de la feuille du tunnel, des modales et
+ * du scanner : c'est là que le pouce blanc sur crème disparaissait le plus.
+ * Les deux propriétés (`scrollbar-color` standard et le pseudo-élément
+ * WebKit) sont teintées ensemble, sinon Firefox et Safari divergeaient.
+ *
+ * 20 % d'encre et non 14 % comme la barre globale : celle-ci est `thin`, donc
+ * deux fois moins large — à surface moindre, il faut plus de densité pour la
+ * même présence à l'œil.
+ */
 .cf-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: color-mix(in srgb, var(--cf-text) 20%, transparent) transparent;
 }
 .cf-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .cf-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--cf-text) 20%, transparent);
   border-radius: 8px;
   border: none;
   background-clip: border-box;
@@ -266,14 +493,20 @@ a {
  * Retour tactile (DA §4) — la réponse doit être perçue en moins de 100 ms.
  * L'ease `cubic-bezier(.2,.8,.2,1)` atteint ~92 % de la course à mi-durée :
  * 200 ms de transition = enfoncement ressenti sous les 100 ms.
+ *
+ * LA DURÉE VIENT DU MASQUE, comme la courbe. Elle était écrite `0.2s` en dur
+ * sur cinq propriétés à côté d'un `var(--sm-ease)` déjà tenant : le
+ * restaurateur qui choisit « vif » voyait sa courbe suivre et sa durée non —
+ * ses boutons s'enfonçaient au rythme de la brasserie d'à côté. Hors masque
+ * (l'admin), `--sm-t-fast` vaut justement 0,2 s : rien n'y change.
  */
 .cf-press {
   transition:
-    transform 0.2s var(--sm-ease),
-    background-color 0.2s var(--sm-ease),
-    border-color 0.2s var(--sm-ease),
-    opacity 0.2s var(--sm-ease),
-    color 0.2s var(--sm-ease);
+    transform var(--sm-t-fast) var(--sm-ease),
+    background-color var(--sm-t-fast) var(--sm-ease),
+    border-color var(--sm-t-fast) var(--sm-ease),
+    opacity var(--sm-t-fast) var(--sm-ease),
+    color var(--sm-t-fast) var(--sm-ease);
 }
 .cf-press:active:not(:disabled):not([aria-disabled="true"]) {
   transform: scale(0.97);
@@ -281,10 +514,10 @@ a {
 /* Variante « ligne » : une ligne pleine largeur ne se met pas à l'échelle. */
 .cf-press-row {
   transition:
-    transform 0.2s var(--sm-ease),
-    background-color 0.2s var(--sm-ease),
-    border-color 0.2s var(--sm-ease),
-    opacity 0.2s var(--sm-ease);
+    transform var(--sm-t-fast) var(--sm-ease),
+    background-color var(--sm-t-fast) var(--sm-ease),
+    border-color var(--sm-t-fast) var(--sm-ease),
+    opacity var(--sm-t-fast) var(--sm-ease);
 }
 .cf-press-row:active:not(:disabled) {
   transform: translateY(1px);
@@ -318,6 +551,38 @@ a {
   .cf-press-row:active {
     transform: none !important;
   }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * FIDÉLITÉ — LES DEUX SURFACES QUE LE MASQUE NE DOIT PAS REPEINDRE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Elles sont ici, en CSS et commentées, plutôt qu'en classes utilitaires :
+ * ce sont les seules exceptions du produit, et une exception se déclare une
+ * fois, au clair, au lieu de traîner en `bg-white` au milieu d'un composant
+ * où personne ne saura plus si elle est voulue.
+ */
+
+/*
+ * CADRE DU QR — lu par une caméra, pas par un œil.
+ *
+ * Le SVG n'emporte que 2 modules de marge (la norme en recommande 4) : ce
+ * cadre clair les complète. Sur une peau sombre, un cadre `bg-surface`
+ * réduirait la zone de silence à un liseré noir et ferait échouer des
+ * lecteurs — le blanc reste donc fixe, comme le QR lui-même.
+ */
+.sm-qr-frame {
+  background: #fff;
+}
+
+/*
+ * VISEUR DU SCANNER — le pourtour de la cible est assombri par une ombre
+ * géante. Sa teinte suit le FOND du masque : sur une peau crème, le voile est
+ * crème, jamais un carré noir posé au milieu d'une page ivoire.
+ */
+.sm-viseur {
+  box-shadow: 0 0 0 999px color-mix(in srgb, var(--cf-bg) 78%, transparent);
 }
 
 /*

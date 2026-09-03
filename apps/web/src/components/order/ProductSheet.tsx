@@ -21,7 +21,7 @@
  * les règles par variante (le nombre de viandes suit la taille du tacos).
  */
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import type { MenuGroup } from "./api";
@@ -42,11 +42,12 @@ import { euros } from "./helpers";
 const SUPPLEMENT_GROUP = "supplements";
 import {
   Badge,
-  Money,
   OptionChip,
   OptionRow,
   Plate,
   PrimaryAction,
+  Prix,
+  RadioGroup,
   SectionLabel,
   Segmented,
   Sheet,
@@ -84,13 +85,19 @@ export function ProductSheet({
   onSubmit,
   /** Commande suspendue : la configuration reste visible, l’ajout est bloqué. */
   blocked = false,
+  /** Paire typographique du masque — obligatoire, comme sur `MenuBoard`. */
+  prixMono,
 }: {
   draft: Draft | null;
   onChange: (next: Draft) => void;
   onClose: () => void;
   onSubmit: (line: CartLine) => void;
   blocked?: boolean;
+  prixMono: boolean;
 }) {
+  const noteId = useId();
+  const retraitsId = useId();
+  const supplementsId = useId();
   // Une copie figée survit à la fermeture le temps de l’animation de sortie
   // (motif « ajuster l’état pendant le rendu » de la doc React, pas un effet).
   const [snapshot, setSnapshot] = useState<Draft | null>(draft);
@@ -138,6 +145,7 @@ export function ProductSheet({
           />
           <div className="min-w-0 flex-1">
             <PrimaryAction
+              mono={prixMono}
               disabled={blocked || blocker !== null}
               amount={blocker || blocked ? undefined : unit * current.qty}
               icon={editing ? "check" : "cart"}
@@ -155,7 +163,7 @@ export function ProductSheet({
 
       <div className="px-4 pb-1 pt-4">
         <div className="flex items-start gap-3">
-          <h2 className="min-w-0 flex-1 text-[23px] font-extrabold leading-tight tracking-[-0.035em] text-ink">
+          <h2 className="font-display min-w-0 flex-1 text-[clamp(1.4375rem,1.25rem+0.8vw,1.75rem)] font-extrabold leading-tight tracking-[-0.035em] text-ink">
             {product.name}
           </h2>
           {product.isNew && (
@@ -165,12 +173,14 @@ export function ProductSheet({
           )}
         </div>
         <p className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-[16px] font-extrabold tabular-nums tracking-[-0.02em] text-ink">
-            {euros(base)}
-          </span>
+          <Prix
+            cents={base}
+            mono={prixMono}
+            className="text-[16px] font-extrabold tracking-[-0.02em] text-ink"
+          />
           {extras > 0 && (
-            <span className="text-[13px] font-semibold tabular-nums text-accent">
-              + {euros(extras)} d’options
+            <span className="text-[13px] font-semibold text-accentink">
+              + <Prix cents={extras} mono={prixMono} /> d’options
             </span>
           )}
         </p>
@@ -188,6 +198,7 @@ export function ProductSheet({
             <SectionLabel hint="obligatoire">Format</SectionLabel>
             <Segmented
               label="Format"
+              mono={prixMono}
               value={current.variantKey}
               onChange={(key) => onChange(setVariant(current, key))}
               options={product.variants.map((variant) => ({
@@ -205,6 +216,7 @@ export function ProductSheet({
             key={group.key}
             group={group}
             draft={current}
+            prixMono={prixMono}
             onChange={onChange}
           />
         ))}
@@ -215,6 +227,7 @@ export function ProductSheet({
             key={group.key}
             group={group}
             draft={current}
+            prixMono={prixMono}
             onChange={onChange}
           />
         ))}
@@ -226,8 +239,17 @@ export function ProductSheet({
 
             {product.removables.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                <SubLabel icon="minus">Ce que je retire</SubLabel>
-                <div className="flex flex-wrap gap-2">
+                <SubLabel id={retraitsId} icon="minus">
+                  Ce que je retire
+                </SubLabel>
+                {/* Les chips `aria-pressed` d'une même grappe forment un
+                    GROUPE, et il doit être nommé : sans lui, « sans oignons »
+                    se lisait sans qu'on sache de quel choix il relève. */}
+                <div
+                  role="group"
+                  aria-labelledby={retraitsId}
+                  className="flex flex-wrap gap-2"
+                >
                   <OptionChip
                     on={current.removed.length === 0}
                     onClick={() => onChange({ ...current, removed: [] })}
@@ -262,8 +284,14 @@ export function ProductSheet({
 
             {product.supplements.length > 0 && (
               <div className="flex flex-col gap-2.5">
-                <SubLabel icon="plus">Suppléments</SubLabel>
-                <div className="flex flex-wrap gap-2">
+                <SubLabel id={supplementsId} icon="plus">
+                  Suppléments
+                </SubLabel>
+                <div
+                  role="group"
+                  aria-labelledby={supplementsId}
+                  className="flex flex-wrap gap-2"
+                >
                   {product.supplements.map((sup) => {
                     const on = (current.picked[SUPPLEMENT_GROUP] ?? []).includes(sup.key);
                     return (
@@ -297,7 +325,7 @@ export function ProductSheet({
             {groups.extra.length > 0 && (
               <div className="flex flex-col gap-2.5">
                 <SubLabel icon="plus">Ce que j’ajoute</SubLabel>
-                <div className="overflow-hidden rounded-card border border-white/8 bg-white/[0.02]">
+                <div className="overflow-hidden rounded-card border border-ink/8 bg-ink/[0.02]">
                   {groups.extra.map((group) => (
                     <ExtraGroup
                       key={group.key}
@@ -315,14 +343,20 @@ export function ProductSheet({
 
         {/* ── Mot pour la cuisine ── */}
         <section className="flex flex-col gap-2.5">
-          <SectionLabel hint="facultatif">Un mot pour la cuisine</SectionLabel>
+          {/* Le titre de section NOMME le champ : sans `aria-labelledby`, ce
+              `<textarea>` n'avait aucun nom accessible (1.3.1, 4.1.2) — le
+              `<h3>` juste au-dessus ne lui était relié par rien. */}
+          <SectionLabel id={noteId} hint="facultatif">
+            Un mot pour la cuisine
+          </SectionLabel>
           <textarea
             value={current.note}
             onChange={(e) => onChange({ ...current, note: e.target.value })}
+            aria-labelledby={noteId}
             rows={2}
             maxLength={200}
             placeholder="Ex : bien cuit, sauce à part…"
-            className="w-full resize-none rounded-card border border-white/8 bg-white/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-200 ease-sm placeholder:text-mut/70 focus:border-accent"
+            className="w-full resize-none rounded-card border border-ink/8 bg-ink/5 px-3.5 py-3 text-[15px] text-ink outline-none transition-colors duration-fast ease-sm placeholder:text-mut focus:border-focus"
           />
         </section>
       </div>
@@ -334,17 +368,20 @@ export function ProductSheet({
 function SubLabel({
   children,
   icon,
+  id,
 }: {
   children: ReactNode;
   icon: "plus" | "minus";
+  /** Nomme la grappe de chips qui suit (`aria-labelledby`). */
+  id?: string;
 }) {
   return (
-    <p className="flex items-center gap-2 text-[13px] font-bold text-ink">
+    <p id={id} className="flex items-center gap-2 text-[13px] font-bold text-ink">
       <span
         aria-hidden
         className={cx(
           "grid size-5 place-items-center rounded-full",
-          icon === "plus" ? "bg-accent text-onaccent" : "bg-white/12 text-ink",
+          icon === "plus" ? "bg-accent text-onaccent" : "bg-ink/12 text-ink",
         )}
       >
         <Icon name={icon} size={12} stroke={3} />
@@ -385,9 +422,9 @@ function ProductHero({
   return (
     <div
       aria-hidden
-      className="sm-grain relative h-[112px] overflow-hidden bg-[linear-gradient(180deg,#1a1a1a,#0d0d0d)]"
+      className="sm-grain relative h-[112px] overflow-hidden bg-[linear-gradient(180deg,var(--cf-surface-2),var(--cf-bg))]"
     >
-      <span className="sm-ghost absolute -left-2 top-1/2 -translate-y-1/2 text-[64px] font-black">
+      <span className="sm-ghost font-display absolute -left-2 top-1/2 -translate-y-1/2 text-[clamp(3.25rem,2.6rem+2vw,4.5rem)] font-black">
         {name}
       </span>
       <span className="absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,transparent,var(--cf-accent),transparent)] opacity-60" />
@@ -403,12 +440,15 @@ function ProductHero({
 function GroupSection({
   group,
   draft,
+  prixMono,
   onChange,
 }: {
   group: MenuGroup;
   draft: Draft;
+  prixMono: boolean;
   onChange: (next: Draft) => void;
 }) {
+  const titreId = useId();
   const picked = draft.picked[group.key] ?? [];
   const { min, max } = groupRules(group, draft.variantKey);
   // Plafond atteint : seul un groupe à choix MULTIPLE grise les choix restants.
@@ -434,6 +474,7 @@ function GroupSection({
   return (
     <section className="flex flex-col gap-2.5">
       <SectionLabel
+        id={titreId}
         hint={
           <span className={cx("tabular-nums", !satisfied && "text-alertt")}>{hint}</span>
         }
@@ -444,6 +485,7 @@ function GroupSection({
       {asSegments ? (
         <Segmented
           label={group.name}
+          mono={prixMono}
           value={picked[0] ?? null}
           onChange={(key) => onChange(toggleChoice(draft, group, key))}
           options={group.choices.map((choice) => {
@@ -456,7 +498,10 @@ function GroupSection({
           })}
         />
       ) : (
-        <div className="flex flex-wrap gap-2">
+        // Le groupe est NOMMÉ par son intitulé (« Sauces 1/2 ») : sans lui, un
+        // lecteur d'écran annonçait « Ketchup, non pressé » sans jamais dire à
+        // quel choix la chip appartenait.
+        <div role="group" aria-labelledby={titreId} className="flex flex-wrap gap-2">
           {group.choices.map((choice) => {
             const on = picked.includes(choice.key);
             return (
@@ -476,7 +521,9 @@ function GroupSection({
 
       {capped && (
         <p className="flex items-center gap-1.5 text-[12.5px] text-mut">
-          <Icon name="check" size={13} className="text-ok" />
+          {/* `okt`, la teinte TEXTE du vert : `ok` est un aplat, il ne tient
+              pas 3:1 sur la surface de la feuille. */}
+          <Icon name="check" size={13} className="text-okt" />
           Sélection complète — décochez pour changer.
         </p>
       )}
@@ -505,6 +552,7 @@ function ExtraGroup({
   /** Plusieurs groupes de suppléments : on rappelle lequel. */
   showName: boolean;
 }) {
+  const groupeId = useId();
   const [expanded, setExpanded] = useState(false);
   const picked = draft.picked[group.key] ?? [];
   const { max } = groupRules(group, draft.variantKey);
@@ -521,31 +569,48 @@ function ExtraGroup({
         );
   const hidden = group.choices.length - shown.length;
 
+  const radio = single && group.choices.length > 1;
+  /*
+   * Un `role="radio"` doit vivre dans un `radiogroup` — ces lignes n'en
+   * avaient aucun. `RadioGroup` le pose ET rend les flèches opérantes ; le
+   * tabindex tournant se calcule ici, seul endroit qui voie tout le groupe :
+   * la ligne cochée prend la halte de tabulation, ou la première quand rien
+   * n'est encore choisi (sinon le groupe devenait inatteignable au clavier).
+   */
+  const lignes = shown.map((choice, i) => {
+    const on = picked.includes(choice.key);
+    return (
+      <OptionRow
+        key={choice.key}
+        on={on}
+        radio={radio}
+        tabIndex={on || (picked.length === 0 && i === 0) ? 0 : -1}
+        disabled={!on && capped}
+        title={choice.name}
+        price={choicePrice(group, choice.key, draft.variantKey)}
+        onClick={() => onChange(toggleChoice(draft, group, choice.key))}
+      />
+    );
+  });
+
   return (
-    <div className="border-b border-white/6 px-3.5 last:border-b-0">
+    <div className="border-b border-ink/6 px-3.5 last:border-b-0">
       {showName && (
-        <p className="pt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
+        <p id={groupeId} className="pt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-mut">
           {group.name}
         </p>
       )}
-      {shown.map((choice) => {
-        const on = picked.includes(choice.key);
-        return (
-          <OptionRow
-            key={choice.key}
-            on={on}
-            radio={single && group.choices.length > 1}
-            disabled={!on && capped}
-            title={choice.name}
-            price={choicePrice(group, choice.key, draft.variantKey)}
-            onClick={() => onChange(toggleChoice(draft, group, choice.key))}
-          />
-        );
-      })}
+      {radio ? (
+        <RadioGroup label={showName ? undefined : group.name} labelledBy={showName ? groupeId : undefined}>
+          {lignes}
+        </RadioGroup>
+      ) : (
+        lignes
+      )}
       {foldable && hidden > 0 && (
         <Tap
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-accent"
+          className="flex min-h-11 w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-accentink"
         >
           Voir les {hidden} autres
           <Icon name="arrow" size={13} stroke={2.6} className="rotate-90" />
@@ -554,7 +619,7 @@ function ExtraGroup({
       {foldable && expanded && (
         <Tap
           onClick={() => setExpanded(false)}
-          className="flex w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-mut hover:text-ink"
+          className="flex min-h-11 w-full items-center justify-center gap-1.5 py-3 text-[13px] font-bold text-mut hover:text-ink"
         >
           Réduire
           <Icon name="arrow" size={13} stroke={2.6} className="-rotate-90" />
@@ -564,7 +629,3 @@ function ExtraGroup({
   );
 }
 
-/** Total unitaire réutilisable (récap panier). */
-export function UnitPrice({ cents }: { cents: number }) {
-  return <Money cents={cents} className="text-[15px]" />;
-}
