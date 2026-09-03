@@ -46,8 +46,26 @@ describe("application fidélité installable", () => {
       theme_color: "#f6ebd9",
       background_color: "#f6ebd9",
     });
-    expect(manifest.icons).toHaveLength(1);
-    expect(manifest.icons[0].src).toBe("/r/classfood/fidelite/icon.svg");
+    /*
+     * DEUX ENTRÉES GÉNÉRÉES, ET DEUX RÔLES DISTINCTS. Une seule icône
+     * `any maskable` était un compromis perdant : la marge de 20 % qu'exige la
+     * découpe d'un lanceur rend l'icône rabougrie quand elle n'est PAS rognée.
+     * Même géométrie, deux échelles — voir `icone-carte.ts`.
+     */
+    expect(manifest.icons).toEqual([
+      {
+        src: "/r/classfood/fidelite/icon.svg?forme=plein",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "any",
+      },
+      {
+        src: "/r/classfood/fidelite/icon.svg?forme=masquable",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "maskable",
+      },
+    ]);
   });
 
   /** Le même catalogue, avec un logo de marque clair à l'URL donnée. */
@@ -79,7 +97,7 @@ describe("application fidélité installable", () => {
     });
   });
 
-  it("garde TOUJOURS l’icône générée en seconde entrée — c’est elle qui est masquable", async () => {
+  it("garde TOUJOURS l’icône générée MASQUABLE derrière le logo — et elle seule", async () => {
     // Sans elle, un restaurant qui pose son logo perd le seul gabarit
     // masquable du manifeste : Android rogne alors son carré dans un cercle.
     mocks.load.mockResolvedValueOnce(avecLogo("https://r2/logo.png"));
@@ -88,11 +106,20 @@ describe("application fidélité installable", () => {
 
     expect(manifest.icons).toHaveLength(2);
     expect(manifest.icons[1]).toEqual({
-      src: "/r/classfood/fidelite/icon.svg",
+      src: "/r/classfood/fidelite/icon.svg?forme=masquable",
       sizes: "any",
       type: "image/svg+xml",
-      purpose: "any maskable",
+      purpose: "maskable",
     });
+    /*
+     * ET AUCUNE SECONDE ENTRÉE `any`. Le logo du restaurateur est ce qu'on
+     * veut voir : lui ajouter la variante `plein` derrière mettrait Chrome en
+     * position d'arbitrer entre deux icônes `any`, et un SVG en `sizes: "any"`
+     * l'emporte souvent sur un PNG de 512. Le logo perdrait sa place sans que
+     * rien ne le dise.
+     */
+    expect(manifest.icons.filter((i: { purpose: string }) => i.purpose === "any")).toHaveLength(1);
+    expect(manifest.icons[0].src).toBe("https://r2/logo.png");
   });
 
   it("déclare le type MIME du logo d’après son extension — un SVG n’est pas un PNG de 512", async () => {

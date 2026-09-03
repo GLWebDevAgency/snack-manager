@@ -72,6 +72,7 @@ import {
   type ContexteInstallation,
 } from "./installation";
 import { VIBRATION_PALIER, VIBRATION_SCAN, vibrer } from "./haptique";
+import { SignatureSnackManager } from "./SignatureSnackManager";
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -840,6 +841,17 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           </div>
         )}
       </main>
+
+      {/*
+        LA SIGNATURE, APRÈS LE CONTENU ET AVANT LES ANNONCES.
+
+        Elle est en pied parce que c'est là qu'une signature se lit : vue par
+        quelqu'un qui est déjà chez le restaurateur, une fois son solde
+        consulté. Le laiton reste le nôtre — une marque qui change de couleur
+        selon le client n'est plus une marque — mais il est ajusté jusqu'au
+        seuil AA contre le fond de CE restaurant.
+      */}
+      <SignatureSnackManager brand={catalog.restaurant.brand} />
 
       {/*
         L'ANNONCE VISIBLE — dans le masque, jamais à côté.

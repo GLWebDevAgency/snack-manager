@@ -54,6 +54,7 @@ import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { ChoixDeMedia } from "@/components/mediatheque/ChoixDeMedia";
 import type { Mediatheque } from "@/components/mediatheque/photos";
 import { ApercuDeMarque } from "./ApercuDeMarque";
+import { ApercuInstalle } from "./ApercuInstalle";
 import {
   CLES_DIRECTIONS,
   CLES_FORMES,
@@ -61,6 +62,8 @@ import {
   COUPLES_LABELS,
   DIRECTIONS_LABELS,
   EMPLACEMENTS,
+  emplacementsDePhoto,
+  emplacementsDuLogo,
   FORMES,
   MOUVEMENTS,
   PAIRES_LABELS,
@@ -254,6 +257,15 @@ export function EditeurDeMarque({
           bodyClassName="flex flex-col gap-2"
         >
           <ApercuDeMarque brand={brand} nom={me.name} />
+          {/*
+            L'APERÇU INSTALLÉ VIENT APRÈS CELUI DE LA VITRINE, ET C'EST VOULU.
+            La vitrine est ce que voit un client qui n'a rien installé — le cas
+            de loin le plus fréquent. Les surfaces installées répondent à une
+            question qui vient ensuite : « et sur son téléphone ? »
+          */}
+          <div className="mt-3">
+            <ApercuInstalle brand={brand} nom={me.name} />
+          </div>
           <p className="text-[12px] text-mut">
             Le fond va jusqu&apos;au bord de l&apos;écran sur la vraie page — ici, le cadre
             s&apos;arrête pour ne pas repeindre votre back-office.
@@ -698,29 +710,79 @@ function SectionImages({
   onOuvrir: (cle: CleEmplacement) => void;
   onRetirer: (cle: CleEmplacement) => void;
 }) {
+  /*
+   * DEUX PANNEAUX, ET LE LOGO D'ABORD.
+   *
+   * Un seul panneau « Vos images » mêlait l'identité et une photo de salle, et
+   * ouvrait sur « Marque, version sombre » — la langue du graphiste, et une
+   * question de conception posée à qui possède un seul fichier. Le fondateur
+   * en a conclu qu'il n'y avait « nulle part où ajouter son logo ».
+   *
+   * Ici : « Votre logo », la déclinaison RÉELLEMENT en usage en tête, et les
+   * trois autres repliées derrière un dépliant. `logoPour` retombant sur
+   * n'importe quelle déclinaison posée, un seul dépôt suffit à tout servir —
+   * les autres ne sont utiles qu'à qui veut soigner l'autre fond.
+   */
+  const logos = emplacementsDuLogo(brand);
+  const [principal, ...autres] = logos;
+  const photos = emplacementsDePhoto();
+  const rangee = (e: Emplacement) => (
+    <RangeeImage
+      key={e.cle}
+      emplacement={e}
+      brand={brand}
+      media={parAdresse.get(lireEmplacement(brand, e.cle) ?? "") ?? null}
+      cotesConnues={cotesConnues}
+      onOuvrir={() => onOuvrir(e.cle)}
+      onRetirer={() => onRetirer(e.cle)}
+    />
+  );
+  const posees = autres.filter((e) => lireEmplacement(brand, e.cle) !== null).length;
+
   return (
-    <Panel
-      title="Vos images"
-      sub="Quatre déclinaisons de logo et la photo d'accueil. Elles se choisissent dans votre médiathèque — celle des photos de plats — ou s'y déposent."
-      bodyClassName="flex flex-col gap-2.5"
-    >
-      {EMPLACEMENTS.map((e) => (
-        <RangeeImage
-          key={e.cle}
-          emplacement={e}
-          brand={brand}
-          media={parAdresse.get(lireEmplacement(brand, e.cle) ?? "") ?? null}
-          cotesConnues={cotesConnues}
-          onOuvrir={() => onOuvrir(e.cle)}
-          onRetirer={() => onRetirer(e.cle)}
-        />
-      ))}
-      <p className="mt-1 text-[12px] leading-snug text-mut">
-        Une marque gagne à faire au moins 256 px de côté, une horizontale 512 px de large. En
-        dessous, on vous le dit — et on enregistre quand même : une image un peu petite
-        s&apos;affiche, elle est seulement molle sur un grand écran.
-      </p>
-    </Panel>
+    <>
+      <Panel
+        title="Votre logo"
+        sub="Déposez-le une fois : il sert votre page de commande, votre carte de fidélité et l’icône installée sur le téléphone de vos clients. Il se choisit dans votre médiathèque — celle des photos de plats — ou s’y dépose."
+        bodyClassName="flex flex-col gap-2.5"
+      >
+        {principal ? rangee(principal) : null}
+
+        {autres.length > 0 && (
+          /*
+            REPLIÉ PAR DÉFAUT, OUVERT DÈS QU'UNE DÉCLINAISON EST POSÉE : replier
+            ce que le restaurateur a déjà rempli le lui ferait chercher deux fois.
+          */
+          <details className="group rounded-card border border-line2" open={posees > 0}>
+            <summary className="cf-press min-h-11 cursor-pointer list-none px-3 py-2.5 text-[12px] font-bold text-mut marker:content-none hover:text-ink">
+              Autres versions ({autres.length})
+              {posees > 0 && <span className="font-normal"> · {posees} posée{posees > 1 ? "s" : ""}</span>}
+            </summary>
+            <div className="flex flex-col gap-2.5 border-t border-line2 p-3">
+              <p className="text-[12px] leading-snug text-mut">
+                Utiles seulement si votre logo ne tient pas sur l’autre fond, ou si vous avez une
+                version où le nom accompagne le symbole. Sans elles, celle du dessus sert partout.
+              </p>
+              {autres.map(rangee)}
+            </div>
+          </details>
+        )}
+
+        <p className="mt-1 text-[12px] leading-snug text-mut">
+          Un logo gagne à faire au moins 256 px de côté, une version avec le nom 512 px de large. En
+          dessous, on vous le dit — et on enregistre quand même : une image un peu petite
+          s&apos;affiche, elle est seulement molle sur un grand écran.
+        </p>
+      </Panel>
+
+      <Panel
+        title="Photo d’accueil"
+        sub="La photo qui ouvre votre page de commande. Ce n’est pas votre logo : c’est une image de votre salle, d’un plat, de votre devanture."
+        bodyClassName="flex flex-col gap-2.5"
+      >
+        {photos.map(rangee)}
+      </Panel>
+    </>
   );
 }
 

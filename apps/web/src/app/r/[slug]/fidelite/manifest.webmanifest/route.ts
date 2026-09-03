@@ -22,6 +22,31 @@ function iconeDe(src: string): { src: string; sizes: string; type: string; purpo
   return { src, sizes: "512x512", type, purpose: "any" };
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * CE FICHIER EST LU UNE FOIS, À L'INSTALLATION — ET PLUS JAMAIS APRÈS
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * À l'ajout à l'écran d'accueil, Android FIGE ce que le manifeste dit : le nom
+ * court, l'icône de lanceur, la couleur d'écran d'ouverture (`background_color`)
+ * et la couleur de barre système (`theme_color`) sont recopiés dans le système
+ * et ne sont plus relus. Chrome ne revient pas chercher ce fichier ; iOS non
+ * plus.
+ *
+ * LA CONSÉQUENCE, ÉCRITE ICI PARCE QUE C'EST ICI QU'ELLE SE DÉCIDE : changer
+ * l'identité d'un restaurant NE MET PAS À JOUR LES CARTES DÉJÀ INSTALLÉES. Un
+ * client qui a installé la carte quand l'accent était doré gardera une icône
+ * dorée et une barre système dorée, quoi qu'on serve ensuite — jusqu'à ce
+ * qu'il désinstalle et réinstalle. Ce n'est pas un défaut du produit et aucun
+ * code d'ici ne peut le contourner : c'est le contrat de la plateforme.
+ *
+ * Ce qui suit L'IDENTITÉ EN DIRECT, en revanche, c'est tout le reste : la page
+ * elle-même, son `theme_color` de document (`generateViewport`), le favicon
+ * d'onglet et les icônes servies par `icon.svg` — parce que ceux-là sont relus
+ * à chaque ouverture. L'écart visible après un changement d'identité se limite
+ * donc à trois choses : l'icône du lanceur, l'écran d'ouverture, et la barre
+ * système de l'application installée.
+ */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> },
@@ -35,20 +60,36 @@ export async function GET(
   const ground = brand.palette.ground;
   const logo = logoPour(brand, "mark");
   /*
-   * L'ICÔNE GÉNÉRÉE EST TOUJOURS LÀ, en seconde entrée `any maskable`.
+   * ═══ DEUX ENTRÉES GÉNÉRÉES, ET PAS UNE « any maskable » ═══
    *
-   * Elle ne remplaçait le logo qu'en son ABSENCE — un restaurant qui posait
-   * son logo perdait donc la seule icône masquable du manifeste, et Android
-   * rognait son carré dans un cercle, coupant l'enseigne. Le logo garde la
-   * première place (c'est lui qu'on veut voir), l'icône générée assure le
-   * gabarit masquable derrière lui.
+   * `purpose: "any maskable"` sur une seule image est un compromis perdant, et
+   * la spécification le dit à sa façon : une icône MASQUABLE doit réserver
+   * environ 20 % de marge tout autour, parce que le lanceur y applique SA
+   * découpe (cercle, carré arrondi, goutte) ; une icône ANY n'est pas rognée
+   * du tout, et cette même marge la fait simplement paraître plus petite que
+   * ses voisines sur l'écran d'accueil. Un seul fichier ne peut pas être juste
+   * dans les deux rôles — l'ancienne icône était donc soit rognée, soit
+   * rabougrie, selon le lanceur.
+   *
+   * `icon.svg` rend donc deux dessins, choisis par `?forme=` : la même
+   * géométrie, deux échelles et deux fonds (voir `icone-carte.ts`).
+   *
+   * ═══ ET LE LOGO GARDE TOUJOURS LA PREMIÈRE PLACE ═══
+   *
+   * Quand le restaurateur a déposé un vrai logo, c'est LUI qu'on veut voir :
+   * il reste seul en rôle `any`. On n'ajoute pas la variante `plein` derrière
+   * lui — deux entrées `any` mettraient Chrome en position d'arbitrer, et un
+   * SVG en `sizes: "any"` l'emporte souvent sur un PNG de 512. La variante
+   * masquable, elle, reste indispensable : on ne peut pas ajouter de marge au
+   * logo d'un tiers, et sans elle Android rognerait son carré dans un cercle.
    */
-  const genere = {
-    src: `${path}/icon.svg`,
+  const genere = (forme: "plein" | "masquable", purpose: string) => ({
+    src: `${path}/icon.svg?forme=${forme}`,
     sizes: "any",
     type: "image/svg+xml",
-    purpose: "any maskable",
-  };
+    purpose,
+  });
+  const masquable = genere("masquable", "maskable");
   return Response.json(
     {
       id: path,
@@ -62,7 +103,9 @@ export async function GET(
       display: "standalone",
       background_color: ground,
       theme_color: ground,
-      icons: logo ? [iconeDe(logo), genere] : [genere],
+      icons: logo
+        ? [iconeDe(logo), masquable]
+        : [genere("plein", "any"), masquable],
     },
     {
       headers: {

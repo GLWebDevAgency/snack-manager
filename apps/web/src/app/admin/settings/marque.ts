@@ -301,48 +301,82 @@ export type Emplacement = {
   coteMin: number | null;
   /** Largeur minimale (spec §7, « horizontale ≥ 512 px de large »). */
   largeurMin: number | null;
+  /**
+   * Le logo et la photo d'accueil ne répondent pas à la même question — l'un
+   * est l'identité, l'autre est une image de la salle. Les mêler dans un seul
+   * panneau « Vos images » était la raison pour laquelle le logo se perdait.
+   */
+  groupe: GroupeEmplacement;
 };
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * L'ORDRE ET LES MOTS — POURQUOI ILS ONT CHANGÉ
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Le fondateur a fait le tour de ce back-office et a conclu : « le
+ * restaurateur n'a nulle part où ajouter son logo à lui ». C'était faux au
+ * sens strict — les deux premiers emplacements SONT son logo — et vrai au sens
+ * utile : il ne les a pas reconnus.
+ *
+ * Deux fautes, et la seconde est la pire.
+ *
+ * LE MOT. L'écran disait « Marque », « symbole », « déclinaison » : la langue
+ * du graphiste. Le restaurateur cherche « mon logo ». Une fonction qu'on ne
+ * trouve pas n'existe pas.
+ *
+ * L'ORDRE. L'écran posait une QUESTION DE CONCEPTION — deux versions pour deux
+ * fonds — à quelqu'un qui possède un seul fichier PNG. On demande donc
+ * désormais SON LOGO, on l'emploie partout (`logoPour` retombe sur n'importe
+ * quelle déclinaison posée), et les autres versions restent disponibles sans
+ * être la porte d'entrée.
+ */
+export type GroupeEmplacement = "logo" | "photo";
 
 export const EMPLACEMENTS: readonly Emplacement[] = [
   {
     cle: "mark.dark",
-    nom: "Marque, version sombre",
-    aide: "Votre symbole seul, dessiné pour être posé sur un fond sombre.",
+    nom: "Votre logo, pour fond sombre",
+    aide: "Votre symbole seul, tel qu’il se pose sur un fond sombre.",
     fond: "sombre",
     usage: "fiche",
     coteMin: 256,
     largeurMin: null,
+    groupe: "logo",
   },
   {
     cle: "mark.light",
-    nom: "Marque, version claire",
-    aide: "Le même symbole, dessiné pour un fond clair.",
+    nom: "Votre logo, pour fond clair",
+    aide: "Le même symbole, tel qu’il se pose sur un fond clair.",
     fond: "clair",
     usage: "fiche",
     coteMin: 256,
     largeurMin: null,
+    groupe: "logo",
   },
   {
     cle: "lockup.dark",
-    nom: "Horizontale, version sombre",
-    aide: "Symbole et nom côte à côte — l'en-tête d'un large écran.",
+    nom: "Logo avec le nom, pour fond sombre",
+    aide: "Symbole et nom côte à côte — l’en-tête d’un large écran.",
     fond: "sombre",
     usage: "fiche",
     coteMin: null,
     largeurMin: 512,
+    groupe: "logo",
   },
   {
     cle: "lockup.light",
-    nom: "Horizontale, version claire",
-    aide: "La même, pour un fond clair.",
+    nom: "Logo avec le nom, pour fond clair",
+    aide: "Le même ensemble, sur un fond clair.",
     fond: "clair",
     usage: "fiche",
     coteMin: null,
     largeurMin: 512,
+    groupe: "logo",
   },
   {
     cle: "hero",
-    nom: "Image d'accueil",
+    nom: "Photo d’accueil",
     aide: "La photo qui ouvre votre page de commande — une salle, un plat, votre devanture.",
     fond: "masque",
     usage: "bandeau",
@@ -350,8 +384,35 @@ export const EMPLACEMENTS: readonly Emplacement[] = [
     // Pas un nombre inventé : c'est la largeur nominale de l'usage « bandeau »
     // au contrat, et c'est aussi celle à laquelle le dépôt réduit.
     largeurMin: USAGES_MEDIA.bandeau.largeur,
+    groupe: "photo",
   },
 ];
+
+/**
+ * Les emplacements de logo, LE PLUS UTILE EN TÊTE.
+ *
+ * « Le plus utile » n'est pas une préférence : c'est la déclinaison que
+ * `logoPour` choisit réellement pour le mode en cours. Sur un restaurant en
+ * mode clair, demander d'abord la version pour fond sombre serait demander
+ * celle qu'on ne verra pas. L'ordre suit donc le masque, et il change avec lui.
+ */
+export function emplacementsDuLogo(brand: Brand): readonly Emplacement[] {
+  const prefere = brand.mode === "dark" ? "dark" : "light";
+  const logos = EMPLACEMENTS.filter((e) => e.groupe === "logo");
+  const rang = (e: Emplacement): number => {
+    const estMarque = e.cle.startsWith("mark.");
+    const estPrefere = e.cle.endsWith(prefere);
+    // La marque avant l'horizontale (c'est elle qui sert d'icône), et dans
+    // chaque famille, la déclinaison en usage avant l'autre.
+    return (estMarque ? 0 : 2) + (estPrefere ? 0 : 1);
+  };
+  return [...logos].sort((a, b) => rang(a) - rang(b));
+}
+
+/** Les emplacements de photo — aujourd'hui l'accueil, seul. */
+export function emplacementsDePhoto(): readonly Emplacement[] {
+  return EMPLACEMENTS.filter((e) => e.groupe === "photo");
+}
 
 export function lireEmplacement(brand: Brand, cle: CleEmplacement): string | null {
   switch (cle) {
