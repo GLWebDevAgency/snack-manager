@@ -637,7 +637,7 @@ gh pr merge --squash --delete-branch   # ← déclenche le déploiement producti
 | 2 | `verification` | **appelle `ci.yml`** : `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
 | 3 | `secrets` | **appelle `secrets.yml`** : gitleaks sur le diff puis sur l'arbre qui allait être téléversé | rien ne part |
 | 4 | **Préflight Railway sans mutation** | impose l'environnement explicite, les quatre services et `pnpm verify:postgres:built` sur `api` | aucune migration ne part |
-| 5 | **Migrations PostgreSQL privilégiées** | applique supply puis fidélité depuis le runner, avec un credential DDL éphémère | aucun conteneur ne part ; le smoke contrôle l'ancien service |
+| 5 | **Migrations PostgreSQL privilégiées** | vérifie le bootstrap en lecture seule, applique supply et fidélité depuis le runner avec un credential DDL injecté uniquement dans ce runner, puis revérifie le bootstrap | aucun conteneur ne part ; une migration déjà commencée peut avoir modifié le schéma ; le smoke contrôle l'ancien service |
 | 6 | **Mise en ligne** | publie uniquement les secrets runtime, pose `SM_REVISION`, déploie `api`, puis `web`, `pos`, `kds` | les suivants ne partent pas ; l'ancienne version continue de servir |
 | 7 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | l'exécution est déclarée **EN ÉCHEC**, mais le code peut être **EN LIGNE** (§ 12) |
 
@@ -681,22 +681,80 @@ doit porter ce `preDeployCommand` en lecture seule :
 pnpm verify:postgres:built
 ```
 
-Le job `Migrations PostgreSQL privilégiées` applique ensuite
-`pnpm migrate:postgres:built` depuis un runner GitHub. Il reçoit
-`SM_DATABASE_MIGRATION_URL_STAGING` ou `..._PRODUCTION` et la CA épinglée
-`SM_DATABASE_ROOT_CA_*` uniquement le temps de l'étape. Le workflow refuse les
+Le job `Migrations PostgreSQL privilégiées` compile d'abord le bootstrap et les
+deux migrateurs. Il exécute ensuite
+`pnpm postgres:bootstrap:check:built` **avant tout DDL**, puis
+`pnpm migrate:postgres:built` depuis un runner GitHub, et rejoue le contrôle
+bootstrap après les migrations. Le préflight bootstrap
+ouvre une transaction en lecture seule et vérifie l'identité des deux rôles,
+leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
+l'état des deux journaux Drizzle. Toute dérive **couverte par ce manifeste**
+bloque le job avant la première migration et avant le déploiement ; elle n'est
+jamais réparée automatiquement.
+Le rôle runtime reste sans DDL **persistant** : PostgreSQL conserve le privilège
+`TEMP` et son schéma temporaire propre à la session, volontairement hors du
+périmètre de ce bootstrap.
+
+Ce contrôle ne certifie pas la définition live des tables, contraintes,
+triggers, policies RLS ni le corps des fonctions. Les tests PostgreSQL réels de
+la CI prouvent ces invariants sur une base reconstruite ; ils ne détectent pas
+une altération manuelle ultérieure de la base déployée. Un fingerprint live
+versionné de ces définitions reste donc un garde-fou distinct à livrer avant le
+premier restaurant réel en production.
+
+L'étape de préparation reçoit `SM_DATABASE_MIGRATION_URL_STAGING` ou
+`..._PRODUCTION` et la CA épinglée `SM_DATABASE_ROOT_CA_*`. Les variables
+brutes URL/CA ne sont exposées qu'à cette étape ; elle écrit la CA dans un
+fichier temporaire du runner et transmet l'URL authentifiée reconstruite aux
+étapes de préflight et de migration via `GITHUB_ENV`. Le workflow refuse les
 paramètres d'URL fournis par le secret, ajoute lui-même `verify-ca`, puis les
-migrateurs prouvent TLS 1.2+ avant le premier DDL. Le compte DDL est un rôle
-dédié, non-SUPERUSER et sans rôle hérité ; les migrateurs vérifient aussi que
-`DATABASE_RUNTIME_ROLE` existe, qu'il est distinct, sans contournement RLS ni
-DDL, puis lui accordent seulement `CONNECT`, `USAGE`, le CRUD et la lecture des
-journaux.
+migrateurs et le bootstrap prouvent TLS 1.2+ avant toute inspection ou DDL. Le
+compte DDL est un rôle dédié, non-SUPERUSER et sans rôle hérité ; les migrateurs
+vérifient aussi que `DATABASE_RUNTIME_ROLE` existe, qu'il est distinct, sans
+contournement RLS ni DDL persistant, puis lui accordent seulement `CONNECT`,
+`USAGE`, le CRUD et la lecture des journaux.
+
+#### Réparer exceptionnellement une dérive de bootstrap
+
+La réparation est une opération de maintenance manuelle, jamais une étape de
+CI. Faire une sauvegarde, choisir une fenêtre sans migration concurrente, puis
+injecter depuis le gestionnaire de secrets une URL administrateur temporaire
+authentifiée par TLS. L'URL doit cibler exactement la base `railway`, utiliser
+un superuser direct distinct des rôles applicatif et migrateur, et porter soit
+`sslmode=verify-full`, soit `verify-ca` avec un chemin `sslrootcert` absolu.
+Renseigner l'hôte et le port attendus depuis la configuration Railway/GitHub
+approuvée, indépendamment de l'URL à contrôler : ne jamais les recopier en les
+déduisant de cette même URL.
+
+```bash
+DATABASE_BOOTSTRAP_ADMIN_URL="$URL_ADMIN_POSTGRES_SECURISEE" \
+DATABASE_BOOTSTRAP_EXPECTED_HOST="$HOTE_POSTGRES_ATTENDU" \
+DATABASE_BOOTSTRAP_EXPECTED_PORT="$PORT_POSTGRES_ATTENDU" \
+  pnpm postgres:bootstrap:repair --environment staging --apply
+unset URL_ADMIN_POSTGRES_SECURISEE HOTE_POSTGRES_ATTENDU PORT_POSTGRES_ATTENDU
+```
+
+Remplacer `staging` par `production` exige le GO production habituel. La
+commande refuse de démarrer sans `--environment` et `--apply`, prend un verrou
+transactionnel et vérifie avant toute connexion que l'URL correspond exactement
+à l'hôte, au port et à la base attendus. Elle ne modifie que la liste versionnée
+d'objets, de privilèges et de réglages de rôles, puis rejoue le préflight sous
+l'identité migrateur avant le commit. Elle ne fait ni `REASSIGN OWNED`, ni
+suppression, ni mutation d'un objet inattendu. Une seconde exécution saine doit
+annoncer zéro changement : c'est le contrôle d'idempotence.
+
+Ne jamais enregistrer `DATABASE_BOOTSTRAP_ADMIN_URL` dans GitHub Actions,
+Railway, un fichier `.env`, un ticket ou la documentation. La supprimer du
+shell immédiatement après l'opération, puis relancer le préflight normal avec
+l'URL migrateur sécurisée avant de livrer.
 
 Railway ne reçoit que `DATABASE_URL` du rôle applicatif. Son preDeploy compare
 alors, avec cette identité limitée, les hash et horodatages attendus des deux
 journaux Drizzle. **Une base absente, en retard ou différente bloque la mise en
 service.** Une migration future additive reste acceptée afin qu'un rollback de
-code demeure possible.
+code demeure possible. Cette tolérance concerne les journaux : le manifeste
+d'ownership du bootstrap, lui, reste strict. Une migration déjà appliquée et
+son entrée de manifeste ne doivent donc jamais être supprimées de l'historique.
 
 > **Garde de livraison fidélité.** Avant le premier push, configurer sur
 > **staging uniquement** `pnpm verify:postgres:built`, sans déclencher un ancien
@@ -1080,6 +1138,13 @@ par la même commande, avec l'identifiant de la version qu'on vient de quitter.
 **2 · Annuler le commit (≈ 10 à 15 minutes)**
 
 C'est la voie propre, celle qui laisse le dépôt et la production d'accord.
+
+Le `git revert` direct ci-dessous ne convient qu'à un commit **sans migration
+déjà appliquée ni nouvelle entrée dans le manifeste PostgreSQL**. Sinon, créer
+un commit de compatibilité qui annule le comportement applicatif mais conserve
+les fichiers `drizzle/`, leurs journaux et les entrées déjà livrées de
+`POSTGRES_MANAGED_OBJECTS`. Le schéma avance toujours ; retirer son historique
+ferait refuser le préflight bootstrap avant le redéploiement.
 
 ```bash
 git switch main && git pull
