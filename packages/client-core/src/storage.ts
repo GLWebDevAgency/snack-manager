@@ -11,6 +11,17 @@ export interface KeyValueStore {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
+  /** Lecture-modification-écriture exécutée sous la frontière partagée. */
+  mutateItem?<T>(
+    key: string,
+    mutate: (current: string | null) => StoreItemMutation<T> | Promise<StoreItemMutation<T>>,
+  ): Promise<T>;
+}
+
+export interface StoreItemMutation<T> {
+  /** `null` supprime la clé ; une chaîne la remplace. */
+  value: string | null;
+  result: T;
 }
 
 const STORE_LOCK_NAME = 'sm.sync.state.v2.commit';
@@ -28,6 +39,33 @@ export function withStoreLock<T>(work: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return operation;
+}
+
+async function mutateStoreItemUnlocked<T>(
+  store: KeyValueStore,
+  key: string,
+  mutate: (current: string | null) => StoreItemMutation<T> | Promise<StoreItemMutation<T>>,
+): Promise<T> {
+  const mutation = await mutate(await store.getItem(key));
+  if (mutation.value === null) await store.removeItem(key);
+  else await store.setItem(key, mutation.value);
+  return mutation.result;
+}
+
+/**
+ * Compare et remplace une clé sous le même verrou que la file offline.
+ *
+ * `scopedStore()` fournit sa propre implémentation afin de revalider le tenant
+ * et d'éviter un verrou imbriqué. Les stores simples utilisent le verrou
+ * partagé directement, ce qui rend aussi les tests multi-instance fidèles.
+ */
+export function mutateStoreItem<T>(
+  store: KeyValueStore,
+  key: string,
+  mutate: (current: string | null) => StoreItemMutation<T> | Promise<StoreItemMutation<T>>,
+): Promise<T> {
+  if (store.mutateItem) return store.mutateItem(key, mutate);
+  return withStoreLock(() => mutateStoreItemUnlocked(store, key, mutate));
 }
 
 async function purgeKeysWithIdentityLastUnlocked(

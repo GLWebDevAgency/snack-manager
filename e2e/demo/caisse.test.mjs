@@ -32,7 +32,7 @@
  */
 import assert from 'node:assert/strict';
 import { cibles } from '../socle/cibles.mjs';
-import { attendreMontant, attendreTexte, bloc, entierAffiche } from '../socle/attentes.mjs';
+import { attendreMontant, attendreTexte, entierAffiche } from '../socle/attentes.mjs';
 import { FORMATS, scenario } from '../socle/navigateur.mjs';
 
 const { pos } = cibles();
@@ -49,6 +49,23 @@ const BILLET = '+ 20,00 €';
 const RECU = '20,00 €';
 const RENDU = '10,10 €';
 
+/**
+ * La vue opérationnelle annonce une ESTIMATION (« ≈ N ») : ses trois lectures
+ * de statut ne partagent pas un snapshot serveur atomique. Le test lit donc ce
+ * contrat honnête au lieu de chercher l'ancien compteur local « Service N ».
+ */
+async function commandesActivesObservees(page) {
+  const tab = page
+    .getByRole('tab', { name: /^Le service, ≈\s*\d+(?: · périmé)?$/ })
+    .first();
+  await tab.waitFor({ state: 'visible' });
+  const nom = await tab.getAttribute('aria-label');
+  const nombre = nom?.match(/(?:≈\s*)?(\d+)/)?.[1];
+  const valeur = Number.parseInt(nombre ?? '', 10);
+  assert.ok(Number.isInteger(valeur), `compteur du service illisible (lu : ${JSON.stringify(nom)})`);
+  return valeur;
+}
+
 scenario(
   'Caisse — commande complète, encaissement espèces et numéro de retrait',
   { format: FORMATS.comptoir },
@@ -62,7 +79,7 @@ scenario(
     await rail.waitFor({ state: 'visible' });
     await attendreTexte(page, 'Ticket');
 
-    const serviceAvant = await entierAffiche(page, 'Service');
+    const serviceAvant = await commandesActivesObservees(page);
 
     // ── Le produit ──
     await rail.click();
@@ -147,10 +164,17 @@ scenario(
     const confirme = await entierAffiche(page, 'Numéro de retrait');
     assert.ok(confirme >= 1, `numéro de retrait confirmé illisible (lu : ${confirme})`);
 
-    // ── Le journal du service a bougé ──
+    // ── La vue opérationnelle a bougé et porte réellement la commande ──
     const nouvelleCommande = page.getByRole('button', { name: 'Nouvelle commande' });
     await nouvelleCommande.waitFor({ state: 'visible' });
     await nouvelleCommande.click();
-    await page.getByRole('button', { name: `Service ${serviceAvant + 1}` }).waitFor({ state: 'visible' });
+    const service = page.getByRole('tab', {
+      name: new RegExp(`^Le service, ≈\\s*${serviceAvant + 1}(?: · périmé)?$`),
+    });
+    await service.waitFor({ state: 'visible' });
+    await service.click();
+    await page
+      .getByRole('button', { name: new RegExp(`^Commande ${confirme},`) })
+      .waitFor({ state: 'visible' });
   },
 );

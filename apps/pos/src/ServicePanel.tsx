@@ -3,8 +3,8 @@
  *
  * Elle répond aux deux seules questions qu'un caissier pose entre deux ventes :
  * « qu'est-ce que j'appelle maintenant ? » et « celle de monsieur, elle en est
- * où ? ». Tout ce qu'elle affiche vient de la charge que le poste recevait
- * DÉJÀ toutes les douze secondes et jetait après en avoir lu sept champs.
+ * où ? ». Elle vient des trois lectures opérationnelles sans borne temporelle,
+ * indépendantes du journal local de cette caisse.
  *
  * ─── LES MOTIFS DE CAISSE RETENUS ────────────────────────────────────────
  *
@@ -40,7 +40,6 @@ import {
   mmss,
   palette,
   timerColor,
-  windowCountLabel,
   type OrderStatus,
 } from '@sm/client-core';
 import {
@@ -57,6 +56,10 @@ import {
   heureCourte,
   type ServiceCommande,
 } from './service-state';
+import type {
+  ActiveOrderStatus,
+  ServiceStatusCounts,
+} from './service-reconciliation';
 
 /**
  * Teinte fonctionnelle d'un statut de service.
@@ -80,21 +83,37 @@ export function ServicePanel({
   /** Fraîcheur de la dernière lecture serveur — jamais un chiffre figé. */
   fraicheurLabel,
   fraicheurPerimee,
-  /** La fenêtre serveur est plafonnée : on ne montre pas tout. */
-  truncated,
-  total,
+  loaded,
+  activeCount,
+  activeCountExact,
+  statusCounts,
+  servicePartial,
+  failedStatuses,
+  truncatedStatuses,
 }: {
   commandes: ServiceCommande[];
   now: number;
   brand: Brand;
   fraicheurLabel: string;
   fraicheurPerimee: boolean;
-  truncated: boolean;
-  total: number;
+  loaded: boolean;
+  activeCount: number;
+  activeCountExact: boolean;
+  statusCounts: ServiceStatusCounts | null;
+  servicePartial: boolean;
+  failedStatuses: ActiveOrderStatus[];
+  truncatedStatuses: ActiveOrderStatus[];
 }) {
   const L = useLayout();
-  const [detail, setDetail] = useState<ServiceCommande | null>(null);
+  // L'identité reste stable ; le contenu est redérivé à chaque photo afin que
+  // statut, paiement et historique bougent aussi dans une modale déjà ouverte.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = useMemo(
+    () => commandes.find((commande) => commande.id === detailId) ?? null,
+    [commandes, detailId],
+  );
   const groupes = useMemo(() => grouperParStatut(commandes), [commandes]);
+  const observedEmpty = loaded && !servicePartial;
 
   const pad = L.gridPad;
   const disponible = L.width - pad * 2;
@@ -106,28 +125,49 @@ export function ServicePanel({
       <Bandeau
         fraicheurLabel={fraicheurLabel}
         perimee={fraicheurPerimee}
-        truncated={truncated}
-        total={total}
-        enCours={commandes.length}
+        loaded={loaded}
+        activeCount={activeCount}
+        activeCountExact={activeCountExact}
+        servicePartial={servicePartial}
+        failedStatuses={failedStatuses}
+        truncatedStatuses={truncatedStatuses}
       />
 
       <ScrollView contentContainerStyle={{ padding: pad, paddingBottom: L.sp(40), gap: L.sp(S.lg) }}>
         {commandes.length === 0 ? (
           <EmptyState
-            title="Rien en cours"
-            sub="Les commandes validées à la caisse et celles arrivées en ligne apparaîtront ici, de la plus urgente à la plus récente."
+            title={
+              observedEmpty
+                ? 'Aucune commande active observée'
+                : loaded
+                  ? 'Vue du service incomplète'
+                  : 'Service en attente d’actualisation'
+            }
+            sub={
+              observedEmpty
+                ? 'Les trois files actives viennent d’être relues ; le rafraîchissement continue automatiquement.'
+                : loaded
+                  ? 'Des commandes actives peuvent être hors de la fenêtre affichée. Réessayez dès que la connexion revient.'
+                  : 'Aucun état des commandes n’a encore été reçu du serveur.'
+            }
           />
         ) : (
           groupes.map((groupe) => (
             <View key={groupe.status} style={{ gap: L.sp(S.md) }}>
               <EnTeteGroupe
                 label={groupe.label}
-                count={groupe.commandes.length}
+                count={statusCountLabel(
+                  statusCounts?.[groupe.status as ActiveOrderStatus]?.value ??
+                    groupe.commandes.length,
+                  statusCounts?.[groupe.status as ActiveOrderStatus]?.exact ?? false,
+                )}
                 tone={TON[groupe.status]}
               />
               {groupe.commandes.length === 0 ? (
                 <Text style={[type.mut, { fontSize: L.fs(13), paddingLeft: 2 }]}>
-                  {vide(groupe.status)}
+                  {statusCounts?.[groupe.status as ActiveOrderStatus]?.complete
+                    ? vide(groupe.status)
+                    : 'Vue incomplète — des commandes peuvent manquer dans ce groupe.'}
                 </Text>
               ) : (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: L.gridGap }}>
@@ -137,7 +177,7 @@ export function ServicePanel({
                       commande={commande}
                       now={now}
                       width={largeur}
-                      onOpen={() => setDetail(commande)}
+                      onOpen={() => setDetailId(commande.id)}
                     />
                   ))}
                 </View>
@@ -148,10 +188,19 @@ export function ServicePanel({
       </ScrollView>
 
       {detail ? (
-        <DetailCommande commande={detail} now={now} brand={brand} onClose={() => setDetail(null)} />
+        <DetailCommande
+          commande={detail}
+          now={now}
+          brand={brand}
+          onClose={() => setDetailId(null)}
+        />
       ) : null}
     </View>
   );
+}
+
+function statusCountLabel(count: number, exact: boolean): string {
+  return exact ? String(count) : `≈ ${count}`;
 }
 
 /** Formulé par statut : plus utile qu'un tiret générique répété trois fois. */
@@ -172,18 +221,27 @@ function vide(status: OrderStatus): string {
 function Bandeau({
   fraicheurLabel,
   perimee,
-  truncated,
-  total,
-  enCours,
+  loaded,
+  activeCount,
+  activeCountExact,
+  servicePartial,
+  failedStatuses,
+  truncatedStatuses,
 }: {
   fraicheurLabel: string;
   perimee: boolean;
-  truncated: boolean;
-  total: number;
-  enCours: number;
+  loaded: boolean;
+  activeCount: number;
+  activeCountExact: boolean;
+  servicePartial: boolean;
+  failedStatuses: ActiveOrderStatus[];
+  truncatedStatuses: ActiveOrderStatus[];
 }) {
   const L = useLayout();
-  const ton = perimee ? palette.amber : palette.mut;
+  const ton = perimee || servicePartial ? palette.amber : palette.mut;
+  const count = loaded ? statusCountLabel(activeCount, activeCountExact) : '—';
+  const labels = (statuses: readonly ActiveOrderStatus[]) =>
+    statuses.map((status) => ORDER_STATUS_LABELS[status]).join(', ');
   return (
     <View
       style={{
@@ -204,29 +262,31 @@ function Bandeau({
           {fraicheurLabel}
           {perimee ? ' — cet écran n’est plus à jour' : ''}
         </Text>
-        {/* Le MÊME compte que la pastille de la barre haute, mis en forme de
-            la même façon : « ≥ » dès que la fenêtre serveur est plafonnée. */}
+        {/* Le MÊME compte que la pastille de la barre haute. Une coupe de la
+            liste n'ajoute pas « ≈ » si le serveur a tout de même rendu son
+            total ; seul un compte réellement inconnu le fait. */}
         <Text style={[type.mut, { fontSize: L.fs(13) }]}>
-          · {windowCountLabel(enCours, truncated)} en cours
+          · {count} en cours
         </Text>
       </View>
 
-      {/*
-        Le serveur plafonne `GET /orders` à 200 lignes et dit `truncated` pour
-        que l'écran refuse de conclure plutôt que de conclure faux. La vue du
-        service porte donc la même réserve que la clôture.
-      */}
-      {truncated ? (
+      {failedStatuses.length > 0 ? (
         <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(12.5), fontWeight: '600' }}>
-          Journée à {total} commandes : le serveur n’en renvoie que les 200 plus
-          récentes. Les plus anciennes ne sont pas dans cette vue — ni dans le Z.
+          Lecture impossible pour {labels(failedStatuses)} : le compteur est
+          estimé et des commandes peuvent manquer.
+        </Text>
+      ) : null}
+      {truncatedStatuses.length > 0 ? (
+        <Text style={{ fontFamily: FONT, color: palette.amber, fontSize: L.fs(12.5), fontWeight: '600' }}>
+          Plus de 200 commandes pour {labels(truncatedStatuses)} : le total est
+          connu, mais toutes les cartes ne tiennent pas dans cette vue.
         </Text>
       ) : null}
     </View>
   );
 }
 
-function EnTeteGroupe({ label, count, tone }: { label: string; count: number; tone: string }) {
+function EnTeteGroupe({ label, count, tone }: { label: string; count: string; tone: string }) {
   const L = useLayout();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -371,7 +431,7 @@ function Carte({
               fontWeight: '800',
               // Non encaissée : le montant est ce qu'il restera à percevoir au
               // moment de la remise. Le dire ici évite de rendre un plat sans
-              // encaisser, qui est l'erreur que le Z retrouve le soir.
+              // encaisser, qui fausserait ensuite le suivi d'encaissement.
               color: commande.paid ? palette.text : palette.amber,
             },
           ]}

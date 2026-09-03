@@ -5,7 +5,6 @@ import {
   commandesEnCours,
   depasseLePlafond,
   estEnCours,
-  fusionnerFenetre,
   grouperParStatut,
   heureCourte,
   plafondRemise,
@@ -69,23 +68,22 @@ describe('l’ordre de la vue du service', () => {
       ligne({ _id: 'c', number: 3, status: 'preparing', createdAt: a(11, 10) }),
       ligne({ _id: 'd', number: 4, status: 'ready', createdAt: a(11, 5) }),
     ];
-    const ordre = commandesEnCours(rows, MINUIT, MAINTENANT).map((c) => c.number);
+    const ordre = commandesEnCours(rows, MAINTENANT).map((c) => c.number);
     // Les deux prêtes d'abord (la plus ancienne en tête), puis la préparation,
     // puis la reçue.
     expect(ordre).toEqual([4, 2, 3, 1]);
   });
 
-  it('écarte ce qui est remis, annulé, ou d’avant le service courant', () => {
+  it('écarte remis et annulé, mais garde une active antérieure au reset local', () => {
     const rows = [
       ligne({ _id: 'a', number: 1, status: 'delivered', createdAt: a(12) }),
       ligne({ _id: 'b', number: 2, status: 'cancelled', createdAt: a(12) }),
-      // Service du midi clôturé à 15 h : cette commande de 11 h ne doit pas
-      // ressortir dans la vue du soir.
+      // Le journal local a été vidé à 15 h, mais cette commande reste à
+      // appeler : elle doit rester dans la vue opérationnelle.
       ligne({ _id: 'c', number: 3, status: 'ready', createdAt: a(11) }),
       ligne({ _id: 'd', number: 4, status: 'ready', createdAt: a(19) }),
     ];
-    const soir = MINUIT + 15 * 3_600_000;
-    expect(commandesEnCours(rows, soir, MAINTENANT).map((c) => c.number)).toEqual([4]);
+    expect(commandesEnCours(rows, MAINTENANT).map((c) => c.number)).toEqual([3, 4]);
   });
 
   it('reste STABLE : le tri ne dépend jamais de l’horloge du rendu', () => {
@@ -96,8 +94,8 @@ describe('l’ordre de la vue du service', () => {
     ];
     // Le minuteur avance de dix minutes : l'ordre à l'écran ne bouge pas d'un
     // cran. C'est ce qui empêche une carte de sauter sous le doigt.
-    const avant = commandesEnCours(rows, MINUIT, MAINTENANT).map((c) => c.id);
-    const apres = commandesEnCours(rows, MINUIT, MAINTENANT + 600_000).map((c) => c.id);
+    const avant = commandesEnCours(rows, MAINTENANT).map((c) => c.id);
+    const apres = commandesEnCours(rows, MAINTENANT + 600_000).map((c) => c.id);
     expect(apres).toEqual(avant);
   });
 
@@ -107,12 +105,12 @@ describe('l’ordre de la vue du service', () => {
       ligne({ _id: 'aa', number: 8, status: 'new', createdAt: a(11) }),
     ];
     // Sans ce départage, deux cartes permuteraient à chaque rafraîchissement.
-    expect(commandesEnCours(rows, MINUIT, MAINTENANT).map((c) => c.id)).toEqual(['aa', 'zz']);
+    expect(commandesEnCours(rows, MAINTENANT).map((c) => c.id)).toEqual(['aa', 'zz']);
   });
 
   it('garde les groupes vides pour que la liste ne saute pas', () => {
     const groupes = grouperParStatut(
-      commandesEnCours([ligne({ _id: 'a', status: 'new' })], MINUIT, MAINTENANT),
+      commandesEnCours([ligne({ _id: 'a', status: 'new' })], MAINTENANT),
     );
     expect(groupes.map((g) => g.status)).toEqual(['ready', 'preparing', 'new']);
     expect(groupes.map((g) => g.commandes.length)).toEqual([0, 0, 1]);
@@ -173,46 +171,6 @@ describe('la projection d’une ligne serveur', () => {
     expect(heureCourte(a(9, 5))).toBe('09:05');
     expect(heureCourte('n’importe quoi')).toBeNull();
     expect(heureCourte(null)).toBeNull();
-  });
-});
-
-describe('la fusion de deux photos serveur', () => {
-  it('ne laisse JAMAIS une réponse en retard faire reculer un statut', () => {
-    // Le poste a deux déclencheurs de lecture (horloge et socket) : deux
-    // requêtes peuvent se croiser. « Prête » ne doit pas redevenir « en
-    // préparation » au moment où le caissier allait appeler le client.
-    const avant = [ligne({ _id: 'a', status: 'ready' })];
-    const enRetard = [ligne({ _id: 'a', status: 'preparing' })];
-    expect(fusionnerFenetre(avant, enRetard)[0]?.status).toBe('ready');
-  });
-
-  it('laisse passer une avancée normale', () => {
-    const avant = [ligne({ _id: 'a', status: 'new' })];
-    const apres = [ligne({ _id: 'a', status: 'preparing' })];
-    expect(fusionnerFenetre(avant, apres)[0]?.status).toBe('preparing');
-  });
-
-  it('ne ressuscite pas une commande déjà remise ni déjà annulée', () => {
-    expect(
-      fusionnerFenetre([ligne({ _id: 'a', status: 'delivered' })], [
-        ligne({ _id: 'a', status: 'cancelled' }),
-      ])[0]?.status,
-    ).toBe('delivered');
-    expect(
-      fusionnerFenetre([ligne({ _id: 'a', status: 'cancelled' })], [
-        ligne({ _id: 'a', status: 'ready' }),
-      ])[0]?.status,
-    ).toBe('cancelled');
-  });
-
-  it('suit la fenêtre entrante : une commande qui en sort n’est pas conservée', () => {
-    // C'est la photo du serveur qui fait foi sur la COMPOSITION de la liste ;
-    // la fusion n'arbitre que les statuts.
-    const fusion = fusionnerFenetre(
-      [ligne({ _id: 'a' }), ligne({ _id: 'b' })],
-      [ligne({ _id: 'b' })],
-    );
-    expect(fusion.map((r) => r._id)).toEqual(['b']);
   });
 });
 

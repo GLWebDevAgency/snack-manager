@@ -118,6 +118,14 @@ function comptePayload(sub = COGERANT): JwtPayload {
   };
 }
 
+function compteAvecRole(role: 'owner' | 'cogerant' | 'comptable', sub = COGERANT): JwtPayload {
+  return { ...comptePayload(sub), role };
+}
+
+function staffAvecRole(role: 'gerant' | 'caisse' | 'cuisine', sub = STAFF_A): JwtPayload {
+  return { ...staffPayload(sub), role };
+}
+
 function build(payloads: Record<string, JwtPayload>) {
   const subscriber = new FakeSubscriber();
   const server = new FakeServer();
@@ -147,6 +155,64 @@ describe('autorisation continue des rooms tenant', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each([
+    ['owner', compteAvecRole('owner')],
+    ['cogerant', compteAvecRole('cogerant')],
+    ['gerant', staffAvecRole('gerant')],
+    ['caisse', staffAvecRole('caisse')],
+    ['cuisine', staffAvecRole('cuisine')],
+  ] as const)('admet le rôle opérationnel %s dans la room tenant', async (_role, payload) => {
+    const { gateway, server } = build({ autorise: payload });
+    const socket = new FakeSocket(`socket-${_role}`, 'autorise');
+    server.add(socket);
+
+    await gateway.handleConnection(socket.asSocket());
+
+    expect(socket.rooms).toContain(`tenant:${TENANT}`);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    gateway.onModuleDestroy();
+  });
+
+  it('refuse un comptable valide avant de rejoindre la room tenant', async () => {
+    const { gateway, server } = build({ comptable: compteAvecRole('comptable') });
+    const socket = new FakeSocket('socket-comptable', 'comptable');
+    server.add(socket);
+
+    await gateway.handleConnection(socket.asSocket());
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    gateway.onModuleDestroy();
+  });
+
+  it("coupe un comptable déjà présent sans lui émettre l'événement", async () => {
+    const { gateway, subscriber, server } = build({ comptable: compteAvecRole('comptable') });
+    const socket = new FakeSocket('socket-comptable', 'comptable');
+    server.add(socket);
+    socket.data.session = compteAvecRole('comptable');
+    socket.data.sessionControl = { generation: 1, invalidated: false };
+    socket.rooms.add(`tenant:${TENANT}`);
+    await gateway.onModuleInit();
+
+    const complet = {
+      _id: '507f1f77bcf86cd799439011',
+      number: 42,
+      status: 'preparing',
+      trackingToken: 'secret',
+      pickup: { customerPhone: '0612345678' },
+    };
+    subscriber.fire(
+      'pmessage',
+      'tenant:*:orders',
+      `tenant:${TENANT}:orders`,
+      JSON.stringify({ event: 'order.created', payload: complet }),
+    );
+
+    await vi.waitFor(() => expect(socket.disconnect).toHaveBeenCalledWith(true));
+    expect(socket.emit).not.toHaveBeenCalled();
+    gateway.onModuleDestroy();
   });
 
   it('admet une session valide et refuse une session déjà révoquée', async () => {

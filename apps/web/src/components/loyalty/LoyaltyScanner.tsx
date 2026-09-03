@@ -13,6 +13,7 @@ import { loyaltyTokenFromQrPayload } from "@sm/contracts";
 import { Btn, Icon } from "@/components/ui";
 import { useDialogLayer } from "@/components/ui/useDialogLayer";
 import { VIBRATION_SCAN, vibrer } from "./haptique";
+import { reconnaitreUneSeuleFois } from "./session-guards";
 
 export function LoyaltyScanner({
   expectedSlug,
@@ -26,6 +27,7 @@ export function LoyaltyScanner({
   const videoRef = useRef<HTMLVideoElement>(null);
   const dialogRef = useDialogLayer({ open: true, onClose });
   const controlsRef = useRef<IScannerControls | null>(null);
+  const reconnaissanceRef = useRef(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [fileBusy, setFileBusy] = useState(false);
@@ -53,10 +55,15 @@ export function LoyaltyScanner({
    */
   const accepter = useCallback(
     (token: string) => {
+      // `setReconnu(true)` n'est visible qu'au rendu suivant. Le ref ferme le
+      // passage dans ce même tour si la caméra et une photo (ou le formulaire)
+      // reconnaissent presque simultanément deux charges.
+      if (!reconnaitreUneSeuleFois(reconnaissanceRef)) return false;
       controlsRef.current?.stop();
       setReconnu(true);
       vibrer(VIBRATION_SCAN);
       onToken(token);
+      return true;
     },
     [onToken],
   );
@@ -109,7 +116,7 @@ export function LoyaltyScanner({
   async function scanFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || fileBusy) return;
+    if (!file || fileBusy || reconnaissanceRef.current) return;
     setFileBusy(true);
     setCameraError(null);
     const url = URL.createObjectURL(file);
@@ -120,7 +127,9 @@ export function LoyaltyScanner({
       if (!token) throw new Error("invalid-card");
       accepter(token);
     } catch {
-      setCameraError("Aucune carte fidélité valide n’a été reconnue sur cette image.");
+      if (!reconnaissanceRef.current) {
+        setCameraError("Aucune carte fidélité valide n’a été reconnue sur cette image.");
+      }
     } finally {
       URL.revokeObjectURL(url);
       setFileBusy(false);
@@ -129,6 +138,7 @@ export function LoyaltyScanner({
 
   function submitManual(event: FormEvent) {
     event.preventDefault();
+    if (reconnaissanceRef.current) return;
     const token = loyaltyTokenFromQrPayload(manual, expectedSlug);
     if (!token) {
       setCameraError("Le code ou le lien ne correspond pas à une carte de ce restaurant.");
@@ -191,16 +201,16 @@ export function LoyaltyScanner({
         <label className="cf-press flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-pill border border-ink/15 bg-ink/8 px-4 text-sm font-extrabold text-ink">
           <Icon name="grid" size={17} />
           {fileBusy ? "Lecture de l’image…" : "Choisir une photo du QR"}
-          <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={fileBusy} onChange={(event) => void scanFile(event)} />
+          <input type="file" accept="image/*" capture="environment" className="sr-only" disabled={fileBusy || reconnu} onChange={(event) => void scanFile(event)} />
         </label>
         <details className="mt-3 rounded-card border border-ink/10 bg-ink/[0.035] p-3">
           <summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-mut">Utiliser le code de secours</summary>
           <form onSubmit={submitManual} className="mt-3 space-y-2">
-            <input type="password" autoComplete="off" spellCheck={false} aria-label="Code ou lien de secours" value={manual} maxLength={2048} onChange={(event) => setManual(event.target.value)} className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-bg/35 px-3.5 py-3 font-mono text-base text-ink outline-none focus:border-focus" />
+            <input type="password" autoComplete="off" spellCheck={false} aria-label="Code ou lien de secours" value={manual} maxLength={2048} disabled={reconnu} onChange={(event) => setManual(event.target.value)} className="min-h-11 w-full rounded-ctrl border border-ink/12 bg-bg/35 px-3.5 py-3 font-mono text-base text-ink outline-none focus:border-focus disabled:opacity-50" />
             {/* Pas de `size="sm"` sur une surface CLIENT : 34 px de haut, sous
                 la cible de 44 px (WCAG 2.2 · 2.5.8). La taille `sm` reste
                 celle des barres d'outils denses de l'admin, à la souris. */}
-            <Btn type="submit" block disabled={!manual.trim()}>Afficher ma carte</Btn>
+            <Btn type="submit" block disabled={reconnu || !manual.trim()}>Afficher ma carte</Btn>
           </form>
         </details>
       </div>

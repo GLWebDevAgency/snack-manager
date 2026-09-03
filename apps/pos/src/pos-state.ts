@@ -3,10 +3,10 @@
  * l'appareil change d'établissement.
  *
  * Le désappairage n'effaçait que l'appairage, la session et la file : le
- * journal du service et les tickets mis en attente restaient, et ressortaient
- * après ré-appairage chez un AUTRE commerçant. Le Z du soir mélangeait deux
- * restaurants, et un ticket parqué chez A se rappelait chez B avec ses lignes
- * et le nom de son client.
+ * journal local et les tickets mis en attente restaient, et ressortaient
+ * après ré-appairage chez un AUTRE commerçant. Le récapitulatif du poste
+ * mélangeait deux restaurants, et un ticket parqué chez A se rappelait chez B
+ * avec ses lignes et le nom de son client.
  *
  * La purge itère sur cette table entière : une clé ajoutée ici y entre
  * d'office, sans qu'on ait à penser à la lister ailleurs.
@@ -17,21 +17,26 @@ export const KEYS = {
   device: 'sm.pos.device.v1',
   parked: 'sm.pos.parked.v1',
   dayLog: 'sm.pos.daylog.v1',
-  /** Ouverture du service courant — borne de découpe du Z. */
+  /** Ancienne borne obsolète, conservée uniquement pour la purge/migration. */
   serviceStart: 'sm.pos.servicestart.v1',
   /** UUID opaque seulement ; permet de redériver un QR après réponse perdue. */
   loyaltyEnrollmentRecovery: 'sm.pos.loyalty-enrollment-recovery.v1',
 } as const;
 
 /**
- * État métier du poste : modes de service, journal du service, tickets en
+ * État métier du poste : modes de service, journal local, tickets en
  * attente, construction du corps de commande.
  *
- * Tout ce qui doit survivre à un rechargement (tickets parqués, journal du
- * service, session) passe par le stockage clé/valeur du noyau partagé — le
+ * Tout ce qui doit survivre à un rechargement (tickets parqués, journal local,
+ * session) passe par le stockage clé/valeur du noyau partagé — le
  * même que la file offline.
  */
-import { uuid, type CartLine, type KeyValueStore } from '@sm/client-core';
+import {
+  mutateStoreItem,
+  uuid,
+  type CartLine,
+  type KeyValueStore,
+} from '@sm/client-core';
 import { PAYMENT_DUE_LABEL, PAYMENT_TENDER_LABELS, type PaymentTender } from '@sm/contracts';
 import type { LoyaltyTicketState } from './loyalty-state';
 
@@ -57,8 +62,8 @@ export const PAY_LABEL: Record<PayMethod, string> = {
  *
  * `retrait` reste `null` : rien n'est perçu, la commande part « à encaisser ».
  * Sans cette traduction, l'API recevait `method: 'counter'` pour les trois
- * boutons et enregistrait tout en attente — le Z du soir était donc faux même
- * quand l'écran affichait « Payé (carte bancaire) ».
+ * boutons et enregistrait tout en attente — le récapitulatif local était donc
+ * faux même quand l'écran affichait « Payé (carte bancaire) ».
  */
 export const PAY_TENDER: Record<PayMethod, PaymentTender | null> = {
   cb: 'card',
@@ -186,47 +191,268 @@ export async function saveJson(
 }
 
 /**
- * Commit critique d'une vente dans le journal du service.
+ * Écrivain UNIQUE du journal local.
  *
- * Contrairement aux préférences UI ci-dessus, cette écriture ne peut pas être
- * best-effort : le verrou d'encaissement ne sera libéré qu'après sa réussite.
- * L'entrée de file réseau est déjà durable à cet instant ; attendre ici évite
- * qu'un verrouillage ou un désappairage démonte l'écran entre le setState et
- * l'effet React chargé de persister le journal.
+ * La FIFO locale ordonne les callbacks d'une instance ; `mutateStoreItem`
+ * arbitre toutes les instances sous le verrou partagé. Chaque commit repart du
+ * snapshot DURABLE courant, jamais de la seule mémoire React. La génération
+ * change au reset et empêche donc un autre onglet de ressusciter son ancienne
+ * copie ; la révision fait échouer un reset si le journal montré a changé.
  */
-export async function appendDayEntryDurably(
-  store: KeyValueStore,
-  current: readonly DayEntry[],
-  entry: DayEntry,
-  day = serviceDay(),
-): Promise<DayEntry[]> {
-  const next = [...current, entry];
-  await store.setItem(
-    KEYS.dayLog,
-    JSON.stringify({ day, entries: next }),
-  );
-  return next;
+export const DAY_LOG_FILE_VERSION = 2 as const;
+
+export interface DayLogFile {
+  version: typeof DAY_LOG_FILE_VERSION;
+  day: string;
+  /** Époque durable : incrémentée uniquement par un reset/changement de jour. */
+  generation: number;
+  /** CAS durable : incrémenté à chaque mutation réussie. */
+  revision: number;
+  entries: DayEntry[];
 }
 
-/**
- * Après un enqueue réussi, un défaut du journal n'annule jamais la vente.
- * L'appelant doit vider le ticket et afficher une alerte de journal dégradé :
- * autoriser un nouvel essai créerait un nouvel UUID et donc un doublon.
- */
-export async function commitQueuedSaleJournal(
-  store: KeyValueStore,
-  current: readonly DayEntry[],
-  entry: DayEntry,
-  day = serviceDay(),
-): Promise<{ entries: DayEntry[]; durable: boolean }> {
-  try {
-    return {
-      entries: await appendDayEntryDurably(store, current, entry, day),
-      durable: true,
-    };
-  } catch {
-    return { entries: [...current, entry], durable: false };
+export interface DayLogSnapshot {
+  day: string;
+  generation: number;
+  revision: number;
+  /** Protège aussi contre une ancienne version qui écrirait sans révision. */
+  content: string;
+}
+
+export class DayLogChangedError extends Error {
+  constructor() {
+    super('Le journal a changé depuis l’ouverture du récapitulatif');
+    this.name = 'DayLogChangedError';
   }
+}
+
+function safeCounter(value: unknown): number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+    ? (value as number)
+    : 0;
+}
+
+/** Lit aussi l'ancien `{ day, entries }` et le promeut au premier commit. */
+export function normalizeDayLogFile(
+  value: unknown,
+  fallbackDay = serviceDay(),
+): DayLogFile {
+  const candidate =
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as Partial<DayLogFile>)
+      : null;
+  return {
+    version: DAY_LOG_FILE_VERSION,
+    day:
+      typeof candidate?.day === 'string' && candidate.day.length > 0
+        ? candidate.day
+        : fallbackDay,
+    generation: safeCounter(candidate?.generation),
+    revision: safeCounter(candidate?.revision),
+    entries: Array.isArray(candidate?.entries)
+      ? (candidate.entries as DayEntry[]).map(minimizeDayEntry)
+      : [],
+  };
+}
+
+function dayLogFromRaw(raw: string | null, fallbackDay: string): DayLogFile {
+  if (!raw) return normalizeDayLogFile(null, fallbackDay);
+  try {
+    return normalizeDayLogFile(JSON.parse(raw), fallbackDay);
+  } catch {
+    return normalizeDayLogFile(null, fallbackDay);
+  }
+}
+
+function snapshotOf(file: DayLogFile): DayLogSnapshot {
+  return {
+    day: file.day,
+    generation: file.generation,
+    revision: file.revision,
+    content: JSON.stringify(file.entries),
+  };
+}
+
+function sameSnapshot(file: DayLogFile, expected: DayLogSnapshot): boolean {
+  return (
+    file.day === expected.day &&
+    file.generation === expected.generation &&
+    file.revision === expected.revision &&
+    JSON.stringify(file.entries) === expected.content
+  );
+}
+
+function uniqueDayEntries(entries: readonly DayEntry[]): DayEntry[] {
+  const positions = new Map<string, number>();
+  const unique: DayEntry[] = [];
+  for (const entry of entries) {
+    const previous = positions.get(entry.clientId);
+    if (previous === undefined) {
+      positions.set(entry.clientId, unique.length);
+      unique.push(entry);
+    } else {
+      unique[previous] = entry;
+    }
+  }
+  return unique;
+}
+
+type DayLogTransform = (current: readonly DayEntry[]) => DayEntry[];
+
+export interface DayLogWriter {
+  hydrate(file: DayLogFile): DayLogSnapshot;
+  refresh(
+    apply: (entries: DayEntry[]) => void,
+    day?: string,
+  ): Promise<DayLogSnapshot>;
+  snapshot(): DayLogSnapshot;
+  /** Révision locale utilisée uniquement pour invalider les callbacks pré-reset. */
+  revision(): number;
+  commit(
+    read: () => readonly DayEntry[],
+    transform: DayLogTransform,
+    apply: (entries: DayEntry[]) => void,
+    expectedRevision?: number,
+    day?: string,
+  ): Promise<boolean>;
+  reset(
+    apply: (entries: []) => void,
+    day?: string,
+    validate?: () => void,
+    expectedSnapshot?: DayLogSnapshot,
+  ): Promise<void>;
+}
+
+export function createDayLogWriter(
+  store: KeyValueStore,
+): DayLogWriter {
+  let tail: Promise<void> = Promise.resolve();
+  let localRevision = 0;
+  let observed = normalizeDayLogFile(null);
+  let pending: Array<{
+    day: string;
+    generation: number;
+    transform: DayLogTransform;
+  }> = [];
+  const enqueue = <T>(task: () => Promise<T>): Promise<T> => {
+    const result = tail.then(task);
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  const targetGeneration = (file: DayLogFile, day: string) =>
+    file.day === day ? file.generation : file.generation + 1;
+
+  const withPending = (file: DayLogFile, day: string): DayEntry[] => {
+    const generation = targetGeneration(file, day);
+    let entries: DayEntry[] = file.day === day ? file.entries : [];
+    for (const mutation of pending) {
+      if (mutation.day !== day || mutation.generation !== generation) continue;
+      entries = uniqueDayEntries(mutation.transform(entries));
+    }
+    return entries;
+  };
+
+  return {
+    hydrate(file) {
+      observed = normalizeDayLogFile(file, file.day);
+      return snapshotOf(observed);
+    },
+    refresh(apply, day = serviceDay()) {
+      return enqueue(async () => {
+        const file = dayLogFromRaw(await store.getItem(KEYS.dayLog), day);
+        observed = file;
+        apply(withPending(file, day));
+        return snapshotOf(file);
+      });
+    },
+    snapshot: () => snapshotOf(observed),
+    revision: () => localRevision,
+    commit(
+      _read,
+      transform,
+      apply,
+      expectedRevision = localRevision,
+      day = serviceDay(),
+    ) {
+      return enqueue(async () => {
+        if (expectedRevision !== localRevision) return false;
+        let attemptedGeneration: number | null = null;
+        try {
+          const file = await mutateStoreItem(
+            store,
+            KEYS.dayLog,
+            (raw) => {
+              const durable = dayLogFromRaw(raw, day);
+              const generation = targetGeneration(durable, day);
+              attemptedGeneration = generation;
+              const nextEntries = uniqueDayEntries(
+                transform(withPending(durable, day)),
+              );
+              const next: DayLogFile = {
+                version: DAY_LOG_FILE_VERSION,
+                day,
+                generation,
+                revision: durable.revision + 1,
+                entries: nextEntries,
+              };
+              return { value: JSON.stringify(next), result: next };
+            },
+          );
+          pending = pending.filter(
+            (mutation) =>
+              mutation.day !== file.day ||
+              mutation.generation !== file.generation,
+          );
+          observed = file;
+          apply(file.entries);
+          return true;
+        } catch (error) {
+          const generation =
+            attemptedGeneration ??
+            (observed.day === day
+              ? observed.generation
+              : observed.generation + 1);
+          pending.push({ day, generation, transform });
+          throw error;
+        }
+      });
+    },
+    reset(
+      apply,
+      day = serviceDay(),
+      validate,
+      expectedSnapshot = snapshotOf(observed),
+    ) {
+      return enqueue(async () => {
+        const file = await mutateStoreItem(store, KEYS.dayLog, (raw) => {
+          const durable = dayLogFromRaw(raw, day);
+          if (!sameSnapshot(durable, expectedSnapshot)) {
+            throw new DayLogChangedError();
+          }
+          // Les mutations locales déjà parties ont fini avant cette tâche ;
+          // les autres onglets sont exclus par le verrou jusqu'au setItem.
+          validate?.();
+          const next: DayLogFile = {
+            version: DAY_LOG_FILE_VERSION,
+            day,
+            generation: durable.generation + 1,
+            revision: durable.revision + 1,
+            entries: [],
+          };
+          return { value: JSON.stringify(next), result: next };
+        });
+        // Si le stockage refuse, aucune de ces mutations mémoire n'a lieu.
+        localRevision += 1;
+        pending = [];
+        observed = file;
+        apply([]);
+      });
+    },
+  };
 }
 
 /** Jour de service au sens du restaurant (fuseau du poste). */
@@ -389,154 +615,46 @@ export function buildOrderBody(params: {
   return body;
 }
 
-// ─── Clôture de service (Z) ───
+// ─── Récapitulatif local du poste ───
 
 /**
- * Ventilation du service par moyen de paiement.
+ * Ventilation des seules commandes inscrites dans le journal de cette caisse.
  *
- * Ce que compte réellement un gérant le soir : les espèces du tiroir, le
- * bordereau du TPE, la télécollecte des titres-restaurant, ce qui est déjà
- * tombé sur le compte via la vente en ligne, et ce qui reste dû. Un total
- * unique ne se recoupe avec rien.
+ * Ce type n'est ni un Z fiscal, ni une clôture du restaurant : il ne contient
+ * pas les commandes web ou celles saisies sur un autre poste. L'écran rappelle
+ * ce périmètre avant toute remise à zéro.
  */
-export interface ServiceZ {
+export interface LocalJournalSummary {
   orders: number;
-  /** Chiffre d'affaires du service, remises déduites (centimes). */
+  /** Total local remises déduites (centimes). */
   ca: number;
   cash: number;
   card: number;
-  /** Titres-restaurant — à recouper avec la télécollecte du terminal TR. */
   mealVoucher: number;
-  online: number;
-  /** Commandes parties sans encaissement (« à encaisser au retrait »). */
+  /** Commandes locales parties sans encaissement (« au retrait »). */
   due: number;
-  /**
-   * Encaissé au comptoir SANS moyen saisi.
-   *
-   * Ce n'est pas un vestige : le cas se produit à chaque commande « à régler au
-   * retrait » que la cuisine fait passer à « Remis ». L'API bascule alors le
-   * paiement en « réglé » — l'argent rentre bien — mais personne n'a dit
-   * comment : ni le KDS, qui ne connaît pas le tiroir, ni la caisse, qui n'a
-   * pas été sollicitée.
-   *
-   * Le montant est donc RÉEL et doit être ventilé à la main au moment du Z. Le
-   * présenter comme une anomalie de données anciennes faisait chercher un bogue
-   * là où il y a un geste manquant.
-   */
+  /** Encaissements locaux dont le moyen n'a pas été saisi. */
   unspecified: number;
   discounts: number;
-  /**
-   * `server` : calculé sur les commandes enregistrées, donc vente en ligne
-   * comprise. `local` : repli hors ligne sur le seul journal de ce poste.
-   */
-  source: 'server' | 'local';
-  /**
-   * LE Z EST-IL UN TOTAL, OU UN MINIMUM ?
-   *
-   * `GET /orders` plafonne sa réponse à 200 commandes, les plus RÉCENTES, et
-   * annonce la coupe (`total`, `truncated`). La caisse typait la réponse
-   * `{ rows }` et jetait les deux : au-delà de 200 commandes dans la journée,
-   * le chiffre d'affaires, les espèces, la carte et les titres-restaurant
-   * étaient calculés sur une fenêtre amputée de ses lignes les PLUS ANCIENNES,
-   * en silence. Le gérant recomptait son tiroir contre un total faux.
-   *
-   * Quand `partial` est vrai, aucun montant de ce Z n'est un total : ce sont
-   * tous des minima, et l'écran doit le dire au lieu de conclure.
-   */
-  partial: boolean;
-  /** Commandes de la journée absentes de la fenêtre (`0` si rien n'est coupé). */
-  missing: number;
 }
 
-/** Ce que le serveur dit de la fenêtre qu'il vient de servir. */
-export interface ZWindow {
-  /** Nombre exact de commandes correspondant à la requête, côté serveur. */
-  total: number;
-  /** `true` quand les lignes reçues ne sont qu'une fenêtre. */
-  truncated: boolean;
-  /** Nombre de lignes réellement reçues. */
-  received: number;
-}
-
-const EMPTY_Z: Omit<ServiceZ, 'source' | 'partial' | 'missing'> = {
+const EMPTY_LOCAL_SUMMARY: LocalJournalSummary = {
   orders: 0,
   ca: 0,
   cash: 0,
   card: 0,
   mealVoucher: 0,
-  online: 0,
   due: 0,
   unspecified: 0,
   discounts: 0,
 };
 
-/** Commande telle que la renvoie `GET /orders` (champs utiles au Z). */
-export interface ServiceOrderRow {
-  createdAt?: string;
-  status?: string;
-  totals?: { total?: number; discount?: { amount?: number } | null };
-  payment?: { status?: string; tender?: PaymentTender | null };
-}
+export const LOCAL_JOURNAL_SCOPE_NOTICE =
+  'Ce récapitulatif contient uniquement les commandes saisies sur cette caisse. Les commandes web, celles des autres caisses et la comptabilité globale ne sont ni totalisées ni clôturées ici. Elles restent visibles dans le suivi opérationnel.';
 
-/**
- * Z de référence : calculé sur les commandes enregistrées côté serveur.
- *
- * Seule source qui voie la vente en ligne et les remises passées depuis le
- * back-office. Les commandes annulées en sortent — elles n'ont encaissé rien.
- *
- * @param since début du service en ms (la clôture précédente, ou minuit).
- * @param fenetre ce que le serveur a dit de la coupe. Facultatif : sans lui, on
- *        suppose la fenêtre complète — c'était le comportement d'avant, et il
- *        reste exact tant que la journée tient sous le plafond. Le fournir est
- *        ce qui permet au Z de dire « au moins » plutôt que d'affirmer.
- */
-export function zFromServer(
-  rows: ServiceOrderRow[],
-  since: number,
-  fenetre?: ZWindow,
-): ServiceZ {
-  const z = {
-    ...EMPTY_Z,
-    source: 'server' as const,
-    partial: fenetre?.truncated === true,
-    missing: fenetre ? Math.max(0, fenetre.total - fenetre.received) : 0,
-  };
-  for (const row of rows) {
-    if (row.status === 'cancelled') continue;
-    const at = row.createdAt ? Date.parse(row.createdAt) : Number.NaN;
-    if (Number.isFinite(at) && at < since) continue;
-
-    const total = Math.round(row.totals?.total ?? 0);
-    z.orders += 1;
-    z.ca += total;
-    z.discounts += Math.round(row.totals?.discount?.amount ?? 0);
-
-    if (row.payment?.status !== 'paid') {
-      z.due += total;
-      continue;
-    }
-    const tender = row.payment.tender ?? null;
-    if (tender === 'cash') z.cash += total;
-    else if (tender === 'card') z.card += total;
-    else if (tender === 'meal_voucher') z.mealVoucher += total;
-    else if (tender === 'online') z.online += total;
-    else z.unspecified += total;
-  }
-  return z;
-}
-
-/**
- * Repli hors ligne : le journal local du poste.
- *
- * Il ne connaît que ce qui est parti de CETTE caisse — la vente en ligne y est
- * donc absente, et le Z le signale par `source: 'local'` plutôt que d'afficher
- * un zéro qui passerait pour un fait.
- */
-export function zFromJournal(entries: DayEntry[]): ServiceZ {
-  // Le journal local n'est jamais tronqué : il contient exactement ce que CE
-  // poste a encaissé. Il est incomplet pour une autre raison — la vente en
-  // ligne lui échappe —, et c'est `source: 'local'` qui le dit.
-  const z = { ...EMPTY_Z, source: 'local' as const, partial: false, missing: 0 };
+/** Calcule exclusivement ce qui est déjà présent dans le journal du poste. */
+export function zFromJournal(entries: DayEntry[]): LocalJournalSummary {
+  const z = { ...EMPTY_LOCAL_SUMMARY };
   for (const entry of entries) {
     const net = entry.total - (entry.discount ?? 0);
     z.orders += 1;

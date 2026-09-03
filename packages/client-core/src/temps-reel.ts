@@ -18,8 +18,9 @@
  *
  * La cadence de secours n'est donc PAS une constante partagée : la cuisine
  * resonde toutes les 5 s (trois GET, un écran qui ne fait que ça), la caisse
- * toutes les 12 s (un GET, un poste qui encaisse en même temps). Chaque surface
- * apporte la sienne ; ce module ne décide que de la RÈGLE.
+ * toutes les 12 s (amorce journalière si nécessaire + trois statuts actifs, un
+ * poste qui encaisse en même temps). Chaque surface apporte sa cadence ; ce
+ * module ne décide que de la RÈGLE.
  */
 
 /** Cadence de secours historique de l'écran cuisine — trois GET par tour. */

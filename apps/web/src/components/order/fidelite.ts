@@ -4,6 +4,7 @@ import type { LoyaltyCustomerCard, LoyaltyPublicProgram } from "@sm/contracts";
  * lanceur de tests du dépôt ne résout pas l'alias de chemin de Next.
  */
 import { prochainPalier, unitePour } from "../loyalty/paliers";
+import { fraicheur } from "../loyalty/carte-locale";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -112,3 +113,75 @@ export function soldeVitrine(carte: LoyaltyCustomerCard): SoldeVitrine {
       : null,
   };
 }
+
+export type EtatSoldeVitrine =
+  | (SoldeVitrine & {
+      source: "reseau";
+      vuA: string;
+    })
+  | {
+      source: "cache";
+      solde: number;
+      unite: string;
+      vuA: string;
+      rafraichissement: "en-cours" | "echec";
+    };
+
+export function soldeVitrineDepuisReseau(
+  carte: LoyaltyCustomerCard,
+  vuA: string,
+): EtatSoldeVitrine {
+  return { source: "reseau", vuA, ...soldeVitrine(carte) };
+}
+
+/**
+ * Un cache minimal ne connaît ni le catalogue complet ni son ordre courant.
+ * Il n'a donc volontairement aucun champ `reste` à interpréter comme un palier.
+ */
+export function soldeVitrineDepuisCache(
+  solde: number,
+  uniteSingulier: string,
+  unitePluriel: string,
+  vuA: string,
+  rafraichissement: "en-cours" | "echec" = "en-cours",
+): EtatSoldeVitrine {
+  return {
+    source: "cache",
+    solde,
+    unite: unitePour(solde, uniteSingulier, unitePluriel),
+    vuA,
+    rafraichissement,
+  };
+}
+
+export function detailSoldeVitrine(
+  etat: EtatSoldeVitrine,
+  resume: VitrineFidelite,
+): string {
+  if (etat.source === "cache") {
+    return "Ouvrez votre carte pour consulter les récompenses à jour.";
+  }
+  if (!etat.reste) return "Vous atteignez tous les paliers publiés.";
+  const unite = unitePour(
+    etat.reste.manque,
+    resume.uniteSingulier,
+    resume.unitePluriel,
+  );
+  return `Encore ${etat.reste.manque.toLocaleString("fr-FR")} ${unite} pour « ${etat.reste.nom} »`;
+}
+
+export function provenanceSoldeVitrine(
+  etat: EtatSoldeVitrine,
+  maintenant = Date.now(),
+): string {
+  const age = fraicheur(etat.vuA, maintenant);
+  if (etat.source === "reseau") {
+    return `Source : réseau · vérifié ${age}`;
+  }
+  return etat.rafraichissement === "echec"
+    ? `Source : copie locale · solde vu ${age} · échec du rafraîchissement`
+    : `Source : copie locale · solde vu ${age} · vérification en cours`;
+}
+
+export const CONSEIL_FIDELITE_APRES_COMMANDE =
+  "Pendant le pilote, cette commande en ligne ne crédite pas la fidélité. Ouvrez le programme pour voir les récompenses et, si vous avez une carte, votre solde.";

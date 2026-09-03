@@ -668,6 +668,13 @@ export type AuthMeUpdate = z.infer<typeof AuthMeUpdateSchema>;
 // Temps réel (WebSocket) — rooms par tenantId
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Rôles autorisés à lire la file de commandes et à rejoindre son flux temps
+ * réel. Le cogérant n'est pas dupliqué ici : il endosse `gerant` via
+ * `roleSatisfait`, exactement comme dans la garde HTTP.
+ */
+export const ORDER_READ_ROLES = ['owner', 'gerant', 'caisse', 'cuisine'] as const;
+
 export const WS_EVENTS = {
   orderCreated: 'order.created',
   orderUpdated: 'order.updated',

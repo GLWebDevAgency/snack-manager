@@ -1,6 +1,6 @@
 /**
  * Barre haute (zone A) — identité du restaurant, VUE, mode de service, état de
- * la file offline, horloge et accès à la clôture.
+ * la file offline, horloge et accès au récapitulatif local.
  *
  * Elle reste visible sous toutes les surcouches : c'est le seul repère fixe du
  * poste pendant un coup de feu.
@@ -27,6 +27,7 @@ import { FONT, R, S, sheet, shadow, type, withAlpha, type Brand } from './theme'
 import { MODE_LABEL, type Mode } from './pos-state';
 import { Press, Segmented, Sheen } from './ui';
 import { useLayout } from './useLayout';
+import type { ServiceBadgeTone } from './service-reconciliation';
 
 /** Ce que le poste montre : la vente en cours, ou l'état du service. */
 export type Vue = 'vente' | 'service';
@@ -37,7 +38,7 @@ export function TopBar({
   vue,
   onVue,
   serviceBadge,
-  serviceUrgent,
+  serviceTone,
   mode,
   onMode,
   pending,
@@ -46,7 +47,7 @@ export function TopBar({
   rejets,
   onRejets,
   now,
-  onCloture,
+  onRecap,
   onLock,
 }: {
   brand: Brand;
@@ -56,14 +57,14 @@ export function TopBar({
   /**
    * Commandes RÉELLEMENT en cours — ni remises, ni annulées.
    *
-   * Déjà mis en forme par l'appelant (« 7 », ou « ≥ 200 » quand la fenêtre
-   * serveur est plafonnée) et calculé sur EXACTEMENT la liste que la vue du
-   * service affiche. Une pastille qui compterait sur une autre fenêtre que son
-   * écran est le défaut qu'on vient de corriger dans le back-office.
+   * Déjà mis en forme par l'appelant : tiret avant la première lecture,
+   * marqueur si la photo est périmée, et « ≈ » seulement si le compte actif
+   * est inexact. Le total peut rester exact même quand toutes les cartes ne
+   * tiennent pas dans une fenêtre de statut.
    */
   serviceBadge: string;
-  /** Au moins une commande est prête : il y a quelqu'un à appeler. */
-  serviceUrgent: boolean;
+  /** Ambre si prudence requise, vert si une prête vient d'une photo fiable. */
+  serviceTone: ServiceBadgeTone;
   mode: Mode;
   onMode: (m: Mode) => void;
   pending: number;
@@ -73,7 +74,7 @@ export function TopBar({
   rejets: number;
   onRejets: () => void;
   now: number;
-  onCloture: () => void;
+  onRecap: () => void;
   onLock: () => void;
 }) {
   const L = useLayout();
@@ -94,8 +95,10 @@ export function TopBar({
    * d'avant comptait les ventes de CE poste depuis l'ouverture du service —
    * pas les commandes encore en cuisine, et jamais la vente en ligne.
    *
-   * Quand une commande est prête, la pastille passe au vert fonctionnel : il y
-   * a quelqu'un à appeler, et cela doit se voir sans changer de vue.
+   * Quand une commande est prête, la pastille passe au vert fonctionnel
+   * uniquement si la photo est fiable. Une lecture absente, périmée ou
+   * partielle reste ambre, même si une ancienne carte était prête. Le
+   * caractère non atomique du compte, lui, est déjà porté par « ≈ ».
    */
   const vues = (
     <Segmented
@@ -104,7 +107,13 @@ export function TopBar({
       accent={brand.accent}
       onAccent={brand.onAccent}
       flex={stacked}
-      badge={serviceUrgent ? palette.green : undefined}
+      badge={
+        serviceTone === 'warning'
+          ? palette.amber
+          : serviceTone === 'ready'
+            ? palette.green
+            : undefined
+      }
       options={[
         { key: 'vente', label: 'Vendre' },
         { key: 'service', label: 'Le service', detail: serviceBadge },
@@ -256,15 +265,11 @@ export function TopBar({
         </View>
 
         {/*
-          « Clôture », et non plus « Service · N ».
-          Ce bouton a toujours ouvert la fenêtre de CLÔTURE ; son compteur
-          annonçait « Service » en ne comptant que les ventes de ce poste depuis
-          l'ouverture — ni la vente en ligne, ni ce qui est encore en cuisine.
-          Le vrai compte du service vit désormais sur la bascule de vue, où il
-          est calculé sur exactement ce que la vue montre. Le bouton dit donc ce
-          qu'il fait, et rien de plus.
+          Ce bouton ouvre uniquement le journal de CETTE caisse. Le suivi actif
+          reste sur la bascule de vue et inclut aussi le web ; aucune fermeture
+          comptable ou globale n'est promise ici.
         */}
-        <BarButton label={compact ? 'Clôture' : 'Clôturer'} accessibilityLabel="Clôture de service" onPress={onCloture} />
+        <BarButton label={compact ? 'Récap' : 'Récapitulatif'} accessibilityLabel="Récapitulatif local du poste" onPress={onRecap} />
         <BarButton label={compact ? 'Verrou' : 'Verrouiller'} accessibilityLabel="Verrouiller" onPress={onLock} />
       </View>
 

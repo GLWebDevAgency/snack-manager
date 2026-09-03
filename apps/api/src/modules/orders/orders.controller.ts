@@ -22,6 +22,7 @@ import {
   OrderDiscountSchema,
   type CreateOrder,
   type JwtPayload,
+  ORDER_READ_ROLES,
   type OrderStatus,
   publicOrderingState,
   aLaCapacite,
@@ -68,7 +69,7 @@ export class OrdersController {
   }
 
   /** Tout l'équipage lit la file : c'est l'écran de travail du KDS. */
-  @Roles('owner', 'gerant', 'caisse', 'cuisine')
+  @Roles(...ORDER_READ_ROLES)
   @Get('orders')
   list(
     @TenantId() tenantId: string,
@@ -79,7 +80,7 @@ export class OrdersController {
   }
 
   /** Même périmètre que la liste, sans charger jusqu'à 200 commandes. */
-  @Roles('owner', 'gerant', 'caisse', 'cuisine')
+  @Roles(...ORDER_READ_ROLES)
   @Get('orders/count')
   count(
     @TenantId() tenantId: string,
@@ -119,7 +120,7 @@ export class OrdersController {
     return order;
   }
 
-  @Roles('owner', 'gerant', 'caisse', 'cuisine')
+  @Roles(...ORDER_READ_ROLES)
   @Get('orders/:id')
   byId(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.orders.byId(tenantId, id);
