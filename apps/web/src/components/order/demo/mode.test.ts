@@ -266,9 +266,29 @@ describe("les créneaux sont relatifs à l'instant présent", () => {
     const api = orderingApi(demoTransport({ latency: false }));
     const slots = await api.loadSlots(DEMO_SLUG);
 
-    expect(slots.slots.length).toBeGreaterThan(0);
+    /*
+     * CE TEST TOMBAIT TOUS LES SOIRS, ET LE DÉFAUT ÉTAIT DANS LE TEST.
+     *
+     * Il exigeait `length > 0` sans condition. Or la démonstration reproduit
+     * fidèlement l'API : passé l'heure de fermeture, il n'y a plus de créneau
+     * aujourd'hui, `closedToday` passe à vrai et `nextOpenDate` porte la
+     * réouverture. Zéro créneau à 21 h n'est pas un défaut, c'est la bonne
+     * réponse — et l'intégration continue refusait donc toute fusion en soirée,
+     * pour une raison sans rapport avec ce qu'on lui demandait de vérifier.
+     *
+     * L'invariant que l'intitulé promet est « jamais un créneau PASSÉ ». Il est
+     * vrai à toute heure et se vérifie sur la liste, vide ou non. Le reste du
+     * contrat est vérifié explicitement plutôt que supposé : ou bien il y a des
+     * créneaux, ou bien la journée est déclarée fermée avec sa réouverture.
+     */
     for (const slot of slots.slots) {
       expect(Date.parse(slot.iso)).toBeGreaterThan(Date.now());
+    }
+    if (slots.slots.length === 0) {
+      expect(slots.closedToday, "une journée sans créneau doit se déclarer fermée").toBe(true);
+      expect(slots.nextOpenDate, "une journée fermée doit dire quand elle rouvre").not.toBeNull();
+    } else {
+      expect(slots.closedToday).toBe(false);
     }
   });
 

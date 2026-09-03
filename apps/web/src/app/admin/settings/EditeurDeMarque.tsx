@@ -39,6 +39,8 @@ import {
   TYPE_PAIR_KEYS,
   contraste,
   marqueEffective,
+  modePourFond,
+  type PresentationEntete,
   type Brand,
   type BrandMotion,
   type BrandShape,
@@ -233,7 +235,29 @@ export function EditeurDeMarque({
             posables={posables}
             deriveEnEchec={deriveEnEchec}
             onPalette={(cle, valeur) =>
-              poser({ ...brand, palette: { ...brand.palette, [cle]: valeur } })
+              /*
+                LE MODE SUIT LE FOND, ICI PLUTÔT QU'À L'ENREGISTREMENT.
+
+                Le contrat refuse désormais un mode qui contredit la luminance
+                du fond. Le laisser refuser au moment d'enregistrer serait le
+                pire des deux mondes : le restaurateur change une couleur de
+                fond, travaille dix minutes, et se fait retoquer sur un champ
+                que cet écran ne lui montre même pas.
+
+                Le mode se dérive donc à la frappe, comme le reste du masque se
+                dérive de ses cinq rôles. Le seul cas qui le change est
+                justement celui du fond : les quatre autres rôles ne le touchent
+                pas, et `modePourFond` rend la même valeur qu'avant.
+              */
+              poser(
+                cle === "ground"
+                  ? {
+                      ...brand,
+                      mode: modePourFond(valeur),
+                      palette: { ...brand.palette, ground: valeur },
+                    }
+                  : { ...brand, palette: { ...brand.palette, [cle]: valeur } },
+              )
             }
           />
 
@@ -245,6 +269,7 @@ export function EditeurDeMarque({
             cotesConnues={medias !== null}
             onOuvrir={setOuvert}
             onRetirer={(cle) => poser(poserEmplacement(brand, cle, null))}
+            onPresentation={(entete) => poser({ ...brand, entete })}
           />
         </div>
 
@@ -703,12 +728,14 @@ function SectionImages({
   cotesConnues,
   onOuvrir,
   onRetirer,
+  onPresentation,
 }: {
   brand: Brand;
   parAdresse: ReadonlyMap<string, MediaVue>;
   cotesConnues: boolean;
   onOuvrir: (cle: CleEmplacement) => void;
   onRetirer: (cle: CleEmplacement) => void;
+  onPresentation: (entete: PresentationEntete) => void;
 }) {
   /*
    * DEUX PANNEAUX, ET LE LOGO D'ABORD.
@@ -748,6 +775,8 @@ function SectionImages({
       >
         {principal ? rangee(principal) : null}
 
+        <ChoixDePresentation brand={brand} onChoisir={(entete) => onPresentation(entete)} />
+
         {autres.length > 0 && (
           /*
             REPLIÉ PAR DÉFAUT, OUVERT DÈS QU'UNE DÉCLINAISON EST POSÉE : replier
@@ -783,6 +812,67 @@ function SectionImages({
         {photos.map(rangee)}
       </Panel>
     </>
+  );
+}
+
+/**
+ * LE CHOIX ENTRE LE SYMBOLE ET LE VERROU.
+ *
+ * Il ne s'affiche QUE si une image horizontale est posée : proposer un choix
+ * dont une branche est vide donnerait un bouton qui ne fait rien, et le
+ * restaurateur croirait avoir mal réglé quelque chose. Sans verrou, la
+ * question ne se pose pas — l'en-tête compose le symbole et le nom, et c'est
+ * la seule réponse possible.
+ */
+function ChoixDePresentation({
+  brand,
+  onChoisir,
+}: {
+  brand: Brand;
+  onChoisir: (entete: PresentationEntete) => void;
+}) {
+  const aUnVerrou = brand.logo.lockup.light !== null || brand.logo.lockup.dark !== null;
+  if (!aUnVerrou) return null;
+
+  const options: ReadonlyArray<{ cle: PresentationEntete; nom: string; aide: string }> = [
+    {
+      cle: "symbole",
+      nom: "Le symbole et le nom",
+      aide: "Votre pictogramme, et le nom écrit à côté. Tient mieux sur un téléphone.",
+    },
+    {
+      cle: "verrou",
+      nom: "Votre logo horizontal",
+      aide: "L’image où le pictogramme et le nom sont déjà composés, employée telle quelle.",
+    },
+  ];
+
+  return (
+    <fieldset className="mt-1 rounded-card border border-line2 p-3">
+      <legend className="px-1 text-[12px] font-bold text-ink">En-tête de vos écrans</legend>
+      <div className="mt-1 flex flex-col gap-1.5">
+        {options.map((o) => {
+          const actif = brand.entete === o.cle;
+          return (
+            <button
+              key={o.cle}
+              type="button"
+              onClick={() => onChoisir(o.cle)}
+              aria-pressed={actif}
+              className={cx(
+                "cf-press min-h-11 rounded-card border px-3 py-2 text-left",
+                actif ? "border-accent bg-accentwash" : "border-line2 hover:border-line",
+              )}
+            >
+              <span className={cx("block text-[13px] font-bold", actif ? "text-accentink" : "text-ink")}>
+                {o.nom}
+              </span>
+              <span className="mt-0.5 block text-[12px] leading-snug text-mut">{o.aide}</span>
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

@@ -20,6 +20,18 @@ import type { Brand } from "@sm/contracts";
  * approximatif ; on veut la tuile et le nom, tels qu'ils ont toujours été.
  */
 export function verrouPour(brand: Brand): string | null {
+  /*
+   * LE CHOIX DU RESTAURATEUR PASSE AVANT CE QU'IL A POSÉ.
+   *
+   * Poser une image horizontale ne suffit plus à l'employer : le restaurateur
+   * dit lequel des deux il veut voir. Il peut vouloir garder sa planche
+   * horizontale pour ses supports imprimés et préférer le symbole à l'écran,
+   * où la largeur manque — un verrou de 512 px sur un téléphone de 390 pousse
+   * tout le reste de l'en-tête.
+   *
+   * Le défaut reste `verrou`, donc rien ne change pour qui n'a rien choisi.
+   */
+  if (brand.entete === "symbole") return null;
   const prefere = brand.mode === "dark" ? "dark" : "light";
   const autre = prefere === "dark" ? "light" : "dark";
   return brand.logo.lockup[prefere] ?? brand.logo.lockup[autre];

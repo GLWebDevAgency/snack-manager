@@ -14,6 +14,7 @@ import {
   MEDIAS_PAR_PRODUIT_MAX,
   ORIGINES_MEDIA,
   PLATFORM_SETTINGS_ID,
+  PRESENTATIONS_ENTETE,
   PRESET_KEYS,
   SENS_DEROGATION,
   SM_INVOICE_VAT,
@@ -139,6 +140,19 @@ export const BrandSub = new Schema(
       type: String,
       enum: [...PRESET_KEYS, null],
       default: null,
+    },
+    /*
+     * CE QUE L'EN-TÊTE MONTRE — le symbole et le nom, ou le logo horizontal.
+     *
+     * `default` et non `required` : tous les masques déjà stockés sont
+     * antérieurs à ce champ. Mongo le posera à leur prochaine écriture, et le
+     * contrat le pose à la lecture — un masque ancien n'est donc jamais
+     * invalide, il est simplement lu avec le comportement d'avant.
+     */
+    entete: {
+      type: String,
+      enum: [...PRESENTATIONS_ENTETE],
+      default: 'verrou',
     },
   },
   { _id: false },

@@ -139,6 +139,30 @@ const BrandTypeSchema = z.object({ pair: TypePairKeySchema });
  * surfaces. Zod 4, la règle : strict à l'ENTRÉE (contre le mass assignment),
  * strip à la LECTURE d'une persistance qu'on ne contrôle pas au bit près.
  */
+/**
+ * CE QUE L'EN-TÊTE MONTRE — un choix, et non une précédence subie.
+ *
+ * Deux façons de se présenter, et le restaurateur choisit :
+ *
+ *   · `symbole` — le pictogramme seul, et le nom écrit à côté par le produit.
+ *     C'est ce qui tient le mieux sur un téléphone, où la largeur manque.
+ *   · `verrou` — l'image où le pictogramme et le nom sont déjà composés
+ *     ensemble, employée telle quelle. C'est la planche de marque, avec son
+ *     interlettrage et ses proportions d'origine.
+ *
+ * Le défaut est `verrou`, ce qui reproduit exactement le comportement
+ * antérieur : jusqu'ici, poser une image horizontale suffisait à l'employer.
+ * La différence est qu'on peut désormais en poser une SANS l'employer — un
+ * restaurateur peut vouloir la garder pour ses supports imprimés et préférer
+ * le symbole à l'écran.
+ *
+ * Sans image horizontale posée, le champ ne change rien : `verrouPour` rend
+ * `null` et l'en-tête retombe sur le symbole et le nom.
+ */
+export const PRESENTATIONS_ENTETE = ['symbole', 'verrou'] as const;
+export type PresentationEntete = (typeof PRESENTATIONS_ENTETE)[number];
+export const PresentationEnteteSchema = z.enum(PRESENTATIONS_ENTETE);
+
 export const BrandSchema = z.object({
   mode: BrandModeSchema,
   palette: BrandPaletteSchema,
@@ -148,6 +172,13 @@ export const BrandSchema = z.object({
   logo: LogoSchema,
   hero: ImageUrl,
   preset: PresetKeySchema.nullable().default(null),
+  /*
+   * `.default()` et non `.optional()` : tous les masques déjà stockés sont
+   * antérieurs à ce champ, et `lireMarque` les valide avec ce schéma. Sans
+   * défaut, chacun d'eux deviendrait « invalide » et retomberait sur la
+   * direction Nuit — le contraire de ce qu'on cherche.
+   */
+  entete: PresentationEnteteSchema.default('verrou'),
 });
 export type Brand = z.infer<typeof BrandSchema>;
 
@@ -165,7 +196,34 @@ export const BrandStrictSchema = BrandSchema.extend({
     mark: LogoPairSchema.strict(),
     lockup: LogoPairSchema.strict(),
   }).strict(),
-}).strict();
+})
+  .strict()
+  /*
+   * LE MODE DOIT SUIVRE LE FOND — ET CETTE GARDE EST SUR L'ÉCRITURE SEULE.
+   *
+   * Elle ne peut PAS aller sur `BrandSchema`, et ce n'est pas un oubli :
+   * `lireMarque` valide avec lui le masque STOCKÉ, et retombe sur la direction
+   * Nuit quand il échoue. Durcir le schéma de lecture ferait donc disparaître
+   * l'identité de tout restaurant portant déjà la combinaison — silencieusement,
+   * sur toutes ses surfaces, à l'instant du déploiement. Le pilote la portait.
+   *
+   * Les lectures continuent donc d'accepter l'existant ; seules les écritures
+   * refusent d'en créer de nouveau. Un masque incohérent se corrige à sa
+   * prochaine modification, et le message dit quoi faire plutôt que de
+   * constater.
+   */
+  .superRefine((b, ctx) => {
+    const attendu = modePourFond(b.palette.ground);
+    if (b.mode === attendu) return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['mode'],
+      message:
+        attendu === 'light'
+          ? 'Le fond est clair : le mode doit être « light ». Un mode sombre sur un fond clair donne des ombres noires et des ascenseurs sombres.'
+          : 'Le fond est sombre : le mode doit être « dark ». Un mode clair sur un fond sombre donne des ombres trop pâles pour se voir.',
+    });
+  });
 
 // ─────────────────────────────────────────────────────────────
 // Les paires typographiques curatées — jamais une police libre
@@ -257,32 +315,32 @@ export const DIRECTIONS: Record<PresetKey, Brand> = {
   brasserie: {
     mode: 'light',
     palette: { ground: '#f5efe3', surface: '#fffdf8', ink: '#1f1a17', accent: '#7a2e2a', onAccent: '#fff8f0' },
-    type: { pair: 'brasserie' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'brasserie',
+    type: { pair: 'brasserie' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'brasserie', entete: 'verrou',
   },
   neon: {
     mode: 'dark',
     palette: { ground: '#0e1016', surface: '#171a23', ink: '#f3f1ec', accent: '#d8f04a', onAccent: '#0e1016' },
-    type: { pair: 'neon' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'neon',
+    type: { pair: 'neon' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'neon', entete: 'verrou',
   },
   atelier: {
     mode: 'light',
     palette: { ground: '#f7f3ec', surface: '#ffffff', ink: '#2b2b2b', accent: '#a8482a', onAccent: '#fff4ec' },
-    type: { pair: 'atelier' }, shape: 'doux', motion: 'pose', logo: sansLogos, hero: null, preset: 'atelier',
+    type: { pair: 'atelier' }, shape: 'doux', motion: 'pose', logo: sansLogos, hero: null, preset: 'atelier', entete: 'verrou',
   },
   marche: {
     mode: 'light',
     palette: { ground: '#ffffff', surface: '#f4f8f4', ink: '#1e4d2b', accent: '#23843f', onAccent: '#ffffff' },
-    type: { pair: 'marche' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'marche',
+    type: { pair: 'marche' }, shape: 'rond', motion: 'vif', logo: sansLogos, hero: null, preset: 'marche', entete: 'verrou',
   },
   nuit: {
     mode: 'dark',
     palette: { ground: '#14151a', surface: '#1d1f26', ink: '#f0ebe1', accent: LAITON, onAccent: '#1c1612' },
-    type: { pair: 'nuit' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'nuit',
+    type: { pair: 'nuit' }, shape: 'net', motion: 'pose', logo: sansLogos, hero: null, preset: 'nuit', entete: 'verrou',
   },
   soleil: {
     mode: 'light',
     palette: { ground: '#f6ebd9', surface: '#fff9f0', ink: '#1b2a4a', accent: '#e07a1f', onAccent: '#1b1206' },
-    type: { pair: 'soleil' }, shape: 'doux', motion: 'vif', logo: sansLogos, hero: null, preset: 'soleil',
+    type: { pair: 'soleil' }, shape: 'doux', motion: 'vif', logo: sansLogos, hero: null, preset: 'soleil', entete: 'verrou',
   },
 };
 
@@ -443,6 +501,29 @@ export function ajusterJusquaAA(
  */
 export function textePosableSur(fond: string): '#000000' | '#ffffff' {
   return ratioContraste(NOIR, fond) >= ratioContraste(BLANC, fond) ? NOIR : BLANC;
+}
+
+/**
+ * LE MODE QU'UN FOND EXIGE — et pourquoi il ne se choisit pas librement.
+ *
+ * `mode` n'est pas une étiquette : il décide de trois choses invisibles au
+ * moment où on le pose.
+ *
+ *   · le `color-scheme` annoncé au navigateur, donc l'apparence des contrôles
+ *     natifs et des barres de défilement ;
+ *   · l'OMBRE — un noir à 38 % en sombre, une teinte d'encre à 14 % en clair ;
+ *   · les couleurs sémantiques de départ (`SEMANTIQUES[mode]`).
+ *
+ * Un mode sombre sur un fond crème donne donc des ombres noires et lourdes sur
+ * une page claire, et des ascenseurs sombres au milieu d'un site clair. Le
+ * pilote portait exactement cela, sans qu'aucune garde ne le dise.
+ *
+ * La règle ne pose aucun seuil nouveau : elle réutilise celle qui décide déjà
+ * de l'encre posable sur un fond. Si le NOIR s'y lit mieux que le blanc, le
+ * fond est clair — donc le mode l'est aussi.
+ */
+export function modePourFond(fond: string): BrandMode {
+  return textePosableSur(fond) === NOIR ? 'light' : 'dark';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -948,7 +1029,7 @@ export function marqueDeRepli(
       mark: { light: null, dark: logo.success ? logo.data : null },
       lockup: { light: null, dark: null },
     },
-    preset: 'nuit',
+    preset: 'nuit', entete: 'verrou',
   };
 }
 
