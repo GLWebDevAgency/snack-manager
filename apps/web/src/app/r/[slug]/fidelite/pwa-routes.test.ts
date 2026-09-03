@@ -113,9 +113,21 @@ describe("application fidélité installable", () => {
   });
 
   it("sert un worker borné à la fidélité et exclut explicitement la carte privée", async () => {
-    const { GET } = await import("./sw.js/route");
+    const { GET, estReponseCoquilleFideliteCacheable } = await import(
+      "./sw.js/route"
+    );
     const response = await GET(new Request("https://classfood.example/sw.js"), context);
     const source = await response.text();
+    const reponse = (
+      url: string,
+      contentType = "text/html; charset=utf-8",
+      redirected = false,
+    ) => ({
+      ok: true,
+      redirected,
+      url,
+      headers: new Headers({ "Content-Type": contentType }),
+    });
 
     expect(response.headers.get("Content-Type")).toContain("application/javascript");
     expect(response.headers.get("Service-Worker-Allowed")).toBe(
@@ -125,8 +137,118 @@ describe("application fidélité installable", () => {
     expect(source).toContain('APP_PATH + "/card-session"');
     expect(source).toContain('APP_PATH + "/card-qr"');
     expect(source).toContain("if (PRIVATE_PATHS.has(url.pathname)) return;");
+    expect(source).toContain(
+      'return pathname === APP_PATH || pathname === APP_PATH + "/";',
+    );
+    expect(source).toContain(
+      'request.mode === "navigate" && isAppShellPath(url.pathname)',
+    );
+    expect(source).not.toContain("const SAFE_ASSETS = new Set([\n  APP_PATH,");
+    expect(source).not.toContain('const SAFE_ASSETS = new Set([\n  APP_PATH + "/",');
+    expect(source).not.toContain("url.pathname.startsWith(APP_PATH)");
+    expect(source).toContain("isCacheableAppShell(response)");
+    expect(source).toContain("!response.ok || response.redirected");
+    expect(source).toContain("responseUrl.origin === self.location.origin");
+    expect(source).toContain('contentType.toLowerCase().startsWith("text/html")');
+    expect(source).toContain("fetchAndCacheAppShell(APP_PATH)");
+    expect(source).not.toContain("cache.add(APP_PATH)");
+    expect(source).toContain("const cache = await caches.open(CACHE_NAME);");
+    expect(source).toContain("(await cache.match(APP_PATH)) || Response.error()");
+    expect(source).not.toContain("caches.match(");
     expect(source).toContain('request.method !== "GET"');
     expect(source).not.toContain("qrToken");
+
+    // `fetch` suit les redirections : la réponse finale privée doit être
+    // refusée même quand la requête initiale visait le shell public.
+    expect(
+      estReponseCoquilleFideliteCacheable(
+        reponse(
+          "https://classfood.example/r/classfood/fidelite/card-session",
+          "text/html; charset=utf-8",
+          true,
+        ),
+        "/r/classfood/fidelite",
+        "https://classfood.example",
+      ),
+    ).toBe(false);
+    expect(
+      estReponseCoquilleFideliteCacheable(
+        reponse("https://classfood.example/r/classfood/fidelite/card-qr"),
+        "/r/classfood/fidelite",
+        "https://classfood.example",
+      ),
+    ).toBe(false);
+    expect(
+      estReponseCoquilleFideliteCacheable(
+        reponse("https://classfood.example/r/classfood/fidelite"),
+        "/r/classfood/fidelite",
+        "https://classfood.example",
+      ),
+    ).toBe(true);
+    expect(
+      estReponseCoquilleFideliteCacheable(
+        reponse(
+          "https://classfood.example/r/classfood/fidelite",
+          "text/html; charset=utf-8",
+          true,
+        ),
+        "/r/classfood/fidelite",
+        "https://classfood.example",
+      ),
+    ).toBe(false);
+    expect(
+      estReponseCoquilleFideliteCacheable(
+        reponse("https://classfood.example/r/classfood/fidelite", "application/json"),
+        "/r/classfood/fidelite",
+        "https://classfood.example",
+      ),
+    ).toBe(false);
+  });
+
+  it("ne traite comme navigation hors ligne que la racine, avec ou sans slash", async () => {
+    const { GET, estCheminCoquilleFidelite } = await import("./sw.js/route");
+    const source = await (
+      await GET(new Request("https://classfood.example/sw.js"), context)
+    ).text();
+
+    const appPath = "/r/classfood/fidelite";
+    expect(estCheminCoquilleFidelite(appPath, appPath)).toBe(true);
+    expect(estCheminCoquilleFidelite(`${appPath}/`, appPath)).toBe(true);
+    expect(estCheminCoquilleFidelite(`${appPath}/card-qr`, appPath)).toBe(false);
+    expect(estCheminCoquilleFidelite(`${appPath}/card-session`, appPath)).toBe(false);
+    expect(
+      estCheminCoquilleFidelite(`${appPath}/future-private-route`, appPath),
+    ).toBe(false);
+
+    // Le worker livré doit employer cette égalité exacte, sans ancien préfixe.
+    expect(source).toContain("isAppShellPath(url.pathname)");
+    expect(source).not.toContain("url.pathname.startsWith(APP_PATH)");
+  });
+
+  it("isole les caches de foo et foo-bar, puis ne purge que son ancien nom exact", async () => {
+    const { GET, estCacheFideliteObsolete, nomsCachesFidelite } = await import(
+      "./sw.js/route"
+    );
+    mocks.load.mockResolvedValueOnce({
+      ...CATALOG,
+      restaurant: { ...CATALOG.restaurant, slug: "foo" },
+    });
+    const source = await (
+      await GET(new Request("https://foo.example/sw.js"), {
+        params: Promise.resolve({ slug: "foo" }),
+      })
+    ).text();
+
+    expect(nomsCachesFidelite("foo").actuel).toBe("sm-loyalty:foo:v2");
+    expect(estCacheFideliteObsolete("sm-loyalty:foo:v1", "foo")).toBe(true);
+    expect(estCacheFideliteObsolete("sm-loyalty-foo-v1", "foo")).toBe(true);
+    expect(estCacheFideliteObsolete("sm-loyalty:foo:v2", "foo")).toBe(false);
+    expect(estCacheFideliteObsolete("sm-loyalty:foo-bar:v1", "foo")).toBe(false);
+    expect(estCacheFideliteObsolete("sm-loyalty-foo-bar-v1", "foo")).toBe(false);
+    expect(source).toContain('const CACHE_NAME = "sm-loyalty:foo:v2";');
+    expect(source).toContain('const CACHE_PREFIX = "sm-loyalty:foo:";');
+    expect(source).toContain('const LEGACY_CACHE_NAME = "sm-loyalty-foo-v1";');
+    expect(source).not.toContain('startsWith("sm-loyalty-foo-")');
   });
 
   it("ne publie ni manifeste ni worker pour un programme inactif", async () => {

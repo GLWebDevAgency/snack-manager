@@ -6,15 +6,18 @@ import { Icon } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import {
   ecrireInstantane,
-  lireInstantane,
+  lireEtatInstantane,
   oublierInstantane,
 } from "../loyalty/carte-locale";
 import { loadRememberedCustomerLoyaltyCard } from "../loyalty/customer-api";
-import { unitePour } from "../loyalty/paliers";
 import {
+  CONSEIL_FIDELITE_APRES_COMMANDE,
+  detailSoldeVitrine,
   promesseFidelite,
-  soldeVitrine,
-  type SoldeVitrine,
+  provenanceSoldeVitrine,
+  soldeVitrineDepuisCache,
+  soldeVitrineDepuisReseau,
+  type EtatSoldeVitrine,
   type VitrineFidelite,
 } from "./fidelite";
 
@@ -53,11 +56,10 @@ import {
  * Le signal « ce navigateur a une carte ici » vient donc de l'instantané local
  * (`components/loyalty/carte-locale.ts`), qui est porté par l'ORIGINE et non
  * par un chemin, qui ne contient aucun secret, et qui existait déjà pour la
- * consultation hors ligne. Sans instantané, AUCUNE requête n'est émise : les
- * visiteurs sans carte — l'immense majorité — ne paient rien.
+ * consultation hors ligne. Sans instantané (hors purge d'une charge expirée),
+ * AUCUNE requête n'est émise : les visiteurs sans carte — l'immense majorité —
+ * ne paient rien.
  */
-
-type Etat = { solde: SoldeVitrine } | null;
 
 export function FideliteVitrine({
   slug,
@@ -68,17 +70,28 @@ export function FideliteVitrine({
   resume: VitrineFidelite;
   className?: string;
 }) {
-  const [etat, setEtat] = useState<Etat>(null);
+  const [etat, setEtat] = useState<EtatSoldeVitrine | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     void (async () => {
-      const instantane = lireInstantane(slug);
+      const lecture = lireEtatInstantane(slug);
+      const instantane = lecture.instantane;
       // Aucune carte connue sur cet appareil : on n'appelle rien, et la bande
-      // reste une invitation. C'est le cas de presque tous les visiteurs.
-      if (!instantane) return;
+      // reste une invitation. Une charge expirée, déjà purgée, garde seulement
+      // le droit de tenter cette actualisation : son cookie peut vivre 180 j.
+      if (!instantane && lecture.etat !== "expire") return;
       if (!controller.signal.aborted) {
-        setEtat({ solde: soldeVitrine(instantane.carte) });
+        if (instantane) {
+          setEtat(
+            soldeVitrineDepuisCache(
+              instantane.solde,
+              resume.uniteSingulier,
+              resume.unitePluriel,
+              instantane.vuA,
+            ),
+          );
+        }
       }
       try {
         const fraiche = await loadRememberedCustomerLoyaltyCard(
@@ -87,8 +100,8 @@ export function FideliteVitrine({
         );
         if (controller.signal.aborted) return;
         if (fraiche) {
-          ecrireInstantane(slug, fraiche);
-          setEtat({ solde: soldeVitrine(fraiche) });
+          const ecrit = ecrireInstantane(slug, fraiche.member.balanceUnits);
+          setEtat(soldeVitrineDepuisReseau(fraiche, ecrit.vuA));
         } else {
           // Le cookie a expiré ou a été retiré : l'instantané ne doit pas
           // survivre au droit qui le rendait consultable.
@@ -96,18 +109,19 @@ export function FideliteVitrine({
           setEtat(null);
         }
       } catch {
-        /*
-         * Hors ligne, ou service indisponible : on garde l'instantané. Une
-         * vitrine n'a aucune raison d'afficher une erreur de fidélité — le
-         * client est venu commander, et le solde affiché est daté d'une visite
-         * qui a bien eu lieu.
-         */
+        // La commande reste prioritaire, mais une copie locale affichée doit
+        // dire explicitement que sa vérification a échoué.
+        setEtat((courant) =>
+          courant?.source === "cache"
+            ? { ...courant, rafraichissement: "echec" }
+            : courant,
+        );
       }
     })();
     return () => controller.abort();
-  }, [slug]);
+  }, [resume.unitePluriel, resume.uniteSingulier, slug]);
 
-  const solde = etat?.solde ?? null;
+  const solde = etat;
 
   return (
     <section
@@ -126,7 +140,11 @@ export function FideliteVitrine({
             </span>
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-accentink">
-                {solde ? "Votre carte" : "Programme fidélité"}
+                {solde
+                  ? solde.source === "reseau"
+                    ? "Solde vérifié sur le réseau"
+                    : "Solde enregistré hors ligne"
+                  : "Programme fidélité"}
               </p>
               <h2
                 id="fidelite-vitrine"
@@ -144,12 +162,13 @@ export function FideliteVitrine({
                 )}
               </h2>
               <p className="mt-1 text-[13px] leading-5 text-mut">
-                {solde
-                  ? solde.reste
-                    ? `Encore ${solde.reste.manque.toLocaleString("fr-FR")} ${unitePour(solde.reste.manque, resume.uniteSingulier, resume.unitePluriel)} pour « ${solde.reste.nom} »`
-                    : "Vous atteignez tous les paliers publiés."
-                  : promesseFidelite(resume)}
+                {solde ? detailSoldeVitrine(solde, resume) : promesseFidelite(resume)}
               </p>
+              {solde && (
+                <p className="mt-1.5 text-[11px] leading-4 text-mut">
+                  {provenanceSoldeVitrine(solde)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -170,7 +189,7 @@ export function FideliteVitrine({
 }
 
 /**
- * LE RAPPEL DE LA CONFIRMATION — le moment où l'on gagne des points.
+ * LE RAPPEL DE LA CONFIRMATION — sans inventer un rattachement rétroactif.
  *
  * ═══ CE QU'ON NE PEUT PAS PROMETTRE, ET POURQUOI ═══
  *
@@ -179,9 +198,9 @@ export function FideliteVitrine({
  * crédite, à partir du `loyaltyMemberId` qu'un ticket de comptoir attache.
  * Écrire ici « vous venez de gagner N points » serait donc faux.
  *
- * Ce qui est vrai, et suffit : le QR présenté au retrait est ce qui rattache
- * l'achat. C'est exactement ce que dit la carte elle-même pendant le pilote,
- * et les deux surfaces doivent dire la même chose.
+ * Le QR ne peut pas être ajouté après coup à la commande stricte déjà créée.
+ * La confirmation renvoie donc vers le programme, son solde éventuel et ses
+ * récompenses, sans promettre que cet achat sera crédité.
  */
 export function FideliteApresCommande({
   resume,
@@ -201,7 +220,7 @@ export function FideliteApresCommande({
           {resume.programme}
         </span>
         <span className="block text-[13px] leading-snug text-mut">
-          Présentez votre QR au retrait pour rattacher cette commande.
+          {CONSEIL_FIDELITE_APRES_COMMANDE}
         </span>
       </span>
       <Icon name="arrow" size={16} stroke={2.4} className="shrink-0 text-accentink" />
