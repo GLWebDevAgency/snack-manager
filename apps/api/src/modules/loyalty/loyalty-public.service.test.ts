@@ -44,6 +44,12 @@ const REWARD = {
  * masque, en pratique. Sans ce paramètre, seul le chemin de REPLI (tenant sans
  * `brand`) était couvert : un restaurant repris qui aurait rendu Nuit au lieu
  * de sa propre identité ne faisait rougir aucun test.
+ *
+ * `plan: 'boost'` et `account.status: 'active'` sont posés par DÉFAUT, et ce
+ * n'est pas de la décoration : depuis que ces routes vérifient la souscription
+ * et le compte, un tenant de fixture sans formule décrit un restaurant à qui la
+ * fidélité n'a jamais été vendue — sa carte se fermerait, et tous les tests de
+ * rendu ci-dessous vérifieraient un 404 en croyant vérifier un masque.
  */
 function build(status: 'active' | 'blocked' = 'active', tenant: Record<string, unknown> = {}) {
   const tenants = {
@@ -53,6 +59,8 @@ function build(status: 'active' | 'blocked' = 'active', tenant: Record<string, u
       name: 'Classfood',
       brandColor: '#c9a15a',
       logoUrl: null,
+      plan: 'boost',
+      account: { status: 'active' },
       ...tenant,
     }),
   };
@@ -197,5 +205,121 @@ describe('LoyaltyPublicService', () => {
     await expect(service.card('classfood', 'A'.repeat(43))).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+});
+
+/**
+ * CE QUE LE SLUG N'OUVRE PLUS.
+ *
+ * Ces routes ne posaient AUCUNE des deux questions que la vitrine pose déjà
+ * (`publicBySlug`) : un restaurant suspendu servait sa carte pendant que sa
+ * commande en ligne était fermée, et un restaurant sans le module de fidélité
+ * servait un programme qu'il n'a jamais acheté.
+ *
+ * Les deux routes sont éprouvées à chaque fois — `catalog` ET `card` — parce
+ * qu'elles partagent `context` mais pas leur chemin d'appel : une garde vérifiée
+ * sur la seule première laisserait la seconde ouverte le jour où l'une des deux
+ * cesserait de passer par là.
+ */
+describe('LoyaltyPublicService — compte et souscription', () => {
+  const TOKEN = 'A'.repeat(43);
+  const DEROGATION = {
+    capacite: 'loyalty',
+    sens: 'accordee',
+    motif: 'Programme du pilote, ouvert hors formule',
+    auteur: 'Équipe Snack Manager',
+    le: '2026-09-03T09:00:00.000Z',
+  };
+
+  /** Les deux routes publiques, refusées de la même façon et sans détail. */
+  async function attendreIndisponible(tenant: Record<string, unknown>) {
+    const { service, loyalty } = build('active', tenant);
+    await expect(service.catalog('classfood')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.card('classfood', TOKEN)).rejects.toBeInstanceOf(NotFoundException);
+    // Fermé AVANT la lecture du programme : rien à lire chez un restaurant
+    // qu'on ne sert pas.
+    expect(loyalty.getProgram).not.toHaveBeenCalled();
+    return service;
+  }
+
+  it('ferme les deux routes d’un compte SUSPENDU', async () => {
+    await attendreIndisponible({ account: { status: 'suspended' } });
+  });
+
+  it('rend au compte suspendu le MÊME message qu’à un programme en brouillon', async () => {
+    // Sans quoi la route deviendrait un oracle : n'importe qui, avec un slug,
+    // saurait dire l'impayé du module non souscrit et du programme non publié.
+    const suspendu = build('active', { account: { status: 'suspended' } }).service;
+    const brouillon = build('active', {});
+    brouillon.loyalty.getProgram.mockResolvedValue({ ...PROGRAM, status: 'draft' });
+    const messages = await Promise.all(
+      [suspendu.catalog('classfood'), brouillon.service.catalog('classfood')].map((p) =>
+        p.then(
+          () => null,
+          (error: unknown) => (error as Error).message,
+        ),
+      ),
+    );
+    expect(messages[0]).toBe('Programme de fidélité indisponible');
+    expect(messages[1]).toBe(messages[0]);
+  });
+
+  it('sert un ESSAI et un compte PARTI — seule la suspension ferme', async () => {
+    // `isAccessBlocked` répond faux à `trial` comme à `churned`, et un essai
+    // dont le terme est passé vaut `active` : aucun des trois ne ferme une
+    // carte. Le parc d'avant le champ `account` non plus.
+    for (const account of [{ status: 'trial' }, { status: 'churned' }, undefined]) {
+      const { service } = build('active', { account });
+      await expect(service.catalog('classfood')).resolves.toMatchObject({
+        restaurant: { slug: 'classfood' },
+      });
+      await expect(service.card('classfood', TOKEN)).resolves.toMatchObject({
+        member: { alias: 'Maya' },
+      });
+    }
+  });
+
+  it('ferme les deux routes d’un restaurant en Complet — la fidélité est vendue en Boost', async () => {
+    // LE PIÈGE DE DÉPLOIEMENT, épinglé ici : le restaurant pilote tourne en
+    // Complet avec un programme actif. Sans la dérogation posée AVANT la mise
+    // en ligne, ce test décrit exactement ce que ses clients verraient.
+    await attendreIndisponible({ plan: 'complet' });
+    await attendreIndisponible({ plan: 'essentiel' });
+    // Le module de commande en ligne n'ouvre pas la fidélité : deux lignes
+    // distinctes de la grille tarifaire.
+    await attendreIndisponible({ plan: null, onlineOrdering: true });
+  });
+
+  it('sert un Complet dont la fidélité est ACCORDÉE hors formule', async () => {
+    const { service } = build('active', {
+      plan: 'complet',
+      derogationsCapacite: [DEROGATION],
+    });
+    await expect(service.catalog('classfood')).resolves.toMatchObject({
+      program: { name: 'La carte Classfood' },
+    });
+    await expect(service.card('classfood', TOKEN)).resolves.toMatchObject({
+      member: { balanceUnits: 125 },
+    });
+  });
+
+  it('ferme un Boost dont la fidélité est RETIRÉE, et un Complet dont la dérogation est levée', async () => {
+    // Un retrait l'emporte toujours sur ce que la formule comprend…
+    await attendreIndisponible({
+      plan: 'boost',
+      derogationsCapacite: [{ ...DEROGATION, sens: 'retiree', motif: 'Retirée le temps du litige' }],
+    });
+    // …et une levée efface la ligne, rendant la capacité à la formule.
+    await attendreIndisponible({ plan: 'complet', derogationsCapacite: [] });
+  });
+
+  it('ferme la carte d’un compte suspendu MÊME quand la fidélité est accordée', async () => {
+    // Les deux conditions sont un ET : une dérogation ouvre un module, elle
+    // n'annule pas un impayé.
+    await attendreIndisponible({
+      plan: 'complet',
+      derogationsCapacite: [DEROGATION],
+      account: { status: 'suspended' },
+    });
   });
 });

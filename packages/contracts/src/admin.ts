@@ -198,14 +198,19 @@ export const TRIAL_ENDED_REASON =
  *
  * La règle tient en une phrase : **on ferme ce qui encaisse, on laisse ouvert
  * ce qui affiche.** Elle est écrite ici parce qu'elle se décide une fois et
- * s'applique à six endroits ; sans elle, chaque surface tranche à sa manière.
+ * s'applique à sept endroits ; sans elle, chaque surface tranche à sa manière.
  *
  * FERMÉ — les surfaces qui prennent de l'argent ou pilotent le service :
  *  · le back-office du gérant (guard global, à chaque requête) ;
  *  · l'ouverture de service au PIN, sur tablette appairée COMME par slug —
  *    une caisse s'authentifie par son jeton d'appareil, hors du guard, et
  *    l'oublier laisserait tout le parc déjà installé encaisser librement ;
- *  · la prise de commande en ligne.
+ *  · la prise de commande en ligne ;
+ *  · le programme de fidélité public — catalogue ET carte du porteur. Un solde
+ *    n'est pas un affichage, c'est une CRÉANCE : la carte annonce les
+ *    récompenses « à portée », et un compte suspendu ne peut en honorer aucune
+ *    puisque sa caisse est déjà fermée (deux lignes plus haut). Le pourquoi
+ *    complet est sur `publicLoyaltyAvailable`, plus bas.
  *
  * OUVERT — les surfaces que voit le CLIENT FINAL du restaurant :
  *  · la carte, les horaires et les avis du site public ;
@@ -333,6 +338,69 @@ export function publicOrderingState(
   return settings.paused
     ? { paused: true, message: settings.message }
     : { paused: false, message: null };
+}
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  LE PROGRAMME DE FIDÉLITÉ EST-IL SERVI AU PUBLIC ?                       ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * Le pendant de `publicOrderingState` pour les deux routes publiques de
+ * fidélité — le catalogue et la carte du porteur. Elles interrogeaient le
+ * restaurant par son slug sans rien vérifier d'autre : un établissement
+ * SUSPENDU servait toujours son programme alors que sa vitrine était fermée,
+ * et un restaurant qui n'a jamais acheté la fidélité servait un programme
+ * qu'on ne lui a pas vendu.
+ *
+ * ─── POURQUOI UN BOOLÉEN, ET PAS UN ÉTAT DE PAUSE ───
+ *
+ * La vitrine se ferme en PAUSE parce qu'il lui reste une page à montrer : le
+ * menu, les horaires, les avis, et un bandeau à la place du panier. La carte
+ * fidélité n'a pas de moitié à garder — c'est une carte ou rien. Elle a
+ * d'ailleurs déjà sa porte de sortie : un programme `draft` ou `paused` rend
+ * un 404 que la page transforme en écran « Programme fidélité indisponible ».
+ * Cette règle emprunte cette porte-là plutôt que d'en ouvrir une seconde ; un
+ * troisième état exigerait un champ dans `LoyaltyPublicProgramSchema` qu'aucun
+ * écran ne lit, c'est-à-dire une fermeture qui n'en serait pas une.
+ *
+ * ─── POURQUOI LA SUSPENSION FERME, ALORS QU'ELLE LAISSE LE MENU OUVERT ───
+ *
+ * Parce qu'un solde n'est pas un affichage. La carte marque ses récompenses
+ * `affordable` — « vous pouvez la prendre maintenant » — et un compte suspendu
+ * ne peut en honorer AUCUNE : `SessionAccess` refuse toutes ses requêtes
+ * authentifiées, caisse comprise. Laisser la carte ouverte, c'est
+ * envoyer le porteur à un comptoir obligé de le refuser, et c'est le
+ * restaurateur qui essuie ce refus devant son propre client. La règle de la
+ * maison — « la pression s'exerce là où le gérant travaille, pas dans sa
+ * salle » — commande donc ici de FERMER : l'écran neutre garde le litige entre
+ * nous et lui, la scène au comptoir l'aurait exposé.
+ *
+ * Le CATALOGUE suit la carte, et pas seulement par symétrie : c'est lui que
+ * lisent le manifeste et l'icône de l'application installée. Le laisser ouvert
+ * pendant que la carte se ferme donnerait une application qui garde son nom,
+ * son logo et sa place sur l'écran d'accueil, et qui n'ouvre plus rien.
+ *
+ * Ce n'est PAS un argument de fraude : le gain est déjà impossible, il n'existe
+ * que par une vente au comptoir authentifiée. Fermer la lecture n'empêche rien
+ * — c'est une question de vérité, pas de sécurité.
+ *
+ * Et l'objection tient debout, elle aussi : le porteur n'est pas partie au
+ * litige, son solde est sa donnée. Il n'est pas effacé, seulement illisible le
+ * temps que le compte le soit ; la réactivation rend la carte, l'icône et
+ * l'application installée dans le même instant.
+ *
+ * ─── UNE SEULE RÉPONSE POUR LES DEUX REFUS ───
+ *
+ * Impayé et module non souscrit rendent le MÊME 404, comme le programme en
+ * brouillon. Deux messages distincts feraient de cette route un oracle sur la
+ * situation commerciale de n'importe quel restaurant, interrogeable par
+ * quiconque connaît un slug.
+ */
+export function publicLoyaltyAvailable(
+  account: { status?: TenantAccountStatus | null } | null | undefined,
+  souscrite: boolean,
+): boolean {
+  return souscrite && !isAccessBlocked(account?.status);
 }
 
 // ─── Formules ───
