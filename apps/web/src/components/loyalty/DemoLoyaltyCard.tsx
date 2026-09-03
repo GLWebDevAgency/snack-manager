@@ -17,6 +17,7 @@ import {
 } from "./carte-visuelle";
 import { dureeEnMs, useCompteAnime } from "./mouvement";
 import { phraseDeProgression, progressionVers, type Recompense } from "./paliers";
+import { SignatureSnackManager } from "./SignatureSnackManager";
 
 /** Repli de la durée « fête » quand aucun masque n'est demandé par l'URL. */
 const FETE_PAR_DEFAUT_MS = 900;
@@ -195,6 +196,12 @@ export function DemoLoyaltyCard() {
           </div>
         </div>
       </main>
+
+      {/* Même signature que la vraie carte : la démonstration ne doit pas
+          montrer un produit sans son auteur. */}
+      {/* Le masque de capture peut être absent : la signature attend, comme
+          la feuille du masque juste au-dessus. */}
+      {brand && <SignatureSnackManager brand={brand} />}
     </div>
   );
 }

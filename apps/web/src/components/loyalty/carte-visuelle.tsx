@@ -5,6 +5,7 @@ import type { ReactNode, Ref } from "react";
 import { Card, Icon } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { chiffre, unitePour, type Recompense } from "./paliers";
+import { MatiereCarte, SceauRecompense } from "./MatiereCarte";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -142,10 +143,22 @@ export function SoldeCarte({
       actualisation, puisque la section reste montée entre-temps.
     */
     <section className="relative animate-carte overflow-hidden rounded-wide border border-accent/25 bg-[image:var(--cf-card-gradient)] p-5 shadow-deep motion-reduce:animate-none sm:p-7">
-      <div
-        className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-accentwash blur-3xl"
-        aria-hidden
-      />
+      {/*
+        LA MATIÈRE REMPLACE LE HALO FLOU, ET C'EST UN GAIN SUR LES SIX
+        DIRECTIONS.
+
+        Le halo était un disque de lavis d'accent passé au flou. Il détachait
+        bien la carte en mode sombre — et sur les quatre directions CLAIRES il
+        lisait comme une auréole sale, d'autant que le dégradé de carte
+        assombrit ce même coin : le haut était simultanément noirci par l'un et
+        éclairci par l'autre.
+
+        `MatiereCarte` fait le même travail avec les moyens d'un objet :
+        un halo directionnel, un lustre, et un guilloché très discret dont les
+        arcs entrent par le coin d'où vient la lumière. Une seule couche, posée
+        ici — les deux surfaces qui montent `SoldeCarte` en héritent ensemble.
+      */}
+      <MatiereCarte />
 
       {/*
         L'ÉTIQUETTE DU CHIFFRE PORTE LE PRÉNOM — et c'est ce qui remet le solde
@@ -303,14 +316,25 @@ export function TuileRecompense({
       )}
     >
       <div className="flex items-start gap-3">
-        <span
-          className={cx(
-            PASTILLE,
-            acquise ? "bg-accent text-onaccent" : "bg-ink/6 text-mut",
-          )}
-        >
-          <Icon name={acquise ? "check" : "gift"} size={19} />
-        </span>
+        {/*
+          LE SCEAU N'APPARAÎT QU'UNE FOIS LA RÉCOMPENSE ACQUISE, ET C'EST VOULU.
+
+          C'est un dessin — un anneau perforé, le bord d'un ticket qu'on
+          détache — là où le reste de la liste porte une pastille de 40 px.
+          L'employer partout ferait de chaque ligne un objet précieux, donc
+          plus aucune : ce qui distingue « c'est à vous » disparaîtrait.
+
+          Il est plus haut que la pastille, et cela fait grandir la ligne
+          acquise. C'est l'effet cherché : au milieu d'une liste calme, c'est
+          celle-là qu'on doit voir.
+        */}
+        {acquise ? (
+          <SceauRecompense />
+        ) : (
+          <span className={cx(PASTILLE, "bg-ink/6 text-mut")}>
+            <Icon name="gift" size={19} />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-extrabold text-ink">{nom}</p>
