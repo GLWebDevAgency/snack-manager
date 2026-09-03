@@ -39,6 +39,7 @@ import {
   isAccessBlocked,
   type AdminPlan,
   type CapaciteEffective,
+  type CompteRestaurant,
   type GesteDerogation,
 } from "@sm/contracts";
 import { ApiError } from "@/lib/api";
@@ -51,6 +52,9 @@ import { AccountPill, PlanPill, ScorePill, Unavailable } from "../ui";
 import { FacturesCard } from "./Factures";
 import {
   CapaciteModal,
+  CompteRevokeModal,
+  CompteRoleModal,
+  CreerCompteModal,
   EmettreFactureModal,
   OffreModal,
   ResetOwnerModal,
@@ -64,6 +68,7 @@ import {
   AccesSection,
   AdoptionSection,
   AdviceSection,
+  ComptesSection,
   DevicesSection,
   HealthSection,
   NotesSection,
@@ -96,9 +101,25 @@ export default function ClientFilePage({
   const reload = useCallback(() => setTick((n) => n + 1), []);
 
   const [modal, setModal] = useState<
-    "suspend" | "reactivate" | "plan" | "motdepasse" | "facturer" | "churn" | null
+    | "suspend"
+    | "reactivate"
+    | "plan"
+    | "motdepasse"
+    | "facturer"
+    | "churn"
+    | "compte"
+    | null
   >(null);
   const [device, setDevice] = useState<ParkDevice | null>(null);
+  // Le compte visé par un geste, ET lequel : les deux modales portent des
+  // conséquences très différentes, et la fiche ne monte que celle qu'elle
+  // ouvre. Comme les autres, elles repartent d'un brouillon vierge — un motif
+  // de révocation qui survivrait à la fermeture finirait collé sur le mauvais
+  // compte.
+  const [compte, setCompte] = useState<{
+    compte: CompteRestaurant;
+    geste: "role" | "revoquer";
+  } | null>(null);
   // La dérogation en cours de saisie — la capacité ET le geste que sa ligne
   // appelait. Comme les autres modales, elle n'est montée qu'à l'ouverture :
   // un motif qui survivrait à la fermeture finirait collé sur la mauvaise
@@ -490,6 +511,20 @@ export default function ClientFilePage({
               l'écrivait.
             */}
             <AccesSection file={file} onGeste={setDeroge} />
+            {/*
+              QUI A UNE CLÉ — juste sous « ce que l'établissement a le droit
+              d'ouvrir ». Les deux questions se posent l'une après l'autre au
+              téléphone, et la seconde n'avait aucun écran : un restaurant
+              n'avait qu'un compte, si bien qu'un cogérant travaillait avec le
+              mot de passe du patron — et le registre des gestes sensibles
+              nommait le patron pour des gestes qu'il n'avait pas faits.
+            */}
+            <ComptesSection
+              file={file}
+              onCreer={() => setModal("compte")}
+              onRole={(c) => setCompte({ compte: c, geste: "role" })}
+              onRevoquer={(c) => setCompte({ compte: c, geste: "revoquer" })}
+            />
             <AdviceSection file={file} />
           </div>
 
@@ -611,6 +646,35 @@ export default function ClientFilePage({
           capacite={deroge.capacite}
           geste={deroge.geste}
           onClose={() => setDeroge(null)}
+          onDone={reload}
+        />
+      )}
+      {modal === "compte" && (
+        <CreerCompteModal
+          tenantId={id}
+          tenantName={name}
+          // Ce qu'il reste à ouvrir vient du SERVEUR : le plafond dépend de la
+          // formule, et la règle d'or interdit qu'un écran connaisse le nom
+          // d'une formule. `0` si la route est muette — le bouton qui ouvre
+          // cette modale est alors absent.
+          restants={file.comptes?.restants ?? 0}
+          onClose={() => setModal(null)}
+          onDone={reload}
+        />
+      )}
+      {compte?.geste === "role" && (
+        <CompteRoleModal
+          tenantId={id}
+          compte={compte.compte}
+          onClose={() => setCompte(null)}
+          onDone={reload}
+        />
+      )}
+      {compte?.geste === "revoquer" && (
+        <CompteRevokeModal
+          tenantId={id}
+          compte={compte.compte}
+          onClose={() => setCompte(null)}
           onDone={reload}
         />
       )}

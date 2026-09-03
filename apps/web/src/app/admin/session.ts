@@ -3,9 +3,9 @@
 /**
  * QUI EST DEVANT L'ÉCRAN — lu sur le jeton, sans appel réseau.
  *
- * Le back-office `/admin` sert quatre rôles très différents sur le même URL :
- * le propriétaire, son gérant, la caisse et la cuisine. Le rôle est déjà dans
- * le jeton depuis toujours — l'API le pose à la connexion et le relit à chaque
+ * Le back-office `/admin` sert six rôles très différents sur le même URL : le
+ * propriétaire, son cogérant, son comptable, et les trois codes de tablette
+ * (gérant, caisse, cuisine). Le rôle est déjà dans le jeton depuis toujours — l'API le pose à la connexion et le relit à chaque
  * requête — mais aucune surface du restaurateur ne le lisait. La barre de
  * navigation affichait donc les mêmes entrées à tout le monde : une session
  * ouverte au code sur la tablette du comptoir voyait « Encaissement en ligne »,
@@ -34,15 +34,36 @@
 import { getToken } from "@/lib/api";
 
 /**
- * Les quatre rôles qui entrent dans `/admin`.
+ * Les six rôles qui entrent dans `/admin`.
+ *
+ * TROIS COMPTES À MOT DE PASSE — `owner`, `cogerant`, `comptable` — et TROIS
+ * CODES SUR TABLETTE — `gerant`, `caisse`, `cuisine`. Le voisinage des mots
+ * `cogerant` et `gerant` est délibéré et ne se simplifie pas : ce sont deux
+ * portes différentes, l'une à mot de passe, l'autre à quatre chiffres.
  *
  * `sm_admin` n'en fait PAS partie : c'est l'équipe Snack Manager, elle
  * travaille sur `/sm`, et son jeton dort dans un autre emplacement. Un jeton
  * d'équipe présenté ici n'est pas une session de restaurateur — il rend `null`
  * comme n'importe quel autre rôle inconnu.
  */
-export const ROLES_ADMIN = ["owner", "gerant", "caisse", "cuisine"] as const;
+export const ROLES_ADMIN = [
+  "owner",
+  "cogerant",
+  "comptable",
+  "gerant",
+  "caisse",
+  "cuisine",
+] as const;
 export type RoleAdmin = (typeof ROLES_ADMIN)[number];
+
+/**
+ * LES RÔLES QUI OUVRENT UNE SESSION AVEC UN MOT DE PASSE.
+ *
+ * Sert au repli de `genre` ci-dessous, et se lit comme la définition qu'elle
+ * est : un compte, c'est une adresse et un mot de passe ; le reste est un code
+ * tapé sur une tablette appairée.
+ */
+const ROLES_A_MOT_DE_PASSE: readonly RoleAdmin[] = ["owner", "cogerant", "comptable"];
 
 /**
  * COMMENT la session a été ouverte, ce qui n'est pas la même question que
@@ -87,14 +108,15 @@ export function sessionAdmin(token: string | null = getToken()): SessionAdmin | 
   const role = ROLES_ADMIN.find((r) => r === claims.role);
   if (!role) return null;
 
-  // Le genre est DÉDUIT du rôle quand le jeton ne le porte pas : `owner` est
-  // un compte e-mail, les trois autres n'existent que derrière un code sur
-  // tablette appairée (`DevicePinLogin`). Les jetons d'avant le champ `kind`
-  // se lisent donc comme les autres, plutôt que de se voir refuser une barre.
+  // Le genre est DÉDUIT du rôle quand le jeton ne le porte pas : les trois
+  // rôles de compte s'ouvrent avec un mot de passe, les trois autres n'existent
+  // que derrière un code sur tablette appairée (`DevicePinLogin`). Les jetons
+  // d'avant le champ `kind` se lisent donc comme les autres, plutôt que de se
+  // voir refuser une barre.
   const genre: GenreDeSession =
     claims.kind === "user" || claims.kind === "staff"
       ? claims.kind
-      : role === "owner"
+      : ROLES_A_MOT_DE_PASSE.includes(role)
         ? "user"
         : "staff";
 

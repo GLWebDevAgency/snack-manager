@@ -21,8 +21,15 @@ export class TenantsController {
   /**
    * L'établissement de la session — nom, couleur, horaires. Tout l'équipage en
    * a besoin pour afficher son propre restaurant, y compris sur une tablette.
+   *
+   * `comptable` compris, et c'est la route la plus basse de sa liste : sans
+   * elle, la coque du back-office n'a ni nom d'enseigne, ni couleur, ni la
+   * liste des capacités dont elle a besoin pour peindre sa barre. Un rôle qui
+   * ne peut pas ouvrir l'application n'ouvre rien du tout. C'est une lecture,
+   * elle ne porte aucun consommateur, et elle est déjà servie à la tablette du
+   * comptoir : personne n'y apprend rien de plus que le nom de son restaurant.
    */
-  @Roles('owner', 'gerant', 'caisse', 'cuisine')
+  @Roles('owner', 'gerant', 'caisse', 'cuisine', 'comptable')
   @Get('tenants/me')
   me(@TenantId() tenantId: string) {
     return this.tenants.byId(tenantId);

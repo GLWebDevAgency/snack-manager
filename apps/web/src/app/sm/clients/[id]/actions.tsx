@@ -39,9 +39,15 @@ import {
   CHURN_CAUSE_HINTS,
   GESTE_DEROGATION_LABELS,
   ORIGINE_CAPACITE_LABELS,
+  ROLES_ATTRIBUABLES,
+  ROLE_COMPTE_HINTS,
+  ROLE_COMPTE_LABELS,
   type CapaciteEffective,
   type ChurnCause,
+  type CompteCree,
+  type CompteRestaurant,
   type GesteDerogation,
+  type RoleAttribuable,
 } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import {
@@ -1252,6 +1258,402 @@ export function ChurnModal({ tenantId, tenantName, onClose, onDone }: Common) {
           placeholder="« On a fermé le service du midi, le logiciel ne se rentabilise plus. »"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
+      {refusal && <Refusal message={refusal} />}
+    </SheetModal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Comptes du restaurant
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * OUVRIR UN COMPTE — et remettre son mot de passe UNE fois.
+ *
+ * ── Pourquoi cette modale ressemble à `ResetOwnerModal` ────────────────────
+ *
+ * Parce que c'est le MÊME chemin, et qu'il est déjà éprouvé : le serveur
+ * fabrique le secret, le rend une fois dans la réponse, et l'opérateur le dicte
+ * au téléphone. C'est ce qui dispense le produit d'un courriel transactionnel —
+ * donc d'un expéditeur vérifié, d'une file d'envoi, de jetons à durée de vie,
+ * d'une page publique de choix de mot de passe et de la surveillance des
+ * rebonds. Cinq pièces neuves en moins, chacune capable de tomber en silence.
+ *
+ * ── Pas de motif, et c'est délibéré ───────────────────────────────────────
+ *
+ * Suspendre, révoquer et changer un rôle se SUBISSENT : le motif est ce qu'on
+ * relit au litige. Ouvrir un compte se demande — c'est le restaurateur qui
+ * appelle pour l'obtenir. Le journal porte l'adresse, le rôle et l'auteur, ce
+ * qui répond déjà à « qui a ouvert cet accès, quand, pour qui ».
+ */
+export function CreerCompteModal({
+  tenantId,
+  tenantName,
+  restants,
+  onClose,
+  onDone,
+}: Common & { restants: number }) {
+  const toast = useToast();
+  const [email, setEmail] = useState("");
+  const [nom, setNom] = useState("");
+  const [role, setRole] = useState<RoleAttribuable>("cogerant");
+  const [busy, setBusy] = useState(false);
+  const [fait, setFait] = useState<CompteCree | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  // Le formulaire, pas la garde : l'API refuse en français, et c'est ce refus
+  // que `Refusal` affiche. Ces deux conditions n'existent que pour ne pas
+  // proposer un bouton qui échouerait à coup sûr.
+  const ok = /.@./.test(email.trim()) && nom.trim().length >= 2;
+
+  async function run() {
+    if (!ok || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      setFait(
+        await clientsApi.creerCompte(tenantId, {
+          email: email.trim(),
+          nom: nom.trim(),
+          role,
+        }),
+      );
+      onDone();
+    } catch (e) {
+      setRefusal(errText(e, "Ouverture impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      // Une fois le mot de passe affiché, un Échap réflexe ou un clic sur le
+      // voile le perdrait — et il ne sera jamais réaffiché.
+      destructive={fait !== null}
+      title={`Ouvrir un compte — ${tenantName}`}
+      footer={
+        fait ? (
+          <Btn size="sm" icon="check" onClick={onClose}>
+            C&apos;est noté
+          </Btn>
+        ) : (
+          <>
+            <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+              Annuler
+            </Btn>
+            <Btn size="sm" icon="user" disabled={!ok || busy} onClick={() => void run()}>
+              {busy ? "Ouverture…" : "Ouvrir le compte"}
+            </Btn>
+          </>
+        )
+      }
+    >
+      {fait ? (
+        <div>
+          <p className="text-[13px] text-mut">
+            À dicter ou copier MAINTENANT pour{" "}
+            <b className="break-all text-ink">{fait.email}</b> ({fait.roleLabel.toLowerCase()}) —
+            il ne sera jamais réaffiché.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <code className="rounded-ctrl border border-white/12 bg-white/6 px-3 py-2 text-[17px] font-bold tracking-[0.08em] text-accent">
+              {fait.password}
+            </code>
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard
+                  ?.writeText(fait.password)
+                  .then(() => toast("Mot de passe copié", { icon: "check" }));
+              }}
+            >
+              Copier
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          <Consequences
+            tone="ok"
+            does={[
+              "Un mot de passe est fabriqué et remis UNE fois, ici — à dicter au téléphone.",
+              "La personne se connecte avec son adresse, sur le même back-office que le gérant.",
+              "Le geste s'inscrit au journal de l'établissement, avec l'adresse et le rôle.",
+            ]}
+            doesNot={[
+              "Aucun e-mail n'est envoyé : c'est vous qui remettez l'accès.",
+              "Le mot de passe du propriétaire ne bouge pas — les comptes sont indépendants.",
+            ]}
+          />
+
+          <Field
+            className="mt-4"
+            label="Adresse e-mail"
+            htmlFor="compte-email"
+            hint="C'est son identifiant de connexion. Une adresse ne peut appartenir qu'à un seul établissement."
+          >
+            <Input
+              id="compte-email"
+              type="email"
+              autoFocus
+              inputMode="email"
+              autoComplete="off"
+              placeholder="sarah@classfood.fr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </Field>
+
+          <Field
+            className="mt-3"
+            label="Nom de la personne"
+            htmlFor="compte-nom"
+            hint="Recopié dans le registre des gestes sensibles à chaque action — il ne s'y réécrit jamais."
+          >
+            <Input
+              id="compte-nom"
+              autoComplete="off"
+              placeholder="Sarah Benali"
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+            />
+          </Field>
+
+          <Field className="mt-3" label="Rôle" htmlFor="compte-role">
+            <Select
+              id="compte-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as RoleAttribuable)}
+            >
+              {ROLES_ATTRIBUABLES.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_COMPTE_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {/* CE QUE LE RÔLE OUVRE, sous le choix : c'est la question que
+              l'opérateur se pose au moment de choisir, pas après. */}
+          <p className="mt-2 text-[12.5px] leading-[1.45] text-mut">{ROLE_COMPTE_HINTS[role]}</p>
+
+          <p className="mt-3 text-[12.5px] text-mut">
+            {restants > 1
+              ? `${restants} comptes restent à ouvrir sur l'offre de ce client.`
+              : "C'est le dernier compte que l'offre de ce client autorise."}
+          </p>
+          {refusal && <Refusal message={refusal} />}
+        </>
+      )}
+    </SheetModal>
+  );
+}
+
+/**
+ * CHANGER LE RÔLE D'UN COMPTE — motif obligatoire, sessions coupées.
+ *
+ * Le geste retire ou accorde des droits sur l'outil de travail de quelqu'un, et
+ * le déconnecte dans la seconde. Sans motif au journal, la personne vit une
+ * déconnexion inexpliquée et l'équipe n'a rien à lui répondre.
+ */
+export function CompteRoleModal({
+  tenantId,
+  compte,
+  onClose,
+  onDone,
+}: Omit<Common, "tenantName"> & { compte: CompteRestaurant }) {
+  const toast = useToast();
+  // Le rôle proposé par défaut est l'AUTRE : c'est le seul geste qui ait un
+  // sens sur deux rôles attribuables, et l'API refuse celui qui ne change rien.
+  const autre = ROLES_ATTRIBUABLES.find((r) => r !== compte.role) ?? "cogerant";
+  const [role, setRole] = useState<RoleAttribuable>(autre);
+  const [motif, setMotif] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  const ok = motif.trim().length >= MIN_REASON && role !== compte.role;
+
+  async function run() {
+    if (!ok || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await clientsApi.changerRoleCompte(tenantId, compte.id, { role, motif: motif.trim() });
+      toast(`${compte.email} — ${ROLE_COMPTE_LABELS[role].toLowerCase()}`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Changement impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      title={`Changer le rôle — ${compte.nom || compte.email}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn size="sm" icon="check" disabled={!ok || busy} onClick={() => void run()}>
+            {busy ? "Enregistrement…" : "Changer le rôle"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="mb-3 break-all text-[13px] text-mut">
+        {compte.email} — aujourd&apos;hui {compte.roleLabel.toLowerCase()}.
+      </p>
+
+      <Consequences
+        tone="alert"
+        does={[
+          "Ses sessions ouvertes se ferment immédiatement, back-office et temps réel compris.",
+          "Il retrouve l'accès en se reconnectant, avec le même mot de passe.",
+          "Le motif s'inscrit au journal de l'établissement.",
+        ]}
+        doesNot={[
+          "Son mot de passe ne change pas — pour le renouveler, il faut le révoquer et le rouvrir.",
+          "Les tablettes appairées ne bougent pas : la caisse et la cuisine continuent.",
+        ]}
+      />
+
+      <Field className="mt-4" label="Nouveau rôle" htmlFor="role-cible">
+        <Select
+          id="role-cible"
+          value={role}
+          onChange={(e) => setRole(e.target.value as RoleAttribuable)}
+        >
+          {ROLES_ATTRIBUABLES.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_COMPTE_LABELS[r]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <p className="mt-2 text-[12.5px] leading-[1.45] text-mut">{ROLE_COMPTE_HINTS[role]}</p>
+
+      <Field
+        className="mt-3"
+        label="Motif du changement"
+        htmlFor="role-motif"
+        hint="Obligatoire — c'est ce qu'on relira quand quelqu'un demandera pourquoi cet accès a changé."
+      >
+        <Textarea
+          id="role-motif"
+          rows={3}
+          placeholder="Reprend la comptabilité, ne fait plus le service."
+          value={motif}
+          onChange={(e) => setMotif(e.target.value)}
+        />
+      </Field>
+      {refusal && <Refusal message={refusal} />}
+    </SheetModal>
+  );
+}
+
+/**
+ * RÉVOQUER UN COMPTE — le geste irréversible de cette section.
+ *
+ * Le document est SUPPRIMÉ, pas désactivé : l'adresse redevient libre pour la
+ * personne qui remplace celle qui part, et aucune empreinte de mot de passe ne
+ * dort en base. Ce qui survit, ce sont les REGISTRES — le journal porte
+ * l'adresse et le rôle, et le registre des gestes sensibles a recopié l'auteur
+ * de chaque ligne au moment du geste. « Qui a annulé cette commande en mars »
+ * se relit à l'identique après le départ.
+ */
+export function CompteRevokeModal({
+  tenantId,
+  compte,
+  onClose,
+  onDone,
+}: Omit<Common, "tenantName"> & { compte: CompteRestaurant }) {
+  const toast = useToast();
+  const [motif, setMotif] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  const ok = motif.trim().length >= MIN_REASON;
+
+  async function run() {
+    if (!ok || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    try {
+      await clientsApi.revoquerCompte(tenantId, compte.id, motif.trim());
+      toast(`${compte.email} — compte révoqué`, { icon: "check" });
+      onDone();
+      onClose();
+    } catch (e) {
+      setRefusal(errText(e, "Révocation impossible — réessayez"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SheetModal
+      open
+      onClose={onClose}
+      destructive
+      title={`Révoquer ${compte.nom || compte.email}`}
+      footer={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+            Annuler
+          </Btn>
+          <Btn
+            size="sm"
+            icon="trash"
+            variant="danger"
+            disabled={!ok || busy}
+            onClick={() => void run()}
+          >
+            {busy ? "Révocation…" : "Révoquer le compte"}
+          </Btn>
+        </>
+      }
+    >
+      <p className="mb-3 break-all text-[13px] text-mut">
+        {compte.email} — {compte.roleLabel.toLowerCase()}.
+      </p>
+
+      <Consequences
+        tone="alert"
+        does={[
+          "Le compte est supprimé : ses sessions se ferment immédiatement et son mot de passe ne vaut plus rien.",
+          "Son adresse redevient libre — elle pourra servir à la personne qui le remplace.",
+          "Le motif s'inscrit au journal, avec l'adresse et le rôle du compte fermé.",
+        ]}
+        doesNot={[
+          "Le registre des gestes sensibles ne bouge PAS : ce qu'il a fait reste signé de son nom.",
+          "Les tablettes appairées ne bougent pas non plus — un code de comptoir n'est pas un compte.",
+          "Ce compte ne se restaure pas : le rouvrir, c'est en fabriquer un nouveau.",
+        ]}
+      />
+
+      <Field
+        className="mt-4"
+        label="Motif de la révocation"
+        htmlFor="revoke-compte-motif"
+        hint="Obligatoire — c'est ce qu'on relira dans le journal."
+      >
+        <Textarea
+          id="revoke-compte-motif"
+          autoFocus
+          rows={3}
+          placeholder="A quitté l'établissement le 30/08, remplacé par Karim."
+          value={motif}
+          onChange={(e) => setMotif(e.target.value)}
         />
       </Field>
       {refusal && <Refusal message={refusal} />}

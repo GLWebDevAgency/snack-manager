@@ -9,6 +9,7 @@ import {
   ADMIN_PLANS,
   DEVICE_REVOKE_REASONS,
   DIRECTIONS,
+  COMPTE_LOG_ACTIONS,
   INVOICE_LOG_ACTIONS,
   PAIRING_CODE_TTL_MS,
   PLANS,
@@ -39,6 +40,7 @@ const CAISSE = '65f0000000000000000000a1';
 const ECRAN = '65f0000000000000000000b1';
 const CAISSE_DU_VOISIN = '65f0000000000000000000a2';
 const FACTURE = '65f0000000000000000000f1';
+const COMPTE = '65f0000000000000000000c1';
 
 const SM: JwtPayload = {
   sub: '65f00000000000000000ff01',
@@ -998,6 +1000,18 @@ describe('Administration client', () => {
       await admin.addNote(SM, CLASSFOOD, { note: 'Rappelé' });
       await admin.revokeDevice(SM, CLASSFOOD, CAISSE, { reason: 'vol', note: '' });
       await admin.revokeScreen(SM, CLASSFOOD, ECRAN, { reason: 'panne', note: '' });
+      // Les trois gestes de compte passent par la même frontière que la
+      // facturation : `ComptesService` rédige, ce service enregistre. Le
+      // parcourir ici garde la promesse « aucun geste sans trace » vraie pour
+      // la famille entière, y compris celle qu'on ajoutera demain.
+      for (const action of COMPTE_LOG_ACTIONS) {
+        await admin.recordCompteGesture(SM, CLASSFOOD, {
+          action,
+          compteId: COMPTE,
+          summary: `Compte cogerant@classfood.fr — ${action}`,
+          meta: { email: 'cogerant@classfood.fr', nom: 'Sofiane', role: 'cogerant' },
+        });
+      }
       for (const action of INVOICE_LOG_ACTIONS) {
         await admin.recordInvoiceGesture(SM, CLASSFOOD, {
           action,
@@ -1227,6 +1241,11 @@ describe('Vocabulaire d’administration', () => {
     // Les gestes de facturation sont bien des actions du MÊME journal : un fil
     // unique, pas un registre parallèle.
     for (const action of INVOICE_LOG_ACTIONS) {
+      expect(ADMIN_LOG_ACTIONS).toContain(action);
+    }
+    // Et les gestes sur les comptes du restaurant aussi : « ouvert un accès le
+    // 3, révoqué le 30 » se lit dans le même fil qu'une suspension.
+    for (const action of COMPTE_LOG_ACTIONS) {
       expect(ADMIN_LOG_ACTIONS).toContain(action);
     }
   });

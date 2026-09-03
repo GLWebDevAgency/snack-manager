@@ -1,5 +1,9 @@
 import { z } from 'zod';
+// `JwtPayload` et `AuthMe` (plus bas) nomment `UserRole` : `export *` republie
+// sans lier le nom localement, il faut donc l'importer en plus.
+import { type UserRole } from './comptes';
 
+export * from './comptes';
 export * from './supply';
 export * from './stats';
 export * from './ordering';
@@ -148,9 +152,16 @@ export const plafondRemiseLabel = (role: StaffRole): string => {
   return `${(cents / 100).toFixed(2).replace('.', ',')} € maximum`;
 };
 
-export const USER_ROLES = ['owner', 'sm_admin'] as const;
-export const UserRoleSchema = z.enum(USER_ROLES);
-export type UserRole = z.infer<typeof UserRoleSchema>;
+/*
+ * `USER_ROLES` A DÉMÉNAGÉ DANS `./comptes` — et n'est pas seulement déplacé.
+ *
+ * Un restaurant n'a plus un compte mais plusieurs (`owner`, `cogerant`,
+ * `comptable`), et le modèle qui va avec — subsomption des rôles, plafond par
+ * formule, projection des réponses — ne tenait pas dans trois lignes au milieu
+ * des énumérations de commande. `export * from './comptes'` (avec les autres
+ * en tête de fichier) le republie : tout appelant de `@sm/contracts` continue
+ * d'importer `USER_ROLES`, `UserRoleSchema` et `UserRole` sans rien changer.
+ */
 
 export const PLANS = ['essentiel', 'complet', 'boost'] as const;
 export const PlanSchema = z.enum(PLANS);

@@ -41,10 +41,11 @@ import { SessionAccessService } from '../../common/session-access';
  * ─── CE QU'IL VÉRIFIE, ET C'EST PLUS STRICT QUE LE GARDE GLOBAL ───
  *
  *  · jeton signé et non expiré (même secret, même service) ;
- *  · `kind: 'user'` ET `role: 'owner'` — le compte du restaurateur, pas une
- *    session de tablette. Un équipier connecté au PIN sur la caisse du comptoir
- *    n'a rien à faire dans la facturation de son patron, et une tablette est
- *    justement l'appareil qui traîne à portée de tout le monde ;
+ *  · `kind: 'user'` ET un rôle de `ROLES_LECTURE_FACTURATION` — un compte à
+ *    mot de passe, pas une session de tablette. Un équipier connecté au PIN sur
+ *    la caisse du comptoir n'a rien à faire dans la facturation de son patron,
+ *    et une tablette est justement l'appareil qui traîne à portée de tout le
+ *    monde ;
  *  · un `tenantId` présent et castable. C'est LUI qui désigne l'établissement,
  *    jamais l'URL : une facture est une donnée financière, et lire celle du
  *    voisin serait une fuite, pas un défaut d'affichage.
@@ -52,6 +53,30 @@ import { SessionAccessService } from '../../common/session-access';
  * Le rôle `sm_admin` est refusé ici sans regret : son jeton ne porte aucun
  * tenant, et l'équipe a déjà sa surface — `GET /crm/tenants/:id/billing`.
  */
+
+/**
+ * QUI LIT LES FACTURES DE L'ÉTABLISSEMENT — deux rôles, et pas un de plus.
+ *
+ * `owner` : c'est son abonnement, c'est lui qui règle.
+ *
+ * `comptable` : c'est son métier. Un rôle « lecture seule sur l'argent » qui ne
+ * verrait pas les factures de l'éditeur serait vide de sens — c'est la
+ * première pièce qu'on lui demande, et la faire transiter par une capture
+ * d'écran du patron ramène le mot de passe partagé qu'on vient de supprimer.
+ *
+ * `cogerant` en est ABSENT, et c'est la décision, pas un oubli : l'abonnement
+ * et l'encaissement restent au propriétaire. Un cogérant tient le service, il
+ * ne négocie pas le contrat.
+ *
+ * ─── CETTE LISTE NE GARDE QUE DE LA LECTURE ───
+ *
+ * `MyBillingController` ne porte que des `@Get` — c'est la condition posée en
+ * tête de ce fichier, et un test l'épingle : l'unique écriture de la surface
+ * (`PUT /billing/me/identity`, le SIRET imprimé sur les pièces) vit sur un
+ * AUTRE contrôleur, sous le garde global et `@Roles('owner')`. Ajouter un rôle
+ * ici n'ouvre donc jamais une écriture par mégarde.
+ */
+export const ROLES_LECTURE_FACTURATION: readonly string[] = ['owner', 'comptable'];
 @Injectable()
 export class TenantSessionGuard implements CanActivate {
   constructor(
@@ -72,13 +97,13 @@ export class TenantSessionGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    if (payload.kind !== 'user' || payload.role !== 'owner') {
+    if (payload.kind !== 'user' || !ROLES_LECTURE_FACTURATION.includes(payload.role)) {
       throw new ForbiddenException(
-        'Cet espace est réservé au compte du gérant de l’établissement.',
+        'Cet espace est réservé au gérant de l’établissement et à son comptable.',
       );
     }
 
-    // Un jeton `owner` sans tenant n'existe pas en production : s'il s'en
+    // Un jeton de restaurant sans tenant n'existe pas en production : s'il s'en
     // présente un, il est forgé ou corrompu. Un 401 vaut mieux qu'une requête
     // Mongo sur `undefined`.
     if (!payload.tenantId || !Types.ObjectId.isValid(payload.tenantId)) {
@@ -86,8 +111,9 @@ export class TenantSessionGuard implements CanActivate {
     }
 
     // Cette route ignore uniquement la suspension COMMERCIALE du tenant. Le
-    // compte owner et sa génération de session restent relus en base, comme sur
-    // toutes les autres frontières HTTP et WebSocket.
+    // compte et sa génération de session restent relus en base, comme sur
+    // toutes les autres frontières HTTP et WebSocket : un compte révoqué ou
+    // changé de rôle ne lit donc plus une facture, suspension ou pas.
     await this.sessions.assertUserSessionAllows(payload);
 
     req.user = payload;

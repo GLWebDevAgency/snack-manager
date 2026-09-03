@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AuditEntryView } from "@sm/contracts";
-import { phraseDuGeste, signatureDeLAuteur } from "./journal";
+import { STAFF_ROLES, USER_ROLES, type AuditEntryView } from "@sm/contracts";
+import { ROLES_NOMMES, phraseDuGeste, signatureDeLAuteur } from "./journal";
 
 /**
  * LES PHRASES DU REGISTRE — les seules que le gérant lira au litige.
@@ -35,6 +35,35 @@ describe("l’auteur affiché", () => {
       ligne({ author: { id: "s1", name: "Sarah", role: "caisse", means: "pin" } }),
     );
     expect(vue).toBe("par Sarah (caisse, au code, sur tablette)");
+  });
+
+  /**
+   * AUCUN RÔLE NE S'AFFICHE EN CLÉ BRUTE.
+   *
+   * Le registre existe pour NOMMER qui a fait quoi. Un rôle ajouté au produit
+   * sans libellé ici y écrirait « cogerant » — au moment précis, et au seul
+   * endroit, où la phrase doit se lire par un contrôleur.
+   */
+  it("nomme en français chacun des rôles du produit", () => {
+    for (const role of [...USER_ROLES, ...STAFF_ROLES]) {
+      expect(ROLES_NOMMES, role).toContain(role);
+    }
+  });
+
+  it("distingue le cogérant du gérant, deux portes différentes", () => {
+    // `cogerant` est un compte à mot de passe, `gerant` un code sur tablette.
+    // Le moyen les sépare déjà dans la phrase ; le mot ne doit pas les
+    // confondre.
+    expect(
+      signatureDeLAuteur(
+        ligne({ author: { id: "u2", name: "Sarah", role: "cogerant", means: "password" } }),
+      ),
+    ).toBe("par Sarah (cogérant, depuis le back-office)");
+    expect(
+      signatureDeLAuteur(
+        ligne({ author: { id: "s2", name: "Sarah", role: "gerant", means: "pin" } }),
+      ),
+    ).toBe("par Sarah (gérant, au code, sur tablette)");
   });
 
   it("retombe sur le nom d’équipier des lignes d’avant l’auteur", () => {

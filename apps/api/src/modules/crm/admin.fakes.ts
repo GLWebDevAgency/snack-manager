@@ -249,6 +249,21 @@ export class FakeCollection {
     return { acknowledged: true, matchedCount: upserted ? 0 : 1, upsertedCount: upserted };
   }
 
+  /**
+   * `deleteOne(filter)` — la révocation d'un compte SUPPRIME son document.
+   *
+   * Rendue au même niveau de fidélité que les écritures : un filtre qui ne
+   * matche rien ne supprime rien et le dit (`deletedCount: 0`), sans lever.
+   * C'est ce que fait Mongo, et c'est ce qui permet à un test de prouver qu'un
+   * identifiant d'un AUTRE établissement n'atteint pas ce compte.
+   */
+  async deleteOne(filter: Row): Promise<{ acknowledged: true; deletedCount: number }> {
+    const index = this.rows.findIndex((r) => matches(r, filter));
+    if (index === -1) return { acknowledged: true, deletedCount: 0 };
+    this.rows.splice(index, 1);
+    return { acknowledged: true, deletedCount: 1 };
+  }
+
   find(filter: Row = {}): FakeListQuery {
     return new FakeListQuery(this.rows.filter((r) => matches(r, filter)).map(clone));
   }

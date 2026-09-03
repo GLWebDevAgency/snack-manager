@@ -43,12 +43,31 @@ describe("la session du back-office restaurateur", () => {
     }
   });
 
+  it("lit les deux comptes ajoutés à côté du propriétaire", () => {
+    // Un restaurant a désormais plusieurs comptes à mot de passe. Sans ces
+    // deux rôles ici, `sessionAdmin` rendait `null` — donc une barre COMPLÈTE
+    // (le repli de la démonstration), donc quinze entrées proposées à un
+    // comptable qui recevra quinze refus.
+    for (const role of ["cogerant", "comptable"] as const) {
+      const token = jeton({ sub: "u2", tenantId: "t1", role, kind: "user", exp: DANS_UNE_HEURE });
+      expect(sessionAdmin(token)).toEqual({ role, genre: "user" });
+    }
+  });
+
   it("déduit le genre du rôle quand le jeton ne le porte pas", () => {
     // Les jetons émis avant le champ `kind` n'ont pas à perdre leur barre :
     // `owner` est un compte e-mail, les trois autres n'existent que derrière
     // un code sur tablette appairée.
     expect(sessionAdmin(jeton({ role: "owner" }))).toEqual({ role: "owner", genre: "user" });
+    expect(sessionAdmin(jeton({ role: "cogerant" }))).toEqual({
+      role: "cogerant",
+      genre: "user",
+    });
     expect(sessionAdmin(jeton({ role: "caisse" }))).toEqual({ role: "caisse", genre: "staff" });
+    // Le piège du voisinage : `gerant` est un CODE sur tablette, `cogerant` un
+    // compte à mot de passe. Un repli qui les confondrait afficherait au
+    // cogérant les écrans d'une session de comptoir.
+    expect(sessionAdmin(jeton({ role: "gerant" }))).toEqual({ role: "gerant", genre: "staff" });
   });
 
   it("ignore un genre inconnu plutôt que de le recopier", () => {

@@ -13,11 +13,29 @@ import { Roles, TenantId } from '../../common/auth';
 import { StatsService } from './stats.service';
 
 /**
- * Statistiques du restaurant — réservées au gérant.
+ * Statistiques du restaurant — réservées au gérant, et LUES par le comptable.
  * Toutes les agrégations sont exécutées côté MongoDB ($match/$group),
  * jamais par filtrage client. tenantId : toujours issu du JWT.
+ *
+ * ─── POURQUOI `comptable` EST NOMMÉ ICI, ET SUR LA CLASSE ───
+ *
+ * C'est SON écran : le chiffre d'affaires, les canaux, et surtout les deux
+ * exports CSV — le fichier qu'il ouvre dans un tableur pour rapprocher la
+ * recette. Sans eux, un rôle « lecture seule sur l'argent » n'aurait rien à
+ * lire et ne serait qu'un intitulé.
+ *
+ * Sur la CLASSE et non route par route parce que ce contrôleur ne porte QUE
+ * des `@Get` : neuf lectures d'agrégats, aucune écriture, aucune donnée
+ * nominative de consommateur. Le jour où quelqu'un y ajoutera un `@Post`, le
+ * contrôle qui parcourt les contrôleurs le refusera (`comptable-lecture-seule.
+ * test.ts`) — c'est ce contrôle qui rend la pose sur la classe défendable, pas
+ * la vigilance de la relecture.
+ *
+ * `comptable` n'a en revanche aucun accès aux rémunérations : elles ne sont pas
+ * ici, elles sont derrière `PayrollGuard` (module planning), qui exige le
+ * compte propriétaire.
  */
-@Roles('owner', 'gerant')
+@Roles('owner', 'gerant', 'comptable')
 @Controller('stats')
 export class StatsController {
   constructor(private readonly stats: StatsService) {}

@@ -345,6 +345,29 @@ describe('Abonnement du gérant — le garde', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  /**
+   * LE COMPTABLE LIT LES FACTURES, LE COGÉRANT NON.
+   *
+   * C'est la ligne de partage du modèle de comptes : le cogérant tient le
+   * SERVICE (carte, stocks, équipe, planning), le comptable lit l'ARGENT. Un
+   * rôle « lecture seule sur l'argent » qui ne verrait pas les factures de
+   * l'éditeur serait vide de sens ; un cogérant qui les verrait pourrait suivre
+   * la négociation commerciale de son patron.
+   */
+  it('laisse entrer le comptable — les factures sont sa pièce', async () => {
+    const comptable: JwtPayload = { ...OWNER, role: 'comptable' };
+    const req = { headers: { authorization: 'Bearer jeton' } } as { headers: Record<string, string> };
+    const ctx = { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
+    await expect(guardFor(comptable).canActivate(ctx)).resolves.toBe(true);
+  });
+
+  it('refuse le cogérant : l’abonnement et l’encaissement restent au propriétaire', async () => {
+    const cogerant: JwtPayload = { ...OWNER, role: 'cogerant' };
+    await expect(guardFor(cogerant).canActivate(context('Bearer jeton'))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
   it('refuse une session de tablette (PIN) : la caisse du comptoir n’est pas le bureau du patron', async () => {
     const staff: JwtPayload = { sub: 's1', tenantId: CLASSFOOD, role: 'gerant', kind: 'staff' };
     await expect(guardFor(staff).canActivate(context('Bearer jeton'))).rejects.toBeInstanceOf(

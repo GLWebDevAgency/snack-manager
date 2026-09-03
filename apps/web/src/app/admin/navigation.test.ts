@@ -27,6 +27,10 @@ const TOUT: readonly Capacite[] = CAPACITES;
 const OWNER: ContexteNav = { role: "owner", suspendu: false, capacites: TOUT };
 /** La tablette du comptoir. */
 const CAISSE: ContexteNav = { role: "caisse", suspendu: false, capacites: TOUT };
+/** Le cogérant : tout l'opérationnel, ni l'abonnement ni l'encaissement. */
+const COGERANT: ContexteNav = { role: "cogerant", suspendu: false, capacites: TOUT };
+/** Le comptable : lecture seule sur l'argent, rien d'autre. */
+const COMPTABLE: ContexteNav = { role: "comptable", suspendu: false, capacites: TOUT };
 /** La démonstration : aucun jeton, donc ni rôle ni capacités connus. */
 const DEMO: ContexteNav = { role: null, suspendu: false, capacites: null };
 
@@ -133,6 +137,45 @@ describe("navigation du back-office restaurateur", () => {
     // Le planning reste visible pour tous : l'écran retient les montants tout
     // seul, et c'est la seule page qui dit à un équipier quand il travaille.
     expect(hrefs(groupesVisibles(CAISSE))).toContain("/admin/planning");
+  });
+
+  /**
+   * LE COGÉRANT VOIT LE SERVICE, PAS L'ARGENT.
+   *
+   * C'est la traduction, dans la barre, de la subsomption posée côté API : il
+   * endosse `gerant`, donc tout ce que le gérant ouvre — et rien des deux
+   * surfaces réservées au propriétaire.
+   */
+  it("ouvre au cogérant tout l’opérationnel, jamais l’abonnement ni l’encaissement", () => {
+    const visibles = new Set(hrefs(groupesVisibles(COGERANT)));
+    expect(visibles.has("/admin/encaissement")).toBe(false);
+    expect(visibles.has(HREF_ABONNEMENT)).toBe(false);
+    // Tout le reste, sans exception : carte, stocks, équipe, planning,
+    // fidélité, promotions, avis, appareils, écrans, site.
+    const attendu = NAV.map((n) => n.href).filter(
+      (href) => href !== "/admin/encaissement" && href !== HREF_ABONNEMENT,
+    );
+    expect([...visibles].sort()).toEqual([...attendu].sort());
+  });
+
+  /**
+   * LE COMPTABLE NE SE VOIT PROPOSER QUE CE QU'IL PEUT OUVRIR.
+   *
+   * Deux entrées, exactement les deux surfaces que l'API lui ouvre côté écran :
+   * les statistiques (avec leurs exports CSV) et l'abonnement (ses factures).
+   * Le défaut « visible » lui en aurait proposé quinze pour quinze refus — une
+   * barre qui ment, pas une barre imprécise.
+   */
+  it("ne propose au comptable que les statistiques et l’abonnement", () => {
+    expect(hrefs(groupesVisibles(COMPTABLE))).toEqual(["/admin/stats", HREF_ABONNEMENT]);
+  });
+
+  it("laisse au comptable ses factures même sur un compte suspendu", () => {
+    // C'est justement le moment où il en a besoin : le numéro de pièce et le
+    // montant à virer. `TenantSessionGuard` l'accepte côté API, la barre doit
+    // dire la même chose.
+    const suspendu = groupesVisibles({ role: "comptable", suspendu: true, capacites: TOUT });
+    expect(hrefs(suspendu)).toEqual([HREF_ABONNEMENT]);
   });
 
   it("montre la barre COMPLÈTE quand le rôle est inconnu", () => {

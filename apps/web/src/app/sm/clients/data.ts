@@ -72,6 +72,10 @@ import {
   type TenantAccountStatus,
   type CrmInvoice,
   type ChurnCause,
+  type CompteCree,
+  type CompteRestaurant,
+  type ComptesRestaurant,
+  type RoleAttribuable,
 } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 
@@ -401,6 +405,18 @@ export type ClientFile = {
    * dû, il n'y figure donc jamais.
    */
   invoices: CrmInvoice[];
+  /**
+   * LES COMPTES À MOT DE PASSE de ce restaurant, avec le plafond de sa formule.
+   *
+   * `null` = la route n'a pas répondu, ce qui n'est PAS la même chose qu'un
+   * restaurant sans compte : le second est impossible (la signature en crée
+   * un), le premier arrive dès que l'API tousse. La section le dit.
+   *
+   * TYPÉ, contrairement au journal ou à la liste des clients : `/crm/tenants/
+   * :id/comptes` est contractualisée (`ComptesRestaurant`, @sm/contracts), et
+   * un champ ajouté ou renommé doit casser la compilation des deux côtés.
+   */
+  comptes: ComptesRestaurant | null;
   /** Sections dont la route a répondu 404 / en erreur — affichées comme telles. */
   offline: Set<Section>;
 };
@@ -412,7 +428,8 @@ export type Section =
   | "insights"
   | "signals"
   | "journal"
-  | "invoices";
+  | "invoices"
+  | "comptes";
 
 // ─────────────────────────────────────────────────────────────
 // Lecture des routes
@@ -526,6 +543,36 @@ export const clientsApi = {
    */
   churn: (id: string, body: { cause: ChurnCause; reason: string }) =>
     api.post<unknown>(`/crm/tenants/${id}/churn`, body),
+
+  /**
+   * LES COMPTES DU RESTAURANT — les quatre gestes, tous côté SUPPORT.
+   *
+   * Le restaurateur ne crée pas ses comptes depuis son back-office, et c'est ce
+   * qui dispense de tout courriel transactionnel : `creerCompte` rend le mot de
+   * passe UNE fois, dans sa réponse, exactement comme la conversion d'un lead.
+   *
+   * Les trois écritures rendent la LISTE À JOUR (la création rend en plus le
+   * secret) : après un geste, ce que l'opérateur a besoin de voir est l'état du
+   * parc de comptes, pas la ligne qu'il vient de toucher.
+   */
+  comptes: (id: string) => api.get<ComptesRestaurant>(`/crm/tenants/${id}/comptes`),
+
+  creerCompte: (id: string, body: { email: string; nom: string; role: RoleAttribuable }) =>
+    api.post<CompteCree>(`/crm/tenants/${id}/comptes`, body),
+
+  changerRoleCompte: (
+    id: string,
+    compteId: string,
+    body: { role: RoleAttribuable; motif: string },
+  ) => api.patch<ComptesRestaurant>(`/crm/tenants/${id}/comptes/${compteId}`, body),
+
+  /**
+   * Le motif voyage dans le corps, et la route est un `POST …/revoke` — comme
+   * la révocation d'un appareil : un mandataire qui écarterait le corps d'un
+   * `DELETE` transformerait une révocation motivée en refus illisible.
+   */
+  revoquerCompte: (id: string, compteId: string, motif: string) =>
+    api.post<ComptesRestaurant>(`/crm/tenants/${id}/comptes/${compteId}/revoke`, { motif }),
 
   addNote: (id: string, note: string) =>
     api.post<unknown>(`/crm/tenants/${id}/notes`, { note }),
@@ -908,15 +955,17 @@ function readAccount(raw: unknown): AdminTenantAccount | null {
  * de l'outil demandé. Chaque section manquante est signalée telle quelle.
  */
 export async function loadClientFile(id: string): Promise<ClientFile> {
-  const [rows, account, healthRaw, insightsRaw, signals, journal, billing] = await Promise.all([
-    soft(clientsApi.list()),
-    soft(clientsApi.account(id)),
-    soft(clientsApi.health(id)),
-    soft(clientsApi.insights(id)),
-    soft(clientsApi.signals()),
-    soft(clientsApi.journal(id)),
-    soft(clientsApi.billing(id)),
-  ]);
+  const [rows, account, healthRaw, insightsRaw, signals, journal, billing, comptes] =
+    await Promise.all([
+      soft(clientsApi.list()),
+      soft(clientsApi.account(id)),
+      soft(clientsApi.health(id)),
+      soft(clientsApi.insights(id)),
+      soft(clientsApi.signals()),
+      soft(clientsApi.journal(id)),
+      soft(clientsApi.billing(id)),
+      soft(clientsApi.comptes(id)),
+    ]);
 
   // `/health` et `/insights` sont CONTRACTUALISÉS : une réponse qui n'a pas le
   // squelette du contrat vaut la même chose qu'une route muette — la section
@@ -932,6 +981,7 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
   if (signals === null) offline.add("signals");
   if (journal === null) offline.add("journal");
   if (billing === null) offline.add("invoices");
+  if (comptes === null) offline.add("comptes");
 
   const row = readClientRows(rows).find((c) => c._id === id) ?? null;
   if (rows !== null && !row) offline.add("row");
@@ -966,6 +1016,7 @@ export async function loadClientFile(id: string): Promise<ClientFile> {
     signals: readSignals(signals).filter((s) => s.tenantId === id),
     journal: readJournal(journal),
     invoices: readInvoices(billing),
+    comptes: readComptes(comptes),
     offline,
   };
 }
@@ -986,6 +1037,31 @@ function readInvoices(raw: unknown): CrmInvoice[] {
       typeof (i as CrmInvoice)?.storedStatus === "string" &&
       typeof (i as CrmInvoice)?._id === "string",
   );
+}
+
+/**
+ * Les comptes de `/crm/tenants/:id/comptes`, avec le squelette du contrat.
+ *
+ * Même règle que `/health` et `/insights` : une réponse qui n'a pas la forme
+ * annoncée vaut une route MUETTE — la section se dit indisponible plutôt que
+ * d'afficher des miettes devinées. Ici, le prix d'une devinette serait un
+ * bouton « Révoquer » posé sur une ligne dont on ne sait pas si elle est le
+ * propriétaire.
+ */
+function readComptes(raw: unknown): ComptesRestaurant | null {
+  const o = bag(raw);
+  if (!Array.isArray(o.comptes) || typeof o.max !== "number") return null;
+  const comptes = o.comptes.filter(
+    (c): c is CompteRestaurant =>
+      typeof (c as CompteRestaurant)?.id === "string" &&
+      typeof (c as CompteRestaurant)?.email === "string" &&
+      typeof (c as CompteRestaurant)?.proprietaire === "boolean",
+  );
+  return {
+    comptes,
+    max: o.max,
+    restants: typeof o.restants === "number" ? o.restants : Math.max(0, o.max - comptes.length),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
