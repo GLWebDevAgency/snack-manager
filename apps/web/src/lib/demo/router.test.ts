@@ -86,6 +86,7 @@ const READS: [string, string][] = [
   ["GET", "/auth/me"],
   ["GET", "/tenants/me"],
   ["GET", "/orders?status=new"],
+  ["GET", "/orders/count?status=new"],
   // Tableau de bord
   ["GET", "/stats/overview?period=1d"],
   ["GET", "/stats/overview?period=7d"],
@@ -184,6 +185,13 @@ describe("lectures", () => {
     midnight.setHours(0, 0, 0, 0);
     const res = routeDemo("GET", `/orders?since=${midnight.toISOString()}`);
     expect((res.body as { rows: unknown[] }).rows.length).toBeGreaterThan(0);
+  });
+
+  it("compte les commandes avec les mêmes filtres sans servir leurs lignes", () => {
+    const list = routeDemo("GET", "/orders?status=new").body as { total: number };
+    const count = routeDemo("GET", "/orders/count?status=new");
+
+    expect(count.body).toEqual({ total: list.total });
   });
 });
 

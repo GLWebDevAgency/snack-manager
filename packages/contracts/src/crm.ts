@@ -951,8 +951,13 @@ export type LeadListQuery = z.infer<typeof LeadListQuerySchema>;
  * Jusqu'au 24/08/2026, il n'existait AUCUNE route pour créer un tenant : une
  * signature se soldait par des écritures Mongo à la main et un script CLI
  * contre la production (diagnostic quatre casquettes, P1). Ce contrat est la
- * chaîne entière d'une installation : le restaurant, le compte gérant, la
- * place fondateur, l'échéance d'essai — et un mot de passe remis UNE fois.
+ * chaîne entière d'une installation : le restaurant, le compte gérant,
+ * l'échéance d'essai — et un mot de passe remis UNE fois.
+ *
+ * Les champs commerciaux restent acceptés pour la compatibilité des clients
+ * déjà déployés, mais ils ne font plus autorité : à la conversion, le serveur
+ * relit la proposition et la réservation fondateur persistées sur le lead.
+ * Seuls le slug et l'identité du gérant viennent réellement de cette requête.
  */
 export const LeadConvertSchema = z
   .object({
@@ -964,18 +969,17 @@ export const LeadConvertSchema = z
       .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, 'Slug invalide (a-z, 0-9, tirets)'),
     ownerEmail: z.email().max(160),
     ownerName: z.string().trim().max(120).default(''),
-    /** `null` = signé sans formule — le client n'achète que des services. */
+    /** Compatibilité client ; le serveur signe `lead.proposal.plan`. */
     plan: z.enum(['essentiel', 'complet', 'boost']).nullable().default('essentiel'),
+    /** Compatibilité client ; le serveur signe `lead.founderSeatReserved`. */
     founderSeat: z.boolean().default(false),
     /**
-     * Les termes SIGNÉS — pré-remplis depuis la proposition par l'écran, mais
-     * c'est bien ce qui part ici qui fait foi : ce qui a changé au moment de
-     * signer (un module retiré, un passage à l'annuel) doit gagner sur ce qui
-     * avait été proposé. Les premières factures s'en dérivent.
+     * Compatibilité client ; le serveur signe `lead.proposal.onlineOrdering`.
      */
     onlineOrdering: z.boolean().default(false),
+    /** Compatibilité client ; le serveur signe `lead.proposal.billing`. */
     billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
-    /** L'Atelier signé — mêmes règles que la proposition, même primauté du signé. */
+    /** Compatibilité client ; le serveur signe `lead.proposal.services`. */
     services: LeadServicesSchema.default(EMPTY_SERVICES),
   })
   .superRefine(integrationExigeLeModule)

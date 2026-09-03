@@ -40,11 +40,21 @@ import {
   slotHHMM,
   type Order,
 } from "./types";
+import {
+  applyOrdersListMutation,
+  applyOrdersListMutations,
+  loadedStatusCountLabel,
+  normalizeOrdersList,
+  type OrdersListMutation,
+  type OrdersListResponse,
+  type OrdersListSnapshot,
+} from "./list-response";
 import { OrderDrawer } from "./OrderDrawer";
 import { CancelModal } from "./CancelModal";
 import { PrintTicket } from "./PrintTicket";
 
 const PAGE_SIZE = 50;
+const RECONCILE_DELAY_MS = 150;
 
 const CHIP_DEFS: { key: "all" | OrderStatus; label: string }[] = [
   { key: "all", label: "Toutes" },
@@ -101,7 +111,10 @@ function ding() {
 export default function OrdersPage() {
   const toast = useToast();
 
-  const [orders, setOrders] = useState<Order[] | null>(null);
+  const [list, setList] = useState<OrdersListSnapshot | null>(null);
+  const listRef = useRef<OrdersListSnapshot | null>(null);
+  const orders = list?.rows ?? null;
+  const listMeta = list;
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | OrderStatus>("all");
   const [q, setQ] = useState("");
@@ -110,20 +123,117 @@ export default function OrdersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  const pendingRef = useRef<ReadonlySet<string>>(new Set());
+  const activeLoad = useRef<AbortController | null>(null);
+  const mutationsDuringLoad = useRef<OrdersListMutation[]>([]);
+  const reconcileRequested = useRef(false);
+  const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+
+  const commitList = useCallback((next: OrdersListSnapshot) => {
+    listRef.current = next;
+    setList(next);
+  }, []);
+
+  /**
+   * Tout fait local est appliqué immédiatement ET conservé tant qu'un GET
+   * est en vol. Sa réponse peut avoir été photographiée avant le fait : le
+   * rejeu garantit qu'elle ne le fera jamais disparaître à son retour.
+   */
+  const applyLocalMutation = useCallback(
+    (mutation: OrdersListMutation) => {
+      if (activeLoad.current) mutationsDuringLoad.current.push(mutation);
+      const current = listRef.current;
+      if (current) commitList(applyOrdersListMutation(current, mutation));
+    },
+    [commitList],
+  );
 
   // ── Chargement initial : commandes du jour (depuis minuit local) ──
-  const load = useCallback(async () => {
-    setError(null);
+  const load = useCallback(async function run({ silent = false } = {}) {
+    // Une transition optimiste en cours rend toute photographie prématurée.
+    // Son `finally` rappellera le planificateur une fois le serveur tranché.
+    if (pendingRef.current.size > 0) {
+      reconcileRequested.current = true;
+      return;
+    }
+
+    // Une seule photographie à la fois. Une demande arrivée pendant le GET
+    // est rabattue sur UN passage suivant, après la courte fenêtre de rafale.
+    if (activeLoad.current) {
+      reconcileRequested.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    activeLoad.current = controller;
+    mutationsDuringLoad.current = [];
+    if (!silent) setError(null);
     try {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
-      const res = await api.get<{ rows: Order[]; total: number } | Order[]>(
+      const res = await api.get<OrdersListResponse | Order[]>(
         `/orders?since=${encodeURIComponent(since.toISOString())}`,
+        { signal: controller.signal },
       );
-      setOrders(Array.isArray(res) ? res : (res?.rows ?? []));
+      if (controller.signal.aborted || activeLoad.current !== controller) return;
+
+      // Une transition optimiste n'est pas encore forcément visible dans la
+      // base. On conserve donc l'écran local et on relira après sa réponse.
+      if (pendingRef.current.size > 0) {
+        reconcileRequested.current = true;
+        return;
+      }
+
+      const snapshot = applyOrdersListMutations(
+        normalizeOrdersList(res),
+        mutationsDuringLoad.current,
+      );
+      commitList(snapshot);
+      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur de chargement");
+      if (controller.signal.aborted) return;
+      // Un événement temps réel déclenche une réconciliation silencieuse. Si
+      // elle échoue, la liste déjà présente reste exploitable et la prochaine
+      // reconnexion réessaiera ; seul un chargement demandé doit la masquer.
+      if (!silent || listRef.current === null) {
+        setError(e instanceof Error ? e.message : "Erreur de chargement");
+      }
+    } finally {
+      if (activeLoad.current === controller) activeLoad.current = null;
+      mutationsDuringLoad.current = [];
+
+      if (
+        mounted.current &&
+        reconcileRequested.current &&
+        reconcileTimer.current === null
+      ) {
+        reconcileTimer.current = setTimeout(() => {
+          reconcileTimer.current = null;
+          reconcileRequested.current = false;
+          void run({ silent: true });
+        }, RECONCILE_DELAY_MS);
+      }
     }
+  }, [commitList]);
+
+  const scheduleReconcile = useCallback(() => {
+    reconcileRequested.current = true;
+    if (activeLoad.current || reconcileTimer.current !== null) return;
+    reconcileTimer.current = setTimeout(() => {
+      reconcileTimer.current = null;
+      reconcileRequested.current = false;
+      void load({ silent: true });
+    }, RECONCILE_DELAY_MS);
+  }, [load]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      activeLoad.current?.abort();
+      if (reconcileTimer.current !== null) clearTimeout(reconcileTimer.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -135,53 +245,49 @@ export default function OrdersPage() {
   }, [load]);
 
   // ── Mutations locales ──
-  const patchOrder = useCallback((id: string, patch: Partial<Order>) => {
-    setOrders((prev) =>
-      prev ? prev.map((o) => (o._id === id ? { ...o, ...patch } : o)) : prev,
-    );
-  }, []);
+  const patchOrder = useCallback(
+    (id: string, patch: Partial<Order>) => {
+      applyLocalMutation({ kind: "patched", orderId: id, patch });
+    },
+    [applyLocalMutation],
+  );
 
-  const replaceOrder = useCallback((o: Order) => {
-    setOrders((prev) =>
-      prev ? prev.map((x) => (x._id === o._id ? o : x)) : prev,
-    );
-  }, []);
+  const replaceOrder = useCallback(
+    (order: Order) => {
+      applyLocalMutation({ kind: "replaced", order });
+    },
+    [applyLocalMutation],
+  );
 
   // ── Temps réel : created → tête de liste + son ; updated → en place ──
   const { connected } = useTenantSocket({
     "order.created": (payload) => {
       const o = payload as Order;
       if (!o?._id) return;
-      setOrders((prev) => {
-        if (!prev) return prev;
-        if (prev.some((x) => x._id === o._id)) return prev; // déduplication
-        return [o, ...prev];
-      });
+      applyLocalMutation({ kind: "created", order: o });
       ding();
+      scheduleReconcile();
     },
     "order.updated": (payload) => {
       const o = payload as Order;
-      if (o?._id) replaceOrder(o);
+      if (!o?._id) return;
+      replaceOrder(o);
+      scheduleReconcile();
     },
   });
 
   // ── Reprise après coupure : les événements émis hors connexion ne sont
-  // jamais rejoués — au retour du socket, on recharge la liste du jour, la
-  // déduplication ci-dessus absorbant les doublons. Pas de rechargement à la
-  // première connexion : celui du montage suffit. ──
-  const everConnected = useRef(false);
+  // jamais rejoués. Toute connexion recharge la liste : la première ferme
+  // aussi la fenêtre entre le GET du montage et l'ouverture du socket. ──
   useEffect(() => {
     if (!connected) return;
-    // Resynchronisation réseau : seule une requête peut combler les
-    // événements manqués pendant la coupure.
-    if (everConnected.current) void load();
-    else everConnected.current = true;
-  }, [connected, load]);
+    scheduleReconcile();
+  }, [connected, scheduleReconcile]);
 
   // ── Filtre statut → recherche client-side (§6.1), puis pagination ──
   const counts = useMemo(() => {
     const c: Record<"all" | OrderStatus, number> = {
-      all: orders?.length ?? 0,
+      all: listMeta?.total ?? orders?.length ?? 0,
       new: 0,
       preparing: 0,
       ready: 0,
@@ -190,7 +296,7 @@ export default function OrdersPage() {
     };
     for (const o of orders ?? []) c[o.status] += 1;
     return c;
-  }, [orders]);
+  }, [orders, listMeta?.total]);
 
   const filtered = useMemo(() => {
     let rows = orders ?? [];
@@ -226,7 +332,10 @@ export default function OrdersPage() {
   async function advance(o: Order) {
     const next = NEXT_STATUS[o.status];
     if (!next || pending.has(o._id)) return;
-    setPending((s) => new Set(s).add(o._id));
+    const avecCommande = new Set(pendingRef.current);
+    avecCommande.add(o._id);
+    pendingRef.current = avecCommande;
+    setPending(avecCommande);
     const prevStatus = o.status;
     patchOrder(o._id, { status: next }); // optimiste — le WS confirmera
     try {
@@ -238,11 +347,13 @@ export default function OrdersPage() {
       patchOrder(o._id, { status: prevStatus }); // rollback
       toast(e instanceof Error ? e.message : "Échec de la mise à jour du statut");
     } finally {
-      setPending((s) => {
-        const n = new Set(s);
-        n.delete(o._id);
-        return n;
-      });
+      const sansCommande = new Set(pendingRef.current);
+      sansCommande.delete(o._id);
+      pendingRef.current = sansCommande;
+      setPending(sansCommande);
+      // Si une photographie a été écartée pendant l'optimisme, une seule
+      // relecture coalescée la remplace maintenant que le serveur a tranché.
+      scheduleReconcile();
     }
   }
 
@@ -266,7 +377,14 @@ export default function OrdersPage() {
           >
             {c.label} ·{" "}
             <span className="cf-fig">
-              {orders === null ? "—" : counts[c.key]}
+              {orders === null
+                ? "—"
+                : c.key === "all"
+                  ? counts.all
+                  : loadedStatusCountLabel(
+                      counts[c.key],
+                      listMeta?.truncated ?? false,
+                    )}
             </span>
           </Chip>
         ))}
@@ -297,6 +415,22 @@ export default function OrdersPage() {
           />
         </div>
       </div>
+
+      {orders !== null && listMeta?.truncated && (
+        <div
+          className="mb-4 rounded-ctrl border border-prep/35 bg-prep/10 px-4 py-3 text-sm text-prept"
+          role="status"
+        >
+          <p className="font-bold">
+            {orders.length} commandes récentes affichées sur{" "}
+            <span className="cf-fig">{listMeta.total}</span> aujourd’hui.
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed">
+            La recherche et les filtres portent sur cette fenêtre. Les compteurs
+            par statut indiquent donc un minimum.
+          </p>
+        </div>
+      )}
 
       {/* ── Table des commandes (§6.2) — cartes empilées sous `lg` ── */}
       <Card>
@@ -341,8 +475,16 @@ export default function OrdersPage() {
           ) : (
             <EmptyState
               icon="search"
-              title="Aucun résultat"
-              hint="Modifiez la recherche ou le filtre sélectionné."
+              title={
+                listMeta?.truncated
+                  ? "Aucun résultat dans la fenêtre affichée"
+                  : "Aucun résultat"
+              }
+              hint={
+                listMeta?.truncated
+                  ? "La recherche ne couvre que les commandes récentes chargées."
+                  : "Modifiez la recherche ou le filtre sélectionné."
+              }
               action={
                 q ? (
                   <Btn variant="ghost" size="sm" onClick={() => setQ("")}>

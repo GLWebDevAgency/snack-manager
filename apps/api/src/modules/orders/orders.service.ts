@@ -66,6 +66,7 @@ function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
  * annonce sa troncature plutôt que de laisser croire à un total.
  */
 const ORDERS_PAGE_MAX = 200;
+type OrderReadFilter = Readonly<{ status?: OrderStatus; since?: string }>;
 
 @Injectable()
 export class OrdersService {
@@ -84,6 +85,17 @@ export class OrdersService {
       ordersChannel(tenantId),
       JSON.stringify({ event, payload }),
     );
+  }
+
+  /** Filtre tenant et métier unique pour la liste et sa projection count-only. */
+  private readFilter(
+    tenantId: string,
+    filter: OrderReadFilter,
+  ): Record<string, unknown> {
+    const query: Record<string, unknown> = { tenantId };
+    if (filter.status) query.status = filter.status;
+    if (filter.since) query.createdAt = { $gte: new Date(filter.since) };
+    return query;
   }
 
   /** Défense supplémentaire avant diffusion temps réel vers caisse ET cuisine. */
@@ -538,15 +550,20 @@ export class OrdersService {
    * lignes. Les deux ensemble permettent à l'écran de refuser de conclure,
    * plutôt que de conclure faux.
    */
-  async list(tenantId: string, filter: { status?: OrderStatus; since?: string }) {
-    const query: Record<string, unknown> = { tenantId };
-    if (filter.status) query.status = filter.status;
-    if (filter.since) query.createdAt = { $gte: new Date(filter.since) };
+  async list(tenantId: string, filter: OrderReadFilter) {
+    const query = this.readFilter(tenantId, filter);
     const [rows, total] = await Promise.all([
       this.orders.find(query).sort({ createdAt: -1 }).limit(ORDERS_PAGE_MAX).lean(),
       this.orders.countDocuments(query),
     ]);
     return { rows, total, truncated: total > rows.length };
+  }
+
+  async count(
+    tenantId: string,
+    filter: OrderReadFilter,
+  ): Promise<{ total: number }> {
+    return { total: await this.orders.countDocuments(this.readFilter(tenantId, filter)) };
   }
 
   async byId(tenantId: string, id: string) {
