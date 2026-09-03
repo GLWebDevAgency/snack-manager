@@ -1,3 +1,4 @@
+import { marqueDeRepli } from "@sm/contracts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -130,5 +131,37 @@ describe("les pièces qui peignent un logo l'ajustent", () => {
    */
   it("l'en-tête de la carte de fidélité ne peint plus son propre <img>", () => {
     expect(code("components/loyalty/carte-visuelle.tsx")).not.toMatch(/<img\b/);
+  });
+});
+
+describe("le choix entre le symbole et le verrou", () => {
+  const avecVerrou = (entete: "symbole" | "verrou") => ({
+    ...marqueDeRepli(null, null),
+    entete,
+    logo: {
+      mark: { light: null, dark: null },
+      lockup: { light: "https://exemple.fr/v.png", dark: null },
+    },
+  });
+
+  it("« verrou » emploie l’image horizontale — c’est le défaut, rien ne change", () => {
+    expect(verrouPour(avecVerrou("verrou"))).toBe("https://exemple.fr/v.png");
+    // Et le défaut du contrat est bien celui-là.
+    expect(marqueDeRepli(null, null).entete).toBe("verrou");
+  });
+
+  it("« symbole » refuse l’image horizontale MÊME si elle est posée", () => {
+    /*
+     * C'est tout l'objet du réglage : poser une planche horizontale ne doit
+     * plus suffire à l'employer. Un restaurateur peut la garder pour ses
+     * supports imprimés et préférer le symbole à l'écran, où la largeur manque.
+     */
+    expect(verrouPour(avecVerrou("symbole"))).toBeNull();
+  });
+
+  it("sans image horizontale, le choix ne change rien", () => {
+    const nu = marqueDeRepli(null, null);
+    expect(verrouPour({ ...nu, entete: "verrou" })).toBeNull();
+    expect(verrouPour({ ...nu, entete: "symbole" })).toBeNull();
   });
 });
