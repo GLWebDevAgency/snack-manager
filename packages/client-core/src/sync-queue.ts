@@ -535,6 +535,13 @@ export class SyncQueue {
       getItem: (key) => run((store) => store.getItem(key)),
       setItem: (key, value) => run((store) => store.setItem(key, value)),
       removeItem: (key) => run((store) => store.removeItem(key)),
+      mutateItem: (key, mutate) =>
+        run(async (store) => {
+          const mutation = await mutate(await store.getItem(key));
+          if (mutation.value === null) await store.removeItem(key);
+          else await store.setItem(key, mutation.value);
+          return mutation.result;
+        }),
     };
   }
 

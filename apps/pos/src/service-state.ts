@@ -3,14 +3,14 @@
  *
  * Jusqu'ici, une commande validée à la caisse ne laissait AUCUNE trace visible.
  * « Nouvelle commande » la faisait disparaître ; elle ne reparaissait que dans
- * un compteur qui ne comptait que ce poste, et dans l'onglet « Commandes » de
- * la clôture, sans statut cuisine ni minuteur. Le caissier ne pouvait répondre
+ * un compteur qui ne comptait que ce poste, et dans son journal local, sans
+ * statut cuisine ni minuteur. Le caissier ne pouvait répondre
  * ni à « c'est prêt ? », ni à « ça fait combien de temps ? ».
  *
- * Tout était pourtant déjà là : `GET /orders?since=…` répond SANS projection —
- * chaque ligne porte `status`, `statusHistory[]`, `lines`, `totals`, `payment`,
+ * Tout était pourtant déjà là : `GET /orders` répond SANS projection — chaque
+ * ligne porte `status`, `statusHistory[]`, `lines`, `totals`, `payment`,
  * `pickup`, `createdAt`. La caisse n'en typait que sept champs et ne lisait
- * `status` qu'une fois, pour exclure les annulées du Z.
+ * `status` qu'une fois, pour un ancien récapitulatif serveur.
  *
  * Ce module est PUR (aucun import react-native) — c'est ce qui le rend
  * testable par le harnais vitest du poste, comme `layout.ts` et `pos-state.ts`.
@@ -22,30 +22,29 @@ import {
   REMISE_PLAFOND_CENTS,
   STAFF_ROLES,
   plafondRemiseLabel,
+  type PaymentTender,
   type StaffRole,
 } from '@sm/contracts';
 import {
-  mostAdvancedStatus,
   type OrderChannel,
   type OrderLine,
   type OrderStatus,
   type OrderType,
 } from '@sm/client-core';
-import type { ServiceOrderRow } from './pos-state';
-
 /**
  * Une ligne de `GET /orders`, telle qu'elle sert VRAIMENT au poste.
  *
- * Elle étend `ServiceOrderRow` (les champs du Z) parce que c'est la même
- * réponse : un seul appel nourrit la réconciliation, le Z et la vue du service.
  * Tout est facultatif au-delà de l'identité : une réponse d'une API plus
  * ancienne, ou une commande créée avant un champ, ne doit pas faire tomber
  * l'écran en plein coup de feu.
  */
-export interface ServerOrderRow extends Omit<ServiceOrderRow, 'totals'> {
+export interface ServerOrderRow {
   _id: string;
   number: number;
   clientId: string;
+  createdAt?: string;
+  status?: string;
+  payment?: { status?: string; tender?: PaymentTender | null };
   trackingToken?: string | null;
   channel?: OrderChannel;
   type?: OrderType;
@@ -53,14 +52,7 @@ export interface ServerOrderRow extends Omit<ServiceOrderRow, 'totals'> {
   statusHistory?: { status: OrderStatus; at: string; by?: string }[];
   pickup?: { slot: string; customerName: string; customerPhone?: string | null } | null;
   note?: string | null;
-  /**
-   * `totals` est ÉLARGI par rapport à `ServiceOrderRow` : le Z n'a besoin que
-   * du total et du montant de la remise, la vue détaillée montre en plus le
-   * sous-total et le MOTIF de la remise — le serveur exige ce motif (NF525
-   * n'admet pas une minoration de recette sans raison), il serait absurde de
-   * ne pas le relire. Le type reste assignable à `ServiceOrderRow` : les mêmes
-   * lignes nourrissent toujours `zFromServer`.
-   */
+  /** La vue détaillée relit aussi le sous-total et le motif de remise. */
   totals?: {
     subtotal?: number;
     total?: number;
@@ -165,7 +157,7 @@ export function versCommande(row: ServerOrderRow, secours: number): ServiceComma
 }
 
 /**
- * LES COMMANDES DU SERVICE, LA PLUS URGENTE EN TÊTE.
+ * LES COMMANDES ENCORE ACTIVES, LA PLUS URGENTE EN TÊTE.
  *
  * Deux décisions, et ce sont elles qui font la lisibilité de l'écran :
  *
@@ -189,16 +181,14 @@ export function versCommande(row: ServerOrderRow, secours: number): ServiceComma
  */
 export function commandesEnCours(
   rows: readonly ServerOrderRow[],
-  since: number,
   maintenant: number,
 ): ServiceCommande[] {
   const retenues: ServiceCommande[] = [];
   for (const row of rows) {
     if (!estEnCours(row.status)) continue;
     const commande = versCommande(row, maintenant);
-    // Même borne que le Z : une clôture à 15 h ne doit pas faire ressortir les
-    // commandes du midi dans la vue du service du soir.
-    if (commande.createdAtMs < since) continue;
+    // Aucun reset du journal local ne découpe le travail restant. Une commande
+    // web ou ancienne encore prête doit rester visible jusqu'à son vrai statut.
     retenues.push(commande);
   }
   return retenues.sort((a, b) => {
@@ -208,38 +198,6 @@ export function commandesEnCours(
     // Départage déterministe : deux commandes peuvent partager la seconde, et
     // un tri instable ferait permuter deux cartes à chaque rafraîchissement.
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
-}
-
-/**
- * FUSION DE DEUX PHOTOS SERVEUR — le statut le plus avancé gagne.
- *
- * Le poste a maintenant DEUX déclencheurs de lecture : son horloge de sondage
- * et le debounce des événements temps réel. Deux requêtes peuvent donc être en
- * vol en même temps, et rien ne garantit que la plus ancienne réponde en
- * premier. Sans arbitrage, une réponse en retard ferait RECULER une commande
- * sous les yeux du caissier : « Prête » redeviendrait « En préparation » juste
- * au moment où il allait appeler le client.
- *
- * C'est exactement la règle de `mergeOrder` du noyau partagé. On ne l'appelle
- * pas telle quelle : elle type ses deux côtés en `Order`, dont tous les champs
- * sont requis, alors que la caisse tolère volontairement une ligne partielle
- * (voir `ServerOrderRow`). On réutilise donc `mostAdvancedStatus`, qui EST la
- * règle, plutôt que d'affaiblir un type partagé pour un besoin local.
- *
- * `mostAdvancedStatus` protège en prime le cas terminal : un rejeu
- * d'annulation ne transforme pas en « annulée » une commande déjà remise.
- */
-export function fusionnerFenetre(
-  precedente: readonly ServerOrderRow[],
-  entrante: readonly ServerOrderRow[],
-): ServerOrderRow[] {
-  const connues = new Map(precedente.map((row) => [row._id, row]));
-  return entrante.map((row) => {
-    const avant = connues.get(row._id);
-    if (!avant?.status || !row.status) return row;
-    const status = mostAdvancedStatus(avant.status as OrderStatus, row.status as OrderStatus);
-    return status === row.status ? row : { ...row, status };
   });
 }
 

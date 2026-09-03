@@ -1,6 +1,6 @@
 /**
  * Surcouches de la caisse : encaissement espèces, confirmation d'envoi,
- * remise (PIN), aperçu du ticket, clôture de service.
+ * remise (PIN), aperçu du ticket, récapitulatif local du poste.
  *
  * Règle commune : aucune de ces vues ne bloque le service. Si la commande
  * n'est pas encore partie de la file offline, on l'explique au lieu d'échouer.
@@ -11,12 +11,19 @@ import { TOUCH_MIN, euros, palette, type RejectedEntry } from '@sm/client-core';
 import { FONT, R, S, TABULAR, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, EmptyState, Field, Overlay, PanelHead, Press, useReducedMotion } from './ui';
 import { useLayout } from './useLayout';
-import { MODE_LABEL, PAY_LABEL, type DayEntry, type Mode, type ServiceZ } from './pos-state';
+import {
+  LOCAL_JOURNAL_SCOPE_NOTICE,
+  MODE_LABEL,
+  PAY_LABEL,
+  type DayEntry,
+  type LocalJournalSummary,
+  type Mode,
+} from './pos-state';
 import {
   rejectedSaleAmount,
   rejectedSnapshotIds,
-  serviceCloseBlockReason,
-  serviceCloseStatus,
+  journalResetBlockReason,
+  journalResetStatus,
 } from './pos-safety';
 import { depasseLePlafond, plafondRemise, pourcentageParDefaut } from './service-state';
 
@@ -850,7 +857,7 @@ function Rule() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// V4 · Clôture de service
+// V4 · Récapitulatif local du poste
 // ─────────────────────────────────────────────────────────────
 
 export function CloseModal({
@@ -859,70 +866,62 @@ export function CloseModal({
   pending,
   rejected,
   pendingLoyalty,
+  journalDegraded,
   busy,
   offline,
   brand,
   staffName,
   onClose,
-  onCloseService,
+  onResetJournal,
   onOpenTicket,
   onOpenDiscount,
 }: {
   entries: DayEntry[];
-  /** Ventilation du service par moyen de paiement — le cœur du Z. */
-  z: ServiceZ;
+  /** Ventilation des seules ventes présentes dans le journal de cette caisse. */
+  z: LocalJournalSummary;
   pending: number;
   rejected: number;
   pendingLoyalty: number;
+  journalDegraded: boolean;
   busy: boolean;
   offline: boolean;
   brand: Brand;
   staffName: string;
   onClose: () => void;
-  onCloseService: () => void;
+  onResetJournal: () => void;
   onOpenTicket: (entry: DayEntry) => void;
   onOpenDiscount: (entry: DayEntry) => void;
 }) {
   const L = useLayout();
   const [tab, setTab] = useState<'recap' | 'orders'>('recap');
-  const closeSafety = {
+  const resetSafety = {
     saleInFlight: busy,
     offline,
     pendingSync: pending,
     rejectedSync: rejected,
     pendingLoyalty,
+    journalDegraded,
   };
-  const closeBlocked = serviceCloseBlockReason(closeSafety) !== null;
-  const closeStatus = serviceCloseStatus(closeSafety);
+  const resetBlocked = journalResetBlockReason(resetSafety) !== null;
+  const resetStatus = journalResetStatus(resetSafety);
 
   const counts = useMemo(() => {
     const byMode = (m: Mode) => entries.filter((e) => e.mode === m).length;
     return { surplace: byMode('surplace'), emporter: byMode('emporter'), tel: byMode('tel') };
   }, [entries]);
 
-  /**
-   * AUCUN MONTANT DE CE Z N'EST UN TOTAL QUAND LA FENÊTRE EST COUPÉE.
-   *
-   * Le serveur plafonne `GET /orders` à 200 lignes, les plus récentes, et le
-   * dit. Au-delà, tout ce qui est calculé ici — chiffre d'affaires, espèces,
-   * carte, titres-restaurant — porte sur une fenêtre amputée de ses lignes les
-   * plus anciennes. On préfixe donc chaque montant par « ≥ », exactement comme
-   * le back-office préfixe ses compteurs de statut : un chiffre et une borne
-   * inférieure ne se lisent pas pareil, et c'est toute la différence entre
-   * recompter son tiroir et croire qu'on l'a recompté.
-   */
-  const somme = (cents: number) => (z.partial ? `≥ ${euros(cents)}` : euros(cents));
+  const somme = (cents: number) => euros(cents);
 
   return (
-    <Overlay onClose={onClose} accessibilityLabel="Clôture de service" width={560}>
+    <Overlay onClose={onClose} accessibilityLabel="Récapitulatif du poste" width={560}>
       <PanelHead
-        title="Clôture de service"
-        sub={`${z.partial ? '≥ ' : ''}${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
+        title="Récapitulatif du poste"
+        sub={`${z.orders} commande${z.orders > 1 ? 's' : ''} saisie${z.orders > 1 ? 's' : ''} ici · ${staffName}`}
         onClose={onClose}
       />
 
       <View style={{ flexDirection: 'row', gap: S.sm, paddingHorizontal: S.xl, paddingBottom: S.md }}>
-        <Chip label="Récapitulatif" on={tab === 'recap'} onPress={() => setTab('recap')} accent={brand.accent} onAccent={brand.onAccent} />
+        <Chip label="Récapitulatif local" on={tab === 'recap'} onPress={() => setTab('recap')} accent={brand.accent} onAccent={brand.onAccent} />
         <Chip
           label={`Commandes · ${entries.length}`}
           on={tab === 'orders'}
@@ -935,18 +934,11 @@ export function CloseModal({
 
       {tab === 'recap' ? (
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: S.md }}>
-          {/*
-            LE PLAFOND DE 200 COMMANDES, DIT AVANT LES CHIFFRES.
-            Il vient d'abord parce qu'il change la nature de tout ce qui suit :
-            ce ne sont plus des totaux, ce sont des minima.
-          */}
-          {z.partial ? (
-            <Notice
-              tone={palette.red}
-              title="Ce Z est incomplet"
-              body={`Le serveur ne renvoie que les 200 commandes les plus récentes : ${z.missing} commande${z.missing > 1 ? 's' : ''} plus ancienne${z.missing > 1 ? 's ne sont pas comptées' : ' n’est pas comptée'} ci-dessous. Chaque montant est donc un MINIMUM. Recoupez la journée depuis le back-office avant de clôturer.`}
-            />
-          ) : null}
+          <Notice
+            tone={palette.amber}
+            title="Périmètre local uniquement"
+            body={LOCAL_JOURNAL_SCOPE_NOTICE}
+          />
 
           <View
             style={[
@@ -959,33 +951,27 @@ export function CloseModal({
             ]}
           >
             <View style={{ flexShrink: 1 }}>
-              <Text style={type.eyebrow}>Chiffre d'affaires</Text>
+              <Text style={type.eyebrow}>Total du journal de ce poste</Text>
               <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(12.5) }]}>
-                {z.partial
-                  ? `Fenêtre plafonnée à 200 commandes sur ${z.orders + z.missing} — minimum, pas un total`
-                  : z.source === 'server'
-                    ? 'Commandes enregistrées — vente en ligne comprise'
-                    : 'Hors ligne : journal de ce poste seul, sans la vente en ligne'}
+                Hors commandes web, autres caisses et comptabilité globale.
               </Text>
             </View>
             <Text
               numberOfLines={1}
               style={[
                 type.display,
-                { fontSize: L.fs(32), color: z.partial ? palette.amber : brand.accent },
+                { fontSize: L.fs(32), color: brand.accent },
               ]}
             >
               {somme(z.ca)}
             </Text>
           </View>
 
-          {/* Ce que le gérant recoupe réellement le soir : le tiroir, le
-              bordereau du TPE, ce qui est déjà tombé sur le compte, le reste dû. */}
+          {/* Ventilation des moyens saisis sur ce poste seulement. */}
           <View style={{ gap: 2 }}>
             <StatRow label="Espèces" value={somme(z.cash)} />
             <StatRow label="Carte bancaire" value={somme(z.card)} />
             <StatRow label="Titres-restaurant" value={somme(z.mealVoucher)} />
-            <StatRow label="En ligne" value={somme(z.online)} />
             <StatRow label="À encaisser au retrait" value={somme(z.due)} tone={palette.amber} />
             {/*
               Encaissé au retrait, sans moyen saisi. Ce n'est pas une anomalie
@@ -1020,7 +1006,7 @@ export function CloseModal({
               paddingHorizontal: 14,
               paddingVertical: 12,
               borderRadius: R.ctrl,
-              backgroundColor: closeBlocked
+              backgroundColor: resetBlocked
                 ? withAlpha(palette.amber, 0.1)
                 : withAlpha(palette.green, 0.1),
             }}
@@ -1030,34 +1016,32 @@ export function CloseModal({
                 width: 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: closeBlocked ? palette.amber : palette.green,
+                backgroundColor: resetBlocked ? palette.amber : palette.green,
               }}
             />
             <Text
               style={{
                 fontFamily: FONT,
-                color: closeBlocked ? palette.amber : palette.green,
+                color: resetBlocked ? palette.amber : palette.green,
                 fontSize: L.fs(13.5),
                 fontWeight: '600',
                 flex: 1,
               }}
             >
-              {closeStatus}
+              {resetStatus}
             </Text>
           </View>
 
           <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}>
-            <Btn label="Continuer le service" kind="ghost" size="md" onPress={onClose} style={{ flex: 1 }} />
+            <Btn label="Conserver le journal" kind="ghost" size="md" onPress={onClose} style={{ flex: 1 }} />
             <Btn
-              label="Clôturer le service"
+              label="Réinitialiser le journal"
               kind="primary"
               size="md"
               accent={brand.accent}
               onAccent={brand.onAccent}
-              // Un service ne comptant que des commandes en ligne se clôture
-              // aussi : le journal local est vide, la caisse ne l'est pas.
-              disabled={z.orders === 0 || closeBlocked}
-              onPress={onCloseService}
+              disabled={z.orders === 0 || resetBlocked}
+              onPress={onResetJournal}
               style={{ flex: 1 }}
             />
           </View>
@@ -1065,7 +1049,10 @@ export function CloseModal({
       ) : (
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.lg) }}>
           {entries.length === 0 ? (
-            <EmptyState title="Aucune commande sur ce service" sub="Le journal se remplit à chaque envoi en cuisine." />
+            <EmptyState
+              title="Aucune commande locale dans ce journal"
+              sub="Les commandes web et celles des autres caisses restent dans le suivi opérationnel ; elles ne font pas partie de ce récapitulatif."
+            />
           ) : (
             [...entries]
               .sort((a, b) => b.at - a.at)
@@ -1225,7 +1212,8 @@ export function Notice({ tone, title, body }: { tone: string; title: string; bod
  *
  * Sur une commande déjà encaissée, l'argent est dans le tiroir et le client est
  * parti avec son ticket : la vente n'existe alors nulle part, et rien ne dit
- * laquelle. Le Z du soir tombe faux sans qu'on sache pourquoi.
+ * laquelle. Le suivi serveur et la comptabilité globale deviennent incomplets
+ * sans qu'on sache pourquoi.
  *
  * Cet écran montre ce qui a été refusé, avec le motif du serveur et le montant,
  * pour que le gérant puisse ressaisir. L'acquittement est un geste EXPLICITE :
@@ -1262,7 +1250,7 @@ export function RejetsModal({
         onClose={onClose}
       />
       {/*
-        DÉFILANT, comme la clôture. `Overlay` borne la hauteur à 94 % de
+        DÉFILANT, comme le récapitulatif. `Overlay` borne la hauteur à 94 % de
         l'écran sans zone de défilement : vingt rejets y seraient comprimés, et
         le bouton d'acquittement sortirait de la vue — sur une tablette de
         comptoir, un bouton hors écran est un bouton qui n'existe pas.
@@ -1271,7 +1259,8 @@ export function RejetsModal({
       <Paper>
         Ces mutations ont été refusées définitivement : les rejouer ne changerait
         rien. Si l&apos;une d&apos;elles était encaissée, l&apos;encaissement a bien eu lieu —
-        ressaisissez la vente pour que le Z du soir tombe juste.
+        ressaisissez-la selon la procédure du restaurant afin que le suivi
+        serveur et la comptabilité puissent être recoupés.
       </Paper>
 
       <View style={{ gap: S.sm, marginTop: S.lg }}>

@@ -57,47 +57,53 @@ export function createSaleInFlightGate(): SaleInFlightGate {
   };
 }
 
-export interface ServiceCloseSafety {
+export interface JournalResetSafety {
   saleInFlight: boolean;
   offline: boolean;
   pendingSync: number;
   rejectedSync: number;
   pendingLoyalty: number;
+  /** Une mutation locale n'a pas encore atteint le stockage durable. */
+  journalDegraded: boolean;
 }
 
-export type ServiceCloseBlockReason =
+export type JournalResetBlockReason =
   | 'sale_in_flight'
   | 'offline'
   | 'pending_sync'
   | 'rejected_sync'
-  | 'pending_loyalty';
+  | 'pending_loyalty'
+  | 'journal_degraded';
 
-/** Un seul prédicat partagé par le bouton et le callback de clôture. */
-export function serviceCloseBlockReason(
-  safety: ServiceCloseSafety,
-): ServiceCloseBlockReason | null {
+/** Un seul prédicat partagé par le bouton et le callback de reset local. */
+export function journalResetBlockReason(
+  safety: JournalResetSafety,
+): JournalResetBlockReason | null {
   if (safety.saleInFlight) return 'sale_in_flight';
   if (safety.offline) return 'offline';
   if (safety.pendingSync > 0) return 'pending_sync';
   if (safety.rejectedSync > 0) return 'rejected_sync';
   if (safety.pendingLoyalty > 0) return 'pending_loyalty';
+  if (safety.journalDegraded) return 'journal_degraded';
   return null;
 }
 
-export function serviceCloseStatus(safety: ServiceCloseSafety): string {
-  switch (serviceCloseBlockReason(safety)) {
+export function journalResetStatus(safety: JournalResetSafety): string {
+  switch (journalResetBlockReason(safety)) {
     case 'sale_in_flight':
-      return 'Une vente finit de s’enregistrer — attendez sa confirmation avant de clôturer.';
+      return 'Une vente finit de s’enregistrer — attendez sa confirmation avant de réinitialiser le journal.';
     case 'offline':
-      return 'Caisse hors ligne — reconnectez-la avant de clôturer pour obtenir un Z exact.';
+      return 'Caisse hors ligne — reconnectez-la avant de réinitialiser le journal du poste.';
     case 'pending_sync':
-      return `${safety.pendingSync} mutation${safety.pendingSync > 1 ? 's' : ''} encore en file — clôturez après synchronisation pour un Z exact.`;
+      return `${safety.pendingSync} mutation${safety.pendingSync > 1 ? 's' : ''} encore en file — attendez la synchronisation avant de réinitialiser le journal.`;
     case 'rejected_sync':
-      return `${safety.rejectedSync} vente${safety.rejectedSync > 1 ? 's' : ''} refusée${safety.rejectedSync > 1 ? 's' : ''} à traiter — ressaisissez puis acquittez ${safety.rejectedSync > 1 ? 'ces ventes' : 'cette vente'} avant de clôturer.`;
+      return `${safety.rejectedSync} vente${safety.rejectedSync > 1 ? 's' : ''} refusée${safety.rejectedSync > 1 ? 's' : ''} à traiter — ressaisissez puis acquittez ${safety.rejectedSync > 1 ? 'ces ventes' : 'cette vente'} avant de réinitialiser le journal.`;
     case 'pending_loyalty':
-      return `${safety.pendingLoyalty} traitement${safety.pendingLoyalty > 1 ? 's' : ''} fidélité encore en cours — attendez ${safety.pendingLoyalty > 1 ? 'leur issue' : 'son issue'} avant de clôturer pour conserver ${safety.pendingLoyalty > 1 ? 'leur suivi' : 'son suivi'}.`;
+      return `${safety.pendingLoyalty} traitement${safety.pendingLoyalty > 1 ? 's' : ''} fidélité encore en cours — attendez ${safety.pendingLoyalty > 1 ? 'leur issue' : 'son issue'} avant de réinitialiser le journal.`;
+    case 'journal_degraded':
+      return 'Journal local non durable — attendez une écriture réussie avant de le réinitialiser.';
     default:
-      return 'File de synchronisation vide — toutes les commandes sont enregistrées.';
+      return 'Journal local durable et file de synchronisation vide.';
   }
 }
 

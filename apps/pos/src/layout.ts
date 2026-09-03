@@ -82,7 +82,7 @@ export const COMPACT_W = 900;
  *
  *   identité (38 + libellé ≈ 200) + bascule de vue (2 × 92 ≈ 190)
  *   + mode de service (3 × 96 ≈ 296) + horloge (≈ 70)
- *   + « Clôture » (≈ 96) + « Verrouiller » (≈ 116) + 6 gouttières de 16
+ *   + « Récapitulatif » (≈ 120) + « Verrouiller » (≈ 116) + 6 gouttières de 16
  *   ≈ 1064 px
  *
  * Il reste ~116 px à 1180 : exactement de quoi loger la pastille « N en
