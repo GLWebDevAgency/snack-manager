@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
+  aLaCapacite,
   brandColorDe,
   logoUrlDe,
   LoyaltyCustomerCardSchema,
   LoyaltyPublicProgramSchema,
+  publicLoyaltyAvailable,
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
 } from '@sm/contracts';
@@ -18,7 +20,9 @@ import { LoyaltyMemberService } from './loyalty-member.service';
  * Le slug ne donne accès qu'au catalogue public. Le solde exige le secret QR
  * dans le corps d'un POST ; aucune route GET, query string ou cookie ne le
  * transporte. Les statuts bloqué/anonymisé et les programmes non actifs sont
- * volontairement rendus comme « indisponibles », sans détail exploitable.
+ * volontairement rendus comme « indisponibles », sans détail exploitable — et
+ * depuis, le compte SUSPENDU et le module de fidélité NON SOUSCRIT empruntent
+ * exactement la même sortie (cf. `context`).
  */
 @Injectable()
 export class LoyaltyPublicService {
@@ -30,6 +34,38 @@ export class LoyaltyPublicService {
 
   private async context(slug: string) {
     const tenant = await this.tenants.bySlug(slug);
+    /*
+     * LE SLUG NE SUFFIT PAS À OUVRIR CE PROGRAMME.
+     *
+     * `bySlug` ne rend qu'un document : il ne dit ni si le compte est suspendu
+     * ni si la fidélité a été vendue. La vitrine, elle, passe par
+     * `publicBySlug`, qui pose les deux questions — ces routes-ci ne les
+     * posaient pas, si bien qu'un restaurant suspendu servait sa carte pendant
+     * que sa commande en ligne était fermée, et qu'un restaurant sans le module
+     * servait un programme qu'il n'a jamais acheté.
+     *
+     * La règle et son pourquoi vivent dans le contrat (`publicLoyaltyAvailable`,
+     * @sm/contracts), à côté de `publicOrderingState` : c'est là que se décide
+     * ce qu'une suspension ferme, et une décision de ce poids ne doit pas
+     * s'écrire dans un service de module.
+     *
+     * La capacité vérifiée est `loyalty`, PAS `online` : ce sont deux modules
+     * distincts de la grille, et un restaurant peut très bien avoir acheté l'un
+     * sans l'autre.
+     *
+     * Posé ICI plutôt que sur le contrôleur, pour deux raisons. D'abord le
+     * refus : `@Capacites(...)` rend un 403 nommé, réservé aux écrans du
+     * restaurateur — un client n'a pas à lire une proposition commerciale
+     * adressée à quelqu'un d'autre (cf. `common/capacites.ts`). Ensuite la
+     * portée : `context` est le passage obligé du catalogue ET de la carte, une
+     * garde posée ici ne peut pas oublier une route.
+     *
+     * AVANT la lecture du programme : rien à lire chez un restaurant qu'on ne
+     * sert pas, et la réponse est de toute façon la même 404 uniforme.
+     */
+    if (!publicLoyaltyAvailable(tenant.account, aLaCapacite(tenant, 'loyalty'))) {
+      throw new NotFoundException('Programme de fidélité indisponible');
+    }
     const tenantRef = String(tenant._id);
     const [program, rewards] = await Promise.all([
       this.loyalty.getProgram(tenantRef),
