@@ -18,6 +18,7 @@ import {
   serviceCloseBlockReason,
   serviceCloseStatus,
 } from './pos-safety';
+import { depasseLePlafond, plafondRemise, pourcentageParDefaut } from './service-state';
 
 // ─────────────────────────────────────────────────────────────
 // V3 · Encaissement espèces
@@ -391,21 +392,43 @@ export function SentOverlay({
 // Remise — exige la re-saisie d'un PIN (traçabilité NF525)
 // ─────────────────────────────────────────────────────────────
 
+/** Les remises proposées en un geste — inchangées, mais désormais situées. */
+const REMISE_POURCENTS = [5, 10, 20] as const;
+
 export function DiscountModal({
   entry,
   brand,
+  /** Rôle du code ouvert sur ce poste (`Session.staffRole`). */
+  staffRole,
   onClose,
   onApply,
 }: {
   entry: DayEntry;
   brand: Brand;
+  staffRole: string;
   onClose: () => void;
   onApply: (amountCents: number, reason: string, pin: string) => Promise<string | null>;
 }) {
   const L = useLayout();
   const [pin, setPin] = useState('');
   const [reason, setReason] = useState('');
-  const [percent, setPercent] = useState<number | null>(10);
+  /**
+   * LE PLAFOND DU RÔLE, ENFIN LU PAR L'ÉCRAN.
+   *
+   * `REMISE_PLAFOND_CENTS` et `plafondRemiseLabel` vivent dans `@sm/contracts`
+   * depuis que le serveur a cessé d'accepter n'importe quelle remise contre
+   * n'importe quel PIN — et aucun client ne les importait. La modale proposait
+   * « − 20 % » : sur une commande à 100 €, cela fait 20 €, au-dessus des 15 €
+   * qu'autorise un code `caisse`. Le bouton validait, le serveur refusait après
+   * coup, et le caissier l'apprenait devant le client.
+   *
+   * La sélection d'ouverture est donc le pourcentage le plus fort qui tienne
+   * SOUS le plafond de la session, au lieu de 10 % au jugé.
+   */
+  const plafond = useMemo(() => plafondRemise(staffRole), [staffRole]);
+  const [percent, setPercent] = useState<number | null>(() =>
+    pourcentageParDefaut(entry.total, REMISE_POURCENTS, plafond),
+  );
   const [custom, setCustom] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,6 +438,17 @@ export function DiscountModal({
     const cents = Math.round(Number(custom.replace(',', '.')) * 100);
     return Number.isFinite(cents) && cents > 0 ? cents : 0;
   }, [custom, entry.total, percent]);
+
+  /**
+   * Dépassement = « il faudra le code du gérant », JAMAIS « c'est interdit ».
+   *
+   * Le serveur juge le rôle du PIN RE-SAISI, pas celui de la session
+   * (`orders.controller.ts` : « C'est le PIN re-saisi qui décide, pas la
+   * session ouverte »), précisément pour que le gérant puisse venir autoriser
+   * un geste sur une tablette ouverte en caisse. Bloquer le bouton ici
+   * casserait ce geste-là, qui est le cas normal d'une grosse remise.
+   */
+  const horsPlafond = depasseLePlafond(amount, plafond);
 
   const synced = !!entry.serverId;
   /**
@@ -456,19 +490,43 @@ export function DiscountModal({
       ) : (
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: L.sp(S.lg) }}>
           <View style={{ gap: S.sm }}>
-            <Text style={type.eyebrow}>Montant</Text>
+            <View style={[sheet.between, { gap: S.sm }]}>
+              <Text style={type.eyebrow}>Montant</Text>
+              {/* Ce que le code ouvert sur ce poste autorise, écrit avant le
+                  geste plutôt que découvert dans un refus. */}
+              <Text
+                style={{
+                  fontFamily: FONT,
+                  color: palette.mut,
+                  fontSize: L.fs(12),
+                  fontWeight: '700',
+                  textAlign: 'right',
+                  flexShrink: 1,
+                }}
+              >
+                Code {staffRole} · {plafond.label}
+              </Text>
+            </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
-              {[5, 10, 20].map((p) => (
-                <Chip
-                  key={p}
-                  label={`− ${p} %`}
-                  detail={euros(Math.round((entry.total * p) / 100))}
-                  on={percent === p}
-                  onPress={() => setPercent(p)}
-                  accent={brand.accent}
-                  onAccent={brand.onAccent}
-                />
-              ))}
+              {REMISE_POURCENTS.map((p) => {
+                const cents = Math.round((entry.total * p) / 100);
+                const trop = depasseLePlafond(cents, plafond);
+                return (
+                  <Chip
+                    key={p}
+                    // Le « ! » marque la proposition qui dépassera le plafond de
+                    // la session : elle reste offerte — le gérant peut la
+                    // valider avec SON code —, elle n'est simplement plus
+                    // proposée comme si elle allait de soi.
+                    label={trop ? `− ${p} % !` : `− ${p} %`}
+                    detail={euros(cents)}
+                    on={percent === p}
+                    onPress={() => setPercent(p)}
+                    accent={brand.accent}
+                    onAccent={brand.onAccent}
+                  />
+                );
+              })}
               <Chip label="Montant libre" on={percent === null} onPress={() => setPercent(null)} />
             </View>
             {percent === null ? (
@@ -478,6 +536,17 @@ export function DiscountModal({
                 placeholder="Montant en euros (ex. 2,50)"
                 keyboardType="number-pad"
                 accent={brand.accent}
+              />
+            ) : null}
+            {horsPlafond ? (
+              <Notice
+                tone={palette.amber}
+                title={
+                  plafond.aucun
+                    ? 'Ce code n’autorise aucune remise'
+                    : `Au-dessus de ce qu’un code ${staffRole} peut accorder (${plafond.label})`
+                }
+                body="Le serveur vérifie le rôle du PIN saisi ci-dessous, pas celui de la session : faites taper son code au gérant et la remise passera. Avec un autre code, elle sera refusée."
               />
             ) : null}
           </View>
@@ -514,7 +583,13 @@ export function DiscountModal({
           </View>
 
           <Btn
-            label={busy ? 'Application…' : `Appliquer − ${euros(amount)}`}
+            label={
+              busy
+                ? 'Application…'
+                : horsPlafond
+                  ? `Appliquer − ${euros(amount)} · code gérant`
+                  : `Appliquer − ${euros(amount)}`
+            }
             kind="primary"
             size="lg"
             accent={brand.accent}
@@ -825,11 +900,24 @@ export function CloseModal({
     return { surplace: byMode('surplace'), emporter: byMode('emporter'), tel: byMode('tel') };
   }, [entries]);
 
+  /**
+   * AUCUN MONTANT DE CE Z N'EST UN TOTAL QUAND LA FENÊTRE EST COUPÉE.
+   *
+   * Le serveur plafonne `GET /orders` à 200 lignes, les plus récentes, et le
+   * dit. Au-delà, tout ce qui est calculé ici — chiffre d'affaires, espèces,
+   * carte, titres-restaurant — porte sur une fenêtre amputée de ses lignes les
+   * plus anciennes. On préfixe donc chaque montant par « ≥ », exactement comme
+   * le back-office préfixe ses compteurs de statut : un chiffre et une borne
+   * inférieure ne se lisent pas pareil, et c'est toute la différence entre
+   * recompter son tiroir et croire qu'on l'a recompté.
+   */
+  const somme = (cents: number) => (z.partial ? `≥ ${euros(cents)}` : euros(cents));
+
   return (
     <Overlay onClose={onClose} accessibilityLabel="Clôture de service" width={560}>
       <PanelHead
         title="Clôture de service"
-        sub={`${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
+        sub={`${z.partial ? '≥ ' : ''}${z.orders} commande${z.orders > 1 ? 's' : ''} · poste 1 · ${staffName}`}
         onClose={onClose}
       />
 
@@ -847,6 +935,19 @@ export function CloseModal({
 
       {tab === 'recap' ? (
         <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: L.sp(S.xl), gap: S.md }}>
+          {/*
+            LE PLAFOND DE 200 COMMANDES, DIT AVANT LES CHIFFRES.
+            Il vient d'abord parce qu'il change la nature de tout ce qui suit :
+            ce ne sont plus des totaux, ce sont des minima.
+          */}
+          {z.partial ? (
+            <Notice
+              tone={palette.red}
+              title="Ce Z est incomplet"
+              body={`Le serveur ne renvoie que les 200 commandes les plus récentes : ${z.missing} commande${z.missing > 1 ? 's' : ''} plus ancienne${z.missing > 1 ? 's ne sont pas comptées' : ' n’est pas comptée'} ci-dessous. Chaque montant est donc un MINIMUM. Recoupez la journée depuis le back-office avant de clôturer.`}
+            />
+          ) : null}
+
           <View
             style={[
               sheet.inset,
@@ -860,24 +961,32 @@ export function CloseModal({
             <View style={{ flexShrink: 1 }}>
               <Text style={type.eyebrow}>Chiffre d'affaires</Text>
               <Text style={[type.mut, { marginTop: 3, fontSize: L.fs(12.5) }]}>
-                {z.source === 'server'
-                  ? 'Commandes enregistrées — vente en ligne comprise'
-                  : 'Hors ligne : journal de ce poste seul, sans la vente en ligne'}
+                {z.partial
+                  ? `Fenêtre plafonnée à 200 commandes sur ${z.orders + z.missing} — minimum, pas un total`
+                  : z.source === 'server'
+                    ? 'Commandes enregistrées — vente en ligne comprise'
+                    : 'Hors ligne : journal de ce poste seul, sans la vente en ligne'}
               </Text>
             </View>
-            <Text numberOfLines={1} style={[type.display, { fontSize: L.fs(32), color: brand.accent }]}>
-              {euros(z.ca)}
+            <Text
+              numberOfLines={1}
+              style={[
+                type.display,
+                { fontSize: L.fs(32), color: z.partial ? palette.amber : brand.accent },
+              ]}
+            >
+              {somme(z.ca)}
             </Text>
           </View>
 
           {/* Ce que le gérant recoupe réellement le soir : le tiroir, le
               bordereau du TPE, ce qui est déjà tombé sur le compte, le reste dû. */}
           <View style={{ gap: 2 }}>
-            <StatRow label="Espèces" value={euros(z.cash)} />
-            <StatRow label="Carte bancaire" value={euros(z.card)} />
-            <StatRow label="Titres-restaurant" value={euros(z.mealVoucher)} />
-            <StatRow label="En ligne" value={euros(z.online)} />
-            <StatRow label="À encaisser au retrait" value={euros(z.due)} tone={palette.amber} />
+            <StatRow label="Espèces" value={somme(z.cash)} />
+            <StatRow label="Carte bancaire" value={somme(z.card)} />
+            <StatRow label="Titres-restaurant" value={somme(z.mealVoucher)} />
+            <StatRow label="En ligne" value={somme(z.online)} />
+            <StatRow label="À encaisser au retrait" value={somme(z.due)} tone={palette.amber} />
             {/*
               Encaissé au retrait, sans moyen saisi. Ce n'est pas une anomalie
               de données : c'est ce que la cuisine encaisse en marquant
@@ -887,12 +996,12 @@ export function CloseModal({
             {z.unspecified > 0 ? (
               <StatRow
                 label="Encaissé au retrait — à ventiler"
-                value={euros(z.unspecified)}
+                value={somme(z.unspecified)}
                 tone={palette.amber}
               />
             ) : null}
             {z.discounts > 0 ? (
-              <StatRow label="Remises accordées" value={`− ${euros(z.discounts)}`} tone={palette.green} />
+              <StatRow label="Remises accordées" value={`− ${somme(z.discounts)}`} tone={palette.green} />
             ) : null}
           </View>
 

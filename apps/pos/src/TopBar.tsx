@@ -1,14 +1,25 @@
 /**
- * Barre haute (zone A) — identité du restaurant, mode de service, état de la
- * file offline, horloge et accès à la clôture.
+ * Barre haute (zone A) — identité du restaurant, VUE, mode de service, état de
+ * la file offline, horloge et accès à la clôture.
  *
  * Elle reste visible sous toutes les surcouches : c'est le seul repère fixe du
  * poste pendant un coup de feu.
  *
- * Sous 900 px de large, tout cela ne tient plus sur une ligne : la barre passe
- * à deux rangées (identité + horloge + actions, puis le sélecteur de mode
- * pleine largeur) plutôt que de tronquer le mode de service, qui décide du
- * contenu de la commande.
+ * ─── DEUX SÉLECTEURS, TROIS COMPOSITIONS ─────────────────────────────────
+ *
+ * Elle en portait un — le mode de service. La vue du service en ajoute un
+ * second (Vendre / Le service), et deux sélecteurs ne tiennent pas partout où
+ * un seul tenait. Plutôt que d'en tronquer un — cacher le mode de service, qui
+ * décide du CONTENU de la commande, ou la bascule de vue, qui décide de ce
+ * qu'on regarde —, la barre se réorganise :
+ *
+ *   ≥ 1180 px  une rangée : identité · vue · mode · pastilles · horloge · actions
+ *   560–1180   deux rangées : la première sans les sélecteurs, la seconde
+ *              partagée entre les deux (cinq onglets, ≈ 100 px chacun au pire)
+ *   < 560 px   trois rangées : chaque sélecteur prend la sienne
+ *
+ * Les deux seuils sont dans `layout.ts`, seul décideur de dimension du poste,
+ * et la tablette de RÉFÉRENCE (1280 × 800) garde donc sa barre sur une ligne.
  */
 import { Pressable, Text, View } from 'react-native';
 import { palette } from '@sm/client-core';
@@ -17,9 +28,16 @@ import { MODE_LABEL, type Mode } from './pos-state';
 import { Press, Segmented, Sheen } from './ui';
 import { useLayout } from './useLayout';
 
+/** Ce que le poste montre : la vente en cours, ou l'état du service. */
+export type Vue = 'vente' | 'service';
+
 export function TopBar({
   brand,
   staffName,
+  vue,
+  onVue,
+  serviceBadge,
+  serviceUrgent,
   mode,
   onMode,
   pending,
@@ -28,12 +46,24 @@ export function TopBar({
   rejets,
   onRejets,
   now,
-  serviceCount,
-  onService,
+  onCloture,
   onLock,
 }: {
   brand: Brand;
   staffName: string;
+  vue: Vue;
+  onVue: (v: Vue) => void;
+  /**
+   * Commandes RÉELLEMENT en cours — ni remises, ni annulées.
+   *
+   * Déjà mis en forme par l'appelant (« 7 », ou « ≥ 200 » quand la fenêtre
+   * serveur est plafonnée) et calculé sur EXACTEMENT la liste que la vue du
+   * service affiche. Une pastille qui compterait sur une autre fenêtre que son
+   * écran est le défaut qu'on vient de corriger dans le back-office.
+   */
+  serviceBadge: string;
+  /** Au moins une commande est prête : il y a quelqu'un à appeler. */
+  serviceUrgent: boolean;
   mode: Mode;
   onMode: (m: Mode) => void;
   pending: number;
@@ -43,8 +73,7 @@ export function TopBar({
   rejets: number;
   onRejets: () => void;
   now: number;
-  serviceCount: number;
-  onService: () => void;
+  onCloture: () => void;
   onLock: () => void;
 }) {
   const L = useLayout();
@@ -52,8 +81,36 @@ export function TopBar({
   const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   const ss = String(d.getSeconds()).padStart(2, '0');
   const compact = L.compact;
+  const stacked = L.topbarStacked;
+  const split = L.topbarSelectorsSplit;
   /** Sous 560 px, l'identité textuelle cède la place aux actions. */
   const showIdentityText = L.width >= 560;
+
+  /**
+   * LA BASCULE DE VUE, ET SA PASTILLE.
+   *
+   * « Le service » porte le nombre de commandes en cours. C'est la seule
+   * information que le poste n'avait nulle part : le compteur « Service · N »
+   * d'avant comptait les ventes de CE poste depuis l'ouverture du service —
+   * pas les commandes encore en cuisine, et jamais la vente en ligne.
+   *
+   * Quand une commande est prête, la pastille passe au vert fonctionnel : il y
+   * a quelqu'un à appeler, et cela doit se voir sans changer de vue.
+   */
+  const vues = (
+    <Segmented
+      value={vue}
+      onChange={onVue}
+      accent={brand.accent}
+      onAccent={brand.onAccent}
+      flex={stacked}
+      badge={serviceUrgent ? palette.green : undefined}
+      options={[
+        { key: 'vente', label: 'Vendre' },
+        { key: 'service', label: 'Le service', detail: serviceBadge },
+      ]}
+    />
+  );
 
   const segmented = (
     <Segmented
@@ -61,7 +118,7 @@ export function TopBar({
       onChange={onMode}
       accent={brand.accent}
       onAccent={brand.onAccent}
-      flex={compact}
+      flex={stacked}
       options={[
         { key: 'surplace', label: MODE_LABEL.surplace },
         { key: 'emporter', label: MODE_LABEL.emporter },
@@ -133,8 +190,8 @@ export function TopBar({
         {
           flexDirection: 'column',
           paddingHorizontal: S.lg,
-          paddingVertical: compact ? S.sm : 0,
-          gap: compact ? S.sm : 0,
+          paddingVertical: stacked ? S.sm : 0,
+          gap: stacked ? S.sm : 0,
           backgroundColor: palette.surface,
           borderBottomWidth: 1,
           borderBottomColor: palette.line,
@@ -173,8 +230,19 @@ export function TopBar({
           ) : null}
         </View>
 
-        {/* Mode de service — sur sa propre rangée en compact */}
-        <View style={{ flex: 1, alignItems: 'center' }}>{compact ? null : segmented}</View>
+        {/* Les deux sélecteurs — sur leur propre rangée dès 1180 px */}
+        <View
+          style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: S.sm,
+          }}
+        >
+          {stacked ? null : vues}
+          {stacked ? null : segmented}
+        </View>
 
         {rejetes}
         {status}
@@ -187,42 +255,57 @@ export function TopBar({
           )}
         </View>
 
-        <BarButton
-          label="Service"
-          detail={String(serviceCount)}
-          onPress={onService}
-          accent={brand.accent}
-          onAccent={brand.onAccent}
-        />
+        {/*
+          « Clôture », et non plus « Service · N ».
+          Ce bouton a toujours ouvert la fenêtre de CLÔTURE ; son compteur
+          annonçait « Service » en ne comptant que les ventes de ce poste depuis
+          l'ouverture — ni la vente en ligne, ni ce qui est encore en cuisine.
+          Le vrai compte du service vit désormais sur la bascule de vue, où il
+          est calculé sur exactement ce que la vue montre. Le bouton dit donc ce
+          qu'il fait, et rien de plus.
+        */}
+        <BarButton label={compact ? 'Clôture' : 'Clôturer'} accessibilityLabel="Clôture de service" onPress={onCloture} />
         <BarButton label={compact ? 'Verrou' : 'Verrouiller'} accessibilityLabel="Verrouiller" onPress={onLock} />
       </View>
 
-      {compact ? segmented : null}
+      {/* Seconde rangée : les deux sélecteurs se partagent la largeur, sauf
+          sous 560 px où « À emporter » se ferait couper en plein mot. */}
+      {stacked ? (
+        split ? (
+          <>
+            {vues}
+            {segmented}
+          </>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: S.sm }}>
+            <View style={{ flex: 2 }}>{vues}</View>
+            <View style={{ flex: 3 }}>{segmented}</View>
+          </View>
+        )
+      ) : null}
     </View>
   );
 }
 
+/**
+ * Action de barre. Elle portait une pastille numérique optionnelle, qui ne
+ * servait qu'au compteur « Service · N » — un compteur qui mentait, et qui vit
+ * désormais sur la bascule de vue. Deux boutons, deux libellés, rien de plus.
+ */
 function BarButton({
   label,
-  detail,
   onPress,
-  accent,
-  onAccent,
   accessibilityLabel,
 }: {
   label: string;
-  detail?: string;
   onPress: () => void;
-  accent?: string;
-  onAccent?: string;
   accessibilityLabel?: string;
 }) {
   const L = useLayout();
-  const name = accessibilityLabel ?? label;
   return (
     <Press
       onPress={onPress}
-      accessibilityLabel={detail ? `${name} ${detail}` : name}
+      accessibilityLabel={accessibilityLabel ?? label}
       style={{
         minHeight: L.touch(),
         paddingHorizontal: L.compact ? 11 : 14,
@@ -237,30 +320,6 @@ function BarButton({
       activeStyle={{ backgroundColor: '#282828' }}
     >
       <Text style={{ fontFamily: FONT, color: palette.text, fontSize: L.fs(13.5), fontWeight: '600' }}>{label}</Text>
-      {detail ? (
-        <View
-          style={{
-            minWidth: 24,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: R.pill,
-            backgroundColor: accent ?? palette.line,
-            alignItems: 'center',
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: FONT,
-              color: onAccent ?? palette.text,
-              fontSize: L.fs(12.5),
-              fontWeight: '800',
-              fontVariant: ['tabular-nums'],
-            }}
-          >
-            {detail}
-          </Text>
-        </View>
-      ) : null}
     </Press>
   );
 }

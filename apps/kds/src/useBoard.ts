@@ -1,23 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import {
+  creerDebounce,
   mergeOrder,
   NEXT_STATUS,
+  POLL_MS,
+  pollCadenceMs,
   SmApiError,
+  useTenantSocket,
   type Order,
   type OrderStatus,
   type SmClient,
 } from '@sm/client-core';
 import { BOARD_STATUSES } from './ui';
-import { KEY_BOARD, KEY_DELIVERED } from './config';
-import { creerDebounce, pollCadenceMs } from './temps-reel';
-import { useTenantSocket } from './useTenantSocket';
+import { DEMO } from './client';
+import { API_URL, KEY_BOARD, KEY_DELIVERED } from './config';
 
 /**
  * Le tableau de la cuisine : les commandes `new` / `preparing` / `ready` du
  * tenant, tenues à jour par sondage et avancées de façon optimiste. La socket
  * temps réel (`useTenantSocket`) anticipe le sondage et en étire la cadence ;
- * elle ne le remplace jamais — voir `temps-reel.ts`.
+ * elle ne le remplace jamais — voir `@sm/client-core/temps-reel`, où la règle
+ * vit désormais, partagée avec la vue du service de la caisse.
  *
  * Trois règles gouvernent l'état :
  *
@@ -199,13 +203,21 @@ export function useBoard(
   const rafale = useMemo(() => creerDebounce(() => void poll()), [poll]);
   useEffect(() => () => rafale.annuler(), [rafale]);
 
-  const socketConnectee = useTenantSocket(enabled ? token : null, rafale.demander);
+  // Démonstration : tout vit dans le navigateur du visiteur, il n'existe aucun
+  // serveur à écouter — et un jeton « demo » se ferait éconduire. Le hook
+  // partagé ne connaît pas ce mode : c'est à la surface de le dire, en ne lui
+  // donnant pas de jeton.
+  const socket = useTenantSocket({
+    url: API_URL,
+    token: enabled && !DEMO ? token : null,
+    onEvent: rafale.demander,
+  });
 
   /**
    * Socket connectée : 60 s — le sondage ne fait plus que rattraper un
    * événement perdu. Sinon : 5 s, le comportement historique à l’identique.
    */
-  const cadence = pollCadenceMs(socketConnectee);
+  const cadence = pollCadenceMs(socket.connectee, POLL_MS);
 
   useEffect(() => {
     if (!enabled) return;
@@ -217,16 +229,21 @@ export function useBoard(
     return () => clearInterval(id);
   }, [enabled, poll, cadence]);
 
-  // Une tablette qui revient au premier plan a peut-être dormi des heures :
-  // on resonde tout de suite, sans debounce — le cuisinier regarde déjà
-  // l’écran. (La reconnexion de la socket, elle, vit dans `useTenantSocket`.)
+  // Une tablette qui revient au premier plan a peut-être dormi des heures : on
+  // resonde tout de suite, sans debounce — le cuisinier regarde déjà l’écran —
+  // et on réveille la socket sans attendre son prochain essai de reconnexion.
+  // `AppState` est une frontière react-native : elle reste ici, côté
+  // application, parce que le noyau partagé est délibérément sans react-native.
+  const reveillerSocket = socket.reveiller;
   useEffect(() => {
     if (!enabled) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void poll();
+      if (state !== 'active') return;
+      void poll();
+      reveillerSocket();
     });
     return () => sub.remove();
-  }, [enabled, poll]);
+  }, [enabled, poll, reveillerSocket]);
 
   // ─── Avancement optimiste ───
 

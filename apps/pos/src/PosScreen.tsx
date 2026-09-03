@@ -10,27 +10,42 @@
  *  - les montants sont en CENTIMES partout, jamais en flottants.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { AppState, Text, View } from 'react-native';
 import type { OrderLoyaltyEarnStatus } from '@sm/contracts';
 import {
+  POLL_POS_MS,
   SmApiError,
   cartTotal,
+  creerDebounce,
   euros,
+  fraicheur,
+  normalizeOrdersWindow,
+  pollCadenceMs,
   sameConfiguration,
+  useTenantSocket,
   uuid,
   useAutoSync,
   useMenu,
   useNow,
+  useOncePerId,
   useSyncState,
+  windowCountLabel,
   type CartLine,
   type Product,
 } from '@sm/client-core';
-import { KEYS, client, TENANT_SLUG, type Session } from './client';
+import { API_URL } from './config';
+import { DEMO, KEYS, client, TENANT_SLUG, type Session } from './client';
 import { S, makeBrand, palette } from './theme';
 import { Btn, Drawer, Loading, useToasts } from './ui';
 import { useLayout } from './useLayout';
 import { siteConfigure } from './demo-retour';
-import { TopBar } from './TopBar';
+import { TopBar, type Vue } from './TopBar';
+import { ServicePanel } from './ServicePanel';
+import {
+  commandesEnCours,
+  fusionnerFenetre,
+  type ServerOrderRow,
+} from './service-state';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
@@ -65,7 +80,6 @@ import {
   type Mode,
   type ParkedTicket,
   type PayMethod,
-  type ServiceOrderRow,
 } from './pos-state';
 
 interface DayLogFile {
@@ -87,14 +101,22 @@ function startOfDay(): number {
 }
 
 /**
- * Ligne de `GET /orders` : réconciliation (numéro, id, jeton) ET ventilation
- * du Z. C'est la seule vue du poste qui voie aussi la vente en ligne.
+ * Fenêtre serveur du jour — la SEULE lecture du poste qui voie aussi la vente
+ * en ligne, et qui sert à quatre choses à la fois : réconciliation (numéro, id,
+ * jeton de suivi), séquence des numéros de retrait, ventilation du Z, et
+ * désormais la vue du service.
+ *
+ * `total` et `truncated` ne sont plus jetés : au-delà de 200 commandes dans la
+ * journée, le serveur ne renvoie que les plus récentes et le DIT (voir
+ * `normalizeOrdersWindow`). La forme de la ligne, elle, vit dans
+ * `service-state.ts`, qui est pur et donc testable.
  */
-interface ServerOrderRow extends ServiceOrderRow {
-  _id: string;
-  number: number;
-  clientId: string;
-  trackingToken?: string | null;
+interface FenetreServeur {
+  rows: ServerOrderRow[];
+  total: number;
+  truncated: boolean;
+  /** Horodatage de la lecture RÉUSSIE — l'horloge de fraîcheur de l'écran. */
+  at: number;
 }
 
 export function PosScreen({
@@ -139,6 +161,13 @@ export function PosScreen({
   );
   /** Mode compact seulement : tiroir du ticket ouvert. */
   const [ticketOpen, setTicketOpen] = useState(false);
+  /**
+   * VENDRE, OU REGARDER LE SERVICE.
+   *
+   * Le poste s'ouvre toujours sur la vente : c'est son métier, et une caisse
+   * qui démarre sur un écran de consultation coûte un geste à chaque service.
+   */
+  const [vue, setVue] = useState<Vue>('vente');
 
   // ─── Surcouches ───
   const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
@@ -169,8 +198,19 @@ export function PosScreen({
    * qui découpe les commandes serveur.
    */
   const [serviceStart, setServiceStart] = useState(() => startOfDay());
-  /** Dernière vue serveur des commandes du jour — base du Z (vente en ligne comprise). */
-  const [serverRows, setServerRows] = useState<ServerOrderRow[] | null>(null);
+  /**
+   * Dernière fenêtre serveur des commandes du jour — base du Z (vente en ligne
+   * comprise) ET de la vue du service.
+   *
+   * EN MÉMOIRE SEULEMENT, jamais en cache disque. C'est la doctrine du KDS,
+   * reprise telle quelle : « volontairement SANS cache de repli — on veut que
+   * la panne réseau remonte comme une panne, pas comme une réponse fraîche mais
+   * périmée ». Un poste qui redémarre hors ligne montre donc une vue vide et le
+   * dit, plutôt que de ressortir le service d'hier avec un minuteur qui repart.
+   * Tant qu'il tourne, il garde sa dernière photo — DATÉE par `at`, ce qui est
+   * exactement la différence entre montrer et prétendre.
+   */
+  const [fenetre, setFenetre] = useState<FenetreServeur | null>(null);
   const dayLogRef = useRef<DayEntry[]>([]);
   /** Verrou synchrone : aucune vente ne peut démarrer pendant une clôture. */
   const serviceCloseGate = useRef(false);
@@ -311,12 +351,24 @@ export function PosScreen({
       }
       try {
         const todaySince = startOfDayIso();
-        const res = await client.get<{ rows: ServerOrderRow[] }>(
-          `/orders?since=${encodeURIComponent(todaySince)}`,
+        // Le serveur annonce `total` et `truncated` en plus des lignes, et
+        // c'est intentionnel de sa part : « pour que l'écran refuse de conclure
+        // plutôt que de conclure faux ». Le poste les typait hors de la réponse
+        // et les jetait — d'où un Z amputé en silence au-delà de 200 commandes.
+        const vueServeur = normalizeOrdersWindow<ServerOrderRow>(
+          await client.get(`/orders?since=${encodeURIComponent(todaySince)}`),
         );
-        const byClient = new Map(res.rows.map((r) => [r.clientId, r]));
-        setServerMax(res.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
-        setServerRows(res.rows);
+        const byClient = new Map(vueServeur.rows.map((r) => [r.clientId, r]));
+        setServerMax(vueServeur.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
+        // Deux déclencheurs de lecture (horloge et socket) : deux réponses
+        // peuvent se croiser. Le statut le plus avancé gagne, sinon une réponse
+        // en retard ferait reculer une commande sous les yeux du caissier.
+        setFenetre((precedente) => ({
+          rows: fusionnerFenetre(precedente?.rows ?? [], vueServeur.rows),
+          total: vueServeur.total,
+          truncated: vueServeur.truncated,
+          at: Date.now(),
+        }));
 
         void reconcileLoyaltyStatuses(dayLogRef.current);
         setDayLog((cur) =>
@@ -341,6 +393,36 @@ export function PosScreen({
     [onLock, reconcileLoyaltyStatuses],
   );
 
+  // ─── Temps réel : la socket anticipe, le sondage garantit ───
+
+  /**
+   * Rafraîchissement demandé par un événement `order.*` du restaurant.
+   * Débouncé : une commande génère volontiers une rafale (créée, payée,
+   * avancée) et chaque tour coûte un GET plus le rendu de la vue du service.
+   */
+  const rafale = useMemo(() => creerDebounce(() => void reconcile(true)), [reconcile]);
+  useEffect(() => () => rafale.annuler(), [rafale]);
+
+  /**
+   * LA SOCKET DE LA CAISSE — la même que celle de la cuisine.
+   *
+   * La passerelle ne vérifie pas le rôle : elle exige un JWT portant un
+   * `tenantId` et joint la room d'après le JETON. Le jeton de session par code
+   * en porte un, donc la caisse est acceptée exactement comme le KDS.
+   *
+   * Note de capacité, assumée : la passerelle est mono-réplique et ne plafonne
+   * pas le nombre de sockets. Brancher la caisse ajoute UNE socket PAR POSTE.
+   * En contrepartie le sondage passe de 12 s à 60 s dès qu'elle tient.
+   *
+   * En démonstration il n'y a aucun serveur à écouter — pas de jeton, pas de
+   * socket.
+   */
+  const socket = useTenantSocket({
+    url: API_URL,
+    token: ready && !DEMO ? session.token : null,
+    onEvent: rafale.demander,
+  });
+
   useEffect(() => {
     if (!ready) return;
     // Premier passage forcé : il amorce la séquence de numéros du jour.
@@ -352,9 +434,26 @@ export function PosScreen({
     // serveur ne bougeait plus. Les commandes EN LIGNE, qui ne passent jamais
     // par le journal local, n'entraient donc plus jamais dans le Z — qui
     // annonce pourtant « vente en ligne comprise ».
-    const id = setInterval(() => void reconcile(true), 12_000);
+    //
+    // Le sondage ne disparaît JAMAIS : la socket ne fait qu'en étirer la
+    // cadence (12 s → 60 s), et une socket morte sans bruit ramène le poste à
+    // son comportement historique, à l'identique.
+    const id = setInterval(() => void reconcile(true), pollCadenceMs(socket.connectee, POLL_POS_MS));
     return () => clearInterval(id);
-  }, [ready, reconcile]);
+  }, [ready, reconcile, socket.connectee]);
+
+  // Une tablette qui sort de veille a peut-être dormi des heures : on relit
+  // tout de suite et on réveille la socket sans attendre son prochain essai.
+  const reveillerSocket = socket.reveiller;
+  useEffect(() => {
+    if (!ready) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void reconcile(true);
+      reveillerSocket();
+    });
+    return () => sub.remove();
+  }, [ready, reconcile, reveillerSocket]);
 
   useEffect(() => {
     if (sync.pending === 0) void reconcile();
@@ -778,9 +877,77 @@ export function PosScreen({
 
   /** Z du service : commandes serveur si disponibles, journal local sinon. */
   const z = useMemo(
-    () => (serverRows ? zFromServer(serverRows, serviceStart) : zFromJournal(dayLog)),
-    [dayLog, serverRows, serviceStart],
+    () =>
+      fenetre
+        ? zFromServer(fenetre.rows, serviceStart, {
+            total: fenetre.total,
+            truncated: fenetre.truncated,
+            received: fenetre.rows.length,
+          })
+        : zFromJournal(dayLog),
+    [dayLog, fenetre, serviceStart],
   );
+
+  // ─── La vue du service ───
+
+  /**
+   * LES COMMANDES RÉELLEMENT EN COURS — ni remises, ni annulées.
+   *
+   * Calculées UNE fois, sur la fenêtre serveur, avec la borne du service
+   * courant. La pastille de la barre haute et la vue en descendent toutes les
+   * deux : elles ne peuvent donc pas diverger. C'est exactement le défaut qu'on
+   * vient de corriger dans le back-office, où une pastille comptait sans borne
+   * de temps ce qu'un écran montrait depuis minuit — et deux requêtes séparées,
+   * fût-ce vers `GET /orders/count`, l'auraient réintroduit ici.
+   */
+  const serviceCommandes = useMemo(
+    // L'horloge de secours est celle de la LECTURE (`fenetre.at`), pas celle du
+    // rendu : elle ne sert qu'à une commande dont le serveur n'aurait pas rendu
+    // la date, et la faire dépendre de `now` recalculerait toute la liste
+    // chaque seconde. Les minuteurs, eux, reçoivent `now` carte par carte.
+    () => commandesEnCours(fenetre?.rows ?? [], serviceStart, fenetre?.at ?? serviceStart),
+    [fenetre, serviceStart],
+  );
+
+  /**
+   * La pastille est un MINIMUM quand la fenêtre serveur est plafonnée : elle
+   * ne peut pas voir ce que le serveur n'a pas renvoyé, et « 200 » se lirait
+   * comme un compte exact.
+   */
+  const serviceBadge = windowCountLabel(
+    serviceCommandes.length,
+    fenetre?.truncated === true,
+  );
+  const servicePretes = serviceCommandes.some((c) => c.status === 'ready');
+
+  /** Depuis quand cet écran n'a-t-il pas été rafraîchi — jamais un chiffre figé. */
+  const fraicheurService = useMemo(
+    () => fraicheur(fenetre?.at ?? null, now),
+    [fenetre?.at, now],
+  );
+
+  /**
+   * « La 42 est prête » — annoncé UNE fois, jamais à chaque sondage.
+   *
+   * `useOncePerId` du noyau partagé sert précisément à ça. L'amorçage compte :
+   * à la première lecture réussie, on MARQUE les commandes déjà prêtes sans
+   * rien annoncer, faute de quoi un poste qui ouvre en plein service noierait
+   * le caissier sous dix notifications d'un coup.
+   */
+  const annoncerUneFois = useOncePerId();
+  const premiereLecture = useRef(true);
+  useEffect(() => {
+    if (!fenetre) return;
+    const pretes = fenetre.rows.filter((row) => row.status === 'ready');
+    if (premiereLecture.current) {
+      premiereLecture.current = false;
+      for (const row of pretes) annoncerUneFois(row._id, () => undefined);
+      return;
+    }
+    for (const row of pretes) {
+      annoncerUneFois(row._id, () => push(`Commande n° ${row.number} prête`, 'good'));
+    }
+  }, [annoncerUneFois, fenetre, push]);
   const pendingLoyalty = useMemo(() => pendingLoyaltyCount(dayLog), [dayLog]);
 
   const dismissServiceClose = useCallback(() => {
@@ -819,7 +986,7 @@ export function PosScreen({
     // Le service suivant démarre ici : sans cette borne, le Z du soir
     // recompterait le service du midi depuis les commandes serveur.
     setServiceStart(Date.now());
-    setServerRows(null);
+    setFenetre(null);
     setCloseOpen(false);
     serviceCloseGate.current = false;
     push(`Service clôturé · ${count} commande${count > 1 ? 's' : ''}`, 'good');
@@ -880,6 +1047,10 @@ export function PosScreen({
       <TopBar
         brand={brand}
         staffName={session.staffName}
+        vue={vue}
+        onVue={setVue}
+        serviceBadge={serviceBadge}
+        serviceUrgent={servicePretes}
         mode={mode}
         onMode={changeMode}
         pending={sync.pending}
@@ -888,53 +1059,74 @@ export function PosScreen({
         rejets={sync.rejected.length}
         onRejets={() => setRejetsOpen(true)}
         now={now}
-        serviceCount={dayLog.length}
-        onService={() => void openServiceClose()}
+        onCloture={() => void openServiceClose()}
         onLock={() => onLock()}
       />
 
       <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
-        <CategoryRail categories={menu.categories} activeId={catId} onSelect={setCatId} brand={brand} />
-
-        <View style={{ flex: 1 }}>
-          {offline ? (
-            <View
-              style={{
-                paddingHorizontal: S.lg,
-                paddingVertical: 7,
-                backgroundColor: '#161104',
-                borderBottomWidth: 1,
-                borderBottomColor: palette.line2,
-              }}
-            >
-              <Text style={{ color: palette.amber, fontSize: layout.fs(13), fontWeight: '600' }}>
-                Menu servi depuis le cache local — les prix peuvent dater. Le service continue normalement.
-              </Text>
-            </View>
-          ) : null}
-          <ProductArea
-            categories={menu.categories}
-            // Les médias voyagent à plat, à côté des catégories : c'est là que
-            // la grille trouve le point d'intérêt et les cotes d'une photo.
-            medias={menu.medias}
-            activeId={catId}
+        {/*
+          LA VUE DU SERVICE REMPLACE LE PLAN DE VENTE, elle ne s'y superpose
+          pas : rail, grille et ticket disparaissent ensemble. Un panneau posé
+          par-dessus laisserait des boutons d'encaissement actifs derrière, et
+          le caissier finirait par toucher un produit en croyant toucher une
+          commande. Le ticket en cours n'est pas perdu pour autant — il est en
+          mémoire et revient intact d'un appui sur « Vendre ».
+        */}
+        {vue === 'service' ? (
+          <ServicePanel
+            commandes={serviceCommandes}
+            now={now}
             brand={brand}
-            parked={parked}
-            query={query}
-            onQuery={setQuery}
-            onPick={(product, categoryName) => {
-              mutateTicket(() => setConfig({ product, categoryName }));
-            }}
-            onRecall={recall}
+            fraicheurLabel={fraicheurService.libelle}
+            fraicheurPerimee={fraicheurService.perimee}
+            truncated={fenetre?.truncated === true}
+            total={fenetre?.total ?? 0}
           />
-        </View>
+        ) : (
+          <>
+            <CategoryRail categories={menu.categories} activeId={catId} onSelect={setCatId} brand={brand} />
 
-        {/* Ticket ancré — au-dessus de 900 px de large uniquement */}
-        {layout.compact ? null : ticket()}
+            <View style={{ flex: 1 }}>
+              {offline ? (
+                <View
+                  style={{
+                    paddingHorizontal: S.lg,
+                    paddingVertical: 7,
+                    backgroundColor: '#161104',
+                    borderBottomWidth: 1,
+                    borderBottomColor: palette.line2,
+                  }}
+                >
+                  <Text style={{ color: palette.amber, fontSize: layout.fs(13), fontWeight: '600' }}>
+                    Menu servi depuis le cache local — les prix peuvent dater. Le service continue normalement.
+                  </Text>
+                </View>
+              ) : null}
+              <ProductArea
+                categories={menu.categories}
+                // Les médias voyagent à plat, à côté des catégories : c'est là que
+                // la grille trouve le point d'intérêt et les cotes d'une photo.
+                medias={menu.medias}
+                activeId={catId}
+                brand={brand}
+                parked={parked}
+                query={query}
+                onQuery={setQuery}
+                onPick={(product, categoryName) => {
+                  mutateTicket(() => setConfig({ product, categoryName }));
+                }}
+                onRecall={recall}
+              />
+            </View>
+
+            {/* Ticket ancré — au-dessus de 900 px de large uniquement */}
+            {layout.compact ? null : ticket()}
+          </>
+        )}
 
         {/* Ticket escamoté : tiroir depuis la droite, SOUS les modales pour
             qu'une configuration ouverte depuis une ligne passe devant. */}
-        {layout.compact && ticketOpen ? (
+        {layout.compact && ticketOpen && vue === 'vente' ? (
           <Drawer onClose={() => setTicketOpen(false)} width={layout.ticketW}>
             {ticket(() => setTicketOpen(false))}
           </Drawer>
@@ -1011,6 +1203,10 @@ export function PosScreen({
           <DiscountModal
             entry={discountFor}
             brand={brand}
+            // Le plafond de remise du rôle vit dans `@sm/contracts` et n'était
+            // lu par aucun client : la modale proposait 20 % sans savoir si le
+            // code ouvert sur ce poste avait le droit de les accorder.
+            staffRole={session.staffRole}
             onClose={() => setDiscountFor(null)}
             onApply={(amount, reason, pin) => applyDiscount(discountFor, amount, reason, pin)}
           />
@@ -1018,8 +1214,10 @@ export function PosScreen({
       </View>
 
       {/* Barre d'accès permanente du mode compact : état du ticket toujours
-          lisible, encaissement à un geste. */}
-      {layout.compact ? (
+          lisible, encaissement à un geste. Elle disparaît dans la vue du
+          service — un bouton « Encaisser » sous un écran de consultation
+          encaisserait un ticket qu'on ne voit pas. */}
+      {layout.compact && vue === 'vente' ? (
         <TicketDock
           lines={lines}
           mode={mode}

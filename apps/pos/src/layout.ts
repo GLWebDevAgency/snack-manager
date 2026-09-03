@@ -66,6 +66,49 @@ export const TOPBAR_REF = 66;
 /** Sous cette largeur, le ticket ne tient plus à côté de la grille. */
 export const COMPACT_W = 900;
 
+/**
+ * LA BARRE HAUTE PORTE DÉSORMAIS DEUX SÉLECTEURS.
+ *
+ * Elle en avait un — le mode de service (Sur place / À emporter / Téléphone).
+ * La vue du service en ajoute un second (Vendre / Le service), et deux
+ * sélecteurs ne tiennent pas partout où un seul tenait. Plutôt que de tronquer
+ * l'un des deux — ce qui reviendrait à cacher le mode de service, qui décide du
+ * CONTENU de la commande, ou la bascule de vue, qui décide de ce qu'on regarde
+ * — la barre se réorganise, en trois compositions et deux seuils.
+ *
+ * ─── TOPBAR_SPLIT_W = 1180 ───────────────────────────────────────────────
+ *
+ * Au-dessus, tout tient sur UNE rangée. Le calcul, à l'échelle 1 :
+ *
+ *   identité (38 + libellé ≈ 200) + bascule de vue (2 × 92 ≈ 190)
+ *   + mode de service (3 × 96 ≈ 296) + horloge (≈ 70)
+ *   + « Clôture » (≈ 96) + « Verrouiller » (≈ 116) + 6 gouttières de 16
+ *   ≈ 1064 px
+ *
+ * Il reste ~116 px à 1180 : exactement de quoi loger la pastille « N en
+ * attente » ou « N refusée(s) » quand le service se dégrade, sans que la barre
+ * ne se réorganise sous les yeux du caissier au pire moment. En dessous, les
+ * deux sélecteurs descendent ensemble sur une seconde rangée.
+ *
+ * 1180 et non 1280 : la tablette de RÉFÉRENCE (1280 × 800) garde donc sa barre
+ * sur une seule ligne, comme aujourd'hui. C'est la contrainte qui a fixé le
+ * seuil, pas l'inverse.
+ *
+ * ─── TOPBAR_SELECTORS_SPLIT_W = 560 ──────────────────────────────────────
+ *
+ * Sur la seconde rangée, les deux sélecteurs se partagent la largeur : cinq
+ * onglets au total. À 560 px de large, chacun reçoit ≈ 100 px — « À emporter »
+ * tient encore. En dessous, il se ferait couper en plein mot, et un mode de
+ * service illisible fait envoyer la mauvaise commande. Chaque sélecteur prend
+ * alors sa propre rangée : la barre en compte trois.
+ *
+ * 560 est aussi la largeur sous laquelle l'identité textuelle s'efface déjà
+ * (`TopBar.tsx`) : les deux bascules arrivent ensemble, ce qui fait UNE rupture
+ * de mise en page à cette largeur au lieu de deux.
+ */
+export const TOPBAR_SPLIT_W = 1180;
+export const TOPBAR_SELECTORS_SPLIT_W = 560;
+
 /** Bornes du panneau ticket (le pied doit garder deux boutons ≥ 44 px). */
 export const TICKET_MIN = 340;
 export const TICKET_MAX = 460;
@@ -151,6 +194,17 @@ export interface Layout {
   screen: ScreenClass;
   /** Largeur < 900 px : ticket escamotable, colonnes réduites. */
   compact: boolean;
+  /**
+   * Les deux sélecteurs de la barre haute (vue, mode de service) descendent
+   * sous la rangée d'identité — voir `TOPBAR_SPLIT_W`.
+   */
+  topbarStacked: boolean;
+  /**
+   * Les deux sélecteurs ne se partagent plus une rangée : chacun la sienne.
+   * N'a de sens que lorsque `topbarStacked` est vrai — voir
+   * `TOPBAR_SELECTORS_SPLIT_W`.
+   */
+  topbarSelectorsSplit: boolean;
   /** Rail des catégories (zone B). */
   railW: number;
   /** Taille du libellé de catégorie — calée sur la largeur du rail, pas sur l'échelle. */
@@ -206,6 +260,35 @@ export function columnsFor(gridWidth: number, layout: Layout): number {
   const ideal = IDEAL_CARD * layout.scale;
   const raw = Math.round((gridWidth + layout.gridGap) / (ideal + layout.gridGap));
   return clamp(layout.minCols, raw, layout.maxCols);
+}
+
+/**
+ * LA CARTE DE LA VUE DU SERVICE — bien plus large qu'une tuile produit.
+ *
+ * Une tuile produit vise 190 px : un nom court et un prix. Une carte de service
+ * porte un numéro de retrait lisible à un mètre, un statut, un minuteur, un
+ * montant et de quoi reconnaître le client — sur 190 px, tout se replierait sur
+ * quatre lignes et le numéro perdrait sa taille, c'est-à-dire l'essentiel.
+ *
+ * 360 px à l'échelle 1 donne, sur la tablette de référence (1280), trois
+ * colonnes d'environ 405 px : le numéro tient en 34 px de haut à côté du
+ * minuteur, sur une seule rangée. Sur un téléphone, une seule colonne pleine
+ * largeur — mieux vaut faire défiler que tronquer.
+ */
+export const SERVICE_CARD_IDEAL = 360;
+export const SERVICE_COLS_MAX = 4;
+
+/**
+ * Colonnes de la vue du service, pour une largeur RÉELLEMENT disponible.
+ *
+ * Même méthode que la grille produits : jamais un nombre fixe, toujours déduit
+ * de la place et d'une carte idéale mise à l'échelle de l'écran.
+ */
+export function serviceColumns(disponible: number, layout: Layout): number {
+  if (disponible <= 0) return 1;
+  const ideal = SERVICE_CARD_IDEAL * layout.scale;
+  const brut = Math.round((disponible + layout.gridGap) / (ideal + layout.gridGap));
+  return clamp(1, brut, SERVICE_COLS_MAX);
 }
 
 /** Largeur d'une carte pour un nombre de colonnes donné. */
@@ -308,6 +391,8 @@ export function computeLayout(width: number, height: number): Layout {
     orientation,
     screen,
     compact,
+    topbarStacked: w < TOPBAR_SPLIT_W,
+    topbarSelectorsSplit: w < TOPBAR_SELECTORS_SPLIT_W,
     railW,
     // Le libellé suit la largeur du rail (12 % : 13 px à 108, la valeur de la
     // maquette) et non l'échelle générale : c'est la place disponible, et non

@@ -38,9 +38,11 @@ export const API_URL = resolveApiOrigin(
 /**
  * Les cadences de rafraîchissement du tableau (sondage de secours à 5 s,
  * sondage étiré à 60 s quand la socket temps réel est connectée) vivent dans
- * `temps-reel.ts`, avec la logique — pure, testée — qui choisit entre elles.
- * Elles n’ont pas leur place ici : ce module importe `react-native`, que le
- * harnais de test ne sait pas charger.
+ * `@sm/client-core/temps-reel`, avec la logique — pure, testée — qui choisit
+ * entre elles. Elles n’ont pas leur place ici : ce module importe
+ * `react-native`, que le harnais de test ne sait pas charger. Elles ont quitté
+ * `apps/kds` le jour où la CAISSE a eu, elle aussi, une vue du service à tenir
+ * à jour : une seule règle de cadence pour les deux surfaces.
  */
 
 /** Rappel sonore tant qu'un ticket reste dans « Nouveau ». */
