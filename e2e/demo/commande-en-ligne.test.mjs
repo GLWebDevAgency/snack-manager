@@ -62,8 +62,14 @@ scenario(
 
     // ── La fiche produit ──
     const fiche = page.getByRole('dialog', { name: PRODUIT });
+    const carteProduit = page
+      .getByRole('region', { name: 'Sandwichs', exact: true })
+      .getByRole('article')
+      .filter({
+        has: page.getByRole('heading', { name: PRODUIT, level: 3, exact: true }),
+    });
     await cliquerJusqua(
-      page.getByRole('button', { name: `${PRODUIT} — composer`, exact: true }),
+      carteProduit.getByRole('button', { name: /composer$/ }),
       fiche,
     );
 
