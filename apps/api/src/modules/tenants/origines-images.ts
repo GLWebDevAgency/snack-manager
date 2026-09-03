@@ -30,6 +30,20 @@ import { ConfigService } from '@nestjs/config';
  *    sous ce domaine : le magasin d'images du projet le jour où il sert par
  *    son propre domaine (bucket R2 public), et l'API de développement
  *    (`localhost:3001`), qui n'est sous aucun domaine public.
+ *  - `RAILWAY_PUBLIC_DOMAIN`, LE DOMAINE OÙ CETTE API EST ELLE-MÊME SERVIE.
+ *
+ *    Ce n'est pas une devinette : c'est la plateforme qui l'injecte, pas le
+ *    client qui le demande. Servir nos propres octets depuis notre propre
+ *    domaine est légitime par définition, et l'omettre a un coût réel — le
+ *    03/09/2026, tout dépôt d'image a été refusé sur staging avec « cette
+ *    requête arrive d'un hôte que nous ne servons pas ». En production le
+ *    domaine vaut `api.snackmanager.fr`, sous-domaine du domaine public, donc
+ *    la liste l'acceptait déjà ; sur staging il vaut le domaine généré par la
+ *    plateforme, hors du domaine public, et rien ne l'acceptait.
+ *
+ *    Le corriger par une variable d'environnement aurait marché une fois et
+ *    aurait été oublié au prochain environnement. Lu ici, il se configure
+ *    tout seul, partout, et ne peut pas dériver.
  *
  * Un hôte ou une origine complète y sont admis indifféremment
  * (`images.exemple.fr` comme `http://localhost:3001`) : seul l'HÔTE est
@@ -62,6 +76,7 @@ export class OriginesImages {
     this.hotes = hotesDImages(
       config.get<string>('PUBLIC_ROOT_DOMAIN'),
       config.get<string>('SM_IMAGE_ORIGINS'),
+      config.get<string>('RAILWAY_PUBLIC_DOMAIN'),
     );
   }
 }
@@ -109,8 +124,9 @@ function hoteDe(brut: string): string | null {
 export function hotesDImages(
   racinePublique: string | undefined,
   origines: string | undefined,
+  domaineDeLaPlateforme?: string | undefined,
 ): readonly string[] {
-  const hotes = [racinePublique ?? '', ...(origines ?? '').split(',')]
+  const hotes = [racinePublique ?? '', domaineDeLaPlateforme ?? '', ...(origines ?? '').split(',')]
     .map(hoteDe)
     .filter((h): h is string => h !== null);
   const uniques = [...new Set(hotes)];

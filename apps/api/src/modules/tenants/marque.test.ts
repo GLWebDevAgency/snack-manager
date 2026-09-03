@@ -54,6 +54,37 @@ describe('la liste blanche d’origines d’images', () => {
     ]);
   });
 
+  /*
+   * LE DOMAINE OÙ L'API EST SERVIE EST TOUJOURS ADMIS.
+   *
+   * Sur staging, la plateforme sert l'API sur son domaine généré, hors du
+   * domaine public — et tout dépôt d'image y a été refusé le 03/09/2026 avec
+   * « cette requête arrive d'un hôte que nous ne servons pas ». En production
+   * le domaine est un sous-domaine du domaine public, donc le défaut ne s'y
+   * voyait pas. Il est lu de la plateforme, jamais de la requête.
+   */
+  it('admet le domaine où l’API est elle-même servie', () => {
+    const staging = hotesDImages('staging.snackmanager.fr', undefined, 'api-staging-a5e8.up.railway.app');
+    expect(staging).toContain('api-staging-a5e8.up.railway.app');
+    expect(
+      imageAutorisee('https://api-staging-a5e8.up.railway.app/public/tenants/x/logo?v=1', staging),
+    ).toBe(true);
+  });
+
+  it('ne double pas le domaine de la plateforme quand il est déjà sous le domaine public', () => {
+    expect(hotesDImages('snackmanager.fr', undefined, 'api.snackmanager.fr')).toEqual([
+      'snackmanager.fr',
+      'api.snackmanager.fr',
+    ]);
+  });
+
+  it('reste inchangée quand la plateforme ne dit rien', () => {
+    expect(hotesDImages('snackmanager.fr', 'localhost', undefined)).toEqual([
+      'snackmanager.fr',
+      'localhost',
+    ]);
+  });
+
   it('lève plutôt que de rendre une liste vide', () => {
     // Une liste vide refuserait jusqu'au logo hébergé chez nous : mieux vaut
     // une API qui ne démarre pas, tout de suite et bruyamment.
