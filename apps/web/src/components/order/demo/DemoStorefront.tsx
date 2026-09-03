@@ -21,6 +21,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { BandeauDemo } from "@/lib/demo/BandeauDemo";
 import { orderingApi, type Site } from "../api";
+import type { VitrineFidelite } from "../fidelite";
 import { Storefront } from "../Storefront";
 import { isDemoStorefront } from "./mode";
 import { demoTransport } from "./transport";
@@ -32,6 +33,23 @@ const adresseCourante = () =>
     typeof window === "undefined" ? null : window.location.href,
   );
 const rienAuServeur = () => false;
+
+/**
+ * Le programme fictif du Comptoir — les mêmes chiffres que
+ * `DemoLoyaltyCard`, pour que la démonstration montre le VA-ET-VIENT complet :
+ * la vitrine mène à la carte, la carte ramène à la vitrine. Sans lui, la
+ * démonstration commerciale n'aurait laissé voir que la moitié du lien.
+ *
+ * `?demo=1` est obligatoire dans l'adresse : la route de la carte fictive
+ * répond 404 sans ce paramètre exact, comme celle de cette vitrine.
+ */
+const FIDELITE_DEMO: VitrineFidelite = {
+  chemin: "/r/demo/fidelite?demo=1",
+  programme: "Le Club Démo",
+  uniteSingulier: "point fictif",
+  unitePluriel: "points fictifs",
+  premiere: { nom: "Boisson offerte", cout: 8 },
+};
 
 export function DemoStorefront({ site }: { site: Site }) {
   // `useState` et non `useMemo` : React peut rejouer un `useMemo` quand il le
@@ -51,7 +69,7 @@ export function DemoStorefront({ site }: { site: Site }) {
   return (
     <>
       <BandeauDemo actif={demo} />
-      <Storefront site={site} api={api} demo />
+      <Storefront site={site} api={api} demo loyalty={FIDELITE_DEMO} />
     </>
   );
 }

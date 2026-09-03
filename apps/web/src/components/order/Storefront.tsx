@@ -64,6 +64,8 @@ import {
   weekSchedule,
 } from "./helpers";
 import { Checkout } from "./Checkout";
+import { FideliteVitrine } from "./FideliteVitrine";
+import type { VitrineFidelite } from "./fidelite";
 import { armeFunnel, jalonFunnel } from "./funnel";
 import { altDuHero, cadrageDuHero } from "./hero";
 import { Highlights, MenuBoard } from "./MenuBoard";
@@ -96,6 +98,7 @@ export function Storefront({
   showClose = false,
   api = networkApi,
   demo = false,
+  loyalty = null,
 }: {
   site: Site;
   mode?: "site" | "embed";
@@ -115,6 +118,17 @@ export function Storefront({
   api?: OrderingApi;
   /** Démonstration : bandeau d’avertissement et parcours sans paiement réel. */
   demo?: boolean;
+  /**
+   * Le programme de fidélité du restaurant, RÉSUMÉ — `null` pour l’immense
+   * majorité des cartes, qui n’en ont pas.
+   *
+   * Il ne vient pas de la charge `/site`, qui n’en porte aucune trace : c’est
+   * la page serveur qui appelle le catalogue public en parallèle et n’en
+   * descend ici que cinq champs (voir `fidelite.ts`). L’embed ne le reçoit
+   * jamais — il est délibérément amputé de tout ce qui n’est pas la carte et
+   * le tunnel.
+   */
+  loyalty?: VitrineFidelite | null;
 }) {
   const embed = mode === "embed";
   /*
@@ -371,6 +385,27 @@ export function Storefront({
           />
         )}
 
+        {/*
+          LA CARTE DE FIDÉLITÉ S'ATTEINT D'ICI — entre les incontournables et
+          la carte, et nulle part ailleurs.
+
+          Trois places étaient possibles ; celle-ci est la seule qui ne coûte
+          rien au parcours. Dans l'en-tête, la bande repoussait le premier plat
+          sous la ligne de flottaison (mesuré : +72 px sur un téléphone de
+          390 px, sur un premier plateau déjà à 689 px du haut) — or le client
+          vient commander. Dans le tunnel, elle serait une distraction au pire
+          moment. Ici, elle occupe la respiration qui sépare le rail des
+          incontournables du menu complet : quelqu'un qui descend a fini de
+          regarder les photos et n'a pas encore commencé à choisir.
+
+          Jamais dans l'embed : il est posé DANS le site du restaurateur et
+          n'emporte ni avis, ni incontournables, ni mentions — la carte et le
+          tunnel, rien d'autre.
+        */}
+        {!embed && loyalty && (
+          <FideliteVitrine slug={site.tenant.slug} resume={loyalty} />
+        )}
+
         <section id="carte" className="scroll-mt-4">
           {site.categories.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-6 py-20 text-center">
@@ -469,6 +504,7 @@ export function Storefront({
         pauseMessage={site.ordering.message}
         initialSlots={site.slots}
         embed={embed}
+        loyalty={loyalty}
         onClose={() => setTunnel(false)}
         onBrowse={scrollToMenu}
         onEditLine={editLine}
