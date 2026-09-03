@@ -16,6 +16,7 @@ function safeProbe() {
     migration_rolcreatedb: false,
     migration_rolreplication: false,
     migration_has_role_membership: false,
+    migration_has_role_members: false,
     migration_search_path: 'public, pg_catalog',
     database_name: 'railway',
     rolsuper: false,
@@ -24,6 +25,7 @@ function safeProbe() {
     rolcreatedb: false,
     rolreplication: false,
     has_role_membership: false,
+    has_role_members: false,
     can_create_database_objects: false,
     can_create_public_schema: false,
     can_create_loyalty_schema: false,
@@ -52,6 +54,10 @@ describe('rôle runtime des migrations supply', () => {
 
     expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0]?.[1]).toEqual(['snackmanager_staging_app']);
+    const probe = String(query.mock.calls[0]?.[0]);
+    expect(probe).toMatch(/pg_auth_members membership[\s\S]*membership\.roleid = m\.oid/);
+    expect(probe).toMatch(/pg_auth_members membership[\s\S]*membership\.roleid = r\.oid/);
+    expect(probe).not.toMatch(/pg_has_role\(member\.oid/);
     const grants = String(query.mock.calls[1]?.[0]);
     expect(grants).toMatch(/GRANT USAGE ON SCHEMA public/);
     expect(grants).toMatch(/GRANT CONNECT ON DATABASE "railway"/);
@@ -82,6 +88,21 @@ describe('rôle runtime des migrations supply', () => {
       assertSupplyMigrationRoleSafe(pool, 'snackmanager_staging_app'),
     ).rejects.toThrow(/absents ou privilégiés/);
     expect(query).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { migration_has_role_members: true },
+    { has_role_members: true },
+  ])('refuse qu’un tiers puisse endosser le rôle protégé : %o', async (unsafeRole) => {
+    const query = vi.fn().mockResolvedValue({
+      rowCount: 1,
+      rows: [{ ...safeProbe(), ...unsafeRole }],
+    });
+    const pool = { query } as unknown as Pick<Pool, 'query'>;
+
+    await expect(
+      assertSupplyMigrationRoleSafe(pool, 'snackmanager_staging_app'),
+    ).rejects.toThrow(/absents ou privilégiés/);
   });
 
   it.each(['"$user", public', 'public, attacker, pg_catalog', 'pg_catalog, public'])(

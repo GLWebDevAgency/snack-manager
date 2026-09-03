@@ -9,6 +9,7 @@ type RoleProbe = {
   migration_rolcreatedb: unknown;
   migration_rolreplication: unknown;
   migration_has_role_membership: unknown;
+  migration_has_role_members: unknown;
   migration_search_path: unknown;
   database_name: unknown;
   rolsuper: unknown;
@@ -17,6 +18,7 @@ type RoleProbe = {
   rolcreatedb: unknown;
   rolreplication: unknown;
   has_role_membership: unknown;
+  has_role_members: unknown;
   can_create_database_objects: unknown;
   can_create_public_schema: unknown;
   can_create_loyalty_schema: unknown;
@@ -50,7 +52,7 @@ export function runtimeDatabaseRole(env: Environment): string | null {
   return role;
 }
 
-/** Vérifie simultanément le migrateur limité et le rôle runtime sans DDL. */
+/** Vérifie simultanément le migrateur limité et le rôle runtime sans DDL persistant. */
 async function assertSupplyRolesSafe(
   pool: Pick<Pool, 'query'>,
   role: string,
@@ -66,19 +68,37 @@ async function assertSupplyRolesSafe(
             m.rolreplication AS migration_rolreplication,
             EXISTS (
               SELECT 1 FROM pg_catalog.pg_roles parent
-               WHERE parent.oid <> m.oid AND pg_has_role(m.oid, parent.oid, 'MEMBER')
+               WHERE parent.oid <> m.oid
+                 AND pg_catalog.pg_has_role(m.oid, parent.oid, 'MEMBER')
             ) AS migration_has_role_membership,
-            current_setting('search_path')::text AS migration_search_path,
-            current_database()::text AS database_name,
+            EXISTS (
+              SELECT 1 FROM pg_catalog.pg_auth_members membership
+               WHERE membership.roleid = m.oid
+            ) AS migration_has_role_members,
+            pg_catalog.current_setting('search_path')::text AS migration_search_path,
+            pg_catalog.current_database()::text AS database_name,
             r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb, r.rolreplication,
             EXISTS (
               SELECT 1 FROM pg_catalog.pg_roles parent
-               WHERE parent.oid <> r.oid AND pg_has_role(r.oid, parent.oid, 'MEMBER')
+               WHERE parent.oid <> r.oid
+                 AND pg_catalog.pg_has_role(r.oid, parent.oid, 'MEMBER')
             ) AS has_role_membership,
-            has_database_privilege(r.oid, current_database(), 'CREATE') AS can_create_database_objects,
-            has_schema_privilege(r.oid, 'public', 'CREATE') AS can_create_public_schema,
+            EXISTS (
+              SELECT 1 FROM pg_catalog.pg_auth_members membership
+               WHERE membership.roleid = r.oid
+            ) AS has_role_members,
+            pg_catalog.has_database_privilege(
+              r.oid,
+              pg_catalog.current_database(),
+              'CREATE'
+            ) AS can_create_database_objects,
+            pg_catalog.has_schema_privilege(r.oid, 'public', 'CREATE') AS can_create_public_schema,
             COALESCE(
-              has_schema_privilege(r.oid, to_regnamespace('loyalty'), 'CREATE'),
+              pg_catalog.has_schema_privilege(
+                r.oid,
+                pg_catalog.to_regnamespace('loyalty'),
+                'CREATE'
+              ),
               false
             ) AS can_create_loyalty_schema,
             EXISTS (
@@ -109,6 +129,7 @@ async function assertSupplyRolesSafe(
     found.migration_rolcreatedb !== false ||
     found.migration_rolreplication !== false ||
     found.migration_has_role_membership !== false ||
+    found.migration_has_role_members !== false ||
     typeof found.migration_search_path !== 'string' ||
     found.migration_search_path
       .split(',')
@@ -122,6 +143,7 @@ async function assertSupplyRolesSafe(
     found.rolcreatedb !== false ||
     found.rolreplication !== false ||
     found.has_role_membership !== false ||
+    found.has_role_members !== false ||
     found.can_create_database_objects !== false ||
     found.can_create_public_schema !== false ||
     found.can_create_loyalty_schema !== false ||
@@ -141,7 +163,7 @@ export async function assertSupplyMigrationRoleSafe(
   await assertSupplyRolesSafe(pool, role);
 }
 
-/** Accorde le CRUD du schéma public au rôle runtime, jamais le DDL. */
+/** Accorde le CRUD du schéma public au rôle runtime, jamais le DDL persistant. */
 export async function grantSupplyRuntimeRole(
   pool: Pick<Pool, 'query'>,
   role: string,
