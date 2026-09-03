@@ -144,6 +144,12 @@ function route(state: DemoState, request: TransportRequest, at: number): Transpo
   if (segments[0] === 'orders') {
     if (method === 'GET' && segments.length === 1) return ok(listOrders(state, query));
 
+    // Route statique AVANT `/:id`, comme dans Nest : `count` n'est jamais
+    // interprété comme l'identifiant d'une commande dans la démonstration.
+    if (method === 'GET' && segments.length === 2 && segments[1] === 'count') {
+      return ok({ total: matchingOrders(state, query).length });
+    }
+
     if (method === 'POST' && segments.length === 1) {
       return ok(createOrder(state, request.body as CreateOrderBody, at));
     }
@@ -177,17 +183,32 @@ function route(state: DemoState, request: TransportRequest, at: number): Transpo
 // Lectures
 // ─────────────────────────────────────────────────────────────
 
-function listOrders(state: DemoState, query: URLSearchParams): { rows: Order[]; total: number } {
+function matchingOrders(
+  state: DemoState,
+  query: URLSearchParams,
+): Order[] {
   const status = query.get('status');
   const since = query.get('since');
   const floor = since ? Date.parse(since) : Number.NaN;
-  const rows = state.orders
+  return state.orders
     .filter((o) => (status ? o.status === status : true))
     .filter((o) => (Number.isFinite(floor) ? Date.parse(o.createdAt) >= floor : true))
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+function listOrders(
+  state: DemoState,
+  query: URLSearchParams,
+): { rows: Order[]; total: number; truncated: boolean } {
+  const matching = matchingOrders(state, query);
+  const rows = matching
     .slice(0, 200)
     .map((o) => ({ ...o, trackingToken: demoTrackingToken(o._id) }));
-  return { rows, total: rows.length };
+  return {
+    rows,
+    total: matching.length,
+    truncated: matching.length > rows.length,
+  };
 }
 
 function trackingOf(order: Order) {

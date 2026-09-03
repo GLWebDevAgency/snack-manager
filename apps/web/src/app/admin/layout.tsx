@@ -15,8 +15,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -27,7 +29,6 @@ import {
   CAPACITE_VERROU_INDICE,
   isAccessBlocked,
   type Capacite,
-  type OrderStatus,
 } from "@sm/contracts";
 import { api, ApiError, clearToken, getToken, type TenantMe } from "@/lib/api";
 import { isDemoActive } from "@/lib/demo";
@@ -54,6 +55,7 @@ import { roleAdmin } from "./session";
 const RAIL = 66;
 const PANEL = 232;
 const NAV_STORE = "sm-bo-nav";
+const ORDER_COUNT_RECONCILE_DELAY_MS = 150;
 
 export default function AdminLayout({
   children,
@@ -172,7 +174,12 @@ function Shell({ children }: { children: ReactNode }) {
 
   const [tenant, setTenant] = useState<TenantMe | null>(null);
   const [suspendu, setSuspendu] = useState(false);
-  const [newIds, setNewIds] = useState<ReadonlySet<string>>(new Set());
+  const [newCount, setNewCount] = useState(0);
+  const newCountRevision = useRef(0);
+  const activeNewCountRequest = useRef<AbortController | null>(null);
+  const newCountReconcileRequested = useRef(false);
+  const newCountReconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const newCountMounted = useRef(true);
   const [togglingOnline, setTogglingOnline] = useState(false);
 
   // ── Session (token localStorage ; null côté serveur) ──
@@ -312,15 +319,18 @@ function Shell({ children }: { children: ReactNode }) {
   }, [hasToken, router]);
 
   // ── Badge « Commandes » : nombre de commandes au statut new, live ──
-  useEffect(() => {
+  const refreshNewCount = useCallback(async function run() {
     if (!hasToken) return;
-    let cancelled = false;
-    // `GET /orders` rend `{ rows, total }`, JAMAIS un tableau nu. Le code
-    // typait la réponse en tableau et se protégeait par `Array.isArray` : la
-    // garde était donc toujours fausse, `setNewIds` n'était jamais appelé, et
-    // le badge restait à zéro au chargement — sans erreur, sans journal. Le
-    // gérant qui ouvrait son back-office ne voyait aucune commande en attente
-    // tant qu'une nouvelle n'arrivait pas par le temps réel.
+    if (activeNewCountRequest.current) {
+      newCountReconcileRequested.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+    const revision = newCountRevision.current;
+    activeNewCountRequest.current = controller;
+    // Le compteur a sa route légère : une pastille n'a aucune raison de
+    // rapatrier jusqu'à 200 commandes avec leurs lignes et leurs paiements.
     /*
      * LA MÊME FENÊTRE QUE L'ÉCRAN, SINON LA PASTILLE MENT.
      *
@@ -337,40 +347,97 @@ function Shell({ children }: { children: ReactNode }) {
      */
     const debutDuJour = new Date();
     debutDuJour.setHours(0, 0, 0, 0);
-    api
-      .get<{ rows?: { _id: string }[] }>(
-        `/orders?status=new&since=${encodeURIComponent(debutDuJour.toISOString())}`,
-      )
-      .then((res) => {
-        const rows = res?.rows;
-        if (!cancelled && Array.isArray(rows)) setNewIds(new Set(rows.map((o) => o._id)));
-      })
-      .catch(() => {}); // badge à 0 si l'appel échoue — non bloquant
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const res = await api.get<{ total: number }>(
+        `/orders/count?status=new&since=${encodeURIComponent(debutDuJour.toISOString())}`,
+        { signal: controller.signal },
+      );
+      const total = res?.total;
+      if (
+        !controller.signal.aborted &&
+        activeNewCountRequest.current === controller &&
+        revision === newCountRevision.current &&
+        typeof total === "number" &&
+        Number.isSafeInteger(total) &&
+        total >= 0
+      ) {
+        setNewCount(total);
+      }
+    } catch {
+      if (controller.signal.aborted) return;
+      // Signal non bloquant : on conserve le dernier compte exact connu.
+    } finally {
+      if (activeNewCountRequest.current === controller) {
+        activeNewCountRequest.current = null;
+      }
+      if (
+        newCountMounted.current &&
+        newCountReconcileRequested.current &&
+        newCountReconcileTimer.current === null
+      ) {
+        newCountReconcileTimer.current = setTimeout(() => {
+          newCountReconcileTimer.current = null;
+          newCountReconcileRequested.current = false;
+          void run();
+        }, ORDER_COUNT_RECONCILE_DELAY_MS);
+      }
+    }
   }, [hasToken]);
 
-  useTenantSocket({
-    "order.created": (payload) => {
-      const o = payload as { _id?: string; status?: OrderStatus };
-      if (o?._id && (o.status ?? "new") === "new")
-        setNewIds((prev) => new Set(prev).add(o._id!));
+  const scheduleNewCountReconcile = useCallback(() => {
+    // Invalide immédiatement la réponse éventuellement photographiée avant
+    // l'événement, puis rabat toute la rafale sur un seul prochain GET.
+    newCountRevision.current += 1;
+    newCountReconcileRequested.current = true;
+    activeNewCountRequest.current?.abort();
+    if (
+      activeNewCountRequest.current ||
+      newCountReconcileTimer.current !== null
+    ) {
+      return;
+    }
+    newCountReconcileTimer.current = setTimeout(() => {
+      newCountReconcileTimer.current = null;
+      newCountReconcileRequested.current = false;
+      void refreshNewCount();
+    }, ORDER_COUNT_RECONCILE_DELAY_MS);
+  }, [refreshNewCount]);
+
+  useEffect(() => {
+    newCountMounted.current = true;
+    return () => {
+      newCountMounted.current = false;
+      activeNewCountRequest.current?.abort();
+      if (newCountReconcileTimer.current !== null) {
+        clearTimeout(newCountReconcileTimer.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronisation réseau : le compteur exact vient de l'API et l'appel ne met à jour React qu'après sa réponse asynchrone.
+    void refreshNewCount();
+  }, [refreshNewCount]);
+
+  const { connected: ordersConnected } = useTenantSocket({
+    // Un `updated` ne contient pas l'ancien statut et la ligne concernée peut
+    // être au-delà du plafond de 200. Recompter côté serveur est le seul moyen
+    // de savoir exactement s'il faut ajouter, retirer ou ne rien faire.
+    "order.created": () => {
+      scheduleNewCountReconcile();
     },
-    "order.updated": (payload) => {
-      const o = payload as { _id?: string; status?: OrderStatus };
-      if (!o?._id) return;
-      setNewIds((prev) => {
-        if (o.status === "new" ? prev.has(o._id!) : !prev.has(o._id!))
-          return prev;
-        const next = new Set(prev);
-        if (o.status === "new") next.add(o._id!);
-        else next.delete(o._id!);
-        return next;
-      });
+    "order.updated": () => {
+      scheduleNewCountReconcile();
     },
   });
-  const newCount = newIds.size;
+
+  // Ferme aussi la fenêtre entre le GET initial et l'ouverture du socket, et
+  // récupère les événements perdus pendant chaque coupure.
+  useEffect(() => {
+    if (ordersConnected) {
+      scheduleNewCountReconcile();
+    }
+  }, [ordersConnected, scheduleNewCountReconcile]);
 
   // ── Pilule Ouvert/Fermé ↔ settings.onlineOrderingPaused ──
   const paused = tenant?.settings?.onlineOrderingPaused ?? false;

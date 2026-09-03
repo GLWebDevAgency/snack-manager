@@ -945,15 +945,24 @@ function dispatch(
   // ─── Commandes ───
 
   if (seg[0] === "orders") {
-    if (method === "GET" && seg.length === 1) {
+    if (
+      method === "GET" &&
+      (seg.length === 1 || (seg.length === 2 && seg[1] === "count"))
+    ) {
       const status = q.get("status");
       const since = q.get("since");
       const floor = since ? Date.parse(since) : Number.NaN;
-      const rows = w.orders
+      const matching = w.orders
         .filter((o) => (status ? o.status === status : true))
         .filter((o) => (Number.isFinite(floor) ? Date.parse(o.createdAt) >= floor : true))
         .sort((a, b2) => Date.parse(b2.createdAt) - Date.parse(a.createdAt));
-      return ok({ rows, total: rows.length });
+      if (seg[1] === "count") return ok({ total: matching.length });
+      const rows = matching.slice(0, 200);
+      return ok({
+        rows,
+        total: matching.length,
+        truncated: matching.length > rows.length,
+      });
     }
     const order = w.orders.find((o) => o._id === seg[1]);
     if (method === "GET" && seg.length === 2) {

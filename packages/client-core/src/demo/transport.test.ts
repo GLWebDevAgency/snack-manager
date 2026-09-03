@@ -119,6 +119,17 @@ describe('carte de démonstration', () => {
       expect(age).toBeLessThan(60 * 60_000);
     }
   });
+
+  it('sert le compteur léger avec les mêmes filtres que la liste', async () => {
+    const t = transport();
+    const since = new Date(T0 - 60 * 60_000).toISOString();
+    const path = `?status=new&since=${encodeURIComponent(since)}`;
+    const list = (await send(t, 'GET', `/orders${path}`)).body as { total: number };
+    const count = await send(t, 'GET', `/orders/count${path}`);
+
+    expect(count.status).toBe(200);
+    expect(count.body).toEqual({ total: list.total });
+  });
 });
 
 describe('prise de commande', () => {

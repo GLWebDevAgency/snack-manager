@@ -78,6 +78,17 @@ export class OrdersController {
     return this.orders.list(tenantId, { status, since });
   }
 
+  /** Même périmètre que la liste, sans charger jusqu'à 200 commandes. */
+  @Roles('owner', 'gerant', 'caisse', 'cuisine')
+  @Get('orders/count')
+  count(
+    @TenantId() tenantId: string,
+    @Query('status') status?: OrderStatus,
+    @Query('since') since?: string,
+  ) {
+    return this.orders.count(tenantId, { status, since });
+  }
+
   /**
    * Réconciliation exacte d'une vente créée par une caisse hors ligne.
    *
