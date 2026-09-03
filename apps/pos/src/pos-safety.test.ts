@@ -3,11 +3,11 @@ import type { CartLine } from '@sm/client-core';
 import { buildOrderBody, zFromJournal, type DayEntry } from './pos-state';
 import {
   createSaleInFlightGate,
+  journalResetBlockReason,
+  journalResetStatus,
   pendingLoyaltyCount,
   rejectedSaleAmount,
   rejectedSnapshotIds,
-  serviceCloseBlockReason,
-  serviceCloseStatus,
 } from './pos-safety';
 
 const LINE: CartLine = {
@@ -78,19 +78,20 @@ describe('acquittement des refus affichés', () => {
   });
 });
 
-describe('invariant de clôture POS', () => {
+describe('invariant du reset du journal local', () => {
   const ready = {
     saleInFlight: false,
     offline: false,
     pendingSync: 0,
     rejectedSync: 0,
     pendingLoyalty: 0,
+    journalDegraded: false,
   };
 
   it('bloque tant qu’une vente refusée n’est pas traitée', () => {
     const safety = { ...ready, rejectedSync: 2 };
-    expect(serviceCloseBlockReason(safety)).toBe('rejected_sync');
-    expect(serviceCloseStatus(safety)).toContain('2 ventes refusées');
+    expect(journalResetBlockReason(safety)).toBe('rejected_sync');
+    expect(journalResetStatus(safety)).toContain('2 ventes refusées');
   });
 
   it('bloque tant qu’un gain fidélité doit encore être suivi', () => {
@@ -102,13 +103,19 @@ describe('invariant de clôture POS', () => {
     ];
     const pendingLoyalty = pendingLoyaltyCount(entries);
     expect(pendingLoyalty).toBe(2);
-    expect(serviceCloseBlockReason({ ...ready, pendingLoyalty })).toBe(
+    expect(journalResetBlockReason({ ...ready, pendingLoyalty })).toBe(
       'pending_loyalty',
     );
   });
 
   it('autorise uniquement un service complètement résolu', () => {
-    expect(serviceCloseBlockReason(ready)).toBeNull();
+    expect(journalResetBlockReason(ready)).toBeNull();
+  });
+
+  it('bloque le reset tant que le journal mémoire n’est pas durable', () => {
+    const safety = { ...ready, journalDegraded: true };
+    expect(journalResetBlockReason(safety)).toBe('journal_degraded');
+    expect(journalResetStatus(safety)).toContain('Journal local non durable');
   });
 });
 
@@ -136,13 +143,13 @@ describe('montant des ventes refusées', () => {
     ).toBeNull();
   });
 
-  it('survit au redémarrage et au changement de jour sans entrer dans le Z', () => {
+  it('survit au redémarrage et au changement de jour sans entrer dans le récapitulatif', () => {
     const restored = JSON.parse(
       JSON.stringify({ body: { clientId: ENTRY.clientId }, displayAmountCents: 2_500 }),
     ) as { body: unknown; displayAmountCents: number };
 
     // Le journal du nouveau jour est vide : le montant vient du snapshot local
-    // numérique de la file, et non d'une ancienne ligne comptable.
+    // numérique de la file, et non d'une ancienne ligne du journal.
     expect(rejectedSaleAmount(restored, [])).toBe(2_500);
     expect(zFromJournal([])).toMatchObject({ orders: 0, ca: 0, card: 0 });
   });

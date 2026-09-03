@@ -29,7 +29,6 @@ import {
   useNow,
   useOncePerId,
   useSyncState,
-  windowCountLabel,
   type CartLine,
   type Product,
 } from '@sm/client-core';
@@ -43,9 +42,19 @@ import { TopBar, type Vue } from './TopBar';
 import { ServicePanel } from './ServicePanel';
 import {
   commandesEnCours,
-  fusionnerFenetre,
   type ServerOrderRow,
 } from './service-state';
+import {
+  ACTIVE_ORDER_STATUSES,
+  activeOrdersPath,
+  createSerialTaskQueue,
+  deriveServiceProjection,
+  ordersSincePath,
+  serviceBadgeLabel,
+  serviceBadgeTone,
+  type ServiceProjection,
+  type StatusWindows,
+} from './service-reconciliation';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
@@ -58,63 +67,39 @@ import {
 } from './loyalty-state';
 import {
   pendingLoyaltyCount,
-  serviceCloseBlockReason,
-  serviceCloseStatus,
+  journalResetBlockReason,
+  journalResetStatus,
   type SaleInFlightGate,
+  type JournalResetSafety,
 } from './pos-safety';
 import {
   buildOrderBody,
-  commitQueuedSaleJournal,
+  createDayLogWriter,
   customerFieldsForMode,
+  DayLogChangedError,
   loadJson,
   minimizeDayEntry,
   minimizeParkedTicket,
+  normalizeDayLogFile,
   parkCode,
   pickupSlots,
   saveJson,
   serviceDay,
   startOfDayIso,
   zFromJournal,
-  zFromServer,
   type DayEntry,
+  type DayLogSnapshot,
   type Mode,
   type ParkedTicket,
   type PayMethod,
 } from './pos-state';
 
-interface DayLogFile {
-  day: string;
-  entries: DayEntry[];
-}
-
-interface ServiceStartFile {
-  day: string;
-  /** Horodatage ms de l'ouverture du service courant. */
-  at: number;
-}
-
-/** Minuit local — borne par défaut du premier service de la journée. */
-function startOfDay(): number {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 /**
- * Fenêtre serveur du jour — la SEULE lecture du poste qui voie aussi la vente
- * en ligne, et qui sert à quatre choses à la fois : réconciliation (numéro, id,
- * jeton de suivi), séquence des numéros de retrait, ventilation du Z, et
- * désormais la vue du service.
- *
- * `total` et `truncated` ne sont plus jetés : au-delà de 200 commandes dans la
- * journée, le serveur ne renvoie que les plus récentes et le DIT (voir
- * `normalizeOrdersWindow`). La forme de la ligne, elle, vit dans
- * `service-state.ts`, qui est pur et donc testable.
+ * Photo opérationnelle des statuts actifs. Elle est volontairement séparée du
+ * journal local du poste : ce dernier n'alimente que son récapitulatif local.
  */
 interface FenetreServeur {
-  rows: ServerOrderRow[];
-  total: number;
-  truncated: boolean;
+  service: ServiceProjection;
   /** Horodatage de la lecture RÉUSSIE — l'horloge de fraîcheur de l'écran. */
   at: number;
 }
@@ -190,17 +175,18 @@ export function PosScreen({
 
   // ─── Journal du service + tickets en attente ───
   const [dayLog, setDayLog] = useState<DayEntry[]>([]);
+  /** Au moins une vente en mémoire n'a pas encore de snapshot local durable. */
+  const [journalDegraded, setJournalDegradedState] = useState(false);
+  const journalDegradedRef = useRef(false);
+  const setJournalDegraded = useCallback((degraded: boolean) => {
+    journalDegradedRef.current = degraded;
+    setJournalDegradedState(degraded);
+  }, []);
   const [parked, setParked] = useState<ParkedTicket[]>([]);
   const [ready, setReady] = useState(false);
   /**
-   * Début du service courant (ms). Une clôture à 15 h ne doit pas faire
-   * ressortir le midi dans le Z du soir : c'est cette borne, et non minuit,
-   * qui découpe les commandes serveur.
-   */
-  const [serviceStart, setServiceStart] = useState(() => startOfDay());
-  /**
-   * Dernière fenêtre serveur des commandes du jour — base du Z (vente en ligne
-   * comprise) ET de la vue du service.
+   * Dernière photo serveur : projection active non bornée, tous canaux
+   * confondus (vente en ligne comprise).
    *
    * EN MÉMOIRE SEULEMENT, jamais en cache disque. C'est la doctrine du KDS,
    * reprise telle quelle : « volontairement SANS cache de repli — on veut que
@@ -212,61 +198,62 @@ export function PosScreen({
    */
   const [fenetre, setFenetre] = useState<FenetreServeur | null>(null);
   const dayLogRef = useRef<DayEntry[]>([]);
-  /** Verrou synchrone : aucune vente ne peut démarrer pendant une clôture. */
-  const serviceCloseGate = useRef(false);
+  /** Seul chemin autorisé pour écrire `KEYS.dayLog`. */
+  const dayLogWriter = useMemo(() => createDayLogWriter(client.tenantStore), []);
+  /** Version durable correspondant aux totaux présentés dans la modale. */
+  const recapSnapshotRef = useRef<DayLogSnapshot | null>(null);
+  const busyRef = useRef(busy);
+  const offlineRef = useRef(offline);
+  /** Toutes les lectures `/orders` du poste passent par cette file FIFO. */
+  const orderReadQueue = useMemo(() => createSerialTaskQueue(), []);
+  /** Verrou synchrone : aucune vente ne démarre pendant un reset du journal. */
+  const journalResetGate = useRef(false);
+  /** Empêche deux confirmations concurrentes du même reset local. */
+  const journalResetCommitGate = useRef(false);
+  const applyDayLog = useCallback((entries: DayEntry[]) => {
+    dayLogRef.current = entries;
+    setDayLog(entries);
+  }, []);
   useEffect(() => {
-    dayLogRef.current = dayLog;
-  }, [dayLog]);
-
+    busyRef.current = busy;
+  }, [busy]);
+  useEffect(() => {
+    offlineRef.current = offline;
+  }, [offline]);
   // Restauration locale (le poste redémarre sans rien perdre).
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [log, park, start] = await Promise.all([
-        loadJson<DayLogFile>(client.tenantStore, KEYS.dayLog, {
-          day: serviceDay(),
-          entries: [],
-        }),
+      const [rawLog, park] = await Promise.all([
+        loadJson<unknown>(client.tenantStore, KEYS.dayLog, null),
         loadJson<ParkedTicket[]>(client.tenantStore, KEYS.parked, []),
-        loadJson<ServiceStartFile>(client.tenantStore, KEYS.serviceStart, {
-          day: serviceDay(),
-          at: startOfDay(),
-        }),
       ]);
       if (!alive) return;
+      const log = normalizeDayLogFile(rawLog, serviceDay());
+      dayLogWriter.hydrate(log);
       const sameDay = log.day === serviceDay();
-      setDayLog(sameDay ? log.entries.map(minimizeDayEntry) : []);
+      const restoredLog = sameDay ? log.entries.map(minimizeDayEntry) : [];
+      dayLogRef.current = restoredLog;
+      setDayLog(restoredLog);
       setParked(park.map(minimizeParkedTicket));
-      // Un service jamais clôturé la veille repart de minuit, pas de son heure.
-      setServiceStart(start.day === serviceDay() ? start.at : startOfDay());
+      // L'ancienne borne n'est plus lue. Elle reste dans `KEYS` uniquement
+      // pour être purgée au désappairage ; on la retire aussi à la migration
+      // quand le stockage le permet.
+      try {
+        await client.tenantStore.removeItem(KEYS.serviceStart);
+      } catch {
+        // Une préférence obsolète ne doit pas empêcher l'ouverture du poste.
+      }
       setReady(true);
     })();
     return () => {
       alive = false;
     };
-  }, []);
-
-  useEffect(() => {
-    if (ready) {
-      void saveJson(client.tenantStore, KEYS.dayLog, {
-        day: serviceDay(),
-        entries: dayLog,
-      } satisfies DayLogFile);
-    }
-  }, [dayLog, ready]);
+  }, [dayLogWriter]);
 
   useEffect(() => {
     if (ready) void saveJson(client.tenantStore, KEYS.parked, parked);
   }, [parked, ready]);
-
-  useEffect(() => {
-    if (ready) {
-      void saveJson(client.tenantStore, KEYS.serviceStart, {
-        day: serviceDay(),
-        at: serviceStart,
-      } satisfies ServiceStartFile);
-    }
-  }, [ready, serviceStart]);
 
   useEffect(() => {
     if (menu && catId === null && menu.categories.length > 0) setCatId(menu.categories[0]?._id ?? null);
@@ -283,12 +270,17 @@ export function PosScreen({
    * Dernier numéro de retrait connu du serveur (tous canaux confondus, la
    * séquence est journalière et partagée avec la commande en ligne). Il sert à
    * proposer un numéro provisoire crédible avant confirmation.
-   */
+  */
   const [serverMax, setServerMax] = useState(0);
+  /** Une tentative ratée sera rejouée au prochain rafraîchissement forcé. */
+  const dailyNumberSeeded = useRef(false);
 
   const loyaltyStatusInFlight = useRef(new Set<string>());
   const reconcileLoyaltyStatuses = useCallback(
-    async (entries: readonly DayEntry[]) => {
+    async (
+      entries: readonly DayEntry[],
+      journalRevision = dayLogWriter.revision(),
+    ) => {
       const candidates = entries.filter(
         (entry) =>
           entry.loyalty &&
@@ -332,65 +324,140 @@ export function PosScreen({
           .map((update) => [update.clientId, update.state]),
       );
       if (byClient.size === 0) return;
-      setDayLog((current) =>
-        current.map((entry) => {
-          const state = byClient.get(entry.clientId);
-          return state && entry.loyalty
-            ? { ...entry, loyalty: { ...entry.loyalty, state } }
-            : entry;
-        }),
+      const persisted = await dayLogWriter.commit(
+        () => dayLogRef.current,
+        (current) =>
+          current.map((entry) => {
+            const state = byClient.get(entry.clientId);
+            return state && entry.loyalty
+              ? { ...entry, loyalty: { ...entry.loyalty, state } }
+              : entry;
+          }),
+        applyDayLog,
+        journalRevision,
       );
+      if (persisted) setJournalDegraded(false);
     },
-    [onLock],
+    [applyDayLog, dayLogWriter, onLock],
   );
 
   const reconcile = useCallback(
-    async (force = false) => {
+    (force = false): Promise<FenetreServeur | null> => {
       if (!force && !dayLogRef.current.some((e) => !e.serverId || e.loyalty)) {
-        return;
+        return Promise.resolve(null);
       }
-      try {
-        const todaySince = startOfDayIso();
-        // Le serveur annonce `total` et `truncated` en plus des lignes, et
-        // c'est intentionnel de sa part : « pour que l'écran refuse de conclure
-        // plutôt que de conclure faux ». Le poste les typait hors de la réponse
-        // et les jetait — d'où un Z amputé en silence au-delà de 200 commandes.
-        const vueServeur = normalizeOrdersWindow<ServerOrderRow>(
-          await client.get(`/orders?since=${encodeURIComponent(todaySince)}`),
-        );
-        const byClient = new Map(vueServeur.rows.map((r) => [r.clientId, r]));
-        setServerMax(vueServeur.rows.reduce((max, r) => Math.max(max, r.number ?? 0), 0));
-        // Deux déclencheurs de lecture (horloge et socket) : deux réponses
-        // peuvent se croiser. Le statut le plus avancé gagne, sinon une réponse
-        // en retard ferait reculer une commande sous les yeux du caissier.
-        setFenetre((precedente) => ({
-          rows: fusionnerFenetre(precedente?.rows ?? [], vueServeur.rows),
-          total: vueServeur.total,
-          truncated: vueServeur.truncated,
-          at: Date.now(),
-        }));
 
-        void reconcileLoyaltyStatuses(dayLogRef.current);
-        setDayLog((cur) =>
-          cur.map((e) => {
-            const hit = byClient.get(e.clientId);
-            if (!hit) return e;
-            // Le jeton de suivi peut manquer sur une entrée déjà réconciliée
-            // (poste mis à jour en cours de service) : on le rattrape ici.
-            if (e.serverId && e.trackingToken) return e;
-            return {
-              ...e,
-              serverId: String(hit._id),
-              serverNumber: hit.number,
-              trackingToken: hit.trackingToken ?? e.trackingToken ?? null,
-            };
-          }),
-        );
-      } catch (err) {
-        if (err instanceof SmApiError && err.status === 401) onLock('Session expirée — reconnectez-vous.');
-      }
+      // Poll, socket et retour de veille empruntent tous cette même
+      // file. Une photo N+1 ne peut donc plus être publiée avant la photo N,
+      // puis être écrasée par sa réponse tardive (composition et totaux inclus).
+      return orderReadQueue.run(async () => {
+        try {
+          const journalRevision = dayLogWriter.revision();
+          let all = normalizeOrdersWindow<ServerOrderRow>([]);
+          const needsDayRead =
+            !dailyNumberSeeded.current ||
+            dayLogRef.current.some((entry) => !entry.serverId);
+          if (needsDayRead) {
+            try {
+              all = normalizeOrdersWindow<ServerOrderRow>(
+                await client.get(ordersSincePath(Date.parse(startOfDayIso()))),
+              );
+              const dailyMax = all.rows.reduce(
+                (max, row) => Math.max(max, row.number ?? 0),
+                0,
+              );
+              setServerMax((current) => Math.max(current, dailyMax));
+              dailyNumberSeeded.current = true;
+            } catch (error) {
+              // Une panne transitoire ne consomme pas l'amorce : le prochain
+              // poll/socket/wake la retentera avant sa lecture de service.
+              if (error instanceof SmApiError && error.status === 401) {
+                onLock('Session expirée — reconnectez-vous.');
+              }
+            }
+          }
+
+          // Les actifs ne sont PAS bornés au journal : un ticket encore en
+          // cuisine doit rester visible après un reset du journal local. Les
+          // trois lectures sont systématiques et indépendantes de ce journal.
+          const statusWindows: StatusWindows = {};
+          const reads = await Promise.all(
+            ACTIVE_ORDER_STATUSES.map(async (status) => {
+              try {
+                return {
+                  status,
+                  window: normalizeOrdersWindow<ServerOrderRow>(
+                    await client.get(activeOrdersPath(status)),
+                  ),
+                  error: null,
+                };
+              } catch (error) {
+                return { status, window: null, error };
+              }
+            }),
+          );
+          for (const read of reads) {
+            statusWindows[read.status] = read.window;
+            if (read.error instanceof SmApiError && read.error.status === 401) {
+              onLock('Session expirée — reconnectez-vous.');
+            }
+          }
+
+          const service = deriveServiceProjection(all, statusWindows);
+          const observedRows = [...all.rows, ...service.rows];
+          const byClient = new Map(observedRows.map((row) => [row.clientId, row]));
+          const nextWindow: FenetreServeur = {
+            service,
+            at: Date.now(),
+          };
+          setFenetre(nextWindow);
+
+          void reconcileLoyaltyStatuses(
+            dayLogRef.current,
+            journalRevision,
+          ).catch(() => undefined);
+          try {
+            const persisted = await dayLogWriter.commit(
+              () => dayLogRef.current,
+              (current) =>
+                current.map((entry) => {
+                  const hit = byClient.get(entry.clientId);
+                  if (!hit) return entry;
+                  // Le jeton de suivi peut manquer sur une entrée déjà
+                  // réconciliée ; la photo journalière le rattrape.
+                  if (entry.serverId && entry.trackingToken) return entry;
+                  return {
+                    ...entry,
+                    serverId: String(hit._id),
+                    serverNumber: hit.number,
+                    trackingToken:
+                      hit.trackingToken ?? entry.trackingToken ?? null,
+                  };
+                }),
+              applyDayLog,
+              journalRevision,
+            );
+            if (persisted) setJournalDegraded(false);
+          } catch {
+            // Le journal reste inchangé en mémoire et sera retenté au prochain
+            // tour ; la photo active, indépendante, reste néanmoins fraîche.
+          }
+          return nextWindow;
+        } catch (err) {
+          if (err instanceof SmApiError && err.status === 401) {
+            onLock('Session expirée — reconnectez-vous.');
+          }
+          return null;
+        }
+      });
     },
-    [onLock, reconcileLoyaltyStatuses],
+    [
+      applyDayLog,
+      dayLogWriter,
+      onLock,
+      orderReadQueue,
+      reconcileLoyaltyStatuses,
+    ],
   );
 
   // ─── Temps réel : la socket anticipe, le sondage garantit ───
@@ -398,7 +465,7 @@ export function PosScreen({
   /**
    * Rafraîchissement demandé par un événement `order.*` du restaurant.
    * Débouncé : une commande génère volontiers une rafale (créée, payée,
-   * avancée) et chaque tour coûte un GET plus le rendu de la vue du service.
+   * avancée) et chaque tour coûte quatre GET plus le rendu de la vue du service.
    */
   const rafale = useMemo(() => creerDebounce(() => void reconcile(true)), [reconcile]);
   useEffect(() => () => rafale.annuler(), [rafale]);
@@ -406,9 +473,9 @@ export function PosScreen({
   /**
    * LA SOCKET DE LA CAISSE — la même que celle de la cuisine.
    *
-   * La passerelle ne vérifie pas le rôle : elle exige un JWT portant un
-   * `tenantId` et joint la room d'après le JETON. Le jeton de session par code
-   * en porte un, donc la caisse est acceptée exactement comme le KDS.
+   * La passerelle vérifie la session et le rôle avant l'admission, puis avant
+   * chaque émission. Le jeton de session par code porte le rôle `caisse`, donc
+   * ce poste est accepté exactement comme le KDS avec son rôle `cuisine`.
    *
    * Note de capacité, assumée : la passerelle est mono-réplique et ne plafonne
    * pas le nombre de sockets. Brancher la caisse ajoute UNE socket PAR POSTE.
@@ -425,15 +492,16 @@ export function PosScreen({
 
   useEffect(() => {
     if (!ready) return;
-    // Premier passage forcé : il amorce la séquence de numéros du jour.
+    // Premier passage forcé : il charge les trois files actives.
+    // La séquence journalière est amorcée par la lecture distincte au début de
+    // la même tâche, puis retentée aux tours suivants seulement si elle échoue.
     void reconcile(true);
     // TOUJOURS forcé. La sortie anticipée de `reconcile` — « rien du poste
     // n'attend son identifiant serveur » — est juste pour économiser un appel
     // après une salve de caisse, mais elle arrêtait aussi le rafraîchissement
     // périodique : une fois la dernière commande du poste réconciliée, la photo
     // serveur ne bougeait plus. Les commandes EN LIGNE, qui ne passent jamais
-    // par le journal local, n'entraient donc plus jamais dans le Z — qui
-    // annonce pourtant « vente en ligne comprise ».
+    // par le journal local, disparaissaient donc du suivi de cette caisse.
     //
     // Le sondage ne disparaît JAMAIS : la socket ne fait qu'en étirer la
     // cadence (12 s → 60 s), et une socket morte sans bruit ramène le poste à
@@ -465,6 +533,7 @@ export function PosScreen({
   );
   useEffect(() => {
     if (!ready || !rejectedLoyaltyKey) return;
+    const journalRevision = dayLogWriter.revision();
     const rejectedLoyaltyOrders = new Set(rejectedLoyaltyKey.split('|'));
     const changed = dayLogRef.current.some(
       (entry) =>
@@ -472,21 +541,29 @@ export function PosScreen({
         entry.loyalty.state !== 'failed' &&
         rejectedLoyaltyOrders.has(entry.clientId),
     );
-    setDayLog((current) => {
-      let modified = false;
-      const next = current.map((entry) => {
-        if (!entry.loyalty || !rejectedLoyaltyOrders.has(entry.clientId)) return entry;
-        if (entry.loyalty.state === 'failed') return entry;
-        modified = true;
-        return {
-          ...entry,
-          loyalty: { ...entry.loyalty, state: 'failed' as const },
-        };
-      });
-      return modified ? next : current;
-    });
+    void dayLogWriter
+      .commit(
+        () => dayLogRef.current,
+        (current) =>
+          current.map((entry) => {
+            if (!entry.loyalty || !rejectedLoyaltyOrders.has(entry.clientId)) {
+              return entry;
+            }
+            if (entry.loyalty.state === 'failed') return entry;
+            return {
+              ...entry,
+              loyalty: { ...entry.loyalty, state: 'failed' as const },
+            };
+          }),
+        applyDayLog,
+        journalRevision,
+      )
+      .then((persisted) => {
+        if (persisted) setJournalDegraded(false);
+      })
+      .catch(() => undefined);
     if (changed) push('Fidélité annulée : la vente a été refusée', 'bad');
-  }, [push, ready, rejectedLoyaltyKey]);
+  }, [applyDayLog, dayLogWriter, push, ready, rejectedLoyaltyKey]);
 
   // ─── Panier ───
   const addLine = useCallback(
@@ -715,8 +792,8 @@ export function PosScreen({
   const send = useCallback(
     async (method: PayMethod, cash?: { received: number; change: number }) => {
       if (lines.length === 0 || busy) return;
-      if (serviceCloseGate.current) {
-        push('Terminez ou fermez la clôture de service avant d’encaisser', 'warn');
+      if (journalResetGate.current) {
+        push('Terminez ou fermez le récapitulatif avant d’encaisser', 'warn');
         return;
       }
       if (!saleInFlight.tryStart()) return;
@@ -778,23 +855,28 @@ export function PosScreen({
         // Le setState seul n'est pas une frontière durable : un lock différé
         // peut démonter l'écran avant l'effet React de persistance. On écrit
         // donc le snapshot critique AVANT de libérer `saleInFlight`.
-        const journal = await commitQueuedSaleJournal(
-          client.tenantStore,
-          dayLogRef.current,
-          entry,
-        );
-        if (!journal.durable) {
+        const journalRevision = dayLogWriter.revision();
+        try {
+          const persisted = await dayLogWriter.commit(
+            () => dayLogRef.current,
+            (current) => [...current, entry],
+            applyDayLog,
+            journalRevision,
+          );
+          if (persisted) setJournalDegraded(false);
+        } catch {
           // L'enqueue a déjà committé la vente. La présenter comme échouée
           // laisserait le ticket intact et un second clic créerait un nouvel
           // UUID — donc un doublon réel. On confirme la vente, garde sa copie
-          // en mémoire et signale uniquement le journal local dégradé.
+          // en mémoire et bloque son récapitulatif tant qu'une écriture
+          // ultérieure n'a pas rendu le snapshot durable.
+          applyDayLog([...dayLogRef.current, entry]);
+          setJournalDegraded(true);
           push(
-            'Vente bien enregistrée — journal local indisponible. Ne la ressaisissez pas.',
+            'Vente bien enregistrée — journal local non durable. Ne la ressaisissez pas ; le récapitulatif du poste reste bloqué.',
             'warn',
           );
         }
-        dayLogRef.current = journal.entries;
-        setDayLog(journal.entries);
         setSentClientId(clientId);
         setCashOpen(false);
         setTicketOpen(false);
@@ -808,8 +890,10 @@ export function PosScreen({
     },
     [
       busy,
+      applyDayLog,
       customerName,
       customerPhone,
+      dayLogWriter,
       lines,
       loyaltyMember,
       mode,
@@ -848,7 +932,34 @@ export function PosScreen({
           { pin, amount, reason },
         );
         const applied = res.totals?.discount?.amount ?? amount;
-        setDayLog((cur) => cur.map((e) => (e.clientId === entry.clientId ? { ...e, discount: applied } : e)));
+        const revision = dayLogWriter.revision();
+        try {
+          const persisted = await dayLogWriter.commit(
+            () => dayLogRef.current,
+            (current) =>
+              current.map((candidate) =>
+                candidate.clientId === entry.clientId
+                  ? { ...candidate, discount: applied }
+                  : candidate,
+              ),
+            applyDayLog,
+            revision,
+          );
+          if (persisted) setJournalDegraded(false);
+        } catch {
+          applyDayLog(
+            dayLogRef.current.map((candidate) =>
+              candidate.clientId === entry.clientId
+                ? { ...candidate, discount: applied }
+                : candidate,
+            ),
+          );
+          setJournalDegraded(true);
+          push(
+            'Remise appliquée — journal local non durable, récapitulatif bloqué.',
+            'warn',
+          );
+        }
         push(`Remise de ${euros(applied)} appliquée`, 'good');
         return null;
       } catch (e) {
@@ -856,7 +967,7 @@ export function PosScreen({
         return e instanceof Error ? e.message : 'Remise refusée';
       }
     },
-    [push],
+    [applyDayLog, dayLogWriter, push],
   );
 
   /**
@@ -875,56 +986,49 @@ export function PosScreen({
     );
   }, []);
 
-  /** Z du service : commandes serveur si disponibles, journal local sinon. */
-  const z = useMemo(
-    () =>
-      fenetre
-        ? zFromServer(fenetre.rows, serviceStart, {
-            total: fenetre.total,
-            truncated: fenetre.truncated,
-            received: fenetre.rows.length,
-          })
-        : zFromJournal(dayLog),
-    [dayLog, fenetre, serviceStart],
-  );
+  /** Récapitulatif strictement local : uniquement les ventes saisies ici. */
+  const z = useMemo(() => zFromJournal(dayLog), [dayLog]);
 
   // ─── La vue du service ───
 
   /**
    * LES COMMANDES RÉELLEMENT EN COURS — ni remises, ni annulées.
    *
-   * Calculées UNE fois, sur la fenêtre serveur, avec la borne du service
-   * courant. La pastille de la barre haute et la vue en descendent toutes les
-   * deux : elles ne peuvent donc pas diverger. C'est exactement le défaut qu'on
-   * vient de corriger dans le back-office, où une pastille comptait sans borne
-   * de temps ce qu'un écran montrait depuis minuit — et deux requêtes séparées,
-   * fût-ce vers `GET /orders/count`, l'auraient réintroduit ici.
+   * Calculées UNE fois sur la projection active de la dernière lecture. Cette
+   * projection vient toujours des trois requêtes de statut, sans borne de
+   * reset local, et non du journal de ce poste.
    */
   const serviceCommandes = useMemo(
     // L'horloge de secours est celle de la LECTURE (`fenetre.at`), pas celle du
     // rendu : elle ne sert qu'à une commande dont le serveur n'aurait pas rendu
     // la date, et la faire dépendre de `now` recalculerait toute la liste
     // chaque seconde. Les minuteurs, eux, reçoivent `now` carte par carte.
-    () => commandesEnCours(fenetre?.rows ?? [], serviceStart, fenetre?.at ?? serviceStart),
-    [fenetre, serviceStart],
+    () =>
+      commandesEnCours(
+        fenetre?.service.rows ?? [],
+        fenetre?.at ?? 0,
+      ),
+    [fenetre],
   );
 
   /**
-   * La pastille est un MINIMUM quand la fenêtre serveur est plafonnée : elle
-   * ne peut pas voir ce que le serveur n'a pas renvoyé, et « 200 » se lirait
-   * comme un compte exact.
+   * La pastille dit aussi l'absence de première photo et sa péremption. Le
+   * signe « ≈ » dépend de l'exactitude DU COMPTE ACTIF :
+   * une liste de statut plafonnée garde un `total` exact même si ses cartes
+   * sont partielles.
    */
-  const serviceBadge = windowCountLabel(
-    serviceCommandes.length,
-    fenetre?.truncated === true,
-  );
-  const servicePretes = serviceCommandes.some((c) => c.status === 'ready');
-
   /** Depuis quand cet écran n'a-t-il pas été rafraîchi — jamais un chiffre figé. */
   const fraicheurService = useMemo(
     () => fraicheur(fenetre?.at ?? null, now),
     [fenetre?.at, now],
   );
+  const serviceBadge = serviceBadgeLabel({
+    loaded: fenetre !== null,
+    stale: !fraicheurService.jamais && fraicheurService.perimee,
+    count: fenetre?.service.activeCount ?? 0,
+    exact: fenetre?.service.activeCountExact ?? false,
+  });
+  const servicePretes = (fenetre?.service.readyCount ?? 0) > 0;
 
   /**
    * « La 42 est prête » — annoncé UNE fois, jamais à chaque sondage.
@@ -938,7 +1042,7 @@ export function PosScreen({
   const premiereLecture = useRef(true);
   useEffect(() => {
     if (!fenetre) return;
-    const pretes = fenetre.rows.filter((row) => row.status === 'ready');
+    const pretes = fenetre.service.rows.filter((row) => row.status === 'ready');
     if (premiereLecture.current) {
       premiereLecture.current = false;
       for (const row of pretes) annoncerUneFois(row._id, () => undefined);
@@ -949,48 +1053,116 @@ export function PosScreen({
     }
   }, [annoncerUneFois, fenetre, push]);
   const pendingLoyalty = useMemo(() => pendingLoyaltyCount(dayLog), [dayLog]);
+  const currentResetSafety = useCallback(
+    (): JournalResetSafety => {
+      const queue = client.queue.getState();
+      return {
+        saleInFlight: busyRef.current || saleInFlight.active,
+        offline: offlineRef.current,
+        pendingSync: queue.pending,
+        rejectedSync: queue.rejected.length,
+        pendingLoyalty: pendingLoyaltyCount(dayLogRef.current),
+        journalDegraded: journalDegradedRef.current,
+      };
+    },
+    [saleInFlight],
+  );
 
-  const dismissServiceClose = useCallback(() => {
-    serviceCloseGate.current = false;
+  const dismissRecap = useCallback(() => {
+    if (journalResetCommitGate.current) return;
+    journalResetGate.current = false;
+    recapSnapshotRef.current = null;
     setCloseOpen(false);
   }, []);
 
-  const openServiceClose = useCallback(async () => {
-    if (busy || saleInFlight.active || serviceCloseGate.current) {
+  const openRecap = useCallback(async () => {
+    if (busy || saleInFlight.active || journalResetGate.current) {
       push('Une vente est encore en cours d’enregistrement', 'warn');
       return;
     }
-    serviceCloseGate.current = true;
+    journalResetGate.current = true;
     setSentClientId(null);
     setLoyaltyOpen(false);
-    // La fenêtre ne s'ouvre qu'après la photo serveur. Le verrou empêche une
-    // vente de se glisser entre cette photo et la décision de clôture.
-    await reconcile(true);
+    try {
+      recapSnapshotRef.current = await dayLogWriter.refresh(
+        (entries) => applyDayLog(entries.map(minimizeDayEntry)),
+        serviceDay(),
+      );
+    } catch {
+      // Le brut reste intact. Le récapitulatif peut être consulté, mais sa
+      // remise à zéro est interdite tant qu'une lecture/écriture n'a pas réussi.
+      recapSnapshotRef.current = null;
+      setJournalDegraded(true);
+    }
     setCloseOpen(true);
-  }, [busy, push, reconcile, saleInFlight]);
+  }, [applyDayLog, busy, dayLogWriter, push, saleInFlight]);
 
-  const closeService = useCallback(() => {
-    const safety = {
-      saleInFlight: busy || saleInFlight.active,
-      offline,
-      pendingSync: sync.pending,
-      rejectedSync: sync.rejected.length,
-      pendingLoyalty,
-    };
-    if (serviceCloseBlockReason(safety)) {
-      push(serviceCloseStatus(safety), 'warn');
+  const resetJournal = useCallback(async () => {
+    if (journalResetCommitGate.current) return;
+    const shownSnapshot = recapSnapshotRef.current;
+    if (!shownSnapshot) {
+      push('Journal local illisible — conservez-le et réessayez après vérification du stockage.', 'warn');
       return;
     }
-    const count = dayLog.length;
-    setDayLog([]);
-    // Le service suivant démarre ici : sans cette borne, le Z du soir
-    // recompterait le service du midi depuis les commandes serveur.
-    setServiceStart(Date.now());
-    setFenetre(null);
-    setCloseOpen(false);
-    serviceCloseGate.current = false;
-    push(`Service clôturé · ${count} commande${count > 1 ? 's' : ''}`, 'good');
-  }, [busy, dayLog.length, offline, pendingLoyalty, push, saleInFlight, sync.pending, sync.rejected.length]);
+    const safety = currentResetSafety();
+    if (journalResetBlockReason(safety)) {
+      push(journalResetStatus(safety), 'warn');
+      return;
+    }
+
+    journalResetCommitGate.current = true;
+    let lateBlockStatus: string | null = null;
+    try {
+      const count = dayLogRef.current.length;
+      // Une seule écriture brute, sérialisée avec toutes les mutations du
+      // journal. `reset` ne touche la mémoire qu'après le setItem réussi et
+      // invalide les réponses réseau qui portaient l'ancienne révision.
+      await dayLogWriter.reset((entries) => {
+        applyDayLog(entries);
+        setJournalDegraded(false);
+      }, serviceDay(), () => {
+        const latestSafety = currentResetSafety();
+        if (!journalResetBlockReason(latestSafety)) return;
+        lateBlockStatus = journalResetStatus(latestSafety);
+        throw new Error(lateBlockStatus);
+      }, shownSnapshot);
+      setCloseOpen(false);
+      journalResetGate.current = false;
+      recapSnapshotRef.current = null;
+      push(
+        `Journal du poste réinitialisé · ${count} commande${count > 1 ? 's' : ''}`,
+        'good',
+      );
+    } catch (error) {
+      if (error instanceof DayLogChangedError) {
+        try {
+          recapSnapshotRef.current = await dayLogWriter.refresh(
+            (entries) => applyDayLog(entries.map(minimizeDayEntry)),
+            serviceDay(),
+          );
+          push(
+            'Journal modifié sur un autre onglet — vérifiez les nouveaux totaux puis confirmez à nouveau.',
+            'warn',
+          );
+        } catch {
+          recapSnapshotRef.current = null;
+          setJournalDegraded(true);
+          push(
+            'Journal local illisible — aucune réinitialisation effectuée.',
+            'warn',
+          );
+        }
+        return;
+      }
+      push(
+        lateBlockStatus ??
+          'Stockage local indisponible — journal conservé, aucune réinitialisation effectuée.',
+        'warn',
+      );
+    } finally {
+      journalResetCommitGate.current = false;
+    }
+  }, [applyDayLog, currentResetSafety, dayLogWriter, push]);
 
   const sentEntry = sentClientId ? (dayLog.find((e) => e.clientId === sentClientId) ?? null) : null;
 
@@ -1050,7 +1222,11 @@ export function PosScreen({
         vue={vue}
         onVue={setVue}
         serviceBadge={serviceBadge}
-        serviceUrgent={servicePretes}
+        serviceTone={serviceBadgeTone({
+          stale: fraicheurService.perimee,
+          partial: fenetre?.service.partial === true,
+          ready: servicePretes,
+        })}
         mode={mode}
         onMode={changeMode}
         pending={sync.pending}
@@ -1059,7 +1235,7 @@ export function PosScreen({
         rejets={sync.rejected.length}
         onRejets={() => setRejetsOpen(true)}
         now={now}
-        onCloture={() => void openServiceClose()}
+        onRecap={() => void openRecap()}
         onLock={() => onLock()}
       />
 
@@ -1079,8 +1255,13 @@ export function PosScreen({
             brand={brand}
             fraicheurLabel={fraicheurService.libelle}
             fraicheurPerimee={fraicheurService.perimee}
-            truncated={fenetre?.truncated === true}
-            total={fenetre?.total ?? 0}
+            loaded={fenetre !== null}
+            activeCount={fenetre?.service.activeCount ?? 0}
+            activeCountExact={fenetre?.service.activeCountExact ?? false}
+            statusCounts={fenetre?.service.statusCounts ?? null}
+            servicePartial={fenetre?.service.partial === true}
+            failedStatuses={fenetre?.service.failedStatuses ?? []}
+            truncatedStatuses={fenetre?.service.truncatedStatuses ?? []}
           />
         ) : (
           <>
@@ -1171,12 +1352,13 @@ export function PosScreen({
             pending={sync.pending}
             rejected={sync.rejected.length}
             pendingLoyalty={pendingLoyalty}
+            journalDegraded={journalDegraded}
             busy={busy}
             offline={offline}
             brand={brand}
             staffName={session.staffName}
-            onClose={dismissServiceClose}
-            onCloseService={closeService}
+            onClose={dismissRecap}
+            onResetJournal={resetJournal}
             onOpenTicket={setTicketFor}
             onOpenDiscount={setDiscountFor}
           />

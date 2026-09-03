@@ -288,8 +288,8 @@ export function TicketPanel({
           </View>
           {/* Le déjeuner d'un snack se règle souvent en titre-restaurant —
               encaissé sur le terminal TR du restaurant, pas par nous. Le
-              bouton existe pour que le Z du midi soit juste ; en fantôme,
-              car il pèse moins que les deux gestes dominants. */}
+              bouton existe pour enregistrer le moyen local correctement ; en
+              fantôme, car il pèse moins que les deux gestes dominants. */}
           <Btn
             label="Titre-restaurant"
             kind="ghost"

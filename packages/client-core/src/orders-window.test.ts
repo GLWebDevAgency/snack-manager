@@ -45,7 +45,7 @@ describe('la fenêtre de GET /orders', () => {
     expect(w.truncated).toBe(true);
   });
 
-  it('ne crie pas à la coupe sur une journée normale', () => {
+  it('ne crie pas à la coupe sur une fenêtre normale', () => {
     const w = normalizeOrdersWindow<Ligne>({ rows: lignes(37), total: 37, truncated: false });
     expect(w.truncated).toBe(false);
     expect(w.total).toBe(37);

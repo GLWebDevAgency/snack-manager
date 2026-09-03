@@ -11,12 +11,10 @@
  * et `truncated` dit qu'il manque des lignes. Les deux ensemble permettent à
  * l'écran de refuser de conclure, plutôt que de conclure faux. »
  *
- * La caisse typait la réponse `{ rows }` et jetait les deux autres champs. Au
- * delà de 200 commandes dans la journée, le Z de clôture — chiffre d'affaires,
- * espèces, carte, titres-restaurant — était calculé sur une fenêtre AMPUTÉE de
- * ses lignes les plus anciennes, sans qu'aucun écran ne le signale. Le gérant
- * recomptait son tiroir contre un total faux. C'est un défaut d'argent, pas un
- * défaut d'affichage.
+ * Un client qui type la réponse `{ rows }` et jette les deux autres champs
+ * présente une fenêtre de plus de 200 commandes comme complète. Normaliser la
+ * réponse conserve explicitement cette limite de capacité pour que chaque vue
+ * puisse signaler les lignes absentes.
  *
  * Ce module est le pendant terrain de `apps/web/src/app/admin/orders/
  * list-response.ts`, qui traite déjà le cas côté back-office. Il vit dans le

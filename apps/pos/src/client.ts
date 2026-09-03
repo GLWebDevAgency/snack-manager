@@ -380,11 +380,11 @@ export function installErrorReporting(): () => void {
 /**
  * DÉSAPPAIRER, c'est tout oublier de CET établissement.
  *
- * L'appairage, la session et la file partaient bien. Le reste — journal du
- * service, tickets mis en attente, heure d'ouverture — restait en place et
- * ressortait tel quel après ré-appairage chez un AUTRE commerçant : le Z du
- * soir mélangeait deux restaurants, et un ticket parqué chez A se rappelait
- * chez B avec ses lignes et le nom de son client.
+ * L'appairage, la session et la file partaient bien. Le reste — journal local,
+ * tickets mis en attente, anciennes préférences — restait en place et
+ * ressortait tel quel après ré-appairage chez un AUTRE commerçant : le
+ * récapitulatif mélangeait deux restaurants, et un ticket parqué chez A se
+ * rappelait chez B avec ses lignes et le nom de son client.
  *
  * La liste est donc celle des clés `KEYS`, dans son ensemble, et non un
  * sous-ensemble choisi : une clé ajoutée demain doit y entrer d'office.
