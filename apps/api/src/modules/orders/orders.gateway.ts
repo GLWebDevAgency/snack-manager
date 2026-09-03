@@ -13,7 +13,12 @@ import type { Server, Socket } from 'socket.io';
 import Redis from 'ioredis';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
-import type { JwtPayload, OrderStatus } from '@sm/contracts';
+import {
+  ORDER_READ_ROLES,
+  roleSatisfait,
+  type JwtPayload,
+  type OrderStatus,
+} from '@sm/contracts';
 import type { Order } from '@sm/db';
 import { REDIS_SUB } from '../../redis.module';
 import { SessionAccessService } from '../../common/session-access';
@@ -147,7 +152,7 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
       const payload = await this.jwt.verifyAsync<JwtPayload>(token);
       if (!Number.isFinite(payload.exp)) throw new Error('JWT sans échéance');
       const generation = this.openPendingSession(socket, payload);
-      await this.sessions.assertAllows(payload);
+      await this.assertAllowsTenantOrderStream(payload);
       if (!this.isSessionCurrent(socket, payload, generation)) {
         this.disconnectSessionSocket(socket);
         return;
@@ -213,7 +218,7 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
               this.disconnectSessionSocket(socket);
               return;
             }
-            await this.sessions.assertAllows(session);
+            await this.assertAllowsTenantOrderStream(session);
             // Une expiration, déconnexion ou révocation peut se produire
             // pendant les lectures Mongo. Aucun `await` ne sépare ce second
             // contrôle de l'émission : la décision et le sink sont atomiques
@@ -267,7 +272,7 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
           try {
             const generation = this.sessionControlFrom(socket.data)?.generation;
             if (generation === undefined) throw new Error('Session sans contrôle');
-            await this.sessions.assertAllows(session);
+            await this.assertAllowsTenantOrderStream(session);
             if (!this.isSessionCurrent(socket, session, generation)) {
               this.disconnectSessionSocket(socket);
             }
@@ -294,6 +299,19 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
     };
     schedule();
     socket.once('disconnect', () => this.clearExpiry(socket.id));
+  }
+
+  /**
+   * Une session valide n'est pas nécessairement autorisée à lire les
+   * commandes. Cette frontière reste alignée sur les routes HTTP grâce à leur
+   * politique partagée ; elle est rejouée à l'admission, périodiquement et
+   * juste avant chaque émission.
+   */
+  private async assertAllowsTenantOrderStream(payload: JwtPayload): Promise<void> {
+    await this.sessions.assertAllows(payload);
+    if (payload.tenantId && !roleSatisfait(payload.role, ORDER_READ_ROLES)) {
+      throw new Error('Rôle non autorisé sur le flux commandes');
+    }
   }
 
   private clearExpiry(socketId: string): void {
