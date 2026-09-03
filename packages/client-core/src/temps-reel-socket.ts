@@ -15,11 +15,11 @@ import { WS_EVENTS } from '@sm/contracts';
  * Même contrat que le back-office (`apps/web/src/lib/ws.ts` ↔
  * `orders.gateway.ts`) : la passerelle vérifie le JWT passé en `auth.token` et
  * joint la room `tenant:<id>` d'après le contenu DU JETON, jamais d'après un
- * identifiant fourni par le client. Elle n'inspecte PAS le rôle — seulement la
- * présence d'un `tenantId` valide. Le jeton d'équipe remis à l'ouverture par
- * PIN en porte un, qu'il ait été délivré à une caisse ou à un écran cuisine :
- * la passerelle l'accepte donc tel quel, et un poste ne peut pas plus écouter
- * un autre restaurant ici que lire ses commandes sur `/orders`.
+ * identifiant fourni par le client. Elle applique ensuite la même politique de
+ * lecture que `/orders` : caisse et cuisine sont admises, un rôle purement
+ * financier ne l'est pas. Le jeton d'équipe remis à l'ouverture par PIN porte
+ * ce rôle et la passerelle le revalide avant chaque émission ; un poste ne peut
+ * donc ni écouter un autre restaurant, ni dépasser ses droits HTTP.
  *
  * ─── CE QUE CE HOOK FAIT, ET SURTOUT CE QU'IL NE FAIT PAS ───
  *
