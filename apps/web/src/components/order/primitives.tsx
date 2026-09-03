@@ -32,7 +32,7 @@ import {
   type ReactNode,
 } from "react";
 import { cx } from "@/lib/cx";
-import { Icon, type IconName } from "@/components/ui";
+import { Icon, TuileDeLogo, type IconName } from "@/components/ui";
 import { useDialogLayer } from "@/components/ui/useDialogLayer";
 import { euros, eurosBare } from "./helpers";
 import "./order.css";
@@ -483,47 +483,30 @@ export function Badge({
   );
 }
 
-/** Tuile de marque : initiale du restaurant sur l’accent, ou logo fourni. */
+/**
+ * Tuile de marque : initiale du restaurant sur l’accent, ou logo AJUSTÉ.
+ *
+ * Le dessin vit dans `components/ui/identite` — l’en-tête de la carte de
+ * fidélité peint la même tuile et n’importe rien de la vitrine, et les deux
+ * écritures avaient déjà divergé sur quatre points pour le même fichier.
+ * Ce qui a changé ici, et pourquoi, est écrit là-bas : le logo n’est plus
+ * recadré en « remplissage », et le vide que `contain` laisse est traité par
+ * une tuile peinte (jetons du masque) plutôt que laissé en trou.
+ *
+ * Le nom reste pris pour l’initiale de repli — `letter` n’est plus un
+ * paramètre : `initial()` est la seule règle, alors que la carte de fidélité
+ * en tenait une autre (`charAt(0)`).
+ */
 export function BrandMark({
   name,
   logoUrl,
   size = 40,
-  letter,
 }: {
   name: string;
   logoUrl?: string | null;
   size?: number;
-  letter: string;
 }) {
-  if (logoUrl) {
-    return (
-      // Logo tenant : URL arbitraire hors domaine connu — <img> volontaire
-      // (next/image imposerait une liste blanche de domaines).
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={logoUrl}
-        alt={name}
-        width={size}
-        height={size}
-        style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
-        className="shrink-0 border border-ink/10 object-cover"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: size,
-        height: size,
-        borderRadius: Math.round(size * 0.28),
-        fontSize: Math.round(size * 0.46),
-      }}
-      className="grid shrink-0 place-items-center bg-accent font-extrabold tracking-[-0.02em] text-onaccent"
-    >
-      {letter}
-    </span>
-  );
+  return <TuileDeLogo nom={name} logoUrl={logoUrl ?? null} taille={size} />;
 }
 
 /**

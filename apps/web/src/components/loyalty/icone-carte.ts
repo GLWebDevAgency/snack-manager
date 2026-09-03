@@ -30,7 +30,8 @@ import {
  * Le prix à payer, dit franchement : l'icône ne porte plus l'INITIALE du
  * restaurant. Ce qui la distingue est sa PALETTE (les cinq couleurs du masque)
  * et sa FORME (net / doux / rond) — et, dès que le restaurateur en dépose un,
- * son vrai logo, qui garde la première place dans le manifeste.
+ * son vrai logo : `dessinerIconeLogo` le pose alors LUI-MÊME au centre de
+ * l'icône du lanceur, et il garde par ailleurs la première place du manifeste.
  *
  * ═══ 2. DEUX RÔLES, DEUX DESSINS ═══
  *
@@ -60,6 +61,27 @@ import {
  *     3:1 (1.4.11 — c'est un élément, pas du texte) ;
  *   · tampons / carte — c'est le couple `onAccent/accent`, celui-là même que
  *     `contraste()` prouve déjà sur les six directions.
+ *
+ * ═══ 4. ET QUAND UN LOGO EST POSÉ, C'EST LUI QU'ON VOIT ═══
+ *
+ * `dessinerIconeLogo` compose la variante MASQUABLE autour du logo du
+ * restaurateur : le fond du masque sur tout le canevas — le lanceur doit
+ * pouvoir rogner sans jamais trouver de vide — et le logo inscrit dans le plus
+ * grand carré qui tienne dans la zone sûre, en `preserveAspectRatio` « meet »,
+ * donc AJUSTÉ et jamais recadré. C'est la règle que l'éditeur de marque écrit
+ * déjà en toutes lettres : un logo recadré n'est plus un logo.
+ *
+ * Les deux cartes disparaissent alors, et ce n'est pas un caprice : le dessin
+ * généré occupe DÉJÀ tout le rayon sûr (196,6 des 204,8 garantis). Il n'y a
+ * pas de place pour poser un logo à côté sans rogner l'un ou l'autre. Entre
+ * notre dessin et le sien, on garde le sien.
+ *
+ * Le logo entre par un attribut `href` — la seule valeur de tout ce fichier
+ * qui ne soit ni un nombre calculé ici ni un hexadécimal validé par le
+ * contrat. Elle est donc bornée deux fois (`hrefIncorporable`) : une adresse
+ * `data:` d'image RASTER, ou une URL http(s), et rien d'autre ; puis échappée
+ * en XML. Un `data:image/svg+xml` est refusé nommément — un SVG incorporé dans
+ * un SVG y rapatrie tout ce que le format sait faire, script compris.
  */
 
 /** Le côté du canevas. 512 est la taille de référence d'une icône de manifeste. */
@@ -334,6 +356,28 @@ function cheminRectangle(r: Rectangle, rayon: number): string {
 const arrondi = (n: number): number => Math.round(n * 100) / 100;
 
 /**
+ * LE HALO — la lumière qui tombe sur le plan, derrière la pile.
+ *
+ * Il valait 0,22 sur tout le canevas, et regardé aux six directions c'était
+ * l'écueil annoncé : sur Brasserie et sur Atelier, un rouge sourd étalé sur une
+ * crème donne une AURÉOLE SALE, pas une lumière. Ramené à 0,12 et resserré
+ * (r 0,62 au lieu de 0,85), il éclaire le coin d'où vient la lumière et laisse
+ * le reste du fond à sa propre valeur.
+ *
+ * Extrait en fonction parce que les DEUX dessins l'emploient : la pile de
+ * cartes et l'icône composée avec le logo. C'est ce halo, avec le fond, qui
+ * fait que les deux restent de la même famille.
+ */
+function gradientHalo(c: CouleursIcone): string {
+  return (
+    `<radialGradient id="halo" cx="0.26" cy="0.18" r="0.62">` +
+    `<stop offset="0" stop-color="${c.halo}" stop-opacity="0.12"/>` +
+    `<stop offset="1" stop-color="${c.halo}" stop-opacity="0"/>` +
+    `</radialGradient>`
+  );
+}
+
+/**
  * Le dessin complet, en balisage SVG.
  *
  * AUCUNE ENTRÉE UTILISATEUR N'Y ENTRE : toutes les valeurs interpolées sont
@@ -372,19 +416,7 @@ export function dessinerIconeCarte(brand: Brand, forme: FormeIcone): string {
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TAILLE} ${TAILLE}" width="${TAILLE}" height="${TAILLE}" role="img">` +
     `<defs>` +
-    /*
-     * LE HALO — la lumière qui tombe sur le plan, derrière la pile.
-     *
-     * Il valait 0,22 sur tout le canevas, et regardé aux six directions
-     * c'était l'écueil annoncé : sur Brasserie et sur Atelier, un rouge sourd
-     * étalé sur une crème donne une AURÉOLE SALE, pas une lumière. Ramené à
-     * 0,12 et resserré (r 0,62 au lieu de 0,85), il éclaire le coin d'où vient
-     * la lumière et laisse le reste du fond à sa propre valeur.
-     */
-    `<radialGradient id="halo" cx="0.26" cy="0.18" r="0.62">` +
-    `<stop offset="0" stop-color="${c.halo}" stop-opacity="0.12"/>` +
-    `<stop offset="1" stop-color="${c.halo}" stop-opacity="0"/>` +
-    `</radialGradient>` +
+    gradientHalo(c) +
     /* La matière de la carte : éclairée en haut, ombrée en bas. */
     `<linearGradient id="carte" x1="0.1" y1="0" x2="0.85" y2="1">` +
     `<stop offset="0" stop-color="${c.hautDeCarte}"/>` +
@@ -410,6 +442,107 @@ export function dessinerIconeCarte(brand: Brand, forme: FormeIcone): string {
     `<path d="${dessus}" fill="url(#carte)" stroke="${c.liseré}" stroke-width="${TRAIT_CARTE}"/>` +
     tampons +
     `</g>` +
+    `</svg>`
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// L'ICÔNE COMPOSÉE AVEC LE LOGO DU RESTAURATEUR
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * LE CÔTÉ DU CARRÉ OÙ LE LOGO S'INSCRIT, sur le canevas de 512.
+ *
+ * La zone sûre masquable est un CERCLE (r = 204,8) ; une image, elle, se pose
+ * dans un rectangle. Le plus grand carré inscrit dans ce cercle a pour côté le
+ * diamètre divisé par √2 — c'est de la géométrie, pas un réglage —, et on lui
+ * applique le MÊME retrait de 4 % que `echelle("masquable")` : la spécification
+ * donne le cercle comme une garantie, pas comme une cible à effleurer, et les
+ * lanceurs qui rognent en goutte mordent un peu plus sur un des quatre côtés.
+ *
+ * Le résultat (≈ 278) a une demi-diagonale de ≈ 196,6 — exactement le rayon
+ * qu'atteint déjà la pile de cartes. Les deux dessins occupent donc la même
+ * empreinte, ce qui n'est pas une coïncidence : c'est la même contrainte.
+ *
+ * `meet` fait le reste : un logo plus large que haut ne remplit pas le carré,
+ * il s'y CENTRE. Il ne peut donc, dans aucun cas, déborder de la zone sûre.
+ */
+export const COTE_LOGO_MASQUABLE: number = (TAILLE * RATIO_ZONE_SURE * 0.96) / Math.SQRT2;
+
+/**
+ * Les seuls `href` qu'on accepte d'incorporer.
+ *
+ * `data:` d'image RASTER — les trois formats que `detecterImage` reconnaît, et
+ * pas un de plus : `image/svg+xml` est absent EXPRÈS, un SVG dans un SVG
+ * rouvrirait scripts, feuilles de style et sous-ressources. Le corps est borné
+ * à l'alphabet base64, donc aucun caractère de balisage ne peut s'y cacher.
+ *
+ * http(s) — pour le SEUL aperçu de l'administration, où le balisage est injecté
+ * dans le document (`ApercuInstalle`) et non consommé comme image : là, et là
+ * seulement, une adresse externe se charge. Servi comme icône, un SVG est en
+ * mode statique sécurisé et ne charge aucune sous-ressource — c'est
+ * précisément pourquoi la route, elle, incorpore les octets.
+ *
+ * `new URL` plutôt qu'une expression régulière sur le schéma : elle refuse
+ * aussi les `javascript:` déguisés par des espaces ou des retours à la ligne,
+ * que le contrat a déjà eu à repousser une fois (`marque.test.ts`).
+ */
+const DATA_URI_RASTER = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+export function hrefIncorporable(href: string): boolean {
+  if (DATA_URI_RASTER.test(href)) return true;
+  try {
+    const protocole = new URL(href).protocol;
+    return protocole === "http:" || protocole === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Les cinq caractères qui pourraient sortir d'un attribut XML. */
+function echapperXml(valeur: string): string {
+  return valeur.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c] as string,
+  );
+}
+
+/**
+ * L'ICÔNE MASQUABLE COMPOSÉE AVEC LE LOGO — ou `null` si l'adresse est refusée.
+ *
+ * Trois couches seulement : le fond du masque sur TOUT le canevas (un lanceur
+ * qui rogne en goutte ne doit jamais trouver de transparence), le halo, et le
+ * logo ajusté dans la zone sûre. Pas de pile de cartes : voir l'en-tête du
+ * fichier, § 4 — il n'y a pas de place pour les deux.
+ *
+ * `null` et non une exception : l'appelant a toujours un repli sous la main —
+ * `dessinerIconeCarte(brand, "masquable")` —, et une icône de lanceur ne se
+ * corrige jamais après l'installation. Mieux vaut notre dessin que rien.
+ */
+export function dessinerIconeLogo(brand: Brand, href: string): string | null {
+  if (!hrefIncorporable(href)) return null;
+  const c = couleursDe(brand);
+  const cote = arrondi(COTE_LOGO_MASQUABLE);
+  const coin = arrondi((TAILLE - COTE_LOGO_MASQUABLE) / 2);
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TAILLE} ${TAILLE}" width="${TAILLE}" height="${TAILLE}" role="img">` +
+    `<defs>` +
+    gradientHalo(c) +
+    `</defs>` +
+    `<rect width="${TAILLE}" height="${TAILLE}" fill="${c.fond}"/>` +
+    `<rect width="${TAILLE}" height="${TAILLE}" fill="url(#halo)"/>` +
+    /*
+     * `xMidYMid meet` : le logo est AJUSTÉ dans son carré, centré, jamais
+     * recadré. C'est la règle que l'éditeur de marque applique déjà à ses
+     * vignettes de dépôt, et l'inverse de ce que fait `object-cover`.
+     *
+     * `href` nu, sans `xlink:href` : le rendu des icônes de manifeste passe
+     * par Blink, qui lit l'attribut SVG 2 depuis 2017. Doubler l'attribut
+     * doublerait le poids du `data:` URI pour des moteurs que ce fichier ne
+     * rencontre jamais.
+     */
+    `<image href="${echapperXml(href)}" x="${coin}" y="${coin}" width="${cote}" height="${cote}" preserveAspectRatio="xMidYMid meet"/>` +
     `</svg>`
   );
 }

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { logoPour, type Brand } from "@sm/contracts";
-import { dessinerIconeCarte } from "@/components/loyalty/icone-carte";
+import { dessinerIconeCarte, dessinerIconeLogo } from "@/components/loyalty/icone-carte";
 import { nomCourt, nomTronque, phraseDuLanceur, sourceDe } from "./surfaces-installees";
 
 /**
@@ -16,17 +16,38 @@ import { nomCourt, nomTronque, phraseDuLanceur, sourceDe } from "./surfaces-inst
  *
  * ─── L'ICÔNE N'EST PAS REDESSINÉE ICI ───
  *
- * Elle vient de `dessinerIconeCarte`, LA MÊME fonction que la route
- * `icon.svg` sert au manifeste. Recopier le dessin à la main aurait produit
- * deux vérités qui divergeraient au premier changement : l'aperçu montrerait
- * une icône que le téléphone n'affiche pas. C'est le seul défaut que cet
- * aperçu n'a pas le droit d'avoir.
+ * Elle vient de `dessinerIconeCarte` et de `dessinerIconeLogo`, LES MÊMES
+ * fonctions que la route `icon.svg` sert au manifeste. Recopier le dessin à la
+ * main aurait produit deux vérités qui divergeraient au premier changement :
+ * l'aperçu montrerait une icône que le téléphone n'affiche pas. C'est le seul
+ * défaut que cet aperçu n'a pas le droit d'avoir.
  *
- * La fonction est PURE — elle ne lit que le masque et rend une chaîne SVG de
- * formes, sans une lettre depuis qu'elle a cessé de dépendre d'une police.
- * Aucun texte du restaurateur n'y entre : `dangerouslySetInnerHTML` n'a donc
- * ici aucune surface d'injection, et les couleurs sont des hexadécimaux déjà
- * validés par le contrat.
+ * ─── CE QUI ENTRE DANS `dangerouslySetInnerHTML`, ET CE QUI N'Y ENTRE PAS ───
+ *
+ * `dessinerIconeCarte` est PURE et entièrement numérique : elle ne lit que le
+ * masque et rend des formes, sans une lettre depuis qu'elle a cessé de dépendre
+ * d'une police. Aucun texte du restaurateur n'y entre, et les couleurs sont des
+ * hexadécimaux déjà validés par le contrat.
+ *
+ * `dessinerIconeLogo` ajoute UNE valeur qui vient du restaurateur : l'adresse
+ * de son logo, dans un attribut `href`. Elle est bornée à la source — une
+ * adresse `data:` d'image raster ou une URL http(s), rien d'autre —, puis
+ * échappée en XML, et la fonction rend `null` si l'adresse ne passe pas. C'est
+ * la même garde des deux côtés : ici et dans la route.
+ *
+ * ─── POURQUOI L'APERÇU N'INCORPORE PAS LES OCTETS, LUI ───
+ *
+ * La route encode le logo en `data:` parce qu'un SVG servi COMME IMAGE ne
+ * charge aucune ressource externe. Ici, le balisage est injecté DANS le
+ * document : le `<image href="https://…">` s'y charge comme n'importe quelle
+ * image, et le rendu est le même à l'écran. Faire télécharger et encoder le
+ * fichier dans le navigateur à chaque frappe dans un champ de couleur aurait
+ * coûté beaucoup pour un pixel identique.
+ *
+ * Ce que l'aperçu ne peut donc PAS montrer : le repli. Un logo trop lourd pour
+ * le plafond de la route, ou servi depuis un hôte hors liste, s'affiche ici et
+ * pas sur le téléphone. C'est la phrase du lanceur qui porte cette réserve —
+ * elle ne promet pas sans condition.
  *
  * ─── LA DÉCOUPE EST APPLIQUÉE À LA BONNE VARIANTE ───
  *
@@ -36,12 +57,29 @@ import { nomCourt, nomTronque, phraseDuLanceur, sourceDe } from "./surfaces-inst
  */
 
 /** Le cercle est la découpe la plus agressive qu'un lanceur applique. */
+/*
+ * LE SVG DOIT ÊTRE CONTRAINT À SA BOÎTE, ET RIEN NE LE FAIT TOUT SEUL.
+ *
+ * `dessinerIconeCarte` rend un SVG portant `width="512" height="512"` EN
+ * ATTRIBUTS. La préflight de Tailwind ne pose `max-width: 100%` que sur
+ * `img` et `video` — jamais sur `svg`. Sans contrainte, le dessin s'affichait
+ * donc à 512 px dans une boîte de 56, et `overflow-hidden` en montrait le coin
+ * supérieur gauche : 1,2 % de la surface.
+ *
+ * Le logo composé étant posé au centre, dans la zone sûre, il tombait
+ * ENTIÈREMENT hors du champ visible. Le restaurateur voyait un aplat uni là où
+ * on lui promettait son logo — précisément la vignette pour laquelle tout ce
+ * lot existe.
+ */
+const SVG_DANS_SA_BOITE = "[&>svg]:size-full [&>svg]:block";
+
 function PastilleLanceur({ svg, taille }: { svg: string; taille: number }) {
   return (
     <div
-      className="overflow-hidden rounded-full"
+      className={`overflow-hidden rounded-full ${SVG_DANS_SA_BOITE}`}
       style={{ width: taille, height: taille }}
-      // Voir l'en-tête : SVG de formes, sans texte, couleurs déjà validées.
+      // Voir l'en-tête : formes et couleurs validées, plus l'unique `href` du
+      // logo, borné et échappé par `dessinerIconeLogo`.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
@@ -50,7 +88,7 @@ function PastilleLanceur({ svg, taille }: { svg: string; taille: number }) {
 function TuilePleine({ svg, taille }: { svg: string; taille: number }) {
   return (
     <div
-      className="overflow-hidden rounded-card"
+      className={`overflow-hidden rounded-card ${SVG_DANS_SA_BOITE}`}
       style={{ width: taille, height: taille }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
@@ -58,11 +96,19 @@ function TuilePleine({ svg, taille }: { svg: string; taille: number }) {
 }
 
 export function ApercuInstalle({ brand, nom }: { brand: Brand; nom: string }) {
-  // Deux dessins, deux rôles — mémorisés parce que cet aperçu se repeint à
-  // chaque frappe dans un champ de couleur, comme celui de la vitrine.
-  const masquable = useMemo(() => dessinerIconeCarte(brand, "masquable"), [brand]);
-  const plein = useMemo(() => dessinerIconeCarte(brand, "plein"), [brand]);
   const logo = logoPour(brand, "mark");
+  /*
+   * Deux dessins, deux rôles — mémorisés parce que cet aperçu se repeint à
+   * chaque frappe dans un champ de couleur, comme celui de la vitrine.
+   *
+   * Le rôle masquable suit EXACTEMENT l'arbitrage de la route : le logo composé
+   * s'il y en a un et que son adresse passe la garde, notre dessin sinon.
+   */
+  const masquable = useMemo(
+    () => (logo ? dessinerIconeLogo(brand, logo) : null) ?? dessinerIconeCarte(brand, "masquable"),
+    [brand, logo],
+  );
+  const plein = useMemo(() => dessinerIconeCarte(brand, "plein"), [brand]);
   const court = nomCourt(nom);
   const coupe = nomTronque(nom);
 
@@ -72,7 +118,7 @@ export function ApercuInstalle({ brand, nom }: { brand: Brand; nom: string }) {
       <p className="mt-1 text-[12px] leading-snug text-mut">{phraseDuLanceur(brand)}</p>
 
       <div className="mt-4 grid grid-cols-3 gap-3">
-        {/* ── L'écran d'accueil : le rôle masquable, donc notre dessin ── */}
+        {/* ── L'écran d'accueil : le rôle masquable, composé avec le logo ── */}
         <figure className="m-0 flex flex-col items-center gap-2">
           <PastilleLanceur svg={masquable} taille={56} />
           <figcaption className="text-center text-[10px] leading-tight text-mut">

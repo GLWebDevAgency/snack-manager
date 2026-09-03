@@ -15,7 +15,7 @@ import {
   type LoyaltyCustomerCard,
   type LoyaltyPublicProgram,
 } from "@sm/contracts";
-import { Btn, Card, Icon, Modal, Pill } from "@/components/ui";
+import { Btn, Card, Icon, Modal, Pill, verrouPour } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
@@ -231,6 +231,13 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
    * s'effaçait sur son propre fond. `logoPour()` suit le mode.
    */
   const logoMarque = logoPour(catalog.restaurant.brand, "mark");
+  /*
+   * LE VERROU — « logo avec le nom », s'il est posé. `verrouPour` et non
+   * `logoPour(brand, "lockup")` : ce dernier retomberait sur la MARQUE, et un
+   * pictogramme carré servi comme verrou effacerait le nom du restaurant de
+   * son propre en-tête. Rien de posé, l'en-tête ne bouge pas.
+   */
+  const verrouMarque = verrouPour(catalog.restaurant.brand);
   const unitePlurielle = catalog.program.unitLabelPlural;
   const uniteSinguliere = catalog.program.unitLabelSingular;
 
@@ -626,6 +633,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
         nom={catalog.restaurant.name}
         programme={catalog.program.name}
         logoUrl={logoMarque}
+        verrouUrl={verrouMarque}
         aside={
           horsLigne ? (
             <Pill className="border-prep/30 bg-prep/10 text-prept">Hors ligne</Pill>

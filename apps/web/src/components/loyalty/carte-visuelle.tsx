@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode, Ref } from "react";
-import { Card, Icon } from "@/components/ui";
+import { Card, Icon, TuileDeLogo, Verrou } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { chiffre, unitePour, type Recompense } from "./paliers";
 import { MatiereCarte, SceauRecompense } from "./MatiereCarte";
@@ -63,32 +63,53 @@ export function EnTeteFidelite({
   nom,
   programme,
   logoUrl,
+  verrouUrl = null,
   aside,
 }: {
   nom: string;
   programme: string;
   logoUrl: string | null;
+  /**
+   * Le VERROU du masque — « logo avec le nom ». Posé, il REMPLACE la tuile et
+   * le nom écrit ; absent (le cas de presque tout le monde), rien ne change.
+   */
+  verrouUrl?: string | null;
   /** Pastille de démonstration, bouton d'installation… selon l'appelant. */
   aside?: ReactNode;
 }) {
+  /* Le nom du programme — sous le nom écrit comme sous le verrou. */
+  const sousTitre = (
+    <p className="font-display truncate text-[11px] text-mut">{programme}</p>
+  );
   return (
     <header className="sticky top-0 z-30 border-b border-ink/8 bg-bg/85 px-4 py-3 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1080px] items-center gap-3">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- URL de marque tenant dynamique, déjà filtrée par l'API publique.
-          <img src={logoUrl} alt="" className="size-10 rounded-card object-cover" />
-        ) : (
-          <span
-            className="grid size-10 place-items-center rounded-card bg-accent text-sm font-black text-onaccent"
-            aria-hidden
-          >
-            {nom.charAt(0).toUpperCase()}
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-extrabold text-ink">{nom}</p>
-          <p className="font-display truncate text-[11px] text-mut">{programme}</p>
-        </div>
+        {/*
+          La tuile et le verrou viennent de `components/ui/identite`, comme sur
+          la vitrine : c'est le MÊME fichier de logo, il n'a aucune raison
+          d'être peint deux fois — et il l'était, avec quatre écarts : 40 px
+          contre 44, rayon en jeton contre rayon calculé, aucun filet contre un
+          filet, `alt=""` contre `alt={nom}`. Le logo n'y est plus recadré, et
+          le vide que `contain` laisse est traité par la tuile elle-même.
+
+          40 px : la hauteur de la tuile que le verrou remplace. L'en-tête
+          grandit alors d'une ligne, celle du programme, qui passe dessous.
+        */}
+        <Verrou
+          src={verrouUrl}
+          nom={nom}
+          hauteur={40}
+          sous={sousTitre}
+          replier={
+            <>
+              <TuileDeLogo nom={nom} logoUrl={logoUrl} taille={40} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-extrabold text-ink">{nom}</p>
+                {sousTitre}
+              </div>
+            </>
+          }
+        />
         {aside}
       </div>
     </header>
