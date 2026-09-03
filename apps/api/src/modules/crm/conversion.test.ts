@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import type { Model } from 'mongoose';
-import { EMPTY_SERVICES, FOUNDER_SEATS_TOTAL, type JwtPayload } from '@sm/contracts';
+import {
+  EMPTY_SERVICES,
+  FOUNDER_SEATS_TOTAL,
+  type JwtPayload,
+  type LeadProposal,
+} from '@sm/contracts';
 import type { Lead, Tenant, User } from '@sm/db';
 import type { SecretHasher } from '@sm/domain/src/ports';
 import type { AdminService } from './admin.service';
@@ -19,11 +24,27 @@ const NOW = new Date('2026-08-24T12:00:00.000Z');
 const LEAD_ID = new Types.ObjectId().toHexString();
 const ACTOR: JwtPayload = { sub: new Types.ObjectId().toHexString(), tenantId: null, role: 'sm_admin' } as JwtPayload;
 
-const leadDoc = () => ({
+const proposalDoc = (over: Partial<LeadProposal> = {}) => ({
+  plan: 'complet' as const,
+  onlineOrdering: true,
+  billing: 'mensuel' as const,
+  services: EMPTY_SERVICES,
+  note: '',
+  ...over,
+  at: NOW,
+});
+
+const leadDoc = (
+  over: {
+    founderSeatReserved?: boolean;
+    proposal?: ReturnType<typeof proposalDoc> | null;
+  } = {},
+) => ({
   _id: new Types.ObjectId(LEAD_ID),
   restaurantName: 'Chez Nicolas',
   stage: 'proposition',
-  founderSeatReserved: true,
+  founderSeatReserved: over.founderSeatReserved ?? false,
+  proposal: over.proposal === undefined ? proposalDoc() : over.proposal,
 });
 
 function build(over: {
@@ -32,12 +53,24 @@ function build(over: {
   userCreateFails?: boolean;
   failIssue?: boolean;
   lead?: ReturnType<typeof leadDoc> | null;
+  proposal?: ReturnType<typeof proposalDoc> | null;
+  founderSeatReserved?: boolean;
   /** Places fondateur déjà prises au parc — dix au total. */
   founderSeatsTaken?: number;
 } = {}) {
   const tenantId = new Types.ObjectId();
   const leads = {
-    findById: vi.fn().mockReturnValue({ lean: () => Promise.resolve(over.lead === undefined ? leadDoc() : over.lead) }),
+    findById: vi.fn().mockReturnValue({
+      lean: () =>
+        Promise.resolve(
+          over.lead === undefined
+            ? leadDoc({
+                proposal: over.proposal,
+                founderSeatReserved: over.founderSeatReserved,
+              })
+            : over.lead,
+        ),
+    }),
     updateOne: vi.fn().mockResolvedValue({}),
   };
   const tenants = {
@@ -157,6 +190,46 @@ describe('Convertir un lead en restaurant', () => {
     );
   });
 
+  it('échoue sans proposition avant toute écriture', async () => {
+    const { service, leads, tenants, users, admin, billing } = build({ proposal: null });
+
+    await expect(service.convert(ACTOR, LEAD_ID, BODY)).rejects.toThrow(/Aucune proposition posée/);
+
+    expect(tenants.findOne).not.toHaveBeenCalled();
+    expect(tenants.countDocuments).not.toHaveBeenCalled();
+    expect(tenants.create).not.toHaveBeenCalled();
+    expect(tenants.deleteOne).not.toHaveBeenCalled();
+    expect(users.findOne).not.toHaveBeenCalled();
+    expect(users.create).not.toHaveBeenCalled();
+    expect(users.updateOne).not.toHaveBeenCalled();
+    expect(leads.updateOne).not.toHaveBeenCalled();
+    expect(admin.recordTenantCreation).not.toHaveBeenCalled();
+    expect(billing.issue).not.toHaveBeenCalled();
+  });
+
+  it('refuse une proposition persistée incohérente avant toute écriture', async () => {
+    const { service, leads, tenants, users, admin, billing } = build({
+      proposal: proposalDoc({
+        plan: null,
+        onlineOrdering: false,
+        services: EMPTY_SERVICES,
+      }),
+    });
+
+    await expect(service.convert(ACTOR, LEAD_ID, BODY)).rejects.toThrow(
+      /proposition enregistrée est incohérente/,
+    );
+
+    expect(tenants.findOne).not.toHaveBeenCalled();
+    expect(tenants.countDocuments).not.toHaveBeenCalled();
+    expect(tenants.create).not.toHaveBeenCalled();
+    expect(users.findOne).not.toHaveBeenCalled();
+    expect(users.create).not.toHaveBeenCalled();
+    expect(leads.updateOne).not.toHaveBeenCalled();
+    expect(admin.recordTenantCreation).not.toHaveBeenCalled();
+    expect(billing.issue).not.toHaveBeenCalled();
+  });
+
   it('supprime le tenant orphelin si le compte gérant échoue', async () => {
     const { service, tenants } = build({ userCreateFails: true });
     await expect(service.convert(ACTOR, LEAD_ID, BODY)).rejects.toThrow('duplicate key');
@@ -182,14 +255,61 @@ describe('Convertir un lead en restaurant', () => {
     expect(result.draftInvoices).toBe(2);
   });
 
-  it('facture l’annuel douze mois payés dix, sans mise en service hors module', async () => {
-    const { service, billing } = build();
-    const result = await service.convert(
+  it('ignore un body commercial contradictoire et applique partout la proposition du lead', async () => {
+    const { service, tenants, users, admin, billing, tenantId } = build();
+
+    await service.convert(
       ACTOR,
       LEAD_ID,
-      { ...BODY, plan: 'boost', onlineOrdering: false, billing: 'annuel' },
+      {
+        slug: 'identite-du-body',
+        ownerEmail: 'Gerant@Exemple.fr',
+        ownerName: 'La Gérante',
+        // Tout ce qui suit contredit la proposition persistée Complet +
+        // module, mensuelle, ordinaire et sans Atelier.
+        plan: 'boost',
+        founderSeat: true,
+        onlineOrdering: false,
+        billing: 'annuel',
+        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
+      },
       NOW,
     );
+
+    const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
+    expect(tenant).toMatchObject({
+      slug: 'identite-du-body',
+      plan: 'complet',
+      founderSeat: false,
+      onlineOrdering: true,
+      billingCycle: 'mensuel',
+      atelier: null,
+      founderDiscountCents: null,
+    });
+    expect(tenants.countDocuments).not.toHaveBeenCalled();
+    expect(users.create).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'gerant@exemple.fr', name: 'La Gérante' }),
+    );
+    expect(admin.recordTenantCreation).toHaveBeenCalledWith(
+      ACTOR,
+      String(tenantId),
+      expect.objectContaining({
+        slug: 'identite-du-body',
+        plan: 'complet',
+        founderSeat: false,
+      }),
+    );
+    expect(billing.issue.mock.calls.map((call) => call[2])).toEqual([
+      expect.objectContaining({ kind: 'abonnement', amountCents: 23_800 }),
+      expect.objectContaining({ kind: 'mise_en_place', amountCents: 5_500 }),
+    ]);
+  });
+
+  it('facture l’annuel douze mois payés dix, sans mise en service hors module', async () => {
+    const { service, billing } = build({
+      proposal: proposalDoc({ plan: 'boost', onlineOrdering: false, billing: 'annuel' }),
+    });
+    const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     // Boost 199 € — module compris, donc pas de mise en service ; annuel = ×10.
     expect(billing.issue).toHaveBeenCalledOnce();
     const corps = billing.issue.mock.calls[0]?.[2] as Record<string, any>;
@@ -199,24 +319,21 @@ describe('Convertir un lead en restaurant', () => {
   });
 
   it('l’Atelier signé : les mensuels sur leur pièce jamais annualisée, une pièce par ponctuel', async () => {
-    const { service, billing, tenants } = build();
-    const result = await service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
+    const services = {
+      ...EMPTY_SERVICES,
+      siteVitrine: true,
+      identiteVisuelle: true,
+      presenceInternet: true,
+      reseauxSociaux: 'hebdo' as const,
+    };
+    const { service, billing, tenants } = build({
+      proposal: proposalDoc({
         onlineOrdering: false,
         billing: 'annuel',
-        services: {
-          ...EMPTY_SERVICES,
-          siteVitrine: true,
-          identiteVisuelle: true,
-          presenceInternet: true,
-          reseauxSociaux: 'hebdo',
-        },
-      },
-      NOW,
-    );
+        services,
+      }),
+    });
+    const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const corps = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
     // Abonnement annuel ×10 (Complet seul) ; Atelier mensuel À PART, au mois ;
     // puis une pièce PAR service ponctuel — le site se relance sans l'identité.
@@ -240,18 +357,14 @@ describe('Convertir un lead en restaurant', () => {
   });
 
   it('signé SANS formule : le tenant naît sans plan, aucune pièce d’abonnement', async () => {
-    const { service, billing, tenants, admin, tenantId } = build();
-    const result = await service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
+    const { service, billing, tenants, admin, tenantId } = build({
+      proposal: proposalDoc({
         plan: null,
         onlineOrdering: false,
         services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
-      },
-      NOW,
-    );
+      }),
+    });
+    const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     // Le client Atelier seul entre au parc : plan null, Atelier sur la fiche.
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.plan).toBeNull();
@@ -272,18 +385,14 @@ describe('Convertir un lead en restaurant', () => {
   });
 
   it('module seul sur site existant : la pièce d’abonnement ne porte que le module', async () => {
-    const { service, billing } = build();
-    await service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
+    const { service, billing } = build({
+      proposal: proposalDoc({
         plan: null,
         onlineOrdering: true,
         services: { ...EMPTY_SERVICES, integrationCommande: true },
-      },
-      NOW,
-    );
+      }),
+    });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     // 79 € de module, 190 € d'intégration (mise en service COMPRISE) — et
     // jamais de pièce à 55 € ni d'abonnement de formule.
     const corps = billing.issue.mock.calls.map((c) => c[2] as Record<string, any>);
@@ -361,32 +470,30 @@ describe('l’offre signée survit à la signature', () => {
   });
 
   it('vendu sans le module, le client le dit aussi — false, jamais absent', async () => {
-    const { service, tenants } = build();
-    await service.convert(ACTOR, LEAD_ID, { ...BODY, onlineOrdering: false }, NOW);
+    const { service, tenants } = build({
+      proposal: proposalDoc({ onlineOrdering: false }),
+    });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.onlineOrdering).toBe(false);
   });
 
   it('l’engagement suit : c’est lui qui décide si l’on facture au mois ou à l’année', async () => {
-    const { service, tenants } = build();
-    await service.convert(ACTOR, LEAD_ID, { ...BODY, billing: 'annuel' }, NOW);
+    const { service, tenants } = build({ proposal: proposalDoc({ billing: 'annuel' }) });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.billingCycle).toBe('annuel');
   });
 
   it('sans formule mais avec le module greffé : les deux se lisent sur le client', async () => {
-    const { service, tenants } = build();
-    await service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
+    const { service, tenants } = build({
+      proposal: proposalDoc({
         plan: null,
         onlineOrdering: true,
         services: { ...EMPTY_SERVICES, integrationCommande: true },
-      },
-      NOW,
-    );
+      }),
+    });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.plan).toBeNull();
     expect(tenant.onlineOrdering).toBe(true);
@@ -408,8 +515,9 @@ describe('l’offre signée survit à la signature', () => {
  */
 describe('la remise fondateur est datée', () => {
   it('signé avec une place fondateur : la remise court douze mois', async () => {
-    const { service, tenants } = build();
-    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
+    const { service, tenants } = build({ founderSeatReserved: true });
+    // Le body ment à `false` : seule la réservation persistée fait foi.
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: false }, NOW);
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.founderSeat).toBe(true);
     // NOW = 2026-08-24T12:00:00Z
@@ -418,7 +526,8 @@ describe('la remise fondateur est datée', () => {
 
   it('signé sans place fondateur : aucune date, donc aucune remise', async () => {
     const { service, tenants } = build();
-    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: false }, NOW);
+    // Le body ment à `true` : il ne peut pas s'octroyer une place.
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
     const tenant = tenants.create.mock.calls[0]?.[0] as Record<string, any>;
     expect(tenant.founderSeat).toBe(false);
     // `null` et non `undefined` : l'absence de remise se lit, elle ne se déduit pas.
@@ -435,28 +544,14 @@ describe('la remise fondateur est datée', () => {
  */
 describe('les premières factures d’un fondateur', () => {
   it('toutes les pièces sont à moitié prix', async () => {
-    const { service, billing } = build();
-    await service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
-        founderSeat: true,
-        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
-      },
-      NOW,
-    );
-    const sansRemise = build();
-    await sansRemise.service.convert(
-      ACTOR,
-      LEAD_ID,
-      {
-        ...BODY,
-        founderSeat: false,
-        services: { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true },
-      },
-      NOW,
-    );
+    const services = { ...EMPTY_SERVICES, siteVitrine: true, presenceInternet: true };
+    const { service, billing } = build({
+      founderSeatReserved: true,
+      proposal: proposalDoc({ services }),
+    });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
+    const sansRemise = build({ proposal: proposalDoc({ services }) });
+    await sansRemise.service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const montants = (b: typeof billing) =>
       b.issue.mock.calls.map((c) => (c[2] as Record<string, any>).amountCents as number);
     const avec = montants(billing);
@@ -466,8 +561,8 @@ describe('les premières factures d’un fondateur', () => {
   });
 
   it('le libellé dit la remise — une facture doit s’expliquer seule', async () => {
-    const { service, billing } = build();
-    await service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }, NOW);
+    const { service, billing } = build({ founderSeatReserved: true });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
     const labels = billing.issue.mock.calls.map((c) => String((c[2] as Record<string, any>).label));
     expect(labels.some((l) => /fondateur/i.test(l))).toBe(true);
   });
@@ -482,23 +577,29 @@ describe('les premières factures d’un fondateur', () => {
  */
 describe('les dix places fondateur', () => {
   it('refuse la onzième, en nommant la raison', async () => {
-    const { service } = build({ founderSeatsTaken: FOUNDER_SEATS_TOTAL });
-    await expect(
-      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }),
-    ).rejects.toThrow(/places fondateur sont prises/);
+    const { service } = build({
+      founderSeatsTaken: FOUNDER_SEATS_TOTAL,
+      founderSeatReserved: true,
+    });
+    await expect(service.convert(ACTOR, LEAD_ID, BODY)).rejects.toThrow(
+      /places fondateur sont prises/,
+    );
   });
 
   it('laisse passer la dixième', async () => {
-    const { service } = build({ founderSeatsTaken: FOUNDER_SEATS_TOTAL - 1 });
-    await expect(
-      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true }),
-    ).resolves.toMatchObject({ slug: expect.any(String) });
+    const { service } = build({
+      founderSeatsTaken: FOUNDER_SEATS_TOTAL - 1,
+      founderSeatReserved: true,
+    });
+    await expect(service.convert(ACTOR, LEAD_ID, BODY)).resolves.toMatchObject({
+      slug: expect.any(String),
+    });
   });
 
   it('un client ORDINAIRE passe même les places épuisées', async () => {
     const { service } = build({ founderSeatsTaken: 99 });
-    await expect(
-      service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: false }),
-    ).resolves.toMatchObject({ slug: expect.any(String) });
+    await expect(service.convert(ACTOR, LEAD_ID, { ...BODY, founderSeat: true })).resolves.toMatchObject(
+      { slug: expect.any(String) },
+    );
   });
 });

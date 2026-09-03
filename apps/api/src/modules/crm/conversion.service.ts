@@ -11,6 +11,7 @@ import {
   PLAN_LABELS,
   SOCIAL_CADENCE_LABELS,
   FOUNDER_SEATS_TOTAL,
+  LeadProposalSchema,
   finRemiseFondateur,
   remiseFondateurContrat,
   proposalCents,
@@ -46,6 +47,11 @@ import { TRIAL_DAYS } from './signals.service';
 
 const DAY_MS = 86_400_000;
 
+type SignedTerms = Pick<
+  LeadConvert,
+  'plan' | 'founderSeat' | 'onlineOrdering' | 'billing' | 'services'
+>;
+
 /**
  * Mot de passe lisible AU TÉLÉPHONE : trois groupes de quatre, alphabet sans
  * ambiguïté (ni 0/O, ni 1/l/I) — le même que les codes d'appairage, pour les
@@ -80,6 +86,41 @@ export class ConversionService {
     if (!Types.ObjectId.isValid(leadId)) throw new NotFoundException('Lead introuvable');
     const lead = await this.leads.findById(leadId).lean();
     if (!lead) throw new NotFoundException('Lead introuvable');
+    if (!lead.proposal) {
+      throw new ConflictException(
+        'Aucune proposition posée sur ce lead — posez la formule ou les services avant de signer.',
+      );
+    }
+
+    /**
+     * LE SERVEUR SIGNE CE QUI EST EN BASE, JAMAIS CE QUE LE NAVIGATEUR RACONTE.
+     *
+     * Le corps ne fournit que l'identité technique du futur restaurant. Les
+     * termes commerciaux ont déjà été posés sur le lead et ont servi au
+     * devis : les reprendre du corps permettrait à une requête modifiée de
+     * changer l'offre, la remise et les premières factures au dernier geste.
+     * Le parseur remet aussi les défauts des propositions historiques.
+     */
+    const parsedProposal = LeadProposalSchema.safeParse({
+      plan: lead.proposal.plan ?? null,
+      onlineOrdering: Boolean(lead.proposal.onlineOrdering),
+      billing: lead.proposal.billing ?? 'mensuel',
+      services: lead.proposal.services ?? {},
+      note: lead.proposal.note ?? '',
+    });
+    if (!parsedProposal.success) {
+      throw new ConflictException(
+        'La proposition enregistrée est incohérente — corrigez-la avant de signer.',
+      );
+    }
+    const proposal = parsedProposal.data;
+    const terms: SignedTerms = {
+      plan: proposal.plan,
+      onlineOrdering: proposal.onlineOrdering,
+      billing: proposal.billing,
+      services: proposal.services,
+      founderSeat: lead.founderSeatReserved === true,
+    };
 
     const email = body.ownerEmail.toLowerCase();
     if (await this.tenants.findOne({ slug: body.slug }).lean()) {
@@ -103,7 +144,7 @@ export class ConversionService {
      * vaut mieux qu'un verrou distribué — et le refus, lui, tient dans le cas
      * qui se produit vraiment.
      */
-    if (body.founderSeat) {
+    if (terms.founderSeat) {
       const prises = await this.tenants.countDocuments({ founderSeat: true });
       if (prises >= FOUNDER_SEATS_TOTAL) {
         throw new ConflictException(
@@ -116,7 +157,7 @@ export class ConversionService {
     const passwordHash = await this.hasher.hash(password);
     const trialEndsAt = new Date(now.getTime() + TRIAL_DAYS * DAY_MS);
 
-    const { onceCents, monthlyCents } = servicesCents(body.services);
+    const { onceCents, monthlyCents } = servicesCents(terms.services);
     const tenant = await this.tenants.create({
       slug: body.slug,
       name: lead.restaurantName,
@@ -129,19 +170,19 @@ export class ConversionService {
         phone: lead.contact?.phone ?? '',
         email: lead.contact?.email ?? '',
       },
-      plan: body.plan,
-      founderSeat: body.founderSeat,
+      plan: terms.plan,
+      founderSeat: terms.founderSeat,
       // L'offre signée EN ENTIER, pas seulement sa formule. Le module et
       // l'engagement se perdaient ici : le devis les chiffrait, les brouillons
       // les facturaient, et le client naissait sans eux — après quoi toute la
       // facturation récurrente retombait sur `plan` seul et sous-facturait.
-      onlineOrdering: body.onlineOrdering,
-      billingCycle: body.billing,
+      onlineOrdering: terms.onlineOrdering,
+      billingCycle: terms.billing,
       // La place fondateur donne le DROIT, cette date donne le TERME, et le
       // montant ci-dessous donne la PORTÉE. Les trois sont posés ici une fois
       // pour toutes : la remise d'un client se lit sur son contrat, jamais sur
       // l'horloge du serveur ni sur l'offre qu'il possède aujourd'hui.
-      founderUntil: body.founderSeat ? finRemiseFondateur(now) : null,
+      founderUntil: terms.founderSeat ? finRemiseFondateur(now) : null,
       // LA REMISE EST FIGÉE AU CONTRAT SIGNÉ, et c'est tout l'enjeu.
       //
       // Un taux appliqué à l'offre courante remiserait aussi le service ajouté
@@ -149,11 +190,11 @@ export class ConversionService {
       // remise en changeant d'offre — ce que le CRM permet en un clic. Le
       // montant, lui, ne bouge plus : le dû grossit, la remise non, et le
       // supplément se paie plein tarif de lui-même.
-      founderDiscountCents: body.founderSeat
+      founderDiscountCents: terms.founderSeat
         ? remiseFondateurContrat({
-            plan: body.plan,
-            onlineOrdering: body.onlineOrdering,
-            atelier: body.services,
+            plan: terms.plan,
+            onlineOrdering: terms.onlineOrdering,
+            atelier: terms.services,
           })
         : null,
       account: {
@@ -166,7 +207,7 @@ export class ConversionService {
       // L'Atelier signé vit sur le client : la fiche répond à « qui a quoi ? »
       // sans fouiller la facturation. Rien de vendu → null, pas un sous-objet
       // de faux — l'absence doit se lire comme une absence.
-      atelier: onceCents > 0 || monthlyCents > 0 ? { ...body.services, signedAt: now } : null,
+      atelier: onceCents > 0 || monthlyCents > 0 ? { ...terms.services, signedAt: now } : null,
     });
 
     try {
@@ -203,13 +244,18 @@ export class ConversionService {
       slug: body.slug,
       // Le journal se lit seul : « aucune » dit mieux que null qu'un client
       // Atelier seul vient d'entrer au parc.
-      plan: body.plan ?? 'aucune',
-      founderSeat: body.founderSeat,
+      plan: terms.plan ?? 'aucune',
+      founderSeat: terms.founderSeat,
       leadId: String(lead._id),
       ownerEmail: email,
     });
 
-    const draftInvoices = await this.draftFirstInvoices(actor, String(tenant._id), body, trialEndsAt);
+    const draftInvoices = await this.draftFirstInvoices(
+      actor,
+      String(tenant._id),
+      terms,
+      trialEndsAt,
+    );
 
     return {
       tenantId: String(tenant._id),
@@ -237,45 +283,45 @@ export class ConversionService {
   private async draftFirstInvoices(
     actor: JwtPayload,
     tenantId: string,
-    body: LeadConvert,
+    terms: SignedTerms,
     trialEndsAt: Date,
   ): Promise<number> {
     const publie = proposalCents({
-      plan: body.plan,
-      onlineOrdering: body.onlineOrdering,
-      services: body.services,
+      plan: terms.plan,
+      onlineOrdering: terms.onlineOrdering,
+      services: terms.services,
     });
     // Le devis a promis moitié prix ; les premières factures doivent porter le
     // même montant. Un client qui reçoit une pièce contredisant le document
     // qu'il vient de signer appelle — et il a raison.
-    const prix = body.founderSeat ? chiffrageFondateur(publie) : publie;
-    const mention = body.founderSeat ? ' — offre fondateur, moitié prix' : '';
+    const prix = terms.founderSeat ? chiffrageFondateur(publie) : publie;
+    const mention = terms.founderSeat ? ' — offre fondateur, moitié prix' : '';
     // Les pièces ponctuelles se chiffrent une à une : la remise s'applique
     // donc à chacune, et non au total — c'est ce qui la rend lisible sur la
     // facture que le client reçoit.
-    const remise = (cents: number) => (body.founderSeat ? prixFondateurCents(cents) : cents);
+    const remise = (cents: number) => (terms.founderSeat ? prixFondateurCents(cents) : cents);
     const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
-    const moduleFacture = body.onlineOrdering && body.plan !== 'boost';
+    const moduleFacture = terms.onlineOrdering && terms.plan !== 'boost';
 
     let poses = 0;
     try {
       // La pièce d'abonnement n'existe que si du LOGICIEL est vendu : une
       // signature Atelier seul (site, réseaux…) n'a rien à abonner — sans
       // formule, le module éventuel est tout l'abonnement.
-      if (body.plan || moduleFacture) {
+      if (terms.plan || moduleFacture) {
         await this.billing.issue(actor, tenantId, {
           kind: 'abonnement',
           period,
           draft: true,
           dueAt: trialEndsAt,
           amountCents:
-            body.billing === 'annuel' ? yearlyCents(prix.monthlyCents) : prix.monthlyCents,
+            terms.billing === 'annuel' ? yearlyCents(prix.monthlyCents) : prix.monthlyCents,
           label:
-            (body.plan
-              ? `Abonnement ${PLAN_LABELS[body.plan]}` +
+            (terms.plan
+              ? `Abonnement ${PLAN_LABELS[terms.plan]}` +
                 (moduleFacture ? ' + commande en ligne' : '')
               : 'Abonnement — module commande en ligne') +
-            (body.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +
+            (terms.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +
             mention,
         });
         poses += 1;
@@ -286,9 +332,9 @@ export class ConversionService {
       // les mêler à un abonnement annuel contredirait le devis.
       if (prix.servicesMonthlyCents > 0) {
         const libelles = [
-          ...(body.services.presenceInternet ? [ATELIER_PRESENCE_LABEL] : []),
-          ...(body.services.reseauxSociaux
-            ? [SOCIAL_CADENCE_LABELS[body.services.reseauxSociaux]]
+          ...(terms.services.presenceInternet ? [ATELIER_PRESENCE_LABEL] : []),
+          ...(terms.services.reseauxSociaux
+            ? [SOCIAL_CADENCE_LABELS[terms.services.reseauxSociaux]]
             : []),
         ];
         await this.billing.issue(actor, tenantId, {
@@ -304,7 +350,7 @@ export class ConversionService {
 
       // L'intégration sur site existant COMPREND la mise en service — la
       // pièce de 55 € ne se pose que quand le module vit sur NOTRE page.
-      if (moduleFacture && !body.services.integrationCommande) {
+      if (moduleFacture && !terms.services.integrationCommande) {
         await this.billing.issue(actor, tenantId, {
           kind: 'mise_en_place',
           period,
@@ -320,7 +366,7 @@ export class ConversionService {
       // indépendamment de l'identité visuelle — une somme unique les rendrait
       // indistincts au premier impayé.
       for (const cle of ATELIER_ONCE_KEYS) {
-        if (!body.services[cle]) continue;
+        if (!terms.services[cle]) continue;
         await this.billing.issue(actor, tenantId, {
           kind: 'autre',
           period,
