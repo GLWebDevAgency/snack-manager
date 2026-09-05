@@ -287,9 +287,10 @@ export class OrdersController {
             tenantId,
             {
               ...trusted,
-              // `method` devient un fait seulement quand Stripe confirme. La
-              // valeur sure avant webhook est le repli au comptoir.
-              payment: { method: fulfillment === 'delivery' ? 'online' : 'counter' },
+              // Le moyen choisi permet au suivi de reprendre le même paiement.
+              // Ce choix ne prouve aucun encaissement : resolvePayment garde
+              // toutes les commandes publiques pending jusqu'à confirmation.
+              payment: { method: fulfillment === 'delivery' ? 'online' : body.payment.method },
               channel: 'online',
               type: fulfillment,
             },

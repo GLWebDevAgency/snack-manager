@@ -604,6 +604,7 @@ export class OrdersService {
       throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
     }
     if (status === 'delivered' && order.payment.status === 'pending' && (
+      order.payment.method === 'online' ||
       order.paymentFlow?.origin !== 'created_v1' || order.paymentFlow.phase !== 'open' ||
       order.paymentFlow.attempt || order.payment.stripePaymentIntentId
     )) {
@@ -619,8 +620,9 @@ export class OrdersService {
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor.sub });
     // Le règlement comptoir implicite historique ne reste permis qu'avec une
-    // preuve persistée de l'absence de tentative bancaire. __v fait échouer ce
-    // save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
+    // preuve persistée de l'absence de tentative bancaire ET un choix comptoir.
+    // Il ne remplace jamais un paiement en ligne non confirmé. __v fait échouer
+    // ce save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
     if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }

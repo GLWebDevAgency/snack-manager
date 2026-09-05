@@ -159,6 +159,16 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
     return String(order._id);
   }
 
+  it('persiste le choix de paiement en ligne avant Stripe pour permettre la reprise du retrait', async () => {
+    const id = await seed({ payment: { method: 'counter', status: 'pending' } });
+    provider.hooks.beforeCreate = async () => {
+      expect((await read(id))?.payment).toMatchObject({ method: 'online', tender: 'online', status: 'pending' });
+      throw new Error('Réseau de recette interrompu avant la réponse.');
+    };
+    await expect(lifecycle().open(id, TOKEN, provider, resolveAccount)).rejects.toThrow('Réseau de recette');
+    expect((await read(id))?.payment).toMatchObject({ method: 'online', status: 'pending' });
+  });
+
   it('deux instances concurrentes ouvrent une seule intention sur le compte figé', async () => {
     const id = await seed();
     const results = await Promise.all([

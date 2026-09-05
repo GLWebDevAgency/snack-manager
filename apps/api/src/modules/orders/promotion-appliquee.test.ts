@@ -377,8 +377,8 @@ describe('la liste des commandes du service', () => {
 /**
  * UNE COMMANDE REMISE A FORCÉMENT ÉTÉ RÉGLÉE.
  *
- * Un règlement comptoir peut solder le retrait seulement si la preuve privée
- * confirme qu'aucune tentative bancaire n'a commencé. Un ancien document ou
+ * Un règlement comptoir peut solder le retrait seulement si ce moyen était
+ * choisi et que la preuve privée confirme l'absence de tentative bancaire. Un ancien document ou
  * une tentative engagée ne sont jamais assimilés à un simple abandon du web.
  */
 describe('le paiement soldé à la remise', () => {
@@ -408,12 +408,12 @@ describe('le paiement soldé à la remise', () => {
     return { service, doc };
   }
 
-  it('solde une commande EN LIGNE qui n’a jamais lancé de tentative bancaire', async () => {
+  it('ne solde pas au comptoir une commande choisie EN LIGNE, même sans tentative bancaire', async () => {
     const { service, doc } = commandeEn('online', 'pending');
-    await service.updateStatus(TENANT, 'o1', 'delivered', {
+    await expect(service.updateStatus(TENANT, 'o1', 'delivered', {
       sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
-    });
-    expect(doc.payment.status).toBe('paid');
+    })).rejects.toThrow('Aucun encaissement ne sera supposé');
+    expect(doc.payment.status).toBe('pending');
   });
 
   it('solde aussi le « à régler au retrait », comme avant', async () => {

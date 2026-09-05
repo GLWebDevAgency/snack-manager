@@ -3,9 +3,10 @@
 /**
  * Suivi de commande sans compte — `/t/[id]`.
  *
- * Le client voit trois étapes : Reçue → En préparation → Prête. Le statut réel
- * vient de la cuisine (KDS) ; ici on interroge l’API toutes les 10 s. Le
- * rafraîchissement s’arrête dès que la commande est terminée ou annulée, et se
+ * Le suivi distingue la confirmation du paiement livraison de la prise en
+ * cuisine, puis de la remise par la caisse ou le livreur. L’API est interrogée
+ * toutes les 10 s. Le rafraîchissement s’arrête une fois la commande terminée
+ * ou annulée (sauf remboursement en attente), et se
  * met en pause quand l’onglet passe en arrière-plan (pas de sondage inutile
  * pendant que le téléphone est dans la poche).
  */
@@ -24,14 +25,16 @@ import { Banner, Dot, Money, Prix, PrimaryAction, Surface } from "./primitives";
 
 const POLL_MS = 10_000;
 
-/** Les trois étapes montrées au client (« remise » et « annulée » à part). */
-const TIMELINE: { status: OrderStatus; label: string; hint: string }[] = [
-  { status: "new", label: "Reçue", hint: "La cuisine a votre commande" },
-  { status: "preparing", label: "En préparation", hint: "Ça chauffe" },
-  { status: "ready", label: "Prête", hint: "À récupérer au comptoir" },
+type TimelineStep = { status: OrderStatus | "payment"; label: string; hint: string; upcomingHint: string };
+
+const TIMELINE: TimelineStep[] = [
+  { status: "new", label: "Reçue", hint: "La cuisine a votre commande", upcomingHint: "Après confirmation du paiement" },
+  { status: "preparing", label: "En préparation", hint: "Ça chauffe", upcomingHint: "Préparation par le restaurant" },
+  { status: "ready", label: "Prête", hint: "À récupérer au comptoir", upcomingHint: "Après la préparation" },
 ];
 
-const RANK: Record<OrderStatus, number> = {
+const RANK: Record<TimelineStep["status"], number> = {
+  payment: -1,
   new: 0,
   preparing: 1,
   ready: 2,
@@ -67,15 +70,40 @@ export function Tracking({
   const timerRef = useRef<number | null>(null);
 
   const status: OrderStatus = state.status;
-  const rank = RANK[status] ?? 0;
   const finished = status === "delivered" || status === "cancelled";
   const delivery = state.fulfillment === "delivery" || ticket?.type === "delivery";
   const dispatched = Boolean(state.delivery?.dispatchedAt);
   const payment = state.payment;
-  const timeline = delivery ? TIMELINE.map((step) => step.status === "ready" ? {
-    ...step, label: dispatched ? "En livraison" : "Prête à partir",
-    hint: dispatched ? "Votre commande est en route" : "En attente du départ du livreur",
-  } : step) : TIMELINE;
+  // Même règle que le KDS : une livraison n'est prise en cuisine qu'une
+  // fois le paiement confirmé par le serveur. Pending inclut une éventuelle
+  // confirmation bancaire en cours : ce n'est jamais la preuve d'un refus.
+  // Une remise historique reste terminale, y compris après remboursement.
+  const refundedDelivery = delivery && !finished && payment?.status === "refunded";
+  const awaitingPayment = delivery && !finished && !refundedDelivery && payment?.status !== "paid";
+  const rank = awaitingPayment ? RANK.payment : RANK[status];
+  const fulfillmentSteps = TIMELINE.map((step) => {
+    if (step.status === "ready" && delivery) return {
+      ...step, label: dispatched && !finished && !awaitingPayment ? "En livraison" : "Prête à partir",
+      hint: finished ? "Préparation terminée" : dispatched ? "Votre commande est en route" : "En attente du départ du livreur",
+    };
+    if (finished) return { ...step, hint: step.status === "new" ? "Commande reçue par le restaurant" : "Préparation terminée" };
+    return step;
+  });
+  const timeline: TimelineStep[] = [
+    ...(awaitingPayment ? [{ status: "payment" as const, label: "Confirmation du paiement",
+      hint: "La préparation commencera après confirmation du paiement.", upcomingHint: "" }] : []),
+    ...fulfillmentSteps,
+    ...(status === "delivered" ? [{ status: "delivered" as const,
+      label: delivery ? "Livrée" : "Remise", hint: "Remise confirmée par le restaurant", upcomingHint: "" }] : []),
+  ];
+  const title = status === "cancelled" ? "Commande annulée"
+    : awaitingPayment ? "En attente de confirmation du paiement"
+      : refundedDelivery ? "Commande remboursée"
+        : status === "delivered" ? delivery ? "Commande livrée" : "Commande remise"
+          : status === "ready" ? delivery
+            ? dispatched ? "Votre commande est en route" : "Votre commande est prête à partir"
+            : "Votre commande est prête"
+            : "Commande en cours";
 
   const refresh = useCallback(async () => {
     try {
@@ -172,13 +200,7 @@ export function Tracking({
             aria-atomic="true"
             className="font-display mt-1 text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-extrabold tracking-[-0.035em] text-ink"
           >
-            {status === "cancelled"
-              ? "Commande annulée"
-              : status === "ready"
-                ? delivery ? dispatched ? "Votre commande est en route" : "Votre commande est prête à partir" : "Votre commande est prête"
-                : status === "delivered"
-                  ? delivery ? "Commande livrée" : "Commande remise"
-                  : "Commande en cours"}
+            {title}
           </h1>
         </div>
       </header>
@@ -196,7 +218,7 @@ export function Tracking({
             {slotLabel && (
               <>
                 <Icon name="clock" size={15} />
-                {delivery ? "Arrivée estimée vers" : "Retrait à"}{" "}
+                {finished || refundedDelivery ? "Créneau initial" : awaitingPayment ? "Créneau souhaité" : delivery ? "Arrivée estimée vers" : "Retrait à"}{" "}
                 <span className="font-bold tabular-nums text-ink">{slotLabel}</span>
               </>
             )}
@@ -208,12 +230,17 @@ export function Tracking({
             Le restaurant a annulé cette commande. Contactez le restaurant
             {phones[0] ? ` ou appelez le ${phones[0]}` : ""}.
           </Banner>
+        ) : refundedDelivery ? (
+          <Banner tone="prep" icon="clock" title="Paiement remboursé">
+            Le paiement de cette commande a été remboursé. Contactez le restaurant pour faire le point sur votre commande.
+          </Banner>
         ) : (
           <Surface className="p-4">
-            <ol className="flex flex-col">
+            <ol aria-label="Étapes de votre commande" className="flex flex-col">
               {timeline.map((step, i) => {
                 const reached = rank >= RANK[step.status];
                 const current = rank === RANK[step.status] && !finished;
+                const waiting = step.status === "payment";
                 return (
                   /*
                     Pas d'opacité sur les étapes à venir : à 40 %, le libellé
@@ -223,12 +250,12 @@ export function Tracking({
                     vient de la pastille (verte contre `bg-ink/10`) et de
                     l'encre atténuée du libellé, qui reste AA.
                   */
-                  <li key={step.status} className="flex items-center gap-3.5 py-2.5">
+                  <li key={step.status} aria-current={current ? "step" : undefined} className="flex items-center gap-3.5 py-2.5">
                     <span
                       aria-hidden
                       className={cx(
                         "relative grid size-8 shrink-0 place-items-center rounded-full transition-colors duration-med ease-sm",
-                        reached ? "bg-ok text-onok" : "bg-ink/10 text-mut",
+                        waiting ? "bg-prep text-onprep" : reached ? "bg-ok text-onok" : "bg-ink/10 text-mut",
                       )}
                     >
                       {reached && rank > RANK[step.status] ? (
@@ -237,7 +264,7 @@ export function Tracking({
                         <span
                           className={cx(
                             "block size-2 rounded-full",
-                            reached ? "bg-onok" : "bg-ink/40",
+                            waiting ? "bg-onprep" : reached ? "bg-onok" : "bg-ink/40",
                           )}
                         />
                       )}
@@ -259,12 +286,12 @@ export function Tracking({
                       >
                         {step.label}
                       </span>
-                      <span className="block text-[13px] text-mut">{step.hint}</span>
+                      <span className="block text-[13px] text-mut">{reached ? step.hint : step.upcomingHint}</span>
                     </span>
                     {current && (
-                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-ok/40 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-okt">
-                        <Dot tone="ok" />
-                        En cours
+                      <span className={cx("inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em]", waiting ? "border-prep/40 text-prept" : "border-ok/40 text-okt")}>
+                        <Dot tone={waiting ? "prep" : "ok"} />
+                        {waiting ? "À confirmer" : "En cours"}
                       </span>
                     )}
                   </li>
@@ -288,13 +315,12 @@ export function Tracking({
         {/* ── Récapitulatif (absent si la route ticket n’est pas publiée) ── */}
         {!finished && payment?.status === "pending" && payment.method === "online" && (
           <Surface className="p-4">
-            <h2 className="font-semibold text-ink">Paiement à finaliser</h2>
-            <p className="mt-2 text-sm text-mut">{delivery ? "La livraison ne pourra pas partir tant que le paiement n’est pas confirmé." : "Reprenez votre paiement sur cette commande, sans la recréer."}</p>
+            <h2 className="font-semibold text-ink">Paiement à vérifier</h2>
+            <p className="mt-2 text-sm text-mut">{delivery ? "La préparation commencera après confirmation du paiement. Si vous venez de payer, la confirmation bancaire peut encore être en cours. Ne payez pas une deuxième fois." : "Reprenez votre paiement sur cette commande, sans la recréer."}</p>
             {paymentError && <p role="alert" className="mt-3 text-sm text-mut">{paymentError}</p>}
             {paymentIntent?.publishableKey ? <StripeCard
               {...paymentIntent} publishableKey={paymentIntent.publishableKey}
               apparence={appearance} prixMono={prixMono} returnUrl={typeof window === "undefined" ? "" : window.location.href}
-              allowCounterFallback={false} onGiveUp={() => setPaymentIntent(null)}
               onPaid={() => { setPaymentIntent(null); void refresh(); }}
             /> : <div className="mt-4"><PrimaryAction onClick={() => void resumePayment()} disabled={resuming}>{resuming ? "Chargement…" : "Reprendre le paiement"}</PrimaryAction></div>}
           </Surface>

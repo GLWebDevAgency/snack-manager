@@ -16,8 +16,8 @@
  *  — la clé d’idempotence (`clientId`) est stable sur toute une tentative :
  *    un double appui, un réseau qui bégaie ou un retour arrière ne créent
  *    jamais deux commandes ;
- *  — le paiement en ligne est facultatif : si Stripe n’est pas configuré, le
- *    parcours se termine par « à régler au comptoir » sans jamais se bloquer.
+ *  — le retrait peut être réglé au comptoir si ce choix précède le paiement
+ *    en ligne ; après une demande bancaire, toute reprise garde la même commande.
  */
 
 import {
@@ -86,6 +86,7 @@ import {
 import { StripeCard, type ApparenceStripe } from "./StripeCard";
 import { TurnstileCheck } from "./TurnstileCheck";
 import { DeliveryFields } from "./DeliveryFields";
+import { PAYMENT_VERIFICATION_MESSAGE, checkoutPaymentDecision, requestExistingOrderPayment } from "./checkout-payment";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
@@ -225,8 +226,11 @@ export function Checkout({
   const [status, setStatus] = useState<OrderStatus>("new");
   const [paidOnline, setPaidOnline] = useState(false);
   const [busy, setBusy] = useState(false);
+  // La garde doit précéder le prochain rendu : un second clic, Échap ou un
+  // callback de fermeture ne peut pas effacer une requête déjà partie.
+  const requestInFlightRef = useRef(false);
+  const resetTimerRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [downgraded, setDowngraded] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileReset, setTurnstileReset] = useState(0);
   /**
@@ -241,6 +245,10 @@ export function Checkout({
   // réessais de la même tentative — un double appui ne crée jamais deux
   // commandes. Elle n’est renouvelée qu’après une commande réellement passée.
   const clientIdRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
 
   // ── Coordonnées et disponibilité du paiement, relues à l’ouverture ──
   useEffect(() => {
@@ -300,17 +308,30 @@ export function Checkout({
    * « panier vide » sous les yeux du client au moment où il ferme.
    */
   function closeTunnel() {
+    if (requestInFlightRef.current) return;
     onClose();
-    window.setTimeout(resetTunnel, SHEET_EXIT_MS);
+    // Refermer la feuille ne signifie ni annuler Stripe ni abandonner sa
+    // référence : la prochaine ouverture reprend le paiement de cette commande.
+    if (step === "card") return;
+    clearScheduledReset();
+    resetTimerRef.current = window.setTimeout(() => {
+      resetTimerRef.current = null;
+      resetTunnel();
+    }, SHEET_EXIT_MS);
+  }
+
+  function clearScheduledReset() {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = null;
   }
 
   function resetTunnel() {
+    if (requestInFlightRef.current) return;
     setStep("cart");
     setOrder(null);
     setStatus("new");
     setIntent(null);
     setPaidOnline(false);
-    setDowngraded(false);
     setError(null);
     setSlotIso(null);
     setDate(null);
@@ -336,16 +357,17 @@ export function Checkout({
   }
 
   async function retryPayment() {
-    if (!order || busy) return;
+    if (!order || requestInFlightRef.current || checkoutPaymentDecision(order, "online") === "verify") return;
+    requestInFlightRef.current = true;
+    clearScheduledReset();
     setBusy(true);
     setError(null);
     try {
-      const next = await api.createPaymentIntent(order._id, order.trackingToken);
-      if (next.unavailable || !next.publishableKey) throw new Error("Le paiement est indisponible pour le moment. Votre commande reste en attente de paiement.");
+      const next = await requestExistingOrderPayment(api, order);
       setIntent(next);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Le paiement n’a pas abouti.");
-    } finally { setBusy(false); }
+    } catch {
+      setError(PAYMENT_VERIFICATION_MESSAGE);
+    } finally { requestInFlightRef.current = false; setBusy(false); }
   }
 
   /**
@@ -396,12 +418,14 @@ export function Checkout({
 
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter") {
-    if (busy || !slotIso || !contactOk || cart.lines.length === 0) return;
+    if (requestInFlightRef.current || !slotIso || !contactOk || cart.lines.length === 0) return;
     const proof = demo ? "demo" : turnstileToken;
     if (!proof) {
       setError("La vérification de sécurité doit se terminer avant l’envoi.");
       return;
     }
+    requestInFlightRef.current = true;
+    clearScheduledReset();
     setBusy(true);
     setError(null);
     // Le fournisseur rend chaque preuve utilisable une seule fois. On relance
@@ -443,11 +467,6 @@ export function Checkout({
         navigator.vibrate(60);
       }
 
-      if (chosenMethod === "counter") {
-        setStep("done");
-        return;
-      }
-
       // ── Démonstration : le paiement s’arrête ici ──
       //
       // Aucune intention de paiement n’est demandée : pas de clé Stripe
@@ -459,55 +478,30 @@ export function Checkout({
         return;
       }
 
-      // ── LA COMMANDE EXISTE DÉJÀ : PLUS AUCUN ÉCHEC NE DOIT LA NIER ──
-      //
-      // Ce qui suit — demander une intention de paiement — était dans le MÊME
-      // `try` que la création. Un réseau qui lâche entre les deux, ou un 404
-      // parce que la commande n'est pas encore visible depuis une autre
-      // réplique, faisait afficher « La commande n'a pas pu être envoyée » à
-      // quelqu'un dont la commande était en cuisine. Le panier venait pourtant
-      // d'être vidé : le client ne pouvait ni recommencer, ni comprendre — et
-      // celui qui insistait commandait deux fois.
-      //
-      // À partir d'ici, l'échec ne peut plus faire pire que « réglez au
-      // comptoir », ce qui est vrai et rattrapable.
-      let res: PaymentIntentResponse | null = null;
-      try {
-        res = await api.createPaymentIntent(created._id, created.trackingToken);
-      } catch {
-        res = null;
-      }
-
-      if (!res || res.unavailable || !res.publishableKey) {
-        if (isDelivery) {
-          setError("Votre commande est enregistrée, mais la livraison attend votre paiement. Réessayez sans créer une nouvelle commande.");
-          setStep("card");
-          return;
-        }
-        // Un incident PASSAGER n'éteint pas la carte pour la session.
-        //
-        // `createIntent` rend `unavailable` pour des causes très différentes :
-        // Stripe non configuré chez ce restaurant (permanent), mais aussi une
-        // panne réseau, un 500 de Stripe, ou un panier sous cinquante
-        // centimes — transitoire, ou propre à CETTE commande. Le tunnel les
-        // confondait et écrivait « paiement en ligne éteint » pour tout le
-        // reste de la visite : le client qui ajoutait un article et revenait
-        // n'avait plus le choix de la carte, sans explication.
-        //
-        // Seule l'absence de clé publiable est structurelle : elle dit que ce
-        // restaurant n'a pas de paiement en ligne. Le reste se réessaie.
-        if (res?.unavailable === true && res.permanent === true) {
-          writePayProbe(slug, "off");
-          setProbe("off");
-        }
-        setDowngraded(true);
+      // Un rejeu peut renvoyer la commande du PREMIER envoi, avec un autre
+      // moyen que celui affiché entre-temps. Seul le serveur permet d'annoncer
+      // un règlement comptoir ; un état ancien ou terminal mène au suivi.
+      const decision = checkoutPaymentDecision(created, chosenMethod);
+      if (decision === "counter") {
         setStep("done");
         return;
       }
-      writePayProbe(slug, "ready");
-      setProbe("ready");
-      setIntent(res);
+
+      // La commande existe. Figer l'étape AVANT la demande bancaire interdit
+      // retour au choix comptoir et fausse confirmation, même si la réponse se perd.
       setStep("card");
+      if (decision === "verify") {
+        setError(PAYMENT_VERIFICATION_MESSAGE);
+        return;
+      }
+      try {
+        const res = await requestExistingOrderPayment(api, created);
+        writePayProbe(slug, "ready");
+        setProbe("ready");
+        setIntent(res);
+      } catch {
+        setError(PAYMENT_VERIFICATION_MESSAGE);
+      }
     } catch (err) {
       setError(
         err instanceof PublicApiError
@@ -515,6 +509,7 @@ export function Checkout({
           : "La commande n’a pas pu être envoyée. Vérifiez votre connexion.",
       );
     } finally {
+      requestInFlightRef.current = false;
       setBusy(false);
     }
   }
@@ -545,13 +540,14 @@ export function Checkout({
     <Sheet
       open={open}
       onClose={closeTunnel}
+      navigationLocked={busy}
       maxHeight="100%"
       fill
       title={titles[step]}
-      onBack={backTo ? () => setStep(backTo) : null}
+      onBack={backTo ? () => { if (!requestInFlightRef.current) setStep(backTo); } : null}
       headerExtra={
         !finished ? (
-          <Progress index={stepIndex} onJump={(target) => setStep(target)} step={step} delivery={isDelivery} />
+          <Progress index={stepIndex} onJump={(target) => { if (!requestInFlightRef.current) setStep(target); }} step={step} delivery={isDelivery} disabled={busy} />
         ) : null
       }
       footer={
@@ -572,6 +568,7 @@ export function Checkout({
           verified={demo || Boolean(turnstileToken)}
           prixMono={prixMono}
           onNext={(next) => {
+            if (requestInFlightRef.current) return;
             if (next === "customer") setTouched(false);
             setStep(next);
           }}
@@ -590,9 +587,9 @@ export function Checkout({
           </div>
         )}
 
-        {error && step !== "done" && (
+        {error && step !== "done" && step !== "card" && (
           <div className="mb-4">
-            <Banner tone="alert" icon="bell" title={order ? "Paiement à terminer" : "Commande non envoyée"}>
+            <Banner tone="alert" icon="bell" title={order ? "Paiement à vérifier" : "Commande non envoyée"}>
               {error}
             </Banner>
           </div>
@@ -652,7 +649,8 @@ export function Checkout({
               slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
               slotDate={slots?.date ?? null}
               method={method}
-              onMethod={setWanted}
+              onMethod={(next) => { if (!requestInFlightRef.current) setWanted(next); }}
+              disabled={busy}
               cardAvailable={probe !== "off"}
               prixMono={prixMono}
               delivery={isDelivery}
@@ -689,12 +687,18 @@ export function Checkout({
               setPaidOnline(true);
               setStep("done");
             }}
-            onGiveUp={() => setStep("done")}
-            allowCounterFallback={!isDelivery}
           />
         )}
         {step === "card" && (!intent || intent.unavailable || !intent.publishableKey) && (
-          <ErrorState title="Terminer le paiement" message={busy ? "Connexion au paiement sécurisé…" : "Votre commande est en attente. Le restaurant lancera votre livraison après confirmation du paiement."} onRetry={busy ? undefined : retryPayment} />
+          <div className="flex flex-col gap-3">
+            <ErrorState title={busy ? "Connexion au paiement" : "Paiement à vérifier"} message={busy ? "Connexion au paiement sécurisé…" : "Ne payez pas par un autre moyen. Consultez le suivi de votre commande pour vérifier son état."} onRetry={busy || !order || checkoutPaymentDecision(order, "online") === "verify" ? undefined : retryPayment} />
+            {order && <Link
+              href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
+              target={embed ? "_blank" : undefined}
+              rel={embed ? "noopener noreferrer" : undefined}
+              className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
+            >Suivre ma commande</Link>}
+          </div>
         )}
 
         {step === "done" && order && (
@@ -703,7 +707,6 @@ export function Checkout({
             status={status}
             prixMono={prixMono}
             paidOnline={paidOnline}
-            downgraded={downgraded}
             demo={demo}
             demoCard={demo && method === "online"}
             loyalty={loyalty}
@@ -728,11 +731,13 @@ function Progress({
   step,
   onJump,
   delivery = false,
+  disabled = false,
 }: {
   index: number;
   step: Step;
   onJump: (target: Step) => void;
   delivery?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <ol className="mt-2.5 flex items-start gap-1.5">
@@ -743,11 +748,11 @@ function Progress({
           <li key={entry.id} className="min-w-0 flex-1">
             <button
               type="button"
-              disabled={!done}
+              disabled={disabled || !done}
               onClick={() => onJump(entry.id)}
               aria-current={current ? "step" : undefined}
               /* 44 px : revenir corriger son téléphone se fait au pouce. */
-              className={cx("block min-h-11 w-full text-left", done && "cursor-pointer")}
+              className={cx("block min-h-11 w-full text-left", done && !disabled && "cursor-pointer", disabled && "cursor-wait")}
             >
               {/*
                 `accentink` et non `accent` : cette barre de 1 px est un
@@ -1462,6 +1467,7 @@ function PayStep({
   deliveryFee,
   total,
   address,
+  disabled,
 }: {
   cart: CartApi;
   customer: Customer;
@@ -1475,6 +1481,7 @@ function PayStep({
   deliveryFee: number;
   total: number;
   address: string | null;
+  disabled: boolean;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -1519,6 +1526,7 @@ function PayStep({
           // le groupe se traversait touche à touche comme deux boutons isolés.
           <RadioGroup label="Mode de paiement" className="flex flex-col gap-2.5">
             <ChoiceCard
+              disabled={disabled}
               on={method === "online"}
               tabIndex={method === "online" ? 0 : -1}
               icon="euro"
@@ -1527,6 +1535,7 @@ function PayStep({
               onClick={() => onMethod("online")}
             />
             <ChoiceCard
+              disabled={disabled}
               on={method === "counter"}
               tabIndex={method === "counter" ? 0 : -1}
               glyph="bag"
@@ -1576,7 +1585,6 @@ function DoneStep({
   order,
   status,
   paidOnline,
-  downgraded,
   demo,
   demoCard,
   prixMono,
@@ -1586,7 +1594,6 @@ function DoneStep({
   /** Avancement en cuisine — n’avance que là où un suivi alimente l’écran. */
   status: OrderStatus;
   paidOnline: boolean;
-  downgraded: boolean;
   demo: boolean;
   /** Démonstration où le visiteur avait choisi la carte bancaire. */
   demoCard: boolean;
@@ -1766,11 +1773,6 @@ function DoneStep({
               n’appelle aucun prestataire de paiement :{" "}
               <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> resteraient
               dus au comptoir.
-            </Banner>
-          ) : downgraded ? (
-            <Banner tone="prep" icon="euro" title="À régler au comptoir">
-              Le paiement en ligne n’était pas disponible. Votre commande est bien
-              enregistrée : réglez sur place au moment du retrait.
             </Banner>
           ) : paidOnline ? (
             <Banner tone="ok" icon="check" title="Paiement accepté">

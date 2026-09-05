@@ -161,8 +161,6 @@ export function StripeCard({
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
-  onGiveUp,
-  allowCounterFallback = true,
 }: {
   publishableKey: string;
   clientSecret: string;
@@ -185,10 +183,6 @@ export function StripeCard({
   prixMono: boolean;
   returnUrl: string;
   onPaid: () => void;
-  /** Repli explicite : « je réglerai au comptoir ». */
-  onGiveUp: () => void;
-  /** La livraison ne peut jamais être confirmée avec un paiement au comptoir. */
-  allowCounterFallback?: boolean;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
@@ -236,7 +230,7 @@ export function StripeCard({
   async function pay() {
     const stripe = stripeRef.current;
     const elements = elementsRef.current;
-    if (!stripe || !elements || paying) return;
+    if (!stripe || !elements || paying || processing || status !== "ready") return;
     setPaying(true);
     setError(null);
     try {
@@ -247,7 +241,7 @@ export function StripeCard({
         redirect: "if_required",
       });
       if (result.error) {
-        setError(result.error.message ?? "Le paiement n’a pas abouti.");
+        setError(result.error.message ?? "La confirmation bancaire n’a pas été reçue. Consultez le suivi avant tout autre règlement.");
         return;
       }
       const state = result.paymentIntent?.status;
@@ -259,9 +253,9 @@ export function StripeCard({
         setProcessing(true);
         return;
       }
-      setError(allowCounterFallback ? "Le paiement n’a pas été confirmé. Réessayez ou réglez au comptoir." : "Le paiement n’a pas été confirmé. Réessayez pour confirmer votre livraison.");
+      setError("La confirmation bancaire n’a pas été reçue. Réessayez sur ce paiement ou consultez le suivi. Ne payez pas une deuxième fois.");
     } catch {
-      setError("Le paiement n’a pas pu être contacté. Réessayez.");
+      setError("La réponse bancaire n’a pas été reçue. Consultez le suivi ou réessayez sur ce paiement, sans régler une deuxième fois.");
     } finally {
       setPaying(false);
     }
@@ -271,11 +265,12 @@ export function StripeCard({
     return (
       <div className="flex flex-col gap-3">
         <Banner tone="alert" icon="bell" title="Paiement en ligne indisponible">
-          {allowCounterFallback ? "Votre commande est enregistrée : vous pourrez régler au comptoir au moment du retrait." : "Votre commande est en attente de paiement. Réessayez pour confirmer votre livraison."}
+          Le formulaire sécurisé n’a pas pu être chargé. Votre commande reste enregistrée : réessayez ou consultez son suivi, sans payer par un autre moyen.
         </Banner>
-        <PrimaryAction icon="check" mono={prixMono} onClick={allowCounterFallback ? onGiveUp : () => { setStatus("loading"); setAttempt((value) => value + 1); }}>
-          {allowCounterFallback ? "Continuer — je paie au comptoir" : "Réessayer le paiement"}
+        <PrimaryAction icon="check" mono={prixMono} onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}>
+          Réessayer le paiement
         </PrimaryAction>
+        <a href={returnUrl} className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink">Suivre ma commande</a>
       </div>
     );
   }
@@ -294,7 +289,7 @@ export function StripeCard({
       </div>
 
       {error && (
-        <Banner tone="alert" icon="bell" title="Paiement refusé">
+        <Banner tone="alert" icon="bell" title="Paiement à vérifier">
           {error}
         </Banner>
       )}
@@ -310,13 +305,12 @@ export function StripeCard({
         Payer
       </PrimaryAction>
 
-      {allowCounterFallback && !processing && <button
-        type="button"
-        onClick={onGiveUp}
-        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
+      <a
+        href={returnUrl}
+        className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
       >
-        Je préfère régler au comptoir
-      </button>}
+        Suivre ma commande
+      </a>
 
       <p className="text-center text-[12px] text-mut">
         Paiement chiffré par Stripe · Visa · Mastercard · CB

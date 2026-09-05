@@ -376,6 +376,8 @@ export type CreatedOrder = {
   _id: string;
   number: number;
   status: OrderStatus;
+  /** Autorité serveur, y compris au rejeu d'un POST dont la réponse s'est perdue. */
+  payment?: { method: PaymentMethod; status: PaymentStatus };
   type?: OrderType;
   delivery?: OrderDelivery | null;
   totals: {

@@ -66,6 +66,15 @@ describe('commande — barrières du cycle de paiement', () => {
     expect(ctx.row.payment.status).toBe('paid');
   });
 
+  it('ne transforme pas le choix en ligne en paiement comptoir même avant sa première tentative bancaire', async () => {
+    const ctx = setup({ payment: { status: 'pending', method: 'online', stripePaymentIntentId: null } });
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.status).toBe('ready');
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.save).not.toHaveBeenCalled();
+    expect(ctx.redis.publish).not.toHaveBeenCalled();
+  });
+
   it('autorise le règlement comptoir prouvé sans aucune tentative et ne diffuse pas la preuve', async () => {
     const ctx = setup();
     await ctx.service.updateStatus(TENANT, ID, 'delivered', caisse);

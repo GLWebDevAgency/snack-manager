@@ -127,7 +127,12 @@ export class OrderPaymentLifecycleService {
           metadata: { orderId: order.id, tenantId: String(order.tenantId), orderNumber: String(order.number) },
           preparedAt: now, requestStartedAt: null, recoveryUntil: new Date(now.getTime() + RECOVERY_WINDOW_MS),
         };
-        if (!await this.change(order, { $set: { 'paymentFlow.attempt': attempt } })) continue;
+        if (!await this.change(order, { $set: {
+          'paymentFlow.attempt': attempt,
+          // Desired collection channel, not a claim that funds were received.
+          // Tracking must offer recovery even when the provider response is lost.
+          'payment.method': 'online', 'payment.tender': 'online',
+        } })) continue;
         continue;
       }
       if (!flow.attempt.requestStartedAt && !order.payment.stripePaymentIntentId) {

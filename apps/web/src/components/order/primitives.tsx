@@ -1044,6 +1044,7 @@ const DISMISS_PX = 96;
 export function Sheet({
   open,
   onClose,
+  navigationLocked = false,
   title,
   label,
   children,
@@ -1068,6 +1069,8 @@ export function Sheet({
 }: {
   open: boolean;
   onClose: () => void;
+  /** Requête non interrompable : bloque fermeture et retour sans changer le défaut. */
+  navigationLocked?: boolean;
   title?: ReactNode;
   label?: string;
   children: ReactNode;
@@ -1087,6 +1090,9 @@ export function Sheet({
   const panelRef = useRef<HTMLDivElement>(null);
   const dragFrom = useRef<number | null>(null);
   const titleId = useId();
+  const requestClose = useCallback(() => {
+    if (!navigationLocked) onClose();
+  }, [navigationLocked, onClose]);
   /*
    * Le focus d'ouverture reste le PANNEAU, comme avant : la feuille produit
    * s'ouvre sur son visuel, pas sur la première chip de sauce. Sans cette
@@ -1094,7 +1100,7 @@ export function Sheet({
    */
   const layerRef = useDialogLayer({
     open: mounted,
-    onClose,
+    onClose: requestClose,
     initialFocusRef: panelRef,
   });
 
@@ -1131,16 +1137,16 @@ export function Sheet({
 
   // ── Glisser pour fermer ──
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse") return;
+    if (navigationLocked || e.pointerType === "mouse") return;
     dragFrom.current = e.clientY;
     e.currentTarget.setPointerCapture?.(e.pointerId);
-  }, []);
+  }, [navigationLocked]);
 
   const onPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragFrom.current === null) return;
+    if (navigationLocked || dragFrom.current === null) return;
     // Vers le haut : rien (la feuille ne grandit pas), vers le bas : elle suit.
     setDrag(Math.max(0, e.clientY - dragFrom.current));
-  }, []);
+  }, [navigationLocked]);
 
   const endDrag = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -1148,10 +1154,10 @@ export function Sheet({
       const travelled = Math.max(0, e.clientY - dragFrom.current);
       dragFrom.current = null;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
-      if (travelled > DISMISS_PX) onClose();
+      if (travelled > DISMISS_PX) requestClose();
       setDrag(0);
     },
-    [onClose],
+    [requestClose],
   );
 
   if (!mounted) return null;
@@ -1171,7 +1177,7 @@ export function Sheet({
     >
       <div
         aria-hidden
-        onClick={onClose}
+        onClick={requestClose}
         className="absolute inset-0 bg-scrim transition-opacity duration-med ease-sm"
         style={{ opacity: shown ? Math.max(0, 1 - drag / 320) : 0 }}
       />
@@ -1179,6 +1185,7 @@ export function Sheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-busy={navigationLocked || undefined}
         aria-labelledby={title ? titleId : undefined}
         aria-label={title ? undefined : label}
         tabIndex={-1}
@@ -1207,9 +1214,10 @@ export function Sheet({
             <div className="flex items-start gap-3">
               {onBack && (
                 <Tap
-                  onClick={onBack}
+                  onClick={() => { if (!navigationLocked) onBack(); }}
+                  disabled={navigationLocked}
                   aria-label="Étape précédente"
-                  className="-ml-1 grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
+                  className="-ml-1 grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30 disabled:cursor-wait disabled:opacity-40 disabled:active:scale-100"
                 >
                   <Icon name="back" size={16} />
                 </Tap>
@@ -1226,9 +1234,10 @@ export function Sheet({
                 {headerExtra}
               </div>
               <Tap
-                onClick={onClose}
+                onClick={requestClose}
+                disabled={navigationLocked}
                 aria-label="Fermer"
-                className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30"
+                className="grid size-11 shrink-0 place-items-center rounded-pill border border-ink/10 bg-surface2 text-ink hover:border-ink/30 disabled:cursor-wait disabled:opacity-40 disabled:active:scale-100"
               >
                 <Icon name="close" size={16} />
               </Tap>
@@ -1261,10 +1270,11 @@ export function Sheet({
               </h2>
             )}
             <Tap
-              onClick={onClose}
+              onClick={requestClose}
+              disabled={navigationLocked}
               aria-label="Fermer"
               className={cx(
-                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-med",
+                "ml-auto grid size-11 shrink-0 place-items-center rounded-pill border text-ink transition-colors duration-med disabled:cursor-wait disabled:opacity-40 disabled:active:scale-100",
                 sunk
                   ? "border-ink/12 bg-surface2 hover:border-ink/30"
                   : "border-ink/15 bg-bg/55 backdrop-blur-md hover:bg-bg/75",
