@@ -8,6 +8,7 @@ import {
   type StatsPeriodQuery,
   type StatsTopProductsQuery,
 } from '@sm/contracts';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { Roles, TenantId } from '../../common/auth';
 import { StatsService } from './stats.service';
@@ -118,4 +119,3 @@ export class StatsController {
     return this.stats.exportMenuCsv(tenantId);
   }
 }
-import { Fonction } from '../../common/capacites';

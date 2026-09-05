@@ -21,6 +21,7 @@ import {
   type LoyaltyRewardUpdate,
 } from '@sm/contracts';
 import { Roles, TenantId } from '../../common/auth';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { LoyaltyAdminService } from './loyalty-admin.service';
 import { LoyaltyMemberService } from './loyalty-member.service';
@@ -95,4 +96,3 @@ export class LoyaltyController {
     return this.loyalty.updateReward(tenantRef, rewardId, body as LoyaltyRewardUpdate);
   }
 }
-import { Fonction } from '../../common/capacites';

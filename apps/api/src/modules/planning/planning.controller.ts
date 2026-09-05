@@ -26,6 +26,7 @@ import {
   type StaffHourlyCost,
 } from '@sm/contracts';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { canReadPayroll, PayrollGuard } from './payroll-access';
 import { PlanningService } from './planning.service';
@@ -134,4 +135,3 @@ export class PlanningController {
     return this.planning.setHourlyCost(tenantId, staffId, body.hourlyCostCents);
   }
 }
-import { Fonction } from '../../common/capacites';

@@ -58,11 +58,14 @@ export function estReponseCoquilleEcranCacheable(
   }
 }
 
+const ASSET_IN_HTML = /(?:src|href)="(\/_next\/static\/[^"]+)"/g;
+const ASSET_IN_CSS = /url\((?:"|')?(\/_next\/static\/[^)"']+)(?:"|')?\)/g;
+
 /** Les actifs `_next/static` référencés par une page ou une feuille — la règle du worker, testée ici. */
 export function actifsReferences(texte: string): string[] {
   const found = new Set<string>();
-  for (const m of texte.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)) found.add(m[1]!);
-  for (const m of texte.matchAll(/url\((?:"|')?(\/_next\/static\/[^)"']+)(?:"|')?\)/g)) found.add(m[1]!);
+  for (const m of texte.matchAll(ASSET_IN_HTML)) found.add(m[1]!);
+  for (const m of texte.matchAll(ASSET_IN_CSS)) found.add(m[1]!);
   return [...found];
 }
 
@@ -95,8 +98,9 @@ function isCacheableShell(response) {
 // les feuilles référencent. Lus dans le HTML mis en cache, ajoutés au cache dès
 // l'installation : une clé qui s'éteint juste après son premier chargement
 // redémarre quand même sans réseau, sans avoir eu à recharger la page une fois.
-const ASSET_IN_HTML = /(?:src|href)="(\/_next\/static\/[^"]+)"/g;
-const ASSET_IN_CSS = /url\((?:"|')?(\/_next\/static\/[^)"']+)(?:"|')?\)/g;
+// Sérialiser les motifs préserve leurs échappements dans ce script généré.
+const ASSET_IN_HTML = ${ASSET_IN_HTML.toString()};
+const ASSET_IN_CSS = ${ASSET_IN_CSS.toString()};
 
 function assetsOf(text, pattern) {
   const found = new Set();
