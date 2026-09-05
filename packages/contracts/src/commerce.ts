@@ -36,7 +36,7 @@ export const BACKOFFICE_ACCESS = {
   ingredients: ['stocks'],
   fidelite: ['loyalty'],
   promos: ['loyalty'],
-  reviews: ['online'],
+  reviews: ['bo', 'online'],
   team: ['pos', 'planning'],
   planning: ['planning'],
   stats: ['bo', 'online'],

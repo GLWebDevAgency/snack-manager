@@ -427,16 +427,18 @@ export function capacitesEffectives(souscription: SouscriptionLue): readonly Cap
     if (champs[champ] === true) acquises.add(capacite);
   }
 
-  if (acquises.has('delivery')) acquises.add('online');
-  if (acquises.has('online')) {
-    acquises.add('menu');
-    acquises.add('loyalty');
-  }
-
   const retirees = new Set<Capacite>();
   for (const lue of lireDerogations(souscription.derogationsCapacite)) {
     if (lue.sens === 'accordee') acquises.add(lue.capacite);
     else retirees.add(lue.capacite);
+  }
+
+  // Les mêmes inclusions s'appliquent aux achats et aux octrois motivés.
+  // Les retraits explicites restent prioritaires, dépendances comprises.
+  if (acquises.has('delivery')) acquises.add('online');
+  if (acquises.has('online')) {
+    acquises.add('menu');
+    acquises.add('loyalty');
   }
 
   return CAPACITES.filter((c) => acquises.has(c) && !retirees.has(c));

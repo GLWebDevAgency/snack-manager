@@ -238,6 +238,22 @@ describe('les dérogations', () => {
     ).toBe(false);
   });
 
+  it('inclut les dépendances des modules accordés hors formule', () => {
+    expect(capacitesEffectives({ plan: null, derogationsCapacite: [geste('delivery', 'accordee')] }))
+      .toEqual(CAPACITES.filter((c) => ['delivery', 'online', 'menu', 'loyalty'].includes(c)));
+    expect(capacitesEffectives({ plan: null, derogationsCapacite: [geste('online', 'accordee')] }))
+      .toEqual(CAPACITES.filter((c) => ['online', 'menu', 'loyalty'].includes(c)));
+  });
+
+  it('ne ressuscite jamais une dépendance explicitement retirée', () => {
+    const capacites = capacitesEffectives({ plan: null, derogationsCapacite: [
+      geste('delivery', 'accordee'), geste('online', 'retiree'), geste('loyalty', 'retiree'),
+    ] });
+    expect(capacites).not.toContain('online');
+    expect(capacites).not.toContain('loyalty');
+    expect(capacites).toContain('menu');
+  });
+
   it('fait toujours gagner le retrait, quel que soit l’ordre des lignes', () => {
     // Un octroi ancien ne ressuscite pas une capacité retirée parce qu'il a été
     // écrit après : on rend la capacité en RETIRANT la ligne de retrait.

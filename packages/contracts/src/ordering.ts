@@ -392,6 +392,7 @@ export interface PublicSiteHours {
 export interface PublicSiteTenant {
   slug: string;
   name: string;
+  websiteUrl?: string | null;
   /** Le masque d'identité — toujours présent côté API (repli Nuit sinon). */
   brand: Brand;
   logoUrl: string | null;

@@ -29,8 +29,14 @@ export const LOGO_MAX_OCTETS = 512 * 1024;
 
 /** Formats admis — pas de SVG : un SVG embarque du script, un logo non. */
 export const LOGO_FORMATS_ADMIS = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Un lien éditorial, jamais chargé par le serveur ni utilisé comme redirect automatique. */
+export const WebsiteUrlSchema = z.url().max(2048).refine((value) => {
+  const url = new URL(value);
+  return url.protocol === 'https:' && !url.username && !url.password;
+}, 'Utilisez une adresse HTTPS sans identifiants intégrés');
 export const TenantIdentityUpdateSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
+  websiteUrl: WebsiteUrlSchema.nullable().optional(),
   /**
    * L'accent de marque — seul levier de personnalisation (charte DA §3).
    * `HexSchema` (et pas une regex recopiée) : la casse est normalisée une
