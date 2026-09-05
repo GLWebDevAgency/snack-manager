@@ -31,6 +31,7 @@ describe('Back-office des écrans', () => {
       name: 'Écran comptoir gauche',
       orientation: 'portrait',
       theme: 'brand',
+      scenography: 'comptoir',
     });
 
     expect(view.paired).toBe(false);
@@ -49,6 +50,7 @@ describe('Back-office des écrans', () => {
       name: 'Écran vitrine',
       orientation: 'landscape',
       theme: 'dark',
+      scenography: 'comptoir',
       playlist: [scene({ kind: 'custom', title: 'Bienvenue' })],
     });
 
@@ -62,6 +64,7 @@ describe('Back-office des écrans', () => {
         name: 'Écran',
         orientation: 'landscape',
         theme: 'brand',
+        scenography: 'comptoir',
         playlist: [scene({ kind: 'category', categoryId: 'cat-tacos' })],
       }),
     ).rejects.toThrow(/Identifiants de scène invalides/);
@@ -121,5 +124,19 @@ describe('Back-office des écrans', () => {
     const view = await useCase.update(CLASSFOOD, 'screen-1', { name: 'Écran salle' });
     expect(view.name).toBe('Écran salle');
     expect(view.sceneCount).toBe(1);
+  });
+  it('la scénographie choisie est stockée et relue avec son libellé', async () => {
+    const created = await useCase.create(CLASSFOOD, {
+      name: 'Vitrine',
+      orientation: 'landscape',
+      theme: 'brand',
+      scenography: 'comptoir',
+    });
+    expect(created.scenography).toBe('comptoir');
+    expect(created.scenographyLabel).toBe('Comptoir');
+
+    const updated = await useCase.update(CLASSFOOD, created.id, { scenography: 'ardoise' });
+    expect(updated.scenography).toBe('ardoise');
+    expect(updated.scenographyLabel).toBe('Ardoise');
   });
 });

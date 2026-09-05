@@ -255,6 +255,9 @@ const screenView = (w: DemoWorld, s: DemoWorld["screens"][number]) => {
     orientationLabel: SCREEN_ORIENTATION_LABELS[s.orientation],
     theme: s.theme,
     themeLabel: SCREEN_THEME_LABELS[s.theme],
+    // La fixture est antérieure au champ : elle vit comme un écran installé.
+    scenography: "ardoise",
+    scenographyLabel: "Ardoise",
     playlist: s.playlist,
     sceneCount: s.playlist.length,
     paired: s.paired,
