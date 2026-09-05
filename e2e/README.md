@@ -35,6 +35,24 @@ Surcharges utiles :
 
 ## Les parcours
 
+### Recette cinématique TV, sans API réelle
+
+Après compilation des contrats et démarrage du web local (idéalement `next build`
+puis `next start --port 3139`) :
+
+```bash
+TV_MOTION_WEB_URL=http://localhost:3139 node e2e/local/board-motion.mjs
+```
+
+Cette recette refuse les hôtes distants. Elle rend les quinze modèles dans les
+deux orientations, contrôle les apparitions, les prix et leur mise à jour, les
+modes pause/fixe/réduit, puis trois rotations réelles. Le contenu des appels
+écran est intercepté dans le navigateur ; aucun restaurant n’est modifié.
+Le bouton « Rejouer » est testé séparément dans `demo/ecran-apparence.test.mjs`.
+Le résultat ne remplace pas une mesure de fluidité et d’endurance sur le lecteur TV réel.
+
+### Parcours applicatifs
+
 | Fichier | Ce qu'il prouve | Durée mesurée |
 |---|---|---|
 | `demo/caisse.test.mjs` | produit, option **requise**, supplément payant, retrait d'ingrédient, ajout au ticket, encaissement espèces, **rendu de monnaie**, numéro de retrait confirmé par le serveur | ≈ 1,7 s |
