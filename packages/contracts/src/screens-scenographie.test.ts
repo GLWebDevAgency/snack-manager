@@ -38,6 +38,20 @@ describe('Scénographies — le contrat', () => {
     expect(lu.scenography).toBeUndefined();
   });
 
+  it('le service simulé est optionnel et limité au midi et au soir', () => {
+    expect(ScreenPreviewSchema.parse({}).service).toBeUndefined();
+    expect(ScreenPreviewSchema.parse({ service: 'lunch' }).service).toBe('lunch');
+    expect(ScreenPreviewSchema.parse({ service: 'dinner' }).service).toBe('dinner');
+    for (const service of ['closed', 'breakfast', null, 12]) {
+      expect(ScreenPreviewSchema.safeParse({ service }).success).toBe(false);
+    }
+  });
+
+  it('une simulation ne peut pas devenir un réglage enregistré de l’écran', () => {
+    expect(ScreenCreateSchema.parse({ name: 'Comptoir', service: 'lunch' })).not.toHaveProperty('service');
+    expect(ScreenUpdateSchema.parse({ theme: 'light', service: 'dinner' })).toEqual({ theme: 'light' });
+  });
+
   it('les libellés de fond disent ce que le fond fait, et chaque fond a une aide', () => {
     expect(SCREEN_THEME_LABELS.brand).toBe('Vos couleurs');
     expect(SCREEN_THEME_LABELS.dark).toBe('Fond sombre');

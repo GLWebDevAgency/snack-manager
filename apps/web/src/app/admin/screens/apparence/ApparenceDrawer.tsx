@@ -24,6 +24,7 @@ import {
   masquePourFond,
   type Brand,
   type ScreenScenePayload,
+  type ScreenPreviewService,
   type ScreenTheme,
   type ScreenView,
 } from "@sm/contracts";
@@ -106,11 +107,14 @@ export function ApparenceDrawer({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [previewService, setPreviewService] = useState<ScreenPreviewService | undefined>();
   const [brand, setBrand] = useState<Brand | null>(null);
 
   const dirty = Object.keys(patch).length > 0;
 
-  const { content, error, loading, stale, retry } = useScreenPreview({ screenId: screen.id, ...draft });
+  const { content, error, loading, stale, retry } = useScreenPreview({
+    screenId: screen.id, ...draft, service: previewService,
+  });
   const previewReady = !!content && !loading && !stale && !error;
   const scenes = content?.scenes ?? VIDE;
   const { current, leaving, index, go } = useSceneRotation(scenes, { paused });
@@ -213,6 +217,31 @@ export function ApparenceDrawer({
               Essayez un style, puis enregistrez le résultat qui vous convient.
             </p>
           </div>
+          <fieldset disabled={saving} className="mb-4">
+            <legend className="mb-2 text-[13px] font-semibold text-ink">Service affiché</legend>
+            <div className="inline-flex gap-1 rounded-ctrl border border-line2 bg-surface2 p-1">
+              {([
+                { value: undefined, label: "Maintenant" },
+                { value: "lunch", label: "Midi" },
+                { value: "dinner", label: "Soir" },
+              ] as const).map(({ value, label }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={previewService === value}
+                  onClick={() => {
+                    if (!savingRef.current) setPreviewService(value);
+                  }}
+                  className={cx(
+                    "cf-press min-h-10 rounded-ctrl px-3 text-[13px] font-semibold disabled:cursor-wait",
+                    previewService === value ? "bg-btn text-onfill shadow-soft" : "text-mut hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <LiveStage
             content={content}
             current={current}
@@ -225,6 +254,7 @@ export function ApparenceDrawer({
             error={error}
             stale={stale}
             onRetry={retry}
+            previewService={previewService}
           />
         </div>
 

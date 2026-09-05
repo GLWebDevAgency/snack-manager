@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Scenography, ScreenContent, ScreenOrientation, ScreenTheme } from "@sm/contracts";
+import type { Scenography, ScreenContent, ScreenOrientation, ScreenPreviewService, ScreenTheme } from "@sm/contracts";
 import { api } from "@/lib/api";
 import { createPreviewSession } from "./preview-session";
 
@@ -10,11 +10,12 @@ export interface Brouillon {
   orientation: ScreenOrientation;
   theme: ScreenTheme;
   scenography: Scenography;
+  service?: ScreenPreviewService;
 }
 
 /** Une clé stable : l'ordre des champs ne compte pas, chaque réglage compte. */
 export const cleDuBrouillon = (b: Brouillon): string =>
-  JSON.stringify([b.screenId, b.orientation, b.theme, b.scenography]);
+  JSON.stringify([b.screenId, b.orientation, b.theme, b.scenography, b.service ?? null]);
 
 interface PreviewState {
   content: ScreenContent | null;
@@ -43,12 +44,14 @@ export function useScreenPreview(brouillon: Brouillon): {
   const sessionRef = useRef<ReturnType<typeof createPreviewSession<ScreenContent>> | null>(null);
 
   useEffect(() => {
-    const [screenId, orientation, theme, scenography] = JSON.parse(cle) as [
-      string | null, ScreenOrientation, ScreenTheme, Scenography,
+    const [screenId, orientation, theme, scenography, service] = JSON.parse(cle) as [
+      string | null, ScreenOrientation, ScreenTheme, Scenography, ScreenPreviewService | null,
     ];
     const session = createPreviewSession({
       request: (signal) =>
-        api.post<ScreenContent>("/screens/preview", { screenId, orientation, theme, scenography }, { signal }),
+        api.post<ScreenContent>("/screens/preview", {
+          screenId, orientation, theme, scenography, ...(service ? { service } : {}),
+        }, { signal }),
       onStart: () => setState((previous) => ({
         ...previous,
         requestKey: cle,

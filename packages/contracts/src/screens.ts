@@ -217,12 +217,17 @@ export type ScreenUpdate = z.infer<typeof ScreenUpdateSchema>;
  * autres champs sont les SURCHARGES du brouillon du tiroir « Apparence ». Sans
  * `screenId`, l'aperçu part des défauts et de la boucle générée depuis la carte.
  */
+/** Simulation du service dans l'aperçu uniquement ; absente = heure réelle. */
+export const ScreenPreviewServiceSchema = z.enum(['lunch', 'dinner']);
+export type ScreenPreviewService = z.infer<typeof ScreenPreviewServiceSchema>;
+
 export const ScreenPreviewSchema = z.object({
   screenId: z.string().min(1).max(64).nullish(),
   orientation: ScreenOrientationSchema.optional(),
   theme: ScreenThemeSchema.optional(),
   scenography: ScenographySchema.optional(),
   playlist: z.array(ScreenSceneSchema).optional(),
+  service: ScreenPreviewServiceSchema.optional(),
 });
 export type ScreenPreview = z.infer<typeof ScreenPreviewSchema>;
 

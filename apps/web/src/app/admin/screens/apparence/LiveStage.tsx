@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import type { ScreenContent, ScreenScenePayload } from "@sm/contracts";
+import type { ScreenContent, ScreenPreviewService, ScreenScenePayload } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Btn, Icon } from "@/components/ui";
 import { BoardStage } from "@/components/board/board-stage";
@@ -54,6 +54,7 @@ export function LiveStage({
   error,
   stale,
   onRetry,
+  previewService,
 }: {
   content: ScreenContent | null;
   current: ScreenScenePayload | null;
@@ -66,6 +67,7 @@ export function LiveStage({
   error: string | null;
   stale: boolean;
   onRetry: () => void;
+  previewService?: ScreenPreviewService;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const orientation = content?.orientation ?? "landscape";
@@ -151,9 +153,14 @@ export function LiveStage({
           )}
         </div>
       </div>
-      {content && !content.open ? (
+      {previewService ? (
         <p className="rounded-ctrl bg-surface2 px-3 py-2.5 text-[13px] leading-relaxed text-mut">
-          Votre établissement est fermé à cette heure. L’aperçu montre l’écran de fermeture prévu.
+          Simulation du service {previewService === "lunch" ? "du midi" : "du soir"}.
+          {" "}Les horaires de votre écran restent inchangés.
+        </p>
+      ) : content && !content.open ? (
+        <p className="rounded-ctrl bg-surface2 px-3 py-2.5 text-[13px] leading-relaxed text-mut">
+          Votre établissement est fermé à cette heure. Choisissez Midi ou Soir pour préparer votre menu.
         </p>
       ) : null}
     </div>

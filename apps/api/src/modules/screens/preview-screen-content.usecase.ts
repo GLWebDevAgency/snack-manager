@@ -55,6 +55,6 @@ export class PreviewScreenContent {
       active: true,
     };
 
-    return renderScreenContent(virtuel, snapshot, now);
+    return renderScreenContent(virtuel, snapshot, now, dto.service);
   }
 }
