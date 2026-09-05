@@ -23,6 +23,7 @@ import type {
   CAPACITES_PAR_FORMULE as CatalogueContrat,
 } from "@sm/contracts";
 import { COMMERCE_PRICES } from "@sm/contracts/commerce";
+import { LOYALTY_PILOT_NOTE } from "./commerce-offers";
 
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
 
@@ -749,7 +750,7 @@ export const CATALOGUE: CatalogueColumn[] = [
       { strong: "Click & collect", post: " avec créneaux de retrait" },
       { pre: "Paiement en ligne ou au retrait" },
       { pre: "Configurateur identique à la caisse — zéro surprise" },
-      { pre: "Codes promo, ", strong: "fidélité points & tampons" },
+      { pre: "Codes promo, ", strong: "fidélité en pilote accompagné" },
       { strong: "À vos couleurs", post: ", sur votre nom de domaine" },
     ],
   },
@@ -1190,7 +1191,7 @@ export const SERVICES: readonly Service[] = [
     id: "commande",
     title: "Commande en ligne & fidélité",
     lead: "Le click and collect et la carte de fidélité, dans la même page.",
-    line: "Une page de commande à vos couleurs, votre carte, vos créneaux et un back-office pour traiter les commandes, même sans notre caisse. La carte de fidélité est incluse : vous définissez points ou tampons et récompenses. L'attribution des avantages suit le parcours activé pour votre établissement.",
+    line: `Une page de commande à vos couleurs, votre carte, vos créneaux et un back-office pour traiter les commandes, même sans notre caisse. ${LOYALTY_PILOT_NOTE}`,
     // Le module est vendu deux fois sur la page — ici, et sous la grille
     // (`MODULE_ADDON`). Les deux montants descendent des mêmes constantes :
     // c'est le seul service dont le prix est répété, donc le seul qui pouvait
@@ -1216,7 +1217,7 @@ export const SERVICES: readonly Service[] = [
  */
 export const DIRECT_DELIVERY = {
   lead: "Vous livrez ?",
-  line: `L'offre Click & collect + livraison est prévue à ${euros(COMMERCE_PRICES.deliveryMonthlyCents)} HT/mois, fidélité incluse. Livraison assurée par votre restaurant. Activation après validation du parcours pilote ; aucun livreur tiers fourni.`,
+  line: `L'offre Click & collect + livraison est prévue à ${euros(COMMERCE_PRICES.deliveryMonthlyCents)} HT/mois, pilote fidélité accompagné inclus. Livraison assurée par votre restaurant. Activation après validation du parcours pilote ; aucun livreur tiers fourni.`,
 } as const;
 
 /**
@@ -1505,7 +1506,7 @@ export const PLAN_MODULES = [
   { id: "planning", label: "Planning, pointage & coût de la semaine" },
   { id: "stocks", label: "Ingrédients, stocks & coût matière" },
   { id: "online", label: "Commande en ligne & click and collect" },
-  { id: "loyalty", label: "Fidélité, codes promo & comptes clients" },
+  { id: "loyalty", label: "Fidélité en pilote accompagné, codes promo & clients" },
   { id: "priority", label: "Support prioritaire" },
   { id: "delivery", label: "Livraison par votre restaurant — option, validation pilote" },
 ] as const satisfies readonly PlanModule[];
@@ -1686,7 +1687,7 @@ export const PLANS: Plan[] = [
     id: "boost",
     name: "Boost",
     ...planPrices(PLAN_MONTHLY_CENTS.boost),
-    desc: "Tout Complet, plus le click & collect, la fidélité et le support prioritaire. Livraison en option.",
+    desc: "Tout Complet, plus le click & collect, le pilote fidélité accompagné et le support prioritaire. Livraison en option.",
     modules: MODULES_BOOST,
   },
 ];
@@ -1711,7 +1712,7 @@ export const MODULE_ADDON = {
    * ligne que Boost fait disparaître.
    */
   setup: `${euros(MODULE_SETUP_CENTS)} de mise en service, la première fois`,
-  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet ; déjà compris dans Boost. La livraison reste une option distincte.`,
+  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet ; déjà compris dans Boost. La livraison reste une option distincte. ${LOYALTY_PILOT_NOTE}`,
 } as const;
 
 /**
@@ -1789,7 +1790,7 @@ export const PRICING_MATH: PricingMath = {
   boost: {
     title: "Boost",
     steps: [
-      { label: "Tout Complet, la commande en ligne et la fidélité comprises", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
+      { label: "Tout Complet, la commande en ligne et le pilote fidélité compris", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
       // La ligne qui fait tout le travail : en face des 55 €, un mot au lieu
       // d'un montant. C'est le seul endroit de la page où l'absence de chiffre
       // vaut mieux qu'un chiffre.
@@ -1997,7 +1998,7 @@ export const FAQ = [
   },
   {
     q: "Puis-je prendre la fidélité ou la commande sans votre caisse ?",
-    a: `Oui. La fidélité seule est à ${euros(COMMERCE_PRICES.loyaltyMonthlyCents)} HT/mois. Le click & collect à ${euros(MODULE_MONTHLY_CENTS)} HT/mois comprend la fidélité et le back-office nécessaire. Votre site vitrine peut être réalisé séparément, sur mesure.`,
+    a: `Oui. La fidélité seule est proposée en pilote accompagné à ${euros(COMMERCE_PRICES.loyaltyMonthlyCents)} HT/mois, avec un périmètre convenu au devis. Le click & collect à ${euros(MODULE_MONTHLY_CENTS)} HT/mois comprend ce pilote et le back-office nécessaire. ${LOYALTY_PILOT_NOTE} Votre site vitrine peut être réalisé séparément, sur mesure.`,
   },
   {
     q: "L'IA, le HACCP et les capteurs sont-ils inclus ?",

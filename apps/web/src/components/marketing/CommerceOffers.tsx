@@ -23,17 +23,17 @@ export function CommerceOffers() {
               ))}
             </ul>
             <p className="body-text pr-desc">
-              {offer.pilot ? "Tarif prévu. L’ouverture dépend de la validation du parcours de livraison ; aucun livreur tiers n’est fourni." : "Configuration et prise en main accompagnées."}
+              {offer.note}
             </p>
             <a className="btn light" href={ancre("contact").href}>
-              {offer.pilot ? "Étudier ma livraison" : `Parler de ${offer.id === "loyalty" ? "ma fidélité" : "ma commande en ligne"}`}
+              {offer.cta}
             </a>
           </article>
         ))}
       </div>
       <p className="body-text">
         Mise en service standard : {euros(COMMERCE_TERMS.setup)} une fois, précisée au devis.
-        Boost comprend le click & collect et la fidélité ; la livraison ajoute {euros(COMMERCE_TERMS.supplement)} HT/mois
+        Boost comprend le click & collect et le pilote fidélité accompagné ; la livraison ajoute {euros(COMMERCE_TERMS.supplement)} HT/mois
         après validation. Les frais de paiement et les coûts de livraison restent séparés.
       </p>
       <p className="body-text">{COMMERCE_TERMS.note}</p>

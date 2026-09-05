@@ -193,9 +193,9 @@ export function corps() {
         il se facture.
       </p>
       <p className="bl-p">
-        Votre lien direct, lui, <strong>fidélise</strong>. L'habitué qui commande chez vous paie le prix affiché en
-        salle, ses points de fidélité se cumulent dans votre page, son numéro et son historique vous appartiennent. Et
-        si vous voulez lui écrire un jour pour annoncer une nouveauté, vous le pouvez.
+        Votre lien direct, lui, <strong>entretient la relation</strong>. L'habitué retrouve votre carte et son
+        historique. Notre programme fidélité est proposé en pilote accompagné : cartes et récompenses configurables,
+        mais attribution automatique après commande en ligne et utilisation sécurisée des récompenses restent à finaliser.
       </p>
       <p className="bl-p">
         La fiche Google est le seul endroit du web où ces deux logiques se rencontrent devant le même client, au même

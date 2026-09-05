@@ -219,7 +219,7 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
   },
   {
     label: "Le logiciel derrière",
-    line: "La vitrine et les applications partagent votre identité. Le site reste sur mesure ; la commande et la fidélité s’activent selon votre besoin, avec leur propre back-office.",
+    line: "La vitrine et les applications partagent votre identité. Le site reste sur mesure ; la commande dispose de son back-office. La fidélité est proposée en pilote accompagné, avec cartes et programme configurables ; utilisation des récompenses et cumul automatique web restent à finaliser.",
   },
 ] as const;
 

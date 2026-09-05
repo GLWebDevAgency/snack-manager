@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { COMMERCE_PRICES } from "@sm/contracts/commerce";
-import { COMMERCE_OFFERS, COMMERCE_TERMS, PUBLISHED_COMMERCE_OFFERS } from "./commerce-offers";
+import { COMMERCE_OFFERS, COMMERCE_TERMS, LOYALTY_PILOT_NOTE, PUBLISHED_COMMERCE_OFFERS } from "./commerce-offers";
 import { currentOperatingCost } from "./cost-model";
-import { PLAN_MODULES, PLANS } from "./content";
+import { FAQ, MODULE_ADDON, PLAN_MODULES, PLANS, SERVICES } from "./content";
 
 describe("catalogue commercial public", () => {
   it("reprend les prix contractuels, sans doublon fidélité + collect + livraison", () => {
@@ -14,9 +14,23 @@ describe("catalogue commercial public", () => {
     expect(COMMERCE_PRICES.deliveryMonthlyCents).toBe(COMMERCE_PRICES.collectMonthlyCents + COMMERCE_TERMS.supplement);
   });
 
-  it("ne publie pas la livraison pilote comme offre prête à acheter", () => {
-    expect(PUBLISHED_COMMERCE_OFFERS.map((offer) => offer.id)).toEqual(["loyalty", "collect"]);
+  it("ne publie ni fidélité ni livraison pilotes comme offres prêtes à acheter", () => {
+    expect(PUBLISHED_COMMERCE_OFFERS.map((offer) => offer.id)).toEqual(["collect"]);
+    expect(COMMERCE_OFFERS.find((offer) => offer.id === "loyalty")?.pilot).toBe(true);
     expect(COMMERCE_OFFERS.find((offer) => offer.id === "delivery")?.pilot).toBe(true);
+  });
+
+  it("explicite les limites fidélité dans le module seul et les offres groupées", () => {
+    expect(LOYALTY_PILOT_NOTE).toContain("L’utilisation sécurisée des récompenses");
+    expect(LOYALTY_PILOT_NOTE).toContain("l’attribution automatique de points après une commande en ligne restent à finaliser");
+    for (const id of ["loyalty", "collect"]) {
+      expect(COMMERCE_OFFERS.find((offer) => offer.id === id)?.note).toBe(LOYALTY_PILOT_NOTE);
+    }
+    expect(SERVICES.find((service) => service.id === "commande")?.line).toContain(LOYALTY_PILOT_NOTE);
+    expect(MODULE_ADDON.line).toContain(LOYALTY_PILOT_NOTE);
+    expect(FAQ.find((item) => item.q.includes("sans votre caisse"))?.a).toContain(LOYALTY_PILOT_NOTE);
+    expect(PLANS.find((plan) => plan.id === "boost")?.desc).toContain("pilote fidélité accompagné");
+    expect(COMMERCE_OFFERS.find((offer) => offer.id === "loyalty")?.cta).toBe("Étudier mon pilote fidélité");
   });
 
   it("distingue livraison optionnelle et suite Boost", () => {

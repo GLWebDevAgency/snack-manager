@@ -136,8 +136,8 @@ export function corps() {
           C'est exactement l'écart que votre client a remarqué — et cette fois, il joue pour vous.
         </li>
         <li>
-          <strong>La fidélité se cumule.</strong> Points ou tampons, dans la même page, sans carte en carton à perdre au
-          fond d'une poche.
+          <strong>Un programme fidélité en pilote accompagné.</strong> Cartes, points ou tampons et récompenses sont
+          configurables. Le cumul automatique après commande en ligne et l’utilisation sécurisée des récompenses restent à finaliser.
         </li>
         <li>
           <strong>Le client est le vôtre.</strong> Son numéro, son historique, ses habitudes. C'est la différence entre
@@ -199,8 +199,8 @@ export function corps() {
       </ul>
       <p className="bl-p">
         Tout le travail consiste donc à faire passer le second groupe d'un canal à l'autre, sans rien casser du premier.
-        Un lien de commande sur votre fiche Google, un sticker sur le sac, un mot au comptoir, des points qui se cumulent
-        : c'est lent, c'est cumulatif, et ça ne se voit pas en une semaine.
+        Un lien de commande sur votre fiche Google, un sticker sur le sac, un mot au comptoir : ces actions peuvent
+        encourager le retour en direct. Leur effet se mesure dans la durée, sans résultat garanti.
       </p>
 
       <h2 className="bl-h2">Ce que vous pouvez regarder dès ce mois-ci</h2>

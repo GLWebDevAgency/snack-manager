@@ -21,7 +21,7 @@ const PRIX_MODULE = `${MODULE_MONTHLY_CENTS / 100} €/mois`;
 
 export const metadata: Metadata = {
   title: "Commande en ligne sans commission — Snack Manager",
-  description: `Le click & collect à vos couleurs, avec fidélité et back-office inclus, même sans notre caisse. ${PRIX_MODULE} HT, compris dans Boost. Livraison restaurant en validation pilote.`,
+  description: `Le click & collect à vos couleurs, avec back-office et pilote fidélité accompagné inclus, même sans notre caisse. ${PRIX_MODULE} HT, compris dans Boost. Livraison restaurant en validation pilote.`,
   keywords: [
     "click and collect restaurant sans commission",
     "commande en ligne snack",

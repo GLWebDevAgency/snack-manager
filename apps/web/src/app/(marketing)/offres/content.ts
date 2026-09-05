@@ -490,8 +490,8 @@ export const MODULE_POINTS: readonly ModulePoint[] = [
     line: "Carte bancaire au moment de la commande, ou règlement au comptoir : c'est vous qui décidez ce que la page propose.",
   },
   {
-    title: "Points de fidélité, tampons et codes promo",
-    line: "Le programme fidélité est inclus avec le click & collect. Vous définissez points ou tampons et récompenses ; l’attribution suit les parcours activés pour votre établissement.",
+    title: "Fidélité en pilote accompagné et codes promo",
+    line: "Le pilote fidélité est inclus avec le click & collect : cartes, programme à points ou tampons et récompenses configurables. L’utilisation sécurisée des récompenses et l’attribution automatique de points après une commande en ligne restent à finaliser. Les codes promo se gèrent séparément depuis le back-office.",
   },
   {
     title: "Le configurateur de la caisse, à l'identique",

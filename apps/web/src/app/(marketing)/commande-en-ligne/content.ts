@@ -15,6 +15,7 @@ import {
   euros,
   type Shot,
 } from "@/components/marketing/content";
+import { LOYALTY_PILOT_NOTE } from "@/components/marketing/commerce-offers";
 
 /* ── Les sections, et leur sommaire ──────────────────────────── */
 
@@ -48,9 +49,9 @@ export const COMMANDE_SECTIONS: readonly CommandeSectionMeta[] = [
   {
     id: "fidelite",
     nav: "La fidélité",
-    badge: "Ils reviennent",
-    title: "La fidélité sans carte tamponnée.",
-    lead: "Une carte aux couleurs du restaurant, un programme à points ou tampons, et des récompenses que vous choisissez.",
+    badge: "Pilote accompagné",
+    title: "Votre programme fidélité, configuré avec vous.",
+    lead: LOYALTY_PILOT_NOTE,
   },
   {
     id: "google",
@@ -95,7 +96,7 @@ export const COMMANDE_SHOTS = {
 export const COMMANDE_HERO = {
   badge: "La commande en ligne",
   title: "La commande en ligne sans commission.",
-  lead: "Le click & collect à vos couleurs : commande, créneau, paiement et fidélité. Le back-office inclus vous permet de traiter les commandes, même sans notre caisse.",
+  lead: "Le click & collect à vos couleurs : commande, créneau et paiement. Le back-office inclus vous permet de traiter les commandes, même sans notre caisse. La fidélité est incluse en pilote accompagné.",
   price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
   claim: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, une fois — les deux compris dans Boost`,
 } as const;
@@ -121,7 +122,8 @@ export const CUISINE_LIEN_POINTS: readonly string[] = [
 /* ── 3. La fidélité ──────────────────────────────────────────── */
 
 export const FIDELITE_POINTS: readonly string[] = [
-  "Vous choisissez points ou tampons, seuils et récompenses. L’attribution suit le parcours activé pour votre établissement.",
+  "Vous choisissez points ou tampons, seuils et récompenses avec notre accompagnement. L’utilisation sécurisée des récompenses reste à finaliser ; elle n’est pas disponible dans ce pilote.",
+  "L’attribution automatique de points après une commande en ligne n’est pas disponible. Les opérations assistées et leurs limites sont précisées avant ouverture du programme.",
   "Les codes promo, quand vous voulez pousser une offre — créés depuis le back-office.",
   "Le back-office permet de gérer les membres et leurs cartes, avec les informations et consentements du programme.",
 ] as const;
