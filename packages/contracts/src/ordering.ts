@@ -402,7 +402,11 @@ export interface PublicSiteTenant {
 
 export interface PublicSiteResponse {
   tenant: PublicSiteTenant;
-  menu: { categories: PublicSiteCategory[] };
+  menu: {
+    categories: PublicSiteCategory[];
+    /** Intention globale, conservée même si sa catégorie est momentanément masquée. */
+    featuredConfigured?: boolean;
+  };
   /**
    * La médiathèque du restaurant, à plat et une seule fois : point d'intérêt,
    * texte alternatif et les quatre adresses d'usage de chaque photo. Les

@@ -29,7 +29,10 @@ function fixture({ supplyDown = false, online = true, paused = false, suspended 
     ],
   };
   const allProducts = [rawProduct, { ...rawProduct, _id: 'inactive', active: false }, { ...rawProduct, _id: 'orphan', categoryId: null }];
-  const allCategories = [{ _id: CATEGORY, tenantId: TENANT, name: 'Sandwichs', active: true }, { _id: 'inactive-category', tenantId: TENANT, name: 'Masquée', active: false }];
+  const allCategories = [
+    { _id: CATEGORY, tenantId: TENANT, name: 'Sandwichs', active: true },
+    { _id: 'inactive-category', tenantId: TENANT, name: 'Masquée', active: false },
+  ].map((category) => ({ ...category, featuredProductIds: [] as string[], featuredRevision: 0 }));
   const query = <T extends { tenantId: string; active: boolean }>(rows: T[]) => vi.fn((filter: { tenantId: string; active?: boolean }) => ({
     sort: () => ({ lean: async () => rows.filter((row) => row.tenantId === filter.tenantId && (filter.active === undefined || row.active === filter.active)) }),
   }));
@@ -54,7 +57,7 @@ function fixture({ supplyDown = false, online = true, paused = false, suspended 
   const slots = { compute: vi.fn(async () => ({ timezone: 'Europe/Paris', slots: [] })), isOpenNow: () => true, todayHours: () => [] };
   const reviews = { aggregate: vi.fn(async () => []), find: vi.fn(() => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) })) };
   const site = new SiteService(reviews as never, tenants as never, slots as never, menu);
-  return { site, menu, products, categories, medias };
+  return { site, menu, products, categories, medias, allCategories, allProducts };
 }
 
 describe('site commande et carte caisse : une seule projection métier', () => {
@@ -90,7 +93,7 @@ describe('site commande et carte caisse : une seule projection métier', () => {
   it('conserve le tenant, les catégories/produits actifs, les ruptures et une projection publique limitée', async () => {
     const { site, categories, products, medias } = fixture();
     const result = await site.build('restaurant');
-    expect(categories.find).toHaveBeenCalledWith({ tenantId: TENANT, active: true });
+    expect(categories.find).toHaveBeenCalledWith({ tenantId: TENANT });
     expect(products.find).toHaveBeenCalledWith({ tenantId: TENANT, active: true });
     expect(medias.catalogue).toHaveBeenCalledWith(TENANT);
     expect(result.menu.categories).toHaveLength(1);
@@ -107,6 +110,39 @@ describe('site commande et carte caisse : une seule projection métier', () => {
     const publicMenu = vi.spyOn(menu, 'publicMenu');
     await site.build('restaurant');
     expect(publicMenu).toHaveBeenCalledExactlyOnceWith(TENANT, 'carte');
+  });
+
+  it('un menu jamais configuré conserve le droit au classement automatique historique', async () => {
+    const result = await fixture().site.build('restaurant');
+    expect(result.menu.featuredConfigured).toBe(false);
+  });
+
+  it.each([true, false])('garde l’intention vidée même avec sa catégorie active=%s et sans aucun produit affichable', async (active) => {
+    const { site, allCategories, allProducts } = fixture();
+    allCategories[0]!.featuredRevision = 1; // [] explicitement enregistrée
+    allCategories[0]!.active = active;
+    allProducts.forEach((product) => { product.active = false; });
+    const result = await site.build('restaurant');
+    expect(result.menu.featuredConfigured).toBe(true);
+    expect(result.menu.categories.flatMap((category) => category.products)).toEqual([]);
+    expect(result.menu.categories).toHaveLength(active ? 1 : 0);
+    expect(result.menu).not.toHaveProperty('featuredRevision');
+    expect(result.menu.categories[0] ?? {}).not.toHaveProperty('featuredRevision');
+  });
+
+  it('une sélection importée sans révision conserve aussi l’intention ; celle d’un voisin ne la crée pas', async () => {
+    const { site, allCategories } = fixture();
+    allCategories[1]!.featuredProductIds = [PRODUCT];
+    expect((await site.build('restaurant')).menu.featuredConfigured).toBe(true);
+    allCategories[1]!.tenantId = '665f0d0a1c2b3d4e5f6a7b99';
+    expect((await site.build('restaurant')).menu.featuredConfigured).toBe(false);
+  });
+
+  it('supprimer les dernières catégories configurées rétablit le comportement historique', async () => {
+    const { site, allCategories } = fixture();
+    allCategories[0]!.featuredRevision = 1;
+    allCategories.splice(0, 1);
+    expect((await site.build('restaurant')).menu.featuredConfigured).toBe(false);
   });
 
   it('conserve le repli de service sans Postgres : retraits historiques, aucun supplément frais inventé', async () => {

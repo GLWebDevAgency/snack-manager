@@ -113,9 +113,9 @@ export const SCENOGRAPHY_LABELS: Record<Scenography, string> = {
 export const SCENOGRAPHY_DESCRIPTIONS: Record<Scenography, string> = {
   ardoise: 'La carte en lignes, sobre et dense : le nom, la description, le prix.',
   comptoir: 'Photos mises en avant, prix bien visibles.',
-  affiche: 'Un produit en grand, un prix qui se repère immédiatement.',
-  halo: 'La photo entourée de lumière aux couleurs de votre établissement.',
-  premiere: 'Une entrée progressive pour présenter vos nouveautés.',
+  affiche: 'Une composition d’affiche, des prix bien visibles.',
+  halo: 'Photos et lumière aux couleurs de votre établissement.',
+  premiere: 'Une entrée progressive, une lecture expressive.',
   galerie: 'Des photos alignées pour comparer vos spécialités.',
   panorama: 'Une grande image et une carte qui garde sa place.',
   decoupe: 'Photos et textes composés dans des cadres contrastés.',

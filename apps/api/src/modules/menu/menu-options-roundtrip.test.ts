@@ -22,7 +22,7 @@ function fixture(includeNullGroup = false) {
     ],
   }).toObject();
   const products = { find: vi.fn(() => ({ sort: () => ({ lean: async () => [raw] }) })) };
-  const categories = { find: vi.fn(() => ({ sort: () => ({ lean: async () => [{ _id: CATEGORY, name: 'Sandwichs' }] }) })) };
+  const categories = { find: vi.fn(() => ({ sort: () => ({ lean: async () => [{ _id: CATEGORY, name: 'Sandwichs', active: true }] }) })) };
   const service = new MenuService(
     categories as never, products as never, { publish: vi.fn() } as never,
     { modifiersForMenu: async () => new Map() } as never,

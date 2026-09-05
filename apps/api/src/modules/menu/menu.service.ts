@@ -123,7 +123,9 @@ export class MenuService {
   /** Menu public (commande en ligne / POS) : actifs seulement, ruptures signalées. */
   async publicMenu(tenantId: string, photoUsage: UsageMedia = 'vignette') {
     const [cats, rawProds] = await Promise.all([
-      this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
+      // L'intention éditoriale reste connue lorsqu'une catégorie est masquée.
+      // Seules ses références servent à ce booléen ; son contenu ne sort pas.
+      this.categories.find({ tenantId }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
     ]);
     const avecModificateurs = await this.withModifiers(tenantId, rawProds);
@@ -135,7 +137,8 @@ export class MenuService {
       photoUsage,
     );
     return {
-      categories: cats.map((c) => ({
+      featuredConfigured: cats.some((c) => (c.featuredRevision ?? 0) > 0 || featuredProductIdsOf(c.featuredProductIds).length > 0),
+      categories: cats.filter((c) => c.active === true).map((c) => ({
         _id: c._id,
         name: c.name,
         featuredProductIds: featuredProductIdsOf(c.featuredProductIds),
