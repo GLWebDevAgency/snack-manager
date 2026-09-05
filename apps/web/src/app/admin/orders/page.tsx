@@ -9,7 +9,7 @@
  * annulation PIN (NF525), impression ticket, « charger plus » au-delà de 50.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import type { OrderStatus } from "@sm/contracts";
 import { api } from "@/lib/api";
@@ -34,6 +34,7 @@ import {
   NEXT_STATUS,
   customerName,
   isPaid,
+  canAdvanceOrder,
   linesSummary,
   searchKey,
   shortId,
@@ -52,9 +53,13 @@ import {
 import { OrderDrawer } from "./OrderDrawer";
 import { CancelModal } from "./CancelModal";
 import { PrintTicket } from "./PrintTicket";
+import { RefundModal } from "./RefundModal";
+import { DispatchModal } from "./DispatchModal";
+import { roleAdmin } from "../session";
 
 const PAGE_SIZE = 50;
 const RECONCILE_DELAY_MS = 150;
+const subscribeRole = () => () => {};
 
 const CHIP_DEFS: { key: "all" | OrderStatus; label: string }[] = [
   { key: "all", label: "Toutes" },
@@ -110,6 +115,7 @@ function ding() {
 
 export default function OrdersPage() {
   const toast = useToast();
+  const role = useSyncExternalStore(subscribeRole, () => roleAdmin(), () => null);
 
   const [list, setList] = useState<OrdersListSnapshot | null>(null);
   const listRef = useRef<OrdersListSnapshot | null>(null);
@@ -122,6 +128,8 @@ export default function OrdersPage() {
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
+  const [refundTarget, setRefundTarget] = useState<Order | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<Order | null>(null);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const pendingRef = useRef<ReadonlySet<string>>(new Set());
   const activeLoad = useRef<AbortController | null>(null);
@@ -331,7 +339,11 @@ export default function OrdersPage() {
 
   async function advance(o: Order) {
     const next = NEXT_STATUS[o.status];
-    if (!next || pending.has(o._id)) return;
+    if (!next || !canAdvanceOrder(o, role) || pending.has(o._id)) return;
+    if (o.type === "delivery" && o.status === "ready" && !o.delivery?.dispatchedAt) {
+      setDispatchTarget(o);
+      return;
+    }
     const avecCommande = new Set(pendingRef.current);
     avecCommande.add(o._id);
     pendingRef.current = avecCommande;
@@ -566,7 +578,7 @@ export default function OrdersPage() {
                   )}
                 >
                   <Pill variant={o.channel === "online" ? "solid" : "out"}>
-                    {CHANNEL_LABELS[o.channel]}
+                    {o.type === "delivery" ? "Livraison" : CHANNEL_LABELS[o.channel]}
                   </Pill>
                   {!isPaid(o) && o.payment.status !== "refunded" && (
                     <span className="text-xs font-bold text-prept">· à payer</span>
@@ -587,7 +599,10 @@ export default function OrdersPage() {
 
                 {/* Statut */}
                 <div className={cx(COLS.status, "lg:order-5")}>
-                  <StatusBadge status={o.status} />
+                  {o.type === "delivery" && o.status === "ready" && o.delivery?.dispatchedAt
+                    ? <Pill variant="out">En route</Pill> : o.type === "delivery" && o.status === "delivered"
+                      ? <Pill variant="out">Livrée</Pill> : <StatusBadge status={o.status} />}
+                  {(o.payment.refundedCents ?? 0) > 0 && <span className="mt-1 block text-xs text-mut">{fmtEuro(o.payment.refundedCents!)} remboursés</span>}
                 </div>
 
                 {/* Actions — pleine largeur en carte, alignées à droite */}
@@ -616,14 +631,16 @@ export default function OrdersPage() {
                     <Btn
                       variant="ink"
                       size="sm"
-                      disabled={pending.has(o._id)}
+                      disabled={pending.has(o._id) || !canAdvanceOrder(o, role)}
                       className="max-lg:min-h-11 max-lg:px-5"
                       onClick={(e) => {
                         e.stopPropagation();
                         void advance(o);
                       }}
                     >
-                      {ADVANCE_LABELS[o.status]}
+                      {o.type === "delivery" && o.status === "ready"
+                        ? o.delivery?.dispatchedAt ? "Marquer livrée" : "Confirmer le départ"
+                        : ADVANCE_LABELS[o.status]}
                     </Btn>
                   ) : (
                     <span className="text-[13px] text-mut">
@@ -658,6 +675,7 @@ export default function OrdersPage() {
           order={selected}
           onClose={() => setSelectedId(null)}
           onPrint={printTicket}
+          onRefund={role === "owner" ? (o) => { setSelectedId(null); setRefundTarget(o); } : undefined}
           onCancel={(o) => {
             // Fermer la fiche avant d'ouvrir la modale : le Drawer écoute
             // Échap tant qu'il est monté, et la modale destructive laisse
@@ -671,12 +689,18 @@ export default function OrdersPage() {
       {/* ── Modale d'annulation PIN (ajout production) ── */}
       <CancelModal
         order={cancelTarget}
+        owner={role === "owner"}
         onClose={() => setCancelTarget(null)}
         onCancelled={(updated) => {
           replaceOrder(updated);
           setCancelTarget(null);
         }}
       />
+
+      {refundTarget && <RefundModal key={refundTarget._id} order={refundTarget} onClose={() => setRefundTarget(null)}
+        onRefunded={(updated) => { replaceOrder(updated); setRefundTarget(null); }} />}
+      {dispatchTarget && <DispatchModal key={dispatchTarget._id} order={dispatchTarget} onClose={() => setDispatchTarget(null)}
+        onDispatched={(updated) => { replaceOrder(updated); setDispatchTarget(null); }} />}
 
       {/* ── Zone d'impression (masquée à l'écran) ── */}
       <PrintTicket order={printOrder} />

@@ -17,6 +17,8 @@ import {
   groupesMobileRestants,
   groupesVisibles,
   navActive,
+  accesPage,
+  accueilAdmin,
   type ContexteNav,
 } from "./navigation";
 
@@ -48,7 +50,24 @@ const verrous = (groupes: readonly { items: readonly { href: string; verrouille:
  * réellement produites sur cette barre.
  */
 describe("navigation du back-office restaurateur", () => {
-  it("range les dix-sept écrans en sept groupes", () => {
+  it("accueille sur une fonction souscrite et autorisée", () => {
+    expect(accueilAdmin(OWNER)).toBe('/admin/dashboard');
+    expect(accueilAdmin({ ...OWNER, capacites: ['loyalty'] })).toBe('/admin/fidelite');
+    expect(accueilAdmin({ ...OWNER, capacites: [] })).toBe('/admin/site');
+    expect(accueilAdmin({ ...OWNER, capacites: ['online', 'menu', 'loyalty'] })).toBe('/admin/dashboard');
+    expect(accueilAdmin(COMPTABLE)).toBe('/admin/stats');
+    expect(accueilAdmin({ ...OWNER, suspendu: true })).toBe(HREF_ABONNEMENT);
+    expect(accueilAdmin({ ...CAISSE, suspendu: true })).toBeNull();
+  });
+  it("protège une URL directe et distingue abonnement et rôle", () => {
+    const web = { ...OWNER, capacites: ['online', 'menu', 'loyalty'] as Capacite[] };
+    expect(accesPage('/admin/orders', web)).toBe('allowed');
+    expect(accesPage('/admin/orders/abc', web)).toBe('allowed');
+    expect(accesPage('/admin/planning', web)).toBe('locked');
+    expect(accesPage('/admin/devices', web)).toBe('locked');
+    expect(accesPage('/admin/encaissement', { ...web, role: 'caisse' })).toBe('forbidden');
+  });
+  it("range les dix-huit écrans en sept groupes", () => {
     expect(NAV_GROUPES.map((g) => g.titre)).toEqual([
       "Service",
       "Carte",
@@ -61,6 +80,7 @@ describe("navigation du back-office restaurateur", () => {
     expect(NAV.map((n) => n.href)).toEqual([
       "/admin/dashboard",
       "/admin/orders",
+      "/admin/livraison",
       "/admin/menu",
       "/admin/ingredients",
       "/admin/fidelite",
@@ -77,6 +97,18 @@ describe("navigation du back-office restaurateur", () => {
       "/admin/devices",
       "/admin/abonnement",
     ]);
+  });
+
+  it.each([
+    { capacites: ['loyalty'] as Capacite[], directs: ['/admin/fidelite', '/admin/promos', '/admin/site'] },
+    { capacites: [] as Capacite[], directs: ['/admin/site', '/admin/settings', HREF_ABONNEMENT] },
+  ])("met les fonctions de l'offre autonome sous le pouce sans perdre les autres", ({ capacites, directs }) => {
+    const context = { ...OWNER, capacites };
+    expect(barreMobile(context).map((item) => item.href)).toEqual(directs);
+    expect(barreMobile(context).every((item) => !item.verrouille)).toBe(true);
+    const routes = [...directs, ...hrefs(groupesMobileRestants(context))];
+    expect(new Set(routes)).toEqual(new Set(NAV.map((item) => item.href)));
+    expect(routes).toHaveLength(NAV.length);
   });
 
   /**
@@ -216,6 +248,7 @@ describe("navigation du back-office restaurateur", () => {
 
     // « Plus » montre des GROUPES, pas une liste plate de seize.
     expect(groupesMobileRestants(OWNER).map((g) => g.titre)).toEqual([
+      "Service",
       "Carte",
       "Clients",
       "Équipe",
@@ -252,6 +285,7 @@ describe("navigation du back-office restaurateur", () => {
     // RIEN ne disparaît : la barre reste complète, au href près.
     expect(hrefs(essentiel)).toEqual(NAV.map((n) => n.href));
     expect(verrous(essentiel)).toEqual([
+      "/admin/livraison",
       "/admin/ingredients",
       "/admin/fidelite",
       "/admin/promos",
@@ -269,6 +303,7 @@ describe("navigation du back-office restaurateur", () => {
     // Le planning et les stocks s'ouvrent ; la fidélité et la commande en ligne
     // restent verrouillées — mot pour mot ce que la grille annonce.
     expect(verrous(complet)).toEqual([
+      "/admin/livraison",
       "/admin/fidelite",
       "/admin/promos",
       "/admin/encaissement",
@@ -316,21 +351,12 @@ describe("navigation du back-office restaurateur", () => {
   });
 
   it("laisse le socle ouvert à qui n’a souscrit aucune formule", () => {
-    // « Atelier seul » (`plan: null`) : aucune capacité de formule. Les écrans
-    // que la grille ne vend PAS restent ouverts — l'établissement, les
-    // horaires, les appareils, l'équipe, l'abonnement, les avis, le site et
-    // les écrans de salle n'ont pas de ligne dans la grille, donc rien ne leur
-    // a été promis et rien ne leur est retiré.
+    // Atelier seul : identité, présence web et factures restent disponibles.
     const socle = groupesVisibles({ role: "owner", suspendu: false, capacites: [] });
     const ouverts = socle.flatMap((g) => g.items.filter((i) => !i.verrouille).map((i) => i.href));
     expect(ouverts).toEqual([
-      "/admin/reviews",
-      "/admin/team",
       "/admin/site",
-      "/admin/screens",
       "/admin/settings",
-      "/admin/hours",
-      "/admin/devices",
       HREF_ABONNEMENT,
     ]);
   });

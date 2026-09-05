@@ -45,6 +45,8 @@ import { api, csvDownload } from "@/lib/api";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
 import { BadgeFondateur } from "@/components/brand/BadgeFondateur";
+import { sessionAdmin } from "../session";
+import { canPayInvoice, safeCheckoutUrl } from "./checkout-ui";
 import {
   Btn,
   Card,
@@ -104,11 +106,19 @@ export default function AbonnementPage() {
   const [data, setData] = useState<MyBilling | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
+  const [cardPayment, setCardPayment] = useState(false);
+  const [paymentReturn, setPaymentReturn] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setData(await api.get<MyBilling>("/billing/me?limit=200"));
       setError(null);
+      const session = sessionAdmin();
+      if (session?.role === "owner" && session.genre === "user") {
+        const available = await api.get<{ enabled: boolean }>("/billing/me/checkout-availability").catch(() => ({ enabled: false }));
+        setCardPayment(available.enabled);
+      } else setCardPayment(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur de chargement");
     }
@@ -118,6 +128,24 @@ export default function AbonnementPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : `load` est la seule source des factures, elles viennent du réseau et aucun rendu ne peut les calculer. Appelée au rendu, la requête repartirait à chaque téléchargement de facture, qui provoque lui-même un rendu.
     void load();
   }, [load]);
+
+  useEffect(() => {
+    // La redirection n'est jamais une preuve de paiement. Seul le webhook met à jour la facture.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- lecture d'un retour externe après montage
+    setPaymentReturn(new URLSearchParams(window.location.search).get("payment") === "return");
+  }, []);
+
+  async function payer(invoice: CrmInvoice) {
+    if (paying) return;
+    setPaying(invoice._id);
+    try {
+      const response = await api.post<{ url: string }>(`/billing/me/invoices/${invoice._id}/checkout`, {});
+      window.location.assign(safeCheckoutUrl(response.url));
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : "Paiement indisponible — réessayez.");
+      setPaying(null);
+    }
+  }
 
   /**
    * Le PDF est servi par une route AUTHENTIFIÉE : un simple `<a href>` partirait
@@ -186,6 +214,13 @@ export default function AbonnementPage() {
           Votre formule, vos échéances et toutes vos factures — {data.tenant.name}.
         </p>
       </div>
+
+      {paymentReturn && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line bg-fill px-[18px] py-4" role="status">
+          <p className="text-sm text-ink">Retour de Stripe. La facture sera marquée payée après confirmation sécurisée du règlement ; la redirection seule ne le confirme pas.</p>
+          <Btn variant="ghost" size="sm" onClick={() => void load()}>Actualiser les factures</Btn>
+        </div>
+      )}
 
       {/* ── Compte suspendu : l'explication, et le montant qui la lève ── */}
       {sub.accessBlocked && (
@@ -411,6 +446,17 @@ export default function AbonnementPage() {
                       {fmtEuro(ttc(f))}
                     </td>
                     <td className="whitespace-nowrap px-[18px] py-3 text-right">
+                      {cardPayment && canPayInvoice(f) && (
+                        <Btn
+                          variant="primary"
+                          size="sm"
+                          disabled={paying !== null}
+                          onClick={() => void payer(f)}
+                          aria-label={`Payer par carte ${fmtEuro(ttc(f))} TTC — facture ${f.number}`}
+                        >
+                          {paying === f._id ? "Ouverture…" : "Payer par carte"}
+                        </Btn>
+                      )}
                       <Btn
                         variant="ghost"
                         size="sm"

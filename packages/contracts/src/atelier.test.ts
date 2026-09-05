@@ -105,11 +105,10 @@ describe('sans formule — les services se vendent seuls', () => {
     expect(prix.setupOnceCents).toBe(ATELIER_ONCE_CENTS.integrationCommande);
   });
 
-  it('sans formule, le module ne se vend que greffé : l’intégration est exigée', () => {
-    // Le module « seul » (79 € + 55 €) n'existe qu'adossé à une formule.
+  it('sans formule, le module hébergé se vend aussi sans site existant', () => {
     expect(
       LeadProposalSchema.safeParse({ plan: null, onlineOrdering: true }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       LeadProposalSchema.safeParse({
         plan: null,
@@ -125,7 +124,7 @@ describe('sans formule — les services se vendent seuls', () => {
         plan: null,
         onlineOrdering: true,
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('accepte une proposition services seuls, refuse une proposition vide', () => {
@@ -272,10 +271,10 @@ describe('TenantOffreSchema — modifier ce qu’un client achète', () => {
     expect(r.success).toBe(true);
   });
 
-  it('rejoue la règle du module greffé : sans formule, il exige l’intégration', () => {
+  it('permet de passer au module hébergé sans formule ni intégration', () => {
     expect(
       TenantOffreSchema.safeParse({ ...BASE, plan: null, onlineOrdering: true }).success,
-    ).toBe(false);
+    ).toBe(true);
     expect(
       TenantOffreSchema.safeParse({
         ...BASE,

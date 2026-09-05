@@ -20,6 +20,7 @@ function atelier() {
   const { audit, lignes } = journalDeTest({
     staff: [{ _id: GERANT, name: 'Sarah', role: 'gerant' }],
   });
+  let status = 'ready';
   const service = new OrdersService(
     {} as never,
     {} as never,
@@ -27,11 +28,14 @@ function atelier() {
     {} as never,
     { publish: () => {} } as never,
     audit,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
+    { cancelOrder: async () => { status = 'cancelled'; } } as never,
   );
   (service as unknown as { byId: () => Promise<unknown> }).byId = async () => ({
     _id: ORDER,
     number: 42,
-    status: 'ready',
+    status,
     statusHistory: [],
     payment: { status: 'paid', method: 'counter', tender: 'card' },
     totals: { subtotal: 2_000, discount: null, total: 2_000 },

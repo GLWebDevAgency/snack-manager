@@ -54,6 +54,7 @@ import { PaymentsService, type WebhookResult } from './payments.service';
  * `https://<api>/public/stripe/webhook/connect`, événements
  * `account.updated`, `account.application.deauthorized`,
  * `payment_intent.succeeded`, `payment_intent.payment_failed`,
+ * `charge.refunded`, `refund.created`, `refund.updated`, `refund.failed`,
  * puis reporter le secret dans `STRIPE_CONNECT_WEBHOOK_SECRET`.
  *
  * En local : `stripe listen --forward-connect-to localhost:3001/public/stripe/webhook/connect`

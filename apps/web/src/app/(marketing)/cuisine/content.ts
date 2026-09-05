@@ -30,7 +30,7 @@ export const CUISINE_SECTIONS: readonly CuisineSectionMeta[] = [
     nav: "Le coup de feu",
     badge: "Le coup de feu",
     title: "Chaque commande arrive à sa place. Avec le son.",
-    lead: "Caisse, téléphone, commande en ligne : une seule file, trois colonnes, un bouton par geste. Le ticket sonne à l'arrivée — personne ne le rate.",
+    lead: "Caisse, téléphone et commande en ligne selon les modules activés : une seule file, trois colonnes et un signal sonore à l’arrivée.",
   },
   {
     id: "lisible",
@@ -44,7 +44,7 @@ export const CUISINE_SECTIONS: readonly CuisineSectionMeta[] = [
     nav: "Sans internet",
     badge: "Vendredi soir",
     title: "La coupure passe, vos tickets restent.",
-    lead: "Les tickets restent affichés, la cuisine continue, et tout se resynchronise au retour du réseau — au complet.",
+    lead: "La cuisine conserve les tickets déjà reçus. Les nouvelles commandes attendent la reconnexion pour parvenir à l’écran.",
   },
   {
     id: "vous",
@@ -108,7 +108,7 @@ export const LISIBLE_POINTS: readonly string[] = [
 export const CUISINE_COUPURE_POINTS: readonly string[] = [
   "Les tickets restent affichés : la cuisine ne s'arrête pas parce que la box redémarre.",
   "La pastille réseau dit l'état sans alarmer — toujours visible, jamais anxiogène.",
-  "Au retour du réseau, tout se resynchronise tout seul, sans doublon.",
+  "À la reconnexion, l’écran récupère l’état des commandes. Sans réseau, il ne reçoit pas de nouvelles commandes des autres tablettes.",
 ] as const;
 
 /* ── 4. Chez vous ────────────────────────────────────────────── */

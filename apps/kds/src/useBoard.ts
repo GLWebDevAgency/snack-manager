@@ -3,7 +3,6 @@ import { AppState } from 'react-native';
 import {
   creerDebounce,
   mergeOrder,
-  NEXT_STATUS,
   POLL_MS,
   pollCadenceMs,
   SmApiError,
@@ -14,7 +13,8 @@ import {
 } from '@sm/client-core';
 import { BOARD_STATUSES } from './ui';
 import { DEMO } from './client';
-import { API_URL, KEY_BOARD, KEY_DELIVERED } from './config';
+import { API_URL, KEY_BOARD } from './config';
+import { advanceDeliveryConfirmed, kitchenNextStatus, isKitchenEligible, reconcileKitchenRows } from './delivery-policy';
 
 /**
  * Le tableau de la cuisine : les commandes `new` / `preparing` / `ready` du
@@ -23,7 +23,7 @@ import { API_URL, KEY_BOARD, KEY_DELIVERED } from './config';
  * elle ne le remplace jamais — voir `@sm/client-core/temps-reel`, où la règle
  * vit désormais, partagée avec la vue du service de la caisse.
  *
- * Trois règles gouvernent l'état :
+ * Les retraits gardent les trois règles historiques :
  *
  * 1. **Le statut le plus avancé gagne** (`mergeOrder`). Une réponse serveur en
  *    retard ne fait jamais reculer un ticket sous les yeux du cuisinier.
@@ -33,6 +33,10 @@ import { API_URL, KEY_BOARD, KEY_DELIVERED } from './config';
  * 3. **On ne purge que sur un sondage réussi.** Une commande absente des trois
  *    listes serveur a été servie ou annulée ailleurs — mais tant que le réseau
  *    est coupé, on ne sait rien, donc on ne retire rien.
+ *
+ * Une livraison fait exception : seul le paiement confirmé ouvre la cuisine.
+ * Son avancement attend le serveur et ne rejoint jamais la file offline ; un
+ * refus ne doit ni la faire avancer ni la faire disparaître localement.
  *
  * Le tableau local (statuts locaux compris) est persisté à chaque changement :
  * une tablette qui redémarre hors ligne retrouve son service exactement où il
@@ -53,7 +57,8 @@ export interface Board {
   /** Message d'erreur réseau/serveur, pour la barre haute. */
   error: string | null;
   lastSyncAt: number | null;
-  /** Fait avancer une commande au statut suivant (NEXT_STATUS). */
+  advancingIds: Set<string>;
+  /** Fait avancer la préparation, jamais la remise au client. */
   advance(order: Order): void;
 }
 
@@ -74,12 +79,15 @@ export function useBoard(
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [advancingIds, setAdvancingIds] = useState<Set<string>>(() => new Set());
+  const activeAdvances = useRef(new Set<string>());
+  const deliveryRevision = useRef(0);
+  const pollSequence = useRef(0);
+  const appliedPoll = useRef(0);
   const [hydratedScope, setHydratedScope] = useState<string | null>(null);
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
 
-  /** Commandes remises localement : retirées du tableau avant confirmation serveur. */
-  const delivered = useRef<Set<string>>(new Set());
   const unauthorized = useRef(onUnauthorized);
   unauthorized.current = onUnauthorized;
 
@@ -88,7 +96,9 @@ export function useBoard(
   useEffect(() => {
     const capturedScope = scope;
     let alive = true;
-    delivered.current = new Set();
+    activeAdvances.current = new Set();
+    deliveryRevision.current += 1;
+    setAdvancingIds(new Set());
     setOrders([]);
     setHydratedScope(null);
     setLastSyncAt(null);
@@ -101,21 +111,14 @@ export function useBoard(
     setLoading(true);
     void (async () => {
       try {
-        const [rawBoard, rawDelivered] = await Promise.all([
-          client.tenantStore.getItem(KEY_BOARD),
-          client.tenantStore.getItem(KEY_DELIVERED),
-        ]);
+        const rawBoard = await client.tenantStore.getItem(KEY_BOARD);
         if (!alive || scopeRef.current !== capturedScope) return;
-        if (rawDelivered) {
-          const ids = JSON.parse(rawDelivered) as unknown;
-          if (Array.isArray(ids)) delivered.current = new Set(ids.filter((i) => typeof i === 'string'));
-        }
         if (rawBoard) {
           const parsed = JSON.parse(rawBoard) as unknown;
           // `prev.length ? prev : …` : si un sondage a déjà répondu pendant la
           // lecture du disque, on ne réécrit pas du frais avec du périmé.
           if (Array.isArray(parsed)) {
-            setOrders((prev) => (prev.length > 0 ? prev : (parsed as Order[])));
+            setOrders((prev) => (prev.length > 0 ? prev : (parsed as Order[]).filter((order) => isKitchenEligible(order) && isBoardStatus(order.status))));
           }
         }
       } catch {
@@ -144,44 +147,30 @@ export function useBoard(
   const poll = useCallback(async () => {
     const capturedScope = scope;
     if (!capturedScope) return;
+    const capturedRevision = deliveryRevision.current;
+    const pollId = ++pollSequence.current;
     try {
       // Volontairement SANS cache de repli : on veut que la panne réseau
       // remonte comme une panne, pas comme une réponse fraîche mais périmée.
       const pages = await Promise.all(
         BOARD_STATUSES.map((status) => client.get<OrdersPage>(`/orders?status=${status}`)),
       );
-      if (scopeRef.current !== capturedScope) return;
+      // Une ancienne lecture ne peut pas annuler une confirmation serveur
+      // arrivée entre-temps, ni écraser un sondage plus récent.
+      if (scopeRef.current !== capturedScope || capturedRevision !== deliveryRevision.current || pollId < appliedPoll.current) return;
+      appliedPoll.current = pollId;
       const rows = pages.flatMap((p) => p?.rows ?? []);
-      const serverIds = new Set(rows.map((r) => r._id));
-
-      // Confirmé côté serveur : on peut oublier la remise locale.
-      for (const id of [...delivered.current]) {
-        if (!serverIds.has(id)) delivered.current.delete(id);
-      }
-      void client.tenantStore
-        .setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]))
-        .catch(() => undefined);
-
-      setOrders((prev) => {
-        let next = prev;
-        for (const row of rows) {
-          if (delivered.current.has(row._id)) continue;
-          next = mergeOrder(next, row);
-        }
-        return next.filter(
-          (o) =>
-            serverIds.has(o._id) &&
-            !delivered.current.has(o._id) &&
-            isBoardStatus(o.status as OrderStatus),
-        );
-      });
+      // On ignore les anciens marqueurs locaux de remise : le KDS n'a plus
+      // cette responsabilité et un ancien refus serveur ne doit rien masquer.
+      setOrders((prev) => reconcileKitchenRows(prev, rows));
 
       setOffline(false);
       setError(null);
       setLastSyncAt(Date.now());
       setHydratedScope(capturedScope);
     } catch (err) {
-      if (scopeRef.current !== capturedScope) return;
+      if (scopeRef.current !== capturedScope || capturedRevision !== deliveryRevision.current || pollId < appliedPoll.current) return;
+      appliedPoll.current = pollId;
       if (err instanceof SmApiError && err.status === 401) {
         unauthorized.current();
         return;
@@ -251,9 +240,44 @@ export function useBoard(
     (order: Order) => {
       const capturedScope = scope;
       if (!capturedScope || scopeRef.current !== capturedScope) return;
-      const next = NEXT_STATUS[order.status as OrderStatus];
+      const next = kitchenNextStatus(order);
       if (!next) return;
-
+      if (order.type === 'delivery') {
+        if (activeAdvances.current.has(order._id)) return;
+        if (offline) {
+          setError('Reconnectez la cuisine pour confirmer l’avancement de cette livraison.');
+          return;
+        }
+        activeAdvances.current.add(order._id);
+        setAdvancingIds(new Set(activeAdvances.current));
+        // Pas d'écriture optimiste/offline pour une livraison : paiement,
+        // remboursement et départ peuvent changer pendant une coupure.
+        void advanceDeliveryConfirmed(order,
+          (id, status) => client.direct<Order>('PATCH', `/orders/${id}/status`, { status }),
+          (updated) => {
+            if (scopeRef.current !== capturedScope) return;
+            deliveryRevision.current += 1;
+            setOrders((current) => {
+              const next = current.filter((candidate) => candidate._id !== updated._id);
+              return isKitchenEligible(updated) && isBoardStatus(updated.status) ? [...next, updated] : next;
+            });
+            setError(null);
+          })
+          .catch((reason: unknown) => {
+            if (scopeRef.current !== capturedScope) return;
+            if (reason instanceof SmApiError && reason.status === 401) {
+              unauthorized.current();
+              return;
+            }
+            setError(reason instanceof Error ? `Livraison non modifiée : ${reason.message}` : 'Livraison non modifiée');
+          })
+          .finally(() => {
+            if (scopeRef.current !== capturedScope) return;
+            activeAdvances.current.delete(order._id);
+            setAdvancingIds(new Set(activeAdvances.current));
+          });
+        return;
+      }
       // `subject` = la commande : la file garde l'ordre de ses mutations et
       // n'applique jamais « prêt » avant « en préparation ».
       void client
@@ -263,22 +287,7 @@ export function useBoard(
           // L'optimisme commence APRÈS le commit local de la file. Sur une
           // tablette c'est quelques millisecondes, mais cela interdit qu'un
           // ticket disparaisse alors que son geste n'a jamais été durable.
-          if (next === 'delivered') {
-            delivered.current.add(order._id);
-            void client.tenantStore
-              .setItem(KEY_DELIVERED, JSON.stringify([...delivered.current]))
-              .catch((reason: unknown) => {
-                if (scopeRef.current !== capturedScope) return;
-                setError(
-                  reason instanceof Error
-                    ? `État local non enregistré : ${reason.message}`
-                    : 'État local non enregistré',
-                );
-              });
-            setOrders((current) => current.filter((candidate) => candidate._id !== order._id));
-          } else {
-            setOrders((current) => mergeOrder(current, { ...order, status: next }));
-          }
+          setOrders((current) => mergeOrder(current, { ...order, status: next }));
         })
         .catch((reason: unknown) => {
           if (scopeRef.current !== capturedScope) return;
@@ -289,7 +298,7 @@ export function useBoard(
           );
         });
     },
-    [client, scope],
+    [client, scope, offline],
   );
 
   return {
@@ -298,6 +307,7 @@ export function useBoard(
     offline,
     error,
     lastSyncAt,
+    advancingIds,
     advance,
   };
 }

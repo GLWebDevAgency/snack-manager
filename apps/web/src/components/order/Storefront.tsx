@@ -39,7 +39,7 @@
 
 import { storefrontHighlights } from "./highlights";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { logoPour, TYPE_PAIRS } from "@sm/contracts";
+import { logoPour, TYPE_PAIRS, WebsiteUrlSchema } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon, Stars, Verrou, verrouPour } from "@/components/ui";
 import { useMasqueDeCapture } from "@/components/masque/masqueDeCapture";
@@ -510,6 +510,7 @@ export function Storefront({
         paused={paused}
         pauseMessage={site.ordering.message}
         initialSlots={site.slots}
+        delivery={site.delivery}
         embed={embed}
         loyalty={loyalty}
         onClose={() => setTunnel(false)}
@@ -1192,6 +1193,7 @@ function LegalFooter({
 }) {
   const year = new Date().getFullYear();
   const lowest = lowestPrice(site);
+  const websiteUrl = WebsiteUrlSchema.safeParse(site.tenant.websiteUrl).data;
   return (
     <footer className="mt-12 border-t border-ink/6 pt-7 text-center">
       {lowest > 0 && (
@@ -1208,6 +1210,11 @@ function LegalFooter({
         Allergènes et composition&nbsp;: demandez au comptoir. Commande en ligne
         propulsée par Snack Manager.
       </p>
+      {websiteUrl && (
+        <a href={websiteUrl} className="mt-3 inline-flex min-h-11 items-center rounded-ctrl px-3 text-[13px] font-bold text-ink underline decoration-ink/30 underline-offset-4 transition-colors hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+          Site du restaurant
+        </a>
+      )}
     </footer>
   );
 }

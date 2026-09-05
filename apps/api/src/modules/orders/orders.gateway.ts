@@ -28,6 +28,8 @@ import {
   type SessionRevocation,
 } from '../../common/session-revocation';
 import { trackingFilter } from './tracking';
+import { CapacitesService } from '../../common/capacites';
+import { orderAccessScope } from '@sm/contracts/commerce';
 
 const SESSION_REVALIDATION_MS = 30_000;
 const MAX_TIMER_MS = 2_147_483_647;
@@ -107,6 +109,7 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
     private readonly jwt: JwtService,
     @InjectModel('Order') private readonly orders: Model<Order>,
     private readonly sessions: SessionAccessService,
+    private readonly capacites: CapacitesService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -218,7 +221,8 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
               this.disconnectSessionSocket(socket);
               return;
             }
-            await this.assertAllowsTenantOrderStream(session);
+            const scope = await this.assertAllowsTenantOrderStream(session);
+            if (scope === 'online' && (payload as { channel?: unknown })?.channel !== 'online') return;
             // Une expiration, déconnexion ou révocation peut se produire
             // pendant les lectures Mongo. Aucun `await` ne sépare ce second
             // contrôle de l'émission : la décision et le sink sont atomiques
@@ -307,11 +311,15 @@ export class OrdersGateway implements OnModuleInit, OnModuleDestroy, OnGatewayCo
    * politique partagée ; elle est rejouée à l'admission, périodiquement et
    * juste avant chaque émission.
    */
-  private async assertAllowsTenantOrderStream(payload: JwtPayload): Promise<void> {
+  private async assertAllowsTenantOrderStream(payload: JwtPayload): Promise<'all' | 'online'> {
     await this.sessions.assertAllows(payload);
     if (payload.tenantId && !roleSatisfait(payload.role, ORDER_READ_ROLES)) {
       throw new Error('Rôle non autorisé sur le flux commandes');
     }
+    if (!payload.tenantId) throw new Error('Flux réservé au restaurant');
+    const scope = orderAccessScope(await this.capacites.pourTenant(payload.tenantId));
+    if (scope === 'none') throw new Error('Commandes non souscrites');
+    return scope;
   }
 
   private clearExpiry(socketId: string): void {

@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type TenantMe } from "@/lib/api";
 import { cx } from "@/lib/cx";
+import { SlotSettingsPanel } from "./SlotSettingsPanel";
+import { useAdminCapabilities } from "../access";
 import {
   Btn,
   EmptyState,
@@ -194,6 +196,7 @@ type ClosureDraft = { from: string; to: string; reason: string };
 
 export default function HoursPage() {
   const toast = useToast();
+  const online = useAdminCapabilities().includes("online");
 
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">(
     "loading",
@@ -586,6 +589,7 @@ export default function HoursPage() {
         </Panel>
 
         {/* Carte « Pause commande en ligne » */}
+        {online && settings && <SlotSettingsPanel key={`${settings.slotIntervalMin}-${settings.slotCapacity}`} settings={settings} onSaved={setSettings} />}
         <Panel
           title="Pause commande en ligne"
           sub="Message affiché au client pendant la pause"

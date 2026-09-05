@@ -334,6 +334,8 @@ export class AdminService {
     const tenant = await this.updateTenant(tenantId, {
       plan: body.plan,
       onlineOrdering: body.onlineOrdering,
+      onlineDelivery: body.onlineDelivery ?? before.onlineDelivery ?? false,
+      standaloneLoyalty: body.standaloneLoyalty ?? before.standaloneLoyalty ?? false,
       billingCycle: body.billing,
       // Rien de vendu → `null`, jamais un sous-objet de faux : la fiche doit
       // lire l'absence comme une absence. La date de signature de l'Atelier
@@ -354,6 +356,8 @@ export class AdminService {
         from: previous,
         to: body.plan ?? 'aucune',
         onlineOrdering: body.onlineOrdering,
+        onlineDelivery: body.onlineDelivery ?? before.onlineDelivery ?? false,
+        standaloneLoyalty: body.standaloneLoyalty ?? before.standaloneLoyalty ?? false,
         billing: body.billing,
         // Les SERVICES aussi, et nommément. Sans eux, retirer les réseaux
         // sociaux d'un client laissait au journal une ligne « Complet →
@@ -1036,6 +1040,8 @@ function toAccountView(raw: RawTenant, now: Date = new Date()): AdminTenantAccou
     slug: String(raw.slug ?? ''),
     plan: (raw.plan ?? null) as AdminPlan | null,
     onlineOrdering: raw.onlineOrdering === true,
+    onlineDelivery: raw.onlineDelivery === true,
+    standaloneLoyalty: raw.standaloneLoyalty === true,
     billingCycle: (raw.billingCycle ?? 'mensuel') as 'mensuel' | 'annuel',
     founderSeat: raw.founderSeat === true,
     founderUntil: iso(raw.founderUntil) ?? null,

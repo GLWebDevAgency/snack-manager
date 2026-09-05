@@ -15,6 +15,7 @@ import { MenuService } from './menu.service';
 import { TenantsService } from '../tenants/tenants.service';
 
 @Controller()
+@Fonction('menu')
 export class MenuController {
   constructor(
     private readonly menu: MenuService,
@@ -135,3 +136,4 @@ export class MenuController {
     return this.menu.setStock(tenantId, id, !!body.outOfStock, user);
   }
 }
+import { Fonction } from '../../common/capacites';

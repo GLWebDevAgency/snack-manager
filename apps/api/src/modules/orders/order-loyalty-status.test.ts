@@ -15,6 +15,9 @@ function serviceWith(result: unknown) {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
+    {} as never,
   );
   return { findOne, lean, select, service };
 }

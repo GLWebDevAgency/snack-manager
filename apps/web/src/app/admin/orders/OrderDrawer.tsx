@@ -53,11 +53,13 @@ export function OrderDrawer({
   onClose,
   onPrint,
   onCancel,
+  onRefund,
 }: {
   order: Order;
   onClose: () => void;
   onPrint: (order: Order) => void;
   onCancel: (order: Order) => void;
+  onRefund?: (order: Order) => void;
 }) {
   const rank = TIMELINE_RANK[order.status] ?? 0;
   const cancelled = order.status === "cancelled";
@@ -86,7 +88,7 @@ export function OrderDrawer({
         </span>
       }
       footer={
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-2.5">
           <Btn
             variant="ghost"
             size="sm"
@@ -107,6 +109,11 @@ export function OrderDrawer({
               Annuler la commande
             </Btn>
           )}
+          {onRefund && order.payment.stripePaymentIntentId && order.payment.status !== "pending" && (
+            <Btn variant="ghost" size="sm" className="w-full" onClick={() => onRefund(order)}>
+              {order.payment.status === "refunded" ? "Voir le remboursement" : "Rembourser"}
+            </Btn>
+          )}
         </div>
       }
     >
@@ -123,14 +130,25 @@ export function OrderDrawer({
           ) : (
             <Pill variant="out">À encaisser</Pill>
           )}
+          {(order.payment.refundedCents ?? 0) > 0 && order.payment.status !== "refunded" && <Pill variant="out">Remboursé : {fmtEuro(order.payment.refundedCents!)}</Pill>}
+          {(order.payment.pendingRefundCents ?? 0) > 0 && <Pill variant="out">Remboursement en attente</Pill>}
           {slot ? (
             <Pill variant="out">
-              Retrait <span className="cf-fig">{slot}</span>
+              {order.type === "delivery" ? "Livraison" : "Retrait"} <span className="cf-fig">{slot}</span>
             </Pill>
           ) : (
             <Pill variant="out">{TYPE_LABELS[order.type]}</Pill>
           )}
         </div>
+
+        {order.delivery && <section className="mt-4 rounded-ctrl border border-line2 p-3" aria-label="Livraison">
+          <h3 className="text-sm font-bold text-ink">{order.delivery.deliveredAt ? "Livrée" : order.delivery.dispatchedAt ? "En route" : "Adresse de livraison"}</h3>
+          <address className="mt-2 text-sm not-italic text-ink">{order.delivery.address.line1}
+            {order.delivery.address.line2 && <><br />{order.delivery.address.line2}</>}<br />
+            {order.delivery.address.postalCode} {order.delivery.address.city}</address>
+          {order.delivery.instructions && <p className="mt-2 text-sm text-prept">{order.delivery.instructions}</p>}
+          {order.delivery.dispatchedAt && <p className="mt-2 text-xs text-mut">Départ à {timeHHMM(order.delivery.dispatchedAt)}{order.delivery.driverName ? ` · ${order.delivery.driverName}` : ""}</p>}
+        </section>}
 
         {/* ── Téléphone ── */}
         {phone && (
@@ -214,6 +232,7 @@ export function OrderDrawer({
                 </div>
               </>
             )}
+            {(order.totals.deliveryFee ?? 0) > 0 && <div className="mb-2 flex justify-between text-sm text-mut"><span>Livraison</span><span>{fmtEuro(order.totals.deliveryFee!)}</span></div>}
             <div className="flex items-baseline justify-between">
               <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-mut">
                 Total
@@ -263,7 +282,7 @@ export function OrderDrawer({
                     <span
                       className={cx("flex-1 text-[14.5px] text-ink", done && "font-bold")}
                     >
-                      {step.label}
+                      {step.status === "delivered" && order.type === "delivery" ? "Livrée" : step.label}
                       {done && <span className="sr-only"> — étape effectuée</span>}
                     </span>
                     {done && at && (

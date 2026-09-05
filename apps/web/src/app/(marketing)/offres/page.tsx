@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
+import { PUBLISHED_COMMERCE_OFFERS } from "@/components/marketing/commerce-offers";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import {
-  MODULE_MONTHLY_CENTS,
   MODULE_SETUP_CENTS,
   PLANS,
   PRICE_RANGE,
@@ -84,7 +84,7 @@ const OFFRES_PATH = "/offres";
  */
 export const metadata: Metadata = {
   title: "Offres et tarifs — Snack Manager",
-  description: `Le détail des trois formules Snack Manager, du module commande en ligne et des services : ce qui est compris, ce qui ne l'est pas. ${PRICE_RANGE}.`,
+  description: `Le détail des suites, des applications fidélité et commande en ligne, et des sites sur mesure : ce qui est compris, ce qui ne l'est pas. ${PRICE_RANGE}.`,
   keywords: [
     "tarif logiciel caisse snack",
     "prix logiciel restaurant",
@@ -99,12 +99,12 @@ export const metadata: Metadata = {
     url: OFFRES_PATH,
     siteName: "Snack Manager",
     title: "Offres et tarifs — Snack Manager",
-    description: `Trois formules, un module commande en ligne, trois services chiffrés. Zéro commission. ${PRICE_RANGE}.`,
+    description: `Suites, fidélité seule, click & collect et sites sur mesure. Livraison sur validation pilote. ${PRICE_RANGE}.`,
   },
   twitter: {
     card: "summary_large_image",
     title: "Offres et tarifs — Snack Manager",
-    description: "Le détail de chaque formule, du module commande en ligne et des services. Zéro commission.",
+    description: "Applications seules ou suites, avec le back-office utile à votre activité. Sites vitrines sur mesure.",
   },
   robots: { index: true, follow: true },
 };
@@ -248,26 +248,22 @@ function structuredData() {
       inLanguage: "fr-FR",
       itemListElement: [
         ...offresFormules,
-        {
+        ...PUBLISHED_COMMERCE_OFFERS.map((offer) => ({
           "@type": "Offer",
-          // Le module s'appelle « Commande en ligne & fidélité » et JAMAIS
-          // « Livraison » : le mot Livraison en face d'un prix se lit comme un
-          // livreur qu'on facture, et nous n'en fournissons aucun.
-          name: "Commande en ligne & fidélité",
-          description: `Module vendu à part, compris dans Boost. ${plain(
-            MODULE_SETUP_CENTS,
-          )} € de mise en service la première fois.`,
-          price: plain(MODULE_MONTHLY_CENTS),
+          name: offer.title,
+          description: `${offer.status}. ${plain(MODULE_SETUP_CENTS)} € HT de mise en service standard, précisée au devis.`,
+          price: plain(offer.monthlyCents),
           priceCurrency: "EUR",
           availability: "https://schema.org/InStock",
           itemOffered: produit,
           priceSpecification: {
             "@type": "UnitPriceSpecification",
-            price: plain(MODULE_MONTHLY_CENTS),
+            price: plain(offer.monthlyCents),
             priceCurrency: "EUR",
             unitCode: "MON",
+            valueAddedTaxIncluded: false,
           },
-        },
+        })),
       ],
     },
   ];

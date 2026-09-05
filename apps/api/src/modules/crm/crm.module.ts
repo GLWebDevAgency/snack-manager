@@ -4,6 +4,8 @@ import { AdminService } from './admin.service';
 import { ComptesService } from './comptes.service';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
+import { InvoiceWriterService } from './invoice-writer.service';
+import { InvoiceNumberingService } from './invoice-numbering.service';
 import { ConversionService } from './conversion.service';
 import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
@@ -20,6 +22,7 @@ import { ProductionService } from './production.service';
 import { SignalsService } from './signals.service';
 import { ContactIngestGuard } from './contact-ingest.guard';
 import { PublicLeadsController } from './public-leads.controller';
+import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 
 /**
  * Back-office interne Snack Manager (CRM HQ) — pipeline commercial, places
@@ -67,6 +70,9 @@ import { PublicLeadsController } from './public-leads.controller';
     HealthService,
     InsightsService,
     BillingService,
+    InvoiceWriterService,
+    InvoiceNumberingService,
+    InvoiceCheckoutGateway,
     SignalsService,
     PlatformService,
     ProductionService,

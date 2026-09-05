@@ -187,14 +187,14 @@ export const BOARD_STATUSES: BoardStatus[] = ['new', 'preparing', 'ready'];
 export const ADVANCE_LABEL: Record<BoardStatus, string> = {
   new: 'Accepter',
   preparing: 'Marquer prête',
-  ready: 'Remise au client',
+  ready: 'En attente de prise en charge',
 };
 
 /** État vide, formulé par colonne (plus utile qu'un tiret générique). */
 export const EMPTY_COPY: Record<BoardStatus, { title: string; hint: string }> = {
   new: { title: 'Aucune nouvelle commande', hint: 'Le prochain ticket sonnera ici.' },
   preparing: { title: 'Rien en préparation', hint: 'Acceptez un ticket pour le lancer.' },
-  ready: { title: 'Rien à remettre', hint: 'Les plats prêts apparaîtront ici.' },
+  ready: { title: 'Aucune commande prête', hint: 'Les plats prêts attendent ici leur prise en charge.' },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -220,6 +220,7 @@ export const TYPE_LABEL: Record<string, string> = {
   surplace: 'Sur place',
   emporter: 'À emporter',
   pickup: 'Retrait',
+  delivery: 'Livraison',
 };
 
 // ─────────────────────────────────────────────────────────────

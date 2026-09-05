@@ -132,7 +132,7 @@ export const OFFRE_SECTIONS: readonly OffreSectionMeta[] = [
     // « et où il s'arrête » est tombé : `MODULE_POINTS[1]` porte déjà la borne,
     // au futur et tourné vers l'avant. L'annoncer en plus dans l'accroche, c'est
     // prévenir deux fois d'un mur qu'on est en train de démonter.
-    lead: "Vendu à part sur Essentiel et sur Complet, compris dans Boost. Voici exactement ce qu'il fait.",
+    lead: "Disponible seul avec son back-office, en complément d’Essentiel ou Complet, et compris dans Boost. La livraison est une option séparée.",
   },
   {
     id: "materiel",
@@ -334,7 +334,7 @@ export const OFFRE_HERO = {
   // « — et la liste de ce qui n'est pas compris » est tombé avec la section
   // qu'il annonçait. Une page qui ouvre en promettant l'inventaire de ses refus
   // se vend contre elle-même dès la deuxième phrase.
-  lead: "Trois formules affichées, un module vendu à part, les services de l’Atelier et trois chantiers chiffrés. Chaque montant de cette page est écrit noir sur blanc.",
+  lead: "Trois suites pour piloter le restaurant, des applications à la carte et des sites vitrines sur mesure. Le périmètre, les frais et la disponibilité sont précisés pour chaque offre.",
   price: PRICE_RANGE,
   claim: "Zéro commission sur vos ventes. Deux mois offerts à l'année.",
 } as const;
@@ -406,13 +406,13 @@ export const ATELIER_STRIP: readonly AtelierStripRow[] = [
   {
     id: "site",
     who: atelierService("site").title,
-    rate: `${euros(ATELIER_CENTS.site)} une fois`,
+    rate: `dès ${euros(ATELIER_CENTS.site)} une fois, sur devis`,
     note: atelierService("site").lead,
   },
   {
     id: "refonte",
     who: atelierService("refonte").title,
-    rate: `${euros(ATELIER_CENTS.refonte)} une fois`,
+    rate: `dès ${euros(ATELIER_CENTS.refonte)} une fois, sur devis`,
     note: atelierService("refonte").lead,
   },
   {
@@ -479,19 +479,19 @@ export type ModulePoint = { title: string; line: string };
 export const MODULE_POINTS: readonly ModulePoint[] = [
   {
     title: "Click and collect",
-    line: "Votre client compose sa commande sur votre page, la règle, et choisit son créneau. Le ticket part droit en cuisine, déjà encaissé — la caisse ne fait que remettre le sac.",
+    line: "Votre client compose sa commande et choisit son créneau. Le back-office inclus reçoit la commande et permet de la traiter, même sans notre caisse. Le paiement suit les moyens activés.",
   },
   {
-    title: "Vous livrez déjà ? L'application suivra",
-    line: "Le module gère aujourd'hui la commande et le retrait. La gestion de vos livraisons arrive — pensée pour les restaurateurs qui ont leur propre livreur : vos tournées, vos horaires, vos marges, et l'outil qui les pilote.",
+    title: "Livraison par votre restaurant — validation pilote",
+    line: "Une offre séparée est prévue pour vos zones et tarifs de livraison. L’activation attend la validation du parcours pilote ; votre restaurant assure les livraisons. Aucun coursier tiers n’est fourni.",
   },
   {
     title: "Paiement en ligne ou au retrait",
     line: "Carte bancaire au moment de la commande, ou règlement au comptoir : c'est vous qui décidez ce que la page propose.",
   },
   {
-    title: "Points de fidélité, tampons et codes promo",
-    line: "Les points se cumulent tout seuls à chaque commande. Un habitué qui commande en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber une commission.",
+    title: "Fidélité en pilote accompagné et codes promo",
+    line: "Le pilote fidélité est inclus avec le click & collect : cartes, programme à points ou tampons et récompenses configurables. L’utilisation sécurisée des récompenses et l’attribution automatique de points après une commande en ligne restent à finaliser. Les codes promo se gèrent séparément depuis le back-office.",
   },
   {
     title: "Le configurateur de la caisse, à l'identique",
@@ -499,7 +499,7 @@ export const MODULE_POINTS: readonly ModulePoint[] = [
   },
   {
     title: "À vos couleurs, ou collée sur le site que vous avez déjà",
-    line: "Votre page sur votre nom de domaine si vous en avez un — sinon, une balise que nous posons pour vous sur votre site actuel. Vos clients ne quittent pas votre enseigne.",
+    line: "Votre vitrine sur mesure ou existante dirige ses boutons Commander vers votre page personnalisée. Nous pouvons rattacher un sous-domaine de commande ; votre back-office en gère la carte et l’identité.",
   },
 ];
 
@@ -607,7 +607,7 @@ export const OFFRE_SERVICES: readonly OffreService[] = [
     lead: service("google").lead,
     line: service("google").line,
     price: service("google").price,
-    compris: true,
+    priceNote: "Service mensuel distinct ; l'ajout du lien de commande lors de la mise en route reste inclus.",
   },
   {
     id: "identite",
@@ -620,7 +620,7 @@ export const OFFRE_SERVICES: readonly OffreService[] = [
   {
     id: "installation",
     title: "L'installation du matériel",
-    lead: "On fournit, on configure, on pose. Vous ouvrez le lendemain.",
+    lead: "On vérifie la compatibilité, on configure et on teste avant votre lancement.",
     line: installe.line,
     price: installe.price,
     // La voie à zéro euro est rappelée SOUS le montant, jamais à côté : posée à
@@ -650,18 +650,15 @@ export const OFFRE_SERVICES: readonly OffreService[] = [
  * compris » un raccourci que la première facture démentirait.
  */
 export const TOUJOURS_COMPRIS: readonly string[] = [
-  "Les mises à jour, le support et les corrections",
-  "Vos données exportables quand vous voulez, en CSV — ventes, clients, menus",
-  "L'hébergement, en Europe",
-  "Le mode hors-ligne : la caisse et la cuisine continuent en local si le réseau tombe",
-  "La configuration — menu, équipe, couleurs, moyens de paiement, imprimante — faite par nous",
-  "Le premier service avec nous, midi et soir, dans votre cuisine",
-  // « compris » et non « comprise » : l'accord se fait sur « votre lien », pas
-  // sur « votre fiche » qui n'est que le complément le plus proche. La faute
-  // venait de là, et elle se lisait à l'écran.
-  "Votre lien de commande ajouté sur votre fiche Google, compris dans la mise en route",
-  "Zéro commission sur vos ventes, quel que soit le volume",
-  "L'appairage des tablettes par code à six caractères, révocable à tout moment",
+  "Les mises à jour, les corrections et le support selon les modalités de votre offre",
+  "Les exports disponibles pour les modules souscrits ; réversibilité précisée au contrat",
+  "L'hébergement du logiciel et sa maintenance",
+  "Avec la caisse : stockage local et renvoi après reconnexion ; la cuisine conserve les tickets déjà reçus",
+  "La configuration des modules souscrits et la validation du matériel compatible",
+  "Une prise en main accompagnée, selon le périmètre et le rendez-vous convenus",
+  "Avec la commande en ligne : ajout de votre lien sur Google si vous nous donnez l'accès",
+  "Zéro commission Snack Manager sur les ventes ; frais de paiement distincts",
+  "Avec les applications tablette : appairage par code, révocable depuis le back-office",
 ];
 
 /* ── 6. L'appel de pied de page ──────────────────────────────── */

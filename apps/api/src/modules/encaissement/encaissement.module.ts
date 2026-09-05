@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { EncaissementController } from './encaissement.controller';
 import { ENCAISSEMENT_CONFIG, EncaissementService, type EncaissementConfig } from './encaissement.service';
 import { STRIPE_CONNECT_CLIENT, StripeConnectHttpClient } from './stripe-connect.client';
+import { OwnerReauthentication } from './owner-reauthentication.service';
 
 /**
  * ENCAISSEMENT MARCHAND — le sous-domaine « où va l'argent ».
@@ -24,6 +25,7 @@ import { STRIPE_CONNECT_CLIENT, StripeConnectHttpClient } from './stripe-connect
   controllers: [EncaissementController],
   providers: [
     EncaissementService,
+    OwnerReauthentication,
     {
       provide: STRIPE_CONNECT_CLIENT,
       inject: [ConfigService],
@@ -38,6 +40,6 @@ import { STRIPE_CONNECT_CLIENT, StripeConnectHttpClient } from './stripe-connect
       }),
     },
   ],
-  exports: [EncaissementService],
+  exports: [EncaissementService, OwnerReauthentication],
 })
 export class EncaissementModule {}

@@ -53,7 +53,7 @@ export const CAISSE_SECTIONS: readonly CaisseSectionMeta[] = [
     nav: "Le service",
     badge: "Au comptoir",
     title: "Prendre la commande, l'envoyer en cuisine, encaisser.",
-    lead: "Trois gestes, des gros boutons : une nouvelle recrue tient la caisse en une heure.",
+    lead: "Trois gestes, des gros boutons, et une prise en main accompagnée sur votre propre carte.",
   },
   {
     id: "encaissement",
@@ -67,7 +67,7 @@ export const CAISSE_SECTIONS: readonly CaisseSectionMeta[] = [
     nav: "Sans internet",
     badge: "Vendredi soir",
     title: "Le wifi saute ? La caisse continue.",
-    lead: "Un rush ne prévient pas. La caisse et la cuisine travaillent en local, et tout se resynchronise au retour du réseau.",
+    lead: "La caisse garde localement les commandes saisies et les renvoie à la reconnexion. Leur transmission à la cuisine attend le retour de la connexion.",
   },
   {
     id: "vous",
@@ -117,7 +117,7 @@ export const CAISSE_SHOTS = {
 export const CAISSE_HERO = {
   badge: "La caisse",
   title: "La caisse qui tient le rush.",
-  lead: "Prendre la commande, l'envoyer en cuisine, encaisser — même quand la file déborde, même quand le wifi saute.",
+  lead: "Prendre la commande, suivre la cuisine, encaisser. En cas de coupure, la saisie reste locale et la transmission reprend au retour du réseau.",
   price: `dès ${euros(PLAN_MONTHLY_CENTS.essentiel)} / mois`,
   claim: "zéro commission — quand vous vendez plus, c'est pour vous",
 } as const;
@@ -134,7 +134,7 @@ export const SERVICE_POINTS: readonly string[] = [
   "Le ticket part en cuisine tout seul — sur l'écran, et à l'imprimante.",
   "Un ticket mis en attente reçoit un code court, criable au comptoir.",
   "Remise ou annulation : code PIN du gérant, et tout est journalisé.",
-  "Le numéro de retrait s'affiche tout de suite, même sans réseau.",
+  "Le numéro de retrait et le statut permettent de retrouver la commande transmise.",
   "La carte et les prix se changent au back-office — la caisse suit en direct.",
 ] as const;
 
@@ -173,16 +173,16 @@ export const Z_NOTE =
 /* ── 3. La coupure ───────────────────────────────────────────── */
 
 export const COUPURE_POINTS: readonly string[] = [
-  "Aucune commande perdue : chaque envoi est rejoué jusqu'à ce qu'il passe, sans jamais créer de doublon.",
-  "Les tickets s'impriment quand même — l'imprimante est sur votre réseau local, pas sur internet.",
-  "Le numéro de retrait sort tout de suite : la file avance, le client attend son numéro, pas la fibre.",
+  "Les commandes enregistrées sur cet appareil sont conservées localement puis renvoyées à la reconnexion, avec une protection contre les doublons.",
+  "L’impression dépend du matériel compatible et du réseau local. Le ticket et le sticker sont testés sur votre installation avant le lancement.",
+  "Sans connexion, les nouvelles commandes n’arrivent pas sur une autre tablette. Le fonctionnement de secours est validé avec votre équipe.",
 ] as const;
 
 /* ── 4. Chez vous ────────────────────────────────────────────── */
 
 export const VOUS_POINTS: readonly string[] = [
   "Une tablette du commerce, Android ou iPad. Aucun matériel propriétaire, aucune location.",
-  "L'imprimante ticket 80 mm en réseau est requise : le ticket cuisine, le sticker du sac, le tiroir-caisse.",
+  "Tickets, stickers et tiroir-caisse : le matériel compatible est sélectionné et testé selon vos besoins.",
   "Votre nom, votre logo, votre couleur — la caisse est à votre enseigne, pas à la nôtre.",
   "La tablette casse ? Six caractères sur la remplaçante, et la caisse revient.",
 ] as const;

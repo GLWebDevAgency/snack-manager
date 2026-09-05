@@ -12,13 +12,14 @@ import {
 import type { Tenant } from '@sm/db';
 import {
   CAPACITES_REQUISES,
+  FONCTION_REQUISE,
   Capacites,
   CapaciteGuard,
   CapacitesService,
   SOUSCRIPTION_FIELDS,
 } from './capacites';
 import { EncaissementController } from '../modules/encaissement/encaissement.controller';
-import { ROLES } from './auth';
+import { ROLES, IS_PUBLIC } from './auth';
 
 /**
  * LA GARDE DE CAPACITÉ — le second axe, testé sans base ni serveur.
@@ -78,6 +79,20 @@ const proprietaire = (tenantId: string | null): JwtPayload => ({
 });
 
 describe('la garde de capacité', () => {
+  it.each(['orders', 'menu', 'stats'])('ouvre %s au module web sans formule', async (area) => {
+    const g = garde({ [FONCTION_REQUISE]: area }, { [RESTO]: { plan: null, onlineOrdering: true } });
+    await expect(g.canActivate(contexte(proprietaire(RESTO)))).resolves.toBe(true);
+  });
+
+  it.each(['team', 'planning', 'devices', 'ingredients', 'livraison'])('ferme %s au module collect seul', async (area) => {
+    const g = garde({ [FONCTION_REQUISE]: area }, { [RESTO]: { plan: null, onlineOrdering: true } });
+    await expect(g.canActivate(contexte(proprietaire(RESTO)))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('laisse les routes publiques à leur politique tenant publique', async () => {
+    const g = garde({ [FONCTION_REQUISE]: 'orders', [IS_PUBLIC]: true });
+    await expect(g.canActivate(contexte(undefined))).resolves.toBe(true);
+  });
   it('laisse passer une route qui n’exige rien', async () => {
     // La très grande majorité des routes. Elle doit alors coûter ZÉRO lecture :
     // le modèle ci-dessous lèverait si on l'interrogeait.

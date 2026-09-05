@@ -9,8 +9,10 @@ import {
   type SlotLoad,
   type SlotService,
   type SlotsResponse,
+  type Fulfillment,
 } from '@sm/contracts';
 import type { Order, Tenant } from '@sm/db';
+import { deliverySettingsOf, publicDeliverySettingsOf } from '../delivery/delivery-order';
 import {
   addDays,
   compareDays,
@@ -142,6 +144,7 @@ export class SlotsService {
     dayEnd: Date,
     gridMs: number[],
     intervalMs: number,
+    deliveryOnly = false,
   ): Promise<Map<number, number>> {
     const counts = new Map<number, number>();
     if (gridMs.length === 0) return counts;
@@ -152,6 +155,7 @@ export class SlotsService {
           tenantId: new Types.ObjectId(tenantId),
           status: { $ne: 'cancelled' }, // une commande annulée relibère sa place
           'pickup.slot': { $gte: dayStart, $lt: dayEnd },
+          ...(deliveryOnly ? { type: 'delivery' } : {}),
         },
       },
       { $group: { _id: '$pickup.slot', count: { $sum: 1 } } },
@@ -198,7 +202,7 @@ export class SlotsService {
    * demanderait un compteur atomique par créneau — à faire le jour où un
    * restaurant vend assez vite pour que cette seconde-là compte.
    */
-  async exigerDisponible(tenant: TenantWithId, iso: string): Promise<void> {
+  async exigerDisponible(tenant: TenantWithId, iso: string, fulfillment: Fulfillment = 'pickup'): Promise<void> {
     const at = new Date(iso);
     if (Number.isNaN(at.getTime())) {
       throw new BadRequestException('Créneau de retrait invalide.');
@@ -212,7 +216,7 @@ export class SlotsService {
       );
     }
 
-    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(requested));
+    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(requested), fulfillment);
     const creneau = slots.find((s) => s.iso === at.toISOString());
 
     if (!creneau) {
@@ -232,7 +236,7 @@ export class SlotsService {
     }
   }
 
-    async compute(tenant: TenantWithId, date?: string): Promise<SlotsResponse> {
+  async compute(tenant: TenantWithId, date?: string, fulfillment: Fulfillment = 'pickup'): Promise<SlotsResponse> {
     const now = new Date();
     const today = parisYmd(now);
     const requested = date ? parseDay(date) : today;
@@ -241,15 +245,20 @@ export class SlotsService {
     }
 
     const intervalMin = positiveInt(tenant.settings?.slotIntervalMin, DEFAULT_INTERVAL_MIN);
-    const capacity = positiveInt(tenant.settings?.slotCapacity, DEFAULT_CAPACITY);
-    const paused = tenant.settings?.onlineOrderingPaused === true;
+    const kitchenCapacity = positiveInt(tenant.settings?.slotCapacity, DEFAULT_CAPACITY);
+    const delivery = deliverySettingsOf(tenant);
+    const isDelivery = fulfillment === 'delivery';
+    const capacity = isDelivery ? Math.min(kitchenCapacity, delivery.slotCapacity) : kitchenCapacity;
+    const deliveryAvailable = !isDelivery || publicDeliverySettingsOf(tenant).available;
+    const leadTimeMin = isDelivery ? Math.max(SLOT_LEAD_TIME_MIN, delivery.leadTimeMin) : SLOT_LEAD_TIME_MIN;
+    const paused = tenant.settings?.onlineOrderingPaused === true || !deliveryAvailable;
 
     const dayStart = parisWallToUtc(requested);
     const dayEnd = parisWallToUtc(addDays(requested, 1));
     const ranges = this.closureRanges(tenant);
     const dayClosure = this.fullDayClosure(ranges, requested);
     const isPastDay = compareDays(requested, today) < 0;
-    const windows = isPastDay || dayClosure ? [] : this.windowsFor(tenant, requested);
+    const windows = isPastDay || dayClosure || !deliveryAvailable ? [] : this.windowsFor(tenant, requested);
 
     // ── Grille brute : un créneau tous les `intervalMin`, bornes incluses ──
     const grid: { at: Date; service: SlotService }[] = [];
@@ -266,7 +275,7 @@ export class SlotsService {
     grid.sort((a, b) => a.at.getTime() - b.at.getTime());
 
     // ── Filtres : délai de préparation + fermetures partielles ──
-    const earliest = now.getTime() + SLOT_LEAD_TIME_MIN * MINUTE_MS;
+    const earliest = now.getTime() + leadTimeMin * MINUTE_MS;
     const intervalMs = intervalMin * MINUTE_MS;
     // Première fermeture ayant écarté un créneau : sert de motif si elle finit
     // par vider la journée (fermeture d'un service, bornes horaires précises).
@@ -289,10 +298,16 @@ export class SlotsService {
       openable.map((s) => s.at.getTime()),
       intervalMs,
     );
+    const deliveryCounts = isDelivery ? await this.countPerSlot(
+      String(tenant._id), dayStart, dayEnd, openable.map((slot) => slot.at.getTime()), intervalMs, true,
+    ) : null;
 
     const slots: PickupSlot[] = openable.map(({ at, service }) => {
       const taken = counts.get(at.getTime()) ?? 0;
-      const remaining = Math.max(0, capacity - taken);
+      const kitchenRemaining = kitchenCapacity - taken;
+      const remaining = Math.max(0, deliveryCounts
+        ? Math.min(kitchenRemaining, delivery.slotCapacity - (deliveryCounts.get(at.getTime()) ?? 0))
+        : kitchenRemaining);
       return {
         iso: at.toISOString(),
         label: parisHm(at),
@@ -313,7 +328,7 @@ export class SlotsService {
       timezone: RESTAURANT_TZ,
       intervalMin,
       capacity,
-      leadTimeMin: SLOT_LEAD_TIME_MIN,
+      leadTimeMin,
       slots,
       closedToday,
       nextOpenDate: closedToday ? this.findNextOpenDate(tenant, scanFrom, ranges) : null,

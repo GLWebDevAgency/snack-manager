@@ -19,10 +19,13 @@ import {
   prixFondateurCents,
   servicesCents,
   yearlyCents,
+  monthKey,
   type JwtPayload,
   type LeadConvert,
   type LeadConversion,
+  type LeadProposal,
 } from '@sm/contracts';
+import { commerceMonthlyCents } from '@sm/contracts/commerce';
 import type { Lead, Tenant, User } from '@sm/db';
 import type { SecretHasher } from '@sm/domain/src/ports';
 import { SECRET_HASHER } from '../../infrastructure/tokens';
@@ -48,9 +51,9 @@ import { TRIAL_DAYS } from './signals.service';
 const DAY_MS = 86_400_000;
 
 type SignedTerms = Pick<
-  LeadConvert,
-  'plan' | 'founderSeat' | 'onlineOrdering' | 'billing' | 'services'
->;
+  LeadProposal,
+  'plan' | 'onlineOrdering' | 'onlineDelivery' | 'standaloneLoyalty' | 'billing' | 'services'
+> & { founderSeat: boolean };
 
 /**
  * Mot de passe lisible AU TÉLÉPHONE : trois groupes de quatre, alphabet sans
@@ -104,6 +107,8 @@ export class ConversionService {
     const parsedProposal = LeadProposalSchema.safeParse({
       plan: lead.proposal.plan ?? null,
       onlineOrdering: Boolean(lead.proposal.onlineOrdering),
+      onlineDelivery: Boolean(lead.proposal.onlineDelivery),
+      standaloneLoyalty: Boolean(lead.proposal.standaloneLoyalty),
       billing: lead.proposal.billing ?? 'mensuel',
       services: lead.proposal.services ?? {},
       note: lead.proposal.note ?? '',
@@ -117,6 +122,8 @@ export class ConversionService {
     const terms: SignedTerms = {
       plan: proposal.plan,
       onlineOrdering: proposal.onlineOrdering,
+      onlineDelivery: proposal.onlineDelivery,
+      standaloneLoyalty: proposal.standaloneLoyalty,
       billing: proposal.billing,
       services: proposal.services,
       founderSeat: lead.founderSeatReserved === true,
@@ -177,6 +184,8 @@ export class ConversionService {
       // les facturaient, et le client naissait sans eux — après quoi toute la
       // facturation récurrente retombait sur `plan` seul et sous-facturait.
       onlineOrdering: terms.onlineOrdering,
+      onlineDelivery: terms.onlineDelivery === true,
+      standaloneLoyalty: terms.standaloneLoyalty === true,
       billingCycle: terms.billing,
       // La place fondateur donne le DROIT, cette date donne le TERME, et le
       // montant ci-dessous donne la PORTÉE. Les trois sont posés ici une fois
@@ -194,6 +203,8 @@ export class ConversionService {
         ? remiseFondateurContrat({
             plan: terms.plan,
             onlineOrdering: terms.onlineOrdering,
+            onlineDelivery: terms.onlineDelivery === true,
+            standaloneLoyalty: terms.standaloneLoyalty === true,
             atelier: terms.services,
           })
         : null,
@@ -289,6 +300,8 @@ export class ConversionService {
     const publie = proposalCents({
       plan: terms.plan,
       onlineOrdering: terms.onlineOrdering,
+      onlineDelivery: terms.onlineDelivery === true,
+      standaloneLoyalty: terms.standaloneLoyalty === true,
       services: terms.services,
     });
     // Le devis a promis moitié prix ; les premières factures doivent porter le
@@ -300,8 +313,13 @@ export class ConversionService {
     // donc à chacune, et non au total — c'est ce qui la rend lisible sur la
     // facture que le client reçoit.
     const remise = (cents: number) => (terms.founderSeat ? prixFondateurCents(cents) : cents);
-    const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
-    const moduleFacture = terms.onlineOrdering && terms.plan !== 'boost';
+    const period = monthKey(trialEndsAt);
+    const moduleFacture = commerceMonthlyCents(terms) > 0;
+    const moduleLibelle = terms.onlineDelivery
+      ? (terms.plan === 'boost' ? 'option livraison restaurant' : 'module commande en ligne + livraison restaurant, fidélité incluse')
+      : terms.onlineOrdering
+        ? 'module commande en ligne, fidélité incluse'
+        : 'module fidélité';
 
     let poses = 0;
     try {
@@ -319,8 +337,8 @@ export class ConversionService {
           label:
             (terms.plan
               ? `Abonnement ${PLAN_LABELS[terms.plan]}` +
-                (moduleFacture ? ' + commande en ligne' : '')
-              : 'Abonnement — module commande en ligne') +
+                (moduleFacture ? ` + ${moduleLibelle}` : '')
+              : `Abonnement — ${moduleLibelle}`) +
             (terms.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +
             mention,
         });
@@ -350,14 +368,14 @@ export class ConversionService {
 
       // L'intégration sur site existant COMPREND la mise en service — la
       // pièce de 55 € ne se pose que quand le module vit sur NOTRE page.
-      if (moduleFacture && !terms.services.integrationCommande) {
+      if (moduleFacture && terms.plan !== 'boost' && !terms.services.integrationCommande) {
         await this.billing.issue(actor, tenantId, {
           kind: 'mise_en_place',
           period,
           draft: true,
           dueAt: trialEndsAt,
           amountCents: remise(MODULE_ORDERING_SETUP_CENTS),
-          label: `Mise en service — module commande en ligne${mention}`,
+          label: `Mise en service — ${moduleLibelle}${mention}`,
         });
         poses += 1;
       }

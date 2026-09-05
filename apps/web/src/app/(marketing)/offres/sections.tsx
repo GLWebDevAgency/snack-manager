@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CommerceOffers } from "@/components/marketing/CommerceOffers";
 import { Photo } from "@/components/marketing/Photo";
 import {
   ATELIER_PORTE,
@@ -643,6 +644,7 @@ export function OffresBody() {
     <>
       <PageHead />
       <Formules />
+      <CommerceOffers />
       <Atelier />
       <Module />
       <Materiel />

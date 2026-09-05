@@ -474,6 +474,8 @@ export const clientsApi = {
     body: {
       plan: AdminPlan | null;
       onlineOrdering: boolean;
+      onlineDelivery?: boolean;
+      standaloneLoyalty?: boolean;
       billing: ProposalBilling;
       services: LeadServices;
       reason: string;

@@ -279,16 +279,26 @@ describe('LoyaltyPublicService — compte et souscription', () => {
     }
   });
 
-  it('ferme les deux routes d’un restaurant en Complet — la fidélité est vendue en Boost', async () => {
+  it('ferme les deux routes sans formule ou module incluant la fidélité', async () => {
     // LE PIÈGE DE DÉPLOIEMENT, épinglé ici : le restaurant pilote tourne en
     // Complet avec un programme actif. Sans la dérogation posée AVANT la mise
     // en ligne, ce test décrit exactement ce que ses clients verraient.
     await attendreIndisponible({ plan: 'complet' });
     await attendreIndisponible({ plan: 'essentiel' });
-    // Le module de commande en ligne n'ouvre pas la fidélité : deux lignes
-    // distinctes de la grille tarifaire.
-    await attendreIndisponible({ plan: null, onlineOrdering: true });
+    await attendreIndisponible({ plan: null });
   });
+
+  it.each([{ onlineOrdering: true }, { onlineDelivery: true }, { standaloneLoyalty: true }])(
+    'ouvre la carte pour un module autonome souscrit : %j', async (offre) => {
+      const { service } = build('active', { plan: null, ...offre });
+      await expect(service.catalog('classfood')).resolves.toMatchObject({
+        program: { name: 'La carte Classfood' },
+      });
+      await expect(service.card('classfood', TOKEN)).resolves.toMatchObject({
+        member: { balanceUnits: 125 },
+      });
+    },
+  );
 
   it('sert un Complet dont la fidélité est ACCORDÉE hors formule', async () => {
     const { service } = build('active', {

@@ -27,6 +27,7 @@ import { LoyaltyMemberService } from './loyalty-member.service';
 
 @Controller('loyalty')
 @Roles('owner', 'gerant')
+@Fonction('fidelite')
 export class LoyaltyController {
   constructor(
     private readonly loyalty: LoyaltyAdminService,
@@ -94,3 +95,4 @@ export class LoyaltyController {
     return this.loyalty.updateReward(tenantRef, rewardId, body as LoyaltyRewardUpdate);
   }
 }
+import { Fonction } from '../../common/capacites';

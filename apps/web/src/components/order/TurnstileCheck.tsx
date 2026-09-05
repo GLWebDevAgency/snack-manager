@@ -144,12 +144,12 @@ export function TurnstileCheck({
   const verified = state === "verified";
   const failed = state === "error" || state === "unsupported";
   const label = verified
-    ? "Commande sécurisée"
+    ? "Vérification réussie"
     : failed
       ? "Vérification indisponible"
       : "Sécurisation de la commande…";
   const detail = verified
-    ? "Votre commande peut être transmise à la cuisine."
+    ? "Vous pouvez maintenant confirmer votre commande."
     : state === "unsupported"
       ? "Ce navigateur ne permet pas la vérification. Appelez le restaurant pour commander."
       : state === "error"

@@ -1,7 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
-import type { CreatePublicOrder } from '@sm/contracts';
+import { CreatePublicOrderSchema, type CreateOrder, type CreatePublicOrder } from '@sm/contracts';
 import { OrdersController } from './orders.controller';
+import { resolvePayment } from './payment';
 
 const TENANT = '507f1f77bcf86cd799439011';
 
@@ -39,7 +40,8 @@ function setup(
     createWithOutcome: vi.fn().mockImplementation(async (...args: unknown[]) => {
       calls.push('create');
       if (over.createError) throw over.createError;
-      return { order: { ok: true, args }, created: over.created ?? true };
+      const dto = args[1] as CreateOrder;
+      return { order: { ok: true, args, payment: resolvePayment(dto.channel, dto.payment, 1250) }, created: over.created ?? true };
     }),
   };
   const tenants = {
@@ -86,7 +88,7 @@ describe('une commande publique ne rejoint la cuisine qu apres ses controles', (
     'verifie le creneau puis la preuve et le quota avant create (%s)',
     async (method) => {
       const ctx = setup();
-      await ctx.controller.createOnline('classfood', body(method));
+      const result = await ctx.controller.createOnline('classfood', body(method));
 
       expect(ctx.calls).toEqual([
         'idempotence',
@@ -111,7 +113,7 @@ describe('une commande publique ne rejoint la cuisine qu apres ses controles', (
         expect.objectContaining({
           channel: 'online',
           type: 'pickup',
-          payment: { method: 'counter' },
+          payment: { method },
         }),
         'online:turnstile',
       );
@@ -119,8 +121,18 @@ describe('une commande publique ne rejoint la cuisine qu apres ses controles', (
         'turnstileToken',
       );
       expect(ctx.publicOrderGate.release).not.toHaveBeenCalled();
+      // Le choix conservé alimente le suivi, jamais un encaissement déclaré.
+      // Le résolveur serveur garde pending pour TOUS les paiements publics.
+      expect(result).toMatchObject({ payment: { method, status: 'pending' } });
     },
   );
+
+  it('le contrat public autorise le choix du moyen, jamais un statut payé ou un tender client', () => {
+    const valid = body('online');
+    expect(CreatePublicOrderSchema.parse(valid).payment).toEqual({ method: 'online' });
+    expect(CreatePublicOrderSchema.safeParse({ ...valid, payment: { method: 'online', status: 'paid' } }).success).toBe(false);
+    expect(CreatePublicOrderSchema.safeParse({ ...valid, payment: { method: 'counter', tender: 'cash' } }).success).toBe(false);
+  });
 
   it('ne cree et ne publie rien quand la preuve est refusee', async () => {
     const ctx = setup({ gateError: new BadRequestException('preuve refusee') });

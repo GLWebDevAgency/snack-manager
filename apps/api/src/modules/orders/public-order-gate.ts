@@ -133,7 +133,11 @@ export class PublicOrderGate {
     input: { tenantId: string; slot: string },
     work: () => Promise<T>,
   ): Promise<T> {
-    const key = `public-orders:slot-lock:${input.tenantId}:${Buffer.from(input.slot).toString('base64url')}`;
+    // Deux représentations ISO d'un même instant doivent partager le verrou
+    // (18:00:00Z et 18:00:00.000Z), comme le comptage Mongo des créneaux.
+    const instant = new Date(input.slot);
+    if (!Number.isFinite(instant.getTime())) throw new BadRequestException('Créneau invalide');
+    const key = `public-orders:slot-lock:${input.tenantId}:${Buffer.from(instant.toISOString()).toString('base64url')}`;
     const owner = randomUUID();
     const deadline = Date.now() + 4_000;
 

@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -38,8 +39,11 @@ import { AuthService } from '../auth/auth.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from '../ordering/slots.service';
 import { PublicOrderGate } from './public-order-gate';
+import { Fonction } from '../../common/capacites';
+import { publicDeliverySettingsOf } from '../delivery/delivery-order';
 
 @Controller()
+@Fonction('orders')
 export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
@@ -65,6 +69,13 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Body(zod(CreateOrderSchema)) body: CreateOrder,
   ) {
+    // Le pilote livre uniquement les commandes passées par le checkout :
+    // c'est cette porte qui réserve la capacité et exige le paiement Stripe.
+    // Les appareils continuent à lire/préparer ces tickets, sans pouvoir
+    // créer une livraison qui contournerait les contrôles du parcours public.
+    if (body.type === 'delivery') {
+      throw new ForbiddenException('La livraison se réserve depuis le parcours de commande en ligne');
+    }
     return this.orders.create(tenantId, body, user.sub, user.deviceId ?? null);
   }
 
@@ -127,9 +138,9 @@ export class OrdersController {
   }
 
   /**
-   * Faire avancer une commande EST le métier de la cuisine — cette route lui
-   * est ouverte délibérément. Elle ne portait aucun décorateur, ce qui donnait
-   * le même résultat par accident : la déclarer transforme un trou en décision.
+   * La cuisine peut préparer et marquer prêt. Le service distingue la remise
+   * au client, réservée au comptoir/gestion : transmettre l'identité complète
+   * permet de faire ce contrôle avant toute mutation ou réponse idempotente.
    */
   @Roles('owner', 'gerant', 'caisse', 'cuisine')
   @Patch('orders/:id/status')
@@ -139,7 +150,7 @@ export class OrdersController {
     @Param('id') id: string,
     @Body(zod(UpdateOrderStatusSchema)) body: { status: OrderStatus },
   ) {
-    return this.orders.updateStatus(tenantId, id, body.status, user.sub);
+    return this.orders.updateStatus(tenantId, id, body.status, user);
   }
 
   /**
@@ -229,6 +240,10 @@ export class OrdersController {
     const tenantId = String(tenant._id);
     const existing = await this.orders.findByClientId(tenantId, body.clientId);
     if (existing) return existing;
+    const fulfillment = body.fulfillment ?? 'pickup';
+    if (fulfillment === 'delivery' && !publicDeliverySettingsOf(tenant).available) {
+      throw new ConflictException('La livraison est momentanément indisponible. Vous pouvez choisir le retrait au restaurant.');
+    }
 
     // LE CRÉNEAU EST VÉRIFIÉ ICI, PAS SEULEMENT PROPOSÉ.
     //
@@ -243,7 +258,7 @@ export class OrdersController {
     // Le cas du client resté dix minutes sur l'étape paiement se referme du
     // même coup : son créneau est revérifié au moment où il valide, pas au
     // moment où il l'a choisi.
-    await this.slots.exigerDisponible(tenant, body.pickup.slot);
+    await this.slots.exigerDisponible(tenant, body.pickup.slot, fulfillment);
 
     const proof = await this.publicOrderGate.authorize({
       tenantId,
@@ -253,7 +268,7 @@ export class OrdersController {
 
     // Le jeton anti-robot n'entre jamais dans le document. Canal et type sont
     // des faits de route, impossibles a choisir dans le corps public strict.
-    const { turnstileToken: _proof, ...trusted } = body;
+    const { turnstileToken: _proof, fulfillment: _fulfillment, ...trusted } = body;
     try {
       return await this.publicOrderGate.serializeSlot(
         { tenantId, slot: body.pickup.slot },
@@ -266,17 +281,18 @@ export class OrdersController {
             await this.publicOrderGate.release(proof);
             return raced;
           }
-          await this.slots.exigerDisponible(tenant, body.pickup.slot);
+          await this.slots.exigerDisponible(tenant, body.pickup.slot, fulfillment);
 
           const outcome = await this.orders.createWithOutcome(
             tenantId,
             {
               ...trusted,
-              // `method` devient un fait seulement quand Stripe confirme. La
-              // valeur sure avant webhook est le repli au comptoir.
-              payment: { method: 'counter' },
+              // Le moyen choisi permet au suivi de reprendre le même paiement.
+              // Ce choix ne prouve aucun encaissement : resolvePayment garde
+              // toutes les commandes publiques pending jusqu'à confirmation.
+              payment: { method: fulfillment === 'delivery' ? 'online' : body.payment.method },
               channel: 'online',
-              type: 'pickup',
+              type: fulfillment,
             },
             'online:turnstile',
           );

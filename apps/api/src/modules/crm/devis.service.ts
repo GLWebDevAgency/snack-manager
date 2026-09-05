@@ -9,7 +9,6 @@ import {
   ATELIER_PRESENCE_LABEL,
   EMPTY_PARTY,
   LeadServicesSchema,
-  MODULE_ORDERING_CENTS,
   MODULE_ORDERING_SETUP_CENTS,
   PLAN_LABELS,
   prixFondateurCents,
@@ -22,6 +21,7 @@ import {
   type InvoiceParty,
   type LeadProposal,
 } from '@sm/contracts';
+import { commerceMonthlyCents } from '@sm/contracts/commerce';
 import type { Lead } from '@sm/db';
 import { renderDevisPdf, type DevisDocument, type DevisLigne } from '../billing/devis-pdf';
 import { IssuerConfig } from '../billing/issuer.config';
@@ -96,20 +96,26 @@ export function buildDevisDocument(
   // peut ne porter AUCUNE formule : le devis n'affiche alors que les services
   // (et le module éventuel reste sa seule ligne d'abonnement).
   const plan = proposal.plan;
-  const moduleFacture = proposal.onlineOrdering && plan !== 'boost';
+  const moduleCents = commerceMonthlyCents(proposal);
+  const moduleFacture = moduleCents > 0;
+  const logicielVendu = Boolean(plan || moduleFacture);
   const planLibelle = plan
     ? `Abonnement ${PLAN_LABELS[plan]} — caisse, cuisine, écrans` +
       (plan === 'boost' ? ', commande en ligne comprise' : '')
     : null;
-  const moduleLibelle = 'Module commande en ligne — page de commande, encaissement et suivi';
+  const moduleLibelle = proposal.onlineDelivery
+    ? (plan === 'boost' ? 'Option livraison par le restaurant' : 'Module commande en ligne + livraison par le restaurant — fidélité incluse')
+    : proposal.onlineOrdering
+      ? 'Module commande en ligne — page de commande, encaissement et suivi, fidélité incluse'
+      : 'Module fidélité — carte digitale, programme et récompenses';
 
   const lignes: DevisLigne[] = [];
   if (proposal.billing === 'annuel' && (plan || moduleFacture)) {
-    const mensuel = (plan ? PLAN_MRR_CENTS[plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0);
+    const mensuel = (plan ? PLAN_MRR_CENTS[plan] : 0) + moduleCents;
     lignes.push({
       designation:
         (planLibelle ?? moduleLibelle) +
-        (planLibelle && moduleFacture ? ' + module commande en ligne' : '') +
+        (planLibelle && moduleFacture ? ` + ${moduleLibelle}` : '') +
         ' — engagement annuel, douze mois payés dix',
       recurrence: 'par an',
       montantHtCents: yearlyCents(mensuel),
@@ -126,7 +132,7 @@ export function buildDevisDocument(
       lignes.push({
         designation: moduleLibelle,
         recurrence: 'par mois',
-        montantHtCents: MODULE_ORDERING_CENTS,
+        montantHtCents: moduleCents,
       });
     }
   }
@@ -149,9 +155,9 @@ export function buildDevisDocument(
   }
   // L'intégration sur site existant COMPREND la mise en service : jamais les
   // deux lignes sur le même devis.
-  if (moduleFacture && !services.integrationCommande) {
+  if (moduleFacture && plan !== 'boost' && !services.integrationCommande) {
     lignes.push({
-      designation: 'Mise en service du module commande en ligne',
+      designation: `Mise en service — ${moduleLibelle}`,
       recurrence: 'une fois',
       montantHtCents: MODULE_ORDERING_SETUP_CENTS,
     });
@@ -190,13 +196,16 @@ export function buildDevisDocument(
         : []),
       // L'essai ne parle que du LOGICIEL : sur un devis services seuls, la
       // ligne promettrait un essai d'un produit qui n'y figure pas.
-      ...(plan || proposal.onlineOrdering
+      ...(logicielVendu
         ? [
             `Essai de ${TRIAL_DAYS} jours offert à l'ouverture du compte — la facturation démarre à l'issue de l'essai.`,
           ]
         : []),
       ...(proposal.billing === 'annuel' && (plan || moduleFacture)
         ? ['Engagement annuel : douze mois de service, dix facturés — deux mois offerts.']
+        : []),
+      ...(proposal.onlineDelivery
+        ? ['Livraison assurée par le restaurant avec ses propres livreurs. Activation et début de facturation de cette option après validation du pilote ; aucun service de livreurs tiers inclus.']
         : []),
       ...(services.presenceInternet || services.reseauxSociaux
         ? ['Services de l’Atelier : sans engagement, résiliables à tout moment, jamais facturés d’avance.']
@@ -206,8 +215,8 @@ export function buildDevisDocument(
         : []),
       // La ligne matériel parle de l'application : hors sujet sur un devis
       // qui ne vend que des services de l'Atelier.
-      ...(plan || proposal.onlineOrdering
-        ? ['Matériel non compris — l’application fonctionne sur vos tablettes et votre imprimante.']
+      ...(logicielVendu
+        ? ['Matériel non compris. Les besoins de connexion et la compatibilité des équipements sont validés avant le lancement.']
         : []),
     ],
     gaps: issuerGaps(issuer),
@@ -235,6 +244,8 @@ export class DevisService {
       {
         plan: (lead.proposal.plan ?? null) as LeadProposal['plan'],
         onlineOrdering: Boolean(lead.proposal.onlineOrdering),
+        onlineDelivery: Boolean(lead.proposal.onlineDelivery),
+        standaloneLoyalty: Boolean(lead.proposal.standaloneLoyalty),
         billing: (lead.proposal.billing ?? 'mensuel') as LeadProposal['billing'],
         // Les propositions d'avant l'Atelier : le schéma pose les défauts.
         services: LeadServicesSchema.parse(lead.proposal.services ?? {}),

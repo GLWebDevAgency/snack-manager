@@ -2,7 +2,6 @@
 
 import type { CSSProperties, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
-import { Comparateur } from "./Comparateur";
 import {
   BILLING_CYCLES,
   BILLING_YEARLY_NOTE,
@@ -232,11 +231,6 @@ export function Pricing() {
           </div>
         ))}
       </dl>
-
-      {/* La quatrième ligne du tableau, rendue manipulable : le visiteur pose
-          ses propres chiffres sur la « caisse gratuite » avant de lire la
-          grille — c'est l'ordre de l'ancrage, ce n'est pas un hasard. */}
-      <Comparateur />
 
       {/* ─── Le sélecteur de périodicité ───
           `--i` place la pastille dorée sous l'onglet actif et `--n` la

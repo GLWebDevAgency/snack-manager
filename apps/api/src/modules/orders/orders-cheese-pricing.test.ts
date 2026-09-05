@@ -3,8 +3,8 @@ import { CreateOrderSchema, type CreateOrder } from '@sm/contracts';
 import { OrdersService } from './orders.service';
 
 /**
- * Régression sur le VRAI point d'écriture de develop, pas sur une extraction
- * du calcul réservée à une autre branche. Seuls Mongo/Redis sont simulés.
+ * Régression sur le VRAI point d'écriture de commande, pas seulement sur un
+ * calcul isolé. Mongo/Redis et les services périphériques sont simulés.
  * Le catalogue reste constitué de deux produits distincts, sans variante.
  */
 const TENANT = '665f0d0a1c2b3d4e5f6a7b80';
@@ -46,8 +46,9 @@ type WrittenOrder = {
     unitPrice: number; lineTotal: number; qty: number;
     options: { groupKey: string; choiceKey: string; name: string; priceDelta: number }[];
   }[];
-  totals: { subtotal: number; discount: unknown; total: number };
+  totals: { subtotal: number; discount: unknown; deliveryFee: number; total: number };
   payment: { status: string; cashReceived: number | null; changeGiven: number | null };
+  paymentFlow: { version: number; origin: string; phase: string; attempt: unknown; close: unknown };
 };
 
 function harness() {
@@ -58,6 +59,9 @@ function harness() {
   }));
   const nextNumber = vi.fn(async () => ({ seq: 1 }));
   const publish = vi.fn(async () => 1);
+  const readTenant = vi.fn();
+  const readCapabilities = vi.fn(async () => ['bo']);
+  const cancelPayment = vi.fn();
   const service = new OrdersService(
     { findOne: vi.fn(async () => null), create } as never,
     { find: findProducts } as never,
@@ -65,8 +69,11 @@ function harness() {
     { find: vi.fn(() => ({ lean: async () => [] })) } as never,
     { publish } as never,
     { log: vi.fn() } as never,
+    { findById: readTenant } as never,
+    { pourTenant: readCapabilities } as never,
+    { cancelOrder: cancelPayment } as never,
   );
-  return { service, create, findProducts, nextNumber, publish };
+  return { service, create, findProducts, nextNumber, publish, readTenant, readCapabilities, cancelPayment };
 }
 
 function line(productKey: ProductKey, additions: Line['options'] = [], breadChoice = 'pain'): Line {
@@ -87,12 +94,13 @@ const withCheese = (key = 'raclette'): Line => line('cheese', [{ groupKey: 'from
 
 describe('création réelle de commande : fromage inclus et supplément payant séparés', () => {
   it.each(cheeseChoices)('enregistre $name inclus à 850 centimes avec son vrai libellé', async (choice) => {
-    const { service, create, findProducts } = harness();
+    const { service, create, findProducts, readTenant, readCapabilities, cancelPayment } = harness();
     await service.create(TENANT, order([withCheese(choice.key)]), 'caisse');
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0]![0]).toMatchObject({
       tenantId: TENANT,
-      totals: { subtotal: 850, discount: null, total: 850 },
+      totals: { subtotal: 850, discount: null, deliveryFee: 0, total: 850 },
+      paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null },
       lines: [{ name: 'Kebab Fromage', variantKey: null, variantName: null, unitPrice: 850, lineTotal: 850,
         options: [
           { groupKey: 'pain', choiceKey: 'pain', name: 'Pain', priceDelta: 0 },
@@ -101,6 +109,11 @@ describe('création réelle de commande : fromage inclus et supplément payant s
       }],
     });
     expect(findProducts).toHaveBeenCalledWith({ tenantId: TENANT, active: true, _id: { $in: [PRODUCT_IDS.cheese] } });
+    expect(readCapabilities).toHaveBeenCalledWith(TENANT);
+    // Une première création au comptoir ne déclenche aucun parcours bancaire
+    // ni calcul de livraison : la preuve initiale est écrite avec la commande.
+    expect(readTenant).not.toHaveBeenCalled();
+    expect(cancelPayment).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -112,7 +125,7 @@ describe('création réelle de commande : fromage inclus et supplément payant s
     const { service, create } = harness();
     await service.create(TENANT, order([item]), 'caisse');
     const written = create.mock.calls[0]![0];
-    expect(written.totals).toEqual({ subtotal: total, discount: null, total });
+    expect(written.totals).toEqual({ subtotal: total, discount: null, deliveryFee: 0, total });
     expect(written.lines[0]).toMatchObject({ unitPrice: total, lineTotal: total });
     expect(written.lines[0]!.options.filter((option) => option.groupKey === 'supplements')).toHaveLength(
       item.options.some((option) => option.groupKey === 'supplements') ? 1 : 0,
@@ -133,6 +146,7 @@ describe('création réelle de commande : fromage inclus et supplément payant s
     await service.create(TENANT, order([withCheese()], 'online'), 'client');
     expect(create.mock.calls[0]![0]).toMatchObject({
       totals: { subtotal: 850, total: 850 }, payment: { status: 'pending' },
+      paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null },
     });
   });
 
@@ -165,10 +179,12 @@ describe('création réelle de commande : fromage inclus et supplément payant s
       { groupKey: 'fromage', choiceKey: 'raclette' }, { groupKey: 'pain', choiceKey: 'galette' },
     ]), 'Pain'],
   ] satisfies [string, Line, string][])('refuse %s avant toute écriture de commande ou allocation de numéro', async (_label, item, message) => {
-    const { service, create, nextNumber, publish } = harness();
+    const { service, create, nextNumber, publish, readTenant, cancelPayment } = harness();
     await expect(service.create(TENANT, order([item]), 'caisse')).rejects.toThrow(message);
     expect(create).not.toHaveBeenCalled();
     expect(nextNumber).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+    expect(readTenant).not.toHaveBeenCalled();
+    expect(cancelPayment).not.toHaveBeenCalled();
   });
 });

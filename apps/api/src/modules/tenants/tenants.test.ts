@@ -158,6 +158,9 @@ describe('la fiche établissement rendue aux tablettes', () => {
         'logoUrl',
         'name',
         'onlineOrdering',
+        'onlineDelivery',
+        'standaloneLoyalty',
+        'websiteUrl',
         'phones',
         'plan',
         'settings',
@@ -507,6 +510,9 @@ const DOCUMENT = {
   closures: [],
   plan: 'complet',
   onlineOrdering: true,
+  onlineDelivery: false,
+  standaloneLoyalty: false,
+  websiteUrl: null,
   settings: { slotIntervalMin: 10, onlineOrderingPaused: false },
   // Ce qu'une tablette de comptoir n'a RIEN à lire.
   siret: '90210987600017',
@@ -637,7 +643,7 @@ describe('les réponses des cinq chemins de la vue de session', () => {
     expect(vue.account).toEqual({ status: 'suspended' });
     // Et ce qu'elle CONSOMME désormais : la liste calculée par le serveur. Le
     // front ne rejoue jamais le catalogue — c'est la règle d'or du produit.
-    expect(vue.capacites).toEqual([...CAPACITES_PAR_FORMULE.complet, 'online']);
+    expect(vue.capacites).toEqual([...CAPACITES_PAR_FORMULE.complet, 'online', 'loyalty']);
 
     for (const secret of SECRETS) {
       expect(vue, `« ${secret} » ne doit pas sortir sur une tablette`).not.toHaveProperty(secret);

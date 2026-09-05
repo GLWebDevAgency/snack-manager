@@ -6,6 +6,7 @@ import {
   brandColorDe,
   logoUrlDe,
   publicOrderingState,
+  WebsiteUrlSchema,
   type MediaVue,
   type PublicSiteResponse,
   type PublicSiteReview,
@@ -18,6 +19,7 @@ import { horairesPublics } from '../tenants/horaires-publics';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from './slots.service';
 import { parisYmd } from './paris-time';
+import { publicDeliverySettingsOf } from '../delivery/delivery-order';
 
 /** Nombre d'avis récents renvoyés avec la page publique. */
 const LATEST_REVIEWS = 3;
@@ -28,6 +30,7 @@ const LATEST_REVIEWS = 3;
  * peut plus diverger de la palette.
  */
 export function tenantPublicDe(tenant: {
+  websiteUrl?: unknown;
   slug?: unknown; name?: unknown; brand?: unknown; brandColor?: unknown; logoUrl?: unknown;
   address?: unknown; phones?: unknown[]; hours?: Parameters<typeof horairesPublics>[0];
 }): PublicSiteTenant {
@@ -42,6 +45,7 @@ export function tenantPublicDe(tenant: {
   return {
     slug: String(tenant.slug ?? ''),
     name: String(tenant.name ?? ''),
+    websiteUrl: WebsiteUrlSchema.safeParse(tenant.websiteUrl).data ?? null,
     brand,
     logoUrl: logoUrlDe(brand),
     brandColor: brandColorDe(brand),
@@ -103,6 +107,7 @@ export class SiteService {
         paused,
         message: gate.message,
       },
+      delivery: publicDeliverySettingsOf(tenant),
       openNow: this.slots.isOpenNow(tenant),
       todayHours: this.slots.todayHours(tenant, parisYmd(new Date())),
       timezone: slots.timezone,

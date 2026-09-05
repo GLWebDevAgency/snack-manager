@@ -27,12 +27,12 @@
  *   affichés. Un changement de statut déplace UNE carte ; il ne réorganise
  *   rien d'autre.
  *
- * • **Aucune action destructive ici.** La vue est en LECTURE : on n'y avance
- *   pas un statut. Faire avancer la cuisine depuis deux écrans créerait deux
- *   écrivains pour un même champ — c'est le métier du KDS, et la caisse n'a
- *   rien à y gagner qu'un conflit. Toucher une carte ouvre son détail.
+ * • **Responsabilités distinctes.** La cuisine prépare ; la caisse constate
+ *   la remise physique d'une commande prête et déjà payée. Ce seul geste est
+ *   confirmé en ligne, jamais optimiste. Toucher une carte ouvre son détail,
+ *   sans changer de statut ni encaisser implicitement.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import {
   TIMER_THRESHOLDS,
@@ -49,13 +49,16 @@ import {
   ORDER_STATUS_LABELS,
 } from '@sm/contracts';
 import { FONT, R, S, TABULAR, sheet, shadow, type, withAlpha, type Brand } from './theme';
-import { EmptyState, Overlay, PanelHead, Press } from './ui';
+import { Btn, EmptyState, Overlay, PanelHead, Press } from './ui';
 import { serviceColumns, useLayout } from './useLayout';
 import {
   grouperParStatut,
   heureCourte,
+  serviceReadyLabel,
   type ServiceCommande,
+  type ServerOrderRow,
 } from './service-state';
+import { canConfirmCounterHandover } from './service-handover';
 import type {
   ActiveOrderStatus,
   ServiceStatusCounts,
@@ -90,6 +93,8 @@ export function ServicePanel({
   servicePartial,
   failedStatuses,
   truncatedStatuses,
+  onConfirmHandover,
+  offline,
 }: {
   commandes: ServiceCommande[];
   now: number;
@@ -103,6 +108,8 @@ export function ServicePanel({
   servicePartial: boolean;
   failedStatuses: ActiveOrderStatus[];
   truncatedStatuses: ActiveOrderStatus[];
+  onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
+  offline?: boolean;
 }) {
   const L = useLayout();
   // L'identité reste stable ; le contenu est redérivé à chaque photo afin que
@@ -193,6 +200,8 @@ export function ServicePanel({
           now={now}
           brand={brand}
           onClose={() => setDetailId(null)}
+          onConfirmHandover={onConfirmHandover}
+          offline={offline}
         />
       ) : null}
     </View>
@@ -406,7 +415,7 @@ function Carte({
                 letterSpacing: 0.6,
               }}
             >
-              À APPELER
+              {serviceReadyLabel(commande.row)}
             </Text>
           </View>
         ) : (
@@ -453,11 +462,15 @@ export function DetailCommande({
   now,
   brand,
   onClose,
+  onConfirmHandover,
+  offline,
 }: {
   commande: ServiceCommande;
   now: number;
   brand: Brand;
   onClose: () => void;
+  onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
+  offline?: boolean;
 }) {
   const L = useLayout();
   const row = commande.row;
@@ -465,6 +478,23 @@ export function DetailCommande({
   const lignes = row.lines ?? [];
   const remise = row.totals?.discount ?? null;
   const tone = TON[commande.status];
+  const [confirming, setConfirming] = useState(false);
+  const [handoverError, setHandoverError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const confirmHandover = async () => {
+    if (!onConfirmHandover || inFlight.current || offline || !canConfirmCounterHandover(row)) return;
+    inFlight.current = true;
+    setConfirming(true);
+    setHandoverError(null);
+    try {
+      await onConfirmHandover(row);
+    } catch (error) {
+      setHandoverError(error instanceof Error ? error.message : 'La remise n’a pas été confirmée.');
+    } finally {
+      inFlight.current = false;
+      setConfirming(false);
+    }
+  };
 
   return (
     <Overlay onClose={onClose} accessibilityLabel={`Commande ${commande.number}`} width={520}>
@@ -502,6 +532,41 @@ export function DetailCommande({
             {secondes / 60 >= TIMER_THRESHOLDS.late ? ' · attend depuis longtemps' : ''}
           </Text>
         </View>
+
+        {row.type === 'delivery' && row.delivery ? (
+          <View style={[sheet.inset, { padding: S.md, gap: 6 }]}>
+            <Text style={type.eyebrow}>Livraison · {row.delivery.dispatchedAt ? 'En route' : 'Départ à organiser'}</Text>
+            <Text style={[type.strong, { fontSize: L.fs(14) }]}>{[row.delivery.address.line1, row.delivery.address.line2, `${row.delivery.address.postalCode} ${row.delivery.address.city}`].filter(Boolean).join(', ')}</Text>
+            {row.delivery.instructions ? <Text style={type.mut}>{row.delivery.instructions}</Text> : null}
+            {row.pickup?.slot ? <Text style={type.mut}>Arrivée estimée · {heureCourte(row.pickup.slot)}</Text> : null}
+            <Text style={type.mut}>{row.delivery.dispatchedAt ? `Départ confirmé à ${heureCourte(row.delivery.dispatchedAt)}${row.delivery.driverName ? ` · ${row.delivery.driverName}` : ''}` : 'Confirmez le départ du livreur depuis les commandes du back-office.'}</Text>
+          </View>
+        ) : null}
+
+        {row.status === 'ready' && row.type !== 'delivery' && onConfirmHandover ? (
+          <View style={[sheet.inset, { padding: S.md, gap: S.sm }]}>
+            <Text style={type.eyebrow}>Remise au client</Text>
+            <Text style={type.mut}>
+              {commande.paid
+                ? 'Confirmez uniquement après avoir remis la commande au client.'
+                : row.channel === 'online' && row.payment?.method === 'counter'
+                  ? 'L’encaissement de ce retrait web n’est pas disponible sur cet écran. Faites traiter la commande existante dans le back-office par un responsable habilité, sans la recréer en caisse.'
+                  : 'Le paiement de cette commande n’est pas confirmé. Faites vérifier la commande existante dans le back-office par un responsable habilité, sans la recréer en caisse.'}
+            </Text>
+            <Btn
+              label={confirming ? 'Confirmation en cours…' : 'Confirmer la remise'}
+              kind="primary"
+              accent={brand.accent}
+              onAccent={brand.onAccent}
+              disabled={confirming || offline || !canConfirmCounterHandover(row)}
+              onPress={() => void confirmHandover()}
+              block
+              accessibilityLabel={`Confirmer la remise au client de la commande ${commande.number}`}
+            />
+            {offline ? <Text style={type.mut}>Connexion requise pour confirmer la remise.</Text> : null}
+            {handoverError ? <Text accessibilityRole="alert" style={[type.mut, { color: palette.red }]}>{handoverError}</Text> : null}
+          </View>
+        ) : null}
 
         {/* Les lignes, avec variantes, options, retraits et notes */}
         <View style={{ gap: S.sm }}>
@@ -569,6 +634,7 @@ export function DetailCommande({
         {/* Totaux et paiement */}
         <View style={{ gap: 2 }}>
           <Ligne label="Sous-total" value={euros(Math.round(row.totals?.subtotal ?? 0))} />
+          {row.type === 'delivery' ? <Ligne label="Frais de livraison" value={euros(row.totals?.deliveryFee ?? row.delivery?.feeCents ?? 0)} /> : null}
           {remise ? (
             <Ligne
               label={`Remise · ${remise.reason ?? 'geste commercial'}`}
@@ -586,7 +652,7 @@ export function DetailCommande({
             label={
               row.payment?.tender
                 ? PAYMENT_TENDER_LABELS[row.payment.tender]
-                : PAYMENT_METHOD_LABELS.counter
+                : PAYMENT_METHOD_LABELS[row.payment?.method ?? 'counter']
             }
             value={
               PAYMENT_STATUS_LABELS[

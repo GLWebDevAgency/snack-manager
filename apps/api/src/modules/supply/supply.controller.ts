@@ -44,6 +44,7 @@ import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { SupplyService } from './supply.service';
 
 @Controller('supply')
+@Fonction('ingredients')
 export class SupplyController {
   constructor(private readonly supply: SupplyService) {}
 
@@ -281,3 +282,4 @@ export class SupplyController {
     return this.supply.listMovements(tenantId, ingredientId || undefined, capped);
   }
 }
+import { Fonction } from '../../common/capacites';

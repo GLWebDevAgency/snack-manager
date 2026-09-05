@@ -33,7 +33,7 @@ export default function LoginPage() {
        * consomme — voir `SplashAuPremierPassage`.
        */
       armerSplashDeTransition();
-      router.replace("/admin/dashboard");
+      router.replace("/admin");
     } catch {
       setError("Identifiants invalides");
     } finally {

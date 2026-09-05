@@ -15,6 +15,8 @@ Elle raconte un contexte, une décision, ce qu'on a écarté et ce que ça coût
 | [0002](./0002-persistance-polyglotte.md) | Persistance polyglotte : MongoDB pour le commerce, PostgreSQL pour le supply | Acceptée | La grille « Mongo ou Postgres ? », les deux transactions distinctes, la cohérence inter-contextes |
 | [0003](./0003-offline-first-et-idempotence.md) | Offline-first : file de mutations persistée et idempotence | Acceptée | La contrainte n° 1 du produit : `clientId`, rejeu, statut le plus avancé qui gagne |
 | [0004](./0004-fournisseur-de-domaines-interchangeable.md) | Fournisseur de domaines interchangeable : port `DomainRegistrar` | Acceptée | Railway aujourd'hui, Cloudflare for SaaS au-delà de ~100 domaines — avec le seuil chiffré |
+| [0005](./0005-facturation-stripe-billing-ou-maison.md) | Ce que Stripe facture, ce que nous facturons | Acceptée, calendrier complété par 0006 | Stripe moteur financier, CRM poste de pilotage ; conserver le moteur historique jusqu'à bascule contrôlée |
+| [0006](./0006-migration-billing-pilotee-par-crm.md) | Migration Billing ajoutée au chantier commerce | Acceptée, non implémentée | Lots progressifs CRM/Billing/Invoicing, SEPA/carte, préservation des contrats et de l'historique ; activation séparée |
 
 ## Écrire une nouvelle ADR
 

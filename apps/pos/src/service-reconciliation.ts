@@ -11,7 +11,7 @@ import {
   type OrdersWindow,
   type OrderStatus,
 } from '@sm/client-core';
-import type { ServerOrderRow } from './service-state';
+import { isOperationalOrder, type ServerOrderRow } from './service-state';
 
 export const ACTIVE_ORDER_STATUSES = ['new', 'preparing', 'ready'] as const;
 export type ActiveOrderStatus = (typeof ACTIVE_ORDER_STATUSES)[number];
@@ -55,7 +55,7 @@ export function activeOrdersPath(status: ActiveOrderStatus): string {
 export interface ServiceStatusCount {
   /** Total annoncé par le serveur, ou estimation issue des lignes observées. */
   value: number;
-  /** `false` seulement quand la lecture dédiée à ce statut a échoué. */
+  /** `false` si la lecture a échoué ou des paiements n'ont pas pu être inspectés. */
   exact: boolean;
   /** Toutes les lignes de ce statut sont présentes dans `rows`. */
   complete: boolean;
@@ -87,7 +87,7 @@ function rowsForStatus(
   rows: readonly ServerOrderRow[],
   status: ActiveOrderStatus,
 ): ServerOrderRow[] {
-  return rows.filter((row) => row.status === status);
+  return rows.filter((row) => row.status === status && isOperationalOrder(row));
 }
 
 /**
@@ -121,10 +121,10 @@ function uniqueMostAdvanced(rows: readonly ServerOrderRow[]): ServerOrderRow[] {
  * Construit la vue active à partir des trois lectures opérationnelles.
  *
  * Chaque statut actif est relu sans borne temporelle : une commande web ou
- * ancienne reste visible tant qu'elle est en cuisine. Le `total` de CHAQUE
- * statut reste exact même si sa liste dépasse elle-même 200 lignes ; leur
- * somme n'est en revanche pas atomique. La vue est marquée partielle si des
- * cartes peuvent manquer.
+ * ancienne reste visible tant qu'elle est en cuisine. Les livraisons impayées
+ * sont exclues du service ; si une liste est tronquée, le total serveur ne
+ * permet pas de connaître leurs paiements et reste donc une estimation à
+ * partir des cartes reçues. La somme des trois lectures n'est pas atomique.
  */
 export function deriveServiceProjection(
   all: OrdersWindow<ServerOrderRow>,
@@ -134,9 +134,14 @@ export function deriveServiceProjection(
   const truncatedStatuses: ActiveOrderStatus[] = [];
   const projectedRows: ServerOrderRow[] = [];
   const statusCounts = {} as ServiceStatusCounts;
+  const ineligibleIds = new Set(
+    [...all.rows, ...Object.values(statusWindows).flatMap((window) => window?.rows ?? [])]
+      .filter((row) => !isOperationalOrder(row))
+      .map((row) => row._id),
+  );
 
   for (const status of ACTIVE_ORDER_STATUSES) {
-    const fallback = rowsForStatus(all.rows, status);
+    const fallback = rowsForStatus(all.rows, status).filter((row) => !ineligibleIds.has(row._id));
     const window = statusWindows[status];
     if (!window) {
       failedStatuses.push(status);
@@ -149,11 +154,14 @@ export function deriveServiceProjection(
       continue;
     }
 
-    projectedRows.push(...window.rows);
+    const eligible = window.rows.filter((row) => isOperationalOrder(row) && !ineligibleIds.has(row._id));
+    projectedRows.push(...eligible);
     if (window.truncated) truncatedStatuses.push(status);
     statusCounts[status] = {
-      value: window.total,
-      exact: true,
+      // Un total serveur tronqué peut contenir des paiements en attente que
+      // le poste n'a pas reçus : ne pas l'afficher comme un compte cuisine exact.
+      value: window.truncated ? eligible.length : window.total - (window.rows.length - eligible.length),
+      exact: !window.truncated,
       complete: !window.truncated,
     };
   }
@@ -166,7 +174,7 @@ export function deriveServiceProjection(
     // ticket qui avance entre deux réponses peut manquer ou être compté deux
     // fois dans la somme de leurs `total`. On n'affiche donc jamais cette
     // somme comme un fait : le nombre de lignes uniques observées (ou le plus
-    // grand total individuel s'il est tronqué) reste une estimation. Une ligne
+    // grand compte individuel observable) reste une estimation. Une ligne
     // peut devenir terminale entre deux réponses, donc ce n'est pas forcément
     // un minimum de l'état réel à un instant donné.
     activeCount: Math.max(

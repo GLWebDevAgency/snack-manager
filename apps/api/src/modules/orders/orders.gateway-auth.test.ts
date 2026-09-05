@@ -126,7 +126,7 @@ function staffAvecRole(role: 'gerant' | 'caisse' | 'cuisine', sub = STAFF_A): Jw
   return { ...staffPayload(sub), role };
 }
 
-function build(payloads: Record<string, JwtPayload>) {
+function build(payloads: Record<string, JwtPayload>, granted: string[] = ['bo']) {
   const subscriber = new FakeSubscriber();
   const server = new FakeServer();
   const revoked = new Set<string>();
@@ -142,12 +142,54 @@ function build(payloads: Record<string, JwtPayload>) {
       if (revoked.has(payload.sub)) throw new Error('session révoquée');
     }),
   } as unknown as SessionAccessService;
-  const gateway = new OrdersGateway(subscriber as never, jwt, {} as never, sessions);
+  const capacites = { pourTenant: vi.fn().mockResolvedValue(granted) };
+  const gateway = new OrdersGateway(subscriber as never, jwt, {} as never, sessions, capacites as never);
   gateway.server = server as never;
-  return { gateway, subscriber, server, revoked, sessions };
+  return { gateway, subscriber, server, revoked, sessions, capacites };
 }
 
 describe('autorisation continue des rooms tenant', () => {
+  it('ne diffuse pas les ventes caisse dans une session web seule', async () => {
+    const { gateway, subscriber, server } = build({ owner: compteAvecRole('owner') }, ['online']);
+    const socket = new FakeSocket('web-only', 'owner');
+    server.add(socket);
+    await gateway.onModuleInit();
+    await gateway.handleConnection(socket.asSocket());
+    for (const channel of ['pos', 'phone', 'online']) {
+      subscriber.fire('pmessage', 'tenant:*:orders', `tenant:${TENANT}:orders`, JSON.stringify({
+        event: 'order.created', payload: { _id: 'order', number: 1, status: 'new', channel },
+      }));
+    }
+    await vi.waitFor(() => expect(socket.emit).toHaveBeenCalledTimes(1));
+    expect(socket.emit).toHaveBeenCalledWith('order.created', expect.objectContaining({ channel: 'online' }));
+    gateway.onModuleDestroy();
+  });
+
+  it('refuse le flux commandes à la fidélité seule', async () => {
+    const { gateway, server } = build({ owner: compteAvecRole('owner') }, ['loyalty']);
+    const socket = new FakeSocket('loyalty-only', 'owner');
+    server.add(socket);
+    await gateway.handleConnection(socket.asSocket());
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    gateway.onModuleDestroy();
+  });
+
+  it('applique immédiatement le retrait du back-office à une socket déjà connectée', async () => {
+    const { gateway, subscriber, server, capacites } = build({ owner: compteAvecRole('owner') }, ['bo', 'online']);
+    const socket = new FakeSocket('downgraded-web', 'owner');
+    server.add(socket);
+    await gateway.onModuleInit();
+    await gateway.handleConnection(socket.asSocket());
+    capacites.pourTenant.mockResolvedValue(['online']);
+    for (const channel of ['pos', 'online']) subscriber.fire('pmessage', 'tenant:*:orders', `tenant:${TENANT}:orders`, JSON.stringify({
+      event: 'order.updated', payload: { _id: 'order', number: 1, status: 'ready', channel },
+    }));
+    await vi.waitFor(() => expect(socket.emit).toHaveBeenCalledTimes(1));
+    expect(socket.emit).toHaveBeenCalledWith('order.updated', expect.objectContaining({ channel: 'online' }));
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    gateway.onModuleDestroy();
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-28T12:00:00.000Z'));

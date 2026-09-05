@@ -41,6 +41,8 @@ export interface StripeWebhookEvent {
   data: { object: StripeWebhookObject };
   /** Présent sur les événements d'un COMPTE CONNECTÉ — absent sur la plateforme. */
   account?: string;
+  /** Signed live/test mode, independently of the endpoint URL. */
+  livemode?: boolean;
 }
 
 export interface StripeWebhookObject {

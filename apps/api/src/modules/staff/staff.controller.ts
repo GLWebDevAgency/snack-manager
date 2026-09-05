@@ -19,6 +19,7 @@ import {
  */
 @Roles('owner', 'gerant')
 @Controller('staff')
+@Fonction('team')
 export class StaffController {
   constructor(private readonly staff: StaffService) {}
 
@@ -64,3 +65,4 @@ export class StaffController {
     return this.staff.clock(tenantId, id, body.direction);
   }
 }
+import { Fonction } from '../../common/capacites';

@@ -69,7 +69,7 @@ function loadStripeJs(): Promise<void> {
     script.addEventListener("load", () => resolve(), { once: true });
     script.addEventListener(
       "error",
-      () => reject(new Error("Stripe.js n’a pas pu être chargé")),
+      () => { script.remove(); loader = null; reject(new Error("Stripe.js n’a pas pu être chargé")); },
       { once: true },
     );
     if (!existing) document.head.appendChild(script);
@@ -161,7 +161,6 @@ export function StripeCard({
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
-  onGiveUp,
 }: {
   publishableKey: string;
   clientSecret: string;
@@ -184,8 +183,6 @@ export function StripeCard({
   prixMono: boolean;
   returnUrl: string;
   onPaid: () => void;
-  /** Repli explicite : « je réglerai au comptoir ». */
-  onGiveUp: () => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
@@ -194,6 +191,8 @@ export function StripeCard({
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,12 +225,12 @@ export function StripeCard({
         /* démontage best-effort */
       }
     };
-  }, [publishableKey, clientSecret, stripeAccount, apparence]);
+  }, [publishableKey, clientSecret, stripeAccount, apparence, attempt]);
 
   async function pay() {
     const stripe = stripeRef.current;
     const elements = elementsRef.current;
-    if (!stripe || !elements || paying) return;
+    if (!stripe || !elements || paying || processing || status !== "ready") return;
     setPaying(true);
     setError(null);
     try {
@@ -242,17 +241,21 @@ export function StripeCard({
         redirect: "if_required",
       });
       if (result.error) {
-        setError(result.error.message ?? "Le paiement n’a pas abouti.");
+        setError(result.error.message ?? "La confirmation bancaire n’a pas été reçue. Consultez le suivi avant tout autre règlement.");
         return;
       }
       const state = result.paymentIntent?.status;
-      if (state === "succeeded" || state === "processing") {
+      if (state === "succeeded") {
         onPaid();
         return;
       }
-      setError("Le paiement n’a pas été confirmé. Réessayez ou réglez au comptoir.");
+      if (state === "processing") {
+        setProcessing(true);
+        return;
+      }
+      setError("La confirmation bancaire n’a pas été reçue. Réessayez sur ce paiement ou consultez le suivi. Ne payez pas une deuxième fois.");
     } catch {
-      setError("Le paiement n’a pas pu être contacté. Réessayez.");
+      setError("La réponse bancaire n’a pas été reçue. Consultez le suivi ou réessayez sur ce paiement, sans régler une deuxième fois.");
     } finally {
       setPaying(false);
     }
@@ -262,18 +265,19 @@ export function StripeCard({
     return (
       <div className="flex flex-col gap-3">
         <Banner tone="alert" icon="bell" title="Paiement en ligne indisponible">
-          Votre commande est enregistrée : vous pourrez régler au comptoir au
-          moment du retrait.
+          Le formulaire sécurisé n’a pas pu être chargé. Votre commande reste enregistrée : réessayez ou consultez son suivi, sans payer par un autre moyen.
         </Banner>
-        <PrimaryAction icon="check" mono={prixMono} onClick={onGiveUp}>
-          Continuer — je paie au comptoir
+        <PrimaryAction icon="check" mono={prixMono} onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}>
+          Réessayer le paiement
         </PrimaryAction>
+        <a href={returnUrl} className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink">Suivre ma commande</a>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {processing && <Banner tone="prep" icon="clock" title="Confirmation bancaire en cours">Ne payez pas une deuxième fois. <a href={returnUrl} className="font-bold underline underline-offset-4">Suivre la confirmation de votre commande</a>.</Banner>}
       <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
           <p className="flex items-center gap-2.5 py-6 text-[14px] text-mut">
@@ -285,14 +289,14 @@ export function StripeCard({
       </div>
 
       {error && (
-        <Banner tone="alert" icon="bell" title="Paiement refusé">
+        <Banner tone="alert" icon="bell" title="Paiement à vérifier">
           {error}
         </Banner>
       )}
 
       <PrimaryAction
         onClick={pay}
-        disabled={status !== "ready"}
+        disabled={status !== "ready" || processing}
         loading={paying}
         icon="check"
         amount={amount}
@@ -301,13 +305,12 @@ export function StripeCard({
         Payer
       </PrimaryAction>
 
-      <button
-        type="button"
-        onClick={onGiveUp}
-        className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
+      <a
+        href={returnUrl}
+        className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
       >
-        Je préfère régler au comptoir
-      </button>
+        Suivre ma commande
+      </a>
 
       <p className="text-center text-[12px] text-mut">
         Paiement chiffré par Stripe · Visa · Mastercard · CB

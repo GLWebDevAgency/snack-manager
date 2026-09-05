@@ -4,10 +4,11 @@ import type { ConfigService } from '@nestjs/config';
 import type { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import type { Order } from '@sm/db';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PaymentsService, type StripeWebhookEvent } from './payments.service';
 import type { EncaissementService } from '../encaissement/encaissement.service';
+import type { OrderPaymentLifecycleService } from './order-payment-lifecycle.service';
 
 /**
  * Ce qui est vérifié ici tient en trois phrases, et chacune correspond à une
@@ -15,8 +16,8 @@ import type { EncaissementService } from '../encaissement/encaissement.service';
  *
  *  · une signature qui ne colle pas ne confirme RIEN — sinon n'importe qui
  *    marque ses commandes payées avec un `curl` ;
- *  · Stripe rejoue le même événement jusqu'à trois jours : le deuxième passage
- *    ne doit ni réécrire, ni surtout refaire biper le KDS ;
+ *  · Stripe peut rejouer après un crash entre paiement durable et Redis :
+ *    la projection est rediffusée sans réécriture de l'état monétaire ;
  *  · un paiement sans commande en face ne doit pas faire tomber la route, sinon
  *    Stripe rejoue en boucle un événement qu'aucun rejeu ne réparera.
  */
@@ -55,33 +56,6 @@ function orderFixture(overrides: Partial<FakeOrder> = {}): FakeOrder {
     },
     ...overrides,
   };
-}
-
-/**
- * Modèle Mongoose minimal : `findOneAndUpdate` applique le filtre AVANT
- * l'écriture, ce qui reproduit exactement la propriété sur laquelle repose
- * l'idempotence en base.
- */
-function fakeOrders(rows: FakeOrder[]) {
-  return {
-    async findOneAndUpdate(
-      filter: Record<string, unknown>,
-      update: { $set: Record<string, unknown> },
-    ) {
-      const row = rows.find(
-        (r) => r._id === String(filter._id) && r.payment.status === filter['payment.status'],
-      );
-      if (!row) return null;
-      for (const [path, value] of Object.entries(update.$set)) {
-        const [head, tail] = path.split('.') as ['payment', keyof FakeOrder['payment']];
-        if (head === 'payment' && tail) row.payment[tail] = value as never;
-      }
-      return { ...row, toObject: () => JSON.parse(JSON.stringify(row)) as unknown };
-    },
-    findById(id: string) {
-      return { lean: async () => rows.find((r) => r._id === id) ?? null };
-    },
-  } as unknown as Model<Order>;
 }
 
 function fakeRedis(sink: { channel: string; message: string }[]) {
@@ -125,8 +99,20 @@ function succeededBody(orderId: string | null = ORDER_ID, amount = 1250): string
 
 let rows: FakeOrder[];
 let published: { channel: string; message: string }[];
+// Ici seul l'adaptateur webhook est testé. Les véritables filtres Mongo,
+// preuves compte/PI/montant/devise et courses sont exercés dans la recette
+// order-payment-lifecycle.integration.test.ts, pas recodés dans ce double.
+const reconcileFixture = async (_event: StripeWebhookEvent) => {
+  const row = rows[0];
+  if (!row) return null;
+  row.payment.status = 'paid';
+  row.payment.method = 'online';
+  row.payment.tender = 'online';
+  return { ...row, toObject: () => structuredClone(row) };
+};
+const reconcileSucceeded = vi.fn(reconcileFixture);
 
-function service(env: Record<string, string | undefined> = { STRIPE_WEBHOOK_SECRET: SECRET }) {
+function service(env: Record<string, string | undefined> = { STRIPE_WEBHOOK_SECRET: SECRET }, redis = fakeRedis(published)) {
   // Le webhook ne consulte jamais le sous-domaine « encaissement » : il traite
   // un paiement déjà encaissé, sur un compte déjà résolu à la création de
   // l'intention. La doublure le prouve — toute lecture ici serait un appel de
@@ -134,12 +120,14 @@ function service(env: Record<string, string | undefined> = { STRIPE_WEBHOOK_SECR
   const encaissement = {
     compteActifDe: () => Promise.reject(new Error('le webhook ne résout aucun compte')),
   } as unknown as EncaissementService;
-  return new PaymentsService(fakeOrders(rows), fakeConfig(env), fakeRedis(published), encaissement);
+  return new PaymentsService({} as Model<Order>, fakeConfig(env), redis, encaissement,
+    { reconcileSucceeded } as unknown as OrderPaymentLifecycleService);
 }
 
 beforeEach(() => {
   rows = [orderFixture()];
   published = [];
+  reconcileSucceeded.mockReset().mockImplementation(reconcileFixture);
 });
 
 describe('constructWebhookEvent — signature', () => {
@@ -243,9 +231,9 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
     expect(diffuse.payload.payment.status).toBe('paid');
   });
 
-  it('est idempotent : un rejeu ne réécrit rien et ne republie pas', async () => {
-    // Stripe rejoue jusqu'à 3 jours. Un second « order.updated » referait biper
-    // le KDS pour une commande déjà confirmée.
+  it('rediffuse la projection sur rejeu pour réparer un crash après écriture et avant Redis', async () => {
+    // Le protocole garantit la stabilité monétaire sur Mongo réel ; ici le
+    // rejeu assure une livraison au moins une fois aux projections clientes.
     const body = succeededBody();
     const sut = service();
     const event = sut.constructWebhookEvent(body, sign(body));
@@ -255,12 +243,13 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
     const troisieme = await sut.handleWebhookEvent(event);
 
     expect(premier.outcome).toBe('payee');
-    expect(second.outcome).toBe('deja_payee');
-    expect(troisieme.outcome).toBe('deja_payee');
-    expect(published).toHaveLength(1);
+    expect(second.outcome).toBe('payee');
+    expect(troisieme.outcome).toBe('payee');
+    expect(published).toHaveLength(3);
   });
 
   it('ne ramène pas une commande remboursée à « payée »', async () => {
+    reconcileSucceeded.mockResolvedValueOnce(null);
     rows = [
       orderFixture({
         payment: {
@@ -276,12 +265,13 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
 
     const result = await sut.handleWebhookEvent(sut.constructWebhookEvent(body, sign(body)));
 
-    expect(result.outcome).toBe('deja_payee');
+    expect(result.outcome).toBe('ignoree');
     expect(rows[0]?.payment.status).toBe('refunded');
     expect(published).toHaveLength(0);
   });
 
   it('gère une commande introuvable sans lever ni publier', async () => {
+    reconcileSucceeded.mockResolvedValueOnce(null);
     // Sinon Stripe rejouerait trois jours durant un événement qu'aucun rejeu ne
     // réparera. On accuse réception, la trace part dans les logs.
     const body = succeededBody('665f0d0a1c2b3d4e5f6affff');
@@ -294,6 +284,7 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
   });
 
   it('gère un metadata.orderId absent ou non-ObjectId', async () => {
+    reconcileSucceeded.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     const sut = service();
     const sansId = succeededBody(null);
     const idBidon = succeededBody('pas-un-objectid');
@@ -307,14 +298,54 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
     expect(published).toHaveLength(0);
   });
 
-  it('confirme malgré un écart de montant — l’argent est encaissé, on trace', async () => {
+  it('ne confirme pas une commande avec un montant encaissé inférieur au total serveur', async () => {
+    reconcileSucceeded.mockResolvedValueOnce(null);
     const body = succeededBody(ORDER_ID, 900); // commande à 1250 c
     const sut = service();
 
     const result = await sut.handleWebhookEvent(sut.constructWebhookEvent(body, sign(body)));
 
-    expect(result.outcome).toBe('payee');
+    expect(result.outcome).toBe('ignoree');
+    expect(rows[0]?.payment.status).toBe('pending');
+    expect(published).toHaveLength(0);
+  });
+
+  it('ne confirme pas avec une autre intention de paiement ni une autre devise', async () => {
+    reconcileSucceeded.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    const sut = service();
+    const event = JSON.parse(succeededBody()) as StripeWebhookEvent;
+    event.data.object.id = 'pi_other';
+    expect((await sut.handleWebhookEvent(event)).outcome).toBe('ignoree');
+    event.data.object.id = 'pi_123';
+    Object.assign(event.data.object, { currency: 'usd' });
+    expect((await sut.handleWebhookEvent(event)).outcome).toBe('ignoree');
+    expect(rows[0]?.payment.status).toBe('pending');
+  });
+
+  it('laisse remonter 503 lorsque la preuve avant attachement ne peut pas encore être récupérée', async () => {
+    reconcileSucceeded.mockRejectedValueOnce(new ServiceUnavailableException('Récupération de la preuve en attente.'));
+    const event = JSON.parse(succeededBody()) as StripeWebhookEvent;
+    await expect(service().handleWebhookEvent(event)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(published).toHaveLength(0);
+    expect(rows[0]?.payment.status).toBe('pending');
+  });
+
+  it('délègue l’événement intact au protocole avant toute publication', async () => {
+    const event = JSON.parse(succeededBody()) as StripeWebhookEvent;
+    event.account = 'acct_fixture';
+    await service().handleWebhookEvent(event);
+    expect(reconcileSucceeded).toHaveBeenCalledWith(event, null);
+    expect(published).toHaveLength(1);
+  });
+
+  it('un échec Redis après confirmation demande le rejeu, qui rediffuse le paiement enregistré', async () => {
+    const redis = { publish: vi.fn().mockRejectedValueOnce(new Error('Redis indisponible.')).mockResolvedValue(1) };
+    const sut = service(undefined, redis as unknown as Redis);
+    const event = JSON.parse(succeededBody()) as StripeWebhookEvent;
+    await expect(sut.handleWebhookEvent(event)).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(rows[0]?.payment.status).toBe('paid');
+    expect((await sut.handleWebhookEvent(event)).outcome).toBe('payee');
+    expect(redis.publish).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -344,7 +375,7 @@ describe('handleWebhookEvent — autres événements', () => {
   it('accuse réception d’un type non traité sans faire rejouer Stripe', async () => {
     const body = JSON.stringify({
       id: 'evt_test_3',
-      type: 'charge.refunded',
+      type: 'charge.dispute.created',
       data: { object: { id: 'ch_1' } },
     });
     const sut = service();

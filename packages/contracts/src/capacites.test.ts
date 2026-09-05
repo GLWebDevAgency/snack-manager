@@ -35,7 +35,7 @@ import { PLANS } from './index';
  */
 
 describe('le catalogue des capacités', () => {
-  it('porte les onze modules de la grille publiée, dans son ordre', () => {
+  it('porte les modules de la grille publiée, livraison optionnelle comprise', () => {
     expect([...CAPACITES]).toEqual([
       'pos',
       'kds',
@@ -48,6 +48,7 @@ describe('le catalogue des capacités', () => {
       'online',
       'loyalty',
       'priority',
+      'delivery',
     ]);
     // Autant de libellés que de capacités : une capacité livrée sans libellé
     // s'afficherait au restaurateur sous sa clé technique.
@@ -100,7 +101,7 @@ describe('le catalogue des capacités', () => {
       'planning',
       'stocks',
     ]);
-    expect([...CAPACITES_PAR_FORMULE.boost]).toEqual([...CAPACITES]);
+    expect([...CAPACITES_PAR_FORMULE.boost]).toEqual(CAPACITES.filter((c) => c !== 'delivery'));
   });
 
   it('reste cumulative — « tout l’Essentiel, plus… »', () => {
@@ -177,7 +178,7 @@ describe('les capacités effectives', () => {
     expect(capacitesEffectives({ plan: 'essentiel', onlineOrdering: false })).toEqual([
       ...CAPACITES_PAR_FORMULE.essentiel,
     ]);
-    expect(capacitesEffectives({ plan: 'boost' })).toEqual([...CAPACITES]);
+    expect(capacitesEffectives({ plan: 'boost' })).toEqual(CAPACITES.filter((c) => c !== 'delivery'));
   });
 
   it('ferme bien ce que la grille vend « non inclus »', () => {
@@ -235,6 +236,22 @@ describe('les dérogations', () => {
         'loyalty',
       ),
     ).toBe(false);
+  });
+
+  it('inclut les dépendances des modules accordés hors formule', () => {
+    expect(capacitesEffectives({ plan: null, derogationsCapacite: [geste('delivery', 'accordee')] }))
+      .toEqual(CAPACITES.filter((c) => ['delivery', 'online', 'menu', 'loyalty'].includes(c)));
+    expect(capacitesEffectives({ plan: null, derogationsCapacite: [geste('online', 'accordee')] }))
+      .toEqual(CAPACITES.filter((c) => ['online', 'menu', 'loyalty'].includes(c)));
+  });
+
+  it('ne ressuscite jamais une dépendance explicitement retirée', () => {
+    const capacites = capacitesEffectives({ plan: null, derogationsCapacite: [
+      geste('delivery', 'accordee'), geste('online', 'retiree'), geste('loyalty', 'retiree'),
+    ] });
+    expect(capacites).not.toContain('online');
+    expect(capacites).not.toContain('loyalty');
+    expect(capacites).toContain('menu');
   });
 
   it('fait toujours gagner le retrait, quel que soit l’ordre des lignes', () => {
@@ -426,13 +443,14 @@ describe('d’où vient chaque capacité', () => {
       plan: 'essentiel',
       onlineOrdering: true,
       derogationsCapacite: [
-        { capacite: 'loyalty', sens: 'accordee', motif: 'pilote', auteur: 'sm', le: '2026-09-02' },
+        { capacite: 'delivery', sens: 'accordee', motif: 'pilote', auteur: 'sm', le: '2026-09-02' },
       ],
     });
     const de = (c: Capacite) => detail.find((d) => d.capacite === c)!;
     expect(de('pos')).toMatchObject({ acquise: true, origine: 'formule' });
     expect(de('online')).toMatchObject({ acquise: true, origine: 'option' });
-    expect(de('loyalty')).toMatchObject({ acquise: true, origine: 'derogation' });
+    expect(de('loyalty')).toMatchObject({ acquise: true, origine: 'option' });
+    expect(de('delivery')).toMatchObject({ acquise: true, origine: 'derogation' });
     // Ni vendue, ni accordée : « rien » est la réponse juste — pas une source
     // qu'on inventerait pour remplir la case.
     expect(de('planning')).toMatchObject({ acquise: false, origine: null });

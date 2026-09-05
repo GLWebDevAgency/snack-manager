@@ -46,6 +46,7 @@ import { PairDeviceUseCase } from './pair-device.usecase';
  * Le contrôleur ne contient aucune règle : il traduit HTTP ⇄ cas d'usage.
  */
 @Controller()
+@Fonction('devices')
 export class DevicesController {
   constructor(
     private readonly manage: ManageDevices,
@@ -145,3 +146,4 @@ export class DevicesController {
     return this.pinLogin.execute(readDeviceToken(headers, body.deviceToken), body.pin);
   }
 }
+import { Fonction } from '../../common/capacites';

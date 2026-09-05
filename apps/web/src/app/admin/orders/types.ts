@@ -10,6 +10,7 @@ import type {
   OrderType,
   PaymentMethod,
   PaymentStatus,
+  OrderDelivery,
 } from "@sm/contracts";
 
 export type OrderLine = {
@@ -38,8 +39,15 @@ export type Order = {
     subtotal: number;
     discount: { amount: number; reason?: string } | null;
     total: number;
+    deliveryFee?: number;
   };
-  payment: { method: PaymentMethod; status: PaymentStatus };
+  payment: {
+    method: PaymentMethod; status: PaymentStatus;
+    stripePaymentIntentId?: string | null;
+    refundedCents?: number;
+    pendingRefundCents?: number;
+  };
+  delivery?: OrderDelivery | null;
   status: OrderStatus;
   statusHistory: { status: string; at: string; by?: string }[];
   pickup: { slot: string; customerName: string; customerPhone: string | null } | null;
@@ -58,6 +66,7 @@ export const TYPE_LABELS: Record<OrderType, string> = {
   surplace: "Sur place",
   emporter: "À emporter",
   pickup: "Retrait",
+  delivery: "Livraison",
 };
 
 /** Étape suivante du flux new → preparing → ready → delivered (absent = terminal). */
@@ -66,6 +75,19 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   preparing: "ready",
   ready: "delivered",
 };
+
+/** Aide d'interface ; l'API reste l'autorité sur le paiement, le rôle et le départ. */
+export function canAdvanceOrder(order: {
+  status: OrderStatus; type: OrderType; payment: { status: PaymentStatus };
+  delivery?: { dispatchedAt?: string | null } | null;
+}, role: string | null): boolean {
+  if (!NEXT_STATUS[order.status] || order.payment.status === "refunded") return false;
+  // La cuisine s'arrête à « prête », quel que soit le mode de remise.
+  if (order.status === "ready" && !["owner", "gerant", "cogerant", "caisse"].includes(role ?? "")) return false;
+  if (order.type !== "delivery") return true;
+  if (order.payment.status !== "paid") return false;
+  return true;
+}
 
 /** Libellé du bouton d'avancement selon le statut courant (spec §6.2) — toujours un verbe. */
 export const ADVANCE_LABELS: Partial<Record<OrderStatus, string>> = {

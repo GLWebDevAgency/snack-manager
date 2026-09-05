@@ -30,6 +30,28 @@ const ISSUER: InvoiceParty = {
 };
 
 describe('composition du devis', () => {
+  it.each([
+    { plan: null, onlineOrdering: false, standaloneLoyalty: true, onlineDelivery: false, expected: [3_900, 5_500] },
+    { plan: null, onlineOrdering: true, standaloneLoyalty: true, onlineDelivery: false, expected: [7_900, 5_500] },
+    { plan: null, onlineOrdering: false, standaloneLoyalty: true, onlineDelivery: true, expected: [11_900, 5_500] },
+    { plan: 'boost' as const, onlineOrdering: true, standaloneLoyalty: true, onlineDelivery: true, expected: [19_900, 4_000] },
+  ])('chiffre toute offre autonome sans inclusion facturée deux fois : $expected', ({ expected, ...offre }) => {
+    const doc = buildDevisDocument(LEAD, { ...offre, billing: 'mensuel', services: EMPTY_SERVICES, note: '' }, ISSUER, NOW);
+    expect(doc.lignes.map((ligne) => ligne.montantHtCents)).toEqual(expected);
+    if (offre.onlineDelivery) {
+      expect(doc.conditions.join(' ')).toContain('validation du pilote');
+      expect(doc.lignes.some((ligne) => ligne.designation.includes('livraison'))).toBe(true);
+    }
+    if (!offre.onlineOrdering && !offre.onlineDelivery) {
+      expect(doc.lignes[0]?.designation).toContain('fidélité');
+    }
+  });
+
+  it('annualise la fidélité seule selon le cycle signé', () => {
+    const doc = buildDevisDocument(LEAD, { plan: null, onlineOrdering: false, standaloneLoyalty: true, billing: 'annuel', services: EMPTY_SERVICES, note: '' }, ISSUER, NOW);
+    expect(doc.lignes.map((ligne) => [ligne.recurrence, ligne.montantHtCents])).toEqual([['par an', 39_000], ['une fois', 5_500]]);
+  });
+
   it('mensuel avec module : trois lignes, montants de la grille', () => {
     const doc = buildDevisDocument(
       LEAD,

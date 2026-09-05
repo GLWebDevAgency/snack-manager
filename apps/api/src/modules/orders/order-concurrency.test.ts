@@ -16,6 +16,14 @@ function harness() {
     {} as never,
     { publish } as never,
     audit as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
+    { cancelOrder: async () => {
+      // Le service bancaire possède maintenant l'annulation ; le gagnant
+      // concurrent est détecté par son CAS, jamais par un ancien doc.save().
+      if (version !== 0) throw new ConflictException('Commande modifiée en parallèle');
+      version += 1;
+    } } as never,
   );
 
   // Chaque appel lit bien le même état `ready` / __v=0 avant que les
@@ -29,6 +37,7 @@ function harness() {
       status: 'ready',
       statusHistory: [],
       payment: { status: 'paid', method: 'counter', tender: 'card' },
+      paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null },
       totals: { subtotal: 2_000, discount: null, total: 2_000 },
       save: async () => {
         if (readVersion !== version) {
@@ -73,7 +82,9 @@ describe('Order — aucune perte de mise à jour concurrente', () => {
       const { service, audit, version } = harness();
 
       const results = await Promise.allSettled([
-        service.updateStatus(TENANT, ORDER, 'delivered', 'cuisine'),
+        service.updateStatus(TENANT, ORDER, 'delivered', {
+          sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
+        }),
         sensitiveAction(service),
       ]);
 

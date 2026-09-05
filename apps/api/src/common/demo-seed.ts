@@ -1,10 +1,9 @@
 /**
  * AMORÇAGE DE DÉMONSTRATION — autorisé nulle part par défaut.
  *
- * Deux services du CRM écrivent des données d'exemple quand leur collection
- * est vide : le pipeline commercial (`CrmService`) et l'historique de
- * facturation (`BillingService`). C'est confortable sur un environnement de
- * travail — on ouvre l'écran, il y a quelque chose à voir.
+ * Le pipeline commercial (`CrmService`) peut écrire des données d'exemple
+ * quand sa collection est vide. La facturation n'utilise plus ce mécanisme :
+ * lire un registre financier ne doit jamais y créer de fausses pièces.
  *
  * En production, c'est un piège. Le jour où l'on vide la base pour démarrer
  * proprement, la PREMIÈRE ouverture du back-office la repeuple de leads

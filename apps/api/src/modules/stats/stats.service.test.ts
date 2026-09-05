@@ -54,7 +54,7 @@ describe('exports CSV sûrs pour les tableurs', () => {
       },
     ];
     const orders = { find: () => queryOf(rows) };
-    const service = new StatsService(orders as never, {} as never, {} as never, {} as never);
+    const service = new StatsService(orders as never, {} as never, {} as never, {} as never, { pourTenant: async () => ['bo'] } as never);
 
     const exported = await service.exportOrdersCsv('507f1f77bcf86cd799439011', {});
 
@@ -81,7 +81,7 @@ describe('exports CSV sûrs pour les tableurs', () => {
           },
         ]),
     };
-    const service = new StatsService({} as never, products as never, categories as never, {} as never);
+    const service = new StatsService({} as never, products as never, categories as never, {} as never, { pourTenant: async () => ['bo'] } as never);
 
     const exported = await service.exportMenuCsv('507f1f77bcf86cd799439011');
 

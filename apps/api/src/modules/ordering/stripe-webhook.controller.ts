@@ -22,14 +22,10 @@ import { PaymentsService } from './payments.service';
  * et pas celui du tableau de bord, qu'il faut mettre dans `STRIPE_WEBHOOK_SECRET`
  * du `.env` puis relancer l'API. Il change à chaque `stripe listen`.
  *
- * Pour déclencher un événement sans sortir sa carte, depuis un second terminal
- * (l'`orderId` doit être celui d'une commande réellement « pending ») :
- *
- *   stripe trigger payment_intent.succeeded \
- *     --add payment_intent:metadata.orderId=<id de la commande>
- *   stripe trigger payment_intent.payment_failed
- *
- * Le parcours réel est plus fidèle encore : créer la commande, appeler
+ * Une fixture générique avec metadata.orderId ne confirme PAS une commande :
+ * l'identifiant PaymentIntent, le compte et le montant doivent correspondre
+ * exactement au paiement enregistré par l'application.
+ * Pour vérifier le parcours : créer la commande, appeler
  * `POST /public/orders/:id/payment-intent`, payer avec la carte de test
  * `4242 4242 4242 4242` — les métadonnées sont alors posées par
  * `PaymentsService.resolveIntent`.
@@ -38,7 +34,8 @@ import { PaymentsService } from './payments.service';
  *
  * Tableau de bord Stripe → Developers → Webhooks → endpoint
  * `https://<api>/public/stripe/webhook`, événements `payment_intent.succeeded`
- * et `payment_intent.payment_failed`, puis reporter le secret de signature.
+ * et `payment_intent.payment_failed`, ainsi que `charge.refunded`,
+ * `refund.created`, `refund.updated`, `refund.failed`, puis reporter le secret.
  *
  * ─── Câblage ───
  *

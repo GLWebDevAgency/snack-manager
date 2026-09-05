@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { COMMERCE_PRICES } from "@sm/contracts/commerce";
 import {
   CLIENT_HEALTH_LABELS,
   LEAD_PIPELINE,
@@ -978,6 +979,8 @@ function slugifie(name: string): string {
 function phrasePrix(p: {
   plan: (typeof PLANS)[number] | null;
   onlineOrdering: boolean;
+  onlineDelivery?: boolean;
+  standaloneLoyalty?: boolean;
   billing: ProposalBilling;
   services?: LeadServices;
   /**
@@ -1034,6 +1037,10 @@ export function OffreFields({
   setPlan,
   module,
   setModule,
+  delivery = false,
+  setDelivery,
+  loyalty = false,
+  setLoyalty,
   billing,
   setBilling,
   services,
@@ -1044,6 +1051,10 @@ export function OffreFields({
   setPlan: (p: (typeof PLANS)[number] | null) => void;
   module: boolean;
   setModule: (on: boolean) => void;
+  delivery?: boolean;
+  setDelivery: (on: boolean) => void;
+  loyalty?: boolean;
+  setLoyalty: (on: boolean) => void;
   billing: ProposalBilling;
   setBilling: (b: ProposalBilling) => void;
   services: LeadServices;
@@ -1062,9 +1073,6 @@ export function OffreFields({
               const suivant =
                 e.target.value === "aucune" ? null : (e.target.value as (typeof PLANS)[number]);
               setPlan(suivant);
-              // Sans formule, le module ne vit que greffé sur le site
-              // existant : coché « seul », il tombe avec la formule.
-              if (suivant === null && module && !services.integrationCommande) setModule(false);
             }}
           >
             {/* Les services se citent seuls : la formule est un choix, pas un
@@ -1092,22 +1100,21 @@ export function OffreFields({
           </Select>
         </Field>
       </div>
-      {/* SANS formule, ce module « seul » n'existe pas : la commande en ligne
-          se vend alors greffée sur le site existant (section Atelier, plus
-          bas) — 190 € de mise en service, puis 79 €/mois. Afficher les deux
-          ici ferait doublon (fondateur, 25/08). */}
-      {plan !== null && (
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1 text-xs text-mut">
-            {plan === "boost"
-              ? "Commande en ligne comprise dans Boost — rien à ajouter."
-              : "Module commande en ligne — 79 €/mois, mise en service 55 €."}
-          </div>
-          {plan !== "boost" && (
-            <Toggle on={module} label="Module commande en ligne" onChange={setModule} />
-          )}
-        </div>
-      )}
+      <Field label="Module client — avec ou sans formule" htmlFor={id("commerce")}>
+        <Select id={id("commerce")} value={delivery ? "delivery" : module || plan === "boost" ? "collect" : loyalty ? "loyalty" : "none"} onChange={(e) => {
+          const choice = e.target.value;
+          setModule(choice === "collect" || choice === "delivery");
+          setDelivery(choice === "delivery");
+          setLoyalty(choice === "loyalty");
+          if (choice === "none" || choice === "loyalty") setServices({ ...services, integrationCommande: false });
+        }}>
+          {plan !== "boost" && <option value="none">Aucun module client</option>}
+          {plan !== "boost" && <option value="loyalty">Fidélité seule — {fmtEuro(COMMERCE_PRICES.loyaltyMonthlyCents)}/mois</option>}
+          <option value="collect">Click & collect + fidélité — {plan === "boost" ? "inclus" : `${fmtEuro(COMMERCE_PRICES.collectMonthlyCents)}/mois`}</option>
+          <option value="delivery">Click & collect + livraison + fidélité — {plan === "boost" ? `+${fmtEuro(COMMERCE_PRICES.deliverySupplementMonthlyCents)}` : fmtEuro(COMMERCE_PRICES.deliveryMonthlyCents)}/mois · pilote</option>
+        </Select>
+        <p className="mt-2 text-xs leading-relaxed text-mut">Page de commande hébergée et back-office adapté inclus. La fidélité n’est jamais facturée deux fois. Livraison assurée par le restaurant, à activer après validation pilote.</p>
+      </Field>
 
       {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
           libellés sortent de la grille : changer un tarif ne réécrit pas cet
@@ -1196,9 +1203,6 @@ export function OffreFields({
             // L'intégration sans le module serait un devis incohérent — le
             // schéma la refuse ; l'écran la rend simplement impossible.
             if (on && plan !== "boost") setModule(true);
-            // Sans formule, le module n'existe qu'à travers l'intégration :
-            // décocher l'une décoche l'autre.
-            if (!on && plan === null) setModule(false);
           }}
         />
       </div>
@@ -1240,6 +1244,8 @@ function ResumeDeLOffre({
   offre: {
     plan: (typeof PLANS)[number] | null;
     onlineOrdering: boolean;
+    onlineDelivery?: boolean;
+    standaloneLoyalty?: boolean;
     billing: ProposalBilling;
     services: LeadServices;
   };
@@ -1249,6 +1255,7 @@ function ResumeDeLOffre({
     <>
       <div className="text-sm font-bold text-ink">
         {planChoiceLabel(offre.plan)}
+        {offre.onlineDelivery ? " + livraison" : offre.standaloneLoyalty && !offre.onlineOrdering && offre.plan !== "boost" ? " + fidélité" : ""}
         {offre.plan === "boost"
           ? " — commande en ligne comprise"
           : offre.onlineOrdering
@@ -1285,6 +1292,8 @@ function ProposalPanel({
   // `null` = sans formule : les services de l'Atelier se vendent seuls.
   const [plan, setPlan] = useState<(typeof PLANS)[number] | null>("complet");
   const [module, setModule] = useState(false);
+  const [delivery, setDelivery] = useState(false);
+  const [loyalty, setLoyalty] = useState(false);
   const [billing, setBilling] = useState<ProposalBilling>("mensuel");
   const [services, setServices] = useState<LeadServices>(EMPTY_SERVICES);
   const [note, setNote] = useState("");
@@ -1295,6 +1304,8 @@ function ProposalPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- brouillon de formulaire, re-synchronisé à chaque lead ouvert : mêmes raisons que le brouillon d'édition du tiroir.
     setPlan(lead.proposal ? lead.proposal.plan : "complet");
     setModule(lead.proposal?.onlineOrdering ?? false);
+    setDelivery(lead.proposal?.onlineDelivery ?? false);
+    setLoyalty(lead.proposal?.standaloneLoyalty ?? false);
     setBilling(lead.proposal?.billing ?? "mensuel");
     setServices(lead.proposal?.services ?? EMPTY_SERVICES);
     setNote(lead.proposal?.note ?? "");
@@ -1310,7 +1321,7 @@ function ProposalPanel({
     setBusy(true);
     try {
       const updated = await crm.updateLead(lead._id, {
-        proposal: { plan, onlineOrdering: module, billing, services, note: note.trim() },
+        proposal: { plan, onlineOrdering: module, onlineDelivery: delivery, standaloneLoyalty: loyalty, billing, services, note: note.trim() },
       });
       onChanged(updated);
       setEdit(false);
@@ -1386,6 +1397,10 @@ function ProposalPanel({
         setPlan={setPlan}
         module={module}
         setModule={setModule}
+        delivery={delivery}
+        setDelivery={setDelivery}
+        loyalty={loyalty}
+        setLoyalty={setLoyalty}
         billing={billing}
         setBilling={setBilling}
         services={services}
@@ -1401,7 +1416,7 @@ function ProposalPanel({
         />
       </Field>
       <div className="text-xs font-semibold text-accent">
-        {phrasePrix({ plan, onlineOrdering: module, billing, services })}
+        {phrasePrix({ plan, onlineOrdering: module, onlineDelivery: delivery, standaloneLoyalty: loyalty, billing, services })}
       </div>
       <div className="flex gap-2">
         <Btn type="submit" variant="ink" size="sm" disabled={busy}>

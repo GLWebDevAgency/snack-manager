@@ -82,6 +82,8 @@ export const TENANT_FIELDS = {
   founderDiscountCents: 1,
   billingCycle: 1,
   onlineOrdering: 1,
+  onlineDelivery: 1,
+  standaloneLoyalty: 1,
   atelier: 1,
   createdAt: 1,
   account: 1,
@@ -552,6 +554,8 @@ function toLead(doc: Record<string, unknown>): CrmLead {
       ? {
           plan: (raw.proposal.plan ?? null) as 'essentiel' | 'complet' | 'boost' | null,
           onlineOrdering: Boolean(raw.proposal.onlineOrdering),
+          onlineDelivery: raw.proposal.onlineDelivery === true,
+          standaloneLoyalty: raw.proposal.standaloneLoyalty === true,
           billing: (raw.proposal.billing ?? 'mensuel') as 'mensuel' | 'annuel',
           // Les propositions posées avant l'Atelier n'ont pas de services :
           // le schéma remplit les défauts (tout à faux, aucune cadence).

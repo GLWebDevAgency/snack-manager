@@ -1,4 +1,5 @@
 import { Schema, type InferSchemaType } from 'mongoose';
+import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import {
   ADMIN_LOG_ACTIONS,
   AUDIT_AUTHOR_MEANS,
@@ -66,6 +67,7 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnCompletedAt;
   delete returned.loyaltyEarnNextAttemptAt;
   delete returned.loyaltyEarnLeaseUntil;
+  delete returned.paymentFlow;
   return returned;
 }
 
@@ -280,6 +282,28 @@ export const TenantSchema = new Schema(
      * c'est une SOUSCRIPTION.
      */
     onlineOrdering: { type: Boolean, default: false },
+    onlineDelivery: { type: Boolean, default: false },
+    standaloneLoyalty: { type: Boolean, default: false },
+    websiteUrl: { type: String, default: null },
+    delivery: {
+      type: new Schema({
+        enabled: { type: Boolean, default: false },
+        zones: { type: [new Schema({
+          id: { type: String, required: true },
+          name: { type: String, required: true },
+          postalCodes: { type: [String], required: true },
+          feeCents: { type: Number, required: true, min: 0 },
+          minimumOrderCents: { type: Number, required: true, min: 0 },
+          freeDeliveryFromCents: {
+            type: Number, default: null, min: 1, max: 100_000,
+            validate: { validator: (value: number | null) => value === null || Number.isInteger(value), message: 'Seuil de gratuité entier requis' },
+          },
+        }, { _id: false })], default: [] },
+        leadTimeMin: { type: Number, default: 45 },
+        slotCapacity: { type: Number, default: 2 },
+      }, { _id: false }),
+      default: () => ({ enabled: false, zones: [], leadTimeMin: 45, slotCapacity: 2 }),
+    },
     /**
      * LES DÉROGATIONS DE CAPACITÉ — l'exception commerciale, tracée.
      *
@@ -961,7 +985,7 @@ export const OrderSchema = new Schema(
     loyaltyEarnNextAttemptAt: { type: Date, default: null, select: false },
     loyaltyEarnLeaseUntil: { type: Date, default: null, select: false },
     channel: { type: String, enum: ['online', 'pos', 'phone'], required: true },
-    type: { type: String, enum: ['surplace', 'emporter', 'pickup'], required: true },
+    type: { type: String, enum: ['surplace', 'emporter', 'pickup', 'delivery'], required: true },
     lines: { type: [OrderLineSub], required: true },
     // Sous-schémas explicites + required : sans cela, Mongoose 8.24 infère les
     // objets imbriqués comme optionnels et tout accès devient nullable côté TS.
@@ -969,6 +993,7 @@ export const OrderSchema = new Schema(
       type: new Schema(
         {
           subtotal: { type: Number, required: true },
+          deliveryFee: { type: Number, default: 0, min: 0 },
           /**
            * La remise portée par le ticket — geste commercial OU promotion.
            *
@@ -1023,10 +1048,65 @@ export const OrderSchema = new Schema(
            * et aucun chemin de création ne sait plus la fabriquer.
            */
           stripeAccountId: { type: String, default: null },
+          refundedCents: { type: Number, default: 0, min: 0 },
+          pendingRefundCents: { type: Number, default: 0, min: 0 },
+          refundSyncVersion: { type: Number, default: 0, min: 0 },
+          refunds: { type: [new Schema({
+            id: { type: String, required: true },
+            amountCents: { type: Number, required: true, min: 0 },
+            status: { type: String, required: true },
+            operationId: { type: String, default: null },
+            reason: { type: String, default: '' },
+          }, { _id: false })], default: [] },
         },
         { _id: false },
       ),
       required: true,
+    },
+    // Preuve privée persistée AVANT tout appel bancaire. Aucun défaut ne
+    // convertit une ancienne commande en preuve d'absence de PaymentIntent.
+    paymentFlow: {
+      type: new Schema({
+        version: { type: Number, enum: [1], required: true },
+        origin: { type: String, enum: ['created_v1', 'adopted_intent', 'legacy_unknown'], required: true },
+        phase: { type: String, enum: ['open', 'closing', 'closed', 'settled', 'review_required'], required: true },
+        attempt: {
+          type: new Schema({
+            id: { type: String, required: true },
+            accountId: { type: String, default: null },
+            environment: { type: String, enum: ['test', 'live'], required: true },
+            amountCents: { type: Number, min: 1, required: true, validate: Number.isSafeInteger },
+            currency: { type: String, enum: ['eur'], required: true },
+            idempotencyKey: { type: String, required: true },
+            metadata: {
+              type: new Schema({
+                orderId: { type: String, required: true },
+                tenantId: { type: String, required: true },
+                orderNumber: { type: String, required: true },
+              }, { _id: false }),
+              required: true,
+            },
+            preparedAt: { type: Date, required: true },
+            requestStartedAt: { type: Date, default: null },
+            recoveryUntil: { type: Date, required: true },
+          }, { _id: false }),
+          default: null,
+        },
+        close: {
+          type: new Schema({
+            operationId: { type: String, required: true },
+            reason: { type: String, required: true },
+            requestedBy: { type: String, required: true },
+            requestedAt: { type: Date, required: true },
+          }, { _id: false }),
+          default: null,
+        },
+        providerStatus: { type: String, default: null },
+        providerCheckedAt: { type: Date, default: null },
+        reviewReason: { type: String, default: null },
+      }, { _id: false }),
+      default: null,
+      select: false,
     },
     status: {
       type: String,
@@ -1051,6 +1131,26 @@ export const OrderSchema = new Schema(
       default: null,
     },
     note: { type: String, default: null },
+    delivery: {
+      type: new Schema({
+        address: { type: new Schema({
+          line1: { type: String, required: true },
+          line2: { type: String, default: '' },
+          postalCode: { type: String, required: true },
+          city: { type: String, required: true },
+          country: { type: String, enum: ['FR'], default: 'FR' },
+        }, { _id: false }), required: true },
+        instructions: { type: String, default: '' },
+        zoneId: { type: String, required: true },
+        zoneName: { type: String, required: true },
+        feeCents: { type: Number, required: true, min: 0 },
+        estimatedMinutes: { type: Number, required: true },
+        dispatchedAt: { type: Date, default: null },
+        deliveredAt: { type: Date, default: null },
+        driverName: { type: String, default: null },
+      }, { _id: false }),
+      default: null,
+    },
     /**
      * Jeton de suivi public — 32 caractères URL-safe tirés de `crypto`.
      *
@@ -1107,6 +1207,7 @@ export const CounterSchema = new Schema(
   {
     _id: { type: String, required: true }, // `<tenantId>:<yyyymmdd>`
     seq: { type: Number, default: 0 },
+    pendingInvoice: { type: InvoicePendingSchema, default: null },
   },
   { versionKey: false },
 );
@@ -1261,6 +1362,8 @@ export const LeadSchema = new Schema(
           // (même motif que `reseauxSociaux` plus bas pour l'enum nullable).
           plan: { type: String, enum: ['essentiel', 'complet', 'boost', null], default: null },
           onlineOrdering: { type: Boolean, default: false },
+          onlineDelivery: { type: Boolean, default: false },
+          standaloneLoyalty: { type: Boolean, default: false },
           billing: { type: String, enum: ['mensuel', 'annuel'], default: 'mensuel' },
           // L'Atelier — les services retenus. Les prix ne se stockent pas :
           // ils se dérivent de la grille (@sm/contracts), comme le plan.
@@ -1908,6 +2011,10 @@ export const InvoiceSchema = new Schema(
     issuedAt: { type: Date, default: null },
     dueAt: { type: Date, required: true },
     paidAt: { type: Date, default: null },
+    stripeCheckoutSessionId: { type: String, default: null },
+    stripePaymentIntentId: { type: String, default: null },
+    stripePaymentEventId: { type: String, default: null },
+    stripeCheckoutExpiresAt: { type: Date, default: null },
     /** Comment l'argent est arrivé — `null` tant que rien n'est encaissé. */
     method: {
       type: String,
@@ -1952,7 +2059,7 @@ InvoiceSchema.index({ number: 1 }, { unique: true });
 InvoiceSchema.index({ tenantId: 1, dueAt: -1 });
 /** File des impayés du parc : on balaie par statut, du plus ancien au plus récent. */
 InvoiceSchema.index({ status: 1, dueAt: 1 });
-/** Garde-fou anti-double-facturation : un abonnement par client et par période. */
+/** Accélère la vérification historique ; l'arbitrage vit dans InvoiceIssuance. */
 InvoiceSchema.index({ tenantId: 1, kind: 1, 'period.start': 1 });
 export type Invoice = InferSchemaType<typeof InvoiceSchema>;
 
@@ -1978,6 +2085,7 @@ export const MODELS = {
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
   Invoice: { name: 'Invoice', schema: InvoiceSchema, collection: 'invoices' },
+  InvoiceIssuance: { name: 'InvoiceIssuance', schema: InvoiceIssuanceSchema, collection: 'invoiceIssuances' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   ErrorEvent: { name: 'ErrorEvent', schema: ErrorEventSchema, collection: 'errorevents' },
   AlertLog: { name: 'AlertLog', schema: AlertLogSchema, collection: 'alertlogs' },

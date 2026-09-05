@@ -15,6 +15,7 @@ import {
   euros,
   type Shot,
 } from "@/components/marketing/content";
+import { LOYALTY_PILOT_NOTE } from "@/components/marketing/commerce-offers";
 
 /* ── Les sections, et leur sommaire ──────────────────────────── */
 
@@ -42,15 +43,15 @@ export const COMMANDE_SECTIONS: readonly CommandeSectionMeta[] = [
     id: "cuisine",
     nav: "Vers la cuisine",
     badge: "Sans ressaisie",
-    title: "La commande tombe en cuisine, toute seule.",
-    lead: "Le ticket part droit à l'écran cuisine, avec son créneau de retrait : zéro ressaisie, zéro tablette de plus.",
+    title: "Recevez et traitez vos commandes en direct.",
+    lead: "Le back-office inclus reçoit vos commandes et leurs créneaux. Si vous utilisez notre cuisine KDS, elles rejoignent aussi sa file.",
   },
   {
     id: "fidelite",
     nav: "La fidélité",
-    badge: "Ils reviennent",
-    title: "La fidélité sans carte tamponnée.",
-    lead: "Les points se cumulent tout seuls à chaque commande. L'habitué a une raison de plus de commander en direct — et son numéro est chez vous.",
+    badge: "Pilote accompagné",
+    title: "Votre programme fidélité, configuré avec vous.",
+    lead: LOYALTY_PILOT_NOTE,
   },
   {
     id: "google",
@@ -95,7 +96,7 @@ export const COMMANDE_SHOTS = {
 export const COMMANDE_HERO = {
   badge: "La commande en ligne",
   title: "La commande en ligne sans commission.",
-  lead: "Le click & collect à vos couleurs : vos clients commandent, choisissent leur créneau, et la cuisine reçoit le ticket — pendant que vous servez.",
+  lead: "Le click & collect à vos couleurs : commande, créneau et paiement. Le back-office inclus vous permet de traiter les commandes, même sans notre caisse. La fidélité est incluse en pilote accompagné.",
   price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
   claim: `+ ${euros(MODULE_SETUP_CENTS)} de mise en service, une fois — les deux compris dans Boost`,
 } as const;
@@ -106,24 +107,25 @@ export const DIRECT_POINTS: readonly string[] = [
   "Votre page, à vos couleurs, sur votre nom de domaine — ou branchée sur votre site actuel.",
   "Le prix affiché en ligne est celui de la salle : rien à gonfler pour absorber une commission.",
   "Le client est le vôtre : son numéro, son historique, ses habitudes restent chez vous.",
-  "Vous livrez déjà ? Vous continuez comme aujourd'hui — vos tournées, vos horaires.",
+  "La livraison par votre restaurant est une option distincte, en validation pilote avant activation. Aucun livreur tiers n’est fourni.",
 ] as const;
 
 /* ── 2. Vers la cuisine ──────────────────────────────────────── */
 
 export const CUISINE_LIEN_POINTS: readonly string[] = [
-  "Des créneaux de retrait à votre rythme, avec une capacité par créneau : la cuisine n'est jamais submergée.",
+  "Des horaires et une capacité par créneau pour limiter le nombre de commandes acceptées.",
   "Ça déborde ? Vous mettez la commande en ligne en pause d'un geste, avec un mot à vos clients.",
   "Paiement en ligne ou au retrait : c'est vous qui décidez ce que la page propose.",
-  "Le client suit sa commande sur son téléphone — il arrive quand c'est prêt, pas avant.",
+  "Le client suit les statuts de sa commande sur son téléphone et retrouve son créneau de retrait.",
 ] as const;
 
 /* ── 3. La fidélité ──────────────────────────────────────────── */
 
 export const FIDELITE_POINTS: readonly string[] = [
-  "Les points se cumulent tout seuls, à chaque commande — rien à tamponner, rien à expliquer.",
+  "Vous choisissez points ou tampons, seuils et récompenses avec notre accompagnement. L’utilisation sécurisée des récompenses reste à finaliser ; elle n’est pas disponible dans ce pilote.",
+  "L’attribution automatique de points après une commande en ligne n’est pas disponible. Les opérations assistées et leurs limites sont précisées avant ouverture du programme.",
   "Les codes promo, quand vous voulez pousser une offre — créés depuis le back-office.",
-  "Les comptes clients gardent les coordonnées et l'historique — chez vous, exportables.",
+  "Le back-office permet de gérer les membres et leurs cartes, avec les informations et consentements du programme.",
 ] as const;
 
 /* ── 4. Sur Google ───────────────────────────────────────────── */
@@ -137,6 +139,6 @@ export const GOOGLE_POINTS: readonly string[] = [
 /* ── L'appel final ───────────────────────────────────────────── */
 
 export const COMMANDE_CTA = {
-  title: "Commandez chez Class'Food, pour voir.",
+  title: "Essayez le parcours de commande en démonstration.",
   line: "Le tunnel de commande est en démonstration sur la page d'accueil : composez un menu, choisissez un créneau — personne ne vous demandera votre e-mail.",
 } as const;

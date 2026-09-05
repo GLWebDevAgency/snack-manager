@@ -44,6 +44,7 @@ import { useTenantSocket } from "@/lib/ws";
 import { Icon, ToastProvider, useToast } from "@/components/ui";
 import { clearAllEnrollmentRecoveries } from "./fidelite/clients/enrollment-recovery";
 import {
+  accueilAdmin,
   barreMobile,
   groupesMobileRestants,
   groupesVisibles,
@@ -51,6 +52,8 @@ import {
   type NavItemAffiche,
 } from "./navigation";
 import { roleAdmin } from "./session";
+import { AdminAccess } from "./access";
+import { orderAccessScope } from "@sm/contracts/commerce";
 
 const RAIL = 66;
 const PANEL = 232;
@@ -149,14 +152,17 @@ function EntreeBarre({
     );
   }
   return (
-    <span
+    <Link
+      href={item.href}
+      onClick={onClick}
+      aria-current={actif ? "page" : undefined}
       title={`${item.label} — ${CAPACITE_VERROU_INDICE}`}
-      className={cx(className, "cursor-not-allowed opacity-50")}
+      className={cx(className, "opacity-70 hover:opacity-100")}
     >
       {children}
       {montrerCadenas && <Icon name="lock" size={15} className="shrink-0" />}
       <span className="sr-only">{CAPACITE_VERROU_INDICE}</span>
-    </span>
+    </Link>
   );
 }
 
@@ -173,6 +179,8 @@ function Shell({ children }: { children: ReactNode }) {
   const toast = useToast();
 
   const [tenant, setTenant] = useState<TenantMe | null>(null);
+  const [tenantFailed, setTenantFailed] = useState(false);
+  const ordersAllowed = orderAccessScope(tenant?.capacites ?? []) !== "none";
   const [suspendu, setSuspendu] = useState(false);
   const [newCount, setNewCount] = useState(0);
   const newCountRevision = useRef(0);
@@ -257,11 +265,7 @@ function Shell({ children }: { children: ReactNode }) {
   // `mounted` évite de rediriger sur le rendu d'hydratation : localStorage
   // n'existe pas côté serveur, donc `hasToken` y vaut toujours false.
   //
-  // La redirection `/admin` → tableau de bord vivait AUSSI ici, et c'était du
-  // code mort : `admin/page.tsx` redirige côté serveur, avant que cette coque
-  // ne soit montée. Les deux destinations divergeaient en silence (la page
-  // envoyait vers la carte, la coque vers le tableau de bord) ; il n'en reste
-  // qu'une, celle du serveur, et elle vise l'écran où mène déjà la connexion.
+  // L'accueil est choisi plus bas, une fois les accès serveur connus.
   const [mounted, setMounted] = useState(false);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- drapeau d'hydratation : sa valeur DOIT différer entre le rendu serveur et le client, aucun calcul au rendu ne peut donc le produire. Dérivé, la garde lirait `hasToken === false` au premier rendu et renverrait vers /admin/login un gérant pourtant connecté.
   useEffect(() => setMounted(true), []);
@@ -291,6 +295,7 @@ function Shell({ children }: { children: ReactNode }) {
       })
       .catch((e) => {
         if (cancelled) return;
+        setTenantFailed(true);
         if (e instanceof ApiError && e.status === 401) {
           clearAllEnrollmentRecoveries();
           clearToken();
@@ -320,7 +325,7 @@ function Shell({ children }: { children: ReactNode }) {
 
   // ── Badge « Commandes » : nombre de commandes au statut new, live ──
   const refreshNewCount = useCallback(async function run() {
-    if (!hasToken) return;
+    if (!hasToken || !ordersAllowed) return;
     if (activeNewCountRequest.current) {
       newCountReconcileRequested.current = true;
       return;
@@ -382,7 +387,7 @@ function Shell({ children }: { children: ReactNode }) {
         }, ORDER_COUNT_RECONCILE_DELAY_MS);
       }
     }
-  }, [hasToken]);
+  }, [hasToken, ordersAllowed]);
 
   const scheduleNewCountReconcile = useCallback(() => {
     // Invalide immédiatement la réponse éventuellement photographiée avant
@@ -429,7 +434,7 @@ function Shell({ children }: { children: ReactNode }) {
     "order.updated": () => {
       scheduleNewCountReconcile();
     },
-  });
+  }, ordersAllowed);
 
   // Ferme aussi la fenêtre entre le GET initial et l'ouverture du socket, et
   // récupère les événements perdus pendant chaque coupure.
@@ -488,6 +493,12 @@ function Shell({ children }: { children: ReactNode }) {
   const groupes = useMemo(() => groupesVisibles(ctxNav), [ctxNav]);
   const barre = useMemo(() => barreMobile(ctxNav), [ctxNav]);
   const groupesPlus = useMemo(() => groupesMobileRestants(ctxNav), [ctxNav]);
+
+  useEffect(() => {
+    if (pathname !== "/admin" || (!tenant && !suspendu)) return;
+    const destination = accueilAdmin(ctxNav);
+    if (destination) router.replace(demo ? `${destination}?demo=1` : destination);
+  }, [pathname, tenant, suspendu, ctxNav, router, demo]);
 
   // ── Titre / sous-titre de la topbar ──
   //
@@ -887,7 +898,9 @@ function Shell({ children }: { children: ReactNode }) {
               `overflow-x-hidden` : garde-fou mobile — un tableau qui déborde
               défile dans SON conteneur, jamais en panoramique sur la page. */}
           <main className="cf-scroll relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-bg">
-            {children}
+            <AdminAccess pathname={pathname} context={ctxNav} pending={!tenant && !suspendu} failed={tenantFailed} demo={demo}>
+              {children}
+            </AdminAccess>
           </main>
         </div>
       </div>

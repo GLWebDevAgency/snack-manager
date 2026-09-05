@@ -12,6 +12,8 @@ import Redis from 'ioredis';
 import { Money, ordering } from '@sm/domain';
 import {
   type CreateOrder,
+  type JwtPayload,
+  orderAccessScope,
   plafondRemiseLabel,
   REMISE_PLAFOND_CENTS,
   type StaffRole,
@@ -22,42 +24,17 @@ import {
   ordersChannel,
   WS_EVENTS,
 } from '@sm/contracts';
-import type { Counter, Order, Product, Promotion } from '@sm/db';
+import type { Counter, Order, Product, Promotion, Tenant } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { AuditService } from '../audit/audit.module';
 import { resolvePayment } from './payment';
 import { newTrackingToken, trackingFilter } from './tracking';
-
-/**
- * Le document Mongo → la règle que le domaine sait lire.
- *
- * Tolérant aux promotions d'AVANT les bornes : `minSubtotalCents`,
- * `maxDiscountCents` et `maxUsage` sont arrivés avec l'application des
- * promotions, et `.lean()` ne matérialise pas les défauts Mongoose. Absents,
- * ils valent « aucune borne » — ce qui est le comportement qu'avait la
- * promotion quand elle a été créée.
- */
-function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
-  const nombre = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-  const date = (v: unknown): Date | null => (v instanceof Date ? v : null);
-  return {
-    id: String(doc._id),
-    name: String(doc.name ?? ''),
-    kind: doc.kind as ordering.PromotionRule['kind'],
-    value: nombre(doc.value),
-    code: typeof doc.code === 'string' && doc.code ? doc.code : null,
-    channels: Array.isArray(doc.channels) ? (doc.channels as string[]) : [],
-    startsAt: date(doc.startsAt),
-    endsAt: date(doc.endsAt),
-    active: doc.active === true,
-    minSubtotalCents: nombre(doc.minSubtotalCents),
-    maxDiscountCents: nombre(doc.maxDiscountCents),
-    maxUsage: nombre(doc.maxUsage),
-    usageCount: nombre(doc.usageCount),
-    offeredProductId: doc.offeredProductId ? String(doc.offeredProductId) : null,
-  };
-}
+import { CapacitesService } from '../../common/capacites';
+import { priceOrderLines } from './price-order-lines';
+import { computeDeliveryForOrder } from '../delivery/delivery-order';
+import { PaymentsService } from '../ordering/payments.service';
+import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -66,6 +43,8 @@ function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
  * annonce sa troncature plutôt que de laisser croire à un total.
  */
 const ORDERS_PAGE_MAX = 200;
+/** La cuisine prépare ; seule une identité de comptoir/gestion confirme la remise. */
+const ORDER_HANDOFF_ROLES: readonly JwtPayload['role'][] = ['owner', 'cogerant', 'gerant', 'caisse'];
 type OrderReadFilter = Readonly<{ status?: OrderStatus; since?: string }>;
 
 @Injectable()
@@ -77,6 +56,9 @@ export class OrdersService {
     @InjectModel('Promotion') private readonly promotions: Model<Promotion>,
     @Inject(REDIS_PUB) private readonly redis: Redis,
     private readonly audit: AuditService,
+    @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
+    private readonly capacites: CapacitesService,
+    private readonly payments: PaymentsService,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
@@ -88,11 +70,14 @@ export class OrdersService {
   }
 
   /** Filtre tenant et métier unique pour la liste et sa projection count-only. */
-  private readFilter(
+  private async readFilter(
     tenantId: string,
     filter: OrderReadFilter,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const query: Record<string, unknown> = { tenantId };
+    const scope = orderAccessScope(await this.capacites.pourTenant(tenantId));
+    if (scope === 'none') throw new ForbiddenException('La gestion des commandes n’est pas incluse dans votre offre.');
+    if (scope === 'online') query.channel = 'online';
     if (filter.status) query.status = filter.status;
     if (filter.since) query.createdAt = { $gte: new Date(filter.since) };
     return query;
@@ -111,6 +96,7 @@ export class OrdersService {
     delete payload.loyaltyEarnCompletedAt;
     delete payload.loyaltyEarnNextAttemptAt;
     delete payload.loyaltyEarnLeaseUntil;
+    delete payload.paymentFlow;
     return payload;
   }
 
@@ -165,59 +151,9 @@ export class OrdersService {
     lines: readonly { productId: unknown; unitPrice: number }[],
   ): Promise<{ discount: { amount: number; reason: string; promotionId: unknown } } | null> {
     const code = dto.promoCode?.trim();
-    const filtre = code
-      ? { tenantId, active: true, code: code.toUpperCase() }
-      : { tenantId, active: true, code: null };
-    const candidates = await this.promotions.find(filtre).lean();
-
-    if (code && candidates.length === 0) {
-      throw new BadRequestException(`Le code « ${code} » ne correspond à aucune offre`);
-    }
-    if (candidates.length === 0) return null;
-
-    // Le prix unitaire réellement retenu pour chaque produit du panier — c'est
-    // lui que vaut un « produit offert », options comprises, et non le prix
-    // catalogue. Le MOINS cher quand le produit figure sur plusieurs lignes :
-    // offrir le plus cher des exemplaires serait un cadeau qu'on n'a pas promis.
-    const prixAuPanier = new Map<string, Money>();
-    for (const l of lines) {
-      const id = String(l.productId);
-      const actuel = prixAuPanier.get(id);
-      if (!actuel || l.unitPrice < actuel.cents) prixAuPanier.set(id, Money.fromCents(l.unitPrice));
-    }
-    const contexte = {
-      subtotal: Money.fromCents(subtotal),
-      channel: dto.channel,
-      code: code ?? null,
-      now: new Date(),
-      prixAuPanier,
-    };
-
-    // La MEILLEURE offre pour le client parmi celles qui passent. Avec un code
-    // saisi il n'y en a qu'une ; sans code, en retenir une moins avantageuse
-    // qu'une autre également applicable serait un choix qu'on ne saurait pas
-    // justifier au comptoir.
-    let retenue: { id: unknown; amount: number; reason: string } | null = null;
-    let refus: string | null = null;
-    for (const brut of candidates) {
-      const resultat = ordering.appliquerPromotion(versRegle(brut), contexte);
-      if (!resultat.ok) {
-        refus ??= resultat.error.message;
-        continue;
-      }
-      const cents = resultat.value.amount.cents;
-      if (!retenue || cents > retenue.amount) {
-        retenue = { id: brut._id, amount: cents, reason: resultat.value.reason };
-      }
-    }
-
-    if (!retenue) {
-      // Un code SAISI qui ne passe pas doit dire pourquoi : le client l'attend.
-      // Une offre d'office qui ne passe pas ne regarde personne — la commande
-      // se poursuit au tarif normal.
-      if (code) throw new BadRequestException(refus ?? `Le code « ${code} » n’est pas applicable`);
-      return null;
-    }
+    const candidates = await this.promotions.find(promotionCandidatesFilter(tenantId, code)).lean();
+    const retenue = selectCartPromotion(candidates, { subtotal, channel: dto.channel, promoCode: code, now: new Date(), lines });
+    if (!retenue) return null;
 
     // Le quota s'arbitre ici, en base. `maxUsage: 0` vaut illimité — la
     // condition doit donc laisser passer ce cas sans le confondre avec un
@@ -284,80 +220,18 @@ export class OrdersService {
     actor: string,
     deviceRef: string | null = null,
   ) {
-    const existing = await this.orders.findOne({ tenantId, clientId: dto.clientId });
+    const permitted = await this.readFilter(tenantId, {});
+    if (permitted.channel && dto.channel !== permitted.channel) {
+      throw new ForbiddenException('Cette offre permet uniquement les commandes en ligne.');
+    }
+    const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId });
     if (existing) {
-      return { order: this.withTrackingToken(existing), created: false as const };
+      return { order: await this.withTrackingToken(existing), created: false as const };
     }
 
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
-    const byId = new Map(prods.map((p) => [String(p._id), p]));
-
-    let subtotal = 0;
-    const lines = dto.lines.map((line) => {
-      const prod = byId.get(line.productId);
-      if (!prod) throw new NotFoundException(`Produit ${line.productId} introuvable`);
-      if (prod.outOfStock) {
-        throw new ConflictException(`« ${prod.name} » est en rupture`);
-      }
-
-      let variantName: string | null = null;
-      let unitPrice = prod.price;
-      if (prod.variants.length > 0) {
-        const variant = prod.variants.find((v) => v.key === line.variantKey);
-        if (!variant) {
-          throw new BadRequestException(`Variante requise pour « ${prod.name} »`);
-        }
-        variantName = variant.name;
-        unitPrice = variant.price;
-      }
-
-      const options = line.options.map((sel) => {
-        const group = prod.optionGroups.find((g) => g.key === sel.groupKey);
-        const choice = group?.choices.find((c) => c.key === sel.choiceKey);
-        if (!group || !choice) {
-          throw new BadRequestException(`Option inconnue pour « ${prod.name} »`);
-        }
-        const perVariant =
-          line.variantKey && group.perVariant
-            ? (group.perVariant as Record<string, { priceDelta?: number }>)[line.variantKey]
-            : undefined;
-        const priceDelta = perVariant?.priceDelta ?? choice.priceDelta;
-        unitPrice += priceDelta;
-        return { groupKey: group.key, choiceKey: choice.key, name: choice.name, priceDelta };
-      });
-
-      // Groupes obligatoires (min effectif selon la variante)
-      for (const group of prod.optionGroups) {
-        const rules =
-          line.variantKey && group.perVariant
-            ? (group.perVariant as Record<string, { min?: number; max?: number }>)[line.variantKey]
-            : undefined;
-        const min = rules?.min ?? group.min ?? 0;
-        const max = rules?.max ?? group.max ?? Infinity;
-        const count = options.filter((o) => o.groupKey === group.key).length;
-        if (count < min || count > max) {
-          throw new BadRequestException(
-            `« ${group.name} » : ${min === max ? min : `${min}–${max === Infinity ? '∞' : max}`} choix attendu(s) pour « ${prod.name} »`,
-          );
-        }
-      }
-
-      const lineTotal = unitPrice * line.qty;
-      subtotal += lineTotal;
-      return {
-        productId: prod._id,
-        name: prod.name,
-        variantKey: line.variantKey ?? null,
-        variantName,
-        options,
-        removed: line.removed,
-        note: line.note ?? null,
-        qty: line.qty,
-        unitPrice,
-        lineTotal,
-      };
-    });
+    const { subtotal, lines } = priceOrderLines(prods, dto.lines);
 
     // LA PROMOTION, RÉSOLUE CÔTÉ SERVEUR comme les prix.
     //
@@ -368,10 +242,14 @@ export class OrdersService {
 
     // Ce que le client doit RÉELLEMENT — le seul montant qui fasse autorité
     // pour l'encaissement, le rendu monnaie et le ticket.
-    const totalDu = subtotal - (promotion?.discount.amount ?? 0);
+    const subtotalAfterDiscount = subtotal - (promotion?.discount.amount ?? 0);
 
-    const number = await this.nextNumber(tenantId);
     try {
+      const number = await this.nextNumber(tenantId);
+      const tenant = dto.type === 'delivery' ? await this.tenants.findById(tenantId).lean() : null;
+      if (dto.type === 'delivery' && !tenant) throw new NotFoundException('Établissement introuvable');
+      const delivery = computeDeliveryForOrder(tenant ?? {}, dto, subtotalAfterDiscount);
+      const totalDu = subtotalAfterDiscount + (delivery?.feeCents ?? 0);
       const order = await this.orders.create({
         tenantId,
         number,
@@ -389,7 +267,8 @@ export class OrdersService {
         channel: dto.channel,
         type: dto.type,
         lines,
-        totals: { subtotal, discount: promotion?.discount ?? null, total: totalDu },
+        totals: { subtotal, discount: promotion?.discount ?? null, deliveryFee: delivery?.feeCents ?? 0, total: totalDu },
+        delivery,
         // LE TOTAL DÛ, remise comprise — jamais le sous-total.
         //
         // Il vient d'être recalculé depuis le menu, pas du corps envoyé par
@@ -402,6 +281,8 @@ export class OrdersService {
         // 18 € se fait refuser « montant reçu insuffisant », et celui qui tend
         // 20 € repart sans son rendu monnaie.
         payment: resolvePayment(dto.channel, dto.payment, totalDu),
+        paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null,
+          providerStatus: null, providerCheckedAt: null, reviewReason: null },
         trackingToken: newTrackingToken(),
         status: 'new',
         statusHistory: [{ status: 'new', at: new Date(), by: actor }],
@@ -434,9 +315,9 @@ export class OrdersService {
 
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
-        const raced = await this.orders.findOne({ tenantId, clientId: dto.clientId });
+        const raced = await this.orders.findOne({ ...permitted, clientId: dto.clientId });
         if (raced) {
-          return { order: this.withTrackingToken(raced), created: false as const };
+          return { order: await this.withTrackingToken(raced), created: false as const };
         }
       }
       throw err;
@@ -451,7 +332,7 @@ export class OrdersService {
    * consommer une seconde preuve, un second quota ou un second numero.
    */
   async findByClientId(tenantId: string, clientId: string) {
-    const existing = await this.orders.findOne({ tenantId, clientId });
+    const existing = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), clientId });
     return existing ? this.withTrackingToken(existing) : null;
   }
 
@@ -465,7 +346,7 @@ export class OrdersService {
     clientId: string,
   ): Promise<OrderLoyaltyEarnStatus | null> {
     const order = await this.orders
-      .findOne({ tenantId, clientId })
+      .findOne({ ...await this.readFilter(tenantId, {}), clientId })
       .select('+loyaltyEarnState +loyaltyEarnAttempts +loyaltyEarnLastError')
       .lean<{
         loyaltyEarnState?: string | null;
@@ -551,7 +432,7 @@ export class OrdersService {
    * plutôt que de conclure faux.
    */
   async list(tenantId: string, filter: OrderReadFilter) {
-    const query = this.readFilter(tenantId, filter);
+    const query = await this.readFilter(tenantId, filter);
     const [rows, total] = await Promise.all([
       this.orders.find(query).sort({ createdAt: -1 }).limit(ORDERS_PAGE_MAX).lean(),
       this.orders.countDocuments(query),
@@ -563,11 +444,11 @@ export class OrdersService {
     tenantId: string,
     filter: OrderReadFilter,
   ): Promise<{ total: number }> {
-    return { total: await this.orders.countDocuments(this.readFilter(tenantId, filter)) };
+    return { total: await this.orders.countDocuments(await this.readFilter(tenantId, filter)) };
   }
 
   async byId(tenantId: string, id: string) {
-    const order = await this.orders.findOne({ _id: id, tenantId });
+    const order = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), _id: id }).select('+paymentFlow');
     if (!order) throw new NotFoundException('Commande introuvable');
     return order;
   }
@@ -593,39 +474,96 @@ export class OrdersService {
         at: new Date(step.at ?? order.createdAt ?? Date.now()).toISOString(),
       })),
       pickupSlot: order.pickup?.slot ? new Date(order.pickup.slot).toISOString() : null,
+      payment: {
+        status: order.payment.status as 'pending' | 'paid' | 'refunded',
+        method: order.payment.method as 'online' | 'counter',
+        refundedCents: order.payment.refundedCents ?? 0,
+        pendingRefundCents: order.payment.pendingRefundCents ?? 0,
+      },
+      fulfillment: order.type === 'delivery' ? 'delivery' : 'pickup',
+      delivery: order.type === 'delivery' && order.delivery ? {
+        dispatchedAt: order.delivery.dispatchedAt ? new Date(order.delivery.dispatchedAt).toISOString() : null,
+        deliveredAt: order.delivery.deliveredAt ? new Date(order.delivery.deliveredAt).toISOString() : null,
+        estimatedMinutes: order.delivery.estimatedMinutes,
+      } : null,
     };
   }
 
   /**
    * Avancement de statut. Règle offline « le plus avancé gagne » :
    * un rejeu vers un statut déjà dépassé est ignoré (renvoie l'état courant).
+   * Une NOUVELLE remise exige toutefois `ready`, quel que soit le mode.
+   * Les droits se vérifient avant les retours idempotents : un ancien client
+   * KDS n'acquiert jamais le droit de confirmer une remise en la rejouant.
    */
-  async updateStatus(tenantId: string, id: string, status: OrderStatus, actor: string) {
+  async updateStatus(tenantId: string, id: string, status: OrderStatus, actor: JwtPayload) {
+    if (status === 'cancelled') {
+      throw new ForbiddenException('Utilisez l’annulation avec confirmation pour fermer le paiement en sécurité.');
+    }
+    if (actor.tenantId !== tenantId) {
+      throw new ForbiddenException('Cette identité ne peut pas agir pour cet établissement.');
+    }
+    if (status === 'delivered' && !ORDER_HANDOFF_ROLES.includes(actor.role)) {
+      throw new ForbiddenException('La remise au client doit être confirmée par la caisse ou le gérant, jamais par la cuisine.');
+    }
     const order = await this.byId(tenantId, id);
     const current = order.status as OrderStatus;
     if (status === current) return order;
     if (ORDER_STATUS_RANK[status] < ORDER_STATUS_RANK[current]) return order;
     if (current === 'delivered' || current === 'cancelled') return order;
 
+    if (order.paymentFlow && ['closing', 'closed', 'review_required'].includes(order.paymentFlow.phase)) {
+      throw new ConflictException('Paiement en cours de fermeture ou à vérifier — actualisez la commande avant de continuer.');
+    }
+
+    if (order.payment.status === 'refunded') throw new ConflictException('Cette commande a été remboursée.');
+    if (order.type === 'delivery' && order.payment.status !== 'paid') {
+      throw new ConflictException('Le paiement en ligne doit être confirmé avant la préparation de la livraison.');
+    }
+
+    if (status === 'delivered' && current !== 'ready') {
+      throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
+    }
+    if (status === 'delivered' && order.payment.status === 'pending' && (
+      order.payment.method === 'online' ||
+      order.paymentFlow?.origin !== 'created_v1' || order.paymentFlow.phase !== 'open' ||
+      order.paymentFlow.attempt || order.payment.stripePaymentIntentId
+    )) {
+      throw new ConflictException('Le paiement en ligne doit être vérifié avant tout règlement au comptoir. Aucun encaissement ne sera supposé.');
+    }
+    if (order.type === 'delivery' && status === 'delivered') {
+      if (!order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
+        throw new ConflictException('Une livraison doit être payée et partie avec le livreur avant d’être remise.');
+      }
+      order.delivery.deliveredAt = new Date();
+    }
+
     order.status = status;
-    order.statusHistory.push({ status, at: new Date(), by: actor });
-    // FILET : une commande REMISE a forcément été réglée.
-    //
-    // Il ne visait que `method: 'counter'`, et ratait donc le cas le plus
-    // fréquent des ennuis de paiement en ligne : le client choisit la carte, la
-    // commande naît en `method: 'online'`, Stripe ne se charge pas (bloqueur,
-    // réseau d'entreprise) ou le client renonce et règle au comptoir. Son
-    // paiement restait « en attente » POUR TOUJOURS — aucun geste du logiciel
-    // ne pouvait plus le solder, et le montant grossissait indéfiniment la
-    // ligne « à encaisser au retrait » de chaque Z.
-    //
-    // Un restaurant ne remet pas la marchandise sans être payé : la remise vaut
-    // donc encaissement, quel que soit le moyen annoncé au départ. Une commande
-    // déjà réglée garde son moyen et son horodatage — on ne la « repaie » pas.
+    order.statusHistory.push({ status, at: new Date(), by: actor.sub });
+    // Le règlement comptoir implicite historique ne reste permis qu'avec une
+    // preuve persistée de l'absence de tentative bancaire ET un choix comptoir.
+    // Il ne remplace jamais un paiement en ligne non confirmé. __v fait échouer
+    // ce save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
     if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }
     await this.saveWithoutLostUpdate(order);
+    this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
+    return order;
+  }
+
+  /** Annulation — action sensible : PIN re-validé en amont, journalisée. */
+  async cancelAsOwner(tenantId: string, id: string, actor: JwtPayload, reason: string) {
+    if (actor.role !== 'owner' || actor.kind !== 'user' || actor.tenantId !== tenantId) {
+      throw new ForbiddenException('Confirmation réservée au propriétaire.');
+    }
+    // Cette lecture applique le périmètre commercial AVANT le service bancaire.
+    await this.byId(tenantId, id);
+    await this.payments.cancelOrder(id, tenantId, actor, reason);
+    const order = await this.byId(tenantId, id);
+    if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
+    await this.audit.log({ tenantId, actor, action: 'order.cancel', targetId: id,
+      meta: { reason, number: order.number, total: order.totals.total, confirmation: 'owner-password' } });
     this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
   }
@@ -638,13 +576,14 @@ export class OrdersService {
     reason: string,
   ) {
     const { staffId } = valideur;
-    const order = await this.byId(tenantId, id);
-    if (order.status === 'delivered') {
-      throw new ConflictException('Commande déjà servie — passer par un remboursement');
+    if (valideur.role === 'cuisine') {
+      throw new ForbiddenException('Ce code ne permet pas d’annuler une commande — demandez à la caisse ou au gérant.');
     }
-    order.status = 'cancelled';
-    order.statusHistory.push({ status: 'cancelled', at: new Date(), by: staffId });
-    await this.saveWithoutLostUpdate(order);
+    await this.byId(tenantId, id);
+    await this.payments.cancelOrder(id, tenantId,
+      { sub: staffId, tenantId, role: valideur.role, kind: 'staff' }, reason);
+    const order = await this.byId(tenantId, id);
+    if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
     await this.audit.log({
       tenantId,
       staffId,
@@ -686,6 +625,10 @@ export class OrdersService {
         'Commande clôturée — une remise doit être posée avant la remise au client',
       );
     }
+    if (order.payment?.stripePaymentIntentId || order.paymentFlow?.origin !== 'created_v1' ||
+      order.paymentFlow.phase !== 'open' || order.paymentFlow.attempt) {
+      throw new ConflictException('Le paiement en ligne a déjà été initié. Utilisez un remboursement après confirmation du paiement.');
+    }
     if (amount > order.totals.subtotal) {
       throw new BadRequestException(
         'Une remise ne peut pas dépasser le montant de la commande',
@@ -723,7 +666,7 @@ export class OrdersService {
       staffId: valideur.staffId as never,
       promotionId: null as never,
     };
-    order.totals.total = order.totals.subtotal - pose.amount;
+    order.totals.total = order.totals.subtotal - pose.amount + (order.totals.deliveryFee ?? 0);
     await this.saveWithoutLostUpdate(order);
     await this.audit.log({
       tenantId,

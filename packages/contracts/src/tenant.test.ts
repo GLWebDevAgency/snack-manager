@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { HEURE_MURALE, TenantHoursUpdateSchema } from './tenant';
+import { HEURE_MURALE, TenantHoursUpdateSchema, WebsiteUrlSchema, TenantIdentityUpdateSchema } from './tenant';
+
+describe('site vitrine externe', () => {
+  it('autorise uniquement un lien HTTPS sans identifiants', () => {
+    expect(WebsiteUrlSchema.safeParse('https://classfood.fr').success).toBe(true);
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'http://classfood.fr', 'https://user:password@classfood.fr']) {
+      expect(WebsiteUrlSchema.safeParse(url).success, url).toBe(false);
+    }
+    expect(TenantIdentityUpdateSchema.parse({ websiteUrl: null }).websiteUrl).toBeNull();
+  });
+});
 
 /**
  * LES HORAIRES SONT VALIDÉS, PAS SEULEMENT ÉCRITS.

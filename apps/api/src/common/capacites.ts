@@ -20,6 +20,8 @@ import {
 } from '@sm/contracts';
 import type { Tenant } from '@sm/db';
 import type { AuthedRequest } from './auth';
+import { IS_PUBLIC } from './auth';
+import { BACKOFFICE_ACCESS, type BackofficeArea } from '@sm/contracts/commerce';
 
 /**
  * LA GARDE DE CAPACITÉ — « ce restaurant a-t-il payé pour cette fonction ? ».
@@ -50,11 +52,14 @@ import type { AuthedRequest } from './auth';
 
 /** Clé de métadonnée — lue par `CapaciteGuard`, jamais ailleurs. */
 export const CAPACITES_REQUISES = 'capacitesRequises';
+export const FONCTION_REQUISE = 'fonctionRequise';
 
 /** Les trois champs du tenant dont le calcul a besoin, et pas un de plus. */
 export const SOUSCRIPTION_FIELDS = {
   plan: 1,
   onlineOrdering: 1,
+  onlineDelivery: 1,
+  standaloneLoyalty: 1,
   derogationsCapacite: 1,
 } as const;
 
@@ -90,11 +95,16 @@ export class CapaciteGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const targets = [ctx.getHandler(), ctx.getClass()];
+    // Public ordering uses its own tenant-resolution and operational policy.
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) return true;
+    const area = this.reflector.getAllAndOverride<BackofficeArea>(FONCTION_REQUISE, targets);
+    const alternatives: readonly Capacite[] = area ? BACKOFFICE_ACCESS[area] : [];
     const requises = this.reflector.getAllAndOverride<Capacite[]>(CAPACITES_REQUISES, [
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    if (!requises?.length) return true;
+    if (!requises?.length && !alternatives.length) return true;
 
     const user = ctx.switchToHttp().getRequest<AuthedRequest>().user;
     // `AuthGuard` est GLOBAL et s'exécute avant tout garde de contrôleur : à ce
@@ -104,7 +114,8 @@ export class CapaciteGuard implements CanActivate {
     if (!user?.tenantId) throw new ForbiddenException('Route tenant-scoped');
 
     const effectives = await this.capacites.pourTenant(user.tenantId);
-    const manquante = requises.find((c) => !effectives.includes(c));
+    const manquante = requises?.find((c) => !effectives.includes(c)) ??
+      (alternatives.length && !alternatives.some((c) => effectives.includes(c)) ? alternatives[0] : undefined);
     if (!manquante) return true;
 
     throw new ForbiddenException({
@@ -133,3 +144,7 @@ export class CapaciteGuard implements CanActivate {
  */
 export const Capacites = (...capacites: Capacite[]) =>
   applyDecorators(SetMetadata(CAPACITES_REQUISES, capacites), UseGuards(CapaciteGuard));
+
+/** A screen can belong to several independent offers; any grants entry. */
+export const Fonction = (area: BackofficeArea) =>
+  applyDecorators(SetMetadata(FONCTION_REQUISE, area), UseGuards(CapaciteGuard));

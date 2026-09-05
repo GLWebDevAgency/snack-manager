@@ -141,6 +141,28 @@ describe('Mot de passe généré', () => {
 });
 
 describe('Convertir un lead en restaurant', () => {
+  it.each([
+    { plan: null, onlineOrdering: false, onlineDelivery: false, standaloneLoyalty: true, amounts: [3_900, 5_500] },
+    { plan: null, onlineOrdering: true, onlineDelivery: false, standaloneLoyalty: true, amounts: [7_900, 5_500] },
+    { plan: null, onlineOrdering: false, onlineDelivery: true, standaloneLoyalty: true, amounts: [11_900, 5_500] },
+    { plan: 'boost' as const, onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amounts: [23_900] },
+  ])('conserve les options signées et prépare leurs factures : $amounts', async ({ amounts, ...offre }) => {
+    const { service, tenants, billing } = build({ proposal: proposalDoc(offre) });
+    // Le navigateur n'est pas la source des termes signés.
+    await service.convert(ACTOR, LEAD_ID, { ...BODY, onlineOrdering: !offre.onlineOrdering }, NOW);
+    expect(tenants.create.mock.calls[0]?.[0]).toMatchObject(offre);
+    expect(billing.issue.mock.calls.map((call) => (call[2] as { amountCents: number }).amountCents)).toEqual(amounts);
+    const label = String((billing.issue.mock.calls[0]?.[2] as { label: string }).label);
+    expect(label).toContain(offre.onlineDelivery ? 'livraison' : offre.onlineOrdering ? 'commande en ligne' : 'fidélité');
+  });
+
+  it('fige la remise fondateur sur la fidélité autonome signée', async () => {
+    const { service, tenants, billing } = build({ founderSeatReserved: true, proposal: proposalDoc({ plan: null, onlineOrdering: false, standaloneLoyalty: true }) });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
+    expect(tenants.create.mock.calls[0]?.[0]).toMatchObject({ founderDiscountCents: 1_950 });
+    expect(billing.issue.mock.calls.map((call) => (call[2] as { amountCents: number }).amountCents)).toEqual([1_950, 2_750]);
+  });
+
   it('crée le tenant en essai daté, le compte haché, marque le lead, journalise', async () => {
     const { service, leads, tenants, users, admin, tenantId } = build();
     const result = await service.convert(ACTOR, LEAD_ID, BODY, NOW);
@@ -253,6 +275,20 @@ describe('Convertir un lead en restaurant', () => {
     expect(abonnement?.label).toContain('commande en ligne');
     expect(mise).toMatchObject({ kind: 'mise_en_place', draft: true, amountCents: 5_500 });
     expect(result.draftInvoices).toBe(2);
+  });
+
+  it('utilise la période UTC même si la fin d’essai tombe au mois suivant dans le fuseau serveur', async () => {
+    const priorTimezone = process.env.TZ;
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      const { service, billing } = build();
+      // Trente jours plus tard : 31 août 23:30 UTC, mais 1er septembre à UTC+14.
+      await service.convert(ACTOR, LEAD_ID, BODY, new Date('2026-08-01T23:30:00.000Z'));
+      expect(billing.issue.mock.calls[0]?.[2]).toMatchObject({ period: '2026-08' });
+    } finally {
+      if (priorTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = priorTimezone;
+    }
   });
 
   it('ignore un body commercial contradictoire et applique partout la proposition du lead', async () => {
