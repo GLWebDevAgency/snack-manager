@@ -104,6 +104,8 @@ const PIECES_DE_LOGO = [
   "components/loyalty/carte-visuelle.tsx",
   "components/order/primitives.tsx",
   "app/admin/settings/ApercuInstalle.tsx",
+  "components/board/board-header.tsx",
+  "components/board/scenographies/comptoir/Comptoir.tsx",
 ];
 
 /*

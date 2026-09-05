@@ -62,6 +62,7 @@ export function client(base) {
     get: (chemin) => exiger('GET', chemin),
     post: (chemin, corps) => exiger('POST', chemin, corps),
     patch: (chemin, corps) => exiger('PATCH', chemin, corps),
+    del: (chemin) => exiger('DELETE', chemin),
 
     /** Ouvre une session. Le jeton reste dans la fermeture, il n'en sort pas. */
     async connexion({ email, motDePasse }) {
