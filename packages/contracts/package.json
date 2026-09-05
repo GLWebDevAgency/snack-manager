@@ -4,6 +4,11 @@
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": { "*": { "commerce": ["dist/commerce.d.ts"] } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./commerce": { "types": "./dist/commerce.d.ts", "default": "./dist/commerce.js" }
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",

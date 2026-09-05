@@ -875,6 +875,8 @@ export type AdminTenantAccount = {
   plan: AdminPlan | null;
   /** Le module de commande en ligne — vendu à part de la formule, 79 €/mois. */
   onlineOrdering: boolean;
+  onlineDelivery?: boolean;
+  standaloneLoyalty?: boolean;
   /** L'engagement signé : au mois, ou à l'année avec deux mois offerts. */
   billingCycle: 'mensuel' | 'annuel';
   founderSeat: boolean;

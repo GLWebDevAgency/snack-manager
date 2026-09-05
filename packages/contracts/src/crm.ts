@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { TenantAccountStatus } from './admin';
+import { commerceMonthlyCents, type CommerceOptions } from './commerce';
 
 // ─────────────────────────────────────────────────────────────
 // CRM Snack Manager — notre back-office interne (HQ), pas celui du client.
@@ -388,10 +389,10 @@ export const EMPTY_SERVICES: LeadServices = {
  * à la proposition COMME à la signature.
  */
 const integrationExigeLeModule = (
-  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
+  p: { plan: string | null; onlineOrdering: boolean; onlineDelivery?: boolean; services: LeadServices },
   ctx: z.RefinementCtx,
 ): void => {
-  if (p.services.integrationCommande && !p.onlineOrdering && p.plan !== 'boost') {
+  if (p.services.integrationCommande && !p.onlineOrdering && !p.onlineDelivery && p.plan !== 'boost') {
     ctx.addIssue({
       code: 'custom',
       path: ['services', 'integrationCommande'],
@@ -405,35 +406,15 @@ const integrationExigeLeModule = (
  * rien à imprimer, rien à signer : refusé ici, à la proposition COMME à la
  * signature — plutôt qu'un devis vide entre les mains du prospect.
  */
-/**
- * SANS formule, le module n'a pas de page hébergée où vivre : la commande en
- * ligne ne se vend alors QUE greffée sur le site existant du client —
- * 190 € de mise en service, puis le module au mois (fondateur, 25/08).
- * Le module « seul » à 79 € + 55 € n'existe qu'ADOSSÉ à une formule.
- */
-const moduleSansFormuleExigeLIntegration = (
-  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
-  ctx: z.RefinementCtx,
-): void => {
-  if (p.plan === null && p.onlineOrdering && !p.services.integrationCommande) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['onlineOrdering'],
-      message:
-        'Sans formule, la commande en ligne se vend greffée sur le site existant — cochez l’intégration.',
-    });
-  }
-};
-
 const propositionNonVide = (
-  p: { plan: string | null; onlineOrdering: boolean; services: LeadServices },
+  p: CommerceOptions & { plan: string | null; services: LeadServices },
   ctx: z.RefinementCtx,
 ): void => {
   const unService =
     ATELIER_ONCE_KEYS.some((cle) => p.services[cle]) ||
     p.services.presenceInternet ||
     p.services.reseauxSociaux !== null;
-  if (p.plan === null && !p.onlineOrdering && !unService) {
+  if (p.plan === null && !p.onlineOrdering && !p.onlineDelivery && !p.standaloneLoyalty && !unService) {
     ctx.addIssue({
       code: 'custom',
       path: ['plan'],
@@ -448,6 +429,8 @@ export const LeadProposalSchema = z
     plan: z.enum(['essentiel', 'complet', 'boost']).nullable(),
     /** Module commande en ligne — sans objet sur Boost, qui le comprend. */
     onlineOrdering: z.boolean().default(false),
+    onlineDelivery: z.boolean().optional(),
+    standaloneLoyalty: z.boolean().optional(),
     billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
     /** L'Atelier — les services retenus, avec ou sans le logiciel. */
     services: LeadServicesSchema.default(EMPTY_SERVICES),
@@ -455,7 +438,6 @@ export const LeadProposalSchema = z
     note: z.string().trim().max(500).default(''),
   })
   .superRefine(integrationExigeLeModule)
-  .superRefine(moduleSansFormuleExigeLIntegration)
   .superRefine(propositionNonVide);
 export type LeadProposal = z.infer<typeof LeadProposalSchema>;
 
@@ -482,12 +464,13 @@ export const TenantOffreSchema = z
   .object({
     plan: z.enum(['essentiel', 'complet', 'boost']).nullable(),
     onlineOrdering: z.boolean().default(false),
+    onlineDelivery: z.boolean().optional(),
+    standaloneLoyalty: z.boolean().optional(),
     billing: z.enum(PROPOSAL_BILLINGS).default('mensuel'),
     services: LeadServicesSchema.default(EMPTY_SERVICES),
     reason: z.string().trim().max(500).default(''),
   })
   .superRefine(integrationExigeLeModule)
-  .superRefine(moduleSansFormuleExigeLIntegration)
   .superRefine(propositionNonVide);
 export type TenantOffre = z.infer<typeof TenantOffreSchema>;
 
@@ -521,21 +504,21 @@ export function servicesCents(services: LeadServices): {
  * jamais. Les ponctuels de l'Atelier rejoignent `setupOnceCents`.
  */
 export function proposalCents(
-  p: Pick<LeadProposal, 'plan' | 'onlineOrdering'> & { services?: LeadServices },
+  p: Pick<LeadProposal, 'plan' | 'onlineOrdering'> & CommerceOptions & { services?: LeadServices },
 ): {
   monthlyCents: number;
   servicesMonthlyCents: number;
   setupOnceCents: number;
 } {
   const services = p.services ?? EMPTY_SERVICES;
-  const moduleFacture = p.onlineOrdering && p.plan !== 'boost';
+  const moduleCents = commerceMonthlyCents(p);
   // L'intégration sur site existant COMPREND la mise en service du module :
   // facturer les deux serait payer deux fois le même branchement.
-  const miseEnService = moduleFacture && !services.integrationCommande;
+  const miseEnService = moduleCents > 0 && p.plan !== 'boost' && !services.integrationCommande;
   const atelier = servicesCents(services);
   return {
     monthlyCents:
-      (p.plan ? PLAN_MRR_CENTS[p.plan] : 0) + (moduleFacture ? MODULE_ORDERING_CENTS : 0),
+      (p.plan ? PLAN_MRR_CENTS[p.plan] : 0) + moduleCents,
     servicesMonthlyCents: atelier.monthlyCents,
     setupOnceCents: (miseEnService ? MODULE_ORDERING_SETUP_CENTS : 0) + atelier.onceCents,
   };
@@ -556,6 +539,8 @@ export function proposalCents(
 export type OffreClient = {
   plan: PlanChoice;
   onlineOrdering: boolean;
+  onlineDelivery?: boolean;
+  standaloneLoyalty?: boolean;
   atelier: (Partial<LeadServices> & { signedAt?: unknown }) | null;
   /** Fin de la remise fondateur, ou `null` — voir `finRemiseFondateur`. */
   founderUntil: Date | string | null;
@@ -575,6 +560,8 @@ export type OffreClient = {
 export function offreClient(source: {
   plan?: unknown;
   onlineOrdering?: unknown;
+  onlineDelivery?: unknown;
+  standaloneLoyalty?: unknown;
   atelier?: unknown;
   founderUntil?: unknown;
   founderDiscountCents?: unknown;
@@ -584,6 +571,8 @@ export function offreClient(source: {
   return {
     plan: plan === 'essentiel' || plan === 'complet' || plan === 'boost' ? plan : null,
     onlineOrdering: source.onlineOrdering === true,
+    onlineDelivery: source.onlineDelivery === true,
+    standaloneLoyalty: source.standaloneLoyalty === true,
     atelier: (source.atelier ?? null) as OffreClient['atelier'],
     founderUntil:
       source.founderUntil instanceof Date || typeof source.founderUntil === 'string'
@@ -613,6 +602,8 @@ export function tarifPublicMensuel(offre: OffreClient): {
   const prix = proposalCents({
     plan: offre.plan,
     onlineOrdering: offre.onlineOrdering,
+    onlineDelivery: offre.onlineDelivery,
+    standaloneLoyalty: offre.standaloneLoyalty,
     services: { ...EMPTY_SERVICES, ...(offre.atelier ?? {}) },
   });
   return { logicielCents: prix.monthlyCents, servicesCents: prix.servicesMonthlyCents };
@@ -632,12 +623,11 @@ export function tarifPublicMensuel(offre: OffreClient): {
  * donnerait un contrat qui ne tombe pas sur la somme des pièces : un centime
  * d'écart au premier prix impair, et un client qui fait recompter.
  */
-export function remiseFondateurContrat(offre: Pick<OffreClient, 'plan' | 'onlineOrdering' | 'atelier'>): number {
+export function remiseFondateurContrat(offre: Pick<OffreClient, 'plan' | 'onlineOrdering' | 'atelier'> & CommerceOptions): number {
   const services: LeadServices = { ...EMPTY_SERVICES, ...(offre.atelier ?? {}) };
-  const moduleFacture = offre.onlineOrdering && offre.plan !== 'boost';
   const composantes = [
     offre.plan ? PLAN_MRR_CENTS[offre.plan] : 0,
-    moduleFacture ? MODULE_ORDERING_CENTS : 0,
+    commerceMonthlyCents(offre),
     services.presenceInternet ? ATELIER_PRESENCE_CENTS : 0,
     services.reseauxSociaux ? SOCIAL_CADENCE_CENTS[services.reseauxSociaux] : 0,
   ];
@@ -983,7 +973,6 @@ export const LeadConvertSchema = z
     services: LeadServicesSchema.default(EMPTY_SERVICES),
   })
   .superRefine(integrationExigeLeModule)
-  .superRefine(moduleSansFormuleExigeLIntegration)
   .superRefine(propositionNonVide);
 export type LeadConvert = z.infer<typeof LeadConvertSchema>;
 

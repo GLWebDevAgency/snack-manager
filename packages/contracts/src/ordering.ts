@@ -13,6 +13,8 @@ import type {
 import type { Brand } from './marque';
 // ⚠️ `import type` uniquement, même raison : `mediatheque.ts` l'est aussi.
 import type { MediaVue } from './mediatheque';
+import { FulfillmentSchema } from './delivery';
+import type { OrderDelivery, PublicDeliverySettings } from './delivery';
 
 // ─────────────────────────────────────────────────────────────
 // Commande en ligne — créneaux de retrait, paiement, impression
@@ -32,6 +34,7 @@ export const NEXT_OPEN_LOOKAHEAD_DAYS = 14;
 
 /** `?date=AAAA-MM-JJ` — absent ⇒ aujourd'hui (heure du restaurant). */
 export const SlotsQuerySchema = z.object({
+  fulfillment: FulfillmentSchema.optional(),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ')
@@ -186,6 +189,7 @@ export const ORDER_TYPE_LABELS: Record<OrderType, string> = {
   surplace: 'Sur place',
   emporter: 'À emporter',
   pickup: 'Retrait',
+  delivery: 'Livraison',
 };
 
 export const ORDER_CHANNEL_LABELS: Record<OrderChannel, string> = {
@@ -259,6 +263,7 @@ export interface TicketPickup {
 
 export interface TicketTotals {
   subtotal: number; // centimes
+  deliveryFee?: number;
   discount: { amount: number; reason: string } | null;
   total: number; // centimes
 }
@@ -292,6 +297,7 @@ export interface OrderTicket {
   status: OrderStatus;
   statusLabel: string;
   pickup: TicketPickup | null;
+  delivery?: OrderDelivery | null;
   lines: TicketLine[];
   totals: TicketTotals;
   payment: TicketPayment;
@@ -322,6 +328,9 @@ export interface OrderTracking {
   statusHistory: OrderTrackingStep[];
   /** ISO 8601 du créneau de retrait, `null` en vente directe. */
   pickupSlot: string | null;
+  fulfillment?: 'pickup' | 'delivery';
+  delivery?: { dispatchedAt: string | null; deliveredAt: string | null; estimatedMinutes: number } | null;
+  payment?: { status: PaymentStatus; method: PaymentMethod; refundedCents: number; pendingRefundCents: number };
 }
 
 // ─── Page publique du restaurant (un seul appel) ───
@@ -414,6 +423,7 @@ export interface PublicSiteResponse {
     /** Message de pause affiché au client (null si la commande est ouverte). */
     message: string | null;
   };
+  delivery?: PublicDeliverySettings;
   /** Le restaurant sert-il à cet instant précis. */
   openNow: boolean;
   /** Horaires du jour demandé, `null` si le restaurant ne sert pas ce jour-là. */
@@ -481,6 +491,7 @@ export const TENANT_AUDIT_ACTIONS = [
   // ─── Commandes : l'argent qui sort de la recette du jour ───
   'order.cancel',
   'order.discount',
+  'order.dispatch',
   /**
    * DÉCLARÉE, JAMAIS ÉCRITE À CE JOUR — et c'est dit plutôt que caché.
    *
@@ -553,6 +564,7 @@ export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
 export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.cancel': 'Annulation de commande',
   'order.discount': 'Remise',
+  'order.dispatch': 'Départ en livraison',
   'order.refund': 'Remboursement',
   'price.change': 'Changement de prix',
   'product.create': 'Produit ajouté à la carte',

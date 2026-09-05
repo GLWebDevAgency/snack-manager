@@ -98,11 +98,10 @@ describe('accès public au programme de fidélité', () => {
     expect(publicLoyaltyAvailable({ status: 'active' }, souscrite({ plan: 'essentiel' }))).toBe(
       false,
     );
-    // Le module de commande en ligne n'ouvre PAS la fidélité : deux lignes
-    // distinctes de la grille, deux achats distincts.
+    // La nouvelle offre commande comprend la fidélité, sans double abonnement.
     expect(
       publicLoyaltyAvailable({ status: 'active' }, souscrite({ plan: null, onlineOrdering: true })),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('sert une fidélité ACCORDÉE hors formule, et referme dès qu’elle est levée', () => {

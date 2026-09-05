@@ -95,6 +95,7 @@ export const CAPACITES = [
   'online',
   'loyalty',
   'priority',
+  'delivery',
 ] as const;
 
 export const CapaciteSchema = z.enum(CAPACITES);
@@ -121,6 +122,7 @@ export const CAPACITE_LABELS: Record<Capacite, string> = {
   online: 'Commande en ligne & click and collect',
   loyalty: 'Fidélité, codes promo & comptes clients',
   priority: 'Support prioritaire',
+  delivery: 'Livraison par le restaurant',
 };
 
 /**
@@ -232,6 +234,8 @@ export const CAPACITES_SANS_FORMULE: readonly Capacite[] = [];
  */
 export const CAPACITES_PAR_OPTION = {
   onlineOrdering: 'online',
+  onlineDelivery: 'delivery',
+  standaloneLoyalty: 'loyalty',
 } as const satisfies Record<string, Capacite>;
 
 // ─────────────────────────────────────────────────────────────
@@ -348,6 +352,8 @@ export type SouscriptionLue = {
   plan?: unknown;
   /** Le module de commande en ligne — la souscription, pas la pause du soir. */
   onlineOrdering?: unknown;
+  onlineDelivery?: unknown;
+  standaloneLoyalty?: unknown;
   /** Les exceptions accordées ou retirées par l'équipe Snack Manager. */
   derogationsCapacite?: readonly unknown[] | null;
 };
@@ -419,6 +425,12 @@ export function capacitesEffectives(souscription: SouscriptionLue): readonly Cap
   const champs = souscription as Record<string, unknown>;
   for (const [champ, capacite] of Object.entries(CAPACITES_PAR_OPTION)) {
     if (champs[champ] === true) acquises.add(capacite);
+  }
+
+  if (acquises.has('delivery')) acquises.add('online');
+  if (acquises.has('online')) {
+    acquises.add('menu');
+    acquises.add('loyalty');
   }
 
   const retirees = new Set<Capacite>();
@@ -510,11 +522,11 @@ export function detailCapacites(souscription: SouscriptionLue): readonly Capacit
   const deLaFormule = new Set<Capacite>(
     formule ? CAPACITES_PAR_FORMULE[formule] : CAPACITES_SANS_FORMULE,
   );
-  const champs = souscription as Record<string, unknown>;
-  const desOptions = new Set<Capacite>();
-  for (const [champ, capacite] of Object.entries(CAPACITES_PAR_OPTION)) {
-    if (champs[champ] === true) desOptions.add(capacite);
-  }
+  const desOptions = new Set<Capacite>(capacitesEffectives({
+    onlineOrdering: souscription.onlineOrdering,
+    onlineDelivery: souscription.onlineDelivery,
+    standaloneLoyalty: souscription.standaloneLoyalty,
+  }));
 
   return CAPACITES.map((capacite) => {
     const derogation = parCapacite.get(capacite) ?? null;

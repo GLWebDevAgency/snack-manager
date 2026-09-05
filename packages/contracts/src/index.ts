@@ -2,6 +2,7 @@ import { z } from 'zod';
 // `JwtPayload` et `AuthMe` (plus bas) nomment `UserRole` : `export *` republie
 // sans lier le nom localement, il faut donc l'importer en plus.
 import { type UserRole } from './comptes';
+import { DeliveryAddressSchema, DeliveryRequestSchema, FulfillmentSchema } from './delivery';
 
 export * from './comptes';
 export * from './supply';
@@ -27,6 +28,9 @@ export * from './marque';
 export * from './capacites';
 export * from './mediatheque';
 export * from './mediatheque-octets';
+export * from './delivery';
+export * from './commerce';
+export * from './order-refunds';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier
@@ -75,7 +79,7 @@ export const ORDER_CHANNELS = ['online', 'pos', 'phone'] as const;
 export const OrderChannelSchema = z.enum(ORDER_CHANNELS);
 export type OrderChannel = z.infer<typeof OrderChannelSchema>;
 
-export const ORDER_TYPES = ['surplace', 'emporter', 'pickup'] as const;
+export const ORDER_TYPES = ['surplace', 'emporter', 'pickup', 'delivery'] as const;
 export const OrderTypeSchema = z.enum(ORDER_TYPES);
 export type OrderType = z.infer<typeof OrderTypeSchema>;
 
@@ -400,6 +404,7 @@ export const CreateOrderSchema = z.object({
   type: OrderTypeSchema,
   lines: z.array(OrderLineInputSchema).min(1),
   payment: CreateOrderPaymentSchema,
+  delivery: DeliveryRequestSchema.optional(),
   pickup: z
     .object({
       slot: z.iso.datetime(),
@@ -422,6 +427,12 @@ export const CreateOrderSchema = z.object({
    */
   promoCode: z.string().trim().min(1).max(24).optional(),
 }).superRefine((order, ctx) => {
+  if ((order.type === 'delivery') !== (order.delivery !== undefined)) {
+    ctx.addIssue({ code: 'custom', path: ['delivery'], message: 'Une adresse est requise uniquement pour une livraison' });
+  }
+  if (order.type === 'delivery' && !order.pickup) {
+    ctx.addIssue({ code: 'custom', path: ['pickup'], message: 'Créneau et coordonnées obligatoires pour la livraison' });
+  }
   const hasMember = order.loyaltyMemberId !== undefined;
   const hasOperation = order.loyaltyEarnOperationId !== undefined;
   if (hasMember !== hasOperation) {
@@ -475,6 +486,9 @@ export type OrderLoyaltyEarnStatus = z.infer<typeof OrderLoyaltyEarnStatusSchema
 export const CreatePublicOrderSchema = z
   .object({
     clientId: z.uuid(),
+    /** Absent pour les anciens clients : retrait au restaurant. */
+    fulfillment: FulfillmentSchema.optional(),
+    delivery: DeliveryRequestSchema.optional(),
     lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
     payment: z
       .object({
@@ -494,8 +508,23 @@ export const CreatePublicOrderSchema = z
     /** Jeton Cloudflare Turnstile : 2 048 caracteres maximum selon Siteverify. */
     turnstileToken: z.string().min(1).max(2_048),
   })
-  .strict();
+  .strict().superRefine((order, ctx) => {
+    const delivery = order.fulfillment === 'delivery';
+    if (delivery !== (order.delivery !== undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['delivery'], message: 'Une adresse est requise uniquement pour une livraison' });
+    }
+    if (delivery && order.payment.method !== 'online') {
+      ctx.addIssue({ code: 'custom', path: ['payment', 'method'], message: 'La livraison nécessite un paiement en ligne' });
+    }
+  });
 export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
+
+/** Devis informatif recalculé depuis le menu, sans montant fourni par le navigateur. */
+export const DeliveryQuoteRequestSchema = z.object({
+  address: DeliveryAddressSchema,
+  lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
+}).strict();
+export type DeliveryQuoteRequest = z.infer<typeof DeliveryQuoteRequestSchema>;
 
 /**
  * Les deux gestes qui MINORENT la recette — et qui n'étaient pas validés.
