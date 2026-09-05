@@ -1,5 +1,5 @@
 import type { Clock } from '@sm/domain';
-import type { ScreenScene } from '@sm/contracts';
+import { marqueDeRepli, type ScreenScene } from '@sm/contracts';
 import type { RawDayHours } from './daypart';
 import type {
   BoardCategory,
@@ -59,6 +59,7 @@ export function boardIdentity(patch: Partial<BoardIdentity> = {}): BoardIdentity
     name: "Class'Food",
     logoUrl: null,
     brandColor: '#c9a15a',
+    brand: marqueDeRepli('#c9a15a', null),
     hours: classFoodHours(),
     ...patch,
   };

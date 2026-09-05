@@ -8,6 +8,7 @@ import {
   logoUrlDe,
   photoPointDe,
   photoUrlDe,
+  type Brand,
   type PointInteret,
 } from '@sm/contracts';
 import { marqueObservee } from '../../common/marque-observee';
@@ -30,6 +31,8 @@ export interface BoardIdentity {
   readonly name: string;
   readonly logoUrl: string | null;
   readonly brandColor: string;
+  /** LE MASQUE observé — la source dont `logoUrl` et `brandColor` dérivent. */
+  readonly brand: Brand;
   readonly hours: RawDayHours[];
 }
 
@@ -87,6 +90,7 @@ export function identiteDuTableau(
     tenantId: String(tenant._id),
     slug: String(tenant.slug ?? ''),
     name: String(tenant.name ?? ''),
+    brand,
     logoUrl: logoUrlDe(brand),
     brandColor: brandColorDe(brand),
     // La même conversion que la vitrine et la fiche publique — elle vivait ici
