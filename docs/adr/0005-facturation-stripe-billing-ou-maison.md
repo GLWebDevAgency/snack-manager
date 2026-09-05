@@ -3,6 +3,7 @@
 - **Statut** : accepté
 - **Date** : 27/08/2026
 - **Décideurs** : le fondateur
+- **Suite** : [ADR 0006](0006-migration-billing-pilotee-par-crm.md), acceptée le 05/09/2026, ajoute la préparation de la migration au chantier en cours et remplace son report à M9. Le texte ci-dessous reste l'historique de la décision initiale.
 
 ## Le problème
 

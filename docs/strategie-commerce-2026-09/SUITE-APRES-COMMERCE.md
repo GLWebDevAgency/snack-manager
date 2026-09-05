@@ -1,4 +1,4 @@
-# Suite du chantier commerce — remise, livreur et écrans
+# Suite du chantier commerce — paiements, Billing, remise et écrans
 
 Demandes utilisateur et cadrage au 5 septembre 2026. Distinguer les protections livrées dans la branche de travail des fonctionnalités proposées. Rien ici n'atteste un déploiement staging ou production.
 
@@ -53,5 +53,19 @@ Prochain livrable : ADR et une scène représentative, puis harnais multi-identi
 ## 4. Autres limites du résumé à traiter par lots
 
 - Consommation sécurisée fidélité confirmée non raccordée : `redeem()` retourne 410 tant que la récompense n'est pas attachée à une commande. Les promesses commerciales sont corrigées en « pilote accompagné ». Ce correctif rédactionnel ne livre pas la consommation, le cumul automatique web ou l'expiration des points.
-- Émission unique des factures, annulation/paiement concurrent et encaissement existant : priorités avant activation des nouveaux encaissements.
+- Émission unique des factures corrigée et testée dans la branche, pas encore déployée : respecter la [bascule contrôlée du writer](FACTURATION-EMISSION-DURABLE.md). Annulation/paiement concurrent et encaissement d'une commande existante restent à traiter avant activation des nouveaux encaissements.
 - Prestations Atelier, médias et cache, notifications transactionnelles, rétention des données, tableaux comptables et tests de composants : relecture séparée du code intégré, classement risque/valeur, puis petits lots. Ne pas traiter tous ces sujets implicitement dans une PR livraison.
+
+## 5. Migration Stripe Billing / Invoicing — ajout accepté, non implémenté
+
+Le fondateur a validé l'ajout de ce chantier le 5 septembre 2026. Décision et critères de réception : [ADR 0006](../adr/0006-migration-billing-pilotee-par-crm.md). Le CRM reste le poste de pilotage ; Stripe prend en charge la facturation des contrats migrés. Les paiements Connect des commandes restaurant restent distincts.
+
+Priorité immédiate inchangée : fermer la course annulation/paiement des commandes. La migration Billing est ensuite menée par lots dédiés ; elle n'est pas ajoutée en bloc aux conditions de fusion de la PR commerce actuelle. Les autres demandes de remise, fidélité et écrans restent dans ce suivi et ne sont pas abandonnées. Vérifier les PR/claims et les branches actives avant chaque lot, notamment le travail Claude sur les écrans ; ne pas reprendre son worktree.
+
+- [ ] **B1 — Contrats et correspondances** : source de facturation, date de bascule, mapping client/prix/abonnement/facture ; préserver tarifs, TVA, essais, remises figées et périodicités mixtes.
+- [ ] **B2 — Pilote abonnement simple** : création depuis CRM, carte/SEPA via Stripe sécurisé, opérations durables, webhooks et rapprochement ; recette sandbox réelle.
+- [ ] **B3 — Cycle commercial** : options, changement d'offre, prorations explicites, résiliation, impayés et droits ; CRM et portail de paiement cohérents, sans lever une suspension administrative par un simple règlement.
+- [ ] **B4 — Prestations et historique** : Invoicing, avoirs/remboursements autorisés, historique unifié, aucune réémission des anciennes pièces ; fermeture de tous les chemins d'émission locale des obligations migrées.
+- [ ] **B5 — Recette et activation** : tests monétaires et de concurrence, staging, contrats complexes, reprise après panne, configuration live relue ; production uniquement après validation staging et GO distinct.
+
+Le pont Checkout actuel reste un paiement ponctuel de facture SM, pas Billing. Aucun abonnement récurrent, mandat, prix, endpoint distant ni frais supplémentaire n'est activé par cet ajout au plan. Les améliorations du moteur maison restent limitées à la sécurité et au maintien nécessaire jusqu'à migration. Ne pas reconstruire en parallèle le renouvellement, les relances automatiques et la proration que Stripe doit fournir.
