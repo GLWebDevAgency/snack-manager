@@ -25,6 +25,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type ReactNode,
@@ -85,7 +86,7 @@ import {
 } from "./primitives";
 import { StripeCard, type ApparenceStripe } from "./StripeCard";
 import { TurnstileCheck } from "./TurnstileCheck";
-import { DeliveryFields } from "./DeliveryFields";
+import { DeliveryFee, DeliveryFields, FreeDeliveryHint } from "./DeliveryFields";
 import { PAYMENT_VERIFICATION_MESSAGE, checkoutPaymentDecision, requestExistingOrderPayment } from "./checkout-payment";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
@@ -127,6 +128,52 @@ function writePayProbe(slug: string, value: "ready" | "off") {
   } catch {
     /* non bloquant */
   }
+}
+
+export type CheckoutDeliveryQuoteState =
+  | { status: "pending"; key: string; requestId: number }
+  | { status: "ready"; key: string; requestId: number; value: DeliveryQuote }
+  | { status: "error"; key: string; requestId: number; message: string }
+  | null;
+
+export type CheckoutDeliveryQuoteAction =
+  | { type: "invalidate" }
+  | { type: "start"; key: string; requestId: number }
+  | { type: "resolve"; key: string; requestId: number; value: DeliveryQuote }
+  | { type: "reject"; key: string; requestId: number; message: string };
+
+/** Une réponse tardive ne remplace ni un devis plus récent ni une invalidation. */
+export function checkoutDeliveryQuoteReducer(
+  state: CheckoutDeliveryQuoteState,
+  action: CheckoutDeliveryQuoteAction,
+): CheckoutDeliveryQuoteState {
+  if (action.type === "invalidate") return null;
+  if (action.type === "start") return { status: "pending", key: action.key, requestId: action.requestId };
+  if (state?.status !== "pending" || state.requestId !== action.requestId || state.key !== action.key) return state;
+  return action.type === "resolve"
+    ? { status: "ready", key: action.key, requestId: action.requestId, value: action.value }
+    : { status: "error", key: action.key, requestId: action.requestId, message: action.message };
+}
+
+export function checkoutDeliveryQuoteKey(input: {
+  slug: string; fulfillment: Fulfillment; address: DeliveryAddress; lines: CartLine[]; promoCode: string;
+}): string {
+  return JSON.stringify({
+    slug: input.slug, fulfillment: input.fulfillment, address: input.address,
+    lines: toOrderLines(input.lines), promoCode: input.promoCode.trim().toUpperCase(),
+    // Même sélection mais prix catalogue rafraîchi : l'ancienne proposition
+    // ne correspond plus non plus à ce que le client voit dans son panier.
+    previewPrices: input.lines.map(line => line.unitPrice),
+  });
+}
+
+/** Un devis n'est une proposition de prix que pour les entrées qui l'ont demandé. */
+export function activeCheckoutDeliveryQuote(
+  state: CheckoutDeliveryQuoteState,
+  enabled: boolean,
+  key: string,
+): DeliveryQuote | null {
+  return enabled && state?.key === key && state.status === "ready" ? state.value : null;
 }
 
 export function Checkout({
@@ -206,12 +253,19 @@ export function Checkout({
   const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
   const [address, setAddress] = useState<DeliveryAddress>({ line1: "", line2: "", postalCode: "", city: "", country: "FR" });
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
-  const [quoteResult, setQuoteResult] = useState<{ key: string; value: DeliveryQuote } | null>(null);
-  const [quoteError, setQuoteError] = useState<{ key: string; message: string } | null>(null);
-  const [quoteBusy, setQuoteBusy] = useState(false);
+  // Le code part avec le devis ET la commande. Seul le serveur calcule la
+  // remise ; le devis ne réserve ni le quota promotionnel ni le prix final.
+  const [promoCode, setPromoCode] = useState("");
+  const normalizedPromoCode = promoCode.trim().toUpperCase();
+  const [quoteState, dispatchQuote] = useReducer(checkoutDeliveryQuoteReducer, null);
+  const quoteSequence = useRef(0);
   const isDelivery = fulfillment === "delivery";
-  const quoteKey = JSON.stringify({ address, lines: toOrderLines(cart.lines) });
-  const deliveryQuote = quoteResult?.key === quoteKey ? quoteResult.value : null;
+  const quoteEnabled = isDelivery && Boolean(delivery?.available) && !demo;
+  const quoteKey = checkoutDeliveryQuoteKey({ slug, fulfillment, address, lines: cart.lines, promoCode });
+  const deliveryQuote = activeCheckoutDeliveryQuote(quoteState, quoteEnabled, quoteKey);
+  const quoteBusy = quoteEnabled && quoteState?.key === quoteKey && quoteState.status === "pending";
+  const quoteError = quoteEnabled && quoteState?.key === quoteKey && quoteState.status === "error" ? quoteState.message : null;
+  const checkoutTotal = isDelivery ? deliveryQuote?.totalCents ?? null : cart.subtotal;
 
   const [date, setDate] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotsResponse | null>(initialSlots);
@@ -233,14 +287,6 @@ export function Checkout({
   const [error, setError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileReset, setTurnstileReset] = useState(0);
-  /**
-   * Le code promo saisi. Il part avec la commande et le serveur décide : le
-   * montant n'est jamais calculé ici, comme les prix. Un refus revient nommé
-   * (« au moins 25,00 € », « cette offre est terminée ») et s'affiche tel quel
-   * — le client doit savoir s'il peut corriger.
-   */
-  const [promoCode, setPromoCode] = useState("");
-
   // Clé d’idempotence : forgée au premier envoi, conservée pendant tous les
   // réessais de la même tentative — un double appui ne crée jamais deux
   // commandes. Elle n’est renouvelée qu’après une commande réellement passée.
@@ -337,23 +383,35 @@ export function Checkout({
     setDate(null);
     setTurnstileToken(null);
     setTurnstileReset((value) => value + 1);
+    dispatchQuote({ type: "invalidate" });
     clientIdRef.current = null;
   }
 
+  function changeFulfillment(next: Fulfillment) {
+    if (requestInFlightRef.current || next === fulfillment) return;
+    dispatchQuote({ type: "invalidate" });
+    setFulfillment(next);
+    setSlotIso(null);
+    setSlots(null);
+  }
+
   async function verifyDelivery() {
+    if (!quoteEnabled) return;
+    const requestId = ++quoteSequence.current;
+    dispatchQuote({ type: "start", key: quoteKey, requestId });
     const parsed = DeliveryAddressSchema.safeParse(address);
     if (!parsed.success) {
-      setQuoteError({ key: quoteKey, message: parsed.error.issues[0]?.message ?? "Vérifiez votre adresse." });
+      dispatchQuote({ type: "reject", key: quoteKey, requestId, message: parsed.error.issues[0]?.message ?? "Vérifiez votre adresse." });
       return;
     }
-    setQuoteBusy(true);
-    setQuoteError(null);
     try {
-      const value = await api.quoteDelivery(slug, { address: parsed.data, lines: toOrderLines(cart.lines) });
-      setQuoteResult({ key: quoteKey, value });
+      const value = await api.quoteDelivery(slug, { address: parsed.data, lines: toOrderLines(cart.lines),
+        ...(normalizedPromoCode ? { promoCode: normalizedPromoCode } : {}) });
+      dispatchQuote({ type: "resolve", key: quoteKey, requestId, value });
     } catch (cause) {
-      setQuoteError({ key: quoteKey, message: cause instanceof PublicApiError ? cause.message : "La vérification n’a pas abouti. Réessayez." });
-    } finally { setQuoteBusy(false); }
+      dispatchQuote({ type: "reject", key: quoteKey, requestId,
+        message: cause instanceof PublicApiError ? cause.message : "La vérification n’a pas abouti. Réessayez." });
+    }
   }
 
   async function retryPayment() {
@@ -449,7 +507,7 @@ export function Checkout({
           customerPhone: customer.phone.trim(),
         },
         ...(cart.note.trim() ? { note: cart.note.trim() } : {}),
-        ...(promoCode.trim() ? { promoCode: promoCode.trim() } : {}),
+        ...(normalizedPromoCode ? { promoCode: normalizedPromoCode } : {}),
       });
 
       if (isPaused(created)) {
@@ -556,7 +614,7 @@ export function Checkout({
           busy={busy}
           cart={cart}
           fulfillment={fulfillment}
-          total={deliveryQuote?.totalCents ?? cart.subtotal}
+          total={checkoutTotal}
           contactOk={contactOk}
           slotIso={slotIso}
           slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
@@ -599,8 +657,8 @@ export function Checkout({
           <>
           {delivery?.available && !demo && (
             <RadioGroup label="Recevoir votre commande" className="mb-5 flex flex-col gap-2.5">
-              <ChoiceCard on={!isDelivery} tabIndex={!isDelivery ? 0 : -1} glyph="bag" title="Retrait au restaurant" sub="Sans frais de livraison" onClick={() => { setFulfillment("pickup"); setSlotIso(null); setSlots(null); }} />
-              <ChoiceCard on={isDelivery} tabIndex={isDelivery ? 0 : -1} glyph="pin" title="Livraison chez vous" sub="Par le restaurant · paiement sécurisé en ligne" onClick={() => { setFulfillment("delivery"); setSlotIso(null); setSlots(null); }} />
+              <ChoiceCard on={!isDelivery} tabIndex={!isDelivery ? 0 : -1} glyph="bag" title="Retrait au restaurant" sub="Sans frais de livraison" onClick={() => changeFulfillment("pickup")} />
+              <ChoiceCard on={isDelivery} tabIndex={isDelivery ? 0 : -1} glyph="pin" title="Livraison chez vous" sub="Par le restaurant · paiement sécurisé en ligne" onClick={() => changeFulfillment("delivery")} />
             </RadioGroup>
           )}
           <CartStep
@@ -610,6 +668,8 @@ export function Checkout({
             promoCode={promoCode}
             prixMono={prixMono}
             onPromoCode={setPromoCode}
+            delivery={isDelivery}
+            quote={deliveryQuote}
           />
           </>
         )}
@@ -623,7 +683,7 @@ export function Checkout({
             onBlur={() => setTouched(true)}
             tenantName={tenantName}
           />
-          {isDelivery && <DeliveryFields address={address} instructions={deliveryInstructions} quote={deliveryQuote} busy={quoteBusy} error={quoteError?.key === quoteKey ? quoteError.message : null} onAddress={setAddress} onInstructions={setDeliveryInstructions} onVerify={verifyDelivery} />}
+          {isDelivery && <DeliveryFields address={address} instructions={deliveryInstructions} quote={deliveryQuote} busy={quoteBusy} error={quoteError} onAddress={setAddress} onInstructions={setDeliveryInstructions} onVerify={verifyDelivery} />}
           </>
         )}
 
@@ -654,8 +714,8 @@ export function Checkout({
               cardAvailable={probe !== "off"}
               prixMono={prixMono}
               delivery={isDelivery}
-              deliveryFee={deliveryQuote?.feeCents ?? 0}
-              total={deliveryQuote?.totalCents ?? cart.subtotal}
+              quote={deliveryQuote}
+              total={checkoutTotal}
               address={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : null}
             />
             {!demo && (
@@ -822,7 +882,7 @@ function Footer({
   busy: boolean;
   cart: CartApi;
   fulfillment: Fulfillment;
-  total: number;
+  total: number | null;
   contactOk: boolean;
   slotIso: string | null;
   slotLabel: string | null;
@@ -867,7 +927,7 @@ function Footer({
     return (
       <PrimaryAction
         disabled={empty || blocked}
-        amount={empty ? undefined : cart.subtotal}
+        amount={empty ? undefined : total ?? cart.subtotal}
         icon="arrow"
         mono={prixMono}
         onClick={() => onNext("customer")}
@@ -907,7 +967,7 @@ function Footer({
     <PrimaryAction
       disabled={blocked || !slotIso || !contactOk || !verified}
       loading={busy}
-      amount={total}
+      amount={total ?? undefined}
       icon={method === "online" ? "euro" : "check"}
       mono={prixMono}
       onClick={onSubmit}
@@ -932,6 +992,8 @@ function CartStep({
   promoCode,
   prixMono,
   onPromoCode,
+  delivery,
+  quote,
 }: {
   cart: CartApi;
   onBrowse: () => void;
@@ -939,6 +1001,8 @@ function CartStep({
   promoCode: string;
   prixMono: boolean;
   onPromoCode: (v: string) => void;
+  delivery: boolean;
+  quote: DeliveryQuote | null;
 }) {
   const noteId = useId();
 
@@ -1046,7 +1110,7 @@ function CartStep({
           />
         </label>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
-          La remise est appliquée par le restaurant au moment de valider.
+          {delivery ? "La remise et le minimum de livraison sont vérifiés à l’étape adresse." : "La remise est appliquée par le restaurant au moment de valider."}
         </p>
       </details>
 
@@ -1058,21 +1122,28 @@ function CartStep({
               {cart.count} article{cart.count > 1 ? "s" : ""}
             </span>
           </span>
-          <Money cents={cart.subtotal} mono={prixMono} className="text-[15px] text-mut" />
+          <Money cents={quote?.originalSubtotalCents ?? cart.subtotal} mono={prixMono} className="text-[15px] text-mut" />
         </div>
+        {quote?.discount && <div className="mt-2 flex items-baseline justify-between gap-3 text-[14px] text-okt">
+          <span>{quote.discount.reason}</span><span>−<Money cents={quote.discount.amount} mono={prixMono} /></span>
+        </div>}
+        {quote && <div className="mt-2 flex items-baseline justify-between gap-3 text-[14px] text-mut">
+          <span>Livraison</span><DeliveryFee quote={quote} mono={prixMono} />
+        </div>}
+        {quote && <div className="mt-2 text-[12px] leading-relaxed text-mut"><FreeDeliveryHint quote={quote} /></div>}
         <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-ink/8 pt-3">
           <span className="text-[16px] font-extrabold uppercase tracking-[0.04em] text-ink">
-            Total
+            {delivery && !quote ? "Produits · hors livraison" : "Total"}
           </span>
           <Money
-            cents={cart.subtotal}
+            cents={quote?.totalCents ?? cart.subtotal}
             mono={prixMono}
             className="text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] text-ink"
           />
         </div>
         <p className="mt-2 text-[12px] leading-relaxed text-mut">
-          Prix TTC, service compris. Le montant est recalculé par le restaurant à
-          la validation.
+          {delivery && !quote ? "Frais de livraison et remise éventuelle à vérifier à l’étape adresse. " : "Prix TTC, service compris. "}
+          Le montant est recalculé par le restaurant à la validation.
         </p>
       </section>
     </div>
@@ -1464,7 +1535,7 @@ function PayStep({
   cardAvailable,
   prixMono,
   delivery,
-  deliveryFee,
+  quote,
   total,
   address,
   disabled,
@@ -1478,8 +1549,8 @@ function PayStep({
   cardAvailable: boolean;
   prixMono: boolean;
   delivery: boolean;
-  deliveryFee: number;
-  total: number;
+  quote: DeliveryQuote | null;
+  total: number | null;
   address: string | null;
   disabled: boolean;
 }) {
@@ -1501,18 +1572,23 @@ function PayStep({
             <span className="font-semibold tabular-nums text-ink">{cart.count}</span>
           </Row>
           {address && <Row label="Adresse"><span className="whitespace-normal text-ink">{address}</span></Row>}
-          {delivery && <Row label="Frais de livraison"><Money cents={deliveryFee} mono={prixMono} /></Row>}
+          {delivery && <Row label="Produits"><Money cents={quote?.originalSubtotalCents ?? cart.subtotal} mono={prixMono} /></Row>}
+          {quote?.discount && <Row label={quote.discount.reason}><span className="text-okt">−<Money cents={quote.discount.amount} mono={prixMono} /></span></Row>}
+          {quote?.discount && <Row label="Produits après remise"><Money cents={quote.subtotalCents} mono={prixMono} /></Row>}
+          {delivery && <Row label="Frais de livraison">{quote ? <DeliveryFee quote={quote} mono={prixMono} /> : "À vérifier"}</Row>}
         </dl>
         <div className="mt-3.5 flex items-baseline justify-between border-t border-ink/8 pt-3.5">
           <span className="text-[15px] font-extrabold uppercase tracking-[0.04em] text-ink">
             Total à régler
           </span>
-          <Money
+          {total === null ? <span className="text-[15px] font-semibold text-mut">À vérifier</span> : <Money
             cents={total}
             mono={prixMono}
             className="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] text-ink"
-          />
+          />}
         </div>
+        {quote && <div className="mt-2 text-[12px] leading-relaxed text-mut"><FreeDeliveryHint quote={quote} /></div>}
+        {delivery && <p className="mt-2 text-[12px] leading-relaxed text-mut">Devis indicatif : prix et disponibilité de l’offre revérifiés à la validation.</p>}
       </section>
 
       <section className="flex flex-col gap-2.5">

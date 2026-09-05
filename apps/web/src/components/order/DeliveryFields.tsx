@@ -4,6 +4,20 @@ import { useId } from "react";
 import type { DeliveryAddress, DeliveryQuote } from "@sm/contracts";
 import { Banner, GhostAction, Money, SectionLabel, Spinner } from "./primitives";
 
+/** Les frais effectifs viennent du devis serveur, jamais d'un seuil recalculé ici. */
+export function DeliveryFee({ quote, mono = false }: { quote: DeliveryQuote; mono?: boolean }) {
+  return quote.feeCents === 0
+    ? <span className="font-semibold text-okt">Offerts</span>
+    : <Money cents={quote.feeCents} mono={mono} />;
+}
+
+export function FreeDeliveryHint({ quote }: { quote: DeliveryQuote }) {
+  const remaining = quote.remainingForFreeDeliveryCents;
+  if (quote.feeCents === 0) return <span className="block font-semibold text-okt">Votre livraison est offerte.</span>;
+  if (remaining == null || remaining <= 0) return null;
+  return <span className="block">Il manque <Money cents={remaining} /> de produits après remise pour la livraison offerte.</span>;
+}
+
 /** Saisie courte, avec validation explicite de la zone et du prix côté restaurant. */
 export function DeliveryFields({ address, instructions, quote, busy, error, onAddress, onInstructions, onVerify }: {
   address: DeliveryAddress;
@@ -39,7 +53,12 @@ export function DeliveryFields({ address, instructions, quote, busy, error, onAd
       {error && <div role="alert"><Banner tone="alert" title="Adresse à vérifier">{error}</Banner></div>}
       {quote ? (
         <div role="status"><Banner tone="ok" icon="check" title="Nous livrons à cette adresse">
-          Livraison <Money cents={quote.feeCents} /> · minimum <Money cents={quote.minimumOrderCents} /> de produits après remise. Choisissez ensuite votre heure de livraison estimée.
+          {quote.discount && <span className="mb-1 block">{quote.discount.reason} : −<Money cents={quote.discount.amount} />.</span>}
+          Produits{quote.discount ? " après remise" : ""} <Money cents={quote.subtotalCents} /> · frais de livraison <DeliveryFee quote={quote} />.
+          <span className="mt-1 block font-semibold">Total estimé <Money cents={quote.totalCents} />.</span>
+          <span className="mt-1 block"><FreeDeliveryHint quote={quote} /></span>
+          <span className="mt-1 block">Minimum <Money cents={quote.minimumOrderCents} /> de produits après remise. Prix et disponibilité de l’offre revérifiés à la validation.</span>
+          Choisissez ensuite votre heure de livraison estimée.
         </Banner></div>
       ) : (
         <GhostAction disabled={busy} onClick={onVerify}>{busy ? <><Spinner /> Vérification…</> : "Vérifier mon adresse"}</GhostAction>

@@ -18,6 +18,8 @@ sont résolus depuis `import.meta.url`.
 QA_SCENARIO=pickup node e2e/local/checkout-payment.mjs
 QA_SCENARIO=delivery node e2e/local/checkout-payment.mjs
 QA_SCENARIO=replay node e2e/local/checkout-payment.mjs
+QA_SCENARIO=delivery-pricing node e2e/local/checkout-payment.mjs
+QA_SCENARIO=delivery-settings node e2e/local/checkout-payment.mjs
 ```
 
 Exécuter **en série**, sans autre `next dev` sur `apps/web` : Next partage son
@@ -26,7 +28,7 @@ session appartenant à un autre développeur pour libérer cette ressource.
 
 | Variable | Défaut | Usage |
 |---|---|---|
-| `QA_SCENARIO` | `pickup` | `pickup`, `delivery` ou `replay` |
+| `QA_SCENARIO` | `pickup` | `pickup`, `delivery`, `replay`, `delivery-pricing` ou `delivery-settings` |
 | `QA_WEB_PORT` | `3218` | Port libre du frontend, lié uniquement à `127.0.0.1` |
 | `QA_API_PORT` | `3219` | Port libre de l'API simulée, distinct du frontend |
 | `QA_HEADED` | absent | `1` ouvre Chromium visiblement |
@@ -48,7 +50,7 @@ et fait échouer le scénario.
 
 ## Ce qui est vérifié
 
-Les trois scénarios parcourent le panier et le paiement, provoquent une première
+Les cinq scénarios parcourent le panier et le paiement, provoquent une première
 réponse PaymentIntent `503`, puis une reprise sur **la même commande et le même
 jeton**, avec **deux demandes PaymentIntent et une seule commande** dans la fixture.
 Aucune confirmation comptoir ni commande payée ne doit être affichée après
@@ -64,6 +66,17 @@ l'incertitude. `processing` désactive le bouton Payer et invite à consulter le
 - `replay`, téléphone 390 × 844 : première commande online mémorisée mais réponse
   `503`, puis choix local comptoir. Le second POST garde le même `clientId` et
   rejoue le paiement **online** initial ; aucune fausse confirmation comptoir.
+- `delivery-pricing`, desktop 1440 × 1000 : devis à 22,50 €, retour au retrait
+  sans frais (20 €), puis retour en livraison avec code promo. Un nouveau devis
+  est exigé et affiche 20 € − 2 € + 2,50 € = 20,50 €, comme le bouton Payer.
+  La navigation et le devis ne créent ni commande ni intention bancaire ; le code
+  part avec la commande unique, dont le paiement reprend sur le montant net.
+- `delivery-settings`, BO desktop + mobile : ancien tarif chargé sans fausse
+  modification, frais fixes à 5 €, toujours offerte, puis offerte dès 25 €.
+  Une saisie invalide est bloquée avant le PATCH et les réglages survivent au
+  rechargement. Côté client, deux articles à 10 € coûtent 25 € livrés ; un
+  troisième article invalide le devis, déclenche la gratuité et donne 30 €.
+  L'API et la session gérant sont des fixtures locales, jamais le parc réel.
 
 La page, son titre, l'absence d'écran vide/overlay et les erreurs JavaScript,
 console et HTTP sont contrôlés. Seuls les échecs HTTP délibérés des fixtures

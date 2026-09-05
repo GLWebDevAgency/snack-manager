@@ -2,30 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { DeliverySettingsSchema, type DeliverySettings, type DeliveryZone } from "@sm/contracts";
+import { DeliverySettingsSchema, type DeliverySettings } from "@sm/contracts";
 import { api } from "@/lib/api";
 import { Btn, EmptyState, Field, Input, Panel, Pill, Skeleton, Textarea, Toggle, useToast } from "@/components/ui";
-
-type ZoneDraft = Omit<DeliveryZone, "postalCodes" | "feeCents" | "minimumOrderCents"> & {
-  postalCodes: string;
-  fee: string;
-  minimum: string;
-};
-type Draft = Omit<DeliverySettings, "zones"> & { zones: ZoneDraft[] };
-
-const euros = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
-function toDraft(settings: DeliverySettings): Draft {
-  return { ...settings, zones: settings.zones.map(({ postalCodes, feeCents, minimumOrderCents, ...zone }) => ({ ...zone, postalCodes: postalCodes.join(", "), fee: euros(feeCents), minimum: euros(minimumOrderCents) })) };
-}
-function cents(value: string): number {
-  const match = /^(\d{1,4})(?:[.,](\d{1,2}))?$/.exec(value.trim());
-  return match ? Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0")) : NaN;
-}
+import { newDeliveryZone, parseDeliveryDraft, toDeliveryDraft, type DeliveryDraft, type DeliveryZoneDraft } from "./delivery-draft";
+import { ZonePricingFields } from "./ZonePricingFields";
 
 export default function DeliveryPage() {
   const toast = useToast();
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [saved, setSaved] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<DeliveryDraft | null>(null);
+  const [saved, setSaved] = useState<DeliveryDraft | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -35,7 +21,7 @@ export default function DeliveryPage() {
     setLoadError(false);
     try {
       const response = await api.get<DeliverySettings>("/delivery/settings");
-      const next = toDraft(DeliverySettingsSchema.parse(response));
+      const next = toDeliveryDraft(DeliverySettingsSchema.parse(response));
       setDraft(next);
       setSaved(next);
     } catch { setLoadError(true); }
@@ -45,23 +31,22 @@ export default function DeliveryPage() {
     void load();
   }, [load]);
 
-  function updateZone(id: string, patch: Partial<ZoneDraft>) {
+  function updateZone(id: string, patch: Partial<DeliveryZoneDraft>) {
     setDraft((current) => current ? { ...current, zones: current.zones.map((zone) => zone.id === id ? { ...zone, ...patch } : zone) } : current);
   }
 
   async function save() {
     if (!draft || saving) return;
-    const parsed = DeliverySettingsSchema.safeParse({ ...draft, zones: draft.zones.map(({ fee, minimum, postalCodes, ...zone }) => ({ ...zone, feeCents: cents(fee), minimumOrderCents: cents(minimum), postalCodes: postalCodes.split(/[\s,;]+/).filter(Boolean) })) });
+    const parsed = parseDeliveryDraft(draft);
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      setError(issue?.path.includes("feeCents") || issue?.path.includes("minimumOrderCents") ? "Saisissez les montants en euros, avec deux décimales au maximum." : issue?.message ?? "Vérifiez vos zones de livraison.");
+      setError(parsed.message);
       return;
     }
     setSaving(true);
     setError(null);
     try {
       const response = await api.patch<DeliverySettings>("/delivery/settings", parsed.data);
-      const next = toDraft(response);
+      const next = toDeliveryDraft(DeliverySettingsSchema.parse(response));
       setDraft(next);
       setSaved(next);
       toast("Livraison enregistrée", { icon: "check" });
@@ -81,7 +66,10 @@ export default function DeliveryPage() {
       </header>
 
       <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <Panel title="Zones de livraison" sub="Chaque code postal couvre toute la commune ou le secteur postal correspondant." actions={<Btn variant="ghost" size="sm" icon="plus" disabled={draft.zones.length >= 30 || saving} onClick={() => setDraft({ ...draft, zones: [...draft.zones, { id: `zone-${crypto.randomUUID().slice(0, 8)}`, name: "", postalCodes: "", fee: "2,50", minimum: "15,00" }] })}>Ajouter</Btn>}>
+        <Panel title="Zones de livraison" sub="Chaque code postal couvre toute la commune ou le secteur postal correspondant." actions={<Btn variant="ghost" size="sm" icon="plus" disabled={draft.zones.length >= 30 || saving} onClick={() => {
+          const zone = newDeliveryZone(`zone-${crypto.randomUUID().slice(0, 8)}`);
+          setDraft(current => current ? { ...current, zones: [...current.zones, zone] } : current);
+        }}>Ajouter</Btn>}>
           {draft.zones.length === 0 ? <EmptyState icon="home" title="Commencez par votre première zone" hint="Ajoutez un ou plusieurs codes postaux, puis choisissez vos frais et votre minimum de commande." /> : (
             <div className="flex flex-col gap-4">
               {draft.zones.map((zone, index) => (
@@ -90,10 +78,7 @@ export default function DeliveryPage() {
                   <div className="flex flex-col gap-3">
                     <Field label="Nom de la zone" htmlFor={`${zone.id}-name`}><Input id={`${zone.id}-name`} value={zone.name} maxLength={60} placeholder="Centre-ville" onChange={(event) => updateZone(zone.id, { name: event.target.value })} /></Field>
                     <Field label="Codes postaux" htmlFor={`${zone.id}-codes`} hint="Séparez les codes par une virgule. Un code postal ne peut appartenir qu’à une seule zone."><Textarea id={`${zone.id}-codes`} value={zone.postalCodes} rows={2} placeholder="69001, 69002" onChange={(event) => updateZone(zone.id, { postalCodes: event.target.value })} /></Field>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Frais de livraison (€)" htmlFor={`${zone.id}-fee`} hint="0 pour une livraison offerte."><Input id={`${zone.id}-fee`} inputMode="decimal" value={zone.fee} onChange={(event) => updateZone(zone.id, { fee: event.target.value })} /></Field>
-                      <Field label="Minimum de commande (€)" htmlFor={`${zone.id}-minimum`} hint="Après remise, hors frais."><Input id={`${zone.id}-minimum`} inputMode="decimal" value={zone.minimum} onChange={(event) => updateZone(zone.id, { minimum: event.target.value })} /></Field>
-                    </div>
+                    <ZonePricingFields zone={zone} onChange={next => updateZone(zone.id, next)} />
                     <div className="flex justify-end"><Btn variant="ghost" size="sm" icon="trash" onClick={() => setDraft({ ...draft, zones: draft.zones.filter((item) => item.id !== zone.id), enabled: draft.zones.length === 1 ? false : draft.enabled })}>Retirer cette zone</Btn></div>
                   </div>
                 </fieldset>
