@@ -100,7 +100,10 @@ export class InvoiceNumberingService {
       // CRITIQUE : lire Counter AVANT Invoice. Si Invoice est lu absent puis
       // qu'un concurrent la termine, un compteur lu après permettrait de lui
       // réserver un second numéro. Ici le CAS de l'ancienne seq échoue.
-      const counter = await this.counters.findById(counterId).read('primary').lean();
+      // Le primaire peut exposer un pending avant son acquittement. Un helper
+      // ne doit pas matérialiser ce travail s'il peut encore être rollbacké.
+      const counter = await this.counters.findById(counterId)
+        .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
       if (!counter || !Number.isSafeInteger(counter.seq) || counter.seq < 0) {
         throw new ConflictException('Compteur de factures incohérent. Rapprochement requis.');
       }
@@ -109,7 +112,8 @@ export class InvoiceNumberingService {
         continue;
       }
 
-      const existing = await this.invoices.findById(snapshot._id).read('primary').lean() as WrittenInvoice | null;
+      const existing = await this.invoices.findById(snapshot._id)
+        .read('primary').readConcern('majority').maxTimeMS(10_000).lean() as WrittenInvoice | null;
       if (existing) {
         assertSameInvoice(existing, snapshot);
         return existing;
@@ -145,7 +149,8 @@ export class InvoiceNumberingService {
       // Une I/O échouée laisse pending intact, même si l'insertion a réussi.
       if (!duplicateKey(error)) throw error;
     }
-    const invoice = await this.invoices.findById(pending.snapshot._id).read('primary').lean() as WrittenInvoice | null;
+    const invoice = await this.invoices.findById(pending.snapshot._id)
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean() as WrittenInvoice | null;
     if (!invoice) {
       throw new ConflictException('La facture réservée n’a pas pu être matérialisée. Rapprochement requis.');
     }

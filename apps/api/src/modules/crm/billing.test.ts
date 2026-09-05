@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Types } from 'mongoose';
 import {
   ADMIN_LOG_ACTION_LABELS,
   INSTALL_FEE_CENTS,
@@ -294,6 +295,77 @@ describe('Facturation', () => {
   // ─── Émission ───
 
   describe('Émettre', () => {
+    it('ne raisonne que sur les lectures majoritaires bornées de facture et réservation', async () => {
+      await sansAmorce();
+      invoices.reads.length = 0;
+      await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      expect(issuances.reads.length).toBeGreaterThan(0);
+      for (const read of [...invoices.reads, ...counters.reads, ...issuances.reads]) {
+        expect(read.options).toEqual({ preference: 'primary', concern: 'majority', maxTimeMS: 10_000 });
+      }
+    });
+
+    it('un claim non visible majoritairement ne déclenche aucune attribution de numéro', async () => {
+      await sansAmorce();
+      issuances.beforeRead = () => { throw new Error('majority claim read timed out'); };
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('majority claim read timed out');
+      expect(issuances.rows).toHaveLength(1);
+      expect(counters.rows).toHaveLength(0);
+      expect(invoices.rows).toHaveLength(0);
+    });
+
+    it('une génération changeant entre CAS et lecture majoritaire ne peut pas être matérialisée', async () => {
+      await sansAmorce();
+      let readings = 0;
+      issuances.beforeRead = () => {
+        readings += 1;
+        const snapshot = issuances.rows[0]!.snapshot as { _id: Types.ObjectId };
+        // Chaque lecture observe une nouvelle génération par rapport au CAS
+        // qui vient de répondre. Aucun de ces anciens résultats ne donne le
+        // droit de numéroter ; la contention doit échouer de façon bornée.
+        snapshot._id = new Types.ObjectId();
+      };
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('Émissions concurrentes');
+      expect(readings).toBe(16);
+      expect(counters.rows).toHaveLength(0);
+      expect(invoices.rows).toHaveLength(0);
+      expect(logs.rows).toHaveLength(0);
+    });
+
+    it('un claim absent au commit point est réessayé sans numéroter son résultat spéculatif', async () => {
+      await sansAmorce();
+      let first = true;
+      issuances.beforeRead = () => {
+        if (!first) return;
+        first = false;
+        expect(counters.rows).toHaveLength(0);
+        expect(invoices.rows).toHaveLength(0);
+        issuances.rows.length = 0;
+      };
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).resolves.toMatchObject({ number: 'SM-2026-0001' });
+      expect(first).toBe(false);
+      expect(issuances.reads).toHaveLength(2);
+      expect(invoices.rows).toHaveLength(1);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(1);
+    });
+
+    it('le remplacement annulé est lui aussi relu majoritairement avant un nouveau numéro', async () => {
+      await sansAmorce();
+      const initial = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      await billing.cancel(SM, CLASSFOOD, initial._id, { reason: 'Recette du remplacement' }, LE_19_AOUT);
+      issuances.reads.length = 0;
+      let reads = 0;
+      issuances.beforeRead = () => {
+        reads += 1;
+        if (reads === 2) throw new Error('replacement majority read timed out');
+      };
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('replacement majority read timed out');
+      expect(invoices.rows).toHaveLength(1);
+      expect(invoices.rows[0]!.status).toBe('annulee');
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(1);
+      expect(issuances.reads.every((read) => read.options.concern === 'majority' && read.options.maxTimeMS === 10_000)).toBe(true);
+    });
+
     it('arbitre deux émissions concurrentes de la même échéance en base', async () => {
       await sansAmorce();
       const other = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(),

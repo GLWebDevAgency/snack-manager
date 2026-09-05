@@ -129,6 +129,7 @@ integration('émission de factures sur un vrai Mongo standalone', () => {
   let first: Models;
   let second: Models;
   let ownsDatabase = false;
+  const commands: { name: string; collection: unknown; readConcern: unknown; maxTimeMS: unknown; writeConcern: unknown }[] = [];
 
   async function assertOwnedDatabase(): Promise<void> {
     if (!database || !ownsDatabase || firstConnection.name !== database.name
@@ -142,8 +143,15 @@ integration('émission de factures sur un vrai Mongo standalone', () => {
   beforeAll(async () => {
     if (!database) throw new Error('Base de recette absente.');
     firstConnection = await mongoose.createConnection(database.uri, {
-      autoCreate: false, autoIndex: false, family: 4, serverSelectionTimeoutMS: 5000,
+      autoCreate: false, autoIndex: false, family: 4, serverSelectionTimeoutMS: 5000, monitorCommands: true,
     }).asPromise();
+    firstConnection.getClient().on('commandStarted', (event) => {
+      commands.push({
+        name: event.commandName, collection: event.command[event.commandName],
+        readConcern: event.command.readConcern, maxTimeMS: event.command.maxTimeMS,
+        writeConcern: event.command.writeConcern,
+      });
+    });
     const hello = await firstConnection.db!.admin().command({ hello: 1 });
     expect(hello.setName).toBeUndefined();
     expect(hello.msg).not.toBe('isdbgrid');
@@ -166,6 +174,7 @@ integration('émission de factures sur un vrai Mongo standalone', () => {
     await Promise.all([
       first.invoices.deleteMany({}), first.counters.deleteMany({}), first.issuances.deleteMany({}),
     ]);
+    commands.length = 0;
   });
 
   afterAll(async () => {
@@ -177,6 +186,23 @@ integration('émission de factures sur un vrai Mongo standalone', () => {
     } finally {
       await Promise.all([firstConnection?.close(), secondConnection?.close()]);
     }
+  });
+
+  it('transmet les lectures majoritaires bornées au serveur sans readConcern sur les commandes d’écriture', async () => {
+    await writer(first).write(input());
+    const reads = commands.filter((command) => command.name === 'find');
+    expect(reads.length).toBeGreaterThan(4);
+    expect(new Set(reads.map((command) => command.collection))).toEqual(new Set([
+      first.invoices.collection.name, first.issuances.collection.name, first.counters.collection.name,
+    ]));
+    for (const command of reads) {
+      expect(command.readConcern).toEqual({ level: 'majority' });
+      expect(command.maxTimeMS).toBe(10_000);
+    }
+    const claims = commands.filter((command) => command.name === 'findAndModify');
+    expect(claims).toHaveLength(1);
+    expect(claims[0]!.readConcern).toBeUndefined();
+    expect(claims[0]!.writeConcern).toEqual({ w: 'majority', j: true, wtimeout: 10_000 });
   });
 
   it.each([2026, 2027])('deux instances sur la même période, échéance concurrente %i : une seule facture et un seul numéro', async (otherYear) => {

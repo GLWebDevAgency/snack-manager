@@ -11,7 +11,7 @@ Correctif logiciel du 5 septembre 2026. Le test initial reproduisait deux factur
 5. Une réponse réseau perdue conserve cette réservation. La même pièce peut être achevée par un autre appelant, sans nouveau numéro et sans toucher au paiement, à l'envoi ou à l'annulation éventuellement intervenus après insertion.
 6. Seule une facture réellement `annulee` autorise le remplacement de sa réservation par comparaison de son ancien identifiant. Un helper retardé n'efface jamais une nouvelle génération et ne ressuscite jamais l'ancienne pièce.
 
-Les lectures critiques imposent le primaire. Les écritures critiques demandent `w: majority`, `j: true` et un délai d'acquittement borné. Un timeout ne prouve pas que l'écriture a échoué : il impose une reprise, jamais une restitution de numéro. Le fonctionnement standalone et la journalisation sont documentés par [MongoDB](https://www.mongodb.com/docs/manual/reference/write-concern/).
+Les lectures critiques imposent le primaire, `readConcern: majority` et un délai maximal de dix secondes. Après un CAS de réservation, une lecture séparée vérifie aussi la génération majoritairement validée avant toute numérotation ; un résultat local d'une écriture sans effet ne tient pas lieu de cette preuve. Les écritures critiques demandent `w: majority`, `j: true` et un délai d'acquittement borné. Un timeout ne prouve pas que l'écriture a échoué : il impose une reprise, jamais une restitution de numéro. Le fonctionnement standalone et la journalisation sont documentés par [MongoDB](https://www.mongodb.com/docs/manual/reference/write-concern/).
 
 ## Comportement visible et limites
 
@@ -43,7 +43,7 @@ Les méthodes de lecture du registre ne créent plus de factures fictives, même
 
 Les tests de service utilisent le writer et le numéroteur réels. Les doublures ne remplacent que les opérations Mongo, avec unicité et comparaisons atomiques explicites. Une suite distincte exerce deux connexions Mongoose sur un MongoDB standalone local : émissions concurrentes, remplacement après annulation, historique ambigu et reprise après interruption aux frontières d'écriture.
 
-La CI démarre sa propre instance Mongo et exécute explicitement cette recette. Sans `BILLING_TEST_MONGO_URL`, les douze scénarios Mongo sont ignorés par la suite générale : une suite générale verte seule ne vaut donc pas recette Mongo. Les dix tests de garde de l'URL restent actifs. Une URI distante ou non dédiée est refusée avant connexion.
+La CI démarre sa propre instance Mongo et exécute explicitement cette recette. Sans `BILLING_TEST_MONGO_URL`, les treize scénarios Mongo sont ignorés par la suite générale : une suite générale verte seule ne vaut donc pas recette Mongo. Les dix tests de garde de l'URL restent actifs. Une URI distante ou non dédiée est refusée avant connexion. La surveillance des commandes envoyées au vrai Mongo vérifie les garanties de lecture/écriture ; elle ne remplace pas une recette de basculement réel d'un replica set.
 
 Ces preuves ne couvrent ni un paiement Stripe réel ni la coexistence avec un ancien processus de facturation, interdite par la procédure de bascule ci-dessus.
 

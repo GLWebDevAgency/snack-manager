@@ -82,10 +82,12 @@ export class InvoiceWriterService {
         continue;
       }
       if (!reservation) throw new ServiceUnavailableException('Réservation de facture indisponible.');
-      let snapshot = reservation.snapshot as InvoiceSnapshot;
+      let snapshot = await this.committedReservation(key, reservation);
+      if (!snapshot) continue;
       this.assertScope(snapshot, candidate);
 
-      const previous = await this.invoices.findOne({ _id: snapshot._id, tenantId: snapshot.tenantId }).read('primary').lean();
+      const previous = await this.invoices.findOne({ _id: snapshot._id, tenantId: snapshot.tenantId })
+        .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
       if (previous && String(snapshot._id) !== String(candidate._id)) {
         if (previous.status !== 'annulee') throw new DuplicateInvoiceException(previous);
         // Une facture annulée est terminale. Un ancien helper ne peut pas
@@ -95,7 +97,9 @@ export class InvoiceWriterService {
           { new: true, runValidators: true, writeConcern: JOURNALED_WRITE },
         ).lean();
         if (!replaced) continue;
-        snapshot = replaced.snapshot as InvoiceSnapshot;
+        snapshot = await this.committedReservation(key, replaced);
+        if (!snapshot) continue;
+        this.assertScope(snapshot, candidate);
       }
 
       // L'historique est relu SOUS réservation. Aucun index unique n'est
@@ -112,6 +116,20 @@ export class InvoiceWriterService {
     throw new ServiceUnavailableException('Émissions concurrentes : actualisez avant de réessayer.');
   }
 
+  /**
+   * Le findOneAndUpdate d'un claim existant peut être un no-op. Son résultat
+   * n'est pas notre preuve de lecture majoritaire : on relit avec un find,
+   * sans appliquer readConcern à une commande d'écriture non compatible.
+   * Une autre génération ou un snapshot pas encore visible fait réessayer,
+   * jamais matérialiser l'ancien travail capturé sur un primaire perdu.
+   */
+  private async committedReservation(key: string, expected: InvoiceIssuance): Promise<InvoiceSnapshot | null> {
+    const committed = await this.issuances.findById(key)
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
+    if (!committed || String(committed.snapshot?._id) !== String(expected.snapshot?._id)) return null;
+    return committed.snapshot as InvoiceSnapshot;
+  }
+
   private assertScope(snapshot: InvoiceSnapshot, candidate: InvoiceSnapshot): void {
     validateInvoiceSnapshot(snapshot);
     if (String(snapshot.tenantId) !== String(candidate.tenantId) || snapshot.kind !== 'abonnement'
@@ -124,7 +142,7 @@ export class InvoiceWriterService {
     const active = await this.invoices.find({
       tenantId: snapshot.tenantId, kind: 'abonnement', 'period.start': snapshot.period.start,
       status: { $ne: 'annulee' },
-    }).limit(2).read('primary').lean();
+    }).limit(2).read('primary').readConcern('majority').maxTimeMS(10_000).lean();
     if (active.length > 1) {
       throw new ServiceUnavailableException('Plusieurs abonnements actifs pour cette période : rapprochez les factures existantes avant toute émission.');
     }

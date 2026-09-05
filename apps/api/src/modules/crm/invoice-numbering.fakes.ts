@@ -45,9 +45,22 @@ export function gate() {
   return { promise, release };
 }
 
-type FakeRead<T> = { read(preference: string): FakeRead<T>; lean(): Promise<T> };
-function query<T>(read: () => Promise<T>, preferences: string[]): FakeRead<T> {
-  const chain: FakeRead<T> = { read: (preference) => { preferences.push(preference); return chain; }, lean: read };
+export type FakeNumberingReadOptions = { preference?: string; concern?: string; maxTimeMS?: number };
+type FakeRead<T> = {
+  read(preference: string): FakeRead<T>;
+  readConcern(concern: string): FakeRead<T>;
+  maxTimeMS(timeout: number): FakeRead<T>;
+  lean(): Promise<T>;
+};
+function query<T>(read: (options: FakeNumberingReadOptions) => Promise<T>, preferences: string[], reads: FakeNumberingReadOptions[]): FakeRead<T> {
+  const options: FakeNumberingReadOptions = {};
+  reads.push(options);
+  const chain: FakeRead<T> = {
+    read: (preference) => { options.preference = preference; preferences.push(preference); return chain; },
+    readConcern: (concern) => { options.concern = concern; return chain; },
+    maxTimeMS: (timeout) => { options.maxTimeMS = timeout; return chain; },
+    lean: () => read(options),
+  };
   return chain;
 }
 
@@ -55,7 +68,10 @@ function query<T>(read: () => Promise<T>, preferences: string[]): FakeRead<T> {
 export function numberingStore() {
   const state = { counter: null as Row | null, invoices: new Map<string, Row>() };
   const readPreferences: string[] = [];
+  const reads: FakeNumberingReadOptions[] = [];
   const hooks: {
+    counterView?: (row: Row | null, options: FakeNumberingReadOptions) => Row | null;
+    invoiceView?: (row: Row | null, options: FakeNumberingReadOptions) => Row | null;
     afterCounterRead?: (row: Row | null) => Promise<void>;
     afterInvoiceRead?: (row: Row | null) => Promise<void>;
     beforeInvoiceInsert?: (row: Row) => Promise<void>;
@@ -66,11 +82,12 @@ export function numberingStore() {
     duplicateOnInit?: boolean;
   } = {};
   const counters = {
-    findById: vi.fn((_id: string) => query(async () => {
-      const captured = copy(state.counter?._id === _id ? state.counter : null);
+    findById: vi.fn((_id: string) => query(async (options) => {
+      const committed = copy(state.counter?._id === _id ? state.counter : null);
+      const captured = hooks.counterView ? hooks.counterView(committed, options) : committed;
       await hooks.afterCounterRead?.(captured);
       return captured;
-    }, readPreferences)),
+    }, readPreferences, reads)),
     updateOne: vi.fn(async (query: Row, update: Row, options?: Row) => {
       if (update.$setOnInsert) {
         if (!state.counter) {
@@ -95,11 +112,12 @@ export function numberingStore() {
     }),
   };
   const invoices = {
-    findById: vi.fn((id: unknown) => query(async () => {
-      const captured = copy(state.invoices.get(String(id)) ?? null);
+    findById: vi.fn((id: unknown) => query(async (options) => {
+      const committed = copy(state.invoices.get(String(id)) ?? null);
+      const captured = hooks.invoiceView ? hooks.invoiceView(committed, options) : committed;
       await hooks.afterInvoiceRead?.(captured);
       return captured;
-    }, readPreferences)),
+    }, readPreferences, reads)),
     updateOne: vi.fn(async (query: Row, update: Row, options: Row) => {
       if (Object.keys(update).some((key) => key !== '$setOnInsert') || options.timestamps !== false) {
         throw new Error('Materialization must not update existing invoices or timestamps');
@@ -116,5 +134,5 @@ export function numberingStore() {
       return { matchedCount: 0, modifiedCount: 0, upsertedId: query._id };
     }),
   };
-  return { state, hooks, counters, invoices, readPreferences };
+  return { state, hooks, counters, invoices, readPreferences, reads };
 }

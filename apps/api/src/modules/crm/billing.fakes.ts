@@ -80,12 +80,17 @@ function mutate(row: Row, update: Update, inserted: boolean): void {
 }
 
 /** La commande ne s’exécute qu’à await/lean, comme une Query Mongoose. */
+export type FakeBillingRead = { kind: 'find' | 'findOne'; filter: Row; options: { preference?: string; concern?: string; maxTimeMS?: number } };
 class Result<T> implements PromiseLike<T> {
   private promise: Promise<T> | undefined;
+  readonly readOptions: FakeBillingRead['options'] = {};
+  beforeRead?: () => void;
   constructor(private readonly execute: () => T) {}
-  read(_preference: string): this { return this; }
+  read(preference: string): this { this.readOptions.preference = preference; return this; }
+  readConcern(concern: string): this { this.readOptions.concern = concern; return this; }
+  maxTimeMS(timeout: number): this { this.readOptions.maxTimeMS = timeout; return this; }
   lean(): Promise<T> {
-    this.promise ??= Promise.resolve().then(() => clone(this.execute()));
+    this.promise ??= Promise.resolve().then(() => { this.beforeRead?.(); return clone(this.execute()); });
     return this.promise;
   }
   then<A = T, B = never>(yes?: ((value: T) => A | PromiseLike<A>) | null, no?: ((reason: unknown) => B | PromiseLike<B>) | null): Promise<A | B> {
@@ -118,16 +123,27 @@ class ListResult extends Result<Row[]> {
 
 class MoneyCollection<T> {
   readonly rows: Row[] = [];
+  readonly reads: FakeBillingRead[] = [];
+  beforeRead?: (read: FakeBillingRead) => void;
   failNextCreate = false;
   /** Insert réussi côté moteur, réponse perdue côté appelant. */
   failAfterNextCreate = false;
   constructor(private readonly unique: readonly string[] = ['_id']) {}
 
   find(filter: Row = {}, _projection?: Row): ListResult {
-    return new ListResult(() => this.rows.filter((row) => matches(row, filter)));
+    const query = new ListResult(() => this.rows.filter((row) => matches(row, filter)));
+    this.observe(query, 'find', filter);
+    return query;
   }
   findOne(filter: Row): Result<Row | null> {
-    return new Result(() => this.rows.find((row) => matches(row, filter)) ?? null);
+    const query = new Result(() => this.rows.find((row) => matches(row, filter)) ?? null);
+    this.observe(query, 'findOne', filter);
+    return query;
+  }
+  private observe(query: { readOptions: FakeBillingRead['options']; beforeRead?: () => void }, kind: FakeBillingRead['kind'], filter: Row): void {
+    const read: FakeBillingRead = { kind, filter: clone(filter), options: query.readOptions };
+    this.reads.push(read);
+    query.beforeRead = () => { this.beforeRead?.(read); };
   }
   findById(id: unknown): Result<Row | null> { return this.findOne({ _id: id }); }
   async countDocuments(filter: Row = {}): Promise<number> { return this.rows.filter((row) => matches(row, filter)).length; }

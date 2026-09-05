@@ -169,7 +169,7 @@ describe('numérotation durable des factures', () => {
       .toMatchObject({ number: 'SM-2026-0001', amountCents: -14900, kind: 'avoir' });
   });
 
-  it('demande un acquittement durable des quatre écritures et des lectures primaires', async () => {
+  it('demande un acquittement durable et des lectures primaires majoritaires bornées', async () => {
     const ctx = setup();
     await ctx.writer().write(invoiceSnapshot());
     const options = [
@@ -182,6 +182,39 @@ describe('numérotation durable des factures', () => {
     }
     expect(ctx.readPreferences).toHaveLength(ctx.counters.findById.mock.calls.length + ctx.invoices.findById.mock.calls.length);
     expect(new Set(ctx.readPreferences)).toEqual(new Set(['primary']));
+    expect(ctx.reads.every((options) => options.concern === 'majority' && options.maxTimeMS === 10_000)).toBe(true);
+  });
+
+  it('ne matérialise pas un pending visible localement mais perdu lors du basculement de primaire', async () => {
+    const ctx = setup();
+    const phantom = invoiceSnapshot();
+    let first = true;
+    ctx.hooks.counterView = (committed, options) => {
+      if (!first) return committed;
+      first = false;
+      // Le nouveau primaire conserve seq0 : l'ancien primaire avait exposé
+      // seq1/pending localement avant son acquittement majoritaire, puis rollback.
+      return options.concern === 'majority' ? committed : {
+        _id: 'invoice:2026', seq: 1,
+        pendingInvoice: { snapshot: phantom, number: 'SM-2026-0001' },
+      };
+    };
+    expect((await ctx.writer().write(invoiceSnapshot(SECOND_ID))).number).toBe('SM-2026-0001');
+    expect(ctx.state.invoices.has(String(phantom._id))).toBe(false);
+    expect(ctx.state.counter).toMatchObject({ seq: 1, pendingInvoice: null });
+  });
+
+  it('une lecture majoritaire indisponible échoue sans matérialiser ni libérer le pending', async () => {
+    const ctx = setup();
+    ctx.state.counter = { _id: 'invoice:2026', seq: 1,
+      pendingInvoice: { snapshot: invoiceSnapshot(), number: 'SM-2026-0001' } };
+    ctx.hooks.counterView = (committed, options) => {
+      if (options.concern === 'majority') throw new Error('majority read timed out');
+      return committed;
+    };
+    await expect(ctx.writer().write(invoiceSnapshot(SECOND_ID))).rejects.toThrow('majority read timed out');
+    expect(ctx.invoices.updateOne).not.toHaveBeenCalled();
+    expect(ctx.state.counter).toMatchObject({ seq: 1, pendingInvoice: { number: 'SM-2026-0001' } });
   });
 
   it('une réponse perdue après nettoyage ne réattribue pas le numéro à la reprise', async () => {
