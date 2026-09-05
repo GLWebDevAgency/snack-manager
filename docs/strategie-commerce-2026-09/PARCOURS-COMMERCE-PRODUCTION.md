@@ -2,6 +2,8 @@
 
 Audit du 5 septembre 2026 sur `codex/commerce-delivery-stripe`, à la demande du fondateur. Priorité : clients du restaurant, caisse/cuisine, gérant et livreurs. Les chantiers IA, HACCP, RH avancées et scénographies de Claude ne sont pas des prérequis ajoutés implicitement à cette revue.
 
+Photographie historique : les états actualisés et l'ordre de réalisation sont tenus dans le [suivi unique](SUITE-APRES-COMMERCE.md). Les constats ci-dessous ne doivent pas faire rouvrir des corrections depuis livrées.
+
 **Conclusion : la chaîne n'est pas encore complète pour une exploitation autonome.** Des parcours réels existent et sont testés, mais certaines fonctions commerciales sont absentes ; des parcours d'incident exigent encore le propriétaire ou du support manuel. Ni une démonstration fluide, ni une CI verte ne prouvent un parcours complet en production. Aucune validation staging ou production de ces nouveaux lots n'est revendiquée ici.
 
 ## 1. État par parcours

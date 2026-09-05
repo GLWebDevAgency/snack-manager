@@ -4,6 +4,8 @@ Suite SaaS multi-tenant (marque grise) pour fast-foods indépendants : caisse (P
 
 Architecture complète : [ARCHITECTURE.md](ARCHITECTURE.md) · Specs UI par surface : [docs/specs/](docs/specs/) · Handoff design : [design_handoff_snack_manager/](design_handoff_snack_manager/)
 
+Pilotage des demandes, priorités et preuves de livraison : [suivi unique Classfood / vision 2030](docs/strategie-commerce-2026-09/SUITE-APRES-COMMERCE.md).
+
 ## Monorepo
 
 | Espace | Contenu |
