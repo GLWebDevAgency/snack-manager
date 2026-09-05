@@ -22,6 +22,7 @@ import {
   type DeviceUpdate,
   type PairDevice,
 } from '@sm/contracts';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { readDeviceToken } from './device-access';
@@ -146,4 +147,3 @@ export class DevicesController {
     return this.pinLogin.execute(readDeviceToken(headers, body.deviceToken), body.pin);
   }
 }
-import { Fonction } from '../../common/capacites';

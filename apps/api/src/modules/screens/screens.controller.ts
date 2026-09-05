@@ -12,6 +12,7 @@ import {
   type ScreenUpdate,
 } from '@sm/contracts';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { Public, Roles, TenantId } from '../../common/auth';
 import { BuildScreenContent } from './build-screen-content.usecase';
@@ -125,4 +126,3 @@ export class ScreensController {
     return this.heartbeat.execute(query.token);
   }
 }
-import { Fonction } from '../../common/capacites';

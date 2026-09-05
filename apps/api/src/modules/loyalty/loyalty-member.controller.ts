@@ -37,6 +37,7 @@ import {
   type LoyaltyRedeem,
 } from '@sm/contracts';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import {
   LoyaltyMemberService,
@@ -284,4 +285,3 @@ export class LoyaltyMemberController {
     );
   }
 }
-import { Fonction } from '../../common/capacites';

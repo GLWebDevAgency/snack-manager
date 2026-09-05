@@ -39,6 +39,7 @@ import {
   type SupplierUpdate,
   type JwtPayload,
 } from '@sm/contracts';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Roles, TenantId } from '../../common/auth';
 import { SupplyService } from './supply.service';
@@ -282,4 +283,3 @@ export class SupplyController {
     return this.supply.listMovements(tenantId, ingredientId || undefined, capped);
   }
 }
-import { Fonction } from '../../common/capacites';

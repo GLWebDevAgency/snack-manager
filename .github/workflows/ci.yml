@@ -193,3 +193,18 @@ jobs:
 
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS
+
+      # TypeScript et Vitest peuvent réussir alors qu'un import utilisé par un
+      # décorateur arrive trop tard dans le CommonJS émis. Charger le vrai graphe
+      # compilé détecte ce défaut AVANT Railway, sans démarrer Nest ni ses bases.
+      - name: Chargement du module API compilé
+        working-directory: apps/api
+        run: |
+          node <<'NODE'
+          require('reflect-metadata');
+          const { AppModule } = require('./dist/app.module.js');
+          if (typeof AppModule !== 'function') {
+            throw new Error('Le module API compilé doit être chargeable');
+          }
+          console.log('✓ graphe API CommonJS chargé sans démarrage des services');
+          NODE

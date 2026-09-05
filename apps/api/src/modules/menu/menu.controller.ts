@@ -9,6 +9,7 @@ import {
   ReorderSchema,
   type JwtPayload,
 } from '@sm/contracts';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
 import { MenuService } from './menu.service';
@@ -136,4 +137,3 @@ export class MenuController {
     return this.menu.setStock(tenantId, id, !!body.outOfStock, user);
   }
 }
-import { Fonction } from '../../common/capacites';

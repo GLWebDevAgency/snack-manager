@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { Roles, TenantId } from '../../common/auth';
 import { StaffService } from './staff.service';
@@ -65,4 +66,3 @@ export class StaffController {
     return this.staff.clock(tenantId, id, body.direction);
   }
 }
-import { Fonction } from '../../common/capacites';
