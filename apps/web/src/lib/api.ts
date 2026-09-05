@@ -274,6 +274,9 @@ export type TenantMe = {
    * restaurant a acheté, là c'est ce qu'il a décidé ce soir.
    */
   onlineOrdering: boolean;
+  onlineDelivery?: boolean;
+  standaloneLoyalty?: boolean;
+  websiteUrl?: string | null;
   /**
    * CE QUE L'ÉTABLISSEMENT A SOUSCRIT — calculé par le SERVEUR, jamais ici.
    *

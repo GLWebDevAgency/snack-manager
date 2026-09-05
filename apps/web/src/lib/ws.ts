@@ -27,7 +27,7 @@ export type TenantSocketEvent = {
  * Retourne le dernier événement reçu + l'état de connexion ; les callbacks
  * passés en `handlers` sont appelés à chaque événement correspondant.
  */
-export function useTenantSocket(handlers?: TenantSocketHandlers) {
+export function useTenantSocket(handlers?: TenantSocketHandlers, enabled = true) {
   const handlersRef = useRef<TenantSocketHandlers | undefined>(handlers);
   const [last, setLast] = useState<TenantSocketEvent | null>(null);
   const [connected, setConnected] = useState(false);
@@ -38,6 +38,7 @@ export function useTenantSocket(handlers?: TenantSocketHandlers) {
   }, [handlers]);
 
   useEffect(() => {
+    if (!enabled) return;
     const token = getToken();
     if (!token) return; // pas de session → pas de room tenant
 
@@ -61,7 +62,7 @@ export function useTenantSocket(handlers?: TenantSocketHandlers) {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [enabled]);
 
   return { last, connected };
 }

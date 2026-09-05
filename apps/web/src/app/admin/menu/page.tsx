@@ -1,4 +1,5 @@
 "use client";
+import { useAdminCapabilities } from "../access";
 
 /**
  * Vue « Menu & prix » — /admin/menu (spec backoffice-restaurant §7).
@@ -175,6 +176,8 @@ const searchKey = (s: string) =>
     .replace(/[\u0300-\u036f]/g, "");
 
 export default function MenuPage() {
+  const capabilities = useAdminCapabilities();
+  const hasStocks = capabilities.includes("stocks");
   const toast = useToast();
 
   const [menu, setMenu] = useState<MenuData | null>(null);
@@ -259,7 +262,7 @@ export default function MenuPage() {
   const refsKey = useMemo(() => allProducts.map((p) => p._id).join(","), [allProducts]);
 
   useEffect(() => {
-    if (!refsKey) return;
+    if (!refsKey || !hasStocks) return;
     let cancelled = false;
     const refs = refsKey.split(",").slice(0, 200).join(",");
     void api
@@ -273,7 +276,7 @@ export default function MenuPage() {
     return () => {
       cancelled = true;
     };
-  }, [refsKey]);
+  }, [refsKey, hasStocks]);
 
   /** Liste d'ingrédients supply mutualisée entre ouvertures d'EditPanel. */
   const ingredientsRef = useRef<Promise<SupplyIngredient[]> | null>(null);

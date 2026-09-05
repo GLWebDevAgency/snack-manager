@@ -46,6 +46,7 @@
  */
 
 import type { Capacite } from "@sm/contracts";
+import { BACKOFFICE_ACCESS, canAccessArea, type BackofficeArea } from "@sm/contracts/commerce";
 import type { IconName } from "@/components/ui";
 import type { RoleAdmin } from "./session";
 
@@ -146,6 +147,7 @@ export const NAV_GROUPES: readonly NavGroupe[] = [
       // libellé court « Accueil » qui le doublait dans la barre basse.
       { href: "/admin/dashboard", label: "Aujourd’hui", icon: "home", capacite: "bo" },
       { href: "/admin/orders", label: "Commandes", icon: "ticket", capacite: "bo" },
+      { href: "/admin/livraison", label: "Livraison", icon: "truck", capacite: "delivery", roles: ["owner", "gerant", "cogerant"] },
     ],
   },
   {
@@ -346,8 +348,23 @@ function estVisible(item: NavItem, ctx: ContexteNav): boolean {
  * votre métier » et « voilà ce que vous pourriez avoir ».
  */
 function estVerrouille(item: NavItem, ctx: ContexteNav): boolean {
-  if (!item.capacite || ctx.capacites === null) return false;
-  return !ctx.capacites.includes(item.capacite);
+  if (ctx.capacites === null) return false;
+  const area = item.href.split("/")[2] as BackofficeArea;
+  if (area in BACKOFFICE_ACCESS) return !canAccessArea(area, ctx.capacites);
+  return Boolean(item.capacite && !ctx.capacites.includes(item.capacite));
+}
+
+/** URL directes comprises : la navigation et la coque relisent le même accès. */
+export function accesPage(pathname: string, ctx: ContexteNav): "allowed" | "locked" | "forbidden" {
+  const item = NAV.find((entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`));
+  if (!item) return "allowed";
+  if (!estVisible(item, ctx)) return "forbidden";
+  return estVerrouille(item, ctx) ? "locked" : "allowed";
+}
+
+/** La première fonction réellement utilisable, jamais une vente additionnelle à la connexion. */
+export function accueilAdmin(ctx: ContexteNav): string | null {
+  return NAV.find((item) => estVisible(item, ctx) && !estVerrouille(item, ctx))?.href ?? null;
 }
 
 const affiche = (item: NavItem, ctx: ContexteNav): NavItemAffiche => ({

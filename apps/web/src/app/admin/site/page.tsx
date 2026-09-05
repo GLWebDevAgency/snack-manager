@@ -32,6 +32,8 @@ import {
 } from "@/components/ui";
 import { CopyBtn, DnsInstructionCard, DomainStatusBadge } from "./parts";
 import { apexSuggestion, type DomainView, type SiteAddresses } from "./types";
+import { WebsitePanel } from "./WebsitePanel";
+import { useAdminCapabilities } from "../access";
 
 /** Lien externe stylé en bouton fantôme (les `Btn` sont des `<button>`). */
 function OpenLink({ url, label }: { url: string; label: string }) {
@@ -51,6 +53,7 @@ function OpenLink({ url, label }: { url: string; label: string }) {
 
 export default function SitePage() {
   const toast = useToast();
+  const online = useAdminCapabilities().includes("online");
 
   const [loadState, setLoadState] = useState<"loading" | "error" | "ready">(
     "loading",
@@ -70,13 +73,14 @@ export default function SitePage() {
   // `loading` est déjà l'état initial : le chargement ne le repositionne pas,
   // sinon l'effet écrirait un état de façon synchrone à chaque montage.
   const load = useCallback(async () => {
+    if (!online) return;
     try {
       setData(await api.get<SiteAddresses>("/site/domains"));
       setLoadState("ready");
     } catch {
       setLoadState("error");
     }
-  }, []);
+  }, [online]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- chargement asynchrone : les domaines viennent du réseau (« loading » est déjà l'état initial, justement pour éviter une écriture au montage). Sans cet appel, la page reste sur son squelette et `retry`, qui repose sur le même `load`, ne relance plus rien.
@@ -172,6 +176,8 @@ export default function SitePage() {
 
   // ─── Chargement / erreur ───
 
+  if (!online) return <div className="max-w-3xl p-4 md:p-[26px]"><WebsitePanel /></div>;
+
   if (loadState === "loading")
     return (
       <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
@@ -202,6 +208,7 @@ export default function SitePage() {
   return (
     <div className="grid grid-cols-1 items-start gap-4 p-4 md:p-[26px] xl:grid-cols-[1.25fr_0.75fr]">
       <div className="flex min-w-0 flex-col gap-4">
+        <WebsitePanel />
         {/* ── Carte « Votre adresse » : toujours active ── */}
         <Panel
           title="Votre adresse"
