@@ -71,8 +71,8 @@ export function FeaturedSelectionDialog({ category, catalogue, initialProductId,
 
   return <Modal open title={`À l’affiche · ${displayedCategory.name}`} width={620}
     onClose={() => { if (!lock.current) onClose(); }}
-    footer={<><Btn variant="ghost" size="sm" disabled={busy} onClick={onClose}>Annuler</Btn><Btn variant="ink" size="sm" disabled={busy} onClick={() => void save()}>{busy ? "Enregistrement…" : "Enregistrer la sélection"}</Btn></>}>
-    <p className="mb-4 leading-relaxed text-mut">Choisissez jusqu’à trois produits, dans l’ordre souhaité. Ils apparaissent sur vos écrans et dans les <strong className="text-ink">Incontournables</strong> de la commande en ligne, avec leurs photos et leurs prix à jour.</p>
+    footer={<><Btn variant="ghost" size="sm" className="min-h-11" disabled={busy} onClick={onClose}>Annuler</Btn><Btn variant="ink" size="sm" className="min-h-11" disabled={busy} onClick={() => void save()}>{busy ? "Enregistrement…" : "Enregistrer la sélection"}</Btn></>}>
+    <p className="mb-4 leading-relaxed text-mut">Choisissez jusqu’à trois produits, dans l’ordre souhaité. Ils apparaissent sur les écrans qui diffusent cette catégorie et dans les <strong className="text-ink">Incontournables</strong> de la commande en ligne, avec leurs photos et leurs prix à jour.</p>
     <div className="mb-3 flex items-center justify-between gap-2"><h3 className="font-semibold">Votre sélection</h3><Pill>{ids.length} / {FEATURED_PRODUCTS_MAX}</Pill></div>
     <ol className="mb-4 space-y-2" aria-label="Produits mis en avant">
       {ids.map((id, index) => {
