@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type RefObject } from "react";
 import type { ScreenOrientation } from "@sm/contracts";
 
 /**
@@ -21,6 +20,10 @@ import type { ScreenOrientation } from "@sm/contracts";
  *    90° — c'est exactement ce que fait un lecteur d'affichage dynamique, et
  *    c'est la seule façon de respecter l'orientation CONFIGURÉE sur l'écran
  *    quand le matériel, lui, n'en sait rien.
+ *
+ * La règle est une fonction PURE (`computeStage`), partagée par le téléviseur
+ * (la fenêtre) et par le back-office (un conteneur) : la même règle, donc le
+ * même rendu dans le tiroir « Apparence » et en salle.
  */
 
 const REFERENCE: Record<ScreenOrientation, { width: number; height: number }> = {
@@ -28,25 +31,68 @@ const REFERENCE: Record<ScreenOrientation, { width: number; height: number }> = 
   portrait: { width: 1080, height: 1920 },
 };
 
+export interface StageStyle extends CSSProperties {
+  "--bd-w": string;
+  "--bd-h": string;
+  "--bd-scale": number;
+  "--bd-rot": string;
+}
+
 export interface Stage {
   orientation: ScreenOrientation;
   /** La scène est pivotée : le matériel ne sort pas dans le bon sens. */
   rotated: boolean;
   ready: boolean;
   /** À poser sur l'élément `.bd-stage`. */
-  style: CSSProperties;
+  style: StageStyle;
 }
 
+interface Viewport {
+  width: number;
+  height: number;
+}
+
+export function computeStage(viewport: Viewport, configured: ScreenOrientation | null): Stage {
+  const ready = viewport.width > 0 && viewport.height > 0;
+  const detected: ScreenOrientation = viewport.width >= viewport.height ? "landscape" : "portrait";
+  const orientation = configured ?? detected;
+  const rotated = ready && orientation !== detected;
+  const { width, height } = REFERENCE[orientation];
+
+  // Pivotée, la scène occupe `height × width` à l'écran : l'échelle se
+  // calcule sur les dimensions échangées.
+  const scale = !ready
+    ? 1
+    : rotated
+      ? Math.min(viewport.width / height, viewport.height / width)
+      : Math.min(viewport.width / width, viewport.height / height);
+
+  return {
+    orientation,
+    rotated,
+    ready,
+    style: {
+      "--bd-w": `${width}px`,
+      "--bd-h": `${height}px`,
+      "--bd-scale": scale,
+      "--bd-rot": rotated ? "90deg" : "0deg",
+    },
+  };
+}
+
+const SAME = (a: Viewport, b: Viewport) => a.width === b.width && a.height === b.height;
+
+/** Le téléviseur : la scène suit la fenêtre. */
 export function useStage(configured: ScreenOrientation | null): Stage {
-  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [viewport, setViewport] = useState<Viewport>({ width: 0, height: 0 });
 
   useEffect(() => {
     const measure = () =>
-      setViewport((previous) =>
-        previous.width === window.innerWidth && previous.height === window.innerHeight
-          ? previous // même mesure : pas de re-rendu (l'écran tourne 12 h/jour)
-          : { width: window.innerWidth, height: window.innerHeight },
-      );
+      setViewport((previous) => {
+        const next = { width: window.innerWidth, height: window.innerHeight };
+        // Même mesure : pas de re-rendu (l'écran tourne 12 h/jour).
+        return SAME(previous, next) ? previous : next;
+      });
 
     measure();
     window.addEventListener("resize", measure);
@@ -57,32 +103,36 @@ export function useStage(configured: ScreenOrientation | null): Stage {
     };
   }, []);
 
-  return useMemo(() => {
-    const ready = viewport.width > 0 && viewport.height > 0;
-    const detected: ScreenOrientation =
-      viewport.width >= viewport.height ? "landscape" : "portrait";
-    const orientation = configured ?? detected;
-    const rotated = ready && orientation !== detected;
-    const { width, height } = REFERENCE[orientation];
+  return useMemo(() => computeStage(viewport, configured), [configured, viewport]);
+}
 
-    // Pivotée, la scène occupe `height × width` à l'écran : l'échelle se
-    // calcule sur les dimensions échangées.
-    const scale = !ready
-      ? 1
-      : rotated
-        ? Math.min(viewport.width / height, viewport.height / width)
-        : Math.min(viewport.width / width, viewport.height / height);
+/**
+ * Le back-office : la scène suit un CONTENEUR, dont le ratio est celui de
+ * l'orientation — donc jamais de rotation. `ResizeObserver` plutôt que
+ * `resize` : le tiroir s'ouvre, la colonne se replie, le conteneur bouge
+ * sans que la fenêtre change.
+ */
+export function useEmbeddedStage(
+  ref: RefObject<HTMLElement | null>,
+  configured: ScreenOrientation,
+): Stage {
+  const [viewport, setViewport] = useState<Viewport>({ width: 0, height: 0 });
 
-    return {
-      orientation,
-      rotated,
-      ready,
-      style: {
-        "--bd-w": `${width}px`,
-        "--bd-h": `${height}px`,
-        "--bd-scale": scale,
-        "--bd-rot": rotated ? "90deg" : "0deg",
-      } as CSSProperties,
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
+      setViewport((previous) => {
+        const next = { width: rect.width, height: rect.height };
+        return SAME(previous, next) ? previous : next;
+      });
     };
-  }, [configured, viewport.width, viewport.height]);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return useMemo(() => computeStage(viewport, configured), [configured, viewport]);
 }

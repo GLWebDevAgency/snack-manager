@@ -18,6 +18,7 @@ import {
   PRESET_KEYS,
   SENS_DEROGATION,
   SM_INVOICE_VAT,
+  SCENOGRAPHIES,
   STOCKAGES_MEDIA,
   TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
@@ -1578,6 +1579,11 @@ export const ScreenSchema = new Schema(
     orientation: { type: String, enum: ['landscape', 'portrait'], default: 'landscape' },
     playlist: { type: [SceneSub], default: [] },
     theme: { type: String, enum: ['brand', 'dark', 'light'], default: 'brand' },
+    // La mise en scène. ABSENTE sur les écrans antérieurs : `toStored` lit
+    // alors « ardoise », l'écran qu'ils ont toujours eu — une mise à jour ne
+    // change pas l'apparence d'un téléviseur accroché au mur. Les écrans neufs
+    // reçoivent le défaut du contrat (Comptoir) à la création, pas ce défaut-ci.
+    scenography: { type: String, enum: [...SCENOGRAPHIES], default: 'ardoise' },
     // Dernier battement de cœur — source du « hors ligne depuis 20 min ».
     lastSeenAt: { type: Date, default: null },
     active: { type: Boolean, default: true },

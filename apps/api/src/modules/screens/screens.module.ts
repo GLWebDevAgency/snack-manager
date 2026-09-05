@@ -8,6 +8,7 @@ import { BuildScreenContent } from './build-screen-content.usecase';
 import { HeartbeatScreen } from './heartbeat-screen.usecase';
 import { ManageScreens } from './manage-screens.usecase';
 import { PairScreenDevice } from './pair-screen.usecase';
+import { PreviewScreenContent } from './preview-screen-content.usecase';
 // L'écran de salle DÉRIVE `photoUrl` et le point de recadrage 16:9 de la
 // médiathèque (`menu-board.repository.ts`).
 import { MediathequeModule } from '../mediatheque/mediatheque.module';
@@ -38,6 +39,7 @@ import { MediathequeModule } from '../mediatheque/mediatheque.module';
     PairScreenDevice,
     BuildScreenContent,
     HeartbeatScreen,
+    PreviewScreenContent,
   ],
 })
 export class ScreensModule {}

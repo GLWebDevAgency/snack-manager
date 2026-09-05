@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { SCENE_MAX_LINES } from '@sm/contracts';
+import { SCENE_MAX_LINES, marqueDeRepli, type Brand } from '@sm/contracts';
 import { BuildScreenContent } from './build-screen-content.usecase';
 import { renderScreenContent } from './render-screen-content';
 import {
   FakeMenuBoardRepository,
   FakeScreensRepository,
   TestClock,
+  boardIdentity,
   boardProduct,
   boardSnapshot,
   scene,
@@ -307,5 +308,45 @@ describe('Accès par jeton d’appareil', () => {
 
   it('un jeton inconnu n’obtient rien — l’écran n’a pas d’autre identité', async () => {
     await expect(build().useCase.execute('jeton-inventé')).rejects.toThrow(/non appairé/);
+  });
+});
+
+describe('Le masque voyage jusqu’à l’écran', () => {
+  const avecLogos = (): Brand => ({
+    ...marqueDeRepli('#c9a15a', null),
+    logo: {
+      mark: { light: 'https://cdn.test/clair.png', dark: 'https://cdn.test/sombre.png' },
+      lockup: { light: null, dark: null },
+    },
+  });
+
+  it('« vos couleurs » transporte le masque du restaurant tel quel, et la scénographie', () => {
+    const snapshot = boardSnapshot();
+    const content = renderScreenContent(storedScreen({ scenography: 'comptoir' }), snapshot, MERCREDI_MIDI);
+    expect(content.masque).toEqual(snapshot.identity.brand);
+    expect(content.scenography).toBe('comptoir');
+  });
+
+  it('« fond clair » rend un masque clair qui garde l’accent', () => {
+    const content = renderScreenContent(storedScreen({ theme: 'light' }), boardSnapshot(), MERCREDI_MIDI);
+    expect(content.masque.mode).toBe('light');
+    expect(content.masque.palette.accent).toBe('#c9a15a');
+    expect(content.brand.accent).toBe('#c9a15a');
+  });
+
+  it('le logo de l’en-tête suit le mode du fond', () => {
+    const snapshot = boardSnapshot({ identity: boardIdentity({ brand: avecLogos() }) });
+    const sombre = renderScreenContent(storedScreen({ theme: 'brand' }), snapshot, MERCREDI_MIDI);
+    const clair = renderScreenContent(storedScreen({ theme: 'light' }), snapshot, MERCREDI_MIDI);
+    expect(sombre.brand.logoUrl).toBe('https://cdn.test/sombre.png');
+    expect(clair.brand.logoUrl).toBe('https://cdn.test/clair.png');
+  });
+
+  it('l’empreinte change avec le fond et avec la scénographie', () => {
+    const base = renderScreenContent(storedScreen(), boardSnapshot(), MERCREDI_MIDI);
+    const fond = renderScreenContent(storedScreen({ theme: 'dark' }), boardSnapshot(), MERCREDI_MIDI);
+    const mise = renderScreenContent(storedScreen({ scenography: 'comptoir' }), boardSnapshot(), MERCREDI_MIDI);
+    expect(fond.contentHash).not.toBe(base.contentHash);
+    expect(mise.contentHash).not.toBe(base.contentHash);
   });
 });

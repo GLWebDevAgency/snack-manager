@@ -7,6 +7,8 @@ import {
   SCREEN_SERVICE_LABELS,
   RESTAURANT_TZ,
   isServedAt,
+  logoPour,
+  masquePourFond,
   type ScreenContent,
   type ScreenScene,
   type ScreenScenePayload,
@@ -238,6 +240,14 @@ export function renderScreenContent(
   }
 
   /**
+   * Le masque EFFECTIF : la variante de fond est appliquée ICI, une fois, et
+   * l'écran reçoit un masque qu'il résout comme la vitrine. Il n'a pas à
+   * connaître la logique du fond — une clé HDMI n'a personne pour s'apercevoir
+   * qu'elle l'applique autrement que le back-office.
+   */
+  const masque = masquePourFond(snapshot.identity.brand, screen.theme);
+
+  /**
    * Ce qui compte pour l'empreinte : ce qui se VOIT. L'horodatage de génération
    * et l'heure du rechargement de nuit en sont exclus — sinon l'empreinte
    * changerait à chaque seconde et l'écran se repeindrait en boucle.
@@ -247,11 +257,15 @@ export function renderScreenContent(
     name: screen.name,
     orientation: screen.orientation,
     theme: screen.theme,
+    scenography: screen.scenography,
+    masque,
     brand: {
       slug: snapshot.identity.slug,
       name: snapshot.identity.name,
-      logoUrl: snapshot.identity.logoUrl,
-      accent: snapshot.identity.brandColor,
+      // Dérivés du masque EFFECTIF : un logo dessiné pour fond sombre ne se
+      // pose pas sur « Fond clair ».
+      logoUrl: logoPour(masque, 'mark'),
+      accent: masque.palette.accent,
     },
     service,
     serviceLabel: SCREEN_SERVICE_LABELS[service],

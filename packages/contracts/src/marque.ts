@@ -1033,6 +1033,45 @@ export function marqueDeRepli(
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Le fond de l'écran de salle — une variante du masque, pas un thème à part
+// ─────────────────────────────────────────────────────────────
+
+/** Le réglage de fond d'un écran de salle (`ScreenTheme`, écrit ici en type seul pour éviter le cycle). */
+export type FondEcran = 'brand' | 'dark' | 'light';
+
+/**
+ * Les deux fonds NEUTRES — ni Snack Manager, ni le restaurant : un noir tiède
+ * et un blanc cassé sur lesquels l'accent du restaurant reste le seul signal.
+ * Le noir n'est pas #000 (DA §1 : jamais le noir pur) ; le clair n'est pas
+ * #fff en fond de page, réservé aux surfaces.
+ */
+export const FONDS_NEUTRES: Record<'dark' | 'light', Pick<BrandPalette, 'ground' | 'surface' | 'ink'>> = {
+  dark: { ground: '#0e0e10', surface: '#17171a', ink: '#f4f2ed' },
+  light: { ground: '#f5f2ec', surface: '#ffffff', ink: '#1a1816' },
+};
+
+/**
+ * Le masque EFFECTIF d'un écran selon son fond.
+ *
+ * `brand` rend l'objet même. Les deux autres remplacent le fond, la surface et
+ * l'encre par un neutre et GARDENT tout le reste — accent et encre d'accent,
+ * logos, photo, accord typographique, forme, mouvement, en-tête. Le mode suit
+ * le fond, comme la garde d'écriture l'exige ; `preset` tombe à `null`
+ * puisque ce n'est plus la direction stockée. `resoudreMarque` fait ensuite
+ * ce qu'il fait partout : ramener l'accent en texte à AA sur le nouveau fond.
+ */
+export function masquePourFond(brand: Brand, fond: FondEcran): Brand {
+  if (fond === 'brand') return brand;
+  const neutre = FONDS_NEUTRES[fond];
+  return {
+    ...brand,
+    mode: modePourFond(neutre.ground),
+    palette: { ...brand.palette, ...neutre },
+    preset: null,
+  };
+}
+
 /** Pourquoi le masque rendu n'est pas celui de la base. */
 export type RepliMarque = null | 'absent' | 'invalide';
 

@@ -19,6 +19,7 @@ export function ScreenCard({
   screen,
   now,
   onInstall,
+  onApparence,
   onCompose,
   onRegenerate,
   onDelete,
@@ -26,6 +27,7 @@ export function ScreenCard({
   screen: ScreenView;
   now: number | null;
   onInstall: () => void;
+  onApparence: () => void;
   onCompose: () => void;
   onRegenerate: () => void;
   onDelete: () => void;
@@ -89,6 +91,7 @@ export function ScreenCard({
         <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-line2 pt-3.5">
           <Pill variant="out">{screen.orientationLabel}</Pill>
           <Pill variant="out">{screen.themeLabel}</Pill>
+          <Pill variant="out">{screen.scenographyLabel}</Pill>
           <span className="cf-fig text-[13px] text-mut">
             {screen.sceneCount} scène{screen.sceneCount > 1 ? "s" : ""}
             {screen.sceneCount > 0 && ` · boucle de ${fmtLoop(loopMs(screen.playlist))}`}
@@ -100,7 +103,10 @@ export function ScreenCard({
         <div className="mt-auto flex flex-wrap items-center gap-2 pt-3.5">
           {screen.paired ? (
             <>
-              <Btn variant="ink" size="sm" icon="grid" onClick={onCompose}>
+              <Btn variant="ink" size="sm" icon="tv" onClick={onApparence}>
+                Apparence
+              </Btn>
+              <Btn variant="ghost" size="sm" icon="grid" onClick={onCompose}>
                 Composer la boucle
               </Btn>
               <Btn variant="ghost" size="sm" onClick={onRegenerate}>
@@ -111,6 +117,9 @@ export function ScreenCard({
             <>
               <Btn variant="ink" size="sm" iconRight="arrow" onClick={onInstall}>
                 Marche à suivre
+              </Btn>
+              <Btn variant="ghost" size="sm" icon="tv" onClick={onApparence}>
+                Apparence
               </Btn>
               <Btn variant="ghost" size="sm" icon="grid" onClick={onCompose}>
                 Composer la boucle

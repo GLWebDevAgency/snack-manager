@@ -2,6 +2,8 @@ import { z } from 'zod';
 // ⚠️ `import type` uniquement : `index.ts` réexporte ce fichier ET
 // `mediatheque.ts` ; un import de valeurs créerait un cycle CommonJS.
 import type { PointInteret } from './mediatheque';
+// Même règle : le masque est un TYPE ici, `marque.ts` reste libre d'importer ce fichier.
+import type { Brand } from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Menu Board — les écrans TV accrochés en salle
@@ -64,9 +66,47 @@ export const ScreenThemeSchema = z.enum(SCREEN_THEMES);
 export type ScreenTheme = z.infer<typeof ScreenThemeSchema>;
 
 export const SCREEN_THEME_LABELS: Record<ScreenTheme, string> = {
-  brand: 'Couleurs du restaurant',
-  dark: 'Fond noir',
+  brand: 'Vos couleurs',
+  dark: 'Fond sombre',
   light: 'Fond clair',
+};
+
+/** L'aide sous chaque fond — ce que le réglage FAIT, puisqu'il le fait enfin. */
+export const SCREEN_THEME_HINTS: Record<ScreenTheme, string> = {
+  brand: 'Le masque de votre marque, tel quel.',
+  dark: 'Un fond sombre neutre, votre accent et votre logo.',
+  light: 'Un fond clair neutre, votre accent et votre logo.',
+};
+
+// ─── Scénographies ───
+
+/**
+ * La MISE EN SCÈNE d'un écran — jamais le contenu, qui est la carte.
+ *
+ * Une scénographie est un module de l'application (registre côté web), pas un
+ * fichier déposé : c'est ce qui permet de la tester, de lui garantir les
+ * polices et les jetons du masque, et de la rendre à l'identique dans le
+ * téléviseur miniature du back-office.
+ */
+export const SCENOGRAPHIES = ['ardoise', 'comptoir'] as const;
+export const ScenographySchema = z.enum(SCENOGRAPHIES);
+export type Scenography = z.infer<typeof ScenographySchema>;
+
+/**
+ * Les écrans NEUFS. Les écrans déjà installés n'ont pas le champ en base et
+ * restent sur Ardoise à la lecture (`toStored`) : une mise à jour du logiciel
+ * ne change pas l'apparence d'un téléviseur accroché au mur.
+ */
+export const SCENOGRAPHY_DEFAULT: Scenography = 'comptoir';
+
+export const SCENOGRAPHY_LABELS: Record<Scenography, string> = {
+  ardoise: 'Ardoise',
+  comptoir: 'Comptoir',
+};
+
+export const SCENOGRAPHY_DESCRIPTIONS: Record<Scenography, string> = {
+  ardoise: 'La carte en lignes, sobre et dense : le nom, la description, le prix.',
+  comptoir: 'Des boîtes photo pleines sous la lampe du comptoir, le prix en étiquette collée.',
 };
 
 // ─── Scènes ───
@@ -151,6 +191,7 @@ export const ScreenCreateSchema = z.object({
   name: z.string().trim().min(1, 'Donnez un nom à cet écran').max(60),
   orientation: ScreenOrientationSchema.default('landscape'),
   theme: ScreenThemeSchema.default('brand'),
+  scenography: ScenographySchema.default(SCENOGRAPHY_DEFAULT),
   /**
    * Absente à la création : l'API génère une playlist par défaut depuis la
    * carte. Le restaurateur ne configure RIEN pour que l'écran fonctionne.
@@ -163,10 +204,27 @@ export const ScreenUpdateSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   orientation: ScreenOrientationSchema.optional(),
   theme: ScreenThemeSchema.optional(),
+  scenography: ScenographySchema.optional(),
   playlist: z.array(ScreenSceneSchema).optional(),
   active: z.boolean().optional(),
 });
 export type ScreenUpdate = z.infer<typeof ScreenUpdateSchema>;
+
+/**
+ * Un aperçu — l'écran tel qu'il serait, sans jeton d'appareil.
+ *
+ * `screenId` désigne l'écran dont on part (sa boucle, ses réglages) ; les
+ * autres champs sont les SURCHARGES du brouillon du tiroir « Apparence ». Sans
+ * `screenId`, l'aperçu part des défauts et de la boucle générée depuis la carte.
+ */
+export const ScreenPreviewSchema = z.object({
+  screenId: z.string().min(1).max(64).nullish(),
+  orientation: ScreenOrientationSchema.optional(),
+  theme: ScreenThemeSchema.optional(),
+  scenography: ScenographySchema.optional(),
+  playlist: z.array(ScreenSceneSchema).optional(),
+});
+export type ScreenPreview = z.infer<typeof ScreenPreviewSchema>;
 
 // ─── DTO écran ───
 
@@ -324,6 +382,14 @@ export interface ScreenContent {
   name: string;
   orientation: ScreenOrientation;
   theme: ScreenTheme;
+  scenography: Scenography;
+  /**
+   * LE MASQUE EFFECTIF — la variante de fond DÉJÀ appliquée (`masquePourFond`).
+   * L'écran ne connaît pas la logique du fond : il reçoit un masque et le
+   * résout avec le même résolveur que la vitrine. Dans l'empreinte : une
+   * couleur changée repeint l'écran dans la minute.
+   */
+  masque: Brand;
   brand: ScreenBrand;
   service: ScreenService;
   serviceLabel: string;
@@ -359,6 +425,8 @@ export interface ScreenView {
   orientationLabel: string;
   theme: ScreenTheme;
   themeLabel: string;
+  scenography: Scenography;
+  scenographyLabel: string;
   playlist: ScreenScene[];
   sceneCount: number;
   paired: boolean;

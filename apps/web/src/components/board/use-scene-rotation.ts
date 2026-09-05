@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScreenScenePayload } from "@sm/contracts";
 
 /**
@@ -23,12 +23,23 @@ export interface SceneRotation {
   leaving: ScreenScenePayload | null;
   /** Position dans la boucle — sert à pré-charger la photo d'après. */
   index: number;
+  /** Avance ou recule d'un cran, en boucle — le tiroir « Apparence ». */
+  go: (delta: number) => void;
 }
 
-export function useSceneRotation(scenes: readonly ScreenScenePayload[]): SceneRotation {
+/** L'index d'après, en boucle dans les deux sens ; zéro sans scène. */
+export const indexSuivant = (index: number, delta: number, length: number): number =>
+  length === 0 ? 0 : (((index + delta) % length) + length) % length;
+
+export function useSceneRotation(
+  scenes: readonly ScreenScenePayload[],
+  options: { paused?: boolean } = {},
+): SceneRotation {
+  const paused = options.paused === true;
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<ScreenScenePayload | null>(null);
   const previousRef = useRef<ScreenScenePayload | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Le contenu peut avoir rétréci depuis (une catégorie vidée par le
   // dayparting) : on reste dans les bornes plutôt que d'afficher du vide.
@@ -39,13 +50,19 @@ export function useSceneRotation(scenes: readonly ScreenScenePayload[]): SceneRo
   useEffect(() => {
     // Une scène unique (écran fermé, plaque de marque) ne tourne pas : aucun
     // minuteur ne doit courir pendant douze heures pour rien.
-    if (scenes.length <= 1 || !current) return;
+    // En pause (le gérant regarde une scène précise) : aucun minuteur non plus.
+    if (paused || scenes.length <= 1 || !current) return;
     const timer = setTimeout(() => {
       setIndex((value) => (value + 1) % scenes.length);
     }, current.durationMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId, scenes.length]);
+  }, [currentId, scenes.length, paused]);
+
+  const go = useCallback(
+    (delta: number) => setIndex((value) => indexSuivant(value, delta, scenes.length)),
+    [scenes.length],
+  );
 
   useEffect(() => {
     const previous = previousRef.current;
@@ -54,9 +71,19 @@ export function useSceneRotation(scenes: readonly ScreenScenePayload[]): SceneRo
     if (!previous || !current || previous.id === current.id) return;
 
     setLeaving(previous);
-    const timer = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
-    return () => clearTimeout(timer);
+    // Le minuteur vit dans une ref : un contenu frais (même scène, nouvelle
+    // référence) arrivant pendant le fondu ne doit pas l'annuler, sinon la
+    // couche sortante resterait montée jusqu'à la transition suivante.
+    if (exitTimer.current) clearTimeout(exitTimer.current);
+    exitTimer.current = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
   }, [current]);
 
-  return { current, leaving, index: safeIndex };
+  useEffect(
+    () => () => {
+      if (exitTimer.current) clearTimeout(exitTimer.current);
+    },
+    [],
+  );
+
+  return { current, leaving, index: safeIndex, go };
 }
