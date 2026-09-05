@@ -29,6 +29,11 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 describe('commande — barrières du cycle de paiement', () => {
+  const counterProof = () => ({ version: 1, origin: 'created_v1', phase: 'counter_ready',
+    attempt: { id: 'attempt', requestStartedAt: new Date(), accountId: 'acct_original', amountCents: 2000 },
+    close: { destination: 'counter', operationId: 'switch' }, providerStatus: 'canceled',
+    providerCheckedAt: new Date(), reviewReason: null });
+  const counterPayment = { status: 'pending', method: 'counter', stripePaymentIntentId: 'pi_cancelled', stripeAccountId: 'acct_original' };
   it('ne laisse pas un appel interne contourner la fermeture via un simple changement de statut', async () => {
     const ctx = setup();
     await expect(ctx.service.updateStatus(TENANT, ID, 'cancelled', owner)).rejects.toBeInstanceOf(ForbiddenException);
@@ -75,12 +80,48 @@ describe('commande — barrières du cycle de paiement', () => {
     expect(ctx.redis.publish).not.toHaveBeenCalled();
   });
 
-  it('autorise le règlement comptoir prouvé sans aucune tentative et ne diffuse pas la preuve', async () => {
+  it('ne confond jamais remise et encaissement, même sans tentative bancaire', async () => {
     const ctx = setup();
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.save).not.toHaveBeenCalled();
+    expect(ctx.redis.publish).not.toHaveBeenCalled();
+  });
+
+  it.each(['created_v1', 'adopted_intent'])('la caisse remet un retrait déjà encaissé avec preuve bancaire %s sans effacer son PI annulé', async (origin) => {
+    const ctx = setup({ channel: 'online', payment: { ...counterPayment, status: 'paid' }, paymentFlow: { ...counterProof(), origin } });
     await ctx.service.updateStatus(TENANT, ID, 'delivered', caisse);
-    expect(ctx.row.payment.status).toBe('paid');
-    expect(ctx.redis.publish).toHaveBeenCalledOnce();
+    expect(ctx.row.payment).toMatchObject({ status: 'paid', method: 'counter', stripePaymentIntentId: 'pi_cancelled' });
+    expect(ctx.row.status).toBe('delivered');
+    expect(ctx.row.save).toHaveBeenCalledOnce();
     expect(ctx.redis.publish.mock.calls[0]?.[1]).not.toContain('paymentFlow');
+  });
+
+  it('la bascule prouvée sans appel provider ne vaut pas encaissement', async () => {
+    const ctx = setup({ channel: 'online', paymentFlow: { ...counterProof(), attempt: null, providerStatus: 'not_started' } });
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.save).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { providerStatus: 'processing' }, { providerStatus: null }, { providerCheckedAt: null },
+    { origin: 'legacy_unknown' }, { close: null }, { close: { destination: 'cancel_order', operationId: 'other' } },
+    { reviewReason: 'inconsistent' }, { attempt: { requestStartedAt: new Date(), amountCents: 1, accountId: 'acct_original' } },
+    { attempt: { requestStartedAt: new Date(), amountCents: 2000, accountId: 'acct_other' } },
+    { providerStatus: 'not_started' },
+  ])('un mode comptoir avec preuve incomplète ne solde rien : %j', async (patch) => {
+    const ctx = setup({ channel: 'online', payment: { ...counterPayment }, paymentFlow: { ...counterProof(), ...patch } });
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.status).toBe('ready');
+    expect(ctx.row.save).not.toHaveBeenCalled();
+  });
+
+  it.each([{ type: 'delivery' }, { channel: 'pos' }, { payment: { ...counterPayment, method: 'online' } }])('la preuve comptoir ne s’applique pas à une autre nature de commande : %j', async (patch) => {
+    const ctx = setup({ channel: 'online', payment: { ...counterPayment }, paymentFlow: counterProof(), ...patch });
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.save).not.toHaveBeenCalled();
   });
 
   it.each([

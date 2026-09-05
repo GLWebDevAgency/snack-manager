@@ -30,6 +30,11 @@ function build(over: { account?: string | null; secretKey?: string | null } = {}
     ? (over.secretKey === undefined ? 'sk_test_fixture_only' : over.secretKey)
     : key === 'STRIPE_PUBLISHABLE_KEY' ? 'pk_test_fixture_only' : undefined) };
   const lifecycle = {
+    switchToCounter: vi.fn().mockResolvedValue({
+      _id: ORDER_ID, tenantId: TENANT_ID,
+      toObject: () => ({ _id: ORDER_ID, tenantId: TENANT_ID, payment: { method: 'counter', status: 'pending' },
+        paymentFlow: { phase: 'counter_ready' }, loyaltyMemberId: 'private-member' }),
+    }),
     open: vi.fn(async (_id: string, _token: unknown, provider: OrderPaymentProvider, resolveAccount: () => Promise<string | null>) => {
       const accountId = await resolveAccount();
       if (!accountId) return null;
@@ -38,12 +43,57 @@ function build(over: { account?: string | null; secretKey?: string | null } = {}
     cancel: vi.fn<OrderPaymentLifecycleService['cancel']>().mockResolvedValue(undefined),
     reconcileSucceeded: vi.fn().mockResolvedValue(null),
   };
+  const redis = { publish: vi.fn().mockResolvedValue(1) };
   const service = new PaymentsService(orders as unknown as Model<Order>, config as unknown as ConfigService,
-    { publish: vi.fn() } as unknown as Redis, encaissement as unknown as EncaissementService,
+    redis as unknown as Redis, encaissement as unknown as EncaissementService,
     lifecycle as unknown as OrderPaymentLifecycleService);
   Object.assign(service, { client: stripe, loadAttempted: true });
-  return { service, stripe, encaissement, lifecycle, orders, order };
+  return { service, stripe, encaissement, lifecycle, orders, order, redis };
 }
+
+describe('changement public vers le comptoir — projection et reprise', () => {
+  it('change la même commande et diffuse le paiement en attente sans preuve privée', async () => {
+    const { service, lifecycle, redis, stripe } = build();
+    expect(await service.switchToCounterPayment(ORDER_ID, TOKEN)).toEqual({
+      _id: ORDER_ID, payment: { method: 'counter', status: 'pending' },
+    });
+    expect(lifecycle.switchToCounter).toHaveBeenCalledWith(ORDER_ID, TOKEN, expect.any(Object));
+    const message = JSON.parse(redis.publish.mock.calls[0]![1] as string);
+    expect(message.payload.payment).toEqual({ method: 'counter', status: 'pending' });
+    expect(message.payload).not.toHaveProperty('paymentFlow');
+    expect(message.payload).not.toHaveProperty('loyaltyMemberId');
+    expect(stripe.paymentIntents.create).not.toHaveBeenCalled();
+  });
+
+  it('autorise la preuve sans tentative à fonctionner sans configuration Stripe', async () => {
+    const { service, lifecycle } = build({ secretKey: null });
+    await service.switchToCounterPayment(ORDER_ID, TOKEN);
+    expect(lifecycle.switchToCounter).toHaveBeenCalledWith(ORDER_ID, TOKEN, null);
+  });
+
+  it.each([undefined, { $ne: '' }])('rejette le jeton invalide avant le protocole et la diffusion', async (token) => {
+    const { service, lifecycle, redis } = build();
+    await expect(service.switchToCounterPayment(ORDER_ID, token)).rejects.toThrow('introuvable');
+    expect(lifecycle.switchToCounter).not.toHaveBeenCalled();
+    expect(redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('ne transforme pas un refus bancaire en confirmation comptoir', async () => {
+    const { service, lifecycle, redis } = build();
+    lifecycle.switchToCounter.mockRejectedValueOnce(new ConflictException('Paiement en cours de vérification.'));
+    await expect(service.switchToCounterPayment(ORDER_ID, TOKEN)).rejects.toBeInstanceOf(ConflictException);
+    expect(redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('une publication perdue demande un rejeu de la même opération, sans seconde commande', async () => {
+    const { service, lifecycle, redis } = build();
+    redis.publish.mockRejectedValueOnce(new Error('Redis indisponible'));
+    await expect(service.switchToCounterPayment(ORDER_ID, TOKEN)).rejects.toThrow('diffusion à reprendre');
+    expect(await service.switchToCounterPayment(ORDER_ID, TOKEN)).toMatchObject({ _id: ORDER_ID });
+    expect(lifecycle.switchToCounter).toHaveBeenCalledTimes(2);
+    expect(redis.publish).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('adaptateur charges directes — protocole durable', () => {
   it('crée uniquement sur le compte restaurant avec la clé préparée par le protocole', async () => {

@@ -92,6 +92,7 @@ function loadStripeJs(): Promise<void> {
  * qu'une police qui ne chargera jamais.
  */
 export type ApparenceStripe = ReturnType<typeof apparenceStripeDe>;
+export type StripePaymentOutcome = "idle" | "processing" | "paid";
 
 /**
  * `vars` ARRIVE, elle n'est pas recalculée.
@@ -161,6 +162,9 @@ export function StripeCard({
   /** URL de retour après authentification 3-D Secure (suivi de commande). */
   returnUrl,
   onPaid,
+  disabled = false,
+  onConfirmStart,
+  onConfirmEnd,
 }: {
   publishableKey: string;
   clientSecret: string;
@@ -183,10 +187,15 @@ export function StripeCard({
   prixMono: boolean;
   returnUrl: string;
   onPaid: () => void;
+  /** Verrou partagé avec un changement de moyen sur la même commande. */
+  disabled?: boolean;
+  onConfirmStart?: () => boolean;
+  onConfirmEnd?: (outcome: StripePaymentOutcome) => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
+  const confirmingRef = useRef(false);
 
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [paying, setPaying] = useState(false);
@@ -230,7 +239,10 @@ export function StripeCard({
   async function pay() {
     const stripe = stripeRef.current;
     const elements = elementsRef.current;
-    if (!stripe || !elements || paying || processing || status !== "ready") return;
+    if (!stripe || !elements || disabled || confirmingRef.current || paying || processing || status !== "ready") return;
+    if (onConfirmStart && !onConfirmStart()) return;
+    confirmingRef.current = true;
+    let outcome: StripePaymentOutcome = "idle";
     setPaying(true);
     setError(null);
     try {
@@ -246,10 +258,12 @@ export function StripeCard({
       }
       const state = result.paymentIntent?.status;
       if (state === "succeeded") {
+        outcome = "paid";
         onPaid();
         return;
       }
       if (state === "processing") {
+        outcome = "processing";
         setProcessing(true);
         return;
       }
@@ -257,17 +271,19 @@ export function StripeCard({
     } catch {
       setError("La réponse bancaire n’a pas été reçue. Consultez le suivi ou réessayez sur ce paiement, sans régler une deuxième fois.");
     } finally {
+      confirmingRef.current = false;
       setPaying(false);
+      onConfirmEnd?.(outcome);
     }
   }
 
   if (status === "failed") {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" inert={disabled || undefined}>
         <Banner tone="alert" icon="bell" title="Paiement en ligne indisponible">
-          Le formulaire sécurisé n’a pas pu être chargé. Votre commande reste enregistrée : réessayez ou consultez son suivi, sans payer par un autre moyen.
+          Le formulaire sécurisé n’a pas pu être chargé. Votre commande reste enregistrée. Réessayez ou consultez son suivi. Ne réglez pas par un autre moyen tant que le changement n’est pas confirmé.
         </Banner>
-        <PrimaryAction icon="check" mono={prixMono} onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}>
+        <PrimaryAction icon="check" mono={prixMono} disabled={disabled} onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}>
           Réessayer le paiement
         </PrimaryAction>
         <a href={returnUrl} className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink">Suivre ma commande</a>
@@ -276,7 +292,7 @@ export function StripeCard({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" inert={disabled || undefined}>
       {processing && <Banner tone="prep" icon="clock" title="Confirmation bancaire en cours">Ne payez pas une deuxième fois. <a href={returnUrl} className="font-bold underline underline-offset-4">Suivre la confirmation de votre commande</a>.</Banner>}
       <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
@@ -296,7 +312,7 @@ export function StripeCard({
 
       <PrimaryAction
         onClick={pay}
-        disabled={status !== "ready" || processing}
+        disabled={disabled || status !== "ready" || processing}
         loading={paying}
         icon="check"
         amount={amount}

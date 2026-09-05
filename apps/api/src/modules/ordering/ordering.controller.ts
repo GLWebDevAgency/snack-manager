@@ -1,4 +1,5 @@
-import { Controller, Get, HttpCode, Param, Post, Query, StreamableFile } from '@nestjs/common';
+import { Controller, Get, HttpCode, Param, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   SlotsQuerySchema,
   TicketRequestQuerySchema,
@@ -47,16 +48,32 @@ export class OrderingController {
   /**
    * PaymentIntent Stripe d'une commande déjà créée.
    * Sans Stripe configuré : `{ unavailable: true, reason }` en 200 — le
-   * paiement au comptoir reste possible, le parcours ne se bloque jamais.
+   * passage au comptoir exige une confirmation serveur séparée, jamais un
+   * simple changement local du choix de paiement.
    */
   @Public()
   @HttpCode(200)
   @Post('public/orders/:id/payment-intent')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   paymentIntent(
     @Param('id') id: string,
     @Query(zod(TrackingTokenQuerySchema)) query: TrackingTokenQuery,
   ) {
     return this.payments.createIntent(id, query.t);
+  }
+
+  /** Same pickup order; the tracking secret authorizes a request, not a receipt. */
+  @Public()
+  @HttpCode(200)
+  @Post('public/orders/:id/payment-counter')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  counterPayment(
+    @Param('id') id: string,
+    @Query(zod(TrackingTokenQuerySchema)) query: TrackingTokenQuery,
+  ) {
+    return this.payments.switchToCounterPayment(id, query.t);
   }
 
   /**

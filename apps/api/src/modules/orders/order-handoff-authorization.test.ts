@@ -68,6 +68,7 @@ describe('remise client — autorité distincte de la préparation cuisine', () 
   for (const role of HANDOFF_ROLES) {
     it.each(TYPES)(`${role} confirme la remise %s depuis prêt`, async (type) => {
       const { service, order } = setup(type);
+      order.payment.status = 'paid';
       await service.updateStatus(TENANT, ORDER, 'delivered', actor(role));
       expect(order.status).toBe('delivered');
       expect(order.statusHistory).toEqual([{ status: 'delivered', at: expect.any(Date), by: `${role}-person` }]);
@@ -98,14 +99,14 @@ describe('remise client — autorité distincte de la préparation cuisine', () 
     });
   }
 
-  it('la caisse ne remet pas une livraison impayée', async () => {
-    const { service, order } = setup('delivery');
+  it.each(TYPES)('la caisse ne remet pas une commande %s impayée', async (type) => {
+    const { service, order } = setup(type);
     order.payment.status = 'pending';
     await expect(service.updateStatus(TENANT, ORDER, 'delivered', actor('caisse')))
       .rejects.toBeInstanceOf(ConflictException);
     expect(order.save).not.toHaveBeenCalled();
     expect(order.payment.status).toBe('pending');
-    expect(order.delivery?.deliveredAt).toBeNull();
+    expect(order.delivery?.deliveredAt ?? null).toBeNull();
   });
 
   it('la caisse ne remet pas une livraison sans départ confirmé', async () => {

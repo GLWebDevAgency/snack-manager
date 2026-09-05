@@ -37,7 +37,6 @@ import { ScrollView, Text, View } from 'react-native';
 import {
   TIMER_THRESHOLDS,
   euros,
-  mmss,
   palette,
   timerColor,
   type OrderStatus,
@@ -59,6 +58,7 @@ import {
   type ServerOrderRow,
 } from './service-state';
 import { canConfirmCounterHandover } from './service-handover';
+import { canCollectOrder, serviceAgeLabel } from './service-payment';
 import type {
   ActiveOrderStatus,
   ServiceStatusCounts,
@@ -94,6 +94,7 @@ export function ServicePanel({
   failedStatuses,
   truncatedStatuses,
   onConfirmHandover,
+  onCollectPayment,
   offline,
 }: {
   commandes: ServiceCommande[];
@@ -109,6 +110,7 @@ export function ServicePanel({
   failedStatuses: ActiveOrderStatus[];
   truncatedStatuses: ActiveOrderStatus[];
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
+  onCollectPayment?: (row: ServerOrderRow) => void;
   offline?: boolean;
 }) {
   const L = useLayout();
@@ -201,6 +203,7 @@ export function ServicePanel({
           brand={brand}
           onClose={() => setDetailId(null)}
           onConfirmHandover={onConfirmHandover}
+          onCollectPayment={onCollectPayment}
           offline={offline}
         />
       ) : null}
@@ -392,7 +395,7 @@ function Carte({
           accessibilityLabel={`Depuis ${Math.floor(secondes / 60)} minutes`}
           style={[type.display, { fontSize: L.fs(20), color: minuteur }]}
         >
-          {mmss(secondes)}
+          {serviceAgeLabel(secondes)}
         </Text>
       </View>
 
@@ -463,6 +466,7 @@ export function DetailCommande({
   brand,
   onClose,
   onConfirmHandover,
+  onCollectPayment,
   offline,
 }: {
   commande: ServiceCommande;
@@ -470,6 +474,7 @@ export function DetailCommande({
   brand: Brand;
   onClose: () => void;
   onConfirmHandover?: (row: ServerOrderRow) => Promise<void>;
+  onCollectPayment?: (row: ServerOrderRow) => void;
   offline?: boolean;
 }) {
   const L = useLayout();
@@ -523,7 +528,7 @@ export function DetailCommande({
               {commande.statusLabel}
             </Text>
             <Text style={[type.display, { fontSize: L.fs(20), color: timerColor(secondes / 60) }]}>
-              {mmss(secondes)}
+              {serviceAgeLabel(secondes)}
             </Text>
           </View>
           <Text style={[type.mut, { fontSize: L.fs(13) }]}>
@@ -543,14 +548,23 @@ export function DetailCommande({
           </View>
         ) : null}
 
+        {onCollectPayment && canCollectOrder(row) ? (
+          <View style={[sheet.inset, { padding: S.md, gap: S.sm }]}>
+            <Text style={type.eyebrow}>À encaisser au comptoir</Text>
+            <Text style={type.mut}>Enregistrez le règlement sur cette commande, sans la recréer. La remise au client sera confirmée séparément.</Text>
+            <Btn label={`Encaisser · ${euros(commande.totalCents)}`} kind="primary" accent={brand.accent} onAccent={brand.onAccent} disabled={offline || confirming} onPress={() => onCollectPayment(row)} block accessibilityLabel={`Encaisser la commande ${commande.number}`} />
+            {offline ? <Text style={type.mut}>Connexion requise pour vérifier et confirmer le paiement.</Text> : null}
+          </View>
+        ) : null}
+
         {row.status === 'ready' && row.type !== 'delivery' && onConfirmHandover ? (
           <View style={[sheet.inset, { padding: S.md, gap: S.sm }]}>
             <Text style={type.eyebrow}>Remise au client</Text>
             <Text style={type.mut}>
               {commande.paid
                 ? 'Confirmez uniquement après avoir remis la commande au client.'
-                : row.channel === 'online' && row.payment?.method === 'counter'
-                  ? 'L’encaissement de ce retrait web n’est pas disponible sur cet écran. Faites traiter la commande existante dans le back-office par un responsable habilité, sans la recréer en caisse.'
+                : canCollectOrder(row) && onCollectPayment
+                  ? 'Encaissez d’abord cette commande. Confirmez ensuite sa remise, une fois le client servi.'
                   : 'Le paiement de cette commande n’est pas confirmé. Faites vérifier la commande existante dans le back-office par un responsable habilité, sans la recréer en caisse.'}
             </Text>
             <Btn
@@ -652,7 +666,7 @@ export function DetailCommande({
             label={
               row.payment?.tender
                 ? PAYMENT_TENDER_LABELS[row.payment.tender]
-                : PAYMENT_METHOD_LABELS[row.payment?.method ?? 'counter']
+                : row.payment?.method === 'online' && !commande.paid ? 'Paiement en ligne' : PAYMENT_METHOD_LABELS[row.payment?.method ?? 'counter']
             }
             value={
               PAYMENT_STATUS_LABELS[

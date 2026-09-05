@@ -14,6 +14,7 @@ const controllers = [
   ['loyalty/loyalty', 'LoyaltyController'],
   ['loyalty/loyalty-member', 'LoyaltyMemberController'],
   ['planning/planning', 'PlanningController'],
+  ['ordering/ordering', 'OrderingController'],
 ] as const;
 
 describe('controller initialization in the production CommonJS format', () => {

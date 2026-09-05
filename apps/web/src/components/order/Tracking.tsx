@@ -18,10 +18,12 @@ import { Icon } from "@/components/ui";
 import { classesPolices } from "@/components/masque/polices";
 import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
-import { createPaymentIntent, loadTracking, type TrackingState } from "./api";
-import { StripeCard, apparenceStripeDe } from "./StripeCard";
+import { createPaymentIntent, loadTracking, networkApi, PublicApiError, type TrackingState } from "./api";
+import { StripeCard, apparenceStripeDe, type StripePaymentOutcome } from "./StripeCard";
 import { hhmm } from "./helpers";
 import { Banner, Dot, Money, Prix, PrimaryAction, Surface } from "./primitives";
+import { CounterPaymentAction } from "./CounterPaymentAction";
+import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, paymentSummaryLabel, requestCounterPayment } from "./checkout-payment";
 
 const POLL_MS = 10_000;
 
@@ -66,14 +68,23 @@ export function Tracking({
   const [stale, setStale] = useState(false);
   const [paymentIntent, setPaymentIntent] = useState<PaymentIntentReady | null>(null);
   const [resuming, setResuming] = useState(false);
+  const [switchingCounter, setSwitchingCounter] = useState(false);
+  const [confirmingCard, setConfirmingCard] = useState(false);
+  const [bankProcessing, setBankProcessing] = useState(false);
+  const bankProcessingRef = useRef(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  const paymentActionRef = useRef(false);
+  const refreshSequence = useRef(0);
 
   const status: OrderStatus = state.status;
   const finished = status === "delivered" || status === "cancelled";
   const delivery = state.fulfillment === "delivery" || ticket?.type === "delivery";
   const dispatched = Boolean(state.delivery?.dispatchedAt);
   const payment = state.payment;
+  const paymentBusy = resuming || switchingCounter || confirmingCard;
+  const counterAvailable = !bankProcessing && canRequestCounterPayment(state,
+    delivery ? "delivery" : state.fulfillment ?? (ticket?.type === "pickup" ? "pickup" : undefined));
   // Même règle que le KDS : une livraison n'est prise en cuisine qu'une
   // fois le paiement confirmé par le serveur. Pending inclut une éventuelle
   // confirmation bancaire en cours : ce n'est jamais la preuve d'un refus.
@@ -105,14 +116,22 @@ export function Tracking({
             : "Votre commande est prête"
             : "Commande en cours";
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
+    if (paymentActionRef.current && !force) return;
+    const sequence = ++refreshSequence.current;
     try {
       const next = await loadTracking(orderId, trackingToken);
+      if (sequence !== refreshSequence.current || next._id !== orderId) return;
       setState(next);
       setStale(false);
+      if ((next.payment && (next.payment.status !== "pending" || next.payment.method !== "online")) || ["cancelled", "delivered"].includes(next.status)) {
+        setPaymentIntent(null);
+        bankProcessingRef.current = false;
+        setBankProcessing(false);
+      }
     } catch {
       // Réseau capricieux : on garde le dernier état connu et on le signale.
-      setStale(true);
+      if (sequence === refreshSequence.current) setStale(true);
     }
   }, [orderId, trackingToken]);
 
@@ -155,18 +174,59 @@ export function Tracking({
   const appearance = useMemo(() => apparenceStripeDe(masque, brand), [masque, brand]);
 
   async function resumePayment() {
-    if (resuming) return;
+    if (paymentActionRef.current || bankProcessingRef.current || finished || payment?.method !== "online" || payment.status !== "pending") return;
+    paymentActionRef.current = true;
+    refreshSequence.current++;
     setResuming(true);
     setPaymentError(null);
     try {
       const next = await createPaymentIntent(orderId, trackingToken);
       if (next.unavailable || !next.publishableKey) {
         setPaymentError(next.unavailable ? next.reason : "Paiement momentanément indisponible. Réessayez ou contactez le restaurant.");
-        await refresh();
+        await refresh(true);
       } else setPaymentIntent(next);
-    } catch {
-      setPaymentError("Impossible de reprendre le paiement. Votre commande est conservée : réessayez sans en créer une nouvelle.");
-    } finally { setResuming(false); }
+    } catch (cause) {
+      setPaymentError(cause instanceof PublicApiError ? cause.message : "Impossible de reprendre le paiement. Votre commande est conservée : réessayez sans en créer une nouvelle.");
+      await refresh(true);
+    } finally { paymentActionRef.current = false; setResuming(false); }
+  }
+
+  function startCardConfirmation() {
+    if (paymentActionRef.current || bankProcessingRef.current || finished || payment?.method !== "online" || payment.status !== "pending") return false;
+    paymentActionRef.current = true;
+    refreshSequence.current++;
+    setConfirmingCard(true);
+    return true;
+  }
+
+  function finishCardConfirmation(outcome: StripePaymentOutcome) {
+    bankProcessingRef.current = outcome !== "idle";
+    paymentActionRef.current = false;
+    setConfirmingCard(false);
+    // Même succeeded doit attendre la projection serveur : un webhook peut
+    // arriver après la réponse Stripe, sans rouvrir un second moyen entretemps.
+    setBankProcessing(outcome !== "idle");
+    if (outcome !== "idle") void refresh();
+  }
+
+  async function switchCounterPayment() {
+    if (paymentActionRef.current || bankProcessingRef.current || !counterAvailable) return;
+    paymentActionRef.current = true;
+    refreshSequence.current++;
+    setSwitchingCounter(true);
+    setPaymentError(null);
+    try {
+      const next = await requestCounterPayment(networkApi, { _id: orderId, trackingToken });
+      setPaymentIntent(null);
+      setState((previous) => ({ ...previous, payment: { ...next.payment,
+        refundedCents: previous.payment?.refundedCents ?? 0, pendingRefundCents: previous.payment?.pendingRefundCents ?? 0 } }));
+      setStale(false);
+    } catch (cause) {
+      setPaymentError(cause instanceof PublicApiError ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
+      if (cause instanceof PublicApiError && cause.status === 409) { bankProcessingRef.current = true; setBankProcessing(true); }
+      setPaymentIntent(null);
+      await refresh(true);
+    } finally { paymentActionRef.current = false; setSwitchingCounter(false); }
   }
 
   return (
@@ -321,8 +381,11 @@ export function Tracking({
             {paymentIntent?.publishableKey ? <StripeCard
               {...paymentIntent} publishableKey={paymentIntent.publishableKey}
               apparence={appearance} prixMono={prixMono} returnUrl={typeof window === "undefined" ? "" : window.location.href}
-              onPaid={() => { setPaymentIntent(null); void refresh(); }}
-            /> : <div className="mt-4"><PrimaryAction onClick={() => void resumePayment()} disabled={resuming}>{resuming ? "Chargement…" : "Reprendre le paiement"}</PrimaryAction></div>}
+              disabled={switchingCounter} onConfirmStart={startCardConfirmation} onConfirmEnd={finishCardConfirmation}
+              onPaid={() => { setPaymentIntent(null); }}
+            /> : <div className="mt-4"><PrimaryAction onClick={() => void resumePayment()} disabled={paymentBusy || bankProcessing}>{resuming ? "Chargement…" : "Reprendre le paiement"}</PrimaryAction></div>}
+            {bankProcessing && <p role="status" className="mt-3 text-sm text-mut">Paiement en cours de vérification. Ne payez pas une deuxième fois ; le suivi se mettra à jour automatiquement.</p>}
+            {counterAvailable && <CounterPaymentAction disabled={paymentBusy} busy={switchingCounter} onConfirm={switchCounterPayment} />}
           </Surface>
         )}
         {payment && (payment.refundedCents > 0 || payment.pendingRefundCents > 0) && (
@@ -384,7 +447,7 @@ export function Tracking({
             />
           </div>
           <p className="mt-1 text-right text-[12px] text-mut">
-            {payment?.status === "paid" ? (payment.method === "online" ? "Payé en ligne" : "Payé au comptoir") : payment?.status === "refunded" ? "Remboursé" : ticket.payment.methodLabel}
+            {paymentSummaryLabel(payment, ticket.payment)}
             {(payment ? payment.status === "paid" : ticket.payment.paid) && (
               <>
                 {" · "}

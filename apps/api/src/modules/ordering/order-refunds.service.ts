@@ -25,7 +25,7 @@ type RefundOrder = {
   _id: unknown; tenantId: unknown;
   totals: { total: number };
   payment: {
-    status: string; stripePaymentIntentId?: string | null; stripeAccountId?: string | null;
+    method: string; status: string; stripePaymentIntentId?: string | null; stripeAccountId?: string | null;
     refundSyncVersion?: number; refundedCents?: number; pendingRefundCents?: number;
   };
 };
@@ -62,7 +62,7 @@ export class OrderRefundsService {
 
   private async allRefunds(client: RefundStripeClient, order: RefundOrder): Promise<ProviderRefund[]> {
     const intent = order.payment.stripePaymentIntentId;
-    if (!intent) throw new ConflictException('Cette commande ne porte pas de paiement Stripe.');
+    if (!intent || order.payment.method !== 'online') throw new ConflictException('Cette commande ne porte pas de paiement Stripe.');
     const rows: ProviderRefund[] = [];
     let cursor: string | undefined;
     for (;;) {
@@ -79,6 +79,9 @@ export class OrderRefundsService {
 
   async summary(tenantId: string, orderId: string): Promise<OrderRefundSummary> {
     const order = await this.order(tenantId, orderId);
+    // A canceled intent is retained as evidence after switching to counter;
+    // it must never be mistaken for money collected by Stripe.
+    if (order.payment.method !== 'online') return refundSummary(0, []);
     if (!order.payment.stripePaymentIntentId) return refundSummary(order.totals.total, []);
     return this.reconcile(order, await this.client());
   }
@@ -88,7 +91,7 @@ export class OrderRefundsService {
     if (!Number.isSafeInteger(body.amountCents) || body.amountCents <= 0) {
       throw new BadRequestException('Le remboursement doit être un montant positif en centimes.');
     }
-    if (!order.payment.stripePaymentIntentId || order.payment.status === 'pending') {
+    if (order.payment.method !== 'online' || !order.payment.stripePaymentIntentId || !['paid', 'refunded'].includes(order.payment.status)) {
       throw new ConflictException('Aucun paiement Stripe confirmé à rembourser.');
     }
     const client = await this.client();
@@ -156,6 +159,7 @@ export class OrderRefundsService {
     // The account is part of identity; metadata supplied by a merchant cannot
     // select a competitor's order or a platform invoice.
     const order = await this.orders.findOne({
+      'payment.method': 'online',
       'payment.stripePaymentIntentId': intent,
       'payment.stripeAccountId': event.account ?? null,
     }).lean();
@@ -166,6 +170,7 @@ export class OrderRefundsService {
   private async reconcile(order: RefundOrder, client: RefundStripeClient): Promise<OrderRefundSummary> {
     const reserved = await this.orders.findOneAndUpdate({
       _id: order._id, tenantId: order.tenantId,
+      'payment.method': 'online',
       'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
       'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
     }, { $inc: { 'payment.refundSyncVersion': 1, __v: 1 } }, { new: true }).lean();
@@ -185,6 +190,7 @@ export class OrderRefundsService {
     else if (reserved.payment.status === 'refunded') set['payment.status'] = 'paid';
     const updated = await this.orders.findOneAndUpdate({
       _id: order._id, tenantId: order.tenantId, 'payment.refundSyncVersion': version,
+      'payment.method': 'online',
       'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
       'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
     }, { $set: set, $inc: { __v: 1 } }, { new: true }).lean();

@@ -7,6 +7,7 @@ import { fmtEuro } from "@/lib/format";
 import { Btn, Field, Input, Modal, useToast } from "@/components/ui";
 import type { Order } from "./types";
 import { refundAmountCents, refundAmountInput } from "./refund-amount";
+import { hasOnlinePaymentToRefund } from "./refund-eligibility";
 
 export function RefundModal({ order, onClose, onRefunded }: {
   order: Order; onClose: () => void; onRefunded: (order: Order) => void;
@@ -20,7 +21,7 @@ export function RefundModal({ order, onClose, onRefunded }: {
   const [submitting, setSubmitting] = useState(false);
   const [operationId, setOperationId] = useState<string | null>(null);
   const cents = refundAmountCents(amount);
-  const valid = summary && cents !== null && cents <= summary.remainingCents && reason.trim().length >= 3 && password.length > 0;
+  const valid = hasOnlinePaymentToRefund(order.payment) && summary && cents !== null && cents <= summary.remainingCents && reason.trim().length >= 3 && password.length > 0;
 
   useEffect(() => {
     const controller = new AbortController();

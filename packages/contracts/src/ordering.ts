@@ -156,6 +156,13 @@ export type PaymentIntentResponse = z.infer<typeof PaymentIntentResponseSchema>;
 
 export const PAYMENT_UNAVAILABLE_REASON = 'Paiement en ligne non configuré';
 
+/** A confirmed change of collection method, NEVER a payment receipt. */
+export const CounterPaymentResponseSchema = z.object({
+  _id: z.string(),
+  payment: z.object({ method: z.literal('counter'), status: z.literal('pending') }),
+});
+export type CounterPaymentResponse = z.infer<typeof CounterPaymentResponseSchema>;
+
 // ─── Ticket imprimable ───
 
 /** Largeurs usuelles : 32 = papier 58 mm, 42/48 = papier 80 mm. */
@@ -503,6 +510,7 @@ export interface PublicSiteResponse {
 export const TENANT_AUDIT_ACTIONS = [
   // ─── Commandes : l'argent qui sort de la recette du jour ───
   'order.cancel',
+  'order.collect',
   'order.discount',
   'order.dispatch',
   /**
@@ -576,6 +584,7 @@ export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
  */
 export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.cancel': 'Annulation de commande',
+  'order.collect': 'Encaissement de commande',
   'order.discount': 'Remise',
   'order.dispatch': 'Départ en livraison',
   'order.refund': 'Remboursement',

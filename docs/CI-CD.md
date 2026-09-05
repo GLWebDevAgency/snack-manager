@@ -4,6 +4,14 @@ Ce document s'adresse à celui qui reprend le projet et doit livrer sans casser
 Class'Food un vendredi soir. Il décrit ce qui tourne automatiquement, ce qui
 bloque une fusion, et comment revenir en arrière.
 
+**Règle de livraison confirmée le 6 septembre 2026 : aucun push direct sur
+`develop` ou `main`.** Chaque changement passe par une branche dédiée, une PR,
+une revue et les contrôles verts sur sa dernière révision. La fusion vers
+`develop` déclenche staging ; celle vers `main` exige d'abord la recette staging
+et un GO explicite du fondateur pour le périmètre de la PR production. Une
+synchronisation de `origin/develop` dans une branche de travail n'est pas une
+livraison. L'absence éventuelle de protection GitHub ne dispense pas de ce flow.
+
 ---
 
 ## 1 · Pourquoi ce pipeline existe
@@ -342,11 +350,14 @@ reprenables en l'état et la tâche dit lesquels.
 ## 4 · Livrer un changement
 
 ```bash
-# 1. Partir de main à jour
-git switch main && git pull
+# 1. Inspecter les worktrees/PR concurrents, puis récupérer les références
+git status --short --branch
+git worktree list
+gh pr list --state open
+git fetch origin
 
 # 2. Une branche par changement
-git switch -c fix/nom-du-changement
+git switch -c fix/nom-du-changement origin/develop
 
 # 3. Travailler, puis vérifier AVANT de pousser (§ 5)
 pnpm verify
@@ -357,13 +368,14 @@ git commit
 
 # 5. Ouvrir la pull request : le gabarit se remplit tout seul
 git push -u origin fix/nom-du-changement
-gh pr create --fill
+gh pr create --base develop --fill
 
 # 6. Regarder la CI, vraiment
 gh pr checks --watch
 
-# 7. Fusionner une fois les deux contrôles verts
-gh pr merge --squash --delete-branch
+# 7. Après revue, vérifier la tête de PR puis fusionner CE SHA vers develop
+gh pr view --json headRefOid,baseRefName,mergeStateStatus,statusCheckRollup
+gh pr merge --squash --match-head-commit <sha-verifie>
 ```
 
 Le gabarit de pull request (`.github/pull_request_template.md`) pose trois
@@ -402,9 +414,9 @@ les parcours qui mutent un restaurant restent limités à staging. Mais il tourn
 *après* la mise en ligne et ne bloque rien (§ 9) : la vérification à la main sur
 staging avant `main` reste la règle.
 
-Ce paragraphe décrit le trajet jusqu'à `main`. **La suite — de `main` jusqu'au
-restaurant en service — est au § 10**, et elle est automatique : la fusion
-déclenche le déploiement en production.
+Ce paragraphe décrit le trajet jusqu'à `develop`. **La suite — staging puis
+production par PR distincte après GO — est au § 10.** Ne pas supprimer une
+branche utilisée dans un worktree partagé pour terminer une commande de fusion.
 
 ---
 
@@ -596,29 +608,41 @@ et surtout plus rien à lancer à la main.
 ### Le chemin recommandé
 
 ```bash
-# 1. Partir de main à jour
-git switch main && git pull
+# 1. Vérifier les autres travaux, puis partir de develop à jour
+git status --short --branch
+git worktree list
+gh pr list --state open
+git fetch origin
 
 # 2. Une branche par changement
-git switch -c fix/nom-du-changement
+git switch -c fix/nom-du-changement origin/develop
 
 # 3. Vérifier AVANT de pousser (§ 5)
 pnpm verify
 
-# 4. Répéter sur staging d'abord — c'est là que ça doit casser
-git switch develop && git pull && git merge fix/nom-du-changement
-git push origin develop            # ← déclenche le déploiement staging
+# 4. Committer des chemins précis, pousser UNIQUEMENT la branche et ouvrir sa PR
+git push -u origin fix/nom-du-changement
+gh pr create --base develop --head fix/nom-du-changement --fill
+gh pr checks --watch
+# Après revue, vérifier l'absence de nouveau commit/PR concurrent et les SHA.
+gh pr view --json headRefOid,baseRefOid,mergeStateStatus,statusCheckRollup
+gh pr merge --squash --match-head-commit <sha-verifie>
+# ↑ fusion par PR : déclenche le déploiement staging, aucun push direct develop
 
 # 5. Regarder le déploiement, vraiment
-gh run watch
+gh run list --workflow deploy.yml --branch develop
+gh run watch <run-staging-du-sha-fusionne> --exit-status
 
 # 6. Essayer sur staging à la main : la caisse, l'écran cuisine, une commande
 #    en ligne. Le contrôle de santé (§ 11) dit que ça répond, pas que ça marche.
 
-# 7. Alors seulement, après un GO écrit, la production par pull request (§ 4)
-gh pr create --base main --fill
-gh pr checks --watch
-gh pr merge --squash --delete-branch   # ← déclenche le déploiement production
+# 7. Après recette et GO écrit sur le lot exact : PR de promotion distincte
+gh pr create --base main --head develop --title "release: lot valide sur staging"
+gh pr checks <numero-pr-production> --watch
+# Relire TOUT le diff de promotion : develop peut contenir d'autres lots.
+# Si le périmètre dépasse le GO, ne pas fusionner ; faire valider le périmètre.
+gh pr merge <numero-pr-production> --merge --match-head-commit <sha-valide>
+# ↑ conserve l'ascendance develop/main ; déclenche la production après sa CI
 ```
 
 > **`develop` doit rester à jour avec `main`.** Le 19 août, `develop` avait

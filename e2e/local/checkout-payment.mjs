@@ -309,7 +309,9 @@ try {
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await screenshot('before');
-  await payment.getByRole('button', { name: /^Payer/ }).click();
+  // The card CTA includes an amount; the separate "Payer au comptoir"
+  // recovery action is intentionally present for an eligible pickup.
+  await payment.getByRole('button', { name: /^Payer\s+\d/ }).click();
   if (scenario === 'pickup') {
     await deadline(creationArrived.promise, 20_000, 'POST de création non reçu par la fixture.');
     assert.equal(await payment.getByRole('button', { name: 'Fermer', exact: true }).isDisabled(), true);
@@ -331,9 +333,10 @@ try {
   assert.equal(await page.getByText('Commande confirmée', { exact: true }).count(), 0);
   await page.getByRole('button', { name: 'Réessayer', exact: true }).click();
   await page.getByText('Paiement de test sécurisé', { exact: true }).waitFor();
-  await page.getByRole('button', { name: /^Payer/ }).click();
+  const cardPayment = page.getByRole('dialog', { name: 'Paiement par carte', exact: true });
+  await cardPayment.getByRole('button', { name: /^Payer\s+\d/ }).click();
   await page.getByText('Confirmation bancaire en cours', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: /^Payer/ }).isDisabled(), true);
+  assert.equal(await cardPayment.getByRole('button', { name: /^Payer\s+\d/ }).isDisabled(), true);
   assert.equal(await page.getByRole('button', { name: /comptoir/ }).count(), 0);
   assert.equal(await page.getByText('Commande confirmée', { exact: true }).count(), 0);
   await screenshot('processing');

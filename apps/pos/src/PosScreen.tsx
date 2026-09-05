@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
-import type { OrderLoyaltyEarnStatus } from '@sm/contracts';
+import type { CollectOrderPayment, OrderLoyaltyEarnStatus } from '@sm/contracts';
 import {
   POLL_POS_MS,
   SmApiError,
@@ -41,6 +41,9 @@ import { siteConfigure } from './demo-retour';
 import { TopBar, type Vue } from './TopBar';
 import { ServicePanel } from './ServicePanel';
 import { applyConfirmedHandover, confirmCounterHandover, isCounterHandoverRole } from './service-handover';
+import { CollectPaymentModal } from './CollectPaymentModal';
+import { collectExistingOrder, collectionRecovery, pendingCollectionIds, reconcileCollectedJournal, withCollectionDeadline } from './service-payment';
+import { createJournalPaymentLookup } from './journal-payment-reconciliation';
 import {
   commandesEnCours,
   type ServerOrderRow,
@@ -158,6 +161,7 @@ export function PosScreen({
   // ─── Surcouches ───
   const [config, setConfig] = useState<{ product: Product; categoryName: string; initial?: ConfigDraft } | null>(null);
   const [cashOpen, setCashOpen] = useState(false);
+  const [collectionTarget, setCollectionTarget] = useState<{ id: string; number: number } | null>(null);
   const [closeOpen, setCloseOpen] = useState(false);
   /**
    * Les ventes que le serveur a refusées définitivement.
@@ -207,6 +211,7 @@ export function PosScreen({
   const offlineRef = useRef(offline);
   /** Toutes les lectures `/orders` du poste passent par cette file FIFO. */
   const orderReadQueue = useMemo(() => createSerialTaskQueue(), []);
+  const journalPaymentLookup = useMemo(() => createJournalPaymentLookup(), []);
   const handoverAlive = useRef(true);
   const handoversInFlight = useRef(new Set<string>());
   useEffect(() => {
@@ -350,7 +355,7 @@ export function PosScreen({
 
   const reconcile = useCallback(
     (force = false): Promise<FenetreServeur | null> => {
-      if (!force && !dayLogRef.current.some((e) => !e.serverId || e.loyalty)) {
+      if (!force && !dayLogRef.current.some((e) => !e.serverId || !e.paid || e.loyalty)) {
         return Promise.resolve(null);
       }
 
@@ -363,7 +368,7 @@ export function PosScreen({
           let all = normalizeOrdersWindow<ServerOrderRow>([]);
           const needsDayRead =
             !dailyNumberSeeded.current ||
-            dayLogRef.current.some((entry) => !entry.serverId);
+            dayLogRef.current.some((entry) => !entry.serverId || !entry.paid);
           if (needsDayRead) {
             try {
               all = normalizeOrdersWindow<ServerOrderRow>(
@@ -419,6 +424,16 @@ export function PosScreen({
           };
           setFenetre(nextWindow);
 
+          // Une vente déjà remise peut dater d'hier ou être hors de la page
+          // des 200 commandes. Réparer uniquement les dettes de CE journal,
+          // par identité exacte : cinq lectures maximum, reprises espacées.
+          const recoveredPayments = await journalPaymentLookup.readMissing(
+            dayLogRef.current,
+            observedRows,
+            (clientId) => withCollectionDeadline(client.get<ServerOrderRow>(`/orders/by-client/${encodeURIComponent(clientId)}`)),
+          );
+          for (const row of recoveredPayments) byClient.set(row.clientId, row);
+
           void reconcileLoyaltyStatuses(
             dayLogRef.current,
             journalRevision,
@@ -432,14 +447,16 @@ export function PosScreen({
                   if (!hit) return entry;
                   // Le jeton de suivi peut manquer sur une entrée déjà
                   // réconciliée ; la photo journalière le rattrape.
-                  if (entry.serverId && entry.trackingToken) return entry;
-                  return {
+                  const synced = {
                     ...entry,
                     serverId: String(hit._id),
                     serverNumber: hit.number,
                     trackingToken:
                       hit.trackingToken ?? entry.trackingToken ?? null,
                   };
+                  // Répare aussi un encaissement confirmé dont la copie locale
+                  // n'a pas atteint le disque avant un crash. Jamais d'ajout web.
+                  return reconcileCollectedJournal([synced], hit)[0];
                 }),
               applyDayLog,
               journalRevision,
@@ -461,6 +478,7 @@ export function PosScreen({
     [
       applyDayLog,
       dayLogWriter,
+      journalPaymentLookup,
       onLock,
       orderReadQueue,
       reconcileLoyaltyStatuses,
@@ -495,6 +513,80 @@ export function PosScreen({
       handoversInFlight.current.delete(row._id);
     }
   }, [session.staffRole, orderReadQueue, reconcile, push, onLock]);
+
+  /** Server payment is authoritative even if this poste's optional local journal fails to persist. */
+  const applyServicePayment = useCallback(async (row: ServerOrderRow) => {
+    if (!handoverAlive.current) return;
+    setFenetre((current) => current ? {
+      ...current,
+      service: { ...current.service, rows: current.service.rows.map((entry) => entry._id === row._id ? row : entry) },
+    } : current);
+    if (row.payment?.status !== 'paid' || !dayLogRef.current.some((entry) => entry.serverId === row._id || entry.clientId === row.clientId)) return;
+    try {
+      const persisted = await dayLogWriter.commit(() => dayLogRef.current, (entries) => reconcileCollectedJournal(entries, row), applyDayLog);
+      if (!persisted) throw new Error('Le journal local a changé pendant la confirmation.');
+    } catch {
+      applyDayLog(reconcileCollectedJournal(dayLogRef.current, row));
+      setJournalDegraded(true);
+      push('Paiement confirmé sur le serveur. Journal local à resynchroniser ; ne réencaissez pas.', 'warn');
+    }
+  }, [applyDayLog, dayLogWriter, push, setJournalDegraded]);
+
+  const readServicePayment = useCallback(async (id: string): Promise<ServerOrderRow> => {
+    try {
+      return await orderReadQueue.run(async () => {
+        if (!isCounterHandoverRole(session.staffRole)) throw new Error('Votre rôle ne permet pas l’encaissement.');
+        if (!handoverAlive.current || offlineRef.current || globalThis.navigator?.onLine === false) throw new Error('Connexion et session active requises pour vérifier le paiement.');
+        const current = await withCollectionDeadline(client.get<ServerOrderRow>(`/orders/${id}`));
+        if (!current || current._id !== id) throw new Error('Impossible de vérifier cette commande.');
+        await applyServicePayment(current);
+        return current;
+      });
+    } catch (error) {
+      if (error instanceof SmApiError && error.status === 401) onLock('Session expirée — reconnectez-vous.');
+      throw error;
+    }
+  }, [applyServicePayment, onLock, orderReadQueue, session.staffRole]);
+
+  const collectServicePayment = useCallback(async (row: ServerOrderRow, operation: CollectOrderPayment): Promise<ServerOrderRow> => {
+    if (!isCounterHandoverRole(session.staffRole)) throw new Error('Votre rôle ne permet pas l’encaissement.');
+    if (offlineRef.current || globalThis.navigator?.onLine === false) throw new Error('Reconnectez la caisse pour confirmer le paiement.');
+    if (!saleInFlight.tryStart()) throw new Error('Une opération de caisse est déjà en cours.');
+    try {
+      return await orderReadQueue.run(async () => {
+        if (!handoverAlive.current || offlineRef.current || globalThis.navigator?.onLine === false) throw new Error('Connexion et session active requises pour encaisser.');
+        const fresh = await withCollectionDeadline(client.get<ServerOrderRow>(`/orders/${row._id}`));
+        if (!fresh || fresh._id !== row._id) throw new Error('Impossible de vérifier cette commande.');
+        const durable = await collectionRecovery(client.tenantStore, row._id);
+        if (!durable || JSON.stringify(durable) !== JSON.stringify(operation)) throw new Error('Référence d’encaissement non vérifiée. Aucun nouveau règlement autorisé.');
+        const confirmed = await collectExistingOrder(fresh, operation,
+          (id, body) => withCollectionDeadline(client.direct<ServerOrderRow>('POST', `/orders/${id}/collect`, body)), { resume: true });
+        await applyServicePayment(confirmed);
+        return confirmed;
+      });
+    } catch (error) {
+      if (error instanceof SmApiError && error.status === 401) onLock('Session expirée — reconnectez-vous.');
+      throw error;
+    } finally {
+      saleInFlight.finish();
+    }
+  }, [applyServicePayment, onLock, orderReadQueue, saleInFlight, session.staffRole]);
+
+  const servicePaymentActions = useMemo(() => ({ read: readServicePayment, collect: collectServicePayment, store: client.tenantStore }), [readServicePayment, collectServicePayment]);
+
+  useEffect(() => {
+    if (!ready || offline || collectionTarget || !isCounterHandoverRole(session.staffRole)) return;
+    let cancelled = false;
+    void pendingCollectionIds(client.tenantStore).then(async (ids) => {
+      const id = ids[0];
+      if (!id || cancelled) return;
+      const row = await readServicePayment(id);
+      if (!cancelled) setCollectionTarget({ id, number: row.number });
+    }).catch(() => {
+      if (!cancelled) push('Un encaissement interrompu peut nécessiter une vérification. Ouvrez la commande avant de percevoir un règlement.', 'warn');
+    });
+    return () => { cancelled = true; };
+  }, [collectionTarget, offline, push, readServicePayment, ready, session.staffRole]);
 
   /**
    * Rafraîchissement demandé par un événement `order.*` du restaurant.
@@ -1297,6 +1389,7 @@ export function PosScreen({
             failedStatuses={fenetre?.service.failedStatuses ?? []}
             truncatedStatuses={fenetre?.service.truncatedStatuses ?? []}
             onConfirmHandover={isCounterHandoverRole(session.staffRole) ? confirmServiceHandover : undefined}
+            onCollectPayment={isCounterHandoverRole(session.staffRole) ? (row) => setCollectionTarget({ id: row._id, number: row.number }) : undefined}
             offline={offline}
           />
         ) : (
@@ -1467,6 +1560,8 @@ export function PosScreen({
           onClose={closeLoyalty}
         />
       ) : null}
+
+      {collectionTarget ? <CollectPaymentModal key={collectionTarget.id} orderId={collectionTarget.id} number={collectionTarget.number} brand={brand} actions={servicePaymentActions} offline={offline} onClose={() => setCollectionTarget(null)} /> : null}
 
       {host}
     </View>

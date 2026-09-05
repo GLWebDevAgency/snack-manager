@@ -1,6 +1,7 @@
 <!--
-Snack Manager sert un vrai commerce. Ce qui est fusionné ici part en
-production. Trois questions, pas une de plus.
+Une fusion vers develop déclenche staging ; vers main, la production.
+PR obligatoire pour les deux : aucun push direct. La production exige une
+recette staging et un GO explicite sur le lot concerné. Trois questions.
 -->
 
 ## Ce que ça change

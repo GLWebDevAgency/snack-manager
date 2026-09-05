@@ -16,8 +16,8 @@
  *  — la clé d’idempotence (`clientId`) est stable sur toute une tentative :
  *    un double appui, un réseau qui bégaie ou un retour arrière ne créent
  *    jamais deux commandes ;
- *  — le retrait peut être réglé au comptoir si ce choix précède le paiement
- *    en ligne ; après une demande bancaire, toute reprise garde la même commande.
+ *  — après une demande bancaire, le retrait ne passe au comptoir qu'après
+ *    fermeture sûre du paiement par le serveur, toujours sur la même commande.
  */
 
 import {
@@ -84,10 +84,11 @@ import {
   Stepper,
   Tap,
 } from "./primitives";
-import { StripeCard, type ApparenceStripe } from "./StripeCard";
+import { StripeCard, type ApparenceStripe, type StripePaymentOutcome } from "./StripeCard";
 import { TurnstileCheck } from "./TurnstileCheck";
 import { DeliveryFee, DeliveryFields, FreeDeliveryHint } from "./DeliveryFields";
-import { PAYMENT_VERIFICATION_MESSAGE, checkoutPaymentDecision, requestExistingOrderPayment } from "./checkout-payment";
+import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, checkoutPaymentDecision, requestCounterPayment, requestExistingOrderPayment } from "./checkout-payment";
+import { CounterPaymentAction } from "./CounterPaymentAction";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
@@ -280,6 +281,9 @@ export function Checkout({
   const [status, setStatus] = useState<OrderStatus>("new");
   const [paidOnline, setPaidOnline] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [switchingCounter, setSwitchingCounter] = useState(false);
+  const [bankProcessing, setBankProcessing] = useState(false);
+  const bankProcessingRef = useRef(false);
   // La garde doit précéder le prochain rendu : un second clic, Échap ou un
   // callback de fermeture ne peut pas effacer une requête déjà partie.
   const requestInFlightRef = useRef(false);
@@ -378,6 +382,8 @@ export function Checkout({
     setStatus("new");
     setIntent(null);
     setPaidOnline(false);
+    setBankProcessing(false);
+    bankProcessingRef.current = false;
     setError(null);
     setSlotIso(null);
     setDate(null);
@@ -415,7 +421,7 @@ export function Checkout({
   }
 
   async function retryPayment() {
-    if (!order || requestInFlightRef.current || checkoutPaymentDecision(order, "online") === "verify") return;
+    if (!order || bankProcessingRef.current || requestInFlightRef.current || checkoutPaymentDecision(order, "online") === "verify") return;
     requestInFlightRef.current = true;
     clearScheduledReset();
     setBusy(true);
@@ -423,9 +429,65 @@ export function Checkout({
     try {
       const next = await requestExistingOrderPayment(api, order);
       setIntent(next);
-    } catch {
-      setError(PAYMENT_VERIFICATION_MESSAGE);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
     } finally { requestInFlightRef.current = false; setBusy(false); }
+  }
+
+  function startCardConfirmation() {
+    if (requestInFlightRef.current || bankProcessingRef.current) return false;
+    requestInFlightRef.current = true;
+    clearScheduledReset();
+    setBusy(true);
+    return true;
+  }
+
+  function finishCardConfirmation(outcome: StripePaymentOutcome) {
+    bankProcessingRef.current = outcome !== "idle";
+    requestInFlightRef.current = false;
+    setBusy(false);
+    setBankProcessing(outcome !== "idle");
+  }
+
+  async function switchCounterPayment() {
+    if (!order || requestInFlightRef.current || bankProcessingRef.current
+      || !canRequestCounterPayment(order, order.type === "pickup" ? "pickup" : undefined)) return;
+    requestInFlightRef.current = true;
+    clearScheduledReset();
+    setBusy(true);
+    setSwitchingCounter(true);
+    setError(null);
+    try {
+      const next = await requestCounterPayment(api, order);
+      setOrder({ ...order, payment: next.payment });
+      setIntent(null);
+      setPaidOnline(false);
+      setStep("done");
+    } catch (cause) {
+      setError(cause instanceof PublicApiError ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
+      if (cause instanceof PublicApiError && cause.status === 409) { bankProcessingRef.current = true; setBankProcessing(true); }
+      // Un refus ou une réponse perdue ne permet aucune supposition locale.
+      // Le GET relit aussi un éventuel succès déjà persisté par le serveur.
+      try {
+        const next = await api.loadTracking(order._id, order.trackingToken);
+        if (next._id === order._id) {
+          setOrder({ ...order, status: next.status, ...(next.payment ? { payment: next.payment } : {}) });
+          setStatus(next.status);
+          setIntent(null);
+          if (next.payment?.method === "counter" && next.payment.status === "pending"
+            && ["new", "preparing", "ready"].includes(next.status)) setStep("done");
+          if (next.payment?.status === "paid" && ["new", "preparing", "ready"].includes(next.status)) {
+            setPaidOnline(next.payment.method === "online");
+            setError(null);
+            setStep("done");
+          }
+        }
+      } catch { /* Le lien de suivi reste disponible, sans faux accord comptoir. */ }
+    } finally {
+      requestInFlightRef.current = false;
+      setBusy(false);
+      setSwitchingCounter(false);
+    }
   }
 
   /**
@@ -557,8 +619,8 @@ export function Checkout({
         writePayProbe(slug, "ready");
         setProbe("ready");
         setIntent(res);
-      } catch {
-        setError(PAYMENT_VERIFICATION_MESSAGE);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : PAYMENT_VERIFICATION_MESSAGE);
       }
     } catch (err) {
       setError(
@@ -738,6 +800,9 @@ export function Checkout({
             amount={intent.amount}
             apparence={stripeApparence}
             prixMono={prixMono}
+            disabled={switchingCounter}
+            onConfirmStart={startCardConfirmation}
+            onConfirmEnd={finishCardConfirmation}
             returnUrl={
               typeof window === "undefined" || !order
                 ? ""
@@ -751,7 +816,7 @@ export function Checkout({
         )}
         {step === "card" && (!intent || intent.unavailable || !intent.publishableKey) && (
           <div className="flex flex-col gap-3">
-            <ErrorState title={busy ? "Connexion au paiement" : "Paiement à vérifier"} message={busy ? "Connexion au paiement sécurisé…" : "Ne payez pas par un autre moyen. Consultez le suivi de votre commande pour vérifier son état."} onRetry={busy || !order || checkoutPaymentDecision(order, "online") === "verify" ? undefined : retryPayment} />
+            <ErrorState title={busy ? "Vérification du paiement" : "Paiement à vérifier"} message={busy ? "Vérification sécurisée en cours…" : error ?? "Votre commande est enregistrée. Réessayez le paiement ou consultez son suivi. Un changement de moyen doit d’abord être confirmé."} onRetry={busy || bankProcessing || !order || checkoutPaymentDecision(order, "online") === "verify" ? undefined : retryPayment} />
             {order && <Link
               href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
               target={embed ? "_blank" : undefined}
@@ -759,6 +824,10 @@ export function Checkout({
               className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
             >Suivre ma commande</Link>}
           </div>
+        )}
+
+        {step === "card" && order && !bankProcessing && canRequestCounterPayment(order, order.type === "pickup" ? "pickup" : undefined) && (
+          <CounterPaymentAction disabled={busy} busy={switchingCounter} onConfirm={switchCounterPayment} />
         )}
 
         {step === "done" && order && (
@@ -1854,6 +1923,10 @@ function DoneStep({
             <Banner tone="ok" icon="check" title="Paiement accepté">
               <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> réglés en
               ligne. {delivery ? "Votre restaurant prépare votre livraison." : "Présentez votre numéro de retrait au comptoir."}
+            </Banner>
+          ) : order.payment?.status === "paid" ? (
+            <Banner tone="ok" icon="check" title="Paiement accepté">
+              <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> réglés au comptoir. Présentez votre numéro de retrait.
             </Banner>
           ) : (
             <Banner icon="euro" title="À régler au comptoir">

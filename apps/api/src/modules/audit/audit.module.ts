@@ -1,4 +1,5 @@
-import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/common';
+import { Controller, Get, Global, Injectable, Module, Query, ServiceUnavailableException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { z } from 'zod';
@@ -26,6 +27,14 @@ import { zod } from '../../common/zod.pipe';
  * à en fabriquer un faux pour dire la vérité.
  */
 export type AuditActor = Pick<JwtPayload, 'sub' | 'role' | 'kind'>;
+
+/** Stable comparison of immutable receipt data, independent of object key order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
 
 /**
  * Journal append-only des gestes sensibles d'un restaurant — socle NF525.
@@ -102,6 +111,33 @@ export class AuditService {
       author: actor ? await this.auteur(actor) : null,
       at: new Date(),
     });
+  }
+
+  /** Idempotent append ONLY for a durable order collection receipt. The receipt
+   * remains the recovery source if this append fails; no audit update/upsert. */
+  async logOnce(entry: { tenantId: string; action: 'order.collect'; targetId: string; actor: AuditActor; meta: unknown }, operationId: string): Promise<void> {
+    const key = JSON.stringify([entry.tenantId, entry.action, entry.targetId, operationId]);
+    const id = new Types.ObjectId(createHash('sha256').update(key).digest('hex').slice(0, 24));
+    const fingerprint = createHash('sha256').update(canonical(entry)).digest('hex');
+    const read = () => this.logs.findById(id).read('primary').readConcern('majority').maxTimeMS(10_000).lean();
+    const verify = (row: AuditLog | null): boolean => {
+      if (!row) return false;
+      if (String(row.tenantId) !== entry.tenantId || row.action !== entry.action || row.targetId !== entry.targetId
+        || row.deduplication?.key !== key || row.deduplication.fingerprint !== fingerprint) {
+        throw new ServiceUnavailableException('Conflit de preuve du journal : rapprochement requis.');
+      }
+      return true;
+    };
+    if (verify(await read())) return;
+    const { actor, ...rest } = entry;
+    try {
+      await this.logs.create([{ _id: id, ...rest, author: await this.auteur(actor), at: new Date(),
+        deduplication: { key, fingerprint } }], { writeConcern: { w: 'majority', j: true, wtimeout: 10_000 } });
+    } catch (error) {
+      // Duplicate writer OR lost response: only an identical persisted record
+      // proves success. Unknown failures leave the collection receipt intact.
+      if (!verify(await read())) throw error;
+    }
   }
 
   /**

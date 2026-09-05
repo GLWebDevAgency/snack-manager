@@ -20,6 +20,7 @@ QA_SCENARIO=delivery node e2e/local/checkout-payment.mjs
 QA_SCENARIO=replay node e2e/local/checkout-payment.mjs
 QA_SCENARIO=delivery-pricing node e2e/local/checkout-payment.mjs
 QA_SCENARIO=delivery-settings node e2e/local/checkout-payment.mjs
+node e2e/local/counter-payment.mjs
 ```
 
 Exécuter **en série**, sans autre `next dev` sur `apps/web` : Next partage son
@@ -101,3 +102,59 @@ réelle, le webhook, la concurrence Mongo, l'authentification du serveur ou le
 déploiement. Ces preuves restent du ressort des tests API/Mongo et de la recette
 sandbox Stripe. La reprise après rafraîchissement/fermeture du navigateur et la
 persistance des secrets de suivi restent un chantier distinct.
+
+## Bascule sécurisée vers le comptoir
+
+`counter-payment.mjs` utilise les mêmes prérequis, variables de ports et règle
+d'exécution en série. Il parcourt **10 scénarios** sur le vrai frontend Next,
+avec une API locale et des SDK Stripe/Turnstile simulés :
+
+- Checkout : paiement non configuré, échec de chargement Stripe.js, carte
+  disponible. Le choix comptoir demande une confirmation et transforme la
+  commande existante, sans second POST de création.
+- Suivi : conversion réussie, conflit `409`, paiement déjà confirmé, ancien GET
+  retardé. La réponse serveur fait autorité ; aucun ancien suivi ne doit rétablir
+  un paiement en ligne après confirmation du choix comptoir.
+- Confirmation bancaire `processing` ou `succeeded` côté SDK : pas de nouvelle
+  tentative comptoir ni d'affichage « payé » sans état serveur correspondant.
+- Livraison : aucune alternative comptoir, le prépaiement reste obligatoire.
+
+Les barrières de réponse vérifient les doubles clics, la confirmation au clavier,
+le verrouillage de Stripe pendant la bascule et l'absence de débordement en
+390 × 844 / 1440 × 1000. Un suivi `online/pending` ne doit jamais afficher
+« Payé en ligne », même si un ancien libellé du ticket le suggère.
+
+Les captures et journaux sont conservés dans un nouveau dossier temporaire
+`sm-counter-payment-…`, indiqué à la fin du test. Les mêmes limites s'appliquent :
+ces tests n'encaissent rien et ne prouvent ni Stripe réel ni le backend Mongo.
+
+## Encaissement d'une commande existante dans le POS
+
+`pos-counter-payment.mjs` parcourt le **vrai POS Expo web**, avec toutes les
+requêtes API interceptées dans le navigateur. Contrairement aux recettes Next,
+il attend qu'un serveur POS **local** soit déjà démarré :
+
+```bash
+# Terminal 1, depuis le dépôt installé (aucun serveur API à démarrer).
+EXPO_PUBLIC_API_URL=http://localhost:3001 EXPO_PUBLIC_ALLOW_LOCAL_API=1 pnpm --filter @sm/pos exec expo start --web --port 8084
+# Terminal 2
+POS_COUNTER_WEB_URL=http://localhost:8084 node e2e/local/pos-counter-payment.mjs
+```
+
+Le harnais refuse les origines non locales. L'API `http://localhost:3001` est
+simulée, les autres sorties HTTP sont bloquées ; aucun SMS, Stripe, TPE ou ordre
+réel n'est appelé. Le serveur Expo appartient à son terminal de lancement et
+doit être arrêté là, pas par recherche/arrêt global de processus.
+
+Les **15 scénarios** couvrent espèces et rendu, carte/TPE et titre-restaurant
+avec confirmation manuelle, panier déjà rempli conservé, remise séparée,
+montant changé, encaissement concurrent, droits, livraison/paiement en ligne
+exclus, hors ligne, silence réseau de 15 s, réponse perdue/rechargement avec le
+même UUID, audit incomplet malgré GET `paid`, panne d'écriture du journal puis
+réconciliation. Une vente locale de la veille hors des 200 résultats est
+retrouvée exactement ; une lecture `404` ne déclare jamais une vente payée.
+
+Captures mobile/tablette/bureau et résumé sont produits dans un nouveau dossier
+temporaire `sm-pos-counter-…`. Aucun POST de création de commande n'est permis.
+Ces preuves portent sur l'interface et ses reprises, pas sur l'API Mongo réelle
+ou l'encaissement physique : ces derniers ont leur recette distincte.

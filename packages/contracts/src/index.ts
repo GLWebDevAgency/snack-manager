@@ -31,6 +31,7 @@ export * from './mediatheque-octets';
 export * from './delivery';
 export * from './commerce';
 export * from './order-refunds';
+export * from './order-counter';
 export * from './menu-legacy-options';
 export * from './menu-featured';
 
