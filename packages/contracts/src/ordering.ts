@@ -156,6 +156,13 @@ export type PaymentIntentResponse = z.infer<typeof PaymentIntentResponseSchema>;
 
 export const PAYMENT_UNAVAILABLE_REASON = 'Paiement en ligne non configuré';
 
+/** A confirmed change of collection method, NEVER a payment receipt. */
+export const CounterPaymentResponseSchema = z.object({
+  _id: z.string(),
+  payment: z.object({ method: z.literal('counter'), status: z.literal('pending') }),
+});
+export type CounterPaymentResponse = z.infer<typeof CounterPaymentResponseSchema>;
+
 // ─── Ticket imprimable ───
 
 /** Largeurs usuelles : 32 = papier 58 mm, 42/48 = papier 80 mm. */

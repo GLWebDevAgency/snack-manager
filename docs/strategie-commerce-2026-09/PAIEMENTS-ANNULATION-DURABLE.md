@@ -1,6 +1,6 @@
 # Paiement et annulation — protocole durable
 
-Implémentation dans la branche commerce, le 5 septembre 2026. **Pas une attestation de déploiement ni de recette Stripe distante.** Ce lot ferme les courses entre ouverture, fermeture et confirmation bancaire. Il ne livre pas encore l'expiration automatique, le paiement comptoir explicite d'une commande existante ou le remboursement comptoir.
+Implémentation initiale le 5 septembre 2026, complétée le 6 septembre par le changement de moyen sur un retrait existant. **Pas une attestation de déploiement ni de recette Stripe distante.** Ce lot ferme les courses entre ouverture, fermeture et confirmation bancaire. Il ne livre pas encore l'expiration automatique, l'encaissement comptoir explicite indépendant de la remise ou le remboursement comptoir.
 
 ## Invariants et fonctionnement
 
@@ -17,6 +17,18 @@ Implémentation dans la branche commerce, le 5 septembre 2026. **Pas une attesta
 Le secret client n'est rendu qu'après rattachement et relecture ouverte. Une réponse HTTP déjà en vol ne peut pas être rappelée : c'est l'annulation terminale **chez Stripe** qui rend l'ancienne intention inutilisable, pas l'affichage d'un message dans le navigateur.
 
 ## Historique et expérience opérateur
+
+### Reprendre un retrait au comptoir
+
+Le checkout et le suivi proposent « Payer au comptoir » pour un retrait actif dont le règlement en ligne reste en attente. Une confirmation explique que le serveur doit d'abord fermer le paiement bancaire. Le POST `public/orders/:id/payment-counter?t=…` exige le secret de **cette** commande et ne crée ni nouvelle commande, ni remise, ni remboursement. La livraison reste exclusivement prépayée.
+
+La destination `counter` est persistée dans la même fermeture durable que l'annulation, distinguée de `cancel_order` (défaut historique). Les deux destinations concurrentes ne s'écrasent pas. Seule une absence d'appel prouvée ou un PI terminal `canceled`, relu sur son compte exact, permet `counter_ready`. Le statut opérationnel et l'historique cuisine restent inchangés ; `payment.status` reste `pending`, le choix devient `counter`, le tender est vide. Le PI et la tentative sont conservés comme preuves. Un replay reprend la décision, sans réouvrir `open`.
+
+La caisse n'encaisse à la remise que si cette preuve est cohérente. Une annulation opérationnelle ultérieure reste possible sans rouvrir Stripe. Les remboursements Stripe et leur interface exigent un paiement réellement classé `online` : un ancien PI annulé conservé après encaissement au comptoir ne représente pas des fonds Stripe remboursables. Un événement bancaire contradictoire exige un rapprochement sans reclassifier silencieusement le règlement comptoir.
+
+Le navigateur invalide les réponses de suivi antérieures à sa mutation, partage un verrou entre confirmation carte et changement de moyen, puis relit le serveur en cas de réponse perdue. Un simple message « indisponible », un timeout ou un paiement `processing` ne constituent jamais une autorisation d'encaisser ailleurs. Le récapitulatif utilise le **statut** du paiement : `pending` n'affiche plus « Payé en ligne ».
+
+Recette locale : vrai Mongo standalone isolé, deux connexions concurrentes et fournisseur de test sans réseau bancaire ; cas sans Connect, réponse Stripe/Mongo perdue, concurrence ouverture/fermeture/remise/webhook, jetons invalides, livraison, historiques ambigus et remboursement comptoir refusé. Ces tests ne certifient pas la délivrabilité Stripe ni une transaction réelle sur staging.
 
 Un PI historique connu est repris sur son compte exact, y compris la plateforme pour les anciens paiements uniquement. Un historique sans PI et sans preuve instrumentée devient `legacy_unknown` : ni nouvelle ouverture bancaire, ni annulation financière supposée sûre, ni remise commerciale qui modifierait son montant.
 

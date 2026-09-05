@@ -24,7 +24,7 @@ const get = (object: object, path: string): unknown => path.split('.').reduce<un
 const matches = (filter: Record<string, unknown>) => Object.entries(filter).every(([key, value]) => get(row, key) === value);
 
 beforeEach(() => {
-  row = { __v: 0, _id: ID, tenantId: TENANT, channel: 'online', totals: { total: 1250 }, payment: { status: 'paid', stripePaymentIntentId: 'pi_paid', stripeAccountId: ACCOUNT, refundSyncVersion: 0 } };
+  row = { __v: 0, _id: ID, tenantId: TENANT, channel: 'online', totals: { total: 1250 }, payment: { method: 'online', status: 'paid', stripePaymentIntentId: 'pi_paid', stripeAccountId: ACCOUNT, refundSyncVersion: 0 } };
   capabilities = ['bo'];
   provider = [];
   const model = {
@@ -54,6 +54,35 @@ beforeEach(() => {
 });
 
 describe('restaurant refunds', () => {
+  it('does not refund a counter payment through a retained canceled Stripe intent', async () => {
+    row.payment.method = 'counter';
+    await expect(sut.request(TENANT, ID, 'owner1', body)).rejects.toThrow('Aucun paiement Stripe confirmé');
+    expect(stripe.refunds.create).not.toHaveBeenCalled();
+    expect(stripe.refunds.list).not.toHaveBeenCalled();
+  });
+  it('does not consult Stripe for a counter payment summary', async () => {
+    row.payment.method = 'counter';
+    expect(await sut.summary(TENANT, ID)).toMatchObject({ refundedCents: 0, pendingRefundCents: 0, remainingCents: 0 });
+    expect(stripe.refunds.list).not.toHaveBeenCalled();
+    expect(row.__v).toBe(0);
+  });
+  it('ignores a refund event for an intent retained after switching to counter', async () => {
+    row.payment.method = 'counter';
+    provider.push({ id: 're_stale', amount: 1250, status: 'succeeded' });
+    await sut.webhook({ type: 'refund.updated', account: ACCOUNT, data: { object: { payment_intent: 'pi_paid' } } });
+    expect(row.payment.status).toBe('paid');
+    expect(stripe.refunds.list).not.toHaveBeenCalled();
+    expect(row.__v).toBe(0);
+  });
+  it('does not overwrite a counter payment when an earlier reconciliation returns late', async () => {
+    vi.mocked(stripe.refunds.list).mockImplementationOnce(async () => {
+      row.payment.method = 'counter';
+      return { data: [{ id: 're_stale', amount: 1250, status: 'succeeded' }], has_more: false };
+    });
+    await sut.summary(TENANT, ID);
+    expect(row.payment.status).toBe('paid');
+    expect(row.payment.refundedCents).toBeUndefined();
+  });
   it('fence les documents hydratés avant réservation ET avant projection du remboursement', async () => {
     vi.mocked(stripe.refunds.list).mockImplementationOnce(async () => {
       expect(row.__v).toBe(1);

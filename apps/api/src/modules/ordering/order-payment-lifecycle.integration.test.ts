@@ -147,6 +147,7 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
   const cancel = (service: OrderPaymentLifecycleService, id: string) => service.cancel(
     id, String(TENANT_ID), 'cashier-test', 'Annulation de recette', provider,
   );
+  const counter = (service: OrderPaymentLifecycleService, id: string, bank = provider) => service.switchToCounter(id, TOKEN, bank);
 
   async function seed(overrides: Record<string, unknown> = {}): Promise<string> {
     const order = await first.create({
@@ -396,5 +397,274 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
     const before = await read(id);
     expect(await lifecycle(second).reconcileSucceeded(succeeded(opened!.intent), provider)).toBeNull();
     expect(await read(id)).toEqual(before);
+  });
+
+  it('bascule sans tentative : même commande, créneau, montant et historique, aucun appel bancaire', async () => {
+    const id = await seed();
+    const before = await read(id);
+    const result = await lifecycle().switchToCounter(id, TOKEN, null);
+    expect(String(result._id)).toBe(id);
+    expect(await read(id)).toMatchObject({ status: 'new', payment: { method: 'counter', tender: null, status: 'pending' },
+      paymentFlow: { phase: 'counter_ready', close: { destination: 'counter' }, providerStatus: 'not_started' } });
+    expect((await read(id))?.pickup).toEqual(before?.pickup);
+    expect((await read(id))?.totals).toEqual(before?.totals);
+    expect((await read(id))?.statusHistory).toEqual(before?.statusHistory);
+    expect(provider.create).not.toHaveBeenCalled();
+    const stable = await read(id);
+    await counter(lifecycle(second), id);
+    expect(await read(id)).toEqual(stable);
+    await expect(lifecycle().open(id, TOKEN, provider, resolveAccount)).rejects.toBeInstanceOf(ConflictException);
+    expect(provider.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['requires_payment_method', 'requires_confirmation', 'requires_action', 'canceled'])('bascule après preuve %s sur le même PI et le même compte', async (status) => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    provider.setStatus(opened!.intent.id, ACCOUNT_ID, status);
+    await counter(lifecycle(second), id);
+    const row = await read(id);
+    expect(row).toMatchObject({ status: 'new', payment: { method: 'counter', status: 'pending', stripePaymentIntentId: opened!.intent.id },
+      paymentFlow: { phase: 'counter_ready', providerStatus: 'canceled', close: { destination: 'counter' } } });
+    expect(row?.paymentFlow?.attempt?.accountId).toBe(ACCOUNT_ID);
+    expect(provider.snapshot(opened!.intent.id, ACCOUNT_ID).status).toBe('canceled');
+    if (status === 'canceled') expect(provider.cancel).not.toHaveBeenCalled();
+    expect(provider.createdCount).toBe(1);
+  });
+
+  it.each(['beforeCreate', 'afterCreate'] as const)('bascule concurrente à %s : fermeture durable et aucun secret tardif', async (boundary) => {
+    const id = await seed();
+    const reached = paymentBarrier();
+    const resume = paymentBarrier();
+    let firstCall = true;
+    provider.hooks[boundary] = async () => {
+      if (firstCall) { firstCall = false; reached.release(); await resume.promise; }
+    };
+    provider.hooks.beforeCancel = async () => {
+      expect(await read(id)).toMatchObject({ payment: { method: 'online' }, paymentFlow: { phase: 'closing', close: { destination: 'counter' } } });
+    };
+    const opening = paymentOutcome(lifecycle().open(id, TOKEN, provider, resolveAccount));
+    await Promise.race([reached.promise, opening.then(() => { throw new Error('Ouverture terminée avant la barrière.'); })]);
+    try { await counter(lifecycle(second), id); } finally { resume.release(); }
+    const late = await opening;
+    expect(late.ok && late.value).toBeFalsy();
+    expect(provider.createdCount).toBe(1);
+    expect(await read(id)).toMatchObject({ status: 'new', payment: { method: 'counter' }, paymentFlow: { phase: 'counter_ready' } });
+  });
+
+  it.each(['counter', 'cancel_order'] as const)('la destination %s gagnante reste immuable face à la demande opposée', async (destination) => {
+    const id = await seed();
+    await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    const reached = paymentBarrier();
+    const resume = paymentBarrier();
+    provider.hooks.beforeCancel = async () => { reached.release(); await resume.promise; };
+    const firstAction = paymentOutcome<unknown>(destination === 'counter' ? counter(lifecycle(), id) : cancel(lifecycle(), id));
+    await Promise.race([reached.promise, firstAction.then(() => { throw new Error('Fermeture terminée avant la barrière.'); })]);
+    try {
+      await expect(destination === 'counter' ? cancel(lifecycle(second), id) : counter(lifecycle(second), id))
+        .rejects.toBeInstanceOf(ConflictException);
+      expect((await read(id))?.paymentFlow?.close?.destination).toBe(destination);
+    } finally { resume.release(); }
+    expect((await firstAction).ok).toBe(true);
+    expect((await read(id))?.status).toBe(destination === 'counter' ? 'new' : 'cancelled');
+  });
+
+  it('deux bascules concurrentes partagent la même opération et ne changent pas le statut métier', async () => {
+    const id = await seed({ status: 'ready' });
+    await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    const results = await Promise.all([counter(lifecycle(), id), counter(lifecycle(second), id)]);
+    expect(new Set(results.map((row) => row.paymentFlow?.close?.operationId)).size).toBe(1);
+    expect((await read(id))?.status).toBe('ready');
+    expect(provider.createdCount).toBe(1);
+  });
+
+  it('une tentative seulement préparée peut basculer sans provider, sans être effacée', async () => {
+    const id = await seed();
+    await expect(lifecycle(loseMongoResponseAfter(first, 'paymentFlow.attempt')).open(id, TOKEN, provider, resolveAccount)).rejects.toThrow();
+    const attempt = (await read(id))?.paymentFlow?.attempt;
+    expect(attempt?.requestStartedAt).toBeNull();
+    await lifecycle(second).switchToCounter(id, TOKEN, null);
+    expect((await read(id))?.paymentFlow?.attempt).toEqual(attempt);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect((await read(id))?.paymentFlow?.phase).toBe('counter_ready');
+  });
+
+  it('une ancienne lecture ne peut solder la commande lorsque le claim de bascule a gagné', async () => {
+    const id = await seed();
+    const stale = await second.findById(id);
+    await counter(lifecycle(), id);
+    stale!.payment.method = 'counter'; stale!.payment.status = 'paid'; stale!.status = 'delivered';
+    await expect(stale!.save()).rejects.toMatchObject({ name: 'VersionError' });
+    expect(await read(id)).toMatchObject({ status: 'new', payment: { status: 'pending', method: 'counter' } });
+  });
+
+  it('un SDK indisponible ne prouve jamais la fermeture d’un PI connu', async () => {
+    const id = await seed();
+    await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    await expect(lifecycle(second).switchToCounter(id, TOKEN, null)).rejects.toBeInstanceOf(ConflictException);
+    expect(await read(id)).toMatchObject({ payment: { status: 'pending', method: 'online' }, paymentFlow: { phase: 'review_required' } });
+    expect(provider.cancel).not.toHaveBeenCalled();
+    await counter(lifecycle(), id);
+    expect((await read(id))?.paymentFlow?.phase).toBe('counter_ready');
+  });
+
+  it.each(['processing', 'requires_capture', 'succeeded', 'unknown'])('la bascule ne transforme jamais %s en règlement comptoir', async (status) => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    provider.setStatus(opened!.intent.id, ACCOUNT_ID, status);
+    await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+    expect((await read(id))?.payment.method).toBe('online');
+    expect((await read(id))?.paymentFlow?.phase).toBe('review_required');
+    expect((await read(id))?.status).toBe('new');
+    expect(provider.cancel).not.toHaveBeenCalled();
+    if (status === 'succeeded') expect((await read(id))?.payment.status).toBe('paid');
+  });
+
+  it('confirmation carte concurrente : la preuve de paiement gagne sans autoriser le comptoir', async () => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    const reached = paymentBarrier();
+    const resume = paymentBarrier();
+    provider.hooks.beforeCancel = async () => { reached.release(); await resume.promise; };
+    const switching = paymentOutcome(counter(lifecycle(), id));
+    await Promise.race([reached.promise, switching.then(() => { throw new Error('Bascule terminée avant la barrière.'); })]);
+    try {
+      provider.setStatus(opened!.intent.id, ACCOUNT_ID, 'succeeded');
+      await lifecycle(second).reconcileSucceeded(succeeded(opened!.intent), provider);
+    } finally { resume.release(); }
+    expect((await switching).ok).toBe(false);
+    expect(await read(id)).toMatchObject({ status: 'new', payment: { method: 'online', status: 'paid' }, paymentFlow: { phase: 'review_required' } });
+  });
+
+  it.each(['afterCreate', 'afterCancel'] as const)('réponse provider perdue à %s : reprise de la même tentative sans faux succès', async (boundary) => {
+    const id = await seed();
+    if (boundary === 'afterCancel') await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    let firstCall = true;
+    provider.hooks[boundary] = async () => { if (firstCall) { firstCall = false; throw new Error('Réponse provider perdue.'); } };
+    if (boundary === 'afterCreate') {
+      await expect(lifecycle().open(id, TOKEN, provider, resolveAccount)).rejects.toThrow('Réponse provider');
+    } else {
+      await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+      expect((await read(id))?.payment.method).toBe('online');
+    }
+    await counter(lifecycle(second), id);
+    expect(provider.createdCount).toBe(1);
+    expect(await read(id)).toMatchObject({ payment: { method: 'counter', status: 'pending' }, paymentFlow: { phase: 'counter_ready' } });
+  });
+
+  it.each(['paymentFlow.close', 'payment.method'] as const)('réponse Mongo perdue après %s : le rejeu retrouve la bascule sans créer de commande', async (field) => {
+    const id = await seed();
+    await expect(counter(lifecycle(loseMongoResponseAfter(first, field)), id)).rejects.toThrow('Réponse Mongo perdue');
+    await counter(lifecycle(second), id);
+    expect(await first.countDocuments({})).toBe(1);
+    expect(await read(id)).toMatchObject({ payment: { method: 'counter', status: 'pending' }, paymentFlow: { phase: 'counter_ready' } });
+    expect(provider.create).not.toHaveBeenCalled();
+  });
+
+  it('refuse l’historique inconnu et la récupération expirée sans nouveau PI', async () => {
+    const unknown = await seed({ paymentFlow: null });
+    await expect(counter(lifecycle(), unknown)).rejects.toBeInstanceOf(ConflictException);
+    expect(provider.create).not.toHaveBeenCalled();
+    const id = await seed();
+    provider.hooks.afterCreate = async () => { throw new Error('Réponse perdue.'); };
+    await expect(lifecycle().open(id, TOKEN, provider, resolveAccount)).rejects.toThrow();
+    await first.updateOne({ _id: id }, { $set: { 'paymentFlow.attempt.recoveryUntil': new Date(Date.now() - 1) } });
+    await expect(counter(lifecycle(second), id)).rejects.toBeInstanceOf(ConflictException);
+    expect(provider.create).toHaveBeenCalledOnce();
+    expect((await read(id))?.payment.method).toBe('online');
+  });
+
+  it.each([ACCOUNT_ID, null])('adopte et ferme le PI historique connu sur son compte %s', async (accountId) => {
+    const intent: ProviderIntent = { id: 'pi_historic_counter', client_secret: null, status: 'requires_payment_method', amount: 1250, currency: 'eur' };
+    provider.seed(intent, accountId);
+    const id = await seed({ paymentFlow: null, payment: { method: 'online', status: 'pending', stripeAccountId: accountId, stripePaymentIntentId: intent.id } });
+    await counter(lifecycle(), id);
+    expect(await read(id)).toMatchObject({ payment: { method: 'counter', stripePaymentIntentId: intent.id },
+      paymentFlow: { origin: 'adopted_intent', phase: 'counter_ready' } });
+    expect(provider.cancel.mock.calls[0]?.[1]).toBe(accountId);
+    expect(provider.create).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, '', 'other-token', { $ne: null }])('refuse le jeton %j avant toute écriture ou banque', async (token) => {
+    const id = await seed();
+    const before = await read(id);
+    await expect(lifecycle().switchToCounter(id, token, provider)).rejects.toMatchObject({ status: 404 });
+    expect(await read(id)).toEqual(before);
+    expect(provider.create).not.toHaveBeenCalled();
+    expect(provider.cancel).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { type: 'delivery' }, { type: 'surplace' }, { channel: 'pos' },
+    { status: 'cancelled' }, { status: 'delivered' },
+    { payment: { method: 'online', status: 'paid' } }, { payment: { method: 'online', status: 'refunded' } },
+  ])('refuse la bascule hors retrait en attente : %j', async (patch) => {
+    const id = await seed(patch);
+    const before = await read(id);
+    await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+    expect(await read(id)).toEqual(before);
+    expect(provider.create).not.toHaveBeenCalled();
+  });
+
+  it('une commande basculée peut ensuite être annulée par la caisse, sans rouvrir Stripe', async () => {
+    const id = await seed();
+    await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    await counter(lifecycle(), id);
+    const proof = (await read(id))?.paymentFlow?.close;
+    provider.retrieve.mockClear(); provider.cancel.mockClear();
+    await cancel(lifecycle(second), id);
+    const row = await read(id);
+    expect(row?.status).toBe('cancelled');
+    expect(row?.paymentFlow?.phase).toBe('closed');
+    expect(row?.paymentFlow?.close).toEqual(proof);
+    expect(row?.statusHistory.at(-1)?.by).toBe('cashier-test');
+    expect(provider.retrieve).not.toHaveBeenCalled();
+    expect(provider.cancel).not.toHaveBeenCalled();
+    await cancel(lifecycle(), id);
+    expect(await read(id)).toEqual(row);
+    await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it.each(['pending', 'paid'] as const)('un événement succeeded contradictoire ne reclassifie pas le comptoir %s si Stripe confirme canceled', async (status) => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    await counter(lifecycle(), id);
+    if (status === 'paid') await first.updateOne({ _id: id }, { $set: { 'payment.status': 'paid' } });
+    const before = await read(id);
+    expect(await lifecycle(second).reconcileSucceeded(succeeded(opened!.intent), provider)).toBeNull();
+    expect(await read(id)).toEqual(before);
+  });
+
+  it.each(['canceled', 'succeeded'])('une ancienne ouverture revenue avec %s après la bascule ne réécrit jamais le mode comptoir', async (status) => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    const reached = paymentBarrier();
+    const resume = paymentBarrier();
+    provider.retrieve.mockImplementationOnce(async () => {
+      reached.release(); await resume.promise;
+      return { ...opened!.intent, status };
+    });
+    const reopening = paymentOutcome(lifecycle().open(id, TOKEN, provider, resolveAccount));
+    await Promise.race([reached.promise, reopening.then(() => { throw new Error('Reprise terminée avant la barrière.'); })]);
+    try { await counter(lifecycle(second), id); } finally { resume.release(); }
+    const late = await reopening;
+    expect(late.ok && late.value).toBeFalsy();
+    expect(await read(id)).toMatchObject({ payment: { method: 'counter', status: 'pending' },
+      paymentFlow: { phase: status === 'canceled' ? 'counter_ready' : 'review_required' } });
+  });
+
+  it.each(['pending', 'paid'] as const)('une vraie contradiction provider après comptoir %s impose le rapprochement sans inventer un encaissement ni remboursement', async (status) => {
+    const id = await seed();
+    const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    await counter(lifecycle(), id);
+    // Impossible dans le cycle Stripe normal : injecte une incohérence pour
+    // prouver que le serveur ne détruit pas la classification comptoir.
+    provider.setStatus(opened!.intent.id, ACCOUNT_ID, 'succeeded');
+    if (status === 'paid') await first.updateOne({ _id: id }, { $set: { 'payment.status': 'paid' } });
+    await expect(lifecycle(second).reconcileSucceeded(succeeded(opened!.intent), provider)).rejects.toMatchObject({ status: 503 });
+    expect(await read(id)).toMatchObject({ status: 'new', payment: { method: 'counter', status },
+      paymentFlow: { phase: 'review_required', reviewReason: 'counter_payment_provider_conflict' } });
+    const stable = await read(id);
+    await expect(lifecycle().reconcileSucceeded(succeeded(opened!.intent), provider)).rejects.toMatchObject({ status: 503 });
+    expect(await read(id)).toEqual(stable);
   });
 });

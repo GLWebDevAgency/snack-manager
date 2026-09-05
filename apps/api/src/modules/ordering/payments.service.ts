@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import Redis from 'ioredis';
-import { ordersChannel, PAYMENT_UNAVAILABLE_REASON, WS_EVENTS, type JwtPayload, type PaymentIntentResponse } from '@sm/contracts';
+import { ordersChannel, PAYMENT_UNAVAILABLE_REASON, WS_EVENTS, type CounterPaymentResponse, type JwtPayload, type PaymentIntentResponse } from '@sm/contracts';
 import type { Order } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { EncaissementService } from '../encaissement/encaissement.service';
@@ -124,6 +124,24 @@ export class PaymentsService {
 
   async cancelOrder(orderId: string, tenantId: string, actor: JwtPayload, reason: string): Promise<void> {
     await this.lifecycle.cancel(orderId, tenantId, actor.sub, reason, await this.provider());
+  }
+
+  /** The lifecycle proves absence/terminal cancellation of any online charge. */
+  async switchToCounterPayment(orderId: string, token: unknown): Promise<CounterPaymentResponse> {
+    if (!trackingFilter(orderId, token)) throw new NotFoundException('Commande introuvable');
+    const order = await this.lifecycle.switchToCounter(orderId, token, await this.provider());
+    const payload = { ...order.toObject() } as Record<string, unknown>;
+    delete payload.paymentFlow;
+    for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
+    try {
+      await this.redis.publish(ordersChannel(String(order.tenantId)), JSON.stringify({
+        event: WS_EVENTS.orderUpdated, payload,
+      }));
+    } catch {
+      // A retry resumes the same durable decision and repairs its publication.
+      throw new ServiceUnavailableException('Choix comptoir enregistré ; diffusion à reprendre. Actualisez cette commande, sans la recréer.');
+    }
+    return { _id: String(order._id), payment: { method: 'counter', status: 'pending' } };
   }
 
   webhookConfigured(): boolean { return this.webhookSecret() !== null; }

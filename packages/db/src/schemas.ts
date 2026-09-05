@@ -1069,7 +1069,7 @@ export const OrderSchema = new Schema(
       type: new Schema({
         version: { type: Number, enum: [1], required: true },
         origin: { type: String, enum: ['created_v1', 'adopted_intent', 'legacy_unknown'], required: true },
-        phase: { type: String, enum: ['open', 'closing', 'closed', 'settled', 'review_required'], required: true },
+        phase: { type: String, enum: ['open', 'closing', 'closed', 'counter_ready', 'settled', 'review_required'], required: true },
         attempt: {
           type: new Schema({
             id: { type: String, required: true },
@@ -1095,6 +1095,9 @@ export const OrderSchema = new Schema(
         close: {
           type: new Schema({
             operationId: { type: String, required: true },
+            // An old closure always means cancellation. A counter switch is a
+            // distinct, immutable destination, never a reopened bank attempt.
+            destination: { type: String, enum: ['cancel_order', 'counter'], default: 'cancel_order' },
             reason: { type: String, required: true },
             requestedBy: { type: String, required: true },
             requestedAt: { type: Date, required: true },

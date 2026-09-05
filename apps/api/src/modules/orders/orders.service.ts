@@ -34,6 +34,7 @@ import { CapacitesService } from '../../common/capacites';
 import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
+import { canCollectOrderAtCounter } from '../ordering/order-payment-lifecycle.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 
 /**
@@ -524,11 +525,7 @@ export class OrdersService {
     if (status === 'delivered' && current !== 'ready') {
       throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
     }
-    if (status === 'delivered' && order.payment.status === 'pending' && (
-      order.payment.method === 'online' ||
-      order.paymentFlow?.origin !== 'created_v1' || order.paymentFlow.phase !== 'open' ||
-      order.paymentFlow.attempt || order.payment.stripePaymentIntentId
-    )) {
+    if (status === 'delivered' && order.payment.status === 'pending' && !canCollectOrderAtCounter(order)) {
       throw new ConflictException('Le paiement en ligne doit être vérifié avant tout règlement au comptoir. Aucun encaissement ne sera supposé.');
     }
     if (order.type === 'delivery' && status === 'delivered') {
@@ -541,7 +538,8 @@ export class OrdersService {
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor.sub });
     // Le règlement comptoir implicite historique ne reste permis qu'avec une
-    // preuve persistée de l'absence de tentative bancaire ET un choix comptoir.
+    // preuve persistée de l'absence de tentative bancaire OU de sa fermeture
+    // irréversible confirmée, ET un choix comptoir.
     // Il ne remplace jamais un paiement en ligne non confirmé. __v fait échouer
     // ce save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
     if (status === 'delivered' && order.payment.status === 'pending') {
