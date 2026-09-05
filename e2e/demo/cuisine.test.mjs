@@ -12,6 +12,8 @@
  *   2. « Accepter » fait passer le ticket de « Nouveau » à « En préparation » ;
  *   3. « Marquer prête » le fait passer en « Prêt » ;
  *   4. les compteurs des colonnes suivent le mouvement.
+ *   5. le ticket prêt reste visible, sans action de remise : celle-ci revient
+ *      à la caisse ou au livreur, jamais à la cuisine.
  *
  * ─── UNE LIMITE ASSUMÉE, ET ELLE EST ÉCRITE ICI PLUTÔT QUE CACHÉE ───
  *
@@ -52,6 +54,14 @@ scenario(
     await attendreTexte(page, 'Prêt');
 
     const nouveauxAvant = await aAccepter.count();
+    const enPreparation = page.getByRole('button', { name: /^Marquer prête — commande numéro \d+$/ });
+    const preparationsAvant = await enPreparation.count();
+    const colonnePrete = page.getByLabel(/^Colonne Prêt, \d+ commande\(s\)$/);
+    const pretsAvant = Number.parseInt(
+      ((await colonnePrete.getAttribute('aria-label')) ?? '').match(/^Colonne Prêt, (\d+)/)?.[1] ?? '',
+      10,
+    );
+    assert.ok(Number.isInteger(pretsAvant), 'le compteur de la colonne « Prêt » doit être lisible');
     assert.ok(
       nouveauxAvant >= 1,
       'le tableau de cuisine doit porter au moins un ticket à accepter',
@@ -92,14 +102,30 @@ scenario(
       nouveauxAvant - 1,
       'la colonne « Nouveau » doit perdre exactement un ticket',
     );
+    assert.equal(await enPreparation.count(), preparationsAvant + 1);
 
     // ── En préparation → Prêt ──
     await aPreparer.click();
-    await page
-      .getByRole('button', { name: `Remise au client — commande numéro ${numero}` })
-      .waitFor({ state: 'visible' });
+    const colonneApres = page.getByLabel(`Colonne Prêt, ${pretsAvant + 1} commande(s)`, { exact: true });
+    await colonneApres.waitFor({ state: 'visible' });
+    const attenteRemise = colonneApres.getByLabel(
+      `Remise à confirmer par la caisse — commande numéro ${numero}`,
+      { exact: true },
+    );
+    await attenteRemise.waitFor({ state: 'visible' });
     await page
       .getByRole('button', { name: `Marquer prête — commande numéro ${numero}` })
       .waitFor({ state: 'detached' });
+    assert.equal(await enPreparation.count(), preparationsAvant);
+    assert.equal(
+      await attenteRemise.locator('xpath=..').getByRole('button').count(),
+      0,
+      'le ticket prêt est informatif : aucune action de remise ne doit être proposée à la cuisine',
+    );
+    assert.equal(
+      await page.getByRole('button', { name: `Remise au client — commande numéro ${numero}` }).count(),
+      0,
+      'la cuisine ne doit plus pouvoir remettre une commande au client',
+    );
   },
 );
