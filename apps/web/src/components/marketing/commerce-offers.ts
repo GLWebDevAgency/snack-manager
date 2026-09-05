@@ -54,6 +54,8 @@ export const PUBLISHED_COMMERCE_OFFERS = COMMERCE_OFFERS.filter((offer) => !offe
 
 export const COMMERCE_TERMS = {
   setup: COMMERCE_PRICES.setupCents,
+  /** Différence entre les modules à la carte, jamais un supplément à Boost. */
   supplement: COMMERCE_PRICES.deliverySupplementMonthlyCents,
+  boost: "Boost comprend le click & collect, la livraison par votre restaurant et le pilote fidélité accompagné, sans supplément, y compris pour les restaurateurs Boost existants. L’ouverture de la livraison nécessite la configuration des zones, tarifs et créneaux et la validation du parcours pilote. Les frais de paiement et les coûts de vos livreurs restent distincts.",
   note: "Prix HT par mois et par établissement, pour les nouveaux devis. Une fonction déjà incluse n'est pas facturée deux fois. Les conditions des contrats existants restent applicables.",
 };

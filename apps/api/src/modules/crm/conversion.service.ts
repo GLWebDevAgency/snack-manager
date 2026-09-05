@@ -316,7 +316,7 @@ export class ConversionService {
     const period = monthKey(trialEndsAt);
     const moduleFacture = commerceMonthlyCents(terms) > 0;
     const moduleLibelle = terms.onlineDelivery
-      ? (terms.plan === 'boost' ? 'option livraison restaurant' : 'module commande en ligne + livraison restaurant, fidélité incluse')
+      ? 'module commande en ligne + livraison restaurant, fidélité incluse'
       : terms.onlineOrdering
         ? 'module commande en ligne, fidélité incluse'
         : 'module fidélité';
@@ -337,6 +337,7 @@ export class ConversionService {
           label:
             (terms.plan
               ? `Abonnement ${PLAN_LABELS[terms.plan]}` +
+                (terms.plan === 'boost' ? ' — commande en ligne, livraison restaurant et fidélité incluses' : '') +
                 (moduleFacture ? ` + ${moduleLibelle}` : '')
               : `Abonnement — ${moduleLibelle}`) +
             (terms.billing === 'annuel' ? ' — annuel, douze mois payés dix' : '') +

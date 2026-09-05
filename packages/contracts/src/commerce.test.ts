@@ -9,9 +9,19 @@ describe('offres autonomes', () => {
     [{ onlineOrdering: true, standaloneLoyalty: true }, 7900],
     [{ onlineDelivery: true, standaloneLoyalty: true }, 11900],
     [{ plan: 'boost', onlineOrdering: true, standaloneLoyalty: true }, 0],
-    [{ plan: 'boost', onlineDelivery: true }, 4000],
+    [{ plan: 'boost', onlineDelivery: true }, 0],
   ])('chiffre sans doubler les inclusions %j', (options, expected) => {
     expect(commerceMonthlyCents(options)).toBe(expected);
+  });
+
+  it('inclut tous les modules clients dans Boost, quels que soient les anciens flags', () => {
+    for (const onlineOrdering of [undefined, false, true]) {
+      for (const onlineDelivery of [undefined, false, true]) {
+        for (const standaloneLoyalty of [undefined, false, true]) {
+          expect(commerceMonthlyCents({ plan: 'boost', onlineOrdering, onlineDelivery, standaloneLoyalty })).toBe(0);
+        }
+      }
+    }
   });
 
   it('livre un back-office exploitable avec la commande seule', () => {

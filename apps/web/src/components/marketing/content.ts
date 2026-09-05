@@ -1217,7 +1217,7 @@ export const SERVICES: readonly Service[] = [
  */
 export const DIRECT_DELIVERY = {
   lead: "Vous livrez ?",
-  line: `L'offre Click & collect + livraison est prévue à ${euros(COMMERCE_PRICES.deliveryMonthlyCents)} HT/mois, pilote fidélité accompagné inclus. Livraison assurée par votre restaurant. Activation après validation du parcours pilote ; aucun livreur tiers fourni.`,
+  line: `La livraison par votre restaurant est incluse dans Boost, sans supplément. Le module Click & collect + livraison est aussi prévu à la carte à ${euros(COMMERCE_PRICES.deliveryMonthlyCents)} HT/mois, pilote fidélité accompagné inclus. Ouverture après configuration et validation du parcours pilote ; aucun livreur tiers fourni.`,
 } as const;
 
 /**
@@ -1508,7 +1508,7 @@ export const PLAN_MODULES = [
   { id: "online", label: "Commande en ligne & click and collect" },
   { id: "loyalty", label: "Fidélité en pilote accompagné, codes promo & clients" },
   { id: "priority", label: "Support prioritaire" },
-  { id: "delivery", label: "Livraison par votre restaurant — option, validation pilote" },
+  { id: "delivery", label: "Livraison par votre restaurant — validation pilote" },
 ] as const satisfies readonly PlanModule[];
 
 /**
@@ -1655,7 +1655,7 @@ function planPrices(monthlyCents: number) {
  */
 const MODULES_ESSENTIEL = ["pos", "kds", "print", "offline", "bo", "menu"] as const;
 const MODULES_COMPLET = [...MODULES_ESSENTIEL, "planning", "stocks"] as const;
-const MODULES_BOOST = [...MODULES_COMPLET, "online", "loyalty", "priority"] as const;
+const MODULES_BOOST = [...MODULES_COMPLET, "online", "loyalty", "priority", "delivery"] as const;
 
 /** Le jumeau de `CATALOGUE_ACCORDÉ`, pour le contenu de chaque colonne. */
 export const FORMULES_ACCORDÉES: MêmeGrille<
@@ -1687,7 +1687,7 @@ export const PLANS: Plan[] = [
     id: "boost",
     name: "Boost",
     ...planPrices(PLAN_MONTHLY_CENTS.boost),
-    desc: "Tout Complet, plus le click & collect, le pilote fidélité accompagné et le support prioritaire. Livraison en option.",
+    desc: "Tout Complet, plus le click & collect, la livraison par votre restaurant, le pilote fidélité accompagné et le support prioritaire. Livraison incluse, à configurer et valider avant ouverture.",
     modules: MODULES_BOOST,
   },
 ];
@@ -1695,9 +1695,8 @@ export const PLANS: Plan[] = [
 /**
  * LE MODULE VENDU À PART, ET SON LIBELLÉ EST UNE DÉCISION.
  *
- * Il s'affiche « Commande en ligne & fidélité », JAMAIS « Livraison » : le mot
- * Livraison en face d'un prix se lit comme un livreur qu'on facture, et nous
- * ne fournissons aucun livreur — le tunnel s'arrête au créneau de retrait.
+ * Ce prix désigne le click & collect à la carte. La livraison est comprise
+ * dans Boost ou dans le module à la carte dédié ; aucun livreur n'est fourni.
  */
 export const MODULE_ADDON = {
   name: "Commande en ligne & fidélité",
@@ -1712,7 +1711,7 @@ export const MODULE_ADDON = {
    * ligne que Boost fait disparaître.
    */
   setup: `${euros(MODULE_SETUP_CENTS)} de mise en service, la première fois`,
-  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet ; déjà compris dans Boost. La livraison reste une option distincte. ${LOYALTY_PILOT_NOTE}`,
+  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet. Commande et livraison incluses dans Boost sans supplément, mise en service comprise. Ouverture de la livraison après configuration et validation pilote, avec vos livreurs. ${LOYALTY_PILOT_NOTE}`,
 } as const;
 
 /**
@@ -1790,7 +1789,7 @@ export const PRICING_MATH: PricingMath = {
   boost: {
     title: "Boost",
     steps: [
-      { label: "Tout Complet, la commande en ligne et le pilote fidélité compris", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
+      { label: "Tout Complet, le click & collect, la livraison restaurant et le pilote fidélité compris", amount: euros(BOOST_MONTHLY_CENTS), note: "par mois" },
       // La ligne qui fait tout le travail : en face des 55 €, un mot au lieu
       // d'un montant. C'est le seul endroit de la page où l'absence de chiffre
       // vaut mieux qu'un chiffre.

@@ -19,13 +19,13 @@ export type CommerceOptions = {
   standaloneLoyalty?: boolean;
 };
 
-/** Une inclusion ne se facture jamais deux fois. La livraison reste un supplément à Boost. */
+/** Boost comprend tous les modules clients, y compris pour les souscriptions historiques. */
 export function commerceMonthlyCents(options: CommerceOptions & { plan?: string | null }): number {
+  if (options.plan === 'boost') return 0;
   const online = options.onlineOrdering === true || options.onlineDelivery === true;
-  const bundled = options.plan === 'boost';
-  return (online && !bundled ? COMMERCE_PRICES.collectMonthlyCents : 0)
+  return (online ? COMMERCE_PRICES.collectMonthlyCents : 0)
     + (options.onlineDelivery === true ? COMMERCE_PRICES.deliverySupplementMonthlyCents : 0)
-    + (options.standaloneLoyalty === true && !online && !bundled ? COMMERCE_PRICES.loyaltyMonthlyCents : 0);
+    + (options.standaloneLoyalty === true && !online ? COMMERCE_PRICES.loyaltyMonthlyCents : 0);
 }
 
 /** Les fonctions nécessaires à une offre font partie de cette offre. */

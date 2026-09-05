@@ -1,8 +1,13 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { COMMERCE_PRICES } from "@sm/contracts/commerce";
+import { MODULE_POINTS, OFFRE_SECTIONS, PLAN_MODULE_NOTE } from "@/app/(marketing)/offres/content";
+import { DIRECT_POINTS } from "@/app/(marketing)/commande-en-ligne/content";
+import { CommerceOffers } from "./CommerceOffers";
 import { COMMERCE_OFFERS, COMMERCE_TERMS, LOYALTY_PILOT_NOTE, PUBLISHED_COMMERCE_OFFERS } from "./commerce-offers";
 import { currentOperatingCost } from "./cost-model";
-import { FAQ, MODULE_ADDON, PLAN_MODULES, PLANS, SERVICES } from "./content";
+import { DIRECT_DELIVERY, FAQ, MODULE_ADDON, PLAN_MODULES, PLAN_MONTHLY_CENTS, PLANS, PRICING_MATH, SERVICES } from "./content";
 
 describe("catalogue commercial public", () => {
   it("reprend les prix contractuels, sans doublon fidélité + collect + livraison", () => {
@@ -33,11 +38,32 @@ describe("catalogue commercial public", () => {
     expect(COMMERCE_OFFERS.find((offer) => offer.id === "loyalty")?.cta).toBe("Étudier mon pilote fidélité");
   });
 
-  it("distingue livraison optionnelle et suite Boost", () => {
+  it("inclut la livraison dans Boost sans augmenter son prix", () => {
     expect(PLAN_MODULES.some((module) => module.id === "delivery")).toBe(true);
     const boost = PLANS.find((plan) => plan.id === "boost");
     expect(boost).toBeDefined();
-    expect(boost?.modules).not.toContain("delivery");
+    expect(boost?.modules).toContain("delivery");
+    expect(PLAN_MONTHLY_CENTS.boost).toBe(19_900);
+    expect(boost?.desc).toContain("livraison");
+    expect(boost?.desc).not.toContain("en option");
+    expect(COMMERCE_TERMS.boost).toContain("sans supplément");
+    expect(COMMERCE_TERMS.boost).toContain("restaurateurs Boost existants");
+    expect(DIRECT_DELIVERY.line).toContain("incluse dans Boost");
+    expect(MODULE_ADDON.line).toContain("livraison incluses dans Boost sans supplément");
+    expect(PLAN_MODULE_NOTE.inclus).toContain("livraison");
+    expect(MODULE_POINTS.find((point) => point.title.includes("Livraison"))?.line).toContain("incluse dans Boost");
+    expect(OFFRE_SECTIONS.find((section) => section.id === "module")?.lead).toContain("livraison incluse");
+    expect(DIRECT_POINTS.find((point) => point.includes("livraison"))).toContain("incluse dans Boost sans supplément");
+    expect(PRICING_MATH.boost.steps[0]?.label).toContain("livraison");
+  });
+
+  it("affiche réellement l’inclusion Boost et conserve les limites d’exploitation", () => {
+    const html = renderToStaticMarkup(createElement(CommerceOffers));
+    expect(html).toContain("Boost comprend le click &amp; collect, la livraison par votre restaurant");
+    expect(html).toContain("sans supplément, y compris pour les restaurateurs Boost existants");
+    expect(html).not.toContain("la livraison ajoute");
+    expect(html).toContain("validation du parcours pilote");
+    expect(html).toContain("coûts de vos livreurs restent distincts");
   });
 });
 

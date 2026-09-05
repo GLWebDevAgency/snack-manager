@@ -17,6 +17,33 @@ const order: CreateOrder = {
 };
 
 describe('publication et écriture de livraison', () => {
+  it.each([undefined, false, true])('ouvre la capacité livraison incluse pour Boost historique : onlineDelivery=%s', (onlineDelivery) => {
+    const boost = { ...tenant, plan: 'boost', onlineOrdering: false, onlineDelivery };
+    if (onlineDelivery === undefined) delete boost.onlineDelivery;
+    expect(publicDeliverySettingsOf(boost)).toMatchObject({ available: true, zones: tenant.delivery.zones });
+    expect(computeDeliveryForOrder(boost, order, 1800)).toMatchObject({ feeCents: 250, zoneId: 'centre' });
+  });
+
+  it('ne transforme jamais l’inclusion Boost en activation opérationnelle automatique', () => {
+    const boost = { ...tenant, plan: 'boost', onlineOrdering: false, onlineDelivery: false };
+    const blocked = [
+      { ...boost, delivery: undefined },
+      { ...boost, delivery: { ...tenant.delivery, enabled: false } },
+      { ...boost, delivery: { ...tenant.delivery, zones: [] } },
+      { ...boost, encaissement: null },
+      { ...boost, encaissement: { accountId: null, chargesEnabled: true } },
+      { ...boost, encaissement: { accountId: 'acct_restaurant', chargesEnabled: false } },
+      { ...boost, account: { status: 'suspended' as const } },
+      { ...boost, settings: { onlineOrderingPaused: true } },
+      { ...boost, derogationsCapacite: [{ capacite: 'delivery', sens: 'retiree' }] },
+      { ...boost, derogationsCapacite: [{ capacite: 'online', sens: 'retiree' }] },
+    ];
+    for (const settings of blocked) {
+      expect(publicDeliverySettingsOf(settings)).toMatchObject({ available: false, zones: [] });
+      expect(() => computeDeliveryForOrder(settings, order, 1800)).toThrow(/indisponible/);
+    }
+  });
+
   it('ne divulgue aucune zone si option absente, compte suspendu ou Stripe indisponible', () => {
     expect(publicDeliverySettingsOf({ ...tenant, onlineDelivery: false })).toMatchObject({ available: false, zones: [] });
     expect(publicDeliverySettingsOf({ ...tenant, account: { status: 'suspended' } }).available).toBe(false);

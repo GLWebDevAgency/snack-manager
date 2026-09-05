@@ -165,8 +165,8 @@ const ESSENTIEL = ['pos', 'kds', 'print', 'offline', 'bo', 'menu'] as const;
 /** Complet — tout l'Essentiel, plus le planning et le coût matière. */
 const COMPLET = [...ESSENTIEL, 'planning', 'stocks'] as const;
 
-/** Boost — tout, commande en ligne et fidélité comprises. */
-const BOOST = [...COMPLET, 'online', 'loyalty', 'priority'] as const;
+/** Boost — tout, commande en ligne, fidélité et livraison comprises. */
+const BOOST = [...COMPLET, 'online', 'loyalty', 'priority', 'delivery'] as const;
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
