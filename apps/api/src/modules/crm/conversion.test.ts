@@ -145,7 +145,7 @@ describe('Convertir un lead en restaurant', () => {
     { plan: null, onlineOrdering: false, onlineDelivery: false, standaloneLoyalty: true, amounts: [3_900, 5_500] },
     { plan: null, onlineOrdering: true, onlineDelivery: false, standaloneLoyalty: true, amounts: [7_900, 5_500] },
     { plan: null, onlineOrdering: false, onlineDelivery: true, standaloneLoyalty: true, amounts: [11_900, 5_500] },
-    { plan: 'boost' as const, onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amounts: [23_900] },
+    { plan: 'boost' as const, onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amounts: [19_900] },
   ])('conserve les options signées et prépare leurs factures : $amounts', async ({ amounts, ...offre }) => {
     const { service, tenants, billing } = build({ proposal: proposalDoc(offre) });
     // Le navigateur n'est pas la source des termes signés.
@@ -154,6 +154,21 @@ describe('Convertir un lead en restaurant', () => {
     expect(billing.issue.mock.calls.map((call) => (call[2] as { amountCents: number }).amountCents)).toEqual(amounts);
     const label = String((billing.issue.mock.calls[0]?.[2] as { label: string }).label);
     expect(label).toContain(offre.onlineDelivery ? 'livraison' : offre.onlineOrdering ? 'commande en ligne' : 'fidélité');
+  });
+
+  it.each([undefined, false])('inclut la livraison à la signature d’un ancien Boost : onlineDelivery=%s', async (onlineDelivery) => {
+    const { service, tenants, billing } = build({ proposal: proposalDoc({
+      plan: 'boost', onlineOrdering: false,
+      ...(onlineDelivery === undefined ? {} : { onlineDelivery }),
+    }) });
+    await service.convert(ACTOR, LEAD_ID, BODY, NOW);
+    expect(tenants.create.mock.calls[0]?.[0]).toMatchObject({ plan: 'boost', onlineOrdering: false, onlineDelivery: false });
+    expect(billing.issue).toHaveBeenCalledOnce();
+    expect(billing.issue.mock.calls[0]?.[2]).toMatchObject({ amountCents: 19_900 });
+    const label = String((billing.issue.mock.calls[0]?.[2] as { label: string }).label);
+    expect(label).toContain('commande en ligne');
+    expect(label).toContain('livraison');
+    expect(label).not.toContain('option livraison');
   });
 
   it('fige la remise fondateur sur la fidélité autonome signée', async () => {
@@ -351,6 +366,7 @@ describe('Convertir un lead en restaurant', () => {
     const corps = billing.issue.mock.calls[0]?.[2] as Record<string, any>;
     expect(corps.amountCents).toBe(199_000);
     expect(corps.label).toContain('annuel');
+    expect(corps.label).toContain('livraison');
     expect(result.draftInvoices).toBe(1);
   });
 

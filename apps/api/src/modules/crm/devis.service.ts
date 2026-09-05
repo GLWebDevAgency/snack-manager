@@ -101,10 +101,10 @@ export function buildDevisDocument(
   const logicielVendu = Boolean(plan || moduleFacture);
   const planLibelle = plan
     ? `Abonnement ${PLAN_LABELS[plan]} — caisse, cuisine, écrans` +
-      (plan === 'boost' ? ', commande en ligne comprise' : '')
+      (plan === 'boost' ? ', commande en ligne, livraison par le restaurant et fidélité comprises' : '')
     : null;
   const moduleLibelle = proposal.onlineDelivery
-    ? (plan === 'boost' ? 'Option livraison par le restaurant' : 'Module commande en ligne + livraison par le restaurant — fidélité incluse')
+    ? 'Module commande en ligne + livraison par le restaurant — fidélité incluse'
     : proposal.onlineOrdering
       ? 'Module commande en ligne — page de commande, encaissement et suivi, fidélité incluse'
       : 'Module fidélité — carte digitale, programme et récompenses';
@@ -204,9 +204,11 @@ export function buildDevisDocument(
       ...(proposal.billing === 'annuel' && (plan || moduleFacture)
         ? ['Engagement annuel : douze mois de service, dix facturés — deux mois offerts.']
         : []),
-      ...(proposal.onlineDelivery
-        ? ['Livraison assurée par le restaurant avec ses propres livreurs. Activation et début de facturation de cette option après validation du pilote ; aucun service de livreurs tiers inclus.']
-        : []),
+      ...(plan === 'boost'
+        ? ['Livraison par le restaurant incluse dans Boost, sans supplément d’abonnement. Le restaurant utilise ses propres livreurs ; activation après paramétrage des zones et du paiement en ligne et validation du pilote. Aucun service de livreurs tiers inclus.']
+        : proposal.onlineDelivery
+          ? ['Livraison assurée par le restaurant avec ses propres livreurs. Activation et début de facturation de cette option après validation du pilote ; aucun service de livreurs tiers inclus.']
+          : []),
       ...(services.presenceInternet || services.reseauxSociaux
         ? ['Services de l’Atelier : sans engagement, résiliables à tout moment, jamais facturés d’avance.']
         : []),

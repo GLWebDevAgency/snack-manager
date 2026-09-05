@@ -101,7 +101,7 @@ describe('le catalogue des capacités', () => {
       'planning',
       'stocks',
     ]);
-    expect([...CAPACITES_PAR_FORMULE.boost]).toEqual(CAPACITES.filter((c) => c !== 'delivery'));
+    expect([...CAPACITES_PAR_FORMULE.boost]).toEqual(CAPACITES);
   });
 
   it('reste cumulative — « tout l’Essentiel, plus… »', () => {
@@ -178,7 +178,23 @@ describe('les capacités effectives', () => {
     expect(capacitesEffectives({ plan: 'essentiel', onlineOrdering: false })).toEqual([
       ...CAPACITES_PAR_FORMULE.essentiel,
     ]);
-    expect(capacitesEffectives({ plan: 'boost' })).toEqual(CAPACITES.filter((c) => c !== 'delivery'));
+    expect(capacitesEffectives({ plan: 'boost' })).toEqual(CAPACITES);
+  });
+
+  it.each([undefined, false, true])('inclut la livraison des clients Boost existants, option %s', (onlineDelivery) => {
+    const historique = { plan: 'boost', onlineDelivery };
+    expect(aLaCapacite(historique, 'delivery')).toBe(true);
+    expect(detailCapacites(historique).find((c) => c.capacite === 'delivery')).toMatchObject({
+      acquise: true, origine: 'formule',
+    });
+  });
+
+  it('conserve un retrait explicite de livraison même pour un client Boost', () => {
+    const historique = { plan: 'boost', derogationsCapacite: [{ capacite: 'delivery', sens: 'retiree' }] };
+    expect(aLaCapacite(historique, 'delivery')).toBe(false);
+    expect(detailCapacites(historique).find((c) => c.capacite === 'delivery')).toMatchObject({
+      acquise: false, origine: 'derogation',
+    });
   });
 
   it('ferme bien ce que la grille vend « non inclus »', () => {

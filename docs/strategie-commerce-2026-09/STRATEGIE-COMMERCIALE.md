@@ -1,6 +1,6 @@
 # Stratégie commerce — septembre 2026
 
-État : recommandation pour les nouveaux devis, intégrée au catalogue de cette branche. Elle ne migre aucun contrat existant. Lecture du code et des pages publiques le 5 septembre 2026 ; une fonction présente dans le code n'est pas une preuve de validation en production.
+État : catalogue de référence, ajusté sur décision explicite du fondateur le 5 septembre 2026 : la livraison est incluse dans Boost sans supplément, pour les nouveaux clients comme pour les restaurants Boost existants. Les pièces financières déjà émises ne sont pas réécrites. Une fonction présente dans le code n'est pas une preuve de validation en production.
 
 ## Décision commerciale
 
@@ -17,8 +17,7 @@ Le site vitrine est une prestation sur mesure indépendante. Ses boutons « Comm
 | Click & collect + livraison | 119 € | Offre précédente + livraison organisée par le restaurant ; ouverture après validation pilote, sans réseau de livreurs fourni |
 | Essentiel | 99 € | Suite caisse/cuisine et socle de gestion selon matrice contractuelle |
 | Complet | 159 € | Essentiel + planning et stocks selon matrice contractuelle |
-| Boost | 199 € | Complet + collect, pilote fidélité accompagné et support prioritaire ; livraison non incluse |
-| Livraison ajoutée à Boost | +40 € | Même condition de validation pilote ; pas de double abonnement collect |
+| Boost | 199 € | Complet + collect, livraison restaurant, pilote fidélité accompagné et support prioritaire ; ouverture de la livraison après configuration et validation pilote |
 | Site vitrine / refonte | Dès 690 € / 990 €, une fois | Sur devis borné, indépendant de la caisse ; domaine, hébergement, maintenance, contenus et révisions explicités |
 
 Source exécutable des modules : `packages/contracts/src/commerce.ts` ; suites : `packages/contracts/src/crm.ts` et `capacites.ts`. Mise en service standard des applications autonomes : 55 € HT une fois selon devis ; pas de facturation répétée du même onboarding. L'installation matérielle et les prestations personnalisées sont distinctes. Ne pas présenter 55 € comme couvrant plusieurs journées sur place.
@@ -31,10 +30,18 @@ Les montants sont une hypothèse commerciale à tester, pas le résultat d'une �
 
 - Fidélité 39 → collect 79 : remplacement, pas 39 + 79.
 - Collect 79 → livraison 119 : supplément de 40, fidélité déjà incluse.
-- Boost 199 + livraison 40 : 239 ; ni 199 + 119, ni supplément fidélité.
+- Boost avec livraison : 199, sans supplément collect, livraison ou fidélité. L'annuel conserve douze mois payés dix, soit 1 990 € HT hors prestations et remises contractuelles.
 - Essentiel 99 + collect 79 : 178. Complet 159 + collect 79 : 238 ; proposer Boost à 199 si son périmètre répond au besoin.
 - Suite et fidélité seules : le supplément fidélité ne s'applique que si elle n'est pas déjà incluse. Toute modification de contrat client exige un devis/avenant clair.
-- Ne pas facturer la livraison tant que son activation opérationnelle n'est pas validée. Un flag commercial ne prouve ni la configuration des zones ni la présence d'un livreur.
+- Hors Boost, ne pas facturer le supplément livraison tant que son activation opérationnelle n'est pas validée. Dans Boost, aucune ligne de supplément livraison n'est due. Un droit commercial ne prouve ni la configuration des zones ni la présence d'un livreur.
+
+### Restaurants Boost déjà présents
+
+La capacité `delivery` est dérivée de la formule à chaque lecture : les anciens comptes Boost en bénéficient même si leur champ `onlineDelivery` est absent ou vaut `false`. Il n'est pas nécessaire de réécrire les comptes ni de poser une dérogation artificielle. Un retrait explicite de capacité reste prioritaire et doit être examiné avant toute levée.
+
+Le droit d'accès ouvre le module au gérant ; il ne force pas `delivery.enabled`. L'ouverture des commandes exige des zones valides, des tarifs choisis par le restaurant, les créneaux, Stripe Connect prêt à encaisser et une organisation de livraison réellement disponible. Ne pas inventer de zone, de frais ou de livreur pour allumer un interrupteur. Les pauses et suspensions restent effectives.
+
+Le nouveau calcul s'applique aux futurs devis et échéances calculés depuis l'offre courante. Les factures, devis déjà émis et snapshots financiers historiques restent inchangés ; aucune opération rétroactive Stripe, aucun remboursement ni réémission automatique ne fait partie de ce changement. Les autres remises et prestations restent régies par leurs conditions existantes.
 
 ## Architecture de l'offre et du parcours
 

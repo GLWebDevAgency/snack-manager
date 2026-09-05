@@ -34,7 +34,7 @@ describe('composition du devis', () => {
     { plan: null, onlineOrdering: false, standaloneLoyalty: true, onlineDelivery: false, expected: [3_900, 5_500] },
     { plan: null, onlineOrdering: true, standaloneLoyalty: true, onlineDelivery: false, expected: [7_900, 5_500] },
     { plan: null, onlineOrdering: false, standaloneLoyalty: true, onlineDelivery: true, expected: [11_900, 5_500] },
-    { plan: 'boost' as const, onlineOrdering: true, standaloneLoyalty: true, onlineDelivery: true, expected: [19_900, 4_000] },
+    { plan: 'boost' as const, onlineOrdering: true, standaloneLoyalty: true, onlineDelivery: true, expected: [19_900] },
   ])('chiffre toute offre autonome sans inclusion facturée deux fois : $expected', ({ expected, ...offre }) => {
     const doc = buildDevisDocument(LEAD, { ...offre, billing: 'mensuel', services: EMPTY_SERVICES, note: '' }, ISSUER, NOW);
     expect(doc.lignes.map((ligne) => ligne.montantHtCents)).toEqual(expected);
@@ -44,6 +44,25 @@ describe('composition du devis', () => {
     }
     if (!offre.onlineOrdering && !offre.onlineDelivery) {
       expect(doc.lignes[0]?.designation).toContain('fidélité');
+    }
+  });
+
+  it.each([
+    { billing: 'mensuel' as const, amount: 19_900 },
+    { billing: 'annuel' as const, amount: 199_000 },
+  ])('Boost $billing décrit la livraison incluse, même sur une ancienne proposition', ({ billing, amount }) => {
+    for (const onlineDelivery of [undefined, false, true]) {
+      const doc = buildDevisDocument(LEAD, {
+        plan: 'boost', onlineOrdering: false, standaloneLoyalty: false,
+        ...(onlineDelivery === undefined ? {} : { onlineDelivery }),
+        billing, services: EMPTY_SERVICES, note: '',
+      }, ISSUER, NOW);
+      expect(doc.lignes.map((line) => line.montantHtCents)).toEqual([amount]);
+      expect(doc.lignes[0]?.designation).toContain('commande en ligne');
+      expect(doc.lignes[0]?.designation).toContain('livraison');
+      expect(doc.conditions.join(' ')).toContain('sans supplément d’abonnement');
+      expect(doc.conditions.join(' ')).toContain('validation du pilote');
+      expect(doc.conditions.join(' ')).not.toContain('début de facturation de cette option');
     }
   });
 

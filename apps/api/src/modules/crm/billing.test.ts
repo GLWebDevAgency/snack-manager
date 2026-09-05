@@ -1309,7 +1309,9 @@ describe('Facturation', () => {
       { plan: null, onlineOrdering: false, onlineDelivery: false, standaloneLoyalty: true, amount: 3_900 },
       { plan: null, onlineOrdering: true, onlineDelivery: false, standaloneLoyalty: true, amount: 7_900 },
       { plan: null, onlineOrdering: false, onlineDelivery: true, standaloneLoyalty: true, amount: 11_900 },
-      { plan: 'boost', onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amount: 23_900 },
+      { plan: 'boost', onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amount: 19_900 },
+      { plan: 'boost', onlineOrdering: false, onlineDelivery: false, standaloneLoyalty: false, amount: 19_900 },
+      { plan: 'boost', onlineOrdering: false, onlineDelivery: undefined, standaloneLoyalty: false, amount: 19_900 },
     ])('facture les options autonomes persistées, sans doublon : $amount', async ({ amount, ...offre }) => {
       await sansAmorce();
       Object.assign(tenants.rows[1]!, offre);
@@ -1317,6 +1319,20 @@ describe('Facturation', () => {
       expect(bilan.emises.find((invoice) => invoice.slug === 'voisin')?.amountCents).toBe(amount);
       const fiche = await billing.tenantBilling(SM, VOISIN, { limit: 20 }, LE_19_AOUT);
       expect(fiche.subscription.mrrCents).toBe(amount);
+    });
+
+    it('conserve une ancienne facture Boost sans recalculer ses montants ni son libellé', async () => {
+      await sansAmorce();
+      Object.assign(tenants.rows[1]!, { plan: 'boost', onlineOrdering: true, onlineDelivery: true });
+      const ancienne = await billing.issue(SM, VOISIN, emission({
+        period: '2026-08', amountCents: 23_900, label: 'Abonnement Boost + ancienne option livraison',
+      }), LE_19_AOUT);
+      const fiche = await billing.tenantBilling(SM, VOISIN, TOUT, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(19_900);
+      expect(fiche.invoices.find((invoice) => invoice._id === ancienne._id)).toMatchObject({
+        amountCents: 23_900, label: 'Abonnement Boost + ancienne option livraison', number: ancienne.number,
+      });
+      expect(invoices.rows).toHaveLength(1);
     });
 
     it('est IDEMPOTENT : relancé, il ne double aucune facture', async () => {
