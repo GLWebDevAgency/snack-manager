@@ -2,6 +2,8 @@
 
 Demandes utilisateur et cadrage au 5 septembre 2026. Distinguer les protections livrées dans la branche de travail des fonctionnalités proposées. Rien ici n'atteste un déploiement staging ou production.
 
+**Priorité métier précisée par le fondateur :** [audit complet des parcours commerce](PARCOURS-COMMERCE-PRODUCTION.md), puis [historique gérant et espace client](HISTORIQUE-ESPACE-CLIENT.md). Click & collect, livraison, sur-place public, fidélité, suivi, accès livreur/polyvalent et réachat sont traités comme des chaînes à terminer, pas comme une collection d'écrans. Les critères de recette et l'ordre opérationnel actualisé sont dans ces deux documents.
+
 ## 1. Remise : règle implémentée
 
 La cuisine fait `nouvelle → en préparation → prête`. Elle ne confirme jamais la remise au client, sur place, à emporter, au retrait ou en livraison. L'API vérifie cette règle avant les retours idempotents ; une ancienne tablette cuisine ne peut pas contourner le changement. Une nouvelle remise exige un état `ready` et une identité caisse/gestion autorisée.
