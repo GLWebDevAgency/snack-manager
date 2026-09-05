@@ -1,10 +1,10 @@
 /**
  * Client API du poste de caisse.
  *
- * Toute écriture passe par `client.post` / `client.patch`, donc par la file
- * offline persistée : une coupure réseau ne fait perdre aucune commande.
- * Seule l'authentification utilise `direct` (il faut un jeton avant de pouvoir
- * empiler quoi que ce soit).
+ * Les nouvelles ventes passent par la file offline persistée. Les gestes
+ * sur une commande existante (encaissement, remise, remise commerciale) sont
+ * confirmés en réseau direct : un paiement incertain garde sa référence
+ * durable, mais n'est jamais mis en file comme une nouvelle commande.
  *
  * ─── L'APPAIREMENT ───
  *
@@ -94,6 +94,7 @@ function nativeStore(): KeyValueStore {
  */
 import { KEYS } from './pos-state';
 import { withDemoLoyalty } from './demo-loyalty';
+import { withDemoPayment } from './demo-payment';
 export { KEYS };
 
 export interface Session {
@@ -167,7 +168,7 @@ setStore(
 export const client = new SmClient({
   baseUrl: API_URL,
   queueScopeRequired: true,
-  ...(DEMO ? { transport: withDemoLoyalty(demoTransport()) } : null),
+  ...(DEMO ? { transport: withDemoLoyalty(withDemoPayment(demoTransport())) } : null),
 });
 
 export interface PinLoginResponse {

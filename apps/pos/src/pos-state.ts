@@ -21,6 +21,8 @@ export const KEYS = {
   serviceStart: 'sm.pos.servicestart.v1',
   /** UUID opaque seulement ; permet de redériver un QR après réponse perdue. */
   loyaltyEnrollmentRecovery: 'sm.pos.loyalty-enrollment-recovery.v1',
+  /** Encaissements directs dont la réponse peut être perdue, purgés à l'appairage. */
+  collectionRecovery: 'sm.pos.collection-recovery.v1',
 } as const;
 
 /**
