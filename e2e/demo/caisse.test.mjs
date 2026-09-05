@@ -40,7 +40,7 @@ const { pos } = cibles();
 const CATEGORIE = 'Compose ton Tacos';
 const PRODUIT = 'Compose ton Tacos';
 const TAILLE = /^M — 1 viande/;
-const VIANDE = 'Kebab';
+const VIANDE = 'Kebab, Inclus';
 const SUPPLEMENT = /^Cheddar/;
 const RETRAIT = 'sans sauce fromagère';
 
