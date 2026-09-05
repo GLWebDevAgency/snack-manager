@@ -53,10 +53,10 @@ Prochain livrable : ADR et une scène représentative, puis harnais multi-identi
 ## 4. Autres limites du résumé à traiter par lots
 
 - Consommation sécurisée fidélité confirmée non raccordée : `redeem()` retourne 410 tant que la récompense n'est pas attachée à une commande. Les promesses commerciales sont corrigées en « pilote accompagné ». Ce correctif rédactionnel ne livre pas la consommation, le cumul automatique web ou l'expiration des points.
-- Émission unique des factures corrigée et testée dans la branche, pas encore déployée : respecter la [bascule contrôlée du writer](FACTURATION-EMISSION-DURABLE.md). Annulation/paiement concurrent et encaissement d'une commande existante restent à traiter avant activation des nouveaux encaissements.
+- Émission unique des factures corrigée et testée dans la branche, pas encore déployée : respecter la [bascule contrôlée du writer](FACTURATION-EMISSION-DURABLE.md). Le [protocole commun annulation/paiement](PAIEMENTS-ANNULATION-DURABLE.md) est implémenté et testé sur Mongo réel dans cette branche ; recette Stripe/staging, expiration automatique et encaissement explicite d'une commande existante restent à traiter avant activation des nouveaux encaissements.
 - Prestations Atelier, médias et cache, notifications transactionnelles, rétention des données, tableaux comptables et tests de composants : relecture séparée du code intégré, classement risque/valeur, puis petits lots. Ne pas traiter tous ces sujets implicitement dans une PR livraison.
 
-## 5. Migration Stripe Billing / Invoicing — ajout accepté, non implémenté
+## 5. Migration Stripe Billing / Invoicing — préparation, non activée
 
 Le fondateur a validé l'ajout de ce chantier le 5 septembre 2026. Décision et critères de réception : [ADR 0006](../adr/0006-migration-billing-pilotee-par-crm.md). Le CRM reste le poste de pilotage ; Stripe prend en charge la facturation des contrats migrés. Les paiements Connect des commandes restaurant restent distincts.
 
@@ -67,5 +67,9 @@ Priorité immédiate inchangée : fermer la course annulation/paiement des comma
 - [ ] **B3 — Cycle commercial** : options, changement d'offre, prorations explicites, résiliation, impayés et droits ; CRM et portail de paiement cohérents, sans lever une suspension administrative par un simple règlement.
 - [ ] **B4 — Prestations et historique** : Invoicing, avoirs/remboursements autorisés, historique unifié, aucune réémission des anciennes pièces ; fermeture de tous les chemins d'émission locale des obligations migrées.
 - [ ] **B5 — Recette et activation** : tests monétaires et de concurrence, staging, contrats complexes, reprise après panne, configuration live relue ; production uniquement après validation staging et GO distinct.
+
+Première partie B1 implémentée : `billingMigration.auditBillingMigration` audite des preuves contractuelles normalisées sans DB, SDK ni émission. Le contrôle couvre montants entiers, remise ventilée, échéances, couverture réelle, coupure, émetteur et correspondances Stripe. Il ne certifie ni l'extraction des données ni leur réalité distante et ne remplace pas l'arbitrage atomique du futur writer : B1 n'est donc pas encore coché complet.
+
+Deux divergences historiques reproduites bloquent la migration automatique des dossiers concernés : remise fondateur annuelle avec Atelier imputée différemment entre signature et échéancier ; renouvellement annuel basé sur la création du tenant plutôt que sur la première période payante après essai. Rapprocher devis signé et couverture déjà facturée ; aucune ancienne pièce n'est recalculée ou modifiée par cet audit.
 
 Le pont Checkout actuel reste un paiement ponctuel de facture SM, pas Billing. Aucun abonnement récurrent, mandat, prix, endpoint distant ni frais supplémentaire n'est activé par cet ajout au plan. Les améliorations du moteur maison restent limitées à la sécurité et au maintien nécessaire jusqu'à migration. Ne pas reconstruire en parallèle le renouvellement, les relances automatiques et la proration que Stripe doit fournir.

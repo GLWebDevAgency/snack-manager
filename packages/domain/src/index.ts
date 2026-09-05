@@ -42,3 +42,5 @@ export * as ordering from './ordering';
 export * as supply from './supply';
 export * as tenancy from './tenancy';
 export * as loyalty from './loyalty';
+/** Préparation B1 seulement : audit pur, sans adaptateur d'émission. */
+export * as billingMigration from './billing-migration';
