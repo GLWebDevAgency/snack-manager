@@ -11,6 +11,7 @@ import {
   pourcentageParDefaut,
   roleStaff,
   versCommande,
+  serviceReadyLabel,
   type ServerOrderRow,
 } from './service-state';
 
@@ -37,6 +38,15 @@ function a(h: number, m = 0): string {
 }
 
 describe('ce qui compte comme « en cours »', () => {
+  it('une livraison impayée n’entre pas dans le travail cuisine', () => {
+    const rows = [ligne({ _id: 'pending', type: 'delivery', payment: { status: 'pending' } }), ligne({ _id: 'paid', type: 'delivery' })];
+    expect(commandesEnCours(rows, MAINTENANT).map((order) => order.id)).toEqual(['paid']);
+  });
+  it('distingue la livraison prête du client à appeler au comptoir', () => {
+    expect(serviceReadyLabel(ligne({ _id: 'delivery', type: 'delivery' }))).toBe('À EXPÉDIER');
+    expect(serviceReadyLabel(ligne({ _id: 'delivery', type: 'delivery', delivery: { dispatchedAt: a(12) } as never }))).toBe('EN LIVRAISON');
+    expect(serviceReadyLabel(ligne({ _id: 'pickup', type: 'pickup' }))).toBe('À APPELER');
+  });
   it('retient reçue, en préparation et prête', () => {
     expect(estEnCours('new')).toBe(true);
     expect(estEnCours('preparing')).toBe(true);

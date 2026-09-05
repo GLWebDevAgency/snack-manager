@@ -17,7 +17,13 @@ describe("avancement des livraisons dans le back-office", () => {
     expect(canAdvanceOrder({ ...ready, status: "cancelled" }, "owner")).toBe(false);
   });
   it("permet la confirmation après départ et conserve le retrait au comptoir", () => {
-    expect(canAdvanceOrder({ ...ready, delivery: { dispatchedAt: "2026-09-05T10:00:00Z" } }, "cuisine")).toBe(true);
+    expect(canAdvanceOrder({ ...ready, delivery: { dispatchedAt: "2026-09-05T10:00:00Z" } }, "caisse")).toBe(true);
     expect(canAdvanceOrder({ ...ready, type: "pickup", payment: { status: "pending" } }, "caisse")).toBe(true);
+  });
+  it("la cuisine s'arrête à prête pour tous les modes, y compris après départ du livreur", () => {
+    for (const type of ['delivery', 'pickup', 'surplace', 'emporter'] as const) {
+      expect(canAdvanceOrder({ ...ready, type, delivery: { dispatchedAt: "2026-09-05T10:00:00Z" } }, "cuisine")).toBe(false);
+      expect(canAdvanceOrder({ ...ready, type, status: "preparing" }, "cuisine")).toBe(true);
+    }
   });
 });

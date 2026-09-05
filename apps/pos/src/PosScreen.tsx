@@ -40,6 +40,7 @@ import { useLayout } from './useLayout';
 import { siteConfigure } from './demo-retour';
 import { TopBar, type Vue } from './TopBar';
 import { ServicePanel } from './ServicePanel';
+import { applyConfirmedHandover, confirmCounterHandover, isCounterHandoverRole } from './service-handover';
 import {
   commandesEnCours,
   type ServerOrderRow,
@@ -206,6 +207,12 @@ export function PosScreen({
   const offlineRef = useRef(offline);
   /** Toutes les lectures `/orders` du poste passent par cette file FIFO. */
   const orderReadQueue = useMemo(() => createSerialTaskQueue(), []);
+  const handoverAlive = useRef(true);
+  const handoversInFlight = useRef(new Set<string>());
+  useEffect(() => {
+    handoverAlive.current = true;
+    return () => { handoverAlive.current = false; };
+  }, []);
   /** Verrou synchrone : aucune vente ne démarre pendant un reset du journal. */
   const journalResetGate = useRef(false);
   /** Empêche deux confirmations concurrentes du même reset local. */
@@ -461,6 +468,33 @@ export function PosScreen({
   );
 
   // ─── Temps réel : la socket anticipe, le sondage garantit ───
+
+  const confirmServiceHandover = useCallback(async (row: ServerOrderRow): Promise<void> => {
+    if (!isCounterHandoverRole(session.staffRole)) throw new Error('Votre rôle ne permet pas la remise au client.');
+    if (offlineRef.current) throw new Error('Reconnectez la caisse pour confirmer la remise.');
+    if (handoversInFlight.current.has(row._id)) throw new Error('La confirmation de cette remise est déjà en cours.');
+    handoversInFlight.current.add(row._id);
+    try {
+      // Même file que les lectures : une ancienne photo ne peut pas
+      // ressusciter la commande après la confirmation de remise.
+      await orderReadQueue.run(async () => {
+        if (!handoverAlive.current) throw new Error('Session fermée. Reconnectez-vous avant de confirmer la remise.');
+        const confirmed = await confirmCounterHandover(row,
+          (id, status) => client.direct<ServerOrderRow>('PATCH', `/orders/${id}/status`, { status }));
+        if (!handoverAlive.current) return;
+        setFenetre((current) => current ? { ...current, service: applyConfirmedHandover(current.service, confirmed) } : current);
+      });
+      if (handoverAlive.current) {
+        push(`Commande n° ${row.number} remise au client`, 'good');
+        void reconcile(true);
+      }
+    } catch (error) {
+      if (error instanceof SmApiError && error.status === 401) onLock('Session expirée — reconnectez-vous.');
+      throw error;
+    } finally {
+      handoversInFlight.current.delete(row._id);
+    }
+  }, [session.staffRole, orderReadQueue, reconcile, push, onLock]);
 
   /**
    * Rafraîchissement demandé par un événement `order.*` du restaurant.
@@ -1014,8 +1048,8 @@ export function PosScreen({
   /**
    * La pastille dit aussi l'absence de première photo et sa péremption. Le
    * signe « ≈ » dépend de l'exactitude DU COMPTE ACTIF :
-   * une liste de statut plafonnée garde un `total` exact même si ses cartes
-   * sont partielles.
+   * une liste de statut plafonnée ne permet pas de vérifier le paiement des
+   * livraisons non reçues et ne fournit donc pas de total opérationnel exact.
    */
   /** Depuis quand cet écran n'a-t-il pas été rafraîchi — jamais un chiffre figé. */
   const fraicheurService = useMemo(
@@ -1262,6 +1296,8 @@ export function PosScreen({
             servicePartial={fenetre?.service.partial === true}
             failedStatuses={fenetre?.service.failedStatuses ?? []}
             truncatedStatuses={fenetre?.service.truncatedStatuses ?? []}
+            onConfirmHandover={isCounterHandoverRole(session.staffRole) ? confirmServiceHandover : undefined}
+            offline={offline}
           />
         ) : (
           <>

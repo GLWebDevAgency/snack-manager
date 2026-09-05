@@ -3,7 +3,7 @@
  * Volontairement souples (documents Mongo « lean ») : on ne dépend pas des
  * types Mongoose côté client.
  */
-import type { MediaVue } from '@sm/contracts';
+import type { MediaVue, OrderDelivery, OrderType as ContractOrderType } from '@sm/contracts';
 
 export interface Variant {
   key: string;
@@ -110,7 +110,7 @@ export interface Menu {
 
 export type OrderStatus = 'new' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
 export type OrderChannel = 'online' | 'pos' | 'phone';
-export type OrderType = 'surplace' | 'emporter' | 'pickup';
+export type OrderType = ContractOrderType;
 
 export interface OrderLine {
   productId: string;
@@ -132,11 +132,12 @@ export interface Order {
   channel: OrderChannel;
   type: OrderType;
   lines: OrderLine[];
-  totals: { subtotal: number; discount?: { amount: number; reason: string } | null; total: number };
+  totals: { subtotal: number; discount?: { amount: number; reason: string } | null; deliveryFee?: number; total: number };
   payment: { method: 'online' | 'counter'; status: 'pending' | 'paid' | 'refunded' };
   status: OrderStatus;
   statusHistory: { status: OrderStatus; at: string; by?: string }[];
   pickup?: { slot: string; customerName: string; customerPhone?: string | null } | null;
+  delivery?: OrderDelivery | null;
   note?: string | null;
   createdAt: string;
 }

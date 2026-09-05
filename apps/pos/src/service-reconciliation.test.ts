@@ -63,6 +63,14 @@ describe('file des lectures du service', () => {
 });
 
 describe('requête opérationnelle', () => {
+  it('retire les livraisons impayées de la projection et des compteurs complets', () => {
+    const pending = { ...row('p', 'new'), type: 'delivery', payment: { status: 'pending' } } as ServerOrderRow;
+    const paid = { ...row('a', 'new'), type: 'delivery', payment: { status: 'paid' } } as ServerOrderRow;
+    const projection = deriveServiceProjection(window([pending, paid]), { new: window([pending, paid]), preparing: window([]), ready: window([]) });
+    expect(projection.rows.map((order) => order._id)).toEqual(['a']);
+    expect(projection.statusCounts.new).toMatchObject({ value: 1, exact: true });
+    expect(projection.activeCount).toBe(1);
+  });
   it('conserve exactement la borne passée à la lecture d’amorce journalière', () => {
     const dayStart = Date.parse('2026-09-03T00:00:00.000Z');
     const path = ordersSincePath(dayStart);
@@ -86,7 +94,7 @@ describe('projection des commandes actives', () => {
     true,
   );
 
-  it('garde le total prêt exact mais ne somme pas trois snapshots en un faux total actif', () => {
+  it('ne présente pas un total tronqué comme exact, car il peut inclure des livraisons impayées', () => {
     const statuses: StatusWindows = {
       new: window([row('new', 'new')], 1),
       preparing: window([row('prep-1', 'preparing'), row('prep-2', 'preparing')], 2),
@@ -94,10 +102,10 @@ describe('projection des commandes actives', () => {
     };
     const projection = deriveServiceProjection(all, statuses);
 
-    expect(projection.activeCount).toBe(7);
+    expect(projection.activeCount).toBe(4);
     expect(projection.activeCountExact).toBe(false);
-    expect(projection.readyCount).toBe(7);
-    expect(projection.readyCountExact).toBe(true);
+    expect(projection.readyCount).toBe(1);
+    expect(projection.readyCountExact).toBe(false);
     expect(projection.partial).toBe(true);
     expect(projection.truncatedStatuses).toEqual(['ready']);
   });
@@ -130,6 +138,16 @@ describe('projection des commandes actives', () => {
     expect(projection.rows[0]?.status).toBe('preparing');
     expect(projection.activeCount).toBe(1);
     expect(projection.activeCountExact).toBe(false);
+  });
+
+  it('un remboursement aperçu dans une lecture écarte aussi le doublon payé périmé', () => {
+    const projection = deriveServiceProjection(window([]), {
+      new: window([{ ...row('moving', 'new'), type: 'delivery', payment: { status: 'paid' } }]),
+      preparing: window([{ ...row('moving', 'preparing'), type: 'delivery', payment: { status: 'refunded' } }]),
+      ready: window([]),
+    });
+    expect(projection.rows).toEqual([]);
+    expect(projection.activeCount).toBe(0);
   });
 
   it('conserve une active ancienne hors du journal local', () => {

@@ -164,13 +164,14 @@ export default function App() {
       .then((entries) => {
         if (!alive) return;
         const ids = entries.map((e) => e.subject).filter((s): s is string => Boolean(s));
+        ids.push(...board.advancingIds);
         setPendingIds(new Set(ids));
       })
       .catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, [sync.pending, sync.syncing]);
+  }, [sync.pending, sync.syncing, board.advancingIds]);
 
   // ─── Alerte d'arrivée : un bip, une seule fois par commande ───
 

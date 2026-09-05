@@ -75,7 +75,9 @@ describe('Order — aucune perte de mise à jour concurrente', () => {
       const { service, audit, version } = harness();
 
       const results = await Promise.allSettled([
-        service.updateStatus(TENANT, ORDER, 'delivered', 'cuisine'),
+        service.updateStatus(TENANT, ORDER, 'delivered', {
+          sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
+        }),
         sensitiveAction(service),
       ]);
 

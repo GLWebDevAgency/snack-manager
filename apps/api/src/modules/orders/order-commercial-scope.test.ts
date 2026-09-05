@@ -34,7 +34,7 @@ describe('online standalone order access', () => {
   it('does not expose an old POS order by its identifier', async () => {
     const { service, row } = setup(['online'], 'pos');
     await expect(service.byId(TENANT, ID)).rejects.toThrow('introuvable');
-    await expect(service.updateStatus(TENANT, ID, 'preparing', 'owner1')).rejects.toThrow('introuvable');
+    await expect(service.updateStatus(TENANT, ID, 'preparing', actor)).rejects.toThrow('introuvable');
     await expect(service.cancelAsOwner(TENANT, ID, actor, 'Erreur client')).rejects.toThrow('introuvable');
     expect(row.save).not.toHaveBeenCalled();
   });

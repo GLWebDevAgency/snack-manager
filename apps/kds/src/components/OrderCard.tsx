@@ -22,6 +22,7 @@ import {
 import { clockHM, elapsedLabel, elapsedSeconds, optionsText } from '../format';
 import { scaledStyles, type Layout } from '../useLayout';
 import { Check, Chevron, Pill, PulseRing, Sheen, Tap } from './primitives';
+import { kitchenNextStatus } from '../delivery-policy';
 
 /**
  * La carte de commande — l'objet le plus lu de l'application.
@@ -135,6 +136,13 @@ function OrderCardBase({
 
   const title = order.pickup?.customerName ?? TYPE_LABEL[order.type] ?? 'Commande';
   const paid = order.payment.status === 'paid';
+  const delivery = order.type === 'delivery';
+  const next = kitchenNextStatus(order);
+  const actionLabel = status === 'ready'
+    ? delivery
+      ? order.delivery?.dispatchedAt ? 'Prise en charge par le livreur' : 'En attente du livreur'
+      : 'Remise à confirmer par la caisse'
+    : ADVANCE_LABEL[status];
   const channelLabel = CHANNEL_LABEL[order.channel] ?? order.channel;
 
   const actionBg = status === 'ready' ? palette.green : accent;
@@ -177,6 +185,7 @@ function OrderCardBase({
           </View>
 
           <View style={styles.pills}>
+            {delivery ? <Pill text={order.delivery?.dispatchedAt ? 'En livraison' : 'Livraison'} color={ink.dim} background={surface.el2} border={hair} layout={layout} /> : null}
             {/* Canal en neutre : l'accent est réservé à ce qui appelle un geste
                 (l'action, l'heure de retrait). Le canal informe, il n'urge pas. */}
             <Pill
@@ -211,7 +220,7 @@ function OrderCardBase({
                 une position différente selon le nombre de pastilles. */}
             {order.pickup?.slot ? (
               <Pill
-                text={`Retrait ${clockHM(order.pickup.slot)}`}
+                text={`${delivery ? 'Arrivée estimée' : 'Retrait'} ${clockHM(order.pickup.slot)}`}
                 color={contrastOn(accent)}
                 background={accent}
                 layout={layout}
@@ -222,6 +231,14 @@ function OrderCardBase({
           </View>
         </View>
       </View>
+
+      {delivery && order.delivery ? (
+        <View style={styles.orderNote}>
+          <Text style={styles.orderNoteLabel}>Adresse de livraison</Text>
+          <Text style={styles.orderNoteText}>{[order.delivery.address.line1, order.delivery.address.line2, `${order.delivery.address.postalCode} ${order.delivery.address.city}`].filter(Boolean).join(', ')}</Text>
+          {order.delivery.instructions ? <Text style={styles.orderNoteText}>{order.delivery.instructions}</Text> : null}
+        </View>
+      ) : null}
 
       {/* ─── Note du client ─── */}
       {order.note ? (
@@ -245,23 +262,29 @@ function OrderCardBase({
       </View>
 
       {/* ─── Action ─── */}
+      {status === 'ready' ? (
+        <View style={[styles.action, { backgroundColor: surface.el2 }]} accessible accessibilityLabel={`${actionLabel} — commande numéro ${order.number}`}>
+          <View style={styles.actionInner}>
+            <Text style={[styles.actionText, { color: ink.dim }]}>{actionLabel}</Text>
+            <Check color={palette.green} size={layout.far(19)} />
+          </View>
+        </View>
+      ) : (
       <Tap
         onPress={() => onAdvance(order)}
+        disabled={!next || (delivery && pending)}
         reducedMotion={reducedMotion}
-        label={`${ADVANCE_LABEL[status]} — commande numéro ${order.number}`}
+        label={`${actionLabel} — commande numéro ${order.number}`}
         style={[styles.action, { backgroundColor: actionBg }]}
         pressedStyle={{ opacity: 0.82 }}
         flat
       >
         <View style={styles.actionInner}>
-          <Text style={[styles.actionText, { color: actionFg }]}>{ADVANCE_LABEL[status]}</Text>
-          {status === 'ready' ? (
-            <Check color={actionFg} size={layout.far(19)} />
-          ) : (
-            <Chevron color={actionFg} size={layout.far(17)} />
-          )}
+          <Text style={[styles.actionText, { color: actionFg }]}>{delivery && pending ? 'Confirmation…' : actionLabel}</Text>
+          <Chevron color={actionFg} size={layout.far(17)} />
         </View>
       </Tap>
+      )}
 
       <PulseRing
         color={ringColor ?? accent}
@@ -487,8 +510,10 @@ const cardStyles = scaledStyles((l: Layout) => {
       borderBottomLeftRadius: radius.md,
       borderBottomRightRadius: radius.md,
     },
-    actionInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+    actionInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 12 },
     actionText: {
+      flexShrink: 1,
+      textAlign: 'center',
       fontFamily: type.action.fontFamily,
       fontSize: l.far(15),
       fontWeight: '800',

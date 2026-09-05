@@ -24,6 +24,7 @@ import {
   plafondRemiseLabel,
   type PaymentTender,
   type StaffRole,
+  type OrderDelivery,
 } from '@sm/contracts';
 import {
   type OrderChannel,
@@ -44,17 +45,19 @@ export interface ServerOrderRow {
   clientId: string;
   createdAt?: string;
   status?: string;
-  payment?: { status?: string; tender?: PaymentTender | null };
+  payment?: { status?: string; method?: 'online' | 'counter'; tender?: PaymentTender | null };
   trackingToken?: string | null;
   channel?: OrderChannel;
   type?: OrderType;
   lines?: OrderLine[];
   statusHistory?: { status: OrderStatus; at: string; by?: string }[];
   pickup?: { slot: string; customerName: string; customerPhone?: string | null } | null;
+  delivery?: OrderDelivery | null;
   note?: string | null;
   /** La vue détaillée relit aussi le sous-total et le motif de remise. */
   totals?: {
     subtotal?: number;
+    deliveryFee?: number;
     total?: number;
     discount?: { amount?: number; reason?: string } | null;
   };
@@ -82,6 +85,14 @@ export const SERVICE_STATUSES: readonly OrderStatus[] = ['ready', 'preparing', '
  */
 export function estEnCours(status: string | undefined): boolean {
   return status === 'new' || status === 'preparing' || status === 'ready';
+}
+
+export function isOperationalOrder(row: ServerOrderRow): boolean {
+  return row.type !== 'delivery' || row.payment?.status === 'paid';
+}
+
+export function serviceReadyLabel(row: ServerOrderRow): string {
+  return row.type !== 'delivery' ? 'À APPELER' : row.delivery?.dispatchedAt ? 'EN LIVRAISON' : 'À EXPÉDIER';
 }
 
 export interface ServiceCommande {
@@ -126,7 +137,7 @@ function reperageDe(row: ServerOrderRow): string | null {
   const nom = row.pickup?.customerName?.trim();
   if (nom) return nom;
   const creneau = heureCourte(row.pickup?.slot);
-  return creneau ? `Retrait ${creneau}` : null;
+  return creneau ? `${row.type === 'delivery' ? 'Arrivée estimée' : 'Retrait'} ${creneau}` : null;
 }
 
 /**
@@ -185,7 +196,7 @@ export function commandesEnCours(
 ): ServiceCommande[] {
   const retenues: ServiceCommande[] = [];
   for (const row of rows) {
-    if (!estEnCours(row.status)) continue;
+    if (!estEnCours(row.status) || !isOperationalOrder(row)) continue;
     const commande = versCommande(row, maintenant);
     // Aucun reset du journal local ne découpe le travail restant. Une commande
     // web ou ancienne encore prête doit rester visible jusqu'à son vrai statut.

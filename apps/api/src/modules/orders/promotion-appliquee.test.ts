@@ -409,20 +409,26 @@ describe('le paiement soldé à la remise', () => {
 
   it('solde une commande EN LIGNE dont le paiement a échoué', async () => {
     const { service, doc } = commandeEn('online', 'pending');
-    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    await service.updateStatus(TENANT, 'o1', 'delivered', {
+      sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
+    });
     expect(doc.payment.status).toBe('paid');
   });
 
   it('solde aussi le « à régler au retrait », comme avant', async () => {
     const { service, doc } = commandeEn('counter', 'pending');
-    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    await service.updateStatus(TENANT, 'o1', 'delivered', {
+      sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
+    });
     expect(doc.payment.status).toBe('paid');
   });
 
   it('ne « repaie » pas une commande déjà réglée', async () => {
     const { service, doc } = commandeEn('online', 'paid');
     doc.payment.tender = 'online' as never;
-    await service.updateStatus(TENANT, 'o1', 'delivered', 'cuisine');
+    await service.updateStatus(TENANT, 'o1', 'delivered', {
+      sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
+    });
     // Le moyen d'origine est conservé : il vaut mieux que rien au Z.
     expect(doc.payment.tender).toBe('online');
   });

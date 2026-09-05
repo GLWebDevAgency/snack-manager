@@ -138,9 +138,9 @@ export class OrdersController {
   }
 
   /**
-   * Faire avancer une commande EST le métier de la cuisine — cette route lui
-   * est ouverte délibérément. Elle ne portait aucun décorateur, ce qui donnait
-   * le même résultat par accident : la déclarer transforme un trou en décision.
+   * La cuisine peut préparer et marquer prêt. Le service distingue la remise
+   * au client, réservée au comptoir/gestion : transmettre l'identité complète
+   * permet de faire ce contrôle avant toute mutation ou réponse idempotente.
    */
   @Roles('owner', 'gerant', 'caisse', 'cuisine')
   @Patch('orders/:id/status')
@@ -150,7 +150,7 @@ export class OrdersController {
     @Param('id') id: string,
     @Body(zod(UpdateOrderStatusSchema)) body: { status: OrderStatus },
   ) {
-    return this.orders.updateStatus(tenantId, id, body.status, user.sub);
+    return this.orders.updateStatus(tenantId, id, body.status, user);
   }
 
   /**

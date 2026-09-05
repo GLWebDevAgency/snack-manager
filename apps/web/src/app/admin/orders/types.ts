@@ -82,10 +82,11 @@ export function canAdvanceOrder(order: {
   delivery?: { dispatchedAt?: string | null } | null;
 }, role: string | null): boolean {
   if (!NEXT_STATUS[order.status] || order.payment.status === "refunded") return false;
+  // La cuisine s'arrête à « prête », quel que soit le mode de remise.
+  if (order.status === "ready" && !["owner", "gerant", "cogerant", "caisse"].includes(role ?? "")) return false;
   if (order.type !== "delivery") return true;
   if (order.payment.status !== "paid") return false;
-  return order.status !== "ready" || Boolean(order.delivery?.dispatchedAt)
-    || ["owner", "gerant", "cogerant", "caisse"].includes(role ?? "");
+  return true;
 }
 
 /** Libellé du bouton d'avancement selon le statut courant (spec §6.2) — toujours un verbe. */

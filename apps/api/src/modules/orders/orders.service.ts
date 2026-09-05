@@ -71,6 +71,8 @@ function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
  * annonce sa troncature plutôt que de laisser croire à un total.
  */
 const ORDERS_PAGE_MAX = 200;
+/** La cuisine prépare ; seule une identité de comptoir/gestion confirme la remise. */
+const ORDER_HANDOFF_ROLES: readonly JwtPayload['role'][] = ['owner', 'cogerant', 'gerant', 'caisse'];
 type OrderReadFilter = Readonly<{ status?: OrderStatus; since?: string }>;
 
 @Injectable()
@@ -564,8 +566,17 @@ export class OrdersService {
   /**
    * Avancement de statut. Règle offline « le plus avancé gagne » :
    * un rejeu vers un statut déjà dépassé est ignoré (renvoie l'état courant).
+   * Une NOUVELLE remise exige toutefois `ready`, quel que soit le mode.
+   * Les droits se vérifient avant les retours idempotents : un ancien client
+   * KDS n'acquiert jamais le droit de confirmer une remise en la rejouant.
    */
-  async updateStatus(tenantId: string, id: string, status: OrderStatus, actor: string) {
+  async updateStatus(tenantId: string, id: string, status: OrderStatus, actor: JwtPayload) {
+    if (actor.tenantId !== tenantId) {
+      throw new ForbiddenException('Cette identité ne peut pas agir pour cet établissement.');
+    }
+    if (status === 'delivered' && !ORDER_HANDOFF_ROLES.includes(actor.role)) {
+      throw new ForbiddenException('La remise au client doit être confirmée par la caisse ou le gérant, jamais par la cuisine.');
+    }
     const order = await this.byId(tenantId, id);
     const current = order.status as OrderStatus;
     if (status === current) return order;
@@ -577,15 +588,18 @@ export class OrdersService {
       throw new ConflictException('Le paiement en ligne doit être confirmé avant la préparation de la livraison.');
     }
 
+    if (status === 'delivered' && current !== 'ready') {
+      throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
+    }
     if (order.type === 'delivery' && status === 'delivered') {
-      if (current !== 'ready' || !order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
+      if (!order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
         throw new ConflictException('Une livraison doit être payée et partie avec le livreur avant d’être remise.');
       }
       order.delivery.deliveredAt = new Date();
     }
 
     order.status = status;
-    order.statusHistory.push({ status, at: new Date(), by: actor });
+    order.statusHistory.push({ status, at: new Date(), by: actor.sub });
     // FILET : une commande REMISE a forcément été réglée.
     //
     // Il ne visait que `method: 'counter'`, et ratait donc le cas le plus
