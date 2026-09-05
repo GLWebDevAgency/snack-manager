@@ -1,5 +1,11 @@
 import type { ComponentType } from "react";
-import type { Scenography, ScreenContent, ScreenOrientation, ScreenScenePayload } from "@sm/contracts";
+import type {
+  Brand,
+  Scenography,
+  ScreenContent,
+  ScreenOrientation,
+  ScreenScenePayload,
+} from "@sm/contracts";
 import { Ardoise } from "./ardoise/Ardoise";
 import { Comptoir } from "./comptoir/Comptoir";
 
@@ -16,6 +22,8 @@ import { Comptoir } from "./comptoir/Comptoir";
 export interface ScenographyProps {
   scene: ScreenScenePayload;
   content: ScreenContent;
+  /** Le masque EFFECTIF, replié par l'hôte si le contenu n'en porte pas — jamais `content.masque` directement. */
+  masque: Brand;
   orientation: ScreenOrientation;
   /** Deux accords sur dix posent les prix en chasse fixe — lu une fois par l'hôte. */
   prixMono: boolean;

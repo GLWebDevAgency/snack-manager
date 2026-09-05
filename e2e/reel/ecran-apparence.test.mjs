@@ -75,16 +75,13 @@ scenario(
       await carte.getByRole('button', { name: 'Apparence' }).click();
 
       // ── 3 · Le téléviseur joue une scène — le même hôte que la salle ──
+      // La plaque « Chargement de la carte » est elle aussi une couche : on
+      // attend une SCÈNE de Comptoir, qui n'existe qu'avec du contenu.
       const apercu = page.getByTestId('apercu-ecran');
       await apercu
-        .locator('.bd-stage[data-ready="1"] .bd-layer')
+        .locator('.bd-root[data-scenography="comptoir"] .bd-stage[data-ready="1"] .ct')
         .first()
         .waitFor({ state: 'visible' });
-      assert.equal(
-        await apercu.locator('.bd-root').getAttribute('data-scenography'),
-        'comptoir',
-        'l’aperçu doit rendre la scénographie de l’écran',
-      );
 
       // ── 4 · Changer de scénographie se voit AVANT d'enregistrer ──
       await page.getByRole('button', { name: /^Ardoise/ }).click();

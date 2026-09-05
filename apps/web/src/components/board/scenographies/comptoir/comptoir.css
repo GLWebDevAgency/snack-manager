@@ -258,6 +258,11 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: opacity var(--sm-t-fast) var(--sm-ease);
+}
+/* La photo neuve arrive invisible et se fond quand elle est chargée ; l'ancienne reste dessous. */
+.ct-ph img[data-loaded="0"] {
+  opacity: 0;
 }
 .ct-photo-frame,
 .ct-photo-motion {
@@ -329,6 +334,7 @@
 }
 .ct-labels .ct-badge { margin-right: auto; }
 .ct-labels .ct-new { position: static; }
+/* Sur la photo, un fond OPAQUE : `--cf-mut` n'est garanti que sur les surfaces du masque. */
 [data-oos="1"] .ct-badge {
   background: var(--cf-surface-2);
   color: var(--cf-mut);
@@ -357,6 +363,7 @@
   font-size: var(--ct-fs-nom);
   text-transform: uppercase;
   color: var(--cf-red-t);
+  /* `--cf-red-t` est ajusté contre `--cf-surface`, pas contre surface-2. */
   background: var(--cf-surface);
   border: 3px solid var(--cf-line-2);
   border-radius: var(--cf-r-sm);
@@ -526,6 +533,7 @@
 .ct-hero .ct-desc {
   -webkit-line-clamp: 3;
 }
+/* Sur le voile, l'encre atténuée n'a aucune garantie : l'encre pleine, un peu voilée. */
 .ct-cap .ct-desc {
   color: var(--cf-text);
   opacity: 0.82;

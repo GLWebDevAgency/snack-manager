@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   cadrageCss,
+  type Brand,
   type ScreenContent,
   type ScreenProduct,
   type ScreenPromo,
@@ -289,9 +290,17 @@ function Offre({ o, i }: { o: ScreenPromo; i: number }) {
 }
 
 /** Le verrou s'il est posé, sinon la marque, sinon le nom en titrage. */
-function Marque({ content, grand = false }: { content: ScreenContent; grand?: boolean }) {
-  const verrou = verrouPour(content.masque);
-  const src = verrou ?? marqueSeule(content.masque);
+function Marque({
+  content,
+  masque,
+  grand = false,
+}: {
+  content: ScreenContent;
+  masque: Brand;
+  grand?: boolean;
+}) {
+  const verrou = verrouPour(masque);
+  const src = verrou ?? marqueSeule(masque);
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -333,7 +342,15 @@ function Puces({ subtitle }: { subtitle: string | null }) {
   );
 }
 
-function Entete({ scene, content }: { scene: ScreenScenePayload; content: ScreenContent }) {
+function Entete({
+  scene,
+  content,
+  masque,
+}: {
+  scene: ScreenScenePayload;
+  content: ScreenContent;
+  masque: Brand;
+}) {
   const heure = useRestaurantClock(content.timezone);
   return (
     <header className="ct-hd ct-it" style={{ "--i": 0 } as CSSProperties}>
@@ -345,7 +362,7 @@ function Entete({ scene, content }: { scene: ScreenScenePayload; content: Screen
         <Puces subtitle={scene.subtitle} />
       </div>
       <div className="ct-hd-r">
-        <Marque content={content} />
+        <Marque content={content} masque={masque} />
         <div className="ct-svc">
           <span className="ct-dot" data-open={content.open ? "1" : "0"} />
           <span className="ct-clock">{heure}</span>
@@ -358,10 +375,12 @@ function Entete({ scene, content }: { scene: ScreenScenePayload; content: Screen
 function Ferme({
   scene,
   content,
+  masque,
   durationMs,
 }: {
   scene: ScreenScenePayload;
   content: ScreenContent;
+  masque: Brand;
   durationMs: number;
 }) {
   const no = scene.nextOpening;
@@ -369,7 +388,7 @@ function Ferme({
     <section className="ct-closed">
       <div className="ct-ring" style={{ animationDuration: `${durationMs}ms` }} />
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
-        <Marque content={content} grand />
+        <Marque content={content} masque={masque} grand />
         <FadeText as="h1" className="ct-title" value={scene.title} />
         {no ? (
           <>
@@ -392,11 +411,19 @@ function Ferme({
 }
 
 /** Panneau libre sans produit, carte vide : la plaque de marque, jamais un écran noir. */
-function Vide({ scene, content }: { scene: ScreenScenePayload; content: ScreenContent }) {
+function Vide({
+  scene,
+  content,
+  masque,
+}: {
+  scene: ScreenScenePayload;
+  content: ScreenContent;
+  masque: Brand;
+}) {
   return (
     <section className="ct-closed">
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
-        <Marque content={content} grand />
+        <Marque content={content} masque={masque} grand />
         <FadeText as="h1" className="ct-title" value={scene.title || content.brand.name} />
         {scene.subtitle ? (
           <FadeText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle} />
@@ -462,7 +489,7 @@ function Corps({
   );
 }
 
-function ComptoirScene({ scene, content, orientation }: ScenographyProps) {
+function ComptoirScene({ scene, content, masque, orientation }: ScenographyProps) {
   const products = scene.products.slice(0, MAX_PRODUITS);
   const promos = scene.promos.slice(0, MAX_OFFRES);
   const d = disposition(scene.kind, products.length, orientation);
@@ -477,12 +504,12 @@ function ComptoirScene({ scene, content, orientation }: ScenographyProps) {
       </div>
       <div className="ct-stage">
         {d === "closed" ? (
-          <Ferme scene={scene} content={content} durationMs={scene.durationMs} />
+          <Ferme scene={scene} content={content} masque={masque} durationMs={scene.durationMs} />
         ) : d === "empty" ? (
-          <Vide scene={scene} content={content} />
+          <Vide scene={scene} content={content} masque={masque} />
         ) : (
           <>
-            <Entete scene={scene} content={content} />
+            <Entete scene={scene} content={content} masque={masque} />
             <section className="ct-body">
               <Corps d={d} scene={scene} products={products} promos={promos} />
             </section>
