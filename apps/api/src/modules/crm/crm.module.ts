@@ -20,6 +20,7 @@ import { ProductionService } from './production.service';
 import { SignalsService } from './signals.service';
 import { ContactIngestGuard } from './contact-ingest.guard';
 import { PublicLeadsController } from './public-leads.controller';
+import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 
 /**
  * Back-office interne Snack Manager (CRM HQ) — pipeline commercial, places
@@ -67,6 +68,7 @@ import { PublicLeadsController } from './public-leads.controller';
     HealthService,
     InsightsService,
     BillingService,
+    InvoiceCheckoutGateway,
     SignalsService,
     PlatformService,
     ProductionService,

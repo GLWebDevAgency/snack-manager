@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -59,6 +60,7 @@ import {
 import type { Counter, Invoice, Tenant } from '@sm/db';
 import { AdminService } from './admin.service';
 import { demoSeedEnabled } from '../../common/demo-seed';
+import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 
 /**
  * Historique d'un client, échéance la plus récente en tête.
@@ -154,6 +156,7 @@ export class BillingService {
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     @InjectModel('Counter') private readonly counters: Model<Counter>,
     private readonly admin: AdminService,
+    @Optional() private readonly checkout?: InvoiceCheckoutGateway,
   ) {}
 
   // ─── Lecture : la fiche facturation d'un client ───
@@ -464,17 +467,21 @@ export class BillingService {
 
     if (kind === 'abonnement') {
       const twin = await this.invoices
-        .findOne({ tenantId: tenant._id, kind, 'period.start': period.start })
+        .findOne({ tenantId: tenant._id, kind, 'period.start': period.start, status: { $ne: 'annulee' } })
         .lean();
-      if (twin && (twin as RawInvoice).status !== 'annulee') {
+      if (twin) {
         throw new ConflictException(
           `${tenant.name ?? 'Ce client'} a déjà une facture d’abonnement pour ${period.label} (${String((twin as RawInvoice).number)}).`,
         );
       }
     }
 
-    const amountCents =
-      body.amountCents ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : mrrOf(tenant, now));
+    const scheduled = kind === 'abonnement' && body.amountCents === undefined ? duDuMois(tenant, period, now) : null;
+    if (kind === 'abonnement' && body.amountCents === undefined && !scheduled) {
+      throw new ConflictException('Aucune échéance d’abonnement pour cette période. Un montant exceptionnel doit être explicite.');
+    }
+    const amountCents = body.amountCents ?? scheduled?.cents
+      ?? (kind === 'mise_en_place' ? INSTALL_FEE_CENTS : mrrOf(tenant, now));
 
     // La pièce porte-t-elle autre chose que la seule formule ? Le libellé par
     // défaut cesse alors de la nommer : « Abonnement Complet » sur un montant
@@ -485,7 +492,7 @@ export class BillingService {
     const raw = await this.writeInvoice({
       tenantId: tenant._id as Types.ObjectId,
       kind,
-      label: body.label || defaultInvoiceLabel(kind, plan, period, composite),
+      label: body.label || (composite ? scheduled?.label : undefined) || defaultInvoiceLabel(kind, plan, period, composite),
       period,
       amountCents,
       status: body.draft ? 'brouillon' : 'envoyee',
@@ -549,7 +556,10 @@ export class BillingService {
       throw new ConflictException(`La facture ${current.number} est déjà émise.`);
     }
 
-    const raw = await this.update(current._id, { status: 'envoyee', issuedAt: now });
+    const raw = await this.invoices.findOneAndUpdate({
+      _id: current._id, tenantId: current.tenantId, status: 'brouillon',
+    }, { $set: { status: 'envoyee', issuedAt: now } }, { new: true }).lean();
+    if (!raw) throw new ConflictException('La facture a changé. Actualisez avant de l’émettre.');
 
     const view = toInvoiceView(raw, now);
     await this.admin.recordInvoiceGesture(actor, String(tenant._id), {
@@ -672,7 +682,7 @@ export class BillingService {
       throw new BadRequestException('Une date de règlement ne peut pas être dans le futur.');
     }
 
-    const raw = await this.update(current._id, {
+    const raw = await this.manualSettlement(current, {
       status: 'payee',
       paidAt,
       method: body.method,
@@ -722,7 +732,7 @@ export class BillingService {
       throw new ConflictException(`La facture ${current.number} est déjà annulée.`);
     }
 
-    const raw = await this.update(current._id, {
+    const raw = await this.manualSettlement(current, {
       status: 'annulee',
       cancelledAt: now,
       cancelReason: body.reason,
@@ -930,11 +940,29 @@ export class BillingService {
     return raw as RawInvoice;
   }
 
-  private async update(invoiceId: unknown, $set: Record<string, unknown>): Promise<RawInvoice> {
-    const raw = await this.invoices
-      .findOneAndUpdate({ _id: invoiceId }, { $set }, { new: true })
-      .lean();
-    if (!raw) throw new NotFoundException('Facture introuvable');
+  /** Ferme Stripe AVANT le règlement/annulation manuel puis compare l'état lu.
+   * Une session expirée localement peut déjà être payée côté Stripe : l'horloge
+   * seule n'est donc jamais suffisante. Le CAS protège aussi une nouvelle session.
+   */
+  private async manualSettlement(current: RawInvoice, $set: Record<string, unknown>): Promise<RawInvoice> {
+    const sessionId = current.stripeCheckoutSessionId;
+    if (sessionId) {
+      if (!this.checkout) throw new ConflictException('Rapprochement Stripe requis avant ce geste.');
+      let session = await this.checkout.retrieve(sessionId);
+      if (session.status === 'open') {
+        try { await this.checkout.expire(sessionId); }
+        catch { throw new ConflictException('Paiement Stripe en cours : actualisez avant de poursuivre.'); }
+        session = await this.checkout.retrieve(sessionId);
+      }
+      if (session.status !== 'expired' || session.payment_status === 'paid') {
+        throw new ConflictException('Paiement Stripe en cours ou confirmé : attendez le rapprochement.');
+      }
+    }
+    const raw = await this.invoices.findOneAndUpdate({
+      _id: current._id, tenantId: current.tenantId, status: current.status,
+      stripeCheckoutSessionId: sessionId ?? null,
+    }, { $set }, { new: true }).lean();
+    if (!raw) throw new ConflictException('La facture a changé. Actualisez avant de poursuivre.');
     return raw as RawInvoice;
   }
 

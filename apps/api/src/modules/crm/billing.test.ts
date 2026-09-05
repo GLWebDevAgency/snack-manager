@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types, type Model } from 'mongoose';
 import {
   ADMIN_LOG_ACTION_LABELS,
@@ -32,6 +32,7 @@ import type { AdminLog, Counter, Invoice, Tenant, User } from '@sm/db';
 import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { BillingService } from './billing.service';
+import type { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 import { FakeCollection, type Row } from './admin.fakes';
 
 // ─────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ const deep = (row: Row, path: string): unknown =>
     return (acc as Record<string, unknown>)[key];
   }, row);
 
-const same = (a: unknown, b: unknown): boolean => String(a) === String(b);
+const same = (a: unknown, b: unknown): boolean => (a == null && b == null) || String(a) === String(b);
 
 function matches(row: Row, filter: Row): boolean {
   return Object.entries(filter).every(([key, expected]) => {
@@ -303,6 +304,49 @@ describe('Facturation', () => {
   const notes = (): string[] =>
     logs.rows.filter((r) => r.action === 'tenant.note').map((r) => String(r.reason));
 
+  describe('concurrence Checkout et gestes manuels', () => {
+    async function withSession(gateway: { retrieve: ReturnType<typeof vi.fn>; expire: ReturnType<typeof vi.fn> }) {
+      await sansAmorce();
+      const invoice = await billing.issue(SM, CLASSFOOD, emission(), LE_19_AOUT);
+      const row = invoices.rows.find((r) => String(r._id) === invoice._id)!;
+      row.stripeCheckoutSessionId = 'cs_invoice';
+      billing = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(), counters.asModel(), admin, gateway as unknown as InvoiceCheckoutGateway);
+      return { invoice, row };
+    }
+
+    it('expire puis revérifie Stripe avant un règlement manuel', async () => {
+      const gateway = { retrieve: vi.fn().mockResolvedValueOnce({ status: 'open', payment_status: 'unpaid' }).mockResolvedValue({ status: 'expired', payment_status: 'unpaid' }), expire: vi.fn().mockResolvedValue(undefined) };
+      const { invoice } = await withSession(gateway);
+      const paid = await billing.pay(SM, CLASSFOOD, invoice._id, { method: 'virement', note: '' }, LE_19_AOUT);
+      expect(gateway.expire).toHaveBeenCalledWith('cs_invoice');
+      expect(gateway.retrieve).toHaveBeenCalledTimes(2);
+      expect(paid.status).toBe('payee');
+    });
+
+    it('refuse d’annuler une session Stripe déjà payée même si le webhook tarde', async () => {
+      const gateway = { retrieve: vi.fn().mockResolvedValue({ status: 'complete', payment_status: 'paid' }), expire: vi.fn() };
+      const { invoice, row } = await withSession(gateway);
+      await expect(billing.cancel(SM, CLASSFOOD, invoice._id, { reason: 'Erreur' }, LE_19_AOUT)).rejects.toThrow('rapprochement');
+      expect(row.status).toBe('envoyee');
+      expect(gateway.expire).not.toHaveBeenCalled();
+    });
+
+    it('un échec d’expiration ne peut pas annuler un paiement en course', async () => {
+      const gateway = { retrieve: vi.fn().mockResolvedValue({ status: 'open', payment_status: 'unpaid' }), expire: vi.fn().mockRejectedValue(new Error('already complete')) };
+      const { invoice, row } = await withSession(gateway);
+      await expect(billing.cancel(SM, CLASSFOOD, invoice._id, { reason: 'Erreur' }, LE_19_AOUT)).rejects.toThrow('en cours');
+      expect(row.status).toBe('envoyee');
+    });
+
+    it('le CAS refuse si une nouvelle session apparaît avant la mutation manuelle', async () => {
+      const gateway = { retrieve: vi.fn(), expire: vi.fn() };
+      const { invoice, row } = await withSession(gateway);
+      gateway.retrieve.mockImplementation(async () => { row.stripeCheckoutSessionId = 'cs_new'; return { status: 'expired', payment_status: 'unpaid' }; });
+      await expect(billing.pay(SM, CLASSFOOD, invoice._id, { method: 'virement', note: '' }, LE_19_AOUT)).rejects.toThrow('changé');
+      expect(row.status).toBe('envoyee');
+    });
+  });
+
   // ─── Numérotation ───
 
   describe('Numérotation continue et sans trou', () => {
@@ -365,6 +409,15 @@ describe('Facturation', () => {
   // ─── Émission ───
 
   describe('Émettre', () => {
+    it('une ancienne pièce annulée ne masque pas son remplacement actif', async () => {
+      await sansAmorce();
+      const ancienne = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      await billing.cancel(SM, CLASSFOOD, ancienne._id, { reason: 'À remplacer' }, LE_19_AOUT);
+      await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('déjà une facture');
+      expect(invoices.rows.filter((row) => row.status !== 'annulee')).toHaveLength(1);
+    });
+
     it('facture le mois courant au tarif de la formule, corps vide', async () => {
       await sansAmorce();
       const invoice = await billing.issue(SM, CLASSFOOD, emission(), LE_19_AOUT);
@@ -462,6 +515,20 @@ describe('Facturation', () => {
   // ─── Envoi d'un brouillon ───
 
   describe('Envoyer un brouillon', () => {
+    it('ne ressuscite pas un brouillon annulé entre la lecture et l’envoi', async () => {
+      await sansAmorce();
+      const draft = await billing.issue(SM, CLASSFOOD, emission({ draft: true }), LE_19_AOUT);
+      const original = invoices.findOneAndUpdate.bind(invoices);
+      const update = vi.spyOn(invoices, 'findOneAndUpdate').mockImplementationOnce((filter, changes) => {
+        const row = invoices.rows.find((invoice) => String(invoice._id) === draft._id)!;
+        row.status = 'annulee';
+        return original(filter, changes);
+      });
+      await expect(billing.send(SM, CLASSFOOD, draft._id, LE_19_AOUT)).rejects.toThrow('changé');
+      expect(invoices.rows.find((invoice) => String(invoice._id) === draft._id)?.status).toBe('annulee');
+      update.mockRestore();
+    });
+
     const brouillon = () =>
       billing.issue(SM, CLASSFOOD, emission({ period: '2026-09', draft: true }), LE_19_AOUT);
 
@@ -1207,6 +1274,20 @@ describe('Facturation', () => {
       expect(bilan.emises.every((e) => e.number)).toBe(true);
     });
 
+    it.each([
+      { plan: null, onlineOrdering: false, onlineDelivery: false, standaloneLoyalty: true, amount: 3_900 },
+      { plan: null, onlineOrdering: true, onlineDelivery: false, standaloneLoyalty: true, amount: 7_900 },
+      { plan: null, onlineOrdering: false, onlineDelivery: true, standaloneLoyalty: true, amount: 11_900 },
+      { plan: 'boost', onlineOrdering: true, onlineDelivery: true, standaloneLoyalty: true, amount: 23_900 },
+    ])('facture les options autonomes persistées, sans doublon : $amount', async ({ amount, ...offre }) => {
+      await sansAmorce();
+      Object.assign(tenants.rows[1]!, offre);
+      const bilan = await billing.runMensuel(SM, { period: '2026-09', draft: true }, LE_19_AOUT);
+      expect(bilan.emises.find((invoice) => invoice.slug === 'voisin')?.amountCents).toBe(amount);
+      const fiche = await billing.tenantBilling(SM, VOISIN, { limit: 20 }, LE_19_AOUT);
+      expect(fiche.subscription.mrrCents).toBe(amount);
+    });
+
     it('est IDEMPOTENT : relancé, il ne double aucune facture', async () => {
       await sansAmorce();
       await billing.runMensuel(SM, { period: '2026-09', draft: false }, LE_19_AOUT);
@@ -1402,6 +1483,23 @@ describe('Facturation', () => {
       // Dix, jamais douze : les deux mois offerts sont la remise vendue.
       expect(ligne?.amountCents).toBe(MRR * 10);
       expect(ligne?.amountCents).not.toBe(MRR * 12);
+    });
+
+    it('l’émission manuelle sans montant suit l’échéancier annuel, pas le MRR normalisé', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      const facture = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-08' }), LE_19_AOUT);
+      expect(facture.amountCents).toBe(MRR * 10);
+      expect(facture.label).toContain('annuel');
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('Aucune échéance');
+    });
+
+    it('l’émission manuelle hors anniversaire conserve seulement les services mensuels dus', async () => {
+      await sansAmorce();
+      tenants.rows[0]!.billingCycle = 'annuel';
+      tenants.rows[0]!.atelier = { ...EMPTY_SERVICES, presenceInternet: true };
+      const facture = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      expect(facture.amountCents).toBe(ATELIER_PRESENCE_CENTS);
     });
 
     it('ses services de l’Atelier restent mensuels — ils ne s’annualisent pas', async () => {

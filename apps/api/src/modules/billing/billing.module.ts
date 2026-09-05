@@ -4,6 +4,9 @@ import { IssuerConfig } from './issuer.config';
 import { MyBillingController } from './my-billing.controller';
 import { MyBillingService } from './my-billing.service';
 import { TenantSessionGuard } from './tenant-session.guard';
+import { InvoiceCheckoutController, InvoiceCheckoutWebhookController, InvoiceOwnerGuard } from './invoice-checkout.controller';
+import { InvoiceCheckoutGateway } from './invoice-checkout.gateway';
+import { InvoiceCheckoutService } from './invoice-checkout.service';
 
 /**
  * « ABONNEMENT » — la facturation vue par le RESTAURATEUR.
@@ -30,7 +33,7 @@ import { TenantSessionGuard } from './tenant-session.guard';
  * ouverture que personne n'aurait décidée.
  */
 @Module({
-  controllers: [MyBillingController, BillingIdentityController],
-  providers: [MyBillingService, IssuerConfig, TenantSessionGuard],
+  controllers: [MyBillingController, BillingIdentityController, InvoiceCheckoutController, InvoiceCheckoutWebhookController],
+  providers: [MyBillingService, IssuerConfig, TenantSessionGuard, InvoiceOwnerGuard, InvoiceCheckoutGateway, InvoiceCheckoutService],
 })
 export class BillingModule {}
