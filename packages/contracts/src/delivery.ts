@@ -24,6 +24,8 @@ export const DeliveryZoneSchema = z.object({
   postalCodes: z.array(z.string().regex(/^\d{5}$/)).min(1).max(100),
   feeCents: z.number().int().min(0).max(10_000),
   minimumOrderCents: z.number().int().min(0).max(100_000),
+  /** Seuil NET après promotion, hors frais. Null/absent conserve les frais fixes. */
+  freeDeliveryFromCents: z.number().int().positive().max(100_000).nullable().optional(),
 }).strict();
 export type DeliveryZone = z.infer<typeof DeliveryZoneSchema>;
 
@@ -62,9 +64,18 @@ export interface DeliveryQuote {
   zoneId: string;
   zoneName: string;
   feeCents: number;
+  /** Tarif configuré avant une éventuelle gratuité ; feeCents reste le montant effectif. */
+  standardFeeCents?: number;
+  freeDeliveryFromCents?: number | null;
+  /** Null sans seuil ; zéro si déjà gratuite ; sinon montant net manquant. */
+  remainingForFreeDeliveryCents?: number | null;
   minimumOrderCents: number;
-  /** Produits avant promotion : une promotion éventuelle est revérifiée à la création. */
+  /** Produits NETS après promotion, hors frais ; quota revérifié à la création. */
   subtotalCents: number;
+  /** Sous-total des produits avant remise ; facultatif pour les anciennes réponses. */
+  originalSubtotalCents?: number;
+  /** Promotion informative, jamais une réservation ni un identifiant interne public. */
+  discount?: { amount: number; reason: string } | null;
   totalCents: number;
   estimatedMinutes: number;
 }

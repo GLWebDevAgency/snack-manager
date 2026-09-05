@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeliveryAddressSchema, DeliverySettingsSchema } from './delivery';
+import { DeliveryAddressSchema, DeliverySettingsSchema, DeliveryZoneSchema } from './delivery';
 import { CreatePublicOrderSchema } from './index';
 
 const address = { line1: '12 rue des Fleurs', postalCode: '69001', city: 'Lyon', country: 'FR' };
@@ -15,6 +15,19 @@ const order = {
 };
 
 describe('contrats de livraison', () => {
+  it.each([undefined, null, 1, 3000, 100000])('accepte le seuil gratuit facultatif sans le confondre avec le minimum : %s', (freeDeliveryFromCents) => {
+    const zone = DeliveryZoneSchema.parse({ ...settings.zones[0], freeDeliveryFromCents });
+    expect(zone).toMatchObject({ feeCents: 250, minimumOrderCents: 1500 });
+    expect(zone.freeDeliveryFromCents).toBe(freeDeliveryFromCents);
+  });
+  it.each([0, -1, 1.5, 100001, '3000', NaN, Infinity])('refuse un seuil gratuit invalide : %s', (freeDeliveryFromCents) => {
+    expect(DeliveryZoneSchema.safeParse({ ...settings.zones[0], freeDeliveryFromCents }).success).toBe(false);
+  });
+  it('un tarif zéro reste valable avec ou sans seuil ; le minimum demeure indépendant', () => {
+    expect(DeliveryZoneSchema.safeParse({ ...settings.zones[0], feeCents: 0, freeDeliveryFromCents: null }).success).toBe(true);
+    expect(DeliveryZoneSchema.safeParse({ ...settings.zones[0], minimumOrderCents: 4000, freeDeliveryFromCents: 3000 }).success).toBe(true);
+  });
+
   it('accepte une adresse française structurée, refuse pays non couvert et champ inconnu', () => {
     expect(DeliveryAddressSchema.parse(address)).toEqual(address);
     expect(DeliveryAddressSchema.safeParse({ ...address, country: 'BE' }).success).toBe(false);

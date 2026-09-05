@@ -9,6 +9,8 @@ export interface DeliveryZonePolicy {
   readonly postalCodes: readonly string[];
   readonly feeCents: number;
   readonly minimumOrderCents: number;
+  /** Seuil net facultatif ; feeCents = 0 signifie toujours gratuite. */
+  readonly freeDeliveryFromCents?: number | null;
 }
 
 export interface DeliveryPolicy {
@@ -22,6 +24,9 @@ export interface DeliveryQuote {
   readonly zoneId: string;
   readonly zoneName: string;
   readonly feeCents: number;
+  readonly standardFeeCents: number;
+  readonly freeDeliveryFromCents: number | null;
+  readonly remainingForFreeDeliveryCents: number | null;
   readonly minimumOrderCents: number;
   /** Montant des produits après remise, hors frais. */
   readonly subtotalCents: number;
@@ -47,12 +52,13 @@ export function quoteDelivery(
     return err(new DeliveryRefused('delivery.outside_zone', 'Cette adresse se trouve hors de notre zone de livraison. Vous pouvez retirer votre commande au restaurant.'));
   }
   const zone = matches[0]!;
+  const threshold = zone.freeDeliveryFromCents ?? null;
   if (
     matches.length !== 1 ||
     !Number.isSafeInteger(zone.feeCents) || zone.feeCents < 0 ||
     !Number.isSafeInteger(zone.minimumOrderCents) || zone.minimumOrderCents < 0 ||
     !Number.isSafeInteger(subtotal.cents) || subtotal.cents < 0 ||
-    !Number.isSafeInteger(subtotal.cents + zone.feeCents) ||
+    (threshold !== null && (!Number.isSafeInteger(threshold) || threshold <= 0 || threshold > 100_000)) ||
     !Number.isInteger(policy.leadTimeMin) || policy.leadTimeMin < 20
   ) {
     return err(new DeliveryRefused('delivery.invalid_configuration', 'La livraison est momentanément indisponible.'));
@@ -61,13 +67,22 @@ export function quoteDelivery(
     const missing = ((zone.minimumOrderCents - subtotal.cents) / 100).toFixed(2).replace('.', ',');
     return err(new DeliveryRefused('delivery.minimum_not_reached', `Ajoutez ${missing} € de produits pour atteindre le minimum de livraison, après remise et hors frais.`));
   }
+  const remainingForFreeDeliveryCents = zone.feeCents === 0 ? 0
+    : threshold === null ? null : Math.max(0, threshold - subtotal.cents);
+  const feeCents = remainingForFreeDeliveryCents === 0 ? 0 : zone.feeCents;
+  if (!Number.isSafeInteger(subtotal.cents + feeCents)) {
+    return err(new DeliveryRefused('delivery.invalid_configuration', 'La livraison est momentanément indisponible.'));
+  }
   return ok({
     zoneId: zone.id,
     zoneName: zone.name,
-    feeCents: zone.feeCents,
+    feeCents,
+    standardFeeCents: zone.feeCents,
+    freeDeliveryFromCents: threshold,
+    remainingForFreeDeliveryCents,
     minimumOrderCents: zone.minimumOrderCents,
     subtotalCents: subtotal.cents,
-    totalCents: subtotal.cents + zone.feeCents,
+    totalCents: subtotal.cents + feeCents,
     estimatedMinutes: policy.leadTimeMin,
   });
 }

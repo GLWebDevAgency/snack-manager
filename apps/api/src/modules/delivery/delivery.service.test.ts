@@ -11,7 +11,7 @@ function setup(over: Record<string, unknown> = {}) {
   const audit = { log: vi.fn().mockResolvedValue(undefined) };
   const redis = { publish: vi.fn().mockResolvedValue(1) };
   const tenants = { findById: vi.fn(() => ({ lean: vi.fn().mockResolvedValue({ onlineDelivery: true }) })) };
-  const service = new DeliveryService(tenants as never, {} as never, orders as never, audit as never, redis as never);
+  const service = new DeliveryService(tenants as never, {} as never, orders as never, audit as never, redis as never, {} as never);
   return { service, orders, audit, redis, row };
 }
 

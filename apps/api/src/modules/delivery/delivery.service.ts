@@ -5,14 +5,15 @@ import type Redis from 'ioredis';
 import {
   ordersChannel, WS_EVENTS, DeliverySettingsSchema,
   capacitesEffectives, orderAccessScope,
-  type DeliveryDispatch, type DeliveryQuoteRequest, type DeliverySettings, type JwtPayload,
+  type DeliveryDispatch, type DeliveryQuote, type DeliveryQuoteRequest, type DeliverySettings, type JwtPayload,
 } from '@sm/contracts';
 import { Money, ordering } from '@sm/domain';
-import type { Order, Product, Tenant } from '@sm/db';
+import type { Order, Product, Promotion, Tenant } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { AuditService } from '../audit/audit.module';
 import { priceOrderLines } from '../orders/price-order-lines';
+import { promotionCandidatesFilter, selectCartPromotion } from '../orders/cart-promotion';
 import { deliverySettingsOf, publicDeliverySettingsOf } from './delivery-order';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class DeliveryService {
     @InjectModel('Order') private readonly orders: Model<Order>,
     private readonly audit: AuditService,
     @Inject(REDIS_PUB) private readonly redis: Redis,
+    @InjectModel('Promotion') private readonly promotions: Model<Promotion>,
   ) {}
 
   private async tenantBySlug(slug: string) {
@@ -35,17 +37,22 @@ export class DeliveryService {
     return publicDeliverySettingsOf(await this.tenantBySlug(slug));
   }
 
-  async quote(slug: string, request: DeliveryQuoteRequest) {
+  async quote(slug: string, request: DeliveryQuoteRequest): Promise<DeliveryQuote> {
     const tenant = await this.tenantBySlug(slug);
     if (!publicDeliverySettingsOf(tenant).available) {
       throw new ConflictException('La livraison est momentanément indisponible. Vous pouvez retirer votre commande au restaurant.');
     }
     const ids = [...new Set(request.lines.map((line) => line.productId))];
     const products = await this.products.find({ tenantId: tenant._id, _id: { $in: ids }, active: true }).lean();
-    const { subtotal } = priceOrderLines(products, request.lines);
-    const result = ordering.quoteDelivery(deliverySettingsOf(tenant), request.address.postalCode, Money.fromCents(subtotal));
+    const { subtotal, lines } = priceOrderLines(products, request.lines);
+    const candidates = await this.promotions.find(promotionCandidatesFilter(String(tenant._id), request.promoCode)).lean();
+    const promotion = selectCartPromotion(candidates, { subtotal, lines, channel: 'online', promoCode: request.promoCode, now: new Date() });
+    const discount = promotion ? { amount: promotion.amount, reason: promotion.reason } : null;
+    const subtotalNet = subtotal - (discount?.amount ?? 0);
+    const result = ordering.quoteDelivery(deliverySettingsOf(tenant), request.address.postalCode, Money.fromCents(subtotalNet));
     if (!result.ok) throw new BadRequestException({ code: result.error.code, message: result.error.message });
-    return result.value;
+    // Informatif : le quota n'est jamais réservé ici et sera revérifié à la création.
+    return { ...result.value, originalSubtotalCents: subtotal, discount };
   }
 
   async settings(tenantId: string): Promise<DeliverySettings> {

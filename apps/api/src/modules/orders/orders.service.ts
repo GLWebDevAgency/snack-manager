@@ -34,36 +34,7 @@ import { CapacitesService } from '../../common/capacites';
 import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
-
-/**
- * Le document Mongo → la règle que le domaine sait lire.
- *
- * Tolérant aux promotions d'AVANT les bornes : `minSubtotalCents`,
- * `maxDiscountCents` et `maxUsage` sont arrivés avec l'application des
- * promotions, et `.lean()` ne matérialise pas les défauts Mongoose. Absents,
- * ils valent « aucune borne » — ce qui est le comportement qu'avait la
- * promotion quand elle a été créée.
- */
-function versRegle(doc: Record<string, unknown>): ordering.PromotionRule {
-  const nombre = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-  const date = (v: unknown): Date | null => (v instanceof Date ? v : null);
-  return {
-    id: String(doc._id),
-    name: String(doc.name ?? ''),
-    kind: doc.kind as ordering.PromotionRule['kind'],
-    value: nombre(doc.value),
-    code: typeof doc.code === 'string' && doc.code ? doc.code : null,
-    channels: Array.isArray(doc.channels) ? (doc.channels as string[]) : [],
-    startsAt: date(doc.startsAt),
-    endsAt: date(doc.endsAt),
-    active: doc.active === true,
-    minSubtotalCents: nombre(doc.minSubtotalCents),
-    maxDiscountCents: nombre(doc.maxDiscountCents),
-    maxUsage: nombre(doc.maxUsage),
-    usageCount: nombre(doc.usageCount),
-    offeredProductId: doc.offeredProductId ? String(doc.offeredProductId) : null,
-  };
-}
+import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -180,59 +151,9 @@ export class OrdersService {
     lines: readonly { productId: unknown; unitPrice: number }[],
   ): Promise<{ discount: { amount: number; reason: string; promotionId: unknown } } | null> {
     const code = dto.promoCode?.trim();
-    const filtre = code
-      ? { tenantId, active: true, code: code.toUpperCase() }
-      : { tenantId, active: true, code: null };
-    const candidates = await this.promotions.find(filtre).lean();
-
-    if (code && candidates.length === 0) {
-      throw new BadRequestException(`Le code « ${code} » ne correspond à aucune offre`);
-    }
-    if (candidates.length === 0) return null;
-
-    // Le prix unitaire réellement retenu pour chaque produit du panier — c'est
-    // lui que vaut un « produit offert », options comprises, et non le prix
-    // catalogue. Le MOINS cher quand le produit figure sur plusieurs lignes :
-    // offrir le plus cher des exemplaires serait un cadeau qu'on n'a pas promis.
-    const prixAuPanier = new Map<string, Money>();
-    for (const l of lines) {
-      const id = String(l.productId);
-      const actuel = prixAuPanier.get(id);
-      if (!actuel || l.unitPrice < actuel.cents) prixAuPanier.set(id, Money.fromCents(l.unitPrice));
-    }
-    const contexte = {
-      subtotal: Money.fromCents(subtotal),
-      channel: dto.channel,
-      code: code ?? null,
-      now: new Date(),
-      prixAuPanier,
-    };
-
-    // La MEILLEURE offre pour le client parmi celles qui passent. Avec un code
-    // saisi il n'y en a qu'une ; sans code, en retenir une moins avantageuse
-    // qu'une autre également applicable serait un choix qu'on ne saurait pas
-    // justifier au comptoir.
-    let retenue: { id: unknown; amount: number; reason: string } | null = null;
-    let refus: string | null = null;
-    for (const brut of candidates) {
-      const resultat = ordering.appliquerPromotion(versRegle(brut), contexte);
-      if (!resultat.ok) {
-        refus ??= resultat.error.message;
-        continue;
-      }
-      const cents = resultat.value.amount.cents;
-      if (!retenue || cents > retenue.amount) {
-        retenue = { id: brut._id, amount: cents, reason: resultat.value.reason };
-      }
-    }
-
-    if (!retenue) {
-      // Un code SAISI qui ne passe pas doit dire pourquoi : le client l'attend.
-      // Une offre d'office qui ne passe pas ne regarde personne — la commande
-      // se poursuit au tarif normal.
-      if (code) throw new BadRequestException(refus ?? `Le code « ${code} » n’est pas applicable`);
-      return null;
-    }
+    const candidates = await this.promotions.find(promotionCandidatesFilter(tenantId, code)).lean();
+    const retenue = selectCartPromotion(candidates, { subtotal, channel: dto.channel, promoCode: code, now: new Date(), lines });
+    if (!retenue) return null;
 
     // Le quota s'arbitre ici, en base. `maxUsage: 0` vaut illimité — la
     // condition doit donc laisser passer ce cas sans le confondre avec un

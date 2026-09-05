@@ -524,6 +524,7 @@ export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
 export const DeliveryQuoteRequestSchema = z.object({
   address: DeliveryAddressSchema,
   lines: z.array(OrderLineInputSchema.strict()).min(1).max(50),
+  promoCode: z.string().trim().min(1).max(24).optional(),
 }).strict();
 export type DeliveryQuoteRequest = z.infer<typeof DeliveryQuoteRequestSchema>;
 

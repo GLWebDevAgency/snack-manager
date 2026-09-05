@@ -290,6 +290,10 @@ export const TenantSchema = new Schema(
           postalCodes: { type: [String], required: true },
           feeCents: { type: Number, required: true, min: 0 },
           minimumOrderCents: { type: Number, required: true, min: 0 },
+          freeDeliveryFromCents: {
+            type: Number, default: null, min: 1, max: 100_000,
+            validate: { validator: (value: number | null) => value === null || Number.isInteger(value), message: 'Seuil de gratuité entier requis' },
+          },
         }, { _id: false })], default: [] },
         leadTimeMin: { type: Number, default: 45 },
         slotCapacity: { type: Number, default: 2 },
