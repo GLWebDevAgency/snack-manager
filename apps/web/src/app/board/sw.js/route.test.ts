@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { createContext, Script } from "node:vm";
+import { describe, expect, it, vi } from "vitest";
 import {
   GET,
   NOMS_CACHES_ECRAN,
@@ -51,6 +52,33 @@ describe("Le service worker de l'écran de salle — ses règles pures", () => {
     expect(source).toContain('addEventListener("fetch"');
     expect(source).toContain('addEventListener("message"');
     expect(source).toContain("sm-board:precache");
+  });
+
+  it("le JavaScript réellement servi au navigateur est syntaxiquement valide", async () => {
+    const source = await GET().text();
+    expect(() => new Script(source, { filename: "/board/sw.js" })).not.toThrow();
+  });
+
+  it.each([
+    {
+      pattern: "ASSET_IN_HTML",
+      text: `<link href="/_next/static/chunks/a.css"/><script src="/_next/static/chunks/b.js"></script><script src="/_next/static/chunks/b.js"></script><img src="/photos/x.png"/>`,
+      expected: ["/_next/static/chunks/a.css", "/_next/static/chunks/b.js"],
+    },
+    {
+      pattern: "ASSET_IN_CSS",
+      text: `@font-face{src:url(/_next/static/media/a.woff2),url("/_next/static/media/b.woff2"),url('/_next/static/media/c.woff2')} .x{src:url(/_next/static/media/a.woff2);background:url("/photos/y.png")}`,
+      expected: ["/_next/static/media/a.woff2", "/_next/static/media/b.woff2", "/_next/static/media/c.woff2"],
+    },
+  ])("le worker émis extrait les actifs avec $pattern", async ({ pattern, text, expected }) => {
+    const source = await GET().text();
+    // Enregistre les handlers sans déclencher installation, réseau ni cache.
+    const context = createContext({ self: { addEventListener: vi.fn() }, inputText: text });
+    new Script(source, { filename: "/board/sw.js" }).runInContext(context, { timeout: 1_000 });
+    const extract = new Script(`assetsOf(inputText, ${pattern});`);
+    expect(extract.runInContext(context, { timeout: 1_000 })).toEqual(expected);
+    // Le motif global doit aussi fonctionner au passage suivant.
+    expect(extract.runInContext(context, { timeout: 1_000 })).toEqual(expected);
   });
 
   it("relève les scripts, feuilles et polices que la page référence, une fois chacun", () => {
