@@ -64,6 +64,8 @@ import type {
   LoyaltyRewardView,
   MeasureUnit,
   PlanningShiftView,
+  Scenography,
+  ScreenPresentation,
   StockMovementRow,
   StorageMode,
   SupplyBrand,
@@ -119,6 +121,8 @@ export interface DemoCategory {
   name: string;
   order: number;
   active: boolean;
+  featuredProductIds?: string[];
+  featuredRevision?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -214,7 +218,8 @@ export interface DemoScreenRow {
   name: string;
   orientation: "landscape" | "portrait";
   theme: "brand" | "dark" | "light";
-  scenography?: "ardoise" | "comptoir";
+  scenography?: Scenography;
+  presentation?: ScreenPresentation;
   playlist: unknown[];
   paired: boolean;
   /** Même raison que pour les postes : un écran allumé bat en continu. */

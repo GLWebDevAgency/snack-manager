@@ -74,6 +74,8 @@ type Props = {
   onClose: () => void;
   /** Sauvegarde réussie — le parent toaste, ferme et recharge. */
   onSaved: (message: string) => void;
+  isFeatured?: boolean;
+  onManageFeatured?: () => void;
 };
 
 /** g/ml → millièmes d'unité de base (kg/l) — miroir de lineCostCents (@sm/supply). */
@@ -99,12 +101,15 @@ export function EditPanel({
   chargerMediatheque,
   onClose,
   onSaved,
+  isFeatured = false,
+  onManageFeatured,
 }: Props) {
   const [name, setName] = useState(product?.name ?? "");
   const [catId, setCatId] = useState(
     mode === "create" ? (createCategoryId ?? "") : (product?.categoryId ?? ""),
   );
   const [desc, setDesc] = useState(product?.description ?? "");
+  const [isNew, setIsNew] = useState(product?.isNew ?? false);
 
   /**
    * Tailles et options — l'écran ne savait pas les éditer, alors que le
@@ -308,6 +313,7 @@ export function EditPanel({
           name: trimmed,
           description: desc.trim(),
           tags: nextTags(),
+          isNew,
         });
         onSaved("Produit créé");
         return;
@@ -315,6 +321,7 @@ export function EditPanel({
       if (!product) return;
 
       const patch: Record<string, unknown> = {};
+      if (isNew !== product.isNew) patch.isNew = isNew;
       if (trimmed !== product.name) patch.name = trimmed;
       if (desc.trim() !== product.description) patch.description = desc.trim();
       if (catId && catId !== (product.categoryId ?? "")) patch.categoryId = catId;
@@ -376,10 +383,12 @@ export function EditPanel({
   const estModifie = () =>
     mode === "create"
       ? name.trim() !== "" ||
+        isNew ||
         desc.trim() !== "" ||
         catId !== (createCategoryId ?? "") ||
         tagsChanged()
       : name !== (product?.name ?? "") ||
+        isNew !== (product?.isNew ?? false) ||
         desc !== (product?.description ?? "") ||
         catId !== (product?.categoryId ?? "") ||
         tagsChanged() ||
@@ -486,6 +495,15 @@ export function EditPanel({
             </p>
           </div>
         </div>
+      </div>
+
+      <div className="my-4 flex flex-wrap items-center gap-3 rounded-ctrl border border-line bg-surface2 p-3">
+        <Chip on={isNew} onClick={() => setIsNew(!isNew)}>Nouveauté</Chip>
+        <span className="min-w-0 flex-1 text-xs text-mut">Le badge Nouveau accompagne le produit sur la carte et les écrans.</span>
+        {mode === "edit" && <Btn variant="ghost" size="sm" icon="star" disabled={busy || !onManageFeatured || catId !== (product?.categoryId ?? "")} onClick={onManageFeatured}
+          title={catId !== (product?.categoryId ?? "") ? "Enregistrez le changement de catégorie avant la mise en avant" : !onManageFeatured ? "Rattachez d’abord le produit à une catégorie" : "Ouvrir la sélection commune TV et commande en ligne"}>
+          {isFeatured ? "Gérer la mise en avant" : "Mettre en avant"}
+        </Btn>}
       </div>
 
       {/* ─── Photos ─── */}

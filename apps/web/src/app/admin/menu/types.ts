@@ -72,6 +72,8 @@ export type Category = {
   order: number;
   active: boolean;
   products: Product[];
+  featuredProductIds?: string[];
+  featuredRevision?: number;
 };
 
 /**

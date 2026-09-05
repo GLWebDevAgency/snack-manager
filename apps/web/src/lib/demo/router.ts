@@ -33,6 +33,8 @@
 
 import {
   AuthMeUpdateSchema,
+  FEATURED_PRODUCTS_MAX,
+  featuredProductIdsOf,
   DEVICE_KIND_LABELS,
   DEVICE_OFFLINE_AFTER_MS,
   LoyaltyAdminAdjustmentSchema,
@@ -69,8 +71,10 @@ import {
   SCREEN_ORIENTATION_LABELS,
   SCREEN_THEME_LABELS,
   SCENOGRAPHY_LABELS,
-  SCENOGRAPHY_DEFAULT,
   ScreenPreviewSchema,
+  ScreenCreateSchema,
+  ScreenUpdateSchema,
+  screenPresentationOf,
   mostAdvancedStatus,
   type DeviceKind,
   type LoyaltyEarnResult,
@@ -90,7 +94,7 @@ import {
   logoUrlDe,
 } from "@sm/contracts";
 import { loyalty as loyaltyDomain, Money } from "@sm/domain";
-import { previewDemoScreen } from "./screen-preview";
+import { defaultDemoScreenPlaylist, previewDemoScreen } from "./screen-preview";
 import {
   bomOf,
   channels,
@@ -261,6 +265,7 @@ const screenView = (w: DemoWorld, s: DemoWorld["screens"][number]) => {
     themeLabel: SCREEN_THEME_LABELS[s.theme],
     scenography: s.scenography ?? "ardoise",
     scenographyLabel: SCENOGRAPHY_LABELS[s.scenography ?? "ardoise"],
+    presentation: screenPresentationOf(s.presentation),
     playlist: s.playlist,
     sceneCount: s.playlist.length,
     paired: s.paired,
@@ -884,6 +889,20 @@ function dispatch(
       return ok({ ok: true });
     }
     const cat = w.categories.find((c) => c._id === seg[1]);
+    if (seg.length === 3 && seg[2] === "featured" && method === "PUT") {
+      if (!cat) throw new Refusal(404, "Catégorie introuvable");
+      // Les identifiants de la fixture sont anonymisés (c1/p1), mais toutes
+      // les contraintes métier restent celles du contrat API.
+      const productIds = b.productIds;
+      if (!Array.isArray(productIds) || productIds.some((v) => typeof v !== "string") || productIds.length > FEATURED_PRODUCTS_MAX || new Set(productIds).size !== productIds.length || !Number.isInteger(b.expectedRevision) || Number(b.expectedRevision) < 0 || Object.keys(b).some((k) => k !== "productIds" && k !== "expectedRevision")) throw new Refusal(400, "Choisissez au plus trois produits distincts de cette catégorie");
+      const current = { categoryId: cat._id, featuredProductIds: featuredProductIdsOf(cat.featuredProductIds), featuredRevision: cat.featuredRevision ?? 0 };
+      if (b.expectedRevision !== current.featuredRevision) return { status: 409, body: { code: "FEATURED_SELECTION_CHANGED", message: "La sélection a été modifiée depuis un autre poste.", current } };
+      if (productIds.some((pid) => !w.products.some((p) => p._id === pid && p.categoryId === cat._id))) throw new Refusal(400, "Chaque produit doit appartenir à cette catégorie");
+      cat.featuredProductIds = [...productIds] as string[];
+      cat.featuredRevision = current.featuredRevision + 1;
+      cat.updatedAt = new Date().toISOString();
+      return ok({ categoryId: cat._id, featuredProductIds: cat.featuredProductIds, featuredRevision: cat.featuredRevision });
+    }
     if (seg.length === 2 && method === "PATCH") {
       if (!cat) throw new Refusal(404, "Catégorie introuvable");
       Object.assign(cat, b, { updatedAt: new Date().toISOString() });
@@ -931,11 +950,21 @@ function dispatch(
     const product = w.products.find((p) => p._id === seg[1]);
     if (seg.length === 2 && method === "PATCH") {
       if (!product) throw new Refusal(404, "Produit introuvable");
+      if ("categoryId" in b && b.categoryId !== product.categoryId) {
+        for (const c of w.categories) if (c.featuredProductIds?.includes(product._id)) {
+          c.featuredProductIds = c.featuredProductIds.filter((pid) => pid !== product._id);
+          c.featuredRevision = (c.featuredRevision ?? 0) + 1;
+        }
+      }
       Object.assign(product, b, { updatedAt: new Date().toISOString() });
       return ok(product);
     }
     if (seg.length === 2 && method === "DELETE") {
       if (!product) throw new Refusal(404, "Produit introuvable");
+      for (const c of w.categories) if (c.featuredProductIds?.includes(product._id)) {
+        c.featuredProductIds = c.featuredProductIds.filter((pid) => pid !== product._id);
+        c.featuredRevision = (c.featuredRevision ?? 0) + 1;
+      }
       w.products = w.products.filter((p) => p._id !== product._id);
       return ok({ ok: true });
     }
@@ -1944,29 +1973,26 @@ function dispatch(
     if (method === "POST" && seg[1] === "preview" && seg.length === 2) {
       const parsed = ScreenPreviewSchema.safeParse(b);
       if (!parsed.success) throw new Refusal(400, "Réglages d’aperçu invalides");
+      if (parsed.data.brandDraft && !contraste(parsed.data.brandDraft).ok) throw new Refusal(400, "Contraste insuffisant dans l’identité en cours d’édition");
       const saved = parsed.data.screenId ? w.screens.find((s) => s.id === parsed.data.screenId) : undefined;
       if (parsed.data.screenId && !saved) throw new Refusal(404, "Écran introuvable");
       return ok(previewDemoScreen(w, parsed.data, saved));
     }
     if (method === "GET" && seg.length === 1) return ok(w.screens.map((s) => screenView(w, s)));
     if (method === "POST" && seg.length === 1) {
+      const parsed = ScreenCreateSchema.safeParse(b);
+      if (!parsed.success) throw new Refusal(400, "Réglages d’écran invalides");
+      const draft = parsed.data;
       const created = {
         id: id(),
-        name: String(b.name ?? "Nouvel écran"),
-        orientation: (b.orientation as "landscape" | "portrait") ?? "landscape",
-        theme: (b.theme as "brand" | "dark" | "light") ?? "brand",
-        scenography: (b.scenography as "ardoise" | "comptoir") ?? SCENOGRAPHY_DEFAULT,
+        name: draft.name,
+        orientation: draft.orientation,
+        theme: draft.theme,
+        scenography: draft.scenography,
+        presentation: screenPresentationOf(draft.presentation),
         // Comme l'API : un écran créé sans playlist en reçoit une, bâtie sur la
         // carte. Le restaurateur ne configure RIEN pour que l'écran serve.
-        playlist:
-          (b.playlist as unknown[]) ??
-          w.categories.slice(0, 3).map((c) => ({
-            kind: "category",
-            categoryId: c._id,
-            productIds: [],
-            title: null,
-            durationMs: 12_000,
-          })),
+        playlist: draft.playlist ?? defaultDemoScreenPlaylist(w),
         paired: false,
         beating: false,
         lastSeenAt: null,
@@ -1980,7 +2006,9 @@ function dispatch(
     const screen = w.screens.find((s) => s.id === seg[1]);
     if (seg.length === 2 && method === "PATCH") {
       if (!screen) throw new Refusal(404, "Écran introuvable");
-      Object.assign(screen, b);
+      const parsed = ScreenUpdateSchema.safeParse(b);
+      if (!parsed.success) throw new Refusal(400, "Réglages d’écran invalides");
+      Object.assign(screen, parsed.data);
       return ok(screenView(w, screen));
     }
     if (seg.length === 2 && method === "DELETE") {
