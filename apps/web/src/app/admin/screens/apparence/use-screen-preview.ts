@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Scenography, ScreenContent, ScreenOrientation, ScreenPreviewService, ScreenTheme } from "@sm/contracts";
+import { screenPresentationOf, type Brand, type Scenography, type ScreenContent, type ScreenOrientation, type ScreenPresentation, type ScreenPreview, type ScreenPreviewService, type ScreenTheme } from "@sm/contracts";
 import { api } from "@/lib/api";
 import { createPreviewSession } from "./preview-session";
 
@@ -11,11 +11,22 @@ export interface Brouillon {
   theme: ScreenTheme;
   scenography: Scenography;
   service?: ScreenPreviewService;
+  presentation?: ScreenPresentation;
+  brandDraft?: Brand;
+}
+
+/** L'identité peut venir de plusieurs éditeurs : l'ordre des objets ne doit pas relancer le réseau. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === "object") return Object.fromEntries(
+    Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]),
+  );
+  return value;
 }
 
 /** Une clé stable : l'ordre des champs ne compte pas, chaque réglage compte. */
 export const cleDuBrouillon = (b: Brouillon): string =>
-  JSON.stringify([b.screenId, b.orientation, b.theme, b.scenography, b.service ?? null]);
+  JSON.stringify(canonical({ ...b, presentation: screenPresentationOf(b.presentation) }));
 
 interface PreviewState {
   content: ScreenContent | null;
@@ -44,14 +55,10 @@ export function useScreenPreview(brouillon: Brouillon): {
   const sessionRef = useRef<ReturnType<typeof createPreviewSession<ScreenContent>> | null>(null);
 
   useEffect(() => {
-    const [screenId, orientation, theme, scenography, service] = JSON.parse(cle) as [
-      string | null, ScreenOrientation, ScreenTheme, Scenography, ScreenPreviewService | null,
-    ];
+    const request = JSON.parse(cle) as ScreenPreview;
     const session = createPreviewSession({
       request: (signal) =>
-        api.post<ScreenContent>("/screens/preview", {
-          screenId, orientation, theme, scenography, ...(service ? { service } : {}),
-        }, { signal }),
+        api.post<ScreenContent>("/screens/preview", request, { signal }),
       onStart: () => setState((previous) => ({
         ...previous,
         requestKey: cle,
