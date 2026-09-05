@@ -132,7 +132,7 @@ export const OFFRE_SECTIONS: readonly OffreSectionMeta[] = [
     // « et où il s'arrête » est tombé : `MODULE_POINTS[1]` porte déjà la borne,
     // au futur et tourné vers l'avant. L'annoncer en plus dans l'accroche, c'est
     // prévenir deux fois d'un mur qu'on est en train de démonter.
-    lead: "Disponible seul avec son back-office, en complément d’Essentiel ou Complet, et compris dans Boost. La livraison est une option séparée.",
+    lead: "Disponible seul avec son back-office ou en complément d’Essentiel ou Complet. Avec Boost, commande et livraison incluses sans supplément ; ouverture de la livraison après configuration et validation pilote.",
   },
   {
     id: "materiel",
@@ -368,7 +368,7 @@ export const ANNUEL_HINT: string = cycleAnnuel.hint;
  * descendrait dans Complet, les notes suivraient sans qu'on rouvre ce fichier.
  */
 export const PLAN_MODULE_NOTE = {
-  inclus: `${MODULE_ADDON.name} comprise — abonnement et mise en service.`,
+  inclus: "Click & collect, livraison restaurant et pilote fidélité compris — abonnement et mise en service. Livraison à configurer et valider avant ouverture.",
   supplement: `${MODULE_ADDON.name} en supplément : ${euros(MODULE_MONTHLY_CENTS)} par mois, plus ${euros(
     MODULE_SETUP_CENTS,
   )} de mise en service la première fois.`,
@@ -483,7 +483,7 @@ export const MODULE_POINTS: readonly ModulePoint[] = [
   },
   {
     title: "Livraison par votre restaurant — validation pilote",
-    line: "Une offre séparée est prévue pour vos zones et tarifs de livraison. L’activation attend la validation du parcours pilote ; votre restaurant assure les livraisons. Aucun coursier tiers n’est fourni.",
+    line: "La livraison est incluse dans Boost sans supplément et proposée dans un module à la carte pour les autres offres. Vous définissez vos zones et tarifs. L’ouverture attend la configuration et la validation du parcours pilote ; votre restaurant assure les livraisons. Aucun coursier tiers n’est fourni.",
   },
   {
     title: "Paiement en ligne ou au retrait",

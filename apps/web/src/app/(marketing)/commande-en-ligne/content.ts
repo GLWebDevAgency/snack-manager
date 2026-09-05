@@ -107,7 +107,7 @@ export const DIRECT_POINTS: readonly string[] = [
   "Votre page, à vos couleurs, sur votre nom de domaine — ou branchée sur votre site actuel.",
   "Le prix affiché en ligne est celui de la salle : rien à gonfler pour absorber une commission.",
   "Le client est le vôtre : son numéro, son historique, ses habitudes restent chez vous.",
-  "La livraison par votre restaurant est une option distincte, en validation pilote avant activation. Aucun livreur tiers n’est fourni.",
+  "La livraison par votre restaurant est incluse dans Boost sans supplément, ou proposée dans le module à la carte dédié. Ouverture après configuration et validation pilote. Aucun livreur tiers n’est fourni.",
 ] as const;
 
 /* ── 2. Vers la cuisine ──────────────────────────────────────── */

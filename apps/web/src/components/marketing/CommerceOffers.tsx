@@ -33,8 +33,7 @@ export function CommerceOffers() {
       </div>
       <p className="body-text">
         Mise en service standard : {euros(COMMERCE_TERMS.setup)} une fois, précisée au devis.
-        Boost comprend le click & collect et le pilote fidélité accompagné ; la livraison ajoute {euros(COMMERCE_TERMS.supplement)} HT/mois
-        après validation. Les frais de paiement et les coûts de livraison restent séparés.
+        {" "}{COMMERCE_TERMS.boost}
       </p>
       <p className="body-text">{COMMERCE_TERMS.note}</p>
     </section>

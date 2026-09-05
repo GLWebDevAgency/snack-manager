@@ -22,7 +22,6 @@ import {
   ATELIER_ONCE_CENTS,
   ATELIER_PRESENCE_CENTS,
   EMPTY_SERVICES,
-  MODULE_ORDERING_CENTS,
   PLANS,
   PROPOSAL_BILLINGS,
   PROPOSAL_BILLING_LABELS,
@@ -1062,6 +1061,10 @@ export function OffreFields({
   idPrefix?: string;
 }) {
   const id = (suffixe: string) => `${idPrefix}-${suffixe}`;
+  // L'inclusion découle du plan, y compris pour les anciens Boost. Ne pas
+  // réécrire les choix à la carte : ils doivent survivre à un aller-retour de plan.
+  const commerceIncluded = plan === "boost";
+  const commerceChoice = commerceIncluded || delivery ? "delivery" : module ? "collect" : loyalty ? "loyalty" : "none";
   return (
     <>
       <div className="grid grid-cols-2 gap-3 max-md:grid-cols-1">
@@ -1101,19 +1104,25 @@ export function OffreFields({
         </Field>
       </div>
       <Field label="Module client — avec ou sans formule" htmlFor={id("commerce")}>
-        <Select id={id("commerce")} value={delivery ? "delivery" : module || plan === "boost" ? "collect" : loyalty ? "loyalty" : "none"} onChange={(e) => {
+        <Select id={id("commerce")} value={commerceChoice} disabled={commerceIncluded} aria-describedby={id("commerce-note")} onChange={(e) => {
           const choice = e.target.value;
           setModule(choice === "collect" || choice === "delivery");
           setDelivery(choice === "delivery");
           setLoyalty(choice === "loyalty");
           if (choice === "none" || choice === "loyalty") setServices({ ...services, integrationCommande: false });
         }}>
-          {plan !== "boost" && <option value="none">Aucun module client</option>}
-          {plan !== "boost" && <option value="loyalty">Fidélité seule — {fmtEuro(COMMERCE_PRICES.loyaltyMonthlyCents)}/mois</option>}
-          <option value="collect">Click & collect + fidélité — {plan === "boost" ? "inclus" : `${fmtEuro(COMMERCE_PRICES.collectMonthlyCents)}/mois`}</option>
-          <option value="delivery">Click & collect + livraison + fidélité — {plan === "boost" ? `+${fmtEuro(COMMERCE_PRICES.deliverySupplementMonthlyCents)}` : fmtEuro(COMMERCE_PRICES.deliveryMonthlyCents)}/mois · pilote</option>
+          {commerceIncluded ? (
+            <option value="delivery">Tous les modules inclus dans Boost</option>
+          ) : (
+            <>
+              <option value="none">Aucun module client</option>
+              <option value="loyalty">Fidélité seule — {fmtEuro(COMMERCE_PRICES.loyaltyMonthlyCents)}/mois</option>
+              <option value="collect">Click & collect + pilote fidélité — {fmtEuro(COMMERCE_PRICES.collectMonthlyCents)}/mois</option>
+              <option value="delivery">Click & collect + livraison + pilote fidélité — {fmtEuro(COMMERCE_PRICES.deliveryMonthlyCents)}/mois · pilote</option>
+            </>
+          )}
         </Select>
-        <p className="mt-2 text-xs leading-relaxed text-mut">Page de commande hébergée et back-office adapté inclus. La fidélité n’est jamais facturée deux fois. Livraison assurée par le restaurant, à activer après validation pilote.</p>
+        <p id={id("commerce-note")} className="mt-2 text-xs leading-relaxed text-mut">{commerceIncluded ? "Click & collect, livraison et fidélité inclus sans supplément, également pour les restaurateurs Boost existants. " : "Page de commande hébergée et back-office adapté inclus. "}La fidélité est en pilote accompagné et n’est jamais facturée deux fois. Livraison assurée par le restaurant, à configurer et valider avant ouverture ; frais de paiement et coûts des livreurs distincts.</p>
       </Field>
 
       {/* L'Atelier — le travail vendu en plus du logiciel. Les prix des
@@ -1192,8 +1201,10 @@ export function OffreFields({
               site), jamais « une fois » tout court — et le module se lit à
               côté, au mois (fondateur, 25/08). */}
           Commande en ligne greffée sur SON site existant — mise en service{" "}
-          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)}, puis le module{" "}
-          {fmtEuro(MODULE_ORDERING_CENTS)}/mois (il s&apos;active avec).
+          {fmtEuro(ATELIER_ONCE_CENTS.integrationCommande)}
+          {commerceIncluded
+            ? ", module inclus dans Boost, sans supplément mensuel."
+            : `, puis le module ${fmtEuro(delivery ? COMMERCE_PRICES.deliveryMonthlyCents : COMMERCE_PRICES.collectMonthlyCents)}/mois (il s’active avec).`}
         </div>
         <Toggle
           on={services.integrationCommande}
@@ -1255,9 +1266,9 @@ function ResumeDeLOffre({
     <>
       <div className="text-sm font-bold text-ink">
         {planChoiceLabel(offre.plan)}
-        {offre.onlineDelivery ? " + livraison" : offre.standaloneLoyalty && !offre.onlineOrdering && offre.plan !== "boost" ? " + fidélité" : ""}
+        {offre.plan !== "boost" && offre.onlineDelivery ? " + livraison" : offre.standaloneLoyalty && !offre.onlineOrdering && offre.plan !== "boost" ? " + fidélité" : ""}
         {offre.plan === "boost"
-          ? " — commande en ligne comprise"
+          ? " — click & collect, livraison et pilote fidélité inclus"
           : offre.onlineOrdering
             ? " + commande en ligne"
             : ""}
