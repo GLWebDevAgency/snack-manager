@@ -50,6 +50,11 @@ import {
 } from "./types";
 import { PhotosDuPlat } from "./PhotosDuPlat";
 import { EditeurOptions, EditeurVariantes, figerLesClefs } from "./VariantesOptions";
+import {
+  erreurEnregistrementProduit,
+  normaliserGroupesEdition,
+  validerModificationProduit,
+} from "./product-validation";
 
 type LineDraft = { ingredientId: string; qty: string; unit: MeasureUnit };
 
@@ -108,9 +113,9 @@ export function EditPanel({
    * renvoyait vers CE panneau : le prix n'était modifiable nulle part.
    */
   const [variants, setVariants] = useState<Variant[]>(() => product?.variants ?? []);
-  const [groups, setGroups] = useState<OptionGroup[]>(() => product?.optionGroups ?? []);
+  const [groups, setGroups] = useState<OptionGroup[]>(() => normaliserGroupesEdition(product?.optionGroups ?? []));
   const variantsInitiales = useMemo(() => JSON.stringify(product?.variants ?? []), [product]);
-  const groupsInitiaux = useMemo(() => JSON.stringify(product?.optionGroups ?? []), [product]);
+  const groupsInitiaux = useMemo(() => JSON.stringify(normaliserGroupesEdition(product?.optionGroups ?? [])), [product]);
 
   /**
    * Les photos du plat — identifiants, DANS L'ORDRE, la première étant la
@@ -323,7 +328,12 @@ export function EditPanel({
         patch.optionGroups = figerLesClefs(groups, product.optionGroups ?? []);
       }
       if (Object.keys(patch).length > 0) {
-        await api.patch(`/products/${product._id}`, patch);
+        const validation = validerModificationProduit(patch);
+        if (!validation.success) {
+          setError(validation.message);
+          return;
+        }
+        await api.patch(`/products/${product._id}`, validation.data);
       }
 
       /*
@@ -350,7 +360,7 @@ export function EditPanel({
       }
       onSaved("Produit enregistré");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erreur d'enregistrement");
+      setError(erreurEnregistrementProduit(e, { optionGroups: groups, variants }));
     } finally {
       setBusy(false);
     }
@@ -711,7 +721,7 @@ export function EditPanel({
       )}
 
       {error && (
-        <p role="alert" className="mt-2.5 text-xs text-alertt">
+        <p role="alert" className="mt-2.5 whitespace-pre-line text-xs text-alertt">
           {error}
         </p>
       )}

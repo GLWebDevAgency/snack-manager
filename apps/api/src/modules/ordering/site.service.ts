@@ -4,21 +4,17 @@ import { Model, Types } from 'mongoose';
 import {
   aLaCapacite,
   brandColorDe,
-  catalogueMedias,
   logoUrlDe,
-  mediasDuProduit,
-  photoUrlDe,
   publicOrderingState,
   type MediaVue,
   type PublicSiteCategory,
-  type PublicSiteProduct,
   type PublicSiteResponse,
   type PublicSiteReview,
   type PublicSiteTenant,
 } from '@sm/contracts';
-import type { Category, Product, Review } from '@sm/db';
+import type { Review } from '@sm/db';
 import { marqueObservee } from '../../common/marque-observee';
-import { MediasService } from '../mediatheque/medias.service';
+import { MenuService } from '../menu/menu.service';
 import { horairesPublics } from '../tenants/horaires-publics';
 import { TenantsService } from '../tenants/tenants.service';
 import { SlotsService } from './slots.service';
@@ -67,12 +63,10 @@ export function tenantPublicDe(tenant: {
 @Injectable()
 export class SiteService {
   constructor(
-    @InjectModel('Category') private readonly categories: Model<Category>,
-    @InjectModel('Product') private readonly products: Model<Product>,
     @InjectModel('Review') private readonly reviews: Model<Review>,
     private readonly tenants: TenantsService,
     private readonly slots: SlotsService,
-    private readonly medias: MediasService,
+    private readonly menu: MenuService,
   ) {}
 
   async build(slug: string, date?: string): Promise<PublicSiteResponse> {
@@ -117,56 +111,34 @@ export class SiteService {
   }
 
   /**
-   * Menu public : catégories et produits actifs, ruptures signalées.
-   * Miroir de `MenuService.publicMenu` — ce service n'est pas exporté par
-   * `MenuModule`, la requête est donc reprise ici (cf. `issues`).
+   * Menu public : source métier commune au POS (actifs, règles, ingrédients,
+   * suppléments et prix). Le site ne fait que limiter les champs exposés et
+   * demander le cadrage « carte » ; aucune seconde lecture Mongo divergente.
    */
   private async publicMenu(
     tenantId: string,
   ): Promise<{ menu: { categories: PublicSiteCategory[] }; medias: MediaVue[] }> {
-    const [cats, prods, medias] = await Promise.all([
-      this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
-      this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
-      this.medias.catalogue(tenantId),
-    ]);
-    // L'usage « carte » : la vitrine présente ses plats en grille 4:3, et c'est
-    // la seule décision de recadrage que le serveur prend pour elle.
-    const catalogue = catalogueMedias(medias);
-
-    const byCategory = new Map<string, PublicSiteProduct[]>();
-    for (const p of prods) {
-      const key = String(p.categoryId ?? '');
-      if (!key) continue; // produit « Non rattaché » : jamais exposé au client
-      const list = byCategory.get(key) ?? [];
-      list.push({
-        _id: String(p._id),
-        name: String(p.name ?? ''),
-        description: String(p.description ?? ''),
-        price: Number(p.price ?? 0),
-        variants: (p.variants ?? []).map((v) => ({
-          key: String(v.key ?? ''),
-          name: String(v.name ?? ''),
-          price: Number(v.price ?? 0),
-        })),
-        optionGroups: (p.optionGroups ?? []) as unknown[],
-        removables: (p.removables ?? []).map(String),
-        tags: (p.tags ?? []).map(String),
-        isNew: p.isNew === true,
-        outOfStock: p.outOfStock === true,
-        // DÉRIVÉ de `medias[0]`, jamais la colonne lue — `photoUrlDe` est le
-        // seul adaptateur, et il retombe sur la chaîne héritée du pilote.
-        photoUrl: photoUrlDe(p, catalogue, 'carte'),
-        medias: mediasDuProduit(p),
-      });
-      byCategory.set(key, list);
-    }
-
+    const { categories, medias } = await this.menu.publicMenu(tenantId, 'carte');
     return {
       menu: {
-        categories: cats.map((c) => ({
+        categories: categories.map((c) => ({
           _id: String(c._id),
           name: String(c.name ?? ''),
-          products: byCategory.get(String(c._id)) ?? [],
+          products: c.products.map((p) => ({
+            _id: String(p._id),
+            name: String(p.name ?? ''),
+            description: String(p.description ?? ''),
+            price: Number(p.price ?? 0),
+            variants: (p.variants ?? []).map((v) => ({ key: String(v.key ?? ''), name: String(v.name ?? ''), price: Number(v.price ?? 0) })),
+            optionGroups: p.optionGroups,
+            removables: p.removables,
+            supplements: p.supplements,
+            tags: (p.tags ?? []).map(String),
+            isNew: p.isNew === true,
+            outOfStock: p.outOfStock === true,
+            photoUrl: p.photoUrl,
+            medias: p.medias,
+          })),
         })),
       },
       medias,

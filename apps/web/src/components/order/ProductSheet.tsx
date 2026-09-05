@@ -31,15 +31,15 @@ import {
   draftBlocker,
   draftToLine,
   draftUnitPrice,
+  effectiveGroups,
   groupRules,
   setVariant,
+  SUPPLEMENT_GROUP,
   toggleChoice,
   type CartLine,
   type Draft,
 } from "./cart";
 import { euros } from "./helpers";
-/** Groupe réservé : c'est le serveur qui fait foi sur le prix d'un supplément. */
-const SUPPLEMENT_GROUP = "supplements";
 import {
   Badge,
   OptionChip,
@@ -108,7 +108,7 @@ export function ProductSheet({
   const groups = useMemo(() => {
     if (!current) return { choice: [], free: [], extra: [] };
     const bucket: Record<GroupKind, MenuGroup[]> = { choice: [], free: [], extra: [] };
-    for (const group of current.product.groups) {
+    for (const group of effectiveGroups(current.product)) {
       if (isMuted(group, current.variantKey)) continue;
       bucket[kindOf(group, current.variantKey)].push(group);
     }
@@ -493,7 +493,7 @@ function GroupSection({
             return {
               key: choice.key,
               label: choice.name,
-              sub: price > 0 ? `+${euros(price)}` : undefined,
+              sub: price === 0 ? "Inclus" : `+${euros(price)}`,
             };
           })}
         />
@@ -504,15 +504,17 @@ function GroupSection({
         <div role="group" aria-labelledby={titreId} className="flex flex-wrap gap-2">
           {group.choices.map((choice) => {
             const on = picked.includes(choice.key);
+            const price = choicePrice(group, choice.key, draft.variantKey);
             return (
               <OptionChip
                 key={choice.key}
                 on={on}
                 disabled={!on && capped}
-                price={choicePrice(group, choice.key, draft.variantKey)}
+                price={price}
                 onClick={() => onChange(toggleChoice(draft, group, choice.key))}
               >
                 {choice.name}
+                {price === 0 && <span className="text-[12px] font-bold text-mut">Inclus</span>}
               </OptionChip>
             );
           })}
@@ -628,4 +630,3 @@ function ExtraGroup({
     </div>
   );
 }
-
