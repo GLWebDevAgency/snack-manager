@@ -11,6 +11,7 @@ import {
   type JwtPayload,
 } from '@sm/contracts';
 import { CurrentUser, Public, Roles, TenantId } from '../../common/auth';
+import { Fonction } from '../../common/capacites';
 import { zod } from '../../common/zod.pipe';
 import { TenantsService } from './tenants.service';
 
@@ -95,6 +96,7 @@ export class TenantsController {
    * FORME d'un créneau — `{ open: '25:99' }` y passait.
    */
   @Roles('owner', 'gerant')
+  @Fonction('hours')
   @Patch('tenants/me/hours')
   updateHours(
     @TenantId() tenantId: string,

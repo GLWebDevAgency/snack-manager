@@ -9,6 +9,7 @@ import { MenuController } from '../modules/menu/menu.controller';
 import { OrdersController } from '../modules/orders/orders.controller';
 import { EngageController } from '../modules/engage/engage.controller';
 import { OrderFinanceController } from '../modules/orders/order-finance.controller';
+import { TenantsController } from '../modules/tenants/tenants.controller';
 
 type ControllerType = { prototype: object };
 function context(controller: ControllerType, method: string, authenticated: boolean): ExecutionContext {
@@ -20,6 +21,16 @@ function context(controller: ControllerType, method: string, authenticated: bool
 }
 
 describe('commercial guard on real mixed controllers', () => {
+  it.each([['online'], ['pos']])('opens service hours for its subscribed operational module %s', async (capabilities) => {
+    const guard = new CapaciteGuard(new Reflector(), { pourTenant: async () => [capabilities] } as never);
+    await expect(guard.canActivate(context(TenantsController, 'updateHours', true))).resolves.toBe(true);
+  });
+
+  it('does not allow a loyalty-only owner to edit service hours by direct API access', async () => {
+    const guard = new CapaciteGuard(new Reflector(), { pourTenant: async () => ['loyalty'] } as never);
+    await expect(guard.canActivate(context(TenantsController, 'updateHours', true))).rejects.toThrow();
+    await expect(guard.canActivate(context(TenantsController, 'updateIdentity', true))).resolves.toBe(true);
+  });
   it.each([
     [DevicesController, 'pairDevice'], [DevicesController, 'pin'], [DevicesController, 'beat'],
     [ScreensController, 'pairDevice'], [ScreensController, 'fetchContent'], [ScreensController, 'beat'],

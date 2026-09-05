@@ -422,10 +422,13 @@ export const MOBILE_HREFS: readonly string[] = [
   "/admin/menu",
 ];
 
-/** Les cases directes de la barre basse, filtrées comme le reste. */
+/** Les fonctions utilisées passent avant les propositions commerciales sous le pouce. */
 export function barreMobile(ctx: ContexteNav): readonly NavItemAffiche[] {
-  return MOBILE_HREFS.map((href) => NAV.find((n) => n.href === href)!)
-    .filter((item) => estVisible(item, ctx))
+  if (ctx.suspendu) return [];
+  const priorites = MOBILE_HREFS.map((href) => NAV.find((n) => n.href === href)!);
+  return [...priorites, ...NAV.filter((item) => !MOBILE_HREFS.includes(item.href))]
+    .filter((item) => estVisible(item, ctx) && !estVerrouille(item, ctx))
+    .slice(0, 3)
     .map((item) => affiche(item, ctx));
 }
 
@@ -437,10 +440,11 @@ export function barreMobile(ctx: ContexteNav): readonly NavItemAffiche[] {
  * disparaissent.
  */
 export function groupesMobileRestants(ctx: ContexteNav): readonly NavGroupeAffiche[] {
+  const directs = new Set(barreMobile(ctx).map((item) => item.href));
   return groupesVisibles(ctx)
     .map((g) => ({
       titre: g.titre,
-      items: g.items.filter((item) => !MOBILE_HREFS.includes(item.href)),
+      items: g.items.filter((item) => !directs.has(item.href)),
     }))
     .filter((g) => g.items.length > 0);
 }

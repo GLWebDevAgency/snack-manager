@@ -76,6 +76,18 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   ready: "delivered",
 };
 
+/** Aide d'interface ; l'API reste l'autorité sur le paiement, le rôle et le départ. */
+export function canAdvanceOrder(order: {
+  status: OrderStatus; type: OrderType; payment: { status: PaymentStatus };
+  delivery?: { dispatchedAt?: string | null } | null;
+}, role: string | null): boolean {
+  if (!NEXT_STATUS[order.status] || order.payment.status === "refunded") return false;
+  if (order.type !== "delivery") return true;
+  if (order.payment.status !== "paid") return false;
+  return order.status !== "ready" || Boolean(order.delivery?.dispatchedAt)
+    || ["owner", "gerant", "cogerant", "caisse"].includes(role ?? "");
+}
+
 /** Libellé du bouton d'avancement selon le statut courant (spec §6.2) — toujours un verbe. */
 export const ADVANCE_LABELS: Partial<Record<OrderStatus, string>> = {
   new: "Accepter",

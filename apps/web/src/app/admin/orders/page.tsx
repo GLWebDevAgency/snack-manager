@@ -34,6 +34,7 @@ import {
   NEXT_STATUS,
   customerName,
   isPaid,
+  canAdvanceOrder,
   linesSummary,
   searchKey,
   shortId,
@@ -338,7 +339,7 @@ export default function OrdersPage() {
 
   async function advance(o: Order) {
     const next = NEXT_STATUS[o.status];
-    if (!next || pending.has(o._id)) return;
+    if (!next || !canAdvanceOrder(o, role) || pending.has(o._id)) return;
     if (o.type === "delivery" && o.status === "ready" && !o.delivery?.dispatchedAt) {
       setDispatchTarget(o);
       return;
@@ -630,8 +631,7 @@ export default function OrdersPage() {
                     <Btn
                       variant="ink"
                       size="sm"
-                      disabled={pending.has(o._id) || o.payment.status === "refunded" || (o.type === "delivery" &&
-                        (o.payment.status !== "paid" || (o.status === "ready" && !o.delivery?.dispatchedAt && !["owner", "gerant", "caisse"].includes(role ?? ""))))}
+                      disabled={pending.has(o._id) || !canAdvanceOrder(o, role)}
                       className="max-lg:min-h-11 max-lg:px-5"
                       onClick={(e) => {
                         e.stopPropagation();

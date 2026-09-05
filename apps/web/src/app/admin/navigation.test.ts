@@ -99,6 +99,18 @@ describe("navigation du back-office restaurateur", () => {
     ]);
   });
 
+  it.each([
+    { capacites: ['loyalty'] as Capacite[], directs: ['/admin/fidelite', '/admin/promos', '/admin/site'] },
+    { capacites: [] as Capacite[], directs: ['/admin/site', '/admin/settings', HREF_ABONNEMENT] },
+  ])("met les fonctions de l'offre autonome sous le pouce sans perdre les autres", ({ capacites, directs }) => {
+    const context = { ...OWNER, capacites };
+    expect(barreMobile(context).map((item) => item.href)).toEqual(directs);
+    expect(barreMobile(context).every((item) => !item.verrouille)).toBe(true);
+    const routes = [...directs, ...hrefs(groupesMobileRestants(context))];
+    expect(new Set(routes)).toEqual(new Set(NAV.map((item) => item.href)));
+    expect(routes).toHaveLength(NAV.length);
+  });
+
   /**
    * LE DÉFAUT D'ORIGINE, ET LE SEUL QUE LE CODE PEUT SURVEILLER SEUL : onze
    * écrans livrés n'avaient aucun lien entrant, et les paramètres n'étaient
