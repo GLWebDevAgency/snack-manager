@@ -66,19 +66,34 @@ scenario(
       // ── 2 · Le worker est prêt, et la coquille EST sur l'appareil : la page,
       //        et au moins un de ses scripts — c'est le signal que l'installation
       //        a fini de précacher, pas un délai deviné. ──
-      await page.waitForFunction(
-        async () => {
-          if (!('serviceWorker' in navigator)) return false;
-          const registration = await navigator.serviceWorker.getRegistration('/board');
-          if (!registration || !registration.active || !navigator.serviceWorker.controller) return false;
-          const cache = await caches.open('sm-board:v1');
-          if (!(await cache.match('/board/display'))) return false;
-          const cles = (await cache.keys()).map((r) => new URL(r.url).pathname);
-          return cles.some((p) => p.startsWith('/_next/static/chunks/') && p.endsWith('.js'));
-        },
-        undefined,
-        { timeout: 60_000 },
-      );
+      // Une fonction ASYNCHRONE rend une promesse, que `waitForFunction` tient
+      // pour vraie au premier tour : l'état est donc calculé côté page, en
+      // boucle, et c'est un booléen qu'on attend.
+      await page.evaluate(() => {
+        const etat = { pret: false, medias: 0 };
+        window.__smAutonomie = etat;
+        const mesurer = async () => {
+          try {
+            const registration = await navigator.serviceWorker.getRegistration('/board');
+            const active = registration?.active;
+            const coquille = await caches.open('sm-board:v1');
+            const cles = (await coquille.keys()).map((r) => new URL(r.url).pathname);
+            etat.medias = (await (await caches.open('sm-board:media:v1')).keys()).length;
+            etat.pret =
+              Boolean(active) &&
+              active.state === 'activated' &&
+              Boolean(navigator.serviceWorker.controller) &&
+              Boolean(await coquille.match('/board/display')) &&
+              cles.some((p) => p.startsWith('/_next/static/chunks/') && p.endsWith('.js')) &&
+              etat.medias > 0;
+          } catch {
+            etat.pret = false;
+          }
+          if (!etat.pret) setTimeout(mesurer, 300);
+        };
+        void mesurer();
+      });
+      await page.waitForFunction(() => window.__smAutonomie?.pret === true, undefined, { timeout: 90_000 });
       const medias = await page.evaluate(async () => (await (await caches.open('sm-board:media:v1')).keys()).length);
       console.log(`   ↳ ${medias} média(s) précaché(s)`);
 
