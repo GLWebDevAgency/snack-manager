@@ -20,11 +20,12 @@ function setup(type: OrderType, status: OrderStatus = 'ready') {
     _id: ORDER, tenantId: TENANT, type, status,
     statusHistory: [] as { status: OrderStatus; at: Date; by: string }[],
     payment: { status: type === 'delivery' ? 'paid' : 'pending', method: 'counter' },
+    paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null },
     delivery: type === 'delivery' ? { dispatchedAt: new Date(), deliveredAt: null as Date | null } : null,
     save: vi.fn(async () => undefined), toObject: () => ({ _id: ORDER, status: order.status }),
   };
   const service = new OrdersService({} as never, {} as never, {} as never, {} as never,
-    { publish } as never, {} as never, {} as never, { pourTenant: async () => ['bo'] } as never);
+    { publish } as never, {} as never, {} as never, { pourTenant: async () => ['bo'] } as never, {} as never);
   const read = vi.spyOn(service, 'byId').mockResolvedValue(order as never);
   return { service, order, read, publish };
 }

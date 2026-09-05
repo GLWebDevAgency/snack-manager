@@ -168,7 +168,7 @@ export class OrderRefundsService {
       _id: order._id, tenantId: order.tenantId,
       'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
       'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
-    }, { $inc: { 'payment.refundSyncVersion': 1 } }, { new: true }).lean();
+    }, { $inc: { 'payment.refundSyncVersion': 1, __v: 1 } }, { new: true }).lean();
     if (!reserved) throw new ConflictException('Paiement modifié, actualisez la commande.');
     const version = (reserved as RefundOrder).payment.refundSyncVersion;
     const rows = await this.allRefunds(client, order);
@@ -184,10 +184,13 @@ export class OrderRefundsService {
     if (summary.refundedCents >= order.totals.total && order.totals.total > 0) set['payment.status'] = 'refunded';
     else if (reserved.payment.status === 'refunded') set['payment.status'] = 'paid';
     const updated = await this.orders.findOneAndUpdate({
-      _id: order._id, 'payment.refundSyncVersion': version,
-    }, { $set: set }, { new: true }).lean();
+      _id: order._id, tenantId: order.tenantId, 'payment.refundSyncVersion': version,
+      'payment.stripePaymentIntentId': order.payment.stripePaymentIntentId,
+      'payment.stripeAccountId': order.payment.stripeAccountId ?? null,
+    }, { $set: set, $inc: { __v: 1 } }, { new: true }).lean();
     if (updated) {
       const payload = { ...updated } as Record<string, unknown>;
+      delete payload.paymentFlow;
       for (const key of Object.keys(payload)) if (key.startsWith('loyalty')) delete payload[key];
       await publishRedisBestEffort(this.redis, ordersChannel(String(order.tenantId)), JSON.stringify({ event: WS_EVENTS.orderUpdated, payload }));
     }

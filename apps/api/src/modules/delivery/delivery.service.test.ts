@@ -7,7 +7,7 @@ const actor = { sub: 'owner', tenantId, role: 'owner' } as JwtPayload;
 function setup(over: Record<string, unknown> = {}) {
   const row = { _id: 'order', tenantId, type: 'delivery', status: 'ready', payment: { status: 'paid' }, delivery: { dispatchedAt: null }, ...over };
   const updated = { ...row, toJSON: () => ({ ...row, delivery: { dispatchedAt: '2026-09-05T10:00:00Z' } }) };
-  const orders = { findOne: vi.fn().mockResolvedValue(row), findOneAndUpdate: vi.fn().mockResolvedValue(updated) };
+  const orders = { findOne: vi.fn(() => ({ select: vi.fn().mockResolvedValue(row) })), findOneAndUpdate: vi.fn().mockResolvedValue(updated) };
   const audit = { log: vi.fn().mockResolvedValue(undefined) };
   const redis = { publish: vi.fn().mockResolvedValue(1) };
   const tenants = { findById: vi.fn(() => ({ lean: vi.fn().mockResolvedValue({ onlineDelivery: true }) })) };
@@ -26,7 +26,7 @@ describe('départ du livreur', () => {
   it('compare les préconditions lors de la mutation et incrémente la version contre l’annulation concurrente', async () => {
     const ctx = setup();
     await ctx.service.dispatch(tenantId, 'order', { driverName: 'Nadia' }, actor);
-    expect(ctx.orders.findOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ tenantId, channel: 'online', type: 'delivery', status: 'ready', 'payment.status': 'paid', 'delivery.dispatchedAt': null }), expect.objectContaining({ $inc: { __v: 1 }, $set: expect.objectContaining({ 'delivery.driverName': 'Nadia' }) }), expect.any(Object));
+    expect(ctx.orders.findOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ tenantId, channel: 'online', type: 'delivery', status: 'ready', 'payment.status': 'paid', 'delivery.dispatchedAt': null, 'paymentFlow.phase': { $nin: ['closing', 'closed', 'review_required'] } }), expect.objectContaining({ $inc: { __v: 1 }, $set: expect.objectContaining({ 'delivery.driverName': 'Nadia' }) }), expect.any(Object));
     expect(ctx.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'order.dispatch', actor }));
     expect(ctx.redis.publish).toHaveBeenCalledOnce();
   });
@@ -35,5 +35,18 @@ describe('départ du livreur', () => {
     await expect(ctx.service.dispatch(tenantId, 'order', { driverName: 'Autre' }, actor)).resolves.toBe(ctx.row);
     expect(ctx.orders.findOneAndUpdate).not.toHaveBeenCalled();
     expect(ctx.audit.log).not.toHaveBeenCalled();
+  });
+  it.each(['closing', 'closed', 'review_required'])('refuse un départ pendant %s même si le paiement local indique payé', async (phase) => {
+    const ctx = setup({ paymentFlow: { phase } });
+    await expect(ctx.service.dispatch(tenantId, 'order', {}, actor)).rejects.toThrow(/paiement/i);
+    expect(ctx.orders.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(ctx.audit.log).not.toHaveBeenCalled();
+  });
+  it('échoue sans publication si une fermeture gagne le CAS avant le départ', async () => {
+    const ctx = setup();
+    ctx.orders.findOneAndUpdate.mockResolvedValueOnce(null as never);
+    await expect(ctx.service.dispatch(tenantId, 'order', {}, actor)).rejects.toThrow(/parallèle/i);
+    expect(ctx.audit.log).not.toHaveBeenCalled();
+    expect(ctx.redis.publish).not.toHaveBeenCalled();
   });
 });

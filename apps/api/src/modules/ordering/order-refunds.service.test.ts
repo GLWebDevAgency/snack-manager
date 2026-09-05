@@ -11,6 +11,7 @@ const ACCOUNT = 'acct_restaurant';
 const OPERATION = 'e404fe33-f766-471e-a6c0-36541d0b1e53';
 const body = { password: 'not-stored', amountCents: 250, reason: 'Produit indisponible', operationId: OPERATION };
 type Row = {
+  __v: number;
   _id: string; tenantId: string; channel: string; totals: { total: number };
   payment: { status: string; stripePaymentIntentId: string; stripeAccountId: string; refundSyncVersion: number; [key: string]: unknown };
 };
@@ -23,7 +24,7 @@ const get = (object: object, path: string): unknown => path.split('.').reduce<un
 const matches = (filter: Record<string, unknown>) => Object.entries(filter).every(([key, value]) => get(row, key) === value);
 
 beforeEach(() => {
-  row = { _id: ID, tenantId: TENANT, channel: 'online', totals: { total: 1250 }, payment: { status: 'paid', stripePaymentIntentId: 'pi_paid', stripeAccountId: ACCOUNT, refundSyncVersion: 0 } };
+  row = { __v: 0, _id: ID, tenantId: TENANT, channel: 'online', totals: { total: 1250 }, payment: { status: 'paid', stripePaymentIntentId: 'pi_paid', stripeAccountId: ACCOUNT, refundSyncVersion: 0 } };
   capabilities = ['bo'];
   provider = [];
   const model = {
@@ -31,7 +32,10 @@ beforeEach(() => {
     findOneAndUpdate: (filter: Record<string, unknown>, update: { $set?: Record<string, unknown>; $inc?: Record<string, number> }) => ({ lean: async () => {
       if (!matches(filter)) return null;
       for (const [key, value] of Object.entries(update.$set ?? {})) row.payment[key.replace('payment.', '')] = value;
-      for (const [key, value] of Object.entries(update.$inc ?? {})) row.payment[key.replace('payment.', '')] = Number(get(row, key) ?? 0) + value;
+      for (const [key, value] of Object.entries(update.$inc ?? {})) {
+        if (key === '__v') row.__v += value;
+        else row.payment[key.replace('payment.', '')] = Number(get(row, key) ?? 0) + value;
+      }
       return structuredClone(row);
     } }),
   } as unknown as Model<Order>;
@@ -50,6 +54,14 @@ beforeEach(() => {
 });
 
 describe('restaurant refunds', () => {
+  it('fence les documents hydratés avant réservation ET avant projection du remboursement', async () => {
+    vi.mocked(stripe.refunds.list).mockImplementationOnce(async () => {
+      expect(row.__v).toBe(1);
+      return { data: [], has_more: false };
+    });
+    await sut.summary(TENANT, ID);
+    expect(row.__v).toBe(2);
+  });
   it('uses the original connected account and amount in cents', async () => {
     expect(await sut.request(TENANT, ID, 'owner1', body)).toMatchObject({ status: 'partial', refundedCents: 250, remainingCents: 1000 });
     expect(stripe.refunds.create).toHaveBeenCalledWith(expect.objectContaining({ payment_intent: 'pi_paid', amount: 250 }), {

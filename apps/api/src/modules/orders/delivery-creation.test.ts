@@ -18,7 +18,7 @@ const request = CreateOrderSchema.parse({
   delivery: { address: { line1: '12 rue des Fleurs', postalCode: '69001', city: 'Lyon', country: 'FR' } },
 });
 
-function setup(discount = 0) {
+function setup(discount = 0, capabilities = ['online', 'delivery']) {
   const existing = { trackingToken: 'existing-secret' };
   const orders = {
     findOne: vi.fn().mockResolvedValue(null),
@@ -33,11 +33,21 @@ function setup(discount = 0) {
   const counters = { findOneAndUpdate: vi.fn().mockResolvedValue({ seq: 12 }) };
   const tenants = { findById: vi.fn(() => ({ lean: async () => tenant })) };
   const redis = { publish: vi.fn().mockResolvedValue(1) };
-  const service = new OrdersService(orders as never, products as never, counters as never, promotions as never, redis as never, {} as never, tenants as never, { pourTenant: async () => ['online', 'delivery'] } as never);
+  const service = new OrdersService(orders as never, products as never, counters as never, promotions as never, redis as never, {} as never, tenants as never, { pourTenant: async () => capabilities } as never, {} as never);
   return { service, orders, products, promotions, counters, tenants, redis, existing };
 }
 
 describe('création livraison : prix, promotion et compensation', () => {
+  it.each(['online', 'pos', 'phone'] as const)('prouve l’absence de tentative dès la création %s sans exposer le protocole au temps réel', async (channel) => {
+    const ctx = setup(0, ['bo']);
+    const dto = CreateOrderSchema.parse({ ...request, channel, type: 'pickup', delivery: undefined });
+    await ctx.service.createWithOutcome(tenantId, dto, 'client');
+    expect(ctx.orders.create).toHaveBeenCalledWith(expect.objectContaining({
+      channel, paymentFlow: expect.objectContaining({ origin: 'created_v1', phase: 'open', attempt: null }),
+    }));
+    expect(ctx.redis.publish).toHaveBeenCalledOnce();
+    expect(JSON.parse(ctx.redis.publish.mock.calls[0]![1] as string).payload).not.toHaveProperty('paymentFlow');
+  });
   it('fige les frais serveur après promotion sans les inclure dans la remise', async () => {
     const ctx = setup(200);
     const result = await ctx.service.createWithOutcome(tenantId, request, 'client');
@@ -46,6 +56,7 @@ describe('création livraison : prix, promotion et compensation', () => {
       type: 'delivery', channel: 'online',
       totals: { subtotal: 2000, discount: { amount: 200, reason: 'Bienvenue', promotionId: 'promo' }, deliveryFee: 250, total: 2050 },
       payment: expect.objectContaining({ method: 'online', status: 'pending' }),
+      paymentFlow: expect.objectContaining({ version: 1, origin: 'created_v1', phase: 'open', attempt: null }),
       delivery: expect.objectContaining({ address: request.delivery?.address, feeCents: 250, zoneId: 'centre', dispatchedAt: null }),
     }));
     expect(ctx.promotions.updateOne).not.toHaveBeenCalled();
@@ -75,6 +86,8 @@ describe('création livraison : prix, promotion et compensation', () => {
     expect(ctx.products.find).not.toHaveBeenCalled();
     expect(ctx.promotions.findOneAndUpdate).not.toHaveBeenCalled();
     expect(ctx.tenants.findById).not.toHaveBeenCalled();
+    expect(ctx.orders.create).not.toHaveBeenCalled();
+    expect(ctx.existing).not.toHaveProperty('paymentFlow');
   });
 
   it('une course sur clientId récupère la gagnante et rend la promotion perdante', async () => {

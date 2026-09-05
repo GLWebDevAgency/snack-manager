@@ -36,6 +36,7 @@ function build(subtotal = 10_000, status = 'new') {
     status,
     totals: { subtotal, discount: null as unknown, total: subtotal },
     payment: { status: 'pending', stripePaymentIntentId: null as string | null },
+    paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null },
     save: async () => {},
     toObject: () => ({}),
   };
@@ -48,6 +49,7 @@ function build(subtotal = 10_000, status = 'new') {
     { log: async (l: Record<string, unknown>) => void enregistre.push(l) } as never,
     {} as never,
     { pourTenant: async () => ["bo"] } as never,
+    {} as never,
   );
   // `byId` lit la commande par une autre voie que `findOne().lean()` : on la
   // court-circuite pour que le test porte sur la RÈGLE, pas sur l'accès Mongo.

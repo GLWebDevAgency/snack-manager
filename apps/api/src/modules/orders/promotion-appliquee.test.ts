@@ -102,6 +102,7 @@ function build(
     { record: async () => {} } as never,
     {} as never,
     { pourTenant: async () => ["bo"] } as never,
+    {} as never,
   );
   return { service, created, incremente, rendu, published };
 }
@@ -356,6 +357,7 @@ describe('la liste des commandes du service', () => {
       { log: async () => {} } as never,
       {} as never,
       { pourTenant: async () => ["bo"] } as never,
+      {} as never,
     );
   }
 
@@ -375,12 +377,9 @@ describe('la liste des commandes du service', () => {
 /**
  * UNE COMMANDE REMISE A FORCÉMENT ÉTÉ RÉGLÉE.
  *
- * Le filet qui solde le paiement à la remise ne visait que `method: 'counter'`,
- * et ratait donc le cas le plus fréquent des ennuis de paiement en ligne : le
- * client choisit la carte, la commande naît en `online`, Stripe ne se charge
- * pas (bloqueur, réseau d'entreprise) ou le client renonce et règle au
- * comptoir. Son paiement restait « en attente » POUR TOUJOURS, et le montant
- * grossissait indéfiniment la ligne « à encaisser au retrait » de chaque Z.
+ * Un règlement comptoir peut solder le retrait seulement si la preuve privée
+ * confirme qu'aucune tentative bancaire n'a commencé. Un ancien document ou
+ * une tentative engagée ne sont jamais assimilés à un simple abandon du web.
  */
 describe('le paiement soldé à la remise', () => {
   function commandeEn(method: string, statut: string) {
@@ -389,6 +388,7 @@ describe('le paiement soldé à la remise', () => {
       status: 'ready',
       statusHistory: [],
       payment: { method, status: statut, tender: null },
+      paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null },
       totals: { subtotal: 1_000, total: 1_000 },
       save: async () => {},
       toObject: () => ({}),
@@ -402,12 +402,13 @@ describe('le paiement soldé à la remise', () => {
       { log: async () => {} } as never,
       {} as never,
       { pourTenant: async () => ["bo"] } as never,
+      {} as never,
     );
     (service as unknown as { byId: () => Promise<unknown> }).byId = async () => doc;
     return { service, doc };
   }
 
-  it('solde une commande EN LIGNE dont le paiement a échoué', async () => {
+  it('solde une commande EN LIGNE qui n’a jamais lancé de tentative bancaire', async () => {
     const { service, doc } = commandeEn('online', 'pending');
     await service.updateStatus(TENANT, 'o1', 'delivered', {
       sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',

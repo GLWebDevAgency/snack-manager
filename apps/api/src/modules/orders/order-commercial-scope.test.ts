@@ -10,8 +10,8 @@ function setup(capabilities: string[], channel = 'online') {
   const row = { _id: ID, tenantId: TENANT, channel, status: 'new', number: 1,
     totals: { total: 1250 }, payment: { status: 'pending' }, statusHistory: [] as unknown[],
     save: vi.fn(async () => undefined), toObject: () => ({ _id: ID, channel }) };
-  const findOne = vi.fn(async (filter: Record<string, unknown>) =>
-    Object.entries(filter).every(([key, value]) => (row as Record<string, unknown>)[key] === value) ? row : null);
+  const findOne = vi.fn((filter: Record<string, unknown>) => ({ select: async () =>
+    Object.entries(filter).every(([key, value]) => (row as Record<string, unknown>)[key] === value) ? row : null }));
   const find = vi.fn(() => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }));
   const countDocuments = vi.fn(async () => 0);
   const audit = { log: vi.fn(async (_entry: unknown) => undefined) };
@@ -19,6 +19,7 @@ function setup(capabilities: string[], channel = 'online') {
     { findOne, find, countDocuments } as never, {} as never, {} as never, {} as never,
     { publish: vi.fn(async () => 1) } as never, audit as never, {} as never,
     { pourTenant: async () => capabilities } as never,
+    { cancelOrder: async () => { row.status = 'cancelled'; } } as never,
   );
   return { service, row, findOne, find, countDocuments, audit };
 }

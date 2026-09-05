@@ -59,6 +59,7 @@ function trackingService() {
     {} as never,
     {} as never,
     { pourTenant: async () => ["bo"] } as never,
+    {} as never,
   );
 }
 

@@ -33,6 +33,7 @@ import { newTrackingToken, trackingFilter } from './tracking';
 import { CapacitesService } from '../../common/capacites';
 import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
+import { PaymentsService } from '../ordering/payments.service';
 
 /**
  * Le document Mongo → la règle que le domaine sait lire.
@@ -86,6 +87,7 @@ export class OrdersService {
     private readonly audit: AuditService,
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     private readonly capacites: CapacitesService,
+    private readonly payments: PaymentsService,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
@@ -123,6 +125,7 @@ export class OrdersService {
     delete payload.loyaltyEarnCompletedAt;
     delete payload.loyaltyEarnNextAttemptAt;
     delete payload.loyaltyEarnLeaseUntil;
+    delete payload.paymentFlow;
     return payload;
   }
 
@@ -357,6 +360,8 @@ export class OrdersService {
         // 18 € se fait refuser « montant reçu insuffisant », et celui qui tend
         // 20 € repart sans son rendu monnaie.
         payment: resolvePayment(dto.channel, dto.payment, totalDu),
+        paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null,
+          providerStatus: null, providerCheckedAt: null, reviewReason: null },
         trackingToken: newTrackingToken(),
         status: 'new',
         statusHistory: [{ status: 'new', at: new Date(), by: actor }],
@@ -522,7 +527,7 @@ export class OrdersService {
   }
 
   async byId(tenantId: string, id: string) {
-    const order = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), _id: id });
+    const order = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), _id: id }).select('+paymentFlow');
     if (!order) throw new NotFoundException('Commande introuvable');
     return order;
   }
@@ -571,6 +576,9 @@ export class OrdersService {
    * KDS n'acquiert jamais le droit de confirmer une remise en la rejouant.
    */
   async updateStatus(tenantId: string, id: string, status: OrderStatus, actor: JwtPayload) {
+    if (status === 'cancelled') {
+      throw new ForbiddenException('Utilisez l’annulation avec confirmation pour fermer le paiement en sécurité.');
+    }
     if (actor.tenantId !== tenantId) {
       throw new ForbiddenException('Cette identité ne peut pas agir pour cet établissement.');
     }
@@ -583,6 +591,10 @@ export class OrdersService {
     if (ORDER_STATUS_RANK[status] < ORDER_STATUS_RANK[current]) return order;
     if (current === 'delivered' || current === 'cancelled') return order;
 
+    if (order.paymentFlow && ['closing', 'closed', 'review_required'].includes(order.paymentFlow.phase)) {
+      throw new ConflictException('Paiement en cours de fermeture ou à vérifier — actualisez la commande avant de continuer.');
+    }
+
     if (order.payment.status === 'refunded') throw new ConflictException('Cette commande a été remboursée.');
     if (order.type === 'delivery' && order.payment.status !== 'paid') {
       throw new ConflictException('Le paiement en ligne doit être confirmé avant la préparation de la livraison.');
@@ -590,6 +602,12 @@ export class OrdersService {
 
     if (status === 'delivered' && current !== 'ready') {
       throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
+    }
+    if (status === 'delivered' && order.payment.status === 'pending' && (
+      order.paymentFlow?.origin !== 'created_v1' || order.paymentFlow.phase !== 'open' ||
+      order.paymentFlow.attempt || order.payment.stripePaymentIntentId
+    )) {
+      throw new ConflictException('Le paiement en ligne doit être vérifié avant tout règlement au comptoir. Aucun encaissement ne sera supposé.');
     }
     if (order.type === 'delivery' && status === 'delivered') {
       if (!order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
@@ -600,19 +618,9 @@ export class OrdersService {
 
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor.sub });
-    // FILET : une commande REMISE a forcément été réglée.
-    //
-    // Il ne visait que `method: 'counter'`, et ratait donc le cas le plus
-    // fréquent des ennuis de paiement en ligne : le client choisit la carte, la
-    // commande naît en `method: 'online'`, Stripe ne se charge pas (bloqueur,
-    // réseau d'entreprise) ou le client renonce et règle au comptoir. Son
-    // paiement restait « en attente » POUR TOUJOURS — aucun geste du logiciel
-    // ne pouvait plus le solder, et le montant grossissait indéfiniment la
-    // ligne « à encaisser au retrait » de chaque Z.
-    //
-    // Un restaurant ne remet pas la marchandise sans être payé : la remise vaut
-    // donc encaissement, quel que soit le moyen annoncé au départ. Une commande
-    // déjà réglée garde son moyen et son horodatage — on ne la « repaie » pas.
+    // Le règlement comptoir implicite historique ne reste permis qu'avec une
+    // preuve persistée de l'absence de tentative bancaire. __v fait échouer ce
+    // save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
     if (status === 'delivered' && order.payment.status === 'pending') {
       order.payment.status = 'paid';
     }
@@ -626,12 +634,11 @@ export class OrdersService {
     if (actor.role !== 'owner' || actor.kind !== 'user' || actor.tenantId !== tenantId) {
       throw new ForbiddenException('Confirmation réservée au propriétaire.');
     }
+    // Cette lecture applique le périmètre commercial AVANT le service bancaire.
+    await this.byId(tenantId, id);
+    await this.payments.cancelOrder(id, tenantId, actor, reason);
     const order = await this.byId(tenantId, id);
-    if (order.status === 'delivered') throw new ConflictException('Commande déjà servie — passer par un remboursement');
-    if (order.status === 'cancelled') return order;
-    order.status = 'cancelled';
-    order.statusHistory.push({ status: 'cancelled', at: new Date(), by: actor.sub });
-    await this.saveWithoutLostUpdate(order);
+    if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
     await this.audit.log({ tenantId, actor, action: 'order.cancel', targetId: id,
       meta: { reason, number: order.number, total: order.totals.total, confirmation: 'owner-password' } });
     this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
@@ -646,13 +653,14 @@ export class OrdersService {
     reason: string,
   ) {
     const { staffId } = valideur;
-    const order = await this.byId(tenantId, id);
-    if (order.status === 'delivered') {
-      throw new ConflictException('Commande déjà servie — passer par un remboursement');
+    if (valideur.role === 'cuisine') {
+      throw new ForbiddenException('Ce code ne permet pas d’annuler une commande — demandez à la caisse ou au gérant.');
     }
-    order.status = 'cancelled';
-    order.statusHistory.push({ status: 'cancelled', at: new Date(), by: staffId });
-    await this.saveWithoutLostUpdate(order);
+    await this.byId(tenantId, id);
+    await this.payments.cancelOrder(id, tenantId,
+      { sub: staffId, tenantId, role: valideur.role, kind: 'staff' }, reason);
+    const order = await this.byId(tenantId, id);
+    if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
     await this.audit.log({
       tenantId,
       staffId,
@@ -694,7 +702,8 @@ export class OrdersService {
         'Commande clôturée — une remise doit être posée avant la remise au client',
       );
     }
-    if (order.payment?.stripePaymentIntentId) {
+    if (order.payment?.stripePaymentIntentId || order.paymentFlow?.origin !== 'created_v1' ||
+      order.paymentFlow.phase !== 'open' || order.paymentFlow.attempt) {
       throw new ConflictException('Le paiement en ligne a déjà été initié. Utilisez un remboursement après confirmation du paiement.');
     }
     if (amount > order.totals.subtotal) {

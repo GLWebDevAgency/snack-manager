@@ -62,6 +62,7 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnCompletedAt;
   delete returned.loyaltyEarnNextAttemptAt;
   delete returned.loyaltyEarnLeaseUntil;
+  delete returned.paymentFlow;
   return returned;
 }
 
@@ -1043,6 +1044,51 @@ export const OrderSchema = new Schema(
         { _id: false },
       ),
       required: true,
+    },
+    // Preuve privée persistée AVANT tout appel bancaire. Aucun défaut ne
+    // convertit une ancienne commande en preuve d'absence de PaymentIntent.
+    paymentFlow: {
+      type: new Schema({
+        version: { type: Number, enum: [1], required: true },
+        origin: { type: String, enum: ['created_v1', 'adopted_intent', 'legacy_unknown'], required: true },
+        phase: { type: String, enum: ['open', 'closing', 'closed', 'settled', 'review_required'], required: true },
+        attempt: {
+          type: new Schema({
+            id: { type: String, required: true },
+            accountId: { type: String, default: null },
+            environment: { type: String, enum: ['test', 'live'], required: true },
+            amountCents: { type: Number, min: 1, required: true, validate: Number.isSafeInteger },
+            currency: { type: String, enum: ['eur'], required: true },
+            idempotencyKey: { type: String, required: true },
+            metadata: {
+              type: new Schema({
+                orderId: { type: String, required: true },
+                tenantId: { type: String, required: true },
+                orderNumber: { type: String, required: true },
+              }, { _id: false }),
+              required: true,
+            },
+            preparedAt: { type: Date, required: true },
+            requestStartedAt: { type: Date, default: null },
+            recoveryUntil: { type: Date, required: true },
+          }, { _id: false }),
+          default: null,
+        },
+        close: {
+          type: new Schema({
+            operationId: { type: String, required: true },
+            reason: { type: String, required: true },
+            requestedBy: { type: String, required: true },
+            requestedAt: { type: Date, required: true },
+          }, { _id: false }),
+          default: null,
+        },
+        providerStatus: { type: String, default: null },
+        providerCheckedAt: { type: Date, default: null },
+        reviewReason: { type: String, default: null },
+      }, { _id: false }),
+      default: null,
+      select: false,
     },
     status: {
       type: String,

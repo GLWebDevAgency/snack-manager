@@ -185,5 +185,11 @@ jobs:
           BILLING_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_billing_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/crm/invoice-issuance.integration.test.ts
 
+      - name: Tests MongoDB réels — concurrence paiement et annulation
+        env:
+          # Faux provider uniquement ; base différente, suffixée par chaque run.
+          ORDER_PAYMENT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_payment_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/ordering/order-payment-lifecycle.integration.test.ts
+
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS

@@ -69,21 +69,25 @@ export class DeliveryService {
     const scope = orderAccessScope(capacitesEffectives(tenant));
     if (scope === 'none') throw new NotFoundException('Commande de livraison introuvable');
     const filter = { _id: id, tenantId, type: 'delivery', ...(scope === 'online' ? { channel: 'online' } : {}) };
-    const existing = await this.orders.findOne(filter);
+    const existing = await this.orders.findOne(filter).select('+paymentFlow');
     if (!existing) throw new NotFoundException('Commande de livraison introuvable');
     if (existing.delivery?.dispatchedAt) return existing;
+    if (existing.paymentFlow && ['closing', 'closed', 'review_required'].includes(existing.paymentFlow.phase)) {
+      throw new ConflictException('Paiement en cours de fermeture ou à vérifier — le livreur ne peut pas partir.');
+    }
     if (existing.status !== 'ready') throw new ConflictException('La commande doit être prête avant le départ du livreur.');
     if (existing.payment.status !== 'paid') throw new ConflictException('Le paiement doit être confirmé avant le départ du livreur.');
     const dispatchedAt = new Date();
     const updated = await this.orders.findOneAndUpdate({
       ...filter, status: 'ready',
       'payment.status': 'paid', 'delivery.dispatchedAt': null,
+      'paymentFlow.phase': { $nin: ['closing', 'closed', 'review_required'] },
     }, {
       $set: { 'delivery.dispatchedAt': dispatchedAt, 'delivery.driverName': input.driverName ?? null },
       $inc: { __v: 1 },
     }, { new: true, runValidators: true });
     if (!updated) {
-      const raced = await this.orders.findOne(filter);
+      const raced = await this.orders.findOne(filter).select('+paymentFlow');
       if (raced?.delivery?.dispatchedAt) return raced;
       throw new ConflictException('Commande modifiée en parallèle — actualisez puis recommencez.');
     }

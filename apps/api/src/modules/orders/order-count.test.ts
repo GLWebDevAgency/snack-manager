@@ -22,6 +22,7 @@ function serviceModel(total = 17) {
     { log: async () => undefined } as never,
     {} as never,
     { pourTenant: async () => ["bo"] } as never,
+    {} as never,
   );
   return { service, find, countDocuments };
 }
