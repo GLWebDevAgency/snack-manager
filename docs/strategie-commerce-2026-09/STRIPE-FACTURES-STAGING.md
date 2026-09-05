@@ -37,13 +37,15 @@ En local, Stripe CLI peut transférer ces événements vers l'endpoint API local
 
 ## Exploitation et limites explicites
 
-### Invariant de facturation — activation bloquée
+### Invariant de facturation — correctif logiciel, activation toujours fermée
 
-Une faille de concurrence préexistante reste identifiée dans `BillingService.issue()` : la recherche d'un abonnement pour le tenant et la période, puis sa création, ne constituent pas une opération atomique. Deux émissions simultanées peuvent donc créer deux factures distinctes pour la même échéance, chacune ensuite payable. L'index tenant/nature/période actuel n'est pas unique. Les tests Checkout ne ferment pas ce risque.
+La faille préexistante a été reproduite par un test : deux émissions simultanées créaient deux factures pour la même échéance. Le correctif remplace cette recherche/création par `InvoiceWriterService` : une réservation persistée à identifiant unique tenant/abonnement/période UTC, un identifiant de pièce et un instantané figés. Une annulation confirmée autorise le remplacement par comparaison atomique de l'ancienne génération. Plusieurs pièces actives historiques provoquent un incident explicite, pas un choix arbitraire.
 
-**Ne pas activer Checkout sur des factures réelles avant une réservation durable d'émission et son test de concurrence.** L'invariant métier est au plus un abonnement non annulé par tenant et période ; options et mises en place peuvent légitimement cohabiter, et une annulation autorise un remplacement. Aucun index unique n'est ajouté à l'historique non audité.
+L'invariant métier reste au plus un abonnement non annulé par tenant et période ; options, avoirs et mises en place peuvent légitimement cohabiter. Aucun index unique n'est ajouté à l'historique non audité. La création de factures de démonstration à la lecture est retirée, même avec `SM_DEMO_SEED=on` ; aucune facture déjà stockée n'est supprimée.
 
-Solution proposée, **non implémentée** : une collection de réservations distincte avec identifiant déterministe tenant/abonnement/période (unicité native de `_id`), identifiant de facture préalloué, instantané des montants/TVA/libellés et état. Réserver, numéroter et créer dans une transaction si le déploiement Mongo le permet ; sinon rattraper idempotemment la même facture préallouée avant toute nouvelle génération. Ne jamais libérer un bail expiré sans rapprochement : une facture a pu être créée juste avant la panne. Le remplacement après annulation nécessite un CAS explicite. Recette requise : deux émissions concurrentes, crash aux frontières d'écriture, rejouement et remplacement après annulation.
+`InvoiceNumberingService` conserve le numéro et la pièce en cours dans le même compteur annuel. Une autre instance peut achever l'insertion conditionnelle puis nettoyer cette réservation ; aucun décrément, expiration de bail ou réécriture d'une facture déjà réglée/annulée. Lectures primaires, écritures acquittées sur journal disque. Ce protocole fonctionne sur Mongo standalone, configuration observée sur staging, sans imposer un nouveau replica set. Le script historique de purge/remise à zéro est retiré pour ne pas invalider ces réservations.
+
+**Checkout reste désactivé avant recette et déploiement contrôlé.** Tous les anciens écrivains doivent être arrêtés avant les nouveaux : l'ancien code ignore les réservations et peut décrémenter le compteur. Les tests locaux, y compris Mongo réel, ne remplacent pas cette condition de mise en service, l'audit de l'historique ni la recette Stripe sandbox. Voir [procédure et limites de reprise](FACTURATION-EMISSION-DURABLE.md).
 
 La course distincte `send()` / annulation est corrigée dans ce lot : l'envoi ne réussit que si la pièce appartient toujours au même tenant et reste `brouillon` au moment de l'écriture. Le test empêche de ressusciter une facture annulée.
 

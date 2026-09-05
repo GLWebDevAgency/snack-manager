@@ -8,7 +8,7 @@ Audit en lecture seule via Stripe CLI et Railway. Aucune clé, donnée de carte,
 | --- | --- | --- |
 | Staging API | Clés secrète/publique de test présentes ; compte obtenu par la clé Railway identique à celui du CLI, nommé « Environnement de test Snack Manager » | Pas de mélange test/live observé pour ces deux clés. Leur présence ne prouve pas la recette. |
 | Compte plateforme de test | `charges_enabled=false`, `payouts_enabled=false`, `details_submitted=false` | Le paiement des factures sur la plateforme ne peut pas être déclaré prêt. Ne pas assimiler cet état à celui des restaurants Connect. |
-| Comptes connectés de test | Quatre comptes : trois avec exigences d'onboarding en retard et encaissement désactivé ; un avec encaissement/versements activés et aucune exigence actuellement due | Identifier celui réellement rattaché à Classfood avant toute intervention. Ne pas remplacer son rattachement par le compte fonctionnel arbitrairement. |
+| Comptes connectés de test | Quatre comptes : trois avec exigences d'onboarding en retard et encaissement désactivé ; un avec encaissement/versements activés et aucune exigence actuellement due | Classfood est rattaché à l'un des comptes non finalisés, pas au compte fonctionnel. Ne pas remplacer son rattachement arbitrairement. |
 | Webhooks test | Deux endpoints activés vers l'API staging : commandes historiques plateforme et Connect. Un ancien endpoint Connect identique est désactivé | Réutiliser les endpoints actifs ; conserver l'ancien désactivé tant que son historique n'a pas été rapproché. |
 | Événements Connect | `account.updated`, `account.application.deauthorized`, `payment_intent.succeeded`, `payment_intent.payment_failed` | Les événements de remboursement du nouveau code ne sont pas souscrits. |
 | Événements plateforme historiques | `payment_intent.succeeded`, `payment_intent.payment_failed` | Même complément de remboursements à prévoir si cet historique est concerné. |
@@ -18,6 +18,8 @@ Audit en lecture seule via Stripe CLI et Railway. Aucune clé, donnée de carte,
 | Accès Stripe live | CLI refuse : authentification live à reconfigurer | Catalogue, comptes, webhooks, versements et identité juridique live **non audités**. Reconnexion officielle requise ; aucune clé à coller dans une conversation. |
 
 L'URL des endpoints test est `https://api-staging-a5e8.up.railway.app/public/stripe/webhook`, avec suffixe `/connect` pour Connect. Les endpoints v1 listés n'imposent pas une version explicite (`api_version=null`) : contrôler la version effective du compte et la compatibilité SDK avant modification ; ne pas choisir une version ancienne par habitude.
+
+Complément de lecture ciblée : la projection `slug/name/encaissement` de Classfood en Mongo staging donne le compte `acct_1U90sl3ZvR0kqbr0`. Sa relecture Stripe avec la clé de test de l'API confirme les trois indicateurs désactivés et `requirements.past_due`. Aucun changement de rattachement ni acceptation de conditions n'a été réalisé. Le diagnostic Mongo `hello` retourne `setName=null`, `isWritablePrimary=true`, `msg=null` : aucune prise en charge de transactions multi-documents par replica set n'est établie sur cette cible.
 
 ## Ordre recommandé
 
