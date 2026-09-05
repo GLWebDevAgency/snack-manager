@@ -48,8 +48,10 @@ export function LiveStage({
   leaving,
   index,
   paused,
+  playbackVersion,
   onTogglePause,
   onGo,
+  onReplay,
   loading,
   error,
   stale,
@@ -61,8 +63,10 @@ export function LiveStage({
   leaving: ScreenScenePayload | null;
   index: number;
   paused: boolean;
+  playbackVersion: number;
   onTogglePause: () => void;
   onGo: (delta: number) => void;
+  onReplay: () => void;
   loading: boolean;
   error: string | null;
   stale: boolean;
@@ -93,6 +97,7 @@ export function LiveStage({
           stage={stage}
           embed
           paused={paused}
+          playbackVersion={playbackVersion}
           fallback={
             <div className="bd-layer" data-phase="in">
               <div className="bd-plate">
@@ -138,6 +143,10 @@ export function LiveStage({
           disabled={!current}
         />
         <Transport label="Scène suivante" icon="arrow" onClick={() => onGo(1)} disabled={total < 2} />
+        <Btn variant="ghost" size="sm" onClick={onReplay} disabled={!current}
+          aria-label="Rejouer cette scène" title="Rejouer l’animation depuis le début">
+          Rejouer
+        </Btn>
         <div className="min-w-0 flex-1 pl-1 text-[13px] text-mut">
           {current ? (
             <>

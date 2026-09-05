@@ -22,7 +22,10 @@ export function ApercuEcransTV({ brand }: { brand: Brand }) {
   const { content, loading, stale, error, retry } = useScreenPreview({
     screenId: null, scenography, orientation, theme: "brand", presentation, service, brandDraft: brand,
   });
-  const { current, leaving, index, go } = useSceneRotation(content?.scenes ?? EMPTY_SCENES, { paused });
+  const { current, leaving, index, go, replay, playbackVersion } = useSceneRotation(content?.scenes ?? EMPTY_SCENES, {
+    paused,
+    playbackKey: content ? `${content.scenography ?? "ardoise"}:${content.orientation}` : undefined,
+  });
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <p className="rounded-ctrl border border-line2 bg-surface2 px-3 py-2.5 text-xs leading-relaxed text-mut">
@@ -48,6 +51,7 @@ export function ApercuEcransTV({ brand }: { brand: Brand }) {
         </Field>
       </div>
       <LiveStage content={content} current={current} leaving={leaving} index={index} paused={paused}
+        playbackVersion={playbackVersion} onReplay={replay}
         onTogglePause={() => setPaused((value) => !value)} onGo={go} loading={loading} stale={stale}
         error={error} onRetry={retry} previewService={service} />
       <details className="rounded-ctrl border border-line2 p-3">
