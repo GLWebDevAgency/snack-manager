@@ -226,11 +226,16 @@ export function PlaylistDrawer({
             : l&apos;écran enchaîne les scènes de haut en bas, puis recommence
             indéfiniment.
           </p>
+          <p className="mt-2 text-xs leading-relaxed text-mut">
+            Les catégories longues occupent plusieurs pages. Les produits mis en
+            avant ajoutent une scène après leur catégorie : la durée de diffusion
+            peut donc dépasser la durée configurée ici.
+          </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-line2 pt-2.5">
             <Pill variant="out">
               {draft.length} scène{draft.length > 1 ? "s" : ""}
             </Pill>
-            <Pill variant="out">Boucle de {fmtLoop(loopMs(draft))}</Pill>
+            <Pill variant="out">Durée configurée : {fmtLoop(loopMs(draft))}</Pill>
           </div>
         </div>
 
