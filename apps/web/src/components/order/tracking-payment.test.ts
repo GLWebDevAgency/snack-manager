@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { DIRECTIONS } from "@sm/contracts";
+import { DIRECTIONS, type OrderTicket } from "@sm/contracts";
 import type { TrackingState } from "./api";
 import { Tracking } from "./Tracking";
 
@@ -15,12 +15,46 @@ const pending: TrackingState = {
   payment: { status: "pending", method: "online", refundedCents: 0, pendingRefundCents: 0 },
 };
 
-function render(overrides: Partial<TrackingState> = {}) {
+function render(overrides: Partial<TrackingState> = {}, ticket: OrderTicket | null = null) {
   return renderToStaticMarkup(createElement(Tracking, {
-    orderId: pending._id, trackingToken: "tracking-token", ticket: null,
+    orderId: pending._id, trackingToken: "tracking-token", ticket,
     initial: { ...pending, ...overrides }, brand: DIRECTIONS.nuit,
   }));
 }
+
+const ticket: OrderTicket = {
+  orderId: "order", pickupNumber: 12, header: { tenantName: "Restaurant", slug: "restaurant", address: "Paris", phones: [] },
+  createdAt: "2026-09-05T18:00:00.000Z", printedAt: "2026-09-05T18:00:00.000Z", channel: "online", channelLabel: "En ligne",
+  type: "pickup", typeLabel: "Retrait", status: "new", statusLabel: "Reçue", pickup: null,
+  lines: [], totals: { subtotal: 1250, discount: null, total: 1250 }, note: null,
+  payment: { method: "online", methodLabel: "Payé en ligne", tender: null, tenderLabel: null,
+    status: "pending", statusLabel: "En attente", paid: false, cashReceived: null, changeGiven: null },
+};
+
+describe("suivi du retrait et changement de paiement", () => {
+  it("propose le comptoir pour le même retrait online en attente, pas pour une livraison", () => {
+    expect(render({ fulfillment: "pickup" })).toContain("Payer au comptoir");
+    expect(render()).not.toContain("Payer au comptoir");
+    for (const status of ["paid", "refunded"] as const) expect(render({ fulfillment: "pickup", payment: { ...pending.payment!, status } })).not.toContain("Payer au comptoir");
+    for (const status of ["delivered", "cancelled"] as const) expect(render({ fulfillment: "pickup", status })).not.toContain("Payer au comptoir");
+  });
+
+  it("un ticket ancien mal libellé ne suffit jamais à afficher Payé en ligne", () => {
+    for (const payment of [pending.payment, undefined]) {
+      const html = render({ fulfillment: "pickup", payment }, ticket);
+      expect(html).toContain("Paiement en ligne à confirmer");
+      expect(html).not.toContain("Payé en ligne");
+    }
+  });
+
+  it("le paiement courant prime sur le ticket figé après conversion au comptoir", () => {
+    const html = render({ fulfillment: "pickup", payment: { ...pending.payment!, method: "counter" } }, ticket);
+    expect(html).toContain("À régler au comptoir");
+    expect(html).not.toContain("Payé en ligne");
+    expect(html).not.toContain("Reprendre le paiement");
+    expect(html).not.toContain("Payer au comptoir");
+  });
+});
 
 describe("suivi rendu et confirmation du paiement livraison", () => {
   it("attend le paiement avant de présenter la commande comme reçue en cuisine", () => {

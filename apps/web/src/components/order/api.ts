@@ -12,6 +12,7 @@
  *   GET  /public/tenants/:slug/slots?date=     créneaux de retrait
  *   POST /public/tenants/:slug/orders          création de commande
  *   POST /public/orders/:id/payment-intent     paiement Stripe (optionnel)
+ *   POST /public/orders/:id/payment-counter    retrait : changement autorisé par le serveur
  *   GET  /public/orders/:id                    suivi (statut)
  *   GET  /public/orders/:id/ticket             récapitulatif du suivi
  *
@@ -49,6 +50,7 @@ import type {
   Fulfillment,
   PaymentStatus,
   PaymentMethod,
+  CounterPaymentResponse,
 } from "@sm/contracts";
 import { featuredProductIdsOf, marqueEffective, WebsiteUrlSchema, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
@@ -633,6 +635,12 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
+  function switchToCounterPayment(orderId: string, token: string): Promise<CounterPaymentResponse> {
+    return postJson<CounterPaymentResponse>(
+      withToken(`/public/orders/${encodeURIComponent(orderId)}/payment-counter`, token), {},
+    );
+  }
+
   function loadTracking(
     id: string,
     token: string,
@@ -658,6 +666,7 @@ export function orderingApi(transport: Transport = httpTransport) {
     quoteDelivery,
     createOrder,
     createPaymentIntent,
+    switchToCounterPayment,
     loadTracking,
     loadTicket,
   };
@@ -677,5 +686,6 @@ export const loadBrand = networkApi.loadBrand;
 export const loadSlots = networkApi.loadSlots;
 export const createOrder = networkApi.createOrder;
 export const createPaymentIntent = networkApi.createPaymentIntent;
+export const switchToCounterPayment = networkApi.switchToCounterPayment;
 export const loadTracking = networkApi.loadTracking;
 export const loadTicket = networkApi.loadTicket;

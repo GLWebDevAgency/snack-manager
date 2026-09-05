@@ -13,6 +13,7 @@ import type { OrderStatus } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { fmtEuro } from "@/lib/format";
 import { Btn, Drawer, Icon, Pill, StatusBadge } from "@/components/ui";
+import { hasOnlinePaymentToRefund } from "./refund-eligibility";
 import {
   CHANNEL_LABELS,
   TYPE_LABELS,
@@ -109,7 +110,7 @@ export function OrderDrawer({
               Annuler la commande
             </Btn>
           )}
-          {onRefund && order.payment.stripePaymentIntentId && order.payment.status !== "pending" && (
+          {onRefund && hasOnlinePaymentToRefund(order.payment) && (
             <Btn variant="ghost" size="sm" className="w-full" onClick={() => onRefund(order)}>
               {order.payment.status === "refunded" ? "Voir le remboursement" : "Rembourser"}
             </Btn>

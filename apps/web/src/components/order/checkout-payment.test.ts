@@ -1,13 +1,56 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { PaymentIntentResponse } from "@sm/contracts";
-import { PAYMENT_VERIFICATION_MESSAGE, checkoutPaymentDecision, requestExistingOrderPayment } from "./checkout-payment";
+import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, checkoutPaymentDecision, paymentSummaryLabel, requestCounterPayment, requestExistingOrderPayment } from "./checkout-payment";
+import { orderingApi } from "./api";
 
 const order = { _id: "order-existing", trackingToken: "private-tracking-token" };
 const ready: PaymentIntentResponse = {
   unavailable: false, clientSecret: "pi_same_secret", paymentIntentId: "pi_same",
   publishableKey: "pk_test_example", stripeAccount: "acct_restaurant", amount: 1250, currency: "eur",
 };
+
+describe("conversion explicite de la même commande au comptoir", () => {
+  const pending = { status: "new", payment: { method: "online", status: "pending" } } as const;
+  it("propose une demande seulement pour un retrait actif en attente de paiement online", () => {
+    expect(canRequestCounterPayment(pending, "pickup")).toBe(true);
+    expect(canRequestCounterPayment(pending, "delivery")).toBe(false);
+    expect(canRequestCounterPayment(pending, undefined)).toBe(false);
+    for (const status of ["paid", "refunded"] as const) expect(canRequestCounterPayment({ ...pending, payment: { method: "online", status } }, "pickup")).toBe(false);
+    for (const status of ["cancelled", "delivered"] as const) expect(canRequestCounterPayment({ ...pending, status }, "pickup")).toBe(false);
+    expect(canRequestCounterPayment({ ...pending, payment: undefined }, "pickup")).toBe(false);
+    expect(canRequestCounterPayment({ ...pending, payment: { method: "counter", status: "pending" } }, "pickup")).toBe(false);
+  });
+
+  it("ne confirme qu’une réponse serveur counter/pending de la même commande", async () => {
+    const confirmed = { _id: order._id, payment: { method: "counter", status: "pending" } } as const;
+    const api = { switchToCounterPayment: vi.fn().mockResolvedValue(confirmed) };
+    await expect(requestCounterPayment(api, order)).resolves.toEqual(confirmed);
+    expect(api.switchToCounterPayment).toHaveBeenCalledWith(order._id, order.trackingToken);
+    for (const response of [null, {}, { ...confirmed, _id: "another-order" }, { ...confirmed, payment: { method: "online", status: "pending" } }, { ...confirmed, payment: { method: "counter", status: "paid" } }]) {
+      api.switchToCounterPayment.mockResolvedValue(response);
+      await expect(requestCounterPayment(api, order)).rejects.toThrow(PAYMENT_VERIFICATION_MESSAGE);
+    }
+  });
+
+  it("appelle uniquement la route dédiée avec le jeton encodé, et garde les refus 409 lisibles", async () => {
+    const send = vi.fn().mockResolvedValue({ status: 409, body: { message: "Le paiement est en cours de confirmation." } });
+    await expect(orderingApi({ send }).switchToCounterPayment("id/1", "secret+token")).rejects.toMatchObject({ status: 409, message: "Le paiement est en cours de confirmation." });
+    expect(send).toHaveBeenCalledExactlyOnceWith({ method: "POST", path: "/public/orders/id%2F1/payment-counter?t=secret%2Btoken", body: {} });
+  });
+});
+
+describe("libellé de paiement autoritaire", () => {
+  it("ne transforme jamais un moyen online en paiement réussi", () => {
+    const staleTicket = { method: "online", status: "pending", paid: false } as const;
+    expect(paymentSummaryLabel(undefined, staleTicket)).toBe("Paiement en ligne à confirmer");
+    expect(paymentSummaryLabel({ method: "online", status: "pending" }, { ...staleTicket, paid: true })).toBe("Paiement en ligne à confirmer");
+    expect(paymentSummaryLabel({ method: "counter", status: "pending" }, staleTicket)).toBe("À régler au comptoir");
+    expect(paymentSummaryLabel({ method: "online", status: "paid" }, staleTicket)).toBe("Payé en ligne");
+    expect(paymentSummaryLabel({ method: "counter", status: "paid" }, staleTicket)).toBe("Payé au comptoir");
+    expect(paymentSummaryLabel({ method: "online", status: "refunded" }, staleTicket)).toBe("Remboursé");
+  });
+});
 
 describe("moyen autoritaire de la commande créée ou rejouée", () => {
   it.each(["new", "preparing", "ready"] as const)("confirme au comptoir seulement un paiement pending/counter et une commande %s", (status) => {
@@ -62,6 +105,12 @@ describe("reprise du paiement de la commande existante", () => {
     expect(api.createPaymentIntent.mock.calls).toEqual([
       [order._id, order.trackingToken], [order._id, order.trackingToken],
     ]);
+  });
+
+  it("conserve la raison d’indisponibilité sans la présenter comme un accord comptoir", async () => {
+    const api = { createPaymentIntent: vi.fn().mockResolvedValue({ unavailable: true, permanent: true, reason: "Le restaurant n’a pas configuré le paiement en ligne." }) };
+    await expect(requestExistingOrderPayment(api, order)).rejects.toThrow("Le restaurant n’a pas configuré le paiement en ligne.");
+    await expect(requestExistingOrderPayment(api, order)).rejects.toThrow(PAYMENT_VERIFICATION_MESSAGE);
   });
 
   it.each([null, undefined, {}, { ...ready, clientSecret: "" }, { ...ready, stripeAccount: "" }])(
