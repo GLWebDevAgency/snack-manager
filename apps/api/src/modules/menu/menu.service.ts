@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import {
   catalogueMedias,
   mediasDuProduit,
+  normalizeLegacyOptionGroup,
   photoUrlDe,
   SUPPLEMENT_GROUP_KEY,
   type JwtPayload,
@@ -79,7 +80,9 @@ export class MenuService {
       const derived = modifiers.get(String(p._id));
       return {
         ...p,
-        optionGroups: (p.optionGroups ?? []).filter((g) => g?.key !== SUPPLEMENT_GROUP_KEY),
+        optionGroups: (p.optionGroups ?? [])
+          .filter((g) => g?.key !== SUPPLEMENT_GROUP_KEY)
+          .map(normalizeLegacyOptionGroup),
         removables: derived?.removables ?? [],
         supplements: derived?.supplements ?? [],
       };
@@ -112,18 +115,18 @@ export class MenuService {
   }
 
   /** Menu public (commande en ligne / POS) : actifs seulement, ruptures signalées. */
-  async publicMenu(tenantId: string) {
+  async publicMenu(tenantId: string, photoUsage: UsageMedia = 'vignette') {
     const [cats, rawProds] = await Promise.all([
       this.categories.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
       this.products.find({ tenantId, active: true }).sort({ order: 1 }).lean(),
     ]);
     const avecModificateurs = await this.withModifiers(tenantId, rawProds);
-    // Usage « vignette » : cette carte est celle de la CAISSE et du tunnel de
-    // commande, où une photo se lit dans une grille carrée.
+    // La même projection métier pour toutes les surfaces ; seule la découpe
+    // de photo change entre grille de caisse et carte du site public.
     const { produits: prods, medias } = await this.avecPhotos(
       tenantId,
       avecModificateurs,
-      'vignette',
+      photoUsage,
     );
     return {
       categories: cats.map((c) => ({

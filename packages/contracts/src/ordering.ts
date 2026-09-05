@@ -13,6 +13,7 @@ import type {
 import type { Brand } from './marque';
 // ⚠️ `import type` uniquement, même raison : `mediatheque.ts` l'est aussi.
 import type { MediaVue } from './mediatheque';
+import type { MenuRemovable, MenuSupplement } from './supply';
 import { FulfillmentSchema } from './delivery';
 import type { OrderDelivery, PublicDeliverySettings } from './delivery';
 
@@ -349,7 +350,10 @@ export interface PublicSiteProduct {
   variants: PublicSiteVariant[];
   /** Groupes d'options bruts (mêmes objets que `GET /public/tenants/:slug/menu`). */
   optionGroups: unknown[];
-  removables: string[];
+  /** Objets dérivés de la recette ; chaînes acceptées pour les anciennes réponses en cache. */
+  removables: MenuRemovable[] | string[];
+  /** Même catalogue tarifé que la caisse, exposé hors du groupe réservé. */
+  supplements?: MenuSupplement[];
   tags: string[];
   isNew: boolean;
   outOfStock: boolean;
