@@ -121,9 +121,27 @@ export class TicketService {
               customerPhone: order.pickup.customerPhone ?? null,
             }
           : null,
+      delivery: order.type === 'delivery' && order.delivery?.address ? {
+        address: {
+          line1: String(order.delivery.address.line1 ?? ''),
+          line2: String(order.delivery.address.line2 ?? ''),
+          postalCode: String(order.delivery.address.postalCode ?? ''),
+          city: String(order.delivery.address.city ?? ''),
+          country: 'FR',
+        },
+        instructions: String(order.delivery.instructions ?? ''),
+        zoneId: String(order.delivery.zoneId ?? ''),
+        zoneName: String(order.delivery.zoneName ?? ''),
+        feeCents: Number(order.delivery.feeCents ?? 0),
+        estimatedMinutes: Number(order.delivery.estimatedMinutes ?? 0),
+        dispatchedAt: order.delivery.dispatchedAt?.toISOString() ?? null,
+        deliveredAt: order.delivery.deliveredAt?.toISOString() ?? null,
+        driverName: order.delivery.driverName ?? null,
+      } : null,
       lines,
       totals: {
         subtotal: Number(order.totals?.subtotal ?? 0),
+        deliveryFee: Number(order.totals?.deliveryFee ?? 0),
         discount: discount
           ? { amount: Number(discount.amount ?? 0), reason: String(discount.reason ?? '') }
           : null,
@@ -166,14 +184,20 @@ export class TicketService {
     p.align('left').rule('=');
 
     // ── Numéro de retrait : l'information la plus lue du ticket ──
-    p.align('center').bold(true).line('NUMÉRO DE RETRAIT').bold(false);
+    p.align('center').bold(true).line(ticket.type === 'delivery' ? 'COMMANDE À LIVRER' : 'NUMÉRO DE RETRAIT').bold(false);
     p.size(3, 3).bold(true).line(String(ticket.pickupNumber)).bold(false).size(1, 1);
     p.size(1, 2).bold(true);
     p.line(ticket.typeLabel.toUpperCase());
     p.size(1, 1).bold(false);
     if (ticket.pickup) {
-      p.line(`Retrait ${ticket.pickup.slotLabel} · ${ticket.pickup.customerName}`);
+      p.line(`${ticket.type === 'delivery' ? 'Livraison estimée' : 'Retrait'} ${ticket.pickup.slotLabel} · ${ticket.pickup.customerName}`);
       if (ticket.pickup.customerPhone) p.line(ticket.pickup.customerPhone);
+    }
+    if (ticket.delivery) {
+      p.align('left').bold(true).wrapped(ticket.delivery.address.line1).bold(false);
+      if (ticket.delivery.address.line2) p.wrapped(ticket.delivery.address.line2);
+      p.wrapped(`${ticket.delivery.address.postalCode} ${ticket.delivery.address.city}`);
+      if (ticket.delivery.instructions) p.wrapped(`Instructions : ${ticket.delivery.instructions}`);
     }
     p.align('left').rule('=');
 
@@ -203,6 +227,7 @@ export class TicketService {
     if (!kitchen) {
       p.rule();
       p.columns('Sous-total', formatEuros(ticket.totals.subtotal));
+      if (ticket.totals.deliveryFee) p.columns('Livraison', formatEuros(ticket.totals.deliveryFee));
       if (ticket.totals.discount) {
         const label = ticket.totals.discount.reason
           ? `Remise (${ticket.totals.discount.reason})`

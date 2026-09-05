@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, type PipelineStage } from 'mongoose';
 import type {
@@ -15,6 +15,8 @@ import type {
 } from '@sm/contracts';
 import type { Category, Order, Product, Review } from '@sm/db';
 import { excelCsvCell, excelCsvNumber } from './excel-csv';
+import { CapacitesService } from '../../common/capacites';
+import { orderAccessScope } from '@sm/contracts/commerce';
 
 const TZ = 'Europe/Paris';
 /** CA = commandes prêtes + livrées ; les annulées (et en cours) sont exclues. */
@@ -100,6 +102,7 @@ export class StatsService {
     @InjectModel('Product') private readonly products: Model<Product>,
     @InjectModel('Category') private readonly categories: Model<Category>,
     @InjectModel('Review') private readonly reviews: Model<Review>,
+    private readonly capacites: CapacitesService,
   ) {}
 
   private tid(tenantId: string): Types.ObjectId {
@@ -122,9 +125,15 @@ export class StatsService {
   }
 
   /** $match commun : tenant + fenêtre + statuts générateurs de CA. */
-  private revenueMatch(tenantId: string, start: Date, end: Date): Record<string, unknown> {
+  private async scope(tenantId: string): Promise<Record<string, unknown>> {
+    const access = orderAccessScope(await this.capacites.pourTenant(tenantId));
+    if (access === 'none') throw new ForbiddenException('Statistiques non souscrites');
+    return { tenantId: this.tid(tenantId), ...(access === 'online' ? { channel: 'online' } : {}) };
+  }
+
+  private async revenueMatch(tenantId: string, start: Date, end: Date): Promise<Record<string, unknown>> {
     return {
-      tenantId: this.tid(tenantId),
+      ...await this.scope(tenantId),
       status: { $in: REVENUE_STATUSES },
       createdAt: { $gte: start, $lte: end },
     };
@@ -136,7 +145,7 @@ export class StatsService {
     end: Date,
   ): Promise<{ ca: number; orders: number }> {
     const rows = await this.orders.aggregate<{ ca: number; n: number }>([
-      { $match: this.revenueMatch(tenantId, start, end) },
+      { $match: await this.revenueMatch(tenantId, start, end) },
       { $group: { _id: null, ca: { $sum: '$totals.total' }, n: { $sum: 1 } } },
     ]);
     return { ca: rows[0]?.ca ?? 0, orders: rows[0]?.n ?? 0 };
@@ -177,7 +186,7 @@ export class StatsService {
   private async timeseriesByHour(tenantId: string): Promise<StatsTimeseriesBucket[]> {
     const now = new Date();
     const rows = await this.orders.aggregate<{ _id: string; ca: number; n: number }>([
-      { $match: this.revenueMatch(tenantId, parisDayStart(now), now) },
+      { $match: await this.revenueMatch(tenantId, parisDayStart(now), now) },
       {
         $group: {
           _id: { $dateToString: { date: '$createdAt', format: '%H', timezone: TZ } },
@@ -221,7 +230,7 @@ export class StatsService {
   private async timeseriesByDay(tenantId: string): Promise<StatsTimeseriesBucket[]> {
     const now = new Date();
     const rows = await this.orders.aggregate<{ _id: string; ca: number; n: number }>([
-      { $match: this.revenueMatch(tenantId, parisDayStart(now, 6), now) },
+      { $match: await this.revenueMatch(tenantId, parisDayStart(now, 6), now) },
       {
         $group: {
           _id: { $dateToString: { date: '$createdAt', format: '%Y-%m-%d', timezone: TZ } },
@@ -265,7 +274,7 @@ export class StatsService {
     }
     const rangeStart = weeks[0]?.start ?? parisDayStart(now, 29);
     const rows = await this.orders.aggregate<{ _id: Date; ca: number; n: number }>([
-      { $match: this.revenueMatch(tenantId, rangeStart, now) },
+      { $match: await this.revenueMatch(tenantId, rangeStart, now) },
       {
         $group: {
           _id: {
@@ -292,7 +301,7 @@ export class StatsService {
   ): Promise<StatsTopProduct[]> {
     const { start, end } = this.periodRange(period);
     const rows = await this.orders.aggregate<{ _id: string; qty: number; ca: number }>([
-      { $match: this.revenueMatch(tenantId, start, end) },
+      { $match: await this.revenueMatch(tenantId, start, end) },
       { $unwind: '$lines' },
       {
         $group: {
@@ -312,7 +321,7 @@ export class StatsService {
   async channels(tenantId: string, period: StatsPeriod): Promise<StatsChannelBucket[]> {
     const { start, end } = this.periodRange(period);
     const rows = await this.orders.aggregate<{ _id: string; ca: number; n: number }>([
-      { $match: this.revenueMatch(tenantId, start, end) },
+      { $match: await this.revenueMatch(tenantId, start, end) },
       { $group: { _id: '$channel', ca: { $sum: '$totals.total' }, n: { $sum: 1 } } },
     ]);
     const byChannel = new Map(rows.map((r) => [r._id, r]));
@@ -330,7 +339,7 @@ export class StatsService {
     const rows = await this.orders.aggregate<{ _id: { day: number; hour: number }; n: number }>([
       {
         $match: {
-          tenantId: this.tid(tenantId),
+          ...await this.scope(tenantId),
           status: { $ne: 'cancelled' },
           createdAt: { $gte: parisDayStart(now, 29), $lte: now },
         },
@@ -371,7 +380,7 @@ export class StatsService {
       },
     });
     const pipeline: PipelineStage[] = [
-      { $match: this.revenueMatch(tenantId, start, end) },
+      { $match: await this.revenueMatch(tenantId, start, end) },
       { $project: { newAt: historyAt('new'), readyAt: historyAt('ready') } },
       { $match: { newAt: { $ne: null }, readyAt: { $ne: null } } },
       { $project: { diffMin: { $divide: [{ $subtract: ['$readyAt', '$newAt'] }, 60_000] } } },
@@ -409,11 +418,12 @@ export class StatsService {
 
   async summaryLive(tenantId: string): Promise<StatsSummaryLive> {
     const tid = this.tid(tenantId);
+    const scope = await this.scope(tenantId);
     const now = new Date();
     const [today, newCount, readyCount, reviewsPendingCount, productsOutCount] = await Promise.all([
       this.sumWindow(tenantId, parisDayStart(now), now),
-      this.orders.countDocuments({ tenantId: tid, status: 'new' }),
-      this.orders.countDocuments({ tenantId: tid, status: 'ready' }),
+      this.orders.countDocuments({ ...scope, status: 'new' }),
+      this.orders.countDocuments({ ...scope, status: 'ready' }),
       this.reviews.countDocuments({ tenantId: tid, reply: null }),
       this.products.countDocuments({ tenantId: tid, outOfStock: true, active: true }),
     ]);
@@ -446,7 +456,7 @@ export class StatsService {
     }
 
     const rows = await this.orders
-      .find({ tenantId: this.tid(tenantId), createdAt: { $gte: start, $lt: end } })
+      .find({ ...await this.scope(tenantId), createdAt: { $gte: start, $lt: end } })
       .sort({ createdAt: 1 })
       .limit(20_000)
       .lean();

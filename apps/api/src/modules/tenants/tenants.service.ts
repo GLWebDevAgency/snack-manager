@@ -78,6 +78,9 @@ export const TENANT_ME_FIELDS = {
   plan: 1,
   /** Le module de commande en ligne : une SOUSCRIPTION, pas la pause du soir. */
   onlineOrdering: 1,
+  onlineDelivery: 1,
+  standaloneLoyalty: 1,
+  websiteUrl: 1,
   /**
    * Les exceptions accordées ou retirées hors formule.
    *
@@ -408,6 +411,7 @@ export class TenantsService {
     const $set: Record<string, unknown> = {};
     if (patch.name !== undefined) $set.name = patch.name;
     if (patch.address !== undefined) $set.address = patch.address;
+    if (patch.websiteUrl !== undefined) $set.websiteUrl = patch.websiteUrl;
     if (patch.phones !== undefined) $set.phones = patch.phones;
     if (patch.brandColor !== undefined) {
       /*

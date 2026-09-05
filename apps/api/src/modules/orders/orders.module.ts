@@ -8,10 +8,12 @@ import { TenantsModule } from '../tenants/tenants.module';
 // ne valaient que dans l'écran du client.
 import { OrderingModule } from '../ordering/ordering.module';
 import { PublicOrderGate } from './public-order-gate';
+import { OrderFinanceController } from './order-finance.controller';
+import { EncaissementModule } from '../encaissement/encaissement.module';
 
 @Module({
-  imports: [TenantsModule, OrderingModule],
-  controllers: [OrdersController],
+  imports: [TenantsModule, OrderingModule, EncaissementModule],
+  controllers: [OrdersController, OrderFinanceController],
   providers: [OrdersService, OrdersGateway, PublicOrderGate],
 })
 export class OrdersModule {}

@@ -27,6 +27,8 @@ function atelier() {
     {} as never,
     { publish: () => {} } as never,
     audit,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
   (service as unknown as { byId: () => Promise<unknown> }).byId = async () => ({
     _id: ORDER,

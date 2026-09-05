@@ -37,6 +37,7 @@ import { StatsService } from './stats.service';
  */
 @Roles('owner', 'gerant', 'comptable')
 @Controller('stats')
+@Fonction('stats')
 export class StatsController {
   constructor(private readonly stats: StatsService) {}
 
@@ -117,3 +118,4 @@ export class StatsController {
     return this.stats.exportMenuCsv(tenantId);
   }
 }
+import { Fonction } from '../../common/capacites';

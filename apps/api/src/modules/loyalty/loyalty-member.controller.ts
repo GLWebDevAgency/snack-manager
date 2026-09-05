@@ -87,6 +87,7 @@ function saleActor(user: JwtPayload): LoyaltyActorContext {
  */
 @Controller('loyalty/members')
 @Roles('owner', 'gerant', 'caisse')
+@Fonction('fidelite')
 export class LoyaltyMemberController {
   constructor(private readonly members: LoyaltyMemberService) {}
 
@@ -283,3 +284,4 @@ export class LoyaltyMemberController {
     );
   }
 }
+import { Fonction } from '../../common/capacites';

@@ -41,7 +41,7 @@ export class OrderingController {
   @Get('public/tenants/:slug/slots')
   async slotsForDay(@Param('slug') slug: string, @Query(zod(SlotsQuerySchema)) query: SlotsQuery) {
     const tenant = await this.tenants.bySlug(slug);
-    return this.slots.compute(tenant, query.date);
+    return this.slots.compute(tenant, query.date, query.fulfillment);
   }
 
   /**

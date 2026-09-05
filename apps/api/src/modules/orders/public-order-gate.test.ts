@@ -149,6 +149,13 @@ describe('preuve humaine de la commande publique', () => {
 });
 
 describe('quotas partages du restaurant', () => {
+  it('sérialise le même instant sous une seule clé, quelle que soit sa précision ISO', async () => {
+    const { service, redis } = gate();
+    await service.serializeSlot({ tenantId: TENANT, slot: '2026-09-06T18:00:00.000Z' }, async () => 1);
+    await service.serializeSlot({ tenantId: TENANT, slot: '2026-09-06T18:00:00Z' }, async () => 2);
+    expect(redis.set.mock.calls[0]?.[0]).toBe(redis.set.mock.calls[1]?.[0]);
+  });
+
   it.each([
     [[0, 12, 1, 1], 'burst tenant'],
     [[0, 1, 60, 1], 'heure tenant'],

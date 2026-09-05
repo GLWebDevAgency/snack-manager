@@ -31,6 +31,7 @@ import { PairScreenDevice } from './pair-screen.usecase';
  * Le contrôleur ne contient aucune règle : il traduit HTTP ⇄ cas d'usage.
  */
 @Controller()
+@Fonction('screens')
 export class ScreensController {
   constructor(
     private readonly manage: ManageScreens,
@@ -110,3 +111,4 @@ export class ScreensController {
     return this.heartbeat.execute(query.token);
   }
 }
+import { Fonction } from '../../common/capacites';

@@ -11,8 +11,10 @@ import {
   type ReviewReply,
 } from './engage.dto';
 import { EngageService } from './engage.service';
+import { Fonction } from '../../common/capacites';
 
 @Controller()
+@Fonction('promos')
 export class EngageController {
   constructor(private readonly engage: EngageService) {}
 
@@ -60,18 +62,21 @@ export class EngageController {
   /** `?filter=pending` = avis sans réponse ; défaut : tous. */
   @Roles('owner', 'gerant')
   @Get('reviews')
+  @Fonction('reviews')
   listReviews(@TenantId() tenantId: string, @Query('filter') filter?: string) {
     return this.engage.listReviews(tenantId, filter === 'pending' ? 'pending' : 'all');
   }
 
   @Roles('owner', 'gerant')
   @Get('reviews/summary')
+  @Fonction('reviews')
   reviewsSummary(@TenantId() tenantId: string) {
     return this.engage.reviewsSummary(tenantId);
   }
 
   @Roles('owner', 'gerant')
   @Post('reviews/:id/reply')
+  @Fonction('reviews')
   replyToReview(
     @TenantId() tenantId: string,
     @Param('id') id: string,

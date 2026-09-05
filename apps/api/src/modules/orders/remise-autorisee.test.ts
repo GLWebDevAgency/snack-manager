@@ -35,6 +35,7 @@ function build(subtotal = 10_000, status = 'new') {
     number: 12,
     status,
     totals: { subtotal, discount: null as unknown, total: subtotal },
+    payment: { status: 'pending', stripePaymentIntentId: null as string | null },
     save: async () => {},
     toObject: () => ({}),
   };
@@ -45,6 +46,8 @@ function build(subtotal = 10_000, status = 'new') {
     {} as never,
     { publish: () => {} } as never,
     { log: async (l: Record<string, unknown>) => void enregistre.push(l) } as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
   // `byId` lit la commande par une autre voie que `findOne().lean()` : on la
   // court-circuite pour que le test porte sur la RÈGLE, pas sur l'accès Mongo.
@@ -101,6 +104,13 @@ describe('le plafond de remise par rôle', () => {
 });
 
 describe('ce que la remise exige encore', () => {
+  it('ne réécrit pas un montant déjà associé à une intention Stripe', async () => {
+    const { service, commande } = build();
+    commande.payment.stripePaymentIntentId = 'pi_started';
+    await expect(service.discount(TENANT, ORDER, gerant, 500, 'Geste commercial')).rejects.toThrow(/remboursement/i);
+    expect(commande.totals.total).toBe(10_000);
+  });
+
   it.each(['delivered', 'cancelled'])(
     'refuse de réécrire le total une fois la commande %s',
     async (status) => {

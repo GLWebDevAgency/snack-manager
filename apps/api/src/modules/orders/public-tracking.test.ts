@@ -57,6 +57,8 @@ function trackingService() {
     { find: () => ({ lean: async () => [] }) } as never,
     {} as never,
     {} as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
 }
 

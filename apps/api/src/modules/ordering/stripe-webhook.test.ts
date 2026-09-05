@@ -69,7 +69,9 @@ function fakeOrders(rows: FakeOrder[]) {
       update: { $set: Record<string, unknown> },
     ) {
       const row = rows.find(
-        (r) => r._id === String(filter._id) && r.payment.status === filter['payment.status'],
+        (r) => r._id === String(filter._id) && r.payment.status === filter['payment.status']
+          && r.payment.stripePaymentIntentId === filter['payment.stripePaymentIntentId']
+          && r.totals.total === filter['totals.total'],
       );
       if (!row) return null;
       for (const [path, value] of Object.entries(update.$set)) {
@@ -307,14 +309,26 @@ describe('handleWebhookEvent — payment_intent.succeeded', () => {
     expect(published).toHaveLength(0);
   });
 
-  it('confirme malgré un écart de montant — l’argent est encaissé, on trace', async () => {
+  it('ne confirme pas une commande avec un montant encaissé inférieur au total serveur', async () => {
     const body = succeededBody(ORDER_ID, 900); // commande à 1250 c
     const sut = service();
 
     const result = await sut.handleWebhookEvent(sut.constructWebhookEvent(body, sign(body)));
 
-    expect(result.outcome).toBe('payee');
-    expect(rows[0]?.payment.status).toBe('paid');
+    expect(result.outcome).toBe('ignoree');
+    expect(rows[0]?.payment.status).toBe('pending');
+    expect(published).toHaveLength(0);
+  });
+
+  it('ne confirme pas avec une autre intention de paiement ni une autre devise', async () => {
+    const sut = service();
+    const event = JSON.parse(succeededBody()) as StripeWebhookEvent;
+    event.data.object.id = 'pi_other';
+    expect((await sut.handleWebhookEvent(event)).outcome).toBe('ignoree');
+    event.data.object.id = 'pi_123';
+    Object.assign(event.data.object, { currency: 'usd' });
+    expect((await sut.handleWebhookEvent(event)).outcome).toBe('ignoree');
+    expect(rows[0]?.payment.status).toBe('pending');
   });
 });
 
@@ -344,7 +358,7 @@ describe('handleWebhookEvent — autres événements', () => {
   it('accuse réception d’un type non traité sans faire rejouer Stripe', async () => {
     const body = JSON.stringify({
       id: 'evt_test_3',
-      type: 'charge.refunded',
+      type: 'charge.dispute.created',
       data: { object: { id: 'ch_1' } },
     });
     const sut = service();

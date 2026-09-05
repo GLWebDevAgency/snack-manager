@@ -49,6 +49,7 @@ import { PlanningService } from './planning.service';
  */
 @Roles('owner', 'gerant')
 @Controller('planning')
+@Fonction('planning')
 export class PlanningController {
   constructor(private readonly planning: PlanningService) {}
 
@@ -133,3 +134,4 @@ export class PlanningController {
     return this.planning.setHourlyCost(tenantId, staffId, body.hourlyCostCents);
   }
 }
+import { Fonction } from '../../common/capacites';

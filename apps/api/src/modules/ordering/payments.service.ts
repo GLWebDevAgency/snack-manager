@@ -22,6 +22,7 @@ import { REDIS_PUB } from '../../redis.module';
 // Le sous-domaine qui sait SUR QUEL COMPTE encaisser. Dépendance à sens
 // unique : `ordering` l'interroge, `encaissement` ignore tout des commandes.
 import { EncaissementService } from '../encaissement/encaissement.service';
+import { OrderRefundsService } from './order-refunds.service';
 // La vérification de signature est PARTAGÉE avec le webhook des comptes
 // connectés : deux secrets différents, un seul algorithme — le dupliquer
 // serait se condamner à ne corriger qu'une moitié le jour d'un correctif.
@@ -63,6 +64,7 @@ interface StripePaymentIntent {
  */
 interface StripeOptions {
   stripeAccount: string;
+  idempotencyKey?: string;
 }
 
 interface StripeClient {
@@ -98,7 +100,7 @@ const REUSABLE_STATUSES = new Set([
 export interface WebhookResult {
   received: true;
   /** `payee` · `deja_payee` (rejeu) · `echec_paiement` · `ignoree`. */
-  outcome: 'payee' | 'deja_payee' | 'echec_paiement' | 'ignoree';
+  outcome: 'payee' | 'deja_payee' | 'echec_paiement' | 'ignoree' | 'remboursement_synchronise';
   message: string;
 }
 
@@ -120,6 +122,7 @@ export class PaymentsService {
     // sans passer par `OrdersService`, dont ce module ne dépend pas.
     @Inject(REDIS_PUB) private readonly redis: Redis,
     private readonly encaissement: EncaissementService,
+    private readonly refunds?: OrderRefundsService,
   ) {}
 
   /** `true` si le paiement en ligne est configuré (clé présente + paquet installé). */
@@ -186,9 +189,10 @@ export class PaymentsService {
     if (order.payment?.status === 'paid') {
       return this.unavailable('Commande déjà réglée');
     }
+    if (order.payment?.status === 'refunded') return this.unavailable('Commande déjà remboursée');
 
     const amount = Number(order.totals?.total ?? 0); // centimes, jamais un float
-    if (!Number.isFinite(amount) || amount < STRIPE_MIN_AMOUNT_CENTS) {
+    if (!Number.isSafeInteger(amount) || amount < STRIPE_MIN_AMOUNT_CENTS) {
       return this.unavailable('Montant trop faible pour un paiement en ligne');
     }
 
@@ -209,7 +213,11 @@ export class PaymentsService {
      * Le client règle donc au comptoir, comme avant : c'est un parcours
      * complet et valide, pas une panne.
      */
-    const compte = await this.encaissement.compteActifDe(String(order.tenantId));
+    // Une intention existante reste attachée à SON compte. Changer le compte
+    // du restaurant ne doit jamais créer un second débit pour la même vente.
+    const compte = order.payment?.stripePaymentIntentId
+      ? order.payment.stripeAccountId
+      : await this.encaissement.compteActifDe(String(order.tenantId));
     if (!compte) {
       // Ce restaurant n'a pas de compte raccordé : structurel, pas passager.
       return this.unavailable(
@@ -222,6 +230,9 @@ export class PaymentsService {
 
     try {
       const intent = await this.resolveIntent(stripe, order, amount, { stripeAccount: compte });
+      if (intent.status === 'succeeded' || intent.status === 'requires_capture') {
+        return this.unavailable('Paiement déjà autorisé ou confirmé. Attendez la mise à jour du suivi de commande.');
+      }
       if (!intent.client_secret) {
         this.logger.warn(`PaymentIntent ${intent.id} sans client_secret`);
         return this.unavailable(PAYMENT_UNAVAILABLE_REASON, true);
@@ -270,22 +281,19 @@ export class PaymentsService {
   ): Promise<StripePaymentIntent> {
     const existingId = order.payment?.stripePaymentIntentId;
     if (existingId) {
-      try {
-        // Les options voyagent sur CHAQUE appel : une intention créée sur le
-        // compte du restaurant n'existe pas sur celui de la plateforme, et la
-        // relire sans l'en-tête renverrait « ressource introuvable ».
-        const existing = await stripe.paymentIntents.retrieve(existingId, options);
-        if (REUSABLE_STATUSES.has(existing.status)) {
-          // Le total a pu bouger (remise appliquée au comptoir) : on resynchronise.
-          return existing.amount === amount
-            ? existing
-            : await stripe.paymentIntents.update(existingId, { amount }, options);
+      // Une erreur réseau ne prouve PAS l'échec du débit. On propage l'erreur
+      // et conserve l'intention, au lieu de risquer de faire payer deux fois.
+      const existing = await stripe.paymentIntents.retrieve(existingId, options);
+      if (existing.status === 'succeeded' || existing.status === 'requires_capture') return existing;
+      if (REUSABLE_STATUSES.has(existing.status)) {
+        if (existing.amount === amount) return existing;
+        if (existing.status === 'processing' || existing.status === 'requires_action') {
+          throw new Error('Le montant a changé pendant un paiement en cours.');
         }
-      } catch (err) {
-        this.logger.warn(
-          `PaymentIntent ${existingId} irrécupérable, création d'un nouveau (${errorMessage(err)})`,
-        );
+        return stripe.paymentIntents.update(existingId, { amount }, options);
       }
+      // Seule une annulation confirmée autorise une nouvelle intention.
+      if (existing.status !== 'canceled') throw new Error('État du paiement non réutilisable.');
     }
 
     /*
@@ -306,7 +314,7 @@ export class PaymentsService {
           orderNumber: String(order.number ?? ''),
         },
       },
-      options,
+      { ...options, idempotencyKey: `order-payment:${String(order._id)}:${existingId ?? 'initial'}` },
     );
   }
 
@@ -362,6 +370,13 @@ export class PaymentsService {
   /** Aiguillage des événements. Ne lève pas : tout ce qui n'est pas traité repart en 200. */
   async handleWebhookEvent(event: StripeWebhookEvent): Promise<WebhookResult> {
     switch (event.type) {
+      case 'charge.refunded':
+      case 'refund.created':
+      case 'refund.updated':
+      case 'refund.failed':
+        if (!this.refunds) throw new ServiceUnavailableException('Réconciliation des remboursements indisponible.');
+        await this.refunds.webhook(event);
+        return { received: true, outcome: 'remboursement_synchronise', message: 'Remboursements réconciliés.' };
       case 'payment_intent.succeeded':
         return this.markPaidFromWebhook(event);
       case 'payment_intent.payment_failed':
@@ -402,6 +417,11 @@ export class PaymentsService {
     }
 
     const intentId = typeof intent.id === 'string' ? intent.id : null;
+    const received = (intent as StripeWebhookObject & { amount_received?: number; currency?: string }).amount_received ?? intent.amount;
+    const currency = (intent as StripeWebhookObject & { currency?: string }).currency;
+    if (!intentId || !Number.isSafeInteger(received) || !received || received < 0 || (currency && currency !== 'eur')) {
+      return { received: true, outcome: 'ignoree', message: 'Preuve de paiement incomplète ou devise incohérente.' };
+    }
     const paid: Record<string, unknown> = {
       'payment.status': 'paid',
       // `method` dit OÙ l'argent est encaissé, `tender` AVEC QUOI : Stripe
@@ -439,6 +459,8 @@ export class PaymentsService {
         _id: orderId,
         'payment.status': 'pending',
         'payment.stripeAccountId': event.account ?? null,
+        'payment.stripePaymentIntentId': intentId,
+        'totals.total': received,
       },
       { $set: paid },
       { new: true },
@@ -453,6 +475,10 @@ export class PaymentsService {
             `commande correspondante, à vérifier dans Stripe.`,
         );
         return { received: true, outcome: 'ignoree', message: 'Commande introuvable.' };
+      }
+      if (known.payment?.status === 'pending') {
+        this.logger.warn(`Webhook ${event.id} : preuve différente du compte, du paiement ou du montant attendu.`);
+        return { received: true, outcome: 'ignoree', message: 'Paiement différent de celui attendu pour cette commande.' };
       }
       // Rejeu : on ne réécrit rien et surtout on ne republie pas — un second
       // « order.updated » relancerait le bip du KDS pour rien.

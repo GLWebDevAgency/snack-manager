@@ -22,7 +22,7 @@ function build(existe: boolean) {
   const joined: string[] = [];
   const socket = { join: async (r: string) => void joined.push(r) } as never;
   const orders = { exists: vi.fn().mockResolvedValue(existe ? { _id: ID } : null) };
-  const gw = new OrdersGateway({} as never, {} as never, orders as never, {} as never);
+  const gw = new OrdersGateway({} as never, {} as never, orders as never, {} as never, {} as never);
   return { gw, socket, joined, orders };
 }
 

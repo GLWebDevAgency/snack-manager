@@ -36,8 +36,8 @@ function build(over: { compteActif?: string | null } = {}) {
       method: 'online',
       tender: null,
       status: 'pending',
-      stripePaymentIntentId: null,
-      stripeAccountId: null,
+      stripePaymentIntentId: null as string | null,
+      stripeAccountId: null as string | null,
     },
     save: vi.fn().mockResolvedValue(undefined),
   };
@@ -76,7 +76,7 @@ function build(over: { compteActif?: string | null } = {}) {
   (service as unknown as { client: unknown; loadAttempted: boolean }).client = stripe;
   (service as unknown as { loadAttempted: boolean }).loadAttempted = true;
 
-  return { service, create, encaissement, order, orders };
+  return { service, create, encaissement, order, orders, stripe };
 }
 
 describe('le paiement d’une commande en ligne', () => {
@@ -87,7 +87,9 @@ describe('le paiement d’une commande en ligne', () => {
     expect(encaissement.compteActifDe).toHaveBeenCalledWith(TENANT_ID);
     // Deuxième argument = options par appel : c'est `stripeAccount` qui fait la
     // charge directe. Sans lui, l'argent tomberait chez l'éditeur.
-    expect(create).toHaveBeenCalledWith(expect.any(Object), { stripeAccount: 'acct_resto1' });
+    expect(create).toHaveBeenCalledWith(expect.any(Object), {
+      stripeAccount: 'acct_resto1', idempotencyKey: `order-payment:${ORDER_ID}:initial`,
+    });
     expect(reponse.unavailable).toBe(false);
     // Le compte remonte JUSQU'AU NAVIGATEUR : Stripe.js doit être initialisé
     // dessus, sinon le `client_secret` d'une charge directe est rejeté et le
@@ -123,6 +125,54 @@ describe('le paiement d’une commande en ligne', () => {
     if (reponse.unavailable) expect(reponse.reason).toMatch(/comptoir/i);
     // Le point qui compte : on ne se rabat pas sur la clé de la plateforme.
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each(['succeeded', 'requires_capture'])('ne recrée pas un paiement déjà %s pendant un retard de webhook', async (status) => {
+    const { service, order, stripe, create } = build();
+    order.payment.stripePaymentIntentId = 'pi_existing';
+    order.payment.stripeAccountId = 'acct_resto1';
+    stripe.paymentIntents.retrieve.mockResolvedValue({ id: 'pi_existing', client_secret: 'secret', amount: 1250, status });
+    expect((await service.createIntent(ORDER_ID, JETON)).unavailable).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('ne crée aucun nouveau paiement si la lecture Stripe échoue', async () => {
+    const { service, order, stripe, create } = build();
+    order.payment.stripePaymentIntentId = 'pi_existing';
+    order.payment.stripeAccountId = 'acct_resto1';
+    stripe.paymentIntents.retrieve.mockRejectedValue(new Error('network timeout'));
+    expect((await service.createIntent(ORDER_ID, JETON)).unavailable).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('conserve le compte initial même si le restaurant raccorde un autre compte', async () => {
+    const { service, order, stripe, create } = build({ compteActif: 'acct_new' });
+    order.payment.stripePaymentIntentId = 'pi_existing';
+    order.payment.stripeAccountId = 'acct_original';
+    stripe.paymentIntents.retrieve.mockResolvedValue({ id: 'pi_existing', client_secret: 'secret', amount: 1250, status: 'requires_payment_method' });
+    const response = await service.createIntent(ORDER_ID, JETON);
+    expect(stripe.paymentIntents.retrieve).toHaveBeenCalledWith('pi_existing', { stripeAccount: 'acct_original' });
+    expect(response).toMatchObject({ unavailable: false, stripeAccount: 'acct_original' });
+    expect(order.payment.stripeAccountId).toBe('acct_original');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('ne recrée pas un paiement dont la mise à jour de montant échoue', async () => {
+    const { service, order, stripe, create } = build();
+    order.payment.stripePaymentIntentId = 'pi_existing';
+    order.payment.stripeAccountId = 'acct_resto1';
+    stripe.paymentIntents.retrieve.mockResolvedValue({ id: 'pi_existing', client_secret: 'secret', amount: 1500, status: 'requires_payment_method' });
+    stripe.paymentIntents.update.mockRejectedValue(new Error('network timeout'));
+    expect((await service.createIntent(ORDER_ID, JETON)).unavailable).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('réutilise une clé idempotente spécifique à la commande pour les appels initiaux concurrents', async () => {
+    const { service, create } = build();
+    await Promise.all([service.createIntent(ORDER_ID, JETON), service.createIntent(ORDER_ID, JETON)]);
+    for (const call of create.mock.calls) {
+      expect(call[1]).toEqual({ stripeAccount: 'acct_resto1', idempotencyKey: `order-payment:${ORDER_ID}:initial` });
+    }
   });
 });
 

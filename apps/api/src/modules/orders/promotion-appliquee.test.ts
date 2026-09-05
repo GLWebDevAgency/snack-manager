@@ -100,6 +100,8 @@ function build(
       },
     } as never,
     { record: async () => {} } as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
   return { service, created, incremente, rendu, published };
 }
@@ -352,6 +354,8 @@ describe('la liste des commandes du service', () => {
       { find: () => ({ lean: async () => [] }) } as never,
       { publish: () => {} } as never,
       { log: async () => {} } as never,
+      {} as never,
+      { pourTenant: async () => ["bo"] } as never,
     );
   }
 
@@ -396,6 +400,8 @@ describe('le paiement soldé à la remise', () => {
       {} as never,
       { publish: () => {} } as never,
       { log: async () => {} } as never,
+      {} as never,
+      { pourTenant: async () => ["bo"] } as never,
     );
     (service as unknown as { byId: () => Promise<unknown> }).byId = async () => doc;
     return { service, doc };

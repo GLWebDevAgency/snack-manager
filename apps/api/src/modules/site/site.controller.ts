@@ -18,6 +18,7 @@ import { CheckDomainStatus } from './check-domain-status.usecase';
 import { ListSiteAddresses } from './list-site-addresses.usecase';
 import { RemoveCustomDomain } from './remove-custom-domain.usecase';
 import { ResolveTenantByHost } from './resolve-tenant-by-host.usecase';
+import { Capacites } from '../../common/capacites';
 
 /**
  * Module « Votre site web ».
@@ -27,6 +28,7 @@ import { ResolveTenantByHost } from './resolve-tenant-by-host.usecase';
  * gérant ne peut pas manipuler les domaines d'un autre établissement.
  */
 @Controller()
+@Capacites('online')
 export class SiteController {
   constructor(
     private readonly listAddresses: ListSiteAddresses,

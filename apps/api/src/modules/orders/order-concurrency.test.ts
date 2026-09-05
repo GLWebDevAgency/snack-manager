@@ -16,6 +16,8 @@ function harness() {
     {} as never,
     { publish } as never,
     audit as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
 
   // Chaque appel lit bien le même état `ready` / __v=0 avant que les

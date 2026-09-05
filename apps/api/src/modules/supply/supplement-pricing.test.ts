@@ -176,6 +176,8 @@ function orders(produit: unknown) {
     { find: () => ({ lean: async () => [] }) } as never,
     { publish: () => {} } as never,
     {} as never,
+    {} as never,
+    { pourTenant: async () => ["bo"] } as never,
   );
   return { service, created };
 }
