@@ -31,6 +31,7 @@ import {
   draftBlocker,
   draftToLine,
   draftUnitPrice,
+  effectiveGroups,
   groupRules,
   setVariant,
   SUPPLEMENT_GROUP,
@@ -107,9 +108,7 @@ export function ProductSheet({
   const groups = useMemo(() => {
     if (!current) return { choice: [], free: [], extra: [] };
     const bucket: Record<GroupKind, MenuGroup[]> = { choice: [], free: [], extra: [] };
-    for (const group of current.product.groups) {
-      // Un ancien cache peut contenir les deux projections du même supplément.
-      if (group.key === SUPPLEMENT_GROUP && current.product.supplements.length > 0) continue;
+    for (const group of effectiveGroups(current.product)) {
       if (isMuted(group, current.variantKey)) continue;
       bucket[kindOf(group, current.variantKey)].push(group);
     }

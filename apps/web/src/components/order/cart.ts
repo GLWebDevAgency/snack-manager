@@ -23,6 +23,17 @@ import { uid } from "./helpers";
 /** Même clé que le groupe tarifé et validé par l'API. */
 export const SUPPLEMENT_GROUP = "supplements";
 
+/**
+ * La projection dédiée remplace entièrement l'ancien groupe réservé : ses
+ * prix ET ses règles/defaults ne doivent plus agir derrière un contrôle masqué.
+ * Les autres groupes (dont les suppléments manuels) gardent toutes leurs règles.
+ */
+export function effectiveGroups(product: MenuProduct): MenuGroup[] {
+  return product.supplements.length > 0
+    ? product.groups.filter(group => group.key !== SUPPLEMENT_GROUP)
+    : product.groups;
+}
+
 function dedicatedSupplementKeys(product: MenuProduct, keys: string[]): string[] {
   return [...new Set(keys)].filter(key => product.supplements.some(supplement => supplement.key === key));
 }
@@ -125,7 +136,7 @@ function defaultPicks(
   variantKey: string | null,
 ): Record<string, string[]> {
   const picked: Record<string, string[]> = {};
-  for (const group of product.groups) {
+  for (const group of effectiveGroups(product)) {
     const { min } = groupRules(group, variantKey);
     picked[group.key] =
       group.type === "single" && min >= 1 && group.choices.length === 1
@@ -138,7 +149,7 @@ function defaultPicks(
 /** Draft reconstruit depuis une ligne existante — « Modifier » ne re-saisit rien. */
 export function draftFromLine(line: CartLine, product: MenuProduct): Draft {
   const picked: Record<string, string[]> = {};
-  for (const group of product.groups) {
+  for (const group of effectiveGroups(product)) {
     picked[group.key] = line.options
       .filter((o) => o.groupKey === group.key)
       .map((o) => o.choiceKey)
@@ -192,7 +203,7 @@ export function toggleChoice(
  */
 export function setVariant(draft: Draft, variantKey: string): Draft {
   const picked: Record<string, string[]> = {};
-  for (const group of draft.product.groups) {
+  for (const group of effectiveGroups(draft.product)) {
     const { min, max } = groupRules(group, variantKey);
     const kept = (draft.picked[group.key] ?? []).slice(
       0,
@@ -212,10 +223,7 @@ export function setVariant(draft: Draft, variantKey: string): Draft {
 /** Options du draft, aplaties et tarifées (ordre des groupes du menu). */
 export function draftOptions(draft: Draft): LineOption[] {
   const options: LineOption[] = [];
-  for (const group of draft.product.groups) {
-    // Pendant la transition d'un ancien cache, le bloc dédié fait foi et
-    // ne doit pas être facturé une seconde fois via le groupe réservé.
-    if (group.key === SUPPLEMENT_GROUP && draft.product.supplements.length > 0) continue;
+  for (const group of effectiveGroups(draft.product)) {
     for (const choiceKey of new Set(draft.picked[group.key] ?? [])) {
       const choice = group.choices.find((c) => c.key === choiceKey);
       if (!choice) continue;
@@ -254,7 +262,7 @@ export function draftBlocker(draft: Draft): string | null {
   if (draft.product.variants.length > 0 && !draft.variantKey) {
     return "Choisissez le format";
   }
-  for (const group of draft.product.groups) {
+  for (const group of effectiveGroups(draft.product)) {
     const { min, max } = groupRules(group, draft.variantKey);
     const count = (draft.picked[group.key] ?? []).length;
     if (count < min) {

@@ -91,6 +91,64 @@ describe("choix inclus et suppléments distincts dans le panier web", () => {
     expect(line.options.filter(option => option.groupKey === "supplements")).toHaveLength(1);
   });
 
+  it("ne limite pas deux suppléments dédiés au maximum d’un ancien groupe masqué", () => {
+    const duplicated: MenuProduct = { ...product,
+      variants: [{ key: "standard", name: "Standard", price: 850 }, { key: "grand", name: "Grand", price: 1000 }],
+      supplements: [...product.supplements, { key: "cheddar", label: "Cheddar supplémentaire", priceCents: 100 }],
+      groups: [...product.groups, { key: "supplements", name: "Ancien groupe", type: "multi", min: 0, max: 1,
+        perVariant: null, choices: [{ key: "bacon", name: "Ancien bacon", priceDelta: 200 }] }],
+    };
+    const draft = configured(duplicated);
+    const selected = { ...draft, picked: { ...draft.picked, supplements: ["bacon", "cheddar"] } };
+    expect(draftBlocker(selected)).toBeNull();
+    expect(draftUnitPrice(selected)).toBe(1050);
+    const line = draftToLine(selected);
+    expect(toOrderLines([line])[0].options.filter(option => option.groupKey === "supplements")).toHaveLength(2);
+    const edited = draftFromLine(line, duplicated);
+    expect(draftBlocker(edited)).toBeNull();
+    expect(setVariant(edited, "grand").picked.supplements).toEqual(["bacon", "cheddar"]);
+    expect(reconcile([line], new Map([[duplicated.id, duplicated]])).dropped).toEqual([]);
+  });
+
+  it("ne rend pas obligatoire un supplément dédié à cause d’un ancien minimum masqué", () => {
+    const duplicated: MenuProduct = { ...product, groups: [...product.groups, {
+      key: "supplements", name: "Ancien groupe", type: "multi", min: 1, max: 2, perVariant: null,
+      choices: [{ key: "bacon", name: "Ancien bacon", priceDelta: 200 }],
+    }] };
+    const draft = configured(duplicated);
+    expect(draftBlocker(draft)).toBeNull();
+    expect(draftUnitPrice(draft)).toBe(850);
+    expect(draftOptions(draft).some(option => option.groupKey === "supplements")).toBe(false);
+  });
+
+  it("ne présélectionne jamais un supplément payant via l’unique choix obligatoire masqué", () => {
+    const duplicated: MenuProduct = { ...product,
+      variants: [{ key: "standard", name: "Standard", price: 850 }, { key: "grand", name: "Grand", price: 1000 }],
+      groups: [...product.groups, { key: "supplements", name: "Ancien groupe", type: "single", min: 1, max: 1,
+        perVariant: null, choices: [{ key: "bacon", name: "Ancien bacon", priceDelta: 200 }] }],
+    };
+    const draft = configured(duplicated);
+    expect(draft.picked.supplements ?? []).toEqual([]);
+    expect(draftOptions(draft).some(option => option.groupKey === "supplements")).toBe(false);
+    expect(draftUnitPrice(draft)).toBe(850);
+    const changed = setVariant(draft, "grand");
+    expect(changed.picked.supplements ?? []).toEqual([]);
+    expect(draftBlocker(changed)).toBeNull();
+    expect(draftUnitPrice(changed)).toBe(1000);
+  });
+
+  it("conserve les règles du groupe historique quand il n’y a pas de projection dédiée", () => {
+    const legacy: MenuProduct = { ...product, supplements: [], groups: [...product.groups, {
+      key: "supplements", name: "Ancien groupe", type: "multi", min: 1, max: 1, perVariant: null,
+      choices: [{ key: "bacon", name: "Ancien bacon", priceDelta: 200 }],
+    }] };
+    const draft = configured(legacy);
+    expect(draftBlocker(draft)).toBe("Choisissez : Ancien groupe");
+    const selected = toggleChoice(draft, legacy.groups[3], "bacon");
+    expect(draftBlocker(selected)).toBeNull();
+    expect(draftUnitPrice(selected)).toBe(1050);
+  });
+
   it("écarte seulement un ingrédient devenu indisponible, sans réinventer un supplément", () => {
     const draft = { ...configured(), picked: { ...configured().picked, supplements: ["inconnu"] } };
     expect(draftUnitPrice(draft)).toBe(850);
