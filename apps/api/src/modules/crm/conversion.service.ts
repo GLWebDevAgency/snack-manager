@@ -19,6 +19,7 @@ import {
   prixFondateurCents,
   servicesCents,
   yearlyCents,
+  monthKey,
   type JwtPayload,
   type LeadConvert,
   type LeadConversion,
@@ -312,7 +313,7 @@ export class ConversionService {
     // donc à chacune, et non au total — c'est ce qui la rend lisible sur la
     // facture que le client reçoit.
     const remise = (cents: number) => (terms.founderSeat ? prixFondateurCents(cents) : cents);
-    const period = `${trialEndsAt.getFullYear()}-${String(trialEndsAt.getMonth() + 1).padStart(2, '0')}`;
+    const period = monthKey(trialEndsAt);
     const moduleFacture = commerceMonthlyCents(terms) > 0;
     const moduleLibelle = terms.onlineDelivery
       ? (terms.plan === 'boost' ? 'option livraison restaurant' : 'module commande en ligne + livraison restaurant, fidélité incluse')

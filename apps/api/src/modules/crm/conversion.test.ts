@@ -277,6 +277,20 @@ describe('Convertir un lead en restaurant', () => {
     expect(result.draftInvoices).toBe(2);
   });
 
+  it('utilise la période UTC même si la fin d’essai tombe au mois suivant dans le fuseau serveur', async () => {
+    const priorTimezone = process.env.TZ;
+    process.env.TZ = 'Pacific/Kiritimati';
+    try {
+      const { service, billing } = build();
+      // Trente jours plus tard : 31 août 23:30 UTC, mais 1er septembre à UTC+14.
+      await service.convert(ACTOR, LEAD_ID, BODY, new Date('2026-08-01T23:30:00.000Z'));
+      expect(billing.issue.mock.calls[0]?.[2]).toMatchObject({ period: '2026-08' });
+    } finally {
+      if (priorTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = priorTimezone;
+    }
+  });
+
   it('ignore un body commercial contradictoire et applique partout la proposition du lead', async () => {
     const { service, tenants, users, admin, billing, tenantId } = build();
 
