@@ -10,12 +10,10 @@ import { Model, Types } from 'mongoose';
 import {
   BILLING_JOURNAL,
   INSTALL_FEE_CENTS,
-  SM_INVOICE_VAT,
   TENANT_ACCOUNT_STATUS_LABELS,
   billingPeriod,
   defaultInvoiceLabel,
   formatEuros,
-  invoiceCounterId,
   invoiceVatOf,
   invoiceView,
   isAccessBlocked,
@@ -23,7 +21,6 @@ import {
   statutEffectif,
   essaiEchuLe,
   type CompteLu,
-  formatInvoiceNumber,
   LEGACY_INVOICE_VAT,
   monthKey,
   nextInvoiceDue,
@@ -34,7 +31,6 @@ import {
   mrrNormaliseCents,
   offreClient,
   echeanceDuMois,
-  shiftMonthKey,
   summarizeOutstanding,
   type BillingHistoryQuery,
   type BillingPlan,
@@ -47,9 +43,7 @@ import {
   type InvoiceCancel,
   type InvoiceCredit,
   type InvoiceIssue,
-  type InvoiceKind,
   type InvoicePay,
-  type InvoicePaymentMethod,
   type InvoiceReminderCreate,
   type InvoiceStatus,
   type JwtPayload,
@@ -57,9 +51,9 @@ import {
   type StoredInvoiceVat,
   type TenantAccountStatus,
 } from '@sm/contracts';
-import type { Counter, Invoice, Tenant } from '@sm/db';
+import type { Invoice, Tenant } from '@sm/db';
+import { DuplicateInvoiceException, InvoiceWriterService, type InvoiceWriteInput } from './invoice-writer.service';
 import { AdminService } from './admin.service';
-import { demoSeedEnabled } from '../../common/demo-seed';
 import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
 
 /**
@@ -101,9 +95,6 @@ const DUE_FILTER = {
  */
 const FUTURE_TOLERANCE_MS = 5 * 60_000;
 
-/** Garde-fou du jeu de démonstration : au-delà, l'ancrage est aberrant. */
-const SEED_MAX_MONTHS = 36;
-
 /**
  * FACTURATION — savoir qui paie, qui doit, et depuis quand.
  *
@@ -115,11 +106,10 @@ const SEED_MAX_MONTHS = 36;
  *
  * QUATRE RÈGLES LE STRUCTURENT.
  *
- * 1. NUMÉROTATION CONTINUE ET SANS TROU. Chaque numéro sort d'une séquence
- *    annuelle atomique tenue dans `counters`. Si l'écriture de la facture
- *    échoue après la réservation, le numéro est RENDU (et seulement s'il est
- *    encore le dernier tiré) : c'est la seule façon de garantir qu'un « 0007 »
- *    manquant n'existe pas. Voir `withInvoiceNumber`.
+ * 1. NUMÉROTATION DURABLE. Le compteur annuel conserve la pièce en cours.
+ *    Une écriture incertaine reprend le même identifiant et le même numéro,
+ *    sans décrément ni réattribution. InvoiceWriterService arbitre également
+ *    l'unicité des abonnements par période, y compris après un crash.
  *
  * 2. JAMAIS DE SUPPRESSION. Une facture erronée s'annule avec un motif ; une
  *    facture réglée ne s'annule pas du tout — elle appelle un avoir. Le numéro
@@ -154,7 +144,7 @@ export class BillingService {
   constructor(
     @InjectModel('Invoice') private readonly invoices: Model<Invoice>,
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
-    @InjectModel('Counter') private readonly counters: Model<Counter>,
+    private readonly writer: InvoiceWriterService,
     private readonly admin: AdminService,
     @Optional() private readonly checkout?: InvoiceCheckoutGateway,
   ) {}
@@ -179,7 +169,6 @@ export class BillingService {
     query: BillingHistoryQuery,
     now: Date = new Date(),
   ): Promise<CrmTenantBilling> {
-    await this.ensureSeeded();
     const tenant = await this.requireTenant(tenantId);
     const id = String(tenant._id);
     await this.admin.recordDetailView(actor, id);
@@ -251,7 +240,6 @@ export class BillingService {
    * client avec trois ans d'historique.
    */
   async outstandingFor(tenantId: string, now: Date = new Date()): Promise<CrmOutstanding> {
-    await this.ensureSeeded();
     const oid = toObjectId(tenantId, 'Établissement introuvable');
     const rows = await this.invoices
       .find({ tenantId: oid, ...DUE_FILTER })
@@ -279,7 +267,6 @@ export class BillingService {
    * justifie une suspension.
    */
   async overdue(now: Date = new Date()): Promise<CrmBillingOverdue> {
-    await this.ensureSeeded();
 
     const [rows, tenants] = await Promise.all([
       this.invoices.find({ ...DUE_FILTER }).sort(RECOVERY_ORDER).lean(),
@@ -421,7 +408,7 @@ export class BillingService {
         // Le seul refus attendu est le doublon : `issue` protège déjà contre
         // deux abonnements sur la même période. Tout autre échec doit remonter
         // — une passe qui avale ses erreurs ferait croire le parc à jour.
-        if (cause instanceof ConflictException) {
+        if (cause instanceof DuplicateInvoiceException) {
           ignores.push({ slug, name: nom, raison: 'deja_facture' });
           continue;
         }
@@ -464,17 +451,6 @@ export class BillingService {
     const plan = planOf(tenant);
     const period = billingPeriod(body.period ?? monthKey(now));
     const kind = body.kind;
-
-    if (kind === 'abonnement') {
-      const twin = await this.invoices
-        .findOne({ tenantId: tenant._id, kind, 'period.start': period.start, status: { $ne: 'annulee' } })
-        .lean();
-      if (twin) {
-        throw new ConflictException(
-          `${tenant.name ?? 'Ce client'} a déjà une facture d’abonnement pour ${period.label} (${String((twin as RawInvoice).number)}).`,
-        );
-      }
-    }
 
     const scheduled = kind === 'abonnement' && body.amountCents === undefined ? duDuMois(tenant, period, now) : null;
     if (kind === 'abonnement' && body.amountCents === undefined && !scheduled) {
@@ -847,76 +823,9 @@ export class BillingService {
 
   // ─── Numérotation ───
 
-  /**
-   * Réserve un numéro, écrit la facture, et REND le numéro si l'écriture rate.
-   *
-   * L'ordre inverse — écrire puis numéroter — laisserait une pièce sans numéro
-   * en cas d'incident. Celui-ci laisse, dans le pire des cas, un numéro rendu à
-   * la séquence : la restitution est CONDITIONNÉE à ce qu'aucune autre facture
-   * ne soit passée entre-temps (`{ _id, seq }`), sans quoi on décrémenterait un
-   * compteur déjà consommé par quelqu'un d'autre et deux factures finiraient
-   * par porter le même numéro. Entre un trou et un doublon, on choisit le trou
-   * — et cette condition-là ne se déclenche que si deux émissions se croisent
-   * ET que l'une échoue, ce qui n'arrive pas sur une séquence tirée par des
-   * humains au téléphone.
-   */
-  private async writeInvoice(input: {
-    tenantId: Types.ObjectId;
-    kind: InvoiceKind;
-    label: string;
-    period: { start: Date; end: Date };
-    amountCents: number;
-    status: InvoiceStatus;
-    issuedAt: Date | null;
-    dueAt: Date;
-    paidAt?: Date | null;
-    method?: InvoicePaymentMethod | null;
-    /** Régime imposé — l'AVOIR recopie celui de sa pièce d'origine. */
-    vat?: { ratePercent: number; amountsAre: InvoiceAmountBasis };
-  }): Promise<RawInvoice> {
-    const year = input.dueAt.getUTCFullYear();
-    const counterId = invoiceCounterId(year);
-    const seq = await this.nextSequence(counterId);
-
-    try {
-      const created = await this.invoices.create({
-        tenantId: input.tenantId,
-        number: formatInvoiceNumber(year, seq),
-        kind: input.kind,
-        label: input.label,
-        period: { start: input.period.start, end: input.period.end },
-        amountCents: input.amountCents,
-        // LE RÉGIME EST FIGÉ SUR LA PIÈCE, ici et nulle part ailleurs. Écrit à
-        // l'émission plutôt que relu à l'impression : une facture de l'an
-        // dernier ne se recalcule pas au taux de cette année. `SM_INVOICE_VAT`
-        // dit que nos tarifs sont HORS TAXES et que la TVA est de 20 % ; le
-        // montant ci-dessus est donc un montant HT, et la facture le dira.
-        // Seul l'AVOIR impose un régime : celui de sa pièce d'origine.
-        vat: input.vat ?? { ...SM_INVOICE_VAT },
-        status: input.status,
-        issuedAt: input.issuedAt,
-        dueAt: input.dueAt,
-        paidAt: input.paidAt ?? null,
-        method: input.method ?? null,
-        cancelledAt: null,
-        cancelReason: '',
-      });
-      return created.toObject() as RawInvoice;
-    } catch (err) {
-      await this.counters
-        .findOneAndUpdate({ _id: counterId, seq }, { $inc: { seq: -1 } })
-        .catch(() => null);
-      throw err;
-    }
-  }
-
-  private async nextSequence(counterId: string): Promise<number> {
-    const doc = await this.counters.findOneAndUpdate(
-      { _id: counterId },
-      { $inc: { seq: 1 } },
-      { new: true, upsert: true },
-    );
-    return doc?.seq ?? 1;
+  /** L'arbitrage durable est commun à toutes les natures de pièces. */
+  private writeInvoice(input: InvoiceWriteInput): Promise<RawInvoice> {
+    return this.writer.write(input);
   }
 
   // ─── Accès ───
@@ -964,123 +873,6 @@ export class BillingService {
     }, { $set }, { new: true }).lean();
     if (!raw) throw new ConflictException('La facture a changé. Actualisez avant de poursuivre.');
     return raw as RawInvoice;
-  }
-
-  // ─── Jeu de démonstration ───
-
-  private seeding: Promise<void> | null = null;
-
-  /**
-   * Écrit l'historique de facturation de démonstration si — et seulement si —
-   * la collection est VIDE. La promesse est mémorisée : deux requêtes
-   * simultanées au démarrage ne doivent pas insérer la série deux fois.
-   *
-   * Même garde-fou que `CrmService.ensureSeeded` : une amorce ratée ne doit
-   * jamais faire tomber la vue, au pire la fiche s'affiche sans historique.
-   */
-  private ensureSeeded(): Promise<void> {
-    // Jamais en production : voir `demoSeedEnabled`. Des factures inventées
-    // dans un registre comptable seraient bien pires que des leads fictifs.
-    if (!demoSeedEnabled()) return Promise.resolve();
-    this.seeding ??= (async () => {
-      if ((await this.invoices.countDocuments({})) > 0) return;
-      await this.seedDemo();
-    })().catch(() => {
-      this.seeding = null;
-    });
-    return this.seeding;
-  }
-
-  /**
-   * L'HISTORIQUE DE CLASS'FOOD — notre unique client réel.
-   *
-   * Ce qui est écrit, et pourquoi ce n'est pas une fiction :
-   *
-   *  · une MISE EN PLACE de 290 € réglée par virement le jour de la mise en
-   *    service (docs/specs/contraintes-business.md §6.8) ;
-   *  · un ABONNEMENT mensuel au tarif de sa formule pour chaque mois écoulé
-   *    depuis son arrivée, RÉGLÉ par prélèvement — le premier le jour de la
-   *    mise en service, les suivants le 1er du mois (« prélèvement mensuel
-   *    constant », FAQ #17) ;
-   *  · l'abonnement du MOIS PROCHAIN, émis et en attente de prélèvement au 1er.
-   *    C'est la facture « en cours », et son échéance est TOUJOURS dans le
-   *    futur, quel que soit le jour où l'amorce tourne.
-   *
-   * AUCUN IMPAYÉ N'EST FABRIQUÉ. L'outil doit savoir AFFICHER un retard, pas en
-   * inventer un sur le seul restaurant qui nous fait confiance : une capture
-   * d'écran de démonstration finit toujours par circuler. La file
-   * `/crm/billing/overdue` sort donc vide, et c'est le bon résultat.
-   *
-   * L'amorce n'écrit RIEN au journal d'administration : personne n'a émis ces
-   * factures, elles décrivent un passé. Une ligne « Facture SM-2026-0001 émise »
-   * signée d'un compte d'équipe serait un faux dans un registre dont toute la
-   * valeur tient à ce qu'il ne ment pas.
-   */
-  private async seedDemo(now: Date = new Date()): Promise<void> {
-    const tenant = (await this.tenants.findOne({ slug: 'classfood' }).lean()) as RawTenant | null;
-    if (!tenant) return;
-
-    const arrival = tenant.createdAt ? new Date(tenant.createdAt) : now;
-    if (arrival.getTime() > now.getTime()) return;
-
-    const plan = planOf(tenant);
-    // Même source que la facturation réelle : l'amorce de démonstration doit
-    // montrer les mêmes montants que ceux qu'on prélève, sinon elle ment.
-    const mrr = mrrOf(tenant, now);
-    const tenantOid = tenant._id as Types.ObjectId;
-    const firstKey = monthKey(arrival);
-    const currentKey = monthKey(now);
-
-    // 1. Mise en place, réglée à la signature.
-    const firstPeriod = billingPeriod(firstKey);
-    await this.writeInvoice({
-      tenantId: tenantOid,
-      kind: 'mise_en_place',
-      label: defaultInvoiceLabel('mise_en_place', plan, firstPeriod),
-      period: firstPeriod,
-      amountCents: INSTALL_FEE_CENTS,
-      status: 'payee',
-      issuedAt: arrival,
-      dueAt: arrival,
-      paidAt: arrival,
-      method: 'virement',
-    });
-
-    // 2. Un abonnement par mois écoulé, réglé par prélèvement.
-    let key = firstKey;
-    for (let guard = 0; guard < SEED_MAX_MONTHS; guard += 1) {
-      const period = billingPeriod(key);
-      // Le premier mois est prélevé le jour de la mise en service, les suivants
-      // au 1er : c'est le « prélèvement mensuel constant » promis au client.
-      const debited = key === firstKey ? arrival : period.start;
-      await this.writeInvoice({
-        tenantId: tenantOid,
-        kind: 'abonnement',
-        label: defaultInvoiceLabel('abonnement', plan, period),
-        period,
-        amountCents: mrr,
-        status: 'payee',
-        issuedAt: debited,
-        dueAt: debited,
-        paidAt: debited,
-        method: 'prelevement',
-      });
-      if (key === currentKey) break;
-      key = shiftMonthKey(key, 1);
-    }
-
-    // 3. Le mois prochain : émis, échéance au 1er — la facture « en cours ».
-    const next = billingPeriod(shiftMonthKey(currentKey, 1));
-    await this.writeInvoice({
-      tenantId: tenantOid,
-      kind: 'abonnement',
-      label: defaultInvoiceLabel('abonnement', plan, next),
-      period: next,
-      amountCents: mrr,
-      status: 'envoyee',
-      issuedAt: now,
-      dueAt: next.start,
-    });
   }
 }
 

@@ -4,6 +4,8 @@ import { AdminService } from './admin.service';
 import { ComptesService } from './comptes.service';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
+import { InvoiceWriterService } from './invoice-writer.service';
+import { InvoiceNumberingService } from './invoice-numbering.service';
 import { ConversionService } from './conversion.service';
 import { CrmController } from './crm.controller';
 import { CrmService } from './crm.service';
@@ -68,6 +70,8 @@ import { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
     HealthService,
     InsightsService,
     BillingService,
+    InvoiceWriterService,
+    InvoiceNumberingService,
     InvoiceCheckoutGateway,
     SignalsService,
     PlatformService,

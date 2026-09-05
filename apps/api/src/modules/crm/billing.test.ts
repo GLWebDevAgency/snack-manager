@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Types, type Model } from 'mongoose';
 import {
   ADMIN_LOG_ACTION_LABELS,
   INSTALL_FEE_CENTS,
@@ -28,163 +27,15 @@ import {
   EMPTY_SERVICES,
   ATELIER_PRESENCE_CENTS,
 } from '@sm/contracts';
-import type { AdminLog, Counter, Invoice, Tenant, User } from '@sm/db';
+import type { AdminLog, Tenant, User } from '@sm/db';
 import { testOriginesImages } from '../tenants/tenants.fakes';
 import { AdminService } from './admin.service';
 import { BillingService } from './billing.service';
+import { DuplicateInvoiceException, InvoiceWriterService } from './invoice-writer.service';
+import { InvoiceNumberingService } from './invoice-numbering.service';
+import { FakeCounters, FakeInvoices, FakeIssuances } from './billing.fakes';
 import type { InvoiceCheckoutGateway } from '../billing/invoice-checkout.gateway';
-import { FakeCollection, type Row } from './admin.fakes';
-
-// ─────────────────────────────────────────────────────────────
-// Doublures propres à la facturation.
-//
-// `admin.fakes` suffit pour les tenants, le journal et les comptes d'équipe :
-// `AdminService` et `BillingService` leur parlent le même vocabulaire étroit.
-// Les FACTURES et le COMPTEUR, eux, exigent deux choses que cette doublure ne
-// sait pas faire — un filtre `$in`, un chemin pointé `period.start`, et un
-// `$inc` avec `upsert`. Les rejouer ici plutôt que d'élargir la doublure
-// commune évite de laisser passer, ailleurs, un appel impossible en production.
-// ─────────────────────────────────────────────────────────────
-
-const deep = (row: Row, path: string): unknown =>
-  path.split('.').reduce<unknown>((acc, key) => {
-    if (acc === null || typeof acc !== 'object') return undefined;
-    return (acc as Record<string, unknown>)[key];
-  }, row);
-
-const same = (a: unknown, b: unknown): boolean => (a == null && b == null) || String(a) === String(b);
-
-function matches(row: Row, filter: Row): boolean {
-  return Object.entries(filter).every(([key, expected]) => {
-    const actual = deep(row, key);
-    if (expected && typeof expected === 'object' && '$in' in (expected as object)) {
-      const list = (expected as { $in: unknown[] }).$in;
-      return list.some((candidate) => same(actual, candidate));
-    }
-    // `$ne` : le filtre des créances écarte les avoirs (`kind: { $ne: 'avoir' }`).
-    if (expected && typeof expected === 'object' && '$ne' in (expected as object)) {
-      return !same(actual, (expected as { $ne: unknown }).$ne);
-    }
-    return same(actual, expected);
-  });
-}
-
-function order(rows: Row[], spec: Record<string, 1 | -1>): Row[] {
-  const criteria = Object.entries(spec);
-  return [...rows].sort((a, b) => {
-    for (const [key, direction] of criteria) {
-      const left = deep(a, key);
-      const right = deep(b, key);
-      const delta =
-        left instanceof Date || right instanceof Date
-          ? Number(new Date(left as Date)) - Number(new Date(right as Date))
-          : String(left).localeCompare(String(right));
-      if (delta !== 0) return delta * (direction === -1 ? -1 : 1);
-    }
-    return 0;
-  });
-}
-
-class FakeQuery {
-  constructor(private rows: Row[]) {}
-  sort(spec: Record<string, 1 | -1>): this {
-    this.rows = order(this.rows, spec);
-    return this;
-  }
-  limit(n: number): this {
-    this.rows = this.rows.slice(0, n);
-    return this;
-  }
-  async lean(): Promise<Row[]> {
-    return this.rows;
-  }
-}
-
-class FakeOne {
-  constructor(private readonly row: Row | null) {}
-  async lean(): Promise<Row | null> {
-    return this.row;
-  }
-}
-
-/** Collection de factures : exactement ce que `BillingService` lui demande. */
-class FakeInvoices {
-  readonly rows: Row[] = [];
-  /** Arme un échec d'écriture — sert à vérifier la restitution du numéro. */
-  failNextCreate = false;
-
-  async countDocuments(filter: Row = {}): Promise<number> {
-    return this.rows.filter((r) => matches(r, filter)).length;
-  }
-
-  find(filter: Row = {}): FakeQuery {
-    return new FakeQuery(this.rows.filter((r) => matches(r, filter)).map((r) => ({ ...r })));
-  }
-
-  findOne(filter: Row): FakeOne {
-    const row = this.rows.find((r) => matches(r, filter));
-    return new FakeOne(row ? { ...row } : null);
-  }
-
-  findOneAndUpdate(filter: Row, update: { $set?: Row; $push?: Row }): FakeOne {
-    const row = this.rows.find((r) => matches(r, filter));
-    if (!row) return new FakeOne(null);
-    Object.assign(row, update.$set ?? {});
-    // `$push` ajoute en fin de tableau, comme Mongo — c'est l'écriture des
-    // relances, et une doublure qui l'écraserait masquerait la perte d'une
-    // relance concurrente.
-    for (const [key, value] of Object.entries(update.$push ?? {})) {
-      const list = Array.isArray(row[key]) ? (row[key] as unknown[]) : [];
-      list.push(value);
-      row[key] = list;
-    }
-    return new FakeOne({ ...row });
-  }
-
-  async create(doc: Row): Promise<{ toObject: () => Row }> {
-    if (this.failNextCreate) {
-      this.failNextCreate = false;
-      throw new Error('écriture refusée par le moteur');
-    }
-    const created: Row = { _id: new Types.ObjectId(), ...doc };
-    this.rows.push(created);
-    return { toObject: () => ({ ...created }) };
-  }
-
-  asModel(): Model<Invoice> {
-    return this as unknown as Model<Invoice>;
-  }
-}
-
-/** Compteur de séquence : `$inc` atomique avec `upsert`, et rien d'autre. */
-class FakeCounters {
-  readonly rows: Row[] = [];
-
-  findOneAndUpdate(
-    filter: Row,
-    update: { $inc?: Record<string, number> },
-    options?: { upsert?: boolean },
-  ): Promise<Row | null> {
-    let row = this.rows.find((r) => matches(r, filter));
-    if (!row) {
-      if (!options?.upsert) return Promise.resolve(null);
-      row = { _id: filter._id, seq: 0 };
-      this.rows.push(row);
-    }
-    for (const [key, delta] of Object.entries(update.$inc ?? {})) {
-      row[key] = Number(row[key] ?? 0) + delta;
-    }
-    return Promise.resolve({ ...row });
-  }
-
-  seqOf(id: string): number {
-    return Number(this.rows.find((r) => r._id === id)?.seq ?? 0);
-  }
-
-  asModel(): Model<Counter> {
-    return this as unknown as Model<Counter>;
-  }
-}
+import { FakeCollection } from './admin.fakes';
 
 // ─────────────────────────────────────────────────────────────
 
@@ -225,6 +76,8 @@ describe('Facturation', () => {
   let users: FakeCollection;
   let invoices: FakeInvoices;
   let counters: FakeCounters;
+  let issuances: FakeIssuances;
+  let writer: InvoiceWriterService;
   let billing: BillingService;
   /** Le journal se relit AVEC son service : c'est lui qui rend les libellés. */
   let admin: AdminService;
@@ -238,6 +91,8 @@ describe('Facturation', () => {
     users = new FakeCollection('user');
     invoices = new FakeInvoices();
     counters = new FakeCounters();
+    issuances = new FakeIssuances();
+    writer = new InvoiceWriterService(invoices.asModel(), issuances.asModel(), new InvoiceNumberingService(invoices.asModel(), counters.asModel()));
 
     tenants.seed({
       _id: CLASSFOOD,
@@ -270,20 +125,20 @@ describe('Facturation', () => {
     billing = new BillingService(
       invoices.asModel(),
       tenants.asModel<Tenant>(),
-      counters.asModel(),
+      writer,
       admin,
     );
   });
 
   /**
-   * Neutralise l'amorce de démonstration : ces tests écrivent leur propre
-   * histoire. Une lecture la déclenche (et la mémorise, donc elle ne repartira
-   * pas), puis on remet les trois collections à zéro.
+   * Une fiche vide reste vide : aucune lecture n'amorce la comptabilité.
+   * Les tests métier commencent avec un registre et des réservations vierges.
    */
   const sansAmorce = async () => {
     await billing.overdue(LE_19_AOUT);
     invoices.rows.length = 0;
     counters.rows.length = 0;
+    issuances.rows.length = 0;
     logs.rows.length = 0;
   };
 
@@ -310,7 +165,7 @@ describe('Facturation', () => {
       const invoice = await billing.issue(SM, CLASSFOOD, emission(), LE_19_AOUT);
       const row = invoices.rows.find((r) => String(r._id) === invoice._id)!;
       row.stripeCheckoutSessionId = 'cs_invoice';
-      billing = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(), counters.asModel(), admin, gateway as unknown as InvoiceCheckoutGateway);
+      billing = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(), writer, admin, gateway as unknown as InvoiceCheckoutGateway);
       return { invoice, row };
     }
 
@@ -378,7 +233,7 @@ describe('Facturation', () => {
       expect(second.number).toBe('SM-2026-0002');
     });
 
-    it('rend le numéro quand l’écriture échoue — pas de trou dans la séquence', async () => {
+    it('conserve le numéro réservé et reprend la même facture après un échec d’écriture', async () => {
       await sansAmorce();
       const before = counters.seqOf(invoiceCounterId(2026));
 
@@ -387,10 +242,40 @@ describe('Facturation', () => {
         billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT),
       ).rejects.toThrow();
 
-      expect(counters.seqOf(invoiceCounterId(2026))).toBe(before);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(before + 1);
+      expect(invoices.rows).toHaveLength(0);
+      const pending = counters.rows[0]?.pendingInvoice as { snapshot: { _id: unknown }; number: string };
+      expect(pending.number).toBe(formatInvoiceNumber(2026, before + 1));
 
-      const next = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
-      expect(next.number).toBe(formatInvoiceNumber(2026, before + 1));
+      // Une autre instance aide la réservation existante ; le conflit invite
+      // l'opérateur à relire la pièce récupérée au lieu d'en émettre une seconde.
+      const restarted = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(),
+        new InvoiceWriterService(invoices.asModel(), issuances.asModel(), new InvoiceNumberingService(invoices.asModel(), counters.asModel())), admin);
+      await expect(restarted.issue(SM, CLASSFOOD, emission({ period: '2026-09', amountCents: MRR + 1000 }), LE_19_AOUT)).rejects.toThrow(DuplicateInvoiceException);
+      expect(invoices.rows).toHaveLength(1);
+      expect(String(invoices.rows[0]?._id)).toBe(String(pending.snapshot._id));
+      expect(invoices.rows[0]?.number).toBe(pending.number);
+      expect(invoices.rows[0]?.amountCents).toBe(MRR);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(before + 1);
+      expect(counters.rows[0]?.pendingInvoice).toBeNull();
+    });
+
+    it('une réponse perdue après insertion ne réattribue pas le numéro à un autre client', async () => {
+      await sansAmorce();
+      invoices.failAfterNextCreate = true;
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow('réponse perdue');
+      const first = (await invoices.find({}).lean())[0]!;
+      expect(first.number).toBe('SM-2026-0001');
+      expect(counters.rows[0]?.pendingInvoice).not.toBeNull();
+      await expect(billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT)).rejects.toThrow(DuplicateInvoiceException);
+
+      // La prochaine émission termine le pending existant avant son allocation.
+      const next = await billing.issue(SM, VOISIN, emission({ period: '2026-09' }), LE_19_AOUT);
+      expect(next.number).toBe('SM-2026-0002');
+      expect(invoices.rows).toHaveLength(2);
+      expect(invoices.rows.find((row) => row.number === first.number)).toEqual(first);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(2);
+      expect(counters.rows[0]?.pendingInvoice).toBeNull();
     });
 
     it('ne journalise rien quand l’émission échoue', async () => {
@@ -409,6 +294,65 @@ describe('Facturation', () => {
   // ─── Émission ───
 
   describe('Émettre', () => {
+    it('arbitre deux émissions concurrentes de la même échéance en base', async () => {
+      await sansAmorce();
+      const other = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(),
+        new InvoiceWriterService(invoices.asModel(), issuances.asModel(), new InvoiceNumberingService(invoices.asModel(), counters.asModel())), admin);
+      const results = await Promise.allSettled([
+        billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT),
+        other.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT),
+      ]);
+      expect(invoices.rows.filter((row) => row.kind === 'abonnement' && row.status !== 'annulee')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(1);
+    });
+
+    it('le propriétaire initial réussit si un helper matérialise avant sa lecture de la facture', async () => {
+      await sansAmorce();
+      const helper = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(),
+        new InvoiceWriterService(invoices.asModel(), issuances.asModel(), new InvoiceNumberingService(invoices.asModel(), counters.asModel())), admin);
+      let reached!: () => void;
+      let release!: () => void;
+      const atPrevious = new Promise<void>((resolve) => { reached = resolve; });
+      const resumePrevious = new Promise<void>((resolve) => { release = resolve; });
+      const original = invoices.findOne.bind(invoices);
+      const read = vi.spyOn(invoices, 'findOne').mockImplementationOnce((filter) => {
+        const query = original(filter);
+        const lean = query.lean.bind(query);
+        vi.spyOn(query, 'lean').mockImplementationOnce(async () => {
+          // Le claim existe, mais cette lecture n'a pas encore interrogé le
+          // store. Le helper peut donc matérialiser la facture avant elle.
+          reached();
+          await resumePrevious;
+          return lean();
+        });
+        return query;
+      });
+      const ownerResult = Promise.allSettled([
+        billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT),
+      ]);
+      try {
+        await atPrevious;
+        expect(issuances.rows).toHaveLength(1);
+        expect(invoices.rows).toHaveLength(0);
+        await expect(helper.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT))
+          .rejects.toThrow(DuplicateInvoiceException);
+        expect(invoices.rows).toHaveLength(1);
+        release();
+        const [result] = await ownerResult;
+        expect(result?.status).toBe('fulfilled');
+        if (result?.status === 'fulfilled') expect(result.value._id).toBe(String(invoices.rows[0]?._id));
+        expect(invoices.rows).toHaveLength(1);
+        expect(counters.seqOf(invoiceCounterId(2026))).toBe(1);
+        expect(counters.rows[0]?.pendingInvoice).toBeNull();
+        expect(billingLines()).toHaveLength(1);
+      } finally {
+        release();
+        await ownerResult;
+        read.mockRestore();
+      }
+    });
+
     it('une ancienne pièce annulée ne masque pas son remplacement actif', async () => {
       await sansAmorce();
       const ancienne = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
@@ -436,7 +380,22 @@ describe('Facturation', () => {
       await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
       await expect(
         billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT),
-      ).rejects.toThrow(/déjà une facture d’abonnement pour septembre 2026/);
+      ).rejects.toThrow(DuplicateInvoiceException);
+    });
+
+    it('un seul remplacement gagne après une annulation, sans perdre la pièce annulée', async () => {
+      await sansAmorce();
+      const first = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      await billing.cancel(SM, CLASSFOOD, first._id, { reason: 'Montant à corriger' }, LE_19_AOUT);
+      const results = await Promise.allSettled([
+        billing.issue(SM, CLASSFOOD, emission({ period: '2026-09', amountCents: MRR + 100 }), LE_19_AOUT),
+        billing.issue(SM, CLASSFOOD, emission({ period: '2026-09', amountCents: MRR + 200 }), LE_19_AOUT),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(invoices.rows).toHaveLength(2);
+      expect(invoices.rows.find((row) => String(row._id) === first._id)?.status).toBe('annulee');
+      expect(invoices.rows.filter((row) => row.status !== 'annulee')).toHaveLength(1);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(2);
     });
 
     it('rouvre le mois après une annulation', async () => {
@@ -519,10 +478,10 @@ describe('Facturation', () => {
       await sansAmorce();
       const draft = await billing.issue(SM, CLASSFOOD, emission({ draft: true }), LE_19_AOUT);
       const original = invoices.findOneAndUpdate.bind(invoices);
-      const update = vi.spyOn(invoices, 'findOneAndUpdate').mockImplementationOnce((filter, changes) => {
+      const update = vi.spyOn(invoices, 'findOneAndUpdate').mockImplementationOnce((filter, changes, options) => {
         const row = invoices.rows.find((invoice) => String(invoice._id) === draft._id)!;
         row.status = 'annulee';
-        return original(filter, changes);
+        return original(filter, changes, options);
       });
       await expect(billing.send(SM, CLASSFOOD, draft._id, LE_19_AOUT)).rejects.toThrow('changé');
       expect(invoices.rows.find((invoice) => String(invoice._id) === draft._id)?.status).toBe('annulee');
@@ -1733,83 +1692,62 @@ describe('Facturation', () => {
     });
   });
 
-  // ─── Jeu de démonstration ───
+  // ─── Les lectures n'amorcent jamais le registre comptable ───
 
-  describe('Jeu de démonstration Class’Food', () => {
-    // L'amorçage n'écrit QUE si `SM_DEMO_SEED=on` est posé explicitement — la
-    // production ne doit jamais se repeupler de factures inventées après une
-    // purge. Ces deux cas décrivent l'amorçage lui-même : ils l'activent donc,
-    // et le cas « rien sans le drapeau » est vérifié juste après.
-    beforeEach(() => {
-      process.env.SM_DEMO_SEED = 'on';
-    });
-    afterEach(() => {
-      delete process.env.SM_DEMO_SEED;
-    });
+  describe('Aucune facture de démonstration créée par consultation', () => {
+    afterEach(() => { vi.unstubAllEnvs(); });
 
-    it('écrit une histoire cohérente : des factures réglées et une en cours', async () => {
-      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT);
-
-      const mois =
-        1 +
-        (() => {
-          let n = 0;
-          let key = '2026-08';
-          while (key !== monthKey(new Date())) {
-            key = shiftMonthKey(key, 1);
-            n += 1;
-          }
-          return n;
-        })();
-
-      // Mise en place + un abonnement par mois écoulé + celui du mois prochain.
-      expect(fiche.invoices).toHaveLength(1 + mois + 1);
-
-      const install = fiche.invoices.find((i) => i.kind === 'mise_en_place')!;
-      expect(install.amountCents).toBe(INSTALL_FEE_CENTS);
-      expect(install.status).toBe('payee');
-      expect(install.methodLabel).toBe('Virement');
-
-      const abonnements = fiche.invoices.filter((i) => i.kind === 'abonnement');
-      expect(abonnements.every((i) => i.amountCents === MRR)).toBe(true);
-      expect(abonnements.filter((i) => i.status === 'payee')).toHaveLength(mois);
-      expect(abonnements.filter((i) => i.status === 'envoyee')).toHaveLength(1);
-    });
-
-    it('n’invente AUCUN impayé sur notre unique client réel', async () => {
-      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT);
-      expect(fiche.outstanding.overdueInvoices).toBe(0);
-      expect(fiche.outstanding.overdueCents).toBe(0);
-      expect(fiche.outstanding.oldestOverdueDays).toBe(0);
-      // Une seule créance : celle du mois prochain, échéance à venir.
-      expect(fiche.outstanding.totalDueCents).toBe(MRR);
-      expect(fiche.nextDue?.daysUntil).toBeGreaterThan(0);
-
-      const file = await billing.overdue();
-      expect(file.count).toBe(0);
-    });
-
-    it('ne signe aucune fausse ligne de journal', async () => {
-      await billing.overdue();
-      // Personne n'a émis ces factures : elles décrivent un passé. Un « Facture
-      // émise » au nom d'un compte d'équipe serait un faux dans un registre dont
-      // toute la valeur tient à ce qu'il ne ment pas.
+    const expectEmptyLedger = () => {
+      expect(invoices.rows).toHaveLength(0);
+      expect(issuances.rows).toHaveLength(0);
+      expect(counters.rows).toHaveLength(0);
       expect(billingLines()).toEqual([]);
-      expect(notes()).toEqual([]);
+    };
+
+    it.each([undefined, 'on'])('garde la fiche vide avec SM_DEMO_SEED=%s', async (seed) => {
+      vi.stubEnv('SM_DEMO_SEED', seed);
+      const fiche = await billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT);
+      expect(fiche.invoices).toHaveLength(0);
+      expect(fiche.outstanding.totalDueCents).toBe(0);
+      expectEmptyLedger();
     });
 
-    it('ne s’écrit qu’une fois, même sur deux consultations', async () => {
-      await billing.tenantBilling(SM, CLASSFOOD, TOUT);
-      const apresUne = invoices.rows.length;
-      await billing.overdue();
-      await billing.tenantBilling(SM, CLASSFOOD, TOUT);
-      expect(invoices.rows).toHaveLength(apresUne);
+    it('ne crée ni créance ni réservation depuis les lectures de recouvrement', async () => {
+      vi.stubEnv('SM_DEMO_SEED', 'on');
+      const [file, outstanding] = await Promise.all([
+        billing.overdue(LE_19_AOUT),
+        billing.outstandingFor(CLASSFOOD, LE_19_AOUT),
+      ]);
+      expect(file.count).toBe(0);
+      expect(outstanding.totalDueCents).toBe(0);
+      expectEmptyLedger();
     });
 
-    it('numérote la série sans trou, de la mise en place au mois prochain', async () => {
-      await billing.tenantBilling(SM, CLASSFOOD, TOUT);
-      const numbers = invoices.rows.map((r) => String(r.number)).sort();
-      expect(numbers).toEqual(numbers.map((_, i) => formatInvoiceNumber(2026, i + 1)));
+    it('deux instances et plusieurs consultations simultanées ne sèment aucune facture', async () => {
+      vi.stubEnv('SM_DEMO_SEED', 'on');
+      const other = new BillingService(invoices.asModel(), tenants.asModel<Tenant>(),
+        new InvoiceWriterService(invoices.asModel(), issuances.asModel(), new InvoiceNumberingService(invoices.asModel(), counters.asModel())), admin);
+      await Promise.all([
+        billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT),
+        other.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT),
+        billing.overdue(LE_19_AOUT),
+        other.outstandingFor(CLASSFOOD, LE_19_AOUT),
+      ]);
+      expectEmptyLedger();
+    });
+
+    it('conserve uniquement les pièces réellement émises lors des consultations suivantes', async () => {
+      vi.stubEnv('SM_DEMO_SEED', 'on');
+      const emitted = await billing.issue(SM, CLASSFOOD, emission({ period: '2026-09' }), LE_19_AOUT);
+      const before = await invoices.find({}).lean();
+      await Promise.all([
+        billing.tenantBilling(SM, CLASSFOOD, TOUT, LE_19_AOUT),
+        billing.overdue(LE_19_AOUT),
+        billing.outstandingFor(CLASSFOOD, LE_19_AOUT),
+      ]);
+      expect(invoices.rows).toEqual(before);
+      expect(invoices.rows.map((row) => row.number)).toEqual([emitted.number]);
+      expect(counters.seqOf(invoiceCounterId(2026))).toBe(1);
     });
   });
 });

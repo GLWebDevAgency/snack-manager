@@ -1,4 +1,5 @@
 import { Schema, type InferSchemaType } from 'mongoose';
+import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import {
   ADMIN_LOG_ACTIONS,
   AUDIT_AUTHOR_MEANS,
@@ -1142,6 +1143,7 @@ export const CounterSchema = new Schema(
   {
     _id: { type: String, required: true }, // `<tenantId>:<yyyymmdd>`
     seq: { type: Number, default: 0 },
+    pendingInvoice: { type: InvoicePendingSchema, default: null },
   },
   { versionKey: false },
 );
@@ -1980,7 +1982,7 @@ InvoiceSchema.index({ number: 1 }, { unique: true });
 InvoiceSchema.index({ tenantId: 1, dueAt: -1 });
 /** File des impayés du parc : on balaie par statut, du plus ancien au plus récent. */
 InvoiceSchema.index({ status: 1, dueAt: 1 });
-/** Garde-fou anti-double-facturation : un abonnement par client et par période. */
+/** Accélère la vérification historique ; l'arbitrage vit dans InvoiceIssuance. */
 InvoiceSchema.index({ tenantId: 1, kind: 1, 'period.start': 1 });
 export type Invoice = InferSchemaType<typeof InvoiceSchema>;
 
@@ -2006,6 +2008,7 @@ export const MODELS = {
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
   Invoice: { name: 'Invoice', schema: InvoiceSchema, collection: 'invoices' },
+  InvoiceIssuance: { name: 'InvoiceIssuance', schema: InvoiceIssuanceSchema, collection: 'invoiceIssuances' },
   Lead: { name: 'Lead', schema: LeadSchema, collection: 'leads' },
   ErrorEvent: { name: 'ErrorEvent', schema: ErrorEventSchema, collection: 'errorevents' },
   AlertLog: { name: 'AlertLog', schema: AlertLogSchema, collection: 'alertlogs' },
