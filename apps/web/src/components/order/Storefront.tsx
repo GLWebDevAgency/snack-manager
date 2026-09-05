@@ -37,6 +37,7 @@
  * prix sont dans le HTML livré, sans attendre l’exécution du JavaScript.
  */
 
+import { storefrontHighlights } from "./highlights";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { logoPour, TYPE_PAIRS } from "@sm/contracts";
 import { cx } from "@/lib/cx";
@@ -101,7 +102,7 @@ const EMBED_HEADER_H = 58;
 const EMBED_HEADER_VERROU_H = 76;
 
 /** Nombre de produits mis en avant sur la vitrine. */
-const HIGHLIGHT_COUNT = 8;
+
 
 export function Storefront({
   site,
@@ -235,21 +236,8 @@ export function Storefront({
     [cart.lines],
   );
 
-  /**
-   * Mise en avant : les produits **photographiés** d’abord.
-   *
-   * Aucun champ « populaire » n’étant exposé par l’API, l’ordre du menu — celui
-   * que le restaurateur a lui-même arrangé — fait autorité ; à rang égal, le
-   * plat qui a une photo passe devant. C’est le seul rail de la page où le
-   * visuel occupe la moitié de la carte : le remplir de plats sans photo
-   * reviendrait à ouvrir la vitrine sur une rangée de monogrammes.
-   */
-  const highlights = useMemo(() => {
-    const all = site.categories.flatMap((c) => c.products).filter((p) => !p.outOfStock);
-    const shot = all.filter((p) => p.photoUrl);
-    const rest = all.filter((p) => !p.photoUrl);
-    return [...shot, ...rest].slice(0, HIGHLIGHT_COUNT);
-  }, [site.categories]);
+  // La sélection du gérant est partagée avec les scènes TV.
+  const highlights = useMemo(() => storefrontHighlights(site.categories, site.featuredConfigured), [site.categories, site.featuredConfigured]);
 
   // ── Lignes écartées à la réconciliation : on l’annonce, on ne l’escamote pas ──
   const notice =

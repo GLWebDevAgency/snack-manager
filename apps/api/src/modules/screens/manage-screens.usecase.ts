@@ -55,6 +55,7 @@ export class ManageScreens {
       orientation: dto.orientation,
       theme: dto.theme,
       scenography: dto.scenography,
+      presentation: dto.presentation,
       playlist:
         dto.playlist ??
         (snapshot ? buildDefaultPlaylist(snapshot.categories, snapshot.products) : []),

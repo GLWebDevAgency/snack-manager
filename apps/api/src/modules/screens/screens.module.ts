@@ -12,6 +12,7 @@ import { PreviewScreenContent } from './preview-screen-content.usecase';
 // L'écran de salle DÉRIVE `photoUrl` et le point de recadrage 16:9 de la
 // médiathèque (`menu-board.repository.ts`).
 import { MediathequeModule } from '../mediatheque/mediatheque.module';
+import { OriginesImages } from '../tenants/origines-images';
 
 /**
  * « Menu Board » — les écrans TV accrochés en salle.
@@ -40,6 +41,7 @@ import { MediathequeModule } from '../mediatheque/mediatheque.module';
     BuildScreenContent,
     HeartbeatScreen,
     PreviewScreenContent,
+    OriginesImages,
   ],
 })
 export class ScreensModule {}

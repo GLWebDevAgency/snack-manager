@@ -154,6 +154,7 @@ export class FakeScreensRepository {
       orientation: screen.orientation,
       theme: screen.theme,
       scenography: screen.scenography,
+      presentation: screen.presentation,
       playlist: screen.playlist,
       pairingCode: screen.pairingCode,
       pairingCodeExpiresAt: screen.pairingCodeExpiresAt,

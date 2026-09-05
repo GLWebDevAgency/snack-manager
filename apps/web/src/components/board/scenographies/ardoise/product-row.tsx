@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import type { ScreenProduct } from "@sm/contracts";
+import { Photo } from "../comptoir/Comptoir";
 
 /**
  * Une ligne de carte : photo, nom, description courte, prix.
@@ -54,8 +55,7 @@ export function ProductRow({ product, index, durationMs }: ProductRowProps) {
     >
       {product.photoUrl ? (
         <div className="bd-thumb">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={product.photoUrl} alt="" decoding="async" />
+          <Photo p={product} drift durationMs={durationMs} />
         </div>
       ) : null}
 

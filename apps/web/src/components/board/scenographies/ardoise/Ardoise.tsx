@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import type { ScreenOrientation, ScreenProduct, ScreenScenePayload } from "@sm/contracts";
 import type { ScenographyModule, ScenographyProps } from "../registry";
 import { ProductRow } from "./product-row";
+import { Photo } from "../comptoir/Comptoir";
 
 /**
  * ARDOISE — la carte en lignes, sobre et dense.
@@ -108,8 +109,7 @@ function HeroProducts({
         >
           {product.photoUrl ? (
             <div className="bd-hero-photo">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={product.photoUrl} alt="" decoding="async" />
+              <Photo p={product} drift durationMs={durationMs} />
             </div>
           ) : null}
           <div className="bd-hero-body">

@@ -68,7 +68,7 @@ function menu(options: { fail?: boolean; produits?: number } = {}) {
     bulkWrite: async (ops: unknown[]) => ({ modifiedCount: (ops as []).length }),
   };
   const categories = {
-    find: () => ({ sort: () => ({ lean: async () => [{ _id: CATEGORIE, name: 'Sandwichs' }] }) }),
+    find: () => ({ sort: () => ({ lean: async () => [{ _id: CATEGORIE, name: 'Sandwichs', active: true }] }) }),
   };
   const supply = new SupplyService(
     supplyDb(options) as never,

@@ -1,10 +1,14 @@
 import {
   SCENE_MAX_LINES,
+  SCENE_DURATION_DEFAULT_MS,
+  PROMO_SCENE_DURATION_MS,
   SCENOGRAPHY_DEFAULT,
   SCREEN_POLL_INTERVAL_MS,
   SCREEN_SERVICE_LABELS,
   RESTAURANT_TZ,
   ScreenSceneSchema,
+  featuredProductIdsOf,
+  screenPresentationOf,
   isServedAt,
   logoPour,
   masquePourFond,
@@ -12,6 +16,7 @@ import {
   type ScreenPreview,
   type ScreenProduct,
   type ScreenScenePayload,
+  type ScreenScene,
 } from "@sm/contracts";
 import { Money } from "@sm/domain";
 import { serviceClock, type DemoProduct, type DemoScreenRow, type DemoWorld } from "./state";
@@ -35,6 +40,18 @@ function product(p: DemoProduct): ScreenProduct {
   };
 }
 
+/** Même ordre que l'API : offres, puis toutes les catégories actives et non vides. */
+export function defaultDemoScreenPlaylist(world: DemoWorld): ScreenScene[] {
+  const populated = new Set(world.products.filter((p) => p.active).map((p) => p.categoryId));
+  return [
+    { kind: "promo", categoryId: null, productIds: [], title: "Offres du moment", durationMs: PROMO_SCENE_DURATION_MS },
+    ...world.categories.filter((category) => category.active && populated.has(category._id))
+      .sort((a, b) => a.order - b.order).map((category): ScreenScene => ({
+        kind: "category", categoryId: category._id, productIds: [], title: category.name, durationMs: SCENE_DURATION_DEFAULT_MS,
+      })),
+  ];
+}
+
 /** La démo reste dans son service simulé, comme ses commandes. Aucun accès réseau ni écriture. */
 export function previewDemoScreen(
   world: DemoWorld,
@@ -49,27 +66,31 @@ export function previewDemoScreen(
   const orientation = draft.orientation ?? saved?.orientation ?? "landscape";
   const theme = draft.theme ?? saved?.theme ?? "brand";
   const scenography = draft.scenography ?? saved?.scenography ?? (saved ? "ardoise" : SCENOGRAPHY_DEFAULT);
-  const masque = masquePourFond(world.tenant.brand, theme);
+  const presentation = screenPresentationOf(draft.presentation ?? saved?.presentation);
+  const masque = masquePourFond(draft.brandDraft ?? world.tenant.brand, theme);
   const categories = world.categories.filter((c) => c.active).sort((a, b) => a.order - b.order);
   const activeCategories = new Set(categories.map((c) => c._id));
   const products = world.products
     .filter((p) => p.active && activeCategories.has(p.categoryId ?? "") && isServedAt(p.tags, service))
     .sort((a, b) => a.order - b.order);
-  const playlist = draft.playlist ?? saved?.playlist ?? categories.map((c) => ({
-    kind: "category", categoryId: c._id, durationMs: 12_000,
-  }));
-  const scenes: ScreenScenePayload[] = [];
-  playlist.forEach((raw, index) => {
+  const playlist = (draft.playlist ?? saved?.playlist ?? defaultDemoScreenPlaylist(world)).flatMap((raw) => {
     const parsed = ScreenSceneSchema.safeParse(raw);
-    if (!parsed.success) return;
-    const scene = parsed.data;
+    return parsed.success ? [parsed.data] : [];
+  });
+  const ids = new Map(products.map((p) => [p._id, p]));
+  const manualFeatured = new Set(playlist.filter((scene) => scene.kind === "featured").flatMap((scene) => scene.productIds));
+  const featuredInserted = new Set<string>();
+  const scenes: ScreenScenePayload[] = [];
+  playlist.forEach((scene, index) => {
     const category = categories.find((c) => c._id === scene.categoryId);
     if (scene.kind === "category" && !category) return;
-    const ids = new Map(products.map((p) => [p._id, p]));
     const selected = scene.kind === "category"
       ? products.filter((p) => p.categoryId === scene.categoryId)
-      : scene.productIds.flatMap((id) => ids.has(id) ? [ids.get(id)!] : []);
-    const promos = scene.kind === "promo" ? world.promotions.filter((p) => p.active).slice(0, 3).map((p) => ({
+      : scene.productIds.flatMap((id) => ids.has(id) ? [ids.get(id)!] : [])
+        .filter((p) => scene.kind !== "featured" || !p.outOfStock);
+    const promos = scene.kind === "promo" ? world.promotions.filter((p) => p.active && p.channels.includes("pos") && p.code === null
+      && (p.startsAtAgeMin === null || world.bootAt - p.startsAtAgeMin * 60_000 <= Date.now())
+      && (p.endsAtAgeMin === null || world.bootAt - p.endsAtAgeMin * 60_000 >= Date.now())).map((p) => ({
       id: p._id, title: p.name, description: p.description,
       label: p.kind === "percent" ? `−${p.value} %` : p.kind === "amount" ? `−${Money.fromCents(p.value).format()}` : "Offert",
     })) : [];
@@ -81,11 +102,24 @@ export function previewDemoScreen(
     for (let page = 0; page < pages; page++) {
       scenes.push({
         id: `demo-${index}-${page}`, kind: scene.kind,
-        title: scene.title ?? category?.name ?? (scene.kind === "promo" ? "Offres du moment" : "La sélection"),
+        title: scene.title ?? category?.name ?? (scene.kind === "promo" ? "Offres du moment" : scene.kind === "custom" ? world.tenant.name : "La sélection"),
         subtitle: pages > 1 ? `${page + 1} / ${pages}` : null,
         durationMs: scene.durationMs,
         products: visible.slice(page * size, (page + 1) * size).map(product),
         promos, nextOpening: null,
+      });
+    }
+    if (scene.kind === "category" && category && !featuredInserted.has(category._id)) {
+      featuredInserted.add(category._id);
+      const featured = featuredProductIdsOf(category.featuredProductIds)
+        .filter((id) => !manualFeatured.has(id))
+        .map((id) => ids.get(id))
+        .filter((p): p is DemoProduct => !!p && p.categoryId === category._id && !p.outOfStock);
+      if (featured.length) scenes.push({
+        id: `featured:category:${category._id}`, kind: "featured",
+        title: featured.every((p) => p.isNew) ? "Nos nouveautés" : "Nos incontournables",
+        subtitle: null, durationMs: SCENE_DURATION_DEFAULT_MS,
+        products: featured.map(product), promos: [], nextOpening: null,
       });
     }
   });
@@ -96,8 +130,8 @@ export function previewDemoScreen(
   });
   const visible = {
     screenId: saved?.id ?? "demo-preview", name: saved?.name ?? "Aperçu",
-    orientation, theme, scenography, masque,
-    brand: { slug: world.tenant.slug, name: world.tenant.name, logoUrl: logoPour(masque, "lockup"), accent: masque.palette.accent },
+    orientation, theme, scenography, presentation, masque,
+    brand: { slug: world.tenant.slug, name: world.tenant.name, logoUrl: logoPour(masque, "mark"), accent: masque.palette.accent },
     service: service as "lunch" | "dinner", serviceLabel: SCREEN_SERVICE_LABELS[service], open: true, scenes,
   };
   return {

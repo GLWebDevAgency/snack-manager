@@ -25,13 +25,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CostsResponse, MediaVue, SupplyIngredient } from "@sm/contracts";
+import type { CostsResponse, SupplyIngredient } from "@sm/contracts";
 import {
-  cadrageCss,
   catalogueMedias,
-  mediasDuProduit,
-  photoPointDe,
-  photoUrlDe,
+  featuredProductIdsOf,
 } from "@sm/contracts";
 import { api, ApiError } from "@/lib/api";
 import { cx } from "@/lib/cx";
@@ -52,6 +49,9 @@ import {
 import { CategoriesCard } from "./CategoriesCard";
 import { EditPanel } from "./EditPanel";
 import { ImportModal } from "./ImportModal";
+import { ProductThumbnail } from "./ProductThumbnail";
+import { FeaturedSelectionDialog } from "./FeaturedSelectionDialog";
+import { normProduct, type RawMenu } from "./product-normalize";
 import {
   UNCAT,
   effectivePrice,
@@ -76,7 +76,7 @@ const COL = {
   price: "w-[96px] shrink-0 lg:w-[110px]",
   avail: "shrink-0 lg:w-[86px] lg:text-center",
   out: "shrink-0 lg:w-[86px] lg:text-center",
-  edit: "shrink-0 lg:w-11",
+  edit: "shrink-0 lg:w-[92px] lg:pointer-fine:w-[68px]",
 } as const;
 
 /** Panneau d'édition ouvert : produit existant ou création dans une catégorie. */
@@ -84,88 +84,6 @@ type Editor =
   | { mode: "edit"; productId: string }
   | { mode: "create"; categoryId: string }
   | null;
-
-/** Réponse brute de GET /menu (documents lean : champs potentiellement absents). */
-type RawProduct = Partial<Omit<Product, "_id">> & { _id: string };
-type RawMenu = {
-  categories?: (Partial<Omit<Category, "_id" | "products">> & {
-    _id: string;
-    products?: RawProduct[];
-  })[];
-  uncategorized?: RawProduct[];
-  /** Le catalogue des photos, à plat — voir `MenuData.medias`. */
-  medias?: MediaVue[];
-};
-
-const normProduct = (p: RawProduct, categoryId: string | null): Product => ({
-  _id: String(p._id),
-  categoryId,
-  name: p.name ?? "",
-  description: p.description ?? "",
-  price: typeof p.price === "number" ? p.price : 0,
-  variants: p.variants ?? [],
-  // Conservés : ils étaient jetés ici, ce qui rendait les groupes d'options
-  // invisibles du back-office quoi que l'API en dise.
-  optionGroups: p.optionGroups ?? [],
-  // Nettoyées et bornées à trois par le contrat : le back-office lit les
-  // références du produit avec la MÊME fonction que les charges publiques.
-  medias: mediasDuProduit(p),
-  photoUrl: typeof p.photoUrl === "string" ? p.photoUrl : null,
-  tags: p.tags ?? [],
-  isNew: p.isNew === true,
-  outOfStock: p.outOfStock === true,
-  outOfStockSource: p.outOfStockSource ?? null,
-  order: typeof p.order === "number" ? p.order : 0,
-  active: p.active !== false,
-});
-
-/**
- * LA VIGNETTE D'UNE LIGNE — et le trou, quand il n'y en a pas.
- *
- * La liste ne montrait aucune photo, alors que c'est ici que le gérant voit sa
- * carte en entier : ce qui manque doit se lire d'un coup d'œil, sans ouvrir
- * une fiche. D'où la case en pointillés plutôt qu'un vide — un trou dessiné se
- * remarque, une absence ne se remarque pas.
- *
- * `alt=""` : la vignette est DÉCORATIVE ici. Le nom du plat la suit
- * immédiatement, et un texte alternatif ferait annoncer « Kebab Fromage » deux
- * fois de suite à un lecteur d'écran. Il reprend tout son sens là où l'image
- * est seule — la caisse, la vitrine, l'aperçu de cadrage.
- */
-function Vignette({
-  produit,
-  catalogue,
-}: {
-  produit: Product;
-  catalogue: ReadonlyMap<string, MediaVue>;
-}) {
-  // L'usage JUSTE : cette case fait 44 px de côté. Les quatre adresses sont
-  // identiques aujourd'hui — le jour où un transformateur d'images se branche,
-  // cette ligne demandera déjà la bonne.
-  const url = photoUrlDe(produit, catalogue, "vignette");
-  return (
-    <div
-      className={cx(
-        "size-11 shrink-0 overflow-hidden rounded-ctrl border",
-        url ? "border-line bg-surface2" : "border-dashed border-line bg-ink/3",
-      )}
-    >
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- l'image vient de notre API (ou du paquet web pour les photos du pilote) : next/image n'a rien à y optimiser, et le recadrage est le nôtre.
-        <img
-          src={url}
-          alt=""
-          style={{ objectPosition: cadrageCss(photoPointDe(produit, catalogue)) }}
-          className="size-full object-cover"
-        />
-      ) : (
-        <span aria-hidden className="grid size-full place-items-center text-mut">
-          <Icon name="fries" size={16} />
-        </span>
-      )}
-    </div>
-  );
-}
 
 /** Minuscules sans accents — recherche insensible à la casse (§7.3). */
 const searchKey = (s: string) =>
@@ -182,6 +100,7 @@ export default function MenuPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [editor, setEditor] = useState<Editor>(null);
+  const [featuredEditor, setFeaturedEditor] = useState<{ categoryId: string; productId?: string } | null>(null);
   /** Catégorie cliquée pendant qu'un panneau est ouvert — confirmation avant d'abandonner la saisie. */
   const [pendingSelect, setPendingSelect] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -207,6 +126,8 @@ export default function MenuPage() {
           name: c.name ?? "",
           order: typeof c.order === "number" ? c.order : 0,
           active: c.active !== false,
+          featuredProductIds: featuredProductIdsOf(c.featuredProductIds),
+          featuredRevision: c.featuredRevision ?? 0,
           products: (c.products ?? []).map((p) => normProduct(p, String(c._id))),
         })),
         uncategorized: (data.uncategorized ?? []).map((p) => normProduct(p, null)),
@@ -320,6 +241,7 @@ export default function MenuPage() {
     deferRef.current =
       dragging ||
       editor !== null ||
+      featuredEditor !== null ||
       importOpen ||
       deleteTarget !== null ||
       Object.keys(drafts).length > 0;
@@ -692,6 +614,11 @@ export default function MenuPage() {
             </Btn>
           </div>
 
+          {selectedCat && !searching && <div className="mx-[18px] mt-3 flex flex-wrap items-center justify-between gap-3 rounded-ctrl border border-line bg-surface2 p-3">
+            <div><p className="flex items-center gap-2 text-sm font-semibold"><Icon name="star" size={16}/>À l’affiche <span className="text-mut">{selectedCat.featuredProductIds?.length ?? 0}/3</span></p><p className="mt-1 text-xs text-mut">Une sélection commune aux écrans et aux Incontournables.</p></div>
+            <Btn variant="ghost" size="sm" className="min-h-11" onClick={() => setFeaturedEditor({ categoryId: selectedCat._id })}>Choisir les produits</Btn>
+          </div>}
+
           {/* En-tête de colonnes (§7.3) — sous `lg` seul le titre survit :
               en carte, chaque bascule porte sa propre étiquette. */}
           <div className="mt-3 flex items-center gap-2.5 bg-[image:var(--cf-elev-gradient)] px-[18px] py-3 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
@@ -752,6 +679,7 @@ export default function MenuPage() {
                 const hasVariants = p.variants.length > 0;
                 const showPill = searching || p.categoryId === null;
                 const ingredientOut = p.outOfStockSource === "ingredient";
+                const featured = categories.find((c) => c._id === p.categoryId)?.featuredProductIds?.includes(p._id) ?? false;
 
                 return (
                   <div key={p._id}>
@@ -770,7 +698,7 @@ export default function MenuPage() {
                       {/* La vignette — sans classe d'ordre : `order: 0` par
                           défaut la place avant le nom (`lg:order-1`) sur
                           grand écran comme en carte. */}
-                      <Vignette produit={p} catalogue={catalogue} />
+                      <ProductThumbnail produit={p} catalogue={catalogue} />
 
                       {/* Nom + pill de catégorie + composition */}
                       <div className="min-w-0 flex-1 lg:order-1">
@@ -805,6 +733,7 @@ export default function MenuPage() {
                               Nouveau
                             </Pill>
                           )}
+                          {featured && <span className="shrink-0 text-accent" title="Mis en avant sur les TV et en ligne"><Icon name="star" size={15}/><span className="sr-only">Mis en avant</span></span>}
                         </div>
                         {p.description && (
                           <p className="truncate text-xs text-mut">{p.description}</p>
@@ -812,7 +741,11 @@ export default function MenuPage() {
                       </div>
 
                       {/* Édition inline — dans le coin de la carte sur mobile */}
-                      <div className={cx("flex justify-end", COL.edit, "lg:order-5")}>
+                      <div className="flex shrink-0 justify-end gap-1 lg:order-5">
+                        <button type="button" onClick={() => { if (p.categoryId) setFeaturedEditor({ categoryId: p.categoryId, productId: p._id }); }} disabled={!p.categoryId}
+                          aria-label={`${featured ? "Gérer la mise en avant de" : "Mettre en avant"} ${p.name}`}
+                          title={p.categoryId ? "TV et Incontournables en ligne" : "Rattachez d’abord le produit à une catégorie"}
+                          className={cx("cf-press grid size-11 place-items-center rounded-pill border lg:pointer-fine:size-8 disabled:opacity-30", featured ? "border-accent bg-accent text-onaccent" : "border-line text-mut hover:text-ink")}><Icon name="star" size={15}/></button>
                         <button
                           type="button"
                           onClick={() =>
@@ -966,6 +899,8 @@ export default function MenuPage() {
                         chargerMediatheque={chargerMediatheque}
                         onClose={() => setEditor(null)}
                         onSaved={(m) => void afterSaved(m)}
+                        isFeatured={featured}
+                        onManageFeatured={p.categoryId ? () => setFeaturedEditor({ categoryId: p.categoryId!, productId: p._id }) : undefined}
                       />
                     )}
                   </div>
@@ -975,6 +910,21 @@ export default function MenuPage() {
           </div>
         </Card>
       </div>
+
+      {featuredEditor && categories.find((c) => c._id === featuredEditor.categoryId) && <FeaturedSelectionDialog
+        key={featuredEditor.categoryId}
+        category={categories.find((c) => c._id === featuredEditor.categoryId)!}
+        catalogue={catalogue}
+        initialProductId={featuredEditor.productId}
+        onClose={() => setFeaturedEditor(null)}
+        onSaved={(selection) => {
+          // Les références produits restent stables : une recette en cours
+          // d'édition ne doit pas être rechargée par cette action indépendante.
+          setMenu((current) => current && ({ ...current, categories: current.categories.map((c) => c._id === selection.categoryId ? { ...c, featuredProductIds: selection.featuredProductIds, featuredRevision: selection.featuredRevision } : c) }));
+          setFeaturedEditor(null);
+          toast("Sélection enregistrée · TV et en ligne", { icon: "star" });
+        }}
+      />}
 
       {/* ── Garde de navigation : un clic de catégorie ne jette jamais une
           saisie en cours dans un panneau ouvert ── */}

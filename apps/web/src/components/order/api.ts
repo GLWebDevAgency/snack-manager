@@ -42,7 +42,7 @@ import type {
   PublicSiteReview,
   SlotsResponse,
 } from "@sm/contracts";
-import { marqueEffective, type Brand } from "@sm/contracts";
+import { featuredProductIdsOf, marqueEffective, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -162,7 +162,7 @@ export type MenuProduct = {
   configurable: boolean;
 };
 
-export type MenuCategory = { id: string; name: string; products: MenuProduct[] };
+export type MenuCategory = { id: string; name: string; products: MenuProduct[]; featuredProductIds?: string[]; featuredConfigured?: boolean };
 
 export type SiteTenant = {
   slug: string;
@@ -178,6 +178,8 @@ export type SiteTenant = {
 
 /** Agrégat consommé par le site public, le tunnel et l’embed. */
 export type Site = {
+  /** Conserve l'intention éditoriale quand les catégories visibles sont vides. */
+  featuredConfigured?: boolean;
   tenant: SiteTenant;
   categories: MenuCategory[];
   /**
@@ -322,10 +324,24 @@ function toCategories(raw: unknown): MenuCategory[] {
       const products = Array.isArray(cat?.products)
         ? cat.products.map(toProduct).filter((p): p is MenuProduct => p !== null)
         : [];
-      return { id, name: String(cat?.name ?? ""), products };
+      return { id, name: String(cat?.name ?? ""), products,
+        featuredProductIds: featuredProductIdsOf(cat?.featuredProductIds),
+        featuredConfigured: cat?.featuredConfigured === true || (typeof cat?.featuredRevision === "number" && cat.featuredRevision > 0),
+      };
     })
     // Une catégorie vide n’a rien à dire au client (ni au référencement).
     .filter((c) => c.id !== "" && c.products.length > 0);
+}
+
+function featuredConfigurationOf(raw: unknown): boolean {
+  const menu = raw as { featuredConfigured?: unknown; categories?: unknown } | null;
+  if (menu?.featuredConfigured === true) return true;
+  return Array.isArray(menu?.categories) && menu.categories.some((value: unknown) => {
+    const category = value as { featuredConfigured?: unknown; featuredProductIds?: unknown; featuredRevision?: unknown } | null;
+    return category?.featuredConfigured === true
+      || (typeof category?.featuredRevision === "number" && category.featuredRevision > 0)
+      || featuredProductIdsOf(category?.featuredProductIds).length > 0;
+  });
 }
 
 
@@ -467,6 +483,7 @@ export function orderingApi(transport: Transport = httpTransport) {
           hours: site.tenant.hours ?? [],
         },
         categories: toCategories(site.menu),
+        featuredConfigured: featuredConfigurationOf(site.menu),
         medias: site.medias ?? [],
         slots: site.slots ?? null,
         reviews: site.reviews ?? { avg: 0, count: 0, latest: [] },
@@ -517,6 +534,7 @@ export function orderingApi(transport: Transport = httpTransport) {
         hours,
       },
       categories: toCategories(menu),
+      featuredConfigured: featuredConfigurationOf(menu),
       // Cette forme n'a jamais exposé de médiathèque : aucun point d'intérêt à
       // retrouver, la bande d'accueil se recadrera au centre.
       medias: [],

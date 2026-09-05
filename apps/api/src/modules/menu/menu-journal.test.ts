@@ -39,6 +39,7 @@ function atelier(options: {
     findOne: async () => categorie,
     create: async (doc: Record<string, unknown>) => ({ _id: 'cat-neuve', ...doc }),
     find: () => ({ sort: () => ({ lean: async () => [] }) }),
+    updateMany: async () => ({ modifiedCount: 0 }),
   };
 
   const products = {
