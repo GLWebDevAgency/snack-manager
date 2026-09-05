@@ -19,6 +19,24 @@
   color: var(--cf-text);
   font-family: var(--cf-font-body);
   --ct-price-font: var(--cf-font-display);
+  --ct-display-weight: 700;
+  --ct-price-weight: 700;
+}
+.ct[data-pair="brasserie"],
+.ct[data-pair="nuit"],
+.ct[data-pair="editorial"] {
+  --ct-display-weight: 600;
+  --ct-price-weight: 600;
+}
+.ct[data-pair="classique"] { --ct-price-weight: 400; }
+.ct[data-pair="brut"] { --ct-display-weight: 400; }
+.ct[data-pair="soleil"],
+.ct[data-pair="atelier"] { --ct-display-weight: 800; }
+.ct-title, .ct-name, .ct-bname, .ct-ptitle, .ct-reopen {
+  font-weight: var(--ct-display-weight);
+}
+.ct-badge, .ct-price, .ct-plab, .ct-win {
+  font-weight: var(--ct-price-weight);
 }
 .bd-root[data-prix-mono="1"] .ct {
   --ct-price-font: var(--cf-font-mono);
@@ -273,7 +291,7 @@
 .ct-photo-in { animation: ct-fade var(--sm-t-fast) var(--sm-ease) both; }
 .ct-photo-out { animation: ct-fade var(--sm-t-fast) var(--sm-ease) reverse both; }
 /* Une petite source reste à sa définition native, sur le fond du masque. */
-.ct-hero .ct-photo-motion img[data-fit="natural"] {
+.ct-photo-motion img[data-fit="natural"] {
   inset: auto;
   left: 50%;
   top: 42%;
@@ -282,6 +300,7 @@
   object-fit: contain;
   transform: translate(-50%, -50%);
 }
+.ct-tile .ct-photo-motion img[data-fit="natural"] { top: 62%; }
 [data-photo="0"] .ct-ph {
   background: var(--cf-elev-gradient);
 }
@@ -398,6 +417,13 @@
   overflow-wrap: anywhere;
   hyphens: auto;
 }
+.ct-tile .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  text-transform: none;
+  hyphens: none;
+}
 .ct-desc {
   margin: 0;
   font-size: var(--ct-fs-desc);
@@ -455,24 +481,40 @@
 }
 .ct-row[data-wide-price="1"] {
   display: grid;
-  grid-template-columns: var(--ct-thumb) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 6px 26px;
-  padding-block: 12px;
+  grid-template-columns: 112px minmax(0, 1fr) 285px;
+  grid-template-rows: 1fr;
+  gap: 16px;
+  padding: 6px 16px 6px 0;
 }
 .ct-row[data-wide-price="1"] .ct-ph {
   grid-column: 1;
-  grid-row: 1 / -1;
+  width: 112px;
 }
 .ct-row[data-wide-price="1"] .ct-tx { grid-column: 2; }
+.ct-row[data-wide-price="1"] .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  line-height: 1;
+  text-transform: none;
+  hyphens: none;
+}
+.ct-row[data-wide-price="1"] .ct-new {
+  left: 0;
+  max-width: 100%;
+  padding: 8px 4px;
+  font-size: 20px;
+  letter-spacing: 0;
+}
 .ct-row[data-wide-price="1"] .ct-desc { display: none; }
 .ct-row[data-wide-price="1"] .ct-badge {
-  grid-column: 2;
-  justify-self: start;
+  grid-column: 3;
+  justify-self: stretch;
   max-width: 100%;
-  padding-block: 0.1em;
+  padding: 0.12em 0.18em;
   transform: none;
 }
+.ct-row[data-wide-price="1"] .ct-price-part { display: block; }
 
 /* ── Héros ── */
 

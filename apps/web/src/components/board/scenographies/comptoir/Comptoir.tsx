@@ -131,7 +131,7 @@ export function Photo({
       alt=""
       decoding="async"
       className={previous ? (photos.current ? undefined : "ct-photo-out") : "ct-photo-in"}
-      data-fit={drift && (photo.width < 1000 || photo.height < 600) ? "natural" : "cover"}
+      data-fit={photo.width < 1000 || photo.height < 600 ? "natural" : "cover"}
       style={{
         objectPosition: cadrageCss(p.photoPoint),
         "--ct-photo-width": `${photo.width}px`,
@@ -497,7 +497,7 @@ function ComptoirScene({ scene, content, masque, orientation }: ScenographyProps
   const mot = scene.kind === "closed" ? content.brand.name : scene.title;
 
   return (
-    <div className="ct" data-disposition={d} data-o={orientation} style={style}>
+    <div className="ct" data-disposition={d} data-o={orientation} data-pair={masque.type.pair} style={style}>
       <div className="ct-bg" aria-hidden>
         <div className="ct-halo" />
         <div className="ct-bgword">{mot}</div>
