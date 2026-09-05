@@ -9,7 +9,10 @@ import {
   type ScreenPaired,
 } from "@sm/contracts";
 import { BOARD_API_URL, BoardApiError, fetchScreenContent, pairScreen } from "./board-api";
-import { boardPalette } from "./board-theme";
+import { marqueDeRepli } from "@sm/contracts";
+import { cx } from "@/lib/cx";
+import { classesPolices } from "@/components/masque/polices";
+import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { readDeviceToken, savePairing, writeCachedContent } from "./board-store";
 import { useStage } from "./use-stage";
 
@@ -84,7 +87,9 @@ export function PairingScreen() {
   const [brandName, setBrandName] = useState<string | null>(null);
 
   const stage = useStage(null);
-  const palette = boardPalette(null);
+  // Aucun restaurant n'est encore connu : la peau de repli (Nuit), la même que
+  // pour un tenant non repris — l'écran d'appairage ne surprend pas la salle.
+  const palette = styleDuMasque(marqueDeRepli(null, null));
 
   // Déjà appairé : on ne montre même pas cet écran, on repart sur la carte.
   useEffect(() => {
@@ -243,7 +248,7 @@ export function PairingScreen() {
         });
 
   return (
-    <div className="bd-root" style={palette}>
+    <div className={cx("bd-root", classesPolices)} style={palette}>
       <div
         className="bd-stage"
         data-orientation={stage.orientation}

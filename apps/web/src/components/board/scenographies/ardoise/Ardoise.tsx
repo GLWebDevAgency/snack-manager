@@ -2,10 +2,17 @@
 
 import type { CSSProperties } from "react";
 import type { ScreenOrientation, ScreenProduct, ScreenScenePayload } from "@sm/contracts";
+import type { ScenographyModule, ScenographyProps } from "../registry";
 import { ProductRow } from "./product-row";
 
 /**
- * Les scènes de l'écran.
+ * ARDOISE — la carte en lignes, sobre et dense.
+ *
+ * La scénographie d'origine de l'écran de salle : le nom, la description, le
+ * prix ; une photo dominante quand la scène met un produit en avant. Elle
+ * prend désormais toutes ses couleurs et ses polices dans le masque du
+ * restaurant (`board.css` ne lit que des jetons), et laisse l'en-tête
+ * persistant à l'hôte (`chrome: "header"`).
  *
  * Règle unique et non négociable : jamais plus de huit lignes. L'API pagine
  * déjà les catégories trop longues (« 2 / 3 ») ; ici on choisit seulement la
@@ -23,13 +30,6 @@ const HERO_MAX = 3;
  * 1080 px de haut ressemblent à une carte qui n'a pas fini de charger.
  */
 const LIST_MIN = 3;
-
-interface SceneProps {
-  scene: ScreenScenePayload;
-  orientation: ScreenOrientation;
-  brandName: string;
-  logoUrl: string | null;
-}
 
 function SceneHead({ scene }: { scene: ScreenScenePayload }) {
   return (
@@ -219,7 +219,9 @@ function PlateScene({
   );
 }
 
-export function SceneBody({ scene, orientation, brandName, logoUrl }: SceneProps) {
+function ArdoiseScene({ scene, orientation, content }: ScenographyProps) {
+  const brandName = content.brand.name;
+  const logoUrl = content.brand.logoUrl;
   if (scene.kind === "closed") {
     return <ClosedScene scene={scene} brandName={brandName} />;
   }
@@ -262,27 +264,4 @@ export function SceneBody({ scene, orientation, brandName, logoUrl }: SceneProps
   );
 }
 
-/**
- * Une couche de scène.
- *
- * Deux couches coexistent le temps du fondu-glissé (l'entrante par-dessus la
- * sortante) : c'est ce qui évite le passage par le noir entre deux scènes.
- */
-export function SceneLayer({
-  scene,
-  phase,
-  orientation,
-  brandName,
-  logoUrl,
-}: SceneProps & { phase: "in" | "out" }) {
-  return (
-    <div className="bd-layer" data-phase={phase} aria-hidden={phase === "out"}>
-      <SceneBody
-        scene={scene}
-        orientation={orientation}
-        brandName={brandName}
-        logoUrl={logoUrl}
-      />
-    </div>
-  );
-}
+export const Ardoise: ScenographyModule = { Component: ArdoiseScene, chrome: "header" };
