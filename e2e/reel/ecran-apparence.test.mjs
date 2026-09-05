@@ -89,14 +89,19 @@ scenario(
         .waitFor({ state: 'visible' });
 
       // ── 4 · Changer de scénographie se voit AVANT d'enregistrer ──
+      await page.getByRole('group', { name: 'Familles de modèles' }).getByRole('button', { name: 'Classiques', exact: true }).click();
       await page.getByRole('button', { name: /^Ardoise/ }).click();
       await apercu.locator('.bd-root[data-scenography="ardoise"]').waitFor({ state: 'attached' });
+      await page.getByRole('button', { name: 'Personnaliser', exact: true }).click();
+      await page.getByRole('combobox', { name: 'Taille des prix', exact: true }).selectOption('large');
+      await attendreTexte(page.getByRole('dialog', { name: `Apparence — ${NOM}`, exact: true }), 'Aperçu à jour');
 
       // ── 5 · Enregistrer, et relire par l'API ──
       await page.getByRole('button', { name: "Enregistrer l'apparence" }).click();
       await attendreTexte(page, 'Apparence enregistrée');
       const relu = await api.get(`/screens/${cree.id}`);
       assert.equal(relu.scenography, 'ardoise', 'la scénographie enregistrée doit être relue par l’API');
+      assert.equal(relu.presentation.priceScale, 'large', 'la présentation enregistrée est relue séparément de la marque');
     } finally {
       // ── Le parc est remis en état, quoi qu'il soit arrivé ──
       await api.del(`/screens/${cree.id}`);

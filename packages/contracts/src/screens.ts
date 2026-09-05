@@ -2,8 +2,8 @@ import { z } from 'zod';
 // ⚠️ `import type` uniquement : `index.ts` réexporte ce fichier ET
 // `mediatheque.ts` ; un import de valeurs créerait un cycle CommonJS.
 import type { PointInteret } from './mediatheque';
-// Même règle : le masque est un TYPE ici, `marque.ts` reste libre d'importer ce fichier.
-import type { Brand } from './marque';
+// `marque.ts` ne dépend que de zod : cet import direct ne traverse pas index.ts.
+import { BrandStrictSchema, type Brand } from './marque';
 
 // ─────────────────────────────────────────────────────────────
 // Menu Board — les écrans TV accrochés en salle
@@ -88,7 +88,10 @@ export const SCREEN_THEME_HINTS: Record<ScreenTheme, string> = {
  * polices et les jetons du masque, et de la rendre à l'identique dans le
  * téléviseur miniature du back-office.
  */
-export const SCENOGRAPHIES = ['ardoise', 'comptoir'] as const;
+export const SCENOGRAPHIES = [
+  'ardoise', 'comptoir', 'affiche', 'halo', 'premiere', 'galerie', 'panorama',
+  'decoupe', 'editorial', 'colonne', 'manifeste', 'contour', 'aurore', 'prisme', 'ruban',
+] as const;
 export const ScenographySchema = z.enum(SCENOGRAPHIES);
 export type Scenography = z.infer<typeof ScenographySchema>;
 
@@ -102,12 +105,57 @@ export const SCENOGRAPHY_DEFAULT: Scenography = 'comptoir';
 export const SCENOGRAPHY_LABELS: Record<Scenography, string> = {
   ardoise: 'Ardoise',
   comptoir: 'Comptoir',
+  affiche: 'Affiche', halo: 'Halo', premiere: 'Première', galerie: 'Galerie',
+  panorama: 'Panorama', decoupe: 'Découpe', editorial: 'Éditorial', colonne: 'Colonne',
+  manifeste: 'Manifeste', contour: 'Contour', aurore: 'Aurore', prisme: 'Prisme', ruban: 'Ruban',
 };
 
 export const SCENOGRAPHY_DESCRIPTIONS: Record<Scenography, string> = {
   ardoise: 'La carte en lignes, sobre et dense : le nom, la description, le prix.',
-  comptoir: 'Des boîtes photo pleines sous la lampe du comptoir, le prix en étiquette collée.',
+  comptoir: 'Photos mises en avant, prix bien visibles.',
+  affiche: 'Une composition d’affiche, des prix bien visibles.',
+  halo: 'Photos et lumière aux couleurs de votre établissement.',
+  premiere: 'Une entrée progressive, une lecture expressive.',
+  galerie: 'Des photos alignées pour comparer vos spécialités.',
+  panorama: 'Une grande image et une carte qui garde sa place.',
+  decoupe: 'Photos et textes composés dans des cadres contrastés.',
+  editorial: 'Une carte élégante, rythmée par de grands titres.',
+  colonne: 'Des colonnes régulières pour une lecture rapide.',
+  manifeste: 'Une typographie affirmée pour vos produits signatures.',
+  contour: 'Des lignes lumineuses soulignent les produits et les prix.',
+  aurore: 'Un fond lumineux en mouvement, avec une lecture apaisée.',
+  prisme: 'Des formes colorées donnent du relief à votre carte.',
+  ruban: 'Un mouvement continu accompagne les produits et les offres.',
 };
+
+export const SCENOGRAPHY_FAMILIES = [
+  { id: 'classiques', label: 'Classiques', scenographies: ['ardoise', 'comptoir'] },
+  { id: 'affiches', label: 'Affiches', scenographies: ['affiche', 'halo', 'premiere'] },
+  { id: 'galerie', label: 'Galerie', scenographies: ['galerie', 'panorama', 'decoupe'] },
+  { id: 'editorial', label: 'Éditorial', scenographies: ['editorial', 'colonne', 'manifeste'] },
+  { id: 'ambiances', label: 'Ambiances', scenographies: ['contour', 'aurore', 'prisme', 'ruban'] },
+] as const satisfies readonly { id: string; label: string; scenographies: readonly Scenography[] }[];
+
+/** Réglages de composition : aucune palette ni copie de l'identité globale. */
+export const SCREEN_CORNERS = ['brand', 'square', 'soft', 'round'] as const;
+export const SCREEN_PRICE_SCALES = ['compact', 'balanced', 'large'] as const;
+export const SCREEN_MOTIONS = ['brand', 'subtle', 'expressive', 'off'] as const;
+export const ScreenPresentationSchema = z.object({
+  version: z.literal(1).default(1),
+  corners: z.enum(SCREEN_CORNERS).default('brand'),
+  priceScale: z.enum(SCREEN_PRICE_SCALES).default('balanced'),
+  motion: z.enum(SCREEN_MOTIONS).default('brand'),
+}).strict();
+export type ScreenPresentation = z.infer<typeof ScreenPresentationSchema>;
+export const SCREEN_PRESENTATION_DEFAULT: Readonly<ScreenPresentation> = Object.freeze(
+  ScreenPresentationSchema.parse({}),
+);
+
+/** Anciennes persistances et caches : conserver le rendu hérité. */
+export function screenPresentationOf(raw: unknown): ScreenPresentation {
+  const parsed = ScreenPresentationSchema.safeParse(raw);
+  return parsed.success ? parsed.data : { ...SCREEN_PRESENTATION_DEFAULT };
+}
 
 // ─── Scènes ───
 
@@ -192,6 +240,7 @@ export const ScreenCreateSchema = z.object({
   orientation: ScreenOrientationSchema.default('landscape'),
   theme: ScreenThemeSchema.default('brand'),
   scenography: ScenographySchema.default(SCENOGRAPHY_DEFAULT),
+  presentation: ScreenPresentationSchema.optional(),
   /**
    * Absente à la création : l'API génère une playlist par défaut depuis la
    * carte. Le restaurateur ne configure RIEN pour que l'écran fonctionne.
@@ -205,6 +254,7 @@ export const ScreenUpdateSchema = z.object({
   orientation: ScreenOrientationSchema.optional(),
   theme: ScreenThemeSchema.optional(),
   scenography: ScenographySchema.optional(),
+  presentation: ScreenPresentationSchema.optional(),
   playlist: z.array(ScreenSceneSchema).optional(),
   active: z.boolean().optional(),
 });
@@ -226,8 +276,11 @@ export const ScreenPreviewSchema = z.object({
   orientation: ScreenOrientationSchema.optional(),
   theme: ScreenThemeSchema.optional(),
   scenography: ScenographySchema.optional(),
+  presentation: ScreenPresentationSchema.optional(),
   playlist: z.array(ScreenSceneSchema).optional(),
   service: ScreenPreviewServiceSchema.optional(),
+  /** Uniquement simulé : jamais reçu par la sauvegarde d'un écran. */
+  brandDraft: BrandStrictSchema.optional(),
 });
 export type ScreenPreview = z.infer<typeof ScreenPreviewSchema>;
 
@@ -388,6 +441,7 @@ export interface ScreenContent {
   orientation: ScreenOrientation;
   theme: ScreenTheme;
   scenography: Scenography;
+  presentation?: ScreenPresentation;
   /**
    * LE MASQUE EFFECTIF — la variante de fond DÉJÀ appliquée (`masquePourFond`).
    * L'écran ne connaît pas la logique du fond : il reçoit un masque et le
@@ -432,6 +486,7 @@ export interface ScreenView {
   themeLabel: string;
   scenography: Scenography;
   scenographyLabel: string;
+  presentation?: ScreenPresentation;
   playlist: ScreenScene[];
   sceneCount: number;
   paired: boolean;

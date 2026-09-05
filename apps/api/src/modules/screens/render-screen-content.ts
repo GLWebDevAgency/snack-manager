@@ -9,6 +9,8 @@ import {
   isServedAt,
   logoPour,
   masquePourFond,
+  featuredProductIdsOf,
+  screenPresentationOf,
   type ScreenContent,
   type ScreenScene,
   type ScreenScenePayload,
@@ -128,9 +130,14 @@ function resolvePlaylist(
   snapshot: BoardSnapshot,
   service: 'lunch' | 'dinner',
 ): ScreenScenePayload[] {
-  const byCategory = groupByCategory(snapshot.products, service);
-  const byId = new Map(snapshot.products.map((p) => [p.id, p]));
+  const activeCategories = new Set(snapshot.categories.map((c) => c.id));
+  const productsInMenu = snapshot.products.filter((p) => p.categoryId && activeCategories.has(p.categoryId));
+  const byCategory = groupByCategory(productsInMenu, service);
+  const byId = new Map(productsInMenu.map((p) => [p.id, p]));
   const categoryNames = new Map(snapshot.categories.map((c) => [c.id, c.name]));
+  const featuredByCategory = new Map(snapshot.categories.map((c) => [c.id, featuredProductIdsOf(c.featuredProductIds)]));
+  const manualFeatured = new Set(playlist.filter((s) => s.kind === 'featured').flatMap((s) => s.productIds));
+  const featuredInserted = new Set<string>();
   const scenes: ScreenScenePayload[] = [];
 
   playlist.forEach((scene, index) => {
@@ -160,6 +167,23 @@ function resolvePlaylist(
       if (products.length === 0) return;
       const title = scene.title ?? categoryNames.get(scene.categoryId) ?? 'Notre carte';
       scenes.push(...paged(scene, key, title, products));
+      if (!featuredInserted.has(scene.categoryId)) {
+        featuredInserted.add(scene.categoryId);
+        const selected = (featuredByCategory.get(scene.categoryId) ?? [])
+          .filter((id) => !manualFeatured.has(id))
+          .map((id) => byId.get(id))
+          .filter((p): p is BoardProduct => p !== undefined && p.categoryId === scene.categoryId && !p.outOfStock && isServedAt(p.tags, service));
+        if (selected.length > 0) scenes.push({
+          id: `featured:category:${scene.categoryId}`,
+          kind: 'featured',
+          title: selected.every((p) => p.isNew) ? 'Nos nouveautés' : 'Nos incontournables',
+          subtitle: null,
+          durationMs: SCENE_DURATION_DEFAULT_MS,
+          products: selected.map(toScreenProduct),
+          promos: [],
+          nextOpening: null,
+        });
+      }
       return;
     }
 
@@ -169,7 +193,8 @@ function resolvePlaylist(
     const products = scene.productIds
       .map((id) => byId.get(id))
       .filter((p): p is BoardProduct => p !== undefined)
-      .filter((p) => isServedAt(p.tags, service));
+      .filter((p) => isServedAt(p.tags, service))
+      .filter((p) => scene.kind !== 'featured' || !p.outOfStock);
 
     if (scene.kind === 'featured') {
       if (products.length === 0) return;
@@ -263,6 +288,7 @@ export function renderScreenContent(
     orientation: screen.orientation,
     theme: screen.theme,
     scenography: screen.scenography,
+    presentation: screenPresentationOf(screen.presentation),
     masque,
     brand: {
       slug: snapshot.identity.slug,

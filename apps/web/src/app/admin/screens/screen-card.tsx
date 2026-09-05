@@ -13,7 +13,7 @@
 import { cx } from "@/lib/cx";
 import { Btn, Card, Icon, Pill } from "@/components/ui";
 import { CodeCountdown, CopyBtn, LastSeenLine, PairingCode, StatusLine } from "./parts";
-import { fmtLoop, loopMs, screenTone, TONE_BAR, type ScreenView } from "./types";
+import { screenTone, TONE_BAR, type ScreenView } from "./types";
 
 export function ScreenCard({
   screen,
@@ -93,8 +93,7 @@ export function ScreenCard({
           <Pill variant="out">{screen.themeLabel}</Pill>
           <Pill variant="out">{screen.scenographyLabel}</Pill>
           <span className="cf-fig text-[13px] text-mut">
-            {screen.sceneCount} scène{screen.sceneCount > 1 ? "s" : ""}
-            {screen.sceneCount > 0 && ` · boucle de ${fmtLoop(loopMs(screen.playlist))}`}
+            {screen.sceneCount} scène{screen.sceneCount > 1 ? "s configurées" : " configurée"}
           </span>
         </div>
 

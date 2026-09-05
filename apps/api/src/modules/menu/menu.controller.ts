@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import {
   CategoryCreateSchema,
   CategoryUpdateSchema,
+  CategoryFeaturedUpdateSchema,
+  type CategoryFeaturedUpdate,
   ProductCreateSchema,
   ProductUpdateSchema,
   ReorderSchema,
@@ -40,6 +42,16 @@ export class MenuController {
   }
 
   // ─── Catégories (gérant) ───
+
+  @Roles('owner', 'gerant')
+  @Put('categories/:id/featured')
+  updateFeatured(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body(zod(CategoryFeaturedUpdateSchema)) body: CategoryFeaturedUpdate,
+  ) {
+    return this.menu.updateFeatured(tenantId, id, body);
+  }
 
   @Roles('owner', 'gerant')
   @Post('categories')

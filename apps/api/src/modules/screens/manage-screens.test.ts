@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { PAIRING_CODE_TTL_MS, isPairingCodeShape } from '@sm/contracts';
+import { PAIRING_CODE_TTL_MS, isPairingCodeShape, ScreenPresentationSchema } from '@sm/contracts';
 import { ManageScreens } from './manage-screens.usecase';
 import {
   FakeMenuBoardRepository,
@@ -56,6 +56,20 @@ describe('Back-office des écrans', () => {
 
     expect(view.playlist).toHaveLength(1);
     expect(view.playlist[0]?.title).toBe('Bienvenue');
+  });
+
+  it('sauvegarde la présentation, la relit, et la conserve lors d’un autre correctif', async () => {
+    const presentation = ScreenPresentationSchema.parse({ corners: 'round', motion: 'off' });
+    const created = await useCase.create(CLASSFOOD, {
+      name: 'Salle', orientation: 'landscape', theme: 'brand', scenography: 'halo', presentation,
+    });
+    expect(created.presentation).toEqual(presentation);
+    await useCase.update(CLASSFOOD, created.id, { name: 'Salle centrale' });
+    expect((await useCase.get(CLASSFOOD, created.id)).presentation).toEqual(presentation);
+    const changed = ScreenPresentationSchema.parse({ priceScale: 'large' });
+    await useCase.update(CLASSFOOD, created.id, { presentation: changed });
+    expect((await useCase.get(CLASSFOOD, created.id)).presentation).toEqual(changed);
+    await expect(useCase.update(VOISIN, created.id, { presentation })).rejects.toThrow('Écran introuvable');
   });
 
   it('un identifiant de scène illisible est refusé, pas encaissé en 500', async () => {

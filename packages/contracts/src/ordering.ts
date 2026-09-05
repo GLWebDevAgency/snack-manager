@@ -373,6 +373,10 @@ export interface PublicSiteProduct {
 }
 
 export interface PublicSiteCategory {
+  /** Sélection manuelle commune TV / vitrine, dans l'ordre choisi. */
+  featuredProductIds?: string[];
+  /** Distingue une sélection vidée volontairement du menu jamais configuré. */
+  featuredConfigured?: boolean;
   _id: string;
   name: string;
   products: PublicSiteProduct[];
@@ -408,7 +412,11 @@ export interface PublicSiteTenant {
 
 export interface PublicSiteResponse {
   tenant: PublicSiteTenant;
-  menu: { categories: PublicSiteCategory[] };
+  menu: {
+    categories: PublicSiteCategory[];
+    /** Intention globale, conservée même si sa catégorie est momentanément masquée. */
+    featuredConfigured?: boolean;
+  };
   /**
    * La médiathèque du restaurant, à plat et une seule fois : point d'intérêt,
    * texte alternatif et les quatre adresses d'usage de chaque photo. Les

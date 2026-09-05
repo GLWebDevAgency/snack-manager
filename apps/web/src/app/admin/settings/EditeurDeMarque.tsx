@@ -32,7 +32,7 @@
  * porte encore, ce qu'un refus veut dire), pour que ça se prouve.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   DIRECTIONS,
   TYPE_PAIRS,
@@ -57,6 +57,7 @@ import { ChoixDeMedia } from "@/components/mediatheque/ChoixDeMedia";
 import type { Mediatheque } from "@/components/mediatheque/photos";
 import { ApercuDeMarque } from "./ApercuDeMarque";
 import { ApercuInstalle } from "./ApercuInstalle";
+import { ApercuEcransTV } from "./ApercuEcransTV";
 import {
   CLES_DIRECTIONS,
   CLES_FORMES,
@@ -128,6 +129,8 @@ export function EditeurDeMarque({
   const [busy, setBusy] = useState(false);
   const [refus, setRefus] = useState<string | null>(null);
   const [ouvert, setOuvert] = useState<CleEmplacement | null>(null);
+  const [previewTab, setPreviewTab] = useState<"web" | "tv">("web");
+  const previewId = useId();
 
   /** Toute retouche repose `preset` sur ce qui est vraiment peint. */
   const poser = useCallback((suivant: Brand) => {
@@ -277,10 +280,30 @@ export function EditeurDeMarque({
             perdant de vue son effet, c'est régler à l'aveugle. */}
         <Panel
           title="Votre vitrine"
-          sub="Le masque en cours d'édition, appliqué aux composants de votre vraie page de commande. Les deux plats sont des exemples."
+          sub={previewTab === "web" ? "Votre identité en cours d’édition, appliquée à votre page de commande. Les deux plats sont des exemples." : "Votre identité en cours d’édition, appliquée à votre vraie carte sur un écran de salle."}
           className="lg:sticky lg:top-4"
           bodyClassName="flex flex-col gap-2"
         >
+          <div className="mb-3 flex gap-1 rounded-ctrl border border-line2 bg-surface2 p-1" role="tablist" aria-label="Surface d’aperçu">
+            {([{ key: "web", label: "Vitrine web" }, { key: "tv", label: "Écrans TV" }] as const).map(({ key, label }) => (
+              <button key={key} type="button" role="tab" id={`${previewId}-${key}`} aria-controls={`${previewId}-panel-${key}`}
+                aria-selected={previewTab === key} tabIndex={previewTab === key ? 0 : -1}
+                onClick={() => setPreviewTab(key)}
+                onKeyDown={(event) => {
+                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === "Home" ? "web" : event.key === "End" ? "tv" : key === "web" ? "tv" : "web";
+                  setPreviewTab(next);
+                  document.getElementById(`${previewId}-${next}`)?.focus();
+                }}
+                className={cx("cf-press min-h-11 flex-1 rounded-ctrl px-3 text-sm font-semibold", previewTab === key ? "bg-btn text-onfill shadow-soft" : "text-mut hover:text-ink")}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {previewTab === "tv" ? (
+            <div role="tabpanel" id={`${previewId}-panel-tv`} aria-labelledby={`${previewId}-tv`}><ApercuEcransTV brand={brand} /></div>
+          ) : <div role="tabpanel" id={`${previewId}-panel-web`} aria-labelledby={`${previewId}-web`}>
           <ApercuDeMarque brand={brand} nom={me.name} />
           {/*
             L'APERÇU INSTALLÉ VIENT APRÈS CELUI DE LA VITRINE, ET C'EST VOULU.
@@ -295,6 +318,7 @@ export function EditeurDeMarque({
             Le fond va jusqu&apos;au bord de l&apos;écran sur la vraie page — ici, le cadre
             s&apos;arrête pour ne pas repeindre votre back-office.
           </p>
+          </div>}
         </Panel>
       </div>
 

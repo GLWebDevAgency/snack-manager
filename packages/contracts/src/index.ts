@@ -32,6 +32,7 @@ export * from './delivery';
 export * from './commerce';
 export * from './order-refunds';
 export * from './menu-legacy-options';
+export * from './menu-featured';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

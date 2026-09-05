@@ -15,8 +15,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  SCENOGRAPHIES,
-  SCENOGRAPHY_LABELS,
   SCREEN_ORIENTATIONS,
   SCREEN_ORIENTATION_LABELS,
   SCREEN_THEMES,
@@ -30,10 +28,11 @@ import {
 } from "@sm/contracts";
 import { api, type TenantMe } from "@/lib/api";
 import { cx } from "@/lib/cx";
-import { Btn, Drawer, Icon, Modal, useToast } from "@/components/ui";
+import { Btn, Drawer, Modal, useToast } from "@/components/ui";
 import { useSceneRotation } from "@/components/board/use-scene-rotation";
 import { LiveStage } from "./LiveStage";
-import { StillStage } from "./StillStage";
+import { PresentationControls } from "./PresentationControls";
+import { ScenographyGallery } from "./ScenographyGallery";
 import { useScreenPreview } from "./use-screen-preview";
 import {
   appearanceDraft,
@@ -47,10 +46,6 @@ import {
 /** Identité stable : une liste vide neuve à chaque rendu relancerait la rotation. */
 const VIDE: ScreenScenePayload[] = [];
 
-const STYLE_DESCRIPTIONS = {
-  ardoise: "Une carte en lignes, facile à lire.",
-  comptoir: "Photos mises en avant, prix bien visibles.",
-};
 const FOND_DESCRIPTIONS: Record<ScreenTheme, string> = {
   brand: "Les couleurs de votre établissement.",
   dark: "Votre logo et votre couleur principale sur fond sombre.",
@@ -109,6 +104,7 @@ export function ApparenceDrawer({
   const [paused, setPaused] = useState(false);
   const [previewService, setPreviewService] = useState<ScreenPreviewService | undefined>();
   const [brand, setBrand] = useState<Brand | null>(null);
+  const [controls, setControls] = useState<"models" | "custom">("models");
 
   const dirty = Object.keys(patch).length > 0;
 
@@ -214,7 +210,7 @@ export function ApparenceDrawer({
           <div className="mb-4">
             <h3 className="text-lg font-semibold tracking-tight text-ink">Aperçu de votre carte</h3>
             <p className="mt-1 text-sm leading-relaxed text-mut">
-              Essayez un style, puis enregistrez le résultat qui vous convient.
+              Ces modèles reprennent automatiquement l’identité de votre établissement. Les réglages recommandés préservent une présentation cohérente sur tous vos supports.
             </p>
           </div>
           <fieldset disabled={saving} className="mb-4">
@@ -259,38 +255,18 @@ export function ApparenceDrawer({
         </div>
 
         <div className="flex min-w-0 flex-col gap-6" aria-busy={saving}>
-
-        {/* ── Scénographie : des tuiles vivantes ── */}
-        <fieldset disabled={saving}>
-          <Titre>Style du menu</Titre>
-          <div className="grid grid-cols-2 gap-3">
-            {SCENOGRAPHIES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={draft.scenography === s}
-                aria-label={SCENOGRAPHY_LABELS[s]}
-                onClick={() => choose("scenography", s)}
-                className={cx(choix(draft.scenography === s), "flex flex-col gap-2 p-2")}
-              >
-                <div className="w-full" aria-hidden="true">
-                  {content && current ? (
-                    <StillStage content={content} scene={current} scenography={s} />
-                  ) : (
-                    <div className="aspect-video w-full rounded-ctrl bg-surface2" />
-                  )}
-                </div>
-                <div className="px-1 pb-1">
-                  <div className="mb-1 flex items-center justify-between gap-2 text-sm font-bold text-ink">
-                    {SCENOGRAPHY_LABELS[s]}
-                    {draft.scenography === s ? <Icon name="check" size={14} /> : null}
-                  </div>
-                  <div className="text-xs leading-snug text-mut">{STYLE_DESCRIPTIONS[s]}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        <div className="flex gap-1 rounded-ctrl border border-line2 bg-surface2 p-1" role="group" aria-label="Réglages du menu">
+          {([{ key: "models", label: "Modèles" }, { key: "custom", label: "Personnaliser" }] as const).map(({ key, label }) => (
+            <button key={key} type="button" aria-pressed={controls === key} onClick={() => setControls(key)}
+              className={cx("cf-press min-h-11 flex-1 rounded-ctrl px-3 text-sm font-semibold", controls === key ? "bg-btn text-onfill shadow-soft" : "text-mut hover:text-ink")}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {controls === "models" ? (
+          <ScenographyGallery value={draft.scenography} content={content} onChange={(value) => choose("scenography", value)} disabled={saving} />
+        ) : <>
+        <PresentationControls value={draft.presentation} onChange={(value) => choose("presentation", value)} disabled={saving} />
 
         {/* ── Fond ── */}
         <fieldset disabled={saving}>
@@ -335,6 +311,7 @@ export function ApparenceDrawer({
             ))}
           </div>
         </fieldset>
+        </>}
         </div>
       </div>
 

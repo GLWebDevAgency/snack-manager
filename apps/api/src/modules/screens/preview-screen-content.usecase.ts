@@ -6,6 +6,8 @@ import { MenuBoardRepository } from './menu-board.repository';
 import { assertPlaylistIsReadable } from './playlist-lisible';
 import { renderScreenContent } from './render-screen-content';
 import { ScreensRepository, type StoredScreen } from './screens.repository';
+import { masqueAEnregistrer } from '../tenants/marque';
+import { OriginesImages } from '../tenants/origines-images';
 
 /**
  * CAS D'USAGE — l'écran tel qu'il serait, vu du back-office.
@@ -23,6 +25,7 @@ export class PreviewScreenContent {
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly screens: ScreensRepository,
     private readonly board: MenuBoardRepository,
+    private readonly origines: OriginesImages,
   ) {}
 
   async execute(tenantId: string, dto: ScreenPreview): Promise<ScreenContent> {
@@ -32,8 +35,12 @@ export class PreviewScreenContent {
     const base = dto.screenId ? await this.screens.byId(tenantId, dto.screenId) : null;
     if (dto.screenId && !base) throw new NotFoundException('Écran introuvable');
 
-    const snapshot = await this.board.snapshot(tenantId, now);
+    let snapshot = await this.board.snapshot(tenantId, now);
     if (!snapshot) throw new NotFoundException('Établissement introuvable');
+    if (dto.brandDraft) {
+      const brand = masqueAEnregistrer(dto.brandDraft, snapshot.identity.logoUrl, this.origines.hotes);
+      snapshot = { ...snapshot, identity: { ...snapshot.identity, brand } };
+    }
 
     const virtuel: StoredScreen = {
       id: base?.id ?? 'preview',
@@ -45,6 +52,7 @@ export class PreviewScreenContent {
       orientation: dto.orientation ?? base?.orientation ?? 'landscape',
       theme: dto.theme ?? base?.theme ?? 'brand',
       scenography: dto.scenography ?? base?.scenography ?? SCENOGRAPHY_DEFAULT,
+      presentation: dto.presentation ?? base?.presentation,
       playlist:
         dto.playlist ??
         base?.playlist ??
