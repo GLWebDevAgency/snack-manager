@@ -5,6 +5,7 @@ import type { ScreenOrientation, ScreenProduct, ScreenScenePayload } from "@sm/c
 import type { ScenographyModule, ScenographyProps } from "../registry";
 import { ProductRow } from "./product-row";
 import { Photo } from "../comptoir/Comptoir";
+import "./ardoise-motion.css";
 
 /**
  * ARDOISE — la carte en lignes, sobre et dense.
@@ -219,7 +220,7 @@ function PlateScene({
   );
 }
 
-function ArdoiseScene({ scene, orientation, content }: ScenographyProps) {
+function ArdoiseContent({ scene, orientation, content }: ScenographyProps) {
   const brandName = content.brand.name;
   const logoUrl = content.brand.logoUrl;
   if (scene.kind === "closed") {
@@ -260,6 +261,15 @@ function ArdoiseScene({ scene, orientation, content }: ScenographyProps) {
           durationMs={scene.durationMs}
         />
       )}
+    </>
+  );
+}
+
+function ArdoiseScene(props: ScenographyProps) {
+  return (
+    <>
+      <div className="ar-ambience" aria-hidden />
+      <ArdoiseContent {...props} />
     </>
   );
 }

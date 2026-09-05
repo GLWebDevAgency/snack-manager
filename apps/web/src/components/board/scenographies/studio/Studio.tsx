@@ -15,9 +15,9 @@ function Atmosphere({ preset }: { preset: StudioPreset }) {
   return (
     <div className="ss-atmosphere" data-atmosphere={STUDIO_PROFILES[preset].atmosphere} aria-hidden="true">
       <div className="ss-light ss-light-a ss-living" />
-      <div className="ss-light ss-light-b ss-living" />
+      <div className="ss-light ss-light-b" />
       <div className="ss-plane ss-plane-a ss-living" />
-      <div className="ss-plane ss-plane-b ss-living" />
+      <div className="ss-plane ss-plane-b" />
       <div className="ss-frame" />
     </div>
   );
@@ -34,10 +34,17 @@ function BrandMark({ content, masque }: { content: ScreenContent; masque: Brand 
 export function StudioPrice({ product }: { product: ScreenProduct }) {
   const range = /^(.*?)\s+[–−-]\s+(.*?)$/.exec(product.priceLabel);
   return (
-    <span className="ss-price" data-range={range ? "1" : "0"}>
+    <span className="ss-price" data-ss-part="price" data-range={range ? "1" : "0"}>
       {range ? <><span>{range[1]}</span>{" "}<span>– {range[2]}</span></> : <span>{product.priceLabel}</span>}
     </span>
   );
+}
+
+/** The outer reveal never owns FadeText's live opacity or changes its identity. */
+function StudioText({ value, as, className, part }: {
+  value: string; as: "h1" | "h2" | "p"; className: string; part: "title" | "name" | "detail";
+}) {
+  return <div className={className} data-ss-part={part}><FadeText as={as} className="ss-live-text" value={value} /></div>;
 }
 
 function Product({ product: p, index }: { product: ScreenProduct; index: number }) {
@@ -45,25 +52,25 @@ function Product({ product: p, index }: { product: ScreenProduct; index: number 
   const long = p.name.length > 36;
   return (
     <article
-      className="ss-product ss-enter"
+      className="ss-product"
       data-product-id={p.id}
       data-oos={p.outOfStock ? "1" : "0"}
       data-photo={p.photoUrl ? "1" : "0"}
       data-long={long ? "1" : "0"}
       style={{ "--ss-i": index, "--ss-name-factor": long ? 0.84 : 1 } as CSSProperties}
     >
-      <div className="ss-visual" aria-hidden="true">
-        <span className="ss-product-halo ss-living" />
+      <div className="ss-visual" data-ss-part="photo" aria-hidden="true">
+        <span className="ss-product-halo" />
         {p.photoUrl ? <div className="ss-object ss-living"><Photo p={p} /></div> : null}
         <span className="ss-number">{String(index + 1).padStart(2, "0")}</span>
       </div>
       <div className="ss-copy">
-        <div className="ss-product-state">
+        <div className="ss-product-state" data-ss-part="detail">
           {p.isNew ? <span className="ss-new">Nouveau</span> : null}
           {p.outOfStock ? <span className="ss-oos">Épuisé</span> : null}
         </div>
-        <FadeText as="h2" className="ss-name" value={p.name} />
-        {p.description ? <FadeText as="p" className="ss-description" value={p.description} /> : null}
+        <StudioText as="h2" className="ss-name" part="name" value={p.name} />
+        {p.description ? <StudioText as="p" className="ss-description" part="detail" value={p.description} /> : null}
         <StudioPrice product={p} />
       </div>
     </article>
@@ -86,50 +93,54 @@ function StudioScene({ preset, scene, content, masque, orientation, phase = "in"
     "--ss-rows": composition.rows,
     "--ss-name-size": `${composition.name}px`,
     "--ss-price-size": `${composition.price}px`,
+    "--ss-photo-beat": profile.beats.photo,
+    "--ss-name-beat": profile.beats.name,
+    "--ss-detail-beat": profile.beats.detail,
+    "--ss-price-beat": profile.beats.price,
   } as CSSProperties;
 
   return (
     <section className="ss" data-preset={preset} data-family={profile.family} data-layout={profile.layout}
-      data-entrance={profile.entrance} data-phase={phase} data-o={orientation} data-pair={masque.type.pair}
+      data-entrance={profile.entrance} data-story={profile.story} data-camera={profile.camera} data-phase={phase} data-o={orientation} data-pair={masque.type.pair}
       data-count={count} data-dense={composition.dense ? "1" : "0"} data-kind={scene.kind}
       data-text-heavy={products.some((p) => p.name.length > 80) ? "1" : "0"} style={style}>
-      <header className="ss-header ss-enter">
+      <header className="ss-header">
         <div className="ss-header-copy">
-          {!echo && <div className="ss-eyebrow">{content.serviceLabel}</div>}
-          {!sidebar && !special ? <FadeText as="h1" className="ss-heading" value={heading} /> : null}
-          {scene.subtitle && !special ? <span className="ss-subtitle">{scene.subtitle}</span> : null}
+          {!echo && <div className="ss-eyebrow" data-ss-part="label">{content.serviceLabel}</div>}
+          {!sidebar && !special ? <StudioText as="h1" className="ss-heading" part="title" value={heading} /> : null}
+          {scene.subtitle && !special ? <span className="ss-subtitle" data-ss-part="detail">{scene.subtitle}</span> : null}
         </div>
-        <div className="ss-brand"><BrandMark content={content} masque={masque} /><span className="ss-status" data-open={content.open ? "1" : "0"} /></div>
+        <div className="ss-brand" data-ss-part="brand"><BrandMark content={content} masque={masque} /><span className="ss-status" data-open={content.open ? "1" : "0"} /></div>
       </header>
 
       {special ? (
-        <div className="ss-message ss-enter">
-          <div className="ss-message-rule" />
-          <FadeText as="h1" className="ss-message-title" value={scene.title || content.brand.name} />
+        <div className="ss-message">
+          <div className="ss-message-rule" data-ss-part="rule" />
+          <StudioText as="h1" className="ss-message-title" part="title" value={scene.title || content.brand.name} />
           {scene.kind === "closed" && scene.nextOpening ? <>
-            <p className="ss-reopening">Réouverture {scene.nextOpening.dayLabel}</p>
-            <div className="ss-windows">{scene.nextOpening.windows.map((w) => <span key={w}>{w}</span>)}</div>
-          </> : scene.subtitle ? <p className="ss-reopening">{scene.subtitle}</p> : null}
-          <span className="ss-message-service">{content.serviceLabel}</span>
+            <p className="ss-reopening" data-ss-part="detail">Réouverture {scene.nextOpening.dayLabel}</p>
+            <div className="ss-windows" data-ss-part="detail">{scene.nextOpening.windows.map((w) => <span key={w}>{w}</span>)}</div>
+          </> : scene.subtitle ? <p className="ss-reopening" data-ss-part="detail">{scene.subtitle}</p> : null}
+          <span className="ss-message-service" data-ss-part="label">{content.serviceLabel}</span>
         </div>
       ) : scene.kind === "promo" ? (
         <div className="ss-promos">
-          {promos.map((promo, index) => <article className="ss-offer ss-enter" key={promo.id} style={{ "--ss-i": index } as CSSProperties}>
-            <span className="ss-offer-label">{promo.label}</span>
-            <FadeText as="h2" className="ss-name" value={promo.title} />
-            {promo.description ? <FadeText as="p" className="ss-description" value={promo.description} /> : null}
+          {promos.map((promo, index) => <article className="ss-offer" key={promo.id} style={{ "--ss-i": index } as CSSProperties}>
+            <span className="ss-offer-label" data-ss-part="price">{promo.label}</span>
+            <StudioText as="h2" className="ss-name" part="name" value={promo.title} />
+            {promo.description ? <StudioText as="p" className="ss-description" part="detail" value={promo.description} /> : null}
           </article>)}
           {promos.length === 0 ? <p className="ss-reopening">{scene.title}</p> : null}
         </div>
       ) : (
         <div className="ss-content">
-          {sidebar ? <aside className="ss-intro ss-enter"><h1>{scene.title}</h1><span className="ss-intro-rule" />
-            {products[0]?.photoUrl ? <div className="ss-intro-photo ss-living"><Photo p={products[0]} /></div> : null}
+          {sidebar ? <aside className="ss-intro"><div className="ss-intro-title" data-ss-part="title"><FadeText as="h1" value={scene.title} /></div><span className="ss-intro-rule" data-ss-part="rule" />
+            {products[0]?.photoUrl ? <div className="ss-intro-photo" data-ss-part="photo"><div className="ss-object ss-living"><Photo p={products[0]} /></div></div> : null}
           </aside> : null}
           <div className="ss-products">{products.map((p, index) => <Product key={p.id} product={p} index={index} />)}</div>
         </div>
       )}
-      <div className="ss-foot" aria-hidden="true"><span /><span className="ss-foot-mark ss-living" /></div>
+      <div className="ss-foot" aria-hidden="true"><span /><span className="ss-foot-mark" data-ss-part="rule" /></div>
     </section>
   );
 }

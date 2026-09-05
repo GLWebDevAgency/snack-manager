@@ -188,3 +188,23 @@ scenario('Identité — aperçu TV du brouillon sans enregistrement', { format: 
   assert.equal(await save.isDisabled(), true);
   assert.equal(await panel.getByRole('combobox', { name: 'Modèle', exact: true }).inputValue(), 'halo', 'l’essai de modèle reste indépendant de l’identité');
 });
+
+scenario('Écrans TV — rejouer une scène en pause sans changer le contenu ni enregistrer', { format: FORMATS.comptoir }, async (page) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto(`${web}/admin/screens?demo=1`, { waitUntil: 'domcontentloaded' });
+  const drawer = await ouvrirApparence(page);
+  await page.waitForFunction((selector) => {
+    const bar = document.querySelector(`${selector} .bd-progress-fill`);
+    return bar && new DOMMatrixReadOnly(getComputedStyle(bar).transform).a > 0.12;
+  }, APERCU);
+  await drawer.getByRole('button', { name: 'Mettre en pause', exact: true }).click();
+  const originalBar = await page.locator(`${APERCU} .bd-progress-fill`).elementHandle();
+  const before = await page.locator(`${APERCU} .bd-layer[data-phase="in"]`).innerText();
+  await drawer.getByRole('button', { name: 'Rejouer cette scène', exact: true }).click();
+  await page.waitForFunction((bar) => !bar.isConnected, originalBar);
+  assert.equal(await page.locator(`${APERCU} .bd-root`).getAttribute('data-paused'), '1');
+  assert.equal(await page.locator(`${APERCU} .bd-layer[data-phase="in"]`).innerText(), before);
+  const samples = await mesurerProgression(page.locator(`${APERCU} .bd-progress-fill`), 350);
+  assert.ok(samples.every((value) => value < 0.002), 'la relecture en pause reste au début');
+  assert.equal(await drawer.getByRole('button', { name: "Enregistrer l'apparence", exact: true }).isDisabled(), true);
+});

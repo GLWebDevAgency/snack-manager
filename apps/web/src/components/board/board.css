@@ -48,24 +48,8 @@
 .bd-root:not([data-corners="brand"]) :is(.bd-row, .bd-thumb, .bd-price, .bd-hero-card, .bd-hero-price) {
   border-radius: var(--bd-corner, var(--cf-r-lg));
 }
-.bd-root[data-motion="subtle"] :is(.bd-thumb > img, .bd-hero-photo > img, .ct-drift) {
-  animation-name: ss-float;
-  animation-duration: var(--ss-cycle) !important;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
-  animation-timing-function: ease-in-out;
-}
-.bd-root[data-motion="expressive"] :is(.bd-thumb > img, .bd-hero-photo > img, .ct-drift) {
-  animation-duration: var(--ss-cycle) !important;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
-  animation-timing-function: ease-in-out;
-}
-.bd-root .ct-halo { animation: ss-light-drift var(--ss-cycle, 32s) ease-in-out infinite alternate; }
-.bd-root[data-paused="1"] :is(.ct-halo, .ct-ring) { animation-play-state: paused !important; }
-@media (prefers-reduced-motion: reduce) {
-  .bd-root :is(.bd-thumb img, .bd-hero-photo img, .ct-drift, .ct-halo, .ct-ring) { animation: none !important; }
-}
+/* Each scenography owns its camera. Shared preferences live in scene-motion.css;
+   no cross-model keyframe name or duration override belongs to the host. */
 
 /*
  * Aucun curseur sur l'affichage : la clé HDMI branchée en salle affiche une
@@ -1296,12 +1280,9 @@
 }
 
 /*
- * `prefers-reduced-motion` — on retombe sur de SIMPLES FONDUS.
- *
- * `globals.css` écrase déjà toutes les durées à 0,01 ms avec `!important` sur
- * le sélecteur universel ; on reprend la main ici avec des sélecteurs de classe
- * (spécificité supérieure) pour conserver un fondu doux plutôt qu'un saut sec,
- * et pour figer le Ken Burns et la barre de progression.
+ * Mouvement réduit : état de lecture immédiat, y compris sur les anciennes
+ * classes et l'appairage. Ne pas réintroduire un fondu plus spécifique que
+ * la politique commune de scene-motion.css après assemblage CSS en production.
  */
 @media (prefers-reduced-motion: reduce) {
   .bd-layer[data-phase="in"],
@@ -1317,11 +1298,11 @@
   .bd-plate-hours,
   .bd-check,
   .bd-code-cell[data-state="filled"] {
-    animation: bd-fade 0.28s linear both !important;
+    animation: none !important;
   }
 
   .bd-layer[data-phase="out"] {
-    animation: bd-fade 0.24s linear reverse both !important;
+    animation: none !important;
   }
 
   .bd-thumb > img,

@@ -29,6 +29,7 @@ export function BoardStage({
   embed = false,
   still = false,
   paused = false,
+  playbackVersion = 0,
   fallback = null,
   overlay = null,
   className,
@@ -43,6 +44,8 @@ export function BoardStage({
   still?: boolean;
   /** Pause de la lecture ; les entrées restent jouées pour permettre la navigation. */
   paused?: boolean;
+  /** Redémarrage explicite de la lecture, sans remonter le fond persistant. */
+  playbackVersion?: number;
   /** Ce qui s'affiche sans scène (chargement, non appairé). */
   fallback?: ReactNode;
   /** Par-dessus les scènes, dans l'aire : le bandeau « hors ligne ». */
@@ -57,6 +60,11 @@ export function BoardStage({
   const prixMono = TYPE_PAIRS[masque.type.pair].prixMono;
   const { chrome, Background, layered } = moduleDe(content?.scenography);
   const multiScene = (content?.scenes.length ?? 0) > 1;
+  // Une liste PLATE et des clés indépendantes de la phase : quand une scène
+  // passe en sortie, son DOM et ses photos décodées restent en place.
+  const layers: { scene: ScreenScenePayload; phase: "in" | "out" }[] = [];
+  if (leaving && leaving.id !== current?.id) layers.push({ scene: leaving, phase: "out" });
+  if (current) layers.push({ scene: current, phase: "in" });
 
   return (
     <div
@@ -91,29 +99,17 @@ export function BoardStage({
         ) : null}
 
         <div className="bd-stagearea">
-          {leaving && content ? (
+          {content ? layers.map(({ scene, phase }) => (
             <SceneLayer
-              key={`out-${leaving.id}`}
-              scene={leaving}
+              key={`${playbackVersion}:${scene.id}`}
+              scene={scene}
               content={content}
               masque={masque}
-              phase="out"
+              phase={phase}
               prixMono={prixMono}
             />
-          ) : null}
-
-          {current && content ? (
-            <SceneLayer
-              key={current.id}
-              scene={current}
-              content={content}
-              masque={masque}
-              phase="in"
-              prixMono={prixMono}
-            />
-          ) : (
-            fallback
-          )}
+          )) : null}
+          {!current || !content ? fallback : null}
 
           {overlay}
         </div>
@@ -121,7 +117,7 @@ export function BoardStage({
         <div className="bd-progress">
           {multiScene && current && !still ? (
             <div
-              key={current.id}
+              key={`${playbackVersion}:${current.id}`}
               className="bd-progress-fill"
               style={{ "--bd-dur": `${current.durationMs}ms` } as CSSProperties}
             />

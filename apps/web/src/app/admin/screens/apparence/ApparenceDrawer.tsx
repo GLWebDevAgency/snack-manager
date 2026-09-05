@@ -113,7 +113,10 @@ export function ApparenceDrawer({
   });
   const previewReady = !!content && !loading && !stale && !error;
   const scenes = content?.scenes ?? VIDE;
-  const { current, leaving, index, go } = useSceneRotation(scenes, { paused });
+  const { current, leaving, index, go, replay, playbackVersion } = useSceneRotation(scenes, {
+    paused,
+    playbackKey: content ? `${content.scenography ?? "ardoise"}:${content.orientation}` : undefined,
+  });
 
   // Le masque de BASE, pour les échantillons de fond : le contenu d'aperçu
   // porte déjà la variante, et la base ne s'en déduit pas.
@@ -244,8 +247,10 @@ export function ApparenceDrawer({
             leaving={leaving}
             index={index}
             paused={paused}
+            playbackVersion={playbackVersion}
             onTogglePause={() => setPaused((p) => !p)}
             onGo={go}
+            onReplay={replay}
             loading={loading}
             error={error}
             stale={stale}

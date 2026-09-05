@@ -1,0 +1,80 @@
+/* ARDOISE — une carte qui s'écrit en plans successifs, puis laisse lire.
+   Le montage vient de l'hôte ; aucun tarif ni glyphe n'est reconstruit. */
+.bd-root[data-scenography="ardoise"] .bd-layer { isolation: isolate; }
+.ar-ambience {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+.ar-ambience::before {
+  content: "";
+  position: absolute;
+  width: 80%;
+  aspect-ratio: 1;
+  right: -25%;
+  top: -35%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--cf-accent-wash), transparent 68%);
+  animation: ar-light var(--ss-cycle, 32s) ease-in-out infinite alternate;
+}
+
+/* L'ancien montage de board.css ne doit pas repartir au remontage de sortie.
+   Les états de repos restent ceux de la carte, notamment l'opacité des ruptures. */
+.bd-root[data-scenography="ardoise"] .bd-layer :is(
+  .bd-row, .bd-hero-card, .bd-title-rule, .bd-price, .bd-hero-price,
+  .bd-promo-label, .bd-plate-logo, .bd-plate-kicker, .bd-plate-title,
+  .bd-plate-line, .bd-plate-hours
+) { animation: none; }
+
+/* Chaque carte a quatre temps : photo → nom → composition → vrai prix.
+   Huit références = index 7 + quatre temps, jamais une cascade sans fin. */
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="in"] :is(.bd-row, .bd-hero-card) {
+  animation: ar-card var(--bd-reveal-ms) var(--bd-ease) backwards;
+  animation-delay: calc(var(--bd-intro-delay) + var(--bd-i, 0) * var(--bd-beat-ms));
+}
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="in"] :is(
+  .bd-title, .bd-page, .bd-name, .bd-desc, .bd-hero-name, .bd-hero-desc,
+  .bd-price, .bd-hero-price, .bd-promo-label, .bd-plate-logo,
+  .bd-plate-kicker, .bd-plate-title, .bd-plate-line, .bd-plate-hours,
+  .ct-photo-frame
+) {
+  animation: ar-reveal var(--bd-reveal-ms) var(--bd-ease) backwards;
+  animation-delay: calc(var(--bd-intro-delay) + (var(--bd-i, 0) + var(--ar-beat, 0)) * var(--bd-beat-ms));
+}
+.bd-root[data-scenography="ardoise"] :is(.bd-page, .ct-photo-frame, .bd-plate-logo, .bd-plate-kicker) { --ar-beat: 1; }
+.bd-root[data-scenography="ardoise"] :is(.bd-name, .bd-hero-name, .bd-plate-title) { --ar-beat: 2; }
+.bd-root[data-scenography="ardoise"] :is(.bd-desc, .bd-hero-desc, .bd-plate-line) { --ar-beat: 3; }
+.bd-root[data-scenography="ardoise"] :is(.bd-price, .bd-hero-price, .bd-promo-label, .bd-plate-hours) { --ar-beat: 4; }
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="in"] .bd-title-rule {
+  animation: ar-rule var(--bd-reveal-ms) var(--bd-ease) backwards;
+  animation-delay: calc(var(--bd-intro-delay) + var(--bd-beat-ms));
+}
+
+/* Figer seulement les ambiances : sélectionner une scène en pause doit quand
+   même terminer son entrée. Les modes off/still/reduced sont gérés par l'hôte. */
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="out"] .ct-drift,
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="out"] .ar-ambience::before,
+.bd-root[data-scenography="ardoise"][data-paused="1"] .ar-ambience::before {
+  animation-play-state: paused !important;
+}
+/* Une photo décodée ne rejoue pas non plus son fondu sur la copie sortante. */
+.bd-root[data-scenography="ardoise"] .bd-layer[data-phase="out"] .ct-photo-in { animation: none; }
+
+@keyframes ar-card {
+  from { opacity: 0; transform: translateY(calc(var(--bd-travel) * .35)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ar-reveal {
+  from { opacity: 0; transform: translateY(var(--bd-travel)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ar-rule {
+  from { opacity: 0; transform: scaleX(.18); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes ar-light {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-5%, 8%); }
+}
