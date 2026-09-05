@@ -1,4 +1,4 @@
-import { marqueDeRepli, type Brand, type ScreenContent } from "@sm/contracts";
+import { BrandSchema, marqueDeRepli, type Brand, type ScreenContent } from "@sm/contracts";
 
 /**
  * Le masque que l'écran PEINT.
@@ -9,6 +9,6 @@ import { marqueDeRepli, type Brand, type ScreenContent } from "@sm/contracts";
  * pour être testée sans `next/font`.
  */
 export function masqueDuContenu(content: ScreenContent | null): Brand {
-  if (content?.masque) return content.masque;
+  if (content?.masque && BrandSchema.safeParse(content.masque).success) return content.masque;
   return marqueDeRepli(content?.brand.accent ?? null, content?.brand.logoUrl ?? null);
 }

@@ -41,12 +41,20 @@ describe("masqueDuContenu — le repli d'un cache antérieur", () => {
   it("sans contenu du tout, rend la direction de repli", () => {
     expect(masqueDuContenu(null).preset).toBe("nuit");
   });
+
+  it("un masque tronqué en cache ne fait pas tomber le téléviseur", () => {
+    const corrupted = { ...cacheAncien(), masque: { type: { pair: "inconnue" } } } as unknown as ScreenContent;
+    expect(masqueDuContenu(corrupted).preset).toBe("nuit");
+    expect(masqueDuContenu(corrupted).palette.accent).toBe("#7a2e2a");
+  });
 });
 
 describe("moduleDe — la scénographie d'un contenu", () => {
   it("un cache sans scénographie rend Ardoise, l'écran qu'il a toujours eu", () => {
     expect(moduleDe(undefined)).toBe(Ardoise);
     expect(moduleDe("inconnue")).toBe(Ardoise);
+    expect(moduleDe("constructor")).toBe(Ardoise);
+    expect(moduleDe("__proto__")).toBe(Ardoise);
   });
 
   it("et le registre connaît Comptoir", () => {
