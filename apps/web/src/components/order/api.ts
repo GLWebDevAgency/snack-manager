@@ -41,8 +41,16 @@ import type {
   PublicSiteResponse,
   PublicSiteReview,
   SlotsResponse,
+  DeliveryQuote,
+  DeliveryQuoteRequest,
+  PublicDeliverySettings,
+  OrderDelivery,
+  OrderType,
+  Fulfillment,
+  PaymentStatus,
+  PaymentMethod,
 } from "@sm/contracts";
-import { marqueEffective, type Brand } from "@sm/contracts";
+import { marqueEffective, WebsiteUrlSchema, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -167,6 +175,8 @@ export type MenuCategory = { id: string; name: string; products: MenuProduct[] }
 export type SiteTenant = {
   slug: string;
   name: string;
+  /** Site vitrine indépendant ; lien volontaire, jamais une redirection. */
+  websiteUrl?: string | null;
   /** Le masque d'identité — résolu une fois pour toutes (repli Nuit sinon). */
   brand: Brand;
   logoUrl: string | null;
@@ -195,6 +205,7 @@ export type Site = {
   slots: SlotsResponse | null;
   reviews: { avg: number; count: number; latest: PublicSiteReview[] };
   ordering: { paused: boolean; message: string | null };
+  delivery?: PublicDeliverySettings;
   openNow: boolean;
   todayHours: PublicSiteHours | null;
   timezone: string;
@@ -365,8 +376,11 @@ export type CreatedOrder = {
   _id: string;
   number: number;
   status: OrderStatus;
+  type?: OrderType;
+  delivery?: OrderDelivery | null;
   totals: {
     subtotal: number;
+    deliveryFee?: number;
     /** La promotion retenue par le serveur, avec son libellé — `null` sinon. */
     discount: { amount: number; reason: string } | null;
     total: number;
@@ -396,6 +410,9 @@ export type TrackingState = {
   status: OrderStatus;
   statusHistory: { status: OrderStatus; at: string }[];
   pickupSlot: string | null;
+  fulfillment?: Fulfillment;
+  delivery?: { dispatchedAt: string | null; deliveredAt: string | null; estimatedMinutes: number } | null;
+  payment?: { status: PaymentStatus; method: PaymentMethod; refundedCents: number; pendingRefundCents: number };
 };
 
 /** `?t=` — sans jeton valide l’API répond 404, jamais 403. */
@@ -455,6 +472,7 @@ export function orderingApi(transport: Transport = httpTransport) {
         tenant: {
           slug: site.tenant.slug,
           name: site.tenant.name,
+          websiteUrl: WebsiteUrlSchema.safeParse(site.tenant.websiteUrl).data ?? null,
           brand: marqueEffective({
             brand: site.tenant.brand ?? null,
             brandColor: site.tenant.brandColor,
@@ -471,6 +489,7 @@ export function orderingApi(transport: Transport = httpTransport) {
         slots: site.slots ?? null,
         reviews: site.reviews ?? { avg: 0, count: 0, latest: [] },
         ordering: site.ordering ?? { paused: false, message: null },
+        delivery: site.delivery,
         openNow: site.openNow === true,
         todayHours: site.todayHours ?? null,
         timezone: site.timezone ?? "Europe/Paris",
@@ -551,12 +570,20 @@ export function orderingApi(transport: Transport = httpTransport) {
     slug: string,
     date?: string,
     signal?: AbortSignal,
+    fulfillment: Fulfillment = "pickup",
   ): Promise<SlotsResponse> {
-    const query = date ? `?date=${encodeURIComponent(date)}` : "";
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    if (fulfillment === "delivery") params.set("fulfillment", fulfillment);
+    const query = params.size ? `?${params}` : "";
     return getJson<SlotsResponse>(
       `/public/tenants/${encodeURIComponent(slug)}/slots${query}`,
       { signal },
     );
+  }
+
+  function quoteDelivery(slug: string, payload: DeliveryQuoteRequest): Promise<DeliveryQuote> {
+    return postJson<DeliveryQuote>(`/public/tenants/${encodeURIComponent(slug)}/delivery/quote`, payload);
   }
 
   function createOrder(
@@ -608,6 +635,7 @@ export function orderingApi(transport: Transport = httpTransport) {
     loadSite,
     loadBrand,
     loadSlots,
+    quoteDelivery,
     createOrder,
     createPaymentIntent,
     loadTracking,

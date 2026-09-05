@@ -17,12 +17,14 @@ export function CancelModal({
   order,
   onClose,
   onCancelled,
+  owner = false,
 }: {
   /** Commande visée — null : modale fermée. */
   order: Order | null;
   onClose: () => void;
   /** Appelé avec la commande annulée renvoyée par l'API. */
   onCancelled: (updated: Order) => void;
+  owner?: boolean;
 }) {
   const toast = useToast();
   const [pin, setPin] = useState("");
@@ -43,7 +45,7 @@ export function CancelModal({
 
   // La MÊME borne que l'API (`OrderCancelSchema`) : « x » passait cet écran et
   // se faisait refuser côté serveur, ce qui fait chercher la faute au PIN.
-  const valid = PIN_RE.test(pin) && reason.trim().length >= 3;
+  const valid = (owner ? pin.length > 0 : PIN_RE.test(pin)) && reason.trim().length >= 3;
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
@@ -51,8 +53,8 @@ export function CancelModal({
     setError(null);
     setSubmitting(true);
     try {
-      const updated = await api.post<Order>(`/orders/${order._id}/cancel`, {
-        pin,
+      const updated = await api.post<Order>(`/orders/${order._id}/${owner ? "cancel-owner" : "cancel"}`, {
+        ...(owner ? { password: pin } : { pin }),
         reason: reason.trim(),
       });
       toast(`Commande n°${order.number} annulée`, { icon: "check" });
@@ -60,7 +62,7 @@ export function CancelModal({
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401
-          ? "PIN incorrect — annulation refusée"
+          ? `${owner ? "Mot de passe" : "PIN"} incorrect — annulation refusée`
           : err instanceof Error
             ? err.message
             : "Échec de l'annulation — réessayez",
@@ -72,7 +74,7 @@ export function CancelModal({
   return (
     <Modal
       open={order !== null}
-      onClose={onClose}
+      onClose={() => { if (!submitting) onClose(); }}
       destructive
       title={`Annuler la commande n°${order?.number ?? ""}`}
       footer={
@@ -98,8 +100,13 @@ export function CancelModal({
           <p className="text-[13px] leading-relaxed text-mut">
             La commande de <strong className="text-ink">{customerName(order)}</strong>{" "}
             sera annulée définitivement. L’opération est journalisée (NF525) —
-            saisissez votre PIN pour confirmer.
+            saisissez votre {owner ? "mot de passe" : "PIN"} pour confirmer.
           </p>
+          {order.payment.method === "online" && order.payment.status === "paid" && (
+            <p className="rounded-ctrl bg-alert/10 p-3 text-sm text-alertt" role="note">
+              Le paiement a déjà été encaissé. L’annulation ne rembourse pas le client : utilisez ensuite « Rembourser » dans la fiche commande.
+            </p>
+          )}
           <Field label="Raison de l'annulation" htmlFor="cancel-reason">
             <Input
               id="cancel-reason"
@@ -112,20 +119,20 @@ export function CancelModal({
             />
           </Field>
           <Field
-            label="PIN staff"
+            label={owner ? "Votre mot de passe" : "PIN staff"}
             htmlFor="cancel-pin"
-            hint="4 à 6 chiffres — jamais mémorisé."
+            hint={owner ? "Le mot de passe de votre compte propriétaire." : "4 à 6 chiffres — jamais mémorisé."}
             error={error}
           >
             <Input
               id="cancel-pin"
               type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              pattern="[0-9]*"
-              maxLength={6}
+              inputMode={owner ? undefined : "numeric"}
+              autoComplete={owner ? "current-password" : "off"}
+              pattern={owner ? undefined : "[0-9]*"}
+              maxLength={owner ? 256 : 6}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => setPin(owner ? e.target.value : e.target.value.replace(/\D/g, ""))}
               placeholder="••••"
               disabled={submitting}
               className="tabular-nums"

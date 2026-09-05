@@ -69,7 +69,7 @@ function loadStripeJs(): Promise<void> {
     script.addEventListener("load", () => resolve(), { once: true });
     script.addEventListener(
       "error",
-      () => reject(new Error("Stripe.js n’a pas pu être chargé")),
+      () => { script.remove(); loader = null; reject(new Error("Stripe.js n’a pas pu être chargé")); },
       { once: true },
     );
     if (!existing) document.head.appendChild(script);
@@ -162,6 +162,7 @@ export function StripeCard({
   returnUrl,
   onPaid,
   onGiveUp,
+  allowCounterFallback = true,
 }: {
   publishableKey: string;
   clientSecret: string;
@@ -186,6 +187,8 @@ export function StripeCard({
   onPaid: () => void;
   /** Repli explicite : « je réglerai au comptoir ». */
   onGiveUp: () => void;
+  /** La livraison ne peut jamais être confirmée avec un paiement au comptoir. */
+  allowCounterFallback?: boolean;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<StripeInstance | null>(null);
@@ -194,6 +197,8 @@ export function StripeCard({
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,7 +231,7 @@ export function StripeCard({
         /* démontage best-effort */
       }
     };
-  }, [publishableKey, clientSecret, stripeAccount, apparence]);
+  }, [publishableKey, clientSecret, stripeAccount, apparence, attempt]);
 
   async function pay() {
     const stripe = stripeRef.current;
@@ -246,11 +251,15 @@ export function StripeCard({
         return;
       }
       const state = result.paymentIntent?.status;
-      if (state === "succeeded" || state === "processing") {
+      if (state === "succeeded") {
         onPaid();
         return;
       }
-      setError("Le paiement n’a pas été confirmé. Réessayez ou réglez au comptoir.");
+      if (state === "processing") {
+        setProcessing(true);
+        return;
+      }
+      setError(allowCounterFallback ? "Le paiement n’a pas été confirmé. Réessayez ou réglez au comptoir." : "Le paiement n’a pas été confirmé. Réessayez pour confirmer votre livraison.");
     } catch {
       setError("Le paiement n’a pas pu être contacté. Réessayez.");
     } finally {
@@ -262,11 +271,10 @@ export function StripeCard({
     return (
       <div className="flex flex-col gap-3">
         <Banner tone="alert" icon="bell" title="Paiement en ligne indisponible">
-          Votre commande est enregistrée : vous pourrez régler au comptoir au
-          moment du retrait.
+          {allowCounterFallback ? "Votre commande est enregistrée : vous pourrez régler au comptoir au moment du retrait." : "Votre commande est en attente de paiement. Réessayez pour confirmer votre livraison."}
         </Banner>
-        <PrimaryAction icon="check" mono={prixMono} onClick={onGiveUp}>
-          Continuer — je paie au comptoir
+        <PrimaryAction icon="check" mono={prixMono} onClick={allowCounterFallback ? onGiveUp : () => { setStatus("loading"); setAttempt((value) => value + 1); }}>
+          {allowCounterFallback ? "Continuer — je paie au comptoir" : "Réessayer le paiement"}
         </PrimaryAction>
       </div>
     );
@@ -274,6 +282,7 @@ export function StripeCard({
 
   return (
     <div className="flex flex-col gap-4">
+      {processing && <Banner tone="prep" icon="clock" title="Confirmation bancaire en cours">Ne payez pas une deuxième fois. <a href={returnUrl} className="font-bold underline underline-offset-4">Suivre la confirmation de votre commande</a>.</Banner>}
       <div className="rounded-card border border-ink/8 bg-surface2 p-3.5">
         {status === "loading" && (
           <p className="flex items-center gap-2.5 py-6 text-[14px] text-mut">
@@ -292,7 +301,7 @@ export function StripeCard({
 
       <PrimaryAction
         onClick={pay}
-        disabled={status !== "ready"}
+        disabled={status !== "ready" || processing}
         loading={paying}
         icon="check"
         amount={amount}
@@ -301,13 +310,13 @@ export function StripeCard({
         Payer
       </PrimaryAction>
 
-      <button
+      {allowCounterFallback && !processing && <button
         type="button"
         onClick={onGiveUp}
         className="min-h-11 text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
       >
         Je préfère régler au comptoir
-      </button>
+      </button>}
 
       <p className="text-center text-[12px] text-mut">
         Paiement chiffré par Stripe · Visa · Mastercard · CB

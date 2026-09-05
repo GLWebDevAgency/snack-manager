@@ -10,6 +10,7 @@ import type {
   OrderType,
   PaymentMethod,
   PaymentStatus,
+  OrderDelivery,
 } from "@sm/contracts";
 
 export type OrderLine = {
@@ -38,8 +39,15 @@ export type Order = {
     subtotal: number;
     discount: { amount: number; reason?: string } | null;
     total: number;
+    deliveryFee?: number;
   };
-  payment: { method: PaymentMethod; status: PaymentStatus };
+  payment: {
+    method: PaymentMethod; status: PaymentStatus;
+    stripePaymentIntentId?: string | null;
+    refundedCents?: number;
+    pendingRefundCents?: number;
+  };
+  delivery?: OrderDelivery | null;
   status: OrderStatus;
   statusHistory: { status: string; at: string; by?: string }[];
   pickup: { slot: string; customerName: string; customerPhone: string | null } | null;
@@ -58,6 +66,7 @@ export const TYPE_LABELS: Record<OrderType, string> = {
   surplace: "Sur place",
   emporter: "À emporter",
   pickup: "Retrait",
+  delivery: "Livraison",
 };
 
 /** Étape suivante du flux new → preparing → ready → delivered (absent = terminal). */

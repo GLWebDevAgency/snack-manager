@@ -35,7 +35,12 @@ import type {
   OrderStatus,
   PaymentIntentResponse,
   SlotsResponse,
+  PublicDeliverySettings,
+  DeliveryAddress,
+  DeliveryQuote,
+  Fulfillment,
 } from "@sm/contracts";
+import { DeliveryAddressSchema } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import {
@@ -80,6 +85,7 @@ import {
 } from "./primitives";
 import { StripeCard, type ApparenceStripe } from "./StripeCard";
 import { TurnstileCheck } from "./TurnstileCheck";
+import { DeliveryFields } from "./DeliveryFields";
 
 type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
 
@@ -134,6 +140,7 @@ export function Checkout({
   paused,
   pauseMessage,
   initialSlots,
+  delivery,
   embed = false,
   loyalty = null,
   api = networkApi,
@@ -166,6 +173,7 @@ export function Checkout({
   pauseMessage: string | null;
   /** Créneaux déjà connus (rendus avec la page) — évite une attente à l’ouverture. */
   initialSlots: SlotsResponse | null;
+  delivery?: PublicDeliverySettings;
   embed?: boolean;
   /**
    * Le programme de fidélité du restaurant, résumé — `null` s’il n’en a pas.
@@ -194,6 +202,15 @@ export function Checkout({
   const [step, setStep] = useState<Step>("cart");
   const [customer, setCustomer] = useState<Customer>({ name: "", phone: "" });
   const [touched, setTouched] = useState(false);
+  const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
+  const [address, setAddress] = useState<DeliveryAddress>({ line1: "", line2: "", postalCode: "", city: "", country: "FR" });
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [quoteResult, setQuoteResult] = useState<{ key: string; value: DeliveryQuote } | null>(null);
+  const [quoteError, setQuoteError] = useState<{ key: string; message: string } | null>(null);
+  const [quoteBusy, setQuoteBusy] = useState(false);
+  const isDelivery = fulfillment === "delivery";
+  const quoteKey = JSON.stringify({ address, lines: toOrderLines(cart.lines) });
+  const deliveryQuote = quoteResult?.key === quoteKey ? quoteResult.value : null;
 
   const [date, setDate] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotsResponse | null>(initialSlots);
@@ -237,14 +254,14 @@ export function Checkout({
   }, [open, slug, demo]);
 
   // Un tenant sans paiement en ligne n’a qu’un mode : le comptoir.
-  const method: "online" | "counter" = !demo && probe === "off" ? "counter" : wanted;
+  const method: "online" | "counter" = isDelivery ? "online" : !demo && probe === "off" ? "counter" : wanted;
 
   // ── Créneaux : toujours rechargés à l’entrée de l’étape (capacité vivante) ──
   const fetchSlots = useCallback(
     (target: string | null, signal?: AbortSignal) => {
       setSlotsState("loading");
       api
-        .loadSlots(slug, target ?? undefined, signal)
+        .loadSlots(slug, target ?? undefined, signal, fulfillment)
         .then((res) => {
           if (signal?.aborted) return;
           setSlots(res);
@@ -257,7 +274,7 @@ export function Checkout({
           if (!signal?.aborted) setSlotsState("error");
         });
     },
-    [api, slug],
+    [api, slug, fulfillment],
   );
 
   useEffect(() => {
@@ -269,7 +286,7 @@ export function Checkout({
   }, [open, step, date, fetchSlots]);
 
   const nameOk = customer.name.trim().length >= 2;
-  const contactOk = nameOk && phoneOk(customer.phone);
+  const contactOk = nameOk && phoneOk(customer.phone) && (!isDelivery || Boolean(deliveryQuote));
   const blockedByPause = paused;
 
   const chosenSlot = useMemo(
@@ -300,6 +317,35 @@ export function Checkout({
     setTurnstileToken(null);
     setTurnstileReset((value) => value + 1);
     clientIdRef.current = null;
+  }
+
+  async function verifyDelivery() {
+    const parsed = DeliveryAddressSchema.safeParse(address);
+    if (!parsed.success) {
+      setQuoteError({ key: quoteKey, message: parsed.error.issues[0]?.message ?? "Vérifiez votre adresse." });
+      return;
+    }
+    setQuoteBusy(true);
+    setQuoteError(null);
+    try {
+      const value = await api.quoteDelivery(slug, { address: parsed.data, lines: toOrderLines(cart.lines) });
+      setQuoteResult({ key: quoteKey, value });
+    } catch (cause) {
+      setQuoteError({ key: quoteKey, message: cause instanceof PublicApiError ? cause.message : "La vérification n’a pas abouti. Réessayez." });
+    } finally { setQuoteBusy(false); }
+  }
+
+  async function retryPayment() {
+    if (!order || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api.createPaymentIntent(order._id, order.trackingToken);
+      if (next.unavailable || !next.publishableKey) throw new Error("Le paiement est indisponible pour le moment. Votre commande reste en attente de paiement.");
+      setIntent(next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Le paiement n’a pas abouti.");
+    } finally { setBusy(false); }
   }
 
   /**
@@ -371,6 +417,7 @@ export function Checkout({
         clientId: clientIdRef.current,
         lines: toOrderLines(cart.lines),
         payment: { method: chosenMethod },
+        ...(isDelivery ? { fulfillment: "delivery" as const, delivery: { address, instructions: deliveryInstructions.trim() } } : {}),
         turnstileToken: proof,
         pickup: {
           slot: slotIso,
@@ -432,6 +479,11 @@ export function Checkout({
       }
 
       if (!res || res.unavailable || !res.publishableKey) {
+        if (isDelivery) {
+          setError("Votre commande est enregistrée, mais la livraison attend votre paiement. Réessayez sans créer une nouvelle commande.");
+          setStep("card");
+          return;
+        }
         // Un incident PASSAGER n'éteint pas la carte pour la session.
         //
         // `createIntent` rend `unavailable` pour des causes très différentes :
@@ -476,7 +528,7 @@ export function Checkout({
   const titles: Record<Step, string> = {
     cart: "Votre commande",
     customer: "Vos coordonnées",
-    slot: "Créneau de retrait",
+    slot: isDelivery ? "Créneau de livraison" : "Créneau de retrait",
     pay: "Paiement",
     card: "Paiement par carte",
     done: "Commande confirmée",
@@ -499,7 +551,7 @@ export function Checkout({
       onBack={backTo ? () => setStep(backTo) : null}
       headerExtra={
         !finished ? (
-          <Progress index={stepIndex} onJump={(target) => setStep(target)} step={step} />
+          <Progress index={stepIndex} onJump={(target) => setStep(target)} step={step} delivery={isDelivery} />
         ) : null
       }
       footer={
@@ -507,6 +559,8 @@ export function Checkout({
           step={step}
           busy={busy}
           cart={cart}
+          fulfillment={fulfillment}
+          total={deliveryQuote?.totalCents ?? cart.subtotal}
           contactOk={contactOk}
           slotIso={slotIso}
           slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
@@ -538,13 +592,20 @@ export function Checkout({
 
         {error && step !== "done" && (
           <div className="mb-4">
-            <Banner tone="alert" icon="bell" title="Commande non envoyée">
+            <Banner tone="alert" icon="bell" title={order ? "Paiement à terminer" : "Commande non envoyée"}>
               {error}
             </Banner>
           </div>
         )}
 
         {step === "cart" && (
+          <>
+          {delivery?.available && !demo && (
+            <RadioGroup label="Recevoir votre commande" className="mb-5 flex flex-col gap-2.5">
+              <ChoiceCard on={!isDelivery} tabIndex={!isDelivery ? 0 : -1} glyph="bag" title="Retrait au restaurant" sub="Sans frais de livraison" onClick={() => { setFulfillment("pickup"); setSlotIso(null); setSlots(null); }} />
+              <ChoiceCard on={isDelivery} tabIndex={isDelivery ? 0 : -1} glyph="pin" title="Livraison chez vous" sub="Par le restaurant · paiement sécurisé en ligne" onClick={() => { setFulfillment("delivery"); setSlotIso(null); setSlots(null); }} />
+            </RadioGroup>
+          )}
           <CartStep
             cart={cart}
             onBrowse={onBrowse}
@@ -553,9 +614,11 @@ export function Checkout({
             prixMono={prixMono}
             onPromoCode={setPromoCode}
           />
+          </>
         )}
 
         {step === "customer" && (
+          <>
           <CustomerStep
             customer={customer}
             onChange={setCustomer}
@@ -563,6 +626,8 @@ export function Checkout({
             onBlur={() => setTouched(true)}
             tenantName={tenantName}
           />
+          {isDelivery && <DeliveryFields address={address} instructions={deliveryInstructions} quote={deliveryQuote} busy={quoteBusy} error={quoteError?.key === quoteKey ? quoteError.message : null} onAddress={setAddress} onInstructions={setDeliveryInstructions} onVerify={verifyDelivery} />}
+          </>
         )}
 
         {step === "slot" && (
@@ -573,8 +638,9 @@ export function Checkout({
             onSelect={setSlotIso}
             onDate={setDate}
             onRetry={() => fetchSlots(date)}
-            tenantName={tenantName}
-            tenantAddress={tenantAddress}
+            tenantName={isDelivery ? "Votre adresse de livraison" : tenantName}
+            tenantAddress={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : tenantAddress}
+            delivery={isDelivery}
           />
         )}
 
@@ -589,6 +655,10 @@ export function Checkout({
               onMethod={setWanted}
               cardAvailable={probe !== "off"}
               prixMono={prixMono}
+              delivery={isDelivery}
+              deliveryFee={deliveryQuote?.feeCents ?? 0}
+              total={deliveryQuote?.totalCents ?? cart.subtotal}
+              address={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : null}
             />
             {!demo && (
               <TurnstileCheck
@@ -620,7 +690,11 @@ export function Checkout({
               setStep("done");
             }}
             onGiveUp={() => setStep("done")}
+            allowCounterFallback={!isDelivery}
           />
+        )}
+        {step === "card" && (!intent || intent.unavailable || !intent.publishableKey) && (
+          <ErrorState title="Terminer le paiement" message={busy ? "Connexion au paiement sécurisé…" : "Votre commande est en attente. Le restaurant lancera votre livraison après confirmation du paiement."} onRetry={busy ? undefined : retryPayment} />
         )}
 
         {step === "done" && order && (
@@ -653,10 +727,12 @@ function Progress({
   index,
   step,
   onJump,
+  delivery = false,
 }: {
   index: number;
   step: Step;
   onJump: (target: Step) => void;
+  delivery?: boolean;
 }) {
   return (
     <ol className="mt-2.5 flex items-start gap-1.5">
@@ -700,7 +776,7 @@ function Progress({
                   current ? "text-ink" : "text-mut",
                 )}
               >
-                {entry.label}
+                {entry.id === "slot" && delivery ? "Livraison" : entry.label}
               </span>
               <span className="sr-only">
                 {done ? " — terminé, revenir" : current ? " — étape en cours" : ""}
@@ -721,6 +797,8 @@ function Footer({
   step,
   busy,
   cart,
+  fulfillment,
+  total,
   contactOk,
   slotIso,
   slotLabel,
@@ -738,6 +816,8 @@ function Footer({
   step: Step;
   busy: boolean;
   cart: CartApi;
+  fulfillment: Fulfillment;
+  total: number;
   contactOk: boolean;
   slotIso: string | null;
   slotLabel: string | null;
@@ -800,7 +880,7 @@ function Footer({
         mono={prixMono}
         onClick={() => onNext("slot")}
       >
-        {contactOk ? "Choisir le créneau" : "Nom et téléphone requis"}
+        {contactOk ? "Choisir le créneau" : fulfillment === "delivery" ? "Coordonnées et adresse vérifiée requises" : "Nom et téléphone requis"}
       </PrimaryAction>
     );
   }
@@ -813,7 +893,7 @@ function Footer({
         mono={prixMono}
         onClick={() => onNext("pay")}
       >
-        {slotLabel ? `Continuer · retrait ${slotLabel}` : "Choisissez un créneau"}
+        {slotLabel ? `Continuer · ${fulfillment === "delivery" ? "livraison" : "retrait"} ${slotLabel}` : "Choisissez un créneau"}
       </PrimaryAction>
     );
   }
@@ -822,7 +902,7 @@ function Footer({
     <PrimaryAction
       disabled={blocked || !slotIso || !contactOk || !verified}
       loading={busy}
-      amount={cart.subtotal}
+      amount={total}
       icon={method === "online" ? "euro" : "check"}
       mono={prixMono}
       onClick={onSubmit}
@@ -1203,6 +1283,7 @@ function SlotStep({
   onRetry,
   tenantName,
   tenantAddress,
+  delivery = false,
 }: {
   slots: SlotsResponse | null;
   state: "idle" | "loading" | "error";
@@ -1212,12 +1293,13 @@ function SlotStep({
   onRetry: () => void;
   tenantName: string;
   tenantAddress: string;
+  delivery?: boolean;
 }) {
   if (state === "error") {
     return (
       <ErrorState
         title="Créneaux indisponibles"
-        message="Impossible de récupérer les horaires de retrait pour le moment."
+        message="Impossible de récupérer les créneaux pour le moment."
         onRetry={onRetry}
       />
     );
@@ -1243,6 +1325,7 @@ function SlotStep({
 
   return (
     <div className={cx("flex flex-col gap-5", state === "loading" && "opacity-60")}>
+      {delivery && <p className="text-[13px] text-mut">L’heure choisie est une estimation de remise à votre adresse. Préparation et trajet sont compris dans le délai annoncé.</p>}
       {/* Où retirer — le client vérifie l’adresse avant de choisir l’heure. */}
       <div className="flex items-center gap-3 rounded-panel border border-ink/8 bg-surface2 p-3.5">
         <span className="grid size-11 shrink-0 place-items-center rounded-pill bg-accent text-onaccent">
@@ -1375,6 +1458,10 @@ function PayStep({
   onMethod,
   cardAvailable,
   prixMono,
+  delivery,
+  deliveryFee,
+  total,
+  address,
 }: {
   cart: CartApi;
   customer: Customer;
@@ -1384,13 +1471,17 @@ function PayStep({
   onMethod: (next: "online" | "counter") => void;
   cardAvailable: boolean;
   prixMono: boolean;
+  delivery: boolean;
+  deliveryFee: number;
+  total: number;
+  address: string | null;
 }) {
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-panel border border-ink/8 bg-surface2 p-4">
         <SectionLabel className="mb-3">Récapitulatif</SectionLabel>
         <dl className="flex flex-col gap-2.5 text-[14px]">
-          <Row label="Retrait">
+          <Row label={delivery ? "Livraison estimée" : "Retrait"}>
             <span className="font-bold text-ink">
               {slotDate ? `${dayLabelOf(slotDate)} · ` : ""}
               <span className="tabular-nums">{slotLabel ?? "—"}</span>
@@ -1402,13 +1493,15 @@ function PayStep({
           <Row label="Articles">
             <span className="font-semibold tabular-nums text-ink">{cart.count}</span>
           </Row>
+          {address && <Row label="Adresse"><span className="whitespace-normal text-ink">{address}</span></Row>}
+          {delivery && <Row label="Frais de livraison"><Money cents={deliveryFee} mono={prixMono} /></Row>}
         </dl>
         <div className="mt-3.5 flex items-baseline justify-between border-t border-ink/8 pt-3.5">
           <span className="text-[15px] font-extrabold uppercase tracking-[0.04em] text-ink">
             Total à régler
           </span>
           <Money
-            cents={cart.subtotal}
+            cents={total}
             mono={prixMono}
             className="text-[clamp(1.25rem,1.1rem+0.6vw,1.5rem)] text-ink"
           />
@@ -1417,7 +1510,9 @@ function PayStep({
 
       <section className="flex flex-col gap-2.5">
         <SectionLabel>Mode de paiement</SectionLabel>
-        {cardAvailable ? (
+        {delivery ? (
+          <Banner icon="euro" title="Paiement sécurisé en ligne">Le paiement confirme votre livraison. Les coordonnées de votre carte restent chez Stripe.</Banner>
+        ) : cardAvailable ? (
           // `RadioGroup` et non une `<div role="radiogroup">` nue : les flèches
           // doivent parcourir le groupe, et une seule des deux cartes prend la
           // halte de tabulation (tabindex tournant, APG radiogroup). Sans cela,
@@ -1500,6 +1595,8 @@ function DoneStep({
   /** Programme de fidélité du restaurant — `null` s’il n’en a pas. */
   loyalty: VitrineFidelite | null;
 }) {
+  const delivery = order.type === "delivery";
+  const timeline = delivery ? TIMELINE.map((entry) => entry.status === "ready" ? { ...entry, label: "Prête à partir", hint: "Le restaurant organise votre livraison" } : entry) : TIMELINE;
   const rank = Math.max(
     0,
     TIMELINE.findIndex((s) => s.status === status),
@@ -1560,14 +1657,14 @@ function DoneStep({
             passerait sinon par-dessus la carte qui le chevauche. */}
         <div className="relative -mt-11 rounded-panel border border-ink/10 bg-surface px-5 py-5 text-center shadow-deep">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-mut">
-            Numéro de retrait
+            {delivery ? "Numéro de commande" : "Numéro de retrait"}
           </p>
           <p className="font-display mt-1 text-[clamp(3.25rem,2.8rem+1.8vw,3.875rem)] font-black leading-none tracking-[-0.05em] tabular-nums text-accentink">
             {order.number}
           </p>
           {order.pickup?.slot && (
             <p className="mt-2 text-[14px] text-mut">
-              Retrait à{" "}
+              {delivery ? "Livraison estimée à " : "Retrait à "}
               <span className="font-bold tabular-nums text-ink">
                 {hhmm(order.pickup.slot)}
               </span>
@@ -1586,12 +1683,12 @@ function DoneStep({
           à chaque avancement.
         */}
         <p aria-live="polite" aria-atomic="true" className="sr-only">
-          {`Statut de la commande : ${TIMELINE[rank]?.label ?? ""}. ${TIMELINE[rank]?.hint ?? ""}`}
+          {`Statut de la commande : ${timeline[rank]?.label ?? ""}. ${timeline[rank]?.hint ?? ""}`}
         </p>
 
         {/* Suivi : la première étape est acquise, les suivantes viennent du KDS. */}
         <ol className="mt-4 rounded-panel border border-ink/8 bg-surface2 px-4 py-2">
-          {TIMELINE.map((entry, i) => {
+          {timeline.map((entry, i) => {
             const reached = i <= rank;
             const current = i === rank;
             return (
@@ -1678,7 +1775,7 @@ function DoneStep({
           ) : paidOnline ? (
             <Banner tone="ok" icon="check" title="Paiement accepté">
               <Prix cents={order.totals?.total ?? 0} mono={prixMono} /> réglés en
-              ligne. Présentez votre numéro de retrait au comptoir.
+              ligne. {delivery ? "Votre restaurant prépare votre livraison." : "Présentez votre numéro de retrait au comptoir."}
             </Banner>
           ) : (
             <Banner icon="euro" title="À régler au comptoir">
