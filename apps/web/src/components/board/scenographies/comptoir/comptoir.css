@@ -456,6 +456,22 @@
   font-size: var(--ct-fs-heros-nom);
   line-height: 0.96;
 }
+/*
+ * LE VOILE ASSOMBRIT TOUJOURS LA PHOTO — en mode clair aussi (`--cf-scrim` y
+ * est de l'encre à 45 %). Le texte posé dessus est donc CLAIR dans les deux
+ * modes : en mode clair, l'encre du masque serait sombre sur sombre. On
+ * double le voile et on écrit avec la couleur du fond, la plus claire du masque.
+ */
+.bd-root[data-mode="light"] .ct-cap {
+  box-shadow: inset 0 0 0 9999px var(--cf-scrim);
+}
+.bd-root[data-mode="light"] .ct-cap .ct-name,
+.bd-root[data-mode="light"] .ct-cap .ct-desc {
+  color: var(--cf-bg);
+}
+.bd-root[data-mode="light"] .ct-cap .ct-desc {
+  opacity: 0.82;
+}
 .ct-hero .ct-desc {
   -webkit-line-clamp: 3;
 }
@@ -566,31 +582,30 @@
   height: 100%;
   min-height: 0;
 }
-.ct-promos[data-count="1"] {
-  grid-template-rows: 1fr;
-}
+/* Les cartes prennent la taille de leur contenu et se centrent : une offre est
+   une annonce, pas une colonne à remplir. */
 .ct[data-o="landscape"] .ct-promos[data-count="3"] {
   grid-template-columns: repeat(3, 1fr);
-  align-content: stretch;
 }
 .ct[data-o="landscape"] .ct-promos[data-count="2"] {
   grid-template-columns: repeat(2, 1fr);
-  align-content: stretch;
 }
 .ct-promo {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 26px;
+  justify-content: center;
+  gap: 36px;
   background: var(--cf-surface);
   border-radius: var(--cf-r-md);
-  padding: 36px 40px;
+  padding: 48px 48px 52px;
   box-shadow: var(--cf-shadow-soft);
   min-height: 0;
+  border-top: 6px solid var(--cf-green);
 }
 .ct-promos[data-count="1"] .ct-promo {
   flex-direction: row;
   align-items: center;
+  gap: 48px;
 }
 .ct-ptx {
   flex: 1;

@@ -78,6 +78,7 @@ export function BoardStage({
       data-still={still ? "1" : "0"}
       data-scenography={content?.scenography ?? "ardoise"}
       data-prix-mono={prixMono ? "1" : "0"}
+      data-mode={masque.mode}
     >
       <div
         className="bd-stage"

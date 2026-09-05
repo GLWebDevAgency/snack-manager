@@ -129,7 +129,18 @@ function Ligne({ p, i }: { p: ScreenProduct; i: number }) {
   );
 }
 
-function Heros({ p, i, durationMs }: { p: ScreenProduct; i: number; durationMs: number }) {
+function Heros({
+  p,
+  i,
+  durationMs,
+  echo = false,
+}: {
+  p: ScreenProduct;
+  i: number;
+  durationMs: number;
+  /** Le produit porte le nom de la scène (« Le Boss » dans « Le Boss ») : on ne l'écrit pas deux fois. */
+  echo?: boolean;
+}) {
   return (
     <article className="ct-hero ct-it" {...etat(p)} style={{ "--i": i } as CSSProperties}>
       <div className="ct-ph">
@@ -142,7 +153,7 @@ function Heros({ p, i, durationMs }: { p: ScreenProduct; i: number; durationMs: 
         Nouveau
       </span>
       <div className="ct-cap">
-        <FadeText as="h3" className="ct-name ct-name-hero" value={p.name} />
+        {echo ? null : <FadeText as="h3" className="ct-name ct-name-hero" value={p.name} />}
         <FadeText as="p" className="ct-desc" value={p.description} />
       </div>
     </article>
@@ -239,8 +250,6 @@ function Entete({ scene, content }: { scene: ScreenScenePayload; content: Screen
         <Marque content={content} />
         <div className="ct-svc">
           <span className="ct-dot" data-open={content.open ? "1" : "0"} />
-          <span>{content.serviceLabel}</span>
-          <span className="ct-sep" />
           <span className="ct-clock">{heure}</span>
         </div>
       </div>
@@ -311,7 +320,11 @@ function Corps({
   promos: ScreenPromo[];
 }) {
   const dur = Math.max(0, Math.round(scene.durationMs));
-  if (d === "hero") return <Heros p={products[0]!} i={1} durationMs={dur} />;
+  if (d === "hero") {
+    const p = products[0]!;
+    const echo = p.name.trim().toLowerCase() === scene.title.trim().toLowerCase();
+    return <Heros p={p} i={1} durationMs={dur} echo={echo} />;
+  }
   if (d === "list") {
     return (
       <div className="ct-grid">
