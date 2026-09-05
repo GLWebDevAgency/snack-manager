@@ -23,6 +23,7 @@ import {
 import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
 import { Btn, Chip, Field, Overlay, PanelHead, Stepper } from './ui';
 import { useLayout } from './useLayout';
+import { optionsForVariant } from './quick-config-options';
 
 export interface ConfigDraft {
   lineId?: string;
@@ -99,31 +100,7 @@ export function QuickConfig({
     // Changer de taille resserre les règles : on tronque les groupes au nouveau
     // plafond. Ce qui NE RELÈVE PAS d'un groupe de la carte est conservé tel
     // quel — les suppléments, notamment.
-    setOptions((cur) => {
-      const kept: SelectedOption[] = [];
-      const perGroup = new Map<string, number>();
-      for (const opt of cur) {
-        const group = groups.find((g) => g.key === opt.groupKey);
-        if (!group) {
-          // LES SUPPLÉMENTS N'ONT PAS DE GROUPE DANS `optionGroups`, et c'est
-          // voulu : `GET /menu` retire le groupe réservé de la carte et les
-          // sert dans leur propre bloc. Ils tombaient donc dans ce `continue`
-          // et disparaissaient à chaque changement de taille — cheddar et
-          // steak effacés en silence, le client payait le tacos XL nu.
-          //
-          // Ils ne dépendent d'aucune règle de variante : rien à tronquer,
-          // rien à recalculer, on les garde.
-          kept.push(opt);
-          continue;
-        }
-        const { max } = ruleFor(group, key);
-        const used = perGroup.get(opt.groupKey) ?? 0;
-        if (used >= max) continue;
-        perGroup.set(opt.groupKey, used + 1);
-        kept.push({ ...opt, priceDelta: deltaFor(group, key, opt.priceDelta) });
-      }
-      return kept;
-    });
+    setOptions((cur) => optionsForVariant(groups, cur, key));
   }
 
   function toggleChoice(group: OptionGroup, choiceKey: string, name: string, priceDelta: number) {
@@ -242,7 +219,7 @@ export function QuickConfig({
                     <Chip
                       key={choice.key}
                       label={choice.name}
-                      detail={delta ? `+${euros(delta)}` : undefined}
+                      detail={delta === 0 ? 'Inclus' : `+${euros(delta)}`}
                       on={on}
                       disabled={blocked}
                       onPress={() => toggleChoice(group, choice.key, choice.name, choice.priceDelta)}
@@ -262,6 +239,13 @@ export function QuickConfig({
             hint={removed.length === 0 ? 'Complet par défaut' : 'Ce que le client ne veut pas'}
           >
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.sm }}>
+              <Chip
+                label="Complet"
+                on={removed.length === 0}
+                onPress={() => setRemoved([])}
+                accent={brand.accent}
+                onAccent={brand.onAccent}
+              />
               {product.removables.map((item) => (
                 <Chip
                   key={item.key}

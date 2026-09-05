@@ -20,6 +20,13 @@ import type {
 } from "./api";
 import { uid } from "./helpers";
 
+/** Même clé que le groupe tarifé et validé par l'API. */
+export const SUPPLEMENT_GROUP = "supplements";
+
+function dedicatedSupplementKeys(product: MenuProduct, keys: string[]): string[] {
+  return [...new Set(keys)].filter(key => product.supplements.some(supplement => supplement.key === key));
+}
+
 // ─────────────────────────────────────────────────────────────
 // Modèle
 // ─────────────────────────────────────────────────────────────
@@ -121,7 +128,7 @@ function defaultPicks(
   for (const group of product.groups) {
     const { min } = groupRules(group, variantKey);
     picked[group.key] =
-      group.type === "single" && min >= 1 && group.choices[0]
+      group.type === "single" && min >= 1 && group.choices.length === 1
         ? [group.choices[0].key]
         : [];
   }
@@ -136,6 +143,10 @@ export function draftFromLine(line: CartLine, product: MenuProduct): Draft {
       .filter((o) => o.groupKey === group.key)
       .map((o) => o.choiceKey)
       .filter((key) => group.choices.some((c) => c.key === key));
+  }
+  if (product.supplements.length > 0) {
+    picked[SUPPLEMENT_GROUP] = dedicatedSupplementKeys(product,
+      line.options.filter(option => option.groupKey === SUPPLEMENT_GROUP).map(option => option.choiceKey));
   }
   const variantKey =
     line.variantKey && product.variants.some((v) => v.key === line.variantKey)
@@ -188,9 +199,12 @@ export function setVariant(draft: Draft, variantKey: string): Draft {
       Number.isFinite(max) ? max : undefined,
     );
     picked[group.key] =
-      kept.length === 0 && group.type === "single" && min >= 1 && group.choices[0]
+      kept.length === 0 && group.type === "single" && min >= 1 && group.choices.length === 1
         ? [group.choices[0].key]
         : kept;
+  }
+  if (draft.product.supplements.length > 0) {
+    picked[SUPPLEMENT_GROUP] = dedicatedSupplementKeys(draft.product, draft.picked[SUPPLEMENT_GROUP] ?? []);
   }
   return { ...draft, variantKey, picked };
 }
@@ -199,7 +213,10 @@ export function setVariant(draft: Draft, variantKey: string): Draft {
 export function draftOptions(draft: Draft): LineOption[] {
   const options: LineOption[] = [];
   for (const group of draft.product.groups) {
-    for (const choiceKey of draft.picked[group.key] ?? []) {
+    // Pendant la transition d'un ancien cache, le bloc dédié fait foi et
+    // ne doit pas être facturé une seconde fois via le groupe réservé.
+    if (group.key === SUPPLEMENT_GROUP && draft.product.supplements.length > 0) continue;
+    for (const choiceKey of new Set(draft.picked[group.key] ?? [])) {
       const choice = group.choices.find((c) => c.key === choiceKey);
       if (!choice) continue;
       options.push({
@@ -210,6 +227,11 @@ export function draftOptions(draft: Draft): LineOption[] {
         priceDelta: choicePrice(group, choice.key, draft.variantKey),
       });
     }
+  }
+  for (const key of dedicatedSupplementKeys(draft.product, draft.picked[SUPPLEMENT_GROUP] ?? [])) {
+    const supplement = draft.product.supplements.find(item => item.key === key)!;
+    options.push({ groupKey: SUPPLEMENT_GROUP, groupName: "Suppléments", choiceKey: key,
+      name: supplement.label, priceDelta: supplement.priceCents });
   }
   return options;
 }
