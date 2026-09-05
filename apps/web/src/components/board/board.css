@@ -64,10 +64,21 @@
   border-radius: inherit;
 }
 
-/* Les tuiles de choix : le mouvement est figé, on regarde une composition. */
+/* Les entrées commencent transparentes : une tuile doit montrer leur état
+   naturel, pas rester en pause sur la première image de l'animation. */
 .bd-root[data-still="1"] *,
 .bd-root[data-still="1"] *::before,
 .bd-root[data-still="1"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Même horloge que la rotation : le transport fige le temps et les photos.
+   Les entrées restent actives, pour lire une nouvelle scène choisie en pause. */
+.bd-root[data-paused="1"] .bd-progress-fill,
+.bd-root[data-paused="1"] .bd-thumb img,
+.bd-root[data-paused="1"] .bd-hero-photo img,
+.bd-root[data-paused="1"] .ct-drift {
   animation-play-state: paused !important;
 }
 
