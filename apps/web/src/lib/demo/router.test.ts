@@ -292,14 +292,20 @@ describe("écritures", () => {
   });
 
   it("publie la semaine de planning et les brouillons disparaissent", () => {
-    const week = routeDemo("GET", "/planning/week").body as {
+    // Le dimanche, la semaine courante peut légitimement n'avoir plus de
+    // brouillon. Tester la publication sur la suivante, quel que soit le jour.
+    const current = routeDemo("GET", "/planning/week").body as { week: string };
+    const nextMonday = new Date(`${current.week}T12:00:00Z`);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+    const path = `/planning/week?week=${nextMonday.toISOString().slice(0, 10)}`;
+    const week = routeDemo("GET", path).body as {
       week: string;
       counts: { brouillon: number; publie: number };
     };
     expect(week.counts.brouillon).toBeGreaterThan(0);
     const res = routeDemo("POST", "/planning/week/publish", { week: week.week });
     expect((res.body as { published: number }).published).toBe(week.counts.brouillon);
-    const after = routeDemo("GET", "/planning/week").body as {
+    const after = routeDemo("GET", path).body as {
       counts: { brouillon: number };
     };
     expect(after.counts.brouillon).toBe(0);
