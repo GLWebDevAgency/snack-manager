@@ -45,7 +45,7 @@ export function previewDemoScreen(
   const hour = Number(new Intl.DateTimeFormat("fr-FR", {
     timeZone: RESTAURANT_TZ, hour: "numeric", hourCycle: "h23",
   }).format(instant));
-  const service = hour < 16 ? "lunch" : "dinner";
+  const service = draft.service ?? (hour < 16 ? "lunch" : "dinner");
   const orientation = draft.orientation ?? saved?.orientation ?? "landscape";
   const theme = draft.theme ?? saved?.theme ?? "brand";
   const scenography = draft.scenography ?? saved?.scenography ?? (saved ? "ardoise" : SCENOGRAPHY_DEFAULT);

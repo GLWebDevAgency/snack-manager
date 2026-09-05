@@ -49,4 +49,18 @@ describe("apparence dans la démonstration", () => {
     expect(routeDemo("POST", "/screens/preview", { screenId: "inconnu" }).status).toBe(404);
     expect(routeDemo("POST", "/screens/preview", { scenography: "inconnue" }).status).toBe(400);
   });
+
+  it("le choix midi ou soir filtre la carte sans devenir un réglage enregistré", () => {
+    const world = demoWorld();
+    const id = world.products[0]!._id;
+    world.products[0]!.tags = ["midi"];
+    const before = JSON.stringify(world.screens);
+    const midi = routeDemo("POST", "/screens/preview", { service: "lunch" }).body as ScreenContent;
+    const soir = routeDemo("POST", "/screens/preview", { service: "dinner" }).body as ScreenContent;
+    expect(midi.service).toBe("lunch");
+    expect(soir.service).toBe("dinner");
+    expect(midi.scenes.flatMap((s) => s.products).some((p) => p.id === id)).toBe(true);
+    expect(soir.scenes.flatMap((s) => s.products).some((p) => p.id === id)).toBe(false);
+    expect(JSON.stringify(world.screens)).toBe(before);
+  });
 });
