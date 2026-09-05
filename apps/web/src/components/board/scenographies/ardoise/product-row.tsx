@@ -38,7 +38,7 @@ export function compactPrice(product: ScreenProduct): {
 
 export interface ProductRowProps {
   product: ScreenProduct;
-  /** Rang dans la scène — porte le décalage de 70 ms de l'apparition. */
+  /** Rang 0–7 : le rythme d'apparition est adapté à la durée par l'hôte. */
   index: number;
   /** Durée de la scène : le Ken Burns dure exactement le temps d'affichage. */
   durationMs: number;

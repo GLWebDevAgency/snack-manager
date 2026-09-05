@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type CSSProperties } from "react";
 import {
   cadrageCss,
   type Brand,
@@ -22,12 +22,12 @@ import { dureeMs, FadeText } from "./FadeText";
  * L'œil voit d'abord la nourriture : des boîtes photo pleines, posées sur un
  * fond profond, comme des plats sous la lampe du comptoir. Deuxième lecture,
  * le prix : étiquette collée en accent, un peu de travers, jamais discrète,
- * jamais animée. Troisième, le nom en capitales de titrage, puis la
+ * stable après son entrée. Troisième, le nom en capitales de titrage, puis la
  * composition en retrait. Le titre de scène ancre la catégorie ; son fantôme
  * tapisse le fond et donne de la matière sans rien ajouter.
  *
- * Le rythme : une entrée en cascade des boîtes, puis le calme — seule la
- * photo du héros dérive, sur toute la durée de la scène. Rien ne clignote,
+ * Le rythme : photo, nom, composition, étiquette ; puis seules les photos et
+ * le décor dérivent lentement. Rien ne clignote,
  * rien ne saute quand un prix change (`FadeText`, clés par identifiant).
  *
  * Tout vient du masque et du contenu : aucune couleur, aucune police, aucune
@@ -37,6 +37,19 @@ import { dureeMs, FadeText } from "./FadeText";
 /** Le contrat plafonne à huit ; un panneau libre n'est pas paginé par le serveur. */
 const MAX_PRODUITS = 8;
 const MAX_OFFRES = 3;
+
+/** L'entrée appartient à l'enveloppe, le fondu LIVE à son enfant : leurs
+ * opacités ne se disputent jamais, même si une correction arrive en pleine entrée. */
+function FilmText({ beat = 2, offer = false, ...props }: ComponentProps<typeof FadeText> & {
+  beat?: 0 | 1 | 2 | 3 | 4;
+  offer?: boolean;
+}) {
+  return (
+    <div className={offer ? "ct-copy ct-offer-entry" : "ct-copy"} data-beat={beat}>
+      <FadeText {...props} />
+    </div>
+  );
+}
 
 /** « Les », « La », « L' » ne font pas une initiale. */
 function initiale(nom: string): string {
@@ -156,7 +169,7 @@ export function Photo({
       {!photos.current && !photos.previous ? <span className="ct-ghost">{initiale(p.name)}</span> : null}
       <span
         className={drift && detailed ? "ct-photo-motion ct-drift" : "ct-photo-motion"}
-        style={drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : undefined}
+        style={drift && durationMs > 0 ? { "--ct-photo-scene-ms": `${durationMs}ms` } as CSSProperties : undefined}
       >
         {photos.previous ? picture(photos.previous, true) : null}
         {photos.current ? picture(photos.current, false) : null}
@@ -170,15 +183,18 @@ const etat = (p: ScreenProduct) => ({
   "data-photo": p.photoUrl ? "1" : "0",
 });
 
-/** Le prix change SANS animation — c'est la règle, pas un oubli. */
+/** L'étiquette entre une fois. Sa valeur autoritaire change ensuite SANS fondu
+ * ni compteur ; son enveloppe et son identifiant ne dépendent pas du montant. */
 function Prix({ p, className = "ct-badge" }: { p: ScreenProduct; className?: string }) {
   const range = /^(.*?)\s+[–−-]\s+(.*?)$/.exec(p.priceLabel);
   return (
     <span className={className} data-range={range ? "1" : "0"}>
-      {range ? <>
-        <span className="ct-price-part">{range[1]}</span>{" "}
-        <span className="ct-price-part">– {range[2]}</span>
-      </> : p.priceLabel}
+      <span className="ct-price-ink">
+        {range ? <>
+          <span className="ct-price-part">{range[1]}</span>{" "}
+          <span className="ct-price-part">– {range[2]}</span>
+        </> : p.priceLabel}
+      </span>
     </span>
   );
 }
@@ -198,7 +214,7 @@ function Tuile({ p, i }: { p: ScreenProduct; i: number }) {
   return (
     <article className="ct-tile ct-it" {...etat(p)} style={{ "--i": i } as CSSProperties}>
       <div className="ct-ph">
-        <Photo p={p} />
+        <Photo p={p} drift />
         <div className="ct-dim" />
         <div className="ct-labels">
           <Prix p={p} />
@@ -207,8 +223,8 @@ function Tuile({ p, i }: { p: ScreenProduct; i: number }) {
         <span className="ct-oos-tag">Épuisé</span>
       </div>
       <div className="ct-tx">
-        <FadeText as="h3" className="ct-name" value={p.name} />
-        <FadeText as="p" className="ct-desc" value={p.description} />
+        <FilmText as="h3" className="ct-name" value={p.name} />
+        <FilmText as="p" className="ct-desc" value={p.description} beat={3} />
       </div>
     </article>
   );
@@ -223,13 +239,13 @@ function Ligne({ p, i }: { p: ScreenProduct; i: number }) {
       style={{ "--i": i } as CSSProperties}
     >
       <div className="ct-ph">
-        <Photo p={p} />
+        <Photo p={p} drift />
         <div className="ct-dim" />
         <Etiquettes p={p} />
       </div>
       <div className="ct-tx">
-        <FadeText as="h3" className="ct-name" value={p.name} />
-        <FadeText as="p" className="ct-desc" value={p.description} />
+        <FilmText as="h3" className="ct-name" value={p.name} />
+        <FilmText as="p" className="ct-desc" value={p.description} beat={3} />
       </div>
       <Prix p={p} />
     </article>
@@ -260,8 +276,8 @@ function Heros({
         <span className="ct-new" hidden={!p.isNew}>Nouveau</span>
       </div>
       <div className="ct-cap">
-        {echo ? null : <FadeText as="h3" className="ct-name ct-name-hero" value={p.name} />}
-        <FadeText as="p" className="ct-desc" value={p.description} />
+        {echo ? null : <FilmText as="h3" className="ct-name ct-name-hero" value={p.name} />}
+        <FilmText as="p" className="ct-desc" value={p.description} beat={3} />
       </div>
     </article>
   );
@@ -271,10 +287,10 @@ function LigneLaterale({ p, i }: { p: ScreenProduct; i: number }) {
   return (
     <article className="ct-srow ct-it" {...etat(p)} style={{ "--i": i } as CSSProperties}>
       <div className="ct-thumb">
-        <Photo p={p} />
+        <Photo p={p} drift />
       </div>
       <div className="ct-tx">
-        <FadeText as="h3" className="ct-name" value={p.name} />
+        <FilmText as="h3" className="ct-name" value={p.name} />
         <span className="ct-new" hidden={!p.isNew}>
           Nouveau
         </span>
@@ -289,10 +305,10 @@ function Offre({ o, i }: { o: ScreenPromo; i: number }) {
   return (
     <article className="ct-promo ct-it" style={{ "--i": i } as CSSProperties}>
       <div className="ct-ptx">
-        <FadeText as="h3" className="ct-ptitle" value={o.title} />
-        <FadeText as="p" className="ct-pdesc" value={o.description} />
+        <FilmText as="h3" className="ct-ptitle" value={o.title} />
+        <FilmText as="p" className="ct-pdesc" value={o.description} beat={3} />
       </div>
-      <FadeText className="ct-plab" value={o.label} />
+      <FilmText className="ct-plab" value={o.label} beat={4} offer />
     </article>
   );
 }
@@ -366,7 +382,7 @@ function Entete({
         <div className="ct-eyebrow">
           <FadeText value={content.serviceLabel} />
         </div>
-        <FadeText as="h1" className="ct-title" value={scene.title} />
+        <FilmText as="h1" className="ct-title" value={scene.title} beat={1} />
         <Puces subtitle={scene.subtitle} />
       </div>
       <div className="ct-hd-r">
@@ -394,10 +410,10 @@ function Ferme({
   const no = scene.nextOpening;
   return (
     <section className="ct-closed">
-      <div className="ct-ring" style={{ animationDuration: `${durationMs}ms` }} />
+      <div className="ct-ring" style={{ "--ct-photo-scene-ms": `${durationMs}ms` } as CSSProperties} />
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
         <Marque content={content} masque={masque} grand />
-        <FadeText as="h1" className="ct-title" value={scene.title} />
+        <FilmText as="h1" className="ct-title" value={scene.title} beat={1} />
         {no ? (
           <>
             <div className="ct-reopen">Réouverture {no.dayLabel}</div>
@@ -410,7 +426,7 @@ function Ferme({
             </div>
           </>
         ) : (
-          <FadeText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle ?? ""} />
+          <FilmText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle ?? ""} beat={3} />
         )}
         <div className="ct-svc-line">{content.serviceLabel}</div>
       </div>
@@ -432,9 +448,9 @@ function Vide({
     <section className="ct-closed">
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
         <Marque content={content} masque={masque} grand />
-        <FadeText as="h1" className="ct-title" value={scene.title || content.brand.name} />
+        <FilmText as="h1" className="ct-title" value={scene.title || content.brand.name} beat={1} />
         {scene.subtitle ? (
-          <FadeText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle} />
+          <FilmText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle} beat={3} />
         ) : null}
       </div>
     </section>
@@ -456,13 +472,13 @@ function Corps({
   if (d === "hero") {
     const p = products[0]!;
     const echo = p.name.trim().toLowerCase() === scene.title.trim().toLowerCase();
-    return <Heros p={p} i={1} durationMs={dur} echo={echo} />;
+    return <Heros p={p} i={0} durationMs={dur} echo={echo} />;
   }
   if (d === "list") {
     return (
       <div className="ct-grid" style={{ gridTemplateRows: products.map((p) => p.priceMaxCents > p.priceCents ? "minmax(0, 1.4fr)" : "minmax(0, 1fr)").join(" ") }}>
         {products.map((p, i) => (
-          <Ligne key={p.id} p={p} i={i + 1} />
+          <Ligne key={p.id} p={p} i={i} />
         ))}
       </div>
     );
@@ -470,10 +486,10 @@ function Corps({
   if (d === "featured") {
     return (
       <div className="ct-feat">
-        <Heros p={products[0]!} i={1} durationMs={dur} />
+        <Heros p={products[0]!} i={0} durationMs={dur} />
         <div className="ct-side">
           {products.slice(1).map((p, i) => (
-            <LigneLaterale key={p.id} p={p} i={i + 2} />
+            <LigneLaterale key={p.id} p={p} i={i + 1} />
           ))}
         </div>
       </div>
@@ -483,7 +499,7 @@ function Corps({
     return (
       <div className="ct-promos" data-count={String(promos.length)}>
         {promos.map((o, i) => (
-          <Offre key={o.id} o={o} i={i + 1} />
+          <Offre key={o.id} o={o} i={i} />
         ))}
       </div>
     );
@@ -491,7 +507,7 @@ function Corps({
   return (
     <div className="ct-grid">
       {products.map((p, i) => (
-        <Tuile key={p.id} p={p} i={i + 1} />
+        <Tuile key={p.id} p={p} i={i} />
       ))}
     </div>
   );

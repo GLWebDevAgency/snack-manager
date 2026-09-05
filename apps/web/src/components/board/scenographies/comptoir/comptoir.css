@@ -124,6 +124,10 @@
   line-height: 0.94;
   text-transform: uppercase;
   letter-spacing: -0.01em;
+  /* Un mot long reste dans sa colonne ; la limite de deux lignes peut alors
+     produire une ellipse, au lieu de couper les lettres au bord de la boîte. */
+  overflow-wrap: anywhere;
+  hyphens: auto;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -781,7 +785,7 @@
   margin: -750px 0 0 -750px;
   border: 3px dashed var(--cf-line);
   border-radius: 50%;
-  animation: ct-spin linear infinite;
+  animation: ct-spin max(var(--ct-photo-scene-ms, 0ms), var(--ss-cycle, 32s)) linear infinite;
 }
 .ct-cbox {
   position: relative;
@@ -844,7 +848,7 @@
 @keyframes ct-rise {
   from {
     opacity: 0;
-    transform: translateY(28px);
+    transform: translateY(var(--bd-travel));
   }
   to {
     opacity: 1;
@@ -856,7 +860,7 @@
     transform: scale(1) translate(0, 0);
   }
   to {
-    transform: scale(1.08) translate(-1.6%, -1.2%);
+    transform: scale(var(--ct-camera-scale, 1.035)) translate(var(--ct-camera-shift, -.35%), var(--ct-camera-shift, -.35%));
   }
 }
 @keyframes ct-spin {
@@ -876,17 +880,63 @@
   }
 }
 
-/* L'entrée : chaque pièce monte en cascade, l'en-tête d'abord. */
-.ct-it {
-  animation: ct-rise var(--sm-t-med) var(--sm-ease) both;
-  animation-delay: calc(var(--sm-t-snap) * var(--i, 0));
+/* Les enveloppes gardent la géométrie des textes ; FadeText reste seul
+   propriétaire du fondu des valeurs. Le prix repose dans sa vraie étiquette
+   tournée : seule l'encre entre, puis elle ne bouge plus. */
+.ct-copy { min-width: 0; max-width: 100%; }
+.ct-copy[data-beat="0"] { --ct-beat: 0; }
+.ct-copy[data-beat="1"] { --ct-beat: 1; }
+.ct-copy[data-beat="2"] { --ct-beat: 2; }
+.ct-copy[data-beat="3"] { --ct-beat: 3; }
+.ct-copy[data-beat="4"] { --ct-beat: 4; }
+.ct-offer-entry { align-self: flex-start; }
+.ct-offer-entry > .ct-plab { display: block; }
+.ct-price-ink { display: inline-block; max-width: 100%; }
+
+/* Une sortie est une copie au repos, jamais une deuxième entrée. */
+.ct-it { animation: none; }
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="in"] .ct-it {
+  animation: ct-fade var(--bd-reveal-ms) var(--bd-ease) backwards;
+  animation-delay: calc(var(--bd-intro-delay) + var(--i, 0) * var(--bd-beat-ms));
 }
-/* La dérive du héros dure exactement la scène (durée posée en ligne), jouée une fois. */
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="in"] .ct-copy,
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="in"] :is(
+  .ct-photo-frame, .ct-price-ink, .ct-eyebrow, .ct-sub, .ct-hd-r,
+  .ct-cbox > .ct-logo, .ct-cbox > .ct-bname, .ct-reopen, .ct-wins, .ct-svc-line
+) {
+  animation: ct-rise var(--bd-reveal-ms) var(--bd-ease) backwards;
+  animation-delay: calc(var(--bd-intro-delay) + (var(--i, 0) + var(--ct-beat, 0)) * var(--bd-beat-ms));
+}
+.ct-photo-frame, .ct-hd-r { --ct-beat: 1; }
+.ct-sub, .ct-reopen { --ct-beat: 2; }
+.ct-wins { --ct-beat: 3; }
+.ct-price-ink, .ct-svc-line { --ct-beat: 4; }
+
+/* Caméra lente partagée avec les photos Ardoise, sans toucher le cadrage
+   object-position ni la translation des petites sources à leur taille native.
+   Même une scène de quatre secondes n'accélère pas l'ambiance. */
 .ct-drift {
-  animation-name: ct-drift;
-  animation-timing-function: var(--sm-ease);
-  animation-fill-mode: both;
+  animation: ct-drift max(var(--ct-photo-scene-ms, 0ms), var(--ss-cycle, 32s)) ease-in-out infinite alternate both;
 }
+.bd-root[data-motion="expressive"] .ct-drift {
+  --ct-camera-scale: 1.055;
+  --ct-camera-shift: -.7%;
+}
+.ct-halo { animation: ct-light-drift var(--ss-cycle, 32s) ease-in-out infinite alternate; }
+.ct-bgword { animation: ct-word-drift var(--ss-cycle, 32s) ease-in-out infinite alternate; }
+@keyframes ct-light-drift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(-4%, 5%); }
+}
+@keyframes ct-word-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(var(--bd-travel) * -1)); }
+}
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="out"] :is(.ct-drift, .ct-halo, .ct-bgword, .ct-ring),
+.bd-root[data-scenography="comptoir"][data-paused="1"] :is(.ct-drift, .ct-halo, .ct-bgword, .ct-ring) {
+  animation-play-state: paused !important;
+}
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="out"] .ct-photo-in { animation: none; }
 /* Le fondu d'une mise à jour en place : le texte s'efface, se remplace, revient. */
 [data-fade="1"] {
   opacity: 0;
@@ -900,11 +950,6 @@
 .ct-pdesc,
 .ct-plab {
   transition: opacity var(--sm-t-fast) var(--sm-ease);
-}
-
-/* L'hôte glisse ses couches ; Comptoir a sa propre cascade : la couche entrante ne fait qu'un fondu. */
-.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="in"] {
-  animation: ct-fade var(--sm-t-fast) var(--sm-ease) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
