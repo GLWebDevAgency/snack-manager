@@ -1,6 +1,6 @@
 "use client";
 
-import type { ScreenContent, ScreenScenePayload } from "@sm/contracts";
+import type { Brand, ScreenContent, ScreenScenePayload } from "@sm/contracts";
 import { moduleDe } from "./scenographies/registry";
 
 /**
@@ -13,11 +13,13 @@ import { moduleDe } from "./scenographies/registry";
 export function SceneLayer({
   scene,
   content,
+  masque,
   phase,
   prixMono,
 }: {
   scene: ScreenScenePayload;
   content: ScreenContent;
+  masque: Brand;
   phase: "in" | "out";
   prixMono: boolean;
 }) {
@@ -27,6 +29,7 @@ export function SceneLayer({
       <Component
         scene={scene}
         content={content}
+        masque={masque}
         orientation={content.orientation}
         prixMono={prixMono}
       />

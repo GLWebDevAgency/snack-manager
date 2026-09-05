@@ -1,32 +1,15 @@
 "use client";
 
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import {
-  TYPE_PAIRS,
-  marqueDeRepli,
-  type Brand,
-  type ScreenContent,
-  type ScreenScenePayload,
-} from "@sm/contracts";
+import { TYPE_PAIRS, type ScreenContent, type ScreenScenePayload } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { BoardHeader } from "./board-header";
+import { masqueDuContenu } from "./board-masque";
 import { SceneLayer } from "./scene-layer";
 import { moduleDe } from "./scenographies/registry";
 import type { Stage } from "./use-stage";
-
-/**
- * Le masque que l'écran PEINT.
- *
- * Un cache écrit par une version antérieure n'en porte pas : on replie sur
- * l'accent et le logo plats plutôt que sur un écran noir, le temps du prochain
- * contenu frais — qui arrive dans la minute.
- */
-export function masqueDuContenu(content: ScreenContent | null): Brand {
-  if (content?.masque) return content.masque;
-  return marqueDeRepli(content?.brand.accent ?? null, content?.brand.logoUrl ?? null);
-}
 
 /**
  * L'HÔTE — ce que toute scénographie reçoit sans le refaire.
@@ -102,6 +85,7 @@ export function BoardStage({
               key={`out-${leaving.id}`}
               scene={leaving}
               content={content}
+              masque={masque}
               phase="out"
               prixMono={prixMono}
             />
@@ -112,6 +96,7 @@ export function BoardStage({
               key={current.id}
               scene={current}
               content={content}
+              masque={masque}
               phase="in"
               prixMono={prixMono}
             />

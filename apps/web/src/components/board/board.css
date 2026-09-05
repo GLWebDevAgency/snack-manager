@@ -64,11 +64,14 @@
   border-radius: inherit;
 }
 
-/* Les tuiles de choix : le mouvement est figé, on regarde une composition. */
+/* Les tuiles de choix : on regarde une composition, pas un mouvement. Les
+   entrées partent d'une opacité nulle (`fill-mode: both`) : mettre en PAUSE
+   les figerait à leur première image, donc vides. On les retire : chaque
+   animation retombe sur son état naturel, opacité pleine, transform nul. */
 .bd-root[data-still="1"] *,
 .bd-root[data-still="1"] *::before,
 .bd-root[data-still="1"] *::after {
-  animation-play-state: paused !important;
+  animation: none !important;
 }
 
 /* ── Scène de référence + mise à l'échelle ── */

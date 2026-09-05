@@ -39,6 +39,7 @@ export function useSceneRotation(
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<ScreenScenePayload | null>(null);
   const previousRef = useRef<ScreenScenePayload | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Le contenu peut avoir rétréci depuis (une catégorie vidée par le
   // dayparting) : on reste dans les bornes plutôt que d'afficher du vide.
@@ -70,9 +71,19 @@ export function useSceneRotation(
     if (!previous || !current || previous.id === current.id) return;
 
     setLeaving(previous);
-    const timer = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
-    return () => clearTimeout(timer);
+    // Le minuteur vit dans une ref : un contenu frais (même scène, nouvelle
+    // référence) arrivant pendant le fondu ne doit pas l'annuler, sinon la
+    // couche sortante resterait montée jusqu'à la transition suivante.
+    if (exitTimer.current) clearTimeout(exitTimer.current);
+    exitTimer.current = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
   }, [current]);
+
+  useEffect(
+    () => () => {
+      if (exitTimer.current) clearTimeout(exitTimer.current);
+    },
+    [],
+  );
 
   return { current, leaving, index: safeIndex, go };
 }

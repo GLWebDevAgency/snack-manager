@@ -75,6 +75,9 @@ export function useScreenPreview(brouillon: Brouillon): {
     setLoading(true);
     const premier = setTimeout(() => void charger(), TEMPORISATION_MS);
     const boucle = () => {
+      // Une requête encore en vol quand le brouillon change ou que le tiroir
+      // se ferme ne doit pas réarmer une boucle que personne n'effacera.
+      if (!alive) return;
       timer = setTimeout(() => {
         void charger().finally(boucle);
       }, RAFRAICHISSEMENT_MS);

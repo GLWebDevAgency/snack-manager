@@ -188,14 +188,19 @@ export function ApparenceDrawer({
                 key={s}
                 type="button"
                 aria-pressed={draft.scenography === s}
+                aria-label={SCENOGRAPHY_LABELS[s]}
                 onClick={() => setDraft((d) => ({ ...d, scenography: s }))}
                 className={cx(choix(draft.scenography === s), "flex flex-col gap-2 p-2")}
               >
-                {content && current ? (
-                  <StillStage content={content} scene={current} scenography={s} />
-                ) : (
-                  <div className="aspect-video w-full rounded-ctrl bg-black/40" />
-                )}
+                {/* La miniature est une IMAGE pour le lecteur d'écran : sans
+                    cela, le nom du bouton serait tout le texte de la scène. */}
+                <div aria-hidden="true">
+                  {content && current ? (
+                    <StillStage content={content} scene={current} scenography={s} />
+                  ) : (
+                    <div className="aspect-video w-full rounded-ctrl bg-black/40" />
+                  )}
+                </div>
                 <div className="px-1 pb-1">
                   <div className="text-sm font-bold text-ink">{SCENOGRAPHY_LABELS[s]}</div>
                   <div className="text-xs leading-snug text-mut">{SCENOGRAPHY_DESCRIPTIONS[s]}</div>

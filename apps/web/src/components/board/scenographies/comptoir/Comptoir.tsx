@@ -1,8 +1,9 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   cadrageCss,
+  type Brand,
   type ScreenContent,
   type ScreenProduct,
   type ScreenPromo,
@@ -48,6 +49,17 @@ function initiale(nom: string): string {
   );
 }
 
+/** Le temps qu'on laisse à l'ancienne photo sous la neuve, une fois celle-ci chargée. */
+const RELEVE_PHOTO_MS = 400;
+
+/**
+ * La photo d'un produit — et son remplacement SANS TROU.
+ *
+ * Quand le gérant change la photo, la neuve se charge PAR-DESSUS l'ancienne,
+ * invisible tant qu'elle n'est pas arrivée, puis se fond ; l'ancienne reste
+ * dessous jusque-là. Sans cela, l'écran montrerait un aplat de surface le
+ * temps du téléchargement, sous les yeux des clients.
+ */
 function Photo({
   p,
   drift = false,
@@ -57,20 +69,54 @@ function Photo({
   drift?: boolean;
   durationMs?: number;
 }) {
-  if (!p.photoUrl) return <span className="ct-ghost">{initiale(p.name)}</span>;
+  const [precedente, setPrecedente] = useState<string | null>(null);
+  const [courante, setCourante] = useState<string | null>(p.photoUrl);
+  const [chargee, setChargee] = useState(true);
+  const releve = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (p.photoUrl === courante) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- un remplacement de photo est un ENCHAÎNEMENT (garder l'ancienne, charger la neuve, relever l'ancienne) qui ne se dérive pas du rendu : il se joue après lui.
+    setPrecedente(courante);
+    setCourante(p.photoUrl);
+    setChargee(p.photoUrl === null);
+  }, [p.photoUrl, courante]);
+
+  useEffect(
+    () => () => {
+      if (releve.current) clearTimeout(releve.current);
+    },
+    [],
+  );
+
+  const position = cadrageCss(p.photoPoint);
+  if (!courante && !precedente) return <span className="ct-ghost">{initiale(p.name)}</span>;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      key={p.photoUrl}
-      src={p.photoUrl}
-      alt=""
-      decoding="async"
-      className={drift ? "ct-drift" : undefined}
-      style={{
-        objectPosition: cadrageCss(p.photoPoint),
-        ...(drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : {}),
-      }}
-    />
+    <>
+      {precedente ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={precedente} alt="" decoding="async" style={{ objectPosition: position }} />
+      ) : null}
+      {courante ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={courante}
+          alt=""
+          decoding="async"
+          data-loaded={chargee ? "1" : "0"}
+          className={drift ? "ct-drift" : undefined}
+          style={{
+            objectPosition: position,
+            ...(drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : {}),
+          }}
+          onLoad={() => {
+            setChargee(true);
+            if (releve.current) clearTimeout(releve.current);
+            releve.current = setTimeout(() => setPrecedente(null), RELEVE_PHOTO_MS);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -191,9 +237,17 @@ function Offre({ o, i }: { o: ScreenPromo; i: number }) {
 }
 
 /** Le verrou s'il est posé, sinon la marque, sinon le nom en titrage. */
-function Marque({ content, grand = false }: { content: ScreenContent; grand?: boolean }) {
-  const verrou = verrouPour(content.masque);
-  const src = verrou ?? marqueSeule(content.masque);
+function Marque({
+  content,
+  masque,
+  grand = false,
+}: {
+  content: ScreenContent;
+  masque: Brand;
+  grand?: boolean;
+}) {
+  const verrou = verrouPour(masque);
+  const src = verrou ?? marqueSeule(masque);
   if (src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -235,7 +289,15 @@ function Puces({ subtitle }: { subtitle: string | null }) {
   );
 }
 
-function Entete({ scene, content }: { scene: ScreenScenePayload; content: ScreenContent }) {
+function Entete({
+  scene,
+  content,
+  masque,
+}: {
+  scene: ScreenScenePayload;
+  content: ScreenContent;
+  masque: Brand;
+}) {
   const heure = useRestaurantClock(content.timezone);
   return (
     <header className="ct-hd ct-it" style={{ "--i": 0 } as CSSProperties}>
@@ -247,7 +309,7 @@ function Entete({ scene, content }: { scene: ScreenScenePayload; content: Screen
         <Puces subtitle={scene.subtitle} />
       </div>
       <div className="ct-hd-r">
-        <Marque content={content} />
+        <Marque content={content} masque={masque} />
         <div className="ct-svc">
           <span className="ct-dot" data-open={content.open ? "1" : "0"} />
           <span className="ct-clock">{heure}</span>
@@ -260,10 +322,12 @@ function Entete({ scene, content }: { scene: ScreenScenePayload; content: Screen
 function Ferme({
   scene,
   content,
+  masque,
   durationMs,
 }: {
   scene: ScreenScenePayload;
   content: ScreenContent;
+  masque: Brand;
   durationMs: number;
 }) {
   const no = scene.nextOpening;
@@ -271,7 +335,7 @@ function Ferme({
     <section className="ct-closed">
       <div className="ct-ring" style={{ animationDuration: `${durationMs}ms` }} />
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
-        <Marque content={content} grand />
+        <Marque content={content} masque={masque} grand />
         <FadeText as="h1" className="ct-title" value={scene.title} />
         {no ? (
           <>
@@ -294,11 +358,19 @@ function Ferme({
 }
 
 /** Panneau libre sans produit, carte vide : la plaque de marque, jamais un écran noir. */
-function Vide({ scene, content }: { scene: ScreenScenePayload; content: ScreenContent }) {
+function Vide({
+  scene,
+  content,
+  masque,
+}: {
+  scene: ScreenScenePayload;
+  content: ScreenContent;
+  masque: Brand;
+}) {
   return (
     <section className="ct-closed">
       <div className="ct-cbox ct-it" style={{ "--i": 0 } as CSSProperties}>
-        <Marque content={content} grand />
+        <Marque content={content} masque={masque} grand />
         <FadeText as="h1" className="ct-title" value={scene.title || content.brand.name} />
         {scene.subtitle ? (
           <FadeText as="p" className="ct-subtxt ct-subtxt-big" value={scene.subtitle} />
@@ -364,7 +436,7 @@ function Corps({
   );
 }
 
-function ComptoirScene({ scene, content, orientation }: ScenographyProps) {
+function ComptoirScene({ scene, content, masque, orientation }: ScenographyProps) {
   const products = scene.products.slice(0, MAX_PRODUITS);
   const promos = scene.promos.slice(0, MAX_OFFRES);
   const d = disposition(scene.kind, products.length, orientation);
@@ -379,12 +451,12 @@ function ComptoirScene({ scene, content, orientation }: ScenographyProps) {
       </div>
       <div className="ct-stage">
         {d === "closed" ? (
-          <Ferme scene={scene} content={content} durationMs={scene.durationMs} />
+          <Ferme scene={scene} content={content} masque={masque} durationMs={scene.durationMs} />
         ) : d === "empty" ? (
-          <Vide scene={scene} content={content} />
+          <Vide scene={scene} content={content} masque={masque} />
         ) : (
           <>
-            <Entete scene={scene} content={content} />
+            <Entete scene={scene} content={content} masque={masque} />
             <section className="ct-body">
               <Corps d={d} scene={scene} products={products} promos={promos} />
             </section>

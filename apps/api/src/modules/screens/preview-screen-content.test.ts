@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PreviewScreenContent } from './preview-screen-content.usecase';
 import {
   FakeMenuBoardRepository,
@@ -70,5 +70,13 @@ describe('Aperçu d’un écran — le téléviseur miniature du back-office', (
     await expect(useCase.execute(CLASSFOOD, { screenId: 'screen-9' })).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('une boucle illisible est refusée comme à l’enregistrement, pas encaissée en 500', async () => {
+    await expect(
+      useCase.execute(CLASSFOOD, {
+        playlist: [scene({ kind: 'category', categoryId: 'pas-un-identifiant' })],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
