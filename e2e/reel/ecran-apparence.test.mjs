@@ -68,11 +68,16 @@ scenario(
 
       // ── 2 · Le tiroir de l'écran créé ──
       await page.goto(`${parc.web}/admin/screens`, { waitUntil: 'domcontentloaded' });
+      // Le plus petit `div` qui contient À LA FOIS le titre et le bouton : la
+      // carte. Le dernier `div` contenant le seul titre serait son enveloppe.
+      // `exact` : la corbeille s'appelle « Supprimer l'écran « E2E · apparence » »,
+      // et Playwright cherche un nom par sous-chaîne, sans casse.
       const carte = page
         .locator('div')
         .filter({ has: page.getByRole('heading', { name: NOM, exact: true }) })
+        .filter({ has: page.getByRole('button', { name: 'Apparence', exact: true }) })
         .last();
-      await carte.getByRole('button', { name: 'Apparence' }).click();
+      await carte.getByRole('button', { name: 'Apparence', exact: true }).click();
 
       // ── 3 · Le téléviseur joue une scène — le même hôte que la salle ──
       // La plaque « Chargement de la carte » est elle aussi une couche : on
