@@ -265,6 +265,15 @@ export class OrderPaymentLifecycleService {
       'Paiement demandé au comptoir par le client.', provider, 'counter');
   }
 
+  private assertClosureCandidate(order: OrderDocument, destination: ClosingDestination): void {
+    if (destination === 'counter' && (order.channel !== 'online' || order.type !== 'pickup'
+      || !['new', 'preparing', 'ready'].includes(order.status))) {
+      throw new ConflictException('Seule une commande de retrait en cours peut être réglée au comptoir.');
+    }
+    if (order.status === 'delivered') throw new ConflictException('Commande remise : utilisez le parcours de remboursement.');
+    if (order.payment?.status !== 'pending') throw new ConflictException('Commande déjà réglée : utilisez le parcours de remboursement.');
+  }
+
   private async closePayment(
     orderId: string, tenantId: string, requestedBy: string, reason: string,
     provider: OrderPaymentProvider | null, destination: ClosingDestination,
@@ -272,12 +281,7 @@ export class OrderPaymentLifecycleService {
     for (let retry = 0; retry < MAX_CAS_RETRIES; retry++) {
       let order = await this.read(orderId);
       if (!order || String(order.tenantId) !== tenantId) throw new NotFoundException('Commande introuvable');
-      if (destination === 'counter' && (order.channel !== 'online' || order.type !== 'pickup'
-        || !['new', 'preparing', 'ready'].includes(order.status))) {
-        throw new ConflictException('Seule une commande de retrait en cours peut être réglée au comptoir.');
-      }
-      if (order.status === 'delivered') throw new ConflictException('Commande remise : utilisez le parcours de remboursement.');
-      if (order.payment?.status !== 'pending') throw new ConflictException('Commande déjà réglée : utilisez le parcours de remboursement.');
+      this.assertClosureCandidate(order, destination);
       if (!order.paymentFlow) { await this.adopt(order, provider); continue; }
       if (order.paymentFlow.phase === 'closed' && order.status === 'cancelled') return order;
       if (order.paymentFlow.phase === 'counter_ready') {
@@ -330,12 +334,24 @@ export class OrderPaymentLifecycleService {
         }
         if (intent.status !== 'canceled') { await this.review(orderId, `provider_${intent.status}`); this.conflict(); }
         order = await this.read(orderId);
-        if (!order?.paymentFlow?.close || order.payment.status !== 'pending') this.conflict();
+        if (!order || String(order.tenantId) !== tenantId) throw new NotFoundException('Commande introuvable');
+        // A fresh __v is not permission to overwrite a newer business decision:
+        // another switch may have completed AND staff canceled/handed off the
+        // order while this worker awaited Stripe. Revalidate the new snapshot
+        // before using that version for the final CAS.
+        this.assertClosureCandidate(order, destination);
+        if (!order.paymentFlow?.close) this.conflict();
+        if (destination === 'cancel_order' && order.paymentFlow.phase === 'closed' && order.status === 'cancelled') return order;
         // A sibling may have completed the very same switch while this worker
         // was retrieving Stripe. Re-enter the loop to recognize the replay.
         if (order.paymentFlow.phase === 'counter_ready') continue;
+        if (!['closing', 'review_required'].includes(order.paymentFlow.phase)
+          || order.paymentFlow.reviewReason === 'counter_payment_provider_conflict') this.conflict();
         if ((order.paymentFlow.close.destination ?? 'cancel_order') !== destination
-          || order.paymentFlow.close.operationId !== flow.close?.operationId) this.conflict();
+          || order.paymentFlow.close.operationId !== flow.close?.operationId
+          || order.paymentFlow.attempt?.id !== flow.attempt?.id
+          || order.totals.total !== flow.attempt?.amountCents) this.conflict();
+        this.assertIntent(order, flow.attempt!, intent);
       }
       const close = order.paymentFlow!.close!;
       const update: UpdateQuery<Order> = { $set: {

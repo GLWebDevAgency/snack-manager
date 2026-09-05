@@ -624,6 +624,31 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
     await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('une ancienne bascule suspendue ne rouvre pas une commande annulée après la réussite d’un autre worker', async () => {
+    const id = await seed();
+    await lifecycle().open(id, TOKEN, provider, resolveAccount);
+    const reached = paymentBarrier();
+    const resume = paymentBarrier();
+    let holdFirst = true;
+    provider.hooks.beforeRetrieve = async () => {
+      if (holdFirst) { holdFirst = false; reached.release(); await resume.promise; }
+    };
+    const oldSwitch = paymentOutcome(counter(lifecycle(), id));
+    await Promise.race([reached.promise, oldSwitch.then(() => { throw new Error('Bascule terminée avant sa barrière.'); })]);
+    let cancelled!: Awaited<ReturnType<typeof read>>;
+    try {
+      await counter(lifecycle(second), id);
+      await cancel(lifecycle(second), id);
+      cancelled = await read(id);
+      expect(cancelled).toMatchObject({ status: 'cancelled', paymentFlow: { phase: 'closed' } });
+    } finally { resume.release(); }
+    const oldResult = await oldSwitch;
+    expect(oldResult.ok).toBe(false);
+    expect(!oldResult.ok && oldResult.error).toBeInstanceOf(ConflictException);
+    expect(await read(id)).toEqual(cancelled);
+    expect(provider.createdCount).toBe(1);
+  });
+
   it.each(['pending', 'paid'] as const)('un événement succeeded contradictoire ne reclassifie pas le comptoir %s si Stripe confirme canceled', async (status) => {
     const id = await seed();
     const opened = await lifecycle().open(id, TOKEN, provider, resolveAccount);
