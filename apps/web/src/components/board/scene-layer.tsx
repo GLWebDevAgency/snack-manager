@@ -2,6 +2,8 @@
 
 import type { Brand, ScreenContent, ScreenScenePayload } from "@sm/contracts";
 import { moduleDe } from "./scenographies/registry";
+import { sceneMotionStyle } from "./scene-motion";
+import "./scene-motion.css";
 
 /**
  * Une couche de scène.
@@ -25,7 +27,7 @@ export function SceneLayer({
 }) {
   const { Component } = moduleDe(content.scenography);
   return (
-    <div className="bd-layer" data-phase={phase} aria-hidden={phase === "out"}>
+    <div className="bd-layer" data-cinema="1" data-phase={phase} style={sceneMotionStyle(scene.durationMs)} aria-hidden={phase === "out"}>
       <Component
         scene={scene}
         content={content}

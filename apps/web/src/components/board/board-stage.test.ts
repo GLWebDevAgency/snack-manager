@@ -38,4 +38,14 @@ describe("the same stage serves the TV and every preview", () => {
     expect(html).toContain("--bd-price-scale:1.14");
     expect(html).toContain(`--cf-bg:${DIRECTIONS.neon.palette.ground}`);
   });
+
+  it("does not duplicate the current scene if a rapid reverse also supplies it as leaving", () => {
+    const html = renderToStaticMarkup(createElement(BoardStage, {
+      content, current, leaving: current, playbackVersion: 2,
+      stage: computeStage({ width: 1080, height: 1920 }, "portrait"), embed: true,
+    }));
+    expect(html.split('class="bd-layer"')).toHaveLength(2);
+    expect(html).not.toContain('data-phase="out"');
+    expect(html).toContain("Bienvenue");
+  });
 });

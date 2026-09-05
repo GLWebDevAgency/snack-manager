@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -154,11 +155,45 @@ describe("Comptoir — les six cas, rendus", () => {
     expect(compter(html, 'class="ct-row ct-it"')).toBe(8);
   });
 
-  it("le prix ne passe jamais par le fondu : un span nu, sans data-fade", () => {
+  it("le prix entre une seule fois, mais ses corrections ne passent jamais par FadeText", () => {
     const html = rendre(scene({ products: [produit({ priceLabel: "12,50 €" }), produit()] }));
-    expect(html).toContain('<span class="ct-badge" data-range="0">12,50 €</span>');
+    expect(html).toContain('<span class="ct-badge" data-range="0"><span class="ct-price-ink">12,50 €</span></span>');
     // Le nom, lui, est un texte fondu.
     expect(html).toMatch(/<h3 class="ct-name" data-fade="0">Produit \d+<\/h3>/);
+  });
+
+  it("sépare les enveloppes d'entrée de l'opacité des mises à jour de texte", () => {
+    const html = rendre(scene({ products: [produit(), produit()] }));
+    expect(html).toMatch(/class="ct-copy" data-beat="2"><h3 class="ct-name" data-fade="0"/);
+    expect(html).toMatch(/class="ct-copy" data-beat="3"><p class="ct-desc" data-fade="0"/);
+    expect(html).not.toMatch(/key="(?:9,50|Produit)/);
+  });
+
+  it("borne la cascade à huit produits, puis quatre temps de détails", () => {
+    for (const orientation of ["portrait", "landscape"] as const) {
+      const html = rendre(scene({ products: Array.from({ length: 8 }, () => produit()) }), orientation);
+      expect(html).toContain('--i:7');
+      expect(html).not.toContain('--i:8');
+    }
+  });
+});
+
+describe("Comptoir — contrat cinéma", () => {
+  const css = readFileSync(new URL("./comptoir.css", import.meta.url), "utf8");
+
+  it("réserve les entrées à la couche entrante et immobilise les ambiances à la sortie", () => {
+    expect(css).toContain('.bd-layer[data-phase="in"] .ct-copy');
+    expect(css).toContain('.bd-layer[data-phase="out"] :is(.ct-drift, .ct-halo, .ct-bgword, .ct-ring)');
+    expect(css).toContain('animation-play-state: paused');
+    expect(css).toContain('var(--bd-reveal-ms)');
+    expect(css).toContain('var(--bd-beat-ms)');
+  });
+
+  it("un mot de titre plus large que la colonne revient à la ligne avant la limite de deux lignes", () => {
+    const title = css.match(/\.ct-title\s*\{([^}]+)\}/)?.[1];
+    expect(title).toContain('overflow-wrap: anywhere');
+    expect(title).toContain('-webkit-line-clamp: 2');
+    expect(rendre(scene({ title: "Les incontournables", products: [produit(), produit()] }), "portrait")).toContain('Les incontournables');
   });
 });
 

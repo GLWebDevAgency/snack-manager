@@ -11,6 +11,8 @@ const FEUILLES = [
   ["board.css", "./board.css"],
   ["comptoir.css", "./scenographies/comptoir/comptoir.css"],
   ["studio.css", "./scenographies/studio/studio.css"],
+  ["scene-motion.css", "./scene-motion.css"],
+  ["ardoise-motion.css", "./scenographies/ardoise/ardoise-motion.css"],
 ] as const;
 
 for (const [nom, chemin] of FEUILLES) {

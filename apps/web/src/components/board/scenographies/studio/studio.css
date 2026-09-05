@@ -12,6 +12,8 @@
 .ss[data-pair="classique"], .ss[data-pair="brut"] { --ss-weight: 400; --ss-price-weight: 400; }
 .ss[data-pair="atelier"], .ss[data-pair="soleil"] { --ss-weight: 800; }
 .ss h1, .ss h2, .ss p { margin: 0; }
+/* Keep the typographic/grid box unchanged; live text fades inside the reveal. */
+.ss .ss-live-text { font: inherit; letter-spacing: inherit; line-height: inherit; }
 .ss-header { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 40px; min-height: 94px; flex: 0 0 auto; }
 .ss-header-copy { min-width: 0; }
 .ss-eyebrow, .ss-subtitle { color: var(--cf-mut); font-size: 24px; line-height: 1.25; }
@@ -303,33 +305,74 @@
 .ss-atmosphere[data-atmosphere="ribbon"] .ss-plane { inset: -55% 36%; background: linear-gradient(90deg, transparent, var(--cf-accent-wash), transparent); border-width: 0 1px; }
 .ss-atmosphere[data-atmosphere="ribbon"] .ss-plane-b { inset: -55% 55% -55% 17%; }
 
-/* The still interval is alive: light, planes and objects use independent, gentle rhythms. */
-.ss-light { animation: ss-light-drift var(--ss-cycle, 32s) ease-in-out infinite alternate; }
-.ss-light-b { animation-delay: -9s; animation-direction: alternate-reverse; }
-.ss-plane { animation: ss-plane-drift calc(var(--ss-cycle, 32s) * 1.4) ease-in-out infinite alternate; }
-.ss-plane-b { animation-delay: -13s; animation-direction: alternate-reverse; }
-.ss-atmosphere[data-atmosphere="orbit"] .ss-plane { animation-name: ss-orbit; }
-.ss-atmosphere[data-atmosphere="vertical"] .ss-plane, .ss-atmosphere[data-atmosphere="curtain"] .ss-plane { animation-name: ss-curtain; }
-.ss-atmosphere[data-atmosphere="type"] .ss-plane, .ss-atmosphere[data-atmosphere="pan"] .ss-plane { animation-name: ss-horizon; }
-.ss-atmosphere[data-atmosphere="trace"] .ss-plane { animation-name: ss-trace; }
-.ss-atmosphere[data-atmosphere="prism"] .ss-plane { animation-name: ss-prism; }
-.ss-atmosphere[data-atmosphere="ribbon"] .ss-plane { animation-name: ss-ribbon; }
-.ss-object, .ss-intro-photo { animation: ss-float calc(var(--ss-cycle, 32s) * .8) ease-in-out infinite alternate; animation-delay: calc(var(--ss-i, 0) * -2s); }
-.ss-product-halo { animation: ss-breathe calc(var(--ss-cycle, 32s) * .6) ease-in-out infinite alternate; }
-.ss-foot-mark { animation: ss-foot var(--ss-cycle, 32s) ease-in-out infinite alternate; }
-.ss-enter { animation: ss-enter-rise var(--ss-enter, 880ms) cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(160ms + min(var(--ss-i, 0), 3) * var(--ss-stagger, 65ms)); }
-.ss[data-entrance="reveal"] .ss-enter { animation-name: ss-enter-reveal; }
-.ss[data-entrance="slide"] .ss-enter { animation-name: ss-enter-slide; }
-.ss[data-phase="out"] .ss-enter { animation: ss-exit 320ms ease-in both; }
-.ss[data-phase="out"] .ss-living { animation-play-state: paused; }
+/* A short film, then a readable hold. Three capped product beats + six copy
+   beats leave most of even a four-second scene fully settled. The host owns
+   --bd-exit-ms and its dissolve: no second opacity envelope over our entrance. */
+.ss [data-ss-part] { --ss-beat: 0; }
+.ss [data-ss-part="label"] { --ss-beat: 0; }
+.ss [data-ss-part="title"] { --ss-beat: 1; }
+.ss [data-ss-part="brand"] { --ss-beat: 2; }
+.ss [data-ss-part="photo"] { --ss-beat: var(--ss-photo-beat); }
+.ss [data-ss-part="name"] { --ss-beat: var(--ss-name-beat); }
+.ss [data-ss-part="detail"] { --ss-beat: var(--ss-detail-beat); }
+.ss [data-ss-part="price"] { --ss-beat: var(--ss-price-beat); }
+.ss [data-ss-part="rule"] { --ss-beat: 1; transform-origin: left center; }
+.ss[data-phase="in"] [data-ss-part] {
+  animation: ss-detail-arrive var(--bd-reveal-ms) var(--bd-ease) both;
+  animation-delay: calc(var(--bd-intro-delay) + (min(var(--ss-i, 0), 3) + var(--ss-beat)) * var(--bd-beat-ms));
+}
+.ss[data-phase="in"] [data-ss-part="photo"] { animation-name: ss-photo-arrive; }
+.ss[data-phase="in"] :is([data-ss-part="name"], [data-ss-part="title"]) { animation-name: ss-type-arrive; }
+.ss[data-phase="in"] [data-ss-part="price"] { animation-name: var(--ss-price-arrival, ss-price-arrive); transform-origin: var(--ss-price-origin, left center); }
+.ss[data-phase="in"] [data-ss-part="rule"] { animation-name: ss-rule-arrive; }
+.ss[data-phase="in"] .ss-copy::before { animation: ss-rule-arrive var(--bd-reveal-ms) var(--bd-ease) both; transform-origin: left center; }
+.ss-subtitle[data-ss-part] { display: inline-block; }
+
+/* Thirteen directions, not thirteen colour skins. Coordinates are multiples
+   of the restaurant's travel token; all resting layouts remain untouched. */
+.ss[data-story="poster-billing"] { --ss-photo-x: 2; --ss-photo-y: .6; --ss-photo-scale: .94; --ss-type-x: -.8; --ss-type-y: 0; --ss-price-arrival: ss-price-seal; }
+.ss[data-story="orbital-focus"] { --ss-photo-scale: 1.09; --ss-type-y: .8; --ss-price-scale: .88; --ss-price-origin: center; }
+.ss[data-story="curtain-call"] { --ss-photo-x: -2.2; --ss-photo-scale: .985; --ss-type-x: 1.4; --ss-type-y: 0; --ss-price-y: .8; }
+.ss[data-story="gallery-hang"] { --ss-photo-y: -1.2; --ss-photo-scale: .985; --ss-type-y: .65; --ss-price-x: .8; }
+.ss[data-story="tracking-shot"] { --ss-photo-x: -2.5; --ss-type-x: 1.15; --ss-type-y: 0; --ss-price-x: 1.5; }
+.ss[data-story="alternating-cut"] { --ss-photo-y: 1.4; --ss-type-y: -.65; --ss-price-arrival: ss-price-seal; }
+.ss[data-story="alternating-cut"] .ss-product:nth-child(even) { --ss-photo-y: -1.4; --ss-type-y: .65; }
+.ss[data-story="editorial-lead"] { --ss-photo-x: -.6; --ss-type-x: -1.1; --ss-type-y: 0; --ss-price-x: .6; }
+.ss[data-story="column-cadence"] { --ss-photo-y: .6; --ss-type-y: 1.5; --ss-price-y: .6; }
+.ss[data-story="column-cadence"] .ss-product:nth-child(even) { --ss-type-y: -.8; }
+.ss[data-story="type-declaration"] { --ss-type-scale: 1.035; --ss-type-y: 0; --ss-price-x: 1.4; --ss-price-scale: 1; }
+.ss[data-story="frame-signature"] { --ss-photo-scale: .9; --ss-type-y: .35; --ss-price-scale: .94; --ss-price-origin: center; }
+.ss[data-story="daybreak"] { --ss-photo-y: 2.2; --ss-photo-scale: 1; --ss-type-y: 1.25; --ss-price-y: 1; }
+.ss[data-story="facet-assembly"] { --ss-photo-x: -1.2; --ss-photo-y: .8; --ss-photo-turn: -1.5deg; --ss-type-x: .7; --ss-type-y: -.45; --ss-price-x: .8; }
+.ss[data-story="facet-assembly"] .ss-product:nth-child(even) { --ss-photo-x: 1.2; --ss-photo-turn: 1.5deg; }
+.ss[data-story="ribbon-seal"] { --ss-photo-x: -.8; --ss-type-x: -1.5; --ss-type-y: 0; --ss-price-x: 2; --ss-price-scale: 1; --ss-price-origin: right center; }
+
+/* Two global layers move; secondary lights and every per-product halo rest.
+   A single lead photo gets a one-shot camera movement, never eight loops. */
+.ss-light-a { animation: ss-light-drift var(--ss-cycle) ease-in-out infinite alternate; }
+.ss-plane-a { animation: ss-plane-drift calc(var(--ss-cycle) * 1.4) ease-in-out infinite alternate; }
+.ss-atmosphere[data-atmosphere="orbit"] .ss-plane-a { animation-name: ss-orbit; }
+.ss-atmosphere:is([data-atmosphere="vertical"], [data-atmosphere="curtain"]) .ss-plane-a { animation-name: ss-curtain; }
+.ss-atmosphere:is([data-atmosphere="type"], [data-atmosphere="pan"]) .ss-plane-a { animation-name: ss-horizon; }
+.ss-atmosphere[data-atmosphere="trace"] .ss-plane-a { animation-name: ss-trace; }
+.ss-atmosphere[data-atmosphere="prism"] .ss-plane-a { animation-name: ss-prism; }
+.ss-atmosphere[data-atmosphere="ribbon"] .ss-plane-a { animation-name: ss-ribbon; }
+.ss:not([data-dense="1"]):not([data-camera="still"]) .ss-product:first-child .ss-object,
+.ss:not([data-camera="still"]) .ss-intro .ss-object { animation: ss-camera-push var(--bd-scene-ms) linear both; }
+.ss[data-camera="glide"] { --ss-camera-x: calc(var(--bd-travel) * .3); }
+.ss[data-camera="rise"] { --ss-camera-y: calc(var(--bd-travel) * -.3); }
+.ss[data-camera="still"] .ss-object { animation: none; }
+
+/* A remounted outgoing layer is already readable, never starts from black.
+   Live text still owns its inner opacity and photos still own their crop. */
+.ss[data-phase="out"] [data-ss-part], .ss[data-phase="out"] .ss-copy::before { animation: none; }
+.ss[data-phase="out"] .ss-living,
 .bd-root[data-paused="1"] .ss-living { animation-play-state: paused !important; }
-.bd-root[data-motion="off"] *, .bd-root[data-motion="off"] *::before, .bd-root[data-motion="off"] *::after { animation: none !important; transition: none !important; }
-.bd-root[data-motion="off"] { --sm-t-fast: 0ms !important; }
-.bd-root[data-motion="off"] [data-fade="1"] { opacity: 1; }
-.bd-root[data-motion="off"] .bd-layer[data-phase="out"], .bd-root[data-still="1"] .bd-layer[data-phase="out"] { display: none; }
+.bd-root:is([data-still="1"], [data-motion="off"]) .ss [data-ss-part],
+.bd-root:is([data-still="1"], [data-motion="off"]) .ss-copy::before,
+.bd-root:is([data-still="1"], [data-motion="off"]) .ss-living { animation: none !important; }
 @media (prefers-reduced-motion: reduce) {
-  .ss-living, .ss-enter { animation: none !important; }
-  .ss[data-phase="out"] { display: none; }
+  .ss [data-ss-part], .ss-copy::before, .ss-living { animation: none !important; }
 }
 @keyframes ss-light-drift {
   from { transform: translate3d(-3%, -2%, 0) scale(.94); }
@@ -363,31 +406,32 @@
   from { transform: translate3d(-8%, -3%, 0) rotate(-28deg); }
   to { transform: translate3d(8%, 3%, 0) rotate(-28deg); }
 }
-@keyframes ss-float {
-  from { transform: translate3d(0, calc(var(--ss-travel, 12px) * -.35), 0); }
-  to { transform: translate3d(0, calc(var(--ss-travel, 12px) * .35), 0); }
+@keyframes ss-camera-push {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(var(--ss-camera-x, 0px), var(--ss-camera-y, 0px), 0) scale(1.025); }
 }
-@keyframes ss-breathe {
-  from { transform: scale(.92); opacity: .65; }
-  to { transform: scale(1.06); opacity: 1; }
+@keyframes ss-photo-arrive {
+  from { opacity: 0; transform: translate3d(calc(var(--bd-travel) * var(--ss-photo-x, 0)), calc(var(--bd-travel) * var(--ss-photo-y, 0)), 0) rotate(var(--ss-photo-turn, 0deg)) scale(var(--ss-photo-scale, .97)); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
 }
-@keyframes ss-foot {
-  from { transform: translateX(0); }
-  to { transform: translateX(700%); }
+@keyframes ss-type-arrive {
+  from { opacity: 0; transform: translate3d(calc(var(--bd-travel) * var(--ss-type-x, 0)), calc(var(--bd-travel) * var(--ss-type-y, .5)), 0) scale(var(--ss-type-scale, 1)); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
-@keyframes ss-enter-rise {
-  from { opacity: 0; transform: translateY(var(--ss-travel, 12px)); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes ss-detail-arrive {
+  from { opacity: 0; transform: translate3d(0, calc(var(--bd-travel) * .25), 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
-@keyframes ss-enter-reveal {
-  from { opacity: 0; transform: scale(.975); }
+@keyframes ss-price-arrive {
+  from { opacity: 0; transform: translate3d(calc(var(--bd-travel) * var(--ss-price-x, 0)), calc(var(--bd-travel) * var(--ss-price-y, .3)), 0) scale(var(--ss-price-scale, .97)); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes ss-price-seal {
+  from { opacity: 0; transform: scale(.9); }
+  70% { opacity: 1; transform: scale(1.025); }
   to { opacity: 1; transform: scale(1); }
 }
-@keyframes ss-enter-slide {
-  from { opacity: 0; transform: translateX(calc(var(--ss-travel, 12px) * -1)); }
-  to { opacity: 1; transform: translateX(0); }
-}
-@keyframes ss-exit {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(calc(var(--ss-travel, 12px) * -.5)); }
+@keyframes ss-rule-arrive {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
 }

@@ -63,7 +63,9 @@ export function BoardDisplay() {
   }, [revoked, router]);
 
   const scenes = content?.scenes ?? NO_SCENES;
-  const { current, leaving, index } = useSceneRotation(scenes);
+  const { current, leaving, index, playbackVersion } = useSceneRotation(scenes, {
+    playbackKey: content ? `${content.scenography ?? "ardoise"}:${content.orientation}` : undefined,
+  });
   const stage = useStage(content?.orientation ?? null);
 
   useWakeLock();
@@ -95,6 +97,7 @@ export function BoardDisplay() {
       content={content}
       current={current}
       leaving={leaving}
+      playbackVersion={playbackVersion}
       stage={stage}
       className="bd-display"
       fallback={

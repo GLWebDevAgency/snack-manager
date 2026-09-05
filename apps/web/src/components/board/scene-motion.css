@@ -1,0 +1,38 @@
+/* Shared film grammar. Individual scenographies own the entrances; the player
+   owns the dissolve and the accessibility switches. No bitmap video to download. */
+.bd-root {
+  --bd-travel: var(--ss-travel, 12px);
+  --bd-ease: var(--sm-ease, cubic-bezier(.2, .8, .2, 1));
+}
+
+/* Do not fade the entire incoming set on top of its individual reveals. */
+.bd-root .bd-layer[data-cinema="1"][data-phase="in"] { animation: none; }
+.bd-root .bd-layer[data-cinema="1"][data-phase="out"] {
+  z-index: 2;
+  pointer-events: none;
+  animation: bd-film-dissolve var(--bd-exit-ms) ease-out both;
+}
+@keyframes bd-film-dissolve {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Still previews, an explicit brand choice, and the system preference have
+   identical semantics. Keep authored resting transforms (price labels, crops). */
+.bd-root:is([data-still="1"], [data-motion="off"]) *,
+.bd-root:is([data-still="1"], [data-motion="off"]) *::before,
+.bd-root:is([data-still="1"], [data-motion="off"]) *::after {
+  animation: none !important;
+  transition: none !important;
+}
+.bd-root:is([data-still="1"], [data-motion="off"]) [data-fade="1"] { opacity: 1 !important; }
+.bd-root:is([data-still="1"], [data-motion="off"]) .bd-layer[data-phase="out"] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bd-root *, .bd-root *::before, .bd-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .bd-root [data-fade="1"] { opacity: 1 !important; }
+  .bd-root .bd-layer[data-phase="out"] { display: none; }
+}
