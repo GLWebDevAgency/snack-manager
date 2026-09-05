@@ -32,6 +32,7 @@ export function SceneLayer({
         masque={masque}
         orientation={content.orientation}
         prixMono={prixMono}
+        phase={phase}
       />
     </div>
   );

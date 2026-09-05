@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 const FEUILLES = [
   ["board.css", "./board.css"],
   ["comptoir.css", "./scenographies/comptoir/comptoir.css"],
+  ["studio.css", "./scenographies/studio/studio.css"],
 ] as const;
 
 for (const [nom, chemin] of FEUILLES) {

@@ -7,6 +7,7 @@ import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { BoardHeader } from "./board-header";
 import { masqueDuContenu } from "./board-masque";
+import { boardPresentation } from "./board-presentation";
 import { SceneLayer } from "./scene-layer";
 import { moduleDe } from "./scenographies/registry";
 import type { Stage } from "./use-stage";
@@ -52,20 +53,25 @@ export function BoardStage({
   // Mémorisé : `resoudreMarque()` recalcule une trentaine de mélanges, et la
   // référence sert de `style` — la recréer repeindrait tout le sous-arbre.
   const skin = useMemo(() => styleDuMasque(masque), [masque]);
+  const presentation = useMemo(() => boardPresentation(masque, content?.presentation), [masque, content?.presentation]);
   const prixMono = TYPE_PAIRS[masque.type.pair].prixMono;
-  const chrome = moduleDe(content?.scenography).chrome;
+  const { chrome, Background, layered } = moduleDe(content?.scenography);
   const multiScene = (content?.scenes.length ?? 0) > 1;
 
   return (
     <div
       className={cx("bd-root", classesPolices, className)}
-      style={skin}
+      style={{ ...skin, ...presentation.style }}
       data-embed={embed ? "1" : "0"}
       data-still={still ? "1" : "0"}
       data-paused={paused ? "1" : "0"}
       data-scenography={content?.scenography ?? "ardoise"}
       data-prix-mono={prixMono ? "1" : "0"}
       data-mode={masque.mode}
+      data-layered={layered ? "1" : "0"}
+      data-corners={presentation.presentation.corners}
+      data-price-scale={presentation.presentation.priceScale}
+      data-motion={presentation.motion}
     >
       <div
         className="bd-stage"
@@ -73,6 +79,7 @@ export function BoardStage({
         data-ready={stage.ready ? "1" : "0"}
         style={stage.style}
       >
+        {Background ? <Background /> : null}
         {content && chrome === "header" ? (
           <BoardHeader
             masque={masque}

@@ -55,6 +55,10 @@ export interface PhotoChargee {
   height: number;
 }
 
+// Only metadata is retained. An outgoing scene can remount its already decoded photo
+// immediately; the browser remains responsible for the image cache itself.
+const photosChargees = new Map<string, PhotoChargee>();
+
 /** Une photo n'entre dans la scène qu'après chargement ET décodage. */
 export function chargerPhoto(url: string, signal: AbortSignal): Promise<PhotoChargee | null> {
   return new Promise((resolve) => {
@@ -66,6 +70,10 @@ export function chargerPhoto(url: string, signal: AbortSignal): Promise<PhotoCha
       image.onload = null;
       image.onerror = null;
       signal.removeEventListener("abort", abort);
+      if (photo) {
+        if (photosChargees.size >= 64) photosChargees.delete(photosChargees.keys().next().value!);
+        photosChargees.set(photo.url, photo);
+      }
       resolve(photo);
     };
     const abort = () => finish(null);
@@ -99,7 +107,7 @@ export function Photo({
   const [photos, setPhotos] = useState<{
     current: PhotoChargee | null;
     previous: PhotoChargee | null;
-  }>({ current: null, previous: null });
+  }>(() => ({ current: p.photoUrl ? photosChargees.get(p.photoUrl) ?? null : null, previous: null }));
   useEffect(() => {
     const controller = new AbortController();
     const next = p.photoUrl ? chargerPhoto(p.photoUrl, controller.signal) : Promise.resolve(null);
@@ -144,7 +152,7 @@ export function Photo({
     />
   );
   return (
-    <span className="ct-photo-frame" ref={ref}>
+    <span className="ct-photo-frame" data-state={photos.current || photos.previous ? "ready" : "empty"} ref={ref}>
       {!photos.current && !photos.previous ? <span className="ct-ghost">{initiale(p.name)}</span> : null}
       <span
         className={drift && detailed ? "ct-photo-motion ct-drift" : "ct-photo-motion"}
@@ -497,7 +505,7 @@ function ComptoirScene({ scene, content, masque, orientation }: ScenographyProps
   const mot = scene.kind === "closed" ? content.brand.name : scene.title;
 
   return (
-    <div className="ct" data-disposition={d} data-o={orientation} data-pair={masque.type.pair} style={style}>
+    <div className="ct" data-disposition={d} data-count={products.length} data-o={orientation} data-pair={masque.type.pair} style={style}>
       <div className="ct-bg" aria-hidden>
         <div className="ct-halo" />
         <div className="ct-bgword">{mot}</div>

@@ -44,6 +44,29 @@
   --bd-elev: var(--cf-elev-gradient);
 }
 
+/* Local presentation also applies to the two historical compositions. */
+.bd-root:not([data-corners="brand"]) :is(.bd-row, .bd-thumb, .bd-price, .bd-hero-card, .bd-hero-price) {
+  border-radius: var(--bd-corner, var(--cf-r-lg));
+}
+.bd-root[data-motion="subtle"] :is(.bd-thumb > img, .bd-hero-photo > img, .ct-drift) {
+  animation-name: ss-float;
+  animation-duration: var(--ss-cycle) !important;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-timing-function: ease-in-out;
+}
+.bd-root[data-motion="expressive"] :is(.bd-thumb > img, .bd-hero-photo > img, .ct-drift) {
+  animation-duration: var(--ss-cycle) !important;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-timing-function: ease-in-out;
+}
+.bd-root .ct-halo { animation: ss-light-drift var(--ss-cycle, 32s) ease-in-out infinite alternate; }
+.bd-root[data-paused="1"] :is(.ct-halo, .ct-ring) { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .bd-root :is(.bd-thumb img, .bd-hero-photo img, .ct-drift, .ct-halo, .ct-ring) { animation: none !important; }
+}
+
 /*
  * Aucun curseur sur l'affichage : la clé HDMI branchée en salle affiche une
  * flèche blanche figée au milieu de la carte tant qu'on ne la masque pas.
@@ -76,8 +99,8 @@
 /* Même horloge que la rotation : le transport fige le temps et les photos.
    Les entrées restent actives, pour lire une nouvelle scène choisie en pause. */
 .bd-root[data-paused="1"] .bd-progress-fill,
-.bd-root[data-paused="1"] .bd-thumb img,
-.bd-root[data-paused="1"] .bd-hero-photo img,
+.bd-root[data-paused="1"] .bd-thumb > img,
+.bd-root[data-paused="1"] .bd-hero-photo > img,
 .bd-root[data-paused="1"] .ct-drift {
   animation-play-state: paused !important;
 }
@@ -419,9 +442,9 @@
      la boîte et se font raboter par `overflow: hidden`. */
   line-height: 1.2;
   letter-spacing: -0.015em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .bd-row[data-out="1"] .bd-name {
@@ -472,7 +495,7 @@
 /* La pastille de prix « se pose » : mise à l'échelle + opacité, jamais d'ombre. */
 .bd-price {
   flex: 0 0 auto;
-  font-size: var(--bd-price-size);
+  font-size: calc(var(--bd-price-size) * var(--bd-price-scale, 1));
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
@@ -651,13 +674,35 @@
   font-weight: 800;
   line-height: 1.06;
   letter-spacing: -0.03em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
   /* « Étudiant » ne doit pas dépasser de la carte quand il ne tient pas. */
   overflow-wrap: break-word;
 }
+
+.bd-stage[data-orientation="portrait"] .bd-hero-card[data-solo="0"] .bd-hero-photo { flex-basis: 30%; }
+.bd-stage[data-orientation="portrait"] .bd-hero[data-count="3"] .bd-hero-desc { display: none; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-desc { display: none; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-name { font-size: 40px; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-name-line { flex-wrap: wrap; gap: 6px; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-row-main { padding: 8px 0; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-thumb { flex-basis: 100px; width: 100px; height: 100px; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-tags { position: absolute; left: 8px; top: 6px; z-index: 1; }
+.bd-stage[data-orientation="portrait"] .bd-list[data-rows="8"] .bd-badge { font-size: 18px; padding: 6px 8px; }
+.bd-thumb { position: relative; }
+/* The decoded image owns its crossfade; gentle motion belongs to its parent,
+   otherwise an image animation would overwrite native-size centring. */
+.bd-root :is(.bd-thumb, .bd-hero-photo) .ct-photo-motion img {
+  position: absolute;
+  inset: 0;
+  animation: ct-fade var(--sm-t-fast) var(--sm-ease) both;
+}
+.bd-root :is(.bd-thumb, .bd-hero-photo) .ct-photo-motion img[data-fit="natural"] {
+  inset: auto; top: 50%; left: 50%;
+  width: min(88%, var(--ct-photo-width)); height: min(88%, var(--ct-photo-height));
+  object-fit: contain; transform: translate(-50%, -50%);
+}
+.bd-root :is(.bd-thumb, .bd-hero-photo) .ct-ghost { display: none; }
 
 .bd-hero-desc {
   font-size: calc(var(--bd-hero-name) * 0.34);
@@ -679,7 +724,7 @@
 .bd-hero-price {
   align-self: flex-start;
   margin-top: calc(var(--bd-hero-name) * 0.18);
-  font-size: calc(var(--bd-hero-name) * 0.62);
+  font-size: calc(var(--bd-hero-name) * 0.62 * var(--bd-price-scale, 1));
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.035em;
@@ -711,7 +756,7 @@
 
 .bd-promo-label {
   align-self: flex-start;
-  font-size: var(--bd-promo-label);
+  font-size: calc(var(--bd-promo-label) * var(--bd-price-scale, 1));
   font-weight: 900;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
@@ -1279,8 +1324,8 @@
     animation: bd-fade 0.24s linear reverse both !important;
   }
 
-  .bd-thumb img,
-  .bd-hero-photo img {
+  .bd-thumb > img,
+  .bd-hero-photo > img {
     animation: none !important;
     transform: none !important;
   }
