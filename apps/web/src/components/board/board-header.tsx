@@ -1,6 +1,7 @@
 "use client";
 
-import type { ScreenBrand } from "@sm/contracts";
+import type { Brand, ScreenBrand } from "@sm/contracts";
+import { verrouPour } from "@/components/ui/verrou";
 import { useRestaurantClock } from "./board-runtime";
 import { monogramOf } from "./board-theme";
 
@@ -14,6 +15,19 @@ function BoardClock({ timezone }: { timezone: string | null }) {
 }
 
 /**
+ * La MARQUE (le symbole) du mode en cours, sans retomber sur le verrou.
+ *
+ * `logoPour(brand, "mark")` retombe sur le verrou quand aucune marque n'est
+ * posée — juste pour une tuile, faux ici : le nom est écrit à côté, et un
+ * verrou (qui porte déjà le nom) le ferait bégayer.
+ */
+export function marqueSeule(brand: Brand): string | null {
+  const pref = brand.mode === "dark" ? "dark" : "light";
+  const alt = pref === "dark" ? "light" : "dark";
+  return brand.logo.mark[pref] ?? brand.logo.mark[alt];
+}
+
+/**
  * En-tête discret : on vient lire la carte, pas le bandeau.
  *
  * Il porte quand même trois informations utiles au client dans la file — chez
@@ -21,26 +35,38 @@ function BoardClock({ timezone }: { timezone: string | null }) {
  * de vie pour le gérant : une heure juste, c'est un écran qui tourne.
  */
 export function BoardHeader({
+  masque,
   brand,
   serviceLabel,
   open,
   timezone,
 }: {
+  masque: Brand;
   brand: ScreenBrand;
   serviceLabel: string;
   open: boolean;
   timezone: string | null;
 }) {
+  // Le verrou — « logo avec le nom » — remplace le nom écrit quand il est posé.
+  const verrou = verrouPour(masque);
+  const marque = marqueSeule(masque);
   return (
     <header className="bd-header">
       <div className="bd-brand">
-        {brand.logoUrl ? (
+        {verrou ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="bd-logo" src={brand.logoUrl} alt="" decoding="async" />
+          <img className="bd-verrou" src={verrou} alt={brand.name} decoding="async" />
         ) : (
-          <div className="bd-logo bd-logo-fallback">{monogramOf(brand.name)}</div>
+          <>
+            {marque ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className="bd-logo" src={marque} alt="" decoding="async" />
+            ) : (
+              <div className="bd-logo bd-logo-fallback">{monogramOf(brand.name)}</div>
+            )}
+            <div className="bd-brand-name">{brand.name}</div>
+          </>
         )}
-        <div className="bd-brand-name">{brand.name}</div>
       </div>
 
       <div className="bd-service">

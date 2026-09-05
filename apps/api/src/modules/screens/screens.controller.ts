@@ -2,10 +2,12 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import {
   PairScreenSchema,
   ScreenCreateSchema,
+  ScreenPreviewSchema,
   ScreenTokenQuerySchema,
   ScreenUpdateSchema,
   type PairScreen,
   type ScreenCreate,
+  type ScreenPreview,
   type ScreenTokenQuery,
   type ScreenUpdate,
 } from '@sm/contracts';
@@ -16,6 +18,7 @@ import { BuildScreenContent } from './build-screen-content.usecase';
 import { HeartbeatScreen } from './heartbeat-screen.usecase';
 import { ManageScreens } from './manage-screens.usecase';
 import { PairScreenDevice } from './pair-screen.usecase';
+import { PreviewScreenContent } from './preview-screen-content.usecase';
 
 /**
  * « Menu Board » — les écrans TV de la salle.
@@ -38,6 +41,7 @@ export class ScreensController {
     private readonly pair: PairScreenDevice,
     private readonly content: BuildScreenContent,
     private readonly heartbeat: HeartbeatScreen,
+    private readonly preview: PreviewScreenContent,
   ) {}
 
   // ─── Back-office (owner / gérant) ───
@@ -81,6 +85,16 @@ export class ScreensController {
   @Post('screens/:id/regenerate-code')
   regenerateCode(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.manage.regenerateCode(tenantId, id);
+  }
+
+  /**
+   * L'aperçu du tiroir « Apparence » — l'écran, ou un brouillon, rendu par le
+   * même chemin que la clé HDMI. Un POST parce qu'il porte une boucle.
+   */
+  @Roles('owner', 'gerant')
+  @Post('screens/preview')
+  previewContent(@TenantId() tenantId: string, @Body(zod(ScreenPreviewSchema)) body: unknown) {
+    return this.preview.execute(tenantId, body as ScreenPreview);
   }
 
   // ─── Écrans (jeton d'appareil) ───

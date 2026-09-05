@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScreenScenePayload } from "@sm/contracts";
+import { createSceneTimer } from "./scene-timer";
 
 /**
  * Le carrousel : une scène à la fois, 8 à 12 secondes chacune.
@@ -23,29 +24,57 @@ export interface SceneRotation {
   leaving: ScreenScenePayload | null;
   /** Position dans la boucle — sert à pré-charger la photo d'après. */
   index: number;
+  /** Avance ou recule d'un cran, en boucle — le tiroir « Apparence ». */
+  go: (delta: number) => void;
 }
 
-export function useSceneRotation(scenes: readonly ScreenScenePayload[]): SceneRotation {
+/** L'index d'après, en boucle dans les deux sens ; zéro sans scène. */
+export const indexSuivant = (index: number, delta: number, length: number): number =>
+  length === 0 ? 0 : (((index + delta) % length) + length) % length;
+
+export function useSceneRotation(
+  scenes: readonly ScreenScenePayload[],
+  options: { paused?: boolean } = {},
+): SceneRotation {
+  const paused = options.paused === true;
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<ScreenScenePayload | null>(null);
   const previousRef = useRef<ScreenScenePayload | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sceneTimer = useRef<{
+    id: string;
+    clock: ReturnType<typeof createSceneTimer>;
+  } | null>(null);
 
   // Le contenu peut avoir rétréci depuis (une catégorie vidée par le
   // dayparting) : on reste dans les bornes plutôt que d'afficher du vide.
   const safeIndex = scenes.length > 0 ? index % scenes.length : 0;
   const current = scenes.length > 0 ? (scenes[safeIndex] ?? null) : null;
   const currentId = current?.id ?? null;
+  const durationMs = current?.durationMs ?? 0;
 
   useEffect(() => {
-    // Une scène unique (écran fermé, plaque de marque) ne tourne pas : aucun
-    // minuteur ne doit courir pendant douze heures pour rien.
-    if (scenes.length <= 1 || !current) return;
-    const timer = setTimeout(() => {
-      setIndex((value) => (value + 1) % scenes.length);
-    }, current.durationMs);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId, scenes.length]);
+    if (currentId === null) {
+      sceneTimer.current = null;
+      return;
+    }
+    if (sceneTimer.current?.id !== currentId) {
+      sceneTimer.current = { id: currentId, clock: createSceneTimer(durationMs) };
+    }
+    const { clock } = sceneTimer.current;
+    clock.setDuration(durationMs);
+    // Une scène seule ou en pause ne programme aucun changement. Reprendre
+    // conserve le temps écoulé, comme la progression CSS figée par l'hôte.
+    if (!paused && scenes.length > 1) {
+      clock.resume(() => setIndex((value) => (value + 1) % scenes.length));
+    }
+    return clock.pause;
+  }, [currentId, durationMs, scenes.length, paused]);
+
+  const go = useCallback(
+    (delta: number) => setIndex((value) => indexSuivant(value, delta, scenes.length)),
+    [scenes.length],
+  );
 
   useEffect(() => {
     const previous = previousRef.current;
@@ -54,9 +83,14 @@ export function useSceneRotation(scenes: readonly ScreenScenePayload[]): SceneRo
     if (!previous || !current || previous.id === current.id) return;
 
     setLeaving(previous);
-    const timer = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
-    return () => clearTimeout(timer);
+    // Un contenu frais de la même scène ne doit pas annuler la sortie en cours.
+    if (exitTimer.current) clearTimeout(exitTimer.current);
+    exitTimer.current = setTimeout(() => setLeaving(null), SCENE_EXIT_MS);
   }, [current]);
 
-  return { current, leaving, index: safeIndex };
+  useEffect(() => () => {
+    if (exitTimer.current) clearTimeout(exitTimer.current);
+  }, []);
+
+  return { current, leaving, index: safeIndex, go };
 }

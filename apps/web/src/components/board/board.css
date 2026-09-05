@@ -16,9 +16,10 @@
  *     de référence : ce qui est lisible en 1080p l'est identiquement en 4K, sur
  *     un 1366 × 768 de supermarché, et la mise en page ne bouge jamais.
  *
- * Les couleurs neutres reprennent les tokens de `globals.css` (noir stratifié
- * #000 / #111 / #1a1a1a) ; seul `--bd-accent`, la couleur du restaurant, est
- * injecté au runtime.
+ * Toutes les couleurs viennent des JETONS DU MASQUE, posés par l'hôte
+ * (`BoardStage`) sur `.bd-root` : sur un tenant non repris, le repli Nuit rend
+ * les mêmes noirs et le même laiton qu'avant. Les polices aussi : l'accord du
+ * restaurant, et la chasse fixe pour les prix quand son accord le demande.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -30,24 +31,17 @@
   overflow: hidden;
   background: var(--cf-bg, #000);
   color: var(--cf-text, #fff);
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: var(--cf-font-body, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-user-select: none;
 
-  /* Accent du restaurant — remplacé au runtime par la marque du tenant. */
-  --bd-accent: #c9a15a;
-  --bd-on-accent: #12100d;
-  --bd-accent-12: rgba(201, 161, 90, 0.12);
-  --bd-accent-24: rgba(201, 161, 90, 0.24);
-
-  --bd-mut: #9a9a9a;
-  --bd-mut-2: #6f6f6f;
-  --bd-line: rgba(255, 255, 255, 0.08);
-  --bd-card: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(0deg, #111, #111);
-  --bd-elev: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 70%),
-    linear-gradient(0deg, #1a1a1a, #1a1a1a);
+  /* Les neutres de l'écran sont ceux du MASQUE, posés par l'hôte sur cette racine. */
+  --bd-mut: var(--cf-mut);
+  --bd-mut-2: var(--cf-line-firm);
+  --bd-line: var(--cf-line);
+  --bd-card: var(--cf-card-gradient);
+  --bd-elev: var(--cf-elev-gradient);
 }
 
 /*
@@ -57,6 +51,35 @@
 .bd-display,
 .bd-display * {
   cursor: none !important;
+}
+
+/* ── Incrusté dans une page (tiroir « Apparence ») ── */
+
+/* La racine prend la géométrie de son conteneur ; la scène reste centrée dedans. */
+.bd-root[data-embed="1"] {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+/* Les entrées commencent transparentes : une tuile doit montrer leur état
+   naturel, pas rester en pause sur la première image de l'animation. */
+.bd-root[data-still="1"] *,
+.bd-root[data-still="1"] *::before,
+.bd-root[data-still="1"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Même horloge que la rotation : le transport fige le temps et les photos.
+   Les entrées restent actives, pour lire une nouvelle scène choisie en pause. */
+.bd-root[data-paused="1"] .bd-progress-fill,
+.bd-root[data-paused="1"] .bd-thumb img,
+.bd-root[data-paused="1"] .bd-hero-photo img,
+.bd-root[data-paused="1"] .ct-drift {
+  animation-play-state: paused !important;
 }
 
 /* ── Scène de référence + mise à l'échelle ── */
@@ -119,7 +142,16 @@
   height: var(--bd-logo);
   border-radius: 999px;
   object-fit: contain;
-  background: #1a1a1a;
+  background: var(--cf-surface-2);
+  flex: 0 0 auto;
+}
+
+/* Le verrou — « logo avec le nom » — prend la hauteur du logo, jamais un disque. */
+.bd-verrou {
+  height: var(--bd-logo);
+  width: auto;
+  max-width: 460px;
+  object-fit: contain;
   flex: 0 0 auto;
 }
 
@@ -130,9 +162,9 @@
   font-weight: 800;
   font-size: calc(var(--bd-logo) * 0.42);
   letter-spacing: 0.01em;
-  color: var(--bd-accent);
-  background: var(--bd-accent-12);
-  border: 2px solid var(--bd-accent-24);
+  color: var(--cf-accent);
+  background: var(--cf-accent-wash);
+  border: 2px solid var(--cf-line-firm);
 }
 
 .bd-brand-name {
@@ -246,7 +278,7 @@
   width: calc(var(--bd-title-size) * 1.5);
   height: calc(var(--bd-title-size) * 0.085);
   border-radius: 999px;
-  background: var(--bd-accent);
+  background: var(--cf-accent);
   transform-origin: left center;
   animation: bd-rule-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
 }
@@ -261,6 +293,19 @@
   border-radius: 999px;
   background: var(--bd-elev);
   border: 1px solid var(--bd-line);
+}
+
+/* Le titre de scène prend la police de TITRAGE de l'accord. */
+.bd-title {
+  font-family: var(--cf-font-display, inherit);
+}
+
+/* Deux accords sur dix posent les prix en chasse fixe : l'hôte le dit, la feuille suit. */
+.bd-root[data-prix-mono="1"] .bd-price,
+.bd-root[data-prix-mono="1"] .bd-hero-price,
+.bd-root[data-prix-mono="1"] .bd-promo-label {
+  font-family: var(--cf-font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Liste de produits ── */
@@ -301,7 +346,7 @@
   padding: 0 var(--bd-row-pad) 0 var(--bd-row-pad);
   border-radius: 18px;
   background: var(--bd-card);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--cf-line-2);
   will-change: transform, opacity;
   /* Décalage de 70 ms d'une ligne à l'autre : l'œil suit la carte de haut en
      bas au lieu de recevoir huit lignes d'un bloc. */
@@ -329,7 +374,7 @@
   max-height: 100%;
   border-radius: 14px;
   overflow: hidden;
-  background: #1a1a1a;
+  background: var(--cf-surface-2);
 }
 
 .bd-thumb img {
@@ -414,14 +459,14 @@
 }
 
 .bd-badge[data-kind="new"] {
-  color: var(--bd-on-accent);
-  background: var(--bd-accent);
+  color: var(--cf-on-accent);
+  background: var(--cf-accent);
 }
 
 .bd-badge[data-kind="out"] {
   color: var(--cf-red-t, #e77b70);
-  background: rgba(201, 75, 63, 0.14);
-  border: 1px solid rgba(201, 75, 63, 0.35);
+  background: var(--cf-surface-2);
+  border: 1px solid var(--cf-line-firm);
 }
 
 /* La pastille de prix « se pose » : mise à l'échelle + opacité, jamais d'ombre. */
@@ -431,10 +476,10 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
-  color: var(--bd-accent);
+  color: var(--cf-accent);
   padding: 0.16em 0.44em;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--cf-surface-6);
   white-space: nowrap;
   will-change: transform, opacity;
   animation: bd-pill-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--bd-i, 0) * 70ms + 0.3s) both;
@@ -488,7 +533,7 @@
   border-radius: 24px;
   overflow: hidden;
   background: var(--bd-card);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--cf-line-2);
   will-change: transform, opacity;
   animation: bd-line-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--bd-i, 0) * 90ms + 0.12s) both;
 }
@@ -511,7 +556,7 @@
 .bd-hero-photo {
   position: relative;
   overflow: hidden;
-  background: #1a1a1a;
+  background: var(--cf-surface-2);
   flex: 0 0 var(--bd-hero-photo, 52%);
   min-height: 0;
   min-width: 0;
@@ -638,8 +683,8 @@
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.035em;
-  color: var(--bd-on-accent);
-  background: var(--bd-accent);
+  color: var(--cf-on-accent);
+  background: var(--cf-accent);
   padding: 0.14em 0.4em;
   border-radius: 16px;
   white-space: nowrap;
@@ -655,9 +700,9 @@
  * panneau de 900 px de haut — l'écran avait l'air en panne.
  */
 .bd-promo-card {
-  background: linear-gradient(180deg, var(--bd-accent-12), rgba(255, 255, 255, 0) 70%),
-    linear-gradient(0deg, #111, #111);
-  border-color: var(--bd-accent-24);
+  background: linear-gradient(180deg, var(--cf-accent-wash), rgba(255, 255, 255, 0) 70%),
+    var(--cf-card-gradient);
+  border-color: var(--cf-line-firm);
 }
 
 .bd-promo-card .bd-hero-body {
@@ -670,7 +715,7 @@
   font-weight: 900;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
-  color: var(--bd-accent);
+  color: var(--cf-accent);
   line-height: 1;
   /* « −2,50 € » sur deux lignes serait illisible : jamais de retour. */
   white-space: nowrap;
@@ -738,7 +783,7 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-  color: var(--bd-accent);
+  color: var(--cf-accent);
   animation: bd-pill-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s both;
 }
 
@@ -747,14 +792,14 @@
 .bd-progress {
   flex: 0 0 auto;
   height: var(--bd-progress-h);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--cf-surface-6);
   overflow: hidden;
 }
 
 .bd-progress-fill {
   height: 100%;
   width: 100%;
-  background: var(--bd-accent);
+  background: var(--cf-accent);
   transform-origin: left center;
   transform: scaleX(0);
   will-change: transform;
@@ -772,8 +817,8 @@
   gap: 12px;
   padding: 0.5em 0.9em;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.72);
-  border: 1px solid rgba(224, 151, 63, 0.35);
+  background: var(--cf-scrim);
+  border: 1px solid var(--cf-line-firm);
   font-size: var(--bd-meta-size);
   font-weight: 600;
   color: var(--cf-amber-t, #eab06a);
@@ -824,7 +869,7 @@
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--bd-accent);
+  color: var(--cf-accent);
 }
 
 .bd-pair-title {
@@ -854,7 +899,7 @@
 }
 
 .bd-pair-step b {
-  color: #fff;
+  color: var(--cf-text);
   font-weight: 700;
 }
 
@@ -868,9 +913,9 @@
   justify-content: center;
   font-size: 0.72em;
   font-weight: 800;
-  color: var(--bd-accent);
-  background: var(--bd-accent-12);
-  border: 1px solid var(--bd-accent-24);
+  color: var(--cf-accent);
+  background: var(--cf-accent-wash);
+  border: 1px solid var(--cf-line-firm);
 }
 
 /* Le code : c'est CE bloc qu'on lit depuis l'autre bout de la salle. */
@@ -893,25 +938,25 @@
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   background: var(--bd-elev);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
+  border: 2px solid var(--cf-line);
+  color: var(--cf-text);
 }
 
 .bd-code-cell[data-state="filled"] {
-  border-color: var(--bd-accent-24);
-  color: var(--bd-accent);
+  border-color: var(--cf-line-firm);
+  color: var(--cf-accent);
   animation: bd-pill-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .bd-code-cell[data-state="active"] {
-  border-color: var(--bd-accent);
+  border-color: var(--cf-accent);
 }
 
 .bd-caret {
   width: 0.12em;
   height: 0.62em;
   border-radius: 4px;
-  background: var(--bd-accent);
+  background: var(--cf-accent);
   animation: bd-caret 1.1s steps(1, end) infinite;
 }
 
@@ -924,9 +969,9 @@
 .bd-key {
   height: var(--bd-key-size);
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--cf-line);
   background: var(--bd-elev);
-  color: #fff;
+  color: var(--cf-text);
   font-family: inherit;
   font-size: calc(var(--bd-key-size) * 0.46);
   font-weight: 700;
@@ -938,7 +983,7 @@
 .bd-key:active,
 .bd-key:focus-visible {
   transform: scale(0.96);
-  border-color: var(--bd-accent);
+  border-color: var(--cf-accent);
   outline: none;
 }
 
@@ -951,9 +996,9 @@
 }
 
 .bd-key[data-tone="accent"] {
-  background: var(--bd-accent);
-  color: var(--bd-on-accent);
-  border-color: var(--bd-accent);
+  background: var(--cf-accent);
+  color: var(--cf-on-accent);
+  border-color: var(--cf-accent);
 }
 
 .bd-pair-status {
@@ -1000,8 +1045,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(63, 174, 74, 0.14);
-  border: 3px solid rgba(63, 174, 74, 0.5);
+  background: var(--cf-surface-2);
+  border: 3px solid var(--cf-green, #3fae4a);
   color: var(--cf-green-t, #6ecf78);
   font-size: calc(var(--bd-title-size) * 0.8);
   font-weight: 900;

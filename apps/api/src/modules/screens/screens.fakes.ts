@@ -1,5 +1,5 @@
 import type { Clock } from '@sm/domain';
-import type { ScreenScene } from '@sm/contracts';
+import { marqueDeRepli, type ScreenScene } from '@sm/contracts';
 import type { RawDayHours } from './daypart';
 import type {
   BoardCategory,
@@ -59,6 +59,7 @@ export function boardIdentity(patch: Partial<BoardIdentity> = {}): BoardIdentity
     name: "Class'Food",
     logoUrl: null,
     brandColor: '#c9a15a',
+    brand: marqueDeRepli('#c9a15a', null),
     hours: classFoodHours(),
     ...patch,
   };
@@ -106,6 +107,7 @@ export function storedScreen(patch: Partial<StoredScreen> = {}): StoredScreen {
     paired: true,
     orientation: 'landscape',
     theme: 'brand',
+    scenography: 'ardoise',
     playlist: [scene({ kind: 'category', categoryId: 'cat-tacos', title: 'Tacos' })],
     lastSeenAt: null,
     active: true,
@@ -151,6 +153,7 @@ export class FakeScreensRepository {
       name: screen.name,
       orientation: screen.orientation,
       theme: screen.theme,
+      scenography: screen.scenography,
       playlist: screen.playlist,
       pairingCode: screen.pairingCode,
       pairingCodeExpiresAt: screen.pairingCodeExpiresAt,

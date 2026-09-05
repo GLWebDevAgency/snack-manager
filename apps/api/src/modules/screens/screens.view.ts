@@ -1,4 +1,9 @@
-import { SCREEN_OFFLINE_AFTER_MS, SCREEN_ORIENTATION_LABELS, SCREEN_THEME_LABELS } from '@sm/contracts';
+import {
+  SCENOGRAPHY_LABELS,
+  SCREEN_OFFLINE_AFTER_MS,
+  SCREEN_ORIENTATION_LABELS,
+  SCREEN_THEME_LABELS,
+} from '@sm/contracts';
 import type { ScreenView } from '@sm/contracts';
 import type { StoredScreen } from './screens.repository';
 
@@ -38,6 +43,8 @@ export function toScreenView(screen: StoredScreen, now: Date): ScreenView {
     orientationLabel: SCREEN_ORIENTATION_LABELS[screen.orientation],
     theme: screen.theme,
     themeLabel: SCREEN_THEME_LABELS[screen.theme],
+    scenography: screen.scenography,
+    scenographyLabel: SCENOGRAPHY_LABELS[screen.scenography],
     playlist: screen.playlist,
     sceneCount: screen.playlist.length,
     paired: screen.paired,

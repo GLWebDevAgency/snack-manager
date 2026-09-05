@@ -6,10 +6,10 @@ import { identiteDuTableau } from './menu-board.repository';
 /**
  * L'IDENTITÉ DU TABLEAU DE MENU — l'écran TV du comptoir.
  *
- * Les écrans gardent leur `theme: brand | dark | light` (spec §2) : ils ne
- * portent pas encore le masque, mais leur mode « brand » lit `brandColor`, et
- * ce champ est désormais un DÉRIVÉ. Sans ce test, la dérivation ne vivait que
- * dans une méthode de dépôt qui parle à Mongo — donc nulle part.
+ * L'écran porte le MASQUE observé, et ses deux champs plats en dérivent :
+ * `brandColor` est l'accent du masque, `logoUrl` sa marque. Sans ce test, la
+ * dérivation ne vivait que dans une méthode de dépôt qui parle à Mongo — donc
+ * nulle part.
  */
 const tenant = (patch: Record<string, unknown>) =>
   ({ _id: 'tv1', slug: 'classfood', name: 'Classfood', ...patch }) as unknown as Partial<Tenant> & {
@@ -23,6 +23,12 @@ describe('l’identité du tableau de menu', () => {
     expect(id.brandColor).toBe(DIRECTIONS.soleil.palette.accent);
     expect(id.logoUrl).toBeNull();
     expect(id.tenantId).toBe('tv1');
+  });
+
+  it('porte le masque observé, dont les champs plats dérivent', () => {
+    const id = identiteDuTableau(tenant({ brand: DIRECTIONS.soleil, brandColor: '#c9a15a' }));
+    expect(id.brand).toEqual(DIRECTIONS.soleil);
+    expect(id.brandColor).toBe(id.brand.palette.accent);
   });
 
   it('un tenant pas encore repris garde son accent BRUT', () => {

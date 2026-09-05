@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { CSSProperties } from "react";
 import type { ScreenScenePayload } from "@sm/contracts";
 import { useDailyReload, useWakeLock } from "./board-runtime";
-import { SceneLayer } from "./board-scenes";
-import { BoardHeader } from "./board-header";
-import { boardPalette } from "./board-theme";
+import { BoardStage } from "./board-stage";
 import { readDeviceToken } from "./board-store";
 import { useBoardContent } from "./use-board-content";
 import { useSceneRotation } from "./use-scene-rotation";
@@ -35,11 +32,12 @@ function formatSync(at: number | null, timezone: string | null): string {
 /**
  * L'AFFICHAGE — ce que voient les clients toute la journée.
  *
- * Plein écran, fond noir, aucun curseur, aucune barre. Le composant se contente
+ * Plein écran, aucun curseur, aucune barre. Le composant se contente
  * d'assembler : le contenu vient du cache puis du réseau, le rythme du serveur,
- * la mise à l'échelle du viewport. Tout ce qui bouge est confié au CSS —
- * `transform` et `opacity` uniquement — pour qu'une clé HDMI à 30 € tienne la
- * cadence douze heures d'affilée.
+ * la mise à l'échelle du viewport, et l'HÔTE (`BoardStage`) peint le masque du
+ * restaurant puis délègue chaque scène à la scénographie de l'écran. Tout ce
+ * qui bouge est confié au CSS — `transform` et `opacity` uniquement — pour
+ * qu'une clé HDMI à 30 € tienne la cadence douze heures d'affilée.
  */
 export function BoardDisplay() {
   const router = useRouter();
@@ -66,10 +64,6 @@ export function BoardDisplay() {
   const scenes = content?.scenes ?? NO_SCENES;
   const { current, leaving, index } = useSceneRotation(scenes);
   const stage = useStage(content?.orientation ?? null);
-  const palette = useMemo(
-    () => boardPalette(content?.brand.accent, content?.theme),
-    [content?.brand.accent, content?.theme],
-  );
 
   useWakeLock();
   useDailyReload(content?.dailyReloadAt);
@@ -84,85 +78,40 @@ export function BoardDisplay() {
     }
   }, [index, scenes]);
 
-  const brand = content?.brand ?? null;
-  const multiScene = scenes.length > 1;
-
   return (
-    <div className="bd-root bd-display" style={palette}>
-      <div
-        className="bd-stage"
-        data-orientation={stage.orientation}
-        data-ready={stage.ready ? "1" : "0"}
-        style={stage.style}
-      >
-        {brand ? (
-          <BoardHeader
-            brand={brand}
-            serviceLabel={content?.serviceLabel ?? ""}
-            open={content?.open ?? false}
-            timezone={content?.timezone ?? null}
-          />
-        ) : null}
-
-        <div className="bd-stagearea">
-          {leaving ? (
-            <SceneLayer
-              key={`out-${leaving.id}`}
-              scene={leaving}
-              phase="out"
-              orientation={stage.orientation}
-              brandName={brand?.name ?? ""}
-              logoUrl={brand?.logoUrl ?? null}
-            />
-          ) : null}
-
-          {current ? (
-            <SceneLayer
-              key={current.id}
-              scene={current}
-              phase="in"
-              orientation={stage.orientation}
-              brandName={brand?.name ?? ""}
-              logoUrl={brand?.logoUrl ?? null}
-            />
-          ) : (
-            // Ni réseau ni cache : une plaque sobre, jamais un écran noir.
-            <div className="bd-layer" data-phase="in">
-              <div className="bd-plate">
-                <div className="bd-plate-kicker">Menu Board</div>
-                <div className="bd-plate-title">
-                  {checked && !token ? "Écran non appairé" : "Chargement de la carte"}
-                </div>
-                <div className="bd-plate-line">
-                  {checked && !token
-                    ? "Redirection vers l'appairage…"
-                    : "Le dernier menu connu s'affichera dès qu'il sera disponible."}
-                </div>
-              </div>
+    <BoardStage
+      content={content}
+      current={current}
+      leaving={leaving}
+      stage={stage}
+      className="bd-display"
+      fallback={
+        // Ni réseau ni cache : une plaque sobre, jamais un écran noir.
+        <div className="bd-layer" data-phase="in">
+          <div className="bd-plate">
+            <div className="bd-plate-kicker">Menu Board</div>
+            <div className="bd-plate-title">
+              {checked && !token ? "Écran non appairé" : "Chargement de la carte"}
             </div>
-          )}
-
-          {offline ? (
-            <div className="bd-offline">
-              <span className="bd-offline-dot" />
-              Hors ligne
-              {lastSyncAt
-                ? ` · carte de ${formatSync(lastSyncAt, content?.timezone ?? null)}`
-                : ""}
+            <div className="bd-plate-line">
+              {checked && !token
+                ? "Redirection vers l'appairage…"
+                : "Le dernier menu connu s'affichera dès qu'il sera disponible."}
             </div>
-          ) : null}
+          </div>
         </div>
-
-        <div className="bd-progress">
-          {multiScene && current ? (
-            <div
-              key={current.id}
-              className="bd-progress-fill"
-              style={{ "--bd-dur": `${current.durationMs}ms` } as CSSProperties}
-            />
-          ) : null}
-        </div>
-      </div>
-    </div>
+      }
+      overlay={
+        offline ? (
+          <div className="bd-offline">
+            <span className="bd-offline-dot" />
+            Hors ligne
+            {lastSyncAt
+              ? ` · carte de ${formatSync(lastSyncAt, content?.timezone ?? null)}`
+              : ""}
+          </div>
+        ) : null
+      }
+    />
   );
 }

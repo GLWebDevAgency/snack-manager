@@ -33,7 +33,7 @@ Surcharges utiles :
 
 ---
 
-## Les cinq parcours
+## Les parcours
 
 | Fichier | Ce qu'il prouve | Durée mesurée |
 |---|---|---|
@@ -43,6 +43,7 @@ Surcharges utiles :
 | `demo/back-office.test.mjs` | un prix changé est **enregistré et relu**, et `?demo=1` survit à la navigation interne | ≈ 1,5 s |
 | `reel/prix-public.test.mjs` | connexion réelle → changement de prix → **le client le voit sur la vitrine** | ≈ 8 s |
 | `reel/suspension.test.mjs` | un restaurant suspendu **ne peut plus ouvrir sa caisse**, et **son site se ferme proprement** | ≈ 62 s |
+| `reel/ecran-apparence.test.mjs` | un écran créé, son tiroir « Apparence », **un téléviseur miniature qui joue sa boucle**, une scénographie changée puis **relue par l'API** | ≈ 15 s |
 
 Les totaux ne sont pas « vérifiés à l'absence d'erreur » : chaque montant est
 comparé au centime, à chaque étape qui le recalcule. Un supplément perdu entre

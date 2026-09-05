@@ -1,0 +1,903 @@
+/*
+ * ─────────────────────────────────────────────────────────────
+ * COMPTOIR — feuille de la scénographie « le comptoir de nuit ».
+ *
+ * Pixels de RÉFÉRENCE : l'hôte met la scène à l'échelle, cette feuille ne
+ * connaît jamais le téléviseur. Les tailles de texte viennent des variables
+ * `--ct-fs-*` posées par `composition.ts` selon l'effectif et l'orientation.
+ * Aucune couleur, aucune durée en dur : les jetons du masque sont posés par
+ * `BoardStage` sur `.bd-root`. Mouvement : transform et opacity, rien d'autre
+ * — une clé HDMI à 30 €, douze heures par jour.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+.ct {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--cf-bg);
+  color: var(--cf-text);
+  font-family: var(--cf-font-body);
+  --ct-price-font: var(--cf-font-display);
+  --ct-display-weight: 700;
+  --ct-price-weight: 700;
+}
+.ct[data-pair="brasserie"],
+.ct[data-pair="nuit"],
+.ct[data-pair="editorial"] {
+  --ct-display-weight: 600;
+  --ct-price-weight: 600;
+}
+.ct[data-pair="classique"] { --ct-price-weight: 400; }
+.ct[data-pair="brut"] { --ct-display-weight: 400; }
+.ct[data-pair="soleil"],
+.ct[data-pair="atelier"] { --ct-display-weight: 800; }
+.ct-title, .ct-name, .ct-bname, .ct-ptitle, .ct-reopen {
+  font-weight: var(--ct-display-weight);
+}
+.ct-badge, .ct-price, .ct-plab, .ct-win {
+  font-weight: var(--ct-price-weight);
+}
+.bd-root[data-prix-mono="1"] .ct {
+  --ct-price-font: var(--cf-font-mono);
+}
+.ct img {
+  display: block;
+}
+.ct [hidden] {
+  display: none !important;
+}
+
+/* ── Fond : halo d'accent et titre fantôme ── */
+
+.ct-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.ct-halo {
+  position: absolute;
+  width: 1500px;
+  height: 1500px;
+  right: -520px;
+  top: -640px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--cf-accent-wash), var(--cf-bg));
+}
+.ct-bgword {
+  position: absolute;
+  left: -24px;
+  bottom: -150px;
+  font-family: var(--cf-font-display);
+  font-size: 580px;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--cf-surface);
+  letter-spacing: -0.02em;
+}
+.ct[data-o="portrait"] .ct-bgword {
+  font-size: 400px;
+  bottom: -104px;
+}
+
+.ct-stage {
+  position: absolute;
+  inset: 0;
+  padding: 56px 64px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.ct[data-o="portrait"] .ct-stage {
+  padding: 56px 48px 60px;
+  gap: 28px;
+}
+
+/* ── En-tête de scène ── */
+
+.ct-hd {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 40px;
+  flex: none;
+}
+.ct-hd-l {
+  min-width: 0;
+  flex: 1;
+}
+.ct-eyebrow {
+  font-weight: 700;
+  font-size: var(--ct-fs-libelle);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cf-accent-ink);
+  margin-bottom: 12px;
+  line-height: 1;
+  min-height: 1em;
+}
+.ct-title {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-size: var(--ct-fs-titre);
+  line-height: 0.94;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ct-sub {
+  margin-top: 16px;
+  font-size: var(--ct-fs-desc);
+  color: var(--cf-mut);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  line-height: 1;
+  min-height: 1em;
+}
+.ct-pips {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.ct-pip {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cf-line-2);
+}
+.ct-pip[data-on="1"] {
+  width: 44px;
+  border-radius: var(--cf-r-pill);
+  background: var(--cf-accent);
+}
+.ct-hd-r {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  text-align: right;
+}
+.ct-logo {
+  max-height: 108px;
+  max-width: 360px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+/* La marque ne doit pas forcer un titre court sur deux lignes et comprimer la liste. */
+.ct[data-o="portrait"] .ct-hd-r { max-width: 28%; }
+.ct[data-o="portrait"] .ct-hd-r .ct-logo { max-width: 100%; }
+.ct-bname {
+  font-family: var(--cf-font-display);
+  font-size: 48px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.ct-svc {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: var(--ct-fs-libelle);
+  font-weight: 600;
+  color: var(--cf-mut);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ct-dot {
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: var(--cf-green);
+}
+.ct-dot[data-open="0"] {
+  background: var(--cf-red);
+}
+.ct-sep {
+  width: 1px;
+  height: 1.3em;
+  background: var(--cf-line);
+}
+.ct-clock {
+  font-weight: 800;
+  color: var(--cf-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Corps et grilles ── */
+
+.ct-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.ct-grid {
+  display: grid;
+  gap: 28px;
+  height: 100%;
+  min-height: 0;
+}
+.ct[data-disposition="g4x2"] .ct-grid {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+.ct[data-disposition="g3x2"] .ct-grid {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+.ct[data-disposition="g4x1"] .ct-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+.ct[data-disposition="g3x1"] .ct-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+.ct[data-disposition="g2x1"] .ct-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+.ct[data-disposition="g2x2"] .ct-grid {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 24px;
+}
+.ct[data-disposition="stack2"] .ct-grid {
+  grid-template-rows: repeat(2, 1fr);
+  gap: 24px;
+}
+.ct[data-disposition="list"] .ct-grid {
+  grid-template-rows: repeat(var(--ct-n), 1fr);
+  gap: 16px;
+}
+
+/* ── Boîte produit ── */
+
+.ct-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--cf-surface);
+  border-radius: var(--cf-r-md);
+  box-shadow: var(--cf-shadow-card);
+  overflow: hidden;
+  min-height: 0;
+}
+.ct-ph {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--cf-surface-2);
+  overflow: hidden;
+}
+.ct-ph img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity var(--sm-t-fast) var(--sm-ease);
+}
+/* La photo neuve arrive invisible et se fond quand elle est chargée ; l'ancienne reste dessous. */
+.ct-ph img[data-loaded="0"] {
+  opacity: 0;
+}
+.ct-photo-frame,
+.ct-photo-motion {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.ct-photo-in { animation: ct-fade var(--sm-t-fast) var(--sm-ease) both; }
+.ct-photo-out { animation: ct-fade var(--sm-t-fast) var(--sm-ease) reverse both; }
+/* Une petite source reste à sa définition native, sur le fond du masque. */
+.ct-photo-motion img[data-fit="natural"] {
+  inset: auto;
+  left: 50%;
+  top: 42%;
+  width: min(88%, var(--ct-photo-width));
+  height: min(78%, var(--ct-photo-height));
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
+.ct-tile .ct-photo-motion img[data-fit="natural"] { top: 62%; }
+[data-photo="0"] .ct-ph {
+  background: var(--cf-elev-gradient);
+}
+.ct-ghost {
+  position: absolute;
+  right: -0.06em;
+  bottom: -0.22em;
+  font-family: var(--cf-font-display);
+  font-size: 280px;
+  line-height: 1;
+  color: var(--cf-surface-3);
+  text-transform: uppercase;
+}
+.ct-dim {
+  position: absolute;
+  inset: 0;
+  background: var(--cf-bg);
+  opacity: 0;
+  transition: opacity var(--sm-t-fast) var(--sm-ease);
+}
+[data-oos="1"] .ct-dim {
+  opacity: 0.55;
+}
+.ct-badge {
+  position: relative;
+  max-width: 100%;
+  background: var(--cf-accent);
+  color: var(--cf-on-accent);
+  font-family: var(--ct-price-font);
+  font-size: var(--ct-fs-prix);
+  line-height: 1;
+  padding: 0.22em 0.42em 0.18em;
+  border-radius: var(--cf-r-sm);
+  transform: rotate(-3deg);
+  box-shadow: var(--cf-shadow-2);
+  white-space: normal;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.ct-price-part { display: inline-block; white-space: nowrap; }
+.ct-labels {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px 18px;
+}
+.ct-labels .ct-badge { margin-right: auto; }
+.ct-labels .ct-new { position: static; }
+/* Sur la photo, un fond OPAQUE : `--cf-mut` n'est garanti que sur les surfaces du masque. */
+[data-oos="1"] .ct-badge {
+  background: var(--cf-surface-2);
+  color: var(--cf-mut);
+  box-shadow: none;
+}
+.ct-new {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  font-weight: 700;
+  font-size: var(--ct-fs-libelle);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--cf-fill);
+  color: var(--cf-on-fill);
+  padding: 0.4em 0.75em;
+  border-radius: var(--cf-r-pill);
+  line-height: 1;
+}
+.ct-oos-tag {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-4deg);
+  font-family: var(--cf-font-display);
+  font-size: var(--ct-fs-nom);
+  text-transform: uppercase;
+  color: var(--cf-red-t);
+  /* `--cf-red-t` est ajusté contre `--cf-surface`, pas contre surface-2. */
+  background: var(--cf-surface);
+  border: 3px solid var(--cf-line-2);
+  border-radius: var(--cf-r-sm);
+  padding: 0.25em 0.6em;
+  line-height: 1;
+  opacity: 0;
+  white-space: nowrap;
+  transition: opacity var(--sm-t-fast) var(--sm-ease);
+}
+[data-oos="1"] .ct-oos-tag {
+  opacity: 1;
+}
+.ct-tx {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+}
+.ct-name {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-size: var(--ct-fs-nom);
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--cf-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.ct-tile .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  text-transform: none;
+  hyphens: none;
+}
+.ct-desc {
+  margin: 0;
+  font-size: var(--ct-fs-desc);
+  line-height: 1.25;
+  color: var(--cf-mut);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+[data-oos="1"] .ct-name {
+  color: var(--cf-mut);
+}
+
+/* ── Ligne (portrait, 5 à 8 produits) ── */
+
+.ct-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  background: var(--cf-surface);
+  border-radius: var(--cf-r-md);
+  box-shadow: var(--cf-shadow-soft);
+  overflow: hidden;
+  min-height: 0;
+  padding-right: 28px;
+}
+.ct-row .ct-ph {
+  flex: none;
+  width: var(--ct-thumb);
+  height: 100%;
+}
+.ct-row .ct-tx {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  gap: 6px;
+}
+.ct-row .ct-desc {
+  -webkit-line-clamp: 1;
+}
+.ct-row .ct-badge {
+  position: static;
+  flex: none;
+  max-width: 46%;
+}
+.ct-row .ct-new {
+  right: auto;
+  left: 12px;
+  top: 12px;
+}
+.ct-row .ct-oos-tag {
+  font-size: calc(var(--ct-fs-nom) * 0.6);
+}
+.ct-row[data-wide-price="1"] {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 285px;
+  grid-template-rows: 1fr;
+  gap: 16px;
+  padding: 6px 16px 6px 0;
+}
+.ct-row[data-wide-price="1"] .ct-ph {
+  grid-column: 1;
+  width: 112px;
+}
+.ct-row[data-wide-price="1"] .ct-tx { grid-column: 2; }
+.ct-row[data-wide-price="1"] .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  line-height: 1;
+  text-transform: none;
+  hyphens: none;
+}
+.ct-row[data-wide-price="1"] .ct-new {
+  left: 0;
+  max-width: 100%;
+  padding: 8px 4px;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.ct-row[data-wide-price="1"] .ct-desc { display: none; }
+.ct-row[data-wide-price="1"] .ct-badge {
+  grid-column: 3;
+  justify-self: stretch;
+  max-width: 100%;
+  padding: 0.12em 0.18em;
+  transform: none;
+}
+.ct-row[data-wide-price="1"] .ct-price-part { display: block; }
+
+/* ── Héros ── */
+
+.ct-hero {
+  position: relative;
+  border-radius: var(--cf-r-lg);
+  overflow: hidden;
+  background: var(--cf-surface-2);
+  box-shadow: var(--cf-shadow-card);
+  height: 100%;
+  min-height: 0;
+}
+.ct-hero .ct-ph {
+  position: absolute;
+  inset: 0;
+}
+.ct-hero .ct-ghost {
+  font-size: 640px;
+}
+.ct-badge-hero {
+  font-size: var(--ct-fs-heros-prix);
+}
+.ct-labels-hero {
+  inset: 36px 36px auto;
+}
+.ct-cap {
+  position: absolute;
+  left: 36px;
+  right: 36px;
+  bottom: 36px;
+  background: var(--cf-scrim);
+  border-radius: var(--cf-r-md);
+  padding: 28px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ct-name-hero {
+  font-size: var(--ct-fs-heros-nom);
+  line-height: 0.96;
+}
+/*
+ * LE VOILE ASSOMBRIT TOUJOURS LA PHOTO — en mode clair aussi (`--cf-scrim` y
+ * est de l'encre à 45 %). Le texte posé dessus est donc CLAIR dans les deux
+ * modes : en mode clair, l'encre du masque serait sombre sur sombre. On
+ * double le voile et on écrit avec la couleur du fond, la plus claire du masque.
+ */
+.bd-root[data-mode="light"] .ct-cap {
+  box-shadow: inset 0 0 0 9999px var(--cf-scrim);
+}
+.bd-root[data-mode="light"] .ct-cap .ct-name,
+.bd-root[data-mode="light"] .ct-cap .ct-desc {
+  color: var(--cf-bg);
+}
+.bd-root[data-mode="light"] .ct-cap .ct-desc {
+  opacity: 0.82;
+}
+.ct-hero .ct-desc {
+  -webkit-line-clamp: 3;
+}
+/* Sur le voile, l'encre atténuée n'a aucune garantie : l'encre pleine, un peu voilée. */
+.ct-cap .ct-desc {
+  color: var(--cf-text);
+  opacity: 0.82;
+}
+.ct-hero .ct-oos-tag {
+  font-size: var(--ct-fs-heros-nom);
+}
+
+/* ── Héros + liste latérale ── */
+
+.ct-feat {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 32px;
+  height: 100%;
+  min-height: 0;
+}
+.ct[data-o="portrait"] .ct-feat {
+  grid-template-columns: 1fr;
+  grid-template-rows: 760px 1fr;
+  gap: 24px;
+}
+.ct-side {
+  display: grid;
+  grid-template-rows: repeat(var(--ct-m), 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+.ct-srow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 2px solid var(--cf-line);
+  padding: 0 6px;
+  min-height: 0;
+}
+.ct-thumb {
+  position: relative;
+  width: var(--ct-sthumb);
+  height: var(--ct-sthumb);
+  flex: none;
+  border-radius: var(--cf-r-sm);
+  overflow: hidden;
+  background: var(--cf-surface-2);
+}
+.ct-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ct-thumb .ct-ghost {
+  font-size: calc(var(--ct-sthumb) * 1.1);
+  right: -0.04em;
+  bottom: -0.2em;
+}
+.ct-srow .ct-tx {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  gap: 4px 12px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ct-srow .ct-name {
+  -webkit-line-clamp: 1;
+}
+.ct[data-o="landscape"] .ct-srow .ct-name {
+  -webkit-line-clamp: 2;
+  line-height: 0.95;
+}
+.ct-srow .ct-new {
+  position: static;
+  font-size: calc(var(--ct-fs-libelle) * 0.85);
+}
+.ct-price {
+  font-family: var(--ct-price-font);
+  font-size: var(--ct-fs-prix);
+  color: var(--cf-accent-ink);
+  line-height: 1;
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ct-srow[data-oos="1"] .ct-price,
+.ct-srow[data-oos="1"] .ct-name {
+  color: var(--cf-mut);
+}
+.ct-srow .ct-oos-tag {
+  position: static;
+  transform: rotate(-3deg);
+  opacity: 0;
+  font-size: calc(var(--ct-fs-libelle) * 0.9);
+  border-width: 2px;
+}
+.ct-srow[data-oos="1"] .ct-oos-tag {
+  opacity: 1;
+}
+
+/* ── Offres ── */
+
+.ct-promos {
+  display: grid;
+  gap: 24px;
+  align-content: center;
+  height: 100%;
+  min-height: 0;
+}
+/* Les cartes prennent la taille de leur contenu et se centrent : une offre est
+   une annonce, pas une colonne à remplir. */
+.ct[data-o="landscape"] .ct-promos[data-count="3"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+.ct[data-o="landscape"] .ct-promos[data-count="2"] {
+  grid-template-columns: repeat(2, 1fr);
+}
+.ct-promo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 36px;
+  background: var(--cf-surface);
+  border-radius: var(--cf-r-md);
+  padding: 48px 48px 52px;
+  box-shadow: var(--cf-shadow-soft);
+  min-height: 0;
+  border-top: 6px solid var(--cf-green);
+}
+.ct-promos[data-count="1"] .ct-promo {
+  flex-direction: row;
+  align-items: center;
+  gap: 48px;
+}
+.ct-ptx {
+  flex: 1;
+  min-width: 0;
+}
+.ct-ptitle {
+  margin: 0;
+  font-family: var(--cf-font-display);
+  font-size: var(--ct-fs-heros-nom);
+  text-transform: uppercase;
+  line-height: 1;
+  letter-spacing: -0.005em;
+}
+.ct-pdesc {
+  margin: 12px 0 0;
+  font-size: var(--ct-fs-desc);
+  color: var(--cf-mut);
+  line-height: 1.25;
+}
+.ct-plab {
+  align-self: flex-start;
+  background: var(--cf-green);
+  color: var(--cf-on-green);
+  font-family: var(--ct-price-font);
+  font-size: var(--ct-fs-heros-prix);
+  line-height: 1;
+  padding: 0.24em 0.4em 0.2em;
+  border-radius: var(--cf-r-sm);
+  transform: rotate(-3deg);
+  box-shadow: var(--cf-shadow-2);
+  white-space: nowrap;
+}
+
+/* ── Fermé et plaque de marque ── */
+
+.ct-closed {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+}
+.ct-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1500px;
+  height: 1500px;
+  margin: -750px 0 0 -750px;
+  border: 3px dashed var(--cf-line);
+  border-radius: 50%;
+  animation: ct-spin linear infinite;
+}
+.ct-cbox {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  max-width: 1400px;
+}
+.ct-logo-big {
+  max-height: 220px;
+  max-width: 640px;
+}
+.ct-bname-big {
+  font-size: 120px;
+}
+.ct-reopen {
+  font-family: var(--cf-font-display);
+  font-size: var(--ct-fs-nom);
+  text-transform: uppercase;
+  color: var(--cf-accent-ink);
+  line-height: 1;
+}
+.ct-wins {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ct-win {
+  font-family: var(--ct-price-font);
+  font-size: var(--ct-fs-prix);
+  background: var(--cf-surface-2);
+  border: 2px solid var(--cf-line-2);
+  color: var(--cf-text);
+  padding: 0.3em 0.7em;
+  border-radius: var(--cf-r-pill);
+  line-height: 1;
+  white-space: nowrap;
+}
+.ct-subtxt-big {
+  margin: 0;
+  font-size: var(--ct-fs-desc);
+  color: var(--cf-mut);
+  max-width: 26ch;
+  line-height: 1.3;
+}
+.ct-svc-line {
+  font-weight: 700;
+  font-size: var(--ct-fs-libelle);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-mut);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Mouvement — transform et opacity exclusivement
+ * ───────────────────────────────────────────────────────────── */
+
+@keyframes ct-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ct-drift {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-1.6%, -1.2%);
+  }
+}
+@keyframes ct-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ct-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* L'entrée : chaque pièce monte en cascade, l'en-tête d'abord. */
+.ct-it {
+  animation: ct-rise var(--sm-t-med) var(--sm-ease) both;
+  animation-delay: calc(var(--sm-t-snap) * var(--i, 0));
+}
+/* La dérive du héros dure exactement la scène (durée posée en ligne), jouée une fois. */
+.ct-drift {
+  animation-name: ct-drift;
+  animation-timing-function: var(--sm-ease);
+  animation-fill-mode: both;
+}
+/* Le fondu d'une mise à jour en place : le texte s'efface, se remplace, revient. */
+[data-fade="1"] {
+  opacity: 0;
+}
+.ct-name,
+.ct-desc,
+.ct-title,
+.ct-eyebrow,
+.ct-subtxt,
+.ct-ptitle,
+.ct-pdesc,
+.ct-plab {
+  transition: opacity var(--sm-t-fast) var(--sm-ease);
+}
+
+/* L'hôte glisse ses couches ; Comptoir a sa propre cascade : la couche entrante ne fait qu'un fondu. */
+.bd-root[data-scenography="comptoir"] .bd-layer[data-phase="in"] {
+  animation: ct-fade var(--sm-t-fast) var(--sm-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct *,
+  .ct *::before,
+  .ct *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { ScreenOrientation, ScreenScene, ScreenTheme } from '@sm/contracts';
+import type { Scenography, ScreenOrientation, ScreenScene, ScreenTheme } from '@sm/contracts';
 import type { Screen } from '@sm/db';
 
 /**
@@ -20,6 +20,7 @@ export interface StoredScreen {
   readonly paired: boolean;
   readonly orientation: ScreenOrientation;
   readonly theme: ScreenTheme;
+  readonly scenography: Scenography;
   readonly playlist: ScreenScene[];
   readonly lastSeenAt: Date | null;
   readonly active: boolean;
@@ -29,6 +30,7 @@ export interface NewScreen {
   readonly name: string;
   readonly orientation: ScreenOrientation;
   readonly theme: ScreenTheme;
+  readonly scenography: Scenography;
   readonly playlist: ScreenScene[];
   readonly pairingCode: string;
   readonly pairingCodeExpiresAt: Date;
@@ -38,6 +40,7 @@ export interface ScreenPatch {
   readonly name?: string;
   readonly orientation?: ScreenOrientation;
   readonly theme?: ScreenTheme;
+  readonly scenography?: Scenography;
   readonly playlist?: ScreenScene[];
   readonly active?: boolean;
 }
@@ -69,9 +72,10 @@ export function invalidSceneIds(playlist: readonly ScreenScene[]): string[] {
   return invalid;
 }
 
-type RawScreen = Screen & { _id: unknown };
+export type RawScreen = Screen & { _id: unknown };
 
-function toStored(raw: RawScreen): StoredScreen {
+/** Exporté pour le test du champ absent : `.lean()` n'applique aucun défaut de schéma. */
+export function toStored(raw: RawScreen): StoredScreen {
   return {
     id: String(raw._id),
     tenantId: String(raw.tenantId),
@@ -81,6 +85,8 @@ function toStored(raw: RawScreen): StoredScreen {
     paired: raw.paired === true,
     orientation: (raw.orientation ?? 'landscape') as ScreenOrientation,
     theme: (raw.theme ?? 'brand') as ScreenTheme,
+    // Les écrans antérieurs au champ gardent l'écran qu'ils ont toujours eu.
+    scenography: (raw.scenography ?? 'ardoise') as Scenography,
     playlist: (raw.playlist ?? []).map((s) => ({
       kind: s.kind as ScreenScene['kind'],
       categoryId: s.categoryId ? String(s.categoryId) : null,

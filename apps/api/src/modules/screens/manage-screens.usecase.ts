@@ -1,8 +1,7 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   PAIRING_CODE_TTL_MS,
   type ScreenCreate,
-  type ScreenScene,
   type ScreenUpdate,
   type ScreenView,
 } from '@sm/contracts';
@@ -10,16 +9,9 @@ import { CLOCK, type Clock } from './screens.tokens';
 import { buildDefaultPlaylist } from './default-playlist';
 import { MenuBoardRepository } from './menu-board.repository';
 import { generatePairingCode } from './pairing-code';
-import { ScreensRepository, invalidSceneIds } from './screens.repository';
+import { assertPlaylistIsReadable } from './playlist-lisible';
+import { ScreensRepository } from './screens.repository';
 import { toScreenView } from './screens.view';
-
-/** Un identifiant de scène illisible vaut une erreur de saisie, pas un 500. */
-function assertPlaylistIsReadable(playlist: readonly ScreenScene[] | undefined): void {
-  const invalid = invalidSceneIds(playlist ?? []);
-  if (invalid.length > 0) {
-    throw new BadRequestException(`Identifiants de scène invalides : ${invalid.join(', ')}`);
-  }
-}
 
 /**
  * CAS D'USAGE — le back-office des écrans (rôles owner / gérant).
@@ -62,6 +54,7 @@ export class ManageScreens {
       name: dto.name,
       orientation: dto.orientation,
       theme: dto.theme,
+      scenography: dto.scenography,
       playlist:
         dto.playlist ??
         (snapshot ? buildDefaultPlaylist(snapshot.categories, snapshot.products) : []),
