@@ -71,14 +71,14 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
     nav: "Les services",
     badge: "Prix affichés",
     title: "Six services, six prix. Écrits ici.",
-    lead: "Une agence répond par un devis. Nous, on affiche la grille : voici ce qu’on fait, et ce que ça coûte.",
+    lead: "Des repères de prix pour choisir. Le devis fixe le périmètre de votre site sur mesure et les éventuels frais récurrents.",
   },
   {
     id: "maquette",
     nav: "Le site, sans risque",
     badge: "Si vous prenez le site",
     title: "Le site ? Vous le voyez avant de payer.",
-    lead: "Pour ce service-là, on dessine d’abord : la maquette est offerte, montrée avant tout engagement — et votre menu est déjà dedans.",
+    lead: "Nous vous présentons la direction du site avant engagement. Votre vitrine est sur mesure ; ses boutons Commander ouvrent votre application de commande.",
   },
   {
     id: "agence",
@@ -87,7 +87,7 @@ export const ATELIER_SECTIONS: readonly AtelierSectionMeta[] = [
     // Le titre AFFIRME au lieu d'opposer : tout ce qu'une agence fait, plus
     // ce qu'elle n'aura jamais — le comptoir, la caisse, la carte.
     title: "Tout d’une agence, avec le comptoir en plus.",
-    lead: "Quatre raisons, toutes vérifiables sur cette page — chiffres à l’appui.",
+    lead: "Une création sur mesure, un interlocuteur identifié et un lien clair vers vos outils de commande.",
   },
 ] as const;
 
@@ -141,7 +141,7 @@ export const ATELIER_SHOTS = {
 export const ATELIER_HERO = {
   badge: "L’Atelier",
   title: "Un restaurant, c’est aussi une image. On s’en occupe pour vous.",
-  lead: "La fiche Google, les réseaux, le site, l’identité visuelle : de la communication tenue par l’artisan local qui fait déjà tourner votre caisse. Zéro commission sur vos ventes, et les services mensuels sans engagement, résiliables à tout moment.",
+  lead: "La fiche Google, les réseaux, le site, l’identité visuelle : un interlocuteur pour votre présence en ligne, avec ou sans notre caisse. Prestations sur mesure et services mensuels se choisissent séparément, selon un périmètre convenu.",
   /** La pastille à pouls doré — LE message anti-confusion, épinglé dès l'ouverture. */
   chip: "Chaque service se choisit seul, à la carte",
   price: "des prix affichés, noir sur blanc",
@@ -191,8 +191,8 @@ export const PARCOURS_STEPS: readonly { when: string; title: string; line: strin
 export const MAQUETTE_POINTS: readonly string[] = [
   "La maquette de votre site est dessinée sur mesure, et montrée avant tout engagement.",
   "Vous validez sur pièce : ce que vous voyez est ce qui part en ligne.",
-  "Votre menu est déjà dedans : le site affiche la carte de votre caisse.",
-  "Un prix change, un plat saute ? Vous le faites au back-office, le site suit — votre carte en ligne est toujours la bonne.",
+  "Votre site vitrine peut se choisir seul, sans abonnement à la caisse.",
+  "Les boutons Commander renvoient au module personnalisé. La carte et les prix de ce module se gèrent dans son back-office.",
 ] as const;
 
 /* ── 3. Et pas une agence ────────────────────────────────────── */
@@ -219,7 +219,7 @@ export const AGENCE_ROWS: readonly AgenceRow[] = [
   },
   {
     label: "Le logiciel derrière",
-    line: "La caisse, le site, la fiche Google et les réseaux sur une seule facture — nous sommes les seuls à le faire, et votre site est branché sur la carte de votre caisse.",
+    line: "La vitrine et les applications partagent votre identité. Le site reste sur mesure ; la commande et la fidélité s’activent selon votre besoin, avec leur propre back-office.",
   },
 ] as const;
 
@@ -242,5 +242,5 @@ export const ATELIER_CTA = {
    * l'Atelier tourne en service réel — un FAIT du site (la frise des jalons
    * le date), jamais un chiffre inventé.
    */
-  proof: "Le logiciel derrière l’Atelier tourne en service réel 7 j/7 — et les prix que vous venez de lire sont les vrais.",
+  proof: "Class’Food est notre restaurant pilote. Chaque prestation, ses livrables et ses conditions sont précisés avant signature.",
 } as const;

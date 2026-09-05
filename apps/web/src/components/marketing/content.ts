@@ -22,6 +22,7 @@ import type {
   CAPACITES as CapacitesContrat,
   CAPACITES_PAR_FORMULE as CatalogueContrat,
 } from "@sm/contracts";
+import { COMMERCE_PRICES } from "@sm/contracts/commerce";
 
 export const CONTACT_EMAIL = "contact@snackmanager.fr";
 
@@ -104,8 +105,8 @@ export const GRILLES_ACCORDÉES: MêmeGrille<typeof PLAN_MONTHLY_CENTS, typeof P
  * comprend. Elle a longtemps vécu dans le seul texte de la section services :
  * l'addition de la grille l'ignorait donc, et se trompait de 55 €.
  */
-export const MODULE_MONTHLY_CENTS = 7_900;
-export const MODULE_SETUP_CENTS = 5_500;
+export const MODULE_MONTHLY_CENTS = COMMERCE_PRICES.collectMonthlyCents;
+export const MODULE_SETUP_CENTS = COMMERCE_PRICES.setupCents;
 
 /**
  * LA PRESTATION AU DEVIS — ET ELLE EST UN NOMBRE, MAINTENANT.
@@ -358,7 +359,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     // à la main : à la révision de grille, la section qui compare nos prix à
     // ceux de l'organisation actuelle a continué d'annoncer un montant que la
     // section juste au-dessus démentait. Il se dérive maintenant.
-    title: `${euros(PLAN_MONTHLY_CENTS.complet)} par mois. Et là, aujourd'hui, vous perdez combien ?`,
+    title: "Chiffrez votre organisation actuelle.",
   },
   {
     id: "lancement",
@@ -677,13 +678,13 @@ export const VS_WITHOUT = [
   // Sans outil, la masse salariale est CONSTATÉE, jamais décidée.
   "La masse salariale, vous la découvrez en fin de mois",
   "Un site qui ne prend pas les commandes",
-  "Jusqu'à 30 % prélevés sur chaque commande livrée — et le client reste le leur",
+  "Des frais par commande, à comparer sur votre contrat réel",
 ] as const;
 
 export const VS_WITH = [
   "Une seule plateforme — caisse, cuisine, back-office, commande en ligne",
   "La caisse calcule, imprime le ticket cuisine et le sticker du sac",
-  "Une heure pour qu'une nouvelle recrue tienne la caisse",
+  "Une prise en main accompagnée, sur votre propre carte",
   "Le planning affiche ce que la semaine va coûter avant que vous validiez",
   "Votre page de commande en ligne, à vos couleurs, sur votre nom de domaine",
   "Votre lien de commande sur votre fiche Google, marqué « préféré par l'établissement »",
@@ -724,7 +725,7 @@ export const CATALOGUE: CatalogueColumn[] = [
       { strong: "Sur place, à emporter, téléphone", post: " — même écran" },
       { pre: "Tacos sur-mesure, passage en menu (+2,50 €) en un tap" },
       { pre: "Totaux, rendu monnaie, CB / espèces / au retrait" },
-      { strong: "Ticket cuisine + sticker sac", post: " imprimés" },
+      { strong: "Ticket cuisine + sticker sac", post: " sur matériel compatible validé" },
       { pre: "Appairage par code à six caractères, révocable" },
     ],
   },
@@ -737,7 +738,7 @@ export const CATALOGUE: CatalogueColumn[] = [
       { pre: "« À lancer » agrégé : 3 frites, 2 tacos… en un coup d'œil" },
       { pre: "Minuteur couleur par commande, alerte sonore" },
       { pre: "Numéro de retrait pour appeler le client" },
-      { strong: "Mode hors-ligne", post: " avec resynchronisation" },
+      { strong: "Tickets déjà reçus", post: " conservés pendant une coupure" },
     ],
   },
   {
@@ -754,7 +755,7 @@ export const CATALOGUE: CatalogueColumn[] = [
   },
   {
     name: "Back-office",
-    device: "Web, côté gérant — 14 écrans",
+    device: "Web, côté gérant — selon les modules choisis",
     demo: 3,
     items: [
       { strong: "CA, commandes et stats", post: " en direct, exports CSV" },
@@ -973,7 +974,7 @@ export const DEMO_APPS: DemoApp[] = [
     device: "tablet",
     shot: { src: "/shots/pos.png", alt: "Caisse : catalogue, configurateur produit et ticket en cours" },
     lead: "Caisse.",
-    body: " Menus cadrés, totaux automatiques, ticket cuisine et sticker sac imprimés — prise en main en une heure, même pour une nouvelle recrue.",
+    body: " Menus cadrés, totaux automatiques, suivi cuisine — avec une prise en main accompagnée sur votre carte. Impression sur matériel compatible validé.",
     live: {
       href: demoHref(DEMO_ORIGINS.pos),
       cta: "Essayer la caisse",
@@ -1070,7 +1071,7 @@ export const DEMO_FALLBACK = "La démonstration ne répond pas — voici l'écra
  * l'endroit où l'on se demande à qui on donne son numéro.
  */
 export const PILOTE_SIGNATURE =
-  "Ce que vous venez de manipuler tourne à Class'Food, Perriers-sur-Andelle, midi et soir, 7 j/7.";
+  "Class'Food, à Perriers-sur-Andelle, est notre restaurant pilote. Les démonstrations présentent des données d'exemple.";
 
 /* ── 4. Nos services + — ce qu'on fait, en plus du logiciel ──── */
 
@@ -1163,9 +1164,9 @@ export const SERVICES: readonly Service[] = [
     id: "site",
     title: "Votre site, maquette montrée d’abord",
     lead: "La maquette d’abord — vous validez sur pièce.",
-    line: "On dessine la maquette de votre site et on vous la montre AVANT tout engagement. Contenus posés, référencement local, mise en ligne — et votre menu est déjà dedans, branché sur la caisse : un prix change au back-office, le site suit.",
-    price: euros(ATELIER_CENTS.site),
-    priceNote: `une fois, avec une formule · refonte de l’existant : ${euros(ATELIER_CENTS.refonte)}`,
+    line: "Une vitrine sur mesure, à votre image, avec des boutons Commander vers votre page de commande personnalisée. Le site peut se choisir seul. Le menu et les prix de la commande se règlent dans votre back-office.",
+    price: aPartirDe(ATELIER_CENTS.site),
+    priceNote: `prestation ponctuelle sur devis, sans formule obligatoire · domaine, hébergement et maintenance précisés au devis · refonte dès ${euros(ATELIER_CENTS.refonte)}`,
   },
   {
     id: "reseaux",
@@ -1189,7 +1190,7 @@ export const SERVICES: readonly Service[] = [
     id: "commande",
     title: "Commande en ligne & fidélité",
     lead: "Le click and collect et la carte de fidélité, dans la même page.",
-    line: "Un habitué qui commande chez vous en direct paie le prix affiché en salle — pas celui qu'il faut gonfler pour absorber 30 % de commission et des frais de service. Ses points se cumulent tout seuls à chaque commande, et le client est le vôtre : son numéro, son historique, ses habitudes. En ligne dès l'ouverture du compte, à vos couleurs — ou greffée sur le site que vous avez déjà.",
+    line: "Une page de commande à vos couleurs, votre carte, vos créneaux et un back-office pour traiter les commandes, même sans notre caisse. La carte de fidélité est incluse : vous définissez points ou tampons et récompenses. L'attribution des avantages suit le parcours activé pour votre établissement.",
     // Le module est vendu deux fois sur la page — ici, et sous la grille
     // (`MODULE_ADDON`). Les deux montants descendent des mêmes constantes :
     // c'est le seul service dont le prix est répété, donc le seul qui pouvait
@@ -1215,7 +1216,7 @@ export const SERVICES: readonly Service[] = [
  */
 export const DIRECT_DELIVERY = {
   lead: "Vous livrez ?",
-  line: "Vous continuez comme aujourd'hui — vos tournées, vos horaires. Personne ne s'intercale entre votre cuisine et votre client.",
+  line: `L'offre Click & collect + livraison est prévue à ${euros(COMMERCE_PRICES.deliveryMonthlyCents)} HT/mois, fidélité incluse. Livraison assurée par votre restaurant. Activation après validation du parcours pilote ; aucun livreur tiers fourni.`,
 } as const;
 
 /**
@@ -1273,17 +1274,17 @@ export const ATELIER_SERVICES: readonly Service[] = [
     id: "site",
     title: "Site vitrine clé en main",
     lead: "Votre site, dessiné pour vous — et la maquette est montrée avant tout engagement.",
-    line: "Maquette sur mesure, contenus posés, référencement local, mise en ligne. Avec une formule Snack Manager, qui héberge le site et le fait vivre : votre menu est déjà dedans, et il suit la caisse.",
-    price: euros(ATELIER_CENTS.site),
-    priceNote: "une fois, avec une formule Snack Manager",
+    line: "Une vitrine simple et sur mesure : présentation, photos, horaires et contact. Ses boutons Commander ouvrent votre module personnalisé, si vous le souscrivez. Le site reste indépendant de votre choix de logiciel de caisse.",
+    price: aPartirDe(ATELIER_CENTS.site),
+    priceNote: "prestation ponctuelle sur devis · domaine, hébergement, maintenance et modifications précisés avant signature",
   },
   {
     id: "refonte",
     title: "Refonte de votre site existant",
     lead: "Vous avez déjà un site ? On le reprend en entier.",
-    line: "Reprise complète sur notre moteur : la maquette redessinée, vos contenus repris — et un site qui parle enfin à votre caisse, au lieu de vivre sa vie dans son coin.",
-    price: euros(ATELIER_CENTS.refonte),
-    priceNote: "une fois",
+    line: "Structure, identité, contenus et navigation repris sur mesure. Les appels à commander mènent au module Snack Manager si vous le choisissez ; votre site et votre commande gardent chacun leur rôle.",
+    price: aPartirDe(ATELIER_CENTS.refonte),
+    priceNote: "prestation ponctuelle, périmètre et reprise de l'existant sur devis",
   },
   {
     id: "identite",
@@ -1313,7 +1314,7 @@ export const ATELIER_SERVICES: readonly Service[] = [
     id: "integration",
     title: "Commande en ligne sur votre site",
     lead: "Vous gardez votre site : on y greffe notre module, sans commission.",
-    line: "Votre site actuel reste en place ; on y intègre notre module de commande — le même configurateur que la caisse, le ticket droit en cuisine, et zéro commission sur vos ventes.",
+    line: "Votre site reste en place : nous relions ses boutons Commander à votre page de commande personnalisée. Vous gérez carte, horaires, paiements et commandes depuis le back-office inclus, sans souscrire à notre caisse.",
     price: `${euros(MODULE_MONTHLY_CENTS)} / mois`,
     priceNote: `+ mise en service ${euros(ATELIER_CENTS.integration)}, une fois — tout compris`,
   },
@@ -1415,7 +1416,7 @@ export const HARDWARE_PATHS = [
  */
 export const HARDWARE_OFFLINE = {
   lead: "Et si le réseau tombe ?",
-  line: "La caisse et la cuisine continuent en local : les tickets restent affichés et s'impriment. Tout se resynchronise au retour du réseau.",
+  line: "La caisse conserve localement les commandes saisies et les renvoie à la reconnexion. La cuisine garde les tickets déjà reçus. Les nouvelles commandes ne passent pas d'une tablette à l'autre sans connexion ; commande et paiement en ligne nécessitent internet. L'impression dépend du matériel et du réseau local validés.",
 } as const;
 
 /* ── 6. Tarifs — les commissions, puis la grille ─────────────── */
@@ -1443,9 +1444,8 @@ export const HARDWARE_OFFLINE = {
  */
 export const COMMISSIONS = [
   { who: "Snack Manager", rate: "0 %", note: "un abonnement mensuel, rien de prélevé sur vos commandes" },
-  { who: "Les plateformes", rate: "jusqu'à 30 %", note: "sur chaque commande livrée, et le client reste le leur" },
-  { who: "Encaissement carte", rate: "≈ 1,5 %", note: "votre prestataire de paiement — cet argent ne nous revient pas" },
-  { who: "Les caisses « gratuites »", rate: "1 à 2 % + frais fixes", note: "sur chaque encaissement carte — plus le ticket est petit, plus le taux réel monte" },
+  { who: "Encaissement carte", rate: "Selon contrat", note: "frais du prestataire de paiement, variables selon la carte et le moyen utilisé" },
+  { who: "Livraison du restaurant", rate: "À votre charge", note: "personnel, déplacement et frais de livraison éventuels restent distincts du logiciel" },
 ] as const;
 
 /**
@@ -1457,39 +1457,7 @@ export const COMMISSIONS = [
  * leurs grilles bougent, la nôtre ne doit jamais afficher un chiffre périmé.
  */
 export const PRICING_PERIMETER =
-  "Avant de comparer les prix, comparez les périmètres : ailleurs, la caisse, l'écran cuisine, le planning et la commande en ligne s'additionnent souvent en deux ou trois abonnements séparés. Ici, une formule les couvre — comparez les totaux, pas les prix d'appel.";
-
-/**
- * LE COMPARATEUR DE LA « CAISSE GRATUITE » — la quatrième ligne du tableau,
- * rendue manipulable.
- *
- * Même contrat d'honnêteté que le simulateur : le seul chiffre de résultat est
- * celui que le visiteur fabrique de ses propres curseurs. Le taux comparé
- * n'est pas une hypothèse maison — c'est la grille publique type des caisses à
- * commission (1,3 % + 0,20 € par encaissement), remplaçable en démo par celle
- * que le prospect s'est réellement vu proposer.
- *
- * LES FRAIS FIXES SONT TOUTE L'HISTOIRE. 0,20 € sur une addition de 60 € ne se
- * voient pas ; sur un kebab à 8 €, c'est 2,5 points de plus. Un snack fait
- * beaucoup de passages pour de petits montants : la « gratuité » se paie
- * précisément là. D'où le taux réel affiché sous le montant — c'est lui que le
- * restaurateur retient, parce qu'il peut le refaire de tête.
- */
-export const COMPARE_RATE = 0.013;
-export const COMPARE_FIXED_CENTS = 20;
-
-export const COMPARE = {
-  lead: "Et la caisse « gratuite », elle coûte combien ?",
-  line: "Vos encaissements carte, votre ticket moyen — et la commission devient un montant par an, posé en face de l'abonnement.",
-  fields: {
-    volume: { label: "Encaissements carte par mois", min: 5_000, max: 60_000, step: 1_000 },
-    ticket: { label: "Ticket moyen", min: 6, max: 30, step: 0.5 },
-  },
-  resLabel: "Prélevé chaque année par une caisse à commission",
-  rateRow: "Taux réel sur un ticket",
-  boostRow: "Boost, tout compris, à l'année",
-  note: "Taux type des caisses à commission : 1,3 % + 0,20 € par encaissement, relevé sur leurs grilles publiques — en démo, on le remplace par celui qu'on vous a proposé. Avec nous, vos encaissements restent sur votre TPE actuel, aux conditions déjà négociées avec votre banque : nous n'y touchons pas.",
-} as const;
+  "Comparez le coût complet à périmètre égal : abonnement, matériel, installation, paiement et livraison. Choisissez une application seule ou une suite ; une fonction déjà incluse n'est jamais refacturée en option.";
 
 /**
  * LA LISTE DE MODULES EST UNIQUE, ET C'EST TOUTE LA REFONTE DE LA GRILLE.
@@ -1539,6 +1507,7 @@ export const PLAN_MODULES = [
   { id: "online", label: "Commande en ligne & click and collect" },
   { id: "loyalty", label: "Fidélité, codes promo & comptes clients" },
   { id: "priority", label: "Support prioritaire" },
+  { id: "delivery", label: "Livraison par votre restaurant — option, validation pilote" },
 ] as const satisfies readonly PlanModule[];
 
 /**
@@ -1717,7 +1686,7 @@ export const PLANS: Plan[] = [
     id: "boost",
     name: "Boost",
     ...planPrices(PLAN_MONTHLY_CENTS.boost),
-    desc: "Tout, commande en ligne comprise. Vos clients commandent chez vous.",
+    desc: "Tout Complet, plus le click & collect, la fidélité et le support prioritaire. Livraison en option.",
     modules: MODULES_BOOST,
   },
 ];
@@ -1742,7 +1711,7 @@ export const MODULE_ADDON = {
    * ligne que Boost fait disparaître.
    */
   setup: `${euros(MODULE_SETUP_CENTS)} de mise en service, la première fois`,
-  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Se branche sur Essentiel ou sur Complet — les deux sont déjà compris dans Boost.`,
+  line: `${euros(MODULE_SETUP_CENTS)} de mise en service la première fois. Disponible seul, avec Essentiel ou Complet ; déjà compris dans Boost. La livraison reste une option distincte.`,
 } as const;
 
 /**
@@ -1861,7 +1830,7 @@ export const PRICING_MATH: PricingMath = {
  * et de la carte présentée, et nous ne le fixons pas.
  */
 export const PRICING_FOOTNOTE =
-  "* Aucune commission sur vos ventes. Seuls s'appliquent les frais d'encaissement de votre prestataire de paiement — environ 1,5 % par transaction carte — que vous régleriez avec n'importe quelle solution de paiement en ligne.";
+  "* 0 % de commission Snack Manager sur les commandes. Les frais de paiement Stripe, le matériel, les prestations et les coûts de livraison restent distincts. Les frais de paiement dépendent notamment du moyen utilisé et de votre contrat. Prix logiciels HT par établissement.";
 
 /* ── 7. Le calcul — simulateur ───────────────────────────────── */
 
@@ -1882,21 +1851,14 @@ export const SIM_LEAD = {
   // « On n'ajoute pas un outil » ouvrait par une négation : le bénéfice
   // passe devant (fondateur, 25/08) — le titre donne, la ligne invite à
   // compter sur SES chiffres, ce que le simulateur fait juste en dessous.
-  title: "On vous rend des heures.",
-  line: "Comptez-les ci-dessous, avec vos chiffres à vous.",
+  title: "Un point de départ pour décider.",
+  line: "Renseignez vos coûts actuels. Le calcul sert à préparer votre essai, pas à prédire vos économies.",
 } as const;
 
 /**
  * L'AMORCE, RAMENÉE DE SOIXANTE MOTS À DEUX LIGNES, ses deux montants sortis
  * en cases de chiffres — ils se lisaient noyés au milieu d'un paragraphe.
  */
-export const SIM_ESC = {
-  line: "Une commande mal relue, c'est un plat refait. Deux par service, midi et soir, 7 j/7.",
-  figures: [
-    { fig: "≈ 5,75 €", label: "le plat qu'on refait" },
-    { fig: "≈ 700 €", label: "par mois, à la poubelle" },
-  ],
-} as const;
 
 /**
  * LES DEUX HYPOTHÈSES EXTÉRIEURES, EN CORPS DE TEXTE SOUS LES CURSEURS —
@@ -1922,7 +1884,7 @@ export const SIM_ESC = {
  * ce dépliable — disponible pour qui cherche, silencieux pour les autres.
  */
 export const SIM_NOTES =
-  "Hypothèses prudentes, ajustées ensemble en démo : coût horaire chargé 13 €/h (SMIC restauration 2026 + charges) · commande refaite ≈ 50 % du panier · appel ≈ 3 min + 1 min d'interruption/reprise de poste, 60 % des appels migrent en ligne · erreurs −35 % (Deliverect, 2023) · 2 services/jour, 30,4 jours/mois.";
+  "Coût actuel déclaré = heures de coordination par mois × coût horaire saisi + plats refaits par mois × coût matière saisi. Renseignez les valeurs de votre établissement. Aucun taux de réduction ni gain de ventes n'est supposé. Un temps gagné ne devient une économie de trésorerie que si une dépense est effectivement évitée.";
 
 /**
  * LA PHRASE QUI RECOUD LA PAGE.
@@ -1964,17 +1926,17 @@ export const MILESTONES: readonly Milestone[] = [
   {
     when: "Semaine 1",
     title: "La configuration",
-    lines: ["Menu, équipe, couleurs, moyens de paiement, imprimante.", "C'est nous qui la faisons, pas vous."],
+    lines: ["Configuration des modules choisis et validation du matériel.", "Le périmètre et la date sont convenus avec vous."],
   },
   {
     when: "Jour d'ouverture",
     title: "On est là",
-    lines: ["Midi et soir, dans votre cuisine.", "Le premier service se passe avec nous."],
+    lines: ["Un premier service accompagné, sur rendez-vous.", "À distance ou sur place, selon votre devis."],
   },
   {
     when: "Ensuite",
     title: "On reste",
-    lines: ["Mises à jour incluses, support, corrections.", "Vos données exportables quand vous voulez."],
+    lines: ["Mises à jour incluses, support, corrections.", "Exports disponibles et réversibilité précisés au contrat."],
   },
 ] as const;
 
@@ -2003,7 +1965,7 @@ export const FAQ = [
   },
   {
     q: "Vous avez combien de clients ?",
-    a: "Un. Class'Food, à Perriers-sur-Andelle, en service 7 j/7 : c'est notre restaurant pilote, et chaque écran y est testé midi et soir. Nous ouvrons dix places de lancement — vous seriez parmi les dix premiers, et vous payez moitié prix pendant votre première année, sur tout ce que vous signez : l'abonnement, la commande en ligne, et votre site si vous en prenez un.",
+    a: "Class'Food, à Perriers-sur-Andelle, est notre restaurant pilote. Nous présentons les fonctions en démonstration et validons votre configuration avec vous avant le lancement. Les conditions de l'offre fondateur sont précisées dans votre devis.",
   },
   {
     q: "Y a-t-il un engagement de durée ?",
@@ -2019,7 +1981,7 @@ export const FAQ = [
     // des « frais de service » au client final, et ça se sait. La question se
     // pose donc chez nous aussi ; y répondre avant qu'elle soit posée vaut
     // mieux que laisser le prospect supposer.
-    a: "Non, jamais. Ni frais de service, ni frais d'application, ni majoration en ligne : le prix affiché sur votre carte est celui que paie votre client. Nous ne prélevons rien sur vos ventes — nos revenus sont l'abonnement et les prestations affichées.",
+    a: "Snack Manager n'ajoute pas de frais d'application au client. Vous fixez les prix de votre carte et, si la livraison est activée, ses frais éventuels sont affichés avant paiement. Les frais de votre prestataire de paiement restent à votre charge selon son contrat.",
   },
   {
     q: "Acceptez-vous les titres-restaurant ?",
@@ -2027,11 +1989,19 @@ export const FAQ = [
   },
   {
     q: "Est-ce que vous livrez ?",
-    a: "Non, et nous n'avons jamais eu l'intention de le faire. Le tunnel de commande s'arrête au créneau de retrait. La livraison, quand il y en a une, reste la vôtre — vos tournées, vos horaires.",
+    a: DIRECT_DELIVERY.line,
   },
   {
     q: "À qui appartiennent mes données ?",
-    a: "À vous. Ventes, clients, menus : tout est exportable à tout moment (CSV), hébergé en Europe.",
+    a: "Vous gardez la maîtrise des données de votre établissement. Les exports disponibles dans votre back-office sont inclus ; nous précisons la restitution des autres données et les conditions d'hébergement dans votre contrat.",
+  },
+  {
+    q: "Puis-je prendre la fidélité ou la commande sans votre caisse ?",
+    a: `Oui. La fidélité seule est à ${euros(COMMERCE_PRICES.loyaltyMonthlyCents)} HT/mois. Le click & collect à ${euros(MODULE_MONTHLY_CENTS)} HT/mois comprend la fidélité et le back-office nécessaire. Votre site vitrine peut être réalisé séparément, sur mesure.`,
+  },
+  {
+    q: "L'IA, le HACCP et les capteurs sont-ils inclus ?",
+    a: "Ces fonctions font partie de la feuille de route. Elles ne sont pas comprises dans les fonctions disponibles ni facturées comme telles aujourd'hui. Votre devis décrit les fonctions activées pour votre établissement.",
   },
 ] as const;
 
@@ -2051,7 +2021,7 @@ export const FAQ = [
  * les douleurs une fois pour toutes.
  */
 export const FOUNDER_QUOTE =
-  "« D'un côté, un restaurateur qui tient son snack et connaît chaque friction du service par cœur. De l'autre, un expert de la tech. On s'est rencontrés, on a regardé le problème ensemble, et on a construit l'outil qui manquait. Chaque écran est testé en service réel, midi et soir, avant d'arriver chez vous. »";
+  "« D'un côté, un restaurateur qui tient son snack et connaît chaque friction du service par cœur. De l'autre, un expert de la tech. On s'est rencontrés, on a regardé le problème ensemble, et on construit l'outil avec les retours de notre restaurant pilote. »";
 
 /**
  * LES PHOTOS — UN CÂBLAGE CASSÉ, PAS UN MANQUE D'IMAGES.
@@ -2101,7 +2071,7 @@ export const PILOTE_PHOTOS: Shot[] = [
  * UN SEUL FAIT. Les deux autres (« Rodé sur de vrais rushs », « Amélioré chaque
  * semaine ») sont déjà dans la citation, mot pour mot ou presque.
  */
-export const FOUNDER_FACTS = ["Testé en service réel 7 j/7"] as const;
+export const FOUNDER_FACTS = ["Restaurant pilote : Class’Food"] as const;
 
 /* ── 11. Contact ─────────────────────────────────────────────── */
 

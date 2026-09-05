@@ -1,6 +1,7 @@
 import { AppsShowcase } from "@/components/marketing/AppsShowcase";
 import { Canaux } from "@/components/marketing/Canaux";
 import { Comparison } from "@/components/marketing/Comparison";
+import { CommerceOffers } from "@/components/marketing/CommerceOffers";
 import { ContactSection } from "@/components/marketing/ContactSection";
 import { Faq } from "@/components/marketing/Faq";
 import { Founder } from "@/components/marketing/Founder";
@@ -74,6 +75,7 @@ export default async function LandingPage() {
         <Canaux />
         <Materiel />
         <Pricing />
+        <CommerceOffers />
         <Simulator />
         <Jalons />
         <Faq />

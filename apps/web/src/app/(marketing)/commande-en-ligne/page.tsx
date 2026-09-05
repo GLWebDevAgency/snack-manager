@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CommerceOffers } from "@/components/marketing/CommerceOffers";
 import { RevealObserver } from "@/components/marketing/RevealObserver";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
@@ -20,7 +21,7 @@ const PRIX_MODULE = `${MODULE_MONTHLY_CENTS / 100} €/mois`;
 
 export const metadata: Metadata = {
   title: "Commande en ligne sans commission — Snack Manager",
-  description: `Le click & collect des snacks indépendants : vos clients commandent chez vous, au prix de la carte, et le ticket tombe en cuisine. ${PRIX_MODULE}, compris dans Boost — zéro commission.`,
+  description: `Le click & collect à vos couleurs, avec fidélité et back-office inclus, même sans notre caisse. ${PRIX_MODULE} HT, compris dans Boost. Livraison restaurant en validation pilote.`,
   keywords: [
     "click and collect restaurant sans commission",
     "commande en ligne snack",
@@ -58,6 +59,7 @@ export default async function CommandePage() {
 
       <main id="top">
         <CommandeBody />
+        <CommerceOffers />
       </main>
 
       <SiteFooter reseaux={reseaux} />
