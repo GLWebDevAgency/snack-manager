@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "@/components/board/board.css";
+import "@/components/board/scenographies/comptoir/comptoir.css";
 
 /**
  * « Menu Board » — l'écran de salle.
