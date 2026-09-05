@@ -145,7 +145,7 @@ export function Photo({
   );
   return (
     <span className="ct-photo-frame" ref={ref}>
-      <span className="ct-ghost">{initiale(p.name)}</span>
+      {!photos.current && !photos.previous ? <span className="ct-ghost">{initiale(p.name)}</span> : null}
       <span
         className={drift && detailed ? "ct-photo-motion ct-drift" : "ct-photo-motion"}
         style={drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : undefined}
