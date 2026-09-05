@@ -29,6 +29,7 @@ import type { OptionGroup, Product, Variant } from "./types";
 import { cx } from "@/lib/cx";
 import { useState } from "react";
 import { Btn, Field, IconBtn, Input, Select } from "@/components/ui";
+import { passerTypeChoix } from "./product-validation";
 
 /** « 8,90 » → 890 centimes. Chaîne vide ou illisible → `null`. */
 /**
@@ -239,7 +240,7 @@ export function EditeurOptions({
       </div>
       <p className="mt-1 text-[12.5px] text-mut">
         Viandes, sauces, cuisson — ce que le client choisit en commandant. Les
-        suppléments payants, eux, se pilotent depuis les ingrédients.
+        suppléments liés aux ingrédients restent gérés depuis les ingrédients.
       </p>
 
       <div className="mt-3 flex flex-col gap-4">
@@ -264,7 +265,7 @@ export function EditeurOptions({
                 <Select
                   id={`grp-type-${g.key}`}
                   value={g.type}
-                  onChange={(e) => modifier(i, { type: e.target.value as "single" | "multi" })}
+                  onChange={(e) => modifier(i, passerTypeChoix(g, e.target.value as "single" | "multi"))}
                 >
                   <option value="single">Un seul</option>
                   <option value="multi">Plusieurs</option>
@@ -294,12 +295,14 @@ export function EditeurOptions({
               <Field
                 label="Maximum"
                 htmlFor={`grp-max-${g.key}`}
-                hint="Vide = autant qu’on veut."
+                hint={g.type === "single" ? "Un seul choix au maximum." : "Vide = tous les choix proposés."}
               >
                 <Input
                   id={`grp-max-${g.key}`}
                   inputMode="numeric"
-                  value={g.max == null ? "" : String(g.max)}
+                  value={g.max == null ? (g.type === "single" ? "1" : "") : String(g.max)}
+                  readOnly={g.type === "single" && (g.max == null || g.max === 1)}
+                  aria-label={`Maximum de choix pour ${g.name || `le groupe ${i + 1}`}`}
                   onChange={(e) => {
                     const brut = e.target.value.trim();
                     // Le champ vide OMET la clef : `0` est refusé par le
@@ -335,6 +338,9 @@ export function EditeurOptions({
               <div className="text-xs font-bold uppercase tracking-[0.04em] text-mut">
                 Choix possibles
               </div>
+              <p className="mt-1 text-[12px] text-mut">
+                0,00 € = inclus dans le prix du produit. Un montant positif s&apos;y ajoute.
+              </p>
               <div className="mt-2 flex flex-col gap-2">
                 {g.choices.map((c, k) => (
                   <div key={c.key} className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -364,6 +370,11 @@ export function EditeurOptions({
                       }
                       className="w-[100px]"
                     />
+                    <span className={cx("text-[12px]", (c.priceDelta ?? 0) === 0 ? "text-ink" : "text-mut")}>
+                      {(c.priceDelta ?? 0) === 0 ? "Inclus" : (c.priceDelta ?? 0) > 0 ? "Supplément" : "Réduction"}
+                      {g.perVariant && Object.values(g.perVariant).some((rule) => rule != null && rule.priceDelta !== undefined)
+                        ? " par défaut" : ""}
+                    </span>
                     <IconBtn
                       icon="trash"
                       label={`Supprimer le choix ${c.name || k + 1}`}

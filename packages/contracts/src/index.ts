@@ -27,6 +27,7 @@ export * from './marque';
 export * from './capacites';
 export * from './mediatheque';
 export * from './mediatheque-octets';
+export * from './menu-legacy-options';
 
 // ─────────────────────────────────────────────────────────────
 // Énumérations métier

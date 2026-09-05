@@ -167,7 +167,7 @@ export function priceLine(
     }
   }
 
-  const known = new Set(product.removables);
+  const known = new Set(product.removables.map((item) => typeof item === "string" ? item : item.key));
   return {
     productId: product._id,
     name: product.name,
