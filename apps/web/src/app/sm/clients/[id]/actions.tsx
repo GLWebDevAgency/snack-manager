@@ -277,6 +277,8 @@ export function OffreModal({
   current: {
     plan: AdminPlan | null;
     onlineOrdering: boolean;
+    onlineDelivery?: boolean;
+    standaloneLoyalty?: boolean;
     billingCycle: ProposalBilling;
     services: LeadServices;
     /** Fin de la remise fondateur, ou `null` — voir le chiffrage ci-dessous. */
@@ -288,6 +290,8 @@ export function OffreModal({
   const toast = useToast();
   const [plan, setPlan] = useState<AdminPlan | null>(current.plan);
   const [module, setModule] = useState(current.onlineOrdering);
+  const [delivery, setDelivery] = useState(current.onlineDelivery ?? false);
+  const [loyalty, setLoyalty] = useState(current.standaloneLoyalty ?? false);
   const [billing, setBilling] = useState<ProposalBilling>(current.billingCycle);
   const [services, setServices] = useState<LeadServices>(current.services);
   const [reason, setReason] = useState("");
@@ -297,9 +301,11 @@ export function OffreModal({
   const avant = proposalCents({
     plan: current.plan,
     onlineOrdering: current.onlineOrdering,
+    onlineDelivery: current.onlineDelivery,
+    standaloneLoyalty: current.standaloneLoyalty,
     services: current.services,
   });
-  const apres = proposalCents({ plan, onlineOrdering: module, services });
+  const apres = proposalCents({ plan, onlineOrdering: module, onlineDelivery: delivery, standaloneLoyalty: loyalty, services });
   const mrrAvant = avant.monthlyCents + avant.servicesMonthlyCents;
   const mrrApres = apres.monthlyCents + apres.servicesMonthlyCents;
   const delta = mrrApres - mrrAvant;
@@ -323,6 +329,8 @@ export function OffreModal({
   const changed =
     plan !== current.plan ||
     module !== current.onlineOrdering ||
+    delivery !== (current.onlineDelivery ?? false) ||
+    loyalty !== (current.standaloneLoyalty ?? false) ||
     billing !== current.billingCycle ||
     JSON.stringify(services) !== JSON.stringify(current.services);
 
@@ -334,6 +342,8 @@ export function OffreModal({
       await clientsApi.changeOffre(tenantId, {
         plan,
         onlineOrdering: module,
+        onlineDelivery: delivery,
+        standaloneLoyalty: loyalty,
         billing,
         services,
         reason: reason.trim(),
@@ -385,6 +395,10 @@ export function OffreModal({
           setPlan={setPlan}
           module={module}
           setModule={setModule}
+          delivery={delivery}
+          setDelivery={setDelivery}
+          loyalty={loyalty}
+          setLoyalty={setLoyalty}
           billing={billing}
           setBilling={setBilling}
           services={services}

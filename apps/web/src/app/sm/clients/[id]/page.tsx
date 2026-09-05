@@ -611,6 +611,8 @@ export default function ClientFilePage({
           current={{
             plan,
             onlineOrdering: account?.onlineOrdering ?? false,
+            onlineDelivery: account?.onlineDelivery ?? false,
+            standaloneLoyalty: account?.standaloneLoyalty ?? false,
             billingCycle: account?.billingCycle ?? "mensuel",
             // La remise, pour que le chiffrage de la modale dise la même chose
             // que la fiche : elle annonçait le tarif public à côté d'un MRR
