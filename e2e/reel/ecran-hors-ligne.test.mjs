@@ -63,14 +63,18 @@ scenario(
       await page.waitForURL(/\/board\/display/, { timeout: 60_000 });
       await page.locator(SCENE).first().waitFor({ state: 'visible', timeout: 60_000 });
 
-      // ── 2 · Le worker est prêt, et la coquille est sur l'appareil ──
+      // ── 2 · Le worker est prêt, et la coquille EST sur l'appareil : la page,
+      //        et au moins un de ses scripts — c'est le signal que l'installation
+      //        a fini de précacher, pas un délai deviné. ──
       await page.waitForFunction(
         async () => {
           if (!('serviceWorker' in navigator)) return false;
           const registration = await navigator.serviceWorker.getRegistration('/board');
-          if (!registration || !registration.active) return false;
+          if (!registration || !registration.active || !navigator.serviceWorker.controller) return false;
           const cache = await caches.open('sm-board:v1');
-          return Boolean(await cache.match('/board/display'));
+          if (!(await cache.match('/board/display'))) return false;
+          const cles = (await cache.keys()).map((r) => new URL(r.url).pathname);
+          return cles.some((p) => p.startsWith('/_next/static/chunks/') && p.endsWith('.js'));
         },
         undefined,
         { timeout: 60_000 },

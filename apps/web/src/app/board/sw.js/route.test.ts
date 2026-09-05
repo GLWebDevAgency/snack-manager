@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   GET,
   NOMS_CACHES_ECRAN,
+  actifsReferences,
   estCheminCoquilleEcran,
   estReponseCoquilleEcranCacheable,
 } from "./route";
@@ -50,5 +51,18 @@ describe("Le service worker de l'écran de salle — ses règles pures", () => {
     expect(source).toContain('addEventListener("fetch"');
     expect(source).toContain('addEventListener("message"');
     expect(source).toContain("sm-board:precache");
+  });
+
+  it("relève les scripts, feuilles et polices que la page référence, une fois chacun", () => {
+    const html = `<link rel="stylesheet" href="/_next/static/chunks/a.css"/><script src="/_next/static/chunks/b.js"></script><script src="/_next/static/chunks/b.js"></script><img src="/photos/x.png"/>`;
+    expect(actifsReferences(html)).toEqual(["/_next/static/chunks/a.css", "/_next/static/chunks/b.js"]);
+    const css = `@font-face{src:url(/_next/static/media/f.woff2) format("woff2")} .x{background:url("/photos/y.png")}`;
+    expect(actifsReferences(css)).toEqual(["/_next/static/media/f.woff2"]);
+  });
+
+  it("le script du worker embarque le précache des actifs à l'installation", async () => {
+    const source = await GET().text();
+    expect(source).toContain("cacheAssets(assetsOf(");
+    expect(source).toContain("ASSET_IN_CSS");
   });
 });

@@ -58,6 +58,14 @@ export function estReponseCoquilleEcranCacheable(
   }
 }
 
+/** Les actifs `_next/static` référencés par une page ou une feuille — la règle du worker, testée ici. */
+export function actifsReferences(texte: string): string[] {
+  const found = new Set<string>();
+  for (const m of texte.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)) found.add(m[1]!);
+  for (const m of texte.matchAll(/url\((?:"|')?(\/_next\/static\/[^)"']+)(?:"|')?\)/g)) found.add(m[1]!);
+  return [...found];
+}
+
 export function GET(): Response {
   const source = `
 const CACHE_SHELL = ${JSON.stringify(NOMS_CACHES_ECRAN.coquille)};
@@ -83,11 +91,41 @@ function isCacheableShell(response) {
   }
 }
 
+// Les actifs que la page référence — scripts, feuilles, et les polices que
+// les feuilles référencent. Lus dans le HTML mis en cache, ajoutés au cache dès
+// l'installation : une clé qui s'éteint juste après son premier chargement
+// redémarre quand même sans réseau, sans avoir eu à recharger la page une fois.
+const ASSET_IN_HTML = /(?:src|href)="(\/_next\/static\/[^"]+)"/g;
+const ASSET_IN_CSS = /url\((?:"|')?(\/_next\/static\/[^)"']+)(?:"|')?\)/g;
+
+function assetsOf(text, pattern) {
+  const found = new Set();
+  let m;
+  while ((m = pattern.exec(text)) !== null) found.add(m[1]);
+  return [...found];
+}
+
+async function cacheAssets(paths) {
+  const cache = await caches.open(CACHE_SHELL);
+  await Promise.all(paths.map(async (p) => {
+    if (await cache.match(p)) return;
+    try {
+      const response = await fetch(p);
+      if (!response.ok) return;
+      await cache.put(p, response.clone());
+      if (p.endsWith(".css")) await cacheAssets(assetsOf(await response.text(), ASSET_IN_CSS));
+    } catch {
+      /* un actif manquant hors ligne se réessaie au prochain passage en ligne */
+    }
+  }));
+}
+
 async function fetchShell(path) {
   const response = await fetch(path, { credentials: "same-origin" });
   if (isCacheableShell(response)) {
     const cache = await caches.open(CACHE_SHELL);
     await cache.put(path, response.clone());
+    await cacheAssets(assetsOf(await response.clone().text(), ASSET_IN_HTML));
   }
   return response;
 }
