@@ -28,10 +28,15 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
+  SCENOGRAPHIES,
+  SCENOGRAPHY_DEFAULT,
+  SCENOGRAPHY_DESCRIPTIONS,
+  SCENOGRAPHY_LABELS,
   SCREEN_ORIENTATIONS,
   SCREEN_ORIENTATION_LABELS,
   SCREEN_THEMES,
   SCREEN_THEME_LABELS,
+  type Scenography,
   type ScreenOrientation,
   type ScreenTheme,
 } from "@sm/contracts";
@@ -58,6 +63,7 @@ import {
   PAIRING_TTL_LABEL,
   useNow,
 } from "./parts";
+import { ApparenceDrawer } from "./apparence/ApparenceDrawer";
 import { PlaylistDrawer } from "./playlist-drawer";
 import { ScreenCard } from "./screen-card";
 import type { MenuData, ScreenView } from "./types";
@@ -144,7 +150,8 @@ export default function ScreensPage() {
     name: string;
     orientation: ScreenOrientation;
     theme: ScreenTheme;
-  }>({ name: "", orientation: "landscape", theme: "brand" });
+    scenography: Scenography;
+  }>({ name: "", orientation: "landscape", theme: "brand", scenography: SCENOGRAPHY_DEFAULT });
   const [createError, setCreateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -155,6 +162,7 @@ export default function ScreensPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [composeId, setComposeId] = useState<string | null>(null);
+  const [apparenceId, setApparenceId] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   function openCompose(id: string) {
@@ -169,6 +177,7 @@ export default function ScreensPage() {
   const regenScreen = byId(regenId);
   const deleteScreen = byId(deleteId);
   const composeScreen = byId(composeId);
+  const apparenceScreen = byId(apparenceId);
 
   // ── Chargement ──
 
@@ -227,7 +236,7 @@ export default function ScreensPage() {
   // ── Mutations ──
 
   function openCreate() {
-    setDraft({ name: "", orientation: "landscape", theme: "brand" });
+    setDraft({ name: "", orientation: "landscape", theme: "brand", scenography: SCENOGRAPHY_DEFAULT });
     setCreateError(null);
     setCreating(true);
   }
@@ -242,6 +251,7 @@ export default function ScreensPage() {
         name,
         orientation: draft.orientation,
         theme: draft.theme,
+        scenography: draft.scenography,
       });
       setScreens((prev) => [...prev, created]);
       setCreating(false);
@@ -291,6 +301,7 @@ export default function ScreensPage() {
       setDeleteId(null);
       if (installId === id) setInstallId(null);
       if (composeId === id) setComposeId(null);
+      if (apparenceId === id) setApparenceId(null);
       toast(`Écran « ${name} » supprimé`, { icon: "check" });
     } catch (e) {
       toast(e instanceof Error ? e.message : "Suppression impossible — réessayez");
@@ -387,6 +398,7 @@ export default function ScreensPage() {
                   setInstallFresh(false);
                   setInstallId(screen.id);
                 }}
+                onApparence={() => setApparenceId(screen.id)}
                 onCompose={() => openCompose(screen.id)}
                 onRegenerate={() => setRegenId(screen.id)}
                 onDelete={() => setDeleteId(screen.id)}
@@ -497,6 +509,26 @@ export default function ScreensPage() {
               </Select>
             </Field>
           </div>
+
+          <Field
+            label="Scénographie"
+            htmlFor="screen-scenography"
+            hint={SCENOGRAPHY_DESCRIPTIONS[draft.scenography]}
+          >
+            <Select
+              id="screen-scenography"
+              value={draft.scenography}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, scenography: e.target.value as Scenography }))
+              }
+            >
+              {SCENOGRAPHIES.map((s) => (
+                <option key={s} value={s}>
+                  {SCENOGRAPHY_LABELS[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
 
           <p className="rounded-ctrl border border-line2 bg-surface2 px-3.5 py-2.5 text-[13px] leading-relaxed text-mut">
             Votre boucle est pré-remplie avec vos catégories et vos offres du
@@ -714,6 +746,16 @@ export default function ScreensPage() {
           </p>
         )}
       </Modal>
+
+      {/* ── Apparence : scénographie, fond, orientation, sur un téléviseur vivant ── */}
+      {apparenceScreen && (
+        <ApparenceDrawer
+          key={apparenceScreen.id}
+          screen={apparenceScreen}
+          onClose={() => setApparenceId(null)}
+          onSaved={replace}
+        />
+      )}
 
       {/* ── Composition de la boucle ── */}
       {composeScreen && (
