@@ -42,5 +42,7 @@ export const SCENOGRAPHIES_WEB: Record<Scenography, ScenographyModule> = {
 
 /** Un contenu mis en cache par une version antérieure n'a pas de scénographie : Ardoise. */
 export function moduleDe(slug: string | undefined): ScenographyModule {
-  return (slug && (SCENOGRAPHIES_WEB as Record<string, ScenographyModule>)[slug]) || Ardoise;
+  return slug && Object.prototype.hasOwnProperty.call(SCENOGRAPHIES_WEB, slug)
+    ? (SCENOGRAPHIES_WEB as Record<string, ScenographyModule>)[slug]!
+    : Ardoise;
 }

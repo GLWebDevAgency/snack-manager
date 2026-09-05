@@ -13,6 +13,7 @@ import {
   type ScreenScene,
   type ScreenScenePayload,
   type ScreenService,
+  type ScreenPreviewService,
 } from '@sm/contracts';
 import { contentHashOf } from './content-hash';
 import { currentService, nextOpeningOf, serviceHoursOf } from './daypart';
@@ -214,9 +215,13 @@ export function renderScreenContent(
   screen: StoredScreen,
   snapshot: BoardSnapshot,
   now: Date,
+  /** Réservé à l'aperçu authentifié. Les appels des téléviseurs n'en passent pas. */
+  previewService?: ScreenPreviewService,
 ): ScreenContent {
   const hours = serviceHoursOf(snapshot.identity.hours);
-  const service: ScreenService = screen.active ? currentService(hours, now) : 'closed';
+  const service: ScreenService = screen.active
+    ? (previewService ?? currentService(hours, now))
+    : 'closed';
 
   let scenes: ScreenScenePayload[];
   // DÉFENSE EN PROFONDEUR, et non un chemin nominal.

@@ -1,13 +1,13 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DIRECTIONS,
   type ScreenContent,
   type ScreenProduct,
   type ScreenScenePayload,
 } from "@sm/contracts";
-import { Comptoir } from "./Comptoir";
+import { chargerPhoto, Comptoir } from "./Comptoir";
 
 /**
  * Les six cas de Comptoir, RENDUS — pas seulement leur disposition. Le rendu
@@ -156,8 +156,70 @@ describe("Comptoir — les six cas, rendus", () => {
 
   it("le prix ne passe jamais par le fondu : un span nu, sans data-fade", () => {
     const html = rendre(scene({ products: [produit({ priceLabel: "12,50 €" }), produit()] }));
-    expect(html).toContain('<span class="ct-badge">12,50 €</span>');
+    expect(html).toContain('<span class="ct-badge" data-range="0">12,50 €</span>');
     // Le nom, lui, est un texte fondu.
     expect(html).toMatch(/<h3 class="ct-name" data-fade="0">Produit \d+<\/h3>/);
+  });
+});
+
+describe("photo TV — seule une image décodée peut remplacer la précédente", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function imageFausse() {
+    let decode!: () => void;
+    let rejectDecode!: () => void;
+    const decoding = new Promise<void>((resolve, reject) => {
+      decode = resolve;
+      rejectDecode = () => reject(new Error("image corrompue"));
+    });
+    const image = {
+      src: "", naturalWidth: 640, naturalHeight: 480,
+      onload: null as (() => void) | null,
+      onerror: null as (() => void) | null,
+      decode: vi.fn(() => decoding),
+    };
+    vi.stubGlobal("Image", class { constructor() { return image; } });
+    return { image, decode, rejectDecode };
+  }
+
+  it("attend le décodage après load, puis conserve la définition source", async () => {
+    const { image, decode } = imageFausse();
+    const result = chargerPhoto("/burger.webp", new AbortController().signal);
+    const done = vi.fn();
+    void result.then(done);
+    expect(image.src).toBe("/burger.webp");
+    image.onload!();
+    await Promise.resolve();
+    expect(done).not.toHaveBeenCalled();
+    decode();
+    await expect(result).resolves.toEqual({ url: "/burger.webp", width: 640, height: 480 });
+    expect(image.onload).toBeNull();
+  });
+
+  it("une URL cassée devient un repli, jamais une image cassée dans le rendu", async () => {
+    const { image } = imageFausse();
+    const result = chargerPhoto("/missing.webp", new AbortController().signal);
+    image.onerror!();
+    await expect(result).resolves.toBeNull();
+  });
+
+  it("une image chargée mais indécodable devient aussi un repli", async () => {
+    const { image, rejectDecode } = imageFausse();
+    const result = chargerPhoto("/corrupt.webp", new AbortController().signal);
+    image.onload!();
+    rejectDecode();
+    await expect(result).resolves.toBeNull();
+  });
+
+  it("un remplacement dépassé ne revient pas après son décodage tardif", async () => {
+    const { image, decode } = imageFausse();
+    const abort = new AbortController();
+    const result = chargerPhoto("/old-request.webp", abort.signal);
+    image.onload!();
+    abort.abort();
+    decode();
+    await expect(result).resolves.toBeNull();
+    expect(image.onload).toBeNull();
+    expect(image.onerror).toBeNull();
   });
 });

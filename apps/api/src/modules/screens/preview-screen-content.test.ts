@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PreviewScreenContent } from './preview-screen-content.usecase';
+import { renderScreenContent } from './render-screen-content';
 import {
   FakeMenuBoardRepository,
   FakeScreensRepository,
   TestClock,
+  boardProduct,
+  boardSnapshot,
   scene,
   storedScreen,
 } from './screens.fakes';
@@ -78,5 +81,61 @@ describe('Aperçu d’un écran — le téléviseur miniature du back-office', (
         playlist: [scene({ kind: 'category', categoryId: 'pas-un-identifiant' })],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('Préparer le menu hors service sans modifier le téléviseur', () => {
+  const FERME = new Date('2026-08-19T13:30:00Z'); // mercredi 15:30 à Paris
+  const snapshot = boardSnapshot({
+    products: [
+      boardProduct({ id: 'toute-la-journee', tags: [] }),
+      boardProduct({ id: 'produit-midi', tags: ['midi'] }),
+      boardProduct({ id: 'produit-soir', tags: ['soir'] }),
+    ],
+  });
+  const screen = storedScreen({ id: 'screen-1', tenantId: CLASSFOOD });
+
+  function setup() {
+    const screens = new FakeScreensRepository();
+    screens.seed(screen);
+    return {
+      screens,
+      preview: new PreviewScreenContent(
+        new TestClock(FERME),
+        screens.asRepository(),
+        new FakeMenuBoardRepository(snapshot).asRepository(),
+      ),
+    };
+  }
+
+  it('« Maintenant » garde la scène de fermeture prévue', async () => {
+    const content = await setup().preview.execute(CLASSFOOD, { screenId: screen.id });
+    expect(content.open).toBe(false);
+    expect(content.service).toBe('closed');
+    expect(content.scenes.map((scene) => scene.kind)).toEqual(['closed']);
+  });
+
+  it.each([
+    ['lunch', 'produit-midi'],
+    ['dinner', 'produit-soir'],
+  ] as const)('simule %s avec ses produits sans écrire les réglages ni le battement', async (service, product) => {
+    const { screens, preview } = setup();
+    const before = JSON.stringify(await screens.byId(CLASSFOOD, screen.id));
+    const content = await preview.execute(CLASSFOOD, { screenId: screen.id, service });
+    expect(content.open).toBe(true);
+    expect(content.service).toBe(service);
+    expect(content.scenes.flatMap((scene) => scene.products.map((item) => item.id)))
+      .toEqual(['toute-la-journee', product]);
+    expect(JSON.stringify(await screens.byId(CLASSFOOD, screen.id))).toBe(before);
+    // Le même écran et la même horloge restent fermés sur le chemin réel.
+    const live = renderScreenContent(screen, snapshot, FERME);
+    expect(live.service).toBe('closed');
+    expect(live.scenes[0]?.kind).toBe('closed');
+  });
+
+  it('un écran réellement désactivé reste en veille, même si un appelant passe un service', () => {
+    const content = renderScreenContent({ ...screen, active: false }, snapshot, FERME, 'lunch');
+    expect(content.open).toBe(false);
+    expect(content.scenes[0]?.id).toBe('standby');
   });
 });

@@ -27,6 +27,7 @@ export function BoardStage({
   stage,
   embed = false,
   still = false,
+  paused = false,
   fallback = null,
   overlay = null,
   className,
@@ -39,6 +40,8 @@ export function BoardStage({
   embed?: boolean;
   /** Mouvement figé — les tuiles de choix du tiroir. */
   still?: boolean;
+  /** Pause de la lecture ; les entrées restent jouées pour permettre la navigation. */
+  paused?: boolean;
   /** Ce qui s'affiche sans scène (chargement, non appairé). */
   fallback?: ReactNode;
   /** Par-dessus les scènes, dans l'aire : le bandeau « hors ligne ». */
@@ -59,6 +62,7 @@ export function BoardStage({
       style={skin}
       data-embed={embed ? "1" : "0"}
       data-still={still ? "1" : "0"}
+      data-paused={paused ? "1" : "0"}
       data-scenography={content?.scenography ?? "ardoise"}
       data-prix-mono={prixMono ? "1" : "0"}
       data-mode={masque.mode}

@@ -14,7 +14,7 @@ import { marqueSeule } from "../../board-header";
 import { useRestaurantClock } from "../../board-runtime";
 import type { ScenographyModule, ScenographyProps } from "../registry";
 import { disposition, variablesDeScene, type Disposition } from "./composition";
-import { FadeText } from "./FadeText";
+import { dureeMs, FadeText } from "./FadeText";
 
 /**
  * COMPTOIR — « le comptoir de nuit ».
@@ -49,18 +49,44 @@ function initiale(nom: string): string {
   );
 }
 
-/** Le temps qu'on laisse à l'ancienne photo sous la neuve, une fois celle-ci chargée. */
-const RELEVE_PHOTO_MS = 400;
+export interface PhotoChargee {
+  url: string;
+  width: number;
+  height: number;
+}
 
-/**
- * La photo d'un produit — et son remplacement SANS TROU.
- *
- * Quand le gérant change la photo, la neuve se charge PAR-DESSUS l'ancienne,
- * invisible tant qu'elle n'est pas arrivée, puis se fond ; l'ancienne reste
- * dessous jusque-là. Sans cela, l'écran montrerait un aplat de surface le
- * temps du téléchargement, sous les yeux des clients.
- */
-function Photo({
+/** Une photo n'entre dans la scène qu'après chargement ET décodage. */
+export function chargerPhoto(url: string, signal: AbortSignal): Promise<PhotoChargee | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const finish = (photo: PhotoChargee | null) => {
+      if (settled) return;
+      settled = true;
+      image.onload = null;
+      image.onerror = null;
+      signal.removeEventListener("abort", abort);
+      resolve(photo);
+    };
+    const abort = () => finish(null);
+    if (signal.aborted) return finish(null);
+    signal.addEventListener("abort", abort, { once: true });
+    image.onload = () => {
+      void image.decode().then(
+        () => finish(
+          image.naturalWidth > 0 && image.naturalHeight > 0 && !signal.aborted
+            ? { url, width: image.naturalWidth, height: image.naturalHeight }
+            : null,
+        ),
+        () => finish(null),
+      );
+    };
+    image.onerror = () => finish(null);
+    image.src = url;
+  });
+}
+
+export function Photo({
   p,
   drift = false,
   durationMs = 0,
@@ -69,54 +95,65 @@ function Photo({
   drift?: boolean;
   durationMs?: number;
 }) {
-  const [precedente, setPrecedente] = useState<string | null>(null);
-  const [courante, setCourante] = useState<string | null>(p.photoUrl);
-  const [chargee, setChargee] = useState(true);
-  const releve = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+  const [photos, setPhotos] = useState<{
+    current: PhotoChargee | null;
+    previous: PhotoChargee | null;
+  }>({ current: null, previous: null });
+  useEffect(() => {
+    const controller = new AbortController();
+    const next = p.photoUrl ? chargerPhoto(p.photoUrl, controller.signal) : Promise.resolve(null);
+    void next.then((current) => {
+      if (!controller.signal.aborted) {
+        setPhotos((old) => old.current?.url === current?.url
+          ? old
+          : { current, previous: old.current });
+      }
+    });
+    return () => controller.abort();
+  }, [p.photoUrl]);
 
   useEffect(() => {
-    if (p.photoUrl === courante) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- un remplacement de photo est un ENCHAÎNEMENT (garder l'ancienne, charger la neuve, relever l'ancienne) qui ne se dérive pas du rendu : il se joue après lui.
-    setPrecedente(courante);
-    setCourante(p.photoUrl);
-    setChargee(p.photoUrl === null);
-  }, [p.photoUrl, courante]);
+    if (!photos.previous) return;
+    const delay = dureeMs(
+      ref.current ? getComputedStyle(ref.current).getPropertyValue("--sm-t-fast") : "",
+    );
+    const timer = setTimeout(() => setPhotos((old) => ({ ...old, previous: null })), delay);
+    return () => clearTimeout(timer);
+  }, [photos.previous]);
 
-  useEffect(
-    () => () => {
-      if (releve.current) clearTimeout(releve.current);
-    },
-    [],
+  const detailed = photos.current && photos.current.width >= 1000 && photos.current.height >= 600;
+  const picture = (photo: PhotoChargee, previous: boolean) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={photo.url}
+      src={photo.url}
+      alt=""
+      decoding="async"
+      className={previous ? (photos.current ? undefined : "ct-photo-out") : "ct-photo-in"}
+      data-fit={photo.width < 1000 || photo.height < 600 ? "natural" : "cover"}
+      style={{
+        objectPosition: cadrageCss(p.photoPoint),
+        "--ct-photo-width": `${photo.width}px`,
+        "--ct-photo-height": `${photo.height}px`,
+      } as CSSProperties}
+      onError={() => setPhotos((old) => ({
+        current: old.current?.url === photo.url ? null : old.current,
+        previous: old.previous?.url === photo.url ? null : old.previous,
+      }))}
+    />
   );
-
-  const position = cadrageCss(p.photoPoint);
-  if (!courante && !precedente) return <span className="ct-ghost">{initiale(p.name)}</span>;
   return (
-    <>
-      {precedente ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={precedente} alt="" decoding="async" style={{ objectPosition: position }} />
-      ) : null}
-      {courante ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={courante}
-          alt=""
-          decoding="async"
-          data-loaded={chargee ? "1" : "0"}
-          className={drift ? "ct-drift" : undefined}
-          style={{
-            objectPosition: position,
-            ...(drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : {}),
-          }}
-          onLoad={() => {
-            setChargee(true);
-            if (releve.current) clearTimeout(releve.current);
-            releve.current = setTimeout(() => setPrecedente(null), RELEVE_PHOTO_MS);
-          }}
-        />
-      ) : null}
-    </>
+    <span className="ct-photo-frame" ref={ref}>
+      {!photos.current && !photos.previous ? <span className="ct-ghost">{initiale(p.name)}</span> : null}
+      <span
+        className={drift && detailed ? "ct-photo-motion ct-drift" : "ct-photo-motion"}
+        style={drift && durationMs > 0 ? { animationDuration: `${durationMs}ms` } : undefined}
+      >
+        {photos.previous ? picture(photos.previous, true) : null}
+        {photos.current ? picture(photos.current, false) : null}
+      </span>
+    </span>
   );
 }
 
@@ -127,7 +164,15 @@ const etat = (p: ScreenProduct) => ({
 
 /** Le prix change SANS animation — c'est la règle, pas un oubli. */
 function Prix({ p, className = "ct-badge" }: { p: ScreenProduct; className?: string }) {
-  return <span className={className}>{p.priceLabel}</span>;
+  const range = /^(.*?)\s+[–−-]\s+(.*?)$/.exec(p.priceLabel);
+  return (
+    <span className={className} data-range={range ? "1" : "0"}>
+      {range ? <>
+        <span className="ct-price-part">{range[1]}</span>{" "}
+        <span className="ct-price-part">– {range[2]}</span>
+      </> : p.priceLabel}
+    </span>
+  );
 }
 
 function Etiquettes({ p }: { p: ScreenProduct }) {
@@ -147,8 +192,11 @@ function Tuile({ p, i }: { p: ScreenProduct; i: number }) {
       <div className="ct-ph">
         <Photo p={p} />
         <div className="ct-dim" />
-        <Prix p={p} />
-        <Etiquettes p={p} />
+        <div className="ct-labels">
+          <Prix p={p} />
+          <span className="ct-new" hidden={!p.isNew}>Nouveau</span>
+        </div>
+        <span className="ct-oos-tag">Épuisé</span>
       </div>
       <div className="ct-tx">
         <FadeText as="h3" className="ct-name" value={p.name} />
@@ -160,7 +208,12 @@ function Tuile({ p, i }: { p: ScreenProduct; i: number }) {
 
 function Ligne({ p, i }: { p: ScreenProduct; i: number }) {
   return (
-    <article className="ct-row ct-it" {...etat(p)} style={{ "--i": i } as CSSProperties}>
+    <article
+      className="ct-row ct-it"
+      {...etat(p)}
+      data-wide-price={p.priceMaxCents > p.priceCents ? "1" : "0"}
+      style={{ "--i": i } as CSSProperties}
+    >
       <div className="ct-ph">
         <Photo p={p} />
         <div className="ct-dim" />
@@ -194,10 +247,10 @@ function Heros({
         <div className="ct-dim" />
         <span className="ct-oos-tag">Épuisé</span>
       </div>
-      <Prix p={p} className="ct-badge ct-badge-hero" />
-      <span className="ct-new" hidden={!p.isNew}>
-        Nouveau
-      </span>
+      <div className="ct-labels ct-labels-hero">
+        <Prix p={p} className="ct-badge ct-badge-hero" />
+        <span className="ct-new" hidden={!p.isNew}>Nouveau</span>
+      </div>
       <div className="ct-cap">
         {echo ? null : <FadeText as="h3" className="ct-name ct-name-hero" value={p.name} />}
         <FadeText as="p" className="ct-desc" value={p.description} />
@@ -399,7 +452,7 @@ function Corps({
   }
   if (d === "list") {
     return (
-      <div className="ct-grid">
+      <div className="ct-grid" style={{ gridTemplateRows: products.map((p) => p.priceMaxCents > p.priceCents ? "minmax(0, 1.4fr)" : "minmax(0, 1fr)").join(" ") }}>
         {products.map((p, i) => (
           <Ligne key={p.id} p={p} i={i + 1} />
         ))}
@@ -444,7 +497,7 @@ function ComptoirScene({ scene, content, masque, orientation }: ScenographyProps
   const mot = scene.kind === "closed" ? content.brand.name : scene.title;
 
   return (
-    <div className="ct" data-disposition={d} data-o={orientation} style={style}>
+    <div className="ct" data-disposition={d} data-o={orientation} data-pair={masque.type.pair} style={style}>
       <div className="ct-bg" aria-hidden>
         <div className="ct-halo" />
         <div className="ct-bgword">{mot}</div>

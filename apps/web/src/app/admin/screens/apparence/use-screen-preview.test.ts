@@ -36,4 +36,13 @@ describe("cleDuBrouillon — ce qui déclenche un nouvel aperçu", () => {
       cleDuBrouillon({ screenId: "s1", orientation: "landscape", theme: "brand", scenography: "comptoir" }),
     );
   });
+
+  it("changer de service renouvelle l'aperçu, revenir à Maintenant retrouve la clé initiale", () => {
+    const base = { screenId: "s1", orientation: "landscape", theme: "brand", scenography: "comptoir" } as const;
+    const now = cleDuBrouillon(base);
+    const lunch = cleDuBrouillon({ ...base, service: "lunch" });
+    const dinner = cleDuBrouillon({ ...base, service: "dinner" });
+    expect(new Set([now, lunch, dinner]).size).toBe(3);
+    expect(cleDuBrouillon({ ...base, service: undefined })).toBe(now);
+  });
 });

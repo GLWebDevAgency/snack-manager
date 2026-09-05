@@ -19,6 +19,24 @@
   color: var(--cf-text);
   font-family: var(--cf-font-body);
   --ct-price-font: var(--cf-font-display);
+  --ct-display-weight: 700;
+  --ct-price-weight: 700;
+}
+.ct[data-pair="brasserie"],
+.ct[data-pair="nuit"],
+.ct[data-pair="editorial"] {
+  --ct-display-weight: 600;
+  --ct-price-weight: 600;
+}
+.ct[data-pair="classique"] { --ct-price-weight: 400; }
+.ct[data-pair="brut"] { --ct-display-weight: 400; }
+.ct[data-pair="soleil"],
+.ct[data-pair="atelier"] { --ct-display-weight: 800; }
+.ct-title, .ct-name, .ct-bname, .ct-ptitle, .ct-reopen {
+  font-weight: var(--ct-display-weight);
+}
+.ct-badge, .ct-price, .ct-plab, .ct-win {
+  font-weight: var(--ct-price-weight);
 }
 .bd-root[data-prix-mono="1"] .ct {
   --ct-price-font: var(--cf-font-mono);
@@ -153,6 +171,9 @@
   height: auto;
   object-fit: contain;
 }
+/* La marque ne doit pas forcer un titre court sur deux lignes et comprimer la liste. */
+.ct[data-o="portrait"] .ct-hd-r { max-width: 28%; }
+.ct[data-o="portrait"] .ct-hd-r .ct-logo { max-width: 100%; }
 .ct-bname {
   font-family: var(--cf-font-display);
   font-size: 48px;
@@ -264,6 +285,25 @@
 .ct-ph img[data-loaded="0"] {
   opacity: 0;
 }
+.ct-photo-frame,
+.ct-photo-motion {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.ct-photo-in { animation: ct-fade var(--sm-t-fast) var(--sm-ease) both; }
+.ct-photo-out { animation: ct-fade var(--sm-t-fast) var(--sm-ease) reverse both; }
+/* Une petite source reste à sa définition native, sur le fond du masque. */
+.ct-photo-motion img[data-fit="natural"] {
+  inset: auto;
+  left: 50%;
+  top: 42%;
+  width: min(88%, var(--ct-photo-width));
+  height: min(78%, var(--ct-photo-height));
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+}
+.ct-tile .ct-photo-motion img[data-fit="natural"] { top: 62%; }
 [data-photo="0"] .ct-ph {
   background: var(--cf-elev-gradient);
 }
@@ -288,9 +328,8 @@
   opacity: 0.55;
 }
 .ct-badge {
-  position: absolute;
-  left: 18px;
-  top: 18px;
+  position: relative;
+  max-width: 100%;
   background: var(--cf-accent);
   color: var(--cf-on-accent);
   font-family: var(--ct-price-font);
@@ -300,10 +339,23 @@
   border-radius: var(--cf-r-sm);
   transform: rotate(-3deg);
   box-shadow: var(--cf-shadow-2);
-  white-space: nowrap;
+  white-space: normal;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
+.ct-price-part { display: inline-block; white-space: nowrap; }
+.ct-labels {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px 18px;
+}
+.ct-labels .ct-badge { margin-right: auto; }
+.ct-labels .ct-new { position: static; }
 /* Sur la photo, un fond OPAQUE : `--cf-mut` n'est garanti que sur les surfaces du masque. */
 [data-oos="1"] .ct-badge {
   background: var(--cf-surface-2);
@@ -365,6 +417,15 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.ct-tile .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  text-transform: none;
+  hyphens: none;
 }
 .ct-desc {
   margin: 0;
@@ -411,6 +472,7 @@
 .ct-row .ct-badge {
   position: static;
   flex: none;
+  max-width: 46%;
 }
 .ct-row .ct-new {
   right: auto;
@@ -420,6 +482,42 @@
 .ct-row .ct-oos-tag {
   font-size: calc(var(--ct-fs-nom) * 0.6);
 }
+.ct-row[data-wide-price="1"] {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 285px;
+  grid-template-rows: 1fr;
+  gap: 16px;
+  padding: 6px 16px 6px 0;
+}
+.ct-row[data-wide-price="1"] .ct-ph {
+  grid-column: 1;
+  width: 112px;
+}
+.ct-row[data-wide-price="1"] .ct-tx { grid-column: 2; }
+.ct-row[data-wide-price="1"] .ct-name {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  line-height: 1;
+  text-transform: none;
+  hyphens: none;
+}
+.ct-row[data-wide-price="1"] .ct-new {
+  left: 0;
+  max-width: 100%;
+  padding: 8px 4px;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.ct-row[data-wide-price="1"] .ct-desc { display: none; }
+.ct-row[data-wide-price="1"] .ct-badge {
+  grid-column: 3;
+  justify-self: stretch;
+  max-width: 100%;
+  padding: 0.12em 0.18em;
+  transform: none;
+}
+.ct-row[data-wide-price="1"] .ct-price-part { display: block; }
 
 /* ── Héros ── */
 
@@ -440,13 +538,10 @@
   font-size: 640px;
 }
 .ct-badge-hero {
-  left: 36px;
-  top: 36px;
   font-size: var(--ct-fs-heros-prix);
 }
-.ct-hero .ct-new {
-  right: 32px;
-  top: 32px;
+.ct-labels-hero {
+  inset: 36px 36px auto;
 }
 .ct-cap {
   position: absolute;

@@ -29,19 +29,18 @@ export function FadeText({
 }) {
   const ref = useRef<HTMLElement | null>(null);
   const [shown, setShown] = useState(value);
-  const [fading, setFading] = useState(false);
+  // Dérivé de la valeur demandée : A → B → A redevient visible immédiatement,
+  // même si le remplacement B a été annulé avant l'expiration du fondu.
+  const fading = value !== shown;
 
   useEffect(() => {
     if (value === shown) return;
     const duree = dureeMs(
       ref.current ? getComputedStyle(ref.current).getPropertyValue("--sm-t-fast") : "",
     );
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- le fondu est un ENCHAÎNEMENT dans le temps (effacer, puis remplacer) : il ne se dérive pas du rendu, il se joue après lui.
-    setFading(true);
     const timer = setTimeout(() => {
       setShown(value);
-      setFading(false);
-    }, duree);
+    }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : duree);
     return () => clearTimeout(timer);
   }, [value, shown]);
 

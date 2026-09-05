@@ -13,32 +13,49 @@
  * API : POST /screens/preview (aperçu) · PATCH /screens/:id (enregistrement)
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SCENOGRAPHIES,
-  SCENOGRAPHY_DESCRIPTIONS,
   SCENOGRAPHY_LABELS,
   SCREEN_ORIENTATIONS,
   SCREEN_ORIENTATION_LABELS,
   SCREEN_THEMES,
-  SCREEN_THEME_HINTS,
   SCREEN_THEME_LABELS,
   masquePourFond,
   type Brand,
   type ScreenScenePayload,
+  type ScreenPreviewService,
   type ScreenTheme,
   type ScreenView,
 } from "@sm/contracts";
 import { api, type TenantMe } from "@/lib/api";
 import { cx } from "@/lib/cx";
-import { Btn, Drawer, Modal, useToast } from "@/components/ui";
+import { Btn, Drawer, Icon, Modal, useToast } from "@/components/ui";
 import { useSceneRotation } from "@/components/board/use-scene-rotation";
 import { LiveStage } from "./LiveStage";
 import { StillStage } from "./StillStage";
 import { useScreenPreview } from "./use-screen-preview";
+import {
+  appearanceDraft,
+  appearanceOf,
+  appearancePatch,
+  editAppearance,
+  type Appearance,
+  type AppearanceEdits,
+} from "./appearance-draft";
 
 /** Identité stable : une liste vide neuve à chaque rendu relancerait la rotation. */
 const VIDE: ScreenScenePayload[] = [];
+
+const STYLE_DESCRIPTIONS = {
+  ardoise: "Une carte en lignes, facile à lire.",
+  comptoir: "Photos mises en avant, prix bien visibles.",
+};
+const FOND_DESCRIPTIONS: Record<ScreenTheme, string> = {
+  brand: "Les couleurs de votre établissement.",
+  dark: "Votre logo et votre couleur principale sur fond sombre.",
+  light: "Votre logo et votre couleur principale sur fond clair.",
+};
 
 /** Les trois pastilles d'un fond — fond, surface, accent — par la même règle que l'écran. */
 function Echantillon({ brand, theme }: { brand: Brand | null; theme: ScreenTheme }) {
@@ -59,16 +76,16 @@ function Echantillon({ brand, theme }: { brand: Brand | null; theme: ScreenTheme
 
 function Titre({ children }: { children: string }) {
   return (
-    <div className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut">
+    <legend className="mb-2.5 text-sm font-bold text-ink">
       {children}
-    </div>
+    </legend>
   );
 }
 
 const choix = (actif: boolean) =>
   cx(
-    "cf-press rounded-card border text-left",
-    actif ? "border-accent bg-accentwash" : "border-line2 hover:border-white/25",
+    "cf-press rounded-card border text-left disabled:cursor-wait",
+    actif ? "border-accent bg-accentwash" : "border-line2 hover:border-ink/25",
   );
 
 export function ApparenceDrawer({
@@ -81,107 +98,171 @@ export function ApparenceDrawer({
   onSaved: (updated: ScreenView) => void;
 }) {
   const toast = useToast();
-  const base = useMemo(
-    () => ({
-      orientation: screen.orientation,
-      theme: screen.theme,
-      scenography: screen.scenography,
-    }),
-    [screen.orientation, screen.theme, screen.scenography],
-  );
-  const [draft, setDraft] = useState(base);
+  const base = appearanceOf(screen);
+  const [edits, setEdits] = useState<AppearanceEdits>({});
+  const draft = appearanceDraft(base, edits);
+  const patch = appearancePatch(base, edits);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [previewService, setPreviewService] = useState<ScreenPreviewService | undefined>();
   const [brand, setBrand] = useState<Brand | null>(null);
 
-  const dirty =
-    draft.orientation !== base.orientation ||
-    draft.theme !== base.theme ||
-    draft.scenography !== base.scenography;
+  const dirty = Object.keys(patch).length > 0;
 
-  const { content, error, loading } = useScreenPreview({ screenId: screen.id, ...draft });
+  const { content, error, loading, stale, retry } = useScreenPreview({
+    screenId: screen.id, ...draft, service: previewService,
+  });
+  const previewReady = !!content && !loading && !stale && !error;
   const scenes = content?.scenes ?? VIDE;
   const { current, leaving, index, go } = useSceneRotation(scenes, { paused });
 
   // Le masque de BASE, pour les échantillons de fond : le contenu d'aperçu
   // porte déjà la variante, et la base ne s'en déduit pas.
   useEffect(() => {
-    let alive = true;
+    const controller = new AbortController();
     api
-      .get<TenantMe>("/tenants/me")
+      .get<TenantMe>("/tenants/me", { signal: controller.signal })
       .then((me) => {
-        if (alive) setBrand(me.brand);
+        if (!controller.signal.aborted) setBrand(me.brand);
       })
       .catch(() => {
         /* sans masque, les fonds gardent leur libellé et perdent leur échantillon */
       });
     return () => {
-      alive = false;
+      controller.abort();
     };
   }, []);
 
+  function choose<K extends keyof Appearance>(key: K, value: Appearance[K]) {
+    if (savingRef.current) return;
+    setEdits((previous) => editAppearance(base, previous, key, value));
+    setSaveError(null);
+  }
+
   async function save() {
-    if (!dirty || saving) return;
+    if (!dirty || savingRef.current || !previewReady) return;
+    // La garde agit immédiatement, avant même le rendu des contrôles désactivés.
+    savingRef.current = true;
     setSaving(true);
+    setSaveError(null);
     try {
-      const updated = await api.patch<ScreenView>(`/screens/${screen.id}`, draft);
+      const updated = await api.patch<ScreenView>(`/screens/${screen.id}`, patch);
       onSaved(updated);
-      toast("Apparence enregistrée — l'écran suit dans la minute", { icon: "check" });
+      toast("Apparence enregistrée", { icon: "check" });
       onClose();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Enregistrement impossible — réessayez");
+      setSaveError(e instanceof Error ? e.message : "Enregistrement impossible. Réessayez.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
-  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  const requestClose = () => {
+    if (savingRef.current) return;
+    if (dirty) setConfirmClose(true);
+    else onClose();
+  };
 
   return (
     <Drawer
       open
       onClose={requestClose}
       title={`Apparence — ${screen.name}`}
-      width={640}
+      width={1120}
       footer={
-        <div className="flex items-center justify-between gap-3">
-          <span className="min-w-0 truncate text-[13px] text-mut">
-            {dirty ? "Modifications non enregistrées" : "Apparence à jour"}
-          </span>
-          <div className="flex shrink-0 items-center gap-2">
-            <Btn variant="ghost" size="sm" onClick={requestClose}>
-              Fermer
-            </Btn>
-            <Btn
-              variant="primary"
-              size="sm"
-              icon="check"
-              disabled={!dirty || saving}
-              onClick={() => void save()}
-            >
-              {saving ? "Enregistrement…" : "Enregistrer l'apparence"}
-            </Btn>
+        <div className="flex flex-col gap-3">
+          {saveError ? (
+            <p role="alert" className="text-sm text-alertt">
+              {saveError} Vos choix restent disponibles dans cet aperçu.
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p role="status" className="text-[13px] text-mut">
+              {saving
+                ? "Enregistrement en cours…"
+                : dirty
+                  ? !previewReady
+                    ? "Vérifiez l’aperçu avant d’enregistrer."
+                    : "Vos changements sont prêts à être enregistrés."
+                  : "Réglages enregistrés de cet écran"}
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Btn variant="ghost" size="sm" disabled={saving} onClick={requestClose}>
+                {dirty ? "Annuler" : "Fermer"}
+              </Btn>
+              <Btn
+                variant="primary"
+                size="sm"
+                icon="check"
+                disabled={!dirty || saving || !previewReady}
+                onClick={() => void save()}
+                className="flex-1 sm:flex-initial"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer l'apparence"}
+              </Btn>
+            </div>
           </div>
         </div>
       }
     >
-      <div className="flex flex-col gap-5 p-[18px]">
-        <LiveStage
-          content={content}
-          current={current}
-          leaving={leaving}
-          index={index}
-          paused={paused}
-          onTogglePause={() => setPaused((p) => !p)}
-          onGo={go}
-          loading={loading}
-          error={error}
-        />
+      <div className="grid items-start gap-6 p-[18px] lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] lg:gap-8 lg:p-6">
+        <div className="min-w-0 lg:sticky lg:top-0">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold tracking-tight text-ink">Aperçu de votre carte</h3>
+            <p className="mt-1 text-sm leading-relaxed text-mut">
+              Essayez un style, puis enregistrez le résultat qui vous convient.
+            </p>
+          </div>
+          <fieldset disabled={saving} className="mb-4">
+            <legend className="mb-2 text-[13px] font-semibold text-ink">Service affiché</legend>
+            <div className="inline-flex gap-1 rounded-ctrl border border-line2 bg-surface2 p-1">
+              {([
+                { value: undefined, label: "Maintenant" },
+                { value: "lunch", label: "Midi" },
+                { value: "dinner", label: "Soir" },
+              ] as const).map(({ value, label }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={previewService === value}
+                  onClick={() => {
+                    if (!savingRef.current) setPreviewService(value);
+                  }}
+                  className={cx(
+                    "cf-press min-h-10 rounded-ctrl px-3 text-[13px] font-semibold disabled:cursor-wait",
+                    previewService === value ? "bg-btn text-onfill shadow-soft" : "text-mut hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <LiveStage
+            content={content}
+            current={current}
+            leaving={leaving}
+            index={index}
+            paused={paused}
+            onTogglePause={() => setPaused((p) => !p)}
+            onGo={go}
+            loading={loading}
+            error={error}
+            stale={stale}
+            onRetry={retry}
+            previewService={previewService}
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-6" aria-busy={saving}>
 
         {/* ── Scénographie : des tuiles vivantes ── */}
-        <section>
-          <Titre>Scénographie</Titre>
+        <fieldset disabled={saving}>
+          <Titre>Style du menu</Titre>
           <div className="grid grid-cols-2 gap-3">
             {SCENOGRAPHIES.map((s) => (
               <button
@@ -189,51 +270,52 @@ export function ApparenceDrawer({
                 type="button"
                 aria-pressed={draft.scenography === s}
                 aria-label={SCENOGRAPHY_LABELS[s]}
-                onClick={() => setDraft((d) => ({ ...d, scenography: s }))}
+                onClick={() => choose("scenography", s)}
                 className={cx(choix(draft.scenography === s), "flex flex-col gap-2 p-2")}
               >
-                {/* La miniature est une IMAGE pour le lecteur d'écran : sans
-                    cela, le nom du bouton serait tout le texte de la scène. */}
-                <div aria-hidden="true">
+                <div className="w-full" aria-hidden="true">
                   {content && current ? (
                     <StillStage content={content} scene={current} scenography={s} />
                   ) : (
-                    <div className="aspect-video w-full rounded-ctrl bg-black/40" />
+                    <div className="aspect-video w-full rounded-ctrl bg-surface2" />
                   )}
                 </div>
                 <div className="px-1 pb-1">
-                  <div className="text-sm font-bold text-ink">{SCENOGRAPHY_LABELS[s]}</div>
-                  <div className="text-xs leading-snug text-mut">{SCENOGRAPHY_DESCRIPTIONS[s]}</div>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-sm font-bold text-ink">
+                    {SCENOGRAPHY_LABELS[s]}
+                    {draft.scenography === s ? <Icon name="check" size={14} /> : null}
+                  </div>
+                  <div className="text-xs leading-snug text-mut">{STYLE_DESCRIPTIONS[s]}</div>
                 </div>
               </button>
             ))}
           </div>
-        </section>
+        </fieldset>
 
         {/* ── Fond ── */}
-        <section>
+        <fieldset disabled={saving}>
           <Titre>Fond</Titre>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2">
             {SCREEN_THEMES.map((t) => (
               <button
                 key={t}
                 type="button"
                 aria-pressed={draft.theme === t}
-                onClick={() => setDraft((d) => ({ ...d, theme: t }))}
+                onClick={() => choose("theme", t)}
                 className={cx(choix(draft.theme === t), "flex items-start gap-2.5 px-3 py-2.5")}
               >
                 <Echantillon brand={brand} theme={t} />
                 <span className="min-w-0">
                   <span className="block text-sm font-bold text-ink">{SCREEN_THEME_LABELS[t]}</span>
-                  <span className="block text-xs leading-snug text-mut">{SCREEN_THEME_HINTS[t]}</span>
+                  <span className="block text-xs leading-snug text-mut">{FOND_DESCRIPTIONS[t]}</span>
                 </span>
               </button>
             ))}
           </div>
-        </section>
+        </fieldset>
 
         {/* ── Orientation ── */}
-        <section>
+        <fieldset disabled={saving}>
           <Titre>Orientation</Titre>
           <div className="grid grid-cols-2 gap-2">
             {SCREEN_ORIENTATIONS.map((o) => (
@@ -241,7 +323,7 @@ export function ApparenceDrawer({
                 key={o}
                 type="button"
                 aria-pressed={draft.orientation === o}
-                onClick={() => setDraft((d) => ({ ...d, orientation: o }))}
+                onClick={() => choose("orientation", o)}
                 className={cx(
                   choix(draft.orientation === o),
                   "px-3 py-2.5 text-sm font-bold",
@@ -252,7 +334,8 @@ export function ApparenceDrawer({
               </button>
             ))}
           </div>
-        </section>
+        </fieldset>
+        </div>
       </div>
 
       <Modal
@@ -267,9 +350,9 @@ export function ApparenceDrawer({
               Reprendre
             </Btn>
             <Btn
-              variant="ink"
-              style={{ background: "var(--cf-red)" }}
+              variant="danger"
               onClick={() => {
+                if (savingRef.current) return;
                 setConfirmClose(false);
                 onClose();
               }}
@@ -280,8 +363,7 @@ export function ApparenceDrawer({
         }
       >
         <p className="leading-relaxed">
-          L&apos;apparence n&apos;a pas été enregistrée&nbsp;: «&nbsp;{screen.name}&nbsp;» garde
-          la sienne.
+          Les changements de cet aperçu seront abandonnés.
         </p>
       </Modal>
     </Drawer>

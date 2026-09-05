@@ -25,11 +25,11 @@ export function StillStage({
   return (
     <div
       ref={ref}
-      className="relative mx-auto overflow-hidden rounded-ctrl bg-black"
+      className="relative mx-auto overflow-hidden rounded-ctrl bg-bg"
       style={
         content.orientation === "landscape"
           ? { width: "100%", aspectRatio: "16 / 9" }
-          : { height: 180, aspectRatio: "9 / 16" }
+          : { width: "min(100%, 90px)", aspectRatio: "9 / 16" }
       }
     >
       <BoardStage content={variante} current={scene} leaving={null} stage={stage} embed still />
