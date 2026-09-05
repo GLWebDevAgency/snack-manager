@@ -171,6 +171,9 @@
   height: auto;
   object-fit: contain;
 }
+/* La marque ne doit pas forcer un titre court sur deux lignes et comprimer la liste. */
+.ct[data-o="portrait"] .ct-hd-r { max-width: 28%; }
+.ct[data-o="portrait"] .ct-hd-r .ct-logo { max-width: 100%; }
 .ct-bname {
   font-family: var(--cf-font-display);
   font-size: 48px;
