@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ScreenScenePayload } from "@sm/contracts";
+import { mediasDuContenu, precacherMedias, useServiceWorkerEcran } from "./board-autonomie";
 import { useDailyReload, useWakeLock } from "./board-runtime";
 import { BoardStage } from "./board-stage";
 import { readDeviceToken } from "./board-store";
@@ -67,6 +68,17 @@ export function BoardDisplay() {
 
   useWakeLock();
   useDailyReload(content?.dailyReloadAt);
+  useServiceWorkerEcran();
+
+  // À chaque contenu frais, le worker reçoit la liste des médias de la boucle :
+  // il précache ce qui manque et purge ce qui n'y est plus. Sur l'empreinte,
+  // pas sur l'objet : un même contenu relu ne relance rien.
+  const contentHash = content?.contentHash ?? null;
+  useEffect(() => {
+    if (!contentHash) return;
+    precacherMedias(mediasDuContenu(content));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentHash]);
 
   // La photo de la scène SUIVANTE est chargée pendant celle en cours : sur le
   // wifi d'un snack, une image qui arrive en même temps que la scène se voit.
