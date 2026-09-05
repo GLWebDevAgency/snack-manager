@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PreviewScreenContent } from './preview-screen-content.usecase';
 import { renderScreenContent } from './render-screen-content';
+import { DIRECTIONS, ScreenPresentationSchema } from '@sm/contracts';
 import {
   FakeMenuBoardRepository,
   FakeScreensRepository,
@@ -27,6 +28,7 @@ describe('Aperçu d’un écran — le téléviseur miniature du back-office', (
       new TestClock(MERCREDI_MIDI),
       screens.asRepository(),
       board.asRepository(),
+      { hotes: ['snackmanager.fr'] },
     );
   });
 
@@ -82,6 +84,32 @@ describe('Aperçu d’un écran — le téléviseur miniature du back-office', (
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('simule les effets et la marque sans modifier le masque ni l’écran enregistrés', async () => {
+    const snapshot = boardSnapshot();
+    const before = JSON.stringify(snapshot);
+    const screen = screens.seed(storedScreen());
+    const preview = new PreviewScreenContent(new TestClock(MERCREDI_MIDI), screens.asRepository(), new FakeMenuBoardRepository(snapshot).asRepository(), { hotes: ['snackmanager.fr'] });
+    const presentation = ScreenPresentationSchema.parse({ corners: 'round', motion: 'off', priceScale: 'large' });
+    const current = renderScreenContent(screen, snapshot, MERCREDI_MIDI);
+    const content = await preview.execute(CLASSFOOD, { screenId: screen.id, brandDraft: DIRECTIONS.neon, presentation, scenography: 'halo' });
+    expect(content.masque).toEqual(DIRECTIONS.neon);
+    expect(content.presentation).toEqual(presentation);
+    expect(content.scenography).toBe('halo');
+    expect(content.contentHash).not.toBe(current.contentHash);
+    expect(JSON.stringify(snapshot)).toBe(before);
+    expect(await screens.byId(CLASSFOOD, screen.id)).toEqual(screen);
+    expect(renderScreenContent(screen, snapshot, MERCREDI_MIDI)).toEqual(current);
+  });
+
+  it('refuse aussi en aperçu un masque illisible ou une image sur une origine inconnue', async () => {
+    await expect(useCase.execute(CLASSFOOD, {
+      brandDraft: { ...DIRECTIONS.neon, hero: 'https://other.example/hero.webp' },
+    })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(useCase.execute(CLASSFOOD, {
+      brandDraft: { ...DIRECTIONS.neon, palette: { ...DIRECTIONS.neon.palette, ink: DIRECTIONS.neon.palette.ground } },
+    })).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('Préparer le menu hors service sans modifier le téléviseur', () => {
@@ -104,6 +132,7 @@ describe('Préparer le menu hors service sans modifier le téléviseur', () => {
         new TestClock(FERME),
         screens.asRepository(),
         new FakeMenuBoardRepository(snapshot).asRepository(),
+        { hotes: ['snackmanager.fr'] },
       ),
     };
   }

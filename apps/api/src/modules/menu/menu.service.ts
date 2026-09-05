@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
@@ -8,6 +8,10 @@ import {
   normalizeLegacyOptionGroup,
   photoUrlDe,
   SUPPLEMENT_GROUP_KEY,
+  CategoryFeaturedUpdateSchema,
+  featuredProductIdsOf,
+  type CategoryFeaturedUpdate,
+  type CategoryFeaturedView,
   type JwtPayload,
   type MediaVue,
   type UsageMedia,
@@ -106,6 +110,8 @@ export class MenuService {
     return {
       categories: cats.map((c) => ({
         ...c,
+        featuredProductIds: featuredProductIdsOf(c.featuredProductIds),
+        featuredRevision: c.featuredRevision ?? 0,
         products: prods.filter((p) => String(p.categoryId) === String(c._id)),
       })),
       // Produits « Non rattachés » (orphelins après suppression de catégorie)
@@ -132,6 +138,8 @@ export class MenuService {
       categories: cats.map((c) => ({
         _id: c._id,
         name: c.name,
+        featuredProductIds: featuredProductIdsOf(c.featuredProductIds),
+        featuredConfigured: (c.featuredRevision ?? 0) > 0 || featuredProductIdsOf(c.featuredProductIds).length > 0,
         products: prods.filter((p) => String(p.categoryId) === String(c._id)),
       })),
       medias,
@@ -139,6 +147,62 @@ export class MenuService {
   }
 
   // ─── Catégories ───
+
+  /** La limite et l'ordre sont écrits ensemble, avec comparaison de révision. */
+  async updateFeatured(tenantId: string, id: string, dto: CategoryFeaturedUpdate): Promise<CategoryFeaturedView> {
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('Catégorie introuvable');
+    const parsed = CategoryFeaturedUpdateSchema.safeParse(dto);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues.map((i) => i.message).join(' · '));
+    const productIds = parsed.data.productIds.map((productId) => productId.toLowerCase());
+    const { expectedRevision } = parsed.data;
+    const view = (category: { featuredProductIds?: unknown; featuredRevision?: number }): CategoryFeaturedView => ({
+      categoryId: id,
+      featuredProductIds: featuredProductIdsOf(category.featuredProductIds),
+      featuredRevision: category.featuredRevision ?? 0,
+    });
+    const conflict = (current: CategoryFeaturedView) => new ConflictException({
+      code: 'FEATURED_SELECTION_CHANGED',
+      message: 'La sélection a été modifiée par une autre personne. Vérifiez la sélection actuelle avant de réessayer.',
+      current,
+    });
+    const category = await this.categories.findOne({ _id: id, tenantId }).lean();
+    if (!category) throw new NotFoundException('Catégorie introuvable');
+    if ((category.featuredRevision ?? 0) !== expectedRevision) throw conflict(view(category));
+
+    // Les ruptures et inactifs peuvent rester sélectionnés, mais leur diffusion
+    // est suspendue. Le produit doit en revanche appartenir à CETTE catégorie.
+    if (productIds.length > 0) {
+      const belonging = await this.products.find({ tenantId, categoryId: id, _id: { $in: productIds } }).lean();
+      if (belonging.length !== productIds.length) {
+        throw new BadRequestException('Choisissez uniquement des produits de cette catégorie. Un produit a peut-être été déplacé ou supprimé.');
+      }
+    }
+    const revisionFilter = expectedRevision === 0
+      ? { $or: [{ featuredRevision: 0 }, { featuredRevision: { $exists: false } }] }
+      : { featuredRevision: expectedRevision };
+    const updated = await this.categories.findOneAndUpdate(
+      { _id: id, tenantId, ...revisionFilter },
+      { $set: { featuredProductIds: productIds }, $inc: { featuredRevision: 1 } },
+      { new: true, runValidators: true },
+    ).lean();
+    if (!updated) {
+      const current = await this.categories.findOne({ _id: id, tenantId }).lean();
+      if (!current) throw new NotFoundException('Catégorie introuvable');
+      throw conflict(view(current));
+    }
+    this.publishMenuUpdated(tenantId, { scope: 'category', id, featured: true });
+    return view(updated);
+  }
+
+  /** Nettoyage des références après déplacement/suppression. Le rendu filtre
+   * aussi l'appartenance : une course entre deux documents ne diffuse jamais
+   * un produit depuis son ancienne catégorie. */
+  private async removeFeaturedReferences(tenantId: string, productId: string, keepCategoryId?: string): Promise<void> {
+    await this.categories.updateMany(
+      { tenantId, featuredProductIds: productId, ...(keepCategoryId ? { _id: { $ne: keepCategoryId } } : {}) },
+      { $pull: { featuredProductIds: productId }, $inc: { featuredRevision: 1 } },
+    );
+  }
 
   createCategory(tenantId: string, dto: { name: string; order?: number; active?: boolean }) {
     this.publishMenuUpdated(tenantId, { scope: 'category' });
@@ -280,6 +344,7 @@ export class MenuService {
       { new: true },
     );
     if (!prod) throw new NotFoundException('Produit introuvable');
+    if (typeof dto.categoryId === 'string') await this.removeFeaturedReferences(tenantId, id, dto.categoryId);
     if (avant && typeof dto.price === 'number' && avant.price !== dto.price) {
       await this.audit.log({
         tenantId,
@@ -322,6 +387,7 @@ export class MenuService {
       .lean<{ name?: string; price?: number } | null>();
     const res = await this.products.deleteOne({ _id: id, tenantId });
     if (res.deletedCount === 0) throw new NotFoundException('Produit introuvable');
+    await this.removeFeaturedReferences(tenantId, id);
     await this.audit.log({
       tenantId,
       actor,

@@ -19,6 +19,10 @@ import {
   SENS_DEROGATION,
   SM_INVOICE_VAT,
   SCENOGRAPHIES,
+  SCREEN_CORNERS,
+  SCREEN_MOTIONS,
+  SCREEN_PRICE_SCALES,
+  FEATURED_PRODUCTS_MAX,
   STOCKAGES_MEDIA,
   TENANT_AUDIT_ACTIONS,
   TYPE_PAIR_KEYS,
@@ -708,6 +712,15 @@ export const CategorySchema = new Schema(
     name: { type: String, required: true },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
+    featuredProductIds: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
+      default: [],
+      validate: {
+        validator: (ids: unknown[]) => ids.length <= FEATURED_PRODUCTS_MAX && new Set(ids.map(String)).size === ids.length,
+        message: 'Choisissez au plus trois produits distincts par catégorie',
+      },
+    },
+    featuredRevision: { type: Number, default: 0, min: 0, validate: Number.isInteger },
   },
   { timestamps: true },
 );
@@ -1563,6 +1576,13 @@ const SceneSub = new Schema(
   { _id: false },
 );
 
+const ScreenPresentationSub = new Schema({
+  version: { type: Number, enum: [1], default: 1 },
+  corners: { type: String, enum: [...SCREEN_CORNERS], default: 'brand' },
+  priceScale: { type: String, enum: [...SCREEN_PRICE_SCALES], default: 'balanced' },
+  motion: { type: String, enum: [...SCREEN_MOTIONS], default: 'brand' },
+}, { _id: false, strict: 'throw' });
+
 export const ScreenSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
@@ -1584,6 +1604,7 @@ export const ScreenSchema = new Schema(
     // change pas l'apparence d'un téléviseur accroché au mur. Les écrans neufs
     // reçoivent le défaut du contrat (Comptoir) à la création, pas ce défaut-ci.
     scenography: { type: String, enum: [...SCENOGRAPHIES], default: 'ardoise' },
+    presentation: { type: ScreenPresentationSub, default: undefined },
     // Dernier battement de cœur — source du « hors ligne depuis 20 min ».
     lastSeenAt: { type: Date, default: null },
     active: { type: Boolean, default: true },

@@ -364,6 +364,10 @@ export interface PublicSiteProduct {
 }
 
 export interface PublicSiteCategory {
+  /** Sélection manuelle commune TV / vitrine, dans l'ordre choisi. */
+  featuredProductIds?: string[];
+  /** Distingue une sélection vidée volontairement du menu jamais configuré. */
+  featuredConfigured?: boolean;
   _id: string;
   name: string;
   products: PublicSiteProduct[];

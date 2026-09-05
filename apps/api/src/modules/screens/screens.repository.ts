@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import type { Scenography, ScreenOrientation, ScreenScene, ScreenTheme } from '@sm/contracts';
+import { screenPresentationOf, type ScreenPresentation, type Scenography, type ScreenOrientation, type ScreenScene, type ScreenTheme } from '@sm/contracts';
 import type { Screen } from '@sm/db';
 
 /**
@@ -21,6 +21,7 @@ export interface StoredScreen {
   readonly orientation: ScreenOrientation;
   readonly theme: ScreenTheme;
   readonly scenography: Scenography;
+  readonly presentation?: ScreenPresentation;
   readonly playlist: ScreenScene[];
   readonly lastSeenAt: Date | null;
   readonly active: boolean;
@@ -31,6 +32,7 @@ export interface NewScreen {
   readonly orientation: ScreenOrientation;
   readonly theme: ScreenTheme;
   readonly scenography: Scenography;
+  readonly presentation?: ScreenPresentation;
   readonly playlist: ScreenScene[];
   readonly pairingCode: string;
   readonly pairingCodeExpiresAt: Date;
@@ -41,6 +43,7 @@ export interface ScreenPatch {
   readonly orientation?: ScreenOrientation;
   readonly theme?: ScreenTheme;
   readonly scenography?: Scenography;
+  readonly presentation?: ScreenPresentation;
   readonly playlist?: ScreenScene[];
   readonly active?: boolean;
 }
@@ -87,6 +90,7 @@ export function toStored(raw: RawScreen): StoredScreen {
     theme: (raw.theme ?? 'brand') as ScreenTheme,
     // Les écrans antérieurs au champ gardent l'écran qu'ils ont toujours eu.
     scenography: (raw.scenography ?? 'ardoise') as Scenography,
+    presentation: screenPresentationOf(raw.presentation),
     playlist: (raw.playlist ?? []).map((s) => ({
       kind: s.kind as ScreenScene['kind'],
       categoryId: s.categoryId ? String(s.categoryId) : null,

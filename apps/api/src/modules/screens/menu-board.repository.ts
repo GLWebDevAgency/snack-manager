@@ -39,6 +39,7 @@ export interface BoardIdentity {
 export interface BoardCategory {
   readonly id: string;
   readonly name: string;
+  readonly featuredProductIds?: string[];
 }
 
 export interface BoardProduct {
@@ -170,7 +171,10 @@ export class MenuBoardRepository {
 
     return {
       identity: identiteDuTableau(tenant),
-      categories: cats.map((c) => ({ id: String(c._id), name: String(c.name ?? '') })),
+      categories: cats.map((c) => ({
+        id: String(c._id), name: String(c.name ?? ''),
+        featuredProductIds: (c.featuredProductIds ?? []).map(String),
+      })),
       products: prods.map((p) => ({
         id: String(p._id),
         categoryId: p.categoryId ? String(p.categoryId) : null,

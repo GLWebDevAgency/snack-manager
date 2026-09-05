@@ -124,6 +124,8 @@ export class SiteService {
         categories: categories.map((c) => ({
           _id: String(c._id),
           name: String(c.name ?? ''),
+          featuredProductIds: c.featuredProductIds,
+          featuredConfigured: c.featuredConfigured,
           products: c.products.map((p) => ({
             _id: String(p._id),
             name: String(p.name ?? ''),
