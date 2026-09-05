@@ -68,6 +68,9 @@ import {
   SCREEN_OFFLINE_AFTER_MS,
   SCREEN_ORIENTATION_LABELS,
   SCREEN_THEME_LABELS,
+  SCENOGRAPHY_LABELS,
+  SCENOGRAPHY_DEFAULT,
+  ScreenPreviewSchema,
   mostAdvancedStatus,
   type DeviceKind,
   type LoyaltyEarnResult,
@@ -87,6 +90,7 @@ import {
   logoUrlDe,
 } from "@sm/contracts";
 import { loyalty as loyaltyDomain, Money } from "@sm/domain";
+import { previewDemoScreen } from "./screen-preview";
 import {
   bomOf,
   channels,
@@ -255,9 +259,8 @@ const screenView = (w: DemoWorld, s: DemoWorld["screens"][number]) => {
     orientationLabel: SCREEN_ORIENTATION_LABELS[s.orientation],
     theme: s.theme,
     themeLabel: SCREEN_THEME_LABELS[s.theme],
-    // La fixture est antérieure au champ : elle vit comme un écran installé.
-    scenography: "ardoise",
-    scenographyLabel: "Ardoise",
+    scenography: s.scenography ?? "ardoise",
+    scenographyLabel: SCENOGRAPHY_LABELS[s.scenography ?? "ardoise"],
     playlist: s.playlist,
     sceneCount: s.playlist.length,
     paired: s.paired,
@@ -1938,6 +1941,13 @@ function dispatch(
   // ─── Écrans TV ───
 
   if (seg[0] === "screens") {
+    if (method === "POST" && seg[1] === "preview" && seg.length === 2) {
+      const parsed = ScreenPreviewSchema.safeParse(b);
+      if (!parsed.success) throw new Refusal(400, "Réglages d’aperçu invalides");
+      const saved = parsed.data.screenId ? w.screens.find((s) => s.id === parsed.data.screenId) : undefined;
+      if (parsed.data.screenId && !saved) throw new Refusal(404, "Écran introuvable");
+      return ok(previewDemoScreen(w, parsed.data, saved));
+    }
     if (method === "GET" && seg.length === 1) return ok(w.screens.map((s) => screenView(w, s)));
     if (method === "POST" && seg.length === 1) {
       const created = {
@@ -1945,6 +1955,7 @@ function dispatch(
         name: String(b.name ?? "Nouvel écran"),
         orientation: (b.orientation as "landscape" | "portrait") ?? "landscape",
         theme: (b.theme as "brand" | "dark" | "light") ?? "brand",
+        scenography: (b.scenography as "ardoise" | "comptoir") ?? SCENOGRAPHY_DEFAULT,
         // Comme l'API : un écran créé sans playlist en reçoit une, bâtie sur la
         // carte. Le restaurateur ne configure RIEN pour que l'écran serve.
         playlist:

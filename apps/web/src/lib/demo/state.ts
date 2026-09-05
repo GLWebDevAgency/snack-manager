@@ -214,6 +214,7 @@ export interface DemoScreenRow {
   name: string;
   orientation: "landscape" | "portrait";
   theme: "brand" | "dark" | "light";
+  scenography?: "ardoise" | "comptoir";
   playlist: unknown[];
   paired: boolean;
   /** Même raison que pour les postes : un écran allumé bat en continu. */
