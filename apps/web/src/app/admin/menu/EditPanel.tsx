@@ -498,9 +498,9 @@ export function EditPanel({
       </div>
 
       <div className="my-4 flex flex-wrap items-center gap-3 rounded-ctrl border border-line bg-surface2 p-3">
-        <Chip on={isNew} onClick={() => setIsNew(!isNew)}>Nouveauté</Chip>
+        <Chip className="min-h-11" on={isNew} onClick={() => setIsNew(!isNew)}>Nouveauté</Chip>
         <span className="min-w-0 flex-1 text-xs text-mut">Le badge Nouveau accompagne le produit sur la carte et les écrans.</span>
-        {mode === "edit" && <Btn variant="ghost" size="sm" icon="star" disabled={busy || !onManageFeatured || catId !== (product?.categoryId ?? "")} onClick={onManageFeatured}
+        {mode === "edit" && <Btn variant="ghost" size="sm" className="min-h-11" icon="star" disabled={busy || !onManageFeatured || catId !== (product?.categoryId ?? "")} onClick={onManageFeatured}
           title={catId !== (product?.categoryId ?? "") ? "Enregistrez le changement de catégorie avant la mise en avant" : !onManageFeatured ? "Rattachez d’abord le produit à une catégorie" : "Ouvrir la sélection commune TV et commande en ligne"}>
           {isFeatured ? "Gérer la mise en avant" : "Mettre en avant"}
         </Btn>}

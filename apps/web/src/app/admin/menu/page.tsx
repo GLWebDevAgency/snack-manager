@@ -76,7 +76,7 @@ const COL = {
   price: "w-[96px] shrink-0 lg:w-[110px]",
   avail: "shrink-0 lg:w-[86px] lg:text-center",
   out: "shrink-0 lg:w-[86px] lg:text-center",
-  edit: "shrink-0 lg:w-[68px]",
+  edit: "shrink-0 lg:w-[92px] lg:pointer-fine:w-[68px]",
 } as const;
 
 /** Panneau d'édition ouvert : produit existant ou création dans une catégorie. */
@@ -616,7 +616,7 @@ export default function MenuPage() {
 
           {selectedCat && !searching && <div className="mx-[18px] mt-3 flex flex-wrap items-center justify-between gap-3 rounded-ctrl border border-line bg-surface2 p-3">
             <div><p className="flex items-center gap-2 text-sm font-semibold"><Icon name="star" size={16}/>À l’affiche <span className="text-mut">{selectedCat.featuredProductIds?.length ?? 0}/3</span></p><p className="mt-1 text-xs text-mut">Une sélection commune aux écrans et aux Incontournables.</p></div>
-            <Btn variant="ghost" size="sm" onClick={() => setFeaturedEditor({ categoryId: selectedCat._id })}>Choisir les produits</Btn>
+            <Btn variant="ghost" size="sm" className="min-h-11" onClick={() => setFeaturedEditor({ categoryId: selectedCat._id })}>Choisir les produits</Btn>
           </div>}
 
           {/* En-tête de colonnes (§7.3) — sous `lg` seul le titre survit :
