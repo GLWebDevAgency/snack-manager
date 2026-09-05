@@ -120,7 +120,7 @@ export class OrdersController {
     return status;
   }
 
-  @Roles('owner', 'gerant', 'caisse')
+  @Roles('owner', 'cogerant', 'gerant', 'caisse')
   @Get('orders/by-client/:clientId')
   async byClientId(
     @TenantId() tenantId: string,

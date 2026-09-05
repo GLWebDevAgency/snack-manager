@@ -34,7 +34,6 @@ import { CapacitesService } from '../../common/capacites';
 import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
-import { canCollectOrderAtCounter } from '../ordering/order-payment-lifecycle.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 
 /**
@@ -98,6 +97,7 @@ export class OrdersService {
     delete payload.loyaltyEarnNextAttemptAt;
     delete payload.loyaltyEarnLeaseUntil;
     delete payload.paymentFlow;
+    delete payload.counterCollection;
     return payload;
   }
 
@@ -525,8 +525,8 @@ export class OrdersService {
     if (status === 'delivered' && current !== 'ready') {
       throw new ConflictException('La commande doit être prête avant de confirmer sa remise au client.');
     }
-    if (status === 'delivered' && order.payment.status === 'pending' && !canCollectOrderAtCounter(order)) {
-      throw new ConflictException('Le paiement en ligne doit être vérifié avant tout règlement au comptoir. Aucun encaissement ne sera supposé.');
+    if (status === 'delivered' && order.payment.status !== 'paid') {
+      throw new ConflictException('Encaissez cette commande avant de confirmer sa remise au client. Aucun paiement ne sera supposé.');
     }
     if (order.type === 'delivery' && status === 'delivered') {
       if (!order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
@@ -537,14 +537,8 @@ export class OrdersService {
 
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor.sub });
-    // Le règlement comptoir implicite historique ne reste permis qu'avec une
-    // preuve persistée de l'absence de tentative bancaire OU de sa fermeture
-    // irréversible confirmée, ET un choix comptoir.
-    // Il ne remplace jamais un paiement en ligne non confirmé. __v fait échouer
-    // ce save si une réservation de PaymentIntent ou une fermeture gagne entre-temps.
-    if (status === 'delivered' && order.payment.status === 'pending') {
-      order.payment.status = 'paid';
-    }
+    // Remise et encaissement sont deux gestes distincts. La version protège
+    // cette remise d'une fermeture ou d'un remboursement simultané.
     await this.saveWithoutLostUpdate(order);
     this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
     return order;
@@ -622,6 +616,9 @@ export class OrdersService {
       throw new ConflictException(
         'Commande clôturée — une remise doit être posée avant la remise au client',
       );
+    }
+    if (order.payment.status !== 'pending') {
+      throw new ConflictException('Commande déjà encaissée ou remboursée : son montant ne peut plus être modifié.');
     }
     if (order.payment?.stripePaymentIntentId || order.paymentFlow?.origin !== 'created_v1' ||
       order.paymentFlow.phase !== 'open' || order.paymentFlow.attempt) {

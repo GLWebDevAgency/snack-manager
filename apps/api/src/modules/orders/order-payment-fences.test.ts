@@ -80,16 +80,16 @@ describe('commande — barrières du cycle de paiement', () => {
     expect(ctx.redis.publish).not.toHaveBeenCalled();
   });
 
-  it('autorise le règlement comptoir prouvé sans aucune tentative et ne diffuse pas la preuve', async () => {
+  it('ne confond jamais remise et encaissement, même sans tentative bancaire', async () => {
     const ctx = setup();
-    await ctx.service.updateStatus(TENANT, ID, 'delivered', caisse);
-    expect(ctx.row.payment.status).toBe('paid');
-    expect(ctx.redis.publish).toHaveBeenCalledOnce();
-    expect(ctx.redis.publish.mock.calls[0]?.[1]).not.toContain('paymentFlow');
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.save).not.toHaveBeenCalled();
+    expect(ctx.redis.publish).not.toHaveBeenCalled();
   });
 
-  it.each(['created_v1', 'adopted_intent'])('la caisse remet un retrait basculé avec preuve bancaire %s sans effacer son PI annulé', async (origin) => {
-    const ctx = setup({ channel: 'online', payment: { ...counterPayment }, paymentFlow: { ...counterProof(), origin } });
+  it.each(['created_v1', 'adopted_intent'])('la caisse remet un retrait déjà encaissé avec preuve bancaire %s sans effacer son PI annulé', async (origin) => {
+    const ctx = setup({ channel: 'online', payment: { ...counterPayment, status: 'paid' }, paymentFlow: { ...counterProof(), origin } });
     await ctx.service.updateStatus(TENANT, ID, 'delivered', caisse);
     expect(ctx.row.payment).toMatchObject({ status: 'paid', method: 'counter', stripePaymentIntentId: 'pi_cancelled' });
     expect(ctx.row.status).toBe('delivered');
@@ -97,10 +97,11 @@ describe('commande — barrières du cycle de paiement', () => {
     expect(ctx.redis.publish.mock.calls[0]?.[1]).not.toContain('paymentFlow');
   });
 
-  it('la bascule prouvée sans appel provider permet le règlement comptoir', async () => {
+  it('la bascule prouvée sans appel provider ne vaut pas encaissement', async () => {
     const ctx = setup({ channel: 'online', paymentFlow: { ...counterProof(), attempt: null, providerStatus: 'not_started' } });
-    await ctx.service.updateStatus(TENANT, ID, 'delivered', caisse);
-    expect(ctx.row.payment.status).toBe('paid');
+    await expect(ctx.service.updateStatus(TENANT, ID, 'delivered', caisse)).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.row.payment.status).toBe('pending');
+    expect(ctx.row.save).not.toHaveBeenCalled();
   });
 
   it.each([

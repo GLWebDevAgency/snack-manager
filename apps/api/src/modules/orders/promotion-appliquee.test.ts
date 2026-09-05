@@ -377,11 +377,10 @@ describe('la liste des commandes du service', () => {
 /**
  * UNE COMMANDE REMISE A FORCÉMENT ÉTÉ RÉGLÉE.
  *
- * Un règlement comptoir peut solder le retrait seulement si ce moyen était
- * choisi et que la preuve privée confirme l'absence de tentative bancaire. Un ancien document ou
- * une tentative engagée ne sont jamais assimilés à un simple abandon du web.
+ * La remise exige un encaissement préalable. Elle ne vaut jamais confirmation
+ * de perception, même pour le choix « à régler au retrait » sans tentative bancaire.
  */
-describe('le paiement soldé à la remise', () => {
+describe('le paiement confirmé avant la remise', () => {
   function commandeEn(method: string, statut: string) {
     const doc = {
       _id: 'o1',
@@ -412,16 +411,17 @@ describe('le paiement soldé à la remise', () => {
     const { service, doc } = commandeEn('online', 'pending');
     await expect(service.updateStatus(TENANT, 'o1', 'delivered', {
       sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
-    })).rejects.toThrow('Aucun encaissement ne sera supposé');
+    })).rejects.toThrow('Aucun paiement ne sera supposé');
     expect(doc.payment.status).toBe('pending');
   });
 
-  it('solde aussi le « à régler au retrait », comme avant', async () => {
+  it('exige également l’encaissement explicite du « à régler au retrait »', async () => {
     const { service, doc } = commandeEn('counter', 'pending');
-    await service.updateStatus(TENANT, 'o1', 'delivered', {
+    await expect(service.updateStatus(TENANT, 'o1', 'delivered', {
       sub: 'staff-caisse', tenantId: TENANT, role: 'caisse', kind: 'staff',
-    });
-    expect(doc.payment.status).toBe('paid');
+    })).rejects.toThrow('Aucun paiement ne sera supposé');
+    expect(doc.payment.status).toBe('pending');
+    expect(doc.status).toBe('ready');
   });
 
   it('ne « repaie » pas une commande déjà réglée', async () => {

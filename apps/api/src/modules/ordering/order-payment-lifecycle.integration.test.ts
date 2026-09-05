@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { ConflictException } from '@nestjs/common';
-import { MODELS, type Order } from '@sm/db';
+import { MODELS, type Order, type AuditLog } from '@sm/db';
 import mongoose, { Types, type Connection, type Model, type Query } from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StripeWebhookEvent } from '../../common/stripe-signature';
 import { OrderPaymentLifecycleService, type ProviderIntent } from './order-payment-lifecycle.service';
 import { paymentBarrier, paymentOutcome, TestOrderPaymentProvider } from './order-payment-test-provider';
+import { OrderCounterCollectionService } from '../orders/order-counter-collection.service';
+import { OrdersService } from '../orders/orders.service';
+import { AuditService } from '../audit/audit.module';
 
 const DATABASE_PREFIX = 'snackmanager_payment_test_';
 const RUN_ID = randomUUID().replaceAll('-', '');
@@ -82,6 +85,27 @@ function loseMongoResponseAfter(model: Model<Order>, field: string): Model<Order
   });
 }
 
+/** Holds a real CAS BEFORE execution, so the other connection may win. */
+function holdCollection(model: Model<Order>) {
+  const reached = paymentBarrier(); const resume = paymentBarrier(); let armed = true;
+  const proxy = new Proxy(model, { get(target, property) {
+    const value = Reflect.get(target, property, target);
+    if (property !== 'findOneAndUpdate') return typeof value === 'function' ? value.bind(target) : value;
+    return (...args: unknown[]) => {
+      const query = Reflect.apply(value, target, args) as Query<unknown, Order>;
+      const execute = query.exec.bind(query);
+      query.exec = async () => {
+        if (armed && (args[1] as { $set?: { counterCollection?: unknown } }).$set?.counterCollection) {
+          armed = false; reached.release(); await resume.promise;
+        }
+        return execute();
+      };
+      return query;
+    };
+  } });
+  return { proxy, reached, resume };
+}
+
 function succeeded(intent: ProviderIntent, account = ACCOUNT_ID): StripeWebhookEvent {
   return {
     id: `evt_test_${randomUUID()}`, type: 'payment_intent.succeeded', account, livemode: false,
@@ -94,6 +118,7 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
   let secondConnection: Connection;
   let first: Model<Order>;
   let second: Model<Order>;
+  let auditLogs: Model<AuditLog>;
   let ownsDatabase = false;
   let provider: TestOrderPaymentProvider;
 
@@ -121,6 +146,8 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
     first = model(firstConnection);
     await first.createCollection();
     await first.createIndexes();
+    auditLogs = firstConnection.model<AuditLog>(MODELS.AuditLog.name, MODELS.AuditLog.schema, MODELS.AuditLog.collection);
+    await auditLogs.createCollection();
     secondConnection = await mongoose.createConnection(database.uri, {
       autoCreate: false, autoIndex: false, family: 4, serverSelectionTimeoutMS: 5000,
     }).asPromise();
@@ -143,7 +170,7 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
 
   const lifecycle = (orders = first) => new OrderPaymentLifecycleService(orders);
   const resolveAccount = () => Promise.resolve(ACCOUNT_ID);
-  const read = (id: string) => first.findById(id).select('+paymentFlow').read('primary').lean();
+  const read = (id: string) => first.findById(id).select('+paymentFlow +counterCollection').read('primary').lean();
   const cancel = (service: OrderPaymentLifecycleService, id: string) => service.cancel(
     id, String(TENANT_ID), 'cashier-test', 'Annulation de recette', provider,
   );
@@ -691,5 +718,265 @@ integration('paiement et annulation sur un vrai Mongo standalone', () => {
     const stable = await read(id);
     await expect(lifecycle().reconcileSucceeded(succeeded(opened!.intent), provider)).rejects.toMatchObject({ status: 503 });
     expect(await read(id)).toEqual(stable);
+  });
+
+  describe('encaissement explicite — une seule commande et une seule preuve', () => {
+    const actor = { sub: 'cashier-test', tenantId: String(TENANT_ID), role: 'caisse' as const, kind: 'staff' as const, deviceId: 'register-test' };
+    const body = () => ({ operationId: randomUUID(), expectedTotalCents: 1250, tender: 'cash' as const, cashReceivedCents: 2000 });
+    function collection(orders = first, capabilities = ['bo']) {
+      const audit = { logOnce: vi.fn(async () => undefined) };
+      const redis = { publish: vi.fn(async () => 1) };
+      return { service: new OrderCounterCollectionService(orders, { pourTenant: async () => capabilities } as never,
+        audit as never, redis as never), audit, redis };
+    }
+    const seedCounter = (patch: Record<string, unknown> = {}) => seed({ payment: { method: 'counter', status: 'pending' }, ...patch });
+    const orderService = (orders = first) => new OrdersService(orders, {} as never, {} as never, {} as never,
+      { publish: async () => 1 } as never, { log: async () => undefined } as never, {} as never,
+      { pourTenant: async () => ['bo'] } as never, {} as never);
+
+    it.each(['cash', 'card', 'meal_voucher'] as const)('encaisse %s sans changer commande, créneau, canal, lignes ou statut cuisine', async (tender) => {
+      const id = await seedCounter({ status: 'preparing' });
+      const before = await read(id);
+      const input = { operationId: randomUUID(), expectedTotalCents: 1250, tender, ...(tender === 'cash' ? { cashReceivedCents: 2000 } : {}) };
+      const { service, audit, redis } = collection();
+      await service.collect(String(TENANT_ID), id, actor, input);
+      const after = await read(id);
+      expect(after).toMatchObject({ _id: before!._id, status: 'preparing', channel: 'online', clientId: before!.clientId,
+        payment: { method: 'counter', status: 'paid', tender, cashReceived: tender === 'cash' ? 2000 : null, changeGiven: tender === 'cash' ? 750 : null },
+        counterCollection: { operationId: input.operationId, amountCents: 1250, tender, actor: { sub: actor.sub, role: 'caisse' }, deviceId: 'register-test' } });
+      expect(after?.pickup).toEqual(before?.pickup); expect(after?.lines).toEqual(before?.lines);
+      expect(after?.statusHistory).toEqual(before?.statusHistory);
+      expect(audit.logOnce).toHaveBeenCalledOnce();
+      expect(redis.publish).toHaveBeenCalledOnce();
+      expect(JSON.stringify(redis.publish.mock.calls)).not.toMatch(/counterCollection|paymentFlow/);
+      expect(await first.countDocuments()).toBe(1);
+      expect(provider.create).not.toHaveBeenCalled();
+    });
+
+    it('la bascule bancaire prouvée permet ensuite l’encaissement de la même commande', async () => {
+      const id = await seed();
+      await lifecycle().open(id, TOKEN, provider, resolveAccount);
+      await counter(lifecycle(), id);
+      await collection().service.collect(String(TENANT_ID), id, actor, body());
+      expect(await read(id)).toMatchObject({ payment: { status: 'paid', method: 'counter' }, paymentFlow: { phase: 'counter_ready' } });
+      expect(provider.createdCount).toBe(1);
+    });
+
+    it('deux opérateurs rejouant la même opération n’inscrivent qu’un seul encaissement', async () => {
+      const id = await seedCounter(); const input = body();
+      await Promise.all([collection().service.collect(String(TENANT_ID), id, actor, input),
+        collection(second).service.collect(String(TENANT_ID), id, actor, input)]);
+      const stable = await read(id);
+      await collection().service.collect(String(TENANT_ID), id, actor, input);
+      expect(await read(id)).toEqual(stable);
+      expect(stable?.counterCollection?.operationId).toBe(input.operationId);
+      expect(stable?.__v).toBe(1);
+    });
+
+    it('deux opérations différentes concurrentes : un gagnant, aucun second paiement', async () => {
+      const id = await seedCounter();
+      const results = await Promise.allSettled([collection().service.collect(String(TENANT_ID), id, actor, body()),
+        collection(second).service.collect(String(TENANT_ID), id, actor, body())]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      expect((await read(id))?.__v).toBe(1);
+    });
+
+    it('réponse Mongo perdue après le paiement : le même ID reprend sans encaisser deux fois', async () => {
+      const id = await seedCounter(); const input = body();
+      await expect(collection(loseMongoResponseAfter(first, 'counterCollection')).service.collect(String(TENANT_ID), id, actor, input)).rejects.toThrow('Réponse Mongo perdue');
+      const stable = await read(id);
+      await collection(second).service.collect(String(TENANT_ID), id, actor, input);
+      expect(await read(id)).toEqual(stable);
+      expect(stable?.payment.status).toBe('paid');
+    });
+
+    it.each([{ cashReceivedCents: 2500 }, { expectedTotalCents: 1200 }, { operationId: randomUUID() }])('refuse une répétition avec d’autres paramètres %j', async (patch) => {
+      const id = await seedCounter(); const input = body();
+      await collection().service.collect(String(TENANT_ID), id, actor, input);
+      const stable = await read(id);
+      await expect(collection().service.collect(String(TENANT_ID), id, actor, { ...input, ...patch })).rejects.toBeInstanceOf(ConflictException);
+      expect(await read(id)).toEqual(stable);
+    });
+
+    it('un rejeu après remise renvoie l’état final, sans ressusciter un remboursement', async () => {
+      const id = await seedCounter(); const input = body();
+      await collection().service.collect(String(TENANT_ID), id, actor, input);
+      await first.updateOne({ _id: id }, { $set: { status: 'delivered', 'payment.status': 'refunded' } });
+      const stable = await read(id);
+      const response = await collection().service.collect(String(TENANT_ID), id, actor, input);
+      expect(response.payment.status).toBe('refunded'); expect(response.status).toBe('delivered');
+      expect(await read(id)).toEqual(stable);
+    });
+
+    it.each([
+      { type: 'delivery' }, { status: 'cancelled' }, { status: 'delivered' }, { paymentFlow: null },
+      { payment: { method: 'online', status: 'pending' } }, { payment: { method: 'counter', status: 'paid' } },
+      { payment: { method: 'counter', status: 'refunded' } },
+      { payment: { method: 'counter', status: 'pending', stripePaymentIntentId: 'pi_unknown' } },
+      { paymentFlow: { version: 1, origin: 'legacy_unknown', phase: 'open' } },
+      { paymentFlow: { version: 1, origin: 'created_v1', phase: 'closed' } },
+      { paymentFlow: { version: 1, origin: 'created_v1', phase: 'closing' } },
+      { paymentFlow: { version: 1, origin: 'created_v1', phase: 'review_required' } },
+    ])('refuse une commande non encaissable %j', async (patch) => {
+      const id = await seedCounter(patch); const before = await read(id);
+      await expect(collection().service.collect(String(TENANT_ID), id, actor, body())).rejects.toBeInstanceOf(ConflictException);
+      expect(await read(id)).toEqual(before);
+    });
+
+    it.each([{ expectedTotalCents: 1200 }, { cashReceivedCents: 1000 }])('refuse un prix périmé ou un montant reçu insuffisant %j', async (patch) => {
+      const id = await seedCounter(); const before = await read(id);
+      await expect(collection().service.collect(String(TENANT_ID), id, actor, { ...body(), ...patch })).rejects.toThrow();
+      expect(await read(id)).toEqual(before);
+    });
+
+    it('distingue le rejet certain, le conflit de paramètres et l’encaissement déjà confirmé ailleurs', async () => {
+      const id = await seedCounter(); const input = body(); const service = collection().service;
+      await expect(service.collect(String(TENANT_ID), id, actor, { ...input, expectedTotalCents: 1 })).rejects.toMatchObject({
+        status: 409, response: { code: 'ORDER_COLLECTION_REJECTED' },
+      });
+      await service.collect(String(TENANT_ID), id, actor, input);
+      await expect(service.collect(String(TENANT_ID), id, actor, { ...input, cashReceivedCents: 2500 })).rejects.toMatchObject({
+        status: 409, response: { code: 'ORDER_COLLECTION_OPERATION_CONFLICT' },
+      });
+      await expect(service.collect(String(TENANT_ID), id, actor, body())).rejects.toMatchObject({
+        status: 409, response: { code: 'ORDER_COLLECTION_ALREADY_COLLECTED' },
+      });
+    });
+
+    it('refuse la cuisine et un autre tenant même sur le rejeu d’une opération réussie', async () => {
+      const id = await seedCounter(); const input = body();
+      await collection().service.collect(String(TENANT_ID), id, actor, input);
+      const stable = await read(id);
+      for (const invalid of [{ ...actor, role: 'cuisine' as const }, { ...actor, tenantId: String(new Types.ObjectId()) }]) {
+        await expect(collection().service.collect(String(TENANT_ID), id, invalid, input)).rejects.toMatchObject({ status: 403 });
+      }
+      expect(await read(id)).toEqual(stable);
+    });
+
+    it('applique le périmètre de l’offre avant toute mutation', async () => {
+      const id = await seedCounter({ channel: 'pos' }); const before = await read(id);
+      await expect(collection(first, ['online']).service.collect(String(TENANT_ID), id, actor, body())).rejects.toMatchObject({ status: 404 });
+      await expect(collection(first, ['loyalty']).service.collect(String(TENANT_ID), id, actor, body())).rejects.toMatchObject({ status: 404 });
+      expect(await read(id)).toEqual(before);
+    });
+
+    it('paiement confirmé d’abord : aucune annulation, bascule ou ouverture bancaire ne le remplace', async () => {
+      const id = await seedCounter();
+      await collection().service.collect(String(TENANT_ID), id, actor, body());
+      await expect(counter(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+      await expect(cancel(lifecycle(), id)).rejects.toBeInstanceOf(ConflictException);
+      expect(await lifecycle().open(id, TOKEN, provider, resolveAccount)).toBeNull();
+      expect(provider.create).not.toHaveBeenCalled();
+    });
+
+    it('une remise après encaissement ne peut modifier le montant confirmé', async () => {
+      const id = await seedCounter();
+      await collection().service.collect(String(TENANT_ID), id, actor, body());
+      const stable = await read(id);
+      await expect(orderService().discount(String(TENANT_ID), id, { staffId: actor.sub, role: 'gerant' }, 100, 'Geste commercial')).rejects.toBeInstanceOf(ConflictException);
+      expect(await read(id)).toEqual(stable);
+    });
+
+    it.each(['discount', 'open', 'cancel', 'switch'] as const)('%s gagne contre une ancienne lecture d’encaissement : aucun écrasement', async (winner) => {
+      const id = await seedCounter(); const input = body(); const hold = holdCollection(first);
+      const late = paymentOutcome(collection(hold.proxy).service.collect(String(TENANT_ID), id, actor, input));
+      await Promise.race([hold.reached.promise, late.then(() => { throw new Error('Collecte terminée avant sa barrière.'); })]);
+      let stable!: Awaited<ReturnType<typeof read>>;
+      try {
+        if (winner === 'discount') await orderService(second).discount(String(TENANT_ID), id,
+          { staffId: String(new Types.ObjectId()), role: 'gerant' }, 100, 'Geste commercial');
+        if (winner === 'open') await lifecycle(second).open(id, TOKEN, provider, resolveAccount);
+        if (winner === 'cancel') await cancel(lifecycle(second), id);
+        if (winner === 'switch') await counter(lifecycle(second), id);
+        stable = await read(id);
+      } finally { hold.resume.release(); }
+      const result = await late;
+      if (winner === 'switch') {
+        // Never-started counter switch is compatible: fresh proof + same price.
+        expect(result.ok).toBe(true);
+        expect(await read(id)).toMatchObject({ status: 'new', payment: { method: 'counter', status: 'paid' }, paymentFlow: { phase: 'counter_ready' } });
+      } else {
+        expect(result.ok).toBe(false);
+        expect(!result.ok && result.error).toBeInstanceOf(ConflictException);
+        expect(await read(id)).toEqual(stable);
+      }
+      expect(provider.createdCount).toBe(winner === 'open' ? 1 : 0);
+    });
+
+    it('une ancienne remise déjà chargée ne peut minorer le paiement encaissé entre-temps', async () => {
+      const id = await seedCounter();
+      const stale = await second.findById(id).select('+paymentFlow');
+      const orders = orderService(second);
+      vi.spyOn(orders, 'byId').mockResolvedValue(stale!);
+      await collection().service.collect(String(TENANT_ID), id, actor, body());
+      const stable = await read(id);
+      await expect(orders.discount(String(TENANT_ID), id, { staffId: String(new Types.ObjectId()), role: 'gerant' }, 100, 'Geste commercial'))
+        .rejects.toBeInstanceOf(ConflictException);
+      expect(await read(id)).toEqual(stable);
+    });
+
+    it('encaisser puis remettre conserve deux gestes et un seul paiement', async () => {
+      const id = await seedCounter({ status: 'ready' });
+      await expect(orderService().updateStatus(String(TENANT_ID), id, 'delivered', actor)).rejects.toBeInstanceOf(ConflictException);
+      await collection().service.collect(String(TENANT_ID), id, actor, body());
+      const receipt = (await read(id))?.counterCollection;
+      await orderService().updateStatus(String(TENANT_ID), id, 'delivered', actor);
+      expect(await read(id)).toMatchObject({ status: 'delivered', payment: { status: 'paid' }, counterCollection: receipt });
+    });
+
+    it.each(['audit', 'redis'] as const)('une panne %s après paiement garde la preuve et se répare par le même POST', async (dependency) => {
+      const id = await seedCounter(); const input = body(); const ctx = collection();
+      if (dependency === 'audit') ctx.audit.logOnce.mockRejectedValueOnce(new Error('Audit indisponible'));
+      else ctx.redis.publish.mockRejectedValueOnce(new Error('Redis indisponible'));
+      await expect(ctx.service.collect(String(TENANT_ID), id, actor, input)).rejects.toMatchObject({ status: 503,
+        response: { code: 'ORDER_COLLECTION_RECONCILIATION_REQUIRED' } });
+      const stable = await read(id);
+      expect(stable?.payment.status).toBe('paid');
+      await ctx.service.collect(String(TENANT_ID), id, actor, input);
+      expect(await read(id)).toEqual(stable);
+      expect(ctx.audit.logOnce).toHaveBeenCalledTimes(2);
+    });
+
+    it('journal append-only réel : replays concurrents et réponse perdue ne créent aucune seconde ligne', async () => {
+      const id = await seedCounter(); const input = body();
+      const audit = new AuditService(auditLogs, {} as never, {} as never);
+      const service = new OrderCounterCollectionService(first, { pourTenant: async () => ['bo'] } as never, audit,
+        { publish: async () => 1 } as never);
+      const create = auditLogs.create.bind(auditLogs);
+      vi.spyOn(auditLogs, 'create').mockImplementationOnce((async (...args: unknown[]) => {
+        await Reflect.apply(create, auditLogs, args);
+        throw new Error('Réponse audit perdue après insert réel');
+      }) as never);
+      try {
+        await Promise.all([service.collect(String(TENANT_ID), id, actor, input), service.collect(String(TENANT_ID), id, actor, input)]);
+        await service.collect(String(TENANT_ID), id, actor, input);
+        const entries = await auditLogs.find({ targetId: id }).lean();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({ action: 'order.collect', author: { id: actor.sub },
+          meta: { amountCents: 1250, tender: 'cash', operationId: input.operationId } });
+        expect(entries[0]?.deduplication?.fingerprint).toHaveLength(64);
+        await expect(audit.logOnce({ tenantId: String(TENANT_ID), action: 'order.collect', targetId: id,
+          actor, meta: { ...(entries[0]?.meta as object), amountCents: 1 } }, input.operationId)).rejects.toMatchObject({ status: 503 });
+        expect(await auditLogs.find({ targetId: id }).lean()).toEqual(entries);
+      } finally { vi.restoreAllMocks(); }
+    });
+
+    it('journal réellement indisponible après paiement : le rejeu répare l’unique entrée sans toucher au paiement', async () => {
+      const id = await seedCounter(); const input = body();
+      const service = new OrderCounterCollectionService(first, { pourTenant: async () => ['bo'] } as never,
+        new AuditService(auditLogs, {} as never, {} as never), { publish: async () => 1 } as never);
+      const create = vi.spyOn(auditLogs, 'create').mockRejectedValueOnce(new Error('Insertion audit indisponible'));
+      try {
+        await expect(service.collect(String(TENANT_ID), id, actor, input)).rejects.toMatchObject({ status: 503 });
+        const stable = await read(id);
+        expect(stable?.payment.status).toBe('paid');
+        expect(await auditLogs.countDocuments({ targetId: id })).toBe(0);
+        await service.collect(String(TENANT_ID), id, actor, input);
+        expect(await read(id)).toEqual(stable);
+        expect(await auditLogs.countDocuments({ targetId: id })).toBe(1);
+        expect(create).toHaveBeenCalledTimes(2);
+      } finally { create.mockRestore(); }
+    });
   });
 });

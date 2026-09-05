@@ -68,6 +68,7 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnNextAttemptAt;
   delete returned.loyaltyEarnLeaseUntil;
   delete returned.paymentFlow;
+  delete returned.counterCollection;
   return returned;
 }
 
@@ -1063,6 +1064,26 @@ export const OrderSchema = new Schema(
       ),
       required: true,
     },
+    // One immutable collection receipt, committed atomically with payment.
+    // No default receipt may manufacture an operator confirmation for history.
+    counterCollection: {
+      type: new Schema({
+        operationId: { type: String, required: true },
+        amountCents: { type: Number, required: true, min: 0, max: 100_000_000, validate: Number.isSafeInteger },
+        tender: { type: String, enum: ['cash', 'card', 'meal_voucher'], required: true },
+        cashReceivedCents: { type: Number, default: null, min: 0, max: 100_000_000, validate: (v: number | null) => v === null || Number.isSafeInteger(v) },
+        changeGivenCents: { type: Number, default: null, min: 0, max: 100_000_000, validate: (v: number | null) => v === null || Number.isSafeInteger(v) },
+        collectedAt: { type: Date, required: true },
+        actor: { type: new Schema({
+          sub: { type: String, required: true },
+          kind: { type: String, enum: ['staff', 'user'], required: true },
+          role: { type: String, enum: ['owner', 'cogerant', 'gerant', 'caisse'], required: true },
+        }, { _id: false }), required: true },
+        deviceId: { type: String, default: null },
+      }, { _id: false }),
+      default: null,
+      select: false,
+    },
     // Preuve privée persistée AVANT tout appel bancaire. Aucun défaut ne
     // convertit une ancienne commande en preuve d'absence de PaymentIntent.
     paymentFlow: {
@@ -1272,6 +1293,8 @@ export const AuditLogSchema = new Schema(
       required: true,
     },
     targetId: { type: String, default: null },
+    /** Optional idempotent append proof; existing audit writers are unchanged. */
+    deduplication: { type: new Schema({ key: { type: String, required: true }, fingerprint: { type: String, required: true } }, { _id: false }), default: null },
     meta: { type: Schema.Types.Mixed, default: null },
     /** `null` sur les lignes antérieures au champ, et sur les gestes sans PIN. */
     author: { type: AuditAuthorSub, default: null },

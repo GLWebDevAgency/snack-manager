@@ -1,6 +1,6 @@
 # Paiement et annulation — protocole durable
 
-Implémentation initiale le 5 septembre 2026, complétée le 6 septembre par le changement de moyen sur un retrait existant. **Pas une attestation de déploiement ni de recette Stripe distante.** Ce lot ferme les courses entre ouverture, fermeture et confirmation bancaire. Il ne livre pas encore l'expiration automatique, l'encaissement comptoir explicite indépendant de la remise ou le remboursement comptoir.
+Implémentation initiale le 5 septembre 2026, complétée le 6 septembre par le changement de moyen sur un retrait existant et l'encaissement POS explicite. **Pas une attestation de déploiement ni de recette Stripe distante.** Ce lot ferme les courses entre ouverture, fermeture et confirmation bancaire. Il ne livre pas encore l'expiration automatique ou le remboursement comptoir. État de livraison : [suivi unique](SUITE-APRES-COMMERCE.md).
 
 ## Invariants et fonctionnement
 
@@ -24,7 +24,7 @@ Le checkout et le suivi proposent « Payer au comptoir » pour un retrait actif 
 
 La destination `counter` est persistée dans la même fermeture durable que l'annulation, distinguée de `cancel_order` (défaut historique). Les deux destinations concurrentes ne s'écrasent pas. Seule une absence d'appel prouvée ou un PI terminal `canceled`, relu sur son compte exact, permet `counter_ready`. Le statut opérationnel et l'historique cuisine restent inchangés ; `payment.status` reste `pending`, le choix devient `counter`, le tender est vide. Le PI et la tentative sont conservés comme preuves. Un replay reprend la décision, sans réouvrir `open`.
 
-La caisse n'encaisse à la remise que si cette preuve est cohérente. Une annulation opérationnelle ultérieure reste possible sans rouvrir Stripe. Les remboursements Stripe et leur interface exigent un paiement réellement classé `online` : un ancien PI annulé conservé après encaissement au comptoir ne représente pas des fonds Stripe remboursables. Un événement bancaire contradictoire exige un rapprochement sans reclassifier silencieusement le règlement comptoir.
+La caisse n'encaisse explicitement que si cette preuve est cohérente ; confirmer la remise ne déclare jamais payé. Une annulation opérationnelle avant encaissement reste possible sans rouvrir Stripe. Les remboursements Stripe et leur interface exigent un paiement réellement classé `online` : un ancien PI annulé conservé après encaissement au comptoir ne représente pas des fonds Stripe remboursables. Un événement bancaire contradictoire exige un rapprochement sans reclassifier silencieusement le règlement comptoir.
 
 Le navigateur invalide les réponses de suivi antérieures à sa mutation, partage un verrou entre confirmation carte et changement de moyen, puis relit le serveur en cas de réponse perdue. Un simple message « indisponible », un timeout ou un paiement `processing` ne constituent jamais une autorisation d'encaisser ailleurs. Le récapitulatif utilise le **statut** du paiement : `pending` n'affiche plus « Payé en ligne ».
 
@@ -32,7 +32,17 @@ Recette locale : vrai Mongo standalone isolé, deux connexions concurrentes et f
 
 Un PI historique connu est repris sur son compte exact, y compris la plateforme pour les anciens paiements uniquement. Un historique sans PI et sans preuve instrumentée devient `legacy_unknown` : ni nouvelle ouverture bancaire, ni annulation financière supposée sûre, ni remise commerciale qui modifierait son montant.
 
-Une commande déjà payée nécessite un traitement financier distinct. Le remboursement Stripe existe ; le remboursement comptoir n'est pas livré par ce lot. Le paiement comptoir implicite historique à la remise reste seulement permis sur une nouvelle commande dont l'absence de tentative bancaire est prouvée. Il reste à le remplacer par une action explicite et auditée, indépendante de la remise.
+Une commande déjà payée nécessite un traitement financier distinct. Le remboursement Stripe existe ; le remboursement comptoir n'est pas livré par ce lot. Le paiement comptoir implicite historique à la remise est supprimé : tout passage à `delivered` exige déjà `paid`.
+
+### Encaisser une commande existante depuis le POS
+
+`POST /orders/:id/collect` exige un opérateur caisse/responsable du restaurant et un périmètre commercial autorisé. Il reçoit un UUID d'opération, le total attendu et le moyen réel (`cash`, `card`, `meal_voucher`), avec montant reçu seulement pour les espèces. Le total vient de la commande serveur ; le rendu monnaie est calculé côté serveur. Il n'y a ni création de vente, ni modification des articles, ni remise au client dans cet appel.
+
+Un CAS écrit ensemble `payment=paid` et la preuve privée `counterCollection` : montant, moyen, monnaie, auteur, appareil et date. Un rejeu identique renvoie l'état actuel, même après remise/remboursement ; un autre UUID ne reprend pas d'argent. Les remises financières après paiement sont refusées. Le journal `order.collect` est append-only avec clé/fingerprint déterministes ; le POST rejoué répare une panne d'audit/publication sans seconde perception.
+
+Le POS conserve l'opération dans le stockage du restaurant avant le POST, reprend le même UUID après fermeture ou réponse perdue et ne l'efface pas sur un simple GET `paid` : celui-ci ne prouve pas la réparation du journal. Le panier courant reste intact. TPE = règlement externe constaté par l'opérateur, pas un terminal bancaire piloté automatiquement. Aucune nouvelle perception hors ligne ni dans la file de création de commandes.
+
+La preuve embarquée et le journal séparé ne forment **pas une transaction inter-documents**. Si le stockage local est effacé pendant une panne d'audit, la preuve serveur subsiste mais il faut un rapprochement ; aucun worker général n'est fourni. La date de collecte est conservée, tandis que les anciens rapports restent basés sur la création : ils ne deviennent pas un livre de caisse exact par ce correctif. Les historiques ambigus sans preuve bancaire ne sont pas auto-réparés.
 
 Les états privés ne sortent ni dans les réponses publiques ni dans les événements POS/KDS. Une erreur opérateur explique la nécessité de vérifier ; aucun secret ni détail bancaire n'est journalisé. L'interface de rapprochement dédiée n'est pas encore fournie.
 

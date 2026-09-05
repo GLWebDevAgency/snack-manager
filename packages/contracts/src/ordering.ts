@@ -510,6 +510,7 @@ export interface PublicSiteResponse {
 export const TENANT_AUDIT_ACTIONS = [
   // ─── Commandes : l'argent qui sort de la recette du jour ───
   'order.cancel',
+  'order.collect',
   'order.discount',
   'order.dispatch',
   /**
@@ -583,6 +584,7 @@ export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
  */
 export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.cancel': 'Annulation de commande',
+  'order.collect': 'Encaissement de commande',
   'order.discount': 'Remise',
   'order.dispatch': 'Départ en livraison',
   'order.refund': 'Remboursement',
