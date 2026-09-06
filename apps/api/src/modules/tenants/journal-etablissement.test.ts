@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DIRECTIONS, type JwtPayload } from '@sm/contracts';
 import { journalDeTest } from '../audit/audit.fakes';
 import { LogoService } from './logo.service';
@@ -62,7 +62,9 @@ function fakeTenants(over: Record<string, unknown> = {}) {
               Object.entries(vu).filter(([k]) => k === '_id' || k in projection),
             )
           : vu;
-        return { lean: async () => rendu, then: (r: (v: unknown) => unknown) => Promise.resolve(r(rendu)) };
+        const query = Promise.resolve(rendu);
+        return Object.assign(query, { lean: () => query, select: () => query, read: () => query,
+          readConcern: () => query, maxTimeMS: () => query });
       },
       findByIdAndUpdate: async (
         _id: string,
@@ -71,6 +73,16 @@ function fakeTenants(over: Record<string, unknown> = {}) {
         appliquer(update.$set);
         return structuredClone(etat);
       },
+      findOneAndUpdate: vi.fn((_filter: Record<string, unknown>, update: { $set: Record<string, unknown> }) => {
+        appliquer(update.$set);
+        const result = structuredClone(etat);
+        const query = Promise.resolve(result);
+        return Object.assign(query, { select: (value: string) => {
+          expect(value).toBe('-capacityControl');
+          delete result.capacityControl;
+          return query;
+        } });
+      }),
       updateOne: async (_f: unknown, update: { $set: Record<string, unknown> }) => {
         appliquer(update.$set);
         return { modifiedCount: 1 };
@@ -107,6 +119,29 @@ describe('les réglages du service', () => {
       },
       author: { id: GERANT, name: 'Lima Ghassene', role: 'owner', means: 'password' },
     });
+  });
+
+  it('trace une capacité enregistrée seulement après l’écriture conditionnelle', async () => {
+    const { service, lignes, tenants } = atelier();
+    await service.updateSettings(TENANT, { slotCapacity: 6 }, SESSION);
+    expect(tenants.model.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: TENANT, capacityControl: { $exists: false } },
+      { $set: { 'settings.slotCapacity': 6 } }, expect.any(Object));
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]).toMatchObject({ action: 'tenant.settings', meta: { reglages: ['slotCapacity'] } });
+  });
+
+  it.each(['capacity', 'hours'] as const)('ne journalise pas un succès si le réglage %s est refusé avant persistance', async (kind) => {
+    const { service, lignes, tenants } = atelier();
+    tenants.model.findOneAndUpdate.mockImplementationOnce(() => {
+      const query = Promise.resolve(null as never);
+      return Object.assign(query, { select: () => Promise.reject(new Error('Modification concurrente')) });
+    });
+    const update = kind === 'capacity'
+      ? service.updateSettings(TENANT, { slotCapacity: 6 }, SESSION)
+      : service.updateHours(TENANT, { hours: [] }, SESSION);
+    await expect(update).rejects.toThrow();
+    expect(lignes).toEqual([]);
   });
 
   it('n’écrit rien sur un PATCH qui ne reconnaît aucun réglage', async () => {
@@ -149,7 +184,7 @@ describe('les horaires', () => {
           { day: 1, lunch: { open: '11:30', close: '14:30' }, dinner: null },
           { day: 2, lunch: null, dinner: null },
         ],
-        closures: [{ date: '2026-12-25', reason: 'Noël' }] as never,
+        closures: [{ from: '2026-12-25', reason: 'Noël' }],
       },
       SESSION,
     );

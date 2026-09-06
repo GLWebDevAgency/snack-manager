@@ -176,6 +176,16 @@ integration('calendrier C15 — deux connexions Mongo réelles, sans branchement
     expect(await ordersA.countDocuments()).toBe(0);
   });
 
+  it('preview refuse un contrôle natif null au lieu de le confondre avec une absence historique', async () => {
+    await tenant(TENANT, null);
+    await tenantsA.collection.updateOne({ _id: new Types.ObjectId(TENANT) }, { $set: { capacityControl: null } });
+    const before = await control();
+    await unavailable(first.ensureDay(TENANT, DAY));
+    await unavailable(second.preview(TENANT, DAY));
+    expect(await control()).toEqual(before);
+    expect(await daysA.countDocuments()).toBe(0);
+  });
+
   it.each([null, 'seeding', 'blocked'] as const)('refuse ensureDay sans contrôle actif (%s), sans inventer de bootstrap', async (state) => {
     await tenant(TENANT, state);
     await unavailable(first.ensureDay(TENANT, DAY));

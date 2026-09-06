@@ -231,9 +231,10 @@ jobs:
         env:
           ORDER_CAPACITY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci
           ORDER_CAPACITY_CALENDAR_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_calendar_test_ci
+          ORDER_CAPACITY_SETTINGS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_settings_test_ci
         run: |
           pnpm --filter @sm/db exec vitest run src/order-capacity-immutability.test.ts
-          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts src/modules/ordering/order-capacity-calendar.store.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts src/modules/ordering/order-capacity-calendar.store.integration.test.ts src/modules/tenants/tenant-capacity-settings.store.integration.test.ts
 
       # Brouillon C15 : volontairement bloquant tant que le runtime ne réserve
       # pas atomiquement. Ne pas masquer ce RED avec continue-on-error ou skip.
