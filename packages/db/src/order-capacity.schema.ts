@@ -1,6 +1,9 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 
 const integer = { validator: Number.isInteger, message: 'Une capacité doit être entière.' };
+const safeInteger = { validator: Number.isSafeInteger, message: 'Une révision doit être un entier sûr.' };
+const CLOSED_REASONS = ['no_service', 'exceptional_closure'] as const;
+const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const CAPACITY_STATES = ['seeding', 'ready', 'blocked'] as const;
 const parisDay = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -21,6 +24,49 @@ const CapacitySlotSchema = new Schema({
   deliveryCapacity: { type: Number, required: true, min: 1, max: 50, validate: integer },
 }, { _id: false });
 
+function civilDay(day: unknown): day is string {
+  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  const date = new Date(`${day}T12:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day;
+}
+
+function validGrid(day: unknown, slots: unknown, closedReason: unknown): boolean {
+  if (!civilDay(day) || !Array.isArray(slots) || slots.length > 1_000) return false;
+  if (slots.length === 0) return CLOSED_REASONS.some((reason) => reason === closedReason);
+  if (closedReason !== null) return false;
+  return slots.every((slot: { at?: Date }, index) => slot?.at instanceof Date && Number.isFinite(slot.at.getTime())
+    && parisDay.format(slot.at) === day && (index === 0 || slot.at.getTime() > slots[index - 1].at.getTime()));
+}
+
+const gridValidator = {
+  validator: function (this: { day?: unknown; closedReason?: unknown }, slots: unknown) {
+    return validGrid(this.day, slots, this.closedReason);
+  },
+  message: 'La grille doit contenir au plus 1000 créneaux ordonnés du jour Paris ; une grille vide exige une raison de fermeture, sinon la raison doit être null.',
+};
+
+/** Un seul plan borné, sans commandes/clients ; le CAS d'activation appartient au store. */
+export const OrderCapacityDayIntentSchema = new Schema({
+  operationId: { type: String, required: true, match: UUID },
+  day: { type: String, required: true, validate: civilDay },
+  sourceRevision: { type: Number, required: true, min: 0, validate: safeInteger },
+  planHash: { type: String, required: true, match: /^[a-f0-9]{64}$/ },
+  slots: { type: [CapacitySlotSchema.clone().set('strict', 'throw')], required: true, default: undefined, validate: gridValidator },
+  closedReason: { type: String, enum: [...CLOSED_REASONS, null], default: null },
+}, { _id: false, strict: 'throw' });
+export type OrderCapacityDayIntent = InferSchemaType<typeof OrderCapacityDayIntentSchema>;
+
+/** Aucun champ ne crée un contrôle actif implicitement sur un ancien tenant. */
+export const OrderCapacityControlSchema = new Schema({
+  version: { type: Number, enum: [1], required: true },
+  state: { type: String, enum: ['seeding', 'active', 'blocked'], required: true },
+  configRevision: { type: Number, required: true, min: 0, validate: safeInteger },
+  bootstrapId: { type: String, required: true, match: UUID },
+  cutoverAt: { type: Date, required: true },
+  dayIntent: { type: OrderCapacityDayIntentSchema, default: null },
+}, { _id: false, strict: 'throw' });
+export type OrderCapacityControl = InferSchemaType<typeof OrderCapacityControlSchema>;
+
 /**
  * Préparation C15, NON activée par le runtime. Une journée ne peut devenir
  * ready qu'après reprise de TOUS ses tickets historiques et de leurs sièges.
@@ -29,21 +75,13 @@ const CapacitySlotSchema = new Schema({
  */
 export const OrderCapacityDaySchema = new Schema({
   tenantId: { type: Schema.Types.ObjectId, required: true, immutable: true },
-  day: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/, immutable: true,
-    validate: (day: string) => {
-      const date = new Date(`${day}T12:00:00.000Z`);
-      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day;
-    },
-  },
+  day: { type: String, required: true, validate: civilDay, immutable: true },
   state: { type: String, enum: [...CAPACITY_STATES], default: 'seeding', required: true },
+  closedReason: { type: String, enum: [...CLOSED_REASONS, null], default: null, immutable: true },
+  sourceRevision: { type: Number, min: 0, validate: safeInteger, immutable: true },
   slots: {
     type: [CapacitySlotSchema], required: true, immutable: true, default: undefined,
-    validate: {
-      validator: (slots: { at: Date }[]) => Array.isArray(slots) && slots.length > 0 && slots.length <= 1_000
-        && slots.every((slot, index) => Number.isFinite(slot.at?.getTime())
-          && (index === 0 || slot.at.getTime() > slots[index - 1]!.at.getTime())),
-      message: 'La grille doit contenir de 1 à 1000 créneaux uniques et ordonnés.',
-    },
+    validate: gridValidator,
   },
 }, { timestamps: true });
 

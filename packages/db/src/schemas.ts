@@ -1,6 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
-import { OrderCapacityClaimSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
+import { OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
   AUDIT_AUTHOR_MEANS,
@@ -82,6 +82,11 @@ function hidePrivateAdmissionFields(_document: unknown, returned: Record<string,
   delete returned.snapshot;
   delete returned.validationOwner;
   delete returned.capacity;
+  return returned;
+}
+
+function hidePrivateTenantFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.capacityControl;
   return returned;
 }
 
@@ -181,6 +186,7 @@ export const BrandSub = new Schema(
 
 export const TenantSchema = new Schema(
   {
+    capacityControl: { type: OrderCapacityControlSchema, default: undefined, select: false },
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     logoUrl: { type: String, default: null },
@@ -563,7 +569,7 @@ export const TenantSchema = new Schema(
       default: null,
     },
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { transform: hidePrivateTenantFields }, toObject: { transform: hidePrivateTenantFields } },
 );
 // La résolution d'un domaine personnalisé (public/resolve) cherche le tenant
 // par `domains.hostname` À CHAQUE visite d'un site client dont le cache a
