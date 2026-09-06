@@ -1,5 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
+import { OrderCapacityClaimSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
   AUDIT_AUTHOR_MEANS,
@@ -78,6 +79,7 @@ function hidePrivateAdmissionFields(_document: unknown, returned: Record<string,
   delete returned.payloadHash;
   delete returned.snapshot;
   delete returned.validationOwner;
+  delete returned.capacity;
   return returned;
 }
 
@@ -1255,10 +1257,17 @@ export const PublicOrderAdmissionSchema = new Schema({
   orderId: { type: Schema.Types.ObjectId, default: null },
   slot: { type: Date, required: true },
   snapshot: { type: Schema.Types.Mixed, default: null, select: false },
+  // Aucun défaut : une admission C01/historique ne s'invente pas de réservation.
+  capacity: { type: OrderCapacityClaimSchema, default: undefined, select: false },
   rejection: { type: String, enum: ['unavailable', 'slot_unavailable', 'invalid_order', 'abandoned', null], default: null },
 }, { timestamps: true, toJSON: { transform: hidePrivateAdmissionFields }, toObject: { transform: hidePrivateAdmissionFields } });
 PublicOrderAdmissionSchema.index({ tenantId: 1, clientId: 1 }, { unique: true });
 PublicOrderAdmissionSchema.index({ tenantId: 1, slot: 1, state: 1 });
+for (const { name, field } of ORDER_CAPACITY_INDEXES) {
+  PublicOrderAdmissionSchema.index({ tenantId: 1, 'capacity.slot': 1, [`capacity.${field}`]: 1 }, {
+    name, unique: true, partialFilterExpression: { [`capacity.${field}`]: { $type: 'number' } },
+  });
+}
 export type PublicOrderAdmission = InferSchemaType<typeof PublicOrderAdmissionSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -2146,6 +2155,7 @@ export const MODELS = {
   Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
   PublicOrderAdmission: { name: 'PublicOrderAdmission', schema: PublicOrderAdmissionSchema, collection: 'public_order_admissions' },
+  OrderCapacityDay: { name: 'OrderCapacityDay', schema: OrderCapacityDaySchema, collection: 'order_capacity_days' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },
