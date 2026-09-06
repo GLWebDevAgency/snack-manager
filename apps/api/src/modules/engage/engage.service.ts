@@ -142,10 +142,18 @@ export class EngageService {
 
   /** Bascule actif/inactif (toggle 1-clic de la carte promo). */
   async togglePromotion(tenantId: string, id: string) {
-    const promo = await this.promotions.findOne({ _id: id, tenantId });
+    // Une hydratation suivie de save() réécrirait les défauts absents d'un
+    // ancien document, notamment usageCount:0 après une réservation concurrente.
+    // La bascule se calcule en base et ne touche jamais au compteur.
+    const promo = await this.promotions.findOneAndUpdate(
+      { _id: id, tenantId },
+      [{ $set: { active: { $cond: [
+        // Le défaut historique Mongoose est actif seulement si le champ manque.
+        { $eq: [{ $type: '$active' }, 'missing'] }, false, { $not: ['$active'] },
+      ] } } }],
+      { new: true },
+    );
     if (!promo) throw new NotFoundException('Promotion introuvable');
-    promo.active = !promo.active;
-    await promo.save();
     return promo;
   }
 
