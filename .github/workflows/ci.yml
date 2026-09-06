@@ -206,6 +206,20 @@ jobs:
           ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/engage/engage.promotions.test.ts
 
+      - name: Tests MongoDB réels — socle de capacité non activé
+        env:
+          ORDER_CAPACITY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci
+        run: |
+          pnpm --filter @sm/db exec vitest run src/order-capacity-immutability.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts
+
+      # Brouillon C15 : volontairement bloquant tant que le runtime ne réserve
+      # pas atomiquement. Ne pas masquer ce RED avec continue-on-error ou skip.
+      - name: Régression runtime — dernière place (bloquant C15)
+        env:
+          ORDER_SLOT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_slot_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/orders/slot-reservation-race.integration.test.ts
+
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS
 
