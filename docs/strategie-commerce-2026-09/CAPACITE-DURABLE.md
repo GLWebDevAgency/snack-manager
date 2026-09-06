@@ -1,6 +1,6 @@
 # C15 — capacité durable, protocole et preuves
 
-6 septembre 2026. **Socle préparatoire C15-A, non activé dans l'application.** Le contrôle de créneau existant présente toujours la course décrite ci-dessous. Cette note ne certifie ni la livraison complète, ni l'expiration des commandes impayées.
+6 septembre 2026. **Socle C15-A et préparation C15-B, réservation durable non activée dans l'application.** Le contrôle de créneau existant présente toujours la course décrite ci-dessous. Cette note ne certifie ni la livraison complète, ni l'expiration des commandes impayées.
 
 ## Défaut reproduit et découpage
 
@@ -29,6 +29,16 @@ Après engagement, la capacité n'est libérée qu'après lecture primaire de **
 
 Pas de TTL sur l'admission, ses places ou le calendrier. Pas de snapshot de toutes les commandes dans un bucket Mongo qui pourrait atteindre 16 Mo ; chaque admission conserve son propre snapshot comme C01. Les places sont privées : projection et sérialisation les retirent.
 
+### Préparation B réalisée — pas un parcours activé
+
+- **Identité commune** : même clé tenant/clientId pour public protégé, legacy et staff. `kind` et `channel` privés/immuables distinguent les origines ; le canal exact `phone` ne peut devenir `pos` pendant l'engagement. Les anciennes admissions C01 sans ces champs restent publiques/online. L'empreinte interne ne dépend pas d'un JWT renouvelable et ne constitue jamais une preuve de reprise publique. Aucun import historique à corps inconnu n'utilise cette fabrique.
+- **Noyau multiwriters** : dernière place testée entre les trois origines ; snapshots staff conservent paiement et outbox fidélité, sans fabriquer `Order.publicRecovery`. Les portes du service public refusent les admissions internes, y compris libération du validateur. Les orchestrateurs de création/matérialisation staff et legacy ne sont **pas encore raccordés** ; `materializeSlot` C01 ne doit pas être pris pour un drainage mixte prêt à activer.
+- **Index réellement prêts** : `listIndexes()` exposait `unique:true` avant la fin de construction. Le garde lit désormais `$indexStats` sur primaire, contrôle les trois spécifications et refuse `building:true`, absence, erreur ou résultat incohérent, sans cache positif ni repli moins sûr. Recette réelle : chacun des trois index a été suspendu puis terminé sur Mongo8.0.12. Avant activation, vérifier l'action Mongo `indexStats` pour le compte applicatif ; un refus de privilège entraîne volontairement503. Une suppression administrative d'index pendant les ventes reste interdite, même après cette lecture.
+- **Grille brute pure** : `buildOrderCapacityCalendar` ne dépend ni de l'heure courante, ni des ventes, pauses web, abonnements ou Stripe. Horaires/fermetures Paris, capacités et déduplication testés face au service existant. Horaires incohérents/au-delà du jour refusés, `24:00` admis seulement en fin exclusive ; une seule occurrence de l'heure répétée DST reste la convention existante. Journée fermée explicitement distinguée d'une erreur. **Son résultat vide n'est pas encore persistable dans `OrderCapacityDay`** : adapter le modèle et le bootstrap avant raccordement, jamais créer un faux créneau.
+- **Journal téléphone pur** : corps/UUID durables avant POST, ISO canonique, reçu staff lié aux coordonnées/lignes/identité de la tentative, prix serveur autoritaire. Reprise sans expiration, sans nouveau clientId sur404/4xx ; aucun faux état rejeté avant contrat staff de clôture durable. Le premier reçu reste immuable et le corps reste présent pour réparer le journal caisse avant archivage. Aucun consommateur UI : il faut encore inscrire la clé dans la purge, exiger une vraie exclusion inter-onglets (pas le fallback mono-process), obtenir la confirmation serveur avant encaissement et remplacer l'ancien envoi en file — ne jamais envoyer par les deux chemins.
+
+Ces modules restent volontairement sans activation. Les fixtures du noyau créent des admissions internes pour éprouver les index : elles ne prouvent pas le fonctionnement des routes staff, ni leur reprise dans le POS.
+
 ## Calendrier — prérequis d'activation
 
 Le modèle `OrderCapacityDay` porte une journée Paris unique par restaurant, une grille bornée (1–1000 créneaux) et les capacités cuisine (1–100) et livraison (1–50). Une journée commence `seeding`, jamais `ready` implicitement. Le noyau refuse une journée absente/non prête, un créneau non exact et les index uniques manquants.
@@ -49,11 +59,21 @@ La primitive ne canonise pas encore les créneaux téléphone hors grille. Ce ra
 
 **POS téléphone : frontière opérationnelle.** Le POS peut aujourd'hui mettre la commande en file offline et l'annoncer acceptée avant admission serveur. Refuser ensuite le créneau pourrait laisser un ticket annoncé accepté, voire encaissé, absent côté serveur. C15-B doit obtenir la réservation serveur avant confirmation/encaissement des nouvelles commandes à créneau, distinguer l'état « à confirmer » et rapprocher explicitement les anciennes entrées offline. POS sans créneau reste hors de cette capacité réservée. Ne pas promettre une réservation hors réseau sans mécanisme distinct de places préallouées.
 
+### Ordre du raccordement restant
+
+1. **Calendrier/coordination Tenant** : un contrôle privé de bootstrap et une révision de configuration ; mise à jour atomique des réglages+révision dans les trois writers BO (`TenantsService.updateSettings`, `updateHours`, `DeliveryService.updateSettings`). Une intention de journée bornée dans le même document Tenant arbitre réglage concurrent vs initialisation ; un helper reprend exactement le plan figé. Les journées déjà initialisées ne changent pas. GET affiche une prévisualisation sans figer 14 jours ; la première vraie admission vérifiée initialise. Expliquer dans le BO les journées figées et les dates d'effet.
+2. **Tous les writers et reprise** : nouveau binaire sans ancien writer de secours pour `pickup.slot` quand le contrôle est absent/seeding/blocked ; commandes sans créneau inchangées. Authentification staff avant admission ; récupération/rejet durable et matérialiseur commun avant UI. Orchestrer plein/rejet, compensation et annulation sans affirmer qu'un timeout a annulé une écriture. Bootstrap : arrêter/drainer les anciens binaires, arbitrer les anciens validating par CAS, matérialiser committing et reprendre tout l'historique futur, sans horizon arbitraire ni preuve publique inventée. Les lignes non mappables/surchargées restent bloquées pour rapprochement.
+3. **Téléphone et activation** : créneaux issus de l'API staff (la pause web ne ferme pas implicitement le téléphone), tentative persistée, confirmation serveur `counter/pending`, puis encaissement de cette même commande via le module existant. Clôture durable avant nouvelle tentative après envoi incertain. Inventorier/vider ou rapprocher explicitement les anciennes files téléphone déjà encaissées avant bascule. Ensuite seulement : RED runtime vert, recette complète et PR vers develop/staging.
+
 ## Tests et critères de réception
 
 La suite du noyau utilise MongoDB standalone local isolé. Les URI refusent les bases métier, hôtes distants, identifiants et options ; chaque exécution crée une base suffixée puis ne supprime que cette base.
 
 Relevé local du 6 septembre : noyau39/39 (33 scénarios Mongo et6 gardes), schéma21/21, immuabilité54/54 (dont10 scénarios Mongo). Non-régression C01 réelle23/23, suite API1904 tests verts/192 explicitement ignorés hors passes DB dédiées, suite DB207 verts/10 ignorés hors passe Mongo dédiée. Typage API/DB et lints ciblés verts. Revue indépendante favorable **uniquement pour ce socle non activé** ; le RED contrôleur a été rejoué et reste rouge (1 attendu,2 observés).
+
+Relevé suivant, préparation B : noyau55/55, identité15/15, grille66/66, index49/49 dont5 scénarios Mongo (3 constructions réellement suspendues), journal téléphone48/48 et52 régressions POS vertes. C01 réel23/23, schéma22/22, immuabilité réelle54/54. Suite API2029 verts/213 ignorés hors passes dédiées ; DB208 verts/10 ignorés hors passe dédiée. Typages API/DB/POS et lints vérifiés. Les recettes unitaires ne se substituent pas aux suites Mongo séparées. **RED contrôleur rejoué : toujours2 commandes pour1 place**. Revues croisées favorables au lot préparatoire seulement.
+
+La CI lance les tests de construction d'index dans un conteneur Mongo éphémère **dédié** sur27018, distinct des autres suites : le failpoint utilisé est global au daemon. Le test exige `enableTestCommands`, refuse un failpoint déjà actif et le désarme même si la réponse d'activation est perdue ; le runner arrête ensuite uniquement le conteneur qu'il a créé. Aucun de ces réglages ne concerne Railway ou une base métier.
 
 - Dernière place simultanée, collisions réelles sur les index, cuisine et livraison indépendantes sans fuite de place.
 - Deux helpers du même candidat ; perte de réponse après write ; timeout avant write réellement retardé.
