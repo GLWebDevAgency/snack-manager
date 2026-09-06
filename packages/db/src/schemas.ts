@@ -75,6 +75,8 @@ function hidePrivateOrderFields(
 }
 
 function hidePrivateAdmissionFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.kind;
+  delete returned.channel;
   delete returned.proofHash;
   delete returned.payloadHash;
   delete returned.snapshot;
@@ -1244,12 +1246,18 @@ OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
 OrderSchema.index({ trackingToken: 1 });
 export type Order = InferSchemaType<typeof OrderSchema>;
 
-/** Journal d'admission public : aucun TTL ne peut rouvrir une clé incertaine. */
+/** Journal commun (collection historique conservée) : aucun TTL ne rouvre une clé incertaine. */
 export const PublicOrderAdmissionSchema = new Schema({
   _id: { type: String, required: true },
   tenantId: { type: Schema.Types.ObjectId, required: true },
   clientId: { type: String, required: true },
   version: { type: Number, enum: [1], required: true },
+  // Les anciens documents C01 sans kind restent publics. Le staff ne crée
+  // aucune preuve de reprise publique ; l'origine ne fait pas partie de la clé unique.
+  kind: { type: String, enum: ['public', 'legacy', 'staff'], default: 'public', immutable: true, select: false },
+  // Ancien C01 absent = online uniquement ; chaque nouvelle identité staff
+  // fige le canal exact afin de ne pas échanger phone et pos pendant la reprise.
+  channel: { type: String, enum: ['online', 'pos', 'phone'], default: undefined, immutable: true, select: false },
   proofHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
   payloadHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
   state: { type: String, enum: ['validating', 'committing', 'created', 'rejected'], required: true },

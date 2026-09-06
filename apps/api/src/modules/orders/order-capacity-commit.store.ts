@@ -1,13 +1,14 @@
 import { ServiceUnavailableException } from '@nestjs/common';
-import { createHash } from 'node:crypto';
 import type { Model } from 'mongoose';
-import { ORDER_CAPACITY_DAY_INDEX, ORDER_CAPACITY_INDEXES, type Order, type OrderCapacityDay, type PublicOrderAdmission } from '@sm/db';
+import { ORDER_CAPACITY_INDEXES, type Order, type OrderCapacityDay, type PublicOrderAdmission } from '@sm/db';
 import { formatDay, parisYmd } from '../ordering/paris-time';
-import { recoveryNotFound, sameRecoveryHash, type PublicRecoveryBinding } from './order-recovery';
+import { recoveryNotFound } from './order-recovery';
+import { assertOrderAdmissionBinding, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, publicRecoveryOfAdmission, type OrderAdmissionBinding } from './order-admission-identity';
 import { PublicOrderSnapshotInvalid } from './public-order-admission.service';
+import { assertOrderCapacityIndexesReady } from './order-capacity-index-readiness';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
-const PRIVATE = '+proofHash +payloadHash +validationOwner +capacity';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +validationOwner +capacity';
 const MAX_CONTENTION_ATTEMPTS = 101;
 
 export type CapacityCommitResult = {
@@ -18,10 +19,6 @@ export type CapacityCommitResult = {
 function uncertain() {
   return new ServiceUnavailableException({ code: 'ORDER_CAPACITY_UNCERTAIN',
     message: 'La réservation reste à vérifier. Conservez la même tentative de commande.' });
-}
-
-function idOf(tenantId: string, clientId: string): string {
-  return createHash('sha256').update(JSON.stringify(['sm.order-admission.v1', tenantId, clientId])).digest('hex');
 }
 
 function terminal(admission: PublicOrderAdmission): CapacityCommitResult | null {
@@ -66,15 +63,15 @@ export class OrderCapacityCommitStore {
     private readonly days: Model<OrderCapacityDay>,
   ) {}
 
-  async commit(tenantId: string, clientId: string, binding: PublicRecoveryBinding,
+  async commit(tenantId: string, clientId: string, binding: OrderAdmissionBinding,
     candidate: Record<string, unknown>): Promise<CapacityCommitResult> {
-    const id = idOf(tenantId, clientId);
+    const id = orderAdmissionId(tenantId, clientId);
     const admission = await this.authenticated(id, binding);
-    if (String(candidate.tenantId) !== tenantId || candidate.clientId !== clientId || candidate.channel !== 'online') {
+    if (String(candidate.tenantId) !== tenantId || candidate.clientId !== clientId || candidate.channel !== orderAdmissionChannel(binding)) {
       throw new PublicOrderSnapshotInvalid();
     }
     const now = new Date();
-    const document = new this.orders({ ...candidate, publicRecovery: binding, createdAt: now, updatedAt: now, __v: 0 });
+    const document = new this.orders({ ...candidate, publicRecovery: publicRecoveryOfAdmission(binding), createdAt: now, updatedAt: now, __v: 0 });
     try { await document.validate(); } catch { throw new PublicOrderSnapshotInvalid(); }
     const snapshot = document.toObject({ transform: false });
     const slot = snapshot.pickup?.slot;
@@ -117,7 +114,7 @@ export class OrderCapacityCommitStore {
         return terminal(reread) ?? (reread.validationOwner === binding.validationOwner ? { state: 'full' } : { state: 'stale' });
       }
       try {
-        await this.admissions.updateOne({ _id: id, tenantId, clientId, slot, state: 'validating',
+        await this.admissions.updateOne({ _id: id, tenantId, clientId, slot, state: 'validating', ...orderAdmissionKindFilter(binding),
           validationOwner: binding.validationOwner, proofHash: binding.proofHash, payloadHash: binding.payloadHash },
         { $set: { state: 'committing', snapshot, orderId: snapshot._id,
           capacity: { slot, kitchenSeat, ...(delivery ? { deliverySeat } : {}) } } }, DURABLE);
@@ -142,7 +139,7 @@ export class OrderCapacityCommitStore {
 
   /** Aucune minuterie/panne de paiement ne constitue une preuve d'annulation. */
   async releaseCancelled(tenantId: string, clientId: string): Promise<boolean> {
-    const id = idOf(tenantId, clientId);
+    const id = orderAdmissionId(tenantId, clientId);
     const admission = await this.read(id);
     if (!admission || !['committing', 'created'].includes(admission.state) || !admission.orderId || !admission.capacity) return false;
     const order = await this.orders.findOne({ _id: admission.orderId, tenantId, clientId, status: 'cancelled' })
@@ -164,24 +161,13 @@ export class OrderCapacityCommitStore {
   }
 
   private async assertIndexes(): Promise<void> {
-    const calendarIndexes = await this.days.collection.listIndexes().toArray();
-    const calendar = calendarIndexes.find((entry) => entry.name === ORDER_CAPACITY_DAY_INDEX);
-    if (!calendar?.unique || JSON.stringify(calendar.key) !== JSON.stringify({ tenantId: 1, day: 1 })
-      || calendar.partialFilterExpression || calendar.sparse) throw uncertain();
-    const installed = await this.admissions.collection.listIndexes().toArray();
-    for (const { name, field } of ORDER_CAPACITY_INDEXES) {
-      const index = installed.find((entry) => entry.name === name);
-      const seat = `capacity.${field}`;
-      if (!index?.unique || Object.keys(index.key).join(',') !== `tenantId,capacity.slot,${seat}`
-        || Object.values(index.key).some((value) => value !== 1)
-        || JSON.stringify(index.partialFilterExpression) !== JSON.stringify({ [seat]: { $type: 'number' } })) throw uncertain();
-    }
+    await assertOrderCapacityIndexesReady(this.admissions.collection, this.days.collection);
   }
 
-  private async authenticated(id: string, binding: PublicRecoveryBinding) {
+  private async authenticated(id: string, binding: OrderAdmissionBinding) {
     const admission = await this.read(id);
-    if (!admission || !sameRecoveryHash(admission.proofHash, binding.proofHash)
-      || !sameRecoveryHash(admission.payloadHash, binding.payloadHash)) throw recoveryNotFound();
+    if (!admission) throw recoveryNotFound();
+    assertOrderAdmissionBinding(admission, binding);
     return admission;
   }
   private read(id: string) {

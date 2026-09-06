@@ -206,6 +206,27 @@ jobs:
           ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/engage/engage.promotions.test.ts
 
+      # Le failpoint de construction est GLOBAL au daemon : un conteneur
+      # éphémère distinct évite d'affecter les autres suites Mongo ci-dessus.
+      - name: Tests MongoDB réels — construction des index de capacité
+        env:
+          ORDER_CAPACITY_INDEX_TEST_MONGO_URL: mongodb://127.0.0.1:27018/snackmanager_index_test_ci
+          ORDER_CAPACITY_INDEX_FAILPOINTS: '1'
+        run: |
+          SM_CAPACITY_TEST_CONTAINER=$(docker run --detach --rm --publish 127.0.0.1:27018:27017 \
+            mongo:8.0.29-noble@sha256:021b2d5ae9d253f2cca17491cc8d03aed8df3c840f3252066aa62d3277fc406e \
+            mongod --bind_ip_all --setParameter enableTestCommands=1)
+          [[ "$SM_CAPACITY_TEST_CONTAINER" =~ ^[a-f0-9]{64}$ ]]
+          trap 'docker stop "$SM_CAPACITY_TEST_CONTAINER" >/dev/null' EXIT
+          for attempt in {1..30}; do
+            if docker exec "$SM_CAPACITY_TEST_CONTAINER" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$SM_CAPACITY_TEST_CONTAINER" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'
+          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-index-readiness.test.ts src/modules/orders/order-capacity-index-readiness.integration.test.ts
+
       - name: Tests MongoDB réels — socle de capacité non activé
         env:
           ORDER_CAPACITY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci

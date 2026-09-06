@@ -45,6 +45,22 @@ describe('schéma de capacité préparatoire, sans connexion Mongo', () => {
     expect(PublicOrderAdmissionSchema.path('capacity').options.select).toBe(false);
   });
 
+  it('origine privée immuable, séparée de la clé unique et rétrocompatible C01', () => {
+    expect(new Admission().get('kind')).toBe('public');
+    expect(PublicOrderAdmissionSchema.path('kind').options).toMatchObject({ select: false, immutable: true });
+    expect(PublicOrderAdmissionSchema.path('channel').options).toMatchObject({ select: false, immutable: true });
+    expect(new Admission().get('channel')).toBeUndefined();
+    for (const kind of ['public', 'legacy', 'staff']) {
+      const row = new Admission({ kind, channel: kind === 'staff' ? 'phone' : 'online' });
+      expect(row.get('kind')).toBe(kind);
+      expect(row.toObject()).not.toHaveProperty('kind');
+      expect(row.toJSON()).not.toHaveProperty('kind');
+      expect(row.toJSON()).not.toHaveProperty('channel');
+    }
+    expect(new Admission({ kind: 'historical_unknown' }).validateSync()?.errors.kind).toBeDefined();
+    expect(PublicOrderAdmissionSchema.indexes().some(([keys, options]) => options.unique && 'kind' in keys)).toBe(false);
+  });
+
   it('cache capacity dans les réponses JSON et objet, y compris juste après une écriture', () => {
     const document = new Admission({ capacity: { slot, kitchenSeat: 0, deliverySeat: 0 } });
     expect(document.get('capacity.kitchenSeat')).toBe(0);

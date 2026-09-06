@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import mongoose, { Types, type Connection, type Model, type Query } from 'mongoose';
 import { MODELS, ORDER_CAPACITY_DAY_INDEX, ORDER_CAPACITY_INDEXES, type Order, type OrderCapacityDay, type PublicOrderAdmission } from '@sm/db';
-import { CreatePublicOrderSchema } from '@sm/contracts';
+import { CreateOrderSchema, CreatePublicOrderSchema } from '@sm/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderCapacityCommitStore } from './order-capacity-commit.store';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { publicRecoveryBinding } from './order-recovery';
+import { internalOrderAdmissionBinding, orderAdmissionId, type OrderAdmissionBinding, type OrderAdmissionKind } from './order-admission-identity';
 
 const TENANT = '507f1f77bcf86cd799439011';
 const OTHER_TENANT = '507f1f77bcf86cd799439021';
@@ -13,7 +14,7 @@ const PRODUCT = '507f1f77bcf86cd799439012';
 const DAY = '2030-05-02';
 const SLOT = '2030-05-02T16:00:00.000Z';
 const NEXT_SLOT = '2030-05-02T16:30:00.000Z';
-const PRIVATE = '+proofHash +payloadHash +validationOwner +snapshot +capacity';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +validationOwner +snapshot +capacity';
 
 export function capacityTestDatabase(raw: string): string {
   const url = new URL(raw);
@@ -105,7 +106,7 @@ integration('socle de sièges atomiques — vrai Mongo, non branché au runtime'
   async function calendar(kitchenCapacity = 1, deliveryCapacity = 1, state = 'ready', slots = [SLOT, NEXT_SLOT], day = DAY) {
     return daysA.create({ tenantId: TENANT, day, state, slots: slots.map((at) => ({ at: new Date(at), kitchenCapacity, deliveryCapacity })) });
   }
-  async function prepared(type: 'pickup' | 'delivery' = 'pickup', slot = SLOT) {
+  async function prepared(type: 'pickup' | 'delivery' = 'pickup', slot = SLOT, kind: OrderAdmissionKind = 'public', staffChannel: 'pos' | 'phone' = 'phone') {
     const body = CreatePublicOrderSchema.parse({
       clientId: randomUUID(), recoveryProof: randomUUID().replaceAll('-', '').repeat(2), fulfillment: type,
       lines: [{ productId: PRODUCT, qty: 1 }], payment: { method: type === 'delivery' ? 'online' : 'counter' },
@@ -113,10 +114,21 @@ integration('socle de sièges atomiques — vrai Mongo, non branché au runtime'
       ...(type === 'delivery' ? { delivery: { address: { line1: '12 rue du Test', postalCode: '69001', city: 'Lyon', country: 'FR' } } } : {}),
       turnstileToken: 'local-proof-only',
     });
-    await admissionA.begin(TENANT, body);
-    const binding = (await admissionA.claimValidation(TENANT, body.clientId, publicRecoveryBinding(TENANT, body)!))!;
+    const channel = kind === 'staff' ? staffChannel : 'online';
+    let binding: OrderAdmissionBinding;
+    if (kind === 'public') {
+      await admissionA.begin(TENANT, body);
+      binding = (await admissionA.claimValidation(TENANT, body.clientId, publicRecoveryBinding(TENANT, body)!))!;
+    } else {
+      // Fixture du noyau uniquement : aucun orchestrateur staff/legacy runtime
+      // n'est prétendu livré par ce test de concurrence des places.
+      const dto = CreateOrderSchema.parse({ ...body, channel, type });
+      binding = { ...internalOrderAdmissionBinding(kind, TENANT, dto), validationOwner: randomUUID() };
+      await admissionsA.create({ _id: orderAdmissionId(TENANT, body.clientId), tenantId: TENANT,
+        clientId: body.clientId, ...binding, slot: new Date(slot), state: 'validating' });
+    }
     const candidate: Record<string, unknown> = {
-      _id: new Types.ObjectId(), tenantId: TENANT, clientId: body.clientId, channel: 'online', type,
+      _id: new Types.ObjectId(), tenantId: TENANT, clientId: body.clientId, channel, type,
       number: 12, lines: [], totals: { subtotal: 1250, deliveryFee: type === 'delivery' ? 250 : 0, total: type === 'delivery' ? 1500 : 1250 },
       payment: { method: type === 'delivery' ? 'online' : 'counter', status: 'pending' },
       trackingToken: randomUUID(), pickup: { ...body.pickup, slot: new Date(slot) },
@@ -158,6 +170,84 @@ integration('socle de sièges atomiques — vrai Mongo, non branché au runtime'
     expect(held[0]).toMatchObject({ state: 'committing', capacity: { slot: new Date(SLOT), kitchenSeat: 0 } });
     expect(held[0]?.capacity?.deliverySeat).toBeUndefined();
     expect(await ordersB.countDocuments()).toBe(0); // Le socle réserve, il ne crée pas encore le ticket.
+  });
+
+  it.each([
+    ['public', 'legacy'], ['public', 'staff'], ['legacy', 'staff'], ['staff', 'staff'], ['legacy', 'legacy'],
+  ] as const)('dernière place %s/%s : même autorité et aucune preuve publique fabriquée', async (kindA, kindB) => {
+    await calendar();
+    const a = await prepared('pickup', SLOT, kindA); const b = await prepared('pickup', SLOT, kindB);
+    const results = await Promise.all([commit(first, a), commit(second, b)]);
+    expect(results.map((result) => result.state).sort()).toEqual(['committing', 'full']);
+    const winner = results[0]!.state === 'committing' ? a : b;
+    const held = await stored(winner);
+    expect(await admissionsB.countDocuments({ 'capacity.kitchenSeat': { $exists: true } })).toBe(1);
+    expect(held?.snapshot).toMatchObject({ channel: winner.candidate.channel, payment: { status: 'pending' } });
+    expect((held?.snapshot as Record<string, unknown>).publicRecovery).toEqual(winner.binding.kind === undefined
+      ? { version: 1, proofHash: winner.binding.proofHash, payloadHash: winner.binding.payloadHash } : null);
+  });
+
+  it.each(['legacy', 'staff'] as const)('une admission %s ne peut être adoptée via begin/recover/reject publics', async (kind) => {
+    await calendar(); const a = await prepared('pickup', SLOT, kind);
+    // Même avec des empreintes publiques copiées, l'origine privée reste une
+    // barrière indépendante. Écriture native limitée à cette fixture isolée.
+    const publicBinding = publicRecoveryBinding(TENANT, a.body)!;
+    await admissionsA.collection.updateOne({ clientId: a.body.clientId }, { $set: publicBinding });
+    await expect(admissionB.begin(TENANT, a.body)).rejects.toMatchObject({ status: 404 });
+    await expect(admissionB.recover(TENANT, a.body.clientId, a.body.recoveryProof!)).rejects.toMatchObject({ status: 404 });
+    await expect(admissionB.reject(TENANT, a.body.clientId, publicBinding, 'abandoned')).rejects.toMatchObject({ status: 404 });
+    await expect(admissionB.releaseValidation(TENANT, a.body.clientId, a.binding)).rejects.toMatchObject({ status: 404 });
+    await expect(second.commit(TENANT, a.body.clientId, publicBinding, { ...a.candidate, channel: 'online' })).rejects.toMatchObject({ status: 404 });
+    expect(await stored(a)).toMatchObject({ state: 'validating', kind, snapshot: null });
+    expect((await stored(a))?.validationOwner).toBe(a.binding.validationOwner);
+    expect(await ordersB.countDocuments()).toBe(0);
+  });
+
+  it('une ancienne admission sans kind conserve le protocole public C01', async () => {
+    await calendar(); const a = await prepared();
+    await admissionsA.collection.updateOne({ clientId: a.body.clientId }, { $unset: { kind: '' } });
+    expect(await commit(first, a)).toMatchObject({ state: 'committing' });
+    expect(await admissionB.recover(TENANT, a.body.clientId, a.body.recoveryProof!)).toMatchObject({ state: 'created' });
+    expect(await ordersB.countDocuments()).toBe(1);
+  });
+
+  it('le snapshot staff conserve paiement/outbox fidélité et écrase toute preuve publique fournie', async () => {
+    await calendar(); const a = await prepared('pickup', SLOT, 'staff', 'pos');
+    const loyalty = { loyaltyMemberId: randomUUID(), loyaltyEarnOperationId: randomUUID(),
+      loyaltyEarnState: 'pending', loyaltyEarnAttempts: 0, loyaltyActorRef: 'staff:test', loyaltyDeviceRef: 'device:test' };
+    Object.assign(a.candidate, loyalty, { publicRecovery: publicRecoveryBinding(TENANT, a.body) });
+    const committed = await commit(first, a);
+    expect(committed).toMatchObject({ state: 'committing' });
+    const row = await stored(a);
+    expect(row?.snapshot).toMatchObject({ ...loyalty, publicRecovery: null, payment: { status: 'pending', method: 'counter' } });
+    expect(await second.commit(TENANT, a.body.clientId, a.binding,
+      { ...a.candidate, _id: new Types.ObjectId(), number: 999, loyaltyMemberId: randomUUID() })).toEqual(committed);
+    expect((await stored(a))?.snapshot).toMatchObject(loyalty);
+  });
+
+  it.each(['legacy', 'staff'] as const)('la clé %s ne crée pas une seconde admission du même client', async (kind) => {
+    const a = await prepared('pickup', SLOT, kind);
+    await expect(admissionsB.create({ _id: orderAdmissionId(TENANT, a.body.clientId), tenantId: TENANT,
+      clientId: a.body.clientId, ...publicRecoveryBinding(TENANT, a.body), slot: new Date(SLOT), state: 'validating' }))
+      .rejects.toMatchObject({ code: 11000 });
+    expect(await admissionsB.countDocuments()).toBe(1);
+  });
+
+  it.each(['public', 'legacy', 'staff'] as const)('refuse un candidat qui change le canal autorisé %s', async (kind) => {
+    await calendar(); const a = await prepared('pickup', SLOT, kind);
+    await expect(second.commit(TENANT, a.body.clientId, a.binding, { ...a.candidate, channel: kind === 'staff' ? 'online' : 'pos' }))
+      .rejects.toMatchObject({ status: 400 });
+    expect((await stored(a))?.capacity).toBeUndefined();
+  });
+
+  it.each(['pos', 'phone'] as const)('le snapshot staff ne peut pas échanger le canal %s', async (channel) => {
+    await calendar(); const a = await prepared('pickup', SLOT, 'staff', channel);
+    const other = channel === 'pos' ? 'phone' : 'pos';
+    await expect(second.commit(TENANT, a.body.clientId, a.binding, { ...a.candidate, channel: other }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(second.commit(TENANT, a.body.clientId, { ...a.binding, channel: other }, { ...a.candidate, channel: other }))
+      .rejects.toMatchObject({ status: 404 });
+    expect((await stored(a))?.capacity).toBeUndefined();
   });
 
   it('alloue les plus petits sièges libres, sans gaspiller les trous', async () => {

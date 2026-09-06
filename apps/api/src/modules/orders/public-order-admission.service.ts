@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Model } from 'mongoose';
 import type Redis from 'ioredis';
 import { ordersChannel, WS_EVENTS, type CreatePublicOrder, type PublicOrderRecoveryResult, type PublicOrderRejectionReason } from '@sm/contracts';
@@ -8,9 +8,10 @@ import type { Order, PublicOrderAdmission } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
 import { publishRedisBestEffort } from '../../common/redis-best-effort';
 import { assertPublicRecoveryReplay, publicRecoveryBinding, recoveryNotFound, recoveryProofHash, recoveryReceipt, sameRecoveryHash, type PublicRecoveryBinding } from './order-recovery';
+import { isPublicOrderAdmission, orderAdmissionChannel, orderAdmissionId as admissionId, orderAdmissionKindFilter, type OrderAdmissionBinding } from './order-admission-identity';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
-const PRIVATE = '+proofHash +payloadHash +snapshot +validationOwner';
+const PRIVATE = '+kind +channel +proofHash +payloadHash +snapshot +validationOwner';
 const MESSAGES: Record<PublicOrderRejectionReason, string> = {
   unavailable: 'Le restaurant ne peut pas accepter cette nouvelle commande pour le moment.',
   slot_unavailable: 'Ce créneau ne peut plus être réservé. Choisissez un autre créneau.',
@@ -18,9 +19,6 @@ const MESSAGES: Record<PublicOrderRejectionReason, string> = {
   abandoned: 'Cette tentative a été abandonnée avant la création de la commande.',
 };
 
-function admissionId(tenantId: string, clientId: string): string {
-  return createHash('sha256').update(JSON.stringify(['sm.order-admission.v1', tenantId, clientId])).digest('hex');
-}
 function uncertain(): ServiceUnavailableException {
   return new ServiceUnavailableException({ code: 'ORDER_ATTEMPT_UNCERTAIN', message: 'La création reste à vérifier. Reprenez cette même tentative.' });
 }
@@ -70,7 +68,8 @@ export class PublicOrderAdmissionService {
 
   async recover(tenantId: string, clientId: string, proof: string): Promise<PublicOrderRecoveryResult> {
     const admission = await this.read(admissionId(tenantId, clientId));
-    if (!admission || !sameRecoveryHash(admission.proofHash, recoveryProofHash(tenantId, clientId, proof))) throw recoveryNotFound();
+    if (!admission || !isPublicOrderAdmission(admission) || orderAdmissionChannel(admission) !== 'online'
+      || !sameRecoveryHash(admission.proofHash, recoveryProofHash(tenantId, clientId, proof))) throw recoveryNotFound();
     return this.result(admission);
   }
 
@@ -87,7 +86,7 @@ export class PublicOrderAdmissionService {
     await this.readAuthenticated(tenantId, clientId, binding);
     const validationOwner = randomUUID();
     try {
-      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: null },
+      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: null, ...orderAdmissionKindFilter(binding) },
         { $set: { validationOwner } }, DURABLE);
     } catch { /* Seule une lecture de notre owner permet de poursuivre après timeout. */ }
     const observed = await this.readAuthenticated(tenantId, clientId, binding);
@@ -97,14 +96,15 @@ export class PublicOrderAdmissionService {
   /** Seulement avant l'appel de création : un ancien propriétaire ne peut libérer son successeur. */
   async releaseValidation(tenantId: string, clientId: string, binding: PublicRecoveryBinding): Promise<void> {
     if (!binding.validationOwner) return;
-    await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: binding.validationOwner,
+    await this.readAuthenticated(tenantId, clientId, binding);
+    await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: binding.validationOwner, ...orderAdmissionKindFilter(binding),
       proofHash: binding.proofHash, payloadHash: binding.payloadHash }, { $set: { validationOwner: null } }, DURABLE);
   }
 
   async reject(tenantId: string, clientId: string, binding: PublicRecoveryBinding, reason: PublicOrderRejectionReason): Promise<PublicOrderRecoveryResult> {
     await this.readAuthenticated(tenantId, clientId, binding);
     try {
-      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', proofHash: binding.proofHash, payloadHash: binding.payloadHash },
+      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', proofHash: binding.proofHash, payloadHash: binding.payloadHash, ...orderAdmissionKindFilter(binding) },
         { $set: { state: 'rejected', rejection: reason } }, DURABLE);
     } catch {
       const observed = await this.readAuthenticated(tenantId, clientId, binding);
@@ -121,7 +121,7 @@ export class PublicOrderAdmissionService {
     const snapshot = document.toObject({ transform: false });
     await this.readAuthenticated(tenantId, clientId, binding);
     try {
-      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: binding.validationOwner, proofHash: binding.proofHash, payloadHash: binding.payloadHash },
+      await this.admissions.updateOne({ _id: admissionId(tenantId, clientId), state: 'validating', validationOwner: binding.validationOwner, proofHash: binding.proofHash, payloadHash: binding.payloadHash, ...orderAdmissionKindFilter(binding) },
         { $set: { state: 'committing', snapshot, orderId: snapshot._id } }, DURABLE);
     } catch {
       const observed = await this.readAuthenticated(tenantId, clientId, binding);
@@ -172,6 +172,7 @@ export class PublicOrderAdmissionService {
   }
 
   private async materialize(admission: PublicOrderAdmission) {
+    if (!isPublicOrderAdmission(admission) || orderAdmissionChannel(admission) !== 'online') throw recoveryNotFound();
     const snapshot = admission.snapshot as Record<string, unknown> | null;
     if (!snapshot?._id || !snapshot.publicRecovery) throw uncertain();
     let writeError: unknown;
@@ -201,9 +202,11 @@ export class PublicOrderAdmissionService {
     return order;
   }
 
-  private async readAuthenticated(tenantId: string, clientId: string, binding: PublicRecoveryBinding) {
+  private async readAuthenticated(tenantId: string, clientId: string, binding: OrderAdmissionBinding) {
+    if (!isPublicOrderAdmission(binding) || orderAdmissionChannel(binding) !== 'online') throw recoveryNotFound();
     const admission = await this.read(admissionId(tenantId, clientId));
     if (!admission) throw uncertain();
+    if (!isPublicOrderAdmission(admission) || orderAdmissionChannel(admission) !== 'online') throw recoveryNotFound();
     assertPublicRecoveryReplay({ channel: 'online', publicRecovery: admission } as Pick<Order, 'channel' | 'publicRecovery'>, binding);
     return admission;
   }
