@@ -17,7 +17,7 @@ const tenant = {
   ] },
 };
 function setup(over = {}) {
-  const orders = { findByClientId: vi.fn().mockResolvedValue(null), createWithOutcome: vi.fn().mockResolvedValue({ created: true, order: { type: 'delivery' } }) };
+  const orders = { findPublicReplay: vi.fn().mockResolvedValue(null), createWithOutcome: vi.fn().mockResolvedValue({ created: true, order: { type: 'delivery' } }) };
   const slots = { exigerDisponible: vi.fn().mockResolvedValue(undefined) };
   const gate = { authorize: vi.fn().mockResolvedValue({}), release: vi.fn(), serializeSlot: vi.fn(async (_input, action: () => unknown) => action()) };
   const tenants = { bySlug: vi.fn().mockResolvedValue({ ...tenant, ...over }) };
@@ -43,7 +43,7 @@ describe('écriture publique livraison', () => {
     expect(ctx.slots.exigerDisponible).toHaveBeenCalledTimes(2);
     expect(ctx.slots.exigerDisponible).toHaveBeenLastCalledWith(tenant, request.pickup.slot, 'delivery');
     expect(ctx.gate.serializeSlot).toHaveBeenCalledWith({ tenantId: tenant._id, slot: request.pickup.slot }, expect.any(Function));
-    expect(ctx.orders.createWithOutcome).toHaveBeenCalledWith(tenant._id, expect.objectContaining({ type: 'delivery', channel: 'online', payment: { method: 'online' }, delivery: request.delivery }), 'online:turnstile');
+    expect(ctx.orders.createWithOutcome).toHaveBeenCalledWith(tenant._id, expect.objectContaining({ type: 'delivery', channel: 'online', payment: { method: 'online' }, delivery: request.delivery }), 'online:turnstile', null, undefined);
     expect(ctx.orders.createWithOutcome.mock.calls[0]?.[1]).not.toHaveProperty('fulfillment');
   });
 });

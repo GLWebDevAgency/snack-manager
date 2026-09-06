@@ -51,8 +51,11 @@ import type {
   PaymentStatus,
   PaymentMethod,
   CounterPaymentResponse,
+  RecoverPublicOrder,
+  PublicOrderRecoveryResult,
+  AbandonPublicOrder,
 } from "@sm/contracts";
-import { featuredProductIdsOf, marqueEffective, WebsiteUrlSchema, type Brand } from "@sm/contracts";
+import { featuredProductIdsOf, marqueEffective, WebsiteUrlSchema, PublicOrderRecoveryResultSchema, type Brand } from "@sm/contracts";
 import { hoursOfDay, isOpenAt, parisParts } from "./helpers";
 
 export const API_URL =
@@ -62,6 +65,7 @@ export class PublicApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "PublicApiError";
@@ -121,6 +125,11 @@ function messageOf(body: unknown, status: number): string {
   if (status === 404) return "Restaurant introuvable";
   if (status >= 500) return "Le service est momentanément indisponible";
   return `Erreur ${status}`;
+}
+
+function codeOf(body: unknown): string | undefined {
+  const code = (body as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -460,7 +469,7 @@ export function orderingApi(transport: Transport = httpTransport) {
       revalidate: opts.revalidate,
     });
     if (res.status < 200 || res.status >= 300) {
-      throw new PublicApiError(res.status, messageOf(res.body, res.status));
+      throw new PublicApiError(res.status, messageOf(res.body, res.status), codeOf(res.body));
     }
     return res.body as T;
   }
@@ -468,7 +477,7 @@ export function orderingApi(transport: Transport = httpTransport) {
   async function postJson<T>(path: string, payload: unknown): Promise<T> {
     const res = await transport.send({ method: "POST", path, body: payload });
     if (res.status < 200 || res.status >= 300) {
-      throw new PublicApiError(res.status, messageOf(res.body, res.status));
+      throw new PublicApiError(res.status, messageOf(res.body, res.status), codeOf(res.body));
     }
     return res.body as T;
   }
@@ -618,6 +627,20 @@ export function orderingApi(transport: Transport = httpTransport) {
     );
   }
 
+  /** Possession de la preuve de tentative, jamais du seul numéro/téléphone. */
+  async function recoverOrder(slug: string, payload: RecoverPublicOrder): Promise<PublicOrderRecoveryResult> {
+    return PublicOrderRecoveryResultSchema.parse(await postJson<unknown>(
+      `/public/tenants/${encodeURIComponent(slug)}/orders/recovery`, payload,
+    ));
+  }
+
+  /** Fence de la demande, distincte de l'annulation d'une commande acceptée. */
+  async function abandonOrderAttempt(slug: string, payload: AbandonPublicOrder): Promise<PublicOrderRecoveryResult> {
+    return PublicOrderRecoveryResultSchema.parse(await postJson<unknown>(
+      `/public/tenants/${encodeURIComponent(slug)}/orders/abandon`, payload,
+    ));
+  }
+
   /**
    * Le jeton de suivi accompagne l'appel, comme sur le suivi et le ticket.
    *
@@ -665,6 +688,8 @@ export function orderingApi(transport: Transport = httpTransport) {
     loadSlots,
     quoteDelivery,
     createOrder,
+    recoverOrder,
+    abandonOrderAttempt,
     createPaymentIntent,
     switchToCounterPayment,
     loadTracking,

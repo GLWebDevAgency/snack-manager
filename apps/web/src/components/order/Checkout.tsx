@@ -40,6 +40,7 @@ import type {
   DeliveryAddress,
   DeliveryQuote,
   Fulfillment,
+  PublicOrderRecoveryResult,
 } from "@sm/contracts";
 import { DeliveryAddressSchema } from "@sm/contracts";
 import { cx } from "@/lib/cx";
@@ -89,8 +90,16 @@ import { TurnstileCheck } from "./TurnstileCheck";
 import { DeliveryFee, DeliveryFields, FreeDeliveryHint } from "./DeliveryFields";
 import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, checkoutPaymentDecision, requestCounterPayment, requestExistingOrderPayment } from "./checkout-payment";
 import { CounterPaymentAction } from "./CounterPaymentAction";
+import type { CheckoutRecovery } from "./useCheckoutRecovery";
+import {
+  acquireCheckoutAttempt, archiveCheckoutAttempt, checkoutCartFingerprint,
+  markCheckoutAttemptUncertain, recordCheckoutReceipt, recordCheckoutRejection,
+  releaseRejectedCheckoutAttempt,
+  type CheckoutAttempt, type PendingCheckoutAttempt,
+} from "./checkout-attempt";
+import { CheckoutRecoveryStep } from "./CheckoutRecoveryStep";
 
-type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done";
+type Step = "cart" | "customer" | "slot" | "pay" | "card" | "done" | "recovery";
 
 /**
  * Doit dépasser la durée d’animation de sortie de `Sheet`, qui vaut
@@ -179,6 +188,7 @@ export function activeCheckoutDeliveryQuote(
 
 export function Checkout({
   open,
+  recovery,
   slug,
   tenantName,
   tenantAddress,
@@ -199,6 +209,7 @@ export function Checkout({
   onEditLine,
 }: {
   open: boolean;
+  recovery: CheckoutRecovery;
   slug: string;
   tenantName: string;
   /** Adresse affichée sur la carte « où retirer » de l’étape créneau. */
@@ -295,6 +306,19 @@ export function Checkout({
   // réessais de la même tentative — un double appui ne crée jamais deux
   // commandes. Elle n’est renouvelée qu’après une commande réellement passée.
   const clientIdRef = useRef<string | null>(null);
+  const liveCartRef = useRef(cart);
+  useEffect(() => { liveCartRef.current = cart; }, [cart]);
+
+  useEffect(() => {
+    if (!open || demo || busy || !recovery.ready) return;
+    // A browser receipt only restores navigation, never a stale "paid" claim
+    // or a Stripe secret. The tracking page reloads the authoritative state.
+    if (recovery.error || (recovery.active &&
+      (recovery.active.state !== "received" || order?._id !== recovery.active.receipt.orderId))) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore durable browser state after hydration, and after cross-tab journal notifications.
+      setStep("recovery");
+    }
+  }, [open, demo, busy, recovery.ready, recovery.error, recovery.active, order?._id]);
 
   useEffect(() => () => {
     if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
@@ -391,6 +415,76 @@ export function Checkout({
     setTurnstileReset((value) => value + 1);
     dispatchQuote({ type: "invalidate" });
     clientIdRef.current = null;
+  }
+
+  async function clearMatchingCart(attempt: CheckoutAttempt) {
+    const current = liveCartRef.current;
+    const fingerprint = await checkoutCartFingerprint({ lines: current.lines, note: current.note });
+    // A cart modified while awaiting the network/IDB is a different draft.
+    if (liveCartRef.current === current && fingerprint === attempt.cartFingerprint) await current.clearIfUnchanged();
+  }
+
+  async function rememberCreated(attempt: PendingCheckoutAttempt, created: CreatedOrder) {
+    await recordCheckoutReceipt(slug, attempt.clientId, {
+      orderId: created._id, trackingToken: created.trackingToken, number: created.number,
+    });
+    await clearMatchingCart(attempt);
+    await recovery.refresh();
+  }
+
+  async function acceptRecoveryResult(attempt: PendingCheckoutAttempt, result: PublicOrderRecoveryResult) {
+    if (result.state === "created") {
+      await recordCheckoutReceipt(slug, attempt.clientId, {
+        orderId: result.order._id, trackingToken: result.order.trackingToken, number: result.order.number,
+      });
+      await clearMatchingCart(attempt);
+      setError(null);
+    } else if (result.state === "rejected") {
+      await recordCheckoutRejection(slug, attempt.clientId, { reason: result.reason, message: result.message });
+      setError(null);
+    } else {
+      setError("Le restaurant vérifie encore cette demande. Retrouvez son état avant de la modifier.");
+    }
+    await recovery.refresh();
+  }
+
+  async function recoverAttempt(abandon = false) {
+    const attempt = recovery.active;
+    if (!attempt || (attempt.state !== "prepared" && attempt.state !== "uncertain") || requestInFlightRef.current) return;
+    requestInFlightRef.current = true;
+    clearScheduledReset();
+    setBusy(true);
+    setError(null);
+    try {
+      const identity = { clientId: attempt.clientId, recoveryProof: attempt.recoveryProof };
+      const result = abandon
+        ? await api.abandonOrderAttempt(slug, { ...attempt.payload, ...identity })
+        : await api.recoverOrder(slug, identity);
+      await acceptRecoveryResult(attempt, result);
+    } catch {
+      setError("La vérification n’a pas abouti. Votre demande est conservée : réessayez sa récupération ou le même envoi, sans recréer de commande.");
+    } finally { requestInFlightRef.current = false; setBusy(false); }
+  }
+
+  async function startNewAttempt() {
+    const attempt = recovery.active;
+    if (!attempt || requestInFlightRef.current || recovery.error) return;
+    requestInFlightRef.current = true;
+    clearScheduledReset();
+    setBusy(true);
+    try {
+      if (attempt.state === "received") {
+        await clearMatchingCart(attempt);
+        await archiveCheckoutAttempt(slug, attempt.clientId);
+      } else if (attempt.state === "rejected") {
+        await releaseRejectedCheckoutAttempt(slug, attempt.clientId);
+      } else return;
+      await recovery.refresh();
+      requestInFlightRef.current = false;
+      resetTunnel();
+    } catch {
+      setError("La reprise n’a pas pu être sauvegardée. Votre précédente demande est conservée ; réessayez.");
+    } finally { requestInFlightRef.current = false; setBusy(false); }
   }
 
   function changeFulfillment(next: Fulfillment) {
@@ -537,8 +631,9 @@ export function Checkout({
   }, [open, step]);
 
   // ── Passage de commande ──
-  async function submit(chosenMethod: "online" | "counter") {
-    if (requestInFlightRef.current || !slotIso || !contactOk || cart.lines.length === 0) return;
+  async function submit(chosenMethod: "online" | "counter", previous?: PendingCheckoutAttempt) {
+    if (requestInFlightRef.current || (!demo && (!recovery.ready || recovery.error))) return;
+    if (!previous && (!slotIso || !contactOk || cart.lines.length === 0)) return;
     const proof = demo ? "demo" : turnstileToken;
     if (!proof) {
       setError("La vérification de sécurité doit se terminer avant l’envoi.");
@@ -554,23 +649,48 @@ export function Checkout({
       setTurnstileToken(null);
       setTurnstileReset((value) => value + 1);
     }
+    let attempt: PendingCheckoutAttempt | undefined = previous;
     try {
-      writeCustomer(customer);
-      clientIdRef.current ??= uid();
-      const created = await api.createOrder(slug, {
-        clientId: clientIdRef.current,
+      if (!previous) writeCustomer(customer);
+      const payload = previous?.payload ?? {
         lines: toOrderLines(cart.lines),
         payment: { method: chosenMethod },
         ...(isDelivery ? { fulfillment: "delivery" as const, delivery: { address, instructions: deliveryInstructions.trim() } } : {}),
-        turnstileToken: proof,
         pickup: {
-          slot: slotIso,
+          slot: slotIso!,
           customerName: customer.name.trim(),
           customerPhone: customer.phone.trim(),
         },
         ...(cart.note.trim() ? { note: cart.note.trim() } : {}),
         ...(normalizedPromoCode ? { promoCode: normalizedPromoCode } : {}),
-      });
+      };
+      if (!demo && !attempt) {
+        const acquired = await acquireCheckoutAttempt(slug, {
+          payload,
+          cartFingerprint: await checkoutCartFingerprint({ lines: cart.lines, note: cart.note }),
+        });
+        if (!acquired.acquired || acquired.attempt.state !== "prepared") {
+          await recovery.refresh();
+          setStep("recovery");
+          return;
+        }
+        attempt = acquired.attempt;
+      }
+      if (attempt) {
+        // Wait for transaction completion, not just IDB put success. A crash
+        // from this point onwards is uncertain, even before fetch resolves.
+        const current = await markCheckoutAttemptUncertain(slug, attempt.clientId);
+        if (current.state !== "prepared" && current.state !== "uncertain") {
+          await recovery.refresh();
+          setStep("recovery");
+          return;
+        }
+        attempt = current;
+      }
+      clientIdRef.current ??= uid(); // demo only; real identity belongs to IDB
+      const created = await api.createOrder(slug, attempt ? {
+        ...attempt.payload, clientId: attempt.clientId, recoveryProof: attempt.recoveryProof, turnstileToken: proof,
+      } : { ...payload, clientId: clientIdRef.current, turnstileToken: proof });
 
       if (isPaused(created)) {
         setError(
@@ -580,9 +700,10 @@ export function Checkout({
         return;
       }
 
+      if (attempt) await rememberCreated(attempt, created);
       setOrder(created);
       jalonFunnel("commande");
-      cart.clear(); // la commande existe : le panier ne doit plus pouvoir repartir
+      if (demo) cart.clear();
       if (typeof navigator !== "undefined" && "vibrate" in navigator) {
         navigator.vibrate(60);
       }
@@ -601,7 +722,7 @@ export function Checkout({
       // Un rejeu peut renvoyer la commande du PREMIER envoi, avec un autre
       // moyen que celui affiché entre-temps. Seul le serveur permet d'annoncer
       // un règlement comptoir ; un état ancien ou terminal mène au suivi.
-      const decision = checkoutPaymentDecision(created, chosenMethod);
+      const decision = checkoutPaymentDecision(created, attempt?.payload.payment.method ?? chosenMethod);
       if (decision === "counter") {
         setStep("done");
         return;
@@ -626,8 +747,18 @@ export function Checkout({
       setError(
         err instanceof PublicApiError
           ? err.message
-          : "La commande n’a pas pu être envoyée. Vérifiez votre connexion.",
+          : "La réponse n’a pas pu être confirmée. Votre demande est conservée ; vérifiez son état avant de recommencer.",
       );
+      if (attempt) {
+        // A 4xx/5xx can arrive after a write. Only the proof-scoped recovery
+        // response can authorize a fresh attempt, never the HTTP status alone.
+        try {
+          await acceptRecoveryResult(attempt, await api.recoverOrder(slug, {
+            clientId: attempt.clientId, recoveryProof: attempt.recoveryProof,
+          }));
+        } catch { await recovery.refresh(); }
+        setStep("recovery");
+      }
     } finally {
       requestInFlightRef.current = false;
       setBusy(false);
@@ -638,7 +769,7 @@ export function Checkout({
     0,
     STEPS.findIndex((s) => s.id === step),
   );
-  const finished = step === "done" || step === "card";
+  const finished = step === "done" || step === "card" || step === "recovery";
 
   const titles: Record<Step, string> = {
     cart: "Votre commande",
@@ -647,6 +778,7 @@ export function Checkout({
     pay: "Paiement",
     card: "Paiement par carte",
     done: "Commande confirmée",
+    recovery: "Reprendre votre commande",
   };
 
   const back: Partial<Record<Step, Step>> = {
@@ -680,7 +812,7 @@ export function Checkout({
           contactOk={contactOk}
           slotIso={slotIso}
           slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
-          blocked={blockedByPause}
+          blocked={blockedByPause || !recovery.ready || Boolean(recovery.error)}
           method={method}
           order={order}
           embed={embed}
@@ -698,6 +830,9 @@ export function Checkout({
       }
     >
       <div className={step === "done" ? "" : "px-4 pb-8 pt-4"}>
+        {cart.persistenceError && <div className="mb-4">
+          <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
+        </div>}
         {blockedByPause && step !== "done" && (
           <div className="mb-4">
             <Banner tone="prep" icon="clock" title="Commande en ligne suspendue">
@@ -709,7 +844,7 @@ export function Checkout({
 
         {error && step !== "done" && step !== "card" && (
           <div className="mb-4">
-            <Banner tone="alert" icon="bell" title={order ? "Paiement à vérifier" : "Commande non envoyée"}>
+            <Banner tone="alert" icon="bell" title={order ? "Paiement à vérifier" : "Commande à vérifier"}>
               {error}
             </Banner>
           </div>
@@ -717,6 +852,10 @@ export function Checkout({
 
         {step === "cart" && (
           <>
+          {recovery.last && <div className="mb-4"><CheckoutRecoveryStep
+            attempt={recovery.last} busy={busy} embed={embed} archived
+            onRecover={() => {}} onResend={() => {}} onAbandon={() => {}} onNew={() => {}}
+          /></div>}
           {delivery?.available && !demo && (
             <RadioGroup label="Recevoir votre commande" className="mb-5 flex flex-col gap-2.5">
               <ChoiceCard on={!isDelivery} tabIndex={!isDelivery ? 0 : -1} glyph="bag" title="Retrait au restaurant" sub="Sans frais de livraison" onClick={() => changeFulfillment("pickup")} />
@@ -789,6 +928,28 @@ export function Checkout({
                 onToken={setTurnstileToken}
               />
             )}
+          </div>
+        )}
+
+        {step === "recovery" && (
+          <div className="flex flex-col gap-4">
+            {recovery.error ? (
+              <ErrorState title="Sauvegarde indisponible" message={recovery.error} onRetry={() => { void recovery.refresh(); }} />
+            ) : recovery.active ? <CheckoutRecoveryStep
+              attempt={recovery.active} busy={busy} embed={embed}
+              resendReady={Boolean(turnstileToken)}
+              onRecover={() => { void recoverAttempt(); }}
+              onResend={() => {
+                const current = recovery.active;
+                if (current?.state === "prepared" || current?.state === "uncertain") void submit(current.payload.payment.method, current);
+              }}
+              onAbandon={() => { void recoverAttempt(true); }}
+              onNew={() => { void startNewAttempt(); }}
+            /> : <ErrorState title="Demande actualisée" message="L’état a changé dans un autre onglet. Revenez à votre panier pour continuer." onRetry={() => { setStep("cart"); }} />}
+            {recovery.active && ["prepared", "uncertain"].includes(recovery.active.state) && !recovery.error && <TurnstileCheck
+              siteKey={TURNSTILE_SITE_KEY} tenantSlug={slug} mode={mode}
+              resetKey={turnstileReset} onToken={setTurnstileToken}
+            />}
           </div>
         )}
 
@@ -967,7 +1128,7 @@ function Footer({
   onSubmit: () => void;
   onFinish: () => void;
 }) {
-  if (step === "card") return null;
+  if (step === "card" || step === "recovery") return null;
 
   if (step === "done") {
     return (

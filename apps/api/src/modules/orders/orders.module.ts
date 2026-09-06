@@ -12,10 +12,12 @@ import { OrderFinanceController } from './order-finance.controller';
 import { EncaissementModule } from '../encaissement/encaissement.module';
 import { OrderCounterController } from './order-counter.controller';
 import { OrderCounterCollectionService } from './order-counter-collection.service';
+import { PublicOrderAdmissionService } from './public-order-admission.service';
+import { PublicOrderRecoveryController } from './public-order-recovery.controller';
 
 @Module({
   imports: [TenantsModule, OrderingModule, EncaissementModule],
-  controllers: [OrdersController, OrderFinanceController, OrderCounterController],
-  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService],
+  controllers: [OrdersController, OrderFinanceController, OrderCounterController, PublicOrderRecoveryController],
+  providers: [OrdersService, OrdersGateway, PublicOrderGate, OrderCounterCollectionService, PublicOrderAdmissionService],
 })
 export class OrdersModule {}

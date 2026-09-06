@@ -162,6 +162,11 @@ jobs:
       - name: Analyse statique
         run: pnpm exec turbo run lint $TURBO_FLAGS
 
+      # Le journal de checkout exige de vraies transactions IndexedDB entre
+      # onglets : un faux stockage mémoire ne valide pas sa durabilité.
+      - name: Navigateur des tests IndexedDB
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
 
@@ -190,6 +195,11 @@ jobs:
           # Faux provider uniquement ; base différente, suffixée par chaque run.
           ORDER_PAYMENT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_payment_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/ordering/order-payment-lifecycle.integration.test.ts
+
+      - name: Tests MongoDB réels — admission et reprise de commande
+        env:
+          ORDER_RECOVERY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_recovery_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/orders/public-order-admission.integration.test.ts
 
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS

@@ -163,6 +163,9 @@ async function handleApi(req, res) {
     if (scenario === 'replay' && creationPosts === 1) return send(503, { message: 'Réponse de création perdue : réessayez.' });
     return send(201, orders.get(body.clientId));
   }
+  // Deliberately unknown for this regression: only the exact original POST
+  // may be retried. Full successful recovery is covered by checkout-recovery.
+  if (path === `${ordersPath}/recovery`) return send(404, { code: 'ORDER_RECOVERY_NOT_FOUND', message: 'Commande introuvable' });
   if (path === intentPath && req.method === 'POST') {
     if (url.searchParams.get('t') !== trackingToken || orders.size !== 1) return send(404, { message: 'Commande introuvable' });
     intents++;
@@ -323,8 +326,10 @@ try {
   }
   if (scenario === 'replay') {
     await page.getByText('Réponse de création perdue : réessayez.', { exact: true }).waitFor();
-    await payment.getByRole('radio', { name: /comptoir/i }).click();
-    await payment.getByRole('button', { name: /^Confirmer la commande/ }).click();
+    const recovery = page.getByRole('dialog', { name: 'Reprendre votre commande', exact: true });
+    await recovery.waitFor();
+    assert.equal(await recovery.getByRole('radio', { name: /comptoir/i }).count(), 0);
+    await recovery.getByRole('button', { name: 'Réessayer cet envoi', exact: true }).click();
   }
   await page.getByRole('button', { name: 'Réessayer', exact: true }).waitFor();
   await screenshot('uncertain');
@@ -346,7 +351,11 @@ try {
   if (scenario === 'replay') {
     assert.equal(orderPosts[0].body.clientId, orderPosts[1].body.clientId);
     assert.equal(orderPosts[0].body.payment.method, 'online');
-    assert.equal(orderPosts[1].body.payment.method, 'counter');
+    assert.equal(orderPosts[1].body.payment.method, 'online');
+    assert.equal(orderPosts[0].body.recoveryProof, orderPosts[1].body.recoveryProof);
+    const { turnstileToken: _firstChallenge, ...firstBody } = orderPosts[0].body;
+    const { turnstileToken: _secondChallenge, ...secondBody } = orderPosts[1].body;
+    assert.deepEqual(firstBody, secondBody, 'Le corps métier ne change pas après une réponse perdue.');
     assert.equal([...orders.values()][0].payment.method, 'online');
   }
   assert.equal(intents, 2);
@@ -372,6 +381,7 @@ try {
     (response.status === 400 && fulfillment === 'delivery' && response.path === '/public/tenants/livraison-e2e/delivery/quote') ||
     (response.status === 503 && response.path === intentPath) ||
     (response.status === 503 && scenario === 'replay' && response.path === ordersPath) ||
+    (response.status === 404 && scenario === 'replay' && response.path === `${ordersPath}/recovery`) ||
     (response.status === 404 && response.path === '/public/tenants/livraison-e2e/loyalty'));
   assert.deepEqual(failedResponses, expectedFailures, 'Erreur HTTP hors pannes délibérées.');
   assert.deepEqual(consoleMessages.filter(message => !(/status of (400|404|503)/.test(message) || /Download the React DevTools/.test(message))), []);

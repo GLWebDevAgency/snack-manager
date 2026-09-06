@@ -10,7 +10,7 @@
  * peut pas rester silencieusement dans le panier d’un client.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   MenuCategory,
   MenuGroup,
@@ -388,39 +388,50 @@ const customerKey = "sm.customer";
 
 export type Customer = { name: string; phone: string };
 
-type Stored = { v: number; at: number; lines: CartLine[]; note: string };
+type CartSnapshot = { lines: CartLine[]; note: string };
+type Stored = CartSnapshot & { v: number; at: number };
+type CartRead = CartSnapshot & { readable: boolean };
 
 /** Un panier oublié depuis plus de 12 h n’a plus de sens (le service est passé). */
 const CART_TTL_MS = 12 * 60 * 60 * 1000;
 
-function readCart(slug: string): { lines: CartLine[]; note: string } {
+function readCart(slug: string): CartRead {
   try {
     const raw = localStorage.getItem(cartKey(slug));
-    if (!raw) return { lines: [], note: "" };
+    if (!raw) return { lines: [], note: "", readable: true };
     const parsed = JSON.parse(raw) as Stored;
     if (parsed?.v !== CART_VERSION || !Array.isArray(parsed.lines)) {
-      return { lines: [], note: "" };
+      return { lines: [], note: "", readable: false };
     }
     if (Date.now() - Number(parsed.at ?? 0) > CART_TTL_MS) {
-      return { lines: [], note: "" };
+      return { lines: [], note: "", readable: true };
     }
-    return { lines: parsed.lines, note: String(parsed.note ?? "") };
+    return { lines: parsed.lines, note: String(parsed.note ?? ""), readable: true };
   } catch {
-    return { lines: [], note: "" };
+    return { lines: [], note: "", readable: false };
   }
 }
 
+/** Called only while holding the per-tenant Web Lock. Never swallow a failed write. */
 function writeCart(slug: string, lines: CartLine[], note: string) {
-  try {
-    if (lines.length === 0) {
-      localStorage.removeItem(cartKey(slug));
-      return;
-    }
-    const payload: Stored = { v: CART_VERSION, at: Date.now(), lines, note };
-    localStorage.setItem(cartKey(slug), JSON.stringify(payload));
-  } catch {
-    // Navigation privée / quota : le panier reste simplement en mémoire.
+  if (lines.length === 0 && !note) {
+    localStorage.removeItem(cartKey(slug));
+    return;
   }
+  const payload: Stored = { v: CART_VERSION, at: Date.now(), lines, note };
+  localStorage.setItem(cartKey(slug), JSON.stringify(payload));
+}
+
+const CART_STORAGE_ERROR = "Votre panier n’a pas pu être sauvegardé. Conservez cette page et autorisez le stockage du navigateur avant de continuer.";
+const CART_EVENT = "sm:cart-change";
+
+function withCartLock<T>(slug: string, action: () => T): Promise<T> {
+  if (typeof navigator === "undefined" || !navigator.locks?.request) return Promise.reject(new Error(CART_STORAGE_ERROR));
+  return navigator.locks.request(`sm.cart.write.${slug}`, { signal: AbortSignal.timeout(5_000) }, action);
+}
+
+function sameCart(left: CartSnapshot, right: CartSnapshot): boolean {
+  return JSON.stringify(left.lines) === JSON.stringify(right.lines) && left.note === right.note;
 }
 
 export function readCustomer(): Customer {
@@ -461,6 +472,9 @@ export type CartApi = {
   remove: (lineId: string) => void;
   setNote: (note: string) => void;
   clear: () => void;
+  /** Receipt cleanup only: false preserves and reloads a newer cart from another tab. */
+  clearIfUnchanged: () => Promise<boolean>;
+  persistenceError: string | null;
 };
 
 /**
@@ -472,55 +486,129 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
   const [lines, setLines] = useState<CartLine[]>([]);
   const [note, setNoteState] = useState("");
   const [dropped, setDropped] = useState<string[]>([]);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const current = useRef<{ slug: string | null; snapshot: CartSnapshot }>({ slug: null, snapshot: { lines: [], note: "" } });
   // Restaurant pour lequel le panier persisté a déjà été relu — sert aussi de
   // drapeau « hydraté », sans ref écrite pendant le rendu.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const hydrated = loadedFor === slug;
 
-  useEffect(() => {
-    if (loadedFor === slug) return;
-    const stored = readCart(slug);
-    const result = reconcile(stored.lines, index);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- relecture du panier persisté APRÈS le montage, volontairement : lue au rendu elle divergerait entre serveur et client. `loadedFor` sert de drapeau « hydraté » qui autorise l'écriture de l'effet suivant ; inverser cet ordre ferait réécrire le panier vide du premier rendu par-dessus la commande en cours du client.
-    setLines(result.lines);
-    setNoteState(stored.note);
-    setDropped(result.dropped);
+  const publish = useCallback((snapshot: CartSnapshot, removed: string[] = []) => {
+    current.current = { slug, snapshot };
+    setLines(snapshot.lines);
+    setNoteState(snapshot.note);
+    setDropped(removed);
     setLoadedFor(slug);
-  }, [slug, index, loadedFor]);
+  }, [slug]);
+
+  const readCurrent = useCallback(() => {
+    const stored = readCart(slug);
+    if (!stored.readable) throw new Error(CART_STORAGE_ERROR);
+    const result = reconcile(stored.lines, index);
+    return { snapshot: { lines: result.lines, note: stored.note }, dropped: result.dropped };
+  }, [slug, index]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    writeCart(slug, lines, note);
-  }, [hydrated, slug, lines, note]);
+    let alive = true;
+    const refresh = () => {
+      void withCartLock(slug, () => {
+        if (!alive) return;
+        const latest = readCurrent();
+        publish(latest.snapshot, latest.dropped);
+        setPersistenceError(null);
+      }).catch(() => {
+        if (!alive) return;
+        setPersistenceError(CART_STORAGE_ERROR);
+        setLoadedFor(slug);
+      });
+    };
+    const changed = (event: Event) => {
+      if (event instanceof StorageEvent && event.key !== null && event.key !== cartKey(slug)) return;
+      if (event instanceof CustomEvent && event.detail !== slug) return;
+      refresh();
+    };
+    refresh();
+    window.addEventListener("storage", changed);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener(CART_EVENT, changed);
+    return () => {
+      alive = false;
+      window.removeEventListener("storage", changed);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+      window.removeEventListener(CART_EVENT, changed);
+    };
+  }, [slug, readCurrent, publish]);
+
+  // Persist explicit actions, not a render effect: an old render can never
+  // restore a cart after a receipt or overwrite another tab's newer draft.
+  const mutate = useCallback((change: (snapshot: CartSnapshot) => CartSnapshot) => {
+    void withCartLock(slug, () => {
+      if (current.current.slug !== slug) return;
+      const latest = readCurrent();
+      const next = change(latest.snapshot);
+      writeCart(slug, next.lines, next.note);
+      publish(next, latest.dropped);
+      setPersistenceError(null);
+      window.dispatchEvent(new CustomEvent(CART_EVENT, { detail: slug }));
+    }).catch(() => setPersistenceError(CART_STORAGE_ERROR));
+  }, [slug, readCurrent, publish]);
 
   const upsert = useCallback((line: CartLine) => {
-    setLines((prev) => {
-      const at = prev.findIndex((l) => l.lineId === line.lineId);
-      if (at === -1) return [...prev, line];
-      const next = [...prev];
-      next[at] = line;
-      return next;
+    const saved = structuredClone(line);
+    mutate((snapshot) => {
+      const at = snapshot.lines.findIndex((entry) => entry.lineId === saved.lineId);
+      const next = [...snapshot.lines];
+      if (at === -1) next.push(saved); else next[at] = saved;
+      return { ...snapshot, lines: next };
     });
-  }, []);
+  }, [mutate]);
 
   const setQty = useCallback((lineId: string, qty: number) => {
-    setLines((prev) =>
-      qty <= 0
-        ? prev.filter((l) => l.lineId !== lineId)
-        : prev.map((l) =>
-            l.lineId === lineId ? { ...l, qty: Math.min(99, qty) } : l,
-          ),
-    );
-  }, []);
+    // A user edit already queued behind receipt cleanup is still a new intent.
+    // Preserve that visible line if the cleanup wins the lock just before it.
+    const observed = current.current.snapshot.lines.find((line) => line.lineId === lineId);
+    const fallback = observed ? structuredClone(observed) : null;
+    mutate((snapshot) => {
+      if (qty <= 0) return { ...snapshot, lines: snapshot.lines.filter((line) => line.lineId !== lineId) };
+      const quantity = Math.min(99, qty);
+      const exists = snapshot.lines.some((line) => line.lineId === lineId);
+      return { ...snapshot, lines: !exists && fallback
+        ? [...snapshot.lines, { ...fallback, qty: quantity }]
+        : snapshot.lines.map((line) => line.lineId === lineId ? { ...line, qty: quantity } : line) };
+    });
+  }, [mutate]);
 
   const remove = useCallback((lineId: string) => {
-    setLines((prev) => prev.filter((l) => l.lineId !== lineId));
-  }, []);
+    mutate((snapshot) => ({ ...snapshot, lines: snapshot.lines.filter((line) => line.lineId !== lineId) }));
+  }, [mutate]);
 
-  const clear = useCallback(() => {
-    setLines([]);
-    setNoteState("");
-  }, []);
+  const setNote = useCallback((value: string) => { mutate((snapshot) => ({ ...snapshot, note: value })); }, [mutate]);
+
+  const clearIfUnchanged = useCallback(async (): Promise<boolean> => {
+    const expected = { lines, note };
+    try {
+      return await withCartLock(slug, () => {
+        if (current.current.slug !== slug) return false;
+        const latest = readCurrent();
+        if (!sameCart(expected, latest.snapshot) || !sameCart(expected, current.current.snapshot)) {
+          publish(latest.snapshot, latest.dropped);
+          return false;
+        }
+        writeCart(slug, [], "");
+        publish({ lines: [], note: "" });
+        setPersistenceError(null);
+        window.dispatchEvent(new CustomEvent(CART_EVENT, { detail: slug }));
+        return true;
+      });
+    } catch {
+      setPersistenceError(CART_STORAGE_ERROR);
+      return false;
+    }
+  }, [slug, lines, note, readCurrent, publish]);
+
+  const clear = useCallback(() => { void clearIfUnchanged(); }, [clearIfUnchanged]);
 
   return useMemo(
     () => ({
@@ -534,9 +622,11 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
       upsert,
       setQty,
       remove,
-      setNote: setNoteState,
+      setNote,
       clear,
+      clearIfUnchanged,
+      persistenceError,
     }),
-    [lines, note, hydrated, dropped, upsert, setQty, remove, clear],
+    [lines, note, hydrated, dropped, upsert, setQty, remove, setNote, clear, clearIfUnchanged, persistenceError],
   );
 }

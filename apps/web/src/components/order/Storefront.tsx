@@ -64,6 +64,7 @@ import {
   weekSchedule,
 } from "./helpers";
 import { Checkout } from "./Checkout";
+import { useCheckoutRecovery } from "./useCheckoutRecovery";
 import { FideliteVitrine } from "./FideliteVitrine";
 import type { VitrineFidelite } from "./fidelite";
 import { armeFunnel, jalonFunnel } from "./funnel";
@@ -209,6 +210,7 @@ export function Storefront({
   );
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
+  const recovery = useCheckoutRecovery(site.tenant.slug, demo);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);
@@ -325,7 +327,7 @@ export function Storefront({
         // barres collantes de la carte cesseraient alors de coller.
         "font-body min-h-dvh overflow-x-clip bg-bg text-ink",
         // Dégage la barre de panier flottante.
-        cart.count > 0 ? "pb-28" : "pb-10",
+        cart.count > 0 || recovery.active || recovery.last ? "pb-28" : "pb-10",
       )}
     >
       {/* Le masque remonte au document : canevas, rebond iOS, ascenseur
@@ -358,6 +360,9 @@ export function Storefront({
       {/* Une seule borne, jamais un point de rupture : la colonne suit la
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
+        {cart.persistenceError && <div className="pt-4">
+          <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
+        </div>}
         {notice && (
           <div className="pt-4">
             <Banner
@@ -452,7 +457,7 @@ export function Storefront({
       </main>
 
       {/* ── Barre de panier flottante ── */}
-      {cart.count > 0 && !tunnel && (
+      {(cart.count > 0 || recovery.active || recovery.last) && !tunnel && (
         <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(12px+env(safe-area-inset-bottom))]">
           <div className="mx-auto max-w-[560px]">
             <Tap
@@ -472,12 +477,12 @@ export function Storefront({
                 que le résolveur garantit sur les six directions.
               */}
               <span className="grid size-8 shrink-0 place-items-center rounded-pill border-[1.5px] border-onaccent/50 text-[14px] font-extrabold tabular-nums">
-                {cart.count}
+                {recovery.active ? <Icon name="clock" size={16} /> : cart.count || <Icon name="clock" size={16} />}
               </span>
               <span className="flex-1 text-left text-[15px] font-extrabold uppercase tracking-[0.02em]">
-                Voir mon panier
+                {recovery.active ? "Ma commande en cours" : cart.count ? "Voir mon panier" : "Retrouver ma commande"}
               </span>
-              <Money cents={cart.subtotal} mono={prixMono} className="text-[16px]" />
+              {!recovery.active && cart.count > 0 && <Money cents={cart.subtotal} mono={prixMono} className="text-[16px]" />}
               <Icon name="arrow" size={16} stroke={2.4} className="opacity-70" />
             </Tap>
           </div>
@@ -498,6 +503,7 @@ export function Storefront({
 
       <Checkout
         open={tunnel}
+        recovery={recovery}
         api={api}
         demo={demo}
         slug={site.tenant.slug}

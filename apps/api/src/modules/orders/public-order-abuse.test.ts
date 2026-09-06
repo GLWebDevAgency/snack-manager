@@ -30,7 +30,7 @@ function setup(
   const calls: string[] = [];
   let idempotenceReads = 0;
   const orders = {
-    findByClientId: vi.fn().mockImplementation(async () => {
+    findPublicReplay: vi.fn().mockImplementation(async () => {
       calls.push('idempotence');
       idempotenceReads += 1;
       return idempotenceReads === 1
@@ -116,6 +116,8 @@ describe('une commande publique ne rejoint la cuisine qu apres ses controles', (
           payment: { method },
         }),
         'online:turnstile',
+        null,
+        undefined,
       );
       expect(ctx.orders.createWithOutcome.mock.calls[0]?.[1]).not.toHaveProperty(
         'turnstileToken',
