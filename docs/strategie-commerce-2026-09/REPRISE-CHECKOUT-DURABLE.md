@@ -99,3 +99,38 @@ le CAS retardé pourrait encore gagner. Cette réparation reste à implémenter.
 Livraison par PR vers `develop`, vérification du SHA réellement servi sur staging,
 puis recette. Production uniquement après GO distinct. Aucun SMS ou débit bancaire
 réel n'est requis pour cette livraison.
+
+## 5. Première bascule C01 et retour arrière
+
+**Une ancienne API ne doit pas coexister avec la nouvelle dès qu'une admission
+C01 peut être écrite.** Elle ignore les admissions rejetées et la preuve de
+possession. Le seul statut `SUCCESS` de la nouvelle API n'atteste pas le retrait
+des anciens processus. La compatibilité des anciens clients avec la nouvelle
+API ne rend pas sûr le mélange des deux versions d'API.
+
+Pour la première livraison staging, après CI verte et revue :
+
+1. Vérifier les PR, la tête de `develop`, la cible Railway explicitement
+   `staging` et l'inventaire de tous les déploiements API. Relever l'ID actif.
+2. Prévoir une interruption de l'API staging, arrêter uniquement l'ancien
+   déploiement API, puis constater son état `REMOVED` et l'absence de tout autre
+   ancien déploiement actif. Ne supprimer ni service, ni base, ni données.
+3. Fusionner le SHA revu par PR vers `develop`. Laisser le workflow habituel
+   vérifier, migrer et déployer API puis interfaces ; aucun téléversement manuel
+   du worktree. Le préflight ne requiert pas une API vivante : il lit les
+   déploiements et la configuration ; les migrations PostgreSQL restent dans
+   le runner avec leur identité dédiée.
+4. Vérifier le SHA servi, les quatre services, les index
+   `public_order_admissions` (`_id`, tenant/client unique, tenant/créneau/état),
+   puis le smoke et une recette de reprise. La santé HTTP seule ne prouve pas
+   l'existence des index Mongo.
+
+Une fois C01 utilisé, **ne pas restaurer une API ni un checkout pré-C01 en
+laissant la commande ouverte**. L'ancien serveur ignore les tombstones ;
+l'ancien navigateur ignore le journal et peut générer un autre UUID depuis un
+panier incertain. En cas d'incident, fermer les nouvelles opérations et corriger
+en avant. Ne pas purger les admissions ou les journaux pour faciliter un retour
+arrière. Les anciens onglets encore ouverts restent la limite documentée au § 1.
+
+Cette fenêtre staging n'autorise aucune interruption ou promotion production :
+sa première bascule nécessite une recette et un GO dédiés.
