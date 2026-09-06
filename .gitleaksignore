@@ -14,3 +14,9 @@
 # en rejouant gitleaks 8.30.1 sur ce commit seul. Le texte du fichier a
 # changé depuis, mais l'historique, lui, ne change pas — d'où l'empreinte.
 b0c6014567af9f0270d9b2ec491c8d01fb704880:docs/CI-CD.md:secret-en-dur:616
+
+# PR #121, commit ee77859 (06/09/2026) : fixture locale inventée du test
+# refusant les URL Mongo avec identifiants AVANT toute connexion. Aucune
+# valeur réelle. Le littéral est remplacé dans l'arbre courant ; cette seule
+# empreinte historique reste exemptée, sans exclure le fichier ni la règle.
+ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-order-admission.integration.test.ts:uri-connexion-avec-identifiants:28

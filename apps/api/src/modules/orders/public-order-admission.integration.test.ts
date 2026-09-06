@@ -25,7 +25,11 @@ const uri = process.env.ORDER_RECOVERY_TEST_MONGO_URL ? recoveryTestDatabase(pro
 const integration = uri ? describe : describe.skip;
 
 describe('cible Mongo de la reprise', () => {
-  it.each(['mongodb://example.com/snackmanager_recovery_test_ci', 'mongodb://localhost/snackmanager', 'mongodb://localhost/admin', 'mongodb://user:pass@localhost/snackmanager_recovery_test_ci', 'mongodb://localhost/snackmanager_recovery_test_ci?replicaSet=prod'])('refuse %s sans I/O', (value) => expect(() => recoveryTestDatabase(value)).toThrow());
+  // Synthetic credentials exercise the guard; this URL is never connected to.
+  const withCredentials = new URL('mongodb://localhost/snackmanager_recovery_test_ci');
+  withCredentials.username = 'user';
+  withCredentials.password = 'pass';
+  it.each(['mongodb://example.com/snackmanager_recovery_test_ci', 'mongodb://localhost/snackmanager', 'mongodb://localhost/admin', withCredentials.toString(), 'mongodb://localhost/snackmanager_recovery_test_ci?replicaSet=prod'])('refuse %s sans I/O', (value) => expect(() => recoveryTestDatabase(value)).toThrow());
 });
 
 function barrier() {
