@@ -5,9 +5,10 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import Redis from 'ioredis';
 import { Money, ordering } from '@sm/domain';
 import {
@@ -35,6 +36,8 @@ import { priceOrderLines } from './price-order-lines';
 import { computeDeliveryForOrder } from '../delivery/delivery-order';
 import { PaymentsService } from '../ordering/payments.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
+import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-recovery';
+import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -59,6 +62,7 @@ export class OrdersService {
     @InjectModel('Tenant') private readonly tenants: Model<Tenant>,
     private readonly capacites: CapacitesService,
     private readonly payments: PaymentsService,
+    @Optional() private readonly admissions?: PublicOrderAdmissionService,
   ) {}
 
   private publish(tenantId: string, event: string, payload: unknown) {
@@ -98,6 +102,7 @@ export class OrdersService {
     delete payload.loyaltyEarnLeaseUntil;
     delete payload.paymentFlow;
     delete payload.counterCollection;
+    delete payload.publicRecovery;
     return payload;
   }
 
@@ -220,13 +225,17 @@ export class OrdersService {
     dto: CreateOrder,
     actor: string,
     deviceRef: string | null = null,
+    recovery?: PublicRecoveryBinding,
   ) {
     const permitted = await this.readFilter(tenantId, {});
     if (permitted.channel && dto.channel !== permitted.channel) {
       throw new ForbiddenException('Cette offre permet uniquement les commandes en ligne.');
     }
-    const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId });
+    if (!recovery && this.admissions) await this.admissions.assertLegacyKeyAvailable(tenantId, dto.clientId);
+    if (recovery && (!this.admissions || dto.channel !== 'online')) throw new ForbiddenException('Admission publique requise');
+    const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery');
     if (existing) {
+      assertPublicRecoveryReplay(existing, recovery);
       return { order: await this.withTrackingToken(existing), created: false as const };
     }
 
@@ -245,13 +254,16 @@ export class OrdersService {
     // pour l'encaissement, le rendu monnaie et le ticket.
     const subtotalAfterDiscount = subtotal - (promotion?.discount.amount ?? 0);
 
+    const candidateId = recovery ? new Types.ObjectId() : undefined;
+    let admissionCommitStarted = false;
     try {
       const number = await this.nextNumber(tenantId);
       const tenant = dto.type === 'delivery' ? await this.tenants.findById(tenantId).lean() : null;
       if (dto.type === 'delivery' && !tenant) throw new NotFoundException('Établissement introuvable');
       const delivery = computeDeliveryForOrder(tenant ?? {}, dto, subtotalAfterDiscount);
       const totalDu = subtotalAfterDiscount + (delivery?.feeCents ?? 0);
-      const order = await this.orders.create({
+      const candidate = {
+        ...(candidateId ? { _id: candidateId } : {}),
         tenantId,
         number,
         clientId: dto.clientId,
@@ -295,7 +307,14 @@ export class OrdersService {
             }
           : null,
         note: dto.note ?? null,
-      });
+      };
+      if (recovery) {
+        admissionCommitStarted = true;
+        const outcome = await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate);
+        if (!outcome.created) await this.rendreReservation(tenantId, promotion);
+        return outcome;
+      }
+      const order = await this.orders.create(candidate);
       this.publish(tenantId, WS_EVENTS.orderCreated, this.orderEventPayload(order));
       return { order, created: true as const };
     } catch (err: unknown) {
@@ -312,12 +331,17 @@ export class OrdersService {
       // l'erreur d'origine, qui est celle qui intéresse l'appelant. Le quota
       // peut alors dériver d'une unité — préjudice sans commune mesure avec une
       // création de commande avalée.
-      await this.rendreReservation(tenantId, promotion);
+      // Une réponse perdue après committing n'autorise pas à rendre la promo
+      // gagnante : son snapshot reste matérialisable par la reprise publique.
+      if (!recovery || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
+        await this.rendreReservation(tenantId, promotion);
+      }
 
       // Course entre deux rejeux simultanés de la même commande offline
       if ((err as { code?: number }).code === 11000) {
-        const raced = await this.orders.findOne({ ...permitted, clientId: dto.clientId });
+        const raced = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery');
         if (raced) {
+          assertPublicRecoveryReplay(raced, recovery);
           return { order: await this.withTrackingToken(raced), created: false as const };
         }
       }
@@ -335,6 +359,15 @@ export class OrdersService {
   async findByClientId(tenantId: string, clientId: string) {
     const existing = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), clientId });
     return existing ? this.withTrackingToken(existing) : null;
+  }
+
+  /** Ancien POST public : ne contourne jamais la preuve des commandes récentes. */
+  async findPublicReplay(tenantId: string, clientId: string) {
+    const existing = await this.orders.findOne({ ...await this.readFilter(tenantId, {}), clientId }, '+publicRecovery');
+    if (!existing) return null;
+    if (existing.channel !== 'online') throw new NotFoundException('Commande introuvable');
+    assertPublicRecoveryReplay(existing);
+    return this.withTrackingToken(existing);
   }
 
   /**

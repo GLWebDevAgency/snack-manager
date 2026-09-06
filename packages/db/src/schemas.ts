@@ -69,6 +69,15 @@ function hidePrivateOrderFields(
   delete returned.loyaltyEarnLeaseUntil;
   delete returned.paymentFlow;
   delete returned.counterCollection;
+  delete returned.publicRecovery;
+  return returned;
+}
+
+function hidePrivateAdmissionFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.proofHash;
+  delete returned.payloadHash;
+  delete returned.snapshot;
+  delete returned.validationOwner;
   return returned;
 }
 
@@ -959,6 +968,16 @@ export const OrderSchema = new Schema(
     tenantId: { type: Schema.Types.ObjectId, required: true, index: true },
     number: { type: Number, required: true }, // séquence journalière par tenant
     clientId: { type: String, required: true }, // clé d'idempotence offline (uuid appareil)
+    /** Preuve de reprise publique, atomique avec la vente ; jamais adoptée après création. */
+    publicRecovery: {
+      type: new Schema({
+        version: { type: Number, enum: [1], required: true },
+        proofHash: { type: String, match: /^[a-f0-9]{64}$/, required: true },
+        payloadHash: { type: String, match: /^[a-f0-9]{64}$/, required: true },
+      }, { _id: false }),
+      default: null,
+      select: false,
+    },
     /**
      * Carte présentée AVANT la création de la vente.
      *
@@ -1222,6 +1241,25 @@ OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
 // de 192 bits tirés au hasard, elle, n'arrive pas.
 OrderSchema.index({ trackingToken: 1 });
 export type Order = InferSchemaType<typeof OrderSchema>;
+
+/** Journal d'admission public : aucun TTL ne peut rouvrir une clé incertaine. */
+export const PublicOrderAdmissionSchema = new Schema({
+  _id: { type: String, required: true },
+  tenantId: { type: Schema.Types.ObjectId, required: true },
+  clientId: { type: String, required: true },
+  version: { type: Number, enum: [1], required: true },
+  proofHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
+  payloadHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
+  state: { type: String, enum: ['validating', 'committing', 'created', 'rejected'], required: true },
+  validationOwner: { type: String, default: null, select: false },
+  orderId: { type: Schema.Types.ObjectId, default: null },
+  slot: { type: Date, required: true },
+  snapshot: { type: Schema.Types.Mixed, default: null, select: false },
+  rejection: { type: String, enum: ['unavailable', 'slot_unavailable', 'invalid_order', 'abandoned', null], default: null },
+}, { timestamps: true, toJSON: { transform: hidePrivateAdmissionFields }, toObject: { transform: hidePrivateAdmissionFields } });
+PublicOrderAdmissionSchema.index({ tenantId: 1, clientId: 1 }, { unique: true });
+PublicOrderAdmissionSchema.index({ tenantId: 1, slot: 1, state: 1 });
+export type PublicOrderAdmission = InferSchemaType<typeof PublicOrderAdmissionSchema>;
 
 // ─────────────────────────────────────────────────────────────
 // counters — numérotation journalière atomique
@@ -2107,6 +2145,7 @@ export const MODELS = {
   Product: { name: 'Product', schema: ProductSchema, collection: 'products' },
   Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
+  PublicOrderAdmission: { name: 'PublicOrderAdmission', schema: PublicOrderAdmissionSchema, collection: 'public_order_admissions' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },

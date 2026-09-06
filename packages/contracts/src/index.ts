@@ -3,6 +3,7 @@ import { z } from 'zod';
 // sans lier le nom localement, il faut donc l'importer en plus.
 import { type UserRole } from './comptes';
 import { DeliveryAddressSchema, DeliveryRequestSchema, FulfillmentSchema } from './delivery';
+import { PublicOrderRecoveryProofSchema } from './order-recovery';
 
 export * from './comptes';
 export * from './supply';
@@ -32,6 +33,7 @@ export * from './delivery';
 export * from './commerce';
 export * from './order-refunds';
 export * from './order-counter';
+export * from './order-recovery';
 export * from './menu-legacy-options';
 export * from './menu-featured';
 
@@ -489,6 +491,8 @@ export type OrderLoyaltyEarnStatus = z.infer<typeof OrderLoyaltyEarnStatusSchema
 export const CreatePublicOrderSchema = z
   .object({
     clientId: z.uuid(),
+    /** Facultatif seulement pour compatibilité des anciens navigateurs. */
+    recoveryProof: PublicOrderRecoveryProofSchema.optional(),
     /** Absent pour les anciens clients : retrait au restaurant. */
     fulfillment: FulfillmentSchema.optional(),
     delivery: DeliveryRequestSchema.optional(),
@@ -521,6 +525,14 @@ export const CreatePublicOrderSchema = z
     }
   });
 export type CreatePublicOrder = z.infer<typeof CreatePublicOrderSchema>;
+/** Abandon d'une TENTATIVE, jamais annulation d'une commande enregistrée. */
+export const AbandonPublicOrderSchema = z.object({
+  ...CreatePublicOrderSchema.shape,
+  recoveryProof: PublicOrderRecoveryProofSchema,
+  turnstileToken: z.string().max(2_048).optional(),
+}).strict().refine((order) => (order.fulfillment === 'delivery') === (order.delivery !== undefined)
+  && (order.fulfillment !== 'delivery' || order.payment.method === 'online'), { message: 'Configuration de livraison invalide' });
+export type AbandonPublicOrder = z.infer<typeof AbandonPublicOrderSchema>;
 
 /** Devis informatif recalculé depuis le menu, sans montant fourni par le navigateur. */
 export const DeliveryQuoteRequestSchema = z.object({
