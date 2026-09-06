@@ -65,8 +65,9 @@ l'incertitude. `processing` désactive le bouton Payer et invite à consulter le
   de confirmation et le créneau souhaité, pas une prise en cuisine. Contrôle du
   suivi également sur téléphone 390 × 844, sans débordement horizontal.
 - `replay`, téléphone 390 × 844 : première commande online mémorisée mais réponse
-  `503`, puis choix local comptoir. Le second POST garde le même `clientId` et
-  rejoue le paiement **online** initial ; aucune fausse confirmation comptoir.
+  `503`, puis récupération `404` volontairement incertaine. Le second POST garde
+  le même `clientId`, la même preuve et tout le corps métier **online** initial ;
+  aucun choix comptoir local ne peut modifier une tentative déjà envoyée.
 - `delivery-pricing`, desktop 1440 × 1000 : devis à 22,50 €, retour au retrait
   sans frais (20 €), puis retour en livraison avec code promo. Un nouveau devis
   est exigé et affiche 20 € − 2 € + 2,50 € = 20,50 €, comme le bouton Payer.
@@ -100,8 +101,21 @@ ou une autre session à l'aveugle.
 Cette recette prouve le comportement du frontend, **pas** l'intégration Stripe
 réelle, le webhook, la concurrence Mongo, l'authentification du serveur ou le
 déploiement. Ces preuves restent du ressort des tests API/Mongo et de la recette
-sandbox Stripe. La reprise après rafraîchissement/fermeture du navigateur et la
-persistance des secrets de suivi restent un chantier distinct.
+sandbox Stripe. La reprise après rafraîchissement/fermeture et les courses entre
+onglets ont leur harnais distinct `checkout-recovery.mjs` (C01).
+
+## Reprise durable du checkout
+
+`node e2e/local/checkout-recovery.mjs` utilise les mêmes prérequis et ports, en
+série avec les autres recettes Next. Il teste le vrai frontend avec les routes
+de création, récupération et fermeture de tentative simulées. Aucun compte,
+prestataire SMS, paiement réel ni environnement distant n'est sollicité.
+
+Le journal IndexedDB natif a aussi ses tests `checkout-attempt.test.ts` dans la
+suite web ; Chromium doit être installé (`pnpm exec playwright install chromium`).
+La CI installe explicitement ce navigateur avant les tests, et exécute séparément
+`public-order-admission.integration.test.ts` contre le MongoDB local de CI.
+Les captures restent dans un dossier temporaire annoncé par le harnais.
 
 ## Bascule sécurisée vers le comptoir
 
