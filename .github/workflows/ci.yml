@@ -201,6 +201,11 @@ jobs:
           ORDER_RECOVERY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_recovery_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/orders/public-order-admission.integration.test.ts
 
+      - name: Tests MongoDB réels — promotion et compteur concurrent
+        env:
+          ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/engage/engage.promotions.test.ts
+
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS
 
