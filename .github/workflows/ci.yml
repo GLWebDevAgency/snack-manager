@@ -162,6 +162,11 @@ jobs:
       - name: Analyse statique
         run: pnpm exec turbo run lint $TURBO_FLAGS
 
+      # Le journal de checkout exige de vraies transactions IndexedDB entre
+      # onglets : un faux stockage mémoire ne valide pas sa durabilité.
+      - name: Navigateur des tests IndexedDB
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
 
