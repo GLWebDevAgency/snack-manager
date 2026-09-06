@@ -57,6 +57,20 @@ Preuves : `StatsService.revenueMatch`, `sumWindow` et `exportOrdersCsv` dans [`s
 
 ## 4. Identité client : réutiliser la fidélité sans élargir son QR
 
+### Précision du fondateur et revue du 7 septembre
+
+**Un seul parcours visible « Mon compte »**, relié à « Mes commandes », « Ma fidélité » et « Mon profil ». Si le programme du restaurant est actif et que le client y adhère, la création du compte et de la carte se fait dans le même parcours, sans deuxième formulaire ni visite obligatoire en caisse. Le QR reste une carte de présentation, pas le secret donnant accès au compte. La commande invitée et l'historique personnel hors module fidélité restent possibles.
+
+Le bouton « Obtenir ma carte » ne doit plus envoyer un nouvel utilisateur directement au scanner. Cible : « Créer mon compte et ma carte » avec numéro vérifié et prénom ; « Me connecter » pour le membre existant ; rattachement d'une carte de caisse comme action secondaire explicite. La déconnexion clôt la session et retire les coordonnées locales ; elle ne supprime ni la carte ni les justificatifs de vente. Prévoir aussi révocation des autres sessions et récupération sûre.
+
+**Constats toujours ouverts** : aucune inscription consommateur publique ni session OTP trouvée ; le cookie actuel conserve une carte de caisse et la suppression locale ne révoque pas les autres appareils. Le préremplissage vient de `sm.customer`, pas d'un profil fidélité authentifié. Le journal C01 conserve la tentative active et le dernier reçu, pas toutes les commandes simultanées. Aucune API d'historique personnel ou de réachat, ni crédit automatique web de fidélité, ne doit être déduit des écrans déjà présents.
+
+Twilio Verify est choisi, **essai gratuit fermé uniquement** : vérifier la liste des destinataires, les quotas et l'échéance avant un envoi. Aucun achat, activation publique ou budget SMS récurrent autorisé. Le futur flux exige plafonds globaux/restaurant/téléphone/IP, délai de renvoi, nombre d'essais borné, réponses sans révéler l'existence d'un compte et arrêt en cas d'incertitude sur le budget. La vérification du téléphone ne doit pas rattacher automatiquement les anciens achats ou cartes créés avec un téléphone non vérifié : possession de carte et rattachement contrôlé restent distincts.
+
+**Plusieurs commandes en cours** : remplacer le raccourci unique vers « la dernière commande » par « Mes commandes » et un nombre de commandes actives. Chaque commande conserve son numéro, mode, créneau, statut opérationnel et financier, et son propre accès au suivi. Une deuxième commande ne remplace pas le premier suivi ; minuit, rafraîchissement et reconnexion ne retirent aucune commande non terminée. Les historiques sont paginés et protégés par propriétaire serveur, jamais regroupés par téléphone déclaré. Le réachat prépare un panier aux conditions actuelles, sans débiter ou recréer immédiatement la vente.
+
+Ce cadrage complète L3a/L3b après le lot de fiabilité C15 et la livraison opérationnelle L2 ; il ne revendique aucun écran ou parcours livré par cette note.
+
 ### Frontière d'identité
 
 Créer un contexte **client final** distinct des comptes du personnel. Une session authentifiée, bornée et révocable, identifie le consommateur pour un restaurant. Un accès sans mot de passe par contact vérifié est une option adaptée ; choisir et tester le canal de récupération, les quotas et la délivrabilité avant activation. Ne pas ajouter un compte global inter-restaurants ni un partage implicite des données.
