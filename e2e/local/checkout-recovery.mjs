@@ -4,6 +4,7 @@
 // Aucun identifiant, paiement, fournisseur, staging ou production n'est appelé.
 // Node >=24.12, packages/contracts déjà compilé, Playwright déjà installé.
 // QA_SCENARIO=all (défaut) ou l'un des noms imprimés par ce harnais.
+// L3a0 ciblé : QA_SCENARIO=device-orders-memory node e2e/local/checkout-recovery.mjs
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -231,8 +232,14 @@ async function storefront(page) {
   assert.equal(new URL(page.url()).pathname, '/r/qa');
   assert.ok((await page.title()).length > 0, 'Titre significatif.');
 }
+async function reloadStorefront(page) {
+  const hydrated = page.waitForResponse(response => new URL(response.url()).pathname === '/public/funnel');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await hydrated;
+  await page.evaluate(() => navigator.locks.request('sm.cart.write.qa', () => true));
+}
 async function fillToPayment(page, { add = true, quantity = 1, name = 'Camille Recette' } = {}) {
-  if (add) await page.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette.*ajouter au panier/ }).click();
+  if (add) await page.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette/ }).click();
   await page.getByRole('button', { name: /Voir mon panier/ }).click();
   if (quantity > 1) await page.getByRole('button', { name: 'Plus de Burger de recette', exact: true }).click();
   await continueToPayment(page, name);
@@ -319,7 +326,7 @@ async function lostResponseScenario(name, createStatus = 503, recoveryStatus = 5
   await assertPrepared(page, fixture.creates[0]);
   assert.equal(fixture.orders.size, 1); assert.equal(fixture.creates.length, 1);
   await closeRecovery(page);
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  await reloadStorefront(page);
   await openRecovery(page);
   await assertPrepared(page, fixture.creates[0]);
   fixture.recoveryAvailable = true;
@@ -332,6 +339,130 @@ async function lostResponseScenario(name, createStatus = 503, recoveryStatus = 5
 }
 
 const cases = {
+  async 'device-orders-memory'() {
+    reset('ok');
+    const page = await pageIn(await context());
+    const memoryKey = 'sm.customer.v1.qa';
+    const customerName = 'Camille Recette';
+    const customerPhone = '0000000000';
+    const closeSheet = async () => {
+      await page.getByRole('dialog').getByRole('button', { name: 'Fermer', exact: true }).click();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    };
+    const toCustomer = async (add) => {
+      if (add) await page.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette/ }).click();
+      await page.getByRole('button', { name: /Voir mon panier/ }).click();
+      await page.getByRole('dialog', { name: 'Votre commande', exact: true }).getByRole('button', { name: /^Continuer/ }).click();
+      await page.getByRole('dialog', { name: 'Vos coordonnées', exact: true }).waitFor();
+    };
+    const assertCustomer = async (name, phone) => {
+      await until(async () => await page.getByRole('textbox', { name: 'Prénom et nom' }).inputValue() === name
+        && await page.getByRole('textbox', { name: 'Téléphone', exact: true }).inputValue() === phone, 'Les coordonnées ne correspondent pas à la mémorisation consentie.');
+    };
+    const submitCounter = async () => {
+      await page.getByRole('button', { name: 'Choisir le créneau' }).click();
+      await page.getByRole('button', { name: label, exact: true }).click();
+      await page.getByRole('button', { name: /^Continuer/ }).click();
+      await page.getByRole('radio', { name: /Payer au comptoir/ }).click();
+      await page.getByRole('button', { name: /^Confirmer la commande/ }).click();
+      await page.getByRole('dialog', { name: 'Commande confirmée', exact: true }).waitFor();
+      await assertReceived(page);
+      assert.equal(fixture.paymentRequests, 0, 'Le retrait au comptoir ne sollicite aucun paiement fournisseur.');
+    };
+    const releaseActive = async () => {
+      await openRecovery(page);
+      await recoveryDialog(page).getByRole('button', { name: 'Préparer une nouvelle commande', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Votre commande', exact: true }).waitFor();
+      await closeSheet();
+    };
+    const openOrders = async () => {
+      await page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).click();
+      const sheet = page.getByRole('dialog', { name: 'Mes commandes', exact: true });
+      await sheet.getByRole('button', { name: 'Actualiser les états', exact: true }).waitFor();
+      return sheet;
+    };
+    await storefront(page);
+    await openOrders(); await page.getByText('Aucune commande enregistrée ici', { exact: true }).waitFor(); await closeSheet();
+    await toCustomer(true); await assertCustomer('', '');
+    await page.getByRole('textbox', { name: 'Prénom et nom' }).fill(customerName);
+    await page.getByRole('textbox', { name: 'Téléphone', exact: true }).fill(customerPhone);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), memoryKey), null, 'Saisir ne vaut pas consentir.');
+    await storefront(page); await toCustomer(false); await assertCustomer('', '');
+    await page.getByRole('textbox', { name: 'Prénom et nom' }).fill(customerName);
+    await page.getByRole('textbox', { name: 'Téléphone', exact: true }).fill(customerPhone);
+    await page.getByRole('button', { name: 'Mémoriser ces coordonnées', exact: true }).click();
+    await page.getByRole('button', { name: 'Coordonnées mémorisées', exact: true }).waitFor();
+    await page.setViewportSize({ width: 320, height: 780 });
+    const memoryRadii = await page.getByRole('button', { name: 'Coordonnées mémorisées', exact: true }).evaluate(button => {
+      const style = getComputedStyle(button);
+      return { token: style.getPropertyValue('--cf-r-sm').trim(),
+        corners: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius] };
+    });
+    assert.match(memoryRadii.token, /^\d+(?:\.\d+)?px$/, 'Le masque de recette expose son rayon de contrôle.');
+    assert.ok(Number.parseFloat(memoryRadii.token) > 0, 'Cette identité de recette demande des contrôles arrondis.');
+    assert.deepEqual(memoryRadii.corners, Array(4).fill(memoryRadii.token), 'Le bouton doit réellement reprendre --cf-r-sm aux quatre coins.');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: join(directory, 'device-memory-mobile.png'), fullPage: false });
+    const remembered = await page.evaluate(key => localStorage.getItem(key), memoryKey);
+    assert.ok(remembered); assert.equal(JSON.parse(remembered).expiresAt - JSON.parse(remembered).savedAt, 7 * 86_400_000);
+    await submitCounter(); assert.equal(fixture.orders.size, 1);
+
+    await storefront(page); await releaseActive(); await toCustomer(true); await assertCustomer(customerName, customerPhone);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), memoryKey), remembered, 'Relire ne renouvelle pas les sept jours.');
+    await submitCounter(); assert.equal(fixture.orders.size, 2); assert.equal(fixture.creates.length, 2);
+    assert.notEqual(fixture.creates[0].clientId, fixture.creates[1].clientId);
+    assert.ok(fixture.creates.every(body => body.payment.method === 'counter'));
+    const [first, second] = [...fixture.orders.values()];
+    first.status = 'delivered'; first.payment.status = 'paid'; second.status = 'preparing';
+    await storefront(page); let sheet = await openOrders();
+    assert.equal(await sheet.getByRole('link').count(), 2);
+    await sheet.getByRole('region', { name: 'Terminées', exact: true }).waitFor();
+    await sheet.getByRole('region', { name: 'En cours', exact: true }).waitFor();
+    await page.screenshot({ path: join(directory, 'device-orders-mobile.png'), fullPage: false });
+    await reloadStorefront(page);
+    sheet = await openOrders();
+    const hrefs = await sheet.getByRole('link').evaluateAll(links => links.map(link => link.getAttribute('href')).sort());
+    assert.deepEqual(hrefs, [first, second].map(order => `/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`).sort());
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    assert.equal(await sheet.evaluate(element => element.scrollWidth > element.clientWidth), false);
+    await page.screenshot({ path: join(directory, 'device-orders-desktop.png'), fullPage: false });
+    for (const order of [first, second]) {
+      await sheet.getByRole('link', { name: `Suivre la commande n° ${order.number}`, exact: true }).click();
+      await until(() => new URL(page.url()).pathname === `/t/${order._id}`, 'Le raccourci ouvre la mauvaise commande.');
+      assert.equal(new URL(page.url()).hash, '');
+      await until(() => requests.some(request => request.path === `/public/orders/${order._id}/ticket`), 'Le vrai suivi Next n’a pas chargé le ticket.');
+      assert.ok((await page.locator('body').innerText()).length > 50, 'Le suivi ne doit pas être un écran vide.');
+      await storefront(page); sheet = await openOrders();
+    }
+    await closeSheet();
+
+    // The actual demo route must not read this restaurant's saved details,
+    // expose real-device shortcuts, or make admission/payment API requests.
+    const createsBeforeDemo = fixture.creates.length;
+    await page.goto(`${web}/r/demo?demo=1`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page.getByRole('heading', { name: 'Le Comptoir', level: 1 }).waitFor();
+    // This banner exists only after the real demo client has hydrated; the
+    // demo deliberately emits no funnel HTTP signal to join as /r/qa does.
+    await page.locator('[data-sm-demo="bandeau"]').waitFor();
+    await page.evaluate(() => navigator.locks.request('sm.cart.write.demo', () => true));
+    assert.equal(await page.getByRole('button', { name: 'Mes commandes sur cet appareil' }).count(), 0);
+    await page.getByRole('region', { name: /^boissons$/i }).getByRole('button', { name: /^Canette 33 cl/ }).click();
+    await page.getByRole('button', { name: /Voir mon panier/ }).click();
+    await page.getByRole('dialog', { name: 'Votre commande', exact: true }).getByRole('button', { name: /^Continuer/ }).click();
+    await assertCustomer('', '');
+    assert.equal(await page.getByRole('region', { name: 'Mémorisation des coordonnées' }).count(), 0);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), memoryKey), remembered);
+    assert.equal(fixture.creates.length, createsBeforeDemo); assert.equal(fixture.paymentRequests, 0);
+
+    await storefront(page); await releaseActive(); await toCustomer(true); await assertCustomer(customerName, customerPhone);
+    await page.getByRole('button', { name: 'Effacer mes coordonnées', exact: true }).click(); await assertCustomer('', '');
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), memoryKey), null);
+    await storefront(page); await toCustomer(false); await assertCustomer('', '');
+    assert.equal(fixture.orders.size, 2, 'Effacer les coordonnées n’efface aucune commande.');
+    assert.equal(fixture.creates.length, 2); assert.equal(fixture.paymentRequests, 0);
+    await closeSheet(); await openOrders(); assert.equal(await page.getByRole('dialog').getByRole('link').count(), 2);
+    await healthy(page, 'device-orders-memory');
+  },
   async 'lost-response-close-reload'() {
     await lostResponseScenario('lost-response-close-reload');
   },
@@ -347,7 +478,7 @@ const cases = {
     await storefront(page); await fillToPayment(page); await pay(page).click();
     await until(() => fixture.paymentRequests === 1, 'La demande bancaire ne démarre pas.');
     await assertReceived(page);
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await reloadStorefront(page);
     await openRecovery(page); await received(page);
     assert.equal(fixture.creates.length, 1); assert.equal(fixture.paymentRequests, 1);
     fixture.releasePayment.resolve();
@@ -374,7 +505,7 @@ const cases = {
     // The second tab prepares a DIFFERENT cart after the first POST is frozen.
     // The shared cart may synchronize, but must never mutate the admitted body.
     await closeRecovery(second);
-    await second.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette.*ajouter au panier/ }).click();
+    await second.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette/ }).click();
     await until(async () => (await second.evaluate(() => JSON.parse(localStorage.getItem('sm.cart.qa') ?? 'null')))?.lines[0]?.qty === 2, 'Le nouveau panier de B n’est pas sauvegardé.');
     await openRecovery(second);
     await recoveryDialog(second).getByRole('button', { name: 'Réessayer cet envoi', exact: true }).click();
@@ -389,7 +520,7 @@ const cases = {
     fixture.releaseCreate.resolve();
     await deadline(fixture.delayedDone.promise, 15_000, 'Le premier envoi retardé reste bloqué.');
     await until(async () => (await journal(first))?.state === 'received', 'Reçu absent du journal partagé.');
-    await second.reload({ waitUntil: 'domcontentloaded' });
+    await reloadStorefront(second);
     await openRecovery(second); await received(second);
     await recoveryDialog(second).getByRole('button', { name: 'Préparer une nouvelle commande', exact: true }).click();
     await second.getByRole('dialog', { name: 'Votre commande', exact: true }).waitFor();
@@ -402,7 +533,7 @@ const cases = {
     reset('ok');
     const page = await pageIn(await context({ denied: true }));
     await storefront(page);
-    await page.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette.*ajouter au panier/ }).click();
+    await page.getByRole('region', { name: 'Burgers', exact: true }).getByRole('button', { name: /Burger de recette/ }).click();
     await page.getByRole('button', { name: /Voir mon panier/ }).click();
     await page.getByText('Sauvegarde indisponible', { exact: true }).waitFor();
     assert.equal(fixture.creates.length, 0); assert.equal(fixture.orders.size, 0);
@@ -494,7 +625,9 @@ try {
   const unexpectedConsole = consoleMessages.filter(message => !expectedConsole(message));
   assert.deepEqual(unexpectedConsole, [], 'Toute erreur console hors panne HTTP simulée doit être expliquée.');
   const result = { result: 'PASS', scenarios, browser: 'Chromium / Playwright (Browser plugin not available)',
-    fixtures: ['API admission/recovery', 'Stripe.js', 'Turnstile'], real: ['Next UI', 'IndexedDB', 'cross-tab browser context'],
+    fixtures: ['API admission/recovery', 'Stripe.js', 'Turnstile'], real: ['Next UI', 'IndexedDB',
+      ...(selection === 'device-orders-memory' || selection === 'all' ? ['Coordonnées opt-in localStorage', 'Route démo séparée', 'Navigation privée vers deux suivis'] : []),
+      ...(selection === 'two-tabs-frozen-payload-and-new-cart' || selection === 'all' ? ['cross-tab browser context'] : [])],
     expectedConsoleWarnings: ['Échecs HTTP injectés vérifiés par route/statut', 'Preloads Next dev inutilisés'],
     limits: ['Pas de concurrence Mongo réelle', 'Pas de paiement réel', 'Pas de recette staging', 'Pas de garantie cross-origin'], evidence: directory };
   await writeFile(join(directory, 'result.json'), JSON.stringify(result, null, 2));
