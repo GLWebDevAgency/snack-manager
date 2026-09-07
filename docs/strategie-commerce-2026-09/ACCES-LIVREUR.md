@@ -113,3 +113,29 @@ Node 24.20.0, sans installation ni mutation de staging :
 Une revue indépendante a fait corriger la pagination de l'annuaire et les
 lectures majoritaires de reprise, avec tests de non-régression. Aucun parcours
 de mission, paiement, GPS ou preuve de remise n'est revendiqué par cette recette.
+
+## Recette staging du 7 septembre
+
+PR #125 fusionnée puis déployée sous `a87af145fdebc025180791a4a8c7ca8e6c8fae2b` :
+quatre services Railway en service, smoke 8/8 et démos E2E 9/9. Quatre scénarios
+E2E nécessitant des identifiants sont restés ignorés, pas validés.
+
+Avec l'accord du fondateur, un seul accès dédié « RECETTE L2.1 — test staging »
+a été créé chez Classfood, puis associé explicitement dans un nouvel onglet
+Chrome via le lien configuré du domaine Railway staging. Le rechargement
+conservait la session ; l'annuaire affichait « Téléphone associé ».
+La révocation côté gérant a ensuite été confirmée par le refus de la session
+côté livreur. Une nouvelle tentative avec le lien initial dans un autre onglet
+a également été refusée. L'accès reste révoqué pour conserver sa trace.
+
+Aucun secret publié, aucune commande affectée, aucun paiement, SMS ou changement
+de production. Aucune erreur ou alerte console observée sur les trois onglets.
+Le contrôle mobile simulé (341 pixels CSS mesurés) ne présentait pas de
+débordement horizontal ; ce n'est pas un test sur téléphone physique ou hors ligne.
+
+Un défaut d'affichage a été relevé : une demande neuve peut être annoncée à tort
+comme datant de plus de trente minutes après inactivité. L'horloge de référence
+du panneau restait celle du chargement de l'annuaire. Correctif isolé et test
+navigateur de non-régression : `fix/delivery-operator-attempt-clock`.
+Les [preuves et limites de cette recette](https://github.com/GLWebDevAgency/snack-manager/pull/125#issuecomment-5565456580)
+complètent les résultats locaux, sans valider les missions L2.2–L2.3.
