@@ -47,6 +47,29 @@ const stubFetch = (impl: (url: string) => Promise<Response>) => {
 };
 
 describe("d’où le logo a le droit de venir", () => {
+  it.each([
+    "ftp://api.exemple.fr/logo.png",
+    "file://api.exemple.fr/logo.png",
+    "ws://api.exemple.fr/logo.png",
+    "https://user@api.exemple.fr/logo.png",
+    "https://user:password@api.exemple.fr/logo.png",
+    "https://:password@api.exemple.fr/logo.png",
+  ])("refuse protocole ou user-info avant tout téléchargement : %s", async url => {
+    const espion = stubFetch(async () => reponse(webp()));
+    expect(logoAutorise(url, HOTES)).toBe(false);
+    expect(await logoIncorpore(url, { hotes: HOTES })).toBeNull();
+    expect(espion).not.toHaveBeenCalled();
+  });
+
+  it("préserve l’hôte et le port de développement configurés", async () => {
+    const hotes = hotesDeLogos({ NEXT_PUBLIC_API_URL: "http://localhost:3001" });
+    const url = "http://localhost:3001/public/medias/t1/x";
+    const espion = stubFetch(async () => reponse(webp()));
+    expect(logoAutorise(url, hotes)).toBe(true);
+    expect(await logoIncorpore(url, { hotes })).toMatch(/^data:image\/webp;base64,/);
+    expect(espion.mock.calls[0]?.[0]).toBe(url);
+  });
+
   it("accepte l’API que ce Web interroge, et ses sous-domaines", () => {
     const hotes = hotesDeLogos({ NEXT_PUBLIC_API_URL: "https://api.exemple.fr" });
     expect(logoAutorise("https://api.exemple.fr/public/medias/t1/x", hotes)).toBe(true);
@@ -85,6 +108,12 @@ describe("d’où le logo a le droit de venir", () => {
 });
 
 describe("ce que le logo doit être pour entrer dans l’icône", () => {
+  it("interdit au transport de suivre une redirection hors de l’hôte vérifié", async () => {
+    const espion = stubFetch(async () => reponse(webp()));
+    expect(await logoIncorpore(ADRESSE, { hotes: HOTES })).toMatch(/^data:image\/webp;base64,/);
+    expect(espion.mock.calls[0]?.[1]?.redirect).toBe("error");
+  });
+
   it("rend une adresse `data:` typée par les OCTETS, pas par l’URL", async () => {
     /*
      * La médiathèque sert ses objets sans extension : le nom de fichier ne
@@ -118,6 +147,50 @@ describe("ce que le logo doit être pour entrer dans l’icône", () => {
 });
 
 describe("le poids, l’échec et le délai", () => {
+  it("annule le flux sans lire quand le poids annoncé dépasse le plafond", async () => {
+    const pull = vi.fn();
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull, cancel }, { highWaterMark: 0 });
+    stubFetch(async () => new Response(body, { headers: { "Content-Length": String(POIDS_MAX_LOGO + 1) } }));
+    expect(await logoIncorpore(ADRESSE, { hotes: HOTES })).toBeNull();
+    expect(pull).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, "12"])("arrête et annule au premier dépassement réel, poids annoncé %s", async annonce => {
+    let lus = 0;
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (lus === 3) { controller.close(); return; }
+        lus++;
+        controller.enqueue(webp());
+      },
+      cancel,
+    }, { highWaterMark: 0 });
+    stubFetch(async () => new Response(body, { headers: annonce ? { "Content-Length": annonce } : {} }));
+    expect(await logoIncorpore(ADRESSE, { hotes: HOTES, poidsMax: 40 })).toBeNull();
+    expect(lus).toBe(2);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(body.locked).toBe(false);
+  });
+
+  it("accepte exactement le plafond après plusieurs morceaux sans arrayBuffer", async () => {
+    const image = webp();
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(image.slice(0, 10));
+      controller.enqueue(image.slice(10));
+      controller.close();
+    } });
+    const response = new Response(body);
+    const arrayBuffer = vi.spyOn(response, "arrayBuffer");
+    stubFetch(async () => response);
+    const uri = await logoIncorpore(ADRESSE, { hotes: HOTES, poidsMax: image.byteLength });
+    expect(uri).toBe(`data:image/webp;base64,${Buffer.from(image).toString("base64")}`);
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(body.locked).toBe(false);
+  });
+
   it("refuse sur le poids ANNONCÉ, avant même de lire le corps", async () => {
     let lu = false;
     stubFetch(async () => {
