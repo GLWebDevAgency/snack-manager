@@ -57,13 +57,13 @@ import {
 import {
   lineSummary,
   lineTotal,
-  readCustomer,
   toOrderLines,
-  writeCustomer,
   type CartApi,
   type CartLine,
-  type Customer,
 } from "./cart";
+import type { Customer } from "./customer-memory";
+import { useCustomerDetails } from "./useCustomerDetails";
+import { CustomerMemoryControls } from "./CustomerMemoryControls";
 import { FideliteApresCommande } from "./FideliteVitrine";
 import type { VitrineFidelite } from "./fidelite";
 import { jalonFunnel } from "./funnel";
@@ -262,7 +262,8 @@ export function Checkout({
   onEditLine: (line: CartLine) => void;
 }) {
   const [step, setStep] = useState<Step>("cart");
-  const [customer, setCustomer] = useState<Customer>({ name: "", phone: "" });
+  const customerDetails = useCustomerDetails(slug, demo, open);
+  const customer = customerDetails.customer;
   const [touched, setTouched] = useState(false);
   const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
   const [address, setAddress] = useState<DeliveryAddress>({ line1: "", line2: "", postalCode: "", city: "", country: "FR" });
@@ -332,11 +333,10 @@ export function Checkout({
   // ── Coordonnées et disponibilité du paiement, relues à l’ouverture ──
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- `readCustomer()` lit la mémoire de session du navigateur, absente au rendu serveur, et la garde protège une saisie déjà commencée. Recalculé au rendu, ce prérenseignement écraserait le nom et le téléphone que le client est en train de taper.
-    setCustomer((prev) => (prev.name || prev.phone ? prev : readCustomer()));
     // La démonstration ne consulte ni n’écrit la mémoire de session : elle
     // propose toujours les deux moyens de paiement, puisque c’est justement
     // ce choix-là qu’il s’agit de montrer.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- payment availability is a browser-only hint, rechecked by the server before payment.
     if (!demo) setProbe(readPayProbe(slug));
   }, [open, slug, demo]);
 
@@ -656,7 +656,6 @@ export function Checkout({
     }
     let attempt: PendingCheckoutAttempt | undefined = previous;
     try {
-      if (!previous) writeCustomer(customer);
       const payload = previous?.payload ?? {
         lines: toOrderLines(cart.lines),
         payment: { method: chosenMethod },
@@ -885,11 +884,12 @@ export function Checkout({
           <>
           <CustomerStep
             customer={customer}
-            onChange={setCustomer}
+            onChange={customerDetails.change}
             touched={touched}
             onBlur={() => setTouched(true)}
             tenantName={tenantName}
           />
+          {!demo && <CustomerMemoryControls details={customerDetails} />}
           {isDelivery && <DeliveryFields address={address} instructions={deliveryInstructions} quote={deliveryQuote} busy={quoteBusy} error={quoteError} onAddress={setAddress} onInstructions={setDeliveryInstructions} onVerify={verifyDelivery} />}
           </>
         )}
@@ -1495,8 +1495,8 @@ function CustomerStep({
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[14px] leading-relaxed text-mut">
-        Pas de compte à créer. {tenantName} a juste besoin de savoir à qui remettre
-        la commande, et comment vous prévenir quand elle est prête.
+        Pas de compte à créer. {tenantName} a besoin de savoir à qui remettre
+        la commande et de pouvoir vous joindre en cas de besoin.
       </p>
 
       <div className="flex flex-col gap-1.5">
