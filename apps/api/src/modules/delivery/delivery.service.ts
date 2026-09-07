@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.module';
 import { priceOrderLines } from '../orders/price-order-lines';
 import { promotionCandidatesFilter, selectCartPromotion } from '../orders/cart-promotion';
 import { deliverySettingsOf, publicDeliverySettingsOf } from './delivery-order';
+import { TenantCapacitySettingsStore } from '../tenants/tenant-capacity-settings.store';
 
 @Injectable()
 export class DeliveryService {
@@ -63,10 +64,11 @@ export class DeliveryService {
 
   async updateSettings(tenantId: string, input: DeliverySettings, actor: JwtPayload) {
     const settings = DeliverySettingsSchema.parse(input);
-    const tenant = await this.tenants.findByIdAndUpdate(tenantId, { $set: { delivery: settings } }, { new: true, runValidators: true }).lean();
-    if (!tenant) throw new NotFoundException('Établissement introuvable');
+    const tenant = await new TenantCapacitySettingsStore(this.tenants).update(tenantId, { delivery: settings });
     await this.audit.log({ tenantId, actor, action: 'tenant.settings', meta: { delivery: settings } });
-    return deliverySettingsOf(tenant);
+    // Le store conserve un document hydraté pour la vue BO ; le contrat Zod
+    // strict de livraison doit recevoir ses données, pas les champs Mongoose.
+    return deliverySettingsOf(tenant.toObject());
   }
 
   /** Départ idempotent : deux postes ne peuvent ni doubler ni antidater le départ. */

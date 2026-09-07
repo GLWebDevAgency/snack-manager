@@ -143,7 +143,7 @@ describe('création réelle de commande : fromage inclus et supplément payant s
 
   it('la commande en ligne utilise le même montant serveur et reste à encaisser au comptoir', async () => {
     const { service, create } = harness();
-    await service.create(TENANT, order([withCheese()], 'online'), 'client');
+    await service.createWithOutcome(TENANT, order([withCheese()], 'online'), 'client');
     expect(create.mock.calls[0]![0]).toMatchObject({
       totals: { subtotal: 850, total: 850 }, payment: { status: 'pending' },
       paymentFlow: { version: 1, origin: 'created_v1', phase: 'open', attempt: null, close: null },

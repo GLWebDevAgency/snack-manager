@@ -1,5 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
+import { HistoricalOrderAdmissionImportSchema, validHistoricalOrderAdmission, OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
   AUDIT_AUTHOR_MEANS,
@@ -74,10 +75,19 @@ function hidePrivateOrderFields(
 }
 
 function hidePrivateAdmissionFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.kind;
+  delete returned.channel;
   delete returned.proofHash;
   delete returned.payloadHash;
   delete returned.snapshot;
   delete returned.validationOwner;
+  delete returned.capacity;
+  delete returned.historicalImport;
+  return returned;
+}
+
+function hidePrivateTenantFields(_document: unknown, returned: Record<string, unknown>): Record<string, unknown> {
+  delete returned.capacityControl;
   return returned;
 }
 
@@ -177,6 +187,7 @@ export const BrandSub = new Schema(
 
 export const TenantSchema = new Schema(
   {
+    capacityControl: { type: OrderCapacityControlSchema, default: undefined, select: false },
     slug: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     logoUrl: { type: String, default: null },
@@ -559,7 +570,7 @@ export const TenantSchema = new Schema(
       default: null,
     },
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { transform: hidePrivateTenantFields }, toObject: { transform: hidePrivateTenantFields } },
 );
 // La résolution d'un domaine personnalisé (public/resolve) cherche le tenant
 // par `domains.hostname` À CHAQUE visite d'un site client dont le cache a
@@ -1242,23 +1253,80 @@ OrderSchema.index({ loyaltyEarnState: 1, loyaltyEarnLeaseUntil: 1 });
 OrderSchema.index({ trackingToken: 1 });
 export type Order = InferSchemaType<typeof OrderSchema>;
 
-/** Journal d'admission public : aucun TTL ne peut rouvrir une clé incertaine. */
+/** Journal commun (collection historique conservée) : aucun TTL ne rouvre une clé incertaine. */
+type HistoricalAdmissionDocument = {
+  kind?: string; isNew: boolean; $locals: Record<string, unknown>;
+  get(path: string): unknown; toObject(options: { transform: false }): Record<string, unknown>;
+  modifiedPaths(): string[]; isSelected(path: string): boolean;
+};
+const HISTORICAL_DOCUMENT = 'capacityHistoricalAdmission';
+function historicalAdmissionImmutable(): Error {
+  return new Error('Une admission historique persistée est immuable : seule la restitution vérifiée par CAS peut modifier ses sièges.');
+}
+function assertHistoricalAdmissionDocument(document: HistoricalAdmissionDocument): void {
+  // select:false ne doit pas transformer un historique partiellement chargé
+  // en document mutable. Les transitions de requête restent des CAS du store.
+  if (!document.isNew && !document.isSelected('kind')
+    && document.modifiedPaths().some((path) => !['updatedAt', '__v'].includes(path))) throw historicalAdmissionImmutable();
+  const historical = document.kind === 'historical' || document.$locals[HISTORICAL_DOCUMENT] === true;
+  if (historical && !document.isNew && document.modifiedPaths().some((path) => !['updatedAt', '__v'].includes(path))) {
+    throw historicalAdmissionImmutable();
+  }
+  if (historical && !validHistoricalOrderAdmission(document.toObject({ transform: false }))) {
+    throw new Error('Admission historique invalide : identité terminale, provenance et capacité atomique requises.');
+  }
+}
+function legacyAdmissionNull(this: { kind?: string } | null | undefined): null | undefined {
+  // setDefaultsOnInsert appelle les défauts sans document hydraté.
+  return this?.kind === 'historical' ? undefined : null;
+}
+function requestAdmissionProofRequired(this: { kind?: string } | null | undefined): boolean { return this?.kind !== 'historical'; }
+
 export const PublicOrderAdmissionSchema = new Schema({
   _id: { type: String, required: true },
   tenantId: { type: Schema.Types.ObjectId, required: true },
   clientId: { type: String, required: true },
   version: { type: Number, enum: [1], required: true },
-  proofHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
-  payloadHash: { type: String, match: /^[a-f0-9]{64}$/, required: true, select: false },
+  // Les anciens documents C01 sans kind restent publics. Le staff ne crée
+  // aucune preuve de reprise publique ; l'origine ne fait pas partie de la clé unique.
+  kind: { type: String, enum: ['public', 'legacy', 'staff', 'historical'], default: 'public', immutable: true, select: false,
+    validate: { validator: function (this: HistoricalAdmissionDocument, kind: string) {
+      if (kind !== 'historical') return this.get('historicalImport') === undefined;
+      return typeof this.toObject === 'function' && validHistoricalOrderAdmission(this.toObject({ transform: false }));
+    }, message: 'Une admission historique exige son identité terminale et sa capacité, sans preuve de requête.' } },
+  // Ancien C01 absent = online uniquement ; chaque nouvelle identité staff
+  // fige le canal exact afin de ne pas échanger phone et pos pendant la reprise.
+  channel: { type: String, enum: ['online', 'pos', 'phone'], default: undefined, immutable: true, select: false },
+  proofHash: { type: String, match: /^[a-f0-9]{64}$/, required: requestAdmissionProofRequired, select: false },
+  payloadHash: { type: String, match: /^[a-f0-9]{64}$/, required: requestAdmissionProofRequired, select: false },
   state: { type: String, enum: ['validating', 'committing', 'created', 'rejected'], required: true },
-  validationOwner: { type: String, default: null, select: false },
+  validationOwner: { type: String, default: legacyAdmissionNull, select: false },
   orderId: { type: Schema.Types.ObjectId, default: null },
   slot: { type: Date, required: true },
-  snapshot: { type: Schema.Types.Mixed, default: null, select: false },
-  rejection: { type: String, enum: ['unavailable', 'slot_unavailable', 'invalid_order', 'abandoned', null], default: null },
+  snapshot: { type: Schema.Types.Mixed, default: legacyAdmissionNull, select: false },
+  // Aucun défaut : une admission C01/historique ne s'invente pas de réservation.
+  capacity: { type: OrderCapacityClaimSchema, default: undefined, select: false },
+  historicalImport: { type: HistoricalOrderAdmissionImportSchema, default: undefined, immutable: true, select: false },
+  rejection: { type: String, enum: ['unavailable', 'slot_unavailable', 'invalid_order', 'abandoned', null], default: legacyAdmissionNull },
 }, { timestamps: true, toJSON: { transform: hidePrivateAdmissionFields }, toObject: { transform: hidePrivateAdmissionFields } });
+PublicOrderAdmissionSchema.post('init', function (document) {
+  const admission = document as HistoricalAdmissionDocument;
+  admission.$locals[HISTORICAL_DOCUMENT] = admission.kind === 'historical';
+});
+PublicOrderAdmissionSchema.pre('validate', function () { assertHistoricalAdmissionDocument(this as HistoricalAdmissionDocument); });
+PublicOrderAdmissionSchema.pre('save', function () { assertHistoricalAdmissionDocument(this as HistoricalAdmissionDocument); });
+PublicOrderAdmissionSchema.pre('deleteOne', { document: true, query: false }, function () {
+  const admission = this as HistoricalAdmissionDocument;
+  if (admission.kind === 'historical' || admission.$locals[HISTORICAL_DOCUMENT] === true
+    || (!admission.isNew && !admission.isSelected('kind'))) throw historicalAdmissionImmutable();
+});
 PublicOrderAdmissionSchema.index({ tenantId: 1, clientId: 1 }, { unique: true });
 PublicOrderAdmissionSchema.index({ tenantId: 1, slot: 1, state: 1 });
+for (const { name, field } of ORDER_CAPACITY_INDEXES) {
+  PublicOrderAdmissionSchema.index({ tenantId: 1, 'capacity.slot': 1, [`capacity.${field}`]: 1 }, {
+    name, unique: true, partialFilterExpression: { [`capacity.${field}`]: { $type: 'number' } },
+  });
+}
 export type PublicOrderAdmission = InferSchemaType<typeof PublicOrderAdmissionSchema>;
 
 // ─────────────────────────────────────────────────────────────
@@ -2146,6 +2214,7 @@ export const MODELS = {
   Media: { name: 'Media', schema: MediaSchema, collection: 'medias' },
   Order: { name: 'Order', schema: OrderSchema, collection: 'orders' },
   PublicOrderAdmission: { name: 'PublicOrderAdmission', schema: PublicOrderAdmissionSchema, collection: 'public_order_admissions' },
+  OrderCapacityDay: { name: 'OrderCapacityDay', schema: OrderCapacityDaySchema, collection: 'order_capacity_days' },
   Counter: { name: 'Counter', schema: CounterSchema, collection: 'counters' },
   AuditLog: { name: 'AuditLog', schema: AuditLogSchema, collection: 'auditlogs' },
   AdminLog: { name: 'AdminLog', schema: AdminLogSchema, collection: 'adminlogs' },

@@ -95,7 +95,17 @@ function nativeStore(): KeyValueStore {
 import { KEYS } from './pos-state';
 import { withDemoLoyalty } from './demo-loyalty';
 import { withDemoPayment } from './demo-payment';
+import { assertPhoneOrderPurgeSafe } from './phone-order-attempt';
+import { pendingCollectionIds } from './service-payment';
 export { KEYS };
+
+/** Lecture sous le verrou de purge : aucun journal direct ne passe par la file. */
+async function assertDirectOperationsSettled(store: KeyValueStore): Promise<void> {
+  await assertPhoneOrderPurgeSafe(store);
+  if ((await pendingCollectionIds(store)).length > 0) {
+    throw new Error('Un encaissement reste à vérifier. Aucun désappairage ni effacement de sa référence n’est autorisé.');
+  }
+}
 
 export interface Session {
   token: string;
@@ -230,7 +240,7 @@ function queueScopeOf(device: PairedDevice): string {
 }
 
 async function finishInterruptedUnpair(): Promise<void> {
-  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device);
+  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device, assertDirectOperationsSettled);
   await client.queue.completeClear();
   adopt(null);
   client.setToken(null);
@@ -248,6 +258,7 @@ export async function loadPairedDevice(): Promise<PairedDevice | null> {
         ? candidate
         : null;
     },
+    assertDirectOperationsSettled,
   );
   if (!parsed) {
     // Une chute après la suppression de l'identité mais avant l'acquittement
@@ -397,8 +408,8 @@ export async function forgetPairedDevice(): Promise<void> {
   // IMPORTANT : la purge durable précède l'effacement de l'identité. Un crash
   // entre les deux laisse ainsi le poste chez A avec une file vide, jamais une
   // file A orpheline susceptible de repartir sous le jeton de B.
-  await client.queue.clear({ requireEmpty: true });
-  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device);
+  await client.queue.clear({ requireEmpty: true, beforeClear: assertDirectOperationsSettled });
+  await purgeKeysWithIdentityLast(getStore(), Object.values(KEYS), KEYS.device, assertDirectOperationsSettled);
   await client.queue.completeClear();
   adopt(null);
   client.setToken(null);

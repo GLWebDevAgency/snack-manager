@@ -1,6 +1,4 @@
 import { BadRequestException, Injectable, ConflictException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
 import {
   NEXT_OPEN_LOOKAHEAD_DAYS,
   RESTAURANT_TZ,
@@ -11,7 +9,10 @@ import {
   type SlotsResponse,
   type Fulfillment,
 } from '@sm/contracts';
-import type { Order, Tenant } from '@sm/db';
+import type { Tenant } from '@sm/db';
+import { OrderCapacityAvailabilityService } from './order-capacity-availability.service';
+import { buildOrderCapacityCalendar } from './order-capacity-calendar';
+import { assertOrderSlotFresh } from './order-slot-freshness';
 import { deliverySettingsOf, publicDeliverySettingsOf } from '../delivery/delivery-order';
 import {
   addDays,
@@ -30,8 +31,6 @@ import {
 const MINUTE_MS = 60_000;
 const DEFAULT_INTERVAL_MIN = 10;
 const DEFAULT_CAPACITY = 4;
-/** Garde-fou : un créneau toutes les minutes sur 24 h resterait raisonnable. */
-const MAX_SLOTS_PER_DAY = 1_000;
 
 /** Tenant hydraté (le type inféré du schéma ne porte pas `_id`). */
 export type TenantWithId = Tenant & { _id: unknown };
@@ -57,13 +56,13 @@ interface ClosureRange {
  *  - pas de `settings.slotIntervalMin` minutes, bornes = services réels du jour
  *    (Class'Food : lundi et vendredi = soir uniquement) ;
  *  - délai de préparation minimum de 20 min à partir de maintenant ;
- *  - `settings.slotCapacity` commandes par créneau, les commandes déjà prises
- *    sur le créneau étant décomptées ;
- *  - fermetures exceptionnelles (`closures`) exclues, à la journée ou au créneau.
+ *  - grille et capacités figées par journée, sièges durables non libérés ;
+ *  - fermetures incorporées au plan avant son gel. Les réglages courants ne
+ *    réécrivent jamais une journée qui porte déjà des engagements.
  */
 @Injectable()
 export class SlotsService {
-  constructor(@InjectModel('Order') private readonly orders: Model<Order>) {}
+  constructor(private readonly availability: OrderCapacityAvailabilityService) {}
 
   /** Fenêtres de service d'un jour calendaire, d'après `hours` (jour ISO 1–7). */
   private windowsFor(tenant: Tenant, day: CalendarDay): ServiceWindow[] {
@@ -119,62 +118,19 @@ export class SlotsService {
   }
 
   /** Première date (AAAA-MM-JJ) réellement ouverte après `from`, sinon `null`. */
-  private findNextOpenDate(
-    tenant: Tenant,
+  private async findNextOpenDate(
+    tenant: TenantWithId,
     from: CalendarDay,
-    ranges: ClosureRange[],
-  ): string | null {
+    furthest: CalendarDay,
+  ): Promise<string | null> {
     for (let i = 1; i <= NEXT_OPEN_LOOKAHEAD_DAYS; i++) {
       const day = addDays(from, i);
-      if (this.windowsFor(tenant, day).length === 0) continue;
-      if (this.fullDayClosure(ranges, day)) continue;
+      if (compareDays(day, furthest) > 0) break;
+      const plan = await this.availability.previewDay(String(tenant._id), formatDay(day));
+      if (plan.slots.length === 0) continue;
       return formatDay(day);
     }
     return null;
-  }
-
-  /**
-   * Nombre de commandes déjà prises par créneau de la grille.
-   * Les commandes « au plus tôt » ne tombent pas pile sur un créneau : chacune
-   * est rattachée au créneau immédiatement antérieur (bucket par troncature).
-   */
-  private async countPerSlot(
-    tenantId: string,
-    dayStart: Date,
-    dayEnd: Date,
-    gridMs: number[],
-    intervalMs: number,
-    deliveryOnly = false,
-  ): Promise<Map<number, number>> {
-    const counts = new Map<number, number>();
-    if (gridMs.length === 0) return counts;
-
-    const rows = await this.orders.aggregate<{ _id: Date | null; count: number }>([
-      {
-        $match: {
-          tenantId: new Types.ObjectId(tenantId),
-          status: { $ne: 'cancelled' }, // une commande annulée relibère sa place
-          'pickup.slot': { $gte: dayStart, $lt: dayEnd },
-          ...(deliveryOnly ? { type: 'delivery' } : {}),
-        },
-      },
-      { $group: { _id: '$pickup.slot', count: { $sum: 1 } } },
-    ]);
-
-    const sorted = [...gridMs].sort((a, b) => a - b);
-    for (const row of rows) {
-      const at = toDate(row._id);
-      if (!at) continue;
-      const ms = at.getTime();
-      let bucket: number | null = null;
-      for (const slotMs of sorted) {
-        if (slotMs > ms) break;
-        bucket = slotMs;
-      }
-      if (bucket === null || ms - bucket >= intervalMs) continue; // hors grille
-      counts.set(bucket, (counts.get(bucket) ?? 0) + row.count);
-    }
-    return counts;
   }
 
   /**
@@ -184,39 +140,15 @@ export class SlotsService {
 /**
    * REFUSE un créneau que le restaurant ne peut pas honorer.
    *
-   * `compute` savait déjà tout — capacité restante, fermetures exceptionnelles,
-   * délai de préparation — et rien ne le relisait au moment d'écrire la
-   * commande. Le tunnel grisait les créneaux pleins, ce qui arrête un client
-   * honnête et personne d'autre.
-   *
-   * ── Ce que ce contrôle ferme, et ce qu'il ne ferme pas ──────────────────
-   *
-   * Il ferme le créneau devenu plein pendant que le client réglait, la
-   * fermeture exceptionnelle, l'heure passée, le délai de préparation non
-   * tenu, et l'appel direct qui poserait des commandes sur un créneau complet.
-   *
-   * Il NE ferme PAS la course de la dernière place : deux clients qui valident
-   * à la même seconde passent tous deux le contrôle avant que l'un des deux
-   * n'écrive. La fenêtre tombe de plusieurs minutes à quelques millisecondes,
-   * ce qui est un autre ordre de grandeur, mais la fermer tout à fait
-   * demanderait un compteur atomique par créneau — à faire le jour où un
-   * restaurant vend assez vite pour que cette seconde-là compte.
+   * Contrôle de fraîcheur public (horizon, délai et pause) seulement. La
+   * disponibilité peut changer juste après : seul le CAS d'admission attribue
+   * les sièges atomiques et ferme la course de la dernière place.
    */
   async exigerDisponible(tenant: TenantWithId, iso: string, fulfillment: Fulfillment = 'pickup'): Promise<void> {
-    const at = new Date(iso);
-    if (Number.isNaN(at.getTime())) {
-      throw new BadRequestException('Créneau de retrait invalide.');
-    }
-
+    const at = assertOrderSlotFresh(iso);
     const requested = parisYmd(at);
-    const furthest = addDays(parisYmd(new Date()), NEXT_OPEN_LOOKAHEAD_DAYS);
-    if (compareDays(requested, furthest) > 0) {
-      throw new ConflictException(
-        `Les commandes ouvrent au maximum ${NEXT_OPEN_LOOKAHEAD_DAYS} jours a l avance.`,
-      );
-    }
-
-    const { slots, closureReason, closedToday } = await this.compute(tenant, formatDay(requested), fulfillment);
+    const { slots, closureReason, closedToday, paused } = await this.compute(tenant, formatDay(requested), fulfillment);
+    if (paused) throw new ConflictException('La prise de commande est suspendue pour le moment.');
     const creneau = slots.find((s) => s.iso === at.toISOString());
 
     if (!creneau) {
@@ -236,7 +168,7 @@ export class SlotsService {
     }
   }
 
-  async compute(tenant: TenantWithId, date?: string, fulfillment: Fulfillment = 'pickup'): Promise<SlotsResponse> {
+  async compute(tenant: TenantWithId, date?: string, fulfillment: Fulfillment = 'pickup', audience: 'public' | 'staff' = 'public'): Promise<SlotsResponse> {
     const now = new Date();
     const today = parisYmd(now);
     const requested = date ? parseDay(date) : today;
@@ -244,84 +176,58 @@ export class SlotsService {
       throw new BadRequestException('Date invalide — format attendu AAAA-MM-JJ');
     }
 
-    const intervalMin = positiveInt(tenant.settings?.slotIntervalMin, DEFAULT_INTERVAL_MIN);
-    const kitchenCapacity = positiveInt(tenant.settings?.slotCapacity, DEFAULT_CAPACITY);
+    const furthest = addDays(today, NEXT_OPEN_LOOKAHEAD_DAYS);
+    if (compareDays(requested, furthest) > 0) {
+      throw new ConflictException(`Les commandes ouvrent au maximum ${NEXT_OPEN_LOOKAHEAD_DAYS} jours a l avance.`);
+    }
+    // Mandatory even during a pause: never present a legacy Order count as
+    // capacity when bootstrap/control is absent, incomplete or blocked.
+    const plan = await this.availability.readDay(String(tenant._id), formatDay(requested));
     const delivery = deliverySettingsOf(tenant);
     const isDelivery = fulfillment === 'delivery';
-    const capacity = isDelivery ? Math.min(kitchenCapacity, delivery.slotCapacity) : kitchenCapacity;
+    const slotCapacity = (slot: (typeof plan.slots)[number]) => isDelivery
+      ? Math.min(slot.kitchenCapacity, slot.deliveryCapacity) : slot.kitchenCapacity;
+    const capacity = plan.slots.length > 0 ? Math.max(...plan.slots.map(slotCapacity))
+      : positiveInt(tenant.settings?.slotCapacity, DEFAULT_CAPACITY);
+    // These response labels are indicative. Admission NEVER derives an
+    // instant or a seat from intervalMin/service; only the frozen plan does.
+    const differences = plan.slots.slice(1).map((slot, index) => (slot.at.getTime() - plan.slots[index]!.at.getTime()) / MINUTE_MS)
+      .filter((value) => Number.isInteger(value) && value >= 5 && value <= 60);
+    const intervalMin = differences.length > 0 ? Math.min(...differences)
+      : positiveInt(tenant.settings?.slotIntervalMin, DEFAULT_INTERVAL_MIN);
     const deliveryAvailable = !isDelivery || publicDeliverySettingsOf(tenant).available;
     const leadTimeMin = isDelivery ? Math.max(SLOT_LEAD_TIME_MIN, delivery.leadTimeMin) : SLOT_LEAD_TIME_MIN;
-    const paused = tenant.settings?.onlineOrderingPaused === true || !deliveryAvailable;
+    const paused = (audience === 'public' && tenant.settings?.onlineOrderingPaused === true) || !deliveryAvailable;
 
-    const dayStart = parisWallToUtc(requested);
-    const dayEnd = parisWallToUtc(addDays(requested, 1));
-    const ranges = this.closureRanges(tenant);
-    const dayClosure = this.fullDayClosure(ranges, requested);
     const isPastDay = compareDays(requested, today) < 0;
-    const windows = isPastDay || dayClosure || !deliveryAvailable ? [] : this.windowsFor(tenant, requested);
-
-    // ── Grille brute : un créneau tous les `intervalMin`, bornes incluses ──
-    const grid: { at: Date; service: SlotService }[] = [];
-    const seen = new Set<number>();
-    for (const window of windows) {
-      for (let m = window.openMin; m <= window.closeMin; m += intervalMin) {
-        if (grid.length >= MAX_SLOTS_PER_DAY) break;
-        const at = parisWallToUtc(requested, 0, m);
-        if (seen.has(at.getTime())) continue; // services qui se chevauchent
-        seen.add(at.getTime());
-        grid.push({ at, service: window.service });
-      }
-    }
-    grid.sort((a, b) => a.at.getTime() - b.at.getTime());
-
-    // ── Filtres : délai de préparation + fermetures partielles ──
+    const windows = this.windowsFor(tenant, requested);
     const earliest = now.getTime() + leadTimeMin * MINUTE_MS;
-    const intervalMs = intervalMin * MINUTE_MS;
-    // Première fermeture ayant écarté un créneau : sert de motif si elle finit
-    // par vider la journée (fermeture d'un service, bornes horaires précises).
-    let blockingClosure: ClosureRange | null = null;
-    const openable = grid.filter(({ at }) => {
-      const ms = at.getTime();
-      if (ms < earliest) return false;
-      const hit = ranges.find((r) => ms >= r.from && ms <= r.to);
-      if (hit) {
-        blockingClosure ??= hit;
-        return false;
-      }
-      return true;
-    });
-
-    const counts = await this.countPerSlot(
-      String(tenant._id),
-      dayStart,
-      dayEnd,
-      openable.map((s) => s.at.getTime()),
-      intervalMs,
-    );
-    const deliveryCounts = isDelivery ? await this.countPerSlot(
-      String(tenant._id), dayStart, dayEnd, openable.map((slot) => slot.at.getTime()), intervalMs, true,
-    ) : null;
-
-    const slots: PickupSlot[] = openable.map(({ at, service }) => {
-      const taken = counts.get(at.getTime()) ?? 0;
-      const kitchenRemaining = kitchenCapacity - taken;
-      const remaining = Math.max(0, deliveryCounts
-        ? Math.min(kitchenRemaining, delivery.slotCapacity - (deliveryCounts.get(at.getTime()) ?? 0))
-        : kitchenRemaining);
+    const openable = isPastDay || !deliveryAvailable ? [] : plan.slots.filter(({ at }) => at.getTime() >= earliest);
+    const slots: PickupSlot[] = openable.map((slot) => {
+      const { at, kitchenCapacity, deliveryCapacity, kitchenTaken, deliveryTaken } = slot;
+      const kitchenRemaining = kitchenCapacity - kitchenTaken;
+      const remaining = Math.max(0, isDelivery ? Math.min(kitchenRemaining, deliveryCapacity - deliveryTaken) : kitchenRemaining);
+      const minutes = parisMinutesOfDay(at);
+      const service = windows.find((window) => minutes >= window.openMin && minutes <= window.closeMin)?.service
+        ?? (minutes < 16 * 60 ? 'lunch' : 'dinner');
       return {
         iso: at.toISOString(),
         label: parisHm(at),
         service,
         remaining,
         full: remaining <= 0,
-        load: loadOf(remaining, capacity),
+        load: loadOf(remaining, slotCapacity(slot)),
       };
     });
 
     const closedToday = slots.length === 0;
     // Une date passée renvoie la prochaine ouverture à partir d'aujourd'hui.
     const scanFrom = isPastDay ? addDays(today, -1) : requested;
-    const closure = dayClosure ?? (closedToday ? blockingClosure : null);
+    const closure = plan.closedReason === 'exceptional_closure';
+    // Frozen plans intentionally do not copy free-text closure reasons. A
+    // later BO edit must not relabel an older closure with an unrelated reason.
+    const closureReason = closure ? (!plan.frozen ? buildOrderCapacityCalendar(tenant, plan.day).closureReason : null)
+      || 'Fermeture exceptionnelle' : null;
 
     return {
       date: formatDay(requested),
@@ -331,8 +237,8 @@ export class SlotsService {
       leadTimeMin,
       slots,
       closedToday,
-      nextOpenDate: closedToday ? this.findNextOpenDate(tenant, scanFrom, ranges) : null,
-      closureReason: closure ? closure.reason || 'Fermeture exceptionnelle' : null,
+      nextOpenDate: closedToday ? await this.findNextOpenDate(tenant, scanFrom, furthest) : null,
+      closureReason,
       paused,
     };
   }

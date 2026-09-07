@@ -170,6 +170,9 @@ jobs:
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
 
+      - name: Gardes des outils de reprise Mongo
+        run: pnpm --filter @sm/api exec vitest run ../../scripts/reprise-mongo.test.mjs --root ../..
+
       # Les suites générales restent rapides et hermétiques. Ces trois fichiers
       # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
       # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et
@@ -205,6 +208,50 @@ jobs:
         env:
           ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/engage/engage.promotions.test.ts
+
+      # Le failpoint de construction est GLOBAL au daemon : un conteneur
+      # éphémère distinct évite d'affecter les autres suites Mongo ci-dessus.
+      - name: Tests MongoDB réels — construction des index de capacité
+        env:
+          ORDER_CAPACITY_INDEX_TEST_MONGO_URL: mongodb://127.0.0.1:27018/snackmanager_index_test_ci
+          ORDER_CAPACITY_INDEX_FAILPOINTS: '1'
+        run: |
+          SM_CAPACITY_TEST_CONTAINER=$(docker run --detach --rm --publish 127.0.0.1:27018:27017 \
+            mongo:8.0.29-noble@sha256:021b2d5ae9d253f2cca17491cc8d03aed8df3c840f3252066aa62d3277fc406e \
+            mongod --bind_ip_all --setParameter enableTestCommands=1)
+          [[ "$SM_CAPACITY_TEST_CONTAINER" =~ ^[a-f0-9]{64}$ ]]
+          trap 'docker stop "$SM_CAPACITY_TEST_CONTAINER" >/dev/null' EXIT
+          for attempt in {1..30}; do
+            if docker exec "$SM_CAPACITY_TEST_CONTAINER" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$SM_CAPACITY_TEST_CONTAINER" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'
+          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-index-readiness.test.ts src/modules/orders/order-capacity-index-readiness.integration.test.ts
+
+      - name: Tests MongoDB réels — capacité et bootstrap reprenable
+        env:
+          ORDER_CAPACITY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci
+          ORDER_CAPACITY_CALENDAR_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_calendar_test_ci
+          ORDER_CAPACITY_SETTINGS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_settings_test_ci
+          ORDER_CAPACITY_READER_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_reader_test_ci
+          ORDER_CAPACITY_BOOTSTRAP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_bootstrap_test_ci
+          ORDER_CAPACITY_CLI_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_cli_test_ci
+          ORDER_CAPACITY_RUNTIME_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_ci
+          STAFF_ORDER_ATTEMPT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_staff
+        run: |
+          pnpm --filter @sm/db exec vitest run src/order-capacity-immutability.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts src/modules/ordering/order-capacity-calendar.store.integration.test.ts src/modules/tenants/tenant-capacity-settings.store.integration.test.ts src/modules/ordering/order-capacity-bootstrap.reader.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/ordering/order-capacity-bootstrap.store.integration.test.ts src/modules/orders/order-capacity-runtime.integration.test.ts src/modules/orders/staff-order-attempt.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/maintenance/order-capacity-bootstrap.cli.integration.test.ts
+
+      # L'expiration du verrou Redis ne doit jamais vendre une place deux fois.
+      # Cette preuve reste bloquante : ni continue-on-error, ni skip.
+      - name: Régression runtime — dernière place après expiration Redis
+        env:
+          ORDER_SLOT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_slot_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/orders/slot-reservation-race.integration.test.ts
 
       - name: Compilation
         run: pnpm exec turbo run build $TURBO_FLAGS

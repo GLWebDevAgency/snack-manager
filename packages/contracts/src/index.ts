@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { type UserRole } from './comptes';
 import { DeliveryAddressSchema, DeliveryRequestSchema, FulfillmentSchema } from './delivery';
 import { PublicOrderRecoveryProofSchema } from './order-recovery';
+import { StaffPhoneOrderAttemptRequestSchema } from './staff-order-attempt';
 
 export * from './comptes';
 export * from './supply';
@@ -457,6 +458,13 @@ export const CreateOrderSchema = z.object({
 });
 export type CreateOrder = z.infer<typeof CreateOrderSchema>;
 
+/** Preserve the established POS payload, but validate phone BEFORE a generic
+ * object parser could strip fields belonging to a different request. */
+export const CreateStaffOrderSchema = z.discriminatedUnion('channel', [
+  StaffPhoneOrderAttemptRequestSchema,
+  CreateOrderSchema.safeExtend({ channel: z.enum(['pos', 'online']) }),
+]);
+
 /**
  * État public, sans identifiant membre ni détail technique, du gain porté
  * par une vente POS. `processing` reste rejouable : il ne signifie jamais que
@@ -726,6 +734,7 @@ export const WS_EVENTS = {
   menuUpdated: 'menu.updated',
 } as const;
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
+export * from './staff-order-attempt';
 
 /** Canal Redis pub/sub par tenant. */
 export const ordersChannel = (tenantId: string) => `tenant:${tenantId}:orders`;

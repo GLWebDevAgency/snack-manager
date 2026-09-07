@@ -23,6 +23,8 @@ export const KEYS = {
   loyaltyEnrollmentRecovery: 'sm.pos.loyalty-enrollment-recovery.v1',
   /** Encaissements directs dont la réponse peut être perdue, purgés à l'appairage. */
   collectionRecovery: 'sm.pos.collection-recovery.v1',
+  /** Tentative téléphone directe : protégée avant purge et effacée avec l'identité. */
+  phoneOrderAttempt: 'sm.pos.phone-order-attempt.v1',
 } as const;
 
 /**

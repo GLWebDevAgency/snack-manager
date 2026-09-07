@@ -14,7 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { cartTotal, euros, type CartLine } from '@sm/client-core';
 import { FONT, R, S, palette, sheet, type, withAlpha, type Brand } from './theme';
-import { MODE_LABEL, lineDetail, pickupSlots, type Mode } from './pos-state';
+import { MODE_LABEL, lineDetail, type Mode } from './pos-state';
+import { phoneServiceDay, type PhoneTicketControls } from './usePhoneOrder';
 import { Btn, Chip, CloseBtn, EmptyState, Field, Press, Stepper } from './ui';
 import { useLayout, type Layout } from './useLayout';
 import type { LoyaltyTicketMember } from './loyalty-state';
@@ -40,6 +41,7 @@ export function TicketPanel({
   loyalty,
   onLoyalty,
   onCollapse,
+  phone,
 }: {
   lines: CartLine[];
   mode: Mode;
@@ -62,14 +64,16 @@ export function TicketPanel({
   onLoyalty: () => void;
   /** Fourni en mode tiroir : referme le ticket et rend la grille au caissier. */
   onCollapse?: () => void;
+  phone: PhoneTicketControls;
 }) {
   const L = useLayout();
   const drawer = !!onCollapse;
   const subtotal = cartTotal(lines);
   const count = lines.reduce((n, l) => n + l.qty, 0);
   const phoneOk = customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8;
-  const canSend = lines.length > 0 && (mode !== 'tel' || phoneOk) && !busy;
-  const slots = pickupSlots();
+  const canSend = lines.length > 0 && mode !== 'tel' && !busy;
+  const today = phoneServiceDay();
+  const tomorrow = new Date(new Date(`${today}T12:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
 
   return (
     <View
@@ -106,6 +110,8 @@ export function TicketPanel({
             onChangeText={onCustomerName}
             placeholder="Nom du client *"
             accent={brand.accent}
+            maxLength={80}
+            disabled={busy}
           />
           <Field
             value={customerPhone}
@@ -113,22 +119,39 @@ export function TicketPanel({
             placeholder="Téléphone *"
             keyboardType="phone-pad"
             accent={brand.accent}
+            maxLength={32}
+            disabled={busy}
             /* Un champ vide n'est pas une erreur : seul un numéro trop court en est une. */
             invalid={customerPhone.length > 0 && customerPhone.replace(/\D/g, '').length < 8}
           />
           <Text style={[type.eyebrow, { marginTop: 2, fontSize: L.fs(12) }]}>Heure de retrait</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.xs }}>
+            {[[today, 'Aujourd’hui'], [tomorrow, 'Demain'],
+              ...(phone.slots?.nextOpenDate && ![today, tomorrow].includes(phone.slots.nextOpenDate)
+                ? [[phone.slots.nextOpenDate, `Le ${phone.slots.nextOpenDate.slice(8)}/${phone.slots.nextOpenDate.slice(5, 7)}`]] : [])].map(([date, label]) => (
+              <Chip key={date} label={label!} on={phone.date === date} disabled={busy || phone.slotsBusy || !!phone.unavailable}
+                accessibilityRole="radio" onPress={() => phone.onDate(date!)} accent={brand.accent} onAccent={brand.onAccent} />
+            ))}
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-            {slots.map((s) => (
+            {(phone.slots?.slots ?? []).map((s) => (
               <Chip
-                key={s.key}
-                label={s.label}
-                on={slotIso === s.iso || (slotIso === null && s.key === 'asap')}
+                key={s.iso}
+                label={`${s.label}${s.full ? ' · complet' : ''}`}
+                accessibilityRole="radio"
+                on={slotIso === s.iso}
+                disabled={busy || phone.slotsBusy || s.full}
                 onPress={() => onSlot(s.iso)}
                 accent={brand.accent}
                 onAccent={brand.onAccent}
               />
             ))}
           </ScrollView>
+          {phone.slotsBusy ? <Text accessibilityRole="alert" style={type.mut}>Vérification des créneaux…</Text> : null}
+          {phone.slots?.closedToday ? <Text style={type.mut}>{phone.slots.closureReason ?? 'Aucun créneau disponible pour cette journée.'}</Text> : null}
+          {phone.slotsError || phone.unavailable ? <Text accessibilityRole="alert" style={[type.mut, { color: palette.amber }]}>{phone.unavailable ?? phone.slotsError}</Text> : null}
+          <Btn label="Actualiser les créneaux" kind="ghost" size="sm" disabled={busy || phone.slotsBusy || !!phone.unavailable} onPress={phone.onRefresh} />
+          <Text style={type.mut}>La fidélité n’est pas encore rattachable aux commandes téléphone.</Text>
           {lines.length > 0 && !phoneOk ? (
             <View style={[sheet.row, { gap: 8 }]}>
               <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: palette.amber }} />
@@ -266,6 +289,11 @@ export function TicketPanel({
         </View>
 
         <View style={{ gap: S.sm }}>
+          {mode === 'tel' ? <>
+            <Text style={type.mut}>Le restaurant confirme le créneau avant tout encaissement.</Text>
+            <Btn label={busy ? 'Confirmation…' : 'Confirmer le créneau'} kind="primary" accent={brand.accent}
+              onAccent={brand.onAccent} disabled={!phone.canSubmit || busy} onPress={phone.onSubmit} block />
+          </> : <>
           <View style={{ flexDirection: 'row', gap: S.sm }}>
             <Btn
               label="Espèces"
@@ -298,16 +326,7 @@ export function TicketPanel({
             onPress={() => onPay('tr')}
             block
           />
-          {mode === 'tel' ? (
-            <Btn
-              label="Payer au retrait"
-              kind="ghost"
-              size="md"
-              disabled={!canSend}
-              onPress={() => onPay('retrait')}
-              block
-            />
-          ) : null}
+          </>}
         </View>
       </View>
     </View>
@@ -472,12 +491,11 @@ export function TicketDock({
   mode,
   brand,
   busy,
-  customerName,
-  customerPhone,
   loyalty,
   onLoyalty,
   onOpen,
   onPay,
+  phone,
 }: {
   lines: CartLine[];
   mode: Mode;
@@ -489,12 +507,12 @@ export function TicketDock({
   onLoyalty: () => void;
   onOpen: () => void;
   onPay: (method: 'cb' | 'especes' | 'tr' | 'retrait') => void;
+  phone: PhoneTicketControls;
 }) {
   const L = useLayout();
   const subtotal = cartTotal(lines);
   const count = lines.reduce((n, l) => n + l.qty, 0);
-  const phoneOk = customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8;
-  const canSend = lines.length > 0 && (mode !== 'tel' || phoneOk) && !busy;
+  const canSend = lines.length > 0 && mode !== 'tel' && !busy;
 
   return (
     <View
@@ -564,7 +582,9 @@ export function TicketDock({
       {/* La barre compacte garde les deux gestes dominants ; le
           titre-restaurant s'encaisse depuis le tiroir du ticket, où la
           place ne manque pas. */}
-      <Btn
+      {mode === 'tel' ? <Btn label={busy ? 'Confirmation…' : 'Confirmer'} kind="primary" size="md"
+        accent={brand.accent} onAccent={brand.onAccent} disabled={!phone.canSubmit || busy} onPress={phone.onSubmit}
+        accessibilityLabel="Confirmer le créneau téléphone avant encaissement" /> : <><Btn
         label="Carte"
         kind="primary"
         size="md"
@@ -582,6 +602,7 @@ export function TicketDock({
         onPress={() => onPay('especes')}
         accessibilityLabel={`Encaisser ${euros(subtotal)} en espèces`}
       />
+      </>}
     </View>
   );
 }

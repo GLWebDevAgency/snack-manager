@@ -251,7 +251,7 @@ export default function App() {
 
   const protectActiveSale = session !== null && saleInFlight.active;
   const posScreen = session ? (
-    <PosScreen session={session} onLock={onLock} saleInFlight={saleInFlight} />
+    <PosScreen key={session.tenantSlug} session={session} onLock={onLock} saleInFlight={saleInFlight} />
   ) : null;
 
   return (

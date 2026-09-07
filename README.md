@@ -42,8 +42,9 @@ est fixée dans `.nvmrc` et `.node-version` ; pnpm suit la version déclarée pa
 
 ```bash
 pnpm install
-cp .env.example .env              # URLs des bases (railway variables) + JWT_SECRET
+cp .env.example .env              # URLs des bases de développement + JWT_SECRET
 pnpm migrate:postgres             # schémas PostgreSQL supply + fidélité
+export MONGO_URL=mongodb://127.0.0.1:27017/snackmanager_disposable_classfood_local
 pnpm seed                         # carte Class'Food (22 catégories, 109 produits)
 pnpm --filter @sm/supply seed     # ingrédients, recettes, fournisseurs
 pnpm --filter @sm/db seed:orders  # 30 jours d'historique de commandes
@@ -52,6 +53,11 @@ pnpm --filter @sm/web dev
 ```
 
 Back-office : http://localhost:3000/admin — comptes de dev affichés en fin de seed.
+
+Les seeds Mongo et copies destructives sont réservés aux bases **locales
+jetables explicitement nommées**, jamais aux URLs staging/production du `.env`.
+Mongo doit déjà tourner en local ; gardez la même `MONGO_URL` pour l’API de
+développement. [Cibles acceptées et limites de maintenance](packages/db/README.md).
 
 ## Règles maison
 

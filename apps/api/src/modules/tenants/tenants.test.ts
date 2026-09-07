@@ -428,6 +428,11 @@ function fakeTenants(doc: Record<string, unknown>) {
   const etat: Record<string, unknown> = { _id: TENANT, ...structuredClone(doc) };
   const sets: Record<string, unknown>[] = [];
   const options: Record<string, unknown>[] = [];
+  const filters: Record<string, unknown>[] = [];
+  const reads: { id: string; steps: [string, unknown][] }[] = [];
+
+  const at = (path: string): unknown => path.split('.').reduce<unknown>((value, key) =>
+    value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined, etat);
 
   const appliquer = ($set: Record<string, unknown>) => {
     for (const [chemin, valeur] of Object.entries($set)) {
@@ -476,10 +481,21 @@ function fakeTenants(doc: Record<string, unknown>) {
   return {
     sets,
     options,
+    filters,
+    reads,
     etat: () => etat,
     model: {
-      findById: async (id: string, projection?: Record<string, unknown>) =>
-        id === TENANT ? projeter(projection) : null,
+      findById: (id: string, projection?: Record<string, unknown>) => {
+        const reading = { id, steps: [] as [string, unknown][] }; reads.push(reading);
+        const query = Promise.resolve(id === TENANT ? projeter(projection) : null);
+        return Object.assign(query, {
+          select: (value: string) => { reading.steps.push(['select', value]); return query; },
+          read: (value: string) => { reading.steps.push(['read', value]); return query; },
+          readConcern: (value: string) => { reading.steps.push(['readConcern', value]); return query; },
+          maxTimeMS: (value: number) => { reading.steps.push(['maxTimeMS', value]); return query; },
+          lean: () => query,
+        });
+      },
       findByIdAndUpdate: async (
         id: string,
         update: { $set: Record<string, unknown> },
@@ -490,6 +506,28 @@ function fakeTenants(doc: Record<string, unknown>) {
         options.push(opts);
         appliquer(update.$set);
         return projeter(opts.projection);
+      },
+      findOneAndUpdate: (
+        filter: Record<string, unknown>, update: { $set: Record<string, unknown>; $inc?: Record<string, number> },
+        opts: { new?: boolean; projection?: Record<string, unknown> },
+      ) => {
+        filters.push(filter);
+        const matches = Object.entries(filter).every(([path, expected]) => {
+          const actual = at(path);
+          if (expected && typeof expected === 'object' && '$exists' in expected) return (actual !== undefined) === expected.$exists;
+          return expected === null ? actual == null : actual === expected;
+        });
+        if (matches) {
+          sets.push(update.$set); options.push(opts); appliquer(update.$set);
+          for (const [path, amount] of Object.entries(update.$inc ?? {})) appliquer({ [path]: Number(at(path)) + amount });
+        }
+        const result = matches ? projeter(opts.projection) : null;
+        const query = Promise.resolve(result);
+        return Object.assign(query, { select: (value: string) => {
+          expect(value).toBe('-capacityControl');
+          if (result) delete result.capacityControl;
+          return query;
+        } });
       },
     },
   };
@@ -620,6 +658,30 @@ describe('les réponses des cinq chemins de la vue de session', () => {
     // Le tenant dort avec `brandColor: #c9a15a` (avant reprise) ; le masque dit
     // safran. Rendre la colonne ferait mentir la réponse.
     expect(vue.brandColor).toBe(DIRECTIONS.soleil.palette.accent);
+  });
+
+  it('lit l’autorité privée sur le primaire avant le CAS sans contrôle historique', async () => {
+    const tenants = fakeTenants(DOCUMENT);
+    await service(tenants).updateSettings(TENANT, { slotCapacity: 4 });
+    expect(tenants.filters).toEqual([{ _id: TENANT, capacityControl: { $exists: false } }]);
+    expect(tenants.reads.some((read) => read.id === TENANT && JSON.stringify(read.steps) === JSON.stringify([
+      ['select', '_id capacityControl'], ['read', 'primary'], ['readConcern', 'majority'], ['maxTimeMS', 10_000],
+    ]))).toBe(true);
+    expect(tenants.options[0]).toMatchObject({ projection: TENANT_ME_FIELDS, runValidators: true,
+      context: 'query', writeConcern: { w: 'majority', j: true } });
+  });
+
+  it('la vue de session reste projetée après une révision active du calendrier', async () => {
+    const capacityControl = { version: 1, state: 'active', configRevision: 7,
+      bootstrapId: '11111111-1111-4111-8111-111111111111', cutoverAt: new Date('2030-05-01T00:00:00Z'), dayIntent: null };
+    const tenants = fakeTenants({ ...DOCUMENT, capacityControl, brand: DIRECTIONS.soleil });
+    const view = await service(tenants).updateSettings(TENANT, { slotCapacity: 6 });
+    expect(view).not.toHaveProperty('capacityControl');
+    expect(view.brandColor).toBe(DIRECTIONS.soleil.palette.accent);
+    expect(Object.keys(view).sort()).toEqual(['_id', ...CLES_RENDUES].sort());
+    expect(tenants.etat().capacityControl).toMatchObject({ configRevision: 8 });
+    expect(tenants.filters[0]).toMatchObject({ _id: TENANT, 'capacityControl.state': 'active',
+      'capacityControl.configRevision': 7, 'capacityControl.bootstrapId': capacityControl.bootstrapId });
   });
 
   it('un PATCH sans rien de reconnu relit, projeté, sans écrire', async () => {

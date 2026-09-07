@@ -20,8 +20,13 @@ export function publicRecoveryBinding(tenantId: string, body: CreatePublicOrder)
   return {
     version: 1,
     proofHash: recoveryProofHash(tenantId, body.clientId, recoveryProof),
-    payloadHash: createHash('sha256').update(canonical(normalized)).digest('hex'),
+    payloadHash: recoveryPayloadHash(normalized),
   };
+}
+
+/** Même canonisation pour toutes les admissions, sans confondre leurs preuves. */
+export function recoveryPayloadHash(value: unknown): string {
+  return createHash('sha256').update(canonical(value)).digest('hex');
 }
 
 /** Trie uniquement les clés d'objet, sans changer l'ordre métier des lignes/options. */

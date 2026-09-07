@@ -104,7 +104,13 @@ function build(
     { pourTenant: async () => ["bo"] } as never,
     {} as never,
   );
-  return { service, created, incremente, rendu, published };
+  // These tests exercise shared pricing, not the authenticated staff route.
+  // Online callers enter createWithOutcome; staff creation rejects that channel.
+  const pricing = {
+    create: async (...args: Parameters<OrdersService['create']>) =>
+      (await service.createWithOutcome(...args)).order,
+  };
+  return { service: pricing, created, incremente, rendu, published };
 }
 
 const commande = (over: Record<string, unknown> = {}) =>

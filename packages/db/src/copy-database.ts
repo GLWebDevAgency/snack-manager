@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MongoClient } from 'mongodb';
+import { assertDisposableMongoTarget, assertNoDurableOrderData, assertNoDurableOrderDocuments } from './disposable-mongo-target';
 
 /**
  * SAUVEGARDE, COPIE ET PURGE D'UNE BASE MONGO — outil d'exploitation.
@@ -12,6 +13,10 @@ import { MongoClient } from 'mongodb';
  *   dump   <URI> <dossier>          sauvegarde JSON, collection par collection
  *   copy   <SOURCE> <CIBLE> [--go]  remplace la cible par la source
  *   purge  <URI> [--go]             vide la base
+ *
+ * copy/purge --go : cible locale explicitement jetable seulement, jamais
+ * staging/production. Preuves C01/C15 présentes : refus, même en local.
+ * Ce n'est pas un outil de restauration. Voir ../README.md.
  *
  * DEUX PROTECTIONS, apprises de ce projet :
  *
@@ -32,19 +37,28 @@ const NEVER_COPIED = new Set(['users']);
 /** Ce qui survit à une purge : les comptes sans établissement (équipe SM). */
 const PLATFORM_ACCOUNT = { tenantId: null } as const;
 
-type Mode = 'dump' | 'copy' | 'purge';
-
-function host(uri: string): string {
-  return uri.replace(/.*@([^/?]+).*/, '$1');
+class CopyDatabaseUsageError extends Error {
+  readonly code = 'MONGO_TOOL_INVALID_ARGUMENTS';
+  constructor() {
+    super('Usage :\n  dump <URI> <dossier>\n  copy <SOURCE> <CIBLE> [--go]\n  purge <URI> [--go]\nAucune autre option ni argument n’est accepté.');
+    this.name = 'CopyDatabaseUsageError';
+  }
 }
 
-async function collections(uri: string): Promise<{ client: MongoClient; names: string[] }> {
-  const client = await MongoClient.connect(uri, { serverSelectionTimeoutMS: 20_000 });
-  const names = (await client.db().listCollections().toArray())
-    .map((c) => c.name)
-    .filter((n) => !n.startsWith('system.'))
-    .sort();
-  return { client, names };
+function host(uri: string): string {
+  try { const parsed = new URL(uri); return parsed.host || '(hôte non affiché)'; }
+  catch { return '(hôte non affiché)'; }
+}
+
+async function collections(uri: string, direct = false): Promise<{ client: MongoClient; names: string[] }> {
+  const client = await MongoClient.connect(uri, { serverSelectionTimeoutMS: 20_000, ...(direct ? { directConnection: true } : {}) });
+  try {
+    const names = (await client.db().listCollections().toArray())
+      .map((c) => c.name)
+      .filter((n) => !n.startsWith('system.'))
+      .sort();
+    return { client, names };
+  } catch (error) { await client.close(); throw error; }
 }
 
 async function dump(uri: string, dir: string): Promise<void> {
@@ -63,8 +77,20 @@ async function dump(uri: string, dir: string): Promise<void> {
 }
 
 async function copy(from: string, to: string, write: boolean): Promise<void> {
+  // Validate before even opening the read source, never after the first write.
+  if (write) assertDisposableMongoTarget(to);
   const source = await collections(from);
-  const target = await MongoClient.connect(to, { serverSelectionTimeoutMS: 20_000 });
+  let target: MongoClient | undefined;
+  try {
+    target = await MongoClient.connect(to, { serverSelectionTimeoutMS: 20_000, ...(write ? { directConnection: true } : {}) });
+    await copyToDisposable(source, target, from, to, write);
+  } finally {
+    await Promise.all([source.client.close(), target?.close()]);
+  }
+}
+
+async function copyToDisposable(source: { client: MongoClient; names: string[] }, target: MongoClient,
+  from: string, to: string, write: boolean): Promise<void> {
 
   console.log(`Copie ${host(from)}  →  ${host(to)}\n`);
   const plan: { name: string; docs: number }[] = [];
@@ -77,20 +103,23 @@ async function copy(from: string, to: string, write: boolean): Promise<void> {
 
   if (!write) {
     console.log('\nAperçu seulement. Relancez avec --go pour appliquer.');
-    await source.client.close();
-    await target.close();
     return;
   }
 
+  await assertNoDurableOrderData(source.client.db());
+  await assertNoDurableOrderData(target.db());
   for (const { name } of plan) {
     const docs = await source.client.db().collection(name).find({}).toArray();
+    assertNoDurableOrderDocuments(name, docs);
+    // Diagnostic against a changed source, not a concurrency fence. The target
+    // remains disposable and must never be served as an activated restaurant.
+    await assertNoDurableOrderData(source.client.db());
+    await assertNoDurableOrderData(target.db());
     await target.db().collection(name).deleteMany({});
     if (docs.length) await target.db().collection(name).insertMany(docs, { ordered: false });
   }
 
   await relinkAccounts(source.client, target);
-  await source.client.close();
-  await target.close();
   console.log('\nCopie terminée.');
 }
 
@@ -127,16 +156,22 @@ async function relinkAccounts(source: MongoClient, target: MongoClient): Promise
     const match = before ? candidates.find((t) => t.slug === before.slug) : candidates[0];
 
     if (!match || (candidates.length > 1 && !before)) {
-      console.log(`    ${account.email} : établissement indécidable, laissé tel quel`);
+      console.log('    Compte conservé : établissement indécidable, laissé tel quel');
       continue;
     }
     await target.db().collection('users').updateOne({ _id: account._id }, { $set: { tenantId: match._id } });
-    console.log(`    ${account.email} → ${match.slug}`);
+    console.log('    Compte conservé rattaché à l’établissement copié');
   }
 }
 
 async function purge(uri: string, write: boolean): Promise<void> {
-  const { client, names } = await collections(uri);
+  if (write) assertDisposableMongoTarget(uri);
+  const { client, names } = await collections(uri, write);
+  try { await purgeDisposable(client, names, uri, write); }
+  finally { await client.close(); }
+}
+
+async function purgeDisposable(client: MongoClient, names: string[], uri: string, write: boolean): Promise<void> {
   const db = client.db();
 
   console.log(`Purge de ${host(uri)}\n`);
@@ -153,11 +188,12 @@ async function purge(uri: string, write: boolean): Promise<void> {
 
   if (!write) {
     console.log('\nAperçu seulement. Relancez avec --go pour appliquer.');
-    await client.close();
     return;
   }
 
+  await assertNoDurableOrderData(db);
   for (const name of names) {
+    await assertNoDurableOrderData(db);
     if (name === 'users') {
       // On supprime les comptes RATTACHÉS à un établissement ; ceux de la
       // plateforme restent, sans quoi plus personne n'ouvre le back-office.
@@ -166,12 +202,14 @@ async function purge(uri: string, write: boolean): Promise<void> {
       await db.collection(name).deleteMany({});
     }
   }
-  await client.close();
   console.log('\nPurge terminée.');
 }
 
-async function main(): Promise<void> {
-  const [mode, ...rest] = process.argv.slice(2) as [Mode, ...string[]];
+export async function runCopyDatabase(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  if (!Array.isArray(argv) || argv.some((value) => typeof value !== 'string')) throw new CopyDatabaseUsageError();
+  const [mode, ...rest] = argv;
+  if (rest.filter((value) => value === '--go').length > 1
+    || rest.some((value) => value.startsWith('--') && value !== '--go')) throw new CopyDatabaseUsageError();
   const write = rest.includes('--go');
   const args = rest.filter((a) => a !== '--go');
 
@@ -180,17 +218,10 @@ async function main(): Promise<void> {
   // raison — c'est l'absence explicite qui doit décider, sur un outil dont un
   // argument manquant viserait la mauvaise base.
   const [first, second] = args;
-  if (mode === 'dump' && first && second) return dump(first, second);
-  if (mode === 'copy' && first && second) return copy(first, second, write);
-  if (mode === 'purge' && first && !second) return purge(first, write);
-
-  console.error(
-    'Usage :\n' +
-      '  dump  <URI> <dossier>\n' +
-      '  copy  <SOURCE> <CIBLE> [--go]\n' +
-      '  purge <URI> [--go]',
-  );
-  process.exit(1);
+  if (mode === 'dump' && args.length === 2 && first && second && !write) return dump(first, second);
+  if (mode === 'copy' && args.length === 2 && first && second) return copy(first, second, write);
+  if (mode === 'purge' && args.length === 1 && first) return purge(first, write);
+  throw new CopyDatabaseUsageError();
 }
 
 /**
@@ -202,8 +233,9 @@ async function main(): Promise<void> {
  * la production, c'est un script d'administration qui part tout seul.
  */
 if (require.main === module) {
-  main().catch((error) => {
-    console.error(error);
+  runCopyDatabase().catch((error: unknown) => {
+    const known = error instanceof Error && ['DisposableMongoRefusal', 'CopyDatabaseUsageError'].includes(error.name);
+    console.error(known ? error.message : 'Opération Mongo interrompue. Ne pas reprendre une copie partielle comme une base restaurée.');
     process.exit(1);
   });
 }

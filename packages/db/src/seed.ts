@@ -3,7 +3,8 @@
  * (design_handoff_snack_manager/menu-data.js, prix relevés en boutique juin 2026)
  * en documents MongoDB. Idempotent : ré-exécutable, il remplace le tenant `classfood`.
  *
- *   pnpm --filter @sm/db seed
+ *   MONGO_URL=mongodb://127.0.0.1:27017/snackmanager_disposable_classfood_local pnpm --filter @sm/db seed
+ * Jamais sur une base servie, staging ou production. Voir ../README.md.
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -13,6 +14,7 @@ import argon2 from 'argon2';
 import mongoose from 'mongoose';
 import { MODELS } from './schemas';
 import { hashPassword } from './password-hash';
+import { assertDisposableMongoTarget, assertNoDurableOrderData } from './disposable-mongo-target';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
 
@@ -589,8 +591,15 @@ categories.push({
 async function main() {
   const uri = process.env.MONGO_URL;
   if (!uri) throw new Error('MONGO_URL manquant (racine .env)');
-  await mongoose.connect(uri);
+  const target = assertDisposableMongoTarget(uri);
+  await mongoose.connect(target.uri, { directConnection: true, serverSelectionTimeoutMS: 5_000 });
+  try {
+    await assertNoDurableOrderData(mongoose.connection.db!);
+    await writeSeedFixture();
+  } finally { await mongoose.disconnect(); }
+}
 
+async function writeSeedFixture() {
   const Tenant = mongoose.model(MODELS.Tenant.name, MODELS.Tenant.schema, MODELS.Tenant.collection);
   const User = mongoose.model(MODELS.User.name, MODELS.User.schema, MODELS.User.collection);
   const Staff = mongoose.model(MODELS.Staff.name, MODELS.Staff.schema, MODELS.Staff.collection);
@@ -708,7 +717,6 @@ async function main() {
   console.log(`    équipe SM : ${adminPassword}`);
   console.log('  Notez-les : ils ne sont stockés que hachés, personne ne pourra les relire.');
   console.log('  PIN staff : Gérant 1234 · Caisse 1111 · Cuisine 2222');
-  await mongoose.disconnect();
 }
 
 /**

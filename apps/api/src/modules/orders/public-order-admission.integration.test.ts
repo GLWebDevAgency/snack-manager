@@ -8,6 +8,7 @@ import { publicRecoveryBinding } from './order-recovery';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { ConflictException } from '@nestjs/common';
+import { capacityModels, seedCapacityFixture } from './order-capacity-test-fixtures';
 
 const tenantId = '507f1f77bcf86cd799439011';
 const productId = '507f1f77bcf86cd799439012';
@@ -63,6 +64,10 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   let admissions: Model<PublicOrderAdmission>; let admissions2: Model<PublicOrderAdmission>;
   const redis = { publish: vi.fn().mockResolvedValue(1) };
   let first: PublicOrderAdmissionService; let second: PublicOrderAdmissionService;
+  function admissionService(model: Model<PublicOrderAdmission>, orderModel: Model<Order>, db = db1) {
+    const { days, tenants } = capacityModels(db);
+    return new PublicOrderAdmissionService(model, orderModel, redis as never, days, tenants);
+  }
   beforeAll(async () => {
     db1 = await mongoose.createConnection(uri!).asPromise();
     db2 = await mongoose.createConnection(uri!).asPromise();
@@ -75,8 +80,9 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   beforeEach(async () => {
     await Promise.all([orders.deleteMany({}), admissions.deleteMany({})]);
     redis.publish.mockClear();
-    first = new PublicOrderAdmissionService(admissions, orders, redis as never);
-    second = new PublicOrderAdmissionService(admissions2, orders2, redis as never);
+    await seedCapacityFixture(db1, tenantId, body.pickup.slot);
+    first = admissionService(admissions, orders);
+    second = admissionService(admissions2, orders2, db2);
   });
   afterAll(async () => {
     if (db1) { await db1.dropDatabase(); await db1.close(); }
@@ -153,7 +159,7 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('abandon gagne devant un CAScommit suspendu : aucune insertion tardive', async () => {
     const owner = await owned(); const reached = barrier(); const release = barrier();
     const held = interceptUpdate(admissions, committing, async (run) => { reached.release(); await release.promise; return run(); });
-    const delayed = new PublicOrderAdmissionService(held, orders, redis as never).commit(tenantId, body.clientId, owner, candidate());
+    const delayed = admissionService(held, orders).commit(tenantId, body.clientId, owner, candidate());
     const outcome = delayed.then(() => null, (error: unknown) => error);
     await reached.promise;
     await second.reject(tenantId, body.clientId, binding, 'abandoned');
@@ -164,7 +170,7 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('commit engagé puis interruption avant insert : seconde instance reprend sans recalcul', async () => {
     const owner = await owned(); const row = candidate();
     const brokenOrders = interceptUpdate(orders, () => true, async () => { throw new Error('crash avant insert'); });
-    await expect(new PublicOrderAdmissionService(admissions, brokenOrders, redis as never).commit(tenantId, body.clientId, owner, row)).rejects.toThrow('crash');
+    await expect(admissionService(admissions, brokenOrders).commit(tenantId, body.clientId, owner, row)).rejects.toThrow('crash');
     expect(await orders.countDocuments()).toBe(0);
     expect(await admissions.findOne().lean()).toMatchObject({ state: 'committing' });
     const recovered = await second.reject(tenantId, body.clientId, binding, 'abandoned');
@@ -174,21 +180,21 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('réponse CAScommit perdue après effet réel : même snapshot, jamais rejected', async () => {
     const owner = await owned(); const row = candidate();
     const lost = interceptUpdate(admissions, committing, async (run) => { await run(); throw new Error('réponse perdue'); });
-    await expect(new PublicOrderAdmissionService(lost, orders, redis as never).commit(tenantId, body.clientId, owner, row)).resolves.toMatchObject({ created: true });
+    await expect(admissionService(lost, orders).commit(tenantId, body.clientId, owner, row)).resolves.toMatchObject({ created: true });
     expect(await orders.countDocuments()).toBe(1);
     expect(await second.recover(tenantId, body.clientId, body.recoveryProof!)).toMatchObject({ state: 'created' });
   });
   it('réponse insertion perdue après effet réel : conserve id/prix/token', async () => {
     const owner = await owned(); const row = candidate();
     const lost = interceptUpdate(orders, () => true, async (run) => { await run(); throw new Error('réponse perdue'); });
-    await expect(new PublicOrderAdmissionService(admissions, lost, redis as never).commit(tenantId, body.clientId, owner, row)).resolves.toMatchObject({ created: true });
+    await expect(admissionService(admissions, lost).commit(tenantId, body.clientId, owner, row)).resolves.toMatchObject({ created: true });
     expect((await orders.findOne().lean())?._id).toEqual(row._id);
     expect(await orders.countDocuments()).toBe(1);
   });
   it('deux helpers matérialisent une seule commande et le rejeu ne ressuscite pas paid/delivered', async () => {
     const owner = await owned(); const row = candidate();
     const broken = interceptUpdate(orders, () => true, async () => { throw new Error('before insert'); });
-    await expect(new PublicOrderAdmissionService(admissions, broken, redis as never).commit(tenantId, body.clientId, owner, row)).rejects.toThrow();
+    await expect(admissionService(admissions, broken).commit(tenantId, body.clientId, owner, row)).rejects.toThrow();
     await Promise.all([first.recover(tenantId, body.clientId, body.recoveryProof!), second.recover(tenantId, body.clientId, body.recoveryProof!)]);
     await orders.updateOne({ _id: row._id }, { $set: { status: 'delivered', 'payment.status': 'paid' } });
     expect(await first.recover(tenantId, body.clientId, body.recoveryProof!)).toMatchObject({ state: 'created', order: { status: 'delivered', payment: { status: 'paid' } } });
@@ -197,7 +203,7 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('un helper suspendu avant insert reprend APRÈS encaissement/remise sans réinitialiser le ticket', async () => {
     const owner = await owned(); const row = candidate(); const reached = barrier(); const resume = barrier();
     const held = interceptUpdate(orders, () => true, async (run) => { reached.release(); await resume.promise; return run(); });
-    const pending = new PublicOrderAdmissionService(admissions, held, redis as never).commit(tenantId, body.clientId, owner, row);
+    const pending = admissionService(admissions, held).commit(tenantId, body.clientId, owner, row);
     await reached.promise;
     await second.recover(tenantId, body.clientId, body.recoveryProof!);
     await orders2.updateOne({ _id: row._id }, { $set: { status: 'delivered', 'payment.status': 'paid' }, $push: { statusHistory: { status: 'delivered', at: new Date(), by: 'staff' } } });
@@ -209,7 +215,7 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('matérialise les réservations engagées avant le prochain comptage du créneau', async () => {
     const owner = await owned();
     const broken = interceptUpdate(orders, () => true, async () => { throw new Error('before insert'); });
-    await expect(new PublicOrderAdmissionService(admissions, broken, redis as never).commit(tenantId, body.clientId, owner, candidate())).rejects.toThrow();
+    await expect(admissionService(admissions, broken).commit(tenantId, body.clientId, owner, candidate())).rejects.toThrow();
     expect(await orders.countDocuments()).toBe(0);
     await second.materializeSlot(tenantId, body.pickup.slot);
     expect(await orders.countDocuments({ 'pickup.slot': new Date(body.pickup.slot) })).toBe(1);
@@ -217,8 +223,8 @@ integration('admission publique durable — vrai Mongo indépendant du paiement'
   it('le vrai createWithOutcome réserve une fois et garde la promotion du snapshot engagé', async () => {
     const owner = await owned();
     const broken = interceptUpdate(orders, () => true, async () => { throw new Error('before insert'); });
-    const admissionService = new PublicOrderAdmissionService(admissions, broken, redis as never);
-    const ctx = writer(admissionService, orders, 100);
+    const brokenAdmission = admissionService(admissions, broken);
+    const ctx = writer(brokenAdmission, orders, 100);
     await expect(ctx.instance.createWithOutcome(tenantId, ctx.dto, 'online:turnstile', null, owner)).rejects.toThrow();
     expect(ctx.promotions.findOneAndUpdate).toHaveBeenCalledOnce();
     expect(ctx.promotions.updateOne).not.toHaveBeenCalled();

@@ -43,10 +43,8 @@ ENVIRONNEMENT="${1:-}"
 TACHE="${2:-}"
 BASE="${SM_MONGO_BASE:-snackmanager}"
 
-# Les drapeaux qui suivent sont passés TELS QUELS à la tâche : ce script n'a
-# pas à connaître ceux qui n'appartiennent qu'à une reprise (`--reparer`). Il
-# ne repère que `--appliquer`, dont il tire la confirmation de production et la
-# relance de contrôle.
+# La tâche est une liste positive, jamais une commande pnpm arbitraire.
+# Les drapeaux métier (`--reparer`) restent transmis à la reprise autorisée.
 OPTIONS=()
 if [[ $# -gt 2 ]]; then
   shift 2
@@ -68,12 +66,13 @@ Tâches disponibles (voir packages/db/package.json) :
     backfill:brand     pose le masque d'identité (Nuit + accent + logo) sur les
                        tenants d'avant, et NOMME ceux dont le masque stocké est
                        invalide (--reparer pour les remplacer)
-    backfill:tracking  pose les jetons de suivi manquants — ÉCRIT DÈS LE LANCEMENT
+    backfill:medias    reprend les références des médias
+    backfill:tracking  pose les jetons de suivi manquants — --appliquer OBLIGATOIRE
 
-Sans --appliquer, la tâche LIT et n'écrit rien. C'est le mode par défaut, et
-c'est celui par lequel on commence toujours. SEULE EXCEPTION :
-backfill:tracking n'a pas de mode lecture — elle n'ajoute qu'un secret là où
-il manque, sans jamais remplacer une valeur existante.
+Sans --appliquer, les reprises à mode lecture n'écrivent rien.
+backfill:tracking écrit immédiatement : ce lanceur la refuse sans --appliquer
+et ne la relance jamais automatiquement comme un contrôle en lecture seule.
+Seeds, copies, purges et tâches arbitraires sont exclus de ce lanceur Railway.
 USAGE
   exit 2
 fi
@@ -82,6 +81,22 @@ if [[ "$ENVIRONNEMENT" != "staging" && "$ENVIRONNEMENT" != "production" ]]; then
   echo "Environnement « $ENVIRONNEMENT » inconnu — attendu : staging ou production." >&2
   exit 2
 fi
+
+# Valider AVANT Railway et AVANT la récupération de ses accès. Une tâche telle
+# que seed:orders ne doit jamais recevoir les credentials d'une base servie.
+case "$TACHE" in
+  backfill:founder|backfill:contact|backfill:brand|backfill:medias) ;;
+  backfill:tracking)
+    if [[ "$APPLIQUER" != "oui" ]]; then
+      echo "backfill:tracking exige --appliquer ; aucun mode lecture n'est disponible." >&2
+      exit 2
+    fi
+    ;;
+  *)
+    echo "Tâche non autorisée : seules les reprises backfill listées sont disponibles." >&2
+    exit 2
+    ;;
+esac
 
 # ── L'environnement est POSÉ, jamais supposé ─────────────────────────────
 # La CLI reste sur le dernier utilisé, et c'est ainsi qu'on redéploie la
@@ -151,6 +166,10 @@ unset mongo_motdepasse
 echo
 if [[ "$APPLIQUER" == "oui" ]]; then
   pnpm --filter @sm/db "$TACHE" -- ${OPTIONS[@]+"${OPTIONS[@]}"}
+  if [[ "$TACHE" == "backfill:tracking" ]]; then
+    echo "Reprise tracking exécutée une fois. Aucun second writer lancé sous couvert de contrôle."
+    exit 0
+  fi
   echo
   echo "▶ Relance de contrôle — une reprise idempotente ne doit plus rien trouver."
   # `--exiger-zero` fait SORTIR la relance en échec s'il reste du travail.

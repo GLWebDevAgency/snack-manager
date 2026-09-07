@@ -3,7 +3,8 @@
  * pilote `classfood`, construites depuis les VRAIS produits Mongo (variantes,
  * options et prix résolus exactement comme orders.service).
  *
- *   pnpm --filter @sm/db seed:orders
+ *   MONGO_URL=mongodb://127.0.0.1:27017/snackmanager_disposable_classfood_local pnpm --filter @sm/db seed:orders
+ * Jamais sur une base servie, staging ou production. Voir ../README.md.
  *
  * Réaliste : services 11h30-14h30 & 18h00-22h30 (bimodal, pas de déjeuner
  * lundi/vendredi), 55-75 commandes/jour, rush vendredi & samedi soir ×2.2,
@@ -19,6 +20,7 @@ import { resolve } from 'node:path';
 import { config as dotenv } from 'dotenv';
 import mongoose, { Types } from 'mongoose';
 import { MODELS } from './schemas';
+import { assertDisposableMongoTarget, assertNoDurableOrderData } from './disposable-mongo-target';
 
 dotenv({ path: resolve(__dirname, '../../../.env') });
 
@@ -234,7 +236,15 @@ function buildLine(prod: ProdDoc): OrderLine {
 async function main() {
   const uri = process.env.MONGO_URL;
   if (!uri) throw new Error('MONGO_URL manquant (racine .env)');
-  await mongoose.connect(uri);
+  const target = assertDisposableMongoTarget(uri);
+  await mongoose.connect(target.uri, { directConnection: true, serverSelectionTimeoutMS: 5_000 });
+  try {
+    await assertNoDurableOrderData(mongoose.connection.db!);
+    await writeOrderFixtures();
+  } finally { await mongoose.disconnect(); }
+}
+
+async function writeOrderFixtures() {
   const db = mongoose.connection.db!;
   const ordersCol = db.collection('orders');
   const Counter = mongoose.model(MODELS.Counter.name, MODELS.Counter.schema, MODELS.Counter.collection);
@@ -549,10 +559,8 @@ async function main() {
   console.log(`  Commandes ouvertes (live) : ${live.map((r) => `${String(r._id)}=${Number(r.n)}`).join(' ') || 'aucune'}`);
 
   if (ca <= 0) {
-    console.error('✗ CA 30 jours nul — génération invalide');
-    process.exit(1);
+    throw new Error('CA 30 jours nul — génération invalide');
   }
-  await mongoose.disconnect();
 }
 
 /**

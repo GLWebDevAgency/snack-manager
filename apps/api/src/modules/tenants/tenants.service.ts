@@ -23,6 +23,7 @@ import { marqueObservee } from '../../common/marque-observee';
 import { horairesPublics } from './horaires-publics';
 import { masqueAEnregistrer } from './marque';
 import { OriginesImages } from './origines-images';
+import { TenantCapacitySettingsStore, touchesCalendarSettings } from './tenant-capacity-settings.store';
 
 /**
  * Ce que `GET /tenants/me` a le droit de rendre — et, depuis, ce que rendent
@@ -307,6 +308,8 @@ export class TenantsService {
     const doc =
       Object.keys($set).length === 0
         ? await this.tenants.findById(tenantId, TENANT_ME_FIELDS)
+        : touchesCalendarSettings($set)
+          ? await new TenantCapacitySettingsStore(this.tenants).update(tenantId, $set, TENANT_ME_FIELDS)
         : await this.tenants.findByIdAndUpdate(
             tenantId,
             { $set },

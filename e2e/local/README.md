@@ -172,3 +172,45 @@ Captures mobile/tablette/bureau et résumé sont produits dans un nouveau dossie
 temporaire `sm-pos-counter-…`. Aucun POST de création de commande n'est permis.
 Ces preuves portent sur l'interface et ses reprises, pas sur l'API Mongo réelle
 ou l'encaissement physique : ces derniers ont leur recette distincte.
+
+## Réservation téléphone avant encaissement dans le POS
+
+```bash
+node e2e/local/pos-phone-order.mjs
+```
+
+Ce harnais autonome rend les vrais composants `App` / `PosScreen` via
+ReactNativeWeb et esbuild. **Ce n'est pas un build Expo** : les modules natifs
+`expo-status-bar`, `expo-keep-awake` et AsyncStorage sont remplacés ; le stockage
+navigateur, les Web Locks et le reste du parcours POS sont réels. Prérequis :
+Node 24, dépendances du dépôt installées (dont esbuild fourni par l'outillage),
+Chromium Playwright présent et contrats compilés. Aucune installation automatique.
+
+Le serveur HTTP est temporaire, lié uniquement à `127.0.0.1` avec un port
+éphémère. Il ne partage ni `.next` ni cache Expo. Toutes les requêtes de l'API
+locale sont interceptées par des fixtures en mémoire ; toute autre origine est
+bloquée et fait échouer la recette. Les huit scénarios utilisent chacun un
+contexte navigateur neuf :
+
+- confirmation d'un créneau, puis encaissement de la même commande ;
+- réponse de création perdue puis reprise après rechargement, même UUID/corps ;
+- stockage refusé : aucun POST de création ;
+- Web Locks absents : commande téléphone indisponible, aucun POST ;
+- reprise depuis un autre onglet : son nom et ses deux articles restent intacts,
+  le brouillon d'origine inchangé est vidé après lecture du reçu archivé ;
+- si ce brouillon d'origine a lui-même été modifié, il reste également intact ;
+- requête suspendue dans A : le verrou empêche une reprise réseau concurrente
+  dans B ; l'événement de stockage actualise ensuite B ;
+- rejet puis clôture serveur explicite avant libération et nouvelle référence.
+
+Le téléphone n'expose ni paiement anticipé ni rattachement fidélité non supporté.
+Les captures bureau/tablette/mobile sont conservées dans un nouveau dossier
+temporaire `sm-pos-phone-…` annoncé au lancement. Le résultat JSON et le code de
+sortie indiquent les assertions réellement exécutées ; les erreurs JavaScript
+de tous les onglets sont contrôlées. Le `finally` ferme le navigateur et ce seul
+serveur, sans effacer les preuves ni aucun cache du projet.
+
+Cette recette n'appelle ni Mongo, ni Stripe, ni SMS, ni staging/production. Elle
+ne prouve pas le backend d'admission, le bundle Expo final, un périphérique natif
+ou l'encaissement physique. Ces vérifications restent distinctes. Elle n'est pas
+automatiquement exécutée en CI.
