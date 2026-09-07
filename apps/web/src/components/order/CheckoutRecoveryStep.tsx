@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui";
 import type { CheckoutAttempt } from "./checkout-attempt";
 import { GhostAction, PrimaryAction } from "./primitives";
 import { hhmm } from "./helpers";
+import { customerTrackingHref } from "./delivery-proof-access";
 
 /** Restores a request or its receipt. Stored state is never payment authority. */
 export function CheckoutRecoveryStep({
@@ -23,6 +24,7 @@ export function CheckoutRecoveryStep({
   onNew: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [observedAt] = useState(Date.now);
   if (attempt.state === "received") return (
     <section className="flex flex-col gap-4 rounded-card border border-ink/10 bg-card p-5">
       <div className="flex items-center gap-3">
@@ -36,7 +38,7 @@ export function CheckoutRecoveryStep({
         Retrouvez son état et, si nécessaire, reprenez son paiement. Aucun nouvel envoi n’est nécessaire.
       </p>
       <Link
-        href={`/t/${encodeURIComponent(attempt.receipt.orderId)}?t=${encodeURIComponent(attempt.receipt.trackingToken)}`}
+        href={customerTrackingHref(attempt.receipt.orderId, attempt.receipt.trackingToken, attempt, observedAt)}
         target={embed ? "_blank" : undefined}
         rel={embed ? "noopener noreferrer" : undefined}
         prefetch={false}

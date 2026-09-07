@@ -170,6 +170,9 @@ export function invalidMissionRequest() {
 }
 
 const MISSION_CONFLICTS: Readonly<Record<string, string>> = {
+  DELIVERY_HANDOFF_CHANGED: "Cette remise a changé. Reprenez la vérification avant une nouvelle action.",
+  DELIVERY_HANDOFF_OPERATION_CONFLICT: "Cette tentative correspond à une autre action. Contactez le restaurant.",
+  DELIVERY_HANDOFF_LIMIT: "Le journal de cette remise nécessite une vérification par le responsable.",
   DELIVERY_MISSION_CHANGED: "Cette mission a changé. Actualisez-la avant de continuer.",
   DELIVERY_MISSION_OPERATION_CONFLICT: "Cette tentative ne correspond pas à l’action enregistrée. Actualisez la mission et contactez le restaurant.",
   DELIVERY_OPERATOR_CHANGED: "L’accès du livreur a changé. Actualisez la mission et contactez le restaurant.",

@@ -14,6 +14,8 @@ import { roleAdmin } from "../session";
 import type { Order } from "./types";
 import { managerMissionScope } from "./delivery-mission-scope";
 import { missionRefusalMessage } from "../../livreur/delivery-missions-feedback";
+import { DeliveryHandoffPanel } from "@/components/delivery-handoff/Panel";
+import { adminHandoffRequest } from "@/components/delivery-handoff/admin-request";
 
 const PATH = "/delivery/missions";
 const REQUEST_MS = 12_000;
@@ -33,6 +35,8 @@ export function DeliveryMissionModal({ order, onClose, onUpdated }: {
   const [operation, setOperation] = useState<MissionOperation | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const handoffBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackWarning, setFeedbackWarning] = useState(false);
@@ -44,7 +48,7 @@ export function DeliveryMissionModal({ order, onClose, onUpdated }: {
   const chosen = eligible.find(operator => operator.id === selection);
 
   const load = useCallback(async () => {
-    if (busyRef.current || isDemoActive()) return;
+    if (busyRef.current || handoffBusyRef.current || isDemoActive()) return;
     const run = ++generation.current;
     setLoading(true); setError(null);
     try {
@@ -166,10 +170,10 @@ export function DeliveryMissionModal({ order, onClose, onUpdated }: {
     } finally { busyRef.current = false; if (alive.current) setBusy(false); }
   }
 
-  const locked = loading || busy || Boolean(operation) || Boolean(error) || !scope;
+  const locked = loading || busy || handoffBusy || Boolean(operation) || Boolean(error) || !scope;
   const selectionValid = Boolean(mission?.canAssign && (selection === "none" ? mission.operator : chosen && chosen.id !== mission.operator?.id));
-  return <Modal open title={`Livraison — n°${order.number}`} onClose={() => { if (!busy) onClose(); }} footer={<>
-    <Btn variant="ghost" disabled={busy} onClick={onClose}>Fermer</Btn>
+  return <Modal open title={`Livraison — n°${order.number}`} onClose={() => { if (!busy && !handoffBusyRef.current) onClose(); }} footer={<>
+    <Btn variant="ghost" disabled={busy || handoffBusy} onClick={onClose}>Fermer</Btn>
     {mission && !mission.dispatchedAt && <Btn className="min-h-12 whitespace-normal" disabled={locked || !mission.canDispatch} aria-busy={busy} onClick={() => void act("dispatch")}>Confirmer le départ</Btn>}
   </>}>
     {isDemoActive() ? <p className="text-sm leading-6 text-mut">L’affectation et les départs nécessitent un restaurant connecté. Aucun faux départ n’est créé en démonstration.</p> : <>
@@ -203,8 +207,13 @@ export function DeliveryMissionModal({ order, onClose, onUpdated }: {
             </div> : !mission.operator && <p className="mt-2 text-sm leading-6 text-prept">Un gérant doit attribuer un livreur avant de confirmer le départ.</p>}
         </section>
         {!mission.dispatchedAt && <p className="mt-5 border-t border-line pt-4 text-sm leading-6 text-mut">{mission.canDispatch ? "Confirmez uniquement lorsque ce livreur a récupéré la commande. Le client verra qu’elle est en route." : !mission.paymentReady ? "Le paiement doit être confirmé avant le départ." : mission.orderStatus !== "ready" ? "La cuisine doit terminer la préparation avant le départ." : "Vérifiez l’affectation et l’accès du livreur avant le départ."}</p>}
+        {mission.dispatchedAt && scope && <DeliveryHandoffPanel key={`${scope}:${mission.id}`} missionId={mission.id} scope={scope}
+          path={`${PATH}/${mission.id}/handoff`} available={!loading && !busy && !operation && !error} manager={manager}
+          request={adminHandoffRequest} current={currentSession}
+          onBusyChange={value => { handoffBusyRef.current = value; setHandoffBusy(value); }}
+          onComplete={() => { onUpdated(); onClose(); }} />}
       </>}
-      <Btn variant="ghost" block className="mt-4 min-h-11" disabled={busy || loading} onClick={() => void load()}>Actualiser la livraison</Btn>
+      <Btn variant="ghost" block className="mt-4 min-h-11" disabled={busy || handoffBusy || loading} onClick={() => void load()}>Actualiser la livraison</Btn>
     </>}
   </Modal>;
 }

@@ -63,6 +63,10 @@ beforeAll(async () => {
         json({ operators: firstPage ? [] : [operator], candidates: [], truncated: false, nextCursor: firstPage ? operatorId : null }); return;
       }
       if (path.startsWith("/livreur/missions") && revoked) { json({ code: "ACCESS_UNAVAILABLE" }, 401); return; }
+      if (req.method === "GET" && /^\/(?:api\/delivery|livreur)\/missions\/[a-f0-9]{24}\/handoff$/.test(path)) {
+        json({ missionId: id, revision: 0, missionRevision: missions[0]?.revision ?? 0, orderStatus: "ready", proof: null, incident: null,
+          canHandoff: false, canOverride: false, canRotate: false }); return;
+      }
       if (path === "/livreur/missions") { json({ missions: missions.filter(value => !removed.has(value.id) && value.operator?.id === operatorId), nextCursor: null }); return; }
       const match = /^\/(?:api\/delivery|livreur)\/missions\/([a-f0-9]{24})(?:\/(assignment|dispatch|depart))?$/.exec(path);
       if (match) {

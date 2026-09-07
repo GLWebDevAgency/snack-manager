@@ -1,5 +1,7 @@
 "use client";
 
+import { customerTrackingHref } from "./delivery-proof-access";
+
 /**
  * Tunnel de commande — panier → coordonnées → créneau → paiement → confirmation.
  *
@@ -289,6 +291,9 @@ export function Checkout({
   const [intent, setIntent] = useState<PaymentIntentResponse | null>(null);
 
   const [order, setOrder] = useState<CreatedOrder | null>(null);
+  const [openedAt] = useState(Date.now);
+  const trackingReceipt = recovery.active?.state === "received" && recovery.active.receipt.orderId === order?._id ? recovery.active : recovery.last;
+  const trackingHref = order ? customerTrackingHref(order._id, order.trackingToken, trackingReceipt, Math.max(openedAt, trackingReceipt?.updatedAt ?? 0)) : "";
   const [status, setStatus] = useState<OrderStatus>("new");
   const [paidOnline, setPaidOnline] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -815,6 +820,7 @@ export function Checkout({
           blocked={blockedByPause || !recovery.ready || Boolean(recovery.error)}
           method={method}
           order={order}
+          trackingHref={trackingHref}
           embed={embed}
           demo={demo}
           verified={demo || Boolean(turnstileToken)}
@@ -979,7 +985,7 @@ export function Checkout({
           <div className="flex flex-col gap-3">
             <ErrorState title={busy ? "Vérification du paiement" : "Paiement à vérifier"} message={busy ? "Vérification sécurisée en cours…" : error ?? "Votre commande est enregistrée. Réessayez le paiement ou consultez son suivi. Un changement de moyen doit d’abord être confirmé."} onRetry={busy || bankProcessing || !order || checkoutPaymentDecision(order, "online") === "verify" ? undefined : retryPayment} />
             {order && <Link
-              href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
+              href={trackingHref}
               target={embed ? "_blank" : undefined}
               rel={embed ? "noopener noreferrer" : undefined}
               className="flex min-h-11 items-center justify-center text-center text-[13px] font-semibold text-mut underline underline-offset-4 transition-colors duration-fast hover:text-ink"
@@ -1100,6 +1106,7 @@ function Footer({
   blocked,
   method,
   order,
+  trackingHref,
   embed,
   demo,
   verified,
@@ -1119,6 +1126,7 @@ function Footer({
   blocked: boolean;
   method: "online" | "counter";
   order: CreatedOrder | null;
+  trackingHref: string;
   embed: boolean;
   demo: boolean;
   verified: boolean;
@@ -1138,7 +1146,7 @@ function Footer({
             de celui-ci. Le suivi se joue donc au-dessus, dans la frise. */}
         {order && !demo && (
           <Link
-            href={`/t/${order._id}?t=${encodeURIComponent(order.trackingToken)}`}
+            href={trackingHref}
             target={embed ? "_blank" : undefined}
             rel={embed ? "noopener noreferrer" : undefined}
             className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-pill bg-accent px-5 text-[15px] font-extrabold text-onaccent transition-transform duration-fast ease-sm active:scale-[0.97] active:duration-snap"

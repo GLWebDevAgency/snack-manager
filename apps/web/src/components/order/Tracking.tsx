@@ -24,6 +24,9 @@ import { hhmm } from "./helpers";
 import { Banner, Dot, Money, Prix, PrimaryAction, Surface } from "./primitives";
 import { CounterPaymentAction } from "./CounterPaymentAction";
 import { PAYMENT_VERIFICATION_MESSAGE, canRequestCounterPayment, paymentSummaryLabel, requestCounterPayment } from "./checkout-payment";
+import { CustomerDeliveryProof } from "./CustomerDeliveryProof";
+import { DeliveryPaymentReturnError, prepareDeliveryPaymentReturn } from "./delivery-payment-return";
+import { readDeliveryProofAccessFragment } from "./delivery-proof-access";
 
 const POLL_MS = 10_000;
 
@@ -105,7 +108,7 @@ export function Tracking({
       hint: "La préparation commencera après confirmation du paiement.", upcomingHint: "" }] : []),
     ...fulfillmentSteps,
     ...(status === "delivered" ? [{ status: "delivered" as const,
-      label: delivery ? "Livrée" : "Remise", hint: "Remise confirmée par le restaurant", upcomingHint: "" }] : []),
+      label: delivery ? "Livrée" : "Remise", hint: "Remise confirmée", upcomingHint: "" }] : []),
   ];
   const title = status === "cancelled" ? "Commande annulée"
     : awaitingPayment ? "En attente de confirmation du paiement"
@@ -180,19 +183,23 @@ export function Tracking({
     setResuming(true);
     setPaymentError(null);
     try {
+      if (delivery) await prepareDeliveryPaymentReturn(ticket?.header.slug ?? null, orderId, trackingToken);
       const next = await createPaymentIntent(orderId, trackingToken);
       if (next.unavailable || !next.publishableKey) {
         setPaymentError(next.unavailable ? next.reason : "Paiement momentanément indisponible. Réessayez ou contactez le restaurant.");
         await refresh(true);
       } else setPaymentIntent(next);
     } catch (cause) {
-      setPaymentError(cause instanceof PublicApiError ? cause.message : "Impossible de reprendre le paiement. Votre commande est conservée : réessayez sans en créer une nouvelle.");
+      setPaymentError(cause instanceof PublicApiError || cause instanceof DeliveryPaymentReturnError ? cause.message : "Impossible de reprendre le paiement. Votre commande est conservée : réessayez sans en créer une nouvelle.");
       await refresh(true);
     } finally { paymentActionRef.current = false; setResuming(false); }
   }
 
   function startCardConfirmation() {
     if (paymentActionRef.current || bankProcessingRef.current || finished || payment?.method !== "online" || payment.status !== "pending") return false;
+    if (delivery && readDeliveryProofAccessFragment(window.location.hash)) {
+      setPaymentIntent(null); setPaymentError("Reprenez la vérification du paiement pour sauvegarder l’accès privé avant de continuer."); return false;
+    }
     paymentActionRef.current = true;
     refreshSequence.current++;
     setConfirmingCard(true);
@@ -285,6 +292,7 @@ export function Tracking({
           </p>
         </Surface>
 
+        {delivery && <CustomerDeliveryProof key={`${orderId}:${stale}:${dispatched}:${payment?.status}:${finished}`} orderId={orderId} tenant={ticket?.header.slug ?? null} ready={!stale && dispatched && payment?.status === "paid"} finished={finished} />}
         {status === "cancelled" ? (
           <Banner tone="alert" icon="close" title="Commande annulée">
             Le restaurant a annulé cette commande. Contactez le restaurant
@@ -380,7 +388,7 @@ export function Tracking({
             {paymentError && <p role="alert" className="mt-3 text-sm text-mut">{paymentError}</p>}
             {paymentIntent?.publishableKey ? <StripeCard
               {...paymentIntent} publishableKey={paymentIntent.publishableKey}
-              apparence={appearance} prixMono={prixMono} returnUrl={typeof window === "undefined" ? "" : window.location.href}
+              apparence={appearance} prixMono={prixMono} returnUrl={typeof window === "undefined" ? "" : `${window.location.origin}/t/${encodeURIComponent(orderId)}?t=${encodeURIComponent(trackingToken)}`}
               disabled={switchingCounter} onConfirmStart={startCardConfirmation} onConfirmEnd={finishCardConfirmation}
               onPaid={() => { setPaymentIntent(null); }}
             /> : <div className="mt-4"><PrimaryAction onClick={() => void resumePayment()} disabled={paymentBusy || bankProcessing}>{resuming ? "Chargement…" : "Reprendre le paiement"}</PrimaryAction></div>}

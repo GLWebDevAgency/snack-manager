@@ -100,7 +100,7 @@ export default function DeliveryPage() {
             <div className="flex items-center justify-between gap-4"><div><p className="text-sm font-semibold text-ink">Proposer la livraison</p><p className="mt-1 text-[13px] text-mut">Le retrait reste disponible.</p></div><Toggle label="Proposer la livraison" on={draft.enabled} disabled={saving || draft.zones.length === 0} onChange={(enabled) => setDraft({ ...draft, enabled })} /></div>
             <p className="mt-4 text-[13px] leading-relaxed text-mut">La livraison s’affiche lorsque vos réglages sont enregistrés et votre encaissement en ligne est actif. Vos clients paient en ligne avant le départ du livreur.</p>
           </Panel>
-          <div className="rounded-card border border-line bg-surface2 p-4 text-[13px] leading-relaxed text-mut"><p className="font-semibold text-ink">Votre équipe assure la livraison.</p><p className="mt-1">Aucun transporteur externe ni suivi GPS n’est inclus. Affectez les missions depuis Commandes. Le départ se confirme depuis Commandes ou sur le téléphone associé du livreur ; la remise au client reste confirmée depuis Commandes.</p></div>
+          <div className="rounded-card border border-line bg-surface2 p-4 text-[13px] leading-relaxed text-mut"><p className="font-semibold text-ink">Votre équipe assure la livraison.</p><p className="mt-1">Aucun transporteur externe ni suivi GPS n’est inclus. Affectez les missions depuis Commandes. Le départ et la remise avec le code du client se confirment depuis Commandes ou sur le téléphone associé du livreur. En cas d’incident, le responsable décide de la suite depuis Commandes.</p></div>
         </div>
       </div>
 

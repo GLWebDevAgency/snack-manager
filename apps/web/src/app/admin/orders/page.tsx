@@ -340,7 +340,7 @@ export default function OrdersPage() {
   async function advance(o: Order) {
     const next = NEXT_STATUS[o.status];
     if (!next || !canAdvanceOrder(o, role) || pending.has(o._id)) return;
-    if (o.type === "delivery" && o.status === "ready" && !o.delivery?.dispatchedAt) {
+    if (o.type === "delivery" && o.status === "ready") {
       setDispatchTarget(o);
       return;
     }
@@ -639,7 +639,7 @@ export default function OrdersPage() {
                       }}
                     >
                       {o.type === "delivery" && o.status === "ready"
-                        ? o.delivery?.dispatchedAt ? "Marquer livrée" : "Confirmer le départ"
+                        ? o.delivery?.dispatchedAt ? "Confirmer la remise" : "Confirmer le départ"
                         : ADVANCE_LABELS[o.status]}
                     </Btn>
                   ) : (
