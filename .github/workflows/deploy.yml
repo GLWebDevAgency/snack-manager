@@ -177,6 +177,10 @@ jobs:
         || github.ref == 'refs/heads/develop' && secrets.RAILWAY_TOKEN_STAGING
         || '' }}
       ENVIRONNEMENT: ${{ needs.cible.outputs.environnement }}
+      DELIVERY_HANDOFF_KEY: >-
+        ${{ github.ref == 'refs/heads/main' && secrets.SM_DELIVERY_HANDOFF_KEY_PRODUCTION
+        || github.ref == 'refs/heads/develop' && secrets.SM_DELIVERY_HANDOFF_KEY_STAGING
+        || '' }}
       CONTACT_INGEST_TOKEN: >-
         ${{ github.ref == 'refs/heads/main' && secrets.SM_CONTACT_INGEST_TOKEN_PRODUCTION
         || github.ref == 'refs/heads/develop' && secrets.SM_CONTACT_INGEST_TOKEN_STAGING
@@ -198,6 +202,17 @@ jobs:
         || github.ref == 'refs/heads/develop' && vars.SM_TURNSTILE_ALLOWED_HOSTNAMES_STAGING
         || '' }}
     steps:
+      - name: Vérifier la clé de remise avant toute migration
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const raw = process.env.DELIVERY_HANDOFF_KEY ?? '';
+          const decoded = Buffer.from(raw, 'base64url');
+          if (!/^[A-Za-z0-9_-]{43}$/.test(raw) || decoded.length !== 32 || decoded.toString('base64url') !== raw) {
+            throw new Error('Clé de remise absente ou invalide pour cet environnement. Aucune migration ni livraison.');
+          }
+          NODE
+
       - name: Installer la CLI Railway vérifiée
         run: |
           set -euo pipefail
@@ -588,6 +603,10 @@ jobs:
       # sortie de `railway variables` n'arrive dans les journaux.
       - name: Vérifier et publier les secrets fidélité
         env:
+          DELIVERY_HANDOFF_KEY: >-
+            ${{ github.ref == 'refs/heads/develop' && secrets.SM_DELIVERY_HANDOFF_KEY_STAGING
+            || github.ref == 'refs/heads/main' && secrets.SM_DELIVERY_HANDOFF_KEY_PRODUCTION
+            || '' }}
           DATABASE_RUNTIME_URL: >-
             ${{ github.ref == 'refs/heads/develop' && secrets.SM_DATABASE_URL_RUNTIME_STAGING
             || github.ref == 'refs/heads/main' && secrets.SM_DATABASE_URL_RUNTIME_PRODUCTION
@@ -637,6 +656,14 @@ jobs:
           if (new Set(decoded).size !== decoded.length) {
             throw new Error('Les clés fidélité et relais doivent être indépendantes');
           }
+          const handoffRaw = process.env.DELIVERY_HANDOFF_KEY ?? '';
+          const handoffKey = Buffer.from(handoffRaw, 'base64url');
+          if (!/^[A-Za-z0-9_-]{43}$/.test(handoffRaw) || handoffKey.length !== 32 || handoffKey.toString('base64url') !== handoffRaw) {
+            throw new Error('La clé de remise doit contenir 32 octets en base64url canonique');
+          }
+          if (decoded.some(value => Buffer.from(value, 'base64').equals(handoffKey))) {
+            throw new Error('La clé de remise doit être indépendante des clés fidélité et relais');
+          }
 
           let runtime;
           try {
@@ -683,6 +710,7 @@ jobs:
                --set "LOYALTY_OPERATION_FINGERPRINT_KEY=$LOYALTY_OPERATION_KEY" \
                --set "LOYALTY_QR_DERIVATION_KEY=$LOYALTY_QR_KEY" \
                --set "SM_PUBLIC_RELAY_SIGNING_KEY=$PUBLIC_RELAY_KEY" \
+               --set "DELIVERY_HANDOFF_KEY=$DELIVERY_HANDOFF_KEY" \
                --set 'SM_PG_POOL_MAX=10' \
                > "$RUNNER_TEMP/variables-api-fidelite.log" 2>&1; then
             echo "::error title=Secrets fidélité non publiés::service api (sortie masquée). Rien ne part."

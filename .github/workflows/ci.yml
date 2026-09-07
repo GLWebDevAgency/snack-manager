@@ -216,6 +216,12 @@ jobs:
           DELIVERY_MISSION_HTTP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_mission_http_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/delivery/delivery-missions.integration.test.ts src/modules/delivery/delivery-missions.http.integration.test.ts
 
+      - name: Tests MongoDB réels — preuve de remise, dérogation et reprise livreur
+        env:
+          DELIVERY_HANDOFF_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_handoff_test_ci
+          DELIVERY_HANDOFF_HTTP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_handoff_http_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/delivery/delivery-handoff.integration.test.ts src/modules/delivery/delivery-handoff.http.integration.test.ts src/modules/delivery/delivery-handoff.browser.integration.test.ts
+
       - name: Tests MongoDB réels — promotion et compteur concurrent
         env:
           ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci

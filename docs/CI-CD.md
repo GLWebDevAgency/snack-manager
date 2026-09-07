@@ -700,6 +700,17 @@ du job 7 utilise `always()` après qu'une migration a pu commencer.
 
 ### Pourquoi les migrations partent avant `api`, puis `api` seule
 
+**Clé de remise livraison (L2.3).** Le préflight impose désormais une clé dédiée
+`SM_DELIVERY_HANDOFF_KEY_STAGING` / `SM_DELIVERY_HANDOFF_KEY_PRODUCTION`
+(32 octets aléatoires, base64url canonique de 43 caractères), avant toute
+migration. La publication runtime vérifie aussi son indépendance des clés
+fidélité/relais et la transmet uniquement à `api` comme `DELIVERY_HANDOFF_KEY`.
+Ne pas la régénérer au déploiement : elle protège les preuves et les reçus
+existants. La clé production n'est pas provisionnée par le lot staging ; une
+promotion exige son provisionnement contrôlé et un GO distinct. En cas de clé
+absente, le déploiement doit rester bloqué, jamais utiliser la clé staging ou JWT.
+Voir [protocole et restrictions de rotation/rollback](strategie-commerce-2026-09/REMISE-LIVREUR.md#clé-et-exploitation).
+
 Après la CI et le balayage des secrets, `deploy.yml` exécute d'abord un
 préflight Railway **sans mutation** : le jeton doit accéder aux quatre services
 dans l'environnement explicitement dérivé de la branche et le service `api`

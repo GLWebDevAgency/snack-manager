@@ -8,7 +8,7 @@ Le gérant prépare une affectation depuis la fiche de commande du back-office. 
 
 Dans `/livreur`, la personne associée consulte uniquement ses missions actives : **À récupérer** et **En route**. Le départ est un geste explicite, confirmé par le serveur, pour une commande prête et dont le paiement enregistré est confirmé, sans remboursement ou blocage financier connu. La caisse habilitée peut également confirmer le départ d’une mission affectée ; elle ne gère pas les habilitations ni l’affectation.
 
-**Hors de ce lot :** remise par le livreur, preuve PIN/QR, incidents, transfert après départ, tournée/GPS, fonctionnement hors réseau et validation d’une PWA installée sur un vrai téléphone. L2.3 reste nécessaire. La clôture manuelle existante du back-office n’est pas une preuve de remise client.
+**Hors de ce lot L2.2 :** remise par le livreur, preuve PIN/QR, incidents, transfert après départ, tournée/GPS, fonctionnement hors réseau et validation d'une PWA installée sur un vrai téléphone. La [suite L2.3](REMISE-LIVREUR.md) ajoute preuve et incidents et ferme l'ancienne clôture manuelle ; ses preuves de déploiement sont distinctes de celles de L2.2.
 
 ## Frontières et données
 
