@@ -66,11 +66,14 @@ export type DeliveryCheckoutReceipt = ReceivedCheckoutAttempt | ImportedDelivery
 
 const DATABASE = "sm.checkout-attempts";
 const VERSION = 1;
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const ACTIVE = "active";
 const RECEIPTS = "last-receipt";
 const DELIVERY_RECEIPTS = "delivery-receipts";
 const DELIVERY_RECEIPT_LIMIT = 128;
+const DEVICE_RECEIPTS = "device-receipts";
+const DEVICE_RECEIPT_LIMIT = 128;
+const DEVICE_RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const DEADLINE_MS = 5_000;
 const HEX_256 = /^[a-f\d]{64}$/;
 const UUID_V4 = /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/;
@@ -190,6 +193,61 @@ function parseAttempt(raw: unknown, tenant: string, origin: string): CheckoutAtt
   return freeze(raw as CheckoutAttempt);
 }
 
+/** Tracking is a separate capability from delivery handoff. Never copy the
+ * recovery proof or a pending checkout's customer/address/note into this store.
+ */
+function deviceReceipt(attempt: ReceivedCheckoutAttempt): ReceivedCheckoutAttempt {
+  const receipt = { ...attempt.receipt };
+  delete receipt.recoveryProof;
+  return { ...attempt, receipt };
+}
+function parseDeviceReceipt(raw: unknown, tenant: string, origin: string): ReceivedCheckoutAttempt | null {
+  const attempt = parseAttempt(raw, tenant, origin);
+  if (!attempt) return null;
+  if (attempt.state !== "received" || Object.hasOwn(attempt.receipt, "recoveryProof")) corrupt();
+  return attempt;
+}
+function deviceReceiptExpired(receipt: ReceivedCheckoutAttempt, now: number): boolean {
+  // A future clock must not silently increase the retention or remove a link.
+  if (receipt.updatedAt > now) corrupt();
+  return receipt.updatedAt + DEVICE_RECEIPT_RETENTION_MS <= now;
+}
+/** Run once in the versionchange transaction. Do not rebuild from aliases on
+ * later reads: that would resurrect a deliberately forgotten shortcut.
+ */
+function migrateDeviceReceipts(tx: IDBTransaction) {
+  const origin = window.location.origin;
+  const now = Date.now();
+  const target = tx.objectStore(DEVICE_RECEIPTS);
+  const migrate = (names: string[]) => {
+    const name = names.shift();
+    if (!name) return;
+    const cursor = tx.objectStore(name).openCursor();
+    cursor.onsuccess = () => {
+      try {
+        const row = cursor.result;
+        if (!row) { migrate(names); return; }
+        if (!object(row.value) || typeof row.value.tenant !== "string" || !TENANT.test(row.value.tenant)) corrupt();
+        const attempt = parseAttempt(row.value, row.value.tenant, origin);
+        if (!attempt || (name === RECEIPTS && attempt.state !== "received")) corrupt();
+        if (attempt.state !== "received" || deviceReceiptExpired(attempt, now)) { row.continue(); return; }
+        const next = deviceReceipt(attempt);
+        const get = target.get([attempt.tenant, attempt.receipt.orderId]);
+        get.onsuccess = () => {
+          try {
+            const existing = parseDeviceReceipt(get.result, attempt.tenant, origin);
+            if (existing && (existing.clientId !== next.clientId || existing.receipt.trackingToken !== next.receipt.trackingToken)) corrupt();
+            // Duplicate aliases retain the earliest receipt time, never sliding TTL.
+            if (!existing || next.updatedAt < existing.updatedAt) target.put(next);
+            row.continue();
+          } catch { tx.abort(); }
+        };
+      } catch { tx.abort(); }
+    };
+  };
+  migrate([RECEIPTS, ACTIVE]);
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -200,14 +258,15 @@ function openDatabase(): Promise<IDBDatabase> {
       request.onblocked = fail;
       request.onerror = fail;
       request.onupgradeneeded = (event) => {
-        // The only upgrade adds a private per-order receipt store. Never rewrite,
-        // recreate or discard an existing active attempt or its immutable identity.
-        if (settled || ![0, 1].includes(event.oldVersion)) { request.transaction?.abort(); fail(); return; }
+        // Add stores without rewriting an active attempt or its private capability.
+        if (settled || ![0, 1, 2].includes(event.oldVersion)) { request.transaction?.abort(); fail(); return; }
         if (event.oldVersion === 0) {
           request.result.createObjectStore(ACTIVE, { keyPath: "tenant" });
           request.result.createObjectStore(RECEIPTS, { keyPath: "tenant" });
         }
-        request.result.createObjectStore(DELIVERY_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
+        if (event.oldVersion < 2) request.result.createObjectStore(DELIVERY_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
+        request.result.createObjectStore(DEVICE_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
+        if (event.oldVersion > 0 && request.transaction) migrateDeviceReceipts(request.transaction);
       };
       request.onsuccess = () => {
         const db = request.result;
@@ -215,7 +274,7 @@ function openDatabase(): Promise<IDBDatabase> {
         settled = true;
         clearTimeout(timer);
         db.onversionchange = () => db.close();
-        if (db.objectStoreNames.length !== 3 || !db.objectStoreNames.contains(ACTIVE) || !db.objectStoreNames.contains(RECEIPTS) || !db.objectStoreNames.contains(DELIVERY_RECEIPTS)) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
+        if (db.objectStoreNames.length !== 4 || ![ACTIVE, RECEIPTS, DELIVERY_RECEIPTS, DEVICE_RECEIPTS].every(name => db.objectStoreNames.contains(name))) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
         resolve(db);
       };
     } catch { fail(); }
@@ -225,11 +284,12 @@ function openDatabase(): Promise<IDBDatabase> {
 /** Every mutation resolves only after strict transaction completion, never request success. */
 async function transaction<T, C = CheckoutAttempt>(
   tenant: string,
-  storeName: typeof ACTIVE | typeof RECEIPTS | typeof DELIVERY_RECEIPTS,
+  storeName: typeof ACTIVE | typeof RECEIPTS | typeof DELIVERY_RECEIPTS | typeof DEVICE_RECEIPTS,
   write: boolean,
   action: (current: C | null, tx: IDBTransaction, fail: (error: unknown) => void) => T,
   key?: IDBValidKey,
   parser?: (raw: unknown, tenant: string, origin: string) => C | null,
+  notifyWrite = true,
 ): Promise<T> {
   const { origin } = scope(tenant);
   const db = await openDatabase();
@@ -251,14 +311,14 @@ async function transaction<T, C = CheckoutAttempt>(
       if (error) reject(error); else resolve(freeze(result));
     }
     try {
-      tx = db.transaction(write ? [ACTIVE, RECEIPTS, DELIVERY_RECEIPTS] : [storeName], write ? "readwrite" : "readonly", { durability: "strict" });
-      tx.oncomplete = () => { finish(); if (write) notify(tenant); };
+      tx = db.transaction(write ? [ACTIVE, RECEIPTS, DELIVERY_RECEIPTS, DEVICE_RECEIPTS] : [storeName], write ? "readwrite" : "readonly", { durability: "strict" });
+      tx.oncomplete = () => { finish(); if (write && notifyWrite) notify(tenant); };
       tx.onabort = () => finish(failure ?? unavailable());
       tx.onerror = () => { failure ??= unavailable(); };
       if (write && tx.durability !== "strict") throw unavailable();
       for (const name of Array.from(tx.objectStoreNames)) {
         const candidate = tx.objectStore(name);
-        const expectedKeyPath = name === DELIVERY_RECEIPTS ? JSON.stringify(["tenant", "receipt.orderId"]) : JSON.stringify("tenant");
+        const expectedKeyPath = name === DELIVERY_RECEIPTS || name === DEVICE_RECEIPTS ? JSON.stringify(["tenant", "receipt.orderId"]) : JSON.stringify("tenant");
         if (JSON.stringify(candidate.keyPath) !== expectedKeyPath || candidate.autoIncrement || candidate.indexNames.length !== 0) corrupt();
       }
       const store = tx.objectStore(storeName);
@@ -284,6 +344,55 @@ export function readCheckoutAttempt(tenant: string): Promise<CheckoutAttempt | n
 }
 export function readLastCheckoutReceipt(tenant: string): Promise<ReceivedCheckoutAttempt | null> {
   return transaction(tenant, RECEIPTS, false, (current) => current as ReceivedCheckoutAttempt | null);
+}
+
+/** Local tracking links only, not a verified customer account or server history.
+ * Expired shortcuts are removed opportunistically, without notification loops.
+ * This never expires active/last reconciliation receipts or private handoff access.
+ */
+export function readDeviceCheckoutReceipts(tenant: string): Promise<ReceivedCheckoutAttempt[]> {
+  const { origin } = scope(tenant);
+  return transaction<ReceivedCheckoutAttempt[]>(tenant, DEVICE_RECEIPTS, true, (_current, tx, fail) => {
+    const now = Date.now();
+    const rows: ReceivedCheckoutAttempt[] = [];
+    const cursor = tx.objectStore(DEVICE_RECEIPTS).openCursor(IDBKeyRange.bound([tenant, ""], [tenant, "\uffff"]));
+    cursor.onsuccess = () => {
+      try {
+        const row = cursor.result;
+        if (!row) { rows.sort((a, b) => b.updatedAt - a.updatedAt || a.receipt.orderId.localeCompare(b.receipt.orderId)); return; }
+        const value = parseDeviceReceipt(row.value, tenant, origin);
+        if (!value) corrupt();
+        if (deviceReceiptExpired(value, now)) row.delete();
+        else rows.push(value);
+        if (rows.length > DEVICE_RECEIPT_LIMIT) corrupt();
+        row.continue();
+      } catch (error) { fail(error); }
+    };
+    return rows;
+  }, [tenant, ""], parseDeviceReceipt, false);
+}
+
+/** Forget only a shortcut. Reconciliation and private handoff access are
+ * deliberately independent; the active receipt must be archived explicitly.
+ */
+export function forgetDeviceCheckoutReceipt(tenant: string, orderId: string): Promise<void> {
+  const { origin } = scope(tenant);
+  if (!nonempty(orderId, 128)) invalid();
+  return transaction(tenant, ACTIVE, true, (active, tx, fail) => {
+    if (active?.state === "received" && active.receipt.orderId === orderId) {
+      throw new CheckoutAttemptStorageError("conflict", "Commencez une nouvelle commande avant d’oublier ce suivi encore actif.");
+    }
+    tx.objectStore(DEVICE_RECEIPTS).delete([tenant, orderId]);
+    const aliases = tx.objectStore(RECEIPTS);
+    const get = aliases.get(tenant);
+    get.onsuccess = () => {
+      try {
+        const last = parseAttempt(get.result, tenant, origin);
+        if (last && last.state !== "received") corrupt();
+        if (last?.receipt.orderId === orderId) aliases.delete(tenant);
+      } catch (error) { fail(error); }
+    };
+  });
 }
 function expireReceiptAliases(tx: IDBTransaction, tenant: string, origin: string, fail: (error: unknown) => void) {
   for (const name of [ACTIVE, RECEIPTS]) {
@@ -391,7 +500,7 @@ function importDeliveryReceipt(tenant: string, orderId: string, request: { clien
 }
 
 /** The pending active row reserves the remaining receipt slot: only one
- * attempt can be acquired per tenant, and all three stores share this lock.
+ * attempt can be acquired per tenant, and all stores share this lock.
  */
 function reserveDeliveryReceipt(tx: IDBTransaction, attempt: PendingCheckoutAttempt, fail: (error: unknown) => void) {
   expireReceiptAliases(tx, attempt.tenant, attempt.origin, fail);
@@ -406,6 +515,26 @@ function reserveDeliveryReceipt(tx: IDBTransaction, attempt: PendingCheckoutAtte
       if (!value) corrupt();
       if (value.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) row.delete();
       else if (++count >= DELIVERY_RECEIPT_LIMIT) throw new CheckoutAttemptStorageError("unavailable", "Ce navigateur conserve déjà 128 accès de livraison récents. Aucun nouvel envoi n’est autorisé ; contactez le restaurant avant de poursuivre.");
+      row.continue();
+    } catch (error) { fail(error); }
+  };
+}
+function reserveDeviceReceipt(tx: IDBTransaction, attempt: PendingCheckoutAttempt, fail: (error: unknown) => void) {
+  const now = Date.now();
+  const cursor = tx.objectStore(DEVICE_RECEIPTS).openCursor(IDBKeyRange.bound([attempt.tenant, ""], [attempt.tenant, "\uffff"]));
+  let count = 0;
+  cursor.onsuccess = () => {
+    try {
+      const row = cursor.result;
+      if (!row) {
+        if (attempt.payload.fulfillment === "delivery") reserveDeliveryReceipt(tx, attempt, fail);
+        else tx.objectStore(ACTIVE).add(attempt);
+        return;
+      }
+      const value = parseDeviceReceipt(row.value, attempt.tenant, attempt.origin);
+      if (!value) corrupt();
+      if (deviceReceiptExpired(value, now)) row.delete();
+      else if (++count >= DEVICE_RECEIPT_LIMIT) throw new CheckoutAttemptStorageError("unavailable", "Ce navigateur conserve déjà 128 suivis de commandes récents. Oubliez un ancien suivi dans « Mes commandes sur cet appareil » avant de commander.");
       row.continue();
     } catch (error) { fail(error); }
   };
@@ -427,8 +556,7 @@ export async function acquireCheckoutAttempt(
       recoveryProof: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
       cartFingerprint, createdAt: now, updatedAt: now, state: "prepared", payload,
     };
-    if (payload.fulfillment === "delivery") reserveDeliveryReceipt(tx, attempt, fail);
-    else tx.objectStore(ACTIVE).add(attempt);
+    reserveDeviceReceipt(tx, attempt, fail);
     return { attempt, acquired: true };
   });
 }
@@ -465,6 +593,7 @@ export function recordCheckoutReceipt(tenant: string, clientId: string, input: O
     // capability in the receipt so a same-origin payment return can restore it.
     // Historical receipts without this optional field remain readable, not upgraded.
     tx.objectStore(ACTIVE).put(next);
+    tx.objectStore(DEVICE_RECEIPTS).add(deviceReceipt(next));
     if (next.receipt.recoveryProof) tx.objectStore(DELIVERY_RECEIPTS).add(next);
     return next;
   });
