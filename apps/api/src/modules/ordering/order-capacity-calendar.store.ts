@@ -8,6 +8,9 @@ import { orderCapacityCalendarPlanHash, unavailable, validRevision, validateCont
 export { orderCapacityCalendarPlanHash } from './order-capacity-control';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };
+// Mongoose transmet writeConcern imbriqué au pilote Mongo. Ses types CreateOptions
+// ne le déclarent pas ; ordered est une vraie option commune, sans cast de type.
+const CREATE_DURABLE = { ...DURABLE, ordered: true };
 const MAX_HELP_ATTEMPTS = 16;
 type StoredDay = OrderCapacityDay & { _id: Types.ObjectId };
 export type OrderCapacityCalendarPreview = Omit<Plan, 'sourceRevision'> & { sourceRevision: number | null; frozen: boolean };
@@ -125,7 +128,7 @@ export class OrderCapacityCalendarStore {
     if (!day) {
       try {
         await this.days.create([{ tenantId, day: intent.day, state: 'seeding', sourceRevision: intent.sourceRevision,
-          slots: intent.slots, closedReason: intent.closedReason }], DURABLE.writeConcern);
+          slots: intent.slots, closedReason: intent.closedReason }], CREATE_DURABLE);
       } catch { /* duplicate or lost acknowledgement: compare the persisted plan below */ }
       day = await this.readDay(tenantId, intent.day);
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { SlotsService, type TenantWithId } from './slots.service';
+import { buildOrderCapacityCalendar } from './order-capacity-calendar';
 
 /**
  * LE CRÉNEAU EST VÉRIFIÉ À L'ÉCRITURE, PAS SEULEMENT PROPOSÉ.
@@ -29,15 +30,20 @@ const RESTAURANT = {
 } as unknown as TenantWithId;
 
 /**
- * Un service dont la base rend `pris` commandes SUR LE CRÉNEAU VISÉ.
- *
- * L'agrégation groupe par `pickup.slot` : la doublure rend donc une ligne
- * datée, comme Mongo le ferait, plutôt qu'un compteur global — sans quoi le
- * test mesurerait autre chose que ce que le service lit.
+ * Une source durable de grille et de sièges sur le créneau visé. Le comptage
+ * ne dépend plus de l'existence ou du statut d'une Order matérialisée.
  */
-function service(pris: number, sur?: string) {
-  const rows = pris > 0 && sur ? [{ _id: new Date(sur), count: pris }] : [];
-  return new SlotsService({ aggregate: vi.fn().mockResolvedValue(rows) } as never);
+function service(pris: number, sur?: string, tenant = RESTAURANT) {
+  const previewDay = vi.fn(async (_tenantId: string, day: string) => {
+    const grid = buildOrderCapacityCalendar(tenant, day);
+    return { day, sourceRevision: 1, frozen: false, closedReason: grid.emptyReason, slots: grid.slots };
+  });
+  const readDay = vi.fn(async (tenantId: string, day: string) => {
+    const plan = await previewDay(tenantId, day);
+    return { ...plan, slots: plan.slots.map((slot) => ({ ...slot,
+      kitchenTaken: slot.at.toISOString() === sur ? pris : 0, deliveryTaken: 0 })) };
+  });
+  return new SlotsService({ readDay, previewDay } as never);
 }
 
 /** Un créneau de demain midi, à coup sûr ouvert et hors délai de préparation. */
@@ -105,7 +111,7 @@ describe('refuser un créneau qu’on ne peut pas honorer', () => {
 
     // Le motif est déjà rédigé pour le client : c'est lui qu'il doit lire,
     // pas un « créneau indisponible » qui ne dit pas de revenir quand.
-    await expect(service(0).exigerDisponible(ferme, creneauDemain())).rejects.toThrow(
+    await expect(service(0, undefined, ferme).exigerDisponible(ferme, creneauDemain())).rejects.toThrow(
       /Congés annuels/,
     );
   });

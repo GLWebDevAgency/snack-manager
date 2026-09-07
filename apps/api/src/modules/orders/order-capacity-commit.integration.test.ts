@@ -7,6 +7,7 @@ import { OrderCapacityCommitStore } from './order-capacity-commit.store';
 import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { publicRecoveryBinding } from './order-recovery';
 import { internalOrderAdmissionBinding, orderAdmissionId, type OrderAdmissionBinding, type OrderAdmissionKind } from './order-admission-identity';
+import { capacityModels } from './order-capacity-test-fixtures';
 
 const TENANT = '507f1f77bcf86cd799439011';
 const OTHER_TENANT = '507f1f77bcf86cd799439021';
@@ -94,8 +95,11 @@ integration('socle de sièges atomiques — vrai Mongo, non branché au runtime'
     await Promise.all([admissionsA.createIndexes(), daysA.createIndexes()]);
     first = new OrderCapacityCommitStore(admissionsA, ordersA, daysA);
     second = new OrderCapacityCommitStore(admissionsB, ordersB, daysB);
-    admissionA = new PublicOrderAdmissionService(admissionsA, ordersA, redis as never);
-    admissionB = new PublicOrderAdmissionService(admissionsB, ordersB, redis as never);
+    await capacityModels(dbA).tenants.collection.updateOne({ _id: new Types.ObjectId(TENANT) }, { $set: {
+      capacityControl: { version: 1, state: 'active', bootstrapId: randomUUID(), cutoverAt: new Date(SLOT), configRevision: 0, dayIntent: null },
+    } }, { upsert: true });
+    admissionA = new PublicOrderAdmissionService(admissionsA, ordersA, redis as never, daysA, capacityModels(dbA).tenants);
+    admissionB = new PublicOrderAdmissionService(admissionsB, ordersB, redis as never, daysB, capacityModels(dbB).tenants);
     redis.publish.mockClear();
   });
   afterAll(async () => {

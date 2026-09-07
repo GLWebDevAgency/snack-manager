@@ -244,7 +244,7 @@ integration('calendrier C15 — deux connexions Mongo réelles, sans branchement
     const observedDays = interceptCreate(daysA, (run, args) => { observedOptions = args[1]; return run(); });
     const ready = await new OrderCapacityCalendarStore(tenantsA, observedDays, admissionsA, ordersA).ensureDay(TENANT, DAY);
     expect(ready.state).toBe('ready');
-    expect(observedOptions).toEqual({ w: 'majority', j: true, wtimeout: 10_000 });
+    expect(observedOptions).toEqual({ writeConcern: { w: 'majority', j: true, wtimeout: 10_000 }, ordered: true });
   });
 
   it('un jour prêt reste identique après changement des réglages et interdit les mutations imbriquées', async () => {

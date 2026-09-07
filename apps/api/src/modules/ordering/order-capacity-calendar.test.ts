@@ -189,14 +189,15 @@ describe('grille brute et pure du calendrier de capacité', () => {
     expect(instants(buildOrderCapacityCalendar(config, MONDAY))[0]).toBe('2026-09-07T09:00:00.000Z');
   });
 
-  it.each([MONDAY, '2026-03-29', '2026-10-25'])('reste identique à SlotsService hors filtres dynamiques sur %s', async (day) => {
+  it.each([MONDAY, '2026-03-29', '2026-10-25'])('alimente SlotsService sans changer les instants DST sur %s', async (day) => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime('2026-01-01T00:00:00.000Z');
+    vi.setSystemTime(new Date(new Date(`${day}T00:00:00.000Z`).getTime() - 86_400_000));
     const config = input({ hours: Array.from({ length: 7 }, (_, index) => ({ day: index + 1,
       lunch: { open: '01:00', close: '04:00' }, dinner: { open: '18:00', close: '19:00' } })) });
-    const service = new SlotsService({ aggregate: vi.fn().mockResolvedValue([]) } as never);
-    const current = await service.compute({ ...config, _id: '507f1f77bcf86cd799439011' } as unknown as TenantWithId, day);
     const raw = buildOrderCapacityCalendar(config, day);
+    const service = new SlotsService({ readDay: vi.fn().mockResolvedValue({ day, sourceRevision: 1, frozen: true,
+      closedReason: raw.emptyReason, slots: raw.slots.map((slot) => ({ ...slot, kitchenTaken: 0, deliveryTaken: 0 })) }) } as never);
+    const current = await service.compute({ ...config, _id: '507f1f77bcf86cd799439011' } as unknown as TenantWithId, day);
     expect(raw.slots.map((slot) => ({ iso: slot.at.toISOString(), service: slot.service })))
       .toEqual(current.slots.map(({ iso, service }) => ({ iso, service })));
     expect(raw.slots.every((slot) => slot.kitchenCapacity === current.capacity)).toBe(true);

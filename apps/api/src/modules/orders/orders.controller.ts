@@ -20,7 +20,9 @@ import {
 import {
   type CreatePublicOrder,
   CreatePublicOrderSchema,
-  CreateOrderSchema,
+  CreateStaffOrderSchema,
+  StaffPhoneOrderAttemptRequestSchema,
+  type StaffPhoneOrderAttemptRequest,
   type OrderCancel,
   OrderCancelSchema,
   type OrderDiscount,
@@ -72,13 +74,34 @@ export class OrdersController {
   // sert, et le dit explicitement — y compris quand la réponse est « tout le
   // monde », qui est une décision et non un oubli.
 
+  @Roles('owner', 'gerant', 'caisse')
+  @Get('orders/slots')
+  async staffSlots(@TenantId() tenantId: string, @Query('date') date?: string) {
+    const tenant = await this.orders.tenantForStaffSlots(tenantId);
+    return { tenantId, ...await this.slots.compute(tenant, date, 'pickup', 'staff') };
+  }
+
+  @Roles('owner', 'gerant', 'caisse')
+  @HttpCode(200)
+  @Post('orders/recovery')
+  staffRecovery(@TenantId() tenantId: string, @Body(zod(StaffPhoneOrderAttemptRequestSchema)) body: StaffPhoneOrderAttemptRequest) {
+    return this.orders.staffAttempt(tenantId, body, false);
+  }
+
+  @Roles('owner', 'gerant', 'caisse')
+  @HttpCode(200)
+  @Post('orders/abandon')
+  staffAbandon(@TenantId() tenantId: string, @Body(zod(StaffPhoneOrderAttemptRequestSchema)) body: StaffPhoneOrderAttemptRequest) {
+    return this.orders.staffAttempt(tenantId, body, true);
+  }
+
   /** La cuisine ne prend pas les commandes : elle les prépare. */
   @Roles('owner', 'gerant', 'caisse')
   @Post('orders')
   create(
     @TenantId() tenantId: string,
     @CurrentUser() user: JwtPayload,
-    @Body(zod(CreateOrderSchema)) body: CreateOrder,
+    @Body(zod(CreateStaffOrderSchema)) body: CreateOrder,
   ) {
     // Le pilote livre uniquement les commandes passées par le checkout :
     // c'est cette porte qui réserve la capacité et exige le paiement Stripe.
@@ -233,6 +256,21 @@ export class OrdersController {
     }
     const tenant = await this.tenants.bySlug(slug);
     const tenantId = String(tenant._id);
+    const fulfillment = body.fulfillment ?? 'pickup';
+    // Identité métier identique à l'écriture, sans les preuves anti-robot.
+    const { turnstileToken: _proof, recoveryProof: _recoveryProof, fulfillment: _fulfillment, ...trusted } = body;
+    const trustedOrder: CreateOrder = {
+      ...trusted,
+      payment: { method: fulfillment === 'delivery' ? 'online' : body.payment.method },
+      channel: 'online', type: fulfillment,
+    };
+    const legacyReplay = async () => {
+      if (!this.admissions) return this.orders.findPublicReplay(tenantId, body.clientId);
+      const observed = await this.admissions.observeInternal(tenantId, trustedOrder, 'legacy');
+      if (observed.state === 'created') return observed.order;
+      if (observed.state === 'rejected') throw this.admissions.rejectionError({ rejection: observed.reason });
+      return null;
+    };
     let binding = publicRecoveryBinding(tenantId, body);
     if (binding) {
       if (!this.admissions) throw new ServiceUnavailableException('La reprise de commande est indisponible');
@@ -242,6 +280,12 @@ export class OrdersController {
       const owned = await this.admissions.claimValidation(tenantId, body.clientId, binding);
       if (!owned) throw new ServiceUnavailableException({ code: 'ORDER_ATTEMPT_UNCERTAIN', message: 'Cette tentative reste à vérifier. Consultez sa reprise avant un nouvel envoi.' });
       binding = owned;
+    }
+    // Un snapshot committing possède déjà sa place. Sa reprise précède toute
+    // nouvelle vérification de pause, quota, Turnstile ou capacité complète.
+    if (!binding) {
+      const existing = await legacyReplay();
+      if (existing) return existing;
     }
     // Pause volontaire du gérant, suspension du compte par Snack Manager, ou
     // commande en ligne non souscrite : même fermeture propre côté client,
@@ -271,9 +315,6 @@ export class OrdersController {
     // Un POST dont la reponse s'est perdue garde la meme cle. La commande
     // existe deja : ne pas redemander une preuve Turnstile a usage unique, ni
     // recompter le quota ou la capacite du creneau.
-    const existing = binding ? null : await this.orders.findPublicReplay(tenantId, body.clientId);
-    if (existing) return existing;
-    const fulfillment = body.fulfillment ?? 'pickup';
     if (fulfillment === 'delivery' && !publicDeliverySettingsOf(tenant).available) {
       if (binding) {
         const observed = await this.admissions!.reject(tenantId, body.clientId, binding, 'unavailable');
@@ -324,7 +365,6 @@ export class OrdersController {
 
     // Le jeton anti-robot n'entre jamais dans le document. Canal et type sont
     // des faits de route, impossibles a choisir dans le corps public strict.
-    const { turnstileToken: _proof, recoveryProof: _recoveryProof, fulfillment: _fulfillment, ...trusted } = body;
     let admissionStage: 'slot_unavailable' | 'invalid_order' = 'slot_unavailable';
     let creationStarted = false;
     try {
@@ -340,7 +380,7 @@ export class OrdersController {
             if (observed.state === 'created') { await this.publicOrderGate.release(proof); return this.admissions!.createdOrder(tenantId, body); }
             if (observed.state === 'rejected') throw this.admissions!.rejectionError({ rejection: observed.reason });
           }
-          const raced = binding ? null : await this.orders.findPublicReplay(tenantId, body.clientId);
+          const raced = binding ? null : await legacyReplay();
           if (raced) {
             await this.publicOrderGate.release(proof);
             return raced;
@@ -351,15 +391,7 @@ export class OrdersController {
 
           const outcome = await this.orders.createWithOutcome(
             tenantId,
-            {
-              ...trusted,
-              // Le moyen choisi permet au suivi de reprendre le même paiement.
-              // Ce choix ne prouve aucun encaissement : resolvePayment garde
-              // toutes les commandes publiques pending jusqu'à confirmation.
-              payment: { method: fulfillment === 'delivery' ? 'online' : body.payment.method },
-              channel: 'online',
-              type: fulfillment,
-            },
+            trustedOrder,
             'online:turnstile',
             null,
             binding,
@@ -385,7 +417,11 @@ export class OrdersController {
         // Erreur I/O : aucune compensation de quota gagnant sur une supposition.
         throw err;
       }
-      await this.publicOrderGate.release(proof);
+      // Un timeout du writer legacy peut avoir gagné son CAS durable. Ne
+      // restituer le quota qu'avant l'écriture ou après un rejet prouvé.
+      const terminal = err instanceof ConflictException && typeof err.getResponse() === 'object'
+        && (err.getResponse() as { code?: unknown }).code === 'ORDER_ATTEMPT_REJECTED';
+      if (!creationStarted || terminal) await this.publicOrderGate.release(proof);
       throw err;
     }
   }

@@ -170,6 +170,9 @@ jobs:
       - name: Tests
         run: pnpm exec turbo run test $TURBO_FLAGS
 
+      - name: Gardes des outils de reprise Mongo
+        run: pnpm --filter @sm/api exec vitest run ../../scripts/reprise-mongo.test.mjs --root ../..
+
       # Les suites générales restent rapides et hermétiques. Ces trois fichiers
       # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
       # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et
@@ -227,19 +230,23 @@ jobs:
           docker exec "$SM_CAPACITY_TEST_CONTAINER" mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok ? 0 : 1)'
           pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-index-readiness.test.ts src/modules/orders/order-capacity-index-readiness.integration.test.ts
 
-      - name: Tests MongoDB réels — socle de capacité non activé
+      - name: Tests MongoDB réels — capacité et bootstrap reprenable
         env:
           ORDER_CAPACITY_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci
           ORDER_CAPACITY_CALENDAR_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_calendar_test_ci
           ORDER_CAPACITY_SETTINGS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_settings_test_ci
           ORDER_CAPACITY_READER_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_reader_test_ci
+          ORDER_CAPACITY_BOOTSTRAP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_bootstrap_test_ci
+          ORDER_CAPACITY_RUNTIME_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_ci
+          STAFF_ORDER_ATTEMPT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_staff
         run: |
           pnpm --filter @sm/db exec vitest run src/order-capacity-immutability.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts src/modules/ordering/order-capacity-calendar.store.integration.test.ts src/modules/tenants/tenant-capacity-settings.store.integration.test.ts src/modules/ordering/order-capacity-bootstrap.reader.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/modules/ordering/order-capacity-bootstrap.store.integration.test.ts src/modules/orders/order-capacity-runtime.integration.test.ts src/modules/orders/staff-order-attempt.integration.test.ts
 
-      # Brouillon C15 : volontairement bloquant tant que le runtime ne réserve
-      # pas atomiquement. Ne pas masquer ce RED avec continue-on-error ou skip.
-      - name: Régression runtime — dernière place (bloquant C15)
+      # L'expiration du verrou Redis ne doit jamais vendre une place deux fois.
+      # Cette preuve reste bloquante : ni continue-on-error, ni skip.
+      - name: Régression runtime — dernière place après expiration Redis
         env:
           ORDER_SLOT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_slot_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/orders/slot-reservation-race.integration.test.ts

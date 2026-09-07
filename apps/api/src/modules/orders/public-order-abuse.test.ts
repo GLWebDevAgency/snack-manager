@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { CreatePublicOrderSchema, type CreateOrder, type CreatePublicOrder } from '@sm/contracts';
 import { OrdersController } from './orders.controller';
@@ -151,11 +151,19 @@ describe('une commande publique ne rejoint la cuisine qu apres ses controles', (
     expect(ctx.orders.createWithOutcome).not.toHaveBeenCalled();
   });
 
-  it('rend le quota si le corps metier echoue apres la preuve', async () => {
-    const ctx = setup({ createError: new BadRequestException('produit invalide') });
+  it('rend le quota après un rejet métier durable, pas une supposition de refus', async () => {
+    const ctx = setup({ createError: new ConflictException({ code: 'ORDER_ATTEMPT_REJECTED', reason: 'invalid_order', message: 'produit invalide' }) });
     await expect(ctx.controller.createOnline('classfood', body())).rejects.toThrow(/produit/);
     expect(ctx.publicOrderGate.release).toHaveBeenCalledOnce();
   });
+
+  it.each([new Error('Réponse Mongo perdue'), new BadRequestException('refus sans décision durable')])(
+    'ne restitue pas le quota après une écriture au résultat incertain (%s)', async (createError) => {
+      const ctx = setup({ createError });
+      await expect(ctx.controller.createOnline('classfood', body())).rejects.toBe(createError);
+      expect(ctx.publicOrderGate.release).not.toHaveBeenCalled();
+    },
+  );
 
   it('rend le quota si une replique gagne la course idempotente sous verrou', async () => {
     const raced = { _id: 'commande', trackingToken: 'secret' };

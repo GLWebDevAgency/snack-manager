@@ -24,8 +24,11 @@ export type BootstrapAdmissionEvidence = Readonly<{
   state: string;
   slot: Date;
   orderId?: string | null;
-  proofHash: string;
-  payloadHash: string;
+  proofHash?: string;
+  payloadHash?: string;
+  historicalImport?: Readonly<{ version: number; bootstrapId: string; importedAt: Date }>;
+  validationOwner?: unknown;
+  rejection?: unknown;
   snapshot?: BootstrapOrderEvidence | null;
   capacity?: Readonly<{ slot: Date; kitchenSeat?: number; deliverySeat?: number; releasedAt?: Date }> | null;
 }>;

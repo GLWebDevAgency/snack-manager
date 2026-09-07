@@ -9,6 +9,8 @@ import { PublicOrderAdmissionService } from './public-order-admission.service';
 import { PublicOrderGate } from './public-order-gate';
 import { SlotsService, type TenantWithId } from '../ordering/slots.service';
 import { addDays, parisWallToUtc, parisYmd } from '../ordering/paris-time';
+import { capacityModels, seedCapacityFixture } from './order-capacity-test-fixtures';
+import { OrderCapacityAvailabilityService } from '../ordering/order-capacity-availability.service';
 
 const TENANT = '507f1f77bcf86cd799439011';
 const PRODUCT = '507f1f77bcf86cd799439012';
@@ -134,6 +136,9 @@ integration('capacité durable après expiration du propriétaire Redis — vrai
   it('ne vend pas deux fois la dernière place quand A validating reprend après le commit de B et le TTL 15s', async () => {
     // Arrange : deux connexions indépendantes, un restaurant, une seule place.
     const slot = parisWallToUtc(addDays(parisYmd(new Date()), 1), 18).toISOString();
+    // The real application now requires a bootstrapped calendar. Only test
+    // fixtures initialize it here; the original one-seat invariant is unchanged.
+    await seedCapacityFixture(dbA, TENANT, slot, 1);
     const tenant = {
       _id: TENANT, account: { status: 'active' }, onlineOrdering: true, closures: [],
       hours: Array.from({ length: 7 }, (_, index) => ({ day: index + 1, dinner: { open: '18:00', close: '22:00' } })),
@@ -152,8 +157,9 @@ integration('capacité durable après expiration du propriétaire Redis — vrai
     let sequence = 0;
 
     function replica(orders: Model<Order>, admissions: Model<PublicOrderAdmission>) {
-      const admission = new PublicOrderAdmissionService(admissions, orders, redis as never);
-      const slots = new SlotsService(orders);
+      const { days, tenants: tenantModel } = capacityModels(orders.db);
+      const admission = new PublicOrderAdmissionService(admissions, orders, redis as never, days, tenantModel);
+      const slots = new SlotsService(new OrderCapacityAvailabilityService(tenantModel, days, admissions, orders));
       const gate = new PublicOrderGate({} as never, redis as never);
       // La preuve humaine n'est pas testée : aucun appel Cloudflare, Stripe ou API distante.
       vi.spyOn(gate, 'authorize').mockImplementation(async () => ({
@@ -203,7 +209,8 @@ integration('capacité durable après expiration du propriétaire Redis — vrai
       expect(redis.acquisitions[1]?.owner).not.toBe(leaseA.owner);
 
       resume.release();
-      await requestA;
+      const outcomeA = await requestA;
+      expect(outcomeA).toMatchObject({ ok: false, error: { status: 409, response: { code: 'ORDER_ATTEMPT_REJECTED', reason: 'slot_unavailable' } } });
 
       // Assert : invariant métier, volontairement RED avant C15 (reçu : 2).
       // Ne pas remplacer par une assertion « 2 » ou un it.fails : ce test doit
@@ -211,6 +218,7 @@ integration('capacité durable après expiration du propriétaire Redis — vrai
       const accepted = await ordersB.find({ tenantId: TENANT, 'pickup.slot': new Date(slot), status: { $ne: 'cancelled' } })
         .select('clientId pickup.slot').lean();
       expect(accepted, 'Une seule commande doit occuper la dernière place après reprise du propriétaire expiré').toHaveLength(1);
+      expect(await admissionsB.countDocuments({ 'capacity.kitchenSeat': { $type: 'number' } })).toBe(1);
     } finally {
       resume.release();
       await requestA;

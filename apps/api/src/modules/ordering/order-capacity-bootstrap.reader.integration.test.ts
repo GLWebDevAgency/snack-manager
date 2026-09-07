@@ -79,6 +79,13 @@ function admission(row: Document, overrides: Document = {}): Document {
     slot: SLOT, orderId: row._id, proofHash: PROOF, payloadHash: PAYLOAD,
     snapshot: null, capacity: null, validationOwner: PRIVATE_SENTINEL, ...overrides };
 }
+function historical(row: Document, overrides: Document = {}): Document {
+  return { _id: orderAdmissionId(TENANT, row.clientId), tenantId: new ObjectId(TENANT), clientId: row.clientId,
+    version: 1, kind: 'historical', channel: row.channel, state: 'created', slot: row.pickup.slot, orderId: row._id,
+    capacity: { slot: row.pickup.slot, kitchenSeat: 0, ...(row.type === 'delivery' ? { deliverySeat: 0 } : {}) },
+    historicalImport: { version: 1, bootstrapId: '11111111-1111-4111-8111-111111111111', importedAt: new Date('2030-05-02T08:00:00.000Z') },
+    ...overrides };
+}
 function frozen(overrides: Document = {}): Document {
   return { _id: new ObjectId(), tenantId: new ObjectId(TENANT), day: DAY, state: 'ready',
     sourceRevision: 3, closedReason: null,
@@ -244,6 +251,80 @@ integration('lecteur bootstrap C15 — vrai Mongo, zéro écriture du lecteur', 
     blocked(result, 'materialization_required');
     expect(result.report?.occupants).toEqual([expect.objectContaining({ orderId: row._id.toHexString(), source: 'committing_snapshot' })]);
     expect(JSON.stringify(observedRows)).not.toContain(PRIVATE_SENTINEL);
+  });
+
+  it.each([{ channel: 'online', type: 'pickup' }, { channel: 'phone', type: 'pickup' },
+    { channel: 'pos', type: 'emporter' }, { channel: 'online', type: 'delivery' }])(
+    'reconnaît un historique réel $channel/$type sans preuve ni double occupation', async ({ channel, type }) => {
+      const row = order(1, { channel, type }); delete row.publicRecovery;
+      await writeDb.collection(MODELS.Order.collection).insertOne(row);
+      await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(historical(row));
+      await writeDb.collection(MODELS.OrderCapacityDay.collection).insertOne(frozen());
+      const before = await stored();
+      const result = await read();
+      expect(result.report).toMatchObject({ status: 'reviewed', issues: [], occupants: [{ source: 'order', orderId: row._id.toHexString() }] });
+      expect(result.report?.days[0]?.slots[0]).toMatchObject({ kitchenUsed: 1, deliveryUsed: type === 'delivery' ? 1 : 0 });
+      const projected = observedRows.find((value) => value.kind === 'historical');
+      for (const key of ['proofHash', 'payloadHash', 'snapshot', 'validationOwner', 'rejection']) expect(projected).not.toHaveProperty(key);
+      expect(await stored()).toEqual(before);
+    });
+
+  it.each([
+    ['validationOwner', null], ['validationOwner', PRIVATE_SENTINEL], ['rejection', null], ['rejection', { private: PRIVATE_SENTINEL }],
+    ['proofHash', PROOF], ['payloadHash', PAYLOAD], ['snapshot', null],
+  ])('refuse le champ interdit historique %s tout en masquant sa valeur privée', async (field, value) => {
+    const row = order(1, { publicRecovery: null });
+    await writeDb.collection(MODELS.Order.collection).insertOne(row);
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(historical(row, { [field as string]: value }));
+    blocked(await read(), 'invalid_admission');
+    expect(JSON.stringify(observedRows)).not.toContain(PRIVATE_SENTINEL);
+    if (field === 'validationOwner' || field === 'rejection') {
+      expect(observedRows.find((entry) => entry.kind === 'historical')?.[field]).toBe('__invalid_persisted_capacity_value__');
+    }
+  });
+
+  it.each([
+    { version: 2 }, { bootstrapId: 'not-a-uuid' }, { importedAt: '2030-05-02T08:00:00.000Z' },
+  ])('ne caste ni ne répare une provenance historique BSON invalide %j', async (patch) => {
+    const row = order(1, { publicRecovery: null });
+    const imported = historical(row);
+    imported.historicalImport = { ...imported.historicalImport, ...patch };
+    await writeDb.collection(MODELS.Order.collection).insertOne(row);
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(imported);
+    blocked(await read(), 'invalid_admission');
+  });
+
+  it('omet même les marqueurs de propriétaire sur C01, mais refuse une provenance import ajoutée', async () => {
+    const row = order();
+    await writeDb.collection(MODELS.Order.collection).insertOne(row);
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(admission(row, { historicalImport: historical(row).historicalImport }));
+    blocked(await read(), 'invalid_admission');
+    const projected = observedRows.find((entry) => entry.kind === 'public');
+    expect(projected).not.toHaveProperty('validationOwner');
+    expect(projected).not.toHaveProperty('rejection');
+  });
+
+  it('ne fabrique pas l’Order manquante à partir d’une admission historique terminale', async () => {
+    const row = order(1, { publicRecovery: null });
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(historical(row));
+    const before = await stored();
+    blocked(await read(), 'missing_order');
+    expect(await stored()).toEqual(before);
+  });
+
+  it('refuse un historique attaché à une Order protégée, sans adopter sa preuve', async () => {
+    const row = order();
+    await writeDb.collection(MODELS.Order.collection).insertOne(row);
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(historical(row));
+    blocked(await read(), 'recovery_binding_mismatch');
+  });
+
+  it('refuse une capacité historique ancienne avec une date de libération texte', async () => {
+    const at = new Date('2029-05-02T09:00:00.000Z');
+    const row = order(1, { publicRecovery: null, pickup: { slot: at } });
+    await writeDb.collection(MODELS.Order.collection).insertOne(row);
+    await writeDb.collection(MODELS.PublicOrderAdmission.collection).insertOne(historical(row, { capacity: { slot: at, releasedAt: '2029-05-02T10:00:00.000Z' } }));
+    blocked(await read(), 'invalid_admission');
   });
 
   it('ne lit aucune Order, admission ou journée d’un autre tenant', async () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SlotsService, type TenantWithId } from './slots.service';
+import { buildOrderCapacityCalendar } from './order-capacity-calendar';
 
 const tenant = {
   _id: '507f1f77bcf86cd799439011', onlineDelivery: true, account: { status: 'active' },
@@ -11,8 +12,17 @@ const tenant = {
 const slot = '2026-09-06T10:00:00.000Z';
 
 function setup(kitchen: number, delivery: number) {
-  const aggregate = vi.fn().mockImplementation(async (pipeline: { $match?: { type?: string } }[]) => [{ _id: new Date(slot), count: pipeline[0]?.$match?.type === 'delivery' ? delivery : kitchen }]);
-  return { service: new SlotsService({ aggregate } as never), aggregate };
+  const previewDay = vi.fn(async (_tenantId: string, day: string) => {
+    const grid = buildOrderCapacityCalendar(tenant, day);
+    return { day, sourceRevision: 1, frozen: true, closedReason: grid.emptyReason, slots: grid.slots };
+  });
+  const readDay = vi.fn(async (tenantId: string, day: string) => {
+    const plan = await previewDay(tenantId, day);
+    return { ...plan, slots: plan.slots.map((entry) => ({ ...entry,
+      kitchenTaken: entry.at.toISOString() === slot ? kitchen : 0,
+      deliveryTaken: entry.at.toISOString() === slot ? delivery : 0 })) };
+  });
+  return { service: new SlotsService({ readDay, previewDay } as never) };
 }
 afterEach(() => vi.useRealTimers());
 

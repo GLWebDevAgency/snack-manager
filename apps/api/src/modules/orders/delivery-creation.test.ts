@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CreateOrderSchema } from '@sm/contracts';
 import { OrdersService } from './orders.service';
+import { pricingAdmissionPort } from './order-pricing-test-fixtures';
 
 const tenantId = '507f1f77bcf86cd799439011';
 const productId = '507f1f77bcf86cd799439012';
@@ -33,14 +34,17 @@ function setup(discount = 0, capabilities = ['online', 'delivery']) {
   const counters = { findOneAndUpdate: vi.fn().mockResolvedValue({ seq: 12 }) };
   const tenants = { findById: vi.fn(() => ({ lean: async () => tenant })) };
   const redis = { publish: vi.fn().mockResolvedValue(1) };
-  const service = new OrdersService(orders as never, products as never, counters as never, promotions as never, redis as never, {} as never, tenants as never, { pourTenant: async () => capabilities } as never, {} as never);
+  const admissions = pricingAdmissionPort((candidate) => orders.create(candidate));
+  const service = new OrdersService(orders as never, products as never, counters as never, promotions as never, redis as never, {} as never, tenants as never, { pourTenant: async () => capabilities } as never, {} as never, admissions as never);
   return { service, orders, products, promotions, counters, tenants, redis, existing };
 }
 
 describe('création livraison : prix, promotion et compensation', () => {
   it.each(['online', 'pos', 'phone'] as const)('prouve l’absence de tentative dès la création %s sans exposer le protocole au temps réel', async (channel) => {
     const ctx = setup(0, ['bo']);
-    const dto = CreateOrderSchema.parse({ ...request, channel, type: 'pickup', delivery: undefined });
+    // Constructor/privacy unit: unslotted ticket. Slotted publication is proven
+    // by the real durable-journal suite, not by this pricing-only port.
+    const dto = CreateOrderSchema.parse({ ...request, channel, type: 'emporter', pickup: undefined, delivery: undefined });
     await ctx.service.createWithOutcome(tenantId, dto, 'client');
     expect(ctx.orders.create).toHaveBeenCalledWith(expect.objectContaining({
       channel, paymentFlow: expect.objectContaining({ origin: 'created_v1', phase: 'open', attempt: null }),

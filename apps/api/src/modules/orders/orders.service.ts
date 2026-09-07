@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -24,6 +25,8 @@ import {
   type OrderTracking,
   ordersChannel,
   WS_EVENTS,
+  StaffOrderAttemptResultSchema,
+  StaffPhoneOrderAttemptRequestSchema,
 } from '@sm/contracts';
 import type { Counter, Order, Product, Promotion, Tenant } from '@sm/db';
 import { REDIS_PUB } from '../../redis.module';
@@ -38,6 +41,7 @@ import { PaymentsService } from '../ordering/payments.service';
 import { promotionCandidatesFilter, selectCartPromotion } from './cart-promotion';
 import { assertPublicRecoveryReplay, type PublicRecoveryBinding } from './order-recovery';
 import { PublicOrderAdmissionService, PublicOrderSnapshotInvalid } from './public-order-admission.service';
+import type { OrderAdmissionBinding } from './order-admission-identity';
 
 /**
  * Le plafond de lecture d'une liste de commandes.
@@ -71,6 +75,23 @@ export class OrdersService {
       ordersChannel(tenantId),
       JSON.stringify({ event, payload }),
     );
+  }
+
+  async tenantForStaffSlots(tenantId: string) {
+    if ((await this.readFilter(tenantId, {})).channel) throw new ForbiddenException('La prise de commande téléphone nécessite la caisse.');
+    const tenant = await this.tenants.findById(tenantId).select('_id settings hours closures').lean();
+    if (!tenant) throw new NotFoundException('Établissement introuvable');
+    return tenant;
+  }
+
+  async staffAttempt(tenantId: string, dto: CreateOrder, abandon: boolean) {
+    if ((await this.readFilter(tenantId, {})).channel) throw new ForbiddenException('La prise de commande téléphone nécessite la caisse.');
+    if (dto.channel !== 'phone' || dto.type !== 'pickup' || !dto.pickup || dto.payment?.method !== 'counter'
+      || dto.payment.tender != null || dto.loyaltyMemberId || dto.loyaltyEarnOperationId) throw new BadRequestException('Tentative téléphone invalide.');
+    if (!this.admissions) throw new ServiceUnavailableException('La reprise de commande est indisponible.');
+    const result = await this.admissions.observeInternal(tenantId, dto, 'staff', abandon);
+    return StaffOrderAttemptResultSchema.parse({ ...result, tenantId, clientId: dto.clientId, channel: 'phone',
+      ...(result.state === 'created' ? { order: JSON.parse(JSON.stringify(result.order.toObject())) } : {}) });
   }
 
   /** Filtre tenant et métier unique pour la liste et sa projection count-only. */
@@ -210,7 +231,13 @@ export class OrdersService {
     actor: string,
     deviceRef: string | null = null,
   ) {
-    return (await this.createWithOutcome(tenantId, dto, actor, deviceRef)).order;
+    if (!['pos', 'phone'].includes(dto.channel)) throw new ForbiddenException('Le canal de cette route est caisse ou téléphone.');
+    if (dto.channel === 'phone') {
+      const attempt = StaffPhoneOrderAttemptRequestSchema.safeParse(dto);
+      if (!attempt.success) throw new BadRequestException('Vérifiez la commande et son créneau téléphone ; encaissez ensuite la commande existante.');
+      dto = attempt.data;
+    }
+    return (await this.createWithOutcome(tenantId, dto, actor, deviceRef, undefined, 'staff')).order;
   }
 
   /**
@@ -226,37 +253,48 @@ export class OrdersService {
     actor: string,
     deviceRef: string | null = null,
     recovery?: PublicRecoveryBinding,
+    origin: 'legacy' | 'staff' = 'legacy',
   ) {
     const permitted = await this.readFilter(tenantId, {});
     if (permitted.channel && dto.channel !== permitted.channel) {
       throw new ForbiddenException('Cette offre permet uniquement les commandes en ligne.');
     }
-    if (!recovery && this.admissions) await this.admissions.assertLegacyKeyAvailable(tenantId, dto.clientId);
     if (recovery && (!this.admissions || dto.channel !== 'online')) throw new ForbiddenException('Admission publique requise');
+    let admissionBinding: OrderAdmissionBinding | undefined = recovery;
+    if (!recovery && dto.pickup) {
+      if (!this.admissions) throw new ServiceUnavailableException('La réservation des commandes est indisponible.');
+      const prepared = await this.admissions.prepareInternal(tenantId, dto, origin);
+      if (prepared.order) return { order: await this.withTrackingToken(prepared.order), created: false as const };
+      admissionBinding = prepared.binding!;
+    } else if (!recovery && this.admissions) {
+      // A body which removes its slot must not bypass a previously slotted admission.
+      await this.admissions.assertLegacyKeyAvailable(tenantId, dto.clientId);
+    }
     const existing = await this.orders.findOne({ ...permitted, clientId: dto.clientId }, '+publicRecovery');
     if (existing) {
       assertPublicRecoveryReplay(existing, recovery);
       return { order: await this.withTrackingToken(existing), created: false as const };
     }
 
-    const ids = [...new Set(dto.lines.map((l) => l.productId))];
-    const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
-    const { subtotal, lines } = priceOrderLines(prods, dto.lines);
+    const candidateId = admissionBinding ? new Types.ObjectId() : undefined;
+    let admissionCommitStarted = false;
+    let promotion: Awaited<ReturnType<OrdersService['resoudrePromotion']>> = null;
+    try {
+      const ids = [...new Set(dto.lines.map((l) => l.productId))];
+      const prods = await this.products.find({ _id: { $in: ids }, tenantId, active: true }).lean();
+      const { subtotal, lines } = priceOrderLines(prods, dto.lines);
 
     // LA PROMOTION, RÉSOLUE CÔTÉ SERVEUR comme les prix.
     //
     // Le corps ne porte qu'un CODE : le montant est calculé ici contre la
     // promotion en base. Un client qui enverrait sa propre remise n'obtient
     // rien — même règle que pour les prix, et pour la même raison.
-    const promotion = await this.resoudrePromotion(tenantId, dto, subtotal, lines);
+      promotion = await this.resoudrePromotion(tenantId, dto, subtotal, lines);
 
     // Ce que le client doit RÉELLEMENT — le seul montant qui fasse autorité
     // pour l'encaissement, le rendu monnaie et le ticket.
     const subtotalAfterDiscount = subtotal - (promotion?.discount.amount ?? 0);
 
-    const candidateId = recovery ? new Types.ObjectId() : undefined;
-    let admissionCommitStarted = false;
-    try {
       const number = await this.nextNumber(tenantId);
       const tenant = dto.type === 'delivery' ? await this.tenants.findById(tenantId).lean() : null;
       if (dto.type === 'delivery' && !tenant) throw new NotFoundException('Établissement introuvable');
@@ -308,9 +346,11 @@ export class OrdersService {
           : null,
         note: dto.note ?? null,
       };
-      if (recovery) {
+      if (admissionBinding) {
         admissionCommitStarted = true;
-        const outcome = await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate);
+        const outcome = recovery
+          ? await this.admissions!.commit(tenantId, dto.clientId, recovery, candidate)
+          : await this.admissions!.commitInternal(tenantId, dto.clientId, admissionBinding, candidate);
         if (!outcome.created) await this.rendreReservation(tenantId, promotion);
         return outcome;
       }
@@ -318,6 +358,26 @@ export class OrdersService {
       this.publish(tenantId, WS_EVENTS.orderCreated, this.orderEventPayload(order));
       return { order, created: true as const };
     } catch (err: unknown) {
+      if (admissionBinding && !recovery) {
+        if (err instanceof BadRequestException || err instanceof ConflictException || err instanceof ForbiddenException || err instanceof NotFoundException) {
+          try {
+            const winner = await this.admissions!.rejectInternal(tenantId, dto.clientId, admissionBinding,
+              err instanceof ForbiddenException ? 'unavailable' : 'invalid_order');
+            if (String(winner._id) !== String(candidateId)) await this.rendreReservation(tenantId, promotion);
+            return { order: winner, created: String(winner._id) === String(candidateId) };
+          } catch (decision) {
+            // Un refus de prix avant le CAS reste explicite pour l'utilisateur,
+            // mais seulement après preuve durable de la fermeture. Une erreur
+            // de lecture ne doit jamais se transformer en faux refus définitif.
+            const response = decision instanceof ConflictException ? decision.getResponse() : null;
+            err = !admissionCommitStarted && response && typeof response === 'object'
+              && (response as { code?: unknown }).code === 'ORDER_ATTEMPT_REJECTED'
+              ? new ConflictException({ ...response, message: err.message }) : decision;
+          }
+        } else if (!admissionCommitStarted) {
+          await this.admissions!.releaseInternalValidation(tenantId, dto.clientId, admissionBinding);
+        }
+      }
       // LA RÉSERVATION EST RENDUE : la commande n'existera pas.
       //
       // `resoudrePromotion` incrémente `usageCount` AVANT la création, et il le
@@ -333,7 +393,7 @@ export class OrdersService {
       // création de commande avalée.
       // Une réponse perdue après committing n'autorise pas à rendre la promo
       // gagnante : son snapshot reste matérialisable par la reprise publique.
-      if (!recovery || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
+      if (!admissionBinding || !admissionCommitStarted || err instanceof PublicOrderSnapshotInvalid || await this.admissions!.candidateLost(tenantId, dto.clientId, candidateId)) {
         await this.rendreReservation(tenantId, promotion);
       }
 
@@ -587,6 +647,7 @@ export class OrdersService {
     await this.payments.cancelOrder(id, tenantId, actor, reason);
     const order = await this.byId(tenantId, id);
     if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
+    if (order.pickup?.slot && this.admissions) await this.admissions.releaseCancelled(tenantId, order.clientId);
     await this.audit.log({ tenantId, actor, action: 'order.cancel', targetId: id,
       meta: { reason, number: order.number, total: order.totals.total, confirmation: 'owner-password' } });
     this.publish(tenantId, WS_EVENTS.orderUpdated, this.orderEventPayload(order));
@@ -609,6 +670,7 @@ export class OrdersService {
       { sub: staffId, tenantId, role: valideur.role, kind: 'staff' }, reason);
     const order = await this.byId(tenantId, id);
     if (order.status !== 'cancelled') throw new ConflictException('Annulation non confirmée — actualisez la commande.');
+    if (order.pickup?.slot && this.admissions) await this.admissions.releaseCancelled(tenantId, order.clientId);
     await this.audit.log({
       tenantId,
       staffId,

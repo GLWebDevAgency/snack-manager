@@ -4,6 +4,7 @@ import { ProductSchema } from '@sm/db';
 import { CreateOrderSchema, DeliveryQuoteRequestSchema } from '@sm/contracts';
 import { DeliveryService } from './delivery.service';
 import { OrdersService } from '../orders/orders.service';
+import { pricingAdmissionPort } from '../orders/order-pricing-test-fixtures';
 
 const tenantId = '507f1f77bcf86cd799439011';
 const productId = '507f1f77bcf86cd799439012';
@@ -50,7 +51,8 @@ function fixture(candidates: Record<string, unknown>[] = [], zoneOverrides: Reco
   const payments = { createIntent: vi.fn(), cancelOrder: vi.fn() };
   const service = new DeliveryService(tenants as never, products as never, orders as never, audit as never, redis as never, promotions as never);
   const writer = new OrdersService(orders as never, products as never, counters as never, promotions as never, redis as never,
-    audit as never, tenants as never, { pourTenant: async () => ['online', 'delivery'] } as never, payments as never);
+    audit as never, tenants as never, { pourTenant: async () => ['online', 'delivery'] } as never, payments as never,
+    pricingAdmissionPort((candidate) => orders.create(candidate)) as never);
   const noWrites = () => {
     for (const spy of [writes.findOneAndUpdate, writes.updateOne, products.updateOne, products.bulkWrite, orders.create,
       audit.log, redis.publish, counters.findOneAndUpdate, payments.createIntent, payments.cancelOrder]) expect(spy).not.toHaveBeenCalled();

@@ -24,7 +24,7 @@ export function isPublicOrderAdmission(admission: { kind?: unknown }): boolean {
  * Un import historique, dont le corps initial est inconnu, ne passe pas ici.
  */
 export function internalOrderAdmissionBinding(kind: 'legacy' | 'staff', tenantId: string, body: CreateOrder): OrderAdmissionBinding {
-  if ((kind === 'legacy' && body.channel !== 'online')
+  if (!['legacy', 'staff'].includes(kind) || (kind === 'legacy' && body.channel !== 'online')
     || (kind === 'staff' && !['pos', 'phone'].includes(body.channel))) throw recoveryNotFound();
   return {
     version: 1, kind, channel: body.channel,
@@ -41,7 +41,7 @@ export function orderAdmissionChannel(admission: { kind?: unknown; channel?: unk
   throw recoveryNotFound();
 }
 
-export function assertOrderAdmissionBinding(admission: { kind?: unknown; channel?: unknown; proofHash: unknown; payloadHash: unknown }, binding: OrderAdmissionBinding): void {
+export function assertOrderAdmissionBinding(admission: { kind?: unknown; channel?: unknown; proofHash?: unknown; payloadHash?: unknown }, binding: OrderAdmissionBinding): void {
   const kind = admission.kind === undefined ? 'public' : admission.kind;
   if (kind !== (binding.kind ?? 'public') || orderAdmissionChannel(admission) !== orderAdmissionChannel(binding)
     || !sameRecoveryHash(admission.proofHash, binding.proofHash)

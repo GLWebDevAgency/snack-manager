@@ -4,7 +4,7 @@ import { ORDER_CAPACITY_INDEXES, type Order, type OrderCapacityDay, type PublicO
 import { formatDay, parisYmd } from '../ordering/paris-time';
 import { recoveryNotFound } from './order-recovery';
 import { assertOrderAdmissionBinding, orderAdmissionChannel, orderAdmissionId, orderAdmissionKindFilter, publicRecoveryOfAdmission, type OrderAdmissionBinding } from './order-admission-identity';
-import { PublicOrderSnapshotInvalid } from './public-order-admission.service';
+import { PublicOrderSnapshotInvalid } from './order-admission.errors';
 import { assertOrderCapacityIndexesReady } from './order-capacity-index-readiness';
 
 const DURABLE = { writeConcern: { w: 'majority' as const, j: true, wtimeout: 10_000 } };

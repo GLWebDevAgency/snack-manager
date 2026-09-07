@@ -46,21 +46,41 @@ function orderEvidence(value: unknown): value is BootstrapOrderEvidence {
     && (value.status === 'cancelled' || (value.type !== 'delivery' && value.publicRecovery == null) || date(value.slot))
     && (value.publicRecovery == null || (value.channel === 'online' && recovery(value.publicRecovery)));
 }
+/** Imported terminal claims have no C01 compatibility/default. Validate their
+ * shape even when old; the contextual Order/type/release checks remain below. */
+function historicalCapacity(value: unknown, slot: Date): boolean {
+  if (!record(value) || !date(value.slot) || value.slot.getTime() !== slot.getTime()) return false;
+  if (value.releasedAt !== undefined) {
+    return date(value.releasedAt) && value.kitchenSeat === undefined && value.deliverySeat === undefined;
+  }
+  return typeof value.kitchenSeat === 'number' && Number.isInteger(value.kitchenSeat)
+    && value.kitchenSeat >= 0 && value.kitchenSeat <= 99
+    && (value.deliverySeat === undefined || (typeof value.deliverySeat === 'number'
+      && Number.isInteger(value.deliverySeat) && value.deliverySeat >= 0 && value.deliverySeat <= 49));
+}
 function admissionEvidence(value: unknown): value is BootstrapAdmissionEvidence {
   if (!record(value) || !identifier(value.tenantId) || !clientKey(value.clientId) || value.version !== 1
     || !hash(value.admissionId) || value.admissionId !== orderAdmissionId(value.tenantId, value.clientId)
-    || !hash(value.proofHash) || !hash(value.payloadHash) || !date(value.slot)
+    || !date(value.slot)
     || !STATES.includes(value.state as string) || (value.orderId != null && !identifier(value.orderId))) return false;
+  if (value.kind === 'historical') {
+    const source = value.historicalImport;
+    return value.state === 'created' && identifier(value.orderId) && CHANNELS.includes(value.channel as string)
+      && value.proofHash === undefined && value.payloadHash === undefined && value.snapshot === undefined
+      && value.validationOwner === undefined && value.rejection === undefined && historicalCapacity(value.capacity, value.slot)
+      && record(source) && source.version === 1 && typeof source.bootstrapId === 'string' && UUID.test(source.bootstrapId) && date(source.importedAt);
+  }
+  if (!hash(value.proofHash) || !hash(value.payloadHash) || value.historicalImport !== undefined) return false;
   try { orderAdmissionChannel(value); return true; } catch { return false; }
 }
 function sameIdentity(admission: BootstrapAdmissionEvidence, order: BootstrapOrderEvidence): boolean {
   return order.orderId === admission.orderId && order.tenantId === admission.tenantId && order.clientId === admission.clientId
-    && order.channel === orderAdmissionChannel(admission) && order.slot?.getTime() === admission.slot.getTime();
+    && order.channel === (admission.kind === 'historical' ? admission.channel : orderAdmissionChannel(admission)) && order.slot?.getTime() === admission.slot.getTime();
 }
 function sameBinding(admission: BootstrapAdmissionEvidence, order: BootstrapOrderEvidence): boolean {
   const stored = order.publicRecovery;
   return isPublicOrderAdmission(admission)
-    ? Boolean(stored && stored.version === 1 && sameRecoveryHash(stored.proofHash, admission.proofHash)
+    ? Boolean(stored && stored.version === 1 && admission.proofHash && admission.payloadHash && sameRecoveryHash(stored.proofHash, admission.proofHash)
       && sameRecoveryHash(stored.payloadHash, admission.payloadHash))
     : stored == null;
 }

@@ -1,4 +1,4 @@
-import { Schema, type InferSchemaType } from 'mongoose';
+import { Schema, Types, type InferSchemaType } from 'mongoose';
 
 const integer = { validator: Number.isInteger, message: 'Une capacité doit être entière.' };
 const safeInteger = { validator: Number.isSafeInteger, message: 'Une révision doit être un entier sûr.' };
@@ -17,6 +17,43 @@ export const OrderCapacityClaimSchema = new Schema({
   deliverySeat: { type: Number, min: 0, max: 49, validate: integer },
   releasedAt: { type: Date },
 }, { _id: false });
+
+/** Provenance d'un import d'Order existante, jamais une preuve de requête/reprise. */
+export const HistoricalOrderAdmissionImportSchema = new Schema({
+  version: { type: Number, enum: [1], required: true, immutable: true },
+  bootstrapId: { type: String, required: true, match: UUID, immutable: true },
+  importedAt: { type: Date, required: true, immutable: true },
+}, { _id: false, strict: 'throw' });
+export type HistoricalOrderAdmissionImport = InferSchemaType<typeof HistoricalOrderAdmissionImportSchema>;
+
+/** Validation locale d'un import terminal. L'existence/annulation de l'Order,
+ * le type livraison et les bornes du calendrier sont vérifiés par le store.
+ * Le ODM caste ses Date/ObjectId ; un lecteur de données BSON persistées doit
+ * donc encore refuser explicitement les types bruts corrompus avant construction.
+ */
+export function validHistoricalOrderAdmission(value: unknown): boolean {
+  if (!record(value) || value.kind !== 'historical' || value.version !== 1 || value.state !== 'created'
+    || typeof value._id !== 'string' || !/^[a-f0-9]{64}$/.test(value._id)
+    || !(value.tenantId instanceof Types.ObjectId) || !(value.orderId instanceof Types.ObjectId)
+    || typeof value.clientId !== 'string' || value.clientId.trim().length === 0
+    || !['online', 'pos', 'phone'].includes(value.channel as string)
+    || !(value.slot instanceof Date) || !Number.isFinite(value.slot.getTime())
+    || ['proofHash', 'payloadHash', 'validationOwner', 'snapshot', 'rejection'].some((key) => value[key] !== undefined)) return false;
+  const provenance = value.historicalImport;
+  if (!record(provenance) || provenance.version !== 1 || typeof provenance.bootstrapId !== 'string'
+    || !UUID.test(provenance.bootstrapId) || !(provenance.importedAt instanceof Date)
+    || !Number.isFinite(provenance.importedAt.getTime())) return false;
+  const claim = value.capacity;
+  if (!record(claim) || !(claim.slot instanceof Date) || claim.slot.getTime() !== value.slot.getTime()) return false;
+  if (claim.releasedAt !== undefined) {
+    return claim.releasedAt instanceof Date && Number.isFinite(claim.releasedAt.getTime())
+      && claim.kitchenSeat === undefined && claim.deliverySeat === undefined;
+  }
+  return typeof claim.kitchenSeat === 'number' && Number.isInteger(claim.kitchenSeat)
+    && claim.kitchenSeat >= 0 && claim.kitchenSeat <= 99
+    && (claim.deliverySeat === undefined || (typeof claim.deliverySeat === 'number'
+      && Number.isInteger(claim.deliverySeat) && claim.deliverySeat >= 0 && claim.deliverySeat <= 49));
+}
 
 const CapacitySlotSchema = new Schema({
   at: { type: Date, required: true },

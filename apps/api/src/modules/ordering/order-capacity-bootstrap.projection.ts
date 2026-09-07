@@ -22,6 +22,10 @@ function array(path: string, entry: Document): Document {
   return { $cond: [{ $isArray: path }, { $map: { input: path, as: 'entry', in: object('$$entry', entry) } }, malformed(path)] };
 }
 function recovery(path: string): Document { return object(path, fields(path, ['version', 'proofHash', 'payloadHash'])); }
+function historicalPresence(path: string): Document {
+  return { $cond: [{ $eq: ['$kind', 'historical'] },
+    { $cond: [{ $eq: [{ $type: path }, 'missing'] }, '$$REMOVE', { $literal: INVALID }] }, '$$REMOVE'] };
+}
 function order(path: string): Document {
   return { ...fields(path, ['_id', 'tenantId', 'clientId', 'channel', 'type', 'status']),
     pickup: object(`${path}.pickup`, fields(`${path}.pickup`, ['slot'])),
@@ -48,6 +52,10 @@ export const CAPACITY_BOOTSTRAP_PROJECTIONS = {
   orders: order('$$ROOT'),
   admissions: {
     ...fields('$$ROOT', ['_id', 'tenantId', 'clientId', 'version', 'kind', 'channel', 'state', 'slot', 'orderId', 'proofHash', 'payloadHash']),
+    // Only presence is necessary for historical integrity; never expose owners.
+    validationOwner: historicalPresence('$validationOwner'),
+    rejection: historicalPresence('$rejection'),
+    historicalImport: object('$historicalImport', fields('$historicalImport', ['version', 'bootstrapId', 'importedAt'])),
     snapshot: object('$snapshot', order('$snapshot')),
     capacity: object('$capacity', fields('$capacity', ['slot', 'kitchenSeat', 'deliverySeat', 'releasedAt'])),
   },
@@ -77,7 +85,8 @@ export function bootstrapAdmissionProjection(value: Document): BootstrapAdmissio
   return { admissionId: value._id, tenantId: bsonId(value.tenantId), clientId: value.clientId,
     version: value.version, kind: value.kind, channel: value.channel, state: value.state, slot: value.slot,
     orderId: value.orderId == null ? value.orderId : bsonId(value.orderId), proofHash: value.proofHash, payloadHash: value.payloadHash,
-    snapshot: orderFootprint(value.snapshot), capacity: value.capacity } as BootstrapAdmissionEvidence;
+    snapshot: orderFootprint(value.snapshot), capacity: value.capacity, historicalImport: value.historicalImport,
+    validationOwner: value.validationOwner, rejection: value.rejection } as BootstrapAdmissionEvidence;
 }
 export function bootstrapDayProjection(value: Document): BootstrapFrozenDay {
   return { tenantId: bsonId(value.tenantId), day: value.day, state: value.state,
