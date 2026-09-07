@@ -28,9 +28,12 @@ export function handoffTestDatabase(raw: string) {
 }
 const database = process.env.DELIVERY_HANDOFF_TEST_MONGO_URL ? handoffTestDatabase(process.env.DELIVERY_HANDOFF_TEST_MONGO_URL) : null;
 describe('cible Mongo des remises', () => {
+  const authenticatedFixture = new URL('mongodb://localhost/snackmanager_delivery_handoff_test_ci');
+  authenticatedFixture.username = 'fixture';
+  authenticatedFixture.password = 'fixture';
   it.each(['mongodb://remote.example/snackmanager_delivery_handoff_test_ci', 'mongodb://127.0.0.1/admin',
     'mongodb://localhost/snackmanager_delivery_handoff_test_ci?replicaSet=other',
-    'mongodb://fixture:fixture@localhost/snackmanager_delivery_handoff_test_ci',
+    authenticatedFixture.toString(),
     'mongodb+srv://localhost/snackmanager_delivery_handoff_test_ci'])('refuse une cible non possédée %s', uri => {
     expect(() => handoffTestDatabase(uri)).toThrow();
   });
