@@ -6,6 +6,7 @@ import {
   PHONE_ORDER_ATTEMPT_KEY, preparePhoneOrderAttempt, readPhoneOrderAttempt,
   markPhoneOrderUncertain, recordPhoneOrderReceipt, archiveReceivedPhoneOrderAttempt,
   readLastPhoneOrderReceipt,
+  recordPhoneOrderResult, releaseRejectedPhoneOrderAttempt, assertPhoneOrderPurgeSafe,
 } from './phone-order-attempt';
 
 const TENANT = '507f1f77bcf86cd799439011';
@@ -13,7 +14,7 @@ const OTHER_TENANT = '507f1f77bcf86cd799439022';
 const ORDER = '507f1f77bcf86cd799439033';
 const body = () => ({
   channel: 'phone' as const, type: 'pickup' as const,
-  lines: [{ productId: 'product-1', options: [{ groupKey: 'cheese', choiceKey: 'blue' }], removed: ['oignon'], qty: 1, note: 'Sans sel' }],
+  lines: [{ productId: '507f1f77bcf86cd799439099', options: [{ groupKey: 'cheese', choiceKey: 'blue' }], removed: ['oignon'], qty: 1, note: 'Sans sel' }],
   pickup: { slot: '2026-09-06T18:30:00.000Z', customerName: 'Recette téléphone', customerPhone: '0000000000' },
   payment: { method: 'counter' as const, tender: null }, note: 'Recette uniquement',
 });
@@ -39,6 +40,47 @@ function serverOrder(clientId: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe('journal durable de la prise de commande téléphone', () => {
+  it('conserve le propriétaire du brouillon acquis, jamais celui du second onglet', async () => {
+    const { storage } = store();
+    const first = await preparePhoneOrderAttempt(storage, TENANT, body(), '11111111-1111-4111-8111-111111111111');
+    const second = await preparePhoneOrderAttempt(storage, TENANT, body(), '22222222-2222-4222-8222-222222222222');
+    expect(first.draftId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(second.draftId).toBe(first.draftId);
+  });
+
+  it('n’autorise une nouvelle clé qu’après un rejet serveur lié à cette tentative', async () => {
+    const { storage } = store();
+    const attempt = await preparePhoneOrderAttempt(storage, TENANT, body());
+    await expect(releaseRejectedPhoneOrderAttempt(storage, TENANT, attempt.clientId)).rejects.toThrow();
+    for (const result of [
+      { state: 'rejected', code: 'ORDER_ATTEMPT_REJECTED', reason: 'invalid_order', message: 'Refus' },
+      { tenantId: OTHER_TENANT, clientId: attempt.clientId, channel: 'phone', state: 'rejected', code: 'ORDER_ATTEMPT_REJECTED', reason: 'invalid_order', message: 'Refus' },
+      { tenantId: TENANT, clientId: attempt.clientId, channel: 'online', state: 'rejected', code: 'ORDER_ATTEMPT_REJECTED', reason: 'invalid_order', message: 'Refus' },
+    ]) await expect(recordPhoneOrderResult(storage, TENANT, attempt.clientId, result)).rejects.toThrow();
+    const rejected = await recordPhoneOrderResult(storage, TENANT, attempt.clientId, {
+      tenantId: TENANT, clientId: attempt.clientId, channel: 'phone', state: 'rejected',
+      code: 'ORDER_ATTEMPT_REJECTED', reason: 'slot_unavailable', message: 'Créneau complet',
+    });
+    expect(rejected.state).toBe('rejected');
+    await expect(archiveReceivedPhoneOrderAttempt(storage, TENANT, attempt.clientId)).rejects.toThrow();
+    await expect(recordPhoneOrderReceipt(storage, TENANT, attempt.clientId, serverOrder(attempt.clientId))).rejects.toThrow();
+    await releaseRejectedPhoneOrderAttempt(storage, TENANT, attempt.clientId);
+    expect(await readPhoneOrderAttempt(storage, TENANT)).toBeNull();
+    expect((await preparePhoneOrderAttempt(storage, TENANT, body())).clientId).not.toBe(attempt.clientId);
+  });
+
+  it('bloque toute purge d’une tentative active ou illisible mais pas d’un reçu archivé', async () => {
+    const { storage } = store();
+    await expect(assertPhoneOrderPurgeSafe(storage)).resolves.toBeUndefined();
+    const attempt = await preparePhoneOrderAttempt(storage, TENANT, body());
+    await expect(assertPhoneOrderPurgeSafe(storage)).rejects.toThrow();
+    await recordPhoneOrderReceipt(storage, TENANT, attempt.clientId, serverOrder(attempt.clientId));
+    await expect(assertPhoneOrderPurgeSafe(storage)).rejects.toThrow();
+    await archiveReceivedPhoneOrderAttempt(storage, TENANT, attempt.clientId);
+    await expect(assertPhoneOrderPurgeSafe(storage)).resolves.toBeUndefined();
+    await storage.setItem(PHONE_ORDER_ATTEMPT_KEY, '{broken');
+    await expect(assertPhoneOrderPurgeSafe(storage)).rejects.toThrow();
+  });
   it('ne publie la tentative et son UUID v4 qu’après la fin de la persistance', async () => {
     const { storage } = store();
     let unblock!: () => void;
@@ -123,7 +165,7 @@ describe('journal durable de la prise de commande téléphone', () => {
     const input = body();
     const attempt = await preparePhoneOrderAttempt(storage, TENANT, {
       ...input, lines: [
-        { productId: 'product-1' },
+        { productId: '507f1f77bcf86cd799439099' },
         { ...input.lines[0], removed: [' oignon '], options: [
           { groupKey: 'cheese', choiceKey: 'blue' }, { groupKey: 'cheese', choiceKey: 'blue' },
         ] },
@@ -132,7 +174,7 @@ describe('journal durable de la prise de commande téléphone', () => {
     // Le service appelle ce helper avec des produits .lean() ; son type DB
     // inféré porte encore les méthodes DocumentArray absentes de ce JSON réel.
     const products = [{
-      _id: 'product-1', name: 'Produit serveur', price: 1400, outOfStock: false,
+      _id: '507f1f77bcf86cd799439099', name: 'Produit serveur', price: 1400, outOfStock: false,
       variants: [], optionGroups: [{ key: 'cheese', name: 'Fromage', type: 'multi', min: 0, max: 2,
         choices: [{ key: 'blue', name: 'Bleu', priceDelta: 100 }], perVariant: {} }],
     }] as unknown as Parameters<typeof priceOrderLines>[0];

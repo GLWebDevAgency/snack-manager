@@ -1,5 +1,5 @@
 /**
- * Journal préparatoire C15-B, sans réseau ni branchement au POS.
+ * Journal C15-B. Le réseau reste fourni par le flux téléphone, jamais la file.
  *
  * Toujours injecter client.tenantStore : son verrou revalide l'appairage,
  * contrairement à un stockage brut. Enregistrer avant POST, conserver la
@@ -7,16 +7,16 @@
  * ticket. Le corps reste disponible pour réparer le journal local ; appeler
  * archiveReceived seulement APRÈS cette réparation durable et le vidage sûr.
  *
- * TODO intégration : inscrire PHONE_ORDER_ATTEMPT_KEY dans KEYS/purge POS.
- * TODO protocole staff : aucun état rejected ni abandon n'est exposé tant
- * qu'un reçu serveur ne prouve pas la clôture interdisant un POST retardé.
- * Un HTTP 409, ou le contrat de reprise PUBLIC, n'apporte pas cette preuve.
+ * Un HTTP 409, ou le contrat de reprise PUBLIC, ne prouve pas la clôture.
+ * Seul le résultat authentifié staff lié à l'identité autorise un rejet.
  * Pas de TTL : une tentative incertaine ne devient jamais une nouvelle vente.
  */
-import { CreateOrderSchema, OrderStatusSchema, type CreateOrder, type OrderStatus } from '@sm/contracts';
+import { CreateOrderSchema, OrderStatusSchema, StaffOrderAttemptResultSchema, StaffPhoneOrderAttemptRequestSchema, PublicOrderRejectionReasonSchema,
+  type CreateOrder, type OrderStatus, type PublicOrderRejectionReason } from '@sm/contracts';
 import { mutateStoreItem, uuid, type KeyValueStore } from '@sm/client-core';
+import { KEYS } from './pos-state';
 
-export const PHONE_ORDER_ATTEMPT_KEY = 'sm.pos.phone-order-attempt.v1';
+export const PHONE_ORDER_ATTEMPT_KEY = KEYS.phoneOrderAttempt;
 type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
 type PhoneBody = CreateOrder & {
   channel: 'phone'; type: 'pickup';
@@ -45,9 +45,12 @@ interface AttemptBase {
   readonly clientId: string;
   readonly createdAt: number;
   readonly body: DeepReadonly<PhoneBody>;
+  /** UUID du brouillon de cet onglet. Une reprise ne possède pas son autre ticket. */
+  readonly draftId?: string;
 }
 export type ReceivedPhoneOrderAttempt = AttemptBase & { readonly state: 'received'; readonly receipt: PhoneOrderReceipt };
-export type PhoneOrderAttempt = (AttemptBase & { readonly state: 'prepared' | 'uncertain' }) | ReceivedPhoneOrderAttempt;
+export type RejectedPhoneOrderAttempt = AttemptBase & { readonly state: 'rejected'; readonly rejection: { reason: PublicOrderRejectionReason; message: string } };
+export type PhoneOrderAttempt = (AttemptBase & { readonly state: 'prepared' | 'uncertain' }) | ReceivedPhoneOrderAttempt | RejectedPhoneOrderAttempt;
 interface Journal { version: 1; tenantId: string; active: PhoneOrderAttempt | null; lastReceipt: PhoneOrderReceipt | null }
 
 const UUID_V4 = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -103,7 +106,7 @@ function phoneBody(input: unknown, clientId: string): PhoneBody {
     }
   }
   try {
-    const parsed = CreateOrderSchema.parse({ ...candidate, clientId }) as PhoneBody;
+    const parsed = StaffPhoneOrderAttemptRequestSchema.parse({ ...candidate, clientId }) as PhoneBody;
     // Les coordonnées sont bornées localement sans changer le contrat global.
     if (parsed.pickup.customerName.length > 80 || (parsed.pickup.customerPhone?.length ?? 0) > 32) throw invalid();
     return parsed;
@@ -151,19 +154,25 @@ function parseJournal(raw: string | null, tenantId: string): Journal {
   const lastReceipt = file.lastReceipt === null ? null : parseReceipt(file.lastReceipt, tenantId);
   let active: PhoneOrderAttempt | null = null;
   if (file.active !== null) {
-    const entry = keys(file.active, ['tenantId', 'clientId', 'createdAt', 'body', 'state', 'receipt']);
+    const entry = keys(file.active, ['tenantId', 'clientId', 'createdAt', 'body', 'state', 'receipt', 'rejection', 'draftId']);
     sameTenant(tenantId, entry.tenantId);
     const clientId = clientIdentity(entry.clientId);
     const storedBody = keys(entry.body, [...BODY_KEYS, 'clientId']);
     if (storedBody.clientId !== clientId) throw invalid();
     const { clientId: _clientId, ...input } = storedBody;
     const body = phoneBody(input, clientId);
-    const base = { tenantId, clientId, createdAt: integer(entry.createdAt), body };
-    if (entry.state === 'received') {
+    const base = { tenantId, clientId, createdAt: integer(entry.createdAt), body,
+      ...(entry.draftId === undefined ? {} : { draftId: clientIdentity(entry.draftId) }) };
+    if (entry.state === 'received' && !Object.hasOwn(entry, 'rejection')) {
       const receipt = parseReceipt(entry.receipt, tenantId);
       if (receipt.clientId !== clientId || receipt.slot !== body.pickup.slot || receipt.items !== body.lines.reduce((sum, line) => sum + line.qty, 0)) throw invalid();
       active = { ...base, state: 'received', receipt };
-    } else if ((entry.state === 'prepared' || entry.state === 'uncertain') && !Object.hasOwn(entry, 'receipt')) {
+    } else if (entry.state === 'rejected' && !Object.hasOwn(entry, 'receipt')) {
+      const rejection = keys(entry.rejection, ['reason', 'message']);
+      const reason = PublicOrderRejectionReasonSchema.safeParse(rejection.reason);
+      if (!reason.success) throw invalid();
+      active = { ...base, state: 'rejected', rejection: { reason: reason.data, message: text(rejection.message, 1000) } };
+    } else if ((entry.state === 'prepared' || entry.state === 'uncertain') && !Object.hasOwn(entry, 'receipt') && !Object.hasOwn(entry, 'rejection')) {
       active = { ...base, state: entry.state };
     } else throw invalid();
   }
@@ -190,18 +199,29 @@ export async function readLastPhoneOrderReceipt(store: KeyValueStore, tenantId: 
   return freeze(parseJournal(await store.getItem(PHONE_ORDER_ATTEMPT_KEY), tenantId).lastReceipt);
 }
 
+/** Restauration locale avant réseau, toujours via le store de l'appairage. */
+export async function readPhoneOrderJournal(store: KeyValueStore): Promise<DeepReadonly<Journal> | null> {
+  const raw = await store.getItem(PHONE_ORDER_ATTEMPT_KEY);
+  if (raw === null) return null;
+  let tenantId: string;
+  try { tenantId = identity(object(JSON.parse(raw)).tenantId); } catch { throw invalid(); }
+  return freeze(parseJournal(raw, tenantId));
+}
+
 /** Alloue l'UUID UNE fois sous le verrou. Le résultat existant prime sur le brouillon proposé. */
-export async function preparePhoneOrderAttempt(store: KeyValueStore, tenantId: string, input: unknown): Promise<PhoneOrderAttempt> {
+export async function preparePhoneOrderAttempt(store: KeyValueStore, tenantId: string, input: unknown, draftId?: string): Promise<PhoneOrderAttempt> {
   // Parse avant le premier await : l'appelant peut déjà modifier son brouillon.
   const snapshot = phoneBody(input, '00000000-0000-4000-8000-000000000000');
   // Mongo sérialise les Date avec millisecondes. Figer dès l'acquisition la
   // même représentation dans le disque ET le futur POST, pas au rejeu.
   snapshot.pickup.slot = new Date(snapshot.pickup.slot).toISOString();
+  if (draftId !== undefined) clientIdentity(draftId);
   return freeze(await mutate(store, tenantId, (file) => {
     if (file.active) return file.active;
     const clientId = clientIdentity(uuid());
     if (file.lastReceipt?.clientId === clientId) throw invalid();
-    const active: PhoneOrderAttempt = { tenantId, clientId, createdAt: Date.now(), state: 'prepared', body: { ...snapshot, clientId } };
+    const active: PhoneOrderAttempt = { tenantId, clientId, createdAt: Date.now(), state: 'prepared', body: { ...snapshot, clientId },
+      ...(draftId === undefined ? {} : { draftId }) };
     file.active = active;
     return active;
   }));
@@ -210,7 +230,7 @@ export async function preparePhoneOrderAttempt(store: KeyValueStore, tenantId: s
 export async function markPhoneOrderUncertain(store: KeyValueStore, tenantId: string, clientId: string): Promise<PhoneOrderAttempt> {
   return freeze(await mutate(store, tenantId, (file) => {
     const attempt = current(file, clientId);
-    if (attempt.state !== 'received') file.active = { ...attempt, state: 'uncertain' };
+    if (attempt.state === 'prepared') file.active = { ...attempt, state: 'uncertain' };
     return file.active!;
   }));
 }
@@ -247,6 +267,7 @@ export async function recordPhoneOrderReceipt(store: KeyValueStore, tenantId: st
   try { snapshot = JSON.parse(JSON.stringify(serverOrder)); } catch { throw invalid(); }
   return freeze(await mutate(store, tenantId, (file) => {
     const attempt = current(file, clientId);
+    if (attempt.state === 'rejected') throw invalid();
     const receipt = receiptFromOrder(snapshot, attempt);
     if (attempt.state === 'received') {
       if (attempt.receipt.orderId !== receipt.orderId || attempt.receipt.number !== receipt.number
@@ -270,4 +291,39 @@ export async function archiveReceivedPhoneOrderAttempt(store: KeyValueStore, ten
     file.active = null;
     return attempt.receipt;
   }));
+}
+
+/** Résultat de /orders/recovery ou /orders/abandon, jamais une erreur HTTP brute. */
+export async function recordPhoneOrderResult(store: KeyValueStore, tenantId: string, clientId: string, value: unknown): Promise<PhoneOrderAttempt> {
+  const parsed = StaffOrderAttemptResultSchema.safeParse(value);
+  if (!parsed.success || parsed.data.tenantId !== tenantId || parsed.data.clientId !== clientId) throw invalid();
+  const result = parsed.data;
+  if (result.state === 'created') return recordPhoneOrderReceipt(store, tenantId, clientId, result.order);
+  return freeze(await mutate(store, tenantId, (file) => {
+    const attempt = current(file, clientId);
+    if (result.state === 'pending') return attempt;
+    if (attempt.state === 'received') throw invalid();
+    const rejection = { reason: result.reason, message: text(result.message, 1000) };
+    file.active = { ...attempt, state: 'rejected', rejection };
+    return file.active;
+  }));
+}
+
+/** Explicitement après lecture du rejet, pour corriger le créneau ou le panier. */
+export async function releaseRejectedPhoneOrderAttempt(store: KeyValueStore, tenantId: string, clientId: string): Promise<void> {
+  await mutate(store, tenantId, (file) => {
+    if (current(file, clientId).state !== 'rejected') throw invalid();
+    file.active = null;
+  });
+}
+
+/** S'exécute sous le verrou de purge avec le store BRUT fourni par ce verrou. */
+export async function assertPhoneOrderPurgeSafe(store: KeyValueStore): Promise<void> {
+  const raw = await store.getItem(PHONE_ORDER_ATTEMPT_KEY);
+  if (raw === null) return;
+  let tenantId: string;
+  try { tenantId = identity(object(JSON.parse(raw)).tenantId); } catch { throw invalid(); }
+  if (parseJournal(raw, tenantId).active !== null) {
+    throw new Error('Une commande téléphone reste à vérifier ou à enregistrer dans le journal. Le poste ne peut pas être désappairé sans cette vérification.');
+  }
 }

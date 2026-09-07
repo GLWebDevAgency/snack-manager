@@ -27,6 +27,17 @@ export interface StoreItemMutation<T> {
 const STORE_LOCK_NAME = 'sm.sync.state.v2.commit';
 let fallbackStoreTail: Promise<void> = Promise.resolve();
 
+/** Les nouvelles réservations réseau ne peuvent utiliser le repli mono-processus. */
+export function requireCrossContextStoreLock(): LockManager {
+  const locks = globalThis.navigator?.locks;
+  if (!locks || typeof locks.request !== 'function') {
+    throw new Error('Ce navigateur ne permet pas de sécuriser une réservation téléphone. Utilisez un navigateur compatible sur une connexion sécurisée.');
+  }
+  return locks;
+}
+
+export type StorePurgePrecondition = (store: KeyValueStore) => Promise<void>;
+
 /** Verrou commun à la file et aux données métier liées à son appairage. */
 export function withStoreLock<T>(work: () => Promise<T>): Promise<T> {
   const locks = globalThis.navigator?.locks;
@@ -95,8 +106,12 @@ export async function purgeKeysWithIdentityLast(
   store: KeyValueStore,
   keys: readonly string[],
   identityKey: string,
+  beforePurge?: StorePurgePrecondition,
 ): Promise<void> {
-  await withStoreLock(() => purgeKeysWithIdentityLastUnlocked(store, keys, identityKey));
+  await withStoreLock(async () => {
+    await beforePurge?.(store);
+    await purgeKeysWithIdentityLastUnlocked(store, keys, identityKey);
+  });
 }
 
 /**
@@ -130,6 +145,7 @@ export async function restoreScopedIdentity<T>(
   keys: readonly string[],
   identityKey: string,
   decode: (raw: string) => T | null,
+  beforePurge?: StorePurgePrecondition,
 ): Promise<T | null> {
   return withStoreLock(async () => {
     const raw = await store.getItem(identityKey);
@@ -141,6 +157,7 @@ export async function restoreScopedIdentity<T>(
         // La purge ci-dessous est volontairement stricte et doit, elle, remonter.
       }
     }
+    await beforePurge?.(store);
     await purgeKeysWithIdentityLastUnlocked(store, keys, identityKey);
     return null;
   });

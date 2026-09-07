@@ -174,7 +174,12 @@ export interface BindQueueScopeOptions {
 export interface ClearQueueOptions {
   /** Refuse atomiquement la purge si le snapshot durable contient une vente. */
   requireEmpty?: boolean;
+  /** Lecture seule sous le verrou partagé, AVANT la première mutation de purge.
+   * Utiliser le store brut fourni : un scopedStore ici imbriquerait le verrou. */
+  beforeClear?: (store: KeyValueStore) => Promise<void>;
 }
+
+class QueueClearPreconditionError extends Error {}
 
 const METHODS: readonly QueueMethod[] = ['POST', 'PATCH', 'PUT', 'DELETE'];
 
@@ -997,14 +1002,15 @@ export class SyncQueue {
     // résultat tardif ne pourra ni committer ni lancer l'entrée suivante.
     this.activeFlush = null;
 
-    const operation = this.runClear(options.requireEmpty === true).finally(() => {
+    const operation = this.runClear(options).finally(() => {
       if (this.activeClear === operation) this.activeClear = null;
     });
     this.activeClear = operation;
     return operation;
   }
 
-  private async runClear(requireEmpty: boolean): Promise<void> {
+  private async runClear(options: ClearQueueOptions): Promise<void> {
+    const requireEmpty = options.requireEmpty === true;
     try {
       // Une corruption ne doit pas empêcher un désappairage volontaire : on
       // attend seulement la lecture pour qu'elle ne repeuple plus la mémoire.
@@ -1059,6 +1065,8 @@ export class SyncQueue {
             );
           }
         }
+        try { await options.beforeClear?.(store); }
+        catch (cause) { throw new QueueClearPreconditionError(cause instanceof Error ? cause.message : 'Une opération directe reste à vérifier.'); }
         // Écrasement strict avant publication : même si removeItem est refusé,
         // les anciennes clés ne contiennent déjà plus aucune PII.
         await store.setItem(LEGACY_KEY, '[]');
@@ -1092,7 +1100,7 @@ export class SyncQueue {
       // restent volontairement fermés jusqu'à `completeClear()`.
       if (!this.purgePending) this.clearing = false;
     } catch (error) {
-      if (error instanceof QueueContainsUnsyncedDataError) {
+      if (error instanceof QueueContainsUnsyncedDataError || error instanceof QueueClearPreconditionError) {
         // Refus attendu et non destructif : la file reste exploitable pour
         // retenter sa synchronisation ou traiter ses rejets.
         this.clearing = false;

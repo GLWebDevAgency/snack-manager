@@ -2,11 +2,9 @@
  * Écran principal de la caisse (V1) et orchestration des surcouches.
  *
  * Invariants tenus ici :
- *  - toute création de commande passe par `client.post` → file offline
- *    persistée, avec `clientId` comme clé d'idempotence : un rejeu ne crée
- *    jamais de doublon et une coupure réseau ne perd aucune commande ;
- *  - l'écran confirme IMMÉDIATEMENT avec un numéro de retrait local, remplacé
- *    par le numéro serveur dès que la file est vidée (réconciliation) ;
+ *  - ventes sans créneau : file offline persistée, UUID idempotent ;
+ *  - téléphone : journal durable puis admission réseau AVANT confirmation
+ *    du créneau et encaissement d'une commande existante ;
  *  - les montants sont en CENTIMES partout, jamais en flottants.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -61,6 +59,9 @@ import {
 } from './service-reconciliation';
 import { CategoryRail, ProductArea } from './Catalog';
 import { TicketDock, TicketPanel } from './TicketPanel';
+import { usePhoneOrder, type PhoneTicketControls } from './usePhoneOrder';
+import { PhoneOrderConfirmed, PhoneOrderNotice } from './PhoneOrderNotice';
+import type { ReceivedPhoneOrderAttempt } from './phone-order-attempt';
 import { QuickConfig, draftToLine, type ConfigDraft } from './QuickConfig';
 import { CashModal, CloseModal, DiscountModal, Notice, SentOverlay, TicketPreview, type OrderTicketDto, RejetsModal } from './modals';
 import { LoyaltyPanel } from './LoyaltyPanel';
@@ -86,7 +87,6 @@ import {
   minimizeParkedTicket,
   normalizeDayLogFile,
   parkCode,
-  pickupSlots,
   saveJson,
   serviceDay,
   startOfDayIso,
@@ -141,6 +141,12 @@ export function PosScreen({
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [slotIso, setSlotIso] = useState<string | null>(null);
+  // Identité du brouillon, pas hash de PII sur disque. Une autre fenêtre ou
+  // un ticket édité/reconstruit identique ne possède jamais l'ancienne vente.
+  const draftSignature = JSON.stringify([mode, lines.map((line) => [line.lineId, line.productId, line.variantKey,
+    line.qty, line.options, line.removed, line.note]), note, customerName, customerPhone, slotIso]);
+  const draftIdentity = useRef({ signature: '', id: '' });
+  if (draftIdentity.current.signature !== draftSignature) draftIdentity.current = { signature: draftSignature, id: uuid() };
   const [query, setQuery] = useState('');
   const [catId, setCatId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -758,6 +764,47 @@ export function PosScreen({
     setLoyaltyMember(null);
   }, []);
 
+  const repairPhoneOrder = useCallback(async (attempt: ReceivedPhoneOrderAttempt) => {
+    const receipt = attempt.receipt;
+    const methods: Record<string, PayMethod> = { cash: 'especes', card: 'cb', meal_voucher: 'tr' };
+    const entry: DayEntry = { clientId: receipt.clientId, localNumber: receipt.number,
+      serverId: receipt.orderId, serverNumber: receipt.number, trackingToken: receipt.trackingToken,
+      mode: 'tel', method: receipt.payment.status === 'paid' ? (methods[receipt.payment.tender ?? ''] ?? 'retrait') : 'retrait',
+      paid: receipt.payment.status === 'paid', total: receipt.totalCents, items: receipt.items,
+      customerName: attempt.body.pickup.customerName, at: attempt.createdAt,
+      ...(receipt.payment.cashReceived === undefined ? {} : { received: receipt.payment.cashReceived }),
+      ...(receipt.payment.changeGiven === undefined ? {} : { change: receipt.payment.changeGiven }) };
+    const revision = dayLogWriter.revision();
+    const persisted = await dayLogWriter.commit(() => dayLogRef.current,
+      (current) => current.some((candidate) => candidate.clientId === entry.clientId) ? [...current] : [...current, entry],
+      applyDayLog, revision);
+    if (!persisted) throw new Error('La commande est confirmée, mais le journal local a changé. Finalisez sa vérification sans la ressaisir.');
+    setJournalDegraded(false);
+    if (attempt.draftId === draftIdentity.current.id) resetTicket();
+    setTicketOpen(false);
+  }, [applyDayLog, dayLogWriter, resetTicket, setJournalDegraded]);
+
+  const phone = usePhoneOrder({ client, enabled: mode === 'tel' && !DEMO, ready, slug: session.tenantSlug,
+    isCurrentPairing: () => TENANT_SLUG === session.tenantSlug,
+    gate: saleInFlight, onBusy: setBusy, onUnauthorized: () => onLock('Session expirée — reconnectez-vous.'), repair: repairPhoneOrder });
+
+  const phoneCanSubmit = !DEMO && ready && phone.loaded && !phone.attempt && !phone.unavailable && !phone.slotsBusy && !phone.slotsError
+    && lines.length > 0 && customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8
+    && phone.slots?.slots.some((slot) => slot.iso === slotIso && !slot.full) === true;
+  const submitPhone = () => {
+    if (!phoneCanSubmit || mode !== 'tel' || !slotIso || busy || journalResetGate.current) return;
+    const { clientId: _unused, ...body } = buildOrderBody({ clientId: '00000000-0000-4000-8000-000000000000',
+      mode: 'tel', lines, note, customerName, customerPhone, slotIso, method: 'retrait' });
+    setTicketOpen(false);
+    phone.submit(body, draftIdentity.current.id);
+  };
+  const phoneControls: PhoneTicketControls = { date: phone.date, slots: phone.slots, slotsBusy: phone.slotsBusy,
+    slotsError: phone.slotsError, unavailable: DEMO
+      ? 'La démonstration ne réserve aucun créneau. Les commandes téléphone sont disponibles sur une caisse appairée.'
+      : phone.unavailable, canSubmit: phoneCanSubmit,
+    onDate: (date) => { if (!saleInFlight.active) { changeSlot(''); phone.setDate(date); } },
+    onRefresh: phone.refreshSlots, onSubmit: submitPhone };
+
   const clearTicket = useCallback(() => {
     mutateTicket(() => {
       resetTicket();
@@ -769,7 +816,7 @@ export function PosScreen({
     (member: LoyaltyTicketMember) => {
       mutateTicket(() => {
         if (mode === 'tel') {
-          push('La fidélité sera proposée au comptoir lors du retrait', 'warn');
+          push('La fidélité n’est pas encore rattachable aux commandes téléphone.', 'warn');
           return;
         }
         setLoyaltyMember(member);
@@ -788,7 +835,7 @@ export function PosScreen({
         if (next === 'tel' && loyaltyMember) {
           setLoyaltyMember(null);
           setLoyaltyOpen(false);
-          push('Carte détachée : fidélité disponible au retrait au comptoir', 'warn');
+          push('Carte détachée : la fidélité n’est pas encore disponible pour les commandes téléphone.', 'warn');
         }
         if (mode === 'tel' && next !== 'tel') {
           setCustomerName('');
@@ -918,6 +965,10 @@ export function PosScreen({
   const send = useCallback(
     async (method: PayMethod, cash?: { received: number; change: number }) => {
       if (lines.length === 0 || busy) return;
+      if (mode === 'tel') {
+        push('Confirmez d’abord le créneau téléphone. L’encaissement se fait ensuite sur la commande confirmée.', 'warn');
+        return;
+      }
       if (journalResetGate.current) {
         push('Terminez ou fermez le récapitulatif avant d’encaisser', 'warn');
         return;
@@ -927,7 +978,7 @@ export function PosScreen({
       try {
         const clientId = uuid();
         const loyaltyIntent =
-          mode !== 'tel' && loyaltyMember?.status === 'active'
+          loyaltyMember?.status === 'active'
             ? {
                 operationId: uuid(),
                 memberId: loyaltyMember.id,
@@ -944,7 +995,7 @@ export function PosScreen({
           note,
           customerName,
           customerPhone,
-          slotIso: slotIso ?? pickupSlots()[0]?.iso ?? null,
+          slotIso: null,
           // Le moyen réellement encaissé part avec la commande : l'API la marque
           // « payée » sur-le-champ, au lieu d'attendre la remise du plat.
           method,
@@ -973,7 +1024,7 @@ export function PosScreen({
           paid: method !== 'retrait',
           total,
           items,
-          customerName: mode === 'tel' ? customerName.trim() : null,
+          customerName: null,
           ...(loyaltyState ? { loyalty: loyaltyState } : null),
           ...(cash ? { received: cash.received, change: cash.change } : null),
           at: Date.now(),
@@ -1035,13 +1086,14 @@ export function PosScreen({
   const onPay = useCallback(
     (method: PayMethod) => {
       if (saleInFlight.active) return;
+      if (mode === 'tel') return;
       // En compact, l'encaissement se déclenche depuis la barre d'accès comme
       // depuis le tiroir : on referme le tiroir pour rendre la main à la vue.
       setTicketOpen(false);
       if (method === 'especes') setCashOpen(true);
       else void send(method);
     },
-    [saleInFlight, send],
+    [mode, saleInFlight, send],
   );
 
   // ─── Remise (PIN) ───
@@ -1312,6 +1364,7 @@ export function PosScreen({
       onClear={clearTicket}
       onPay={onPay}
       busy={busy}
+      phone={phoneControls}
       loyalty={loyaltyMember}
       onLoyalty={openLoyalty}
       {...(collapse ? { onCollapse: collapse } : null)}
@@ -1365,6 +1418,8 @@ export function PosScreen({
         onLock={() => onLock()}
       />
 
+      <PhoneOrderNotice key={phone.attempt?.clientId ?? 'none'} attempt={phone.attempt} error={phone.error}
+        busy={phone.busy} brand={brand} onResume={phone.resume} onAbandon={phone.abandon} onRelease={phone.release} onFinish={phone.finish} />
       <View style={{ flex: 1, flexDirection: 'row', overflow: 'hidden' }}>
         {/*
           LA VUE DU SERVICE REMPLACE LE PLAN DE VENTE, elle ne s'y superpose
@@ -1534,6 +1589,7 @@ export function PosScreen({
           mode={mode}
           brand={brand}
           busy={busy}
+          phone={phoneControls}
           customerName={customerName}
           customerPhone={customerPhone}
           loyalty={loyaltyMember}
@@ -1562,6 +1618,12 @@ export function PosScreen({
       ) : null}
 
       {collectionTarget ? <CollectPaymentModal key={collectionTarget.id} orderId={collectionTarget.id} number={collectionTarget.number} brand={brand} actions={servicePaymentActions} offline={offline} onClose={() => setCollectionTarget(null)} /> : null}
+      {phone.confirmed ? <PhoneOrderConfirmed receipt={phone.confirmed} brand={brand} onClose={phone.clearConfirmed}
+        onCollect={() => {
+          const receipt = phone.confirmed;
+          if (!receipt) return;
+          phone.clearConfirmed(); setCollectionTarget({ id: receipt.orderId, number: receipt.number });
+        }} /> : null}
 
       {host}
     </View>
