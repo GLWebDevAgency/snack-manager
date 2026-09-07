@@ -131,6 +131,43 @@ async function openDriver() {
 }
 async function detail(number = 12) { await page.getByRole("button", { name: `Voir la mission n°${number}`, exact: true }).click(); await page.getByRole("dialog").waitFor(); }
 async function capture(name: string) { if (evidenceDir) await page.screenshot({ path: join(evidenceDir, name), fullPage: false }); }
+async function runningAnimations() {
+  return page.evaluate(() => document.getAnimations().filter(animation => animation.pending || animation.playState === "running").map(animation => {
+    const effect = animation.effect instanceof KeyframeEffect ? animation.effect : null;
+    const timing = effect?.getTiming();
+    const target = effect?.target;
+    return { type: animation.constructor.name, name: animation instanceof CSSAnimation ? animation.animationName : animation instanceof CSSTransition ? animation.transitionProperty : animation.id,
+      target: target instanceof Element ? `${target.tagName}.${target.getAttribute("class") ?? ""}` : null,
+      duration: timing?.duration, delay: timing?.delay, iterations: String(timing?.iterations), playbackRate: animation.playbackRate, pending: animation.pending, currentTime: animation.currentTime };
+  }));
+}
+/** A disabled→enabled cf-press transition lasts 0.01ms but remains pending until a frame.
+ * Allow only that reduced duration/delay (≤1ms tolerance, one iteration at normal speed), then require
+ * complete settlement within 500ms. Remember unsafe observations even if they finish
+ * during polling: a real 500ms motion must not become a passing "eventually idle" check.
+ */
+async function expectReducedMotionSettled(afterFirstSample?: () => Promise<void>) {
+  const unsafe = new Map<string, Awaited<ReturnType<typeof runningAnimations>>[number]>();
+  let last: Awaited<ReturnType<typeof runningAnimations>> = [];
+  let first = true;
+  try { await expect.poll(async () => {
+    const active = await runningAnimations();
+    last = active;
+    for (const animation of active) {
+      if (typeof animation.duration !== "number" || !Number.isFinite(animation.duration) || animation.duration > 1
+        || typeof animation.delay !== "number" || !Number.isFinite(animation.delay) || Math.abs(animation.delay) > 1
+        || animation.iterations !== "1" || animation.playbackRate !== 1) {
+        const key = `${animation.type}:${animation.name}:${animation.target}`;
+        if (!unsafe.has(key)) unsafe.set(key, animation);
+      }
+    }
+    if (first) { first = false; await afterFirstSample?.(); }
+    return { unsafe: [...unsafe.values()], active };
+  }, { timeout: 500, interval: 20 }).toEqual({ unsafe: [], active: [] }); }
+  catch (cause) {
+    throw new Error(`Le mode mouvement réduit ne s’est pas stabilisé : ${JSON.stringify({ unsafe: [...unsafe.values()], active: last })}`, { cause });
+  }
+}
 async function openBo(role = "owner") {
   await context.addInitScript(value => localStorage.setItem("sm.token.resto", value), token(role));
   await page.goto(`${origin}/admin/orders`); await page.getByRole("dialog").waitFor();
@@ -142,9 +179,35 @@ describe("missions livreur et affectation BO rendues", () => {
     await page.setViewportSize({ width: 320, height: 844 }); await openDriver();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await page.getByRole("button", { name: "Voir la mission n°12" }).isEnabled()).toBe(true);
-    expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === "running").length)).toBe(0);
+    await expectReducedMotionSettled();
     await capture("mobile-320-list.png");
     await page.setViewportSize({ width: 1440, height: 1000 }); await capture("desktop-driver-list.png");
+  });
+  it.each(["longue", "ralentie", "infinie", "bloquée"] as const)("le contrôle du mouvement refuse une animation %s, sans attendre qu’elle disparaisse pour l’oublier", async kind => {
+    await openDriver(); await expectReducedMotionSettled();
+    await page.evaluate(mode => {
+      const target = document.getElementById("delivery-missions-title");
+      if (!target) throw new Error("Missing fixture target");
+      const animation = target.animate([{ opacity: 1 }, { opacity: 0.5 }], {
+        duration: mode === "longue" ? 10_000 : mode === "ralentie" ? 1 : 0.01, iterations: mode === "infinie" ? Infinity : 1,
+      });
+      animation.id = "fixture-reduced-motion-guard";
+      // Slow playback turns a nominal 1ms duration into 100s of visible motion,
+      // keeping the negative control observable until its first sample on a busy CI.
+      // The long/infinite controls keep normal speed to isolate their own limits.
+      animation.playbackRate = mode === "ralentie" ? 0.00001 : mode === "bloquée" ? 0 : 1;
+    }, kind);
+    const cancelFixture = () => page.evaluate(() => {
+      document.getAnimations().filter(animation => animation.id === "fixture-reduced-motion-guard").forEach(animation => animation.cancel());
+    });
+    try {
+      // The slow animation disappears immediately after observation; its violation
+      // must still fail. Infinite/stalled variants remain until finally cleanup.
+      await expect(expectReducedMotionSettled(kind === "longue" || kind === "ralentie" ? cancelFixture : undefined)).rejects.toThrow(
+        kind === "longue" ? '"duration":10000' : kind === "ralentie" ? '"playbackRate":0.00001' : kind === "infinie" ? '"iterations":"Infinity"' : '"playbackRate":0',
+      );
+    } finally { await cancelFixture(); }
+    await expectReducedMotionSettled();
   });
   it("une vérification d’accès conserve la géométrie compacte et désactive les actions", async () => {
     await openDriver();
