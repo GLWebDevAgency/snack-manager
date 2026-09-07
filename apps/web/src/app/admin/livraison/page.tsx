@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { Btn, EmptyState, Field, Input, Panel, Pill, Skeleton, Textarea, Toggle, useToast } from "@/components/ui";
 import { newDeliveryZone, parseDeliveryDraft, toDeliveryDraft, type DeliveryDraft, type DeliveryZoneDraft } from "./delivery-draft";
 import { ZonePricingFields } from "./ZonePricingFields";
+import { DeliveryOperatorsPanel } from "./DeliveryOperatorsPanel";
 
 export default function DeliveryPage() {
   const toast = useToast();
@@ -102,6 +103,8 @@ export default function DeliveryPage() {
           <div className="rounded-card border border-line bg-surface2 p-4 text-[13px] leading-relaxed text-mut"><p className="font-semibold text-ink">Votre équipe assure la livraison.</p><p className="mt-1">Aucun transporteur externe ni suivi GPS n’est inclus. Depuis Commandes, indiquez le départ du livreur puis confirmez la remise au client.</p></div>
         </div>
       </div>
+
+      <DeliveryOperatorsPanel />
 
       <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-line bg-surface p-4 shadow-card">
         <div aria-live="polite"><p className="text-sm font-semibold text-ink">{dirty ? "Modifications à enregistrer" : "Vos réglages sont à jour"}</p>{error && <p role="alert" className="mt-1 text-[13px] text-alertt">{error}</p>}</div>
