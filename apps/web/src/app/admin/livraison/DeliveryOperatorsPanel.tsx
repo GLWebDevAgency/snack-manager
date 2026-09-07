@@ -219,6 +219,7 @@ export function DeliveryOperatorsPanel() {
   async function create() {
     if (!canAct() || !directory || storageError) return;
     setCreateError(null);
+    const now = Date.now();
     let pending: DeliveryOperatorAttempt;
     try {
       const stored = readDeliveryOperatorAttempt(sessionStorage, directory.tenantId);
@@ -226,8 +227,9 @@ export function DeliveryOperatorsPanel() {
       else {
         const parsed = DeliveryOperatorCreateSchema.safeParse({ requestId: crypto.randomUUID(), ...(mode === "staff" ? { staffId } : { name }) });
         if (!parsed.success) { setCreateError(mode === "staff" ? "Choisissez un équipier dans la liste." : "Indiquez un nom entre 2 et 80 caractères."); return; }
-        pending = saveDeliveryOperatorAttempt(sessionStorage, directory.tenantId, parsed.data);
+        pending = saveDeliveryOperatorAttempt(sessionStorage, directory.tenantId, parsed.data, now);
       }
+      setObservedAt(now);
       setAttempt(pending);
     } catch {
       setCreateError("La demande n’a pas pu être sauvegardée sur ce navigateur. Aucun ajout n’a été envoyé.");
