@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { Document } from 'mongoose';
 import {
   aLaCapacite, DEFAULT_DELIVERY_SETTINGS, DeliverySettingsSchema, publicOrderingState,
   type CreateOrder, type DeliverySettings, type PublicDeliverySettings, type SouscriptionLue,
@@ -14,8 +15,18 @@ type DeliveryTenant = SouscriptionLue & {
 
 /** Les anciens documents n'ont aucune zone : ils restent en retrait uniquement. */
 export function deliverySettingsOf(tenant: { delivery?: unknown }): DeliverySettings {
-  const result = DeliverySettingsSchema.safeParse(tenant.delivery);
-  return result.success ? result.data : { ...DEFAULT_DELIVERY_SETTINGS, zones: [] };
+  try {
+    const delivery = tenant.delivery;
+    // Les lectures hydratées portent de vrais sous-documents Mongoose, pas
+    // du JSON. Ne convertir qu'eux, sans exécuter un toObject arbitraire ni
+    // masquer des champs inconnus avant la validation stricte du contrat.
+    const plain = delivery instanceof Document ? delivery.toObject({
+      getters: false, virtuals: false, transform: false, minimize: false, schemaFieldsOnly: false,
+    }) : delivery;
+    const result = DeliverySettingsSchema.safeParse(plain);
+    if (result.success) return result.data;
+  } catch { /* Une normalisation impossible ne rend jamais la livraison disponible. */ }
+  return { ...DEFAULT_DELIVERY_SETTINGS, zones: [] };
 }
 
 export function publicDeliverySettingsOf(tenant: DeliveryTenant): PublicDeliverySettings {
