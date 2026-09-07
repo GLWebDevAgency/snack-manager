@@ -10,6 +10,7 @@ import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DELETE, GET, POST } from "./acces/route";
+import { GET as GET_MISSIONS } from "./missions/route";
 import { INVITATION_BOOTSTRAP } from "./invitation-bootstrap";
 
 /** Real component, DS CSS and Next route handlers; only the upstream API is a local fixture. */
@@ -63,6 +64,11 @@ beforeAll(async () => {
           res.end(JSON.stringify({ token: credential, session })); return;
         }
         if (req.headers.authorization !== `Bearer ${credential}`) { res.writeHead(401).end("{}"); return; }
+        if (req.url.endsWith("/missions")) {
+          if (!upstreamSession) res.writeHead(401).end("{}");
+          else res.end(JSON.stringify({ missions: [], nextCursor: null }));
+          return;
+        }
         if (req.url.endsWith("/session")) {
           if (!upstreamSession) res.writeHead(401).end("{}");
           else res.end(JSON.stringify(session));
@@ -72,12 +78,12 @@ beforeAll(async () => {
         if (firstLogoutUnavailable && logoutRequests === 1) { res.writeHead(503).end("{}"); return; }
         upstreamSession = false; res.writeHead(204).end(); return;
       }
-      if (req.url === "/livreur/acces") {
+      if (req.url === "/livreur/acces" || req.url === "/livreur/missions") {
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(",") : value);
-        const request = new NextRequest(`${origin}/livreur/acces`, { method: req.method, headers,
+        const request = new NextRequest(`${origin}${req.url}`, { method: req.method, headers,
           ...(body ? { body } : {}) });
-        const handler = req.method === "POST" ? POST : req.method === "DELETE" ? DELETE : GET;
+        const handler = req.url === "/livreur/missions" ? GET_MISSIONS : req.method === "POST" ? POST : req.method === "DELETE" ? DELETE : GET;
         const result = await handler(request);
         if (result.status >= 400) responses.push({ status: result.status, origin: request.headers.get("origin"),
           site: request.headers.get("sec-fetch-site"), code: (await result.clone().json()).code });
