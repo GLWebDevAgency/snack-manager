@@ -601,6 +601,13 @@ export class OrdersService {
       throw new ForbiddenException('La remise au client doit être confirmée par la caisse ou le gérant, jamais par la cuisine.');
     }
     const order = await this.byId(tenantId, id);
+    // Toutes les livraisons, y compris historiques : seule la remise dédiée
+    // possède une preuve ou une dérogation responsable motivée. Le refus
+    // précède l'idempotence pour fermer aussi les anciennes files clientes.
+    if (order.type === 'delivery' && status === 'delivered') {
+      throw new ConflictException({ code: 'DELIVERY_HANDOFF_REQUIRED',
+        message: 'Utilisez la remise livraison avec preuve ou la dérogation du responsable.' });
+    }
     const current = order.status as OrderStatus;
     if (status === current) return order;
     if (ORDER_STATUS_RANK[status] < ORDER_STATUS_RANK[current]) return order;
@@ -621,13 +628,6 @@ export class OrdersService {
     if (status === 'delivered' && order.payment.status !== 'paid') {
       throw new ConflictException('Encaissez cette commande avant de confirmer sa remise au client. Aucun paiement ne sera supposé.');
     }
-    if (order.type === 'delivery' && status === 'delivered') {
-      if (!order.delivery?.dispatchedAt || order.payment.status !== 'paid') {
-        throw new ConflictException('Une livraison doit être payée et partie avec le livreur avant d’être remise.');
-      }
-      order.delivery.deliveredAt = new Date();
-    }
-
     order.status = status;
     order.statusHistory.push({ status, at: new Date(), by: actor.sub });
     // Remise et encaissement sont deux gestes distincts. La version protège

@@ -66,7 +66,7 @@ describe('remise client — autorité distincte de la préparation cuisine', () 
   });
 
   for (const role of HANDOFF_ROLES) {
-    it.each(TYPES)(`${role} confirme la remise %s depuis prêt`, async (type) => {
+    it.each(TYPES.filter(type => type !== 'delivery'))(`${role} confirme la remise %s depuis prêt`, async (type) => {
       const { service, order } = setup(type);
       order.payment.status = 'paid';
       await service.updateStatus(TENANT, ORDER, 'delivered', actor(role));
@@ -74,7 +74,16 @@ describe('remise client — autorité distincte de la préparation cuisine', () 
       expect(order.statusHistory).toEqual([{ status: 'delivered', at: expect.any(Date), by: `${role}-person` }]);
       expect(order.payment.status).toBe('paid');
       expect(order.save).toHaveBeenCalledOnce();
-      if (type === 'delivery') expect(order.delivery?.deliveredAt).toBeInstanceOf(Date);
+    });
+    it.each(['new', 'preparing', 'ready', 'delivered', 'cancelled'] as const)(`${role} ne contourne pas la preuve livraison depuis %s`, async status => {
+      const { service, order, publish } = setup('delivery', status);
+      await expect(service.updateStatus(TENANT, ORDER, 'delivered', actor(role)))
+        .rejects.toMatchObject({ status: 409, response: { code: 'DELIVERY_HANDOFF_REQUIRED' } });
+      expect(order.status).toBe(status);
+      expect(order.statusHistory).toEqual([]);
+      expect(order.delivery?.deliveredAt).toBeNull();
+      expect(order.save).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
     });
   }
 
