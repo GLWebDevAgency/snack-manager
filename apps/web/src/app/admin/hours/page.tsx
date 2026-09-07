@@ -444,6 +444,10 @@ export default function HoursPage() {
           </>
         }
       >
+        <div className="mb-4 rounded-card border border-line bg-surface2 p-3.5 text-[13px] leading-relaxed text-mut">
+          <p className="font-semibold text-ink">Quand vos changements s’appliquent</p>
+          <p className="mt-1">Une journée dont les créneaux ont déjà été préparés garde ses horaires, même sans commande. Les modifications d’horaires et les fermetures exceptionnelles s’appliquent aux journées encore non préparées. Les commandes confirmées restent inchangées.</p>
+        </div>
         {/* En-tête de grille — dès `md` seulement : en dessous chaque
             service porte sa propre étiquette Midi/Soir dans la ligne */}
         <div className="hidden items-center gap-2 px-1.5 pb-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-mut md:flex">
@@ -550,7 +554,7 @@ export default function HoursPage() {
             <EmptyState
               icon="clock"
               title="Aucune fermeture prévue"
-              hint="Ajoutez un jour férié ou des congés : la commande en ligne sera fermée sur ces dates."
+              hint="Ajoutez un jour férié ou des congés pour les journées encore non préparées."
             />
           ) : (
             <ul>
@@ -586,6 +590,7 @@ export default function HoursPage() {
               ))}
             </ul>
           )}
+          <p className="mt-3 text-[13px] leading-relaxed text-mut">Une fermeture ne modifie pas une journée déjà préparée. Pour suspendre immédiatement les nouvelles commandes en ligne, utilisez la pause ci-dessous.</p>
         </Panel>
 
         {/* Carte « Pause commande en ligne » */}
@@ -666,6 +671,7 @@ export default function HoursPage() {
           }
         >
           <div className="flex flex-col gap-3.5">
+            <p className="text-[13px] leading-relaxed text-mut">Cette fermeture s’appliquera aux journées encore non préparées. Les journées déjà préparées et les commandes confirmées restent inchangées.</p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Du" htmlFor="closure-from">
                 <Input
@@ -735,8 +741,8 @@ export default function HoursPage() {
             La fermeture «{" "}
             {closures[deleteIdx]?.reason?.trim() ||
               closureDateLabel(closures[deleteIdx] ?? {})}{" "}
-            » sera retirée : les créneaux redeviendront réservables sur ces
-            dates.
+            » sera retirée des réglages. Les journées déjà préparées ne seront
+            pas rouvertes par cette suppression.
           </p>
         )}
       </Modal>

@@ -30,6 +30,7 @@ export function SlotSettingsPanel({ settings, onSaved }: { settings: TenantMe['s
         <Field label="Commandes par créneau" htmlFor="slot-capacity"><Input id="slot-capacity" type="number" min={1} max={100} step={1} required value={capacity} onChange={(e) => setCapacity(e.target.value)} disabled={busy} /></Field>
       </div>
       <p className="text-sm leading-relaxed text-mut">Cette capacité est commune au retrait et à la livraison. Le module livraison permet d’ajouter une limite spécifique et un délai estimé de transport. Les commandes déjà prises restent conservées.</p>
+      <p className="rounded-card border border-line bg-surface2 p-3.5 text-[13px] leading-relaxed text-mut"><strong className="font-semibold text-ink">Journées déjà préparées.</strong> Les journées déjà préparées gardent leur intervalle et leur capacité, même sans commande. Vos changements s’appliquent aux journées encore non préparées.</p>
       {error && <p role="alert" className="text-sm text-alertt">{error}</p>}
       <Btn type="submit" disabled={busy || !dirty}>{busy ? 'Enregistrement…' : 'Enregistrer les créneaux'}</Btn>
     </form>

@@ -91,7 +91,8 @@ export default function DeliveryPage() {
             <div className="flex flex-col gap-4">
               <Field label="Délai minimum avant livraison (min)" htmlFor="delivery-lead" hint="Préparation et trajet compris. Entre 20 et 180 minutes."><Input id="delivery-lead" type="number" min={20} max={180} step={5} value={draft.leadTimeMin} disabled={saving} onChange={(event) => setDraft({ ...draft, leadTimeMin: Number(event.target.value) })} /></Field>
               <Field label="Livraisons maximum par créneau" htmlFor="delivery-capacity" hint="La capacité de la cuisine est également respectée."><Input id="delivery-capacity" type="number" min={1} max={50} step={1} value={draft.slotCapacity} disabled={saving} onChange={(event) => setDraft({ ...draft, slotCapacity: Number(event.target.value) })} /></Field>
-              <p className="text-[13px] leading-relaxed text-mut">Les créneaux suivent vos horaires et vos fermetures exceptionnelles. <Link href="/admin/hours" className="font-semibold text-ink underline underline-offset-4">Gérer les horaires</Link></p>
+              <p className="rounded-card border border-line bg-surface2 p-3.5 text-[13px] leading-relaxed text-mut"><strong className="font-semibold text-ink">Capacité des prochaines journées.</strong> Le nombre maximum de livraisons par créneau ne change pas pour les journées déjà préparées, même sans commande. La nouvelle capacité s’applique aux journées encore non préparées.</p>
+              <p className="text-[13px] leading-relaxed text-mut">Les créneaux sont préparés à partir de vos horaires et de vos fermetures exceptionnelles. <Link href="/admin/hours" className="font-semibold text-ink underline underline-offset-4">Gérer les horaires</Link></p>
             </div>
           </Panel>
           <Panel title="Ouvrir la livraison">
