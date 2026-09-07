@@ -16,7 +16,7 @@ const REPLI = marqueDeRepli(null, null);
 const MASQUE_DE_REPLI = styleDuMasque(REPLI);
 
 /** Panne dans l’iframe : le site hôte du restaurant ne doit pas paraître cassé. */
-export default function EmbedError({ reset }: { reset: () => void }) {
+export default function EmbedError({ retry }: { retry: () => void }) {
   return (
     <main
       style={MASQUE_DE_REPLI}
@@ -41,7 +41,7 @@ export default function EmbedError({ reset }: { reset: () => void }) {
             `prefers-reduced-motion`, la classe `transition-*` ne l'était pas. */}
         <button
           type="button"
-          onClick={reset}
+          onClick={retry}
           className="cf-press mt-5 inline-flex min-h-11 items-center justify-center rounded-pill bg-accent px-5 py-2.5 text-[14px] font-extrabold text-onaccent"
         >
           Réessayer

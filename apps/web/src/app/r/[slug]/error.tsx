@@ -22,10 +22,10 @@ const MASQUE_DE_REPLI = styleDuMasque(REPLI);
  */
 export default function RestaurantError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("[/r] chargement du restaurant impossible", error);
@@ -47,8 +47,7 @@ export default function RestaurantError({
           La carte ne s’est pas chargée
         </h1>
         <p className="mt-3 text-[15px] leading-relaxed text-mut">
-          Le service est momentanément injoignable. Le restaurant, lui, est
-          toujours ouvert&nbsp;: réessayez dans un instant.
+          Le service est momentanément injoignable. Réessayez dans un instant.
         </p>
         {/* `min-h-11` : 44 px, la cible tactile de WCAG 2.2 (2.5.8) — le
             `py-3` seul plafonnait à 41 px. `cf-press` remplace le retour
@@ -56,7 +55,7 @@ export default function RestaurantError({
             `prefers-reduced-motion`, la classe `transition-*` ne l'était pas. */}
         <button
           type="button"
-          onClick={reset}
+          onClick={retry}
           className="cf-press mt-6 inline-flex min-h-11 items-center justify-center rounded-pill bg-accent px-5 py-3 text-[14px] font-extrabold text-onaccent"
         >
           Réessayer
