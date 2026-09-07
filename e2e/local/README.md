@@ -1,5 +1,25 @@
 # Recette locale — paiement de commande
 
+## Métadonnées et identité restaurant
+
+`QA_NEXT_START_CONFIRMED=yes node e2e/local/restaurant-metadata.mjs` lance le vrai
+Next et une API locale publique, sur les ports libres 3220/3221 par défaut.
+Réserver le créneau : aucun autre Next du même worktree ne doit tourner.
+Le script n'installe rien ; prévoir de l'espace disque pour le cache Next.
+
+Les scénarios `restaurant`, `loyalty`, `neutral`, `isolation`, `platform` et
+`unavailable` (ou `QA_SCENARIO=all`) analysent le HTML réellement généré, y compris
+les métadonnées streamées : domaines simulés par Host HTTP, deux marques distinctes,
+chaque lien d'icône/manifeste téléchargé et vérifié, refus cross-tenant,
+erreurs/404 sans héritage SnackManager. Les conventions de fichiers Next sont
+ainsi testées au-delà des objets `Metadata` unitaires. Seule la fidélité conserve
+son manifeste installable ; aucune PWA commande n'est annoncée par ce correctif.
+
+Les résultats JSON et le journal du serveur vont dans un répertoire temporaire
+`sm-restaurant-metadata-*`. Aucun paiement, SMS, session du parc ou requête API
+mutante. Cette recette HTTP n'atteste ni DNS/TLS, ni hydratation, ni installation
+mobile ; compléter par le navigateur sur staging. Elle n'est pas lancée par la CI.
+
 `checkout-payment.mjs` lance le vrai frontend Next et un serveur API de fixtures
 en mémoire. Turnstile et Stripe.js sont remplacés dans le navigateur ; le
 paiement simulé finit en `processing`, **jamais en encaissement réel**.

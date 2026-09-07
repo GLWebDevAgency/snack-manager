@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { marqueDeRepli } from "@sm/contracts";
 import { loadSite, PublicApiError } from "@/components/order/api";
 import { Storefront } from "@/components/order/Storefront";
+import { publicRestaurantMetadata, restaurantMetadata } from "@/lib/restaurant-metadata";
 
 /**
  * Tunnel embarquable — `/embed/[slug]`.
@@ -31,10 +32,15 @@ type Params = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export const metadata: Metadata = {
-  title: "Commander en ligne",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata({ params }: Params): Promise<Metadata> {
+  const { slug } = await params;
+  const site = await loadSite(slug).catch(() => null);
+  return {
+    ...(site ? restaurantMetadata(site.tenant.slug) : publicRestaurantMetadata),
+    title: "Commander en ligne",
+    robots: { index: false, follow: false },
+  };
+}
 
 /**
  * Le `themeColor` suit le MASQUE du restaurant, pas notre noir.

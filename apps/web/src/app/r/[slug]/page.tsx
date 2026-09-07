@@ -7,6 +7,7 @@ import { resumeFidelite } from "@/components/order/fidelite";
 import { restaurantJsonLd, serializeJsonLd } from "@/components/order/jsonld";
 import { Storefront } from "@/components/order/Storefront";
 import { loadPublicLoyalty } from "@/components/loyalty/public-api";
+import { restaurantMetadata } from "@/lib/restaurant-metadata";
 
 /**
  * Site public d’un restaurant — `/r/[slug]`.
@@ -72,6 +73,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const images = partage ? [{ url: partage.url, alt }] : [];
 
   return {
+    ...restaurantMetadata(site.tenant.slug),
     title,
     description,
     alternates: { canonical: url },

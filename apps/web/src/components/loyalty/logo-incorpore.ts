@@ -128,11 +128,25 @@ export function hotesDeLogos(
  * Le suffixe est comparé AVEC son point : sans lui, `evilexemple.fr` passerait
  * pour un sous-domaine d'`exemple.fr`. Ce qu'on n'a pas su lire, on ne le
  * télécharge pas.
+ *
+ * Comme `OriginesImages` côté API, cette liste autorise des HÔTES et leurs
+ * sous-domaines, pas des origines complètes : les ports ne sont pas filtrés
+ * (notamment `localhost:3001` en développement). Ce n'est pas une protection
+ * DNS contre un hôte autorisé compromis. La configuration doit donc rester
+ * limitée aux domaines que nous contrôlons ; changer cette politique exige
+ * de coordonner les deux applications, pas d'inventer une liste locale.
+ * Ici, le téléchargement impose en plus http(s), sans identifiants d'URL.
  */
 export function logoAutorise(url: string, hotes: readonly string[]): boolean {
-  const hote = hoteDeLUrl(url);
-  if (hote === null) return false;
-  return hotes.some((autorise) => hote === autorise || hote.endsWith(`.${autorise}`));
+  try {
+    const adresse = new URL(url);
+    if ((adresse.protocol !== "https:" && adresse.protocol !== "http:")
+      || adresse.username !== "" || adresse.password !== "") return false;
+    const hote = adresse.hostname.toLowerCase();
+    return hotes.some((autorise) => hote === autorise || hote.endsWith(`.${autorise}`));
+  } catch {
+    return false;
+  }
 }
 
 type Options = {
@@ -140,6 +154,40 @@ type Options = {
   poidsMax?: number;
   delaiMs?: number;
 };
+
+/** Ne conserve jamais plus que le plafond, même sans Content-Length fiable. */
+async function lireLogoBorne(reponse: Response, poidsMax: number): Promise<Uint8Array | null> {
+  let lecteur: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    lecteur = reponse.body?.getReader();
+    if (!lecteur) return null;
+    const morceaux: Uint8Array[] = [];
+    let poids = 0;
+    for (;;) {
+      const { done, value } = await lecteur.read();
+      if (done) break;
+      poids += value.byteLength;
+      if (poids > poidsMax) return null;
+      morceaux.push(value);
+    }
+    const octets = new Uint8Array(poids);
+    let position = 0;
+    for (const morceau of morceaux) {
+      octets.set(morceau, position);
+      position += morceau.byteLength;
+    }
+    return octets;
+  } catch {
+    return null;
+  } finally {
+    if (lecteur) {
+      // Dépassement ou lecture interrompue : fermer le transport tout de suite.
+      // Ne pas attendre une éventuelle promesse de nettoyage du transport.
+      void lecteur.cancel().catch(() => {});
+      lecteur.releaseLock();
+    }
+  }
+}
 
 /**
  * LE LOGO, RAMENÉ À UNE ADRESSE `data:` — ou `null`, sans jamais lever.
@@ -181,25 +229,23 @@ export async function logoIncorpore(url: string, options: Options = {}): Promise
        * d'un logo ne partagent jamais une URL.
        */
       signal: AbortSignal.timeout(options.delaiMs ?? DELAI_MAX_LOGO_MS),
+      // L'hôte a été vérifié AVANT fetch : une redirection ne peut pas en
+      // choisir un autre (y compris une adresse interne au réseau Railway).
+      redirect: "error",
       headers: { Accept: "image/png,image/jpeg,image/webp" },
     });
   } catch {
     return null;
   }
-  if (!reponse.ok) return null;
-
   // Le poids ANNONCÉ, quand il l'est : refuser avant de lire deux mégaoctets.
   const annonce = Number(reponse.headers.get("Content-Length"));
-  if (Number.isFinite(annonce) && annonce > poidsMax) return null;
-
-  let octets: Uint8Array;
-  try {
-    octets = new Uint8Array(await reponse.arrayBuffer());
-  } catch {
+  if (!reponse.ok || (Number.isFinite(annonce) && annonce > poidsMax)) {
+    void reponse.body?.cancel().catch(() => {});
     return null;
   }
-  // …puis le poids RÉEL : un `Content-Length` est une promesse, pas une mesure.
-  if (octets.byteLength > poidsMax) return null;
+  // …puis le poids RÉEL, borné pendant la lecture, pas après arrayBuffer().
+  const octets = await lireLogoBorne(reponse, poidsMax);
+  if (octets === null) return null;
 
   const type = detecterImage(octets);
   if (type === null) return null;
