@@ -1,172 +1,235 @@
 # C15 — capacité durable, protocole et preuves
 
-7 septembre 2026. **Socle C15-A et préparation C15-B, réservation durable non activée dans l'application.** Le contrôle de créneau existant présente toujours la course décrite ci-dessous. Cette note ne certifie ni la livraison complète, ni l'expiration des commandes impayées.
+7 septembre 2026. **Raccordement applicatif en cours de réception sur la PR123.**
+Le scénario de survente après expiration Redis passe désormais sur Mongo réel :
+une seule commande pour la dernière place. **Ce résultat local n'est pas une
+activation métier, une fusion, ni une recette staging.** La diffusion sera
+consignée avec le SHA effectivement servi.
 
-## Défaut reproduit et découpage
+## Périmètre
 
-Le verrou Redis public expire après 15 secondes. A valide la dernière place et reste suspendu avant son CAS `committing`. B acquiert le verrou expiré, ne voit aucune commande/snapshot engagé de A et prend la place. A reprend puis engage aussi sa commande.
+Un seul système de réservation pour les commandes portant un créneau :
 
-Le harnais `apps/api/src/modules/orders/slot-reservation-race.integration.test.ts` reproduit **deux commandes pour une place** : vrais contrôleur, `SlotsService`, `OrdersService`, admissions et deux connexions Mongo ; seule l'horloge Redis est avancée, sans attente réelle ni fournisseur distant. Son assertion doit rester rouge jusqu'au raccordement complet. Ne pas remplacer l'invariant par « deux commandes attendues », `it.fails` ou une recette déclarée réussie.
+- checkout public protégé par preuve de reprise C01 ;
+- ancien checkout public, sans preuve de reprise C01 ;
+- caisse et téléphone authentifiés, avec canal exact conservé.
 
-- **Correctif Engage indépendant** : toggle de promotion atomique, sans réécriture du compteur historique. Ce n'est pas la correction des réservations promotionnelles orphelines.
-- **C15-A** : schémas compatibles, primitive de réservation avec snapshots et places atomiques, tests Mongo. Aucun provider Nest, aucune route ni changement du checkout. Branche/PR en brouillon tant que l'invariant runtime reste rouge.
-- **C15-B** : calendrier/bootstrap historique, admission commune aux writers public protégé/legacy/staff, disponibilité issue des admissions et UX POS téléphone confirmée serveur. Activation seulement après toutes les preuves et recette staging.
-- **Promotions durables** : lot distinct ; ne pas coupler son compteur à ce mécanisme de capacité par une compensation aveugle.
+Les ventes caisse sans créneau conservent leur parcours. La capacité ne livre
+ni l'application livreur, ni l'expiration des impayés, ni les promotions
+durables. Ces lots restent séparés dans le [registre](SUITE-APRES-COMMERCE.md).
 
-## Décision de stockage
+## Invariant et stockage
 
-MongoDB standalone reste supporté. Ni réplica set présumé, ni abonnement ou infrastructure supplémentaire.
+MongoDB standalone reste supporté, sans infrastructure payante supplémentaire.
+Une admission porte une place cuisine et, pour une livraison, une place
+livraison. Les index uniques partiels `(tenantId, slot, seat)` arbitrent les
+collisions entre toutes les répliques et tous les canaux.
 
-Une admission porte des places numérotées : `capacity.slot`, `capacity.kitchenSeat`, et `capacity.deliverySeat` pour la livraison. Deux index uniques partiels `(tenantId, slot, seat)` arbitrent les collisions. **Un seul CAS** `validating + propriétaire + empreintes → committing` écrit ensemble snapshot validé, identité de commande et places. Les places ne sont donc pas un effet séparé de la décision irréversible de créer la commande.
+Un seul CAS `validating + propriétaire + empreintes → committing` écrit
+ensemble le snapshot validé, l'identité de commande et les places. La lecture
+des places libres ne constitue jamais une réservation. Redis reste un contrôle
+de contention/anti-abus : son expiration ne fait pas autorité sur la capacité.
 
-La lecture des places libres est une proposition ; seuls le CAS et les index décident. Une collision E11000 provenant précisément de ces index permet de proposer un autre siège. Toute réponse d'écriture ambiguë impose une relecture ; `validating` ne prouve pas qu'un write retardé ne gagnera pas. Le noyau renvoie l'incertitude, jamais un acquittement de libération supposé.
+Une réponse perdue ne prouve pas l'échec de l'écriture. Toute décision ambiguë
+est relue sur primaire avec readConcern majority. Un résultat « complet » du
+noyau ne libère la tentative qu'après CAS terminal `validating → rejected`.
+Les inserts de journées/historique doivent transmettre le **writeConcern
+imbriqué**, vérifié par command monitoring Mongo ; une assertion sur des
+options locales ne suffit pas.
 
-Un résultat `full` du noyau n'est pas un rejet terminal : le futur orchestrateur doit gagner le CAS `validating → rejected` avant de libérer la tentative client. Un autre helper du même candidat peut être en vol. C01 conserve déjà cette frontière ; son intégration ne doit pas la perdre.
+Un snapshot engagé est matérialisable par `$setOnInsert`, sans recalcul des
+prix, nouveau numéro ou nouveau paiement. Une Order existante payée, annulée
+ou remise n'est jamais remise à son ancien état. La reprise précède les
+nouveaux contrôles de pause, fraîcheur, Turnstile et créneau plein.
 
-Une commande engagée est matérialisable par `$setOnInsert`, sans nouveau prix/numéro ni effet monétaire. L'abandon gagne avant l'engagement, ou observe la commande gagnante. Il ne supprime aucune commande existante.
+L'abandon gagne avant committing, ou retrouve la commande gagnante. Une
+tentative absente explicitement abandonnée laisse une identité terminale :
+un POST retardé ne peut pas la recréer. Une lecture/reprise seule ne crée
+pas ce marqueur.
 
-Après engagement, la capacité n'est libérée qu'après lecture primaire de **l'Order exact, même tenant/clientId/orderId, définitivement cancelled**. Le CAS retire les numéros de place et inscrit une date de libération. Il ne rouvre jamais l'admission. Un helper retardé ne ressuscite pas la commande annulée existante. Une panne avant restitution produit une sous-capacité réparable, jamais une place libérée sans preuve.
+Aucun TTL sur les admissions, les places ou les journées. Les empreintes,
+snapshots, propriétaires de validation et places sont privés, retirés des
+réponses et des événements publics.
 
-Pas de TTL sur l'admission, ses places ou le calendrier. Pas de snapshot de toutes les commandes dans un bucket Mongo qui pourrait atteindre 16 Mo ; chaque admission conserve son propre snapshot comme C01. Les places sont privées : projection et sérialisation les retirent.
+## Restitution et annulation
 
-### Préparation B réalisée — pas un parcours activé
+Une place n'est restituée qu'après lecture primaire de **l'Order exacte**,
+même tenant/clientId/orderId, définitivement `cancelled`. Le CAS retire
+les numéros de place et inscrit une date de restitution. Il ne rouvre
+jamais l'admission.
 
-- **Identité commune** : même clé tenant/clientId pour public protégé, legacy et staff. `kind` et `channel` privés/immuables distinguent les origines ; le canal exact `phone` ne peut devenir `pos` pendant l'engagement. Les anciennes admissions C01 sans ces champs restent publiques/online. L'empreinte interne ne dépend pas d'un JWT renouvelable et ne constitue jamais une preuve de reprise publique. Aucun import historique à corps inconnu n'utilise cette fabrique.
-- **Noyau multiwriters** : dernière place testée entre les trois origines ; snapshots staff conservent paiement et outbox fidélité, sans fabriquer `Order.publicRecovery`. Les portes du service public refusent les admissions internes, y compris libération du validateur. Les orchestrateurs de création/matérialisation staff et legacy ne sont **pas encore raccordés** ; `materializeSlot` C01 ne doit pas être pris pour un drainage mixte prêt à activer.
-- **Index réellement prêts** : `listIndexes()` exposait `unique:true` avant la fin de construction. Le garde lit désormais `$indexStats` sur primaire, contrôle les trois spécifications et refuse `building:true`, absence, erreur ou résultat incohérent, sans cache positif ni repli moins sûr. Recette réelle : chacun des trois index a été suspendu puis terminé sur Mongo8.0.12. Avant activation, vérifier l'action Mongo `indexStats` pour le compte applicatif ; un refus de privilège entraîne volontairement503. Une suppression administrative d'index pendant les ventes reste interdite, même après cette lecture.
-- **Grille brute pure** : `buildOrderCapacityCalendar` ne dépend ni de l'heure courante, ni des ventes, pauses web, abonnements ou Stripe. Horaires/fermetures Paris, capacités et déduplication testés face au service existant. Horaires incohérents/au-delà du jour refusés, `24:00` admis seulement en fin exclusive ; une seule occurrence de l'heure répétée DST reste la convention existante. Journée fermée explicitement distinguée d'une erreur. Depuis le 7 septembre, le modèle accepte zéro créneau **uniquement** avec une raison de fermeture explicite ; le bootstrap historique reste à livrer, aucun faux créneau n'est créé.
-- **Journal téléphone pur** : corps/UUID durables avant POST, ISO canonique, reçu staff lié aux coordonnées/lignes/identité de la tentative, prix serveur autoritaire. Reprise sans expiration, sans nouveau clientId sur404/4xx ; aucun faux état rejeté avant contrat staff de clôture durable. Le premier reçu reste immuable et le corps reste présent pour réparer le journal caisse avant archivage. Aucun consommateur UI : il faut encore inscrire la clé dans la purge, exiger une vraie exclusion inter-onglets (pas le fallback mono-process), obtenir la confirmation serveur avant encaissement et remplacer l'ancien envoi en file — ne jamais envoyer par les deux chemins.
+Un timeout de paiement, un remboursement localement observé, une commande
+prête ou remise ne sont pas des preuves d'annulation. Une panne avant
+restitution peut laisser une sous-capacité, jamais une place libérée par
+supposition. La reprise idempotente répare la restitution confirmée.
 
-Ces modules restent volontairement sans activation. Les fixtures du noyau créent des admissions internes pour éprouver les index : elles ne prouvent pas le fonctionnement des routes staff, ni leur reprise dans le POS.
+## Calendrier, disponibilité et réglages BO
 
-## Calendrier — prérequis d'activation
+Le contrôle privé `Tenant.capacityControl` est absent par défaut. Les
+états absent/seeding/blocked ferment les nouvelles réservations. Aucun
+GET, scan ou démarrage de l'API n'active automatiquement un restaurant.
 
-Le modèle `OrderCapacityDay` porte une journée Paris unique par restaurant, une grille bornée (1–1000 créneaux, ou zéro avec fermeture explicite) et les capacités cuisine (1–100) et livraison (1–50). Une journée commence `seeding`, jamais `ready` implicitement. Le noyau refuse une journée absente/non prête, un créneau non exact et les index uniques manquants.
+Une journée porte un plan Paris borné et une révision source. Elle commence
+seeding, puis ready après vérification. Zéro créneau exige une fermeture
+explicite, pas un faux créneau. Les horaires incohérents sont refusés ;
+`24:00` n'est permis qu'en fin exclusive. La convention DST reste celle
+du calendrier du restaurant.
 
-**La capacité/grille d'une journée initialisée ne change pas.** Une nouvelle version de clé ne doit jamais oublier les commandes déjà prises. Les modifications BO devront annoncer leur date d'effet sur les journées non initialisées ; un changement urgent d'une journée déjà ouverte exige une opération dédiée de fermeture/reconciliation, pas une édition silencieuse. Les gardes du modèle ne protègent pas contre une écriture native Mongo ou une restauration incohérente : ces opérations restent réservées au bootstrap/migrations audités.
+Le premier vrai writer peut figer une nouvelle journée via une intention
+sur le Tenant et sa révision. Des helpers reprennent **le même plan** après
+panne. L'historique non rapproché empêche l'ouverture, sans suppression ni
+plan alternatif opportuniste.
 
-La primitive ne canonise pas encore les créneaux téléphone hors grille. Ce raccordement devra utiliser le même intervalle et le même calendrier que le public, sans regarder une grille différente à chaque requête.
+Horaires/fermetures, capacité/intervalle et réglages livraison passent par
+le writer coordonné Tenant. Un PATCH ne remplace pas une intention et ne
+réécrit pas une journée déjà figée. Ses effets concernent les journées
+encore non initialisées. La pause web, l'identité et l'impression restent
+indépendantes. Toute modification urgente d'une journée déjà ouverte exige
+une opération dédiée de rapprochement, pas une édition native.
 
-### Coordination calendrier et réglages implémentée le 7 septembre — capacité non activée
+`SlotsService` lit désormais les admissions non restituées, y compris
+committing, sans recompter l'Order matérialisée. Les bornes document/jour,
+anomalies de sièges ou configurations corrompues ferment la lecture.
+La grille n'est pas recalculée depuis les réglages courants quand elle est
+déjà figée. Une consultation seule ne précrée pas quatorze journées.
 
-`OrderCapacityCalendarStore` complète désormais la grille pure. Le contrôle privé `Tenant.capacityControl` est absent par défaut ; aucun tenant n'est activé automatiquement. Sa version, son état, la génération de bootstrap, la date de bascule et la révision de réglages sont validés. Une unique intention contient le plan complet borné, sa révision et son empreinte, sans données de vente ou de client.
+La disponibilité staff ne dépend pas de la pause web. Le serveur doit
+néanmoins refuser une nouvelle réservation passée, trop proche ou hors
+horizon, et non se contenter des choix affichés par le POS. Une reprise
+déjà engagée reste valable indépendamment de ces nouveaux contrôles.
 
-- `preview` ne fait aucune écriture : grille brute d'un ancien tenant ou plan déjà figé. Une prévisualisation n'est pas une disponibilité promise ; elle ne vérifie pas Stripe, les délais ou les places libres.
-- `ensureDay` exige un contrôle actif et les trois index réellement prêts. Un CAS sur **le même Tenant et la même révision** fige le plan. Une modification des réglages gagnante avant le CAS impose un recalcul ; après le CAS elle n'altère plus cette journée.
-- Les helpers reprennent ce plan exact : insertion `seeding`, vérification, passage `ready`, puis nettoyage de l'intention exacte. Une réponse perdue impose une relecture, jamais une expiration/remplacement du plan. Les anciennes générations ne peuvent acquitter une nouvelle intention.
-- Une journée fermée reste fermée même si les réglages courants ont changé. Grille et révision source sont immuables ; un ancien calendrier sans révision ne peut être adopté implicitement. Les lectures corrompues sont refusées et les prévisualisations projettent uniquement leurs champs publics.
-- Une commande historique non annulée, quel que soit son canal ou son état, ou une admission déjà engagée dans le jour Paris empêche l'ouverture d'une **nouvelle** journée. L'intention et le `seeding` restent conservés pour rapprochement : zéro journée `ready`, pas de suppression ni de deuxième plan opportuniste. Cette garde n'importe pas l'historique et peut bloquer l'initialisation des autres jours jusqu'à réconciliation.
+## Bootstrap historique reprenable
 
-**Raccordement BO versionné dans `0b2c498` :** `TenantCapacitySettingsStore` est désormais appelé par `TenantsService.updateSettings` pour capacité/intervalle, `TenantsService.updateHours` pour horaires/fermetures et `DeliveryService.updateSettings` pour la configuration livraison. Sur un contrôle actif, réglages et incrément de révision sont écrits dans un seul CAS, filtré par tenant, génération de bootstrap et révision lue. Une intention créée ou nettoyée en parallèle n'est jamais remplacée par le PATCH ; les journées figées conservent leur plan.
+Le lecteur natif reste strictement en lecture seule et borné. Il projette
+les empreintes utiles, pas les coordonnées ou prix clients. Son rapport
+reste `analysis_only`, `canActivate:false`, cohérence `non_atomic` :
+un scan favorable n'est pas une autorisation de bascule.
 
-- Le validateur partagé `order-capacity-control.ts` vérifie contrôle et intention persistés dans les deux stores. Un contrôle explicitement `null` est refusé, y compris en prévisualisation ; il n'est jamais assimilé à un contrôle historique absent. Les réglages capacitaires sont refusés en `seeding` ou `blocked`.
-- Un tenant sans contrôle garde ses réglages historiques, sous filtre d'absence : une initialisation concurrente impose une relecture, sans activation automatique. Cette compatibilité legacy ne lui invente pas une révision CAS entre PATCH.
-- Le patch est validé et détaché avant I/O ; seuls les champs autorisés s'écrivent. Une erreur de transport ne déclenche pas de réécriture automatique. L'opérateur doit relire ; une réponse perdue ne signifie pas que le réglage n'a pas été appliqué. Projections et sérialisation conservent le contrôle privé.
-- Identité, pause web et impression seules conservent leurs chemins habituels. Un patch mixte contenant capacité/intervalle passe en entier par le writer coordonné.
+L'application explicite sous exclusion des anciens writers :
 
-**Frontière inchangée :** aucune route de commande ni provider Nest n'appelle le store de calendrier ; aucun bootstrap ni calendrier métier n'est créé par ces changements. Bootstrap historique, arrêt/drainage des anciens binaires et raccordement de tous les writers de commandes restent obligatoires. Une relecture de contrôle entre deux documents ne clôt pas un ancien writer en vol. Ce lot n'est ni activé ni déployé sur staging par les preuves locales ci-dessous.
+1. Vérifie le tenant, la date Paris, les budgets, la génération UUID et le SHA
+   du nouveau writer attesté. Aucun ancien binaire ne doit encore écrire.
+2. Installe seeding par CAS d'absence, ou reprend exactement sa génération.
+   Aucun retour active → seeding, reset, effacement ou rollback legacy.
+3. Ferme les anciens validating par décision durable et matérialise les
+   committing C01 sans changer preuve, prix, numéro ou jeton.
+4. Importe tous les tickets non annulés à créneau depuis le début du jour
+   Paris de bascule, **au-delà de l'horizon public si nécessaire**.
+5. Crée une admission historical terminale pour un ticket ancien sans corps
+   initial : lien exact Order, canal et sièges, sans preuve publique fabriquée.
+   Une admission C01 existante conserve ses empreintes.
+6. Répare seulement les restitutions appuyées par l'Order annulée exacte ;
+   préserve les journées déjà figées, puis vérifie index et rapprochements.
+7. Passe les journées ready et le contrôle active seulement après relecture
+   complète. Chaque phase est reprenable après perte de réponse.
 
-## Bootstrap et tous les writers — encore à réaliser
+Surbooking, créneau hors grille, identités contradictoires ou budget dépassé
+restent bloquants. Aucune vente n'est supprimée, arrondie, repricée ou
+annulée pour obtenir un rapport vert. Les snapshots complets nécessaires
+au matérialiseur ont aussi un budget BSON, avec curseur batchSize1.
 
-1. Bloquer les nouvelles admissions de créneau et arrêter les anciens writers avant initialisation. Une simple pause de la vitrine ne suffit pas pour POS/legacy.
-2. Matérialiser les anciens snapshots C01 `committing` ; préserver les preuves de reprise et les identités.
-3. Importer tous les tickets futurs non annulés avec `pickup.slot`, **y compris les tickets staff au-delà de l'horizon public**. Une journée ne s'ouvre qu'après seed complet et vérification des index.
-4. Conserver tout surbooking historique ; bloquer son créneau et demander une réconciliation, sans supprimer une vente ou inventer une annulation.
-5. Faire partager l'admission et ses places par public protégé, public legacy et staff. Aucune adoption d'une commande privée par une preuve publique neuve ; une même clé tenant/clientId ne réserve pas deux créneaux.
-6. Remplacer la disponibilité calculée sur les seuls Orders par l'autorité des admissions, en incluant `committing` sans compter deux fois les Orders matérialisés.
-7. Réparer les restitutions après annulation, de façon idempotente et observable. Pas de purge liée à l'âge ni au seul statut bancaire local.
+L'attestation `writersStopped` n'est **pas un verrou distribué**. Vérifier
+la révision servie et l'arrêt des anciens déploiements reste une opération
+de release. Les anciennes files téléphone, notamment déjà encaissées,
+doivent être inventoriées et rapprochées avant ouverture : ne jamais les
+purger pour contourner un rejet.
 
-### Audit des autres writers et du bootstrap — préparation, aucun import exécuté
+La [procédure opérateur](BOOTSTRAP-CAPACITE-OPERATEUR.md) documente la CLI :
+lecture seule par défaut, application réservée au staging avec génération
+explicite, reprise après interruption et contrôles avant ouverture. Elle ne
+certifie pas elle-même l'arrêt des anciennes répliques ou des files tablettes.
 
-La revue statique des modules API, scripts et reprises du dépôt n'a pas identifié de quatrième writer API des horaires/fermetures/capacités hors des trois chemins BO raccordés. `scripts/simulation/ouvrir-chez-nicolas.mjs` passe par leurs routes ; la conversion CRM crée un nouveau tenant avec ses valeurs par défaut, sans activer le contrôle. Les backfills marque/contact/fondateur/médias/tracking et la console des comptes n'écrivent pas ces réglages.
+## Outils de maintenance
 
-**Les outils natifs ne sont pas protégés par cette coordination :**
+Le commit `8137037` isole seed, seed-orders, copie cible et purge aux bases
+loopback jetables `snackmanager_disposable_<suffix>`, sans authentification
+ou options arbitraires. Ils refusent tout contrôle/admission/calendrier C15,
+y compris un contrôle null. Une source C15 n'est pas copiée comme une base
+redémarrable. Les dumps restent des exports, pas des preuves de restauration.
 
-- `packages/db/src/seed.ts:603–637` détruit/recrée Classfood, ses horaires et ses Orders, sans reprise des admissions et journées capacitaires.
-- `packages/db/src/seed-orders.ts:291–292,408–435,515` supprime puis insère des Orders directement, avec des retraits pouvant être encore futurs, sans réservation de place.
-- `packages/db/src/copy-database.ts:65–88` copie les collections successivement via le driver, contrôle privé inclus, sans cohérence intercollections ni reproduction des index. Une copie ou restauration ne doit jamais être redémarrée en se fiant à un `capacityControl.active` transporté.
+Le wrapper Railway de reprises accepte une liste positive de backfills.
+Le writer tracking exige l'application explicite et n'est pas relancé comme
+un faux contrôle en lecture seule. Ces gardes ne constituent pas une
+exclusion contre un administrateur Mongo : une restauration cohérente est
+une opération séparée, avec rapprochement et anciens writers arrêtés.
 
-Ces outils doivent être exclus des tenants initialisés ou encadrés par une maintenance/reprise explicitement auditée. Leurs gardes C15 ne sont **pas implémentés**. La vérification d'archive de `.github/workflows/restauration.yml` ne prouve pas une réimportation cohérente. Aucune activation n'est autorisée sur la seule base des trois writers BO.
+## Téléphone : confirmation avant encaissement
 
-### Analyse historique pure implémentée le 7 septembre — aucun scan ni import
+Le POS propose les créneaux de l'API staff. Corps, tenant, UUID et version
+du brouillon sont persistés avant POST sous vraie exclusion inter-onglets.
+Pas de chemin simultané via la file offline. Sans réseau, aucune promesse
+de réservation et aucun encaissement anticipé.
 
-Versionné dans `d1e01f8`, `planCapacityBootstrap` reçoit des **empreintes internes normalisées explicitement fournies** : identités Mongo en hex, dates, origine/état/créneau, liens de reprise privés et plans calendaires. Il ne lit aucune base, horloge ou fournisseur et n'écrit rien. Son rapport reste inconditionnellement `mode: analysis_only`, `canActivate: false`, `requiresExclusiveRescan: true` ; `reviewed` signifie seulement qu'aucune anomalie n'a été trouvée dans ces entrées, jamais que la migration est autorisée.
+Le même corps est repris après timeout/404/4xx ; aucun nouvel UUID automatique.
+Les états « à vérifier », rejet terminal et confirmation sont distincts.
+Une reprise reçue répare le journal caisse avant archivage. Le ticket ouvert
+dans un autre onglet n'est pas effacé sur simple égalité de contenu.
 
-- Périmètre à partir du **début du jour Paris de bascule**, pas seulement les créneaux après l'heure de bascule. Tous les jours observés sont examinés, même au-delà de l'horizon public, sans boucle sur les jours intermédiaires. Le jour de bascule garde une grille de prévisualisation même sans occupation ; aucun GET ni analyse ne fige un calendrier réel.
-- Occupation cuisine pour chaque Order non annulée avec créneau, livraison en plus si nécessaire. `ready`, `delivered` ou remboursement bancaire ne libèrent pas une place. Les identifiants historiques non UUID restent admis ; une commande caisse/legacy sans créneau reste légitime, contrairement à une livraison ou une commande publique prouvée non annulée sans créneau.
-- Order et admission/snapshot sont rapprochés par tenant/clientId/orderId/canal/créneau et preuves existantes. L'Order réelle prévaut sur son ancien snapshot sans réinitialiser état ou paiement. `committing` reste à matérialiser/acquitter ; `created` avec snapshot résiduel, Order protégée sans admission, identités contradictoires et scan dupliqué sont signalés. Aucune preuve publique ni nouvelle identité n'est fabriquée.
-- Une ancienne date d'admission ne masque pas un snapshot ou une réservation futurs/malformés. Réservations incohérentes, collision de sièges et restitution encore nécessaire après annulation sont bloquantes ; l'analyse ne restitue elle-même aucune place.
-- Les journées figées conservent grille/révision/capacités et fermeture. Plan corrompu/non prêt ou intention non rapprochée bloquent le rapport ; pas de remplacement opportuniste par les réglages actuels. Horaires hors grille, millisecondes et occurrences DST différentes ne sont pas arrondis ; les surcapacités réelles restent visibles sans plafonner les compteurs ni supprimer une vente.
-- La sortie exclut hashes de reprise, clientId, snapshots, coordonnées et montants. Elle n'est pas un export de restauration : les snapshots complets restent indispensables au futur matérialiseur. Elle ne certifie ni l'exhaustivité des tableaux ni leur cohérence temporelle.
+Le premier reçu est lié aux coordonnées/lignes/identité de la tentative,
+avec les montants serveur faisant autorité. La confirmation initiale exige
+counter/pending, puis l'encaissement utilise la commande existante et la
+modale habituelle. Reprise d'un ticket déjà payé : aucun deuxième règlement.
 
-### Lecteur historique natif implémenté le 7 septembre — recette isolée, aucun import
+La purge/désappairage ne doit effacer ni tentative incertaine ni encaissement
+direct en cours. L'absence de Web Locks ferme ce parcours direct ; elle ne
+fait pas passer un verrou mono-process pour une protection entre onglets.
+Une recette Chromium ne vaut pas validation Safari, tablette physique ou TPE.
 
-Versionné dans `e93f29d`, `OrderCapacityBootstrapReader` reçoit une connexion native Mongo déjà ouverte et un tenant/date de bascule explicites. Il n'instancie aucun modèle Mongoose et n'appelle ni `init`, ni `recover`, ni `ensureDay`, ni aucun autre helper susceptible d'écrire. Aucun provider Nest, endpoint, CLI opérateur ou appel en staging/production ajouté ; la connexion de maintenance devra être limitée à la lecture.
+## Preuves de cette passe et diffusion
 
-- Inventaire des trois collections Orders/admissions/journées du restaurant, sans filtre de date, état ou canal. Le lecteur suit ainsi les références anciennes vers le futur et garde les annulations pour contrôler les restitutions. Il inclut les références texte/tableau associables à l'ID demandé pour signaler leur type BSON invalide, sans les convertir en tenant légitime. Les enregistrements sans rattachement tenant identifiable ne peuvent pas être attribués par ce scan : un contrôle global de restauration reste distinct.
-- Projections natives positives : seuls les champs du plan analytique sont récupérés. Coordonnées, lignes/prix, tokens de suivi, validationOwner et autres données métier ne sont pas chargés, même dans les snapshots. `$type` distingue champ absent, null, objet et conteneur corrompu ; seul un véritable ObjectId devient hex, aucune chaîne ISO n'est réparée en Date. `hydrate` aurait masqué ce dernier défaut et les transformations publiques auraient retiré les preuves privées. [Sémantique Mongo des types](https://www.mongodb.com/docs/manual/reference/operator/aggregation/type/).
-- Lectures primaires avec `majority`, curseurs de64 documents, délai driver/serveur et fermeture en `finally`, y compris après limite ou erreur. Pas de création de collection/index, pas de `$out/$merge`, pas de fichiers intermédiaires. La fermeture des curseurs est également requise par le [guide du driver](https://www.mongodb.com/docs/drivers/node/current/crud/query/cursor/).
-- Limites par défaut : **10 000 documents cumulés, 8 Mio BSON projetés, 90 journées distinctes depuis la bascule, 30 secondes**. Les deux lectures Tenant entrent dans le budget octets mais pas dans le compteur des trois collections ; une ligne N+1 rend le scan incomplet. Plafonds explicites maximaux :100 000 documents,64 Mio,366 jours,120 secondes. Une journée lointaine n'est pas exclue par sa date ; le plafond borne le nombre de jours analysés, jamais un horizon public. Les buffers du driver et le rapport ne constituent pas une mesure RSS à l'octet ; le délai par curseur, au plus10 secondes, peut interrompre avant le budget global. Nettoyage réseau séparément borné par le driver.
-- Contrôle complet et réglages capacitaires relus à la fin : génération, état, date de bascule, révision **et intention**, horaires/fermetures/capacités. Un changement d'intention peut ne pas incrémenter la révision ; il invalide néanmoins la lecture. Contrôle explicitement null/corrompu refusé, absence legacy distincte ; sur contrôle existant, la date demandée doit correspondre exactement à sa bascule.
-- `scan.complete:true` signifie seulement curseurs épuisés dans les limites et Tenant inchangé aux deux observations. **`consistency: non_atomic`, `canActivate:false`, `requiresExclusiveRescan:true` restent inconditionnels.** Les Orders/admissions peuvent avoir évolué entre les lectures ; un aller-retour des réglages peut être invisible. Collection absente/vide ne prouve pas l'absence d'une perte de données. Ces observations ne constituent ni snapshot transactionnel, ni sauvegarde exhaustive, ni clôture des anciens writers.
-- Erreur, dépassement ou dérive : `scan.complete:false`, code/source bornés et **`report:null`**, sans message/cause driver, URI ou données privées. Aucun plan partiel « reviewed » n'est retourné et aucune tentative de reprise automatique n'écrit quoi que ce soit.
+Preuves locales du raccordement, y compris le durcissement temporel staff :
 
-**Prochaine étape — application reprenable, non implémentée :** fermer toutes les nouvelles créations à créneau, arrêter/drainer les anciens writers, puis établir `seeding` et un `bootstrapId` durables. Arbitrer les anciens `validating` par CAS, aider les `committing` insert-only sans recalculer prix/numéro/promotion, puis importer les places avec les index uniques et relecture après chaque résultat ambigu. Ne rendre journées puis tenant prêts qu'après rapprochement exhaustif sous exclusion. Identité discordante, snapshot/Order manquant, horaire non mappable ou surcapacité restent bloquants ; aucune suppression, annulation ou compensation promotionnelle aveugle. La préparation des nouveaux writers et de leur reprise doit précéder tout import réel.
+- dernière place après expiration Redis : 7/7, dont scénario réel renforcé ;
+- trois origines, replays, matérialisation et disponibilité : 31/31 ;
+- bootstrap : 50/50, dont 42 scénarios Mongo et 8 gardes de cible ;
+- passe Mongo consolidée : 405/405 sur dix fichiers, dont les gardes de cible
+  et la CLI ; les gardes ne sont pas comptées comme des scénarios métier Mongo ;
+- API : 2 472 tests réussis, 470 ignorés dans la passe sans variables de bases
+  réelles ; les scénarios Mongo ci-dessus ont leur exécution dédiée explicite ;
+- POS : 271 tests + 5 gardes build-terrain ; client-core : 128 ; contrats : 466 ;
+- DB : 402 tests réussis, 10 ignorés hors passe Mongo dédiée ; notices BO : 30 ;
+- gardes de maintenance : 62 tests DB et 16 exécutions Bash ;
+- prix/fromages/promotions/livraison : 63 tests unitaires, sans présenter leur
+  faux port de persistance comme une preuve de capacité ;
+- huit scénarios navigateur POS et quatre BO, avec vrais composants et API
+  simulée : confirmation/encaissement, réponse perdue, stockage indisponible,
+  Web Locks absents, reprises inter-onglets et préservation des tickets modifiés ;
+- compilation API et chargement CommonJS du module compilé ; aide CLI et refus
+  explicite de son application en environnement production.
 
-**Compatibilité de reprise à implémenter avant import :** `OrdersService.createWithOutcome` appelle encore `assertLegacyKeyAvailable` avant la recherche d'une Order existante ; cette porte refuse toute admission. Importer naïvement un ancien ticket casserait donc son rejeu legacy/staff. `materializeSlot` sélectionne tous les `committing`, mais son matérialiseur actuel ne traite que public/online. Le futur bootstrap doit conserver les preuves publiques existantes, et distinguer les historiques à corps initial inconnu sans fabriquer de `proofHash`/`payloadHash` de requête. Un `kind: historical` privé dans la même collection est une proposition à valider avec le schéma et les branches de rejeu, **pas un genre actuellement supporté** ; le canal d'origine reste conservé et la reprise publique n'est jamais élargie.
+Les comptes de tests se recoupent entre passes : ne pas les additionner. Le
+harnais POS portable est documenté dans [e2e/local](../../e2e/local/README.md) ;
+il ne compile pas Expo et ne remplace ni le bundle servi ni un essai physique.
+Les derniers changements doivent passer la CI sur leur propre SHA. Les preuves
+distantes sont consignées sur la PR123 ; elles ne se déduisent pas de ces tests.
 
-**POS téléphone : frontière opérationnelle.** Le POS peut aujourd'hui mettre la commande en file offline et l'annoncer acceptée avant admission serveur. Refuser ensuite le créneau pourrait laisser un ticket annoncé accepté, voire encaissé, absent côté serveur. C15-B doit obtenir la réservation serveur avant confirmation/encaissement des nouvelles commandes à créneau, distinguer l'état « à confirmer » et rapprocher explicitement les anciennes entrées offline. POS sans créneau reste hors de cette capacité réservée. Ne pas promettre une réservation hors réseau sans mécanisme distinct de places préallouées.
+Préflight staging en lecture seule le 7 septembre : Classfood présente 2 115
+Orders, quatre admissions, aucun contrôle ni calendrier ; trois occupations à
+reprendre depuis le début du jour Paris et aucune anomalie dans le scan borné.
+L'API servait encore `247d27a4c2cc0af4ff0194ee461c217b3f3792f1`, contrôlé par
+`/health`. Rien n'a été importé ou activé. Ce scan non atomique devra être refait
+sous exclusion avant bascule. L'inventaire des anciennes files téléphone des
+tablettes et la recette authentifiée staging restent ouverts.
 
-### Ordre du raccordement restant
+Réception requise : concurrence mixte, anciennes admissions/import hors
+horizon, réponses perdues, BO et jours figés, téléphone hors réseau/reprise,
+confirmation avant encaissement, annulation/restitution, CI, puis parcours
+staging. Le scénario RED d'origine reste bloquant dans la CI ; ni skip,
+ni continue-on-error, ni assertion de deux commandes attendues.
 
-1. **Calendrier à intégrer aux parcours** : contrôle, intention durable et coordination des trois writers BO sont implémentés ; restent l'appel de la prévisualisation depuis les parcours et l'initialisation par la première vraie admission vérifiée, sans figer 14 jours sur un GET. Les journées déjà initialisées ne changent pas. Expliquer dans le BO les journées figées et les dates d'effet.
-2. **Tous les writers et reprise** : nouveau binaire sans ancien writer de secours pour `pickup.slot` quand le contrôle est absent/seeding/blocked ; commandes sans créneau inchangées. Authentification staff avant admission ; récupération/rejet durable et matérialiseur commun avant UI. Orchestrer plein/rejet, compensation et annulation sans affirmer qu'un timeout a annulé une écriture. Bootstrap : arrêter/drainer les anciens binaires, arbitrer les anciens validating par CAS, matérialiser committing et reprendre tout l'historique futur, sans horizon arbitraire ni preuve publique inventée. Les lignes non mappables/surchargées restent bloquées pour rapprochement.
-3. **Téléphone et activation** : créneaux issus de l'API staff (la pause web ne ferme pas implicitement le téléphone), tentative persistée, confirmation serveur `counter/pending`, puis encaissement de cette même commande via le module existant. Clôture durable avant nouvelle tentative après envoi incertain. Inventorier/vider ou rapprocher explicitement les anciennes files téléphone déjà encaissées avant bascule. Ensuite seulement : RED runtime vert, recette complète et PR vers develop/staging.
+PR obligatoire vers develop, staging via le pipeline du dépôt et contrôle
+du SHA servi. Avant activation, vérifier indexStats pour l'utilisateur Mongo
+et arrêter les anciens writers. Après activation, **ne pas redéployer un
+ancien binaire dépourvu d'admission commune**. En incident : fermer les
+nouvelles réservations et rapprocher, sans effacer les engagements.
 
-## Tests et critères de réception
+Production uniquement après recette staging et **GO distinct sur le lot exact**.
 
-La suite du noyau utilise MongoDB standalone local isolé. Les URI refusent les bases métier, hôtes distants, identifiants et options ; chaque exécution crée une base suffixée puis ne supprime que cette base.
+## Hors de C15
 
-Relevé local du 6 septembre : noyau39/39 (33 scénarios Mongo et6 gardes), schéma21/21, immuabilité54/54 (dont10 scénarios Mongo). Non-régression C01 réelle23/23, suite API1904 tests verts/192 explicitement ignorés hors passes DB dédiées, suite DB207 verts/10 ignorés hors passe Mongo dédiée. Typage API/DB et lints ciblés verts. Revue indépendante favorable **uniquement pour ce socle non activé** ; le RED contrôleur a été rejoué et reste rouge (1 attendu,2 observés).
-
-Relevé suivant, préparation B : noyau55/55, identité15/15, grille66/66, index49/49 dont5 scénarios Mongo (3 constructions réellement suspendues), journal téléphone48/48 et52 régressions POS vertes. C01 réel23/23, schéma22/22, immuabilité réelle54/54. Suite API2029 verts/213 ignorés hors passes dédiées ; DB208 verts/10 ignorés hors passe dédiée. Typages API/DB/POS et lints vérifiés. Les recettes unitaires ne se substituent pas aux suites Mongo séparées. **RED contrôleur rejoué : toujours2 commandes pour1 place**. Revues croisées favorables au lot préparatoire seulement.
-
-La CI lance les tests de construction d'index dans un conteneur Mongo éphémère **dédié** sur27018, distinct des autres suites : le failpoint utilisé est global au daemon. Le test exige `enableTestCommands`, refuse un failpoint déjà actif et le désarme même si la réponse d'activation est perdue ; le runner arrête ensuite uniquement le conteneur qu'il a créé. Aucun de ces réglages ne concerne Railway ou une base métier.
-
-Relevé local du 7 septembre : schémas de contrôle/fermeture **61/61**, paquet DB **269 verts/10 ignorés** hors passe Mongo dédiée ; immuabilité **54/54** sur Mongo. Nouveau store calendrier **57/57**, dont **49 scénarios Mongo réels** et8 gardes URI. Passe commune calendrier+grille+noyau+C01 **201/201**. Les réponses perdues, les deux connexions, les révisions concurrentes, le nettoyage d'une autre intention, le changement de bootstrap, les index absents et les historiques aux bornes Paris sont exercés. La CI est configurée pour exécuter ce store avec les autres recettes du socle, avant le RED runtime bloquant. **Ce RED a été rejoué localement : toujours2 commandes pour1 place** ; aucune assertion n'a été affaiblie et aucune activation n'est autorisée par les tests du store.
-
-**Relevé local consolidé après raccordement BO, le 7 septembre : 266/266**, soit réglages **64**, calendrier **58**, noyau **55**, C01 **23** et grille pure **66**. Cette passe inclut les suites Mongo isolées et leurs gardes, pas 266 scénarios bancaires ou navigateur. Elle couvre le PATCH réellement retardé après 503 face à un réglage plus récent, le refus du contrôle `null` en prévisualisation et l'égalité de réponse/relecture des réglages livraison sur anciens et nouveaux tenants. La revue a corrigé le passage d'un sous-document Mongoose hydraté au contrat Zod strict, qui retournait sinon des valeurs par défaut malgré un enregistrement réussi. **Le RED runtime reste séparé et en échec : 2 commandes pour 1 place.** Suite API : **2055 verts/319 ignorés** hors passes DB dédiées ; typage, lint, build API et chargement CommonJS du module compilé verts. Ces preuves ne livrent ni bootstrap historique, ni admission commune des routes, ni activation/staging.
-
-**CI du raccordement BO, antérieure à l'analyseur historique :** sur `6bb1d8e62ce6e916a83e47a64a9a91dbe80dfecd`, [CI 34066887784](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34066887784) échoue uniquement sur le RED runtime. Typage, lint, tests monorepo, PostgreSQL/fidélité et les étapes Mongo du socle sont verts ; réglages64 + calendrier58 + noyau55 =177/177 et immuabilité54/54 exécutés dans la passe dédiée. Compilation/chargement compilé sont ignorés après cet échec, pas validés par cette CI. Le [contrôle des secrets 34066887858](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34066887858) est vert. Chaque changement suivant doit être vérifié sur son propre SHA poussé ; ce relevé ne certifie pas la CI de l'analyseur.
-
-**Analyseur historique `d1e01f8`, recette locale du 7 septembre : 116/116 tests purs** (84 règles principales,17 intégrité,15 formes/contrats et conflits de snapshots). Les régressions ont été constatées rouges avant correction : anciennes dates masquant des références futures/malformées, Order protégée sans admission, livraison/commande publique prouvée sans créneau et orderId partagé entre deux candidats. Le snapshot résiduel après `created` est également bloquant, sans rejouer un ancien état de l'Order. Suite API complète **2171 verts/319 ignorés** hors passes DB dédiées ; typage/lint API, build et chargement CommonJS de l'application et de l'analyseur verts. Gitleaks sur les sources concernées vert. Revue croisée favorable à ce lot analytique uniquement. Aucun scan métier, daemon Mongo, import, SMS, paiement, aperçu UI ou déploiement exécuté dans cette recette ; les preuves Mongo ci-dessus appartiennent aux passes antérieures. Le test runtime dédié reste à faire passer par le raccordement complet, pas par l'analyseur.
-
-**Lecteur `e93f29d`, recette locale du 7 septembre : 75 tests unitaires +35 tests d'intégration verts**, dont27 scénarios sur un Mongo isolé et8 gardes de cible. Les commandes de la connexion lecteur sont surveillées par liste positive dès l'ouverture, distinctement des fixtures écrivantes ; données/index inchangés, aucune collection absente créée, projections privées vérifiées jusque dans les réponses réseau. Trois lots réels pour130 tickets, erreur à la70e ligne avec `getMore/killCursors`, limites N+1/octet/jour/durée, références corrompues et intention modifiée sans incrément de révision sont couverts. Passe lecteur+analyseur **226/226** ; passe consolidée calendrier/réglages/noyau/C01/grille/analyseur/lecteur **492/492**. Suite API **2254 verts/346 ignorés** hors passes DB dédiées ; type/lint/build et chargement CommonJS API/lecteur verts. Revue croisée favorable au lecteur seul. Le RED runtime a été rejoué sur le même daemon isolé : **toujours2 commandes pour1 place**, sans modification de l'assertion. La CI inclut maintenant le lecteur dans la passe Mongo du socle, avant ce test bloquant.
-
-**Dernière CI antérieure au lecteur, vérifiée sur `b7c4860` :** [CI34068868356](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34068868356), typage/lint/tests monorepo et passes PostgreSQL/Mongo du socle verts, seul RED runtime en échec. Analyseur116/116 et suite API2171 verts/319 ignorés dans cette passe. [Secrets34068868381](https://github.com/GLWebDevAgency/snack-manager/actions/runs/34068868381) vert. Compilation/chargement compilé ignorés après l'échec ; ces résultats ne certifient pas le SHA du lecteur. Les preuves distantes de chaque nouveau SHA sont consignées sur la PR123, qui reste en brouillon tant que le runtime est rouge.
-
-- Dernière place simultanée, collisions réelles sur les index, cuisine et livraison indépendantes sans fuite de place.
-- Deux helpers du même candidat ; perte de réponse après write ; timeout avant write réellement retardé.
-- Abandon avant CAS retardé, commit gagnant contre abandon, ancienne reprise après annulation/restitution et réattribution de la place.
-- Calendrier absent/non prêt, index journée ou siège manquant, preuves/snapshot/créneau invalides, autre tenant.
-- Restitution seulement après Order exact annulé, rejeu et réponse perdue, état de libération incohérent refusé.
-- Validation des dates Paris, tailles et capacités, confidentialité et absence de TTL.
-
-Commande du noyau (Node24 du dépôt) :
-
-```sh
-ORDER_CAPACITY_TEST_MONGO_URL=mongodb://127.0.0.1:27017/snackmanager_capacity_test_ci \
-  pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts
-```
-
-**Réception C15-B obligatoire avant de déclarer la survente corrigée** : le RED contrôleur devient vert ; mélange des trois writers ; seed ancien/hors horizon ; modification BO différée ; téléphone offline puis reprise ; refus avant encaissement ; annulation/helper tardif et disponibilités ; CI réelle puis recette staging. Les tests du noyau ne sont pas cette réception.
-
-## Promotion et expiration — restent séparées
-
-Le compteur promotionnel est actuellement réservé avant le snapshot puis compensé par décrément best-effort. Une interruption peut laisser un quota orphelin. La piste sans transaction est un intent d'opération dans l'admission **avant** effet, puis compteur et reçu dans une même écriture Promotion ; abandon confirmé ferme le reçu, y compris par tombstone avant une réservation retardée. Il faut gérer bornes/rotation de reçus, archivage au lieu de suppression physique et writers historiques. Cette piste n'est pas livrée par le toggle atomique.
-
-La politique existante ne restitue pas automatiquement le quota d'une promotion lors de l'annulation d'une commande déjà créée ; aucun changement commercial implicite ici. L'expiration d'impayés, la réconciliation Stripe et le budget de paiement dans le créneau restent C05 : [note dédiée](RESERVATIONS-IMPAYEES.md).
-
-## Diffusion
-
-PR obligatoire vers `develop`, staging via le pipeline existant et preuve du SHA servi. C15-A ne change aucun parcours live et ne crée aucun calendrier réel. Avant activation C15-B, écrire le runbook d'arrêt des anciens writers/bootstrap/ouverture et la limite de rollback : un ancien binaire sans admission commune ne doit pas reprendre des commandes sur un calendrier actif. Production uniquement sur GO distinct.
+Les réservations de promotion restent compensées en best effort ; une panne
+avant snapshot peut laisser un quota orphelin. C15 évite de restituer un quota
+gagnant sur la seule base d'un timeout, mais ne livre pas un ledger promotionnel.
+L'expiration/réconciliation des paiements et la politique de délai restent
+[C05](RESERVATIONS-IMPAYEES.md). Aucune dépense SMS, commission réelle ou
+promesse de livraison complète n'est ajoutée par ce lot.
