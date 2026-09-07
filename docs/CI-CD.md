@@ -295,12 +295,16 @@ scripts/reprise-mongo.sh staging backfill:founder --appliquer
 scripts/reprise-mongo.sh staging backfill:contact --appliquer
 scripts/reprise-mongo.sh staging backfill:brand --appliquer
 
-# 3. backfill:tracking n'a PAS de mode lecture : elle écrit dès le
-#    lancement. Elle n'AJOUTE qu'un jeton là où il manque, sans jamais
-#    remplacer une valeur existante — c'est ce qui la rend sans risque,
-#    et ce qui la sort de la règle « lire d'abord ».
-scripts/reprise-mongo.sh staging backfill:tracking
+# 3. backfill:tracking n'a PAS de mode lecture : son script écrit
+#    immédiatement. Le lanceur Railway exige donc --appliquer et ne relance
+#    pas automatiquement ce writer sous couvert d'un contrôle en lecture.
+scripts/reprise-mongo.sh staging backfill:tracking --appliquer
 ```
+
+Le lanceur refuse les tâches autres que `backfill:founder`, `backfill:contact`,
+`backfill:brand`, `backfill:medias` et `backfill:tracking` avant tout accès Railway.
+Les seeds, copies et purges ne sont pas des reprises de données autorisées sur
+une base servie ; [leur cible est exclusivement locale et jetable](../packages/db/README.md).
 
 | Script | Ce qu'il répare | Ce qu'on voit sans lui |
 |---|---|---|
