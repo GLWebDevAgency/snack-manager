@@ -210,6 +210,12 @@ jobs:
           DELIVERY_OPERATOR_HTTP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_http_test_ci
         run: pnpm --filter @sm/api exec vitest run src/modules/delivery/delivery-operators.integration.test.ts src/modules/delivery/delivery-access.http.integration.test.ts
 
+      - name: Tests MongoDB réels — affectation et départ des missions livreur
+        env:
+          DELIVERY_MISSION_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_mission_test_ci
+          DELIVERY_MISSION_HTTP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_delivery_mission_http_test_ci
+        run: pnpm --filter @sm/api exec vitest run src/modules/delivery/delivery-missions.integration.test.ts src/modules/delivery/delivery-missions.http.integration.test.ts
+
       - name: Tests MongoDB réels — promotion et compteur concurrent
         env:
           ENGAGE_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_engage_test_ci
