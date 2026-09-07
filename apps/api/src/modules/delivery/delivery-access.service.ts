@@ -162,7 +162,21 @@ export class DeliveryAccessService {
 
   async authenticate(token: string): Promise<DeliveryAccessSession> {
     if (!DeliveryAccessSecretSchema.safeParse(token).success) throw this.denied();
-    const sessionHash = hashDeliveryAccessSecret(token);
+    return this.authenticateHash(hashDeliveryAccessSecret(token));
+  }
+
+  /** Revalidation interne d'un contexte déjà authentifié, sans conserver le
+   * bearer brut. Ce contrôle ne forme pas une transaction avec une commande :
+   * une requête autorisée déjà en vol peut croiser une révocation ultérieure. */
+  async revalidate(access: DeliveryAccessSession): Promise<DeliveryAccessSession> {
+    const current = await this.authenticateHash(access.sessionHash);
+    if (current.operatorId !== access.operatorId || current.tenantId !== access.tenantId
+      || current.sessionVersion !== access.sessionVersion) throw this.denied();
+    return current;
+  }
+
+  private async authenticateHash(sessionHash: string): Promise<DeliveryAccessSession> {
+    if (!/^[a-f0-9]{64}$/.test(sessionHash)) throw this.denied();
     const operator = await this.operators.findOne({ 'session.hash': sessionHash })
       .read('primary')
       .readConcern('majority').maxTimeMS(10_000)

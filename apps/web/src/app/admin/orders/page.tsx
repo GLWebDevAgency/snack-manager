@@ -54,7 +54,7 @@ import { OrderDrawer } from "./OrderDrawer";
 import { CancelModal } from "./CancelModal";
 import { PrintTicket } from "./PrintTicket";
 import { RefundModal } from "./RefundModal";
-import { DispatchModal } from "./DispatchModal";
+import { DeliveryMissionModal } from "./DeliveryMissionModal";
 import { roleAdmin } from "../session";
 
 const PAGE_SIZE = 50;
@@ -675,6 +675,7 @@ export default function OrdersPage() {
           order={selected}
           onClose={() => setSelectedId(null)}
           onPrint={printTicket}
+          onManageDelivery={["owner", "gerant", "cogerant", "caisse"].includes(role ?? "") ? (o) => { setSelectedId(null); setDispatchTarget(o); } : undefined}
           onRefund={role === "owner" ? (o) => { setSelectedId(null); setRefundTarget(o); } : undefined}
           onCancel={(o) => {
             // Fermer la fiche avant d'ouvrir la modale : le Drawer écoute
@@ -699,8 +700,8 @@ export default function OrdersPage() {
 
       {refundTarget && <RefundModal key={refundTarget._id} order={refundTarget} onClose={() => setRefundTarget(null)}
         onRefunded={(updated) => { replaceOrder(updated); setRefundTarget(null); }} />}
-      {dispatchTarget && <DispatchModal key={dispatchTarget._id} order={dispatchTarget} onClose={() => setDispatchTarget(null)}
-        onDispatched={(updated) => { replaceOrder(updated); setDispatchTarget(null); }} />}
+      {dispatchTarget && <DeliveryMissionModal key={dispatchTarget._id} order={dispatchTarget} onClose={() => setDispatchTarget(null)}
+        onUpdated={() => { void load({ silent: true }); }} />}
 
       {/* ── Zone d'impression (masquée à l'écran) ── */}
       <PrintTicket order={printOrder} />

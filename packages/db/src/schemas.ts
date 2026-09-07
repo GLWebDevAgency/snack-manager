@@ -1,6 +1,7 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
+import { DeliveryMissionSchema } from './delivery-mission.schema';
 import { HistoricalOrderAdmissionImportSchema, validHistoricalOrderAdmission, OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
@@ -72,6 +73,7 @@ function hidePrivateOrderFields(
   delete returned.paymentFlow;
   delete returned.counterCollection;
   delete returned.publicRecovery;
+  delete returned.deliveryMission;
   return returned;
 }
 
@@ -1219,6 +1221,7 @@ export const OrderSchema = new Schema(
      * statut) plutôt que d'échouer en validation en plein service.
      */
     trackingToken: { type: String, default: null },
+    deliveryMission: { type: DeliveryMissionSchema, default: null, select: false },
     virtualBrandId: { type: Schema.Types.ObjectId, default: null }, // marques virtuelles T4
     // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
     meta: { type: Schema.Types.Mixed, default: null },
@@ -1238,6 +1241,8 @@ export const OrderSchema = new Schema(
 );
 OrderSchema.index({ tenantId: 1, createdAt: -1 });
 OrderSchema.index({ tenantId: 1, status: 1 });
+OrderSchema.index({ tenantId: 1, type: 1, 'deliveryMission.assignment.operatorId': 1, _id: 1 });
+OrderSchema.index({ tenantId: 1, type: 1, _id: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1 }, { unique: true }); // rejeu offline idempotent
 OrderSchema.index(
   { tenantId: 1, loyaltyEarnOperationId: 1 },

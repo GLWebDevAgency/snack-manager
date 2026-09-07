@@ -50,6 +50,7 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
   let captured = false;
   let captureFailure: Reason = null;
   let busy = false;
+  let revocation = 0;
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<AccessState>) => {
     state = { ...state, ...patch, hasInvitation: invitation !== null };
@@ -76,13 +77,15 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
     if (captureFailure) { fail(captureFailure); return; }
     if (!browser.online()) { fail("offline"); return; }
     busy = true;
+    const observedRevocation = revocation;
     publish({ phase: "checking", reason: null, online: true });
     try {
       const session = await readSession();
+      if (observedRevocation !== revocation) return;
       if (session && session !== "revoked") connected(session);
       else if (session === "revoked") { publish({ session: null }); fail("revoked"); }
       else ready();
-    } catch { fail(browser.online() ? "network" : "offline"); }
+    } catch { if (observedRevocation === revocation) fail(browser.online() ? "network" : "offline"); }
     finally { busy = false; }
   }
 
@@ -152,6 +155,7 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
   }
 
   return { start, refresh, associate, logout, connectivityChanged,
+    accessRejected: () => { revocation++; publish({ session: null }); fail("revoked"); },
     getSnapshot: () => state, getServerSnapshot: () => INITIAL,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };

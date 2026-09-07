@@ -5,6 +5,7 @@ import { Btn } from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
 import { createDeliveryAccessClient, type AccessState } from "./access-client";
+import { DeliveryMissions } from "./delivery-missions";
 
 const MESSAGES: Record<NonNullable<AccessState["reason"]>, string> = {
   invalid: "Ce lien d’invitation est incomplet. Demandez au restaurant de vous le renvoyer.",
@@ -45,10 +46,11 @@ export function DeliveryAccess() {
 
   const busy = ["checking", "associating", "disconnecting"].includes(state.phase);
   const connected = state.phase === "connected" && state.online;
+  const hasSession = Boolean(state.session);
   const title = connected ? "Accès associé."
     : state.phase === "associating" ? "Association en cours."
       : state.phase === "disconnecting" ? "Déconnexion en cours."
-        : state.phase === "checking" ? "Vérifions votre accès."
+        : state.phase === "checking" ? hasSession ? "Accès à vérifier." : "Vérifions votre accès."
           : state.reason ? "Un instant avant de continuer."
             : state.hasInvitation ? "Associez ce téléphone."
               : state.signedOut ? "Vous êtes déconnecté."
@@ -65,10 +67,10 @@ export function DeliveryAccess() {
           <span className="flex items-center gap-1.5 text-xs text-mut"><span aria-hidden className={`size-1.5 rounded-full ${state.online ? "bg-accent" : "bg-prep"}`} />{state.online ? "Vérification en ligne" : "Hors connexion"}</span>
         </header>
 
-        <section className="pb-8 pt-11 sm:pt-16" aria-labelledby="delivery-access-title" aria-busy={busy}>
-          <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-accentink">Votre téléphone · votre accès</p>
-          <h1 id="delivery-access-title" className="max-w-[390px] text-[clamp(30px,8.7vw,42px)] font-semibold leading-[1.08] tracking-[-0.055em]">{title}</h1>
-          {!state.reason && <p className="mt-5 text-[15px] leading-7 text-mut">
+        <section className={`pb-8 ${hasSession ? "pt-6" : "pt-11 sm:pt-16"}`} aria-labelledby="delivery-access-title" aria-busy={busy}>
+          {!hasSession && <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-accentink">Votre téléphone · votre accès</p>}
+          <h1 id="delivery-access-title" className={`max-w-[390px] font-semibold leading-[1.08] tracking-[-0.055em] ${hasSession ? "text-2xl" : "text-[clamp(30px,8.7vw,42px)]"}`}>{title}</h1>
+          {!state.reason && <p className={`${hasSession ? "mt-2 text-sm leading-6" : "mt-5 text-[15px] leading-7"} text-mut`}>
             {connected ? "Votre restaurant vous reconnaît sur ce téléphone."
               : state.phase === "associating" ? "Attendez la confirmation du restaurant."
                 : state.phase === "disconnecting" ? "Le restaurant retire la session de ce téléphone."
@@ -83,17 +85,17 @@ export function DeliveryAccess() {
             {!state.reason && <span className="sr-only">{title}</span>}
           </div>
 
-          {state.session && <Card className="mt-7 p-5 sm:p-6">
+          {state.session && <Card className="mt-4 p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mut">{connected ? "Votre identité livreur" : "Dernier accès vérifié"}</span>
               {connected && <span className="flex items-center gap-1.5 text-xs font-semibold text-okt"><Icon name="check" size={15} />Associé</span>}
             </div>
-            <p className="mt-5 break-words text-[26px] font-semibold tracking-[-0.04em]">{state.session.name}</p>
+            <p className="mt-3 break-words text-xl font-semibold tracking-[-0.04em]">{state.session.name}</p>
             <p className="mt-1 break-words text-[15px] text-mut">{state.session.restaurantName}</p>
-            <div className="mt-6 flex items-start gap-2.5 border-t border-line pt-4 text-xs leading-5 text-mut"><Icon name="clock" size={16} className="mt-0.5 shrink-0" /><p>Accès valable jusqu’au {expiryLabel(state.session.expiresAt)}, sauf retrait par le restaurant.</p></div>
+            <details className="mt-3 border-t border-line pt-3 text-xs leading-5 text-mut"><summary className="cursor-pointer">Validité de cet accès</summary><p className="mt-2">Accès valable jusqu’au {expiryLabel(state.session.expiresAt)}, sauf retrait par le restaurant.</p></details>
           </Card>}
 
-          {connected && <p className="mt-5 text-[13px] leading-6 text-mut">Cet écran confirme votre accès. Les missions de livraison ne sont pas encore disponibles.</p>}
+          {state.session && <DeliveryMissions key={`${state.session.restaurantSlug}:${state.session.operatorId}`} session={state.session} available={connected && !state.logoutPending} onRevoked={access.accessRejected} />}
           {state.session && state.hasInvitation && <p className="mt-5 text-[13px] leading-6 text-prept">Vous avez ouvert une nouvelle invitation. Déconnectez cet accès avant d’associer le nouveau lien.</p>}
 
           <div className="mt-8 space-y-3">

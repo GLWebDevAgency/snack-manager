@@ -55,12 +55,14 @@ export function OrderDrawer({
   onPrint,
   onCancel,
   onRefund,
+  onManageDelivery,
 }: {
   order: Order;
   onClose: () => void;
   onPrint: (order: Order) => void;
   onCancel: (order: Order) => void;
   onRefund?: (order: Order) => void;
+  onManageDelivery?: (order: Order) => void;
 }) {
   const rank = TIMELINE_RANK[order.status] ?? 0;
   const cancelled = order.status === "cancelled";
@@ -149,6 +151,7 @@ export function OrderDrawer({
             {order.delivery.address.postalCode} {order.delivery.address.city}</address>
           {order.delivery.instructions && <p className="mt-2 text-sm text-prept">{order.delivery.instructions}</p>}
           {order.delivery.dispatchedAt && <p className="mt-2 text-xs text-mut">Départ à {timeHHMM(order.delivery.dispatchedAt)}{order.delivery.driverName ? ` · ${order.delivery.driverName}` : ""}</p>}
+          {onManageDelivery && <Btn variant="ghost" className="mt-3 min-h-11" onClick={() => onManageDelivery(order)}>Gérer la livraison</Btn>}
         </section>}
 
         {/* ── Téléphone ── */}

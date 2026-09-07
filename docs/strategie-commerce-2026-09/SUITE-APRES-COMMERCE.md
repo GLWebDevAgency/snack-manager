@@ -2,7 +2,7 @@
 
 **Registre opérationnel actualisé le 7 septembre 2026.** C'est le point d'entrée des demandes du fondateur ; les audits liés restent des photographies datées et les spécifications décrivent les critères de réception. Ne pas réouvrir un sujet sur la seule lecture d'un ancien constat, ni confondre code écrit, fusionné, déployé et recetté.
 
-**Dernière livraison : [L2.1 accès livreur](ACCES-LIVREUR.md) est déployé sur staging** via #125, SHA `a87af145fdebc025180791a4a8c7ca8e6c8fae2b`, quatre services et smoke 8/8 vérifiés. La recette Classfood a confirmé l'association, la persistance après rechargement, la révocation et le refus de réutiliser le lien initial. L'unique accès de test reste révoqué. Le correctif de reprise du site (#124) et C15 (#123) restent intégrés ; voir la [recette datée et les limites](RECETTE-C15-STAGING.md). **Suite : finir le correctif du faux avertissement d'ancienneté observé en recette L2.1, puis missions/remise L2.2–L2.3 et espace client L3.** Production inchangée.
+**Dernière livraison : [L2.1 accès livreur](ACCES-LIVREUR.md) et sa correction d’horloge sont déployés sur staging** via #125/#126, dernière révision `86ca72a54be066bc8a073049a2297435df3dcd42`, quatre services et smoke 8/8 vérifiés. La recette Classfood a confirmé l'association, la persistance après rechargement, la révocation et le refus de réutiliser le lien initial. L'accès de test a été révoqué à l'issue de cette recette ; son état courant doit être relu avant toute nouvelle intervention. Le correctif de reprise du site (#124) et C15 (#123) restent intégrés ; voir la [recette datée et les limites](RECETTE-C15-STAGING.md). **En cours : [missions/affectation/départ L2.2](MISSIONS-LIVREUR.md), puis remise/incident L2.3 et espace client L3.** Production inchangée.
 
 **Objectif :** faire fonctionner les parcours vendus à Classfood de bout en bout avec les moyens d'un développeur seul. L'[audit initial](../audit-2026-08-28/AUDIT-STRATEGIQUE-ET-TECHNIQUE.md) conserve la vision concurrentielle, technique, sécurité, données, exploitation, HACCP et IA. L'[audit commerce](PARCOURS-COMMERCE-PRODUCTION.md) et l'[espace client](HISTORIQUE-ESPACE-CLIENT.md) détaillent les écarts ; **l'ordre de travail et les états actualisés ci-dessous font référence**.
 
@@ -14,7 +14,7 @@ Un seul lot fonctionnel en réalisation ; relecture, tests et préparation non f
 | --- | --- | --- |
 | **L0 — Fermer le lot paiement actuel** | Retrait online → comptoir sur la même commande ; encaissement POS explicite espèces/TPE/TR ; monnaie, journal, reprise ; remise distincte. Revue indépendante, vérification globale puis `develop`/staging et recette du scénario Classfood. | **LIVRÉ SUR STAGING via #120, `e266721`.** CI/migrations/quatre services verts ; smoke8/8, démos9/9 ; Classfood réel en staging : même commande passée au comptoir puis encaissée, un reçu/un audit. Aucun débit bancaire réel ni certification TPE/impression. Production inchangée. |
 | **L1 — Fiabilité du service et reprise** | Tentative checkout persistée avant POST et suivi retrouvable ; file active sans coupure à minuit/200 commandes ; historique gérant paginé, recherche POS, exports exacts ; abandons et paiements tardifs, créneaux pleins/après minuit et précommandes ; refus/incident et notifications utiles. Sous-lots distincts C01/C03/C04/C05/C11/C13/C15. | **PARTIEL.** Parcours nominal présent ; ne pas assimiler la reprise de paiement L0 à la reprise complète du navigateur. Prioriser les pertes/doubles commandes et la réception quotidienne. |
-| **L2 — Livraison réellement exécutable** | Prérequis visibles au BO ; gérant crée/révoque un livreur ou habilite un équipier polyvalent ; missions isolées, affectation/réaffectation, départ, QR/PIN de remise et incidents ; application web mobile installable. Les accès opérationnels ne nécessitent pas un abonnement RH. | **PARTIEL. L2.1 livré et recetté sur staging (#125)** : création/habilitation et accès révocable. Missions, affectation, preuve de remise et incidents restent à livrer (L2.2–L2.3). Tarifs/zones/adresse/créneau/prépaiement existent. Ne dépend pas de l'inscription fidélité : un client invité doit pouvoir être livré. |
+| **L2 — Livraison réellement exécutable** | Prérequis visibles au BO ; gérant crée/révoque un livreur ou habilite un équipier polyvalent ; missions isolées, affectation/réaffectation, départ, QR/PIN de remise et incidents ; application web mobile installable. Les accès opérationnels ne nécessitent pas un abonnement RH. | **PARTIEL. L2.1 livré et recetté sur staging (#125/#126)** : création/habilitation et accès révocable. L2.2 missions/affectation/départ est en vérification ; preuve de remise et incidents restent à livrer en L2.3. Tarifs/zones/adresse/créneau/prépaiement existent. Ne dépend pas de l'inscription fidélité : un client invité doit pouvoir être livré. |
 | **L3a — Identité client et préremplissage** | Session personnelle séparée du QR fidélité, inscription/connexion vérifiée, profil et coordonnées préremplies sans écraser la saisie ; adresse demandée pour livraison seulement, sauvegarde volontaire. Conservation du parcours invité. | **À FAIRE. Twilio Verify choisi ; essai gratuit uniquement.** Préparation du compte possible pendant L0–L2, aucun lancement public/payant. |
 | **L3b — Boucle fidélité et réachat** | Adhésion/rattachement sûrs, points/tampons et récompenses liés à une vraie vente, crédit web/POS, consommation et compensation ; « Mes commandes », historique protégé, recommander aux conditions actuelles. | **PARTIEL.** Carte/design/navigation/solde et création accompagnée existent. Pas de boucle complète : inscription publique, gains web, consommation et historique personnel restent à livrer. Dépend de L3a pour l'espace personnel, pas du secret QR. |
 | **L4 — Sur-place public** | Commander en ligne pour manger sur place, préparation/ticket/suivi cohérents ; d'abord retrait comptoir, puis QR/table vérifiable si cette prestation est retenue. | **NON LIVRÉ.** Le mode POS ne prouve pas le parcours public. |
@@ -119,7 +119,7 @@ Bornes C01 : ce journal local n'est ni un compte client, ni l'historique personn
 
 La cuisine fait `nouvelle → en préparation → prête`. Elle ne confirme jamais la remise au client, sur place, à emporter, au retrait ou en livraison. L'API vérifie cette règle avant les retours idempotents ; une ancienne tablette cuisine ne peut pas contourner le changement. Une nouvelle remise exige un état `ready` et une identité caisse/gestion autorisée.
 
-Le KDS affiche l'attente caisse/livreur. Le POS confirme une remise comptoir déjà payée, après réponse serveur et jamais via une file hors ligne. Une livraison nécessite en plus un départ confirmé ; sa clôture manuelle reste dans le back-office habilité. Aucun accès livreur ni preuve QR n'est implémenté dans ce lot.
+Le KDS affiche l'attente caisse/livreur. Le POS confirme une remise comptoir déjà payée, après réponse serveur et jamais via une file hors ligne. Une livraison nécessite en plus un départ confirmé ; sa clôture manuelle reste dans le back-office habilité. Les accès livreur sont livrés séparément en L2.1 ; la remise par preuve QR/PIN reste à livrer.
 
 ### Limite importante : encaisser n'est pas remettre
 
@@ -129,18 +129,21 @@ L0 supprime le paiement implicite historique à la remise : le règlement puis l
 
 La preuve d'encaissement et le paiement sont atomiques dans la commande ; le journal append-only et les événements sont réparables par rejeu. Pas de worker de réparation universel dans ce lot, ni remboursement espèces. Voir [protocole](PAIEMENTS-ANNULATION-DURABLE.md) et [réservations](RESERVATIONS-IMPAYEES.md).
 
-## 2. Accès livreur et preuve de remise — proposition, non implémentée
+## 2. Livraison — accès et missions, puis preuve de remise
 
-Parcours cible : `paiement confirmé → préparation → prête → affectation et départ → remise confirmée`.
+Accès L2.1 : livré sur staging (#125/#126). Affectation et départ L2.2 : code/tests dans [PR #127](https://github.com/GLWebDevAgency/snack-manager/pull/127), preuves de déploiement et de recette attachées à la PR. [Protocole et limites des missions](MISSIONS-LIVREUR.md). La preuve de remise et les incidents ci-dessous restent la cible **non livrée L2.3**.
+
+Parcours cible : `affectation possible pendant la préparation → prête et paiement confirmé → départ explicite → remise confirmée`.
 
 | Acteur | Responsabilité |
 | --- | --- |
 | Cuisine | Préparer et signaler prêt ; aucune clôture client |
-| Caisse / responsable | Affecter un livreur, confirmer la prise en charge, gérer les incidents |
+| Responsable | Affecter/réaffecter avant départ ; arbitrer les incidents dans le futur parcours dédié |
+| Caisse | Confirmer la prise en charge d’une mission affectée, sans gérer l’affectation |
 | Livreur authentifié | Voir seulement ses missions actives, les coordonnées strictement nécessaires et confirmer leur remise |
 | Client | Présenter une preuve dédiée à cette commande au moment de la remise |
 
-Choix conseillé au pilote : interface web mobile installable, sans application native supplémentaire, optimisation de tournées ni suivi GPS continu. L'accès livreur doit être indépendant de l'abonnement RH, mais ne donne accès ni aux finances, ni aux menus, ni aux autres clients. Il faut concevoir invitation/révocation, durée de session et affectation avant d'ajouter un rôle au JWT.
+Choix au pilote : interface web mobile, installation à valider séparément, sans application native supplémentaire, optimisation de tournées ni suivi GPS continu. L'accès livreur est indépendant de l'abonnement RH et ne donne accès ni aux finances, ni aux menus, ni aux autres clients. Invitation/révocation et durée de session sont propres à cet accès ; aucun rôle livreur n’est ajouté au JWT professionnel.
 
 Preuve : QR à forte entropie et/ou code court, secret propre à la commande, usage unique et durée limitée. Ne réutiliser ni QR fidélité ni jeton de consultation du suivi. Un QR identifie une preuve ; il ne donne pas à son détenteur le droit de modifier la commande sans authentification de l'opérateur.
 

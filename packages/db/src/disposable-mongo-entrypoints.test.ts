@@ -8,6 +8,10 @@ import { runCopyDatabase } from './copy-database';
 
 const DISPOSABLE = 'mongodb://127.0.0.1:27017/snackmanager_disposable_classfood_local';
 const SOURCE = 'mongodb://readonly.invalid/snackmanager';
+// These cases boot a real Node/tsx process. Give the test runner longer than
+// the child process's own hard limit, including cold starts on a busy CI host.
+const SEED_PROCESS_TIMEOUT_MS = 10_000;
+const SEED_TEST_TIMEOUT_MS = 15_000;
 afterEach(() => vi.restoreAllMocks());
 
 /** A real script process with both drivers intercepted: NO socket can open. */
@@ -34,7 +38,7 @@ Module._load = function(name, ...rest) {
 };`, { mode: 0o600 });
   try {
     return spawnSync(process.execPath, ['--require', hook, '--import', 'tsx', resolve(__dirname, script)], {
-      cwd: resolve(__dirname, '..'), encoding: 'utf8', timeout: 10_000,
+      cwd: resolve(__dirname, '..'), encoding: 'utf8', timeout: SEED_PROCESS_TIMEOUT_MS,
       env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, NODE_ENV: 'test', MONGO_URL: uri,
         SM_TEST_DURABLE_FIXTURE: durableFixture ? '1' : '0' },
     });
@@ -44,17 +48,21 @@ Module._load = function(name, ...rest) {
 describe('seeds réels : la garde précède mongoose.connect et les writes', () => {
   it.each(['seed.ts', 'seed-orders.ts'])('%s refuse une base servie avant tout appel au driver', (script) => {
     const result = runSeed(script, 'mongodb://127.0.0.1:27017/snackmanager');
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MONGO_DISPOSABLE_TARGET_REQUIRED');
     expect(result.stderr).not.toContain('TEST_DRIVER_CONNECT_CALLED');
-  });
+  }, SEED_TEST_TIMEOUT_MS);
 
   it.each(['seed.ts', 'seed-orders.ts'])('%s refuse les preuves présentes avant le premier modèle ou effacement', (script) => {
     const result = runSeed(script, DISPOSABLE, true);
+    expect(result.error).toBeUndefined();
+    expect(result.signal).toBeNull();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MONGO_DURABLE_ORDER_DATA_PRESENT');
     expect(result.stderr).not.toContain('TEST_MODEL_CALLED');
-  });
+  }, SEED_TEST_TIMEOUT_MS);
 });
 
 describe('copy/purge : la garde précède même l’ouverture de la source', () => {

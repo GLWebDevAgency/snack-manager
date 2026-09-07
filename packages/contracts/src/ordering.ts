@@ -511,6 +511,7 @@ export const TENANT_AUDIT_ACTIONS = [
   // ─── Commandes : l'argent qui sort de la recette du jour ───
   'order.cancel',
   'order.collect',
+  'order.assign',
   'order.discount',
   'order.dispatch',
   /**
@@ -585,6 +586,7 @@ export type TenantAuditAction = (typeof TENANT_AUDIT_ACTIONS)[number];
 export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.cancel': 'Annulation de commande',
   'order.collect': 'Encaissement de commande',
+  'order.assign': 'Affectation de livraison',
   'order.discount': 'Remise',
   'order.dispatch': 'Départ en livraison',
   'order.refund': 'Remboursement',
@@ -624,13 +626,14 @@ export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
  * de clé, qui n'aura pas cette forme, y tienne. Le champ `name` nommera alors
  * l'assistant, `role` le titre sous lequel il a agi.
  */
-export const AUDIT_AUTHOR_MEANS = ['password', 'pin', 'connector'] as const;
+export const AUDIT_AUTHOR_MEANS = ['password', 'pin', 'connector', 'delivery_access'] as const;
 export type AuditAuthorMeans = (typeof AUDIT_AUTHOR_MEANS)[number];
 
 export const AUDIT_AUTHOR_MEANS_LABELS: Record<AuditAuthorMeans, string> = {
   password: 'depuis le back-office',
   pin: 'au code, sur tablette',
   connector: 'par un assistant connecté',
+  delivery_access: 'depuis l’accès livreur',
 };
 
 /**
@@ -642,7 +645,7 @@ export const AUDIT_AUTHOR_MEANS_LABELS: Record<AuditAuthorMeans, string> = {
  * change de rôle ou quitte le restaurant. Ce qui est écrit reste écrit.
  */
 export type AuditAuthor = {
-  /** `users._id`, `staff._id`, ou demain un identifiant de clé de connecteur. */
+  /** `users._id`, `staff._id`, `delivery_operators._id`, ou une clé de connecteur. */
   id: string;
   /** Le nom AU MOMENT DU GESTE. Peut être vide : un compte historique n'en porte pas. */
   name: string;

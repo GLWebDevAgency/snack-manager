@@ -20,6 +20,19 @@ function fixture(hash = `#invitation=${TOKEN}`) {
 }
 
 describe("accès mobile livreur", () => {
+  it("retire immédiatement l’identité sur révocation confirmée par une route mission", async () => {
+    const f = fixture(); f.browser.request.mockResolvedValueOnce(Response.json(SESSION)); await f.client.start();
+    f.client.accessRejected();
+    expect(f.client.getSnapshot()).toMatchObject({ phase: "error", reason: "revoked", session: null });
+  });
+  it("une lecture d’accès antérieure ne restaure pas une identité révoquée entre-temps", async () => {
+    const f = fixture(""); f.browser.request.mockResolvedValueOnce(Response.json(SESSION)); await f.client.start();
+    let finish!: (response: Response) => void;
+    f.browser.request.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const reading = f.client.refresh(); f.client.accessRejected();
+    finish(Response.json(SESSION)); await reading;
+    expect(f.client.getSnapshot()).toMatchObject({ phase: "error", reason: "revoked", session: null });
+  });
   it("lit puis efface le fragment, sans appel d’association automatique ni secret dans l’état public", async () => {
     const f = fixture(); await f.client.start();
     expect(f.calls).toEqual(["read", "remove"]);
