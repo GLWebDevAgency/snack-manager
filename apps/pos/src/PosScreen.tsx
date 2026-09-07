@@ -786,7 +786,13 @@ export function PosScreen({
 
   const phone = usePhoneOrder({ client, enabled: mode === 'tel' && !DEMO, ready, slug: session.tenantSlug,
     isCurrentPairing: () => TENANT_SLUG === session.tenantSlug,
-    gate: saleInFlight, onBusy: setBusy, onUnauthorized: () => onLock('Session expirée — reconnectez-vous.'), repair: repairPhoneOrder });
+    gate: saleInFlight, onBusy: setBusy, onUnauthorized: () => onLock('Session expirée — reconnectez-vous.'), repair: repairPhoneOrder,
+    onArchivedDraft: (draftId) => {
+      if (!draftId) return;
+      saleInFlight.deferUntilIdle(() => {
+        if (draftId === draftIdentity.current.id) resetTicket();
+      });
+    } });
 
   const phoneCanSubmit = !DEMO && ready && phone.loaded && !phone.attempt && !phone.unavailable && !phone.slotsBusy && !phone.slotsError
     && lines.length > 0 && customerName.trim().length > 0 && customerPhone.replace(/\D/g, '').length >= 8

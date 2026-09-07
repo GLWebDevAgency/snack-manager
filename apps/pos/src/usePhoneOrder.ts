@@ -37,6 +37,8 @@ interface Options {
   onBusy: (busy: boolean) => void;
   onUnauthorized: () => void;
   repair: (attempt: ReceivedPhoneOrderAttempt) => Promise<void>;
+  /** Un autre onglet a déjà réparé le journal puis archivé ce reçu. */
+  onArchivedDraft: (draftId: string | undefined) => void;
 }
 
 /** Observable state; submission/repair remain explicit events, not effects. */
@@ -57,6 +59,7 @@ export function usePhoneOrder(options: Options) {
   const tenant = useRef<string | null>(null);
   const slotGeneration = useRef(0);
   const stateGeneration = useRef(0);
+  const observedAttempt = useRef<PhoneOrderAttempt | null>(null);
   let unsupported: string | null = null;
   try { requireCrossContextStoreLock(); } catch (cause) { unsupported = messageOf(cause); }
 
@@ -67,6 +70,14 @@ export function usePhoneOrder(options: Options) {
       if (!alive.current || generation !== stateGeneration.current) return;
       if (file && tenant.current && file.tenantId !== tenant.current) throw new Error('La reprise appartient à un autre établissement. Aucune nouvelle commande autorisée.');
       if (file) tenant.current = file.tenantId;
+      const previous = observedAttempt.current;
+      observedAttempt.current = file?.active ?? null;
+      if (previous && file?.active?.clientId !== previous.clientId && file?.lastReceipt?.clientId === previous.clientId) {
+        // Une clé vide seule ne prouve rien. Ce reçu exact n'existe qu'après
+        // réparation durable : retirer l'erreur et uniquement le brouillon lié.
+        setError(null);
+        latest.current.onArchivedDraft(previous.draftId);
+      }
       setAttempt(file?.active ?? null); setStorageError(null); setLoaded(true);
     } catch (cause) {
       if (alive.current && generation === stateGeneration.current) { setStorageError(messageOf(cause)); setLoaded(false); }
