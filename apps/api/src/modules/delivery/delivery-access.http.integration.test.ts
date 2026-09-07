@@ -72,10 +72,13 @@ type FixtureModels = ReturnType<typeof fixtureModels>;
 
 describe('cible de la recette HTTP livreur', () => {
   it('refuse toute cible externe, métier, authentifiée ou munie d’options', () => {
+    const authenticatedTarget = new URL('mongodb://localhost/snackmanager_delivery_http_test_ci');
+    authenticatedTarget.username = 'fixture';
+    authenticatedTarget.password = 'fixture';
     for (const raw of [
       'mongodb://remote.example/snackmanager_delivery_http_test_ci', 'mongodb://localhost/snackmanager',
       'mongodb+srv://localhost/snackmanager_delivery_http_test_ci',
-      'mongodb://fixture:fixture@localhost/snackmanager_delivery_http_test_ci',
+      authenticatedTarget.toString(),
       'mongodb://localhost/snackmanager_delivery_http_test_ci?replicaSet=anything',
       'mongodb://localhost/snackmanager_delivery_http_test_ci#fragment',
     ]) expect(() => deliveryHttpTestDatabase(raw)).toThrow();

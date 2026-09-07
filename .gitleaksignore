@@ -20,3 +20,11 @@ b0c6014567af9f0270d9b2ec491c8d01fb704880:docs/CI-CD.md:secret-en-dur:616
 # valeur réelle. Le littéral est remplacé dans l'arbre courant ; cette seule
 # empreinte historique reste exemptée, sans exclure le fichier ni la règle.
 ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-order-admission.integration.test.ts:uri-connexion-avec-identifiants:28
+
+# PR #125, commit 3dbc4a1 (07/09/2026) : deux fixtures loopback inventées
+# prouvent le refus des URI authentifiées AVANT toute connexion. Aucun
+# identifiant réel. Les littéraux sont remplacés par construction URL dans
+# l'arbre courant. Seules ces deux empreintes historiques sont exemptées ;
+# la règle et les fichiers restent entièrement contrôlés.
+3dbc4a1c6fe549abe7b4b36f9de21c9d3b9e1f63:apps/api/src/modules/delivery/delivery-access.http.integration.test.ts:uri-connexion-avec-identifiants:78
+3dbc4a1c6fe549abe7b4b36f9de21c9d3b9e1f63:apps/api/src/modules/delivery/delivery-operators.integration.test.ts:uri-connexion-avec-identifiants:55

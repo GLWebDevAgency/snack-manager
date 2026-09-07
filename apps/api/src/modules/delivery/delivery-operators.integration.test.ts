@@ -50,9 +50,12 @@ describe('frontières des accès livreurs', () => {
     expect(String(deliveryOperatorId(TENANT, a))).toBe(String(deliveryOperatorId(TENANT, { ...a, requestId: randomUUID() })));
     expect(String(deliveryOperatorId(TENANT, a))).not.toBe(String(deliveryOperatorId(OTHER, a)));
   });
+  const authenticatedTarget = new URL('mongodb://localhost/snackmanager_delivery_test_ci');
+  authenticatedTarget.username = 'fixture';
+  authenticatedTarget.password = 'fixture';
   it.each([
     'mongodb://remote.example/snackmanager_delivery_test_ci', 'mongodb://localhost/admin',
-    'mongodb+srv://localhost/snackmanager_delivery_test_ci', 'mongodb://user:secret@localhost/snackmanager_delivery_test_ci',
+    'mongodb+srv://localhost/snackmanager_delivery_test_ci', authenticatedTarget.toString(),
     'mongodb://localhost/snackmanager_delivery_test_ci?replicaSet=prod', 'mongodb://localhost/snackmanager_delivery_test_ci#fragment',
   ])('refuse une cible de test dangereuse %s', value => expect(() => deliveryTestDatabase(value)).toThrow());
   it('isole chaque base par UUID', () => {
