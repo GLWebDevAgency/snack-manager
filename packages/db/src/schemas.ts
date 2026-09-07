@@ -2,6 +2,7 @@ import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
 import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { DeliveryMissionSchema } from './delivery-mission.schema';
+import { DeliveryHandoffSchema } from './delivery-handoff.schema';
 import { HistoricalOrderAdmissionImportSchema, validHistoricalOrderAdmission, OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
@@ -74,6 +75,7 @@ function hidePrivateOrderFields(
   delete returned.counterCollection;
   delete returned.publicRecovery;
   delete returned.deliveryMission;
+  delete returned.deliveryHandoff;
   return returned;
 }
 
@@ -1222,6 +1224,7 @@ export const OrderSchema = new Schema(
      */
     trackingToken: { type: String, default: null },
     deliveryMission: { type: DeliveryMissionSchema, default: null, select: false },
+    deliveryHandoff: { type: DeliveryHandoffSchema, default: null, select: false },
     virtualBrandId: { type: Schema.Types.ObjectId, default: null }, // marques virtuelles T4
     // Métadonnées techniques (ex. { note: 'seed-history' } pour purger un jeu de démo)
     meta: { type: Schema.Types.Mixed, default: null },

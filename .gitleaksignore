@@ -34,3 +34,9 @@ ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-orde
 # Le littéral est remplacé par construction URL dans l'arbre courant.
 # Exemption limitée à cette empreinte historique, sans exclure fichier/règle.
 4d8937d18fb8b6e5443b4801034133df45b0e612:apps/api/src/modules/delivery/delivery-missions.integration.test.ts:uri-connexion-avec-identifiants:32
+
+# PR #130, commit eb0e7d5 (07/09/2026) : fixture loopback inventée du test
+# qui refuse toute cible authentifiée AVANT connexion. Aucun secret réel.
+# Le littéral est remplacé par construction URL dans l'arbre courant.
+# Seule cette empreinte historique est exemptée, pas le fichier ni la règle.
+eb0e7d5a8a88aae8941c39def4a0e197834e533d:apps/api/src/modules/delivery/delivery-handoff.integration.test.ts:uri-connexion-avec-identifiants:33

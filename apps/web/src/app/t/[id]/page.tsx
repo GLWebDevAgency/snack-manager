@@ -33,6 +33,7 @@ type Params = {
 export const metadata: Metadata = {
   title: "Suivi de commande",
   robots: { index: false, follow: false },
+  referrer: "no-referrer",
 };
 
 /*
@@ -98,6 +99,7 @@ export default async function TrackingPage({ params, searchParams }: Params) {
 
   return (
     <Tracking
+      key={id}
       orderId={id}
       trackingToken={token}
       ticket={ticket}

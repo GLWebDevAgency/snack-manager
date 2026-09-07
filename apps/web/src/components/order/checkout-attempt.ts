@@ -4,17 +4,26 @@ import {
   OrderTypeSchema,
   PaymentMethodSchema,
   PaymentStatusSchema,
+  DeliveryCustomerProofSchema,
+  DeliveryProofRequestSchema,
+  parseDeliveryHandoffQr,
+  PublicOrderRecoveryResultSchema,
   type CreatePublicOrder,
   type OrderStatus,
   type OrderType,
   type PaymentMethod,
   type PaymentStatus,
 } from "@sm/contracts";
+import { DELIVERY_PROOF_ACCESS_RETENTION_MS } from "./delivery-proof-access";
 
 export type CheckoutBusinessPayload = Omit<CreatePublicOrder, "clientId" | "turnstileToken" | "recoveryProof">;
 export type CheckoutReceipt = Readonly<{
   orderId: string;
   trackingToken: string;
+  /** Delivery access retained from the private local attempt, never a server response.
+   * Unlike the tracking token, this must never enter staff views, receipts or sockets.
+   */
+  recoveryProof?: string;
   number?: number;
   status?: OrderStatus;
   type?: OrderType;
@@ -48,11 +57,20 @@ export type RejectedCheckoutAttempt = AttemptIdentity & Readonly<{
   rejection: CheckoutRejection;
 }>;
 export type CheckoutAttempt = PendingCheckoutAttempt | ReceivedCheckoutAttempt | RejectedCheckoutAttempt;
+/** A capability verified on this origin, not a synthetic checkout attempt. */
+export type ImportedDeliveryReceipt = Readonly<{
+  v: 1; state: "imported"; tenant: string; origin: string; clientId: string; updatedAt: number;
+  receipt: Readonly<{ orderId: string; recoveryProof: string }>;
+}>;
+export type DeliveryCheckoutReceipt = ReceivedCheckoutAttempt | ImportedDeliveryReceipt;
 
 const DATABASE = "sm.checkout-attempts";
 const VERSION = 1;
+const DATABASE_VERSION = 2;
 const ACTIVE = "active";
 const RECEIPTS = "last-receipt";
+const DELIVERY_RECEIPTS = "delivery-receipts";
+const DELIVERY_RECEIPT_LIMIT = 128;
 const DEADLINE_MS = 5_000;
 const HEX_256 = /^[a-f\d]{64}$/;
 const UUID_V4 = /^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/;
@@ -134,8 +152,9 @@ function businessPayload(value: unknown): CheckoutBusinessPayload {
   delete result.recoveryProof;
   return result as CheckoutBusinessPayload;
 }
-function receiptValue(value: unknown): CheckoutReceipt {
-  if (!object(value) || !onlyKeys(value, ["orderId", "trackingToken", "number", "status", "type", "payment"]) || !nonempty(value.orderId, 128) || !nonempty(value.trackingToken, 2_048)) invalid();
+function receiptValue(value: unknown, allowPrivateProof = false): CheckoutReceipt {
+  if (!object(value) || !onlyKeys(value, ["orderId", "trackingToken", "number", "status", "type", "payment", ...(allowPrivateProof ? ["recoveryProof"] : [])]) || !nonempty(value.orderId, 128) || !nonempty(value.trackingToken, 2_048)) invalid();
+  if (Object.hasOwn(value, "recoveryProof") && (typeof value.recoveryProof !== "string" || !HEX_256.test(value.recoveryProof))) invalid();
   if (value.number !== undefined && (!Number.isSafeInteger(value.number) || (value.number as number) < 0)) invalid();
   if (value.status !== undefined && !OrderStatusSchema.safeParse(value.status).success) invalid();
   if (value.type !== undefined && !OrderTypeSchema.safeParse(value.type).success) invalid();
@@ -159,7 +178,7 @@ function parseAttempt(raw: unknown, tenant: string, origin: string): CheckoutAtt
   try {
     if (raw.state === "received") {
       if (!onlyKeys(raw, [...IDENTITY_KEYS, "receipt"])) corrupt();
-      receiptValue(raw.receipt);
+      receiptValue(raw.receipt, true);
     } else if (raw.state === "rejected") {
       if (!onlyKeys(raw, [...IDENTITY_KEYS, "rejection"])) corrupt();
       rejectionValue(raw.rejection);
@@ -177,14 +196,18 @@ function openDatabase(): Promise<IDBDatabase> {
     const fail = () => { if (!settled) { settled = true; clearTimeout(timer); reject(unavailable()); } };
     const timer = setTimeout(fail, DEADLINE_MS);
     try {
-      const request = window.indexedDB.open(DATABASE, VERSION);
+      const request = window.indexedDB.open(DATABASE, DATABASE_VERSION);
       request.onblocked = fail;
       request.onerror = fail;
       request.onupgradeneeded = (event) => {
-        // Never recreate missing stores or delete an unknown/future journal.
-        if (settled || event.oldVersion !== 0) { request.transaction?.abort(); fail(); return; }
-        request.result.createObjectStore(ACTIVE, { keyPath: "tenant" });
-        request.result.createObjectStore(RECEIPTS, { keyPath: "tenant" });
+        // The only upgrade adds a private per-order receipt store. Never rewrite,
+        // recreate or discard an existing active attempt or its immutable identity.
+        if (settled || ![0, 1].includes(event.oldVersion)) { request.transaction?.abort(); fail(); return; }
+        if (event.oldVersion === 0) {
+          request.result.createObjectStore(ACTIVE, { keyPath: "tenant" });
+          request.result.createObjectStore(RECEIPTS, { keyPath: "tenant" });
+        }
+        request.result.createObjectStore(DELIVERY_RECEIPTS, { keyPath: ["tenant", "receipt.orderId"] });
       };
       request.onsuccess = () => {
         const db = request.result;
@@ -192,7 +215,7 @@ function openDatabase(): Promise<IDBDatabase> {
         settled = true;
         clearTimeout(timer);
         db.onversionchange = () => db.close();
-        if (db.objectStoreNames.length !== 2 || !db.objectStoreNames.contains(ACTIVE) || !db.objectStoreNames.contains(RECEIPTS)) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
+        if (db.objectStoreNames.length !== 3 || !db.objectStoreNames.contains(ACTIVE) || !db.objectStoreNames.contains(RECEIPTS) || !db.objectStoreNames.contains(DELIVERY_RECEIPTS)) { db.close(); reject(new CheckoutAttemptStorageError("corrupt", "Le journal de commande est endommagé ou incompatible.")); return; }
         resolve(db);
       };
     } catch { fail(); }
@@ -200,11 +223,13 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /** Every mutation resolves only after strict transaction completion, never request success. */
-async function transaction<T>(
+async function transaction<T, C = CheckoutAttempt>(
   tenant: string,
-  storeName: typeof ACTIVE | typeof RECEIPTS,
+  storeName: typeof ACTIVE | typeof RECEIPTS | typeof DELIVERY_RECEIPTS,
   write: boolean,
-  action: (current: CheckoutAttempt | null, tx: IDBTransaction) => T,
+  action: (current: C | null, tx: IDBTransaction, fail: (error: unknown) => void) => T,
+  key?: IDBValidKey,
+  parser?: (raw: unknown, tenant: string, origin: string) => C | null,
 ): Promise<T> {
   const { origin } = scope(tenant);
   const db = await openDatabase();
@@ -226,22 +251,24 @@ async function transaction<T>(
       if (error) reject(error); else resolve(freeze(result));
     }
     try {
-      tx = db.transaction(write ? [ACTIVE, RECEIPTS] : [storeName], write ? "readwrite" : "readonly", { durability: "strict" });
+      tx = db.transaction(write ? [ACTIVE, RECEIPTS, DELIVERY_RECEIPTS] : [storeName], write ? "readwrite" : "readonly", { durability: "strict" });
       tx.oncomplete = () => { finish(); if (write) notify(tenant); };
       tx.onabort = () => finish(failure ?? unavailable());
       tx.onerror = () => { failure ??= unavailable(); };
       if (write && tx.durability !== "strict") throw unavailable();
       for (const name of Array.from(tx.objectStoreNames)) {
         const candidate = tx.objectStore(name);
-        if (candidate.keyPath !== "tenant" || candidate.autoIncrement || candidate.indexNames.length !== 0) corrupt();
+        const expectedKeyPath = name === DELIVERY_RECEIPTS ? JSON.stringify(["tenant", "receipt.orderId"]) : JSON.stringify("tenant");
+        if (JSON.stringify(candidate.keyPath) !== expectedKeyPath || candidate.autoIncrement || candidate.indexNames.length !== 0) corrupt();
       }
       const store = tx.objectStore(storeName);
-      const request = store.get(tenant);
+      const request = store.get(key ?? tenant);
       request.onsuccess = () => {
         try {
-          const current = parseAttempt(request.result, tenant, origin);
-          if (storeName === RECEIPTS && current && current.state !== "received") corrupt();
-          result = action(current, tx!);
+          const current = parser ? parser(request.result, tenant, origin) : parseAttempt(request.result, tenant, origin) as C | null;
+          const persisted: unknown = current;
+          if (storeName === RECEIPTS && persisted && (!object(persisted) || persisted.state !== "received")) corrupt();
+          result = action(current, tx!, error => { failure = storageError(error); tx!.abort(); });
         } catch (error) { failure = storageError(error); tx!.abort(); }
       };
     } catch (error) {
@@ -258,6 +285,131 @@ export function readCheckoutAttempt(tenant: string): Promise<CheckoutAttempt | n
 export function readLastCheckoutReceipt(tenant: string): Promise<ReceivedCheckoutAttempt | null> {
   return transaction(tenant, RECEIPTS, false, (current) => current as ReceivedCheckoutAttempt | null);
 }
+function expireReceiptAliases(tx: IDBTransaction, tenant: string, origin: string, fail: (error: unknown) => void) {
+  for (const name of [ACTIVE, RECEIPTS]) {
+    const store = tx.objectStore(name);
+    const request = store.get(tenant);
+    request.onsuccess = () => {
+      try {
+        const current = parseAttempt(request.result, tenant, origin);
+        if (!current || current.state !== "received" || !current.receipt.recoveryProof
+          || current.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS > Date.now()) return;
+        const receipt = { ...current.receipt };
+        delete receipt.recoveryProof;
+        store.put({ ...current, receipt });
+      } catch (error) { fail(error); }
+    };
+  }
+}
+/** Exact private lookup only, not a customer history. A tracking token alone
+ * cannot recreate a missing capability. Retention is seven days from receipt;
+ * expired entries are removed opportunistically, never pending attempts.
+ */
+function parseDeliveryReceipt(raw: unknown, tenant: string, origin: string): DeliveryCheckoutReceipt | null {
+  if (raw == null) return null;
+  if (object(raw) && raw.state === "imported") {
+    if (!onlyKeys(raw, ["v", "state", "tenant", "origin", "clientId", "updatedAt", "receipt"])
+      || raw.v !== 1 || raw.tenant !== tenant || raw.origin !== origin || typeof raw.clientId !== "string" || !UUID_V4.test(raw.clientId)
+      || !Number.isSafeInteger(raw.updatedAt) || (raw.updatedAt as number) < 0 || !object(raw.receipt)
+      || !onlyKeys(raw.receipt, ["orderId", "recoveryProof"]) || typeof raw.receipt.orderId !== "string" || !/^[a-f\d]{24}$/.test(raw.receipt.orderId)
+      || typeof raw.receipt.recoveryProof !== "string" || !HEX_256.test(raw.receipt.recoveryProof)) corrupt();
+    return raw as ImportedDeliveryReceipt;
+  }
+  const attempt = parseAttempt(raw, tenant, origin);
+  if (!attempt || attempt.state !== "received" || !attempt.receipt.recoveryProof) corrupt();
+  return attempt;
+}
+export function readDeliveryCheckoutReceipt(tenant: string, orderId: string, preserveExpired = false): Promise<DeliveryCheckoutReceipt | null> {
+  if (!nonempty(orderId, 128)) invalid();
+  return transaction<DeliveryCheckoutReceipt | null, DeliveryCheckoutReceipt>(tenant, DELIVERY_RECEIPTS, true, (current, tx, fail) => {
+    if (!current) return null;
+    if (current.receipt.orderId !== orderId || !current.receipt.recoveryProof) corrupt();
+    if (current.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) {
+      if (!preserveExpired) {
+        tx.objectStore(DELIVERY_RECEIPTS).delete([tenant, orderId]);
+        expireReceiptAliases(tx, tenant, current.origin, fail);
+      }
+      return null;
+    }
+    return current;
+  }, [tenant, orderId], parseDeliveryReceipt);
+}
+
+/** Call only after this exact order's proof endpoint accepted the private
+ * fragment, and its authenticated tracking ticket established the tenant.
+ * Never creates/archives an attempt or stores the returned PIN/QR.
+ */
+export function importVerifiedDeliveryReceipt(tenant: string, orderId: string, access: unknown, confirmation: unknown): Promise<void> {
+  const request = DeliveryProofRequestSchema.parse(access);
+  const proof = DeliveryCustomerProofSchema.parse(confirmation);
+  const qr = parseDeliveryHandoffQr(proof.qr);
+  if (proof.missionId !== orderId || qr?.orderId !== orderId || qr.proofId !== proof.proofId) invalid();
+  return importDeliveryReceipt(tenant, orderId, request);
+}
+/** Explicit payment recovery only. C01 may finish an already committed
+ * snapshot; this is not a read-only visit and never starts a new attempt.
+ * No synthetic PIN/QR is manufactured to authorize this distinct receipt.
+ */
+export function importRecoveredDeliveryReceipt(tenant: string, orderId: string, trackingToken: string, access: unknown, confirmation: unknown): Promise<void> {
+  const request = DeliveryProofRequestSchema.parse(access);
+  const result = PublicOrderRecoveryResultSchema.parse(confirmation);
+  if (result.state !== "created" || result.order._id !== orderId || result.order.type !== "delivery" || result.order.trackingToken !== trackingToken) invalid();
+  return importDeliveryReceipt(tenant, orderId, request);
+}
+function importDeliveryReceipt(tenant: string, orderId: string, request: { clientId: string; recoveryProof: string }): Promise<void> {
+  const { origin } = scope(tenant);
+  if (!/^[a-f\d]{24}$/.test(orderId) || !UUID_V4.test(request.clientId)) invalid();
+  const next: ImportedDeliveryReceipt = { v: 1, state: "imported", tenant, origin, clientId: request.clientId,
+    updatedAt: Date.now(), receipt: { orderId, recoveryProof: request.recoveryProof } };
+  return transaction(tenant, ACTIVE, true, (active, tx, fail) => {
+    const store = tx.objectStore(DELIVERY_RECEIPTS);
+    const cursor = store.openCursor(IDBKeyRange.bound([tenant, ""], [tenant, "\uffff"]));
+    // Do not consume the slot already reserved for an unresolved delivery.
+    let count = active && (active.state === "prepared" || active.state === "uncertain") && active.payload.fulfillment === "delivery" ? 1 : 0;
+    let exists = false;
+    cursor.onsuccess = () => {
+      try {
+        const row = cursor.result;
+        if (!row) {
+          if (!exists) {
+            if (count >= DELIVERY_RECEIPT_LIMIT) throw unavailable();
+            store.add(next);
+          }
+          return;
+        }
+        const value = parseDeliveryReceipt(row.value, tenant, origin)!;
+        if (value.receipt.orderId === orderId) {
+          if (value.clientId !== request.clientId || value.receipt.recoveryProof !== request.recoveryProof) corrupt();
+          if (value.updatedAt > Date.now() || value.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) throw unavailable();
+          exists = true; // Reading/importing never extends the original retention.
+        } else if (value.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) row.delete();
+        else count++;
+        row.continue();
+      } catch (error) { fail(error); }
+    };
+  });
+}
+
+/** The pending active row reserves the remaining receipt slot: only one
+ * attempt can be acquired per tenant, and all three stores share this lock.
+ */
+function reserveDeliveryReceipt(tx: IDBTransaction, attempt: PendingCheckoutAttempt, fail: (error: unknown) => void) {
+  expireReceiptAliases(tx, attempt.tenant, attempt.origin, fail);
+  const store = tx.objectStore(DELIVERY_RECEIPTS);
+  const cursor = store.openCursor(IDBKeyRange.bound([attempt.tenant, ""], [attempt.tenant, "\uffff"]));
+  let count = 0;
+  cursor.onsuccess = () => {
+    try {
+      const row = cursor.result;
+      if (!row) { tx.objectStore(ACTIVE).add(attempt); return; }
+      const value = parseDeliveryReceipt(row.value, attempt.tenant, attempt.origin);
+      if (!value) corrupt();
+      if (value.updatedAt + DELIVERY_PROOF_ACCESS_RETENTION_MS <= Date.now()) row.delete();
+      else if (++count >= DELIVERY_RECEIPT_LIMIT) throw new CheckoutAttemptStorageError("unavailable", "Ce navigateur conserve déjà 128 accès de livraison récents. Aucun nouvel envoi n’est autorisé ; contactez le restaurant avant de poursuivre.");
+      row.continue();
+    } catch (error) { fail(error); }
+  };
+}
 export async function acquireCheckoutAttempt(
   tenant: string,
   input: Readonly<{ payload: CheckoutBusinessPayload; cartFingerprint: string }>,
@@ -266,7 +418,7 @@ export async function acquireCheckoutAttempt(
   const cartFingerprint = input.cartFingerprint;
   if (!HEX_256.test(cartFingerprint)) invalid();
   const payload = businessPayload(input.payload);
-  return transaction(tenant, ACTIVE, true, (current, tx) => {
+  return transaction(tenant, ACTIVE, true, (current, tx, fail) => {
     if (current) return { attempt: current, acquired: false };
     const bytes = window.crypto.getRandomValues(new Uint8Array(32));
     const now = Date.now();
@@ -275,7 +427,8 @@ export async function acquireCheckoutAttempt(
       recoveryProof: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
       cartFingerprint, createdAt: now, updatedAt: now, state: "prepared", payload,
     };
-    tx.objectStore(ACTIVE).add(attempt);
+    if (payload.fulfillment === "delivery") reserveDeliveryReceipt(tx, attempt, fail);
+    else tx.objectStore(ACTIVE).add(attempt);
     return { attempt, acquired: true };
   });
 }
@@ -293,7 +446,7 @@ export function markCheckoutAttemptUncertain(tenant: string, clientId: string): 
   });
 }
 /** Call only with an authoritative POST/recovery response, before clearing the matching cart. */
-export function recordCheckoutReceipt(tenant: string, clientId: string, input: CheckoutReceipt): Promise<ReceivedCheckoutAttempt> {
+export function recordCheckoutReceipt(tenant: string, clientId: string, input: Omit<CheckoutReceipt, "recoveryProof">): Promise<ReceivedCheckoutAttempt> {
   const receipt = receiptValue(input);
   return transaction(tenant, ACTIVE, true, (current, tx) => {
     const attempt = matching(current, clientId);
@@ -305,10 +458,14 @@ export function recordCheckoutReceipt(tenant: string, clientId: string, input: C
     const next: ReceivedCheckoutAttempt = {
       v: VERSION, tenant: attempt.tenant, origin: attempt.origin, clientId: attempt.clientId,
       cartFingerprint: attempt.cartFingerprint, createdAt: attempt.createdAt,
-      updatedAt: Math.max(attempt.updatedAt, Date.now()), state: "received", receipt,
+      updatedAt: Math.max(attempt.updatedAt, Date.now()), state: "received",
+      receipt: attempt.payload.fulfillment === "delivery" ? { ...receipt, recoveryProof: attempt.recoveryProof } : receipt,
     };
-    // Replacing the whole row removes the customer, address, note and recovery proof.
+    // Remove the customer, address and note. Only a delivery keeps its original
+    // capability in the receipt so a same-origin payment return can restore it.
+    // Historical receipts without this optional field remain readable, not upgraded.
     tx.objectStore(ACTIVE).put(next);
+    if (next.receipt.recoveryProof) tx.objectStore(DELIVERY_RECEIPTS).add(next);
     return next;
   });
 }

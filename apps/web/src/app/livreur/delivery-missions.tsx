@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { DeliveryMissionView, DeliverySessionView } from "@sm/contracts";
 import { Btn } from "@/components/ui/Btn";
 import { Card } from "@/components/ui/Card";
@@ -9,6 +9,8 @@ import { Icon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { createDeliveryMissionsClient } from "./delivery-missions-client";
+import { DeliveryHandoffPanel } from "@/components/delivery-handoff/Panel";
+import { DeliveryHandoffRecoveries } from "@/components/delivery-handoff/Recoveries";
 
 export function missionStatus(mission: DeliveryMissionView) {
   if (mission.orderStatus === "cancelled") return "Annulée";
@@ -33,14 +35,20 @@ export function DeliveryMissions({ session, available, onRevoked }: {
   }));
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getServerSnapshot);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+  const handoffTerminal = useCallback((status: "delivered" | "cancelled") => {
+    setHandoffNotice(status === "delivered" ? "Remise confirmée sur le serveur. La mission terminée quitte votre tournée." : "Le serveur indique que cette commande est annulée. Ne la remettez pas au client.");
+  }, []);
+  const handoffBusyRef = useRef(false);
   const selected = state.missions.find(mission => mission.id === selectedId) ?? null;
-  const disabled = !available || state.loading || state.busy || state.stale;
+  const disabled = !available || state.loading || state.busy || state.stale || handoffBusy;
   const selectedPending = state.operations.some(operation => operation.missionId === selectedId);
 
   useEffect(() => {
     if (!available) { client.pause(); return; }
     void client.start();
-    const refresh = () => { if (document.visibilityState === "visible") void client.refresh(); };
+    const refresh = () => { if (document.visibilityState === "visible" && !handoffBusyRef.current) void client.refresh(); };
     const timer = window.setInterval(refresh, 15_000);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
@@ -50,7 +58,7 @@ export function DeliveryMissions({ session, available, onRevoked }: {
 
   async function inspect(id: string) {
     const current = await client.inspect(id);
-    if (current) setSelectedId(current.id);
+    if (current) { setHandoffNotice(null); setSelectedId(current.id); }
   }
 
   return <section className="mt-6 border-t border-line pt-5" aria-labelledby="delivery-missions-title" aria-busy={state.loading || state.busy}>
@@ -61,7 +69,9 @@ export function DeliveryMissions({ session, available, onRevoked }: {
     </div>
     <p className="mt-3 text-xs leading-5 text-mut">Seules les commandes qui vous sont confiées apparaissent ici. Confirmez le départ après avoir récupéré les sacs au restaurant.</p>
     {state.message && <p role={state.tone === "warning" ? "alert" : "status"} className={`mt-4 rounded-card border p-3 text-sm leading-6 ${state.tone === "warning" ? "border-prep/30 bg-prep/8 text-prept" : "border-ok/25 bg-ok/5 text-okt"}`}>{state.message}</p>}
+    {handoffNotice && <p role="status" className="mt-4 rounded-card border border-line p-3 text-sm leading-6">{handoffNotice}</p>}
     {!available && <p role="status" className="sr-only">Accès à vérifier : aucun départ n’est autorisé pour le moment.</p>}
+    <DeliveryHandoffRecoveries scope={`driver:${session.restaurantSlug}:${session.operatorId}`} available={available} selectedMission={selected?.id ?? null} onRevoked={onRevoked} />
     {state.operations.map((operation, index) => <Card key={operation.missionId} className="mt-4 p-4">
       <h3 className="text-sm font-bold">Un départ reste à vérifier</h3>
       <p className="mt-2 text-sm leading-6 text-mut">La réponse de cette mission n’est pas confirmée. Reprenez la même vérification, sans confirmer un deuxième départ. Vos autres missions restent accessibles.</p>
@@ -84,8 +94,8 @@ export function DeliveryMissions({ session, available, onRevoked }: {
         })}</div>}
     {state.nextCursor && <Btn block variant="ghost" className="mt-4 min-h-12" disabled={!available || state.loading || state.busy} onClick={() => void client.loadMore()}>Charger d’autres missions</Btn>}
 
-    <Modal open={Boolean(selected)} title={selected ? `Mission n°${selected.number}` : "Mission"} onClose={() => { if (!state.busy) setSelectedId(null); }} footer={selected && <>
-      <Btn variant="ghost" disabled={state.busy} onClick={() => setSelectedId(null)}>Fermer</Btn>
+    <Modal open={Boolean(selected)} title={selected ? `Mission n°${selected.number}` : "Mission"} onClose={() => { if (!state.busy && !handoffBusyRef.current) setSelectedId(null); }} footer={selected && <>
+      <Btn variant="ghost" disabled={state.busy || handoffBusy} onClick={() => setSelectedId(null)}>Fermer</Btn>
       {!selected.dispatchedAt && <Btn className="min-h-12 whitespace-normal" disabled={disabled || selectedPending || !selected.canDispatch} aria-busy={state.busy} onClick={() => void client.dispatch(selected.id)}>{state.busy ? "Confirmation…" : "Confirmer mon départ"}</Btn>}
     </>}>
       {selected && <>
@@ -98,7 +108,13 @@ export function DeliveryMissions({ session, available, onRevoked }: {
         {selected.instructions && <p className="mt-4 rounded-card border border-prep/25 bg-prep/5 p-3 text-sm leading-6 text-prept">{selected.instructions}</p>}
         <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-[0.1em] text-mut">À récupérer</h3>
         <ul className="space-y-2 text-sm">{selected.items.map((item, index) => <li key={index} className="flex gap-2"><span className="cf-fig font-bold">{item.qty}×</span><span>{item.name}{item.variantName ? ` · ${item.variantName}` : ""}</span></li>)}</ul>
-        <p className="mt-5 border-t border-line pt-4 text-sm leading-6 text-mut">{selected.dispatchedAt ? "Départ enregistré. Pour confirmer la remise ou signaler un incident, contactez le restaurant." : selected.canDispatch ? "En confirmant, vous indiquez avoir récupéré cette commande et démarrer sa livraison. Le client verra qu’elle est en route." : !selected.paymentReady ? "Le paiement doit être confirmé par le restaurant avant le départ." : selected.orderStatus !== "ready" ? "Attendez que la cuisine ait terminé la préparation avant de récupérer la commande." : "L’accès ou l’affectation doit être vérifié avec le restaurant avant le départ."}</p>
+        {selected.dispatchedAt ? <DeliveryHandoffPanel key={`${session.operatorId}:${selected.id}`} missionId={selected.id}
+          scope={`driver:${session.restaurantSlug}:${session.operatorId}`} path={`/livreur/missions/${selected.id}/handoff`}
+          available={available && !state.loading && !state.busy && !state.stale} onRevoked={onRevoked}
+          onBusyChange={busy => { handoffBusyRef.current = busy; setHandoffBusy(busy); }}
+          onTerminal={handoffTerminal}
+          onComplete={() => { setSelectedId(null); void client.refresh(); }} />
+          : <p className="mt-5 border-t border-line pt-4 text-sm leading-6 text-mut">{selected.canDispatch ? "En confirmant, vous indiquez avoir récupéré cette commande et démarrer sa livraison. Le client verra qu’elle est en route." : !selected.paymentReady ? "Le paiement doit être confirmé par le restaurant avant le départ." : selected.orderStatus !== "ready" ? "Attendez que la cuisine ait terminé la préparation avant de récupérer la commande." : "L’accès ou l’affectation doit être vérifié avec le restaurant avant le départ."}</p>}
       </>}
     </Modal>
   </section>;

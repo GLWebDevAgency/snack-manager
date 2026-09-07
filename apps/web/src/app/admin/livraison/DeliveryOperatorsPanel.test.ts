@@ -13,11 +13,11 @@ function render(patch: Partial<DeliveryOperatorView> = {}, disabled = false) {
   return renderToStaticMarkup(createElement(DeliveryOperatorRow, { operator: { ...operator, ...patch }, disabled, onAction: vi.fn() }));
 }
 describe("annuaire livreurs rendu", () => {
-  it("décrit les missions et le départ sur téléphone sans promettre la remise dans l’application livreur", () => {
+  it("décrit la remise par code sur téléphone et conserve la limite sans géolocalisation", () => {
     const html = renderToStaticMarkup(createElement(DeliveryOperatorsPanel));
     expect(html).toContain("Consultez et affectez les missions depuis Commandes.");
     expect(html).toContain("Le livreur peut consulter ses missions et confirmer son départ sur son téléphone associé.");
-    expect(html).toContain("La remise au client reste confirmée depuis Commandes.");
+    expect(html).toContain("La remise se confirme avec le code du client, depuis Commandes ou le téléphone du livreur.");
     expect(html).toContain("ne signifie pas que le livreur est en ligne ou géolocalisé");
     expect(html).not.toContain("seront proposées dans une prochaine étape");
   });
