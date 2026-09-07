@@ -10,3 +10,4 @@ export * from './order';
 export * from './build-order';
 export * from './delivery';
 export * from './delivery-mission';
+export * from './delivery-handoff';

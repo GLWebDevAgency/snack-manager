@@ -514,6 +514,10 @@ export const TENANT_AUDIT_ACTIONS = [
   'order.assign',
   'order.discount',
   'order.dispatch',
+  'order.handoff',
+  'order.delivery_incident',
+  'order.delivery_override',
+  'order.delivery_proof_rotate',
   /**
    * DÉCLARÉE, JAMAIS ÉCRITE À CE JOUR — et c'est dit plutôt que caché.
    *
@@ -589,6 +593,10 @@ export const AUDIT_ACTION_LABELS: Record<TenantAuditAction, string> = {
   'order.assign': 'Affectation de livraison',
   'order.discount': 'Remise',
   'order.dispatch': 'Départ en livraison',
+  'order.handoff': 'Remise avec preuve client',
+  'order.delivery_incident': 'Incident de livraison',
+  'order.delivery_override': 'Remise dérogatoire de livraison',
+  'order.delivery_proof_rotate': 'Renouvellement de la preuve de remise',
   'order.refund': 'Remboursement',
   'price.change': 'Changement de prix',
   'product.create': 'Produit ajouté à la carte',
