@@ -26,10 +26,16 @@ export function missionTestDatabase(raw: string): { uri: string; name: string } 
 }
 const database = process.env.DELIVERY_MISSION_TEST_MONGO_URL ? missionTestDatabase(process.env.DELIVERY_MISSION_TEST_MONGO_URL) : null;
 
+function authenticatedLocalFixture() {
+  const url = new URL('mongodb://localhost/snackmanager_delivery_mission_test_ci');
+  url.username = 'fixture'; url.password = 'fixture';
+  return url.toString();
+}
+
 describe('cible Mongo des missions', () => {
   it.each(['mongodb://remote.example/snackmanager_delivery_mission_test_ci', 'mongodb://localhost/admin',
     'mongodb://localhost/snackmanager_delivery_mission_test_ci?replicaSet=prod',
-    'mongodb://fixture:fixture@localhost/snackmanager_delivery_mission_test_ci',
+    authenticatedLocalFixture(),
     'mongodb+srv://localhost/snackmanager_delivery_mission_test_ci',
   ])('refuse la cible non isolée %s', url => expect(() => missionTestDatabase(url)).toThrow());
   it('utilise une base différente pour chaque run', () => {

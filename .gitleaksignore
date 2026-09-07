@@ -28,3 +28,9 @@ ee77859262cf768802d9b9477e55fa0407b9aab0:apps/api/src/modules/orders/public-orde
 # la règle et les fichiers restent entièrement contrôlés.
 3dbc4a1c6fe549abe7b4b36f9de21c9d3b9e1f63:apps/api/src/modules/delivery/delivery-access.http.integration.test.ts:uri-connexion-avec-identifiants:78
 3dbc4a1c6fe549abe7b4b36f9de21c9d3b9e1f63:apps/api/src/modules/delivery/delivery-operators.integration.test.ts:uri-connexion-avec-identifiants:55
+
+# PR #127, commit 4d8937d (07/09/2026) : fixture locale inventée du test
+# refusant toute URI authentifiée AVANT connexion. Aucun identifiant réel.
+# Le littéral est remplacé par construction URL dans l'arbre courant.
+# Exemption limitée à cette empreinte historique, sans exclure fichier/règle.
+4d8937d18fb8b6e5443b4801034133df45b0e612:apps/api/src/modules/delivery/delivery-missions.integration.test.ts:uri-connexion-avec-identifiants:32
