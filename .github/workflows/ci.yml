@@ -237,12 +237,14 @@ jobs:
           ORDER_CAPACITY_SETTINGS_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_settings_test_ci
           ORDER_CAPACITY_READER_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_reader_test_ci
           ORDER_CAPACITY_BOOTSTRAP_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_bootstrap_test_ci
+          ORDER_CAPACITY_CLI_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_capacity_cli_test_ci
           ORDER_CAPACITY_RUNTIME_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_ci
           STAFF_ORDER_ATTEMPT_TEST_MONGO_URL: mongodb://127.0.0.1:27017/snackmanager_runtime_test_staff
         run: |
           pnpm --filter @sm/db exec vitest run src/order-capacity-immutability.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/orders/order-capacity-commit.integration.test.ts src/modules/ordering/order-capacity-calendar.store.integration.test.ts src/modules/tenants/tenant-capacity-settings.store.integration.test.ts src/modules/ordering/order-capacity-bootstrap.reader.integration.test.ts
           pnpm --filter @sm/api exec vitest run src/modules/ordering/order-capacity-bootstrap.store.integration.test.ts src/modules/orders/order-capacity-runtime.integration.test.ts src/modules/orders/staff-order-attempt.integration.test.ts
+          pnpm --filter @sm/api exec vitest run src/maintenance/order-capacity-bootstrap.cli.integration.test.ts
 
       # L'expiration du verrou Redis ne doit jamais vendre une place deux fois.
       # Cette preuve reste bloquante : ni continue-on-error, ni skip.
