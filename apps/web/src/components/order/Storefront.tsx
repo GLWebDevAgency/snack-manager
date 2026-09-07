@@ -64,6 +64,7 @@ import {
   weekSchedule,
 } from "./helpers";
 import { Checkout } from "./Checkout";
+import { DeviceOrdersSheet } from "./DeviceOrdersSheet";
 import { useCheckoutRecovery } from "./useCheckoutRecovery";
 import { FideliteVitrine } from "./FideliteVitrine";
 import type { VitrineFidelite } from "./fidelite";
@@ -214,6 +215,7 @@ export function Storefront({
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);
+  const [deviceOrdersOpen, setDeviceOrdersOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // ── L'entonnoir : la visite au montage, le panier au premier article. ──
@@ -360,6 +362,7 @@ export function Storefront({
       {/* Une seule borne, jamais un point de rupture : la colonne suit la
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
+        {!demo && <div className="flex justify-end pt-4"><Tap onClick={() => setDeviceOrdersOpen(true)} className="cf-press flex min-h-12 items-center gap-2 rounded-pill border border-ink/10 bg-surface px-4 text-left hover:border-ink/25" aria-label="Mes commandes sur cet appareil"><Icon name="ticket" size={18} /><span><span className="block text-sm font-bold">Mes commandes</span><span className="block text-[11px] text-mut">Sur cet appareil</span></span></Tap></div>}
         {cart.persistenceError && <div className="pt-4">
           <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
         </div>}
@@ -500,6 +503,8 @@ export function Storefront({
           setDraft(null);
         }}
       />
+
+      {!demo && <DeviceOrdersSheet open={deviceOrdersOpen} slug={site.tenant.slug} tenantName={site.tenant.name} embed={embed} onClose={() => setDeviceOrdersOpen(false)} />}
 
       <Checkout
         open={tunnel}

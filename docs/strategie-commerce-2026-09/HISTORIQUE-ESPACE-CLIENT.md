@@ -2,6 +2,19 @@
 
 Complément à l'[audit des parcours commerce](PARCOURS-COMMERCE-PRODUCTION.md), demandé le 5 septembre 2026. État du code vérifié sur la branche commerce ; les parcours cibles ci-dessous **ne sont pas encore implémentés**. Ce document ne revendique aucun déploiement.
 
+## Delta de réalisation — 7 septembre 2026, L3a0
+
+Le corps de cet audit reste une photographie datée. Le [registre opérationnel](SUITE-APRES-COMMERCE.md) et les preuves de PR font référence pour les livraisons suivantes.
+
+Le lot L3a0 ajoute **une reprise invitée sur cet appareil**, pas un compte personnel :
+
+- Plusieurs reçus retrait/livraison dans un journal IndexedDB, isolés par origine et restaurant ; ouverture explicite, états relus au serveur, accès à chaque suivi et oubli local. Aucun regroupement par téléphone, aucune identité authentifiée déduite de ces reçus.
+- Rétention de 7 jours non glissante et capacité de 128 reçus/tentatives réservées avant admission. L'expiration retire le raccourci, pas la commande serveur, la tentative active ou la preuve privée de remise. La suppression physique est opportuniste à la lecture/admission ; un navigateur fermé n'exécute aucune purge. Les anciens reçus connus sont repris, pas un historique serveur inventé.
+- Base `sm.checkout-attempts` v3, ajout du store `device-receipts` sans supprimer les stores antérieurs. Un ancien onglet v2 doit être rechargé ; un retour de version ne doit jamais effacer/recréer la base ni abandonner une tentative pour forcer son ouverture.
+- Nom/téléphone seulement, mémorisés **sur clic explicite**, par restaurant pendant 7 jours ; oubli et expiration respectés entre onglets, saisie nouvelle préservée. L'ancienne clé globale `sm.customer` est retirée sans migration implicite à un restaurant. Aucun enregistrement à l'envoi de la commande, aucune lecture/écriture en démo. Stockage indisponible : le parcours invité reste utilisable.
+
+Les coordonnées mémorisées ne sont ni vérifiées, ni issues du profil fidélité. L3a (session personnelle, téléphone vérifié), L3b (historique serveur protégé, réachat et boucle fidélité), adresse sauvegardée et rattachement des anciens achats restent à livrer séparément. Aucun envoi Twilio ni activation payante dans ce lot. Les tests locaux avec API simulée ne prouvent pas une commande bancaire ou une livraison réelle ; les résultats et le SHA effectivement servi seront attestés dans la PR de livraison.
+
 ## 1. Décision produit proposée
 
 Un historique central des commandes sert trois usages, avec trois périmètres d'accès différents. Ni le journal local d'une caisse ni les mouvements de points ne peuvent tenir lieu de cet historique.

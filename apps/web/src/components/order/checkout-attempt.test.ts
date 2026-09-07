@@ -66,6 +66,280 @@ const acquire = (target = page, tenant = "classfood") => target.evaluate(
 );
 const acquireDelivery = () => page.evaluate(({ payload, fingerprint }) => window.checkoutJournal.acquireCheckoutAttempt("classfood", { payload, cartFingerprint: fingerprint }), { payload: deliveryPayload, fingerprint });
 
+describe("suivis de commandes sur cet appareil, IndexedDB natif", () => {
+  const read = (target = page, tenant = "classfood") => target.evaluate(tenant => window.checkoutJournal.readDeviceCheckoutReceipts(tenant), tenant);
+  const receive = async (delivery = false, orderId = receipt.orderId) => {
+    const { attempt } = await (delivery ? acquireDelivery() : acquire());
+    return page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+      id: attempt.clientId, receipt: { ...receipt, orderId, type: delivery ? "delivery" as const : "pickup" as const },
+    });
+  };
+  const archive = (received: Journal.ReceivedCheckoutAttempt) => page.evaluate(id => window.checkoutJournal.archiveCheckoutAttempt("classfood", id), received.clientId);
+
+  it("conserve retrait et livraison après recharge, sans corps ni capacité privée dans le magasin ou sa projection", async () => {
+    const pickup = await receive(); await archive(pickup);
+    const delivery = await receive(true, "d".repeat(24));
+    await page.reload(); await page.waitForFunction(() => !!window.checkoutJournal);
+    const rows = await read();
+    expect(rows.map(row => row.receipt.orderId)).toEqual([delivery.receipt.orderId, pickup.receipt.orderId]);
+    expect(rows.every(row => !("payload" in row) && !("recoveryProof" in row.receipt))).toBe(true);
+    expect(await page.evaluate(() => new Promise<boolean>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts");
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction("device-receipts");
+        const get = tx.objectStore("device-receipts").getAll();
+        get.onsuccess = () => resolve(get.result.every(row => !("payload" in row) && !("recoveryProof" in row.receipt)));
+        tx.oncomplete = () => db.close(); tx.onabort = () => { db.close(); reject(tx.error); };
+      }; open.onerror = () => reject(open.error);
+    }))).toBe(true);
+    expect(await read(page, "other")).toEqual([]);
+    const otherOrigin = await context.newPage(); await otherOrigin.goto(origin.replace("127.0.0.1", "localhost"));
+    await otherOrigin.waitForFunction(() => !!window.checkoutJournal);
+    expect(await read(otherOrigin)).toEqual([]);
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toEqual(delivery);
+    expect(await page.evaluate(id => window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", id), delivery.receipt.orderId)).toEqual(delivery);
+  });
+
+  it("refuse l’oubli actif avec conflict puis oublie le suivi et son alias, jamais l’accès privé ni la tentative suivante", async () => {
+    const received = await receive(true);
+    expect(await page.evaluate(async id => {
+      try { await window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id); return null; }
+      catch (error) { return { code: (error as Journal.CheckoutAttemptStorageError).code, message: (error as Error).message }; }
+    }, received.receipt.orderId)).toEqual({ code: "conflict", message: "Commencez une nouvelle commande avant d’oublier ce suivi encore actif." });
+    await archive(received);
+    const pending = await acquire();
+    await page.evaluate(id => window.checkoutJournal.markCheckoutAttemptUncertain("classfood", id), pending.attempt.clientId);
+    const uncertain = await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"));
+    await page.evaluate(id => window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id), received.receipt.orderId);
+    await page.reload(); await page.waitForFunction(() => !!window.checkoutJournal);
+    expect(await read()).toEqual([]);
+    expect(await page.evaluate(() => window.checkoutJournal.readLastCheckoutReceipt("classfood"))).toBeNull();
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toEqual(uncertain);
+    expect(await page.evaluate(id => window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", id), received.receipt.orderId)).toEqual(received);
+  });
+
+  it("annule reçu actif, suivi et accès de remise si l’écriture du suivi échoue avant le commit", async () => {
+    const { attempt } = await acquireDelivery();
+    const result = await page.evaluate(async ({ id, receipt }) => {
+      const original = IDBObjectStore.prototype.add;
+      IDBObjectStore.prototype.add = function (...args) {
+        const request = original.apply(this, args);
+        if (this.name === "device-receipts") request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+      let wouldClearCart = false;
+      try { await window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt); wouldClearCart = true; }
+      catch { /* Required atomic refusal. */ }
+      finally { IDBObjectStore.prototype.add = original; }
+      return { wouldClearCart, active: await window.checkoutJournal.readCheckoutAttempt("classfood"), rows: await window.checkoutJournal.readDeviceCheckoutReceipts("classfood"), proof: await window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", receipt.orderId) };
+    }, { id: attempt.clientId, receipt });
+    expect(result).toEqual({ wouldClearCart: false, active: attempt, rows: [], proof: null });
+  });
+
+  it.each([1, 2])("migre v%i : seulement active/last reçus, sans modifier les originaux ni importer les accès privés", async version => {
+    const now = Date.now();
+    const base = { v: 1 as const, tenant: "classfood", origin, clientId: "11111111-1111-4111-8111-111111111111", cartFingerprint: fingerprint, createdAt: now - 100, updatedAt: now, state: "received" as const };
+    const active = { ...base, receipt: { ...receipt, recoveryProof: "b".repeat(64) } };
+    const last = { ...base, clientId: "22222222-2222-4222-8222-222222222222", receipt: { ...receipt, orderId: "e".repeat(24) } };
+    const imported = { v: 1, state: "imported", tenant: "classfood", origin, clientId: base.clientId, updatedAt: now, receipt: { orderId: "f".repeat(24), recoveryProof: "c".repeat(64) } };
+    await page.evaluate(({ version, active, last, imported }) => new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts", version);
+      open.onupgradeneeded = () => {
+        open.result.createObjectStore("active", { keyPath: "tenant" }).put(active);
+        open.result.createObjectStore("last-receipt", { keyPath: "tenant" }).put(last);
+        if (version === 2) {
+          const proofs = open.result.createObjectStore("delivery-receipts", { keyPath: ["tenant", "receipt.orderId"] });
+          proofs.put(imported); proofs.put({ ...active, receipt: { ...active.receipt, orderId: "a".repeat(24) } });
+        }
+      };
+      open.onsuccess = () => { open.result.close(); resolve(); }; open.onerror = () => reject(open.error);
+    }), { version, active, last, imported });
+    const rows = await read();
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => row.receipt.orderId).sort()).toEqual([active.receipt.orderId, last.receipt.orderId].sort());
+    expect(rows.every(row => !("recoveryProof" in row.receipt))).toBe(true);
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toEqual(active);
+    expect(await page.evaluate(() => window.checkoutJournal.readLastCheckoutReceipt("classfood"))).toEqual(last);
+    if (version === 2) expect(await page.evaluate(id => window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", id), imported.receipt.orderId)).toEqual(imported);
+  });
+
+  it("la rétention dure sept jours depuis le reçu, passe minuit et n’est prolongée ni par replay, ni par archive/reload", async () => {
+    await page.clock.setFixedTime(new Date("2030-01-01T23:59:00Z"));
+    const received = await receive();
+    await page.clock.setFixedTime(new Date(received.updatedAt + 60_000));
+    expect(await read()).toHaveLength(1);
+    await page.clock.setFixedTime(new Date(received.updatedAt + 6 * 86_400_000));
+    const replayed = await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+      id: received.clientId, receipt: received.receipt,
+    });
+    expect(replayed.updatedAt).toBe(received.updatedAt);
+    await archive(received); await page.reload(); await page.waitForFunction(() => !!window.checkoutJournal);
+    await page.clock.setFixedTime(new Date(received.updatedAt + 7 * 86_400_000 - 1));
+    expect((await read())[0].updatedAt).toBe(received.updatedAt);
+    const pending = await acquire();
+    await page.evaluate(id => window.checkoutJournal.markCheckoutAttemptUncertain("classfood", id), pending.attempt.clientId);
+    const before = await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"));
+    await page.clock.setFixedTime(new Date(received.updatedAt + 7 * 86_400_000));
+    expect(await read()).toEqual([]);
+    expect(await page.evaluate(orderId => new Promise<boolean>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts");
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction("device-receipts");
+        const get = tx.objectStore("device-receipts").get(["classfood", orderId]);
+        tx.oncomplete = () => { db.close(); resolve(get.result === undefined); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      }; open.onerror = () => reject(open.error);
+    }), received.receipt.orderId)).toBe(true);
+    // Shortcut expiry is not reconciliation or erasure of the last/active receipt.
+    expect(await page.evaluate(() => window.checkoutJournal.readLastCheckoutReceipt("classfood"))).toEqual(received);
+    await page.clock.setFixedTime(new Date(received.updatedAt + 60 * 86_400_000));
+    expect((await acquire()).attempt).toEqual(before);
+  });
+
+  it("réserve le 128e suivi avant admission entre deux onglets et refuse le 129e sans perdre les précédents", async () => {
+    const first = await receive(); await archive(first);
+    await page.evaluate(received => new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts");
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction("device-receipts", "readwrite");
+        for (let index = 1; index <= 126; index++) tx.objectStore("device-receipts").add({ ...received, receipt: { ...received.receipt, orderId: index.toString(16).padStart(24, "0") } });
+        tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => { db.close(); reject(tx.error); };
+      }; open.onerror = () => reject(open.error);
+    }), first);
+    const second = await context.newPage(); await second.goto(origin); await second.waitForFunction(() => !!window.checkoutJournal);
+    const attempts = await Promise.all([acquire(), acquire(second)]);
+    expect(attempts.filter(item => item.acquired)).toHaveLength(1);
+    expect(attempts[0].attempt.clientId).toBe(attempts[1].attempt.clientId);
+    const received = await page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+      id: attempts[0].attempt.clientId, receipt: { ...receipt, orderId: "f".repeat(24) },
+    });
+    await archive(received);
+    const before = await read(); expect(before).toHaveLength(128);
+    const denied = await Promise.allSettled([acquire(), acquire(second)]);
+    expect(denied.every(item => item.status === "rejected" && (item.reason as Error).message.includes("128"))).toBe(true);
+    expect(await read()).toEqual(before);
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toBeNull();
+    await page.evaluate(id => window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id), first.receipt.orderId);
+    expect((await acquire(second)).acquired).toBe(true);
+    expect(await read()).toHaveLength(127);
+  });
+
+  it("sérialise oubli et nouveau reçu entre deux onglets sans effacer le nouveau suivi ni ressusciter l’ancien", async () => {
+    const previous = await receive(true); await archive(previous);
+    const next = await acquire();
+    const second = await context.newPage(); await second.goto(origin); await second.waitForFunction(() => !!window.checkoutJournal);
+    const [, current] = await Promise.all([
+      second.evaluate(id => window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id), previous.receipt.orderId),
+      page.evaluate(({ id, receipt }) => window.checkoutJournal.recordCheckoutReceipt("classfood", id, receipt), {
+        id: next.attempt.clientId, receipt: { ...receipt, orderId: "f".repeat(24) },
+      }),
+    ]);
+    expect((await read(second)).map(row => row.receipt.orderId)).toEqual([current.receipt.orderId]);
+    expect(await page.evaluate(id => window.checkoutJournal.readDeliveryCheckoutReceipt("classfood", id), previous.receipt.orderId)).toEqual(previous);
+    await archive(current); await second.reload(); await second.waitForFunction(() => !!window.checkoutJournal);
+    expect((await read(second)).map(row => row.receipt.orderId)).toEqual([current.receipt.orderId]);
+    expect(await second.evaluate(() => window.checkoutJournal.readLastCheckoutReceipt("classfood"))).toEqual(current);
+  });
+
+  it("l’oubli interrompu annule aussi la suppression de l’alias et ne touche jamais une tentative prepared", async () => {
+    const received = await receive(); await archive(received); const pending = await acquire();
+    const result = await page.evaluate(async id => {
+      const original = IDBObjectStore.prototype.delete;
+      IDBObjectStore.prototype.delete = function (...args) {
+        const request = original.apply(this, args);
+        if (this.name === "device-receipts") request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+      let forgotten = false;
+      try { await window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id); forgotten = true; }
+      catch { /* Must preserve both shortcuts on abort. */ }
+      finally { IDBObjectStore.prototype.delete = original; }
+      return { forgotten, rows: await window.checkoutJournal.readDeviceCheckoutReceipts("classfood"), last: await window.checkoutJournal.readLastCheckoutReceipt("classfood"), active: await window.checkoutJournal.readCheckoutAttempt("classfood") };
+    }, received.receipt.orderId);
+    expect(result.forgotten).toBe(false); expect(result.rows).toEqual([received]);
+    expect(result.last).toEqual(received); expect(result.active).toEqual(pending.attempt);
+  });
+
+  it.each(["proof", "payload", "future", "origin"])("une projection corrompue (%s) bloque lecture et admission sans effacement", async fault => {
+    const received = await receive(); await archive(received);
+    await page.evaluate(({ fault, received }) => new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts");
+      open.onsuccess = () => {
+        const db = open.result; const tx = db.transaction("device-receipts", "readwrite");
+        const row = structuredClone(received) as unknown as Record<string, unknown>;
+        if (fault === "proof") row.receipt = { ...received.receipt, recoveryProof: "a".repeat(64) };
+        if (fault === "payload") row.payload = { note: "must-not-exist" };
+        if (fault === "future") row.updatedAt = Date.now() + 86_400_000;
+        if (fault === "origin") row.origin = "https://other.invalid";
+        tx.objectStore("device-receipts").put(row);
+        tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => { db.close(); reject(tx.error); };
+      }; open.onerror = () => reject(open.error);
+    }), { fault, received });
+    await expect(read()).rejects.toThrow("endommagé");
+    await expect(acquire()).rejects.toThrow("endommagé");
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toBeNull();
+    expect(await page.evaluate(() => new Promise<number>((resolve, reject) => {
+      const open = indexedDB.open("sm.checkout-attempts");
+      open.onsuccess = () => { const db = open.result; const tx = db.transaction("device-receipts"); const count = tx.objectStore("device-receipts").count(); count.onsuccess = () => resolve(count.result); tx.oncomplete = () => db.close(); };
+      open.onerror = () => reject(open.error);
+    }))).toBe(1);
+  });
+
+  it("notifie les ajouts et oublis après commit, sans notification de lecture ni données du reçu", async () => {
+    const second = await context.newPage(); await second.goto(origin); await second.waitForFunction(() => !!window.checkoutJournal);
+    await second.evaluate(() => {
+      const events: string[] = []; Object.assign(window, { deviceReceiptEvents: events });
+      window.checkoutJournal.subscribeCheckoutAttempts(tenant => events.push(tenant));
+    });
+    const received = await receive(); await archive(received);
+    await second.waitForFunction(() => (window as unknown as { deviceReceiptEvents: string[] }).deviceReceiptEvents.length === 3);
+    await read(); await read(second);
+    await page.evaluate(id => window.checkoutJournal.forgetDeviceCheckoutReceipt("classfood", id), received.receipt.orderId);
+    await second.waitForFunction(() => (window as unknown as { deviceReceiptEvents: string[] }).deviceReceiptEvents.length === 4);
+    expect(await second.evaluate(() => (window as unknown as { deviceReceiptEvents: string[] }).deviceReceiptEvents)).toEqual(Array(4).fill("classfood"));
+    expect(await read(second)).toEqual([]);
+  });
+
+  it("une migration interrompue restaure la version v2, sa tentative incertaine et ses alias intacts", async () => {
+    const now = Date.now();
+    const old = { v: 1, tenant: "classfood", origin, clientId: "11111111-1111-4111-8111-111111111111", cartFingerprint: fingerprint, createdAt: now, updatedAt: now, state: "uncertain", recoveryProof: "b".repeat(64), payload };
+    const last = { v: 1, tenant: "classfood", origin, clientId: "22222222-2222-4222-8222-222222222222", cartFingerprint: fingerprint, createdAt: now, updatedAt: now, state: "received", receipt };
+    const after = await page.evaluate(async ({ old, last }) => {
+      await new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("sm.checkout-attempts", 2);
+        open.onupgradeneeded = () => {
+          open.result.createObjectStore("active", { keyPath: "tenant" }).put(old);
+          open.result.createObjectStore("last-receipt", { keyPath: "tenant" }).put(last);
+          open.result.createObjectStore("delivery-receipts", { keyPath: ["tenant", "receipt.orderId"] });
+        };
+        open.onsuccess = () => { open.result.close(); resolve(); }; open.onerror = () => reject(open.error);
+      });
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (...args) {
+        const request = put.apply(this, args);
+        if (this.name === "device-receipts") request.addEventListener("success", () => this.transaction.abort());
+        return request;
+      };
+      let failed = false;
+      try { await window.checkoutJournal.readDeviceCheckoutReceipts("classfood"); }
+      catch { failed = true; }
+      finally { IDBObjectStore.prototype.put = put; }
+      return new Promise<{ failed: boolean; version: number; hasStore: boolean; active: unknown; last: unknown }>((resolve, reject) => {
+        const open = indexedDB.open("sm.checkout-attempts");
+        open.onsuccess = () => {
+          const db = open.result; const tx = db.transaction(["active", "last-receipt"]);
+          const active = tx.objectStore("active").get("classfood"); const last = tx.objectStore("last-receipt").get("classfood");
+          tx.oncomplete = () => { const result = { failed, version: db.version, hasStore: db.objectStoreNames.contains("device-receipts"), active: active.result, last: last.result }; db.close(); resolve(result); };
+          tx.onabort = () => { db.close(); reject(tx.error); };
+        }; open.onerror = () => reject(open.error);
+      });
+    }, { old, last });
+    expect(after).toEqual({ failed: true, version: 2, hasStore: false, active: old, last });
+    expect(await read()).toEqual([last]);
+    expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toEqual(old);
+  });
+});
+
 describe("journal de checkout durable, IndexedDB natif", () => {
   const importedAccess = { clientId: "a0010000-0000-4000-8000-000000000001", recoveryProof: "9".repeat(64) };
   const confirmation = { missionId: receipt.orderId, proofId: "a0010000-0000-4000-8000-000000000002", pin: "654321",
@@ -270,17 +544,18 @@ describe("journal de checkout durable, IndexedDB natif", () => {
     expect((await acquireDelivery()).attempt.state).toBe("uncertain");
   });
 
-  it("migre v1 sans perdre une tentative incertaine ni recréer son identité", async () => {
+  it.each([1, 2])("migre v%i sans perdre une tentative incertaine ni recréer son identité", async version => {
     const old = { v: 1, tenant: "classfood", origin, clientId: "11111111-1111-4111-8111-111111111111", recoveryProof: "b".repeat(64), cartFingerprint: fingerprint, createdAt: 1, updatedAt: 1, state: "uncertain", payload };
-    await page.evaluate(({ dbName, old }) => new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open(dbName, 1);
+    await page.evaluate(({ dbName, old, version }) => new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open(dbName, version);
       open.onupgradeneeded = () => {
         open.result.createObjectStore("active", { keyPath: "tenant" }).put(old);
         open.result.createObjectStore("last-receipt", { keyPath: "tenant" });
+        if (version === 2) open.result.createObjectStore("delivery-receipts", { keyPath: ["tenant", "receipt.orderId"] });
       };
       open.onsuccess = () => { open.result.close(); resolve(); };
       open.onerror = () => reject(open.error);
-    }), { dbName, old });
+    }), { dbName, old, version });
     expect(await page.evaluate(() => window.checkoutJournal.readCheckoutAttempt("classfood"))).toEqual(old);
     expect(await acquire()).toEqual({ acquired: false, attempt: old });
   });

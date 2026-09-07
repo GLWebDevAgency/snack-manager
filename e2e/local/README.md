@@ -117,6 +117,22 @@ La CI installe explicitement ce navigateur avant les tests, et exécute séparé
 `public-order-admission.integration.test.ts` contre le MongoDB local de CI.
 Les captures restent dans un dossier temporaire annoncé par le harnais.
 
+### Commandes de cet appareil et coordonnées facultatives (L3a0)
+
+`QA_SCENARIO=device-orders-memory node e2e/local/checkout-recovery.mjs` cible le
+vrai frontend Next : deux commandes distinctes au comptoir, deux liens de suivi
+après rechargement, ouverture de chaque suivi, coordonnées non enregistrées
+sans geste explicite, préremplissage après consentement puis effacement. Le
+mode démo reste isolé. Captures en 320 px et sur bureau ; aucune demande
+PaymentIntent, aucun SMS ni compte client authentifié dans cette recette.
+
+L'API est une fixture locale : ces deux commandes ne prouvent ni la création
+sur le backend réel ni un encaissement. Les tests navigateur des composants
+complètent ce scénario avec migration IndexedDB v2 → v3, expiration, capacité,
+confidentialité des preuves, interruptions, réseau lent et courses entre
+onglets. La CI web les exécute ; la recette Next locale reste un contrôle
+manuel explicite avant livraison.
+
 ## Bascule sécurisée vers le comptoir
 
 `counter-payment.mjs` utilise les mêmes prérequis, variables de ports et règle

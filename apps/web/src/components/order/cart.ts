@@ -384,9 +384,6 @@ export function reconcile(
 
 const CART_VERSION = 1;
 const cartKey = (slug: string) => `sm.cart.${slug}`;
-const customerKey = "sm.customer";
-
-export type Customer = { name: string; phone: string };
 
 type CartSnapshot = { lines: CartLine[]; note: string };
 type Stored = CartSnapshot & { v: number; at: number };
@@ -432,25 +429,6 @@ function withCartLock<T>(slug: string, action: () => T): Promise<T> {
 
 function sameCart(left: CartSnapshot, right: CartSnapshot): boolean {
   return JSON.stringify(left.lines) === JSON.stringify(right.lines) && left.note === right.note;
-}
-
-export function readCustomer(): Customer {
-  try {
-    const raw = localStorage.getItem(customerKey);
-    if (!raw) return { name: "", phone: "" };
-    const parsed = JSON.parse(raw) as Partial<Customer>;
-    return { name: String(parsed?.name ?? ""), phone: String(parsed?.phone ?? "") };
-  } catch {
-    return { name: "", phone: "" };
-  }
-}
-
-export function writeCustomer(customer: Customer) {
-  try {
-    localStorage.setItem(customerKey, JSON.stringify(customer));
-  } catch {
-    /* non bloquant */
-  }
 }
 
 // ─────────────────────────────────────────────────────────────
