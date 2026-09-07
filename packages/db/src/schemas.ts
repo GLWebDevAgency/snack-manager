@@ -1,5 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose';
 import { InvoiceIssuanceSchema, InvoicePendingSchema } from './invoice-issuance.schema';
+import { DeliveryOperatorSchema } from './delivery-operator.schema';
 import { HistoricalOrderAdmissionImportSchema, validHistoricalOrderAdmission, OrderCapacityClaimSchema, OrderCapacityControlSchema, OrderCapacityDaySchema, ORDER_CAPACITY_INDEXES } from './order-capacity.schema';
 import {
   ADMIN_LOG_ACTIONS,
@@ -2203,6 +2204,7 @@ export const MODELS = {
   Tenant: { name: 'Tenant', schema: TenantSchema, collection: 'tenants' },
   User: { name: 'User', schema: UserSchema, collection: 'users' },
   Staff: { name: 'Staff', schema: StaffSchema, collection: 'staff' },
+  DeliveryOperator: { name: 'DeliveryOperator', schema: DeliveryOperatorSchema, collection: 'delivery_operators' },
   Shift: { name: 'Shift', schema: ShiftSchema, collection: 'shifts' },
   PlannedShift: {
     name: 'PlannedShift',

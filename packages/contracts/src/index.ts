@@ -31,6 +31,7 @@ export * from './capacites';
 export * from './mediatheque';
 export * from './mediatheque-octets';
 export * from './delivery';
+export * from './delivery-operators';
 export * from './commerce';
 export * from './order-refunds';
 export * from './order-counter';

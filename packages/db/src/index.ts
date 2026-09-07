@@ -1,6 +1,7 @@
 export * from './schemas';
 export * from './invoice-issuance.schema';
 export * from './order-capacity.schema';
+export * from './delivery-operator.schema';
 export * from './media-empreinte';
 
 import mongoose from 'mongoose';
