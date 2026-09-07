@@ -26,7 +26,9 @@ import { zod } from '../../common/zod.pipe';
  * l'auteur du geste est le gérant, pas la session. Exiger un jeton obligerait
  * à en fabriquer un faux pour dire la vérité.
  */
-export type AuditActor = Pick<JwtPayload, 'sub' | 'role' | 'kind'>;
+export type AuditActor = Pick<JwtPayload, 'sub' | 'role' | 'kind'>
+  // Une identité dédiée à la livraison, jamais un JWT professionnel fabriqué.
+  | { kind: 'delivery'; sub: string; role: 'livreur'; name: string };
 
 /** Stable comparison of immutable receipt data, independent of object key order. */
 function canonical(value: unknown): string {
@@ -113,9 +115,9 @@ export class AuditService {
     });
   }
 
-  /** Idempotent append ONLY for a durable order collection receipt. The receipt
+  /** Idempotent append ONLY for a durable order operation receipt. The receipt
    * remains the recovery source if this append fails; no audit update/upsert. */
-  async logOnce(entry: { tenantId: string; action: 'order.collect'; targetId: string; actor: AuditActor; meta: unknown }, operationId: string): Promise<void> {
+  async logOnce(entry: { tenantId: string; action: 'order.collect' | 'order.assign' | 'order.dispatch'; targetId: string; actor: AuditActor; meta: unknown }, operationId: string): Promise<void> {
     const key = JSON.stringify([entry.tenantId, entry.action, entry.targetId, operationId]);
     const id = new Types.ObjectId(createHash('sha256').update(key).digest('hex').slice(0, 24));
     const fingerprint = createHash('sha256').update(canonical(entry)).digest('hex');
@@ -153,6 +155,9 @@ export class AuditService {
    * agi en gérant.
    */
   private async auteur(actor: AuditActor): Promise<AuditAuthor> {
+    if (actor.kind === 'delivery') {
+      return { id: actor.sub, name: actor.name.trim(), role: actor.role, means: 'delivery_access' };
+    }
     const means: AuditAuthorMeans = actor.kind === 'staff' ? 'pin' : 'password';
     return {
       id: String(actor.sub),
@@ -163,7 +168,7 @@ export class AuditService {
   }
 
   /** Le nom affiché — vide si le compte a disparu entre le geste et sa lecture. */
-  private async nomDe(actor: AuditActor): Promise<string> {
+  private async nomDe(actor: Pick<JwtPayload, 'sub' | 'role' | 'kind'>): Promise<string> {
     if (!Types.ObjectId.isValid(actor.sub)) return '';
     if (actor.kind === 'staff') {
       const membre = await this.staff

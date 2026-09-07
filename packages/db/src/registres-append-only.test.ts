@@ -94,8 +94,8 @@ describe('la forme de l’auteur', () => {
     expect(AuditLogSchema.path('author.id').instance).toBe('String');
   });
 
-  it('réserve déjà la place d’un assistant connecté, sans qu’aucun code ne l’écrive', () => {
+  it('distingue l’accès livreur et conserve la place réservée aux connecteurs', () => {
     const chemin = AuditLogSchema.path('author.means') as unknown as { enumValues?: string[] };
-    expect(chemin.enumValues).toEqual(['password', 'pin', 'connector']);
+    expect(chemin.enumValues).toEqual(['password', 'pin', 'connector', 'delivery_access']);
   });
 });

@@ -41,6 +41,15 @@ const registre = () =>
   });
 
 describe('l’auteur d’un geste', () => {
+  it('trace l’accès livreur sans le confondre avec un compte professionnel', async () => {
+    const { audit, lignes } = registre();
+    await audit.log({ tenantId: TENANT, action: 'order.dispatch',
+      actor: { kind: 'delivery', sub: SARAH, role: 'livreur', name: 'Nora livraison' } });
+    // Même identifiant qu’un Staff de la fixture : aucune résolution vers Sarah.
+    expect(lignes[0]!.author).toEqual({ id: SARAH, name: 'Nora livraison', role: 'livreur', means: 'delivery_access' });
+    expect((await audit.list(TENANT))[0]!.author?.means).toBe('delivery_access');
+  });
+
   it('nomme la personne, son rôle, et par quel moyen elle a ouvert sa session', async () => {
     const { audit, lignes } = registre();
 

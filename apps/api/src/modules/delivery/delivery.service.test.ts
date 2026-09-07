@@ -18,6 +18,21 @@ function setup(over: Record<string, unknown> = {}) {
 }
 
 describe('départ du livreur', () => {
+  it('ferme le legacy pour une mission existante même déjà partie', async () => {
+    const ctx = setup({ deliveryMission: { version: 1 }, delivery: { dispatchedAt: new Date() } });
+    await expect(ctx.service.dispatch(tenantId, 'order', {}, actor)).rejects.toMatchObject({ status: 409 });
+    expect(ctx.orders.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+  it('compare aussi absence de mission dans le CAS et refuse une adoption concurrente', async () => {
+    const ctx = setup();
+    ctx.orders.findOneAndUpdate.mockImplementationOnce(async () => {
+      Object.assign(ctx.row, { deliveryMission: { version: 1 } });
+      return null as never;
+    });
+    await expect(ctx.service.dispatch(tenantId, 'order', {}, actor)).rejects.toMatchObject({ status: 409 });
+    expect(ctx.orders.findOneAndUpdate).toHaveBeenCalledWith(expect.objectContaining({ deliveryMission: null }), expect.any(Object), expect.any(Object));
+    expect(ctx.audit.log).not.toHaveBeenCalled();
+  });
   it('refuse préparation inachevée et paiement non confirmé', async () => {
     const preparing = setup({ status: 'preparing' });
     await expect(preparing.service.dispatch(tenantId, 'order', {}, actor)).rejects.toThrow(/prête/);

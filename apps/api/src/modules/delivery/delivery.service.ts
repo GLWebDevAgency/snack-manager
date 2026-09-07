@@ -78,8 +78,9 @@ export class DeliveryService {
     const scope = orderAccessScope(capacitesEffectives(tenant));
     if (scope === 'none') throw new NotFoundException('Commande de livraison introuvable');
     const filter = { _id: id, tenantId, type: 'delivery', ...(scope === 'online' ? { channel: 'online' } : {}) };
-    const existing = await this.orders.findOne(filter).select('+paymentFlow');
+    const existing = await this.orders.findOne(filter).select('+paymentFlow +deliveryMission');
     if (!existing) throw new NotFoundException('Commande de livraison introuvable');
+    if (existing.deliveryMission) throw new ConflictException({ code: 'DELIVERY_MISSION_REQUIRED', message: 'Utilisez la mission affectée pour confirmer ce départ.' });
     if (existing.delivery?.dispatchedAt) return existing;
     if (existing.paymentFlow && ['closing', 'closed', 'review_required'].includes(existing.paymentFlow.phase)) {
       throw new ConflictException('Paiement en cours de fermeture ou à vérifier — le livreur ne peut pas partir.');
@@ -88,7 +89,7 @@ export class DeliveryService {
     if (existing.payment.status !== 'paid') throw new ConflictException('Le paiement doit être confirmé avant le départ du livreur.');
     const dispatchedAt = new Date();
     const updated = await this.orders.findOneAndUpdate({
-      ...filter, status: 'ready',
+      ...filter, status: 'ready', deliveryMission: null,
       'payment.status': 'paid', 'delivery.dispatchedAt': null,
       'paymentFlow.phase': { $nin: ['closing', 'closed', 'review_required'] },
     }, {
@@ -96,7 +97,8 @@ export class DeliveryService {
       $inc: { __v: 1 },
     }, { new: true, runValidators: true });
     if (!updated) {
-      const raced = await this.orders.findOne(filter).select('+paymentFlow');
+      const raced = await this.orders.findOne(filter).select('+paymentFlow +deliveryMission');
+      if (raced?.deliveryMission) throw new ConflictException({ code: 'DELIVERY_MISSION_REQUIRED', message: 'Utilisez la mission affectée pour confirmer ce départ.' });
       if (raced?.delivery?.dispatchedAt) return raced;
       throw new ConflictException('Commande modifiée en parallèle — actualisez puis recommencez.');
     }

@@ -9,3 +9,4 @@ export * from './order-line';
 export * from './order';
 export * from './build-order';
 export * from './delivery';
+export * from './delivery-mission';
