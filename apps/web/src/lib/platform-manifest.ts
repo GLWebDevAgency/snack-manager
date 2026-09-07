@@ -2,11 +2,13 @@ import type { MetadataRoute } from "next";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * MANIFESTE WEB — CONVENTION `app/manifest.ts`
+ * MANIFESTE WEB DE LA PLATEFORME
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Next sert ce fichier à `/manifest.webmanifest` et pose lui-même le
- * `<link rel="manifest">` : rien à ajouter dans `layout.tsx`.
+ * La route explicite `/manifest.webmanifest` sert ces données. Son lien vient
+ * de `platform-metadata.ts`, afin que les surfaces restaurant puissent le
+ * remplacer ou le retirer. Une convention `app/manifest.ts` le réinjecterait
+ * automatiquement, y compris sur les domaines où le proxy le refuse.
  *
  * Les icônes ne sont pas dessinées ici. Elles sortent de la fabrique
  * (`scripts/generate-brand-assets.mjs`), qui les dérive de la géométrie du
@@ -20,14 +22,9 @@ import type { MetadataRoute } from "next";
  *    d'adresse perd son URL, son bouton de retour et son partage — on prive
  *    le visiteur des gestes mêmes par lesquels une vitrine se transmet.
  *
- * 2. LA FRONTIÈRE DE LA MARQUE BLANCHE. Le manifeste d'une application Next
- *    est GLOBAL : le lien part dans toutes les pages du dossier `app/`,
- *    y compris `/r/[slug]`, le site de commande que voit le client final du
- *    restaurant. En `"standalone"`, ces pages rempliraient les critères
- *    d'installabilité de Chrome, et le client d'un snack se verrait proposer
- *    d'installer une application nommée « Snack Manager », à notre icône,
- *    en croyant installer celle du commerce. C'est exactement la confusion
- *    que la marque blanche interdit.
+ * 2. LA FRONTIÈRE DE LA MARQUE BLANCHE. Ce manifeste reste exclusivement
+ *    celui de Snack Manager. Il ne doit jamais proposer au client d'un snack
+ *    d'installer notre marque en croyant installer celle du commerce.
  *
  *    `"browser"` ferme la porte à la source : les navigateurs ne déclenchent
  *    pas d'invite d'installation pour ce mode d'affichage. Nos surfaces
@@ -39,7 +36,7 @@ import type { MetadataRoute } from "next";
  * par exemple), ce n'est pas ce fichier qu'il faut basculer : il faut un
  * manifeste propre à cette route, laissant celui-ci en `"browser"`.
  */
-export default function manifest(): MetadataRoute.Manifest {
+export function platformManifest(): MetadataRoute.Manifest {
   return {
     name: "Snack Manager",
     short_name: "Snack Manager",

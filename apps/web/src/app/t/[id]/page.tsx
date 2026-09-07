@@ -7,6 +7,7 @@ import { FeuilleDuMasque } from "@/components/masque/FeuilleDuMasque";
 import { classesPolices } from "@/components/masque/polices";
 import { styleDuMasque } from "@/components/masque/styleDuMasque";
 import { cx } from "@/lib/cx";
+import { restaurantMetadata } from "@/lib/restaurant-metadata";
 import { loadTicket, loadTracking, marqueDuSuivi, readToken } from "./tracking-api";
 
 /**
@@ -30,11 +31,19 @@ type Params = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
-export const metadata: Metadata = {
-  title: "Suivi de commande",
-  robots: { index: false, follow: false },
-  referrer: "no-referrer",
-};
+export async function generateMetadata({ params, searchParams }: Params): Promise<Metadata> {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const token = readToken(query.t);
+  const ticket = token ? await loadTicket(id, token).catch(() => null) : null;
+  return {
+    // Le lecteur de ticket est mémorisé par requête. Seul le slug public et
+    // validé sert ici : ni identifiant, ni jeton, ni données client en asset.
+    ...restaurantMetadata(ticket?.header?.slug),
+    title: "Suivi de commande",
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
+}
 
 /*
  * Sans jeton, aucun slug : le restaurant est inconnu, donc son masque aussi.

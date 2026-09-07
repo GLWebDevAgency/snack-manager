@@ -8,9 +8,9 @@
  * Produit, depuis LA géométrie et elle seule
  * (`apps/web/src/components/brand/geometry.ts`) :
  *
- *   apps/web/src/app/icon.svg              favicon vectoriel
- *   apps/web/src/app/favicon.ico           favicon hérité (PNG 32 empaqueté)
- *   apps/web/src/app/apple-icon.png        180 × 180, écran d'accueil iOS
+ *   apps/web/public/icon.svg               favicon vectoriel
+ *   apps/web/public/favicon.ico            favicon hérité (PNG 32 empaqueté)
+ *   apps/web/public/apple-icon.png         180 × 180, écran d'accueil iOS
  *   apps/web/public/icons/icon-192.png     manifeste PWA
  *   apps/web/public/icons/icon-512.png     manifeste PWA
  *   apps/web/public/icons/maskable-512.png manifeste PWA, purpose maskable
@@ -155,15 +155,15 @@ console.log('\nFavicon et icônes du site');
  * gravure existe pour couvrir.
  */
 const faviconSvg = tuile({ cote: 64, rayon: 14, occupation: 0.7, micro: true });
-await ecrire('apps/web/src/app/icon.svg', faviconSvg);
+await ecrire('apps/web/public/icon.svg', faviconSvg);
 
 const favicon32 = await enPng(page, tuile({ cote: 32, rayon: 7, occupation: 0.72, micro: true }), 32);
-await ecrire('apps/web/src/app/favicon.ico', empaqueterIco(favicon32, 32));
+await ecrire('apps/web/public/favicon.ico', empaqueterIco(favicon32, 32));
 
 // iOS n'arrondit rien lui-même sur `apple-touch-icon` : c'est à nous de le
 // faire, et sans transparence — un PNG transparent y devient noir.
 await ecrire(
-  'apps/web/src/app/apple-icon.png',
+  'apps/web/public/apple-icon.png',
   await enPng(page, tuile({ cote: 180, rayon: 40, occupation: 0.66 }), 180),
 );
 

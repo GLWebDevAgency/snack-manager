@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { platformMetadata } from "@/lib/platform-metadata";
 import "./globals.css";
 
 const inter = Inter({
@@ -9,10 +10,7 @@ const inter = Inter({
   weight: ["400", "500", "600", "700", "800", "900"],
 });
 
-export const metadata: Metadata = {
-  title: "Snack Manager",
-  description: "La suite qui fait tourner votre snack — caisse, cuisine, commande en ligne.",
-};
+export const metadata: Metadata = platformMetadata;
 
 export default function RootLayout({
   children,

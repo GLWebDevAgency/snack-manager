@@ -389,6 +389,7 @@ function verdictPourRestaurant(pathname: string, slug: string): Verdict {
   if (
     pathname === `/r/${slug}` ||
     pathname === `/r/${slug}/` ||
+    pathname === `/r/${slug}/icon.svg` ||
     pathname === `/r/${slug}/fidelite` ||
     pathname.startsWith(`/r/${slug}/fidelite/`)
   ) {

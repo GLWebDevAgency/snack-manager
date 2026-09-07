@@ -124,6 +124,21 @@ describe("politique anti-cadrage", () => {
     expectSameOrigin(machine);
   });
 
+  it("sert seulement l'icône du restaurant lié au domaine", async () => {
+    resolvesTo("classfood");
+    const response = await proxy(request("/r/classfood/icon.svg", "restaurant-icon.example"));
+    expect(response.status).toBe(200);
+    expect(isRewrite(response)).toBe(false);
+    expectSameOrigin(response);
+  });
+
+  it.each(["/r/concurrent/icon.svg", "/r/classfood/nested/icon.svg", "/icon.svg", "/favicon.ico", "/apple-icon.png", "/manifest.webmanifest"])(
+    "n'ouvre pas les actifs hors périmètre : %s", async (pathname) => {
+      resolvesTo("classfood");
+      expect((await proxy(request(pathname, "restaurant-icon-denied.example"))).status).toBe(404);
+    },
+  );
+
   it("décore les refus machine et les hôtes inconnus", async () => {
     resolvesTo("classfood");
     const machine = await proxy(request("/manifest.webmanifest", "commande-machine.example"));
