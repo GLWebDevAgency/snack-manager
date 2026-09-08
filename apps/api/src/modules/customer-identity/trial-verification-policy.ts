@@ -40,6 +40,9 @@ const evidenceSchema = z.strictObject({
   smsEnabled: z.literal(true),
   fraudGuardEnabled: z.literal(true),
   codeLength: z.literal(6),
+  // La garde durable inter-challenges couvre 10 minutes. Ne pas accepter un
+  // service dont un ancien code pourrait rester valide au-delà de cette borne.
+  maxTokenValiditySeconds: z.number().int().min(1).max(600),
   verifiedPhones: recipientList,
   freeSmsUnitsRemaining: units,
   // Borne attestée du template/service, pas déduite de la longueur du code.

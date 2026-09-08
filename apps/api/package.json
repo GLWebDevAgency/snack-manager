@@ -22,6 +22,7 @@
     "@nestjs/websockets": "^11.0.0",
     "@sentry/node": "^10.70.0",
     "@sm/contracts": "workspace:*",
+    "@sm/customer": "workspace:*",
     "@sm/db": "workspace:*",
     "@sm/domain": "workspace:*",
     "@sm/loyalty": "workspace:*",
