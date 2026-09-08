@@ -309,6 +309,64 @@ de ce lot, la récupération sûre sur nouvel appareil et le nouveau cadre Verif
 La vérification frontend d'auteur n'est pas une garantie contre un futur code
 d'authentification qui remplacerait les cookies en dehors de ce protocole.
 
+## L3a.5 — pilote Verify payant fermé, préparation non activée
+
+Le compte fournisseur devenu `Full` n'est pas accepté comme un compte `Trial`.
+Le nouveau mode explicite `closed_paid_pilot` reste limité au runtime Railway
+staging épinglé, à un seul restaurant et à cinq mobiles français autorisés au
+maximum. API et BFF restent fermés sans leur configuration complète. Une
+autorisation Verify, un solde crédité ou des unités Messaging ne constituent
+pas un budget de dépenses applicatif : **aucun montant par défaut**.
+
+Une autorisation ponctuelle, non récurrente, doit nommer le compte parent, le
+service, le restaurant, son auteur, sa référence, son plafond en micro-USD
+entiers et son expiration. Les preuves fournisseur et tarifaires doivent être
+postérieures à cette autorisation, fraîches de moins de quinze minutes et
+liées à la référence tarifaire approuvée. Le plafond par cycle couvre la
+segmentation maximale et la vérification réussie éventuelle, tous frais inclus.
+Une grille de prix publique seule ne prouve pas cette borne complète ; absence
+de preuve ou dépassement numérique ferme l'envoi, sans conversion de devise.
+
+Le calcul pur ne donne pas la permission d'appeler Twilio. Le registre PostgreSQL
+réserve d'abord le coût maximal irréversiblement, sous le même verrou de compte
+parent que l'essai. Un rejeu ne réserve pas à nouveau ; un envoi échoué ou dont
+la réponse est perdue reste compté. Référence d'autorisation, devise, coût et
+preuve tarifaire sont liés aux réservations. Ni rafraîchir les prix, ni changer
+de service, ni changer la référence d'autorisation ne recrée un budget.
+
+La migration est additive : nouvelles preuves payantes, contraintes, RLS et
+gardes monotones ; migration initiale inchangée. Un parent passé au payant a
+ses anciens plafonds gratuits abaissés à zéro, y compris s'il existait déjà.
+Son plafond historique d'envois reste irréversible : un ancien plafond d'un
+envoi ne devient pas cinquante grâce à une nouvelle autorisation. Ne jamais
+changer artificiellement de compte parent pour contourner ce refus. Réduire
+le montant ferme les nouveaux envois non couverts ; une expiration anticipée
+arrête les nouveaux contrôles. Les preuves et réservations déjà consommées
+ne sont pas effacées pour revenir à une ancienne version applicative.
+
+Chaque contrôle de code retrouve son financement initial : pas de transformation
+silencieuse Trial → Paid, pas d'autre autorisation et pas de coût actuel supérieur
+à la réserve. Une preuve tarifaire renouvelée, toujours couverte, n'impose pas
+de repayer un SMS. Après le dernier contrôle asynchrone du restaurant, le cœur
+revalide immédiatement politique, financement et clés avant le fournisseur.
+Le SQL ferme aussi l'admission d'un ancien contrôle Trial après bascule payante.
+Cela ne révoque pas un appel fournisseur **déjà en vol** : arrêt contrôlé des
+anciens writers et rapprochement des challenges restent des préalables à la
+bascule. La récupération d'une session déjà approuvée ne relance jamais Verify.
+
+Ce lot prépare le serveur, pas l'inscription publique : journal navigateur de
+confirmation/récupération, continuité sur nouvel appareil, recette OTP réelle
+et rattachement fidélité restent séparés. Aucun numéro réel, clé ou preuve
+d'autorisation du fondateur n'est écrit dans les fixtures. Le plafond de recette
+proposé au fondateur reste à confirmer ; aucun SMS n'est envoyé sans cet accord.
+Vérifications locales du lot : 441 tests API identité, 58 intégrations PostgreSQL
+réelles, suite `customer` complète 190/190 sans test ignoré, bootstrap 60 tests
+et intégration PostgreSQL réelle, suite web 128 fichiers/1 816 tests. Types,
+lint, builds ciblés customer/bootstrap et revue croisée verts. Ces décomptes
+se recouvrent : ne pas les additionner. Compilation monorepo laissée à la CI
+faute d'espace disque local ; une suite locale ne prouve pas la recette Twilio.
+PR, CI du SHA final et déploiement seront consignés à la réception du lot.
+
 ## Conditions restantes avant ouverture
 
 1. **Contexte PostgreSQL `customer` distinct** (socle implémenté) de `User` professionnel et de
