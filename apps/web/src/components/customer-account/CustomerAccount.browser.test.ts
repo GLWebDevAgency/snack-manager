@@ -117,10 +117,14 @@ describe('customer entry placement — real Storefront and loyalty components', 
       const primary = page.getByRole('button', { name: 'Commander maintenant', exact: true });
       const entry = page.getByRole('button', { name: 'Mon compte', exact: true });
       expect(await entry.count()).toBe(1); expect(await page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).count()).toBe(1);
-      const orderEntry = page.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true });
-      const accountBox = await entry.boundingBox(); const ordersBox = await orderEntry.boundingBox();
-      expect(Math.abs(accountBox!.y - ordersBox!.y)).toBeLessThanOrEqual(1);
-      expect(accountBox!.height).toBeGreaterThanOrEqual(44); expect(ordersBox!.height).toBeGreaterThanOrEqual(44);
+      const geometry = await accountNavigationGeometry();
+      try { assertAccountNavigationAligned(geometry, width); }
+      catch (error) {
+        const failure = await mkdtemp(join(tmpdir(), 'sm-account-layout-failure-'));
+        await page.screenshot({ path: join(failure, `storefront-${width}.png`) });
+        process.stdout.write(`Customer navigation failure capture: ${failure}\n`);
+        throw error;
+      }
       expect(await primary.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await entry.evaluate(node => getComputedStyle(node).backgroundColor));
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       if (evidence) await page.screenshot({ path: join(evidence, `storefront-${width}.png`) });
@@ -131,6 +135,25 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await expect.poll(() => page.getByRole('dialog').count()).toBe(1);
     await page.keyboard.press('Escape'); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
     expect(requests.mutations).toEqual([]);
+  });
+  it('measures a shared reflow atomically but still rejects a genuinely displaced sibling', async () => {
+    await navigationFixture(false); await page.goto(`${origin}/storefront`);
+    await page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).waitFor();
+    const initial = await accountNavigationGeometry();
+    const nav = page.getByRole('navigation', { name: 'Vos accès personnels', exact: true });
+    // Deterministically reproduce the old mixed-frame measurement: the whole
+    // row moves between two reads, while both siblings remain aligned.
+    await nav.evaluate(node => { (node as HTMLElement).style.transform = 'translateY(44.78125px)'; });
+    const after = await accountNavigationGeometry();
+    expect(Math.abs(initial.account.y - after.orders.y)).toBeGreaterThan(44);
+    assertAccountNavigationAligned(after, 320);
+    // A real one-button displacement must fail the unchanged <=1px assertion.
+    await nav.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).evaluate(node => {
+      (node as HTMLElement).style.transform = 'translateY(44px)';
+    });
+    const broken = await accountNavigationGeometry();
+    expect(Math.abs(broken.account.y - broken.orders.y)).toBe(44);
+    expect(() => assertAccountNavigationAligned(broken, 320)).toThrow();
   });
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
@@ -241,6 +264,29 @@ afterAll(async () => { await browser?.close(); if (server) await new Promise<voi
 const open = async () => { await page.getByRole('button', { name: 'Mon compte', exact: true }).click(); await page.getByRole('dialog', { name: 'Mon compte', exact: true }).waitFor(); };
 const authenticate = () => page.evaluate(() => window.customerAccountUiFixture.patch({ status: 'authenticated', view: window.customerAccountUiFixture.view() }));
 const calls = () => page.evaluate(() => window.customerAccountUiFixture.calls);
+
+async function accountNavigationGeometry() {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
+  // Read both siblings in the SAME browser turn. Separate boundingBox RPCs
+  // could compare opposite sides of a resize/reflow that moves their parent.
+  return page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).evaluate(nav => {
+    const account = nav.querySelector('[aria-label="Mon compte"]');
+    const orders = nav.querySelector('[aria-label="Mes commandes sur cet appareil"]');
+    if (!account || !orders) throw new Error('Customer navigation controls missing');
+    return { width: innerWidth, scrollY, fonts: document.fonts.status, display: getComputedStyle(nav).display,
+      account: account.getBoundingClientRect().toJSON(), orders: orders.getBoundingClientRect().toJSON() };
+  });
+}
+function assertAccountNavigationAligned(geometry: Awaited<ReturnType<typeof accountNavigationGeometry>>, width: number) {
+  const diagnostic = JSON.stringify({ expectedWidth: width, ...geometry });
+  expect(geometry.width, diagnostic).toBe(width);
+  expect(Math.abs(geometry.account.y - geometry.orders.y), diagnostic).toBeLessThanOrEqual(1);
+  expect(geometry.account.height, diagnostic).toBeGreaterThanOrEqual(44);
+  expect(geometry.orders.height, diagnostic).toBeGreaterThanOrEqual(44);
+}
 
 describe('customer account panel — rendered boundaries', () => {
   it('opens only on demand and preserves the honest guest journey without an OTP CTA', async () => {
