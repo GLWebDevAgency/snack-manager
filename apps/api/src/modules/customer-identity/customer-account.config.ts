@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CustomerAccountSlugSchema } from '@sm/contracts';
-import { planTrialPhoneVerification } from './trial-verification-policy';
+import { CustomerVerificationModeSchema, planCustomerPhoneVerification, type CustomerVerificationMode } from './verification-plan';
 
 export type CustomerConfigReader = { get(key: string): unknown };
 const key = z.string().regex(/^[A-Za-z0-9+/]{43}=$/)
@@ -13,14 +13,15 @@ const origin = z.string().max(200).refine(value => {
 });
 export type CustomerAccessConfiguration = {
   environment: 'staging'; parentRef: string; tenantRef: string; slug: string;
+  mode: CustomerVerificationMode;
   origins: string[]; identityKey: string; relayKey: string;
 };
 /** No provider account, key or pilot default. Native Railway identity must
  * match a separately pinned operator target; a policy saying staging is not evidence. */
 export function customerAccessConfiguration(config: CustomerConfigReader): CustomerAccessConfiguration | null {
   try {
-    if (config.get('SM_CUSTOMER_ACCOUNT_MODE') !== 'closed_trial'
-      || config.get('RAILWAY_ENVIRONMENT_NAME') !== 'staging'
+    const mode = CustomerVerificationModeSchema.parse(config.get('SM_CUSTOMER_ACCOUNT_MODE'));
+    if (config.get('RAILWAY_ENVIRONMENT_NAME') !== 'staging'
       || (config.get('SM_ENV') !== undefined && config.get('SM_ENV') !== 'staging')) return null;
     for (const part of ['ENVIRONMENT', 'PROJECT']) {
       const actual = uuid.parse(config.get(`RAILWAY_${part}_ID`));
@@ -32,7 +33,7 @@ export function customerAccessConfiguration(config: CustomerConfigReader): Custo
     const slugs = z.array(CustomerAccountSlugSchema).length(1).parse(json(config, 'SM_CUSTOMER_PILOT_SLUGS'));
     const origins = z.array(origin).min(1).max(5).parse(json(config, 'SM_CUSTOMER_PILOT_ORIGINS'));
     if (new Set(origins).size !== origins.length) return null;
-    return { environment: 'staging', identityKey, relayKey, slug: slugs[0]!, origins,
+    return { mode, environment: 'staging', identityKey, relayKey, slug: slugs[0]!, origins,
       tenantRef: z.string().regex(/^[0-9a-f]{24}$/).parse(config.get('SM_CUSTOMER_PILOT_TENANT_ID')),
       parentRef: z.string().regex(/^AC[0-9a-fA-F]{32}$/).parse(config.get('SM_CUSTOMER_VERIFY_ACCOUNT_SID')) };
   } catch { return null; }
@@ -45,7 +46,9 @@ export function customerSendConfiguration(config: CustomerConfigReader, access: 
     const policy = json(config, 'SM_CUSTOMER_VERIFY_POLICY');
     const evidence = json(config, 'SM_CUSTOMER_VERIFY_EVIDENCE');
     const candidate = z.object({ allowedPhones: z.array(z.string()).min(1) }).parse(policy).allowedPhones[0]!;
-    const plan = planTrialPhoneVerification({ policy, evidence, request: { tenantRef: access.tenantRef, phone: candidate }, now });
+    if (config.get('SM_CUSTOMER_ACCOUNT_MODE') !== access.mode) return null;
+    const plan = planCustomerPhoneVerification({ mode: access.mode, policy, evidence,
+      request: { tenantRef: access.tenantRef, phone: candidate }, now });
     if (plan.kind !== 'reservation_required' || plan.accountSid !== access.parentRef) return null;
     const turnstileSecret = secret.parse(config.get('SM_CUSTOMER_TURNSTILE_SECRET_KEY'));
     // Official always-pass/always-fail testing keys are never a runtime proof.

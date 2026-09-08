@@ -19,6 +19,37 @@ une observation, un service ou une preuve plus récents ne remettent rien à zé
 Cette borne conservatrice peut fermer le pilote avant épuisement fournisseur ;
 ce n'est pas une réconciliation de facture. Le plafond absolu est 50 envois.
 
+## Financement payant fermé, distinct de l'essai
+
+La migration additive `0001_customer_paid_budget` conserve `0000`, ses lignes
+et son hash. Elle ajoute une autorisation unique par parent, en microdollars USD
+entiers, un plafond qui ne peut que baisser, un réservé qui ne peut que monter
+et une expiration qui ne peut que raccourcir. La référence d'autorisation ne se
+remplace pas. Chaque réservation payante garde son montant, son expiration
+initiale et sa référence de preuve de coût, sans inventer d'unités gratuites.
+
+Trial et Paid prennent **le même verrou parent**, puis Paid verrouille son budget.
+Ils partagent le nombre d'envois lifetime, les quotas journaliers et la garde
+téléphone. La bascule Paid abaisse définitivement les deux plafonds gratuits à
+zéro, y compris pour un parent historique. Les consommations gratuites passées
+restent intactes ; les nouveaux envois payants ne les augmentent pas. Le plafond
+historique d'envois peut être inférieur à 50 car Trial le dérivait aussi des
+crédits gratuits : le financement payant ne le relève jamais.
+
+La projection `PendingChallenge.funding` vient du reçu immuable ; seule son
+expiration effective est le minimum entre reçu et budget courant. Abaisser un
+plafond financier à zéro ferme les **nouveaux** envois mais laisse terminer les
+cycles déjà provisionnés. Une expiration explicitement passée ferme leurs
+nouvelles vérifications. Un trigger SQL refuse aussi l'ancien INSERT de check
+Trial après la bascule Paid. Cela ne peut pas arrêter un appel fournisseur déjà
+autorisé/en vol : fermer le pilote et arrêter les anciennes instances avant
+changement de mode reste une précondition opératoire.
+
+Rollback : fermer le pilote et revenir au code précédent si nécessaire, **sans
+down migration ni suppression des budgets/réservations**. Les plafonds gratuits
+à zéro et le garde SQL restent actifs ; ce rollback ne réactive pas l'essai.
+Ni recharge, ni renouvellement d'autorisation, ni migration de parent n'est livré.
+
 Les challenges expirent au plus tard après 10 minutes et les sessions après
 7 jours absolus selon l'horloge PostgreSQL. La garde téléphone reste au moins
 10 minutes + 5 secondes après réservation, indépendamment d'une expiration

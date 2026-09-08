@@ -7,14 +7,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { CustomerAccountRuntime } from './customer-account.runtime';
 import type { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
-import { customerTestEnvironment } from './customer-account.test-fixture';
+import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
 
-function fixture() {
-  const now = Date.now(); const env = customerTestEnvironment(now);
+function fixture(paid = false) {
+  const now = Date.now(); const env = paid ? customerPaidTestEnvironment(now) : customerTestEnvironment(now);
   const crypto = new CustomerIdentityCrypto(env.SM_CUSTOMER_IDENTITY_KEY!);
   const tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!; const phone = '+33612345678';
   const phoneHash = crypto.hash('phone', tenantRef, phone);
   const pending = { challengeId: randomUUID(), phoneHash, serviceSid: `VA${'b'.repeat(32)}`,
+    funding: paid ? { mode: 'paid' as const, authorizationRef: 'fixture-authorization', currency: 'USD' as const,
+      reservedMicrousd: 70, expiresAt: now + 86_400_000 } : { mode: 'trial' as const },
     verificationSid: `VE${'c'.repeat(32)}`, expiresAt: now + 600_000,
     encryptedPhone: crypto.seal('phone', tenantRef, phoneHash, phone) };
   const session: CustomerSession = { sessionId: randomUUID(), expiresAt: now + 604_800_000,
@@ -154,3 +156,142 @@ describe('customer runtime tenant and purpose boundary', () => {
     expect(JSON.stringify(error).includes(marker) || String((error as Error).stack).includes(marker)).toBe(false);
   });
 });
+
+describe('closed paid pilot runtime funding', () => {
+  it('reserves the authorized money and cost evidence before sending, without any Trial alias', async () => {
+    const f = fixture(true);
+    await f.runtime.execute(f.relay, f.start);
+    const reserved = f.repository.reserve.mock.calls[0]![0];
+    expect(reserved.limits).toMatchObject({ maxSendReservations: 10, smsUnitsReservedPerSend: 2,
+      paidBudget: { mode: 'paid', authorizationRef: 'fixture-authorization', currency: 'USD',
+        costEvidenceReference: 'fixture-cost', authorizedSpendMicrousd: 1010, reservePerSendMicrousd: 70 } });
+    for (const field of ['challengeTtlMs', 'trialSendReservations', 'freeSmsUnitsRemainingAtObservation',
+      'freeVerificationUnitsRemainingAtObservation']) expect(reserved.limits).not.toHaveProperty(field);
+    expect(f.repository.reserve.mock.invocationCallOrder[0]).toBeLessThan(f.provider.start.mock.invocationCallOrder[0]!);
+    expect(f.provider.start).toHaveBeenCalledTimes(1);
+  });
+  it('replays a correctly funded pending start without sending again', async () => {
+    const f = fixture(true); f.repository.reserve.mockResolvedValue({ kind: 'pending', challenge: f.pending });
+    await expect(f.runtime.execute(f.relay, f.start)).resolves.toEqual({ challengeId: f.pending.challengeId, expiresAt: f.pending.expiresAt });
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.repository.settleSend).not.toHaveBeenCalled();
+  });
+  for (const action of ['start', 'check'] as const) {
+    it.each(['trial', 'missing', 'foreign-authorization', 'currency', 'expired', 'underfunded', 'zero', 'extra'])
+      (`refuses %s funding on ${action}, never calling the provider or re-provisioning a check`, async kind => {
+        const f = fixture(true); const funding: Record<string, unknown> = { ...f.pending.funding };
+        if (kind === 'foreign-authorization') funding.authorizationRef = 'other-authorization';
+        if (kind === 'currency') funding.currency = 'EUR';
+        if (kind === 'expired') funding.expiresAt = Date.now() - 1;
+        if (kind === 'underfunded') funding.reservedMicrousd = 69;
+        if (kind === 'zero') funding.reservedMicrousd = 0;
+        if (kind === 'extra') funding.untrusted = true;
+        const invalid = { ...f.pending, funding: kind === 'missing' ? undefined : kind === 'trial' ? { mode: 'trial' } : funding } as typeof f.pending;
+        f.repository.claimCheck.mockResolvedValue(invalid);
+        f.repository.reserve.mockResolvedValue({ kind: 'pending', challenge: invalid });
+        const rejected = await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check)
+          .then(() => false, (error: { status?: number }) => error.status === 503);
+        expect(rejected).toBe(true);
+        expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+        if (action === 'check') {
+          expect(f.repository.reserve).not.toHaveBeenCalled();
+          expect(f.repository.completeCheck).toHaveBeenCalledWith(expect.objectContaining({ result: 'uncertain' }));
+        }
+      });
+  }
+  it.each(['same', 'lower'])('checks with %s covered cost after a new cost attestation, without reserving again', async cost => {
+    const f = fixture(true); reviseCosts(f, cost === 'same' ? 31 : 30);
+    const result = await f.runtime.execute({ ...f.relay, action: 'check' }, f.check);
+    expect(result).toMatchObject({ view: { profile: { revision: 0 } } });
+    expect(f.provider.check).toHaveBeenCalledTimes(1); expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it('accepts a fresh covered cost reference after the final tenant wait, not just before the request', async () => {
+    const f = fixture(true); let reads = 0;
+    f.query.exec.mockImplementation(async () => { if (++reads === 2) reviseCosts(f, 31); return f.row; });
+    const accepted = await f.runtime.execute({ ...f.relay, action: 'check' }, f.check).then(() => true, () => false);
+    expect(accepted).toBe(true); expect(f.provider.check).toHaveBeenCalledTimes(1);
+    expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it('rejects a higher cost appearing during the final tenant wait before checking', async () => {
+    const f = fixture(true); let reads = 0;
+    f.query.exec.mockImplementation(async () => { if (++reads === 2) reviseCosts(f, 32); return f.row; });
+    const rejected = await f.runtime.execute({ ...f.relay, action: 'check' }, f.check)
+      .then(() => false, (error: { status?: number }) => error.status === 503);
+    expect(rejected).toBe(true); expect(f.provider.check).not.toHaveBeenCalled();
+    expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it.each(['claim', 'last-read'])('rejects an authorization changed during %s before checking', async timing => {
+    const f = fixture(true); const change = () => {
+      const policy = JSON.parse(f.env.SM_CUSTOMER_VERIFY_POLICY!);
+      policy.authorization.reference = 'new-authorization'; f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify(policy);
+    };
+    if (timing === 'claim') f.repository.claimCheck.mockImplementation(async () => { change(); return f.pending; });
+    else { let reads = 0; f.query.exec.mockImplementation(async () => { if (++reads === 2) change(); return f.row; }); }
+    const rejected = await f.runtime.execute({ ...f.relay, action: 'check' }, f.check)
+      .then(() => false, (error: { status?: number }) => error.status === 503);
+    expect(rejected).toBe(true); expect(f.provider.check).not.toHaveBeenCalled();
+  });
+  it.each(['reserve', 'last-read'])('does not send if the cost evidence reference changes during %s, even at the same amount', async timing => {
+    const f = fixture(true);
+    if (timing === 'reserve') f.repository.reserve.mockImplementation(async () => {
+      reviseCosts(f, 31); return { kind: 'reserved', challengeId: f.pending.challengeId };
+    });
+    else { let reads = 0; f.query.exec.mockImplementation(async () => { if (++reads === 3) reviseCosts(f, 31); return f.row; }); }
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.provider.start).not.toHaveBeenCalled();
+    expect(f.repository.settleSend).toHaveBeenCalledWith(expect.objectContaining({ verificationSid: null }));
+  });
+  it('cannot silently switch mode while waiting on a durable reservation', async () => {
+    const f = fixture(true); f.repository.reserve.mockImplementation(async () => {
+      const trial = customerTestEnvironment();
+      for (const key of ['SM_CUSTOMER_ACCOUNT_MODE', 'SM_CUSTOMER_VERIFY_POLICY', 'SM_CUSTOMER_VERIFY_EVIDENCE']) f.env[key] = trial[key]!;
+      return { kind: 'pending', challenge: f.pending };
+    });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+  });
+  for (const action of ['start', 'check'] as const) {
+    it.each(['mode', 'key', 'turnstile-key', 'expiry'])(`fails closed when %s changes during the final ${action} tenant read`, async field => {
+      const f = fixture(true); let reads = 0;
+      f.query.exec.mockImplementation(async () => {
+        if (++reads === (action === 'start' ? 3 : 2)) {
+          if (field === 'mode') {
+            const trial = customerTestEnvironment();
+            for (const key of ['SM_CUSTOMER_ACCOUNT_MODE', 'SM_CUSTOMER_VERIFY_POLICY', 'SM_CUSTOMER_VERIFY_EVIDENCE']) f.env[key] = trial[key]!;
+          } else if (field === 'key') f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET = 'changed-fixture-key';
+          else if (field === 'turnstile-key') f.env.SM_CUSTOMER_TURNSTILE_SECRET_KEY = 'changed-fixture-human-key';
+          else {
+            const policy = JSON.parse(f.env.SM_CUSTOMER_VERIFY_POLICY!);
+            policy.authorization.expiresAt = Date.now() - 1; f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify(policy);
+          }
+        }
+        return f.row;
+      });
+      const rejected = await f.runtime.execute({ ...f.relay, action }, action === 'start' ? f.start : f.check)
+        .then(() => false, (error: { status?: number }) => error.status === 503);
+      expect(rejected).toBe(true); expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+    });
+  }
+  it.each(['recover', 'session', 'name', 'logout'] as const)('keeps paid %s available without spending evidence or provider credentials', async action => {
+    const f = fixture(true); delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_POLICY;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET; f.repository.recoverCheck.mockResolvedValue(f.session);
+    const { challengeId, checkId } = f.check.request;
+    const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 }
+      : action === 'logout' ? { all: true } : action === 'recover' ? { challengeId, checkId } : {};
+    const envelope = action === 'recover' ? { browserSecret: f.start.browserSecret, request }
+      : { sessionToken: f.start.browserSecret, request };
+    const result = await f.runtime.execute({ ...f.relay, action }, envelope);
+    if (action === 'logout') expect(result).toBeUndefined();
+    else expect(typeof result).toBe('object');
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
+    expect(f.provider.check).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
+    expect(f.repository.claimCheck).not.toHaveBeenCalled();
+  });
+});
+
+function reviseCosts(f: ReturnType<typeof fixture>, smsUpperBound: number): void {
+  const policy = JSON.parse(f.env.SM_CUSTOMER_VERIFY_POLICY!);
+  const evidence = JSON.parse(f.env.SM_CUSTOMER_VERIFY_EVIDENCE!);
+  policy.costEvidenceReference = 'updated-cost-reference';
+  evidence.costs.reference = 'updated-cost-reference'; evidence.costs.smsSegmentUpperBoundMicrousd = smsUpperBound;
+  f.env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify(policy); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify(evidence);
+}

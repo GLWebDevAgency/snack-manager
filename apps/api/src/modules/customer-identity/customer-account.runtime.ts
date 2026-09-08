@@ -12,7 +12,6 @@ import { customerSafeError } from './customer-account.error';
 import { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
 import type { PhoneVerificationTransport } from './phone-verification.port';
-import { planTrialPhoneVerification } from './trial-verification-policy';
 
 export const CUSTOMER_IDENTITY_REPOSITORY = Symbol('CUSTOMER_IDENTITY_REPOSITORY');
 export const CUSTOMER_VERIFICATION_TRANSPORT_FACTORY = Symbol('CUSTOMER_VERIFICATION_TRANSPORT_FACTORY');
@@ -40,35 +39,25 @@ export class CustomerAccountRuntime {
       const spends = relay.action === 'start' || relay.action === 'check';
       if (spends && !send) throw new CustomerIdentityError('unavailable');
       const transport = spends && send ? this.transportFactory(send.transport) : closedTransport;
-      const beforeProvider = async (phone: string, serviceSid: string) => {
+      const beforeProvider = async () => {
         // A PG lock wait must not preserve permission to spend for a tenant
         // suspended while waiting. Check again at the last controllable boundary.
         await this.tenant(access); this.access(relay, access);
-        const current = customerSendConfiguration(this.config, access);
-        // Freeze the whole evidence/segment/ceiling snapshot as well as keys.
-        // A final Mongo wait cannot upgrade an old one-segment reservation.
-        if (!send || !current || JSON.stringify(current) !== JSON.stringify(send)) {
-          throw new CustomerIdentityError('unavailable');
-        }
-        const plan = planTrialPhoneVerification({ policy: current.policy, evidence: current.evidence,
-          request: { tenantRef: access.tenantRef, phone }, now: Date.now() });
-        if (plan.kind !== 'reservation_required' || plan.accountSid !== access.parentRef || plan.serviceSid !== serviceSid) {
-          throw new CustomerIdentityError('unavailable');
-        }
+        // The core revalidates its plan and immutable funding synchronously
+        // after this await, immediately before the provider. A check may use a
+        // fresh cost attestation only when its original reservation covers it.
       };
       const core = new CustomerIdentityService(this.repository, new CustomerIdentityCrypto(access.identityKey),
-        spends ? {
-          start: async input => { await beforeProvider(input.phone, input.serviceSid); return transport.start(input); },
-          check: async input => { await beforeProvider(input.phone, input.serviceSid); return transport.check(input); },
-        } : closedTransport, () => {
+        transport, () => {
           this.access(relay, access);
           const current = spends ? customerSendConfiguration(this.config, access) : null;
           if (spends && !current) throw new CustomerIdentityError('unavailable');
           if (send && current && (send.transport.apiKeySid !== current.transport.apiKeySid
-            || send.transport.apiKeySecret !== current.transport.apiKeySecret)) throw new CustomerIdentityError('unavailable');
-          return { environment: access.environment, parentRef: access.parentRef,
+            || send.transport.apiKeySecret !== current.transport.apiKeySecret
+            || send.turnstileSecret !== current.turnstileSecret)) throw new CustomerIdentityError('unavailable');
+          return { mode: access.mode, environment: access.environment, parentRef: access.parentRef,
             policy: current?.policy ?? null, evidence: current?.evidence ?? null };
-        });
+        }, Date.now, beforeProvider);
       const tenantRef = access.tenantRef; let result: unknown;
       switch (relay.action) {
         case 'start': {
