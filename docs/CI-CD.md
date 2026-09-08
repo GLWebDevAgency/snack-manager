@@ -750,14 +750,15 @@ l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
 l'état des trois journaux Drizzle : `__drizzle_migrations`,
 `__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
-`drizzle`. Le manifeste L3a.6b.2 énumère **79 objets** : les 55 objets historiques,
+`drizzle`. Le manifeste L3a.6c énumère **81 objets** : les 55 objets historiques,
 les 14 objets `customer` initiaux (schéma, neuf tables, deux fonctions, journal
 et sa séquence), puis la table de budget payant et trois fonctions de garde
 de la migration additive `0001`, et la table de continuité navigateur avec sa
 fonction de garde `0002`, puis la table de préparation navigateur et sa fonction
-de garde `0003`, puis la table d'intentions et sa fonction de garde `0004`.
+de garde `0003`, puis la table d'intentions et sa fonction de garde `0004`, puis
+le reçu de publication de session et sa fonction de garde `0005`.
 Chaque ajout est lié à sa migration : une
-base à 77 objets reste recevable avant `0004`, pas après son journal
+base à 79 objets reste recevable avant `0005`, pas après son journal
 d'application. Ce nombre décrit le code cible, pas une preuve de migration déjà
 appliquée. Une base saine aux deux anciens contextes passe le préflight avant
 l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
@@ -806,6 +807,20 @@ remettre les plafonds à zéro ; retour applicatif fermé, migration additive co
 Le test d'upgrade réel 0003→0004 conserve les historiques et vérifie leur refus
 privé. Les tests HTTP Nest→PostgreSQL et navigateur utilisent un fournisseur
 simulé : ils ne sont pas une recette SMS ni une autorisation d'ouverture.
+
+**Publication commune L3a.6c :** `0005_customer_session_publications` matérialise
+uniquement les anciennes approbations complètes encore autorisées ; aucun reçu
+n'est inventé pour une preuve historique incomplète. Déploiement avec pilote
+fermé, remplacement de toutes les anciennes instances API/Web avant toute
+réouverture. Un ancien writer `0004` encore actif ne crée pas de reçu commun :
+sa nouvelle session reste inerte pour les nouveaux lecteurs. Dans la transaction
+Drizzle, le propriétaire migrateur limité obtient temporairement `NO FORCE` sur
+huit tables sources pour ce backfill ; `ENABLE RLS` reste actif, et `FORCE` est
+restauré avant commit comme après rollback. L'upgrade natif prouve aussi que le
+runtime non propriétaire reste isolé pendant cette opération. Vérifier les six
+entrées du journal customer et `pnpm verify:postgres:built` dans la nouvelle API.
+Le nombre **81 objets** ne remplace pas cette preuve. Retour applicatif fermé,
+migration additive conservée ; ni purge des reçus ni réinitialisation des budgets.
 
 L'étape de préparation reçoit `SM_DATABASE_MIGRATION_URL_STAGING` ou
 `..._PRODUCTION` et la CA épinglée `SM_DATABASE_ROOT_CA_*`. Les variables

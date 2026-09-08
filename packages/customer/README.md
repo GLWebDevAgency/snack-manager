@@ -90,6 +90,32 @@ Session, nom et révocation exigent `expectedOperationId`/`expectedCheckId`,
 sélecteurs non secrets vérifiés avec les cookies navigateur/session. Leur
 validité ne dépend pas de la courte expiration de la preuve de reprise.
 
+`0005_customer_session_publications` matérialise le reçu commun immuable
+`phone | passkey | recovery`, lié à la session, à son navigateur/génération et à
+l'intention exacte. Ce repository ne vérifie aucune passkey et ne permet encore
+aucune récupération par code secours. L'approbation OTP écrit ce reçu dans la même transaction ;
+les lectures privées, les modifications et la clôture ne fabriquent plus de
+challenge Verify pour représenter une publication.
+
+Le backfill conserve seulement les sessions OTP déjà autorisées par les
+jointures exactes de `0004` (approbation, empreinte de check, intention, navigateur
+confirmé et session courante valide). L'expiration de l'intention ne raccourcit
+pas une session légitime. Aucun lien n'est inféré depuis les anciennes valeurs
+NULL ; les lignes sources et budgets restent intacts. Le migrateur propriétaire
+NOBYPASSRLS lève seulement FORCE sur les sources, **dans la transaction Drizzle**,
+sans retirer ENABLE RLS ; FORCE est restauré avant commit ou par rollback.
+
+Déployer ce changement **pilote fermé**, puis remplacer toutes les anciennes
+instances avant réouverture. Aucun trigger de compatibilité ne crée de reçu
+pour un writer `0004` encore actif après la migration : sa nouvelle session
+restera inerte pour le nouveau code. Retour au code précédent uniquement pilote
+fermé, sans down migration ni suppression de reçu.
+
+Le helper `recovery-code` génère un code CSPRNG de 128 bits et une empreinte HMAC
+séparée, liée au parent/tenant. Il ne stocke ni n'active aucun code : confirmation
+de sauvegarde, version active, consommation unique et publication atomique
+restent au futur protocole métier. Voir [le parcours clés d'accès](../../docs/strategie-commerce-2026-09/COMPTE-CLES-ACCES.md).
+
 Plafonds conservateurs du pilote : 128 préparations et 128 intentions persistées
 par parent/restaurant ; trois preuves d'intention non expirées par navigateur,
 même après clôture. Ce ne sont ni des comptes ni des quotas SMS. Pas de purge

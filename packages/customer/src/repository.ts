@@ -101,10 +101,10 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
           AND EXISTS (SELECT 1 FROM customer.sessions s WHERE s.parent_ref=a.parent_ref AND s.tenant_ref=a.tenant_ref
             AND s.account_id=a.id AND s.session_hash=$6 AND s.revoked_at IS NULL
             AND s.expires_at>clock_timestamp() AND s.account_version=a.session_version AND s.browser_hash=$7
-            AND EXISTS (SELECT 1 FROM customer.check_attempts k JOIN customer.challenges v
-              ON (v.parent_ref,v.tenant_ref,v.id)=(k.parent_ref,k.tenant_ref,k.challenge_id)
-              WHERE (k.parent_ref,k.tenant_ref,k.session_id)=(s.parent_ref,s.tenant_ref,s.id)
-                AND k.id=$10 AND k.state='approved' AND k.request_hash IS NOT NULL AND v.intent_operation_id=$9)
+            AND EXISTS (SELECT 1 FROM customer.session_publications u
+              WHERE (u.parent_ref,u.tenant_ref,u.session_id,u.browser_ref,u.browser_hash,u.browser_generation)
+                =(s.parent_ref,s.tenant_ref,s.id,s.browser_ref,s.browser_hash,s.browser_generation)
+                AND u.operation_id=$9 AND u.check_id=$10)
             AND s.browser_ref=$8 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
               WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
                 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
@@ -130,10 +130,10 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
           AND EXISTS (SELECT 1 FROM customer.sessions s WHERE s.parent_ref=a.parent_ref AND s.tenant_ref=a.tenant_ref
             AND s.account_id=a.id AND s.session_hash=$4 AND s.revoked_at IS NULL
             AND s.expires_at>clock_timestamp() AND s.account_version=a.session_version AND s.browser_hash=$5
-            AND EXISTS (SELECT 1 FROM customer.check_attempts k JOIN customer.challenges v
-              ON (v.parent_ref,v.tenant_ref,v.id)=(k.parent_ref,k.tenant_ref,k.challenge_id)
-              WHERE (k.parent_ref,k.tenant_ref,k.session_id)=(s.parent_ref,s.tenant_ref,s.id)
-                AND k.id=$8 AND k.state='approved' AND k.request_hash IS NOT NULL AND v.intent_operation_id=$7)
+            AND EXISTS (SELECT 1 FROM customer.session_publications u
+              WHERE (u.parent_ref,u.tenant_ref,u.session_id,u.browser_ref,u.browser_hash,u.browser_generation)
+                =(s.parent_ref,s.tenant_ref,s.id,s.browser_ref,s.browser_hash,s.browser_generation)
+                AND u.operation_id=$7 AND u.check_id=$8)
             AND s.browser_ref=$6 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
               WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
                 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
@@ -143,10 +143,10 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
       [input.parentRef, input.tenantRef, current.profile.accountId, input.sessionHash, input.browserHash, input.browserRef, input.expectedOperationId, input.expectedCheckId])
         : await client.query(`UPDATE customer.sessions s SET revoked_at=clock_timestamp()
         WHERE parent_ref=$1 AND tenant_ref=$2 AND session_hash=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp()
-          AND EXISTS (SELECT 1 FROM customer.check_attempts k JOIN customer.challenges v
-            ON (v.parent_ref,v.tenant_ref,v.id)=(k.parent_ref,k.tenant_ref,k.challenge_id)
-            WHERE (k.parent_ref,k.tenant_ref,k.session_id)=(s.parent_ref,s.tenant_ref,s.id)
-              AND k.id=$7 AND k.state='approved' AND k.request_hash IS NOT NULL AND v.intent_operation_id=$6)
+          AND EXISTS (SELECT 1 FROM customer.session_publications u
+            WHERE (u.parent_ref,u.tenant_ref,u.session_id,u.browser_ref,u.browser_hash,u.browser_generation)
+              =(s.parent_ref,s.tenant_ref,s.id,s.browser_ref,s.browser_hash,s.browser_generation)
+              AND u.operation_id=$6 AND u.check_id=$7)
           AND browser_hash=$4 AND browser_ref=$5 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
             WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
               AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())

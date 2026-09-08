@@ -29,6 +29,7 @@ const roles = {
 };
 const browserPreparationMigration = 1_788_894_000_000;
 const verificationIntentsMigration = 1_788_901_200_000;
+const sessionPublicationsMigration = 1_788_908_400_000;
 
 function result<T extends Record<string, unknown>>(rows: T[]): QueryResult<T> {
   return {
@@ -688,14 +689,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 79 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(79);
+  it('énumère exactement les 81 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(81);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(42);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(43);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(10);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(79);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(11);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(81);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -748,6 +749,17 @@ describe('manifeste PostgreSQL versionné', () => {
     expect(intentions).toHaveLength(2);
     for (const object of intentions) {
       expect(object).toMatchObject({ journal: 'customer', introducedAt: verificationIntentsMigration });
+    }
+  });
+
+  it('inventorie séparément le journal des publications de session et sa fonction de garde', () => {
+    const publications = POSTGRES_MANAGED_OBJECTS.filter((object) =>
+      ['table:customer.session_publications', 'function:customer.preserve_session_publication()']
+        .includes(managedObjectKey(object)),
+    );
+    expect(publications).toHaveLength(2);
+    for (const object of publications) {
+      expect(object).toMatchObject({ journal: 'customer', introducedAt: sessionPublicationsMigration });
     }
   });
 
@@ -831,6 +843,8 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(browserPreparationMigration);
     expect(customer.entries.find((entry) => entry.tag === '0004_customer_verification_intents')?.when)
       .toBe(verificationIntentsMigration);
+    expect(customer.entries.find((entry) => entry.tag === '0005_customer_session_publications')?.when)
+      .toBe(sessionPublicationsMigration);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -1052,6 +1066,8 @@ describe('préflight PostgreSQL', () => {
     ['customer', browserPreparationMigration, 'customer.preserve_browser_preparation()'],
     ['customer', verificationIntentsMigration, 'customer.verification_intents'],
     ['customer', verificationIntentsMigration, 'customer.preserve_verification_intent()'],
+    ['customer', sessionPublicationsMigration, 'customer.session_publications'],
+    ['customer', sessionPublicationsMigration, 'customer.preserve_session_publication()'],
   ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
@@ -1082,6 +1098,8 @@ describe('préflight PostgreSQL', () => {
     ['function', 'preserve_browser_preparation', 'customer.preserve_browser_preparation()'],
     ['table', 'verification_intents', 'customer.verification_intents'],
     ['function', 'preserve_verification_intent', 'customer.preserve_verification_intent()'],
+    ['table', 'session_publications', 'customer.session_publications'],
+    ['function', 'preserve_session_publication', 'customer.preserve_session_publication()'],
   ] as const)('refuse le journal navigateur %s présent avant sa migration', async (kind, name, target) => {
     const query = checkQuery({
       probe: {

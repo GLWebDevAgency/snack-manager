@@ -18,6 +18,7 @@ export const CUSTOMER_PAID_BUDGET_MIGRATION = 1_788_861_600_000;
 export const CUSTOMER_BROWSER_CONTINUITY_MIGRATION = 1_788_870_000_000;
 export const CUSTOMER_BROWSER_PREPARATION_MIGRATION = 1_788_894_000_000;
 export const CUSTOMER_VERIFICATION_INTENTS_MIGRATION = 1_788_901_200_000;
+export const CUSTOMER_SESSION_PUBLICATIONS_MIGRATION = 1_788_908_400_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -184,6 +185,8 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   introduced('function', 'customer', 'preserve_browser_preparation', 'customer', CUSTOMER_BROWSER_PREPARATION_MIGRATION),
   introduced('table', 'customer', 'verification_intents', 'customer', CUSTOMER_VERIFICATION_INTENTS_MIGRATION),
   introduced('function', 'customer', 'preserve_verification_intent', 'customer', CUSTOMER_VERIFICATION_INTENTS_MIGRATION),
+  introduced('table', 'customer', 'session_publications', 'customer', CUSTOMER_SESSION_PUBLICATIONS_MIGRATION),
+  introduced('function', 'customer', 'preserve_session_publication', 'customer', CUSTOMER_SESSION_PUBLICATIONS_MIGRATION),
 ] as const;
 
 export const JOURNALS: Readonly<
