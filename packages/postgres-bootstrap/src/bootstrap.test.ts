@@ -27,6 +27,7 @@ const roles = {
   migrationRole: 'snackmanager_staging_migrator',
   runtimeRole: 'snackmanager_staging_app',
 };
+const browserPreparationMigration = 1_788_894_000_000;
 
 function result<T extends Record<string, unknown>>(rows: T[]): QueryResult<T> {
   return {
@@ -686,14 +687,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 75 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(75);
+  it('énumère exactement les 77 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(77);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(40);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(41);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(8);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(75);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(9);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(77);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -724,6 +725,18 @@ describe('manifeste PostgreSQL versionné', () => {
         columns: ['id', 'hash', 'created_at'],
       },
     });
+  });
+
+  it('inventorie séparément la table de préparation navigateur et sa fonction de garde', () => {
+    const preparation = POSTGRES_MANAGED_OBJECTS.filter((object) =>
+      ['table:customer.browser_preparations', 'function:customer.preserve_browser_preparation()']
+        .includes(managedObjectKey(object)),
+    );
+    expect(preparation).toHaveLength(2);
+    for (const object of preparation) {
+      expect(object).toMatchObject({ journal: 'customer', introducedAt: browserPreparationMigration });
+    }
+    expect(new Set(preparation.map((object) => object.introducedAt)).size).toBe(1);
   });
 
   it('rattache exhaustivement chaque CREATE autonome à son fichier et journal Drizzle', () => {
@@ -802,6 +815,8 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(CUSTOMER_PAID_BUDGET_MIGRATION);
     expect(customer.entries.find((entry) => entry.tag === '0002_customer_browser_continuity')?.when)
       .toBe(CUSTOMER_BROWSER_CONTINUITY_MIGRATION);
+    expect(customer.entries.find((entry) => entry.tag === '0003_customer_browser_preparation')?.when)
+      .toBe(browserPreparationMigration);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -1019,6 +1034,8 @@ describe('préflight PostgreSQL', () => {
     ['customer', CUSTOMER_INITIAL_MIGRATION, 'customer.accounts'],
     ['customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION, 'customer.browser_contexts'],
     ['customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION, 'customer.preserve_browser_context()'],
+    ['customer', browserPreparationMigration, 'customer.browser_preparations'],
+    ['customer', browserPreparationMigration, 'customer.preserve_browser_preparation()'],
   ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
@@ -1030,6 +1047,7 @@ describe('préflight PostgreSQL', () => {
         drizzle_exists: true,
         migration_can_use_drizzle_schema: true,
         migration_can_create_drizzle_schema: true,
+        runtime_can_use_drizzle_schema: true,
       },
       owners,
       journals: { [journal]: [timestamp] },
@@ -1040,6 +1058,32 @@ describe('préflight PostgreSQL', () => {
           expect.objectContaining({ code: 'missing_object', target }),
         ]),
       },
+    });
+  });
+
+  it.each([
+    ['table', 'browser_preparations', 'customer.browser_preparations'],
+    ['function', 'preserve_browser_preparation', 'customer.preserve_browser_preparation()'],
+  ] as const)('refuse la préparation %s présente avant sa migration', async (kind, name, target) => {
+    const query = checkQuery({
+      probe: {
+        drizzle_exists: true,
+        migration_can_use_drizzle_schema: true,
+        migration_can_create_drizzle_schema: true,
+        runtime_can_use_drizzle_schema: true,
+      },
+      owners: {
+        [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
+        [key('table', 'drizzle', JOURNALS.customer.table)]: roles.migrationRole,
+        [key('sequence', 'drizzle', JOURNALS.customer.sequence)]: roles.migrationRole,
+        [key(kind, 'customer', name)]: roles.migrationRole,
+      },
+      journals: { customer: [] },
+    });
+    await expect(checkPostgresBootstrap(poolFor(query), roles)).rejects.toMatchObject({
+      report: { issues: expect.arrayContaining([
+        expect.objectContaining({ code: 'orphaned_object', target }),
+      ]) },
     });
   });
 

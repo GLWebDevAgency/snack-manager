@@ -426,7 +426,7 @@ services passent. Revue indépendante du relais et des jointures/révocations.
 Ces ensembles se recouvrent ; aucun total agrégé ni recette Twilio réelle
 n'en est déduit. CI et staging de la PR restent à recevoir.
 
-## Suite L3a.6 — inscription fermée et reprise navigateur, non implémentée
+## Suite L3a.6 — inscription fermée et reprise navigateur par sous-lots
 
 La revue du 8 septembre identifie trois préalables au formulaire OTP : deux
 préparations sans cookie peuvent installer des secrets navigateur différents ;
@@ -444,9 +444,10 @@ navigateur concurrente, cookies tardifs, rechargement, révocation et stockage
 refusé doivent être couverts par de vrais contre-tests avant ouverture de l'UI.
 
 L3a.6a couvre le refus serveur des sessions remplacées et des confirmations
-déjà admises avant déconnexion. Restent à concevoir et tester : préparation
-concurrente sans cookie, clôture d'une intention invitée avant admission,
-journal durable et lecture des résultats incertains, preuve de reprise privée
+déjà admises avant déconnexion. L3a.6b.1 ci-dessous traite la préparation
+concurrente sans cookie. Restent à concevoir et tester : clôture d'une intention
+invitée avant admission, journal durable des vérifications et lecture des
+résultats incertains, preuve de reprise privée
 distincte des UUID non secrets. Il ne faut ni exposer le contrôle courant au
 seul cookie navigateur ni permettre à ce cookie de récupérer arbitrairement
 une nouvelle session. Ces limites interdisent encore l'ouverture du formulaire.
@@ -454,6 +455,78 @@ La récupération sûre d'un ancien compte sur un nouvel appareil reste à livre
 prochaine étape compte → adhésion fidélité explicite, puis propriétaire privé
 des nouvelles commandes → historique/réachat, reste distincte. Aucune ancienne
 carte ou commande n'est réattribuée par simple correspondance de téléphone.
+
+### L3a.6b.1 — préparation navigateur durable, sans SMS
+
+Lot préparé sur `codex/customer-browser-preparation`, à recevoir via PR puis
+staging. **Ce n'est pas l'ouverture du formulaire d'inscription/connexion.**
+La PWA SM Livreur #142 est reçue sur staging `4f210166af806ee60af2bb0fbcbc1fed8f8796da` ;
+[reçu et limites physiques](https://github.com/GLWebDevAgency/snack-manager/pull/142#issuecomment-5589180628).
+
+Le nouveau protocole remplace le POST navigateur vide, qui pouvait émettre
+plusieurs cookies concurrents :
+
+1. Avant réseau, IndexedDB conserve `{version:1,browserRef,phase}` sous verrou
+   natif `sm:customer:<slug>`. Aucun téléphone, nom, OTP, jeton, reçu de
+   vérification ni donnée de commande n'entre dans ce journal.
+2. `prepare` crée/rejoue uniquement des métadonnées publiques. PostgreSQL fixe
+   définitivement une admission de 10 minutes et une expiration de 168 heures.
+3. `issue` associe une seule fois l'empreinte d'un secret aléatoire créé au BFF.
+   Seule cette émission gagnante autorise `Set-Cookie`. Un rejeu n'émet rien,
+   même après perte de réponse. Le navigateur ne reçoit jamais le secret en JSON.
+4. `confirm`, dans une requête distincte, prouve que le cookie HttpOnly a été
+   reçu. La première confirmation doit arriver avant la fin de l'admission ;
+   une confirmation déjà acquise reste relisible jusqu'à l'expiration absolue.
+5. Toute action privée exige désormais la référence attendue du journal et
+   le cookie correspondant, puis la session pour consulter/modifier un compte.
+   Une référence seule n'est pas un moyen de connexion. Un cookie A reçu après
+   une préparation B ne permet pas d'adopter A avec le journal B.
+
+La phase `issuing` est conservée **avant** le POST. Si la réponse est perdue,
+la reprise relit l'état et tente seulement de confirmer le cookie reçu. Même
+un état encore `prepared` ne prouve pas qu'une émission en vol est absente :
+aucune nouvelle émission automatique. Une préparation expirée peut être
+remplacée par un geste explicite après lecture de son état terminal. Un journal
+absent/corrompu n'est jamais reconstruit à partir des cookies. Sans stockage
+durable ou Web Locks, la préparation reste bloquée ; commander en invité reste
+possible. La lecture d'un compte invité ne crée pas une base locale vide.
+Un ancien cookie sans préparation connue est également refusé : la procédure
+explicite de réinitialisation ciblée reste à livrer. Ne pas conseiller d'effacer
+toutes les données du site, qui contiennent aussi les tentatives de commande.
+
+La migration additive `0003_customer_browser_preparation` ajoute une table
+isolée par parent et restaurant, des liaisons immuables et des clés composites.
+Elle ne dépend d'aucun budget SMS et ne le modifie pas. Le pilote borne à **128
+préparations persistées par parent/restaurant**, avec exclusion transactionnelle
+pour la dernière place et rejeu possible au plafond. Ce plafond anti-saturation
+ne représente ni 128 comptes, ni 128 SMS, ni un tarif commercial. Pas de purge
+ou remise à zéro automatique permettant de réanimer une ancienne référence ;
+la politique de rétention et l'ouverture à grande échelle restent à définir.
+
+Les anciennes sessions/challenges conservent une référence NULL et deviennent
+inertes, sans réattribution ni suppression. Les écritures et lectures privées
+vérifient la préparation confirmée non expirée jusque dans SQL. La durée d'une
+session est plafonnée à celle du navigateur. Les cookies utilisent `Expires`
+absolu, sans `Max-Age` relatif qui prolongerait leur vie après une réponse tardive.
+
+Preuves locales : tests PostgreSQL réels de concurrence, expiration pendant
+verrou, upgrade 0002→0003, immutabilité/RLS et conservation des budgets ; vrai
+signataire Web et garde Nest ; BFF et tests Chromium avec IndexedDB/Web Locks et
+cookie jar natifs. Le fournisseur/CAS amont du harnais navigateur est simulé :
+c'est la suite PostgreSQL séparée qui prouve l'autorité SQL. Aucun envoi Verify,
+recette OTP, appareil physique ou compte public connecté n'est revendiqué.
+
+Vérifications de ce lot : 222 tests du paquet customer, dont 85 contre PostgreSQL
+réel ; 83 tests unitaires du bootstrap et son intégration PostgreSQL ; 509 tests
+API ciblés ; 489 tests de contrats ; 1 958 tests web. Ces ensembles ne sont pas additionnés aux
+sous-suites BFF/navigateur. Le module Nest compilé se charge effectivement en
+CommonJS. Aucun de ces résultats locaux ne remplace la recette du déploiement.
+
+Retour arrière : garder le pilote fermé, revenir au code précédent si nécessaire,
+**sans down migration ni suppression des préparations, sessions ou budgets**.
+Ne pas rouvrir l'ancienne API qui n'exigeait pas la référence de préparation.
+La suite immédiate reste la clôture d'intention avant admission et la reprise
+du résultat OTP, puis le formulaire, la récupération sûre et fidélité/historique.
 
 ## Conditions restantes avant ouverture
 

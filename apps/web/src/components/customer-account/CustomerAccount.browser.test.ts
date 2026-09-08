@@ -9,6 +9,7 @@ import tailwind from '@tailwindcss/postcss';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { marqueDeRepli } from '@sm/contracts';
+import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
 declare global { interface Window { customerAccountUiFixture: {
   patch(patch: Record<string, unknown>): void; calls: unknown[][]; failure: boolean; hold: boolean;
@@ -195,6 +196,7 @@ describe('customer entry placement — real Storefront and loyalty components', 
 });
 
 describe('customer account entry — real hook and client, isolated HTTP boundary', () => {
+  beforeEach(async () => { await seedCustomerBrowserFixture(page, 'recette'); });
   const fixtureView = () => ({ expiresAt: Date.now() + 600_000,
     profile: { name: 'Camille Test', phoneE164: '+33600000000', phoneVerifiedAt: 1_700_000_000_000, revision: 0 } });
   it('shows real offline state without a no-op retry and reads authority only after reconnecting', async () => {

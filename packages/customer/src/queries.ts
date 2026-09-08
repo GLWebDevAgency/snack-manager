@@ -1,9 +1,10 @@
 import type { PoolClient } from 'pg';
 import type { CustomerScope, CustomerSession, PendingChallenge } from './port';
+import { validateBrowser } from './browser-preparation';
 
 export type ChallengeRow = {
   id: string; parent_ref: string; tenant_ref: string; operation_id: string; request_hash: string;
-  browser_hash: string; browser_generation: string | null; phone_hash: string; encrypted_phone: string; service_sid: string;
+  browser_ref: string | null; browser_hash: string; browser_generation: string | null; phone_hash: string; encrypted_phone: string; service_sid: string;
   verification_sid: string | null; state: string; max_checks: number; checks_used: number;
   check_id: string | null; expires_at: Date;
   funding_kind: string | null; authorization_ref: string | null; reserved_microusd: string | null; funding_expires_at: Date | null;
@@ -53,23 +54,28 @@ export async function currentBrowserGeneration(client: PoolClient, scope: Custom
   [scope.parentRef, scope.tenantRef, browserHash])).rows[0]?.generation ?? null;
 }
 export async function currentChallenge(client: PoolClient, row: ChallengeRow): Promise<boolean> {
-  return row.browser_generation !== null && row.browser_generation === await currentBrowserGeneration(client,
-    { parentRef: row.parent_ref, tenantRef: row.tenant_ref }, row.browser_hash);
+  return row.browser_ref !== null && row.browser_generation !== null
+    && row.browser_generation === await currentBrowserGeneration(client,
+      { parentRef: row.parent_ref, tenantRef: row.tenant_ref }, row.browser_hash)
+    && await validateBrowser(client, { parentRef: row.parent_ref, tenantRef: row.tenant_ref,
+      browserRef: row.browser_ref, browserHash: row.browser_hash }) !== null;
 }
-export async function session(client: PoolClient, scope: CustomerScope, sessionHash: string, browserHash: string): Promise<CustomerSession | null> {
+export async function session(client: PoolClient, scope: CustomerScope & { browserRef: string }, sessionHash: string, browserHash: string): Promise<CustomerSession | null> {
   const result = await client.query<{ session_id: string; expires_at: Date; account_id: string;
     encrypted_name: string | null; encrypted_phone: string; phone_hash: string; verified_at: Date; revision: string }>(`
-    SELECT s.id AS session_id,s.expires_at,a.id AS account_id,a.encrypted_name,a.revision,
+    SELECT s.id AS session_id,LEAST(s.expires_at,p.expires_at) AS expires_at,a.id AS account_id,a.encrypted_name,a.revision,
       c.encrypted_phone,c.phone_hash,c.verified_at
     FROM customer.sessions s JOIN customer.accounts a
       ON (a.parent_ref,a.tenant_ref,a.id)=(s.parent_ref,s.tenant_ref,s.account_id)
     JOIN customer.verified_contacts c ON (c.parent_ref,c.tenant_ref,c.account_id)=(a.parent_ref,a.tenant_ref,a.id)
     JOIN customer.browser_contexts b ON (b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
       =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id)
+    JOIN customer.browser_preparations p ON (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)
+      =(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
     WHERE s.parent_ref=$1 AND s.tenant_ref=$2 AND s.session_hash=$3 AND s.revoked_at IS NULL
-      AND s.browser_hash=$4
+      AND s.browser_hash=$4 AND s.browser_ref=$5 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp()
       AND s.expires_at>clock_timestamp() AND a.active AND s.account_version=a.session_version`,
-  [scope.parentRef, scope.tenantRef, sessionHash, browserHash]);
+  [scope.parentRef, scope.tenantRef, sessionHash, browserHash, scope.browserRef]);
   const row = result.rows[0];
   return row ? { sessionId: row.session_id, expiresAt: row.expires_at.getTime(), profile: {
     accountId: row.account_id, phoneHash: row.phone_hash, encryptedName: row.encrypted_name,

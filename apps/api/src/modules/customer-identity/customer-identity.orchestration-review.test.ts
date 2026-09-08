@@ -1,3 +1,4 @@
+import { confirmedCustomerBrowserFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository, type CustomerSession } from '@sm/customer';
@@ -13,6 +14,7 @@ function fixture() {
   const parent = `AC${'d'.repeat(32)}`;
   const serviceSid = `VA${'e'.repeat(32)}`;
   const phone = '+33600000001';
+  const browserRef = randomUUID();
   const browser = Buffer.alloc(32, 37).toString('base64url');
   const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 73).toString('base64'));
   const phoneHash = crypto.hash('phone', tenant, phone);
@@ -36,6 +38,7 @@ function fixture() {
       observedAt: initial, trialExpiresAt: initial + 86_400_000 },
   };
   const repository = {
+    ...confirmedCustomerBrowserFixture(browserRef, initial + 7 * 86_400_000),
     reserve: vi.fn<CustomerIdentityRepository['reserve']>().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     recoverCheck: vi.fn<CustomerIdentityRepository['recoverCheck']>().mockResolvedValue(null),
@@ -50,9 +53,9 @@ function fixture() {
     check: vi.fn<PhoneVerificationTransport['check']>().mockResolvedValue('approved'),
   } satisfies PhoneVerificationTransport;
   const service = new CustomerIdentityService(repository, crypto, transport, () => config, () => now);
-  const start = { tenantRef: tenant, phone, operationId: randomUUID(), browserSecret: browser,
+  const start = { tenantRef: tenant, browserRef, phone, operationId: randomUUID(), browserSecret: browser,
     clientIp: '127.0.0.1', humanVerified: true };
-  const check = { tenantRef: tenant, challengeId: pending.challengeId, checkId: randomUUID(),
+  const check = { tenantRef: tenant, browserRef, challengeId: pending.challengeId, checkId: randomUUID(),
     browserSecret: browser, code: '123456', existingSessionToken: null };
   return { service, repository, transport, config, crypto, start, check, pending, session,
     advance: (ms: number) => { now += ms; } };

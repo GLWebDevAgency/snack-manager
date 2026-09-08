@@ -750,12 +750,13 @@ l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
 l'état des trois journaux Drizzle : `__drizzle_migrations`,
 `__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
-`drizzle`. Le manifeste L3a.6a énumère **75 objets** : les 55 objets historiques,
+`drizzle`. Le manifeste L3a.6b.1 énumère **77 objets** : les 55 objets historiques,
 les 14 objets `customer` initiaux (schéma, neuf tables, deux fonctions, journal
 et sa séquence), puis la table de budget payant et trois fonctions de garde
 de la migration additive `0001`, et la table de continuité navigateur avec sa
-fonction de garde `0002`. Chaque ajout est lié à sa migration : une
-base à 73 objets reste recevable avant `0002`, pas après son journal
+fonction de garde `0002`, puis la table de préparation navigateur et sa fonction
+de garde `0003`. Chaque ajout est lié à sa migration : une
+base à 75 objets reste recevable avant `0003`, pas après son journal
 d'application. Ce nombre décrit le code cible, pas une preuve de migration déjà
 appliquée. Une base saine aux deux anciens contextes passe le préflight avant
 l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
@@ -782,6 +783,15 @@ servent pas le nouveau lot. En cas de retour applicatif, garder les comptes
 fermés, conserver la migration additive et privilégier un correctif en avant.
 Le parcours invité, les QR de présentation fidélité et les commandes ne sont
 ni migrés ni réattribués par ce changement.
+
+**Préparation navigateur L3a.6b.1 :** `0003_customer_browser_preparation` ajoute
+les références de préparation sans compléter les anciennes lignes : les
+sessions/challenges sans référence restent inertes. Garder le pilote fermé
+pendant toute la livraison API/Web. Vérifier le journal customer et le succès
+du contrôle de migrations du conteneur API ; le seul message « 77 objets » du
+bootstrap décrit le manifeste cible, pas l'application de `0003`. Pas de down
+migration, purge de préparations ni remise à zéro des budgets en cas de retour
+applicatif. L'inscription OTP reste un lot distinct non ouvert.
 
 L'étape de préparation reçoit `SM_DATABASE_MIGRATION_URL_STAGING` ou
 `..._PRODUCTION` et la CA épinglée `SM_DATABASE_ROOT_CA_*`. Les variables

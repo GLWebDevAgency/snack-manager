@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reservationSchema, sessionSchema, nameSchema, revocationSchema } from './validation';
+import { reservationSchema, sessionSchema, nameSchema, revocationSchema, browserPreparationSchema, browserBindingSchema, browserIssueSchema } from './validation';
 
 const common = { smsUnitsReservedPerSend: 1, cooldownMs: 60_000, windowMs: 86_400_000,
   globalSendReservations: 10, tenantSendReservations: 10, phoneSendReservations: 3,
@@ -29,7 +29,7 @@ describe('verification funding input boundaries', () => {
 });
 
 describe('browser credential input boundaries', () => {
-  const common = { parentRef: 'fixture', tenantRef: 'tenant', sessionHash: 'a'.repeat(64), now: 1 };
+  const common = { parentRef: 'fixture', tenantRef: 'tenant', browserRef: '11111111-1111-4111-8111-111111111111', sessionHash: 'a'.repeat(64), now: 1 };
   it.each([
     { schema: sessionSchema, input: common },
     { schema: nameSchema, input: { ...common, encryptedName: null, expectedRevision: 0 } },
@@ -39,5 +39,21 @@ describe('browser credential input boundaries', () => {
       expect(schema.safeParse({ ...input, browserHash }).success).toBe(false);
     }
     expect(schema.safeParse({ ...input, browserHash: 'b'.repeat(64) }).success).toBe(true);
+  });
+  it('requires a public browser selector as well as both credentials', () => {
+    expect(sessionSchema.safeParse({ ...common, browserHash: 'b'.repeat(64), browserRef: undefined }).success).toBe(false);
+    expect(sessionSchema.safeParse({ ...common, browserHash: 'b'.repeat(64), browserRef: 'not-a-uuid' }).success).toBe(false);
+  });
+  it('accepts only strict server preparation inputs, without a caller clock', () => {
+    const base = { parentRef: common.parentRef, tenantRef: common.tenantRef, browserRef: common.browserRef };
+    for (const [schema, value] of [
+      [browserPreparationSchema, base], [browserBindingSchema, { ...base, browserHash: 'b'.repeat(64) }],
+      [browserIssueSchema, { ...base, browserHash: 'b'.repeat(64), currentBrowserHash: null }],
+    ] as const) {
+      expect(schema.safeParse(value).success).toBe(true);
+      expect(schema.safeParse({ ...value, now: 1 }).success).toBe(false);
+      expect(schema.safeParse({ ...value, browserRef: undefined }).success).toBe(false);
+    }
+    expect(browserIssueSchema.safeParse({ ...base, browserHash: 'b'.repeat(64) }).success).toBe(false);
   });
 });

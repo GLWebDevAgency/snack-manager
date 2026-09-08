@@ -9,29 +9,29 @@ describe('customer browser DTO versus private relay envelope', () => {
     const request = action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
     expect(CustomerAccountBrowserRequests[action].safeParse(request).success).toBe(true);
     expect(CustomerAccountBrowserRequests[action].safeParse({ ...request, browserSecret: token }).success).toBe(false);
-    expect(CustomerAccountEnvelopes[action].safeParse({ sessionToken: token, request }).success).toBe(false);
-    expect(CustomerAccountEnvelopes[action].safeParse({ sessionToken: token, browserSecret: token, request }).success).toBe(true);
+    expect(CustomerAccountEnvelopes[action].safeParse({ browserRef: randomUUID(), sessionToken: token, request }).success).toBe(false);
+    expect(CustomerAccountEnvelopes[action].safeParse({ browserRef: randomUUID(), sessionToken: token, browserSecret: token, request }).success).toBe(true);
     for (const browserSecret of [null, 'loyalty-qr', `${'A'.repeat(42)}B`]) {
-      expect(CustomerAccountEnvelopes[action].safeParse({ sessionToken: token, browserSecret, request }).success).toBe(false);
+      expect(CustomerAccountEnvelopes[action].safeParse({ browserRef: randomUUID(), sessionToken: token, browserSecret, request }).success).toBe(false);
     }
   });
-  it.each(['browserSecret', 'sessionToken', 'tenantRef', 'humanVerified', 'clientIp', 'policy', 'accountId'])('never accepts server authority %s in browser DTOs', field => {
+  it.each(['browserRef', 'browserSecret', 'sessionToken', 'tenantRef', 'humanVerified', 'clientIp', 'policy', 'accountId'])('never accepts server authority %s in browser DTOs', field => {
     const request = { phone: '+33612345678', operationId: randomUUID(), turnstileToken: 'fixture-human-token' };
     expect(CustomerAccountBrowserRequests.start.safeParse({ ...request, [field]: 'forged' }).success).toBe(false);
   });
   it('accepts canonical 32-byte capabilities and rejects a noncanonical alias', () => {
     for (let i = 0; i < 32; i++) {
       const token = randomBytes(32).toString('base64url');
-      expect(CustomerAccountEnvelopes.session.safeParse({ sessionToken: token, browserSecret: token, request: {} }).success).toBe(true);
+      expect(CustomerAccountEnvelopes.session.safeParse({ browserRef: randomUUID(), sessionToken: token, browserSecret: token, request: {} }).success).toBe(true);
     }
     const token = Buffer.alloc(32).toString('base64url');
-    expect(CustomerAccountEnvelopes.session.safeParse({ sessionToken: `${token.slice(0, -1)}B`, browserSecret: token, request: {} }).success).toBe(false);
+    expect(CustomerAccountEnvelopes.session.safeParse({ browserRef: randomUUID(), sessionToken: `${token.slice(0, -1)}B`, browserSecret: token, request: {} }).success).toBe(false);
   });
   it('does not accept OTP fields in recover or a QR in place of a session', () => {
     const request = { challengeId: randomUUID(), checkId: randomUUID() };
     expect(CustomerAccountBrowserRequests.recover.safeParse(request).success).toBe(true);
     expect(CustomerAccountBrowserRequests.recover.safeParse({ ...request, code: '123456' }).success).toBe(false);
-    expect(CustomerAccountEnvelopes.session.safeParse({ sessionToken: 'sm-loyalty:fixture', browserSecret: randomBytes(32).toString('base64url'), request: {} }).success).toBe(false);
+    expect(CustomerAccountEnvelopes.session.safeParse({ browserRef: randomUUID(), sessionToken: 'sm-loyalty:fixture', browserSecret: randomBytes(32).toString('base64url'), request: {} }).success).toBe(false);
   });
   it('requires versioned name updates and exact logout intent', () => {
     expect(CustomerAccountBrowserRequests.name.safeParse({ name: 'Fixture' }).success).toBe(false);

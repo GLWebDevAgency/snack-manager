@@ -1,3 +1,4 @@
+import { confirmedCustomerBrowserFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import type { Model } from 'mongoose';
@@ -10,6 +11,7 @@ import type { CustomerRelay } from './customer-account.guard';
 import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
 
 function fixture(paid = false) {
+  const browserRef = randomUUID();
   const now = Date.now(); const env = paid ? customerPaidTestEnvironment(now) : customerTestEnvironment(now);
   const crypto = new CustomerIdentityCrypto(env.SM_CUSTOMER_IDENTITY_KEY!);
   const tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!; const phone = '+33612345678';
@@ -23,6 +25,7 @@ function fixture(paid = false) {
     profile: { accountId: randomUUID(), phoneHash, encryptedPhone: pending.encryptedPhone,
       encryptedName: null, phoneVerifiedAt: now, revision: 0 } };
   const repository = {
+    ...confirmedCustomerBrowserFixture(browserRef, now + 604_800_000),
     reserve: vi.fn<CustomerIdentityRepository['reserve']>().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
@@ -46,8 +49,8 @@ function fixture(paid = false) {
     human as unknown as CustomerAccountHumanVerifier, transportFactory);
   const relay: CustomerRelay = { slug: 'fixture', action: 'start', origin: 'https://fixture.example', client: Buffer.alloc(32, 41).toString('base64url') };
   const browserSecret = Buffer.alloc(32, 42).toString('base64url');
-  const start = { browserSecret, request: { phone, operationId: randomUUID(), turnstileToken: 'fixture-human-token' } };
-  const check = { browserSecret, sessionToken: null, request: { challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
+  const start = { browserRef, browserSecret, request: { phone, operationId: randomUUID(), turnstileToken: 'fixture-human-token' } };
+  const check = { browserRef, browserSecret, sessionToken: null, request: { challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
   return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending };
 }
 describe('customer runtime tenant and purpose boundary', () => {
@@ -58,7 +61,7 @@ describe('customer runtime tenant and purpose boundary', () => {
     await expect(f.runtime.execute({ ...f.relay, action }, envelope)).rejects.toMatchObject({ status: 400 });
     expect(f.repository.authenticate).not.toHaveBeenCalled();
     expect(f.repository.updateName).not.toHaveBeenCalled(); expect(f.repository.revoke).not.toHaveBeenCalled();
-    await f.runtime.execute({ ...f.relay, action }, { ...envelope, browserSecret: f.start.browserSecret });
+    await f.runtime.execute({ ...f.relay, action }, { ...envelope, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret });
     const crypto = new CustomerIdentityCrypto(f.env.SM_CUSTOMER_IDENTITY_KEY!);
     const expected = expect.objectContaining({
       browserHash: crypto.hash('browser', f.env.SM_CUSTOMER_PILOT_TENANT_ID!, f.start.browserSecret),
@@ -142,7 +145,7 @@ describe('customer runtime tenant and purpose boundary', () => {
     f.repository.recoverCheck.mockResolvedValue(f.session);
     const { challengeId, checkId } = f.check.request;
     const result = await f.runtime.execute({ ...f.relay, action: 'recover' }, {
-      browserSecret: f.start.browserSecret, request: { challengeId, checkId },
+      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: { challengeId, checkId },
     });
     expect(result).toMatchObject({ view: { profile: { name: null, revision: 0 } } });
     const serialized = JSON.stringify(result);
@@ -154,14 +157,14 @@ describe('customer runtime tenant and purpose boundary', () => {
   it.each(['session', 'name', 'logout'] as const)('keeps %s independent from expiring send evidence', async action => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}'; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
-    const result = await f.runtime.execute({ ...f.relay, action }, { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request });
+    const result = await f.runtime.execute({ ...f.relay, action }, { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request });
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(result).toMatchObject({ profile: { revision: 0 } });
     expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
   });
   it('does not return private data when tenant revocation occurs during the session read', async () => {
     const f = fixture(); f.repository.authenticate.mockImplementation(async () => { f.row.account.status = 'suspended'; return f.session; });
-    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request: {} }))
+    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: {} }))
       .rejects.toMatchObject({ status: 503 });
   });
   it('sanitizes arbitrary storage or adapter exceptions before Ops can see them', async () => {
@@ -169,10 +172,74 @@ describe('customer runtime tenant and purpose boundary', () => {
     f.repository.recoverCheck.mockRejectedValue(new Error(marker));
     const { challengeId, checkId } = f.check.request;
     const error = await f.runtime.execute({ ...f.relay, action: 'recover' }, {
-      browserSecret: f.start.browserSecret, request: { challengeId, checkId },
+      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: { challengeId, checkId },
     }).catch((value: Error) => value);
     expect(error).toMatchObject({ status: 503 });
     expect(JSON.stringify(error).includes(marker) || String((error as Error).stack).includes(marker)).toBe(false);
+  });
+});
+
+describe('browser preparation runtime boundary', () => {
+  it.each(['prepare', 'issue', 'confirm'] as const)('runs %s without a send policy, Turnstile or a provider', async step => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const browserRef = f.start.browserRef, now = Date.now();
+    const preparation = { browserRef, state: 'prepared' as const, admissionExpiresAt: now + 600_000, expiresAt: now + 604_800_000 };
+    f.repository.prepareBrowser.mockResolvedValue(preparation);
+    f.repository.issueBrowser.mockResolvedValue({ preparation: { ...preparation, state: 'issued' }, emitCookie: true });
+    f.repository.confirmBrowser.mockResolvedValue({ ...preparation, state: 'confirmed' });
+    const result = await f.runtime.execute({ ...f.relay, action: 'browser' }, { request: { step, browserRef },
+      browserSecret: step === 'confirm' ? f.start.browserSecret : null,
+      candidateSecret: step === 'issue' ? Buffer.alloc(32, 57).toString('base64url') : null });
+    expect(result).toMatchObject({ preparation: { browserRef, state: step === 'prepare' ? 'prepared' : step === 'issue' ? 'issued' : 'confirmed' },
+      emitCookie: step === 'issue' });
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
+    expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.repository.claimCheck).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(f.start.browserSecret);
+  });
+  it.each(['missing', 'wrong', 'unconfirmed', 'expired'] as const)('refuses a %s preparation before even verifying the human challenge', async kind => {
+    const f = fixture(); const body: Record<string, unknown> = { ...f.start };
+    if (kind === 'missing') delete body.browserRef;
+    if (kind === 'wrong') body.browserRef = randomUUID();
+    if (kind === 'unconfirmed') f.repository.validateBrowser.mockResolvedValue(null);
+    if (kind === 'expired') f.repository.validateBrowser.mockResolvedValue({ expiresAt: Date.now() - 1 });
+    await expect(f.runtime.execute(f.relay, body)).rejects.toMatchObject({ status: kind === 'missing' ? 400 : 401 });
+    expect(f.human.verify).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+  });
+  it('rechecks the cookie preparation after Turnstile, before reserving a send', async () => {
+    const f = fixture(); f.human.verify.mockImplementation(async () => { f.repository.validateBrowser.mockResolvedValue(null); return true; });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 401 });
+    expect(f.human.verify).toHaveBeenCalledTimes(1); expect(f.repository.reserve).not.toHaveBeenCalled();
+    expect(f.provider.start).not.toHaveBeenCalled();
+  });
+  it('revalidates fresh funding after the final asynchronous browser validation', async () => {
+    const f = fixture(true); let reads = 0;
+    f.repository.validateBrowser.mockImplementation(async () => {
+      if (++reads === 3) reviseCosts(f, 32);
+      return { expiresAt: f.session.expiresAt };
+    });
+    await expect(f.runtime.execute({ ...f.relay, action: 'check' }, f.check)).rejects.toMatchObject({ status: 503 });
+    expect(f.provider.check).not.toHaveBeenCalled();
+    expect(f.repository.completeCheck).toHaveBeenCalledWith(expect.objectContaining({ result: 'uncertain' }));
+  });
+  it('does not release private data if the preparation expires during the final tenant response check', async () => {
+    const f = fixture(); let reads = 0;
+    f.query.exec.mockImplementation(async () => { if (++reads === 2) f.repository.validateBrowser.mockResolvedValue(null); return f.row; });
+    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { browserRef: f.start.browserRef,
+      browserSecret: f.start.browserSecret, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
+    expect(f.repository.authenticate).toHaveBeenCalledTimes(1); expect(f.transportFactory).not.toHaveBeenCalled();
+  });
+  it('rechecks session expiry after the last tenant wait, even while the browser remains valid', async () => {
+    const f = fixture(); const initial = Date.now(); let now = initial, reads = 0;
+    f.session.expiresAt = initial + 1000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      f.query.exec.mockImplementation(async () => { if (++reads === 2) now = initial + 2000; return f.row; });
+      await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { browserRef: f.start.browserRef,
+        browserSecret: f.start.browserSecret, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
+      expect(f.repository.authenticate).toHaveBeenCalledTimes(1);
+    } finally { clock.mockRestore(); }
   });
 });
 
@@ -296,8 +363,8 @@ describe('closed paid pilot runtime funding', () => {
     const { challengeId, checkId } = f.check.request;
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 }
       : action === 'logout' ? { all: true } : action === 'recover' ? { challengeId, checkId } : {};
-    const envelope = action === 'recover' ? { browserSecret: f.start.browserSecret, request }
-      : { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request };
+    const envelope = action === 'recover' ? { browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request }
+      : { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request };
     const result = await f.runtime.execute({ ...f.relay, action }, envelope);
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(typeof result).toBe('object');

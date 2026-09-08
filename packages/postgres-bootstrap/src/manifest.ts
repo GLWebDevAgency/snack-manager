@@ -16,6 +16,7 @@ export const LOYALTY_EARN_RECEIPTS_MIGRATION = 1_788_236_557_128;
 export const CUSTOMER_INITIAL_MIGRATION = 1_788_854_400_000;
 export const CUSTOMER_PAID_BUDGET_MIGRATION = 1_788_861_600_000;
 export const CUSTOMER_BROWSER_CONTINUITY_MIGRATION = 1_788_870_000_000;
+export const CUSTOMER_BROWSER_PREPARATION_MIGRATION = 1_788_894_000_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -178,6 +179,8 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   ),
   introduced('table', 'customer', 'browser_contexts', 'customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION),
   introduced('function', 'customer', 'preserve_browser_context', 'customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION),
+  introduced('table', 'customer', 'browser_preparations', 'customer', CUSTOMER_BROWSER_PREPARATION_MIGRATION),
+  introduced('function', 'customer', 'preserve_browser_preparation', 'customer', CUSTOMER_BROWSER_PREPARATION_MIGRATION),
 ] as const;
 
 export const JOURNALS: Readonly<

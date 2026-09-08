@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { seedCustomerBrowserFixture } from './browser-journal.fixture';
 
 let server: Server, browser: Browser, context: BrowserContext, page: Page, origin: string;
 let session: { expiresAt: number; profile: { name: string; phoneE164: string; phoneVerifiedAt: number; revision: number } } | null;
@@ -18,6 +19,7 @@ beforeAll(async () => {
     define: { "process.env.NODE_ENV": '"production"' } });
   server = createServer(async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store");
+    if (req.url === '/fixture-empty') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Fixture setup</title>'); return; }
     if (req.url === "/bundle.js") { res.setHeader("Content-Type", "text/javascript"); res.end(bundle.outputFiles[0]!.text); return; }
     if (req.url === "/") { res.setHeader("Content-Type", "text/html"); res.end('<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Recette compte</title></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>'); return; }
     res.setHeader("Content-Type", "application/json");
@@ -46,7 +48,8 @@ beforeEach(async () => {
   session = { expiresAt: Date.now() + 60_000, profile: { name: "Avant modification", phoneE164: "+33600000001", phoneVerifiedAt: Date.now() - 1_000, revision: 0 } };
   context = await browser.newContext({ serviceWorkers: "block" });
   context.on("page", p => p.on("pageerror", error => faults.push(error.message)));
-  page = await context.newPage(); page.setDefaultTimeout(5_000); await page.goto(origin);
+  page = await context.newPage(); page.setDefaultTimeout(5_000); await page.goto(origin + '/fixture-empty');
+  await seedCustomerBrowserFixture(page, 'recette'); await page.goto(origin);
 });
 afterEach(async () => { paused?.destroy(); await context.close(); expect(faults).toEqual([]); });
 afterAll(async () => { await browser?.close(); if (server) await new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }); });

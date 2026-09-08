@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CustomerAccountView } from "@sm/contracts";
+import { seedCustomerBrowserFixture } from '../customer-account/browser-journal.fixture';
 
 let server: Server;
 let browser: Browser;
@@ -93,7 +94,10 @@ beforeEach(async () => { account = null; accountReads = 0; accountGate = undefin
   page = await context.newPage(); });
 afterEach(async () => { releaseAccount?.(); await context?.close(); });
 afterAll(async () => { await browser?.close(); if (server) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); });
-async function ready(target = page, suffix = "") { await target.goto(origin + suffix); await target.getByRole("heading", { name: "Coordonnées de recette" }).waitFor(); }
+async function ready(target = page, suffix = "") {
+  if (account) { await target.goto(origin + '/lock-holder'); await seedCustomerBrowserFixture(target, 'classfood'); }
+  await target.goto(origin + suffix); await target.getByRole("heading", { name: "Coordonnées de recette" }).waitFor();
+}
 async function fill(target = page, name = "Camille Test") {
   await target.getByLabel("Nom", { exact: true }).fill(name); await target.getByLabel("Téléphone", { exact: true }).fill("0600000000");
 }

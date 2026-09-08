@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
-import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses } from '@sm/contracts';
+import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
+  CustomerAccountBrowserRefSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 
 type Action = 'status' | 'browser' | 'start' | 'check' | 'recover' | 'session' | 'name' | 'logout';
@@ -168,7 +169,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     try {
       if (request.method !== 'GET') browserRequest = await boundedJson(request, signal, 8_192);
     } catch { return signal.aborted ? unavailable() : invalid(); }
-    const apiAction = action === 'browser' ? 'status' : action;
+    const apiAction = action;
     const parsed = CustomerAccountBrowserRequests[apiAction].safeParse(browserRequest);
     if (!parsed.success) return invalid();
     const browser = readCookie(request, slug, 'browser');
@@ -181,6 +182,16 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     }
     if (['session', 'name', 'logout'].includes(action)
       && (session.kind !== 'valid' || browser.kind !== 'valid')) return unauthorized();
+    // A non-secret selector comes from the durable client journal, never from
+    // whichever cookie happened to arrive last. The signed API validates its
+    // immutable association with the HttpOnly credential on every private use.
+    const selectedBrowser = CustomerAccountBrowserRefSchema.safeParse(request.headers.get(CUSTOMER_ACCOUNT_BROWSER_REF_HEADER));
+    if (action !== 'status' && action !== 'browser' && !selectedBrowser.success) {
+      return failure(409, 'CUSTOMER_CONFLICT', 'La préparation de cet accès doit être vérifiée avant de continuer.');
+    }
+    const preparationRequest = action === 'browser' ? CustomerAccountBrowserRequests.browser.parse(parsed.data) : null;
+    if (preparationRequest?.step === 'confirm' && browser.kind !== 'valid') return unauthorized();
+    const candidateSecret = preparationRequest?.step === 'issue' ? randomBytes(32).toString('base64url') : null;
 
     // Platform paths may serve any pilot tenant; a custom domain must resolve
     // freshly to this exact tenant. Never adopt the proxy's stale cache or a
@@ -197,6 +208,9 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       }
     }
     const envelope = { request: parsed.data,
+      ...(preparationRequest ? { candidateSecret,
+        browserSecret: preparationRequest.step !== 'prepare' && browser.kind === 'valid' ? browser.value : null } : {}),
+      ...(action !== 'status' && action !== 'browser' && selectedBrowser.success ? { browserRef: selectedBrowser.data } : {}),
       ...(['start', 'check', 'recover', 'session', 'name', 'logout'].includes(action)
         && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
       ...(action === 'check' ? { sessionToken: session.kind === 'valid' ? session.value : null }
@@ -238,10 +252,21 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const output = CustomerAccountResponses[apiAction].safeParse(raw);
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
     if (action === 'browser') {
-      if (!('available' in output.data) || output.data.available !== true) return unavailable();
-      const result = privateResponse(new NextResponse(null, { status: 204 }));
-      if (browser.kind === 'absent') result.cookies.set(cookieName(slug, 'browser'), randomBytes(32).toString('base64url'),
-        { ...cookieOptions(), maxAge: SESSION_MAX_MS / 1_000 });
+      if (!('preparation' in output.data) || !('emitCookie' in output.data)
+        || output.data.preparation.browserRef !== preparationRequest?.browserRef) return unavailable();
+      const { preparation, emitCookie } = output.data;
+      if (preparation.expiresAt > Date.now() + SESSION_MAX_MS
+        || preparation.admissionExpiresAt > Date.now() + 600_000
+        || (preparation.state !== 'expired' && preparation.expiresAt <= Date.now())
+        || (preparation.state === 'confirmed' && preparationRequest.step === 'confirm' && browser.kind !== 'valid')) return unavailable();
+      if (emitCookie && (preparationRequest.step !== 'issue' || !candidateSecret
+        || preparation.admissionExpiresAt <= Date.now() || preparation.state !== 'issued')) return unavailable();
+      const result = privateResponse(NextResponse.json(preparation));
+      // Exactly one admitted issue may emit the candidate. Retrying prepare or
+      // confirming receipt never rewrites cookies. Absolute expiry cannot slide
+      // when an HTTP response arrives late (Max-Age would take precedence).
+      if (emitCookie && candidateSecret) result.cookies.set(cookieName(slug, 'browser'), candidateSecret,
+        { ...cookieOptions(), expires: new Date(preparation.expiresAt) });
       return result;
     }
     if (action === 'check' || action === 'recover') {
@@ -250,8 +275,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       const remaining = view.expiresAt - Date.now();
       if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
       const result = privateResponse(NextResponse.json(view));
-      result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(view.expiresAt),
-        maxAge: Math.floor(remaining / 1_000) });
+      result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(view.expiresAt) });
       return result;
     }
     if ('expiresAt' in output.data && (output.data.expiresAt <= Date.now()
