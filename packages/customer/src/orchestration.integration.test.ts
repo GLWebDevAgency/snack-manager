@@ -11,6 +11,7 @@ import type { PhoneVerificationTransport } from '../../../apps/api/src/modules/c
 const integration = process.env.CUSTOMER_TEST_DATABASE_URL ? describe : describe.skip;
 const PHONE = '+33612345678';
 const BROWSER = Buffer.alloc(32, 57).toString('base64url');
+const INTENT_PROOF = Buffer.alloc(32, 58).toString('base64url');
 const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 22).toString('base64'));
 
 integration('customer use cases with real PostgreSQL and simulated Verify', () => {
@@ -46,9 +47,12 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     await service.browser({ tenantRef, request: { step: 'prepare', browserRef }, browserSecret: null, candidateSecret: null });
     expect((await service.browser({ tenantRef, request: { step: 'issue', browserRef }, browserSecret: null, candidateSecret: BROWSER })).emitCookie).toBe(true);
     await service.browser({ tenantRef, request: { step: 'confirm', browserRef }, browserSecret: BROWSER, candidateSecret: null });
-    const start = { tenantRef, phone: PHONE, operationId: randomUUID(), browserRef, browserSecret: BROWSER,
+    const operationId = randomUUID();
+    expect((await service.intent({ tenantRef, browserRef, browserSecret: BROWSER,
+      request: { step: 'prepare', operationId }, candidateProof: INTENT_PROOF })).emitCookie).toBe(true);
+    const start = { tenantRef, phone: PHONE, operationId, intentProof: INTENT_PROOF, browserRef, browserSecret: BROWSER,
       clientIp: '127.0.0.1', humanVerified: true };
-    const check = (challengeId: string) => ({ tenantRef, challengeId, checkId: randomUUID(),
+    const check = (challengeId: string) => ({ tenantRef, operationId, intentProof: INTENT_PROOF, challengeId, checkId: randomUUID(),
       browserRef, browserSecret: BROWSER, code: '123456', existingSessionToken: null });
     return { tenantRef, parentRef, browserRef, service, repository, transport, start, check, config };
   }
@@ -69,11 +73,12 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     expect(await f.service.check(check)).toEqual(first);
     expect(f.transport.check).toHaveBeenCalledTimes(1);
     expect(first.view.profile).toMatchObject({ name: null, phoneE164: PHONE, revision: 0 });
-    const updated = await f.service.updateName({ tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token, name: 'Mina', expectedRevision: 0 });
+    const selection = { expectedOperationId: check.operationId, expectedCheckId: check.checkId };
+    const updated = await f.service.updateName({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token, name: 'Mina', expectedRevision: 0 });
     expect(updated.profile).toMatchObject({ name: 'Mina', revision: 1 });
-    expect((await f.service.session({ tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token })).profile).toEqual(updated.profile);
-    await f.service.logout({ tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token, all: true });
-    await expect(f.service.session({ tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token })).rejects.toMatchObject({ reason: 'unauthorized' });
+    expect((await f.service.session({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token })).profile).toEqual(updated.profile);
+    await f.service.logout({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token, all: true });
+    await expect(f.service.session({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token })).rejects.toMatchObject({ reason: 'unauthorized' });
     await expect(f.service.check(check)).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.transport.check).toHaveBeenCalledTimes(1);
   });
@@ -90,8 +95,8 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     });
     await expect(f.service.check(check)).rejects.toMatchObject({ reason: 'unavailable' });
     expect(committed.session !== null).toBe(true);
-    const { tenantRef, challengeId, checkId, browserRef, browserSecret } = check;
-    const receipt = { tenantRef, challengeId, checkId, browserRef, browserSecret };
+    const { tenantRef, challengeId, checkId, browserRef, browserSecret, operationId, intentProof } = check;
+    const receipt = { tenantRef, operationId, intentProof, checkId, browserRef, browserSecret };
     const claim = vi.spyOn(f.repository, 'claimCheck');
     const completionCalls = vi.mocked(f.repository.completeCheck).mock.calls.length;
     f.transport.start.mockClear(); f.transport.check.mockClear();
@@ -100,16 +105,19 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     for (const forged of [
       { ...receipt, browserSecret: Buffer.alloc(32, 1).toString('base64url') },
       { ...receipt, tenantRef: 'other-tenant' },
-      { ...receipt, checkId: randomUUID() },
     ]) {
       const denied = await f.service.recover(forged).then(() => false, error => error.reason === 'unauthorized');
       expect(denied).toBe(true);
     }
+    expect((await f.service.recover({ ...receipt, checkId: randomUUID() })).state).toBe('unresolved');
     const recovered = await f.service.recover(receipt);
-    expect(recovered.token === crypto.tokenForCheck(tenantRef, browserSecret, challengeId, checkId)).toBe(true);
-    expect(recovered.view.sessionId === committed.session?.sessionId).toBe(true);
+    if (recovered.state !== 'approved') throw new Error('Approved fixture expected');
+    expect(recovered.token === crypto.tokenForIntentCheck(tenantRef, browserSecret, operationId, intentProof, challengeId, checkId)).toBe(true);
+    expect(recovered.state).toBe('approved');
+    expect((await database.admin.query('SELECT id FROM customer.sessions WHERE tenant_ref=$1', [tenantRef])).rows[0].id === committed.session?.sessionId).toBe(true);
     expect(recovered.view.expiresAt).toBe(committed.session?.expiresAt);
     const repeated = await f.service.recover(receipt);
+    if (repeated.state !== 'approved') throw new Error('Approved fixture expected');
     expect(repeated.token === recovered.token).toBe(true);
     expect(repeated.view.expiresAt).toBe(recovered.view.expiresAt);
     expect(claim.mock.calls.length).toBe(0);
@@ -124,10 +132,10 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
 
   it('recover cannot consume a pending challenge or accept a code, then the real check still succeeds', async () => {
     const f = await fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
-    const { tenantRef, challengeId, checkId, browserRef, browserSecret } = check;
+    const { tenantRef, challengeId, checkId, browserRef, browserSecret, operationId, intentProof } = check;
     const claim = vi.spyOn(f.repository, 'claimCheck');
-    const receipt = { tenantRef, challengeId, checkId, browserRef, browserSecret };
-    await expect(f.service.recover(receipt)).rejects.toMatchObject({ reason: 'unauthorized' });
+    const receipt = { tenantRef, operationId, intentProof, checkId, browserRef, browserSecret };
+    expect((await f.service.recover(receipt)).state).toBe('unresolved');
     await expect(f.service.recover({ ...receipt, code: check.code })).rejects.toMatchObject({ reason: 'invalid_request' });
     expect(claim.mock.calls.length + f.transport.check.mock.calls.length).toBe(0);
     const untouched = await database.admin.query('SELECT state,checks_used FROM customer.challenges WHERE tenant_ref=$1 AND id=$2', [tenantRef, challengeId]);
@@ -140,13 +148,11 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
   it.each([false, true])('recover never revives a revoked session (all=%s)', async all => {
     const f = await fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
     const first = await f.service.check(check);
-    const { tenantRef, challengeId, checkId, browserRef, browserSecret } = check;
-    await f.service.logout({ tenantRef, browserRef, browserSecret, token: first.token, all });
+    const { tenantRef, checkId, browserRef, browserSecret, operationId, intentProof } = check;
+    await f.service.logout({ expectedOperationId: operationId, expectedCheckId: checkId, tenantRef, browserRef, browserSecret, token: first.token, all });
     const claim = vi.spyOn(f.repository, 'claimCheck'); const complete = vi.spyOn(f.repository, 'completeCheck');
     f.transport.start.mockClear(); f.transport.check.mockClear();
-    const denied = await f.service.recover({ tenantRef, challengeId, checkId, browserRef, browserSecret })
-      .then(() => false, error => error.reason === 'unauthorized');
-    expect(denied).toBe(true);
+    expect((await f.service.recover({ tenantRef, operationId, intentProof, checkId, browserRef, browserSecret })).state).toBe('failed');
     expect(claim.mock.calls.length + complete.mock.calls.length).toBe(0);
     expect(f.transport.start.mock.calls.length + f.transport.check.mock.calls.length).toBe(0);
     const rows = await database.admin.query('SELECT count(*)::int AS n FROM customer.sessions WHERE tenant_ref=$1', [tenantRef]);
@@ -160,7 +166,7 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     await expect(f.service.check({ ...check, tenantRef: 'other-tenant' })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.transport.check).not.toHaveBeenCalled();
     const access = await f.service.check(check);
-    await expect(f.service.session({ tenantRef: 'other-tenant', browserRef: f.browserRef, browserSecret: BROWSER, token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.session({ expectedOperationId: check.operationId, expectedCheckId: check.checkId, tenantRef: 'other-tenant', browserRef: f.browserRef, browserSecret: BROWSER, token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
   });
 
   it('single-flights concurrent approval and creates exactly one account/session', async () => {

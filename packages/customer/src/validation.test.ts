@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { reservationSchema, sessionSchema, nameSchema, revocationSchema, browserPreparationSchema, browserBindingSchema, browserIssueSchema } from './validation';
+import { reservationSchema, sessionSchema, nameSchema, revocationSchema, browserPreparationSchema, browserBindingSchema, browserIssueSchema,
+  intentBindingSchema, intentCloseSchema, intentResultSchema, claimSchema } from './validation';
 
 const common = { smsUnitsReservedPerSend: 1, cooldownMs: 60_000, windowMs: 86_400_000,
   globalSendReservations: 10, tenantSendReservations: 10, phoneSendReservations: 3,
@@ -29,7 +30,8 @@ describe('verification funding input boundaries', () => {
 });
 
 describe('browser credential input boundaries', () => {
-  const common = { parentRef: 'fixture', tenantRef: 'tenant', browserRef: '11111111-1111-4111-8111-111111111111', sessionHash: 'a'.repeat(64), now: 1 };
+  const common = { parentRef: 'fixture', tenantRef: 'tenant', browserRef: '11111111-1111-4111-8111-111111111111', sessionHash: 'a'.repeat(64), now: 1,
+    expectedOperationId: '22222222-2222-4222-8222-222222222222', expectedCheckId: '33333333-3333-4333-8333-333333333333' };
   it.each([
     { schema: sessionSchema, input: common },
     { schema: nameSchema, input: { ...common, encryptedName: null, expectedRevision: 0 } },
@@ -44,6 +46,13 @@ describe('browser credential input boundaries', () => {
     expect(sessionSchema.safeParse({ ...common, browserHash: 'b'.repeat(64), browserRef: undefined }).success).toBe(false);
     expect(sessionSchema.safeParse({ ...common, browserHash: 'b'.repeat(64), browserRef: 'not-a-uuid' }).success).toBe(false);
   });
+  it('requires the exact public publication selection instead of silently adopting the cookie', () => {
+    for (const field of ['expectedOperationId', 'expectedCheckId']) {
+      for (const value of [undefined, null, '', 'not-a-uuid']) {
+        expect(sessionSchema.safeParse({ ...common, browserHash: 'b'.repeat(64), [field]: value }).success).toBe(false);
+      }
+    }
+  });
   it('accepts only strict server preparation inputs, without a caller clock', () => {
     const base = { parentRef: common.parentRef, tenantRef: common.tenantRef, browserRef: common.browserRef };
     for (const [schema, value] of [
@@ -55,5 +64,28 @@ describe('browser credential input boundaries', () => {
       expect(schema.safeParse({ ...value, browserRef: undefined }).success).toBe(false);
     }
     expect(browserIssueSchema.safeParse({ ...base, browserHash: 'b'.repeat(64) }).success).toBe(false);
+  });
+});
+
+describe('verification intention boundary', () => {
+  const base = { parentRef: 'fixture', tenantRef: 'tenant', browserRef: '11111111-1111-4111-8111-111111111111',
+    browserHash: 'a'.repeat(64), operationId: '22222222-2222-4222-8222-222222222222' };
+  const privateBinding = { ...base, proofHash: 'b'.repeat(64) };
+  it('keeps closure independent of the proof and refuses caller time or raw secret fields', () => {
+    expect(intentCloseSchema.safeParse(base).success).toBe(true);
+    expect(intentBindingSchema.safeParse(base).success).toBe(false);
+    expect(intentBindingSchema.safeParse(privateBinding).success).toBe(true);
+    for (const extra of [{ now: 1 }, { code: '000000' }, { intentProof: 'unhashed-fixture' }]) {
+      expect(intentBindingSchema.safeParse({ ...privateBinding, ...extra }).success).toBe(false);
+    }
+    expect(intentCloseSchema.safeParse(privateBinding).success).toBe(false);
+  });
+  it('requires an exact check selector for a session hash and binds check bodies separately', () => {
+    expect(intentResultSchema.safeParse({ ...privateBinding, checkId: null, sessionHash: null }).success).toBe(true);
+    expect(intentResultSchema.safeParse({ ...privateBinding, checkId: null, sessionHash: 'c'.repeat(64) }).success).toBe(false);
+    const check = { ...privateBinding, challengeId: base.operationId, checkId: base.browserRef, requestHash: 'd'.repeat(64), now: 1 };
+    expect(claimSchema.safeParse(check).success).toBe(true);
+    expect(claimSchema.safeParse({ ...check, requestHash: undefined }).success).toBe(false);
+    expect(claimSchema.safeParse({ ...check, proofHash: undefined }).success).toBe(false);
   });
 });

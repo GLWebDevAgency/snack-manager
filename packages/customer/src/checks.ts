@@ -2,6 +2,8 @@ import type { PoolClient } from 'pg';
 import type { CheckClaim, CustomerIdentityRepository, CustomerSession } from './port';
 import { CustomerRepositoryError } from './client';
 import { challenge, currentChallenge, dbTime, fundingAllowsCheck, pendingView, session, type ChallengeRow } from './queries';
+import { intentRow, validOpenIntent } from './intent-queries';
+import { resultIntent } from './verification-intents';
 
 type Completion = Parameters<CustomerIdentityRepository['completeCheck']>[0];
 
@@ -38,19 +40,21 @@ export async function settleVerification(client: PoolClient, input: Parameters<C
 
 export async function claimVerification(client: PoolClient, input: CheckClaim) {
   const row = await challenge(client, input, input.challengeId);
-  if (!row || row.browser_ref !== input.browserRef || row.browser_hash !== input.browserHash || row.state !== 'pending'
+  if (!row || row.intent_operation_id !== input.operationId || row.browser_ref !== input.browserRef || row.browser_hash !== input.browserHash || row.state !== 'pending'
     || row.checks_used >= row.max_checks || row.expires_at.getTime() <= await dbTime(client)) return null;
-  if (!await currentChallenge(client, row)) return null;
+  if (!await validOpenIntent(client, input) || !await currentChallenge(client, row)) return null;
   if (!fundingAllowsCheck(row, await dbTime(client))) return null;
-  const attempt = await client.query(`INSERT INTO customer.check_attempts(id,parent_ref,tenant_ref,challenge_id)
-    VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [input.checkId, input.parentRef, input.tenantRef, row.id]);
+  const attempt = await client.query(`INSERT INTO customer.check_attempts(id,parent_ref,tenant_ref,challenge_id,request_hash)
+    VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, [input.checkId, input.parentRef, input.tenantRef, row.id, input.requestHash]);
   if (!attempt.rowCount) return null;
   const changed = await client.query<ChallengeRow>(`UPDATE customer.challenges
     SET state='checking',check_id=$4,checks_used=checks_used+1
     WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 AND expires_at>clock_timestamp()
       AND EXISTS (SELECT 1 FROM customer.browser_preparations p WHERE p.parent_ref=$1 AND p.tenant_ref=$2
-        AND p.browser_ref=$5 AND p.browser_hash=$6 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp()) RETURNING *`,
-  [input.parentRef, input.tenantRef, row.id, input.checkId, input.browserRef, input.browserHash]);
+        AND p.browser_ref=$5 AND p.browser_hash=$6 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
+      AND EXISTS (SELECT 1 FROM customer.verification_intents i WHERE i.parent_ref=$1 AND i.tenant_ref=$2
+        AND i.operation_id=$7 AND i.proof_hash=$8 AND i.state='open' AND i.expires_at>clock_timestamp()) RETURNING *`,
+  [input.parentRef, input.tenantRef, row.id, input.checkId, input.browserRef, input.browserHash, input.operationId, input.proofHash]);
   if (!changed.rows[0]) {
     await finish(client, input, 'expired', 'expired'); return null;
   }
@@ -66,22 +70,25 @@ async function finish(client: PoolClient, input: CheckClaim, result: string, sta
 }
 
 export async function recoverVerification(client: PoolClient, input: CheckClaim & { sessionHash: string }): Promise<CustomerSession | null> {
-  const row = (await client.query<{ session_id: string }>(`SELECT a.session_id FROM customer.challenges c
-    JOIN customer.check_attempts a ON (a.parent_ref,a.tenant_ref,a.challenge_id,a.id)=(c.parent_ref,c.tenant_ref,c.id,c.check_id)
-    WHERE c.parent_ref=$1 AND c.tenant_ref=$2 AND c.id=$3 AND c.browser_hash=$4 AND c.check_id=$5
-      AND c.browser_ref=$6 AND c.state='consumed' AND a.state='approved'`,
-  [input.parentRef, input.tenantRef, input.challengeId, input.browserHash, input.checkId, input.browserRef])).rows[0];
-  if (!row) return null;
-  const current = await session(client, input, input.sessionHash, input.browserHash);
-  return current?.sessionId === row.session_id ? current : null;
+  const exact = await client.query(`SELECT 1 FROM customer.check_attempts WHERE parent_ref=$1 AND tenant_ref=$2
+    AND challenge_id=$3 AND id=$4 AND request_hash=$5 AND state='approved'`,
+  [input.parentRef, input.tenantRef, input.challengeId, input.checkId, input.requestHash]);
+  if (!exact.rowCount) return null;
+  const result = await resultIntent(client, input);
+  return result?.state === 'approved' && result.challengeId === input.challengeId ? result.session : null;
 }
 
 export async function completeVerification(client: PoolClient, input: Completion): Promise<CustomerSession | null> {
   const row = await challenge(client, input, input.challengeId);
-  if (!row || row.browser_ref !== input.browserRef || row.browser_hash !== input.browserHash || row.check_id !== input.checkId) return null;
+  if (!row || row.intent_operation_id !== input.operationId || row.browser_ref !== input.browserRef || row.browser_hash !== input.browserHash || row.check_id !== input.checkId) return null;
+  if ((await intentRow(client, input))?.proof_hash !== input.proofHash) return null;
   if (row.state === 'consumed') return recoverVerification(client, input);
   if (row.state !== 'checking') return null;
-  if (!await currentChallenge(client, row)) {
+  const exact = await client.query(`SELECT 1 FROM customer.check_attempts WHERE parent_ref=$1 AND tenant_ref=$2
+    AND challenge_id=$3 AND id=$4 AND request_hash=$5`,
+  [input.parentRef, input.tenantRef, row.id, input.checkId, input.requestHash]);
+  if (!exact.rowCount) return null;
+  if (!await validOpenIntent(client, input) || !await currentChallenge(client, row)) {
     await finish(client, input, 'rejected', 'rejected'); return null;
   }
   const attempt = await client.query(`SELECT id FROM customer.check_attempts
@@ -130,18 +137,25 @@ export async function completeVerification(client: PoolClient, input: Completion
     FROM customer.accounts a CROSS JOIN stamp JOIN customer.browser_preparations p
       ON p.parent_ref=$2 AND p.tenant_ref=$3 AND p.browser_ref=$11 AND p.browser_hash=$9
       AND p.confirmed_at IS NOT NULL AND p.expires_at>stamp.now
+    JOIN customer.verification_intents i ON (i.parent_ref,i.tenant_ref,i.browser_ref,i.browser_hash)
+      =(p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash) AND i.operation_id=$12 AND i.proof_hash=$13
+      AND i.state='open' AND i.expires_at>stamp.now AND i.browser_generation=$10
     WHERE a.parent_ref=$2 AND a.tenant_ref=$3 AND a.id=$4 AND a.active
       AND $6::timestamptz>stamp.now AND $7::timestamptz>stamp.now
       AND ($8::text IS NULL OR EXISTS (SELECT 1 FROM customer.sessions s WHERE s.parent_ref=$2 AND s.tenant_ref=$3
         AND s.account_id=a.id AND s.session_hash=$8 AND s.revoked_at IS NULL AND s.expires_at>stamp.now
         AND s.account_version=a.session_version))`,
   [input.sessionId, input.parentRef, input.tenantRef, accountId, input.sessionHash, new Date(input.sessionExpiresAt),
-    row.expires_at, existing ? input.existingSessionHash : null, input.browserHash, row.browser_generation, input.browserRef]);
+    row.expires_at, existing ? input.existingSessionHash : null, input.browserHash, row.browser_generation, input.browserRef, input.operationId, input.proofHash]);
   if (!created.rowCount) throw new CustomerRepositoryError('unavailable');
   const published = await client.query(`UPDATE customer.browser_contexts SET generation=generation+1,current_session_id=$5
     WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_hash=$3 AND generation=$4`,
   [input.parentRef, input.tenantRef, input.browserHash, row.browser_generation, input.sessionId]);
   if (!published.rowCount) throw new CustomerRepositoryError('unavailable');
+  const consumed = await client.query(`UPDATE customer.verification_intents SET state='consumed',consumed_at=clock_timestamp()
+    WHERE parent_ref=$1 AND tenant_ref=$2 AND operation_id=$3 AND state='open' AND expires_at>clock_timestamp()`,
+  [input.parentRef, input.tenantRef, input.operationId]);
+  if (!consumed.rowCount) throw new CustomerRepositoryError('unavailable');
   await finish(client, input, 'approved', 'consumed', input.sessionId);
   const result = await session(client, input, input.sessionHash, input.browserHash);
   if (!result) throw new CustomerRepositoryError('unavailable');

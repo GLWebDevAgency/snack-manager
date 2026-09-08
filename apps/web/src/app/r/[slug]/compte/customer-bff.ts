@@ -2,19 +2,20 @@ import { randomBytes } from 'node:crypto';
 import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
-  CustomerAccountBrowserRefSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER } from '@sm/contracts';
+  CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
+  CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 
-type Action = 'status' | 'browser' | 'start' | 'check' | 'recover' | 'session' | 'name' | 'logout';
+type Action = 'status' | 'browser' | 'intent' | 'start' | 'check' | 'recover' | 'session' | 'name' | 'logout';
 export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
-const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', start: 'verification',
+const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
   check: 'confirmation', recover: 'resultat', session: 'session', name: 'profil', logout: 'session' };
-const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', start: 'POST', check: 'POST',
+const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', intent: 'POST', start: 'POST', check: 'POST',
   recover: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE' };
 
 function privateResponse(response: NextResponse) {
@@ -94,6 +95,11 @@ function clientIp(request: NextRequest): string | null {
 function cookieName(slug: string, kind: 'browser' | 'session') {
   return `__Host-sm_customer_${kind}_${slug}`;
 }
+function intentCookieName(slug: string, operationId: string) {
+  // Separate names prevent delayed proof(A) headers from overwriting proof(B).
+  // SQL limits three unexpired proofs per browser; expiry is absolute/short.
+  return `__Host-sm_customer_intent_${slug}_${operationId}`;
+}
 function cookieOptions() {
   // __Host- prevents a sibling subdomain from planting a Domain cookie. Path=/
   // is mandatory for that browser-enforced boundary; the name and API remain
@@ -101,7 +107,9 @@ function cookieOptions() {
   return { httpOnly: true, secure: true, sameSite: 'strict' as const, path: '/', priority: 'high' as const };
 }
 function readCookie(request: NextRequest, slug: string, kind: 'browser' | 'session') {
-  const name = cookieName(slug, kind);
+  return readNamedCookie(request, cookieName(slug, kind));
+}
+function readNamedCookie(request: NextRequest, name: string) {
   const copies = (request.headers.get('cookie') ?? '').split(';').map(part => part.trim())
     .filter(part => part.split('=', 1)[0] === name);
   if (!copies.length) return { kind: 'absent' } as const;
@@ -177,7 +185,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (browser.kind === 'invalid' || session.kind === 'invalid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Les accès enregistrés sont ambigus. Fermez les autres accès avant de réessayer.');
     }
-    if (['start', 'check', 'recover'].includes(action) && browser.kind !== 'valid') {
+    if (['intent', 'start', 'check', 'recover'].includes(action) && browser.kind !== 'valid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Le navigateur doit confirmer son accès avant de continuer.');
     }
     if (['session', 'name', 'logout'].includes(action)
@@ -189,9 +197,20 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (action !== 'status' && action !== 'browser' && !selectedBrowser.success) {
       return failure(409, 'CUSTOMER_CONFLICT', 'La préparation de cet accès doit être vérifiée avant de continuer.');
     }
+    const publication = ['session', 'name', 'logout'].includes(action) ? CustomerAccountPublicationSchema.safeParse({
+      expectedOperationId: request.headers.get(CUSTOMER_ACCOUNT_OPERATION_HEADER), expectedCheckId: request.headers.get(CUSTOMER_ACCOUNT_CHECK_HEADER),
+    }) : null;
+    if (publication && !publication.success) return failure(409, 'CUSTOMER_CONFLICT', 'La connexion attendue doit être vérifiée.');
     const preparationRequest = action === 'browser' ? CustomerAccountBrowserRequests.browser.parse(parsed.data) : null;
     if (preparationRequest?.step === 'confirm' && browser.kind !== 'valid') return unauthorized();
     const candidateSecret = preparationRequest?.step === 'issue' ? randomBytes(32).toString('base64url') : null;
+    const intentRequest = action === 'intent' ? CustomerAccountBrowserRequests.intent.parse(parsed.data) : null;
+    const candidateProof = intentRequest?.step === 'prepare' ? randomBytes(32).toString('base64url') : null;
+    const selectedOperation = 'operationId' in parsed.data ? parsed.data.operationId : null;
+    const proof = ['start', 'check', 'recover'].includes(action) && selectedOperation
+      ? readNamedCookie(request, intentCookieName(slug, selectedOperation)) : null;
+    if (proof?.kind === 'absent') return unauthorized();
+    if (proof?.kind === 'invalid') return failure(409, 'CUSTOMER_CONFLICT', 'La preuve de cette tentative est ambiguë.');
 
     // Platform paths may serve any pilot tenant; a custom domain must resolve
     // freshly to this exact tenant. Never adopt the proxy's stale cache or a
@@ -211,7 +230,10 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       ...(preparationRequest ? { candidateSecret,
         browserSecret: preparationRequest.step !== 'prepare' && browser.kind === 'valid' ? browser.value : null } : {}),
       ...(action !== 'status' && action !== 'browser' && selectedBrowser.success ? { browserRef: selectedBrowser.data } : {}),
-      ...(['start', 'check', 'recover', 'session', 'name', 'logout'].includes(action)
+      ...(intentRequest ? { candidateProof } : {}),
+      ...(publication?.success ? publication.data : {}),
+      ...(proof?.kind === 'valid' ? { intentProof: proof.value } : {}),
+      ...(['intent', 'start', 'check', 'recover', 'session', 'name', 'logout'].includes(action)
         && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
       ...(action === 'check' ? { sessionToken: session.kind === 'valid' ? session.value : null }
         : ['session', 'name', 'logout'].includes(action) && session.kind === 'valid' ? { sessionToken: session.value } : {}),
@@ -269,7 +291,37 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
         { ...cookieOptions(), expires: new Date(preparation.expiresAt) });
       return result;
     }
-    if (action === 'check' || action === 'recover') {
+    if (action === 'intent') {
+      if (!('intent' in output.data) || !('emitCookie' in output.data)
+        || output.data.intent.operationId !== intentRequest?.operationId) return unavailable();
+      const { intent, emitCookie } = output.data;
+      if (intent.expiresAt > Date.now() + 600_000
+        || (intent.state === 'open' && intent.expiresAt <= Date.now())
+        || (intentRequest.step === 'close' && intent.state !== 'closed' && intent.state !== 'expired')) return unavailable();
+      if (emitCookie && (intentRequest.step !== 'prepare' || !candidateProof
+        || intent.state !== 'open' || intent.expiresAt <= Date.now())) return unavailable();
+      const result = privateResponse(NextResponse.json(intent));
+      if (emitCookie && candidateProof) result.cookies.set(intentCookieName(slug, intent.operationId), candidateProof,
+        { ...cookieOptions(), expires: new Date(intent.expiresAt) });
+      if (intentRequest.step === 'close') result.cookies.set(intentCookieName(slug, intent.operationId), '',
+        { ...cookieOptions(), expires: new Date(0) });
+      return result;
+    }
+    if (action === 'recover') {
+      const recovered = CustomerAccountResponses.recover.parse(output.data);
+      const selected = CustomerAccountBrowserRequests.recover.parse(parsed.data);
+      if (recovered.operationId !== selected.operationId || recovered.checkId !== selected.checkId
+        || recovered.expiresAt > Date.now() + 600_000
+        || (!['expired', 'closed', 'failed'].includes(recovered.state) && recovered.expiresAt <= Date.now())) return unavailable();
+      if (recovered.state !== 'approved') return privateResponse(NextResponse.json(recovered));
+      const { token, ...publicResult } = recovered;
+      const remaining = recovered.view.expiresAt - Date.now();
+      if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+      const result = privateResponse(NextResponse.json(publicResult));
+      result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(recovered.view.expiresAt) });
+      return result;
+    }
+    if (action === 'check') {
       if (!('token' in output.data) || !('view' in output.data)) return unavailable();
       const { token, view } = output.data;
       const remaining = view.expiresAt - Date.now();

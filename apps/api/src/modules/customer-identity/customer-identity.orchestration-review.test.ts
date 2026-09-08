@@ -1,4 +1,4 @@
-import { confirmedCustomerBrowserFixture } from './customer-browser.test-fixture';
+import { confirmedCustomerBrowserFixture, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository, type CustomerSession } from '@sm/customer';
@@ -14,7 +14,8 @@ function fixture() {
   const parent = `AC${'d'.repeat(32)}`;
   const serviceSid = `VA${'e'.repeat(32)}`;
   const phone = '+33600000001';
-  const browserRef = randomUUID();
+  const browserRef = randomUUID(), operationId = randomUUID();
+  const intentProof = Buffer.alloc(32, 38).toString('base64url');
   const browser = Buffer.alloc(32, 37).toString('base64url');
   const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 73).toString('base64'));
   const phoneHash = crypto.hash('phone', tenant, phone);
@@ -39,6 +40,7 @@ function fixture() {
   };
   const repository = {
     ...confirmedCustomerBrowserFixture(browserRef, initial + 7 * 86_400_000),
+    ...confirmedCustomerIntentFixture(operationId, initial + 600_000),
     reserve: vi.fn<CustomerIdentityRepository['reserve']>().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     recoverCheck: vi.fn<CustomerIdentityRepository['recoverCheck']>().mockResolvedValue(null),
@@ -53,9 +55,9 @@ function fixture() {
     check: vi.fn<PhoneVerificationTransport['check']>().mockResolvedValue('approved'),
   } satisfies PhoneVerificationTransport;
   const service = new CustomerIdentityService(repository, crypto, transport, () => config, () => now);
-  const start = { tenantRef: tenant, browserRef, phone, operationId: randomUUID(), browserSecret: browser,
+  const start = { tenantRef: tenant, browserRef, phone, operationId, intentProof, browserSecret: browser,
     clientIp: '127.0.0.1', humanVerified: true };
-  const check = { tenantRef: tenant, browserRef, challengeId: pending.challengeId, checkId: randomUUID(),
+  const check = { tenantRef: tenant, browserRef, operationId, intentProof, challengeId: pending.challengeId, checkId: randomUUID(),
     browserSecret: browser, code: '123456', existingSessionToken: null };
   return { service, repository, transport, config, crypto, start, check, pending, session,
     advance: (ms: number) => { now += ms; } };
@@ -118,7 +120,7 @@ describe('independent customer orchestration race and recovery checks', () => {
     });
     f.repository.recoverCheck.mockImplementation(async () => committed ? f.session : null);
     await expect(f.service.check(f.check)).rejects.toMatchObject({ reason: 'unavailable' });
-    const expectedToken = f.crypto.tokenForCheck(f.start.tenantRef, f.check.browserSecret,
+    const expectedToken = f.crypto.tokenForIntentCheck(f.start.tenantRef, f.check.browserSecret, f.check.operationId, f.check.intentProof,
       f.check.challengeId, f.check.checkId);
     const retried = await f.service.check(f.check);
     expect(retried).toMatchObject({ token: expectedToken, view: { sessionId: f.session.sessionId,

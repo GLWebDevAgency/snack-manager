@@ -80,13 +80,15 @@ export function customerBrowserPreparation(slug: string) {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   return createCustomerBrowserPreparation({ journal: customerBrowserJournal(slug), request: customerAccountRequest(slug),
     uuid: () => crypto.randomUUID(),
-    changed: () => {
-      const key = `sm:customer:invalidate:${slug}`; const nonce = crypto.randomUUID(); let sent = false;
-      try { const channel = new BroadcastChannel(key); channel.postMessage(nonce); channel.close(); sent = true; } catch { /* Try storage. */ }
-      try { localStorage.setItem(key, nonce); sent = true; } catch { /* BroadcastChannel may suffice. */ }
-      window.dispatchEvent(new Event(key));
-      if (!sent) throw new Error('Cross-tab invalidation unavailable');
-    },
+    changed: () => notifyCustomerAccountChanged(slug),
     lock: locks ? async work => await locks.request(`sm:customer:${slug}`, { mode: 'exclusive', signal: AbortSignal.timeout(15_000) }, work) : undefined,
   });
+}
+
+export function notifyCustomerAccountChanged(slug: string) {
+  const key = `sm:customer:invalidate:${slug}`; const nonce = crypto.randomUUID(); let sent = false;
+  try { const channel = new BroadcastChannel(key); channel.postMessage(nonce); channel.close(); sent = true; } catch { /* Try storage. */ }
+  try { localStorage.setItem(key, nonce); sent = true; } catch { /* BroadcastChannel may suffice. */ }
+  window.dispatchEvent(new Event(key));
+  if (!sent) throw new Error('Cross-tab invalidation unavailable');
 }

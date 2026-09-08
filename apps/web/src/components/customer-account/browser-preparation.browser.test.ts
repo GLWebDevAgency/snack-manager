@@ -64,6 +64,7 @@ beforeEach(async () => {
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
     const envelope = JSON.parse(String(init.body));
     if (url.endsWith('/session')) {
+      calls.push('session');
       const row = records.get(envelope.browserRef);
       if (!row?.confirmed || row.secret !== envelope.browserSecret || row.expiresAt <= Date.now()) return new Response(null, { status: 401 });
       return Response.json({ expiresAt: row.expiresAt, profile: { name: 'Profile fixture', phoneE164: '+33600000000', phoneVerifiedAt: Date.now() - 1_000, revision: 0 } });
@@ -197,12 +198,27 @@ describe('Customer preparation — native browser continuity', () => {
     expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
     const chosen = (await page.evaluate(() => window.preparationFixture.journal()))!.browserRef;
     const expected = records.get(chosen)!; expect(expected.secret).toBeTruthy();
+    // Explicit publication fixture so the new client actually reaches the BFF;
+    // otherwise an absent verification journal would already refuse locally.
+    await page.evaluate(async () => {
+      const open = indexedDB.open('sm-customer-preparation-v1', 1);
+      await new Promise<void>((resolve, reject) => {
+        open.onsuccess = () => {
+          const db = open.result; const tx = db.transaction('preparations', 'readwrite', { durability: 'strict' });
+          const store = tx.objectStore('preparations'), read = store.get('classfood');
+          read.onsuccess = () => store.put({ ...read.result, verification: { phase: 'completed', operationId: crypto.randomUUID(),
+            challengeId: crypto.randomUUID(), checkId: crypto.randomUUID(), expiresAt: Date.now() + 60_000 } }, 'classfood');
+          tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(Error('Fixture failed'));
+        };
+      });
+    });
     await context.addCookies([{ name: sessionCookie, value: randomBytes(32).toString('base64url'), url: origin, httpOnly: true, secure: true, sameSite: 'Strict' }]);
     holdRef = null; const held = heldResponse!; heldResponse = null; await fulfill(held.route, held.response);
     await expect.poll(async () => (await context.cookies()).find(item => item.name === browserCookie)?.value).toBe(records.get(refA)!.secret);
     const result = await page.evaluate(async () => {
       try { return await window.preparationFixture.privateRead(); } catch { return 'refused'; }
     });
-    expect(result).toBe('refused'); expect((await page.evaluate(() => window.preparationFixture.journal()))!.browserRef).toBe(chosen);
+    expect(result).toBe('refused'); expect(calls.filter(action => action === 'session')).toHaveLength(1);
+    expect((await page.evaluate(() => window.preparationFixture.journal()))!.browserRef).toBe(chosen);
   });
 });

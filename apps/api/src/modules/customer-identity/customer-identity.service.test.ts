@@ -1,4 +1,4 @@
-import { confirmedCustomerBrowserFixture } from './customer-browser.test-fixture';
+import { approvedCustomerIntentResult, confirmedCustomerBrowserFixture, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository, type CustomerSession } from '@sm/customer';
@@ -12,6 +12,9 @@ const SID = `VE${'c'.repeat(32)}`;
 const PHONE = '+33612345678';
 const TENANT = 'tenant-classfood-test';
 const BROWSER_REF = randomUUID();
+const OPERATION = randomUUID();
+const PUBLICATION = { expectedOperationId: OPERATION, expectedCheckId: randomUUID() };
+const INTENT_PROOF = Buffer.alloc(32, 35).toString('base64url');
 const BROWSER = Buffer.alloc(32, 33).toString('base64url');
 const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 19).toString('base64'));
 const phoneHash = crypto.hash('phone', TENANT, PHONE);
@@ -44,6 +47,7 @@ function configuration() {
 function fixture() {
   const repository = {
     ...confirmedCustomerBrowserFixture(BROWSER_REF, NOW + 7 * 86_400_000),
+    ...confirmedCustomerIntentFixture(OPERATION, NOW + 600_000),
     reserve: vi.fn<CustomerIdentityRepository['reserve']>().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
@@ -59,9 +63,9 @@ function fixture() {
   };
   const config = configuration();
   const service = new CustomerIdentityService(repository, crypto, transport, () => config, () => NOW);
-  const start = { tenantRef: TENANT, browserRef: BROWSER_REF, phone: PHONE, operationId: randomUUID(),
+  const start = { tenantRef: TENANT, browserRef: BROWSER_REF, phone: PHONE, operationId: OPERATION, intentProof: INTENT_PROOF,
     browserSecret: BROWSER, clientIp: '127.0.0.1', humanVerified: true as const };
-  const check = { tenantRef: TENANT, browserRef: BROWSER_REF, challengeId: pending.challengeId,
+  const check = { tenantRef: TENANT, browserRef: BROWSER_REF, operationId: OPERATION, intentProof: INTENT_PROOF, challengeId: pending.challengeId,
     checkId: randomUUID(), code: '123456', browserSecret: BROWSER,
     existingSessionToken: null };
   return { repository, transport, config, service, start, check };
@@ -71,7 +75,7 @@ describe('private customer identity orchestration', () => {
   beforeEach(() => vi.clearAllMocks());
   it.each(['session', 'updateName', 'logout'] as const)('requires a canonical browser secret before %s reaches storage', async action => {
     const f = fixture();
-    const input = { tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER,
+    const input = { ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER,
       ...(action === 'updateName' ? { name: 'Mina', expectedRevision: 0 } : action === 'logout' ? { all: false } : {}) };
     for (const patch of [{}, { browserSecret: null }, { browserSecret: 'loyalty-qr' }, { browserSecret: `${'A'.repeat(42)}B` }]) {
       await expect(f.service[action]({ ...input, ...patch })).rejects.toMatchObject({ reason: 'invalid_request' });
@@ -83,7 +87,7 @@ describe('private customer identity orchestration', () => {
   it.each(['session', 'updateName'] as const)('does not authorize %s with another browser even when the session token matches', async action => {
     const f = fixture(); const expectedHash = crypto.hash('browser', TENANT, BROWSER);
     f.repository.authenticate.mockImplementation(async input => Reflect.get(input, 'browserHash') === expectedHash ? privateSession : null);
-    await expect(f.service[action]({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER,
+    await expect(f.service[action]({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER,
       browserSecret: Buffer.alloc(32, 34).toString('base64url'),
       ...(action === 'updateName' ? { name: 'Mina', expectedRevision: 0 } : {}) })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.repository.authenticate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
@@ -96,32 +100,35 @@ describe('private customer identity orchestration', () => {
     const f = fixture(); let revoked = false;
     const browserHash = crypto.hash('browser', TENANT, BROWSER);
     f.repository.revoke.mockImplementation(async input => { if (Reflect.get(input, 'browserHash') === browserHash) revoked = true; });
-    await f.service.logout({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: Buffer.alloc(32, 34).toString('base64url'), all: true });
+    await f.service.logout({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: Buffer.alloc(32, 34).toString('base64url'), all: true });
     expect(revoked).toBe(false);
-    await f.service.logout({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, all: true });
+    await f.service.logout({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, all: true });
     expect(revoked).toBe(true);
-    expect(f.repository.revoke).toHaveBeenLastCalledWith({ tenantRef: TENANT, parentRef: PARENT, browserRef: BROWSER_REF,
+    expect(f.repository.revoke).toHaveBeenLastCalledWith({ ...PUBLICATION, tenantRef: TENANT, parentRef: PARENT, browserRef: BROWSER_REF,
       sessionHash: crypto.hash('session', TENANT, BROWSER), browserHash, all: true, now: NOW });
     expect(JSON.stringify(f.repository.revoke.mock.calls)).not.toContain(BROWSER);
   });
   it('recovers only the exact committed receipt, without claiming or checking any OTP', async () => {
-    const f = fixture(); f.repository.recoverCheck.mockResolvedValue(privateSession);
+    const f = fixture();
+    f.repository.resultIntent.mockImplementation(approvedCustomerIntentResult({ operationId: OPERATION,
+      challengeId: pending.challengeId, checkId: f.check.checkId, expiresAt: pending.expiresAt }, privateSession));
     f.config.evidence.observedAt = NOW - 86_400_000;
-    const { tenantRef, browserRef, challengeId, checkId, browserSecret } = f.check;
-    const result = await f.service.recover({ tenantRef, browserRef, challengeId, checkId, browserSecret });
+    const { tenantRef, browserRef, operationId, intentProof, checkId, browserSecret } = f.check;
+    const result = await f.service.recover({ tenantRef, browserRef, operationId, intentProof, checkId, browserSecret });
+    expect(result.state).toBe('approved'); if (result.state !== 'approved') throw new Error('Expected approval');
     expect(result.view.expiresAt).toBe(privateSession.expiresAt);
-    expect(result.token === crypto.tokenForCheck(TENANT, BROWSER, challengeId, checkId)).toBe(true);
-    expect(f.repository.recoverCheck).toHaveBeenCalledTimes(1);
+    expect(result.token === crypto.tokenForIntentCheck(TENANT, BROWSER, operationId, intentProof, pending.challengeId, checkId)).toBe(true);
+    expect(f.repository.resultIntent).toHaveBeenCalledTimes(2); expect(f.repository.recoverCheck).not.toHaveBeenCalled();
     for (const method of ['claimCheck', 'completeCheck', 'reserve', 'settleSend', 'authenticate', 'updateName', 'revoke'] as const) {
       expect(f.repository[method]).not.toHaveBeenCalled();
     }
     expect(f.transport.start).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
   });
   it('recovery without a receipt never starts a check or accepts a code field', async () => {
-    const f = fixture(); const { tenantRef, browserRef, challengeId, checkId, browserSecret } = f.check;
-    await expect(f.service.recover({ tenantRef, browserRef, challengeId, checkId, browserSecret })).rejects.toMatchObject({ reason: 'unauthorized' });
-    await expect(f.service.recover({ tenantRef, browserRef, challengeId, checkId, browserSecret, code: '123456' })).rejects.toMatchObject({ reason: 'invalid_request' });
-    expect(f.repository.recoverCheck).toHaveBeenCalledTimes(1);
+    const f = fixture(); const { tenantRef, browserRef, operationId, intentProof, checkId, browserSecret } = f.check;
+    await expect(f.service.recover({ tenantRef, browserRef, operationId, intentProof, checkId, browserSecret })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.recover({ tenantRef, browserRef, operationId, intentProof, checkId, browserSecret, code: '123456' })).rejects.toMatchObject({ reason: 'invalid_request' });
+    expect(f.repository.resultIntent).toHaveBeenCalledTimes(1); expect(f.repository.recoverCheck).not.toHaveBeenCalled();
     expect(f.repository.claimCheck).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
   });
   it('persists the complete bounded reservation BEFORE the only provider send', async () => {
@@ -242,19 +249,19 @@ describe('private customer identity orchestration', () => {
   });
   it('returns only a protected minimal profile, never a QR identity', async () => {
     const f = fixture(); const token = Buffer.alloc(32, 5).toString('base64url');
-    const view = await f.service.session({ tenantRef: TENANT, browserRef: BROWSER_REF, token, browserSecret: BROWSER });
+    const view = await f.service.session({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token, browserSecret: BROWSER });
     expect(view.profile.phoneE164).toBe(PHONE);
-    expect(f.repository.authenticate).toHaveBeenCalledWith({ tenantRef: TENANT, parentRef: PARENT, browserRef: BROWSER_REF,
+    expect(f.repository.authenticate).toHaveBeenCalledWith({ ...PUBLICATION, tenantRef: TENANT, parentRef: PARENT, browserRef: BROWSER_REF,
       sessionHash: crypto.hash('session', TENANT, token), browserHash: crypto.hash('browser', TENANT, BROWSER), now: NOW });
-    await expect(f.service.session({ tenantRef: TENANT, browserRef: BROWSER_REF, token: 'loyalty-qr', browserSecret: BROWSER })).rejects.toMatchObject({ reason: 'invalid_request' });
+    await expect(f.service.session({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: 'loyalty-qr', browserSecret: BROWSER })).rejects.toMatchObject({ reason: 'invalid_request' });
   });
   it('does not treat a storage failure as a confirmed logout', async () => {
     const f = fixture(); f.repository.revoke.mockRejectedValue(new Error('offline'));
-    await expect(f.service.logout({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, all: false })).rejects.toMatchObject({ reason: 'unavailable' });
+    await expect(f.service.logout({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, all: false })).rejects.toMatchObject({ reason: 'unavailable' });
   });
   it('encrypts explicit name changes and sends the expected revision', async () => {
     const f = fixture();
-    await f.service.updateName({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, name: '  Mina  ', expectedRevision: 0 });
+    await f.service.updateName({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, name: '  Mina  ', expectedRevision: 0 });
     const stored = f.repository.updateName.mock.calls[0]![0];
     expect(stored.expectedRevision).toBe(0);
     expect(Reflect.get(stored, 'browserHash')).toBe(crypto.hash('browser', TENANT, BROWSER));
@@ -264,7 +271,7 @@ describe('private customer identity orchestration', () => {
   });
   it('never writes a profile from an invalid session', async () => {
     const f = fixture(); f.repository.authenticate.mockResolvedValue(null);
-    await expect(f.service.updateName({ tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, name: 'Mina', expectedRevision: 0 })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.updateName({ ...PUBLICATION, tenantRef: TENANT, browserRef: BROWSER_REF, token: BROWSER, browserSecret: BROWSER, name: 'Mina', expectedRevision: 0 })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.repository.updateName).not.toHaveBeenCalled();
   });
 });

@@ -68,9 +68,34 @@ aussi un doublon après changement de parent fournisseur, sans divulguer l'ancie
 compte. Une migration de parent relève d'une procédure explicite non livrée ici.
 
 `recoverCheck` ne restitue qu'une session originale encore valide, corrélée au
-browserHash, challengeId, checkId et sessionHash exacts. Aucune extension de TTL.
+browserHash, operationId, preuve d'intention, challengeId, checkId, empreinte du
+corps et sessionHash exacts. Aucune extension de TTL.
 Les expirations sont relues après attente des verrous. Un rollback échoué détruit
 la connexion au lieu de la remettre dans le pool.
+
+## Préparation, intention et publication attendue
+
+`0003` impose la préparation navigateur confirmée et sa durée absolue de sept
+jours au maximum. `0004` ajoute les intentions, leur preuve privée émise une
+seule fois (dix minutes au maximum) et les reçus de confirmation immuables.
+La clôture avant admission écrit un tombstone ; après publication elle révoque
+seulement sa propre session encore courante, sans toucher une publication B.
+Le verrou transactionnel commun est pris avant celui du budget lorsqu'il existe.
+Préparer/clôturer une intention ne crée ni ne remet à zéro un budget fournisseur.
+
+`resultIntent` relit le résultat exact sans nouvelle vérification fournisseur.
+Un check absent ou incertain ne permet jamais un renvoi automatique. Les
+publications approuvées doivent encore correspondre à la session courante.
+Session, nom et révocation exigent `expectedOperationId`/`expectedCheckId`,
+sélecteurs non secrets vérifiés avec les cookies navigateur/session. Leur
+validité ne dépend pas de la courte expiration de la preuve de reprise.
+
+Plafonds conservateurs du pilote : 128 préparations et 128 intentions persistées
+par parent/restaurant ; trois preuves d'intention non expirées par navigateur,
+même après clôture. Ce ne sont ni des comptes ni des quotas SMS. Pas de purge
+automatique ni de hausse implicite ; politique de rétention/grande échelle à
+livrer séparément. Anciennes lignes sans liens conservées mais inertes. Déployer
+API/Web pilote fermé ; aucun down, réattribution ou effacement du journal de commande.
 
 ## Validation locale et CI
 
@@ -80,5 +105,6 @@ la connexion au lieu de la remettre dans le pool.
 rôle UUID neufs et supprime uniquement ces deux cibles. Le rôle utilisé par le
 repository n'est ni superuser, ni propriétaire, ni BYPASSRLS. Sans cible sûre,
 le runner échoue avant connexion. Les tests orchestration utilisent le vrai
-service API mais un fournisseur simulé : aucun SMS, aucune dépense, aucun HTTP
-public ou navigateur n'est validé par cette suite.
+service API mais un fournisseur simulé. Le runner enchaîne aussi les tests HTTP
+Nest→PostgreSQL locaux : aucune dépense, aucun SMS, aucune route de staging ou
+installation navigateur physique n'est validé par ces tests.

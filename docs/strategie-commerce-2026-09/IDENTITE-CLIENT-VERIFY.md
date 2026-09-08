@@ -445,9 +445,9 @@ refusé doivent être couverts par de vrais contre-tests avant ouverture de l'UI
 
 L3a.6a couvre le refus serveur des sessions remplacées et des confirmations
 déjà admises avant déconnexion. L3a.6b.1 ci-dessous traite la préparation
-concurrente sans cookie. Restent à concevoir et tester : clôture d'une intention
-invitée avant admission, journal durable des vérifications et lecture des
-résultats incertains, preuve de reprise privée
+concurrente sans cookie. L3a.6b.2 prépare la clôture d'une intention
+invitée avant admission, le journal durable des vérifications et la lecture des
+résultats incertains, avec une preuve de reprise privée
 distincte des UUID non secrets. Il ne faut ni exposer le contrôle courant au
 seul cookie navigateur ni permettre à ce cookie de récupérer arbitrairement
 une nouvelle session. Ces limites interdisent encore l'ouverture du formulaire.
@@ -458,8 +458,9 @@ carte ou commande n'est réattribuée par simple correspondance de téléphone.
 
 ### L3a.6b.1 — préparation navigateur durable, sans SMS
 
-Lot préparé sur `codex/customer-browser-preparation`, à recevoir via PR puis
-staging. **Ce n'est pas l'ouverture du formulaire d'inscription/connexion.**
+Lot reçu via #143 sur staging `9c156cff7cbc6b2af3d20596bbe6838a1e86e507`.
+[Réception et preuves](https://github.com/GLWebDevAgency/snack-manager/pull/143#issuecomment-5590338383).
+**Ce n'est pas l'ouverture du formulaire d'inscription/connexion.**
 La PWA SM Livreur #142 est reçue sur staging `4f210166af806ee60af2bb0fbcbc1fed8f8796da` ;
 [reçu et limites physiques](https://github.com/GLWebDevAgency/snack-manager/pull/142#issuecomment-5589180628).
 
@@ -527,6 +528,69 @@ Retour arrière : garder le pilote fermé, revenir au code précédent si néces
 Ne pas rouvrir l'ancienne API qui n'exigeait pas la référence de préparation.
 La suite immédiate reste la clôture d'intention avant admission et la reprise
 du résultat OTP, puis le formulaire, la récupération sûre et fidélité/historique.
+
+### L3a.6b.2 — intention privée, clôture et résultat durable
+
+Lot préparé sur `codex/customer-verification-recovery`, non reçu sur staging à
+ce relevé. Le formulaire reste fermé ; aucun appel Twilio ni nouveau compte
+public n'est créé par cette livraison technique.
+
+- Une intention reçoit un UUID public persisté **avant** le POST et un secret
+  aléatoire HttpOnly émis une seule fois. Son cookie est nommé par restaurant
+  **et intention** : une réponse A tardive n'écrase pas la preuve B. Durée
+  absolue maximale dix minutes, jamais renouvelée par une lecture.
+- `start` et `check` exigent cette preuve privée et la préparation navigateur
+  confirmée. Chaque confirmation possède son UUID et une empreinte HMAC du
+  corps : un même UUID avec un autre code n'est pas un nouvel essai valide.
+- Le résultat est une lecture de l'intention et du **check demandé**, sans
+  appel fournisseur, anti-robot ou réservation budgétaire supplémentaire.
+  Un résultat inconnu ne prouve pas l'absence d'un POST encore en vol. Une
+  reprise ne renvoie donc automatiquement ni SMS ni code, et ne change pas d'UUID.
+- Une clôture explicite peut précéder l'admission et laisse un tombstone ;
+  aucun POST tardif ne réouvre cette intention. Après publication, elle révoque
+  seulement sa propre session si elle est encore courante, jamais une session B.
+  Elle n'annule pas un SMS déjà en vol et ne rembourse pas une réservation.
+- Fermer le panneau, masquer l'onglet ou perdre le réseau **met en pause**, sans
+  clôturer. Une clôture à réponse perdue reste `closing` et peut seule être
+  rejouée de façon idempotente. La fermeture métier exige un geste explicite.
+- Le journal IndexedDB ne conserve que références, phases et expirations :
+  aucun téléphone, OTP, profil ou jeton. Sans journal valide ou Web Locks,
+  l'identité reste fermée ; aucune reconstruction depuis un cookie tardif.
+- Session, modification du nom et déconnexion exigent en plus la publication
+  attendue (`operationId` + `checkId`) du journal `completed`, vérifiée en SQL.
+  Ces UUID ne sont pas des secrets de connexion. Les cookies navigateur/session
+  restent nécessaires. Les actions sont liées à la publication qui a produit
+  la vue affichée, même si deux sessions du même compte ont des profils identiques.
+  L'expiration de la preuve de reprise à dix minutes ne raccourcit pas la session.
+
+Migration additive `0004_customer_verification_intents` : anciens reçus conservés
+mais inertes, RLS parent/restaurant, liaisons et empreintes immuables. Plafonds
+de pilote : **trois preuves non expirées par navigateur** (clôturées comprises)
+et **128 intentions persistées par parent/restaurant**, distincts des budgets SMS
+et du nombre de comptes. Pas de purge ou reset automatique. Ces plafonds exigent
+une politique d'exploitation/rétention avant ouverture à grande échelle.
+
+Preuves locales : 245 tests customer sans skip avec PostgreSQL activé ; runner
+officiel 103 PostgreSQL puis six vrais HTTP Nest→PostgreSQL ; bootstrap 88 tests
+unitaires et un upgrade PostgreSQL réel. Chromium exécute 18 parcours avec
+IndexedDB, Web Locks, cookies, BFF et contrôleur réels, dont deux onglets et une
+véritable échéance réseau de douze secondes. Son amont est simulé, pas la base
+réelle ; les preuves SQL/HTTP sont exécutées séparément. Les corrections de
+revue couvrent aussi la pause pendant une lecture asynchrone et les reçus
+terminaux sans challenge. Ces suites se recouvrent, aucun total additionné.
+
+Passe consolidée : web **2 026/2 026** (137 fichiers), API identité **562/562**
+avec sa cible PostgreSQL, contrats **493/493**. Types/lint ciblés et compilation
+API verts ; chargement réel de `AppModule` CommonJS sans démarrer Nest réussi.
+La revue A→B est protégée par deux tests Chromium supplémentaires sur nom/logout
+avec projections identiques, Web Locks et journal natifs. La CI du SHA final et
+la réception staging restent requises avant de déclarer ce lot livré.
+
+Restent distincts : formulaire accessible et clair, récupération sûre d'un
+compte après déconnexion/nouvel appareil, adhésion/rattachement fidélité,
+propriétaire des commandes et historique/réachat. Le QR de présentation ou une
+simple correspondance téléphonique ne donnent accès à aucun de ces historiques.
+La recette Verify réelle reste soumise au plafond de dépense confirmé.
 
 ## Conditions restantes avant ouverture
 

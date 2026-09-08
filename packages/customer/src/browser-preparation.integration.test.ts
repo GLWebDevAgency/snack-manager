@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
+import { prepareCustomerTestIntent } from './browser-test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
 import { withCustomerScope } from './client';
 import type { VerificationReservation } from './port';
@@ -11,7 +12,7 @@ const hash = () => randomBytes(32).toString('hex');
 const input = () => ({ parentRef: `parent_${hash().slice(0, 16)}`, tenantRef: `tenant_${hash().slice(0, 16)}`,
   browserRef: randomUUID(), browserHash: hash() });
 const scope = (i: ReturnType<typeof input>) => ({ parentRef: i.parentRef, tenantRef: i.tenantRef, browserRef: i.browserRef });
-const verification = (i: ReturnType<typeof input>): VerificationReservation => ({ ...i, operationId: randomUUID(), challengeId: randomUUID(),
+const verification = (i: ReturnType<typeof input>): VerificationReservation => ({ ...i, operationId: randomUUID(), proofHash: hash(), challengeId: randomUUID(),
   requestHash: hash(), phoneHash: hash(), globalPhoneHash: hash(), ipHash: hash(), encryptedPhone: 'fixture-only',
   serviceSid: `VA${hash().slice(0, 32)}`, evidenceReference: 'fixture', now: Date.now(), expiresAt: Date.now() + 600_000,
   planExpiresAt: Date.now() + 60_000, limits: { trialSendReservations: 50, smsUnitsReservedPerSend: 1,
@@ -36,11 +37,12 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
   }
   async function approval(i: ReturnType<typeof input>) {
     const request = verification(i);
+    await prepareCustomerTestIntent(repo, request);
     expect((await repo.reserve(request)).kind).toBe('reserved');
     await repo.settleSend({ ...request, verificationSid: `VE${hash().slice(0, 32)}` });
     const claim = { ...request, checkId: randomUUID() };
     expect(await repo.claimCheck(claim)).not.toBeNull();
-    return { ...claim, result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(),
+    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: claim.checkId, result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(),
       sessionExpiresAt: Date.now() + 604_800_000, accountId: randomUUID(), existingSessionHash: null };
   }
 

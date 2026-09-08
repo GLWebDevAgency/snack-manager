@@ -108,7 +108,7 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
 
   it('passes the original browser-bound recovery proof, without an OTP', async () => {
     const body = JSON.stringify({ browserRef: randomUUID(), browserSecret: randomBytes(32).toString('base64url'),
-      request: { challengeId: randomUUID(), checkId: randomUUID() } });
+      intentProof: randomBytes(32).toString('base64url'), request: { operationId: randomUUID(), checkId: randomUUID() } });
     const response = await post('/public/customer/classfood/recover', signed('recover', body));
     expect(response.status).toBe(200);
     expect(execute.mock.calls[0]![1]).toEqual(JSON.parse(body));
@@ -136,10 +136,12 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
     'requires a signed canonical browserRef for %s; the UUID alone never replaces its cookie', async action => {
       const secret = randomBytes(32).toString('base64url');
       const request = action === 'start' ? { phone: '+33612345678', operationId: randomUUID(), turnstileToken: 'fixture-human-token' }
-        : action === 'check' ? { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' }
-          : action === 'recover' ? { challengeId: randomUUID(), checkId: randomUUID() }
+        : action === 'check' ? { operationId: randomUUID(), challengeId: randomUUID(), checkId: randomUUID(), code: '123456' }
+          : action === 'recover' ? { operationId: randomUUID(), checkId: randomUUID() }
             : action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
       const envelope = { browserRef: randomUUID(), browserSecret: secret, request,
+        ...(['session', 'name', 'logout'].includes(action) ? { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } : {}),
+        ...(['start', 'check', 'recover'].includes(action) ? { intentProof: secret } : {}),
         ...(['check', 'session', 'name', 'logout'].includes(action) ? { sessionToken: action === 'check' ? null : secret } : {}) };
       const body = JSON.stringify(envelope), input = signed(action, body);
       const tampered = await post(`/public/customer/classfood/${action}`, { ...input,
@@ -156,6 +158,7 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
   it.each(['session', 'name', 'logout'] as const)('signs and requires the exact private browser binding for %s', async action => {
     const request = action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
     const envelope = { browserRef: randomUUID(), browserSecret: randomBytes(32).toString('base64url'),
+      expectedOperationId: randomUUID(), expectedCheckId: randomUUID(),
       sessionToken: randomBytes(32).toString('base64url'), request };
     const body = JSON.stringify(envelope); const input = signed(action, body);
     const accepted = await post(`/public/customer/classfood/${action}`, input);
@@ -173,6 +176,31 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
       expect(response.headers.get('cache-control')).toContain('no-store');
       expect(await response.text()).not.toContain(envelope.browserSecret);
     }
+  });
+
+  it.each(['prepare', 'close'] as const)('accepts the signed intent %s only with its exact browser binding', async step => {
+    const secret = randomBytes(32).toString('base64url'), operationId = randomUUID();
+    const envelope = { browserRef: randomUUID(), browserSecret: secret, candidateProof: step === 'prepare' ? randomBytes(32).toString('base64url') : null,
+      request: { step, operationId } };
+    execute.mockResolvedValue({ intent: { operationId, state: step === 'prepare' ? 'open' : 'closed', expiresAt: Date.now() + 600_000 }, emitCookie: step === 'prepare' });
+    const input = signed('intent', JSON.stringify(envelope));
+    const response = await post('/public/customer/classfood/intent', input);
+    expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'intent' }), envelope);
+    const body = await response.text(); expect(body).not.toContain(secret); expect(record).not.toHaveBeenCalled();
+    const tampered = await post('/public/customer/classfood/intent', { ...input,
+      body: JSON.stringify({ ...envelope, request: { step, operationId: randomUUID() } }) });
+    expect(tampered.status).toBe(403); expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['start', 'check', 'recover'] as const)('rejects the former proof-less %s envelope', async action => {
+    const request = action === 'start' ? { phone: '+33612345678', operationId: randomUUID(), turnstileToken: 'fixture-human' }
+      : action === 'check' ? { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' }
+        : { challengeId: randomUUID(), checkId: randomUUID() };
+    const body = { browserRef: randomUUID(), browserSecret: randomBytes(32).toString('base64url'), request,
+      ...(action === 'check' ? { sessionToken: null } : {}) };
+    const refused = await post(`/public/customer/classfood/${action}`, signed(action, JSON.stringify(body)));
+    expect(refused.status).toBe(400); expect(execute).not.toHaveBeenCalled();
   });
 
   it.each(['body', 'action', 'tenant', 'origin', 'source', 'key', 'expired'] as const)(
