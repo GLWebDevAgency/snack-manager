@@ -1,4 +1,5 @@
 import type { CustomerCheckCompletion, CustomerEnrollment, CustomerEnrollmentRepository } from './enrollment-port';
+import type { CustomerProtectedAccessRepository } from './access-port';
 /** Private consumer identity, independent of staff users and loyalty cards.
  * All dates are server epoch milliseconds. No browser supplies a tenant, parent
  * account, verified phone, quota plan or account identity to this boundary. */
@@ -114,7 +115,7 @@ export type CheckResult = 'approved' | 'pending' | 'expired' | 'locked' | 'uncer
  * Every successful reservation remains spent, including a failed/lost send.
  * Check claims must be single-flight: expired leases NEVER re-execute a remote
  * check whose outcome may have been approved. No raw token, OTP or phone here. */
-export interface CustomerIdentityRepository extends CustomerEnrollmentRepository {
+export interface CustomerIdentityRepository extends CustomerEnrollmentRepository, CustomerProtectedAccessRepository {
   prepareBrowser(input: CustomerScope & { browserRef: string }): Promise<CustomerBrowserPreparation | null>;
   issueBrowser(input: CustomerBrowserBinding & { currentBrowserHash: string | null }): Promise<{
     preparation: CustomerBrowserPreparation; emitCookie: boolean;

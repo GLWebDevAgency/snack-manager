@@ -7,6 +7,7 @@ import { Icon } from '../ui/icons';
 import { Tap } from '../order/primitives';
 import { TurnstileCheck } from '../order/TurnstileCheck';
 import { useCustomerEnrollment } from './useCustomerEnrollment';
+import { CustomerAccess } from './CustomerAccess';
 
 const primary = 'cf-press flex min-h-12 w-full items-center justify-center gap-2 rounded-ctrl bg-accent px-4 py-3 text-sm font-extrabold text-onaccent disabled:cursor-not-allowed disabled:opacity-40';
 const secondary = 'cf-press min-h-11 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40';
@@ -17,20 +18,24 @@ function mobilePhone(raw: string) {
   return /^\+33[67]\d{8}$/.test(phone) ? phone : null;
 }
 
-export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvailable, onAuthenticated, onActivity }: {
+export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvailable, accessAvailable = false, onAuthenticated, onActivity }: {
   slug: string; mode: BrandMode; registrationAvailable: boolean; smsAvailable: boolean; onAuthenticated: () => void;
   onActivity: (active: boolean) => void;
+  accessAvailable?: boolean;
 }) {
   const { state, flow } = useCustomerEnrollment(slug);
   const inputId = useId(), heading = useRef<HTMLHeadingElement>(null);
   const [phone, setPhone] = useState(''), [otp, setOtp] = useState(''), [human, setHuman] = useState<string | null>(null);
   const [answer, setAnswer] = useState(''), [saved, setSaved] = useState(false), [closeChoice, setCloseChoice] = useState(false);
   const [humanReset, setHumanReset] = useState(0), [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [signupSelected, setSignupSelected] = useState(false);
   const verification = state.record?.verification, protection = verification?.protection;
   const phase = verification?.phase, stage = protection?.stage;
   const terminal = phase && ['closed', 'expired', 'failed'].includes(phase);
   const started = verification && !terminal && phase !== 'completed';
-  useEffect(() => { onActivity(Boolean(started) || state.busy); }, [onActivity, started, state.busy]);
+  const access = state.record?.access;
+  const accessActive = access && !['completed', 'closed', 'expired'].includes(access.phase);
+  useEffect(() => { onActivity(Boolean(access ? accessActive : started) || state.busy); }, [onActivity, access, accessActive, started, state.busy]);
   useEffect(() => () => onActivity(false), [onActivity]);
   const title = phase === 'prepared' ? 'Votre numéro de téléphone' : phase === 'code' || phase === 'incorrect' ? 'Le code reçu par SMS'
     : phase === 'protecting' ? stage === 'registration_required' ? 'Créer votre clé d’accès'
@@ -45,7 +50,11 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
   useEffect(() => { if (state.outcome) heading.current?.focus({ preventScroll: true }); }, [phase, stage, state.outcome]);
   // A completed selector is not itself a signed-in session. Let the existing
   // account client own its offline/expired/logout state, without duplicating it.
-  if (state.loading || phase === 'completed' || (!registrationAvailable && !verification)) return null;
+  if (state.loading) return null;
+  if (access || (accessAvailable && !started && !signupSelected)) return <CustomerAccess state={state} flow={flow} available={accessAvailable}
+    {...(registrationAvailable && phase !== 'completed' && (!access || ['closed', 'expired'].includes(access.phase))
+      ? { onSignup: () => { if (access) void flow?.begin(); else setSignupSelected(true); } } : {})} />;
+  if (phase === 'completed' || (!registrationAvailable && !verification)) return null;
 
   async function sendSms() {
     const valid = mobilePhone(phone);
@@ -74,6 +83,7 @@ export function CustomerEnrollment({ slug, mode, registrationAvailable, smsAvail
       {!supported && <p role="status" className="text-sm leading-6 text-mut">Ce navigateur ne permet pas de protéger cet accès. Utilisez un navigateur récent. Aucun SMS n’a été envoyé.</p>}
       {registrationAvailable ? <Tap className={primary} disabled={locked || !supported} onClick={() => void flow?.begin()}>Commencer mon inscription</Tap>
         : <p className="text-sm text-mut">Les nouvelles inscriptions sont fermées pour le moment.</p>}
+      {accessAvailable && <Tap className={secondary + ' w-full'} disabled={locked} onClick={() => setSignupSelected(false)}>J’ai déjà un compte</Tap>}
       {!state.record && !state.storageError && <div className="border-t border-ink/10 pt-3">
         <Tap className="min-h-11 text-left text-sm font-semibold underline underline-offset-4" disabled={locked || !supported} onClick={() => void flow?.restore()}>Reprendre sur cet appareil</Tap>
         <p className="text-xs leading-5 text-mut">Si vous avez déjà commencé ici. Cela ne reconnecte pas votre compte personnel sans votre clé.</p>

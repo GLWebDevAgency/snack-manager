@@ -20,6 +20,7 @@ export const CUSTOMER_BROWSER_PREPARATION_MIGRATION = 1_788_894_000_000;
 export const CUSTOMER_VERIFICATION_INTENTS_MIGRATION = 1_788_901_200_000;
 export const CUSTOMER_SESSION_PUBLICATIONS_MIGRATION = 1_788_908_400_000;
 export const CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION = 1_788_915_600_000;
+export const CUSTOMER_PROTECTED_ACCESS_MIGRATION = 1_788_922_800_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -199,6 +200,16 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
     'preserve_check_outcome',
   ].map((name) =>
     introduced('function', 'customer', name, 'customer', CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION),
+  ),
+  ...['credential_access_attempts', 'account_recovery_grants', 'credential_auth_reservations'].map((name) =>
+    introduced('table', 'customer', name, 'customer', CUSTOMER_PROTECTED_ACCESS_MIGRATION),
+  ),
+  ...[
+    'preserve_credential_access_attempt',
+    'preserve_account_recovery_grant',
+    'preserve_credential_auth_reservation',
+  ].map((name) =>
+    introduced('function', 'customer', name, 'customer', CUSTOMER_PROTECTED_ACCESS_MIGRATION),
   ),
 ] as const;
 

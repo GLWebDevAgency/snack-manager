@@ -10,6 +10,9 @@ import type { PhoneVerificationTransport } from './phone-verification.port';
 import { SimpleWebAuthnPasskeyVerifier } from './passkey-verifier';
 import type { PasskeyVerifier } from './passkey-verifier.port';
 import { protectCustomerEnrollment } from './customer-protection';
+import { loginCustomerPasskey } from './customer-passkey-login';
+import { recoverCustomerAccount } from './customer-account-recovery';
+import { CustomerCredentialAccessError, type CustomerCredentialAccessPort } from './customer-credential-access.port';
 import { costEvidenceReferenceOf, CustomerVerificationModeSchema, paidBudgetOf, planCustomerPhoneVerification,
   type CustomerVerificationMode, type ReservedCustomerVerificationPlan } from './verification-plan';
 
@@ -35,6 +38,9 @@ const checkSchema = z.strictObject({
 const recoverSchema = intentBindingSchema.extend({ checkId: uuid.nullable() });
 const protectionSchema = browserBindingSchema.extend({ intentProof: token,
   origin: z.string().min(1).max(200), request: CustomerAccountBrowserRequests.protection });
+const credentialAccessShape = { intentProof: token, origin: z.string().min(1).max(200), clientIp: z.string().min(1).max(160) };
+const passkeyLoginSchema = browserBindingSchema.extend({ ...credentialAccessShape, request: CustomerAccountBrowserRequests.passkey });
+const accountRecoverySchema = browserBindingSchema.extend({ ...credentialAccessShape, request: CustomerAccountBrowserRequests.recovery });
 const sessionSchema = browserBindingSchema.extend({ token, expectedOperationId: uuid, expectedCheckId: uuid });
 const browserSchema = z.strictObject({ tenantRef: tenant, request: CustomerAccountBrowserRequests.browser,
   browserSecret: token.nullable(), candidateSecret: token.nullable() }).refine(value =>
@@ -366,6 +372,32 @@ export class CustomerIdentityService {
     });
   }
 
+  async passkey(raw: unknown) {
+    return this.protect(async () => this.credentialAccess(this.parse(passkeyLoginSchema, raw), loginCustomerPasskey));
+  }
+
+  async recovery(raw: unknown) {
+    return this.protect(async () => this.credentialAccess(this.parse(accountRecoverySchema, raw), recoverCustomerAccount));
+  }
+
+  private async credentialAccess<Request extends { operationId: string; attemptId: string }, Result>(
+    input: BrowserBinding & { intentProof: string; origin: string; clientIp: string; request: Request },
+    work: (port: CustomerCredentialAccessPort, request: Request) => Promise<Result>,
+  ): Promise<Result> {
+    const bound = { ...this.binding(input), operationId: input.request.operationId, intentProof: input.intentProof };
+    const scope = this.intentScope(bound);
+    const result = await work({ repository: this.repository, crypto: this.crypto, verifier: this.passkeys,
+      binding: { ...scope, attemptId: input.request.attemptId }, source: input.clientIp,
+      browserSecret: input.browserSecret, intentProof: input.intentProof, origin: input.origin, now: this.now,
+      browser: () => this.requireBrowser(this.binding(input)), intent: () => this.requireIntent(bound),
+      view: async session => { const value = await this.boundView(input, scope, session);
+        return { expiresAt: value.expiresAt, profile: value.profile }; },
+    }, input.request);
+    await this.requireBrowser(this.binding(input));
+    if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) throw new CustomerIdentityError('unavailable');
+    return result;
+  }
+
   async session(raw: unknown): Promise<CustomerSessionView> {
     return this.protect(async () => {
       const input = this.parse(sessionSchema, raw);
@@ -524,6 +556,7 @@ export class CustomerIdentityService {
     try { return await work(); }
     catch (error) {
       if (error instanceof CustomerIdentityError) throw error;
+      if (error instanceof CustomerCredentialAccessError) throw new CustomerIdentityError('unauthorized');
       // Never attach cause, SQL parameters, raw provider body or an OTP.
       throw new CustomerIdentityError('unavailable');
     }

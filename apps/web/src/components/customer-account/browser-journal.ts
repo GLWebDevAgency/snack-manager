@@ -17,10 +17,25 @@ export const CustomerVerificationJournalSchema = z.strictObject({
   protection: CustomerProtectionJournalSchema.optional(),
 });
 export type CustomerVerificationJournal = z.infer<typeof CustomerVerificationJournalSchema>;
+const accessBase = {
+  operationId: CustomerAccountBrowserRefSchema, attemptId: CustomerAccountBrowserRefSchema,
+  phase: z.enum(['preparing', 'prepared', 'options', 'asserting', 'grant', 'protecting', 'completed', 'closing', 'closed', 'expired', 'failed']),
+  expiresAt: z.number().int().positive().nullable(),
+};
+export const CustomerAccessJournalSchema = z.discriminatedUnion('method', [
+  z.strictObject({ ...accessBase, method: z.literal('passkey'),
+    phase: z.enum(['preparing', 'prepared', 'options', 'asserting', 'completed', 'closing', 'closed', 'expired', 'failed']) }),
+  z.strictObject({ ...accessBase, method: z.literal('recovery'), protection: CustomerProtectionJournalSchema.optional(),
+    phase: z.enum(['preparing', 'prepared', 'grant', 'protecting', 'completed', 'closing', 'closed', 'expired', 'failed']) })
+    .refine(value => (value.phase !== 'protecting' || Boolean(value.protection))
+      && (value.phase !== 'completed' || Boolean(value.protection?.activationId))),
+]);
+export type CustomerAccessJournal = z.infer<typeof CustomerAccessJournalSchema>;
 export const CustomerBrowserJournalSchema = z.strictObject({
   version: z.literal(1), browserRef: CustomerAccountBrowserRefSchema,
   phase: z.enum(['preparing', 'issuing', 'confirming', 'ready']),
   verification: CustomerVerificationJournalSchema.optional(),
+  access: CustomerAccessJournalSchema.optional(),
 });
 export type CustomerBrowserJournal = z.infer<typeof CustomerBrowserJournalSchema>;
 export type CustomerBrowserJournalStore = {
@@ -111,6 +126,18 @@ export async function selectedCustomerBrowser(slug: string): Promise<string | nu
 
 export async function selectedCustomerPublication(slug: string): Promise<CustomerAccountPublication | null> {
   const record = await customerBrowserJournal(slug).read();
+  return customerPublicationOf(record);
+}
+export function customerPublicationOf(record: CustomerBrowserJournal | null): CustomerAccountPublication | null {
+  if (record?.phase !== 'ready') return null;
+  // Presence itself fences the legacy receipt, including after a failed/closed
+  // access. Never let a late session(A) cookie select an old OTP publication.
+  if (record.access) {
+    const access = record.access;
+    const publicationId = access.method === 'passkey' ? access.attemptId : access.protection?.activationId;
+    return access.phase === 'completed' && publicationId
+      ? { expectedOperationId: access.operationId, expectedCheckId: publicationId } : null;
+  }
   const verification = record?.verification;
   return record?.phase === 'ready' && verification?.phase === 'completed' && verification.checkId
     ? { expectedOperationId: verification.operationId, expectedCheckId: verification.protection?.activationId ?? verification.checkId } : null;

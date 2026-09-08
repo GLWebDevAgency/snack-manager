@@ -29,8 +29,11 @@ export async function customerPasskeyFixture(origin: string) {
     return {
       register: async (optionsJSON: PublicKeyCredentialCreationOptionsJSON) => CustomerPasskeyRegistrationSchema.parse(
         await page.evaluate(options => (window as unknown as FixtureWindow).fixtureKeys.startRegistration({ optionsJSON: options }), optionsJSON)),
-      authenticate: async (optionsJSON: PublicKeyCredentialRequestOptionsJSON) => CustomerPasskeyAssertionSchema.parse(
-        await page.evaluate(options => (window as unknown as FixtureWindow).fixtureKeys.startAuthentication({ optionsJSON: options }), optionsJSON)),
+      // Selecting one of this virtual device's keys models the user's account
+      // chooser. The challenge/RP remain the exact server options.
+      authenticate: async (optionsJSON: PublicKeyCredentialRequestOptionsJSON, chosenCredentialId?: string) => CustomerPasskeyAssertionSchema.parse(
+        await page.evaluate(options => (window as unknown as FixtureWindow).fixtureKeys.startAuthentication({ optionsJSON: options }),
+          chosenCredentialId ? { ...optionsJSON, allowCredentials: [{ type: 'public-key' as const, id: chosenCredentialId }] } : optionsJSON)),
       close: () => browser.close(),
     };
   } catch (error) { await browser.close(); throw error; }

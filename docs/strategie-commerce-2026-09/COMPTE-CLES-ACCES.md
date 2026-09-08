@@ -2,7 +2,7 @@
 
 Décision du fondateur, 8 septembre 2026 : **clé d’accès + code de secours** pour
 la reconnexion, en conservant la vérification initiale du téléphone. Ce document
-décrit la cible et distingue le socle testé du parcours qui reste à raccorder.
+décrit les lots successifs et distingue le parcours testé de son ouverture réelle.
 Il ne vaut ni ouverture du pilote, ni autorisation de consommation Verify.
 
 ## Lot préparé : primitives et reçu de session commun
@@ -101,11 +101,12 @@ réponses perdues. Ces nombres se recouvrent avec les suites ciblées et ne
 constituent pas une recette SMS ou appareil physique. Captures inspectées aux
 largeurs 320, 390 et 1440 px avec une identité de fixture, pas celle d'un client.
 
-**Ce lot n'ouvre pas les comptes publics.** La reconnexion passkey,
-la récupération et la remise en protection restent à raccorder avant ouverture ;
+**Le lot 0006 n'ouvre pas les comptes publics.** À cette étape, la reconnexion
+passkey, la récupération et la remise en protection restent à raccorder ;
 `accessAvailable` demeure faux. Aucun SMS, paiement ni production autorisé par
-cette livraison. Le statut de déploiement doit être établi séparément sur la
-révision réellement servie, pas déduit de ce document.
+cette livraison. La PR #147 est fusionnée vers `develop` à la révision
+`44ae82bfe27fb523a3dbdb5855222cdaea2f8c7c`. Son statut de déploiement doit être
+établi séparément sur la révision réellement servie, pas déduit de ce document.
 
 Pour la récupération suivante, le choix retenu est une preuve provisoire liée
 à l'intention, sans consommation anticipée du seul secours. La consommation
@@ -113,6 +114,61 @@ définitive, le remplacement de clé et de secours et la révocation des ancienn
 sessions seront atomiques, après confirmation de toutes les nouvelles preuves.
 Une interruption ne doit donc pas rendre définitivement irrécupérable un compte
 dont le propriétaire a justement perdu sa clé.
+
+## Lot reconnexion et récupération — 0007
+
+Le panneau **Mon compte** propose la reconnexion par clé découvrable, ou le code
+de secours. Les deux passent par les contrats stricts BFF/API et PostgreSQL :
+aucune identification par numéro ou QR. La signature exige la vérification de
+l'utilisateur et son `userHandle`, le challenge durable de l'intention, le RP
+et le restaurant exacts. Le claim précède la cryptographie ; le compteur, la
+version du compte, l'intention et sa génération sont recontrôlés au commit.
+Une signature refusée produit un résultat terminal, pas une deuxième
+vérification automatique. Un résultat perdu se relit sans renouveler la session.
+
+Le bon secours ouvre uniquement une remise en protection provisoire exclusive.
+Il ne dévoile pas le compte, ne consomme pas encore le code et n'invalide pas les
+anciens accès. Après création **et assertion** de la nouvelle clé, un nouveau
+secours doit être ressaisi. Le commit final consomme l'ancien code, révoque
+l'ancienne clé et les anciennes sessions, écrit les nouvelles preuves et publie
+la session ensemble. Une interruption avant ce commit laisse l'ancien secours
+utilisable après clôture ou expiration du grant. Une reprise après commit lit
+le reçu exact ; elle ne consomme ni ne génère de code supplémentaire.
+
+Les admissions ont leurs limites durables indépendantes des SMS : 5 par
+intention, 20 par navigateur/heure, 30 par source/15 minutes, 300 par
+restaurant/heure, 1000 par parent/heure. Il s'agit des plafonds conservateurs du
+pilote, pas de quotas commerciaux. L'horloge SQL fait autorité et les rejeux ne
+remettent aucun compteur à zéro. Aucune dépense ni lecture de financement pour
+la reconnexion. Le pilote global fermé reste fermé ; `accessAvailable: true`
+ne s'expose que derrière sa configuration explicitement autorisée.
+
+Le journal IndexedDB ne conserve que les identifiants publics d'étapes. Un
+parcours d'accès engagé masque toute ancienne publication d'inscription,
+également s'il est suspendu ou expiré. Verrou Web Locks, CAS local, actions de
+reprise explicites et lecture du reçu empêchent une réponse tardive d'adopter
+une autre session. Une réponse d'intention perdue se distingue d'une assertion
+incertaine ; aucune cérémonie native ne redémarre automatiquement.
+
+Preuves locales du lot : 165 tests PostgreSQL puis 11 HTTP Nest→PostgreSQL,
+sans skip dans le runner dédié ; 124 tests bootstrap avec upgrade réel
+0006→0007 et rôle ordinaire. Les signatures sont produites par un
+authentificateur virtuel Chromium, le fournisseur SMS est simulé. La recette
+web passe 2203 tests sur 145 fichiers, dont 14 scénarios natifs d'accès et 11
+d'inscription : déconnexion/reconnexion, secours, réponses perdues, Web Locks
+entre onglets, stockage réel et petits écrans. API générale : 3310 tests passent,
+585 scénarios à services externes sont ignorés dans cette commande ; les 11 HTTP
+ci-dessus sont exécutés séparément avec PostgreSQL. Contrats : 529 tests verts.
+Typage/lint : 33 tâches ; build : 25 tâches ; autres suites Turbo : 17 tâches.
+Ces totaux se recouvrent, ne pas les additionner. Ces preuves ne sont ni une recette SMS
+réelle, ni une validation sur téléphone physique. Le déploiement de ce lot doit
+encore être reçu sur son propre commit.
+
+**L'identité forte ne rattache pas encore automatiquement les cartes et
+commandes historiques.** Les commandes de cet appareil gardent leurs preuves
+propres ; le compte n'adopte pas un historique par correspondance de téléphone.
+Le raccord métier, son préremplissage et ses droits restent un lot distinct à
+vérifier avant d'annoncer un compte client unifié.
 
 ## Parcours complet à recevoir avant ouverture
 

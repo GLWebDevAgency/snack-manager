@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'session', 'name', 'logout']);
+export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout']);
 export type CustomerAccountAction = z.infer<typeof CustomerAccountActionSchema>;
 export const CUSTOMER_ACCOUNT_TURNSTILE_ACTION = 'customer-account-start';
 export const customerAccountTurnstileData = (slug: string, operationId: string) => `${slug}_${operationId}`;
@@ -78,7 +78,35 @@ export const CustomerProtectionRequestSchema = z.discriminatedUnion('step', [
   z.strictObject({ step: z.literal('activation-result'), ...enrollmentBinding, activationId: uuid }),
 ]);
 export type CustomerProtectionRequest = z.infer<typeof CustomerProtectionRequestSchema>;
-export const customerAccountRequestLimit = (action: CustomerAccountAction) => action === 'protection' ? 65_536 : 4096;
+const accessBinding = { operationId: uuid, attemptId: uuid };
+export const CustomerPasskeyLoginRequestSchema = z.discriminatedUnion('step', [
+  z.strictObject({ step: z.literal('options'), ...accessBinding }),
+  z.strictObject({ step: z.literal('assert'), ...accessBinding, response: CustomerPasskeyAssertionSchema.extend({
+    response: CustomerPasskeyAssertionSchema.shape.response.extend({ userHandle: token }),
+  }) }),
+  z.strictObject({ step: z.literal('result'), ...accessBinding }),
+]);
+export type CustomerPasskeyLoginRequest = z.infer<typeof CustomerPasskeyLoginRequestSchema>;
+export const CustomerRecoveryGrantSchema = z.strictObject({ ...accessBinding, expiresAt: timestamp,
+  stage: z.enum(['registration_required', 'assertion_required', 'recovery_required']),
+  // Number of replacement candidates in this grant, NOT the private account's
+  // absolute recovery version. That value never comes from the browser.
+  recoveryVersion: z.number().int().min(0).max(3),
+});
+export type CustomerRecoveryGrant = z.infer<typeof CustomerRecoveryGrantSchema>;
+export const CustomerRecoveryRequestSchema = z.discriminatedUnion('step', [
+  z.strictObject({ step: z.literal('begin'), ...accessBinding, code: recoveryInput }),
+  z.strictObject({ step: z.literal('state'), ...accessBinding }),
+  z.strictObject({ step: z.literal('registration-options'), ...accessBinding, registrationId: uuid }),
+  z.strictObject({ step: z.literal('register'), ...accessBinding, registrationId: uuid, response: CustomerPasskeyRegistrationSchema }),
+  z.strictObject({ step: z.literal('assertion-options'), ...accessBinding, assertionId: uuid }),
+  z.strictObject({ step: z.literal('assert'), ...accessBinding, assertionId: uuid, response: CustomerPasskeyAssertionSchema }),
+  z.strictObject({ step: z.literal('recovery-code'), ...accessBinding, rotationId: uuid, expectedVersion: z.number().int().min(0).max(2) }),
+  z.strictObject({ step: z.literal('activate'), ...accessBinding, activationId: uuid, recoveryVersion: z.number().int().min(1).max(3), code: recoveryInput }),
+  z.strictObject({ step: z.literal('activation-result'), ...accessBinding, activationId: uuid }),
+]);
+export type CustomerRecoveryRequest = z.infer<typeof CustomerRecoveryRequestSchema>;
+export const customerAccountRequestLimit = (action: CustomerAccountAction) => ['protection', 'passkey', 'recovery'].includes(action) ? 65_536 : 4096;
 
 /** Browser DTOs never carry the HttpOnly identities or server attestations. */
 export const CustomerAccountBrowserRequests = {
@@ -93,6 +121,8 @@ export const CustomerAccountBrowserRequests = {
   check: z.strictObject({ operationId: uuid, challengeId: uuid, checkId: uuid, code: z.string().regex(/^\d{6}$/) }),
   recover: z.strictObject({ operationId: uuid, checkId: uuid.nullable() }),
   protection: CustomerProtectionRequestSchema,
+  passkey: CustomerPasskeyLoginRequestSchema,
+  recovery: CustomerRecoveryRequestSchema,
   session: empty,
   name: z.strictObject({ name, expectedRevision: revision }),
   logout: z.strictObject({ all: z.boolean() }),
@@ -113,6 +143,8 @@ export const CustomerAccountEnvelopes = {
   check: z.strictObject({ browserRef: uuid, browserSecret: token, intentProof: token, sessionToken: token.nullable(), request: CustomerAccountBrowserRequests.check }),
   recover: z.strictObject({ browserRef: uuid, browserSecret: token, intentProof: token, request: CustomerAccountBrowserRequests.recover }),
   protection: z.strictObject({ browserRef: uuid, browserSecret: token, intentProof: token, request: CustomerAccountBrowserRequests.protection }),
+  passkey: z.strictObject({ browserRef: uuid, browserSecret: token, intentProof: token, request: CustomerAccountBrowserRequests.passkey }),
+  recovery: z.strictObject({ browserRef: uuid, browserSecret: token, intentProof: token, request: CustomerAccountBrowserRequests.recovery }),
   session: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.session }),
   name: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.name }),
   logout: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
@@ -167,6 +199,28 @@ export const CustomerProtectionPublicResponseSchema = z.discriminatedUnion('stat
 ]);
 export type CustomerProtectionResponse = z.infer<typeof CustomerProtectionResponseSchema>;
 export type CustomerProtectionPublicResponse = z.infer<typeof CustomerProtectionPublicResponseSchema>;
+const credentialAuthenticated = { state: z.literal('authenticated'), operationId: uuid, publicationId: uuid, view: CustomerAccountViewSchema };
+const credentialPending = [
+  z.strictObject({ state: z.literal('unresolved'), ...accessBinding, expiresAt: timestamp }),
+  z.strictObject({ state: z.literal('failed'), ...accessBinding, expiresAt: timestamp }),
+] as const;
+const loginPending = [...credentialPending,
+  z.strictObject({ state: z.literal('options'), ...accessBinding, expiresAt: timestamp, options: CustomerPasskeyAssertionOptionsSchema }),
+] as const;
+export const CustomerPasskeyLoginResponseSchema = z.discriminatedUnion('state', [...loginPending, z.strictObject({ ...credentialAuthenticated, token })]);
+export const CustomerPasskeyLoginPublicResponseSchema = z.discriminatedUnion('state', [...loginPending, z.strictObject(credentialAuthenticated)]);
+export type CustomerPasskeyLoginResponse = z.infer<typeof CustomerPasskeyLoginResponseSchema>;
+export type CustomerPasskeyLoginPublicResponse = z.infer<typeof CustomerPasskeyLoginPublicResponseSchema>;
+const recoveryPending = [...credentialPending,
+  z.strictObject({ state: z.literal('recovery'), recovery: CustomerRecoveryGrantSchema }),
+  z.strictObject({ state: z.literal('registration-options'), recovery: CustomerRecoveryGrantSchema, registrationId: uuid, options: CustomerPasskeyRegistrationOptionsSchema }),
+  z.strictObject({ state: z.literal('assertion-options'), recovery: CustomerRecoveryGrantSchema, assertionId: uuid, options: CustomerPasskeyAssertionOptionsSchema }),
+  z.strictObject({ state: z.literal('recovery-code'), recovery: CustomerRecoveryGrantSchema, code: z.string().regex(/^SM1(?:-[A-F0-9]{4}){8}$/).nullable() }),
+] as const;
+export const CustomerRecoveryResponseSchema = z.discriminatedUnion('state', [...recoveryPending, z.strictObject({ ...credentialAuthenticated, token })]);
+export const CustomerRecoveryPublicResponseSchema = z.discriminatedUnion('state', [...recoveryPending, z.strictObject(credentialAuthenticated)]);
+export type CustomerRecoveryResponse = z.infer<typeof CustomerRecoveryResponseSchema>;
+export type CustomerRecoveryPublicResponse = z.infer<typeof CustomerRecoveryPublicResponseSchema>;
 export const CustomerAccountResponses = {
   status: z.strictObject({ available: z.boolean(), registrationAvailable: z.boolean().optional(), accessAvailable: z.boolean().optional() }),
   browser: z.strictObject({ preparation: CustomerBrowserPreparationSchema, emitCookie: z.boolean() })
@@ -177,6 +231,8 @@ export const CustomerAccountResponses = {
   check: CustomerCheckResponseSchema,
   recover: CustomerVerificationResultSchema,
   protection: CustomerProtectionResponseSchema,
+  passkey: CustomerPasskeyLoginResponseSchema,
+  recovery: CustomerRecoveryResponseSchema,
   session: CustomerAccountViewSchema,
   name: CustomerAccountViewSchema,
   logout: z.undefined(),

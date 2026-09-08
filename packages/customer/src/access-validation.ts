@@ -1,0 +1,30 @@
+import { z } from 'zod';
+import { intentBindingSchema } from './validation';
+import { enrollmentRecordKeySchema } from './enrollment-validation';
+const uuid = z.string().uuid().regex(/^[a-f0-9-]+$/), hash = z.string().regex(/^[a-f0-9]{64}$/);
+const token = z.string().regex(/^[A-Za-z0-9_-]{43}$/).refine(v => Buffer.from(v, 'base64url').toString('base64url') === v);
+const credentialId = z.string().regex(/^[A-Za-z0-9_-]{1,2048}$/).refine(v => Buffer.from(v, 'base64url').toString('base64url') === v);
+const assertion = z.strictObject({ credentialId, counter: z.number().int().min(0).max(4294967295),
+  deviceType: z.enum(['singleDevice', 'multiDevice']), backedUp: z.boolean() });
+const scope = { origin: z.string().url().max(2048), rpId: z.string().min(1).max(253) };
+const exact = (v: { origin: string; rpId: string }) => { try { const u = new URL(v.origin);
+  return u.protocol === 'https:' && u.origin === v.origin && u.hostname === v.rpId && !u.username && !u.password && !u.port;
+} catch { return false; } };
+export const binding = intentBindingSchema.extend({ attemptId: uuid });
+const candidate = { sessionId: uuid, sessionHash: hash, sessionExpiresAt: z.number().int().min(0).max(8_640_000_000_000_000) };
+export const preparePasskeyLogin = binding.extend({ sourceHash: hash, ...scope, challenge: token }).refine(exact);
+export const claimPasskeyLogin = binding.extend({ requestHash: hash, credentialId, userHandle: token });
+export const completePasskeyLogin = binding.extend({ requestHash: hash, assertion: assertion.nullable(), ...candidate });
+export const resultPasskeyLogin = binding.extend({ sessionHash: hash.nullable() });
+export const beginAccountRecovery = binding.extend({ sourceHash: hash, requestHash: hash, codeHash: hash });
+export const readAccountRecovery = binding;
+export const prepareRecoveryKey = binding.extend({ registrationId: uuid, ...scope, challenge: token, userHandle: token }).refine(exact);
+export const readRecoveryKey = binding.extend({ registrationId: uuid });
+export const recordRecoveryKey = binding.extend({ registrationId: uuid, requestHash: hash, credential: enrollmentRecordKeySchema.shape.credential });
+export const prepareRecoveryAssertion = binding.extend({ assertionId: uuid, ...scope, challenge: token }).refine(exact);
+export const readRecoveryAssertion = binding.extend({ assertionId: uuid });
+export const recordRecoveryAssertion = binding.extend({ assertionId: uuid, requestHash: hash, ...assertion.shape });
+export const issueRecoveryReplacement = binding.extend({ rotationId: uuid, expectedVersion: z.number().int().min(0).max(3), codeHash: hash });
+export const recoverAccountRecoveryActivation = binding.extend({ activationId: uuid, sessionHash: hash });
+export const activateAccountRecovery = binding.extend({ activationId: uuid, requestHash: hash,
+  recoveryVersion: z.number().int().min(1).max(3), codeHash: hash, ...candidate });

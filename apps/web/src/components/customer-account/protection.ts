@@ -72,7 +72,7 @@ export function createCustomerProtection(port: Port) {
     try { return await port.lock(async () => {
       if (!current(version)) return { kind: 'paused' };
       const record = await port.journal.read();
-      if (record?.phase !== 'ready' || record.verification?.phase !== 'protecting'
+      if (record?.phase !== 'ready' || record.access || record.verification?.phase !== 'protecting'
         || !record.verification.checkId || !record.verification.protection) return { kind: 'blocked' };
       return work(record as Record, version);
     }); } catch { return { kind: current(version) ? 'uncertain' : 'paused' }; }

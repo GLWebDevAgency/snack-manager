@@ -6,6 +6,21 @@ import type { CustomerIdentityRepository, CustomerSession } from '@sm/customer';
  * real PostgreSQL suites exercise those boundaries separately. */
 export function confirmedCustomerBrowserFixture(browserRef: string, expiresAt: number) {
   return {
+    preparePasskeyLogin: vi.fn<CustomerIdentityRepository['preparePasskeyLogin']>().mockResolvedValue(null),
+    claimPasskeyLogin: vi.fn<CustomerIdentityRepository['claimPasskeyLogin']>().mockResolvedValue(null),
+    completePasskeyLogin: vi.fn<CustomerIdentityRepository['completePasskeyLogin']>().mockResolvedValue(null),
+    resultPasskeyLogin: vi.fn<CustomerIdentityRepository['resultPasskeyLogin']>().mockResolvedValue(null),
+    beginAccountRecovery: vi.fn<CustomerIdentityRepository['beginAccountRecovery']>().mockResolvedValue(null),
+    readAccountRecovery: vi.fn<CustomerIdentityRepository['readAccountRecovery']>().mockResolvedValue(null),
+    prepareRecoveryKey: vi.fn<CustomerIdentityRepository['prepareRecoveryKey']>().mockResolvedValue(null),
+    readRecoveryKey: vi.fn<CustomerIdentityRepository['readRecoveryKey']>().mockResolvedValue(null),
+    recordRecoveryKey: vi.fn<CustomerIdentityRepository['recordRecoveryKey']>().mockResolvedValue(null),
+    prepareRecoveryAssertion: vi.fn<CustomerIdentityRepository['prepareRecoveryAssertion']>().mockResolvedValue(null),
+    readRecoveryAssertion: vi.fn<CustomerIdentityRepository['readRecoveryAssertion']>().mockResolvedValue(null),
+    recordRecoveryAssertion: vi.fn<CustomerIdentityRepository['recordRecoveryAssertion']>().mockResolvedValue(null),
+    issueRecoveryReplacement: vi.fn<CustomerIdentityRepository['issueRecoveryReplacement']>().mockResolvedValue(null),
+    activateAccountRecovery: vi.fn<CustomerIdentityRepository['activateAccountRecovery']>().mockResolvedValue(null),
+    recoverAccountRecoveryActivation: vi.fn<CustomerIdentityRepository['recoverAccountRecoveryActivation']>().mockResolvedValue(null),
     readEnrollment: vi.fn<CustomerIdentityRepository['readEnrollment']>().mockResolvedValue(null),
     prepareEnrollmentKey: vi.fn<CustomerIdentityRepository['prepareEnrollmentKey']>().mockResolvedValue(null),
     readEnrollmentKey: vi.fn<CustomerIdentityRepository['readEnrollmentKey']>().mockResolvedValue(null),

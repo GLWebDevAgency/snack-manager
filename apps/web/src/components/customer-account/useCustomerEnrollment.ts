@@ -5,6 +5,7 @@ import { customerBrowserJournal, type CustomerBrowserJournal } from './browser-j
 import { customerBrowserPreparation } from './browser-preparation';
 import { customerVerification } from './verification';
 import { customerProtection } from './protection';
+import { customerAccess } from './access';
 
 type Snapshot = { record: CustomerBrowserJournal | null; loading: boolean; busy: boolean;
   message: string | null; code: string | null; clearInputs: number; outcome: string | null; storageError: boolean };
@@ -41,13 +42,20 @@ function runtime(slug: string) {
   const preparation = customerBrowserPreparation(slug, announce);
   const verification = customerVerification(slug, active, announce);
   const protection = customerProtection(slug, active, announce);
+  const access = customerAccess(slug, active, announce);
   async function read(version = generation) {
     try {
       const record = await journal.read();
       if (mounted && generation === version) {
-        publish({ record, loading: false, storageError: false }); clearTimeout(expiry);
-        const until = record?.verification?.expiresAt;
-        if (until && record.verification?.phase !== 'completed' && until > Date.now()) expiry = setTimeout(pause, until - Date.now());
+        const selected = record?.access ?? record?.verification;
+        // A final logout notification may reach the newly mounted guest form.
+        // Rereading public terminal/absent state can unlock its initial choices;
+        // it neither restores a private view nor resumes an unfinished action.
+        const idleAgain = state.outcome === 'paused' && active()
+          && (!selected || ['completed', 'closed', 'expired'].includes(selected.phase));
+        publish({ record, loading: false, storageError: false, ...(idleAgain ? { outcome: null, message: null } : {}) }); clearTimeout(expiry);
+        const until = selected?.expiresAt;
+        if (until && selected?.phase !== 'completed' && until > Date.now()) expiry = setTimeout(pause, until - Date.now());
       }
       return record;
     } catch {
@@ -57,7 +65,7 @@ function runtime(slug: string) {
     }
   }
   function pause() {
-    generation++; verification.pause(); protection.pause();
+    generation++; verification.pause(); protection.pause(); access.pause();
     publish({ code: null, clearInputs: state.clearInputs + 1, outcome: 'paused', message: messages.paused!, loading: false });
   }
   const incoming = () => { if (!ownNotification) { pause(); void read().catch(() => undefined); } };
@@ -71,7 +79,12 @@ function runtime(slug: string) {
       const result = await work();
       if (active() && generation === version) {
         await read(version);
-        if (active() && generation === version) publish({ outcome: result.kind, message: result.message ?? messages[result.kind] ?? null,
+        const accessMessages: Record<string, string> = {
+          uncertain: 'Cette connexion n’est pas confirmée. Vérifiez son résultat avant de continuer.',
+          failed: 'Cette tentative a été refusée définitivement. Vous pouvez en préparer une nouvelle.',
+          closed: 'Cette démarche a été fermée. Aucun autre accès n’a été déconnecté.',
+        };
+        if (active() && generation === version) publish({ outcome: result.kind, message: result.message ?? (state.record?.access ? accessMessages[result.kind] : undefined) ?? messages[result.kind] ?? null,
           code: result.kind === 'recovery-code' ? result.code ?? null : null });
       }
     } catch { if (active() && generation === version) publish({ outcome: 'uncertain', message: messages.uncertain! }); }
@@ -87,7 +100,7 @@ function runtime(slug: string) {
       window.addEventListener('offline', pause); window.addEventListener('pagehide', pause);
       window.addEventListener('online', visibility); document.addEventListener('visibilitychange', visibility);
       void read().catch(() => undefined);
-      return () => { mounted = false; generation++; clearTimeout(expiry); verification.pause(); protection.pause();
+      return () => { mounted = false; generation++; clearTimeout(expiry); verification.pause(); protection.pause(); access.pause();
         // No secret survives closing the panel, even if this runtime is retained
         // briefly by React while the sheet's exit animation completes.
         state = { ...state, code: null, clearInputs: state.clearInputs + 1 };
@@ -110,18 +123,33 @@ function runtime(slug: string) {
         ? 'Cet appareil est reconnu. Aucun compte personnel n’a été reconnecté.'
         : 'Cet appareil n’a pas pu être repris. Vous pouvez réessayer ou commencer une inscription. Aucun compte n’a été reconnecté.' };
     }),
+    beginAccess: (method: 'passkey' | 'recovery') => action(async () => {
+      const record = await journal.read();
+      if (record?.phase !== 'ready') {
+        const ready = await preparation.begin();
+        if (ready.kind !== 'ready') return ready;
+        if (!active()) return { kind: 'paused' };
+      }
+      const prepared = await access.begin(method);
+      return prepared.kind === 'prepared' && method === 'passkey' && active() ? access.login() : prepared;
+    }),
+    login: () => action(() => access.login()),
+    recoverAccess: (code: string) => action(() => access.recover(code)),
+    retryAccess: () => action(() => access.retry()),
     restartBrowser: () => action(() => preparation.restartExpired()),
     resume: () => action(async () => {
       const record = await journal.read();
       if (record?.phase !== 'ready') return preparation.resume();
+      if (record.access) return access.resume();
       return record.verification?.phase === 'protecting' ? protection.resume() : verification.resume();
     }),
     start: (phone: string, human: string) => action(() => verification.start(phone, human)),
     check: (code: string) => action(() => verification.check(code)),
-    register: () => action(() => protection.register()), assert: () => action(() => protection.assert()),
-    recoveryCode: () => action(() => protection.recoveryCode()),
-    activate: (code: string) => action(() => protection.activate(code)),
-    close: () => action(() => verification.close()),
+    register: () => action(async () => (await journal.read())?.access ? access.register() : protection.register()),
+    assert: () => action(async () => (await journal.read())?.access ? access.assert() : protection.assert()),
+    recoveryCode: () => action(async () => (await journal.read())?.access ? access.recoveryCode() : protection.recoveryCode()),
+    activate: (code: string) => action(async () => (await journal.read())?.access ? access.activate(code) : protection.activate(code)),
+    close: () => action(async () => (await journal.read())?.access ? access.close() : verification.close()),
     hideCode: () => publish({ code: null }),
   };
 }

@@ -97,12 +97,12 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
   // Keep the exact authoritative action/quota message. Only its presentation
   // changes; availability is never used to infer a missing or invalid session.
   const message = state.message ?? (state.status === 'guest'
-    ? state.registrationAvailable ? 'Vous pouvez créer un compte protégé ou continuer votre commande en invité.' : 'La création et la connexion au compte ne sont pas encore ouvertes.'
+    ? state.accessAvailable ? 'Vous pouvez retrouver votre compte ou continuer votre commande en invité.' : state.registrationAvailable ? 'Vous pouvez créer un compte protégé ou continuer votre commande en invité.' : 'La création et la connexion au compte ne sont pas encore ouvertes.'
     : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
       : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
   return <Sheet open={open} onClose={onClose} title="Mon compte" navigationLocked={state.busy}
     headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>}
-    footer={<Tap className={view || state.registrationAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={state.busy} onClick={onClose}>
+    footer={<Tap className={view || state.registrationAvailable || state.accessAvailable || enrollmentActive ? secondary + ' w-full' : primary} disabled={state.busy} onClick={onClose}>
       {returnLabel}
     </Tap>}>
     <div className="space-y-4 p-4 pb-5 sm:p-5">
@@ -112,7 +112,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           <p className="text-sm font-semibold">Vérification de votre session…</p>
           {state.message && <p className="mt-3 text-sm leading-6 text-mut">{state.message}</p>}
           <div aria-hidden className="mt-5 space-y-3"><div className="h-4 w-1/2 rounded bg-ink/10" /><div className="h-11 rounded-ctrl bg-ink/5" /><div className="h-4 w-3/4 rounded bg-ink/10" /></div>
-        </div> : state.status === 'guest' && state.registrationAvailable
+        </div> : state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)
           ? <p role="status" className="text-sm leading-6 text-mut">Vous naviguez en invité. La commande reste possible sans créer de compte.</p>
           : <section role="status" aria-live="polite" aria-atomic="true" className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
           <div className="flex items-start gap-3">
@@ -121,9 +121,9 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           </div>
           <p className="mt-3 text-sm leading-6 text-mut">{message}</p>
         </section>}
-      {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && state.registrationAvailable) && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
+      {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)) && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
       {open && !view && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
-        smsAvailable={state.available} onAuthenticated={refresh} onActivity={activity} />}
+        smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={refresh} onActivity={activity} />}
       {!view && !loading && <p className="text-xs leading-5 text-mut">La carte fidélité ne donne pas accès à ce compte.</p>}
       {(onDeviceOrders || loyaltyHref) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
         <h3 className="mb-3 text-sm font-bold">Autres accès</h3>
