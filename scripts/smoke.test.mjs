@@ -142,6 +142,21 @@ describe('smoke public', () => {
     expect(resultat.sortie).toContain('charge sans programme fidélité public valide');
   });
 
+  it.each(['Scanner mon QR', 'Afficher ma carte'])('reconnaît la carte fidélité servie avec le libellé %s', async libelle => {
+    const resultat = await jouerSmoke({
+      pageFidelite: `<!doctype html><title>La carte Classfood — CLASS'FOOD</title><main><button>${libelle}</button></main>`,
+    });
+    expect(resultat.code, resultat.erreur || resultat.sortie).toBe(0);
+  });
+
+  it('refuse un titre de fidélité sans chargement ni accès à la carte', async () => {
+    const resultat = await jouerSmoke({
+      pageFidelite: '<!doctype html><title>La carte Classfood</title><main>Service indisponible</main>',
+    });
+    expect(resultat.code).toBe(1);
+    expect(resultat.sortie).toContain('page servie sans marqueur de la carte fidélité');
+  });
+
   it('refuse le faux vert HTTP 200 de la page fidélité indisponible', async () => {
     const resultat = await jouerSmoke({
       pageFidelite:

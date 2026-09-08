@@ -173,6 +173,9 @@ jobs:
       - name: Gardes des outils de reprise Mongo
         run: pnpm --filter @sm/api exec vitest run ../../scripts/reprise-mongo.test.mjs --root ../..
 
+      - name: Tests du smoke public — réponses HTTP locales
+        run: pnpm --filter @sm/api exec vitest run ../../scripts/smoke.test.mjs --root ../..
+
       # Les suites générales restent rapides et hermétiques. Ces trois fichiers
       # sont ensuite rejoués séquentiellement contre un vrai PostgreSQL : le
       # bootstrap des rôles et propriétaires, les migrations, RLS, triggers et
