@@ -115,6 +115,28 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
     expect(execute.mock.calls[0]![1].request).not.toHaveProperty('code');
   });
 
+  it.each(['session', 'name', 'logout'] as const)('signs and requires the exact private browser binding for %s', async action => {
+    const request = action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
+    const envelope = { browserSecret: randomBytes(32).toString('base64url'),
+      sessionToken: randomBytes(32).toString('base64url'), request };
+    const body = JSON.stringify(envelope); const input = signed(action, body);
+    const accepted = await post(`/public/customer/classfood/${action}`, input);
+    expect(accepted.status).toBe(action === 'logout' ? 204 : 200);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]![1]).toEqual(envelope);
+    const changed = await post(`/public/customer/classfood/${action}`, { ...input,
+      body: JSON.stringify({ ...envelope, browserSecret: randomBytes(32).toString('base64url') }) });
+    expect(changed.status).toBe(403);
+    const missing = await post(`/public/customer/classfood/${action}`, signed(action,
+      JSON.stringify({ sessionToken: envelope.sessionToken, request })));
+    expect(missing.status).toBe(400);
+    expect(execute).toHaveBeenCalledTimes(1);
+    for (const response of [accepted, changed, missing]) {
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(await response.text()).not.toContain(envelope.browserSecret);
+    }
+  });
+
   it.each(['body', 'action', 'tenant', 'origin', 'source', 'key', 'expired'] as const)(
     'rejects a request with an altered %s before any account operation', async change => {
       const input = signed();

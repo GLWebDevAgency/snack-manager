@@ -23,7 +23,7 @@ const checkSchema = z.strictObject({
   browserSecret: token, existingSessionToken: token.nullable(),
 });
 const recoverSchema = checkSchema.omit({ code: true, existingSessionToken: true });
-const sessionSchema = z.strictObject({ tenantRef: tenant, token });
+const sessionSchema = z.strictObject({ tenantRef: tenant, token, browserSecret: token });
 const updateSchema = sessionSchema.extend({
   name: z.string().trim().min(1).max(120).refine(value => !/[\p{Cc}\p{Cf}]/u.test(value)).nullable(),
   expectedRevision: z.number().int().min(0).max(2_147_483_646),
@@ -186,6 +186,7 @@ export class CustomerIdentityService {
       const input = this.parse(sessionSchema, raw);
       const scope = this.scope(input.tenantRef, this.configuration());
       const session = await this.repository.authenticate({ ...scope,
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
       return this.view(scope, session);
@@ -214,9 +215,10 @@ export class CustomerIdentityService {
       const input = this.parse(updateSchema, raw);
       const scope = this.scope(input.tenantRef, this.configuration());
       const sessionHash = this.crypto.hash('session', input.tenantRef, input.token);
-      const session = await this.repository.authenticate({ ...scope, sessionHash, now: this.now() });
+      const browserHash = this.crypto.hash('browser', input.tenantRef, input.browserSecret);
+      const session = await this.repository.authenticate({ ...scope, sessionHash, browserHash, now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
-      const updated = await this.repository.updateName({ ...scope, sessionHash,
+      const updated = await this.repository.updateName({ ...scope, sessionHash, browserHash,
         expectedRevision: input.expectedRevision,
         encryptedName: input.name === null ? null
           : this.crypto.seal('name', input.tenantRef, session.profile.accountId, input.name),
@@ -233,6 +235,7 @@ export class CustomerIdentityService {
       const scope = this.scope(input.tenantRef, this.configuration());
       await this.repository.revoke({ ...scope,
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token),
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
         all: input.all, now: this.now(),
       });
     });

@@ -65,11 +65,11 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     expect(await f.service.check(check)).toEqual(first);
     expect(f.transport.check).toHaveBeenCalledTimes(1);
     expect(first.view.profile).toMatchObject({ name: null, phoneE164: PHONE, revision: 0 });
-    const updated = await f.service.updateName({ tenantRef: f.tenantRef, token: first.token, name: 'Mina', expectedRevision: 0 });
+    const updated = await f.service.updateName({ tenantRef: f.tenantRef, browserSecret: BROWSER, token: first.token, name: 'Mina', expectedRevision: 0 });
     expect(updated.profile).toMatchObject({ name: 'Mina', revision: 1 });
-    expect((await f.service.session({ tenantRef: f.tenantRef, token: first.token })).profile).toEqual(updated.profile);
-    await f.service.logout({ tenantRef: f.tenantRef, token: first.token, all: true });
-    await expect(f.service.session({ tenantRef: f.tenantRef, token: first.token })).rejects.toMatchObject({ reason: 'unauthorized' });
+    expect((await f.service.session({ tenantRef: f.tenantRef, browserSecret: BROWSER, token: first.token })).profile).toEqual(updated.profile);
+    await f.service.logout({ tenantRef: f.tenantRef, browserSecret: BROWSER, token: first.token, all: true });
+    await expect(f.service.session({ tenantRef: f.tenantRef, browserSecret: BROWSER, token: first.token })).rejects.toMatchObject({ reason: 'unauthorized' });
     await expect(f.service.check(check)).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.transport.check).toHaveBeenCalledTimes(1);
   });
@@ -137,7 +137,7 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     const f = fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
     const first = await f.service.check(check);
     const { tenantRef, challengeId, checkId, browserSecret } = check;
-    await f.service.logout({ tenantRef, token: first.token, all });
+    await f.service.logout({ tenantRef, browserSecret, token: first.token, all });
     const claim = vi.spyOn(f.repository, 'claimCheck'); const complete = vi.spyOn(f.repository, 'completeCheck');
     f.transport.start.mockClear(); f.transport.check.mockClear();
     const denied = await f.service.recover({ tenantRef, challengeId, checkId, browserSecret })
@@ -156,7 +156,7 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     await expect(f.service.check({ ...check, tenantRef: 'other-tenant' })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.transport.check).not.toHaveBeenCalled();
     const access = await f.service.check(check);
-    await expect(f.service.session({ tenantRef: 'other-tenant', token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.session({ tenantRef: 'other-tenant', browserSecret: BROWSER, token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
   });
 
   it('single-flights concurrent approval and creates exactly one account/session', async () => {

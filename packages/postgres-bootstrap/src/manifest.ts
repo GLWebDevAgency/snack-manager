@@ -15,6 +15,7 @@ export const LOYALTY_INITIAL_MIGRATION = 1_788_230_085_055;
 export const LOYALTY_EARN_RECEIPTS_MIGRATION = 1_788_236_557_128;
 export const CUSTOMER_INITIAL_MIGRATION = 1_788_854_400_000;
 export const CUSTOMER_PAID_BUDGET_MIGRATION = 1_788_861_600_000;
+export const CUSTOMER_BROWSER_CONTINUITY_MIGRATION = 1_788_870_000_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -175,6 +176,8 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   ...['seal_paid_parent', 'preserve_paid_budget', 'guard_verification_funding'].map((name) =>
     introduced('function', 'customer', name, 'customer', CUSTOMER_PAID_BUDGET_MIGRATION),
   ),
+  introduced('table', 'customer', 'browser_contexts', 'customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION),
+  introduced('function', 'customer', 'preserve_browser_context', 'customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION),
 ] as const;
 
 export const JOURNALS: Readonly<

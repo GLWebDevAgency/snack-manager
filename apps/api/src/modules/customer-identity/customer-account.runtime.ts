@@ -83,15 +83,15 @@ export class CustomerAccountRuntime {
         }
         case 'session': {
           const input = this.input('session', raw);
-          result = view(await core.session({ tenantRef, token: input.sessionToken })); break;
+          result = view(await core.session({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret })); break;
         }
         case 'name': {
           const input = this.input('name', raw);
-          result = view(await core.updateName({ tenantRef, token: input.sessionToken, ...input.request })); break;
+          result = view(await core.updateName({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret, ...input.request })); break;
         }
         case 'logout': {
           const input = this.input('logout', raw);
-          await core.logout({ tenantRef, token: input.sessionToken, ...input.request }); break;
+          await core.logout({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret, ...input.request }); break;
         }
       }
       // Mongo lifecycle and PG are distinct stores. A request already in flight

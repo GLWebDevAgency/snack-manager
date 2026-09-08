@@ -51,6 +51,25 @@ function fixture(paid = false) {
   return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending };
 }
 describe('customer runtime tenant and purpose boundary', () => {
+  it.each(['session', 'name', 'logout'] as const)('requires and forwards the browser binding on %s without constructing a provider', async action => {
+    const f = fixture();
+    const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
+    const envelope = { sessionToken: Buffer.alloc(32, 11).toString('base64url'), request };
+    await expect(f.runtime.execute({ ...f.relay, action }, envelope)).rejects.toMatchObject({ status: 400 });
+    expect(f.repository.authenticate).not.toHaveBeenCalled();
+    expect(f.repository.updateName).not.toHaveBeenCalled(); expect(f.repository.revoke).not.toHaveBeenCalled();
+    await f.runtime.execute({ ...f.relay, action }, { ...envelope, browserSecret: f.start.browserSecret });
+    const crypto = new CustomerIdentityCrypto(f.env.SM_CUSTOMER_IDENTITY_KEY!);
+    const expected = expect.objectContaining({
+      browserHash: crypto.hash('browser', f.env.SM_CUSTOMER_PILOT_TENANT_ID!, f.start.browserSecret),
+      sessionHash: crypto.hash('session', f.env.SM_CUSTOMER_PILOT_TENANT_ID!, envelope.sessionToken),
+    });
+    if (action !== 'logout') expect(f.repository.authenticate).toHaveBeenCalledExactlyOnceWith(expected);
+    if (action === 'name') expect(f.repository.updateName).toHaveBeenCalledExactlyOnceWith(expected);
+    if (action === 'logout') expect(f.repository.revoke).toHaveBeenCalledExactlyOnceWith(expected);
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
+    expect(f.provider.start).not.toHaveBeenCalled(); expect(f.provider.check).not.toHaveBeenCalled();
+  });
   it('requires human validation and durable reservation before the only send', async () => {
     const f = fixture();
     await expect(f.runtime.execute(f.relay, f.start)).resolves.toEqual({ challengeId: f.pending.challengeId, expiresAt: f.pending.expiresAt });
@@ -135,14 +154,14 @@ describe('customer runtime tenant and purpose boundary', () => {
   it.each(['session', 'name', 'logout'] as const)('keeps %s independent from expiring send evidence', async action => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}'; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
-    const result = await f.runtime.execute({ ...f.relay, action }, { sessionToken: f.start.browserSecret, request });
+    const result = await f.runtime.execute({ ...f.relay, action }, { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request });
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(result).toMatchObject({ profile: { revision: 0 } });
     expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
   });
   it('does not return private data when tenant revocation occurs during the session read', async () => {
     const f = fixture(); f.repository.authenticate.mockImplementation(async () => { f.row.account.status = 'suspended'; return f.session; });
-    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { sessionToken: f.start.browserSecret, request: {} }))
+    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request: {} }))
       .rejects.toMatchObject({ status: 503 });
   });
   it('sanitizes arbitrary storage or adapter exceptions before Ops can see them', async () => {
@@ -278,7 +297,7 @@ describe('closed paid pilot runtime funding', () => {
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 }
       : action === 'logout' ? { all: true } : action === 'recover' ? { challengeId, checkId } : {};
     const envelope = action === 'recover' ? { browserSecret: f.start.browserSecret, request }
-      : { sessionToken: f.start.browserSecret, request };
+      : { sessionToken: f.start.browserSecret, browserSecret: f.start.browserSecret, request };
     const result = await f.runtime.execute({ ...f.relay, action }, envelope);
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(typeof result).toBe('object');

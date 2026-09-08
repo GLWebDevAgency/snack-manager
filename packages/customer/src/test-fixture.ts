@@ -18,7 +18,10 @@ export function assertCustomerTestTarget(raw: unknown): string {
   return url.toString();
 }
 
-export async function customerTestFixture(raw: unknown, options: { beforeUpgrade?: (admin: Pool) => Promise<void> } = {}) {
+export async function customerTestFixture(raw: unknown, options: {
+  beforeUpgrade?: (admin: Pool) => Promise<void>;
+  beforeUpgradeMigrations?: 1 | 2;
+} = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');
   const database = `snackmanager_customer_test_${suffix}`;
@@ -52,7 +55,7 @@ export async function customerTestFixture(raw: unknown, options: { beforeUpgrade
       const config = { migrationsFolder: resolve(__dirname, '../drizzle'), migrationsTable: '__drizzle_customer_migrations' };
       const dialect = new PgDialect();
       const driver = new NodePgDriver(admin, dialect);
-      await dialect.migrate(readMigrationFiles(config).slice(0, 1), driver.createSession(undefined), config);
+      await dialect.migrate(readMigrationFiles(config).slice(0, options.beforeUpgradeMigrations ?? 1), driver.createSession(undefined), config);
       await options.beforeUpgrade(admin);
     }
     await migrateCustomer(admin);

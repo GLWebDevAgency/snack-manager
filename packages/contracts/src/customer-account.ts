@@ -31,9 +31,9 @@ export const CustomerAccountEnvelopes = {
   start: z.strictObject({ browserSecret: token, request: CustomerAccountBrowserRequests.start }),
   check: z.strictObject({ browserSecret: token, sessionToken: token.nullable(), request: CustomerAccountBrowserRequests.check }),
   recover: z.strictObject({ browserSecret: token, request: CustomerAccountBrowserRequests.recover }),
-  session: z.strictObject({ sessionToken: token, request: CustomerAccountBrowserRequests.session }),
-  name: z.strictObject({ sessionToken: token, request: CustomerAccountBrowserRequests.name }),
-  logout: z.strictObject({ sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
+  session: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.session }),
+  name: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.name }),
+  logout: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
 } as const;
 export type CustomerAccountEnvelope<A extends CustomerAccountAction> = z.infer<(typeof CustomerAccountEnvelopes)[A]>;
 export const CustomerAccountViewSchema = z.strictObject({
