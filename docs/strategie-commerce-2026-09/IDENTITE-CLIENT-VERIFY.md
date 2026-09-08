@@ -261,6 +261,16 @@ preuve de staging du SHA fusionné restent consignées dans la PR de ce lot.
 
 ## L3a.4 — interface et préremplissage, inscription encore fermée
 
+**Livré via #137**, staging `d99f44f763e71598eb7a5c09b2e07c6b8940f6ed`.
+[Réception détaillée](https://github.com/GLWebDevAgency/snack-manager/pull/137#issuecomment-5586645517) :
+CI complète, quatre services et migrations réussis, smoke 8/8, frontière privée
+fermée 8/8, E2E démos 9/9 et quatre parcours avec identifiants ignorés. Navigation
+du vrai site Classfood testée à 320/390/1440 px : 16/16 assertions, focus/retour
+invité/modales, quinze captures. Une annulation RSC intermittente sans échec
+visuel reproduit reste consignée dans la preuve ; dernière passe verte.
+La recette du profil authentifié/préremplissage reste sur fixtures, pas une
+session Twilio réelle. Aucun compte, SMS, commande ou paiement créé sur staging.
+
 Entrée secondaire « Mon compte » dans la commande hors démo/iframe et dans la
 PWA fidélité, mêmes primitives et identité restaurant. Consultation d'une session
 existante, nom modifiable, déconnexion de cet appareil ou de tous avec confirmation.
