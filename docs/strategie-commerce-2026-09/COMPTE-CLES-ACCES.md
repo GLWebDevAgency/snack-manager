@@ -63,7 +63,58 @@ rétablit toujours ni profil, ni carte, ni historique et ne remplace pas la
 preuve forte de reconnexion. Un cookie remplacé hors protocole peut rendre un
 sélecteur inutilisable ; les appels suivants le refusent sans adopter un compte.
 
-## Parcours à livrer ensuite, avant ouverture
+## Lot inscription protégée — implémentation du 9 septembre 2026
+
+La migration `0006_customer_protected_enrollment` remplace la création d'un
+nouveau compte sur OTP seul par une inscription provisoire de dix minutes au
+plus. Elle ne donne aucun profil ni session. Le parcours web du panneau
+**Mon compte** utilise les vrais contrats BFF/API : téléphone, SMS, création
+WebAuthn, assertion de cette même clé, affichage explicite du secours et
+ressaisie de ce secours avant activation atomique. La bibliothèque navigateur
+est désormais une dépendance de production du web, chargée à la demande.
+
+La base exige au COMMIT l'ensemble compte, contact, clé, secours, session et
+publication commune. Un ancien writer ne peut plus créer un compte incomplet.
+Les anciens comptes sont conservés, pas convertis depuis leur seul téléphone.
+Les préparations de clé et d'assertion sont immuables ; une nouvelle réponse ne
+remplace pas la preuve précédemment enregistrée. Les signatures sont vérifiées
+hors transaction puis les autorisations et échéances recontrôlées sous verrou.
+
+Le secours n'est affiché qu'après sa première écriture confirmée ; sa reprise
+n'en renvoie jamais le clair. Trois versions explicites au maximum, puis un
+seul identifiant d'activation fixé au premier essai et cinq erreurs de
+confirmation au maximum. Le navigateur garde les seuls identifiants publics
+dans son journal, jamais le téléphone, l'OTP, le code ou une réponse WebAuthn.
+Après COMMIT, `activate` comme `activation-result` lit le reçu exact de cette
+publication si les preuves privées sont toujours valides : aucune nouvelle
+vérification du code ni session supplémentaire.
+
+La disponibilité du parcours et celle de l'envoi SMS sont séparées. Une preuve
+de financement absente bloque un nouvel envoi/check fournisseur, pas les étapes
+de protection déjà engagées. Aucun envoi automatique lors d'une reprise.
+
+Preuves locales : 135 tests PostgreSQL customer et 8 HTTP Nest signés passent
+sans skip ; ces suites utilisent de vraies signatures d'un authentificateur
+virtuel Chromium, avec le fournisseur téléphonique simulé. La suite web passe
+ses 2144 tests, dont les scénarios rendus de l'inscription, du hors-ligne et des
+réponses perdues. Ces nombres se recouvrent avec les suites ciblées et ne
+constituent pas une recette SMS ou appareil physique. Captures inspectées aux
+largeurs 320, 390 et 1440 px avec une identité de fixture, pas celle d'un client.
+
+**Ce lot n'ouvre pas les comptes publics.** La reconnexion passkey,
+la récupération et la remise en protection restent à raccorder avant ouverture ;
+`accessAvailable` demeure faux. Aucun SMS, paiement ni production autorisé par
+cette livraison. Le statut de déploiement doit être établi séparément sur la
+révision réellement servie, pas déduit de ce document.
+
+Pour la récupération suivante, le choix retenu est une preuve provisoire liée
+à l'intention, sans consommation anticipée du seul secours. La consommation
+définitive, le remplacement de clé et de secours et la révocation des anciennes
+sessions seront atomiques, après confirmation de toutes les nouvelles preuves.
+Une interruption ne doit donc pas rendre définitivement irrécupérable un compte
+dont le propriétaire a justement perdu sa clé.
+
+## Parcours complet à recevoir avant ouverture
 
 1. **Créer mon compte** : téléphone → code SMS → inscription provisoire bornée.
    Elle n’autorise ni ancien profil, ni commandes privées, ni historique. Une

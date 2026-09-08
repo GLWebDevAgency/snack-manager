@@ -45,7 +45,7 @@ function fixture() {
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     recoverCheck: vi.fn<CustomerIdentityRepository['recoverCheck']>().mockResolvedValue(null),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
-    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue(session),
+    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue({ kind: 'session', session }),
     authenticate: vi.fn<CustomerIdentityRepository['authenticate']>().mockResolvedValue(session),
     updateName: vi.fn<CustomerIdentityRepository['updateName']>().mockResolvedValue(session),
     revoke: vi.fn<CustomerIdentityRepository['revoke']>().mockResolvedValue(undefined),
@@ -118,12 +118,12 @@ describe('independent customer orchestration race and recovery checks', () => {
       committed = true;
       throw new Error('simulated completion commit response loss');
     });
-    f.repository.recoverCheck.mockImplementation(async () => committed ? f.session : null);
+    f.repository.recoverCheck.mockImplementation(async () => committed ? { kind: 'session', session: f.session } : null);
     await expect(f.service.check(f.check)).rejects.toMatchObject({ reason: 'unavailable' });
     const expectedToken = f.crypto.tokenForIntentCheck(f.start.tenantRef, f.check.browserSecret, f.check.operationId, f.check.intentProof,
       f.check.challengeId, f.check.checkId);
     const retried = await f.service.check(f.check);
-    expect(retried).toMatchObject({ token: expectedToken, view: { sessionId: f.session.sessionId,
+    expect(retried).toMatchObject({ state: 'authenticated', token: expectedToken, view: {
       expiresAt: f.session.expiresAt } });
     expect(f.repository.recoverCheck).toHaveBeenLastCalledWith(expect.objectContaining({
       challengeId: f.check.challengeId, checkId: f.check.checkId,
@@ -148,7 +148,7 @@ describe('independent customer orchestration race and recovery checks', () => {
     const f = fixture();
     f.repository.recoverCheck.mockImplementation(async () => {
       f.advance(86_400_001);
-      return f.session;
+      return { kind: 'session', session: f.session };
     });
     await expect(f.service.check(f.check)).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.repository.claimCheck).not.toHaveBeenCalled();

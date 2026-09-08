@@ -164,4 +164,18 @@ describe('durable customer verification controller', () => {
     await f.client.start('+33600000000', 'human'); f.request.mockClear();
     expect(await f.client.check('bad')).toEqual({ kind: 'invalid' }); expect(f.request).not.toHaveBeenCalled();
   });
+  it('OTP enrollment is provisional and never becomes a completed personal publication', async () => {
+    const f = fixture(); await f.client.begin(); await f.client.start('+33600000000', 'human');
+    const original = f.request.getMockImplementation()!;
+    f.request.mockImplementation(async (action, raw) => {
+      if (action !== 'recover') return original(action, raw);
+      const choice = f.stored()!.verification!;
+      return { state: 'enrollment', operationId: choice.operationId, checkId: choice.checkId, challengeId: choice.challengeId,
+        expiresAt: Date.now() + 60_000, enrollment: { operationId: choice.operationId, checkId: choice.checkId,
+          expiresAt: Date.now() + 60_000, stage: 'registration_required', recoveryVersion: 0 } };
+    });
+    expect(await f.client.check('123456')).toEqual({ kind: 'enrollment' });
+    expect(f.stored()!.verification!.phase).toBe('protecting');
+    expect(f.stored()!.verification!.protection).toEqual({ stage: 'registration_required', recoveryVersion: 0, pending: null });
+  });
 });

@@ -57,7 +57,7 @@ describe('customer browser DTO versus private relay envelope', () => {
     expect(CustomerAccountViewSchema.safeParse(view).success).toBe(true);
     expect(CustomerAccountViewSchema.safeParse({ ...view, sessionId: randomUUID() }).success).toBe(false);
     expect(CustomerAccountViewSchema.safeParse({ ...view, profile: { ...view.profile, accountId: randomUUID() } }).success).toBe(false);
-    expect(CustomerAccountResponses.check.safeParse({ token: randomBytes(32).toString('base64url'), view }).success).toBe(true);
+    expect(CustomerAccountResponses.check.safeParse({ state: 'authenticated', token: randomBytes(32).toString('base64url'), view }).success).toBe(true);
     expect(CustomerAccountResponses.session.safeParse({ ...view, token: randomBytes(32).toString('base64url') }).success).toBe(false);
   });
 });

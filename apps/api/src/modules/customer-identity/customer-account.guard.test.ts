@@ -88,6 +88,21 @@ describe('customer dedicated signed boundary', () => {
     expect(JSON.stringify(error).includes('fixture-secret-redis-url')).toBe(false);
     expect(f.request.customerRelay).toBeUndefined();
   });
+  it('admits a bounded native WebAuthn envelope over 4 KiB only on its signed protection action', async () => {
+    const f = fixture('protection');
+    f.request.body = { browserRef: randomUUID(), browserSecret: Buffer.alloc(32, 23).toString('base64url'),
+      intentProof: Buffer.alloc(32, 24).toString('base64url'), request: { step: 'register', operationId: randomUUID(),
+        checkId: randomUUID(), registrationId: randomUUID(), response: { id: 'AA', rawId: 'AA', type: 'public-key',
+          clientExtensionResults: {}, response: { clientDataJSON: 'AA', attestationObject: 'A'.repeat(5000) } } } };
+    f.request.rawBody = Buffer.from(JSON.stringify(f.request.body)); f.sign();
+    expect(f.request.rawBody.length).toBeGreaterThan(4096);
+    await expect(f.guard.canActivate(f.context)).resolves.toBe(true);
+    const g = fixture('protection'); g.request.body = f.request.body; g.request.rawBody = Buffer.alloc(65_537); g.sign();
+    await expect(g.guard.canActivate(g.context)).rejects.toMatchObject({ status: 400 });
+    expect(g.quota.reserve).not.toHaveBeenCalled();
+    f.request.params.action = 'check'; f.request.originalUrl = '/public/customer/fixture/check'; f.sign();
+    await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 400 });
+  });
   it('rejects production even with a perfectly signed envelope', async () => {
     const f = fixture(); f.env.RAILWAY_ENVIRONMENT_NAME = 'production';
     await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 503 });

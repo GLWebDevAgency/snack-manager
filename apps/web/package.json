@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "@sm/contracts": "workspace:*",
     "@sm/domain": "workspace:*",
     "@zxing/browser": "^0.2.1",

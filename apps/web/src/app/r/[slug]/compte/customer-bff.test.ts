@@ -366,9 +366,9 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     for (const [handler, path, body] of [[check, 'confirmation', { operationId, challengeId, checkId, code: '123456' }],
       [recover, 'resultat', { operationId, checkId }]] as const) {
       const current = view(); const receipt = approved(current);
-      mockFetch.mockResolvedValueOnce(Response.json(path === 'confirmation' ? { token: sessionToken, view: current } : receipt));
+      mockFetch.mockResolvedValueOnce(Response.json(path === 'confirmation' ? { state: 'authenticated', token: sessionToken, view: current } : receipt));
       const response = await handler(req(path, 'POST', body, { cookie: `${boundCookies}` }), context);
-      expect(response.status).toBe(200); expect(await response.json()).toEqual(path === 'confirmation' ? current : { ...selection(), state: 'approved', view: current, expiresAt: receipt.expiresAt });
+      expect(response.status).toBe(200); expect(await response.json()).toEqual(path === 'confirmation' ? { state: 'authenticated', view: current } : { ...selection(), state: 'approved', view: current, expiresAt: receipt.expiresAt });
       expect(response.headers.get('set-cookie')).toContain(`${sessionCookie}=${sessionToken}`);
       privateHeaders(response);
     }

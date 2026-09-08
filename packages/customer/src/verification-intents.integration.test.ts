@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { confirmCustomerTestBrowser } from './browser-test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
+import { completeCustomerTestAccount } from './enrollment-test-fixture';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import type { Pool } from 'pg';
 import { migrateCustomer } from './migration';
@@ -78,19 +79,23 @@ integration('verification intentions — PostgreSQL, no provider', () => {
     expect((await repo.resultIntent({ ...i, checkId: randomUUID(), sessionHash: null }))?.state).toBe('unresolved');
   });
 
-  it('reads a lost approval only under the exact check, proof and current session, without another claim', async () => {
+  it('recovers provisional OTP separately from exact protected activation without another check', async () => {
     const i = await ready(); const done = await admitted(i);
-    const published = await repo.completeCheck(done); expect(published).not.toBeNull();
+    const provisional = await repo.completeCheck(done); expect(provisional?.kind).toBe('enrollment');
     const selected = { ...i, checkId: done.checkId, sessionHash: null };
-    expect(await repo.resultIntent(selected)).toMatchObject({ state: 'approved', challengeId: done.challengeId, session: null });
-    expect(await repo.resultIntent({ ...selected, sessionHash: done.sessionHash })).toMatchObject({ state: 'approved', session: published });
-    expect(await repo.resultIntent({ ...selected, sessionHash: hash() })).toBeNull();
+    expect(await repo.resultIntent(selected)).toMatchObject({ state: 'enrollment', challengeId: done.challengeId });
     expect(await repo.resultIntent({ ...selected, proofHash: hash() })).toBeNull();
     expect((await repo.resultIntent({ ...selected, checkId: randomUUID() }))?.state).toBe('unresolved');
     expect((await repo.resultIntent({ ...selected, checkId: null }))?.state).not.toBe('approved');
-    expect(await repo.recoverCheck(done)).toEqual(published);
+    expect(await repo.recoverCheck(done)).toEqual(provisional);
     expect(await repo.recoverCheck({ ...done, requestHash: hash() })).toBeNull();
     expect(await repo.completeCheck({ ...done, requestHash: hash() })).toBeNull();
+    const published = await completeCustomerTestAccount(repo, done); expect(published).not.toBeNull();
+    expect(await repo.recoverCheck(done)).toBeNull(); // OTP receipt never becomes a protected session.
+    const binding = { parentRef: i.parentRef, tenantRef: i.tenantRef, browserRef: i.browserRef, browserHash: i.browserHash,
+      operationId: i.operationId, proofHash: i.proofHash, checkId: done.checkId, activationId: done.checkId, sessionHash: done.sessionHash };
+    expect(await repo.recoverEnrollmentActivation(binding)).toEqual(published);
+    expect(await repo.recoverEnrollmentActivation({ ...binding, sessionHash: hash() })).toBeNull();
     expect((await fixture.admin.query('SELECT id FROM customer.check_attempts WHERE parent_ref=$1', [i.parentRef])).rowCount).toBe(1);
   });
 
@@ -106,9 +111,9 @@ integration('verification intentions — PostgreSQL, no provider', () => {
   });
 
   it('closes only its own still-current publication, never another intention B', async () => {
-    const i = await ready(); const a = await admitted(i); await repo.completeCheck(a);
+    const i = await ready(); const a = await admitted(i); await completeCustomerTestAccount(repo, a);
     const j = { ...i, operationId: randomUUID(), proofHash: hash() };
-    const b = await admitted(j); const sessionB = await repo.completeCheck(b); expect(sessionB).not.toBeNull();
+    const b = await admitted(j); const sessionB = await completeCustomerTestAccount(repo, b); expect(sessionB).not.toBeNull();
     await repo.closeIntent(closeInput(i));
     expect(await repo.authenticate(b)).toEqual(sessionB);
     expect(await repo.recoverCheck(a)).toBeNull();
@@ -120,16 +125,16 @@ integration('verification intentions — PostgreSQL, no provider', () => {
 
   it('serializes close versus approval and leaves no accessible closed publication whichever commits first', async () => {
     const i = await ready(); const done = await admitted(i);
-    const results = await Promise.all([repo.completeCheck(done), repo.closeIntent(closeInput(i))]);
+    const results = await Promise.all([completeCustomerTestAccount(repo, done), repo.closeIntent(closeInput(i))]);
     expect(results[1]?.state).toBe('closed');
     expect(await repo.authenticate(done)).toBeNull();
     expect(await repo.recoverCheck(done)).toBeNull();
   });
 
   it('requires the selected publication for profile and mutations, so a late cookie cannot adopt another journal', async () => {
-    const i = await ready(); const a = await admitted(i); await repo.completeCheck(a);
+    const i = await ready(); const a = await admitted(i); await completeCustomerTestAccount(repo, a);
     const b = await admitted({ ...i, operationId: randomUUID(), proofHash: hash() });
-    const current = await repo.completeCheck(b); expect(current).not.toBeNull();
+    const current = await completeCustomerTestAccount(repo, b); expect(current).not.toBeNull();
     for (const wrong of [{ ...b, expectedOperationId: a.operationId, expectedCheckId: a.checkId },
       { ...b, expectedOperationId: randomUUID() }, { ...b, expectedCheckId: randomUUID() }]) {
       expect(await repo.authenticate(wrong)).toBeNull();
@@ -143,7 +148,7 @@ integration('verification intentions — PostgreSQL, no provider', () => {
 
   it('keeps the selected seven-day session usable after the ten-minute recovery proof expires', async () => {
     const i = await ready(); await historical(i, 500);
-    const done = await admitted(i); const published = await repo.completeCheck(done); expect(published).not.toBeNull();
+    const done = await admitted(i); const published = await completeCustomerTestAccount(repo, done); expect(published).not.toBeNull();
     await fixture.admin.query('SELECT pg_sleep(0.55)');
     expect((await repo.resultIntent({ ...i, checkId: done.checkId, sessionHash: done.sessionHash }))?.state).toBe('expired');
     expect(await repo.authenticate(done)).toEqual(published);
@@ -154,7 +159,7 @@ integration('verification intentions — PostgreSQL, no provider', () => {
 
   it('captures generation before admission and refuses a previously prepared intent after another publication', async () => {
     const i = await ready(); await repo.prepareIntent(i);
-    const b = await admitted({ ...i, operationId: randomUUID(), proofHash: hash() }); await repo.completeCheck(b);
+    const b = await admitted({ ...i, operationId: randomUUID(), proofHash: hash() }); await completeCustomerTestAccount(repo, b);
     expect(await repo.reserve(reservation(i))).toEqual({ kind: 'denied' });
     expect(await repo.validateIntent(i)).toBeNull();
     await repo.closeIntent(closeInput(i));
@@ -181,7 +186,7 @@ integration('verification intentions — PostgreSQL, no provider', () => {
         return client.query(sql, parameters);
       }, release: client.release.bind(client) };
     } } as unknown as Pool;
-    await expect(new PostgresCustomerIdentityRepository(interposed).completeCheck(done)).rejects.toBeInstanceOf(CustomerRepositoryError);
+    await expect(completeCustomerTestAccount(new PostgresCustomerIdentityRepository(interposed), done)).rejects.toBeInstanceOf(CustomerRepositoryError);
     expect(waited).toBe(1);
     expect((await fixture.admin.query('SELECT id FROM customer.accounts WHERE parent_ref=$1', [i.parentRef])).rowCount).toBe(0);
     expect((await fixture.admin.query('SELECT current_session_id,generation FROM customer.browser_contexts WHERE parent_ref=$1', [i.parentRef])).rows[0])
@@ -268,7 +273,7 @@ integration('verification intentions — PostgreSQL, no provider', () => {
       await expect(fixture.admin.query(sql, [i.operationId])).rejects.toMatchObject({ code: '23514' });
     }
     const before = (await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-    expect(before).toHaveLength(6); await migrateCustomer(fixture.admin);
+    expect(before).toHaveLength(7); await migrateCustomer(fixture.admin);
     expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(before);
   });
 });

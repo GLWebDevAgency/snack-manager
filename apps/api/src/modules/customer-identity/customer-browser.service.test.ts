@@ -1,4 +1,4 @@
-import { approvedCustomerIntentResult, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
+import { approvedCustomerIntentResult, confirmedCustomerBrowserFixture, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository } from '@sm/customer';
@@ -24,6 +24,7 @@ function fixture() {
     profile: { accountId: randomUUID(), phoneHash, encryptedName: null, encryptedPhone: pending.encryptedPhone,
       phoneVerifiedAt: now, revision: 0 } };
   const repository = {
+    ...confirmedCustomerBrowserFixture(browserRef, expiresAt),
     ...confirmedCustomerIntentFixture(operationId, now + 600_000),
     prepareBrowser: vi.fn().mockResolvedValue(preparation),
     issueBrowser: vi.fn().mockResolvedValue({ preparation: { ...preparation, state: 'issued' }, emitCookie: true }),
@@ -33,7 +34,7 @@ function fixture() {
       && input.browserHash === crypto.hash('browser', tenantRef, browserSecret) ? { expiresAt } : null),
     reserve: vi.fn().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn().mockResolvedValue(pending), claimCheck: vi.fn().mockResolvedValue(pending),
-    recoverCheck: vi.fn().mockResolvedValue(null), completeCheck: vi.fn().mockResolvedValue(session),
+    recoverCheck: vi.fn().mockResolvedValue(null), completeCheck: vi.fn().mockResolvedValue({ kind: 'session', session }),
     authenticate: vi.fn().mockResolvedValue(session), updateName: vi.fn().mockResolvedValue(session),
     revoke: vi.fn().mockResolvedValue(undefined),
   } satisfies CustomerIdentityRepository;
@@ -180,7 +181,7 @@ describe('browser preparation — service binding, no provider authorization', (
   it.each(['start', 'check'] as const)('does not expose a private result when its browser expires during %s', async action => {
     const f = fixture();
     if (action === 'start') f.repository.settleSend.mockImplementation(async () => { f.advance(7 * 86_400_000); return null; });
-    else f.repository.completeCheck.mockImplementation(async () => { f.advance(7 * 86_400_000); return f.session; });
+    else f.repository.completeCheck.mockImplementation(async () => { f.advance(7 * 86_400_000); return { kind: 'session', session: f.session }; });
     await expect(f.service[action](f[action])).rejects.toBeDefined();
     expect(action === 'start' ? f.transport.start : f.transport.check).toHaveBeenCalledTimes(1);
   });

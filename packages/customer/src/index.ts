@@ -1,4 +1,5 @@
 export * from './port';
+export * from './enrollment-port';
 export * from './client';
 export * from './migration';
 export * from './migration-state';

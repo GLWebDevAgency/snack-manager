@@ -6,6 +6,16 @@ import type { CustomerIdentityRepository, CustomerSession } from '@sm/customer';
  * real PostgreSQL suites exercise those boundaries separately. */
 export function confirmedCustomerBrowserFixture(browserRef: string, expiresAt: number) {
   return {
+    readEnrollment: vi.fn<CustomerIdentityRepository['readEnrollment']>().mockResolvedValue(null),
+    prepareEnrollmentKey: vi.fn<CustomerIdentityRepository['prepareEnrollmentKey']>().mockResolvedValue(null),
+    readEnrollmentKey: vi.fn<CustomerIdentityRepository['readEnrollmentKey']>().mockResolvedValue(null),
+    recordEnrollmentKey: vi.fn<CustomerIdentityRepository['recordEnrollmentKey']>().mockResolvedValue(null),
+    prepareEnrollmentAssertion: vi.fn<CustomerIdentityRepository['prepareEnrollmentAssertion']>().mockResolvedValue(null),
+    readEnrollmentAssertion: vi.fn<CustomerIdentityRepository['readEnrollmentAssertion']>().mockResolvedValue(null),
+    recordEnrollmentAssertion: vi.fn<CustomerIdentityRepository['recordEnrollmentAssertion']>().mockResolvedValue(null),
+    issueEnrollmentRecovery: vi.fn<CustomerIdentityRepository['issueEnrollmentRecovery']>().mockResolvedValue(null),
+    activateEnrollment: vi.fn<CustomerIdentityRepository['activateEnrollment']>().mockResolvedValue(null),
+    recoverEnrollmentActivation: vi.fn<CustomerIdentityRepository['recoverEnrollmentActivation']>().mockResolvedValue(null),
     prepareBrowser: vi.fn<CustomerIdentityRepository['prepareBrowser']>().mockResolvedValue(null),
     issueBrowser: vi.fn<CustomerIdentityRepository['issueBrowser']>().mockResolvedValue(null),
     confirmBrowser: vi.fn<CustomerIdentityRepository['confirmBrowser']>().mockResolvedValue(null),

@@ -4,7 +4,7 @@ import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccou
   type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
 import { selectedCustomerBrowser, selectedCustomerPublication } from './browser-journal';
 
-type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "session" | "name" | "logout";
+type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "protection" | "session" | "name" | "logout";
 export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
 export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
   selection?: () => Promise<CustomerAccountSelection | null>;
@@ -12,6 +12,7 @@ export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedS
 export type CustomerAccountState = Readonly<{
   status: "idle" | "loading" | "guest" | "authenticated" | "unavailable" | "error" | "offline";
   view: CustomerAccountView | null; available: boolean; busy: boolean; message: string | null;
+  registrationAvailable?: boolean; accessAvailable?: boolean;
 }>;
 export const EMPTY_ACCOUNT: CustomerAccountState = Object.freeze({ status: "idle", view: null, available: false, busy: false, message: null });
 const UNCONFIRMED = "L’action n’est pas confirmée. Actualisez votre compte avant de recommencer.";
@@ -27,8 +28,8 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
   const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
     if (!valid) throw new CustomerAccountHttpError(400);
-    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", session: "session", name: "profil", logout: "session" };
-    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
+    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", protection: "protection", session: "session", name: "profil", logout: "session" };
+    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", protection: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
     let browserRef: string | null = null;
     let expected: CustomerAccountPublication | null = null;
     if (action !== 'status' && action !== 'browser') {
@@ -74,7 +75,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
     try {
       while (true) {
         const next = await reader.read(); if (next.done) break;
-        bytes += next.value.byteLength; if (bytes > 4_096) throw new CustomerAccountHttpError(502);
+        bytes += next.value.byteLength; if (bytes > (action === 'protection' ? 65_536 : 4_096)) throw new CustomerAccountHttpError(502);
         text += decoder.decode(next.value, { stream: true });
       }
       complete = true;
@@ -136,7 +137,8 @@ export function createCustomerAccountClient(port: Port) {
   };
   function invalidate(status: "idle" | "offline" | "guest" = "idle") {
     generation++; reloadRequested = false; viewedSelection = null;
-    publish({ status, view: null, available: false, message: status === "offline" ? "Connectez-vous au réseau pour consulter votre compte." : null });
+    publish({ status, view: null, available: false, registrationAvailable: false, accessAvailable: false,
+      message: status === "offline" ? "Connectez-vous au réseau pour consulter votre compte." : null });
   }
   function fail(error: unknown, mutation = false) {
     viewedSelection = null;
@@ -152,20 +154,24 @@ export function createCustomerAccountClient(port: Port) {
     const work = async () => {
       if (!current(run)) return;
       // Status is an SMS admission signal, never a session/revocation oracle.
-      const availability = port.request("status").then(raw => CustomerAccountResponses.status.parse(raw).available, () => false).catch(() => false);
+      const closed = { available: false, registrationAvailable: false, accessAvailable: false };
+      const availability = port.request("status").then(raw => {
+        const caps = CustomerAccountResponses.status.parse(raw);
+        return { available: caps.available, registrationAvailable: caps.registrationAvailable === true, accessAvailable: caps.accessAvailable === true };
+      }, () => closed).catch(() => closed);
       try {
         const selected = await selection();
         if (!current(run)) return;
         const raw = await port.request("session", undefined, selected);
-        const available = await availability;
+        const capabilities = await availability;
         if (!sameSelection(selected, await selection())) throw new CustomerAccountHttpError(409);
         if (current(run)) {
           const view = parse(raw); viewedSelection = selected;
-          publish({ status: "authenticated", view, available, message: null });
+          publish({ status: "authenticated", view, ...capabilities, message: null });
         }
       } catch (error) {
-        const available = await availability;
-        if (current(run)) { publish({ available }); fail(error); }
+        const capabilities = await availability;
+        if (current(run)) { publish(capabilities); fail(error); }
       }
     };
     reading = (port.lock ? port.lock(work) : work()).catch(error => { if (current(run)) fail(error); });

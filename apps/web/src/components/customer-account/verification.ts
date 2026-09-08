@@ -6,7 +6,7 @@ import { notifyCustomerAccountChanged } from './browser-preparation';
 import { customerAccountRequest, type CustomerAccountRequest } from './client';
 
 export type CustomerVerificationOutcome = {
-  kind: 'prepared' | 'code_required' | 'incorrect' | 'approved' | 'closed' | 'expired' | 'failed'
+  kind: 'prepared' | 'code_required' | 'incorrect' | 'enrollment' | 'approved' | 'closed' | 'expired' | 'failed'
     | 'uncertain' | 'absent' | 'blocked' | 'paused' | 'invalid';
 };
 type Port = {
@@ -71,6 +71,15 @@ export function createCustomerVerification(port: Port) {
       }
       return { kind: 'uncertain' };
     }
+    if (view.state === 'enrollment') {
+      if (view.enrollment.operationId !== choice.operationId || view.enrollment.checkId !== choice.checkId
+        || view.enrollment.expiresAt <= Date.now() || view.enrollment.expiresAt > Date.now() + 600_000) throw new Error('Enrollment changed');
+      // An OTP attests a phone, not a protected account. Keep its exact check
+      // selector for enrollment; only activation may later publish a session.
+      await move(record, { ...metadata, phase: 'protecting', protection: choice.protection ?? {
+        stage: view.enrollment.stage, recoveryVersion: view.enrollment.recoveryVersion, pending: null } }, run);
+      return { kind: 'enrollment' };
+    }
     const phase = view.state === 'approved' ? 'completed' : view.state === 'code_required' ? 'code' : view.state;
     await move(record, { ...metadata, phase }, run);
     // The private profile is validated but not published here. The normal
@@ -126,10 +135,10 @@ export function createCustomerVerification(port: Port) {
   };
 }
 
-export function customerVerification(slug: string, active?: () => boolean) {
+export function customerVerification(slug: string, active?: () => boolean, changed = () => notifyCustomerAccountChanged(slug)) {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   return createCustomerVerification({ journal: customerBrowserJournal(slug), request: customerAccountRequest(slug),
-    uuid: () => crypto.randomUUID(), active, changed: () => notifyCustomerAccountChanged(slug),
+    uuid: () => crypto.randomUUID(), active, changed,
     lock: locks ? async work => await locks.request(`sm:customer:${slug}`, { mode: 'exclusive', signal: AbortSignal.timeout(15_000) }, work) : undefined,
   });
 }

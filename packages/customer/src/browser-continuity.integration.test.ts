@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
 import { confirmCustomerTestBrowser, prepareCustomerTestIntent } from './browser-test-fixture';
+import { completeCustomerTestAccount } from './enrollment-test-fixture';
 import { withCustomerScope } from './client';
 import { migrateCustomer } from './migration';
 import type { CustomerIdentityRepository, VerificationReservation } from './port';
@@ -41,16 +42,23 @@ integration('browser continuity — native PostgreSQL, both credentials required
     expect(await repo.settleSend({ ...input, verificationSid: `VE${randomUUID().replaceAll('-', '')}` })).not.toBeNull();
     const claim = { ...input, checkId: randomUUID() };
     expect(await repo.claimCheck(claim)).not.toBeNull();
-    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: claim.checkId, result: 'approved', sessionId: randomUUID(), sessionHash: hash(), accountId: randomUUID(),
+    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: randomUUID(), result: 'approved', sessionId: randomUUID(), sessionHash: hash(), accountId: randomUUID(),
       sessionExpiresAt: Date.now() + 604_800_000, existingSessionHash: null };
   }
   const sameBrowser = (input: VerificationReservation) => reservation({ parentRef: input.parentRef,
     tenantRef: input.tenantRef, browserRef: input.browserRef, browserHash: input.browserHash });
+  const recover = ({ parentRef, tenantRef, browserRef, browserHash, operationId, proofHash, checkId,
+    expectedCheckId, sessionHash }: Completion) => repo.recoverEnrollmentActivation({
+    parentRef, tenantRef, browserRef, browserHash, operationId, proofHash, checkId,
+    activationId: expectedCheckId, sessionHash,
+  });
 
   it('makes token A and its exact recovery inert after publication B, without deleting receipts or budget', async () => {
-    const input = reservation(); const a = await admitted(input); expect(await repo.completeCheck(a)).not.toBeNull();
-    const b = await admitted(sameBrowser(input)); expect(await repo.completeCheck(b)).not.toBeNull();
+    const input = reservation(); const a = await admitted(input); expect(await completeCustomerTestAccount(repo, a)).not.toBeNull();
+    expect(await recover(a)).not.toBeNull();
+    const b = await admitted(sameBrowser(input)); expect(await completeCustomerTestAccount(repo, b)).not.toBeNull();
     expect(await repo.authenticate(a)).toBeNull();
+    expect(await recover(a)).toBeNull();
     expect(await repo.recoverCheck(a)).toBeNull();
     expect(await repo.completeCheck(a)).toBeNull();
     expect(await repo.updateName({ ...a, encryptedName: 'stale', expectedRevision: 0 })).toBeNull();
@@ -61,12 +69,13 @@ integration('browser continuity — native PostgreSQL, both credentials required
   });
 
   it.each([false, true])('fences an admitted confirmation behind a completed logout (all=%s)', async all => {
-    const input = reservation(); const a = await admitted(input); await repo.completeCheck(a);
+    const input = reservation(); const a = await admitted(input); expect(await completeCustomerTestAccount(repo, a)).not.toBeNull();
     const b = await admitted(sameBrowser(input));
     await repo.revoke({ ...a, all });
     expect(await repo.completeCheck(b)).toBeNull();
     expect(await repo.authenticate(a)).toBeNull(); expect(await repo.authenticate(b)).toBeNull();
     expect(await repo.recoverCheck(a)).toBeNull(); expect(await repo.recoverCheck(b)).toBeNull();
+    expect(await recover(a)).toBeNull(); expect(await recover(b)).toBeNull();
     const row = (await fixture.admin.query('SELECT state FROM customer.check_attempts WHERE id=$1', [b.checkId])).rows[0];
     expect(row.state).toBe('rejected');
     expect((await fixture.admin.query('SELECT count(*)::int AS n FROM customer.accounts WHERE parent_ref=$1', [input.parentRef])).rows[0].n).toBe(1);
@@ -74,29 +83,30 @@ integration('browser continuity — native PostgreSQL, both credentials required
 
   it('publishes only one of two approvals admitted at the same browser generation', async () => {
     const input = reservation(); const a = await admitted(input); const b = await admitted(sameBrowser(input));
-    const outcomes = await Promise.all([repo.completeCheck(a), repo.completeCheck(b)]);
+    const outcomes = await Promise.all([completeCustomerTestAccount(repo, a), completeCustomerTestAccount(repo, b)]);
     expect(outcomes.filter(Boolean)).toHaveLength(1);
     expect((await Promise.all([repo.authenticate(a), repo.authenticate(b)])).filter(Boolean)).toHaveLength(1);
     expect((await fixture.admin.query('SELECT reserved_sends FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0].reserved_sends).toBe('2');
   });
 
   it('binds authentication, mutations and recovery to the same browser and tenant', async () => {
-    const input = reservation(); const a = await admitted(input); await repo.completeCheck(a);
+    const input = reservation(); const a = await admitted(input); expect(await completeCustomerTestAccount(repo, a)).not.toBeNull();
     for (const patch of [{ browserHash: hash() }, { tenantRef: 'foreign' }, { parentRef: 'foreign' }]) {
       expect(await repo.authenticate({ ...a, ...patch })).toBeNull();
       expect(await repo.recoverCheck({ ...a, ...patch })).toBeNull();
+      expect(await recover({ ...a, ...patch })).toBeNull();
       expect(await repo.updateName({ ...a, ...patch, expectedRevision: 0, encryptedName: 'forbidden' })).toBeNull();
       await repo.revoke({ ...a, ...patch, all: true });
     }
     expect((await repo.authenticate(a))?.profile.revision).toBe(0);
     const other = await admitted(reservation({ parentRef: input.parentRef, tenantRef: input.tenantRef }));
-    await repo.completeCheck(other); await repo.revoke({ ...a, all: false });
+    expect(await completeCustomerTestAccount(repo, other)).not.toBeNull(); await repo.revoke({ ...a, all: false });
     expect((await repo.authenticate(other))?.sessionId).toBe(other.sessionId);
   });
 
   it('refuses stale challenge replays and checks before contacting a provider', async () => {
     const input = reservation(); const old = await admitted(input);
-    const newer = await admitted(sameBrowser(input)); await repo.completeCheck(newer);
+    const newer = await admitted(sameBrowser(input)); expect(await completeCustomerTestAccount(repo, newer)).not.toBeNull();
     expect(await reserve(input)).toEqual({ kind: 'denied' });
     expect(await repo.claimCheck({ ...old, checkId: randomUUID() })).toBeNull();
     expect(await repo.settleSend({ ...input, verificationSid: `VE${'2'.repeat(32)}` })).toBeNull();
@@ -113,25 +123,24 @@ integration('browser continuity — native PostgreSQL, both credentials required
       expect(await withCustomerScope(fixture.app, scope, async client => (await client.query('SELECT * FROM customer.browser_contexts')).rowCount)).toBe(0);
     }
     const before = (await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-    expect(before).toHaveLength(6); await migrateCustomer(fixture.admin);
+    expect(before).toHaveLength(7); await migrateCustomer(fixture.admin);
     expect((await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(before);
   });
 
   it('keeps the final generation available for logout and rejects resets or cross-browser pointers', async () => {
-    const input = reservation(); await reserve(input);
-    // The privileged fixture constructs the boundary without billions of writes.
-    await fixture.admin.query('ALTER TABLE customer.browser_contexts DISABLE TRIGGER browser_context_monotone');
-    try {
-      await fixture.admin.query('UPDATE customer.browser_contexts SET generation=$2 WHERE parent_ref=$1',
-        [input.parentRef, String(BigInt(Number.MAX_SAFE_INTEGER) - 2n)]);
-    } finally { await fixture.admin.query('ALTER TABLE customer.browser_contexts ENABLE TRIGGER browser_context_monotone'); }
-    const final = await admitted(sameBrowser(input)); await repo.completeCheck(final);
+    const input = reservation();
+    // Seed the boundary at INSERT, without disabling the monotonic guard.
+    await fixture.admin.query(`INSERT INTO customer.parent_budgets(parent_ref,send_limit,sms_limit,verification_limit)
+      VALUES($1,50,100,100)`, [input.parentRef]);
+    await fixture.admin.query(`INSERT INTO customer.browser_contexts(parent_ref,tenant_ref,browser_hash,generation)
+      VALUES($1,$2,$3,$4)`, [input.parentRef, input.tenantRef, input.browserHash, String(BigInt(Number.MAX_SAFE_INTEGER) - 2n)]);
+    const final = await admitted(input); expect(await completeCustomerTestAccount(repo, final)).not.toBeNull();
     expect((await repo.authenticate(final))?.sessionId).toBe(final.sessionId);
     await expect(fixture.admin.query('UPDATE customer.browser_contexts SET generation=0 WHERE parent_ref=$1', [input.parentRef]))
       .rejects.toMatchObject({ code: '23514' });
     await expect(fixture.admin.query('DELETE FROM customer.browser_contexts WHERE parent_ref=$1', [input.parentRef]))
       .rejects.toMatchObject({ code: '23514' });
-    const other = await admitted(reservation({ parentRef: input.parentRef, tenantRef: input.tenantRef })); await repo.completeCheck(other);
+    const other = await admitted(reservation({ parentRef: input.parentRef, tenantRef: input.tenantRef })); expect(await completeCustomerTestAccount(repo, other)).not.toBeNull();
     await expect(fixture.admin.query(`UPDATE customer.browser_contexts SET generation=generation+1,current_session_id=$4
       WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_hash=$3`, [input.parentRef, input.tenantRef, input.browserHash, other.sessionId]))
       .rejects.toMatchObject({ code: '23503' });
@@ -163,7 +172,7 @@ integration('browser continuity — native PostgreSQL, both credentials required
     expect((await fixture.admin.query('SELECT 1 FROM customer.reservations WHERE parent_ref=$1', [input.parentRef])).rowCount).toBe(0);
   });
 
-  it('rolls back account, session and consumption when publication fails, but never refunds the reservation', async () => {
+  it('rolls back activation, account, session and intent consumption when publication fails, without refunding the verified OTP', async () => {
     const input = reservation(); const done = await admitted(input); let intercepted = 0;
     const interposed = { connect: async () => {
       const client = await fixture.app.connect();
@@ -174,12 +183,16 @@ integration('browser continuity — native PostgreSQL, both credentials required
         return client.query(sql, params);
       }, release: client.release.bind(client) };
     } } as unknown as Pool;
-    await expect(new PostgresCustomerIdentityRepository(interposed).completeCheck(done)).rejects.toThrow('Identité client indisponible');
+    await expect(completeCustomerTestAccount(new PostgresCustomerIdentityRepository(interposed), done)).rejects.toThrow('Identité client indisponible');
     expect(intercepted).toBe(1);
-    for (const table of ['accounts', 'sessions']) {
+    for (const table of ['accounts', 'sessions', 'session_publications', 'passkey_credentials', 'recovery_codes']) {
       expect((await fixture.admin.query(`SELECT 1 FROM customer.${table} WHERE parent_ref=$1`, [input.parentRef])).rowCount).toBe(0);
     }
-    expect((await fixture.admin.query('SELECT state FROM customer.check_attempts WHERE id=$1', [done.checkId])).rows[0].state).toBe('checking');
+    expect((await fixture.admin.query('SELECT state,enrollment_id,session_id FROM customer.check_attempts WHERE id=$1', [done.checkId])).rows[0])
+      .toEqual({ state: 'verified', enrollment_id: done.checkId, session_id: null });
+    expect((await fixture.admin.query('SELECT activated_at,activation_id,activation_intent_id,failed_confirmations,session_id,activation_attempts FROM customer.registration_enrollments WHERE id=$1', [done.checkId])).rows[0])
+      .toEqual({ activated_at: null, activation_id: null, activation_intent_id: null, failed_confirmations: 0, session_id: null, activation_attempts: [] });
+    expect((await fixture.admin.query('SELECT state FROM customer.verification_intents WHERE operation_id=$1', [done.operationId])).rows[0].state).toBe('open');
     expect((await fixture.admin.query('SELECT generation,current_session_id FROM customer.browser_contexts WHERE parent_ref=$1', [input.parentRef])).rows[0])
       .toEqual({ generation: '0', current_session_id: null });
     expect((await fixture.admin.query('SELECT reserved_sends FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0].reserved_sends).toBe('1');
@@ -248,7 +261,7 @@ integration('browser continuity migration — preexisting identities remain iner
       expect((await fixture.admin.query('SELECT revision,session_version FROM customer.accounts WHERE id=$1', [accountId])).rows[0])
         .toEqual({ revision: '0', session_version: '0' });
       await migrateCustomer(fixture.admin);
-      expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(6);
+      expect((await fixture.admin.query('SELECT * FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(7);
     } finally { await fixture.close(); }
   }, 20_000);
 });

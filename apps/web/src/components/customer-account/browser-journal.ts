@@ -1,11 +1,20 @@
 import { z } from 'zod';
 import { CustomerAccountBrowserRefSchema, CustomerAccountSlugSchema, type CustomerAccountPublication } from '@sm/contracts';
 
+export const CustomerProtectionJournalSchema = z.strictObject({
+  stage: z.enum(['registration_required', 'assertion_required', 'recovery_required']),
+  recoveryVersion: z.number().int().min(0).max(3),
+  pending: z.enum(['registration-options', 'register', 'assertion-options', 'assert', 'recovery-code', 'activate']).nullable(),
+  registrationId: CustomerAccountBrowserRefSchema.optional(), assertionId: CustomerAccountBrowserRefSchema.optional(),
+  rotationId: CustomerAccountBrowserRefSchema.optional(), activationId: CustomerAccountBrowserRefSchema.optional(),
+});
+export type CustomerProtectionJournal = z.infer<typeof CustomerProtectionJournalSchema>;
 export const CustomerVerificationJournalSchema = z.strictObject({
   operationId: CustomerAccountBrowserRefSchema,
-  phase: z.enum(['preparing', 'prepared', 'starting', 'code', 'checking', 'incorrect', 'completed', 'closing', 'closed', 'expired', 'failed']),
+  phase: z.enum(['preparing', 'prepared', 'starting', 'code', 'checking', 'incorrect', 'protecting', 'completed', 'closing', 'closed', 'expired', 'failed']),
   challengeId: CustomerAccountBrowserRefSchema.nullable(), checkId: CustomerAccountBrowserRefSchema.nullable(),
   expiresAt: z.number().int().positive().nullable(),
+  protection: CustomerProtectionJournalSchema.optional(),
 });
 export type CustomerVerificationJournal = z.infer<typeof CustomerVerificationJournalSchema>;
 export const CustomerBrowserJournalSchema = z.strictObject({
@@ -104,5 +113,5 @@ export async function selectedCustomerPublication(slug: string): Promise<Custome
   const record = await customerBrowserJournal(slug).read();
   const verification = record?.verification;
   return record?.phase === 'ready' && verification?.phase === 'completed' && verification.checkId
-    ? { expectedOperationId: verification.operationId, expectedCheckId: verification.checkId } : null;
+    ? { expectedOperationId: verification.operationId, expectedCheckId: verification.protection?.activationId ?? verification.checkId } : null;
 }

@@ -10,6 +10,8 @@ import { claimSchema, completionSchema, nameSchema, recoverySchema, reservationS
 import { prepareBrowser, issueBrowser, confirmBrowser, validateBrowser, restoreBrowser } from './browser-preparation';
 import { lockIntentParent } from './intent-queries';
 import { prepareIntent, closeIntent, validateIntent, resultIntent } from './verification-intents';
+import * as enrollment from './enrollment';
+import * as enrollmentValidation from './enrollment-validation';
 
 type Input<K extends keyof CustomerIdentityRepository> = Parameters<CustomerIdentityRepository[K]>[0];
 const browserRestoreSchema = browserBindingSchema.omit({ browserRef: true });
@@ -36,6 +38,46 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
   restoreBrowser(raw: Input<'restoreBrowser'>) {
     const input = validate(browserRestoreSchema, raw);
     return withCustomerScope(this.pool, input, client => restoreBrowser(client, input));
+  }
+  readEnrollment(raw: Input<'readEnrollment'>) {
+    const input = validate(enrollmentValidation.enrollmentBindingSchema, raw);
+    return this.intentLocked(input, client => enrollment.readEnrollment(client, input));
+  }
+  readEnrollmentKey(raw: Input<'readEnrollmentKey'>) {
+    const input = validate(enrollmentValidation.enrollmentReadKeySchema, raw);
+    return this.intentLocked(input, client => enrollment.readEnrollmentKey(client, input));
+  }
+  readEnrollmentAssertion(raw: Input<'readEnrollmentAssertion'>) {
+    const input = validate(enrollmentValidation.enrollmentReadAssertionSchema, raw);
+    return this.intentLocked(input, client => enrollment.readEnrollmentAssertion(client, input));
+  }
+  prepareEnrollmentKey(raw: Input<'prepareEnrollmentKey'>) {
+    const input = validate(enrollmentValidation.enrollmentKeySchema, raw);
+    return this.intentLocked(input, client => enrollment.prepareEnrollmentKey(client, input));
+  }
+  recordEnrollmentKey(raw: Input<'recordEnrollmentKey'>) {
+    const input = validate(enrollmentValidation.enrollmentRecordKeySchema, raw);
+    return this.intentLocked(input, client => enrollment.recordEnrollmentKey(client, input));
+  }
+  prepareEnrollmentAssertion(raw: Input<'prepareEnrollmentAssertion'>) {
+    const input = validate(enrollmentValidation.enrollmentAssertionSchema, raw);
+    return this.intentLocked(input, client => enrollment.prepareEnrollmentAssertion(client, input));
+  }
+  recordEnrollmentAssertion(raw: Input<'recordEnrollmentAssertion'>) {
+    const input = validate(enrollmentValidation.enrollmentRecordAssertionSchema, raw);
+    return this.intentLocked(input, client => enrollment.recordEnrollmentAssertion(client, input));
+  }
+  issueEnrollmentRecovery(raw: Input<'issueEnrollmentRecovery'>) {
+    const input = validate(enrollmentValidation.enrollmentCodeSchema, raw);
+    return this.intentLocked(input, client => enrollment.issueEnrollmentRecovery(client, input));
+  }
+  activateEnrollment(raw: Input<'activateEnrollment'>) {
+    const input = validate(enrollmentValidation.enrollmentActivationSchema, raw);
+    return this.intentLocked(input, client => enrollment.activateEnrollment(client, input));
+  }
+  recoverEnrollmentActivation(raw: Input<'recoverEnrollmentActivation'>) {
+    const input = validate(enrollmentValidation.enrollmentActivationRecoverySchema, raw);
+    return this.intentLocked(input, client => enrollment.recoverEnrollmentActivation(client, input));
   }
   private intentLocked<T>(scope: CustomerScope, work: (client: PoolClient) => Promise<T>) {
     return withCustomerScope(this.pool, scope, async client => {

@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { CustomerAccountBrowserRequests, CustomerAccountResponses, type CustomerVerificationResult } from '@sm/contracts';
+import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerEnrollmentSchema, type CustomerVerificationResult } from '@sm/contracts';
 import {
   CustomerIdentityCrypto,
   type CustomerIdentityRepository, type CustomerScope, type CustomerSession,
-  type PendingChallenge, type CheckResult,
+  type PendingChallenge, type CheckResult, type CustomerCheckCompletion,
 } from '@sm/customer';
 import type { PhoneVerificationTransport } from './phone-verification.port';
+import { SimpleWebAuthnPasskeyVerifier } from './passkey-verifier';
+import type { PasskeyVerifier } from './passkey-verifier.port';
+import { protectCustomerEnrollment } from './customer-protection';
 import { costEvidenceReferenceOf, CustomerVerificationModeSchema, paidBudgetOf, planCustomerPhoneVerification,
   type CustomerVerificationMode, type ReservedCustomerVerificationPlan } from './verification-plan';
 
@@ -30,6 +33,8 @@ const checkSchema = z.strictObject({
   browserRef: uuid, browserSecret: token, existingSessionToken: token.nullable(),
 });
 const recoverSchema = intentBindingSchema.extend({ checkId: uuid.nullable() });
+const protectionSchema = browserBindingSchema.extend({ intentProof: token,
+  origin: z.string().min(1).max(200), request: CustomerAccountBrowserRequests.protection });
 const sessionSchema = browserBindingSchema.extend({ token, expectedOperationId: uuid, expectedCheckId: uuid });
 const browserSchema = z.strictObject({ tenantRef: tenant, request: CustomerAccountBrowserRequests.browser,
   browserSecret: token.nullable(), candidateSecret: token.nullable() }).refine(value =>
@@ -85,6 +90,7 @@ export class CustomerIdentityService {
     private readonly configuration: () => CustomerIdentityConfiguration,
     private readonly now: () => number = Date.now,
     private readonly beforeProvider: () => Promise<void> = async () => {},
+    private readonly passkeys: PasskeyVerifier = new SimpleWebAuthnPasskeyVerifier(),
   ) {}
 
   /** Preparations do not authorize a send and never consume a provider budget.
@@ -274,7 +280,7 @@ export class CustomerIdentityService {
     });
   }
 
-  async check(raw: unknown): Promise<{ token: string; view: CustomerSessionView }> {
+  async check(raw: unknown): Promise<z.infer<typeof CustomerAccountResponses.check>> {
     return this.protect(async () => {
       const input = this.parse(checkSchema, raw);
       let browser = await this.requireBrowser(this.binding(input));
@@ -291,7 +297,7 @@ export class CustomerIdentityService {
       // This private receipt is valid only for the original consumed challenge,
       // exact browser/check and STILL-LIVE session. No new TTL or provider call.
       const recovered = await this.repository.recoverCheck({ ...claim, sessionHash });
-      if (recovered) return { token: accessToken, view: await this.boundView(input, scope, recovered) };
+      if (recovered) return this.checkCompletion(input, scope, recovered, accessToken);
       await this.requireIntent(this.intentBinding(input));
       const pending = await this.repository.claimCheck(claim);
       if (!pending) throw new CustomerIdentityError('unauthorized');
@@ -324,7 +330,39 @@ export class CustomerIdentityService {
       });
       if (result === 'uncertain') throw new CustomerIdentityError('unavailable');
       if (result !== 'approved' || !completed) throw new CustomerIdentityError('unauthorized');
-      return { token: accessToken, view: await this.boundView(input, scope, completed) };
+      return this.checkCompletion(input, scope, completed, accessToken);
+    });
+  }
+
+  private async checkCompletion(input: BrowserBinding & { operationId: string; checkId: string }, scope: CustomerScope,
+    completed: CustomerCheckCompletion, accessToken: string) {
+    await this.requireBrowser(this.binding(input));
+    if (completed.kind === 'enrollment') {
+      const enrollment = CustomerEnrollmentSchema.parse(completed.enrollment);
+      if (enrollment.operationId !== input.operationId || enrollment.checkId !== input.checkId || enrollment.expiresAt <= this.now()) {
+        throw new CustomerIdentityError('unauthorized');
+      }
+      return CustomerAccountResponses.check.parse({ state: 'enrollment', enrollment });
+    }
+    const view = await this.boundView(input, scope, completed.session);
+    return CustomerAccountResponses.check.parse({ state: 'authenticated', token: accessToken,
+      view: { expiresAt: view.expiresAt, profile: view.profile } });
+  }
+
+  async protection(raw: unknown) {
+    return this.protect(async () => {
+      const input = this.parse(protectionSchema, raw);
+      const bound = { ...this.binding(input), operationId: input.request.operationId, intentProof: input.intentProof };
+      const scope = this.intentScope(bound);
+      const result = await protectCustomerEnrollment({ repository: this.repository, crypto: this.crypto, verifier: this.passkeys,
+        binding: { ...scope, checkId: input.request.checkId }, browserSecret: input.browserSecret, intentProof: input.intentProof,
+        origin: input.origin, now: this.now, browser: () => this.requireBrowser(this.binding(input)), intent: () => this.requireIntent(bound),
+        view: async session => { const value = await this.boundView(input, scope, session);
+          return { expiresAt: value.expiresAt, profile: value.profile }; },
+      }, input.request);
+      await this.requireBrowser(this.binding(input));
+      if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) throw new CustomerIdentityError('unavailable');
+      return result;
     });
   }
 

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture, assertCustomerTestTarget } from './test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
+import { completeCustomerTestAccount } from './enrollment-test-fixture';
 import { confirmCustomerTestBrowser, prepareCustomerTestIntent } from './browser-test-fixture';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import { assertCustomerMigrationsCurrent } from './migration-state';
@@ -132,14 +133,16 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     expect(await repo.claimCheck(claim(input))).toBeNull();
   });
 
-  it('atomically creates account/contact/session, recovers the exact receipt, and never revives a revoked session', async () => {
+  it('atomically protects account/contact/session, recovers the exact receipt, and never revives a revoked session', async () => {
     const input = reservation(); await pending(input);
     const check = claim(input); await repo.claimCheck(check);
     const complete = completion(check);
-    const result = await repo.completeCheck(complete);
+    const result = await completeCustomerTestAccount(repo, complete);
     expect(result?.profile.accountId).toBe(complete.accountId);
     expect(result?.profile.phoneHash).toBe(input.phoneHash);
-    expect(await repo.recoverCheck({ ...check, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toEqual(result);
+    expect(await repo.recoverEnrollmentActivation({ parentRef: input.parentRef, tenantRef: input.tenantRef, browserRef: input.browserRef,
+      browserHash: input.browserHash, operationId: input.operationId, proofHash: input.proofHash, checkId: complete.checkId,
+      activationId: complete.checkId, sessionHash: complete.sessionHash })).toEqual(result);
     expect(await repo.recoverCheck({ ...check, sessionHash: hash() })).toBeNull();
     expect(await repo.recoverCheck({ ...check, browserHash: hash(), expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toBeNull();
     expect(await repo.claimCheck(check)).toBeNull();
@@ -152,20 +155,20 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   it('does not recover an existing account by phone alone; continuity permits a new session without changing identity', async () => {
     const input = reservation(); await pending(input);
     const firstClaim = claim(input); await repo.claimCheck(firstClaim);
-    const first = completion(firstClaim); await repo.completeCheck(first);
+    const first = completion(firstClaim); await completeCustomerTestAccount(repo, first);
     const second = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash });
     await pending(second); const secondClaim = claim(second); await repo.claimCheck(secondClaim);
     expect(await repo.completeCheck(completion(secondClaim))).toBeNull();
     const third = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash, browserRef: input.browserRef, browserHash: input.browserHash });
     await pending(third); const thirdClaim = claim(third); await repo.claimCheck(thirdClaim);
-    const result = await repo.completeCheck({ ...completion(thirdClaim), existingSessionHash: first.sessionHash });
+    const result = await completeCustomerTestAccount(repo, { ...completion(thirdClaim), existingSessionHash: first.sessionHash });
     expect(result?.profile.accountId).toBe(first.accountId);
     expect((await fixture.admin.query('SELECT count(*)::int AS count FROM customer.accounts WHERE tenant_ref=$1', [input.tenantRef])).rows[0].count).toBe(1);
   });
 
   it('CAS-updates name and invalidates every session through account version without deleting proofs', async () => {
     const input = reservation(); await pending(input);
-    const check = claim(input); await repo.claimCheck(check); const complete = completion(check); await repo.completeCheck(complete);
+    const check = claim(input); await repo.claimCheck(check); const complete = completion(check); await completeCustomerTestAccount(repo, complete);
     const updated = await repo.updateName({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'ciphertext-name' });
     expect(updated?.profile.revision).toBe(1);
     expect(await repo.updateName({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'stale' })).toBeNull();
@@ -190,7 +193,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('never returns sessions through another tenant/parent and refuses expired or inactive accounts', async () => {
     const input = reservation(); await pending(input);
-    const check = claim(input); await repo.claimCheck(check); const done = completion(check); await repo.completeCheck(done);
+    const check = claim(input); await repo.claimCheck(check); const done = completion(check); await completeCustomerTestAccount(repo, done);
     for (const scope of [{ tenantRef: 'other', parentRef: input.parentRef }, { tenantRef: input.tenantRef, parentRef: 'other' }]) {
       expect(await repo.authenticate({ ...scope, browserRef: input.browserRef, browserHash: input.browserHash, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
       expect(await repo.recoverCheck({ ...check, ...scope, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
@@ -217,15 +220,15 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('rolls back a failed session insertion including the new account/contact and leaves no false approval', async () => {
     const first = reservation(); await pending(first); const firstClaim = claim(first); await repo.claimCheck(firstClaim);
-    const firstDone = completion(firstClaim); await repo.completeCheck(firstDone);
+    const firstDone = completion(firstClaim); await completeCustomerTestAccount(repo, firstDone);
     const input = reservation(); await pending(input); const check = claim(input); await repo.claimCheck(check);
     const done = { ...completion(check), sessionHash: firstDone.sessionHash };
-    await expect(repo.completeCheck(done)).rejects.toBeInstanceOf(CustomerRepositoryError);
+    await expect(completeCustomerTestAccount(repo, done)).rejects.toBeInstanceOf(CustomerRepositoryError);
     expect((await fixture.admin.query('SELECT id FROM customer.accounts WHERE id=$1', [done.accountId])).rowCount).toBe(0);
     expect((await fixture.admin.query('SELECT account_id FROM customer.verified_contacts WHERE account_id=$1', [done.accountId])).rowCount).toBe(0);
-    expect((await fixture.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('checking');
+    expect((await fixture.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('consumed');
     expect(await repo.claimCheck(claim(input))).toBeNull();
-    expect(await repo.recoverCheck({ ...check, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
+    expect((await repo.recoverCheck({ ...check, sessionHash: done.sessionHash }))?.kind).toBe('enrollment');
   });
 
   it('bounds challenge and session lifetimes using one SQL timestamp without extending replay', async () => {
@@ -233,9 +236,9 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     expect(challenge.expiresAt).toBeLessThanOrEqual(Date.now() + 600_000);
     const check = claim(input); await repo.claimCheck(check);
     const done = { ...completion(check), sessionExpiresAt: Date.now() + 30 * 86_400_000 };
-    const current = await repo.completeCheck(done);
+    const current = await completeCustomerTestAccount(repo, done);
     expect(current?.expiresAt).toBeLessThanOrEqual(Date.now() + 604_800_000);
-    expect(await repo.recoverCheck({ ...check, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toEqual(current);
+    expect(await completeCustomerTestAccount(repo, done)).toEqual(current);
     const lifetime = (await fixture.admin.query('SELECT EXTRACT(EPOCH FROM (expires_at-created_at))::int AS seconds FROM customer.sessions WHERE id=$1', [done.sessionId])).rows[0];
     expect(lifetime.seconds).toBe(604800);
   });
@@ -257,7 +260,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('serializes concurrent name CAS and revoke-all versus continuity approval', async () => {
     const input = reservation(); await pending(input); const initial = claim(input); await repo.claimCheck(initial);
-    const first = completion(initial); await repo.completeCheck(first);
+    const first = completion(initial); await completeCustomerTestAccount(repo, first);
     const names = await Promise.all(['one', 'two'].map(encryptedName => repo.updateName({ ...input,
       expectedOperationId: first.operationId, expectedCheckId: first.checkId, sessionHash: first.sessionHash, expectedRevision: 0, encryptedName })));
     expect(names.filter(Boolean)).toHaveLength(1);
@@ -271,13 +274,13 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('does not duplicate or disclose a tenant phone when the configured provider parent changes', async () => {
     const input = reservation(); await pending(input); const first = claim(input); await repo.claimCheck(first);
-    const done = completion(first); await repo.completeCheck(done);
+    const done = completion(first); await completeCustomerTestAccount(repo, done);
     const other = reservation({ tenantRef: input.tenantRef, phoneHash: input.phoneHash });
     await pending(other); const check = claim(other); await repo.claimCheck(check);
     const attempted = { ...completion(check), existingSessionHash: done.sessionHash };
-    expect(await repo.completeCheck(attempted)).toBeNull();
+    expect(await completeCustomerTestAccount(repo, attempted)).toBeNull();
     expect((await fixture.admin.query('SELECT id FROM customer.accounts WHERE tenant_ref=$1', [input.tenantRef])).rowCount).toBe(1);
-    expect((await fixture.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [other.challengeId])).rows[0].state).toBe('rejected');
+    expect((await fixture.admin.query('SELECT state FROM customer.check_attempts WHERE id=$1', [check.checkId])).rows[0].state).toBe('verified');
   });
 
   it('holds the provider phone exclusion beyond a short application challenge and preserves a late SID', async () => {
@@ -304,7 +307,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it.each(['name', 'revoke-all'] as const)('cannot mutate %s after session expiry while waiting on the account lock', async action => {
     const input = reservation(); await pending(input); const check = claim(input); await repo.claimCheck(check);
-    const done = completion(check); await repo.completeCheck(done);
+    const done = completion(check); await completeCustomerTestAccount(repo, done);
     const blocker = await fixture.admin.connect();
     try {
       await blocker.query('BEGIN');
@@ -323,7 +326,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it.each(['name', 'revoke-all', 'revoke-one'] as const)('rechecks expiry inside the final %s SQL mutation after the last successful session read', async action => {
     const input = reservation(); await pending(input); const check = claim(input); await repo.claimCheck(check);
-    const done = completion(check); await repo.completeCheck(done);
+    const done = completion(check); await completeCustomerTestAccount(repo, done);
     let intercepted = 0;
     const interposed = { connect: async () => {
       const client = await fixture.app.connect();

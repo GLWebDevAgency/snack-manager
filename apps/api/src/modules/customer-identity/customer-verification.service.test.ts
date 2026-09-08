@@ -29,7 +29,7 @@ function fixture() {
     resultIntent: vi.fn().mockResolvedValue({ operationId, state: 'unresolved', challengeId: null, checkId: null, expiresAt: intent.expiresAt }),
     reserve: vi.fn().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn().mockResolvedValue(pending), recoverCheck: vi.fn().mockResolvedValue(null),
-    claimCheck: vi.fn().mockResolvedValue(pending), completeCheck: vi.fn().mockResolvedValue(session),
+    claimCheck: vi.fn().mockResolvedValue(pending), completeCheck: vi.fn().mockResolvedValue({ kind: 'session', session }),
     authenticate: vi.fn().mockResolvedValue(session), updateName: vi.fn().mockResolvedValue(session), revoke: vi.fn().mockResolvedValue(undefined),
   };
   const provider = { start: vi.fn().mockResolvedValue({ verificationSid: pending.verificationSid }), check: vi.fn().mockResolvedValue('approved') };
@@ -108,7 +108,7 @@ describe('verification intent and result — API use cases', () => {
     const f = fixture();
     const expectedHash = f.crypto.hash('request', f.binding.tenantRef, JSON.stringify(['customer-check-body-v1',
       f.check.operationId, f.check.challengeId, f.check.checkId, f.check.code]));
-    f.repository.recoverCheck.mockImplementation(async input => input.requestHash === expectedHash ? f.session : null);
+    f.repository.recoverCheck.mockImplementation(async input => input.requestHash === expectedHash ? { kind: 'session', session: f.session } : null);
     f.repository.claimCheck.mockResolvedValue(null);
     await expect(f.service.check(f.check)).resolves.toMatchObject({ view: { expiresAt: f.session.expiresAt } });
     await expect(f.service.check({ ...f.check, code: '654321' })).rejects.toBeDefined();

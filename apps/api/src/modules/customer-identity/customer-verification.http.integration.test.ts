@@ -9,7 +9,7 @@ import type { RequestHandler } from 'express';
 import type { Pool } from 'pg';
 import type { z } from 'zod';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerAccountResponses, type CustomerAccountAction, type CustomerAccountEnvelope } from '@sm/contracts';
+import { CustomerAccountResponses, type CustomerAccountAction, type CustomerAccountEnvelope, type CustomerProtectionRequest } from '@sm/contracts';
 import { PostgresCustomerIdentityRepository } from '@sm/customer';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { CustomerAccountController } from './customer-account.controller';
@@ -18,6 +18,7 @@ import { CustomerAccountHumanVerifier } from './customer-account.human';
 import { CUSTOMER_IDENTITY_REPOSITORY, CUSTOMER_VERIFICATION_TRANSPORT_FACTORY, CustomerAccountRuntime } from './customer-account.runtime';
 import { customerTestEnvironment } from './customer-account.test-fixture';
 import type { PhoneVerificationTransport } from './phone-verification.port';
+import { customerPasskeyFixture } from './customer-passkey.test-fixture';
 
 // Real signed HTTP -> Nest guard/controller/runtime/core -> migrated PostgreSQL
 // under a NOSUPERUSER/NOBYPASSRLS role. Only tenant lookup, HTTP rate limiting,
@@ -64,10 +65,11 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
   let sign: Sign;
   let dropAction: CustomerAccountAction | null = null;
   let closed = false;
+  let keys: Awaited<ReturnType<typeof customerPasskeyFixture>> | undefined;
   async function close() {
     if (closed) return;
     closed = true;
-    try { await app?.close(); } finally { await database?.close(); }
+    try { await keys?.close(); } finally { try { await app?.close(); } finally { await database?.close(); } }
   }
   beforeAll(async () => {
     // Reuse the guarded UUID database/role fixture; no application DB can be a
@@ -95,7 +97,7 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     } catch (error) { await close(); throw error; }
   }, 20_000);
   afterAll(close);
-  beforeEach(() => {
+  beforeEach(async () => {
     dropAction = null;
     env = customerTestEnvironment();
     const parent = `AC${randomUUID().replaceAll('-', '')}`, tenant = randomBytes(12).toString('hex');
@@ -109,6 +111,7 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     human.verify.mockReset().mockResolvedValue(true);
     provider.start.mockReset().mockImplementation(async () => ({ verificationSid: `VE${randomUUID().replaceAll('-', '')}` }));
     provider.check.mockReset().mockResolvedValue('approved');
+    await keys?.close(); keys = await customerPasskeyFixture(origin);
   });
   async function http<A extends CustomerAccountAction>(action: A, envelope: CustomerAccountEnvelope<A>) {
     const body = JSON.stringify(envelope);
@@ -151,6 +154,29 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
       (SELECT count(*)::int FROM customer.accounts WHERE tenant_ref=$1) AS accounts,
       (SELECT count(*)::int FROM customer.sessions WHERE tenant_ref=$1) AS sessions,
       (SELECT count(*)::int FROM customer.check_attempts WHERE tenant_ref=$1) AS checks`, [env.SM_CUSTOMER_PILOT_TENANT_ID])).rows[0];
+  }
+
+  async function prepareProtection(f: Awaited<ReturnType<typeof intent>>, checkId: string) {
+    const selected = { operationId: f.operationId, checkId };
+    const call = (request: CustomerProtectionRequest) => ok('protection', { ...f.privateBinding, request });
+    const registrationId = randomUUID(), assertionId = randomUUID(), activationId = randomUUID();
+    const registration = await call({ ...selected, step: 'registration-options', registrationId });
+    if (registration.state !== 'registration-options') throw new Error('Expected options');
+    const registered = await call({ ...selected, step: 'register', registrationId, response: await keys!.register(registration.options) });
+    expect(registered.state).toBe('enrollment');
+    const assertion = await call({ ...selected, step: 'assertion-options', assertionId });
+    if (assertion.state !== 'assertion-options') throw new Error('Expected assertion');
+    await call({ ...selected, step: 'assert', assertionId, response: await keys!.authenticate(assertion.options) });
+    const recovery = await call({ ...selected, step: 'recovery-code', rotationId: randomUUID(), expectedVersion: 0 });
+    if (recovery.state !== 'recovery-code' || !recovery.code) throw new Error('Expected recovery display');
+    const envelope = { ...f.privateBinding, request: { ...selected, step: 'activate' as const,
+      activationId, recoveryVersion: recovery.enrollment.recoveryVersion, code: recovery.code } };
+    const resultEnvelope = { ...f.privateBinding, request: { ...selected, step: 'activation-result' as const, activationId } };
+    return { envelope, resultEnvelope, activationId, publication: f.publication(activationId),
+      activate: async () => { const result = await ok('protection', envelope);
+        if (result.state !== 'authenticated') throw new Error('Expected activation'); return result; },
+      recover: async () => { const result = await ok('protection', resultEnvelope);
+        if (result.state !== 'authenticated') throw new Error('Expected activation receipt'); return result; } };
   }
 
   it('restores the confirmed selector after response loss without renewing it or creating a private publication', async () => {
@@ -203,19 +229,26 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     expect(provider.start).toHaveBeenCalledTimes(1); expect(provider.check).not.toHaveBeenCalled();
     expect(await counts()).toEqual({ sends: 1, accounts: 0, sessions: 0, checks: 0 });
   });
-  it('recovers one committed approval after HTTP loss, refuses changed OTP replay, and closes its session', async () => {
+  it('recovers provisional OTP then protected activation after HTTP loss without a second provider check', async () => {
     const binding = await browser(), f = await intent(binding), pending = await ok('start', f.start());
     const check = f.check(pending.challengeId); dropAction = 'check';
     await expect(http('check', check)).rejects.toBeDefined(); expect(dropAction).toBeNull();
-    const result = await ok('recover', f.result(check.request.checkId));
-    expect(result.state).toBe('approved'); if (result.state !== 'approved') throw new Error('Expected exact approval');
-    expect(await ok('recover', f.result(check.request.checkId))).toEqual(result);
+    const provisional = await ok('recover', f.result(check.request.checkId));
+    expect(provisional.state).toBe('enrollment');
+    expect(provisional).not.toHaveProperty('token'); expect(provisional).not.toHaveProperty('view');
+    expect(await ok('recover', f.result(check.request.checkId))).toEqual(provisional);
+    expect(await counts()).toEqual({ sends: 1, accounts: 0, sessions: 0, checks: 1 });
     expect((await http('check', { ...check, request: { ...check.request, code: '654321' } })).status).toBe(401);
     const noSelection = await ok('recover', f.result(null)); expect(noSelection.state).not.toBe('approved');
-    expect(await ok('session', { ...binding, ...f.publication(check.request.checkId), sessionToken: result.token, request: {} })).toEqual(result.view);
+    const protection = await prepareProtection(f, check.request.checkId);
+    expect(await counts()).toEqual({ sends: 1, accounts: 0, sessions: 0, checks: 1 });
+    dropAction = 'protection'; await expect(http('protection', protection.envelope)).rejects.toBeDefined(); expect(dropAction).toBeNull();
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const result = await protection.recover(); expect(await protection.recover()).toEqual(result);
+    expect(await ok('session', { ...binding, ...protection.publication, sessionToken: result.token, request: {} })).toEqual(result.view);
     expect((await f.close()).intent.state).toBe('closed');
     expect((await ok('recover', f.result(check.request.checkId))).state).toBe('closed');
-    expect((await http('session', { ...binding, ...f.publication(check.request.checkId), sessionToken: result.token, request: {} })).status).toBe(401);
+    expect((await http('session', { ...binding, ...protection.publication, sessionToken: result.token, request: {} })).status).toBe(401);
     expect(provider.start).toHaveBeenCalledTimes(1); expect(provider.check).toHaveBeenCalledTimes(1);
     expect(await counts()).toEqual({ sends: 1, accounts: 1, sessions: 1, checks: 1 });
   });
@@ -248,7 +281,9 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
   });
   it('keeps a later session B authoritative when an old A credential arrives and A is closed', async () => {
     const binding = await browser(), a = await intent(binding), pendingA = await ok('start', a.start());
-    const checkA = a.check(pendingA.challengeId), approvedA = await ok('check', checkA);
+    const checkA = a.check(pendingA.challengeId);
+    expect((await ok('check', checkA)).state).toBe('enrollment');
+    const protectionA = await prepareProtection(a, checkA.request.checkId), approvedA = await protectionA.activate();
     const nonexistentPublication = { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() };
     // A is still valid here: these refusals specifically prove publication
     // selection, not an already-revoked token or a stale browser generation.
@@ -256,15 +291,17 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
     expect((await http('name', { ...binding, ...nonexistentPublication, sessionToken: approvedA.token,
       request: { name: 'Must not be written', expectedRevision: 0 } })).status).toBe(401);
     await ok('logout', { ...binding, ...nonexistentPublication, sessionToken: approvedA.token, request: { all: true } });
-    expect(await ok('session', { ...binding, ...a.publication(checkA.request.checkId), sessionToken: approvedA.token, request: {} })).toEqual(approvedA.view);
+    expect(await ok('session', { ...binding, ...protectionA.publication, sessionToken: approvedA.token, request: {} })).toEqual(approvedA.view);
     // This is the stale server credential carried by a delayed Set-Cookie A;
     // browser cookie delivery itself belongs to the separate BFF/Chromium test.
     const b = await intent(binding), pendingB = await ok('start', b.start(phones[1]));
-    const checkB = b.check(pendingB.challengeId), approvedB = await ok('check', checkB);
-    expect((await http('session', { ...binding, ...b.publication(checkB.request.checkId), sessionToken: approvedA.token, request: {} })).status).toBe(401);
+    const checkB = b.check(pendingB.challengeId);
+    expect((await ok('check', checkB)).state).toBe('enrollment');
+    const protectionB = await prepareProtection(b, checkB.request.checkId), approvedB = await protectionB.activate();
+    expect((await http('session', { ...binding, ...protectionB.publication, sessionToken: approvedA.token, request: {} })).status).toBe(401);
     expect((await ok('recover', a.result(checkA.request.checkId))).state).toBe('failed');
     expect((await a.close()).intent.state).toBe('closed');
-    expect(await ok('session', { ...binding, ...b.publication(checkB.request.checkId), sessionToken: approvedB.token, request: {} })).toEqual(approvedB.view);
+    expect(await ok('session', { ...binding, ...protectionB.publication, sessionToken: approvedB.token, request: {} })).toEqual(approvedB.view);
     expect(await counts()).toEqual({ sends: 2, accounts: 2, sessions: 2, checks: 2 });
     expect(provider.start).toHaveBeenCalledTimes(2); expect(provider.check).toHaveBeenCalledTimes(2);
   });

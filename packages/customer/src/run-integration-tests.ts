@@ -8,6 +8,7 @@ const result = spawnSync(process.execPath, [require.resolve('vitest/vitest.mjs')
   'src/paid-migration.integration.test.ts', 'src/browser-continuity.integration.test.ts', 'src/browser-preparation.integration.test.ts',
   'src/verification-intents.integration.test.ts', 'src/session-publications.integration.test.ts',
   'src/session-publication-migration.integration.test.ts',
+  'src/enrollment.integration.test.ts', 'src/enrollment-adversarial.integration.test.ts',
   '--maxWorkers=1', '--no-file-parallelism'], { stdio: 'inherit', timeout: 120_000 });
 if (result.status !== 0 || result.error || result.signal) process.exitCode = 1;
 else {
