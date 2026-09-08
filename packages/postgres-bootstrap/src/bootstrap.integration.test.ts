@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
+import { grantCustomerRuntimeRole } from '../../customer/src/migration-role';
 import {
   PostgresBootstrapError,
   checkPostgresBootstrap,
@@ -181,11 +182,18 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationsFolder: resolve(__dirname, '../../loyalty/drizzle'),
         migrationsTable: '__drizzle_loyalty_migrations',
       });
-      await freshMigrationPool.query(
-        `GRANT USAGE ON SCHEMA drizzle, loyalty TO ${identifier(runtimeRole)};
-         GRANT SELECT ON TABLE drizzle.__drizzle_migrations TO ${identifier(runtimeRole)};
-         GRANT SELECT ON TABLE drizzle.__drizzle_loyalty_migrations TO ${identifier(runtimeRole)};`,
-      );
+      // Couvre aussi le déploiement additif : les deux contextes historiques
+      // sont sains, customer n'existe pas encore, et le préflight reste passant.
+      await repairPostgresBootstrap(bootstrapPool(freshAdminPool), {
+        migrationRole, runtimeRole, expectedDatabase: freshDatabaseName,
+      });
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+        migrationRole, runtimeRole,
+      })).resolves.toMatchObject({ issues: [] });
+      await migrate(drizzle(freshMigrationPool), {
+        migrationsFolder: resolve(__dirname, '../../customer/drizzle'),
+        migrationsTable: '__drizzle_customer_migrations',
+      });
       await expect(
         checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
           migrationRole,
@@ -198,13 +206,17 @@ integration('bootstrap PostgreSQL — base réelle', () => {
           ]),
         },
       });
+      // C'est le helper réellement appelé par le CLI customer qui complète
+      // les droits. Aucun administrateur ni repair n'est requis après ce DDL.
+      await grantCustomerRuntimeRole(freshMigrationPool, runtimeRole);
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+        migrationRole, runtimeRole,
+      })).resolves.toMatchObject({ issues: [] });
       const freshPostMigrationRepair = await repairPostgresBootstrap(
         bootstrapPool(freshAdminPool),
         { migrationRole, runtimeRole, expectedDatabase: freshDatabaseName },
       );
-      expect(
-        freshPostMigrationRepair.changed.some((change) => change.includes(':DML:')),
-      ).toBe(true);
+      expect(freshPostMigrationRepair.changed).toEqual([]);
       await expect(
         checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
           migrationRole,
@@ -260,7 +272,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
          GRANT USAGE, CREATE ON SCHEMA public TO ${identifier(legacyRole)}`,
       );
 
-      // Reproduit le legs réel : les deux migrations et leurs journaux sont
+      // Reproduit le legs réel : les trois contextes et leurs journaux sont
       // créés avec l'ancien propriétaire, jamais avec le migrateur dédié.
       await adminPool.query(`SET ROLE ${identifier(legacyRole)}`);
       const legacyDb = drizzle(adminPool);
@@ -270,6 +282,10 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       await migrate(legacyDb, {
         migrationsFolder: resolve(__dirname, '../../loyalty/drizzle'),
         migrationsTable: '__drizzle_loyalty_migrations',
+      });
+      await migrate(legacyDb, {
+        migrationsFolder: resolve(__dirname, '../../customer/drizzle'),
+        migrationsTable: '__drizzle_customer_migrations',
       });
       await adminPool.query('RESET ROLE');
       await adminPool.query(
@@ -325,6 +341,15 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       await expect(
         runtimePool.query('CREATE TABLE public.runtime_must_not_create (id integer)'),
       ).rejects.toMatchObject({ code: '42501' });
+      await expect(
+        runtimePool.query('CREATE TABLE customer.runtime_must_not_create (id integer)'),
+      ).rejects.toMatchObject({ code: '42501' });
+      await expect(
+        runtimePool.query('SELECT count(*)::integer AS count FROM customer.accounts'),
+      ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+      await expect(
+        runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
+      ).resolves.toMatchObject({ rows: [{ count: 1 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont
@@ -336,6 +361,43 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         migrationsFolder: resolve(__dirname, '../../loyalty/drizzle'),
         migrationsTable: '__drizzle_loyalty_migrations',
       });
+      await migrate(drizzle(migrationPool), {
+        migrationsFolder: resolve(__dirname, '../../customer/drizzle'),
+        migrationsTable: '__drizzle_customer_migrations',
+      });
+
+      // Le troisième journal doit être aussi strictement lecture seule pour
+      // le runtime : l'ajout d'un contexte ne lui accorde aucun pouvoir DDL.
+      await adminPool.query(
+        `GRANT UPDATE ON TABLE drizzle.__drizzle_customer_migrations TO ${identifier(runtimeRole)}`,
+      );
+      await expect(
+        checkPostgresBootstrap(bootstrapPool(migrationPool), { migrationRole, runtimeRole }),
+      ).rejects.toMatchObject({ report: { issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'journal_privilege_excessive', target: 'drizzle.__drizzle_customer_migrations',
+        }),
+      ]) } });
+      const customerAclRepaired = await repairPostgresBootstrap(bootstrapPool(adminPool), {
+        migrationRole, runtimeRole, expectedDatabase: databaseName,
+      });
+      expect(customerAclRepaired.changed).toContain(
+        `revoke:drizzle.__drizzle_customer_migrations:WRITE:${runtimeRole}`,
+      );
+      await expect(runtimePool.query(
+        'UPDATE drizzle.__drizzle_customer_migrations SET hash = hash WHERE false',
+      )).rejects.toMatchObject({ code: '42501' });
+
+      await adminPool.query('GRANT CREATE ON SCHEMA customer TO PUBLIC');
+      await expect(
+        checkPostgresBootstrap(bootstrapPool(migrationPool), { migrationRole, runtimeRole }),
+      ).rejects.toMatchObject({ report: { issues: expect.arrayContaining([
+        expect.objectContaining({ code: 'managed_schema_unsafe', target: 'schema:customer' }),
+      ]) } });
+      await expect(repairPostgresBootstrap(bootstrapPool(adminPool), {
+        migrationRole, runtimeRole, expectedDatabase: databaseName,
+      })).rejects.toThrow(/schéma géré/);
+      await adminPool.query('REVOKE CREATE ON SCHEMA customer FROM PUBLIC');
 
       await adminPool.query(
         `GRANT INSERT, UPDATE, DELETE, TRUNCATE
@@ -753,6 +815,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       await adminPool.query(
         `ALTER TABLE loyalty.members OWNER TO ${identifier(legacyRole)};
          CREATE TABLE loyalty.bootstrap_rogue (id integer PRIMARY KEY);
+         CREATE TABLE customer.bootstrap_rogue (id integer PRIMARY KEY);
          CREATE VIEW loyalty.bootstrap_rogue_view AS SELECT 1 AS value;
          CREATE PROCEDURE loyalty.bootstrap_rogue_procedure()
            LANGUAGE SQL AS 'SELECT 1';
@@ -783,6 +846,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
         report: {
           issues: expect.arrayContaining([
             expect.objectContaining({ code: 'unexpected_object', target: 'loyalty.bootstrap_rogue' }),
+            expect.objectContaining({ code: 'unexpected_object', target: 'customer.bootstrap_rogue' }),
             expect.objectContaining({
               code: 'unexpected_object',
               target: 'loyalty.bootstrap_rogue_view',

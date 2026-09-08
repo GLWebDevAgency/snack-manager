@@ -138,6 +138,11 @@ type RoleProbe = {
   loyalty_create_granted_to_other: unknown;
   migration_can_use_loyalty_schema: unknown;
   migration_can_create_loyalty_schema: unknown;
+  customer_exists: unknown;
+  customer_create_granted_to_public: unknown;
+  customer_create_granted_to_other: unknown;
+  migration_can_use_customer_schema: unknown;
+  migration_can_create_customer_schema: unknown;
   runtime_role: unknown;
   runtime_rolcanlogin: unknown;
   runtime_rolsuper: unknown;
@@ -154,10 +159,12 @@ type RoleProbe = {
   runtime_can_use_public_schema: unknown;
   runtime_can_use_drizzle_schema: unknown;
   runtime_can_use_loyalty_schema: unknown;
+  runtime_can_use_customer_schema: unknown;
   runtime_can_create_database_objects: unknown;
   runtime_can_create_public_schema: unknown;
   runtime_can_create_drizzle_schema: unknown;
   runtime_can_create_loyalty_schema: unknown;
+  runtime_can_create_customer_schema: unknown;
   runtime_owns_application_objects: unknown;
 };
 
@@ -252,6 +259,8 @@ type AdminProbe = {
   drizzle_create_granted_to_other: unknown;
   loyalty_create_granted_to_public: unknown;
   loyalty_create_granted_to_other: unknown;
+  customer_create_granted_to_public: unknown;
+  customer_create_granted_to_other: unknown;
 };
 
 type ConnectablePool = Pick<Pool, 'connect'>;
@@ -275,7 +284,7 @@ actual AS (
          ''::pg_catalog.text AS identity_arguments,
          pg_catalog.pg_get_userbyid(namespace.nspowner)::pg_catalog.text AS owner_name
     FROM pg_catalog.pg_namespace namespace
-   WHERE namespace.nspname IN ('drizzle', 'loyalty')
+   WHERE namespace.nspname IN ('drizzle', 'loyalty', 'customer')
   UNION ALL
   SELECT CASE relation.relkind
            WHEN 'S' THEN 'sequence'
@@ -290,7 +299,7 @@ actual AS (
          pg_catalog.pg_get_userbyid(relation.relowner)::pg_catalog.text AS owner_name
     FROM pg_catalog.pg_class relation
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = relation.relnamespace
-   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty')
+   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty', 'customer')
      -- Indexes, contraintes, triggers et row-types suivent la propriété de
      -- leur table. Les objets ci-dessous ont une propriété autonome.
      AND relation.relkind IN ('r', 'p', 'S', 'v', 'm', 'f')
@@ -310,7 +319,7 @@ actual AS (
     FROM pg_catalog.pg_type data_type
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = data_type.typnamespace
     LEFT JOIN pg_catalog.pg_class composite_relation ON composite_relation.oid = data_type.typrelid
-   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty')
+   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty', 'customer')
      AND (
        data_type.typtype IN ('e', 'd', 'r', 'm')
        OR (data_type.typtype = 'c' AND composite_relation.relkind = 'c')
@@ -333,7 +342,7 @@ actual AS (
          pg_catalog.pg_get_userbyid(procedure.proowner)::pg_catalog.text AS owner_name
    FROM pg_catalog.pg_proc procedure
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = procedure.pronamespace
-   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty')
+   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty', 'customer')
   UNION ALL
   SELECT 'operator'::pg_catalog.text AS kind,
          namespace.nspname::pg_catalog.text AS schema_name,
@@ -352,7 +361,7 @@ actual AS (
          pg_catalog.pg_get_userbyid(operator.oprowner)::pg_catalog.text AS owner_name
     FROM pg_catalog.pg_operator operator
     JOIN pg_catalog.pg_namespace namespace ON namespace.oid = operator.oprnamespace
-   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty')
+   WHERE namespace.nspname IN ('public', 'drizzle', 'loyalty', 'customer')
 )
 SELECT wanted.kind,
        wanted.schema_name,
@@ -375,7 +384,7 @@ SELECT actual.kind,
        false AS managed
   FROM actual
  WHERE (
-   actual.schema_name IN ('drizzle', 'loyalty')
+   actual.schema_name IN ('drizzle', 'loyalty', 'customer')
    OR (
      actual.schema_name = 'public'
      AND (
@@ -600,6 +609,38 @@ SELECT pg_catalog.current_database()::pg_catalog.text AS database_name,
          AS migration_can_use_loyalty_schema,
        COALESCE(pg_catalog.has_schema_privilege(migration.oid, pg_catalog.to_regnamespace('loyalty'), 'CREATE'), false)
          AS migration_can_create_loyalty_schema,
+       pg_catalog.to_regnamespace('customer') IS NOT NULL AS customer_exists,
+       EXISTS (
+         SELECT 1
+           FROM pg_catalog.pg_namespace namespace
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               namespace.nspacl,
+               pg_catalog.acldefault('n', namespace.nspowner)
+             )
+           ) AS privilege
+          WHERE namespace.nspname = 'customer'
+            AND privilege.grantee = 0
+            AND privilege.privilege_type = 'CREATE'
+       ) AS customer_create_granted_to_public,
+       EXISTS (
+         SELECT 1
+           FROM pg_catalog.pg_namespace namespace
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(
+               namespace.nspacl,
+               pg_catalog.acldefault('n', namespace.nspowner)
+             )
+           ) AS privilege
+          WHERE namespace.nspname = 'customer'
+            AND privilege.grantee <> 0
+            AND privilege.grantee NOT IN (migration.oid, namespace.nspowner)
+            AND privilege.privilege_type = 'CREATE'
+       ) AS customer_create_granted_to_other,
+       COALESCE(pg_catalog.has_schema_privilege(migration.oid, pg_catalog.to_regnamespace('customer'), 'USAGE'), false)
+         AS migration_can_use_customer_schema,
+       COALESCE(pg_catalog.has_schema_privilege(migration.oid, pg_catalog.to_regnamespace('customer'), 'CREATE'), false)
+         AS migration_can_create_customer_schema,
        runtime.rolname::pg_catalog.text AS runtime_role,
        runtime.rolcanlogin AS runtime_rolcanlogin,
        runtime.rolsuper AS runtime_rolsuper,
@@ -662,6 +703,14 @@ SELECT pg_catalog.current_database()::pg_catalog.text AS database_name,
          ),
          false
        ) AS runtime_can_use_loyalty_schema,
+       COALESCE(
+         pg_catalog.has_schema_privilege(
+           runtime.oid,
+           pg_catalog.to_regnamespace('customer'),
+           'USAGE'
+         ),
+         false
+       ) AS runtime_can_use_customer_schema,
        pg_catalog.has_database_privilege(runtime.oid, pg_catalog.current_database(), 'CREATE')
          AS runtime_can_create_database_objects,
        pg_catalog.has_schema_privilege(runtime.oid, 'public', 'CREATE') AS runtime_can_create_public_schema,
@@ -669,6 +718,8 @@ SELECT pg_catalog.current_database()::pg_catalog.text AS database_name,
          AS runtime_can_create_drizzle_schema,
        COALESCE(pg_catalog.has_schema_privilege(runtime.oid, pg_catalog.to_regnamespace('loyalty'), 'CREATE'), false)
          AS runtime_can_create_loyalty_schema,
+       COALESCE(pg_catalog.has_schema_privilege(runtime.oid, pg_catalog.to_regnamespace('customer'), 'CREATE'), false)
+         AS runtime_can_create_customer_schema,
        EXISTS (
          SELECT 1
            FROM pg_catalog.pg_class relation
@@ -922,6 +973,27 @@ SELECT pg_catalog.current_database()::pg_catalog.text AS database_name,
             AND privilege.grantee NOT IN (migration.oid, namespace.nspowner)
             AND privilege.privilege_type = 'CREATE'
        ) AS loyalty_create_granted_to_other
+       , EXISTS (
+         SELECT 1
+           FROM pg_catalog.pg_namespace namespace
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+           ) AS privilege
+          WHERE namespace.nspname = 'customer'
+            AND privilege.grantee = 0
+            AND privilege.privilege_type = 'CREATE'
+       ) AS customer_create_granted_to_public
+       , EXISTS (
+         SELECT 1
+           FROM pg_catalog.pg_namespace namespace
+           CROSS JOIN LATERAL pg_catalog.aclexplode(
+             COALESCE(namespace.nspacl, pg_catalog.acldefault('n', namespace.nspowner))
+           ) AS privilege
+          WHERE namespace.nspname = 'customer'
+            AND privilege.grantee <> 0
+            AND privilege.grantee NOT IN (migration.oid, namespace.nspowner)
+            AND privilege.privilege_type = 'CREATE'
+       ) AS customer_create_granted_to_other
   FROM pg_catalog.pg_roles admin
   JOIN pg_catalog.pg_roles migration ON migration.rolname = $1
   JOIN pg_catalog.pg_roles runtime ON runtime.rolname = $2
@@ -1636,7 +1708,7 @@ function defaultPrivilegeAllowed(
 ): boolean {
   if (privilege.grantee === roles.migrationRole) return true;
   if (privilege.grantee !== roles.runtimeRole || privilege.grantable) return false;
-  if (!['public', 'loyalty'].includes(privilege.schema)) return false;
+  if (!['public', 'loyalty', 'customer'].includes(privilege.schema)) return false;
   if (privilege.objectType === 'r') {
     return ['SELECT', 'INSERT', 'UPDATE', 'DELETE'].includes(privilege.privilege);
   }
@@ -1657,7 +1729,7 @@ function appendDefaultPrivilegeIssues(
       code: 'default_privilege_excessive',
       target: `${privilege.schema}:${privilege.objectType}:${privilege.grantee}`,
       expected:
-        'migrateur propriétaire ou runtime DML/sequence sans grant option dans public/loyalty',
+        'migrateur propriétaire ou runtime DML/sequence sans grant option dans public/loyalty/customer',
       actual: `${privilege.privilege}; grantable=${String(privilege.grantable)}`,
     });
   }
@@ -1786,6 +1858,12 @@ function roleIssues(row: RoleProbe | undefined, roles: BootstrapRoles): Bootstra
           ['schema:loyalty:CREATE', row.migration_can_create_loyalty_schema],
         ] as const)
       : []),
+    ...(row.customer_exists === true
+      ? ([
+          ['schema:customer:USAGE', row.migration_can_use_customer_schema],
+          ['schema:customer:CREATE', row.migration_can_create_customer_schema],
+        ] as const)
+      : []),
   ] as const) {
     if (allowed !== true) {
       issues.push({
@@ -1823,6 +1901,12 @@ function roleIssues(row: RoleProbe | undefined, roles: BootstrapRoles): Bootstra
       row.loyalty_exists,
       row.loyalty_create_granted_to_public,
       row.loyalty_create_granted_to_other,
+    ],
+    [
+      'customer',
+      row.customer_exists,
+      row.customer_create_granted_to_public,
+      row.customer_create_granted_to_other,
     ],
   ] as const) {
     if (exists === true && (publicCreate !== false || otherCreate !== false)) {
@@ -1883,6 +1967,9 @@ function roleIssues(row: RoleProbe | undefined, roles: BootstrapRoles): Bootstra
     ...(row.loyalty_exists === true
       ? ([['schema:loyalty:USAGE', row.runtime_can_use_loyalty_schema]] as const)
       : []),
+    ...(row.customer_exists === true
+      ? ([['schema:customer:USAGE', row.runtime_can_use_customer_schema]] as const)
+      : []),
   ] as const) {
     if (allowed !== true) {
       issues.push({
@@ -1899,6 +1986,7 @@ function roleIssues(row: RoleProbe | undefined, roles: BootstrapRoles): Bootstra
     ['schema:public:CREATE', row.runtime_can_create_public_schema],
     ['schema:drizzle:CREATE', row.runtime_can_create_drizzle_schema],
     ['schema:loyalty:CREATE', row.runtime_can_create_loyalty_schema],
+    ['schema:customer:CREATE', row.runtime_can_create_customer_schema],
     ['application:OWNER', row.runtime_owns_application_objects],
   ] as const) {
     if (excessive !== false) {
@@ -1994,7 +2082,7 @@ function appendObjectStateIssues(
     }
   }
 
-  for (const journal of ['supply', 'loyalty'] as const) {
+  for (const journal of ['supply', 'loyalty', 'customer'] as const) {
     const definition = JOURNALS[journal];
     const journalTable = POSTGRES_MANAGED_OBJECTS.find(
       (object) => object.kind === 'table' && object.schema === 'drizzle' && object.name === definition.table,
@@ -2099,6 +2187,7 @@ async function inspectPostgresBootstrap(
   const applied = {
     supply: await readJournal(client, 'supply', catalog, roles.migrationRole, issues),
     loyalty: await readJournal(client, 'loyalty', catalog, roles.migrationRole, issues),
+    customer: await readJournal(client, 'customer', catalog, roles.migrationRole, issues),
   };
   appendObjectStateIssues(catalog, roles.migrationRole, applied, issues);
 
@@ -2265,7 +2354,9 @@ function assertAdminProbe(
     row.drizzle_create_granted_to_public !== false ||
     row.drizzle_create_granted_to_other !== false ||
     row.loyalty_create_granted_to_public !== false ||
-    row.loyalty_create_granted_to_other !== false
+    row.loyalty_create_granted_to_other !== false ||
+    row.customer_create_granted_to_public !== false ||
+    row.customer_create_granted_to_other !== false
   ) {
     throw new Error(
       'Un schéma géré accorde CREATE à PUBLIC ou à un rôle hors allowlist ; réparation automatique refusée',
@@ -2410,7 +2501,7 @@ export async function repairPostgresBootstrap(
 
     const catalogResult = await client.query<CatalogRow>(CATALOG_QUERY, [catalogPayload()]);
     const catalog = catalogResult.rows.map(parseCatalogRow);
-    for (const schema of ['drizzle', 'loyalty'] as const) {
+    for (const schema of ['drizzle', 'loyalty', 'customer'] as const) {
       const schemaEntry = catalog.find(
         (object) => object.managed && object.kind === 'schema' && object.name === schema,
       );
@@ -2440,7 +2531,7 @@ export async function repairPostgresBootstrap(
       changed.push(`owner:${targetLabel(object)}:${options.migrationRole}`);
     }
 
-    for (const schema of ['public', 'drizzle', 'loyalty'] as const) {
+    for (const schema of ['public', 'drizzle', 'loyalty', 'customer'] as const) {
       const exists =
         schema === 'public' ||
         catalog.some(
@@ -2629,7 +2720,7 @@ export async function repairPostgresBootstrap(
       await client.query(`REVOKE CREATE ON DATABASE ${quotedDatabase} FROM ${quotedRuntimeRole}`);
       changed.push(`revoke:${database}:CREATE:${options.runtimeRole}`);
     }
-    for (const schema of ['public', 'drizzle', 'loyalty'] as const) {
+    for (const schema of ['public', 'drizzle', 'loyalty', 'customer'] as const) {
       const exists =
         schema === 'public' || catalog.some((object) => object.kind === 'schema' && object.name === schema && object.owner);
       if (

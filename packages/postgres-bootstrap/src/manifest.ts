@@ -1,5 +1,5 @@
 export type ManagedObjectKind = 'schema' | 'table' | 'sequence' | 'type' | 'function';
-export type MigrationJournal = 'supply' | 'loyalty';
+export type MigrationJournal = 'supply' | 'loyalty' | 'customer';
 
 export type ManagedObject = Readonly<{
   kind: ManagedObjectKind;
@@ -13,6 +13,7 @@ export type ManagedObject = Readonly<{
 export const SUPPLY_INITIAL_MIGRATION = 1_787_074_510_723;
 export const LOYALTY_INITIAL_MIGRATION = 1_788_230_085_055;
 export const LOYALTY_EARN_RECEIPTS_MIGRATION = 1_788_236_557_128;
+export const CUSTOMER_INITIAL_MIGRATION = 1_788_854_400_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -98,8 +99,10 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
 
   managed('table', 'drizzle', '__drizzle_migrations'),
   managed('table', 'drizzle', '__drizzle_loyalty_migrations'),
+  managed('table', 'drizzle', '__drizzle_customer_migrations'),
   managed('sequence', 'drizzle', '__drizzle_migrations_id_seq'),
   managed('sequence', 'drizzle', '__drizzle_loyalty_migrations_id_seq'),
+  managed('sequence', 'drizzle', '__drizzle_customer_migrations_id_seq'),
 
   ...[
     'allergen',
@@ -152,6 +155,21 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
     ),
     identityArguments: '',
   },
+  introduced('schema', 'customer', 'customer', 'customer', CUSTOMER_INITIAL_MIGRATION),
+  ...[
+    'parent_budgets',
+    'phone_guards',
+    'reservations',
+    'accounts',
+    'verified_contacts',
+    'challenges',
+    'provider_verifications',
+    'check_attempts',
+    'sessions',
+  ].map((name) => introduced('table', 'customer', name, 'customer', CUSTOMER_INITIAL_MIGRATION)),
+  ...['reject_immutable_record', 'preserve_parent_budget'].map((name) =>
+    introduced('function', 'customer', name, 'customer', CUSTOMER_INITIAL_MIGRATION),
+  ),
 ] as const;
 
 export const JOURNALS: Readonly<
@@ -165,6 +183,11 @@ export const JOURNALS: Readonly<
   loyalty: {
     table: '__drizzle_loyalty_migrations',
     sequence: '__drizzle_loyalty_migrations_id_seq',
+    columns: ['id', 'hash', 'created_at'],
+  },
+  customer: {
+    table: '__drizzle_customer_migrations',
+    sequence: '__drizzle_customer_migrations_id_seq',
     columns: ['id', 'hash', 'created_at'],
   },
 };

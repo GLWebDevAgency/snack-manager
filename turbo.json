@@ -37,6 +37,32 @@
       "dependsOn": ["^build", "@sm/db#build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/src/modules/orders/price-order-lines.ts", "$TURBO_ROOT$/apps/api/package.json"]
     },
+    "@sm/postgres-bootstrap#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/supply/drizzle/**",
+        "$TURBO_ROOT$/packages/loyalty/drizzle/**",
+        "$TURBO_ROOT$/packages/customer/drizzle/**",
+        "$TURBO_ROOT$/packages/customer/src/migration-role.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/apps/api/package.json",
+        "$TURBO_ROOT$/.github/workflows/ci.yml",
+        "$TURBO_ROOT$/.github/workflows/deploy.yml"
+      ]
+    },
+    "@sm/customer#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/api/src/modules/customer-identity/customer-identity.service.ts",
+        "$TURBO_ROOT$/apps/api/src/modules/customer-identity/trial-verification-policy.ts",
+        "$TURBO_ROOT$/apps/api/src/modules/customer-identity/phone-verification.port.ts",
+        "$TURBO_ROOT$/apps/api/package.json",
+        "$TURBO_ROOT$/apps/api/tsconfig.json",
+        "$TURBO_ROOT$/tsconfig.base.json"
+      ]
+    },
     "dev": {
       "cache": false,
       "persistent": true

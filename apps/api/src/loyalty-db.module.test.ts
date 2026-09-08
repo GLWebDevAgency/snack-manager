@@ -22,6 +22,7 @@ function safeRole(roleName = 'snackmanager_app'): Record<string, unknown> {
     can_create_database_objects: false,
     can_create_public_schema: false,
     can_create_loyalty_schema: false,
+    can_create_customer_schema: false,
     owns_application_objects: false,
   };
 }
@@ -60,11 +61,13 @@ describe('rôle PostgreSQL du module fidélité', () => {
     expect(query).toHaveBeenCalledOnce();
     expect(query.mock.calls[0]?.[0]).toMatch(/pg_catalog\.pg_roles/);
     expect(query.mock.calls[0]?.[0]).toMatch(/current_user/);
+    expect(query.mock.calls[0]?.[0]).toContain("to_regnamespace('customer')");
   });
 
   it.each([
     ['SUPERUSER', 'postgres', { ...safeRole('postgres'), rolsuper: true }],
     ['BYPASSRLS', 'unsafe_app', { ...safeRole('unsafe_app'), rolbypassrls: true }],
+    ['CREATE customer', 'unsafe_app', { ...safeRole('unsafe_app'), can_create_customer_schema: true }],
   ])('refuse un rôle %s même si la sonde réussit', async (_label, roleName, role) => {
     const { pool } = poolReturning({ rowCount: 1, rows: [role] });
 
@@ -91,6 +94,10 @@ describe('rôle PostgreSQL du module fidélité', () => {
     [
       'attribut manquant',
       { rowCount: 1, rows: [{ role_name: 'app', rolsuper: false }] },
+    ],
+    [
+      'privilège customer inconnu',
+      { rowCount: 1, rows: [{ ...safeRole(), can_create_customer_schema: null }] },
     ],
     [
       'attribut non booléen',
@@ -164,23 +171,27 @@ describe('rôle PostgreSQL du module fidélité', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
-  it('vérifie les deux journaux de migration après le rôle déployé', async () => {
+  it('vérifie les trois journaux de migration après le rôle déployé', async () => {
     const { pool } = poolReturning({
       rowCount: 1,
       rows: [safeRole()],
     });
     const supply = vi.fn().mockResolvedValue(undefined);
     const loyalty = vi.fn().mockResolvedValue(undefined);
+    const customer = vi.fn().mockResolvedValue(undefined);
 
     await expect(
       assertDeployedPostgresReady(
         pool,
         { NODE_ENV: 'production', DATABASE_RUNTIME_ROLE: 'snackmanager_app' },
-        { supply, loyalty },
+        { supply, loyalty, customer },
       ),
     ).resolves.toBeUndefined();
     expect(supply).toHaveBeenCalledOnce();
     expect(loyalty).toHaveBeenCalledOnce();
+    expect(customer).toHaveBeenCalledOnce();
+    expect(supply.mock.invocationCallOrder[0]).toBeLessThan(loyalty.mock.invocationCallOrder[0]!);
+    expect(loyalty.mock.invocationCallOrder[0]).toBeLessThan(customer.mock.invocationCallOrder[0]!);
   });
 
   it('bloque le démarrage si le schéma runtime n est pas à jour', async () => {
@@ -197,8 +208,19 @@ describe('rôle PostgreSQL du module fidélité', () => {
         {
           supply: vi.fn().mockRejectedValue(failure),
           loyalty: vi.fn(),
+          customer: vi.fn(),
         },
       ),
     ).rejects.toBe(failure);
+  });
+
+  it('bloque aussi le démarrage si le nouveau schéma customer manque', async () => {
+    const { pool } = poolReturning({ rowCount: 1, rows: [safeRole()] });
+    const failure = new Error('schéma customer en retard');
+    await expect(assertDeployedPostgresReady(pool,
+      { RAILWAY_ENVIRONMENT_NAME: 'staging', DATABASE_RUNTIME_ROLE: 'snackmanager_app' },
+      { supply: vi.fn().mockResolvedValue(undefined), loyalty: vi.fn().mockResolvedValue(undefined),
+        customer: vi.fn().mockRejectedValue(failure) },
+    )).rejects.toBe(failure);
   });
 });
