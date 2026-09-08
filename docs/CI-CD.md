@@ -750,11 +750,12 @@ l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
 l'état des trois journaux Drizzle : `__drizzle_migrations`,
 `__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
-`drizzle`. Le manifeste L3a.5 énumère **73 objets** : les 55 objets historiques,
+`drizzle`. Le manifeste L3a.6a énumère **75 objets** : les 55 objets historiques,
 les 14 objets `customer` initiaux (schéma, neuf tables, deux fonctions, journal
 et sa séquence), puis la table de budget payant et trois fonctions de garde
-de la migration additive `0001`. Chaque ajout est lié à sa migration : une
-base à 69 objets reste recevable avant cette migration, pas après son journal
+de la migration additive `0001`, et la table de continuité navigateur avec sa
+fonction de garde `0002`. Chaque ajout est lié à sa migration : une
+base à 73 objets reste recevable avant `0002`, pas après son journal
 d'application. Ce nombre décrit le code cible, pas une preuve de migration déjà
 appliquée. Une base saine aux deux anciens contextes passe le préflight avant
 l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
@@ -771,6 +772,16 @@ la CI prouvent ces invariants sur une base reconstruite ; ils ne détectent pas
 une altération manuelle ultérieure de la base déployée. Un fingerprint live
 versionné de ces définitions reste donc un garde-fou distinct à livrer avant le
 premier restaurant réel en production.
+
+**Continuité des sessions L3a.6a :** déployer `0002_customer_browser_continuity`
+avec le pilote compte toujours fermé. Les anciennes lignes restent conservées,
+mais sans liaison navigateur inventée : elles ne sont pas reconnues par la
+nouvelle authentification. Une ancienne API ne vérifie pas encore cette
+liaison ; ne pas rouvrir le pilote tant que toutes ses instances et le web ne
+servent pas le nouveau lot. En cas de retour applicatif, garder les comptes
+fermés, conserver la migration additive et privilégier un correctif en avant.
+Le parcours invité, les QR de présentation fidélité et les commandes ne sont
+ni migrés ni réattribués par ce changement.
 
 L'étape de préparation reçoit `SM_DATABASE_MIGRATION_URL_STAGING` ou
 `..._PRODUCTION` et la CA épinglée `SM_DATABASE_ROOT_CA_*`. Les variables
