@@ -23,7 +23,6 @@ import { customerTrackingHref } from "./delivery-proof-access";
  */
 
 import {
-  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -287,7 +286,8 @@ export function Checkout({
 
   const [date, setDate] = useState<string | null>(null);
   const [slots, setSlots] = useState<SlotsResponse | null>(initialSlots);
-  const [slotsState, setSlotsState] = useState<"idle" | "loading" | "error">("idle");
+  const [slotsState, setSlotsState] = useState<"idle" | "loading" | "error">("loading");
+  const [slotsRetry, setSlotsRetry] = useState(0);
   const [slotIso, setSlotIso] = useState<string | null>(null);
 
   const [wanted, setWanted] = useState<"online" | "counter">("online");
@@ -347,33 +347,33 @@ export function Checkout({
   const method: "online" | "counter" = isDelivery ? "online" : !demo && probe === "off" ? "counter" : wanted;
 
   // ── Créneaux : toujours rechargés à l’entrée de l’étape (capacité vivante) ──
-  const fetchSlots = useCallback(
-    (target: string | null, signal?: AbortSignal) => {
-      setSlotsState("loading");
-      api
-        .loadSlots(slug, target ?? undefined, signal, fulfillment)
-        .then((res) => {
-          if (signal?.aborted) return;
-          setSlots(res);
-          setSlotsState("idle");
-          setSlotIso((prev) =>
-            prev && res.slots.some((s) => s.iso === prev && !s.full) ? prev : null,
-          );
-        })
-        .catch(() => {
-          if (!signal?.aborted) setSlotsState("error");
-        });
-    },
-    [api, slug, fulfillment],
-  );
-
   useEffect(() => {
     if (!open || step !== "slot") return;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- appel réseau : la capacité des créneaux est vivante, elle doit être relue à chaque entrée dans l'étape et à chaque changement de date. Figée, le client choisirait un créneau déjà complet — commande acceptée puis impossible à honorer.
-    fetchSlots(date, controller.signal);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- capacité externe relue à chaque entrée/date/réessai ; l'ancienne grille reste visible mais ne permet pas de poursuivre avant cette réponse.
+    setSlotsState("loading");
+    api.loadSlots(slug, date ?? undefined, controller.signal, fulfillment)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        if (date !== null && res.date !== date) { setSlotsState("error"); return; }
+        setSlots(res);
+        setSlotsState("idle");
+        setSlotIso((prev) =>
+          prev && res.slots.some((s) => s.iso === prev && !s.full) ? prev : null,
+        );
+      })
+      .catch(() => { if (!controller.signal.aborted) setSlotsState("error"); });
+    // Les réessais appartiennent au même cycle : aucune ancienne réponse ne
+    // réactive une grille après sortie, changement de date ou de livraison.
     return () => controller.abort();
-  }, [open, step, date, fetchSlots]);
+  }, [open, step, date, api, slug, fulfillment, slotsRetry]);
+
+  function navigateStep(next: Step) {
+    if (requestInFlightRef.current) return;
+    // Invalider avant le rendu d'entrée, pas seulement après son effet réseau.
+    if (next === "slot") setSlotsState("loading");
+    setStep(next);
+  }
 
   const nameOk = customer.name.trim().length >= 2 && customer.name.trim().length <= 80;
   const contactOk = nameOk && phoneOk(customer.phone) && (!isDelivery || Boolean(deliveryQuote));
@@ -383,6 +383,7 @@ export function Checkout({
     () => slots?.slots.find((s) => s.iso === slotIso) ?? null,
     [slots, slotIso],
   );
+  const slotsReady = slotsState === "idle" && Boolean(slots) && !slots?.paused;
 
   /**
    * Referme le tunnel puis le remet à zéro — le nettoyage attend la fin de
@@ -501,6 +502,7 @@ export function Checkout({
     setFulfillment(next);
     setSlotIso(null);
     setSlots(null);
+    setSlotsState("loading");
   }
 
   async function verifyDelivery() {
@@ -641,7 +643,7 @@ export function Checkout({
   // ── Passage de commande ──
   async function submit(chosenMethod: "online" | "counter", previous?: PendingCheckoutAttempt) {
     if (requestInFlightRef.current || (!demo && (!recovery.ready || recovery.error))) return;
-    if (!previous && (!slotIso || !contactOk || cart.lines.length === 0)) return;
+    if (!previous && (!slotsReady || !chosenSlot || chosenSlot.full || !slotIso || !contactOk || cart.lines.length === 0)) return;
     const proof = demo ? "demo" : turnstileToken;
     if (!proof) {
       setError("La vérification de sécurité doit se terminer avant l’envoi.");
@@ -803,10 +805,10 @@ export function Checkout({
       maxHeight="100%"
       fill
       title={titles[step]}
-      onBack={backTo ? () => { if (!requestInFlightRef.current) setStep(backTo); } : null}
+      onBack={backTo ? () => navigateStep(backTo) : null}
       headerExtra={
         !finished ? (
-          <Progress index={stepIndex} onJump={(target) => { if (!requestInFlightRef.current) setStep(target); }} step={step} delivery={isDelivery} disabled={busy} />
+          <Progress index={stepIndex} onJump={navigateStep} step={step} delivery={isDelivery} disabled={busy} />
         ) : null
       }
       footer={
@@ -819,7 +821,7 @@ export function Checkout({
           contactOk={contactOk}
           slotIso={slotIso}
           slotLabel={chosenSlot ? hhmm(chosenSlot.iso) : null}
-          blocked={blockedByPause || !recovery.ready || Boolean(recovery.error)}
+          blocked={blockedByPause || !recovery.ready || Boolean(recovery.error) || ((step === "slot" || step === "pay") && !slotsReady)}
           method={method}
           order={order}
           trackingHref={trackingHref}
@@ -830,7 +832,7 @@ export function Checkout({
           onNext={(next) => {
             if (requestInFlightRef.current) return;
             if (next === "customer") setTouched(false);
-            setStep(next);
+            navigateStep(next);
           }}
           onSubmit={() => submit(method)}
           onFinish={closeTunnel}
@@ -903,9 +905,9 @@ export function Checkout({
             slots={slots}
             state={slotsState}
             selected={slotIso}
-            onSelect={setSlotIso}
-            onDate={setDate}
-            onRetry={() => fetchSlots(date)}
+            onSelect={(iso) => { if (slotsReady) setSlotIso(iso); }}
+            onDate={(next) => { if (next !== date) { setSlotsState("loading"); setDate(next); } }}
+            onRetry={() => { setSlotsState("loading"); setSlotsRetry((value) => value + 1); }}
             tenantName={isDelivery ? "Votre adresse de livraison" : tenantName}
             tenantAddress={isDelivery ? `${address.line1}, ${address.postalCode} ${address.city}` : tenantAddress}
             delivery={isDelivery}
@@ -1630,9 +1632,8 @@ function SlotStep({
 
   if (state === "loading" && !slots) {
     return (
-      <div className="flex items-center gap-2.5 py-10 text-[14px] text-mut">
-        <Spinner />
-        Recherche des créneaux disponibles…
+      <div role="status" className="py-10 text-[14px] text-mut">
+        Actualisation des créneaux…
       </div>
     );
   }
@@ -1648,6 +1649,7 @@ function SlotStep({
 
   return (
     <div className={cx("flex flex-col gap-5", state === "loading" && "opacity-60")}>
+      {state === "loading" && <p role="status" className="text-[13px] text-ink">Actualisation des créneaux…</p>}
       {delivery && <p className="text-[13px] text-mut">L’heure choisie est une estimation de remise à votre adresse. Préparation et trajet sont compris dans le délai annoncé.</p>}
       {/* Où retirer — le client vérifie l’adresse avant de choisir l’heure. */}
       <div className="flex items-center gap-3 rounded-panel border border-ink/8 bg-surface2 p-3.5">
@@ -1722,7 +1724,7 @@ function SlotStep({
                     <Tap
                       key={slot.iso}
                       onClick={() => onSelect(slot.iso)}
-                      disabled={slot.full}
+                      disabled={state !== "idle" || slots.paused || slot.full}
                       aria-pressed={on}
                       aria-label={`${hhmm(slot.iso)}${slot.full ? " — complet" : slot.load === "busy" ? " — créneau chargé" : ""}`}
                       className={cx(
