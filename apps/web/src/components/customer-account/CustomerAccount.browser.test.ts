@@ -136,24 +136,16 @@ describe('customer entry placement — real Storefront and loyalty components', 
     await page.keyboard.press('Escape'); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
     expect(requests.mutations).toEqual([]);
   });
-  it('measures a shared reflow atomically but still rejects a genuinely displaced sibling', async () => {
+  it('isolates the reflow counterexample in one browser turn and rejects a displaced sibling', async () => {
     await navigationFixture(false); await page.goto(`${origin}/storefront`);
     await page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).waitFor();
-    const initial = await accountNavigationGeometry();
     const nav = page.getByRole('navigation', { name: 'Vos accès personnels', exact: true });
-    // Deterministically reproduce the old mixed-frame measurement: the whole
-    // row moves between two reads, while both siblings remain aligned.
-    await nav.evaluate(node => { (node as HTMLElement).style.transform = 'translateY(44.78125px)'; });
-    const after = await accountNavigationGeometry();
-    expect(Math.abs(initial.account.y - after.orders.y)).toBeGreaterThan(44);
-    assertAccountNavigationAligned(after, 320);
-    // A real one-button displacement must fail the unchanged <=1px assertion.
-    await nav.getByRole('button', { name: 'Mes commandes sur cet appareil', exact: true }).evaluate(node => {
-      (node as HTMLElement).style.transform = 'translateY(44px)';
-    });
-    const broken = await accountNavigationGeometry();
-    expect(Math.abs(broken.account.y - broken.orders.y)).toBe(44);
-    expect(() => assertAccountNavigationAligned(broken, 320)).toThrow();
+    const { current: initial, scenario } = await nav.evaluate(sampleAccountNavigation, true);
+    expect(scenario).not.toBeNull();
+    expect(Math.abs(initial.account.y - scenario!.moved.orders.y)).toBe(44.78125);
+    assertAccountNavigationAligned(scenario!.moved, 320);
+    expect(Math.abs(scenario!.broken.account.y - scenario!.broken.orders.y)).toBe(44);
+    expect(() => assertAccountNavigationAligned(scenario!.broken, 320)).toThrow();
   });
   it('keeps the loyalty card and ordering readable, with no duplicate link back to the same card', async () => {
     const requests = await navigationFixture(true); await page.goto(`${origin}/loyalty`);
@@ -265,6 +257,27 @@ const open = async () => { await page.getByRole('button', { name: 'Mon compte', 
 const authenticate = () => page.evaluate(() => window.customerAccountUiFixture.patch({ status: 'authenticated', view: window.customerAccountUiFixture.view() }));
 const calls = () => page.evaluate(() => window.customerAccountUiFixture.calls);
 
+function sampleAccountNavigation(nav: Element, simulateReflow: boolean) {
+  const account = nav.querySelector('[aria-label="Mon compte"]');
+  const orders = nav.querySelector('[aria-label="Mes commandes sur cet appareil"]');
+  if (!(nav instanceof HTMLElement) || !account || !(orders instanceof HTMLElement)) throw new Error('Customer navigation controls missing');
+  const read = () => ({ width: innerWidth, scrollY, fonts: document.fonts.status, display: getComputedStyle(nav).display,
+    account: account.getBoundingClientRect().toJSON(), orders: orders.getBoundingClientRect().toJSON() });
+  const current = read();
+  if (!simulateReflow) return { current, scenario: null };
+  const original = [nav.style.position, nav.style.top, orders.style.position, orders.style.top];
+  try {
+    // The counterexample also stays in ONE synchronous browser turn. No
+    // font/banner update or scroll anchoring task can intervene between states.
+    // Relative offsets do not exercise cf-press's animated transform property.
+    nav.style.position = 'relative'; nav.style.top = '44.78125px';
+    const moved = read();
+    orders.style.position = 'relative'; orders.style.top = '44px';
+    return { current, scenario: { moved, broken: read() } };
+  } finally {
+    [nav.style.position, nav.style.top, orders.style.position, orders.style.top] = original as [string, string, string, string];
+  }
+}
 async function accountNavigationGeometry() {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -272,13 +285,7 @@ async function accountNavigationGeometry() {
   });
   // Read both siblings in the SAME browser turn. Separate boundingBox RPCs
   // could compare opposite sides of a resize/reflow that moves their parent.
-  return page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).evaluate(nav => {
-    const account = nav.querySelector('[aria-label="Mon compte"]');
-    const orders = nav.querySelector('[aria-label="Mes commandes sur cet appareil"]');
-    if (!account || !orders) throw new Error('Customer navigation controls missing');
-    return { width: innerWidth, scrollY, fonts: document.fonts.status, display: getComputedStyle(nav).display,
-      account: account.getBoundingClientRect().toJSON(), orders: orders.getBoundingClientRect().toJSON() };
-  });
+  return (await page.getByRole('navigation', { name: 'Vos accès personnels', exact: true }).evaluate(sampleAccountNavigation, false)).current;
 }
 function assertAccountNavigationAligned(geometry: Awaited<ReturnType<typeof accountNavigationGeometry>>, width: number) {
   const diagnostic = JSON.stringify({ expectedWidth: width, ...geometry });

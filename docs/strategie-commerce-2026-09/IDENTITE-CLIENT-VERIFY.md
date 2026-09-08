@@ -295,9 +295,11 @@ le contraste du bouton profil et l'absence de lien fidélité redondant dans sa 
 Les captures utilisent une identité de recette explicitement désignée, pas les
 données Classfood. La recette Next/staging du SHA fusionné reste distincte.
 
-Validation globale locale non relancée sur disque saturé : uniquement le cache
-Next régénérable de ce worktree a été retiré (246 Mo), pas les sources,
-dépendances ou worktrees. Typage/lint et tests ciblés complétés ; la CI complète
+Compilation globale locale non relancée sur disque saturé : caches régénérables
+Next de ce worktree (246 Mo), puis Turborepo du checkout principal (562 Mo)
+retirés, pas les sources, dépendances ou worktrees. Typage/lint et tests ciblés
+complétés ; suite web complète également verte en exécution séquentielle.
+La CI complète
 du dernier SHA est obligatoire avant fusion. Les preuves et limites finales
 sont consignées dans la PR, pas déduites de ces intentions.
 
