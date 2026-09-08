@@ -65,6 +65,7 @@ import {
 } from "./helpers";
 import { Checkout } from "./Checkout";
 import { DeviceOrdersSheet } from "./DeviceOrdersSheet";
+import { CustomerAccountEntry } from "../customer-account/CustomerAccountEntry";
 import { useCheckoutRecovery } from "./useCheckoutRecovery";
 import { FideliteVitrine } from "./FideliteVitrine";
 import type { VitrineFidelite } from "./fidelite";
@@ -362,7 +363,11 @@ export function Storefront({
       {/* Une seule borne, jamais un point de rupture : la colonne suit la
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
-        {!demo && <div className="flex justify-end pt-4"><Tap onClick={() => setDeviceOrdersOpen(true)} className="cf-press flex min-h-12 items-center gap-2 rounded-pill border border-ink/10 bg-surface px-4 text-left hover:border-ink/25" aria-label="Mes commandes sur cet appareil"><Icon name="ticket" size={18} /><span><span className="block text-sm font-bold">Mes commandes</span><span className="block text-[11px] text-mut">Sur cet appareil</span></span></Tap></div>}
+        {!demo && <nav aria-label="Vos accès personnels" className={cx("gap-2 pt-4 sm:flex sm:justify-end", embed ? "flex justify-end" : "grid grid-cols-2")}>
+          {!embed && <CustomerAccountEntry slug={site.tenant.slug} restaurantName={site.tenant.name}
+            loyaltyHref={loyalty?.chemin} onDeviceOrders={() => setDeviceOrdersOpen(true)} />}
+          <Tap onClick={() => setDeviceOrdersOpen(true)} className="cf-press flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-pill border border-ink/10 bg-surface px-3 text-left hover:border-ink/25" aria-label="Mes commandes sur cet appareil"><Icon name="ticket" size={18} className="hidden sm:block" /><span><span className="block text-[13px] font-bold">Mes commandes</span><span className="block text-[11px] text-mut">Sur cet appareil</span></span></Tap>
+        </nav>}
         {cart.persistenceError && <div className="pt-4">
           <Banner tone="alert" icon="bell" title="Panier non sauvegardé">{cart.persistenceError}</Banner>
         </div>}
@@ -511,6 +516,7 @@ export function Storefront({
         recovery={recovery}
         api={api}
         demo={demo}
+        customerAccountEnabled={!embed}
         slug={site.tenant.slug}
         tenantName={site.tenant.name}
         tenantAddress={site.tenant.address}

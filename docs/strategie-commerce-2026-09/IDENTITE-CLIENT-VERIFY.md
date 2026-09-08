@@ -1,12 +1,17 @@
 # L3a — identité client : raccordement Verify
 
 État du 8 septembre 2026. Complète [l'espace client](HISTORIQUE-ESPACE-CLIENT.md).
-**L3a.1 et L3a.2 sont livrés sur staging par #134 et #135. La persistance et les
+**L3a.1 à L3a.3 sont livrés sur staging par #134 à #136. La persistance et les
 cas d'usage serveur sont vérifiés ; l'inscription publique n'est pas encore opérationnelle.**
 [Preuve de livraison L3a.2](https://github.com/GLWebDevAgency/snack-manager/pull/135#issuecomment-5583195612) :
 révision `d645c9f2ad92bb74ef015231bd81306d11af3c00`, trois migrations,
 quatre services actifs, smoke 8/8 et démos 9/9. Quatre parcours authentifiés
 ignorés faute d'identifiants ne constituent pas une recette réelle.
+
+Dernière frontière livrée : [PR136 et recette](https://github.com/GLWebDevAgency/snack-manager/pull/136#issuecomment-5584637073),
+révision staging `3caedfa3103dbf9b4fba6e61fb1fc06f825a36ac`, smoke 8/8,
+huit contrôles HTTP privés, démos 9/9, quatre parcours réels ignorés.
+La section fournisseur ci-dessous distingue le blocage initial de sa levée.
 
 ## L3a.1 — code et limites
 
@@ -99,6 +104,22 @@ Le raccordement logiciel peut être développé et testé avec un fournisseur si
 mais reste fermé en déploiement. Avant une recette Verify réelle, une décision
 distincte du fondateur sur le fournisseur ou le cadre d'accès sera nécessaire ;
 aucun changement payant n'est implicitement autorisé par la reconnexion.
+
+### Actualisation fournisseur après autorisation explicite du fondateur
+
+Le 8 septembre, le fondateur a autorisé l'activation de Verify, puis complété
+lui-même les informations fiscales, l'upgrade et l'attestation d'usage du nom.
+Observation Console : compte **Active, solde 20 $** ; service dédié
+`SnackManager Staging`, SID `VA70c29dc863d2abbc8a6f06c19af917ff`.
+Lecture CLI explicite `--profile SnackManager` : six chiffres, codes aléatoires
+(`customCodeEnabled=false`), Lookup et PSD2 désactivés. Canal SMS et Fraud Guard
+actifs en Console. Aucun OTP envoyé par cette préparation ; solde et service
+créé ne prouvent pas une inscription applicative ni un budget mensuel approuvé.
+
+**Le préflight actuel exige Trial.** Ne pas lui injecter une fausse attestation
+Trial après l'upgrade : un prochain lot doit traiter le compte activé avec les
+allocations/bornes de recette effectivement observées. Ni ouverture publique,
+ni suppression des quotas/contrôles, ni recharge automatique implicite.
 
 ## L3a.2 — socle durable implémenté, non exposé
 
@@ -237,6 +258,56 @@ réponse est simulée après commit SQL, pas une coupure réseau réelle. Une
 composition Nest des vrais modules avec connexions remplacées en mémoire a
 aussi vérifié leurs exports DI et le refus fermé sans appel DB. La CI et la
 preuve de staging du SHA fusionné restent consignées dans la PR de ce lot.
+
+## L3a.4 — interface et préremplissage, inscription encore fermée
+
+Entrée secondaire « Mon compte » dans la commande hors démo/iframe et dans la
+PWA fidélité, mêmes primitives et identité restaurant. Consultation d'une session
+existante, nom modifiable, déconnexion de cet appareil ou de tous avec confirmation.
+Invité et cartes QR existantes conservés. Pas de bouton d'inscription factice :
+le lien invité de fidélité dit « Découvrir la fidélité », conformément à sa destination.
+« Mes commandes » reste explicitement l'historique **de cet appareil**, pas un
+historique personnel reconstitué à partir du téléphone.
+
+Un store mémoire par restaurant lit le vrai BFF ; aucun profil dans le HTML public,
+localStorage, IndexedDB ou les messages interonglets. Web Locks sérialise lectures
+et mutations ; un PATCH/DELETE revalide l'auteur et la révision avant envoi. Les
+notifications interonglets ne transportent qu'un nonce d'invalidation. Sans aucun
+canal de notification disponible, la mutation est refusée. Hidden, offline,
+expiration ou arrêt du dernier consommateur effacent la projection ; les réponses
+anciennes sont ignorées. Retour/focus relit l'autorité sans rejouer une écriture.
+Une réponse perdue n'est ni un succès supposé ni une déconnexion optimiste.
+
+Le préremplissage reste un affichage dérivé : mémoire locale consentie d'abord,
+après sa lecture bornée, puis profil sur les champs vierges non édités. Une saisie
+ou un effacement volontaire est conservé ; modifier le nom ne transforme pas le
+téléphone suggéré en donnée saisie. Nom long conservé sans troncature, correction
+demandée selon la limite checkout ; adresse uniquement au choix livraison. Aucun
+rattachement de propriétaire, crédit fidélité ou modification des tentatives
+de commande déjà figées n'est ajouté implicitement.
+
+Recette locale : vrai navigateur, HTTP loopback, Web Locks/BroadcastChannel,
+interactions de la vraie UI, profil tardif, révocation, réponse perdue, stockage
+indisponible, TTL, focus/clavier, mouvement réduit, 320/390/1440 px. Les réponses
+personnelles du BFF sont des fixtures, pas des sessions Twilio réelles. La passe
+d'agencement vérifie la priorité Commander, l'alignement des accès secondaires,
+le contraste du bouton profil et l'absence de lien fidélité redondant dans sa PWA.
+Les captures utilisent une identité de recette explicitement désignée, pas les
+données Classfood. La recette Next/staging du SHA fusionné reste distincte.
+
+Compilation globale locale non relancée sur disque saturé : caches régénérables
+Next de ce worktree (246 Mo), puis Turborepo du checkout principal (562 Mo)
+retirés, pas les sources, dépendances ou worktrees. Typage/lint et tests ciblés
+complétés ; suite web complète également verte en exécution séquentielle.
+La CI complète
+du dernier SHA est obligatoire avant fusion. Les preuves et limites finales
+sont consignées dans la PR, pas déduites de ces intentions.
+
+**Avant une UI d'inscription** : compléter le journal de confirmation/récupération
+et sa sérialisation interonglets, les changements de cookies hors du protocole
+de ce lot, la récupération sûre sur nouvel appareil et le nouveau cadre Verify.
+La vérification frontend d'auteur n'est pas une garantie contre un futur code
+d'authentification qui remplacerait les cookies en dehors de ce protocole.
 
 ## Conditions restantes avant ouverture
 

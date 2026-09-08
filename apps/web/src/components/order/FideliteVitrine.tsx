@@ -179,7 +179,7 @@ export function FideliteVitrine({
             href={resume.chemin}
             className="cf-press flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-pill border border-accent/30 bg-accentwash px-5 text-sm font-extrabold text-accentink"
           >
-            {solde ? "Ouvrir ma carte" : "Obtenir ma carte"}
+            {solde ? "Ouvrir ma carte" : "Découvrir la fidélité"}
             <Icon name="arrow" size={16} stroke={2.4} />
           </Link>
         </div>
