@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import type { CheckClaim, CustomerIdentityRepository, CustomerSession } from './port';
 import { CustomerRepositoryError } from './client';
-import { challenge, dbTime, pendingView, session, type ChallengeRow } from './queries';
+import { challenge, dbTime, fundingAllowsCheck, pendingView, session, type ChallengeRow } from './queries';
 
 type Completion = Parameters<CustomerIdentityRepository['completeCheck']>[0];
 
@@ -27,7 +27,7 @@ export async function settleVerification(client: PoolClient, input: Parameters<C
         SET state=CASE WHEN expires_at>clock_timestamp() THEN 'pending' ELSE 'expired' END,verification_sid=$4
         WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 RETURNING *`,
       [input.parentRef, input.tenantRef, row.id, input.verificationSid]);
-      return updated.rows[0]?.state === 'pending' ? pendingView(updated.rows[0]) : null;
+      return updated.rows[0]?.state === 'pending' ? pendingView((await challenge(client, input, row.id))!) : null;
     }
   }
   await client.query(`UPDATE customer.challenges SET state='uncertain' WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3`,
@@ -39,6 +39,7 @@ export async function claimVerification(client: PoolClient, input: CheckClaim) {
   const row = await challenge(client, input, input.challengeId);
   if (!row || row.browser_hash !== input.browserHash || row.state !== 'pending'
     || row.checks_used >= row.max_checks || row.expires_at.getTime() <= await dbTime(client)) return null;
+  if (!fundingAllowsCheck(row, await dbTime(client))) return null;
   const attempt = await client.query(`INSERT INTO customer.check_attempts(id,parent_ref,tenant_ref,challenge_id)
     VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [input.checkId, input.parentRef, input.tenantRef, row.id]);
   if (!attempt.rowCount) return null;
@@ -49,7 +50,7 @@ export async function claimVerification(client: PoolClient, input: CheckClaim) {
   if (!changed.rows[0]) {
     await finish(client, input, 'expired', 'expired'); return null;
   }
-  return pendingView(changed.rows[0]);
+  return pendingView((await challenge(client, input, row.id))!);
 }
 
 async function finish(client: PoolClient, input: CheckClaim, result: string, state: string, sessionId: string | null = null) {

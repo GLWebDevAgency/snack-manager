@@ -6,7 +6,8 @@ import {
   type PendingChallenge, type CheckResult,
 } from '@sm/customer';
 import type { PhoneVerificationTransport } from './phone-verification.port';
-import { planTrialPhoneVerification } from './trial-verification-policy';
+import { costEvidenceReferenceOf, CustomerVerificationModeSchema, paidBudgetOf, planCustomerPhoneVerification,
+  type CustomerVerificationMode, type ReservedCustomerVerificationPlan } from './verification-plan';
 
 const tenant = z.string().regex(/^[a-zA-Z0-9_-]{1,160}$/);
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -29,11 +30,18 @@ const updateSchema = sessionSchema.extend({
 });
 const logoutSchema = sessionSchema.extend({ all: z.boolean() });
 const SESSION_TTL_MS = 7 * 86_400_000;
+const fundingSchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('trial') }),
+  z.strictObject({ mode: z.literal('paid'), authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
+    currency: z.literal('USD'), reservedMicrousd: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    expiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) }),
+]);
 
 /** Trusted server configuration only. No default activation and no adapter
  * configuration from an HTTP body. The future Nest composition must derive
  * environment from the actual deployed runtime, never from a public request. */
 export type CustomerIdentityConfiguration = {
+  mode: CustomerVerificationMode;
   environment: string;
   parentRef: string;
   policy: unknown;
@@ -64,6 +72,7 @@ export class CustomerIdentityService {
     private readonly transport: PhoneVerificationTransport,
     private readonly configuration: () => CustomerIdentityConfiguration,
     private readonly now: () => number = Date.now,
+    private readonly beforeProvider: () => Promise<void> = async () => {},
   ) {}
 
   async start(raw: unknown): Promise<{ challengeId: string; expiresAt: number }> {
@@ -73,6 +82,9 @@ export class CustomerIdentityService {
       const scope = this.scope(input.tenantRef, config);
       const now = this.now();
       const plan = this.plan(config, input.tenantRef, input.phone, now);
+      const { challengeTtlMs, ...plannedLimits } = plan.limits;
+      const limits = 'paidBudget' in plannedLimits ? { ...plannedLimits,
+        paidBudget: { ...plannedLimits.paidBudget, costEvidenceReference: costEvidenceReferenceOf(plan)! } } : plannedLimits;
       const phoneHash = this.crypto.hash('phone', input.tenantRef, input.phone);
       const browserHash = this.crypto.hash('browser', input.tenantRef, input.browserSecret);
       const reserved = await this.repository.reserve({
@@ -85,22 +97,25 @@ export class CustomerIdentityService {
         encryptedPhone: this.crypto.seal('phone', input.tenantRef, phoneHash, input.phone),
         serviceSid: plan.serviceSid, evidenceReference: plan.evidenceReference,
         planExpiresAt: plan.expiresAt,
-        expiresAt: Math.min(now + plan.limits.challengeTtlMs, plan.expiresAt),
-        now, limits: plan.limits,
+        expiresAt: Math.min(now + challengeTtlMs, plan.expiresAt),
+        now, limits,
       });
       if (reserved.kind === 'pending') {
         this.assertChallenge(scope, reserved.challenge, phoneHash, plan.serviceSid);
+        this.assertFunding(scope, reserved.challenge, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
         return this.challengeView(reserved.challenge);
       }
       if (reserved.kind !== 'reserved') throw new CustomerIdentityError('unavailable');
 
       let sid: string;
       try {
+        await this.beforeProvider();
         // Lock waits/configuration refreshes must not turn the old reservation
         // into permission for a different service, segment cost or allowance.
         const current = this.plan(this.configuration(), input.tenantRef, input.phone, this.now());
         if (this.now() >= plan.expiresAt || current.accountSid !== plan.accountSid
           || current.serviceSid !== plan.serviceSid || current.evidenceReference !== plan.evidenceReference
+          || costEvidenceReferenceOf(current) !== costEvidenceReferenceOf(plan)
           || JSON.stringify(current.limits) !== JSON.stringify(plan.limits)) {
           throw new CustomerIdentityError('unavailable');
         }
@@ -115,6 +130,7 @@ export class CustomerIdentityService {
       });
       if (!pending) throw new CustomerIdentityError('unavailable');
       this.assertChallenge(scope, pending, phoneHash, plan.serviceSid, reserved.challengeId);
+      this.assertFunding(scope, pending, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
       return this.challengeView(pending);
     });
   }
@@ -139,10 +155,14 @@ export class CustomerIdentityService {
       try {
         this.assertChallenge(scope, pending, pending.phoneHash, pending.serviceSid, input.challengeId);
         const verifiedPhone = this.crypto.open('phone', input.tenantRef, pending.phoneHash, pending.encryptedPhone);
+        await this.beforeProvider();
+        // No await between this fresh funding/policy decision and the provider.
+        this.assertChallenge(scope, pending, pending.phoneHash, pending.serviceSid, input.challengeId);
         const plan = this.plan(this.configuration(), input.tenantRef, verifiedPhone, this.now());
         if (plan.accountSid !== scope.parentRef || plan.serviceSid !== pending.serviceSid) {
           throw new CustomerIdentityError('unavailable');
         }
+        this.assertFunding(scope, pending, plan);
         result = await this.transport.check({ phone: verifiedPhone, serviceSid: pending.serviceSid,
           verificationSid: pending.verificationSid, code: input.code });
       } catch {
@@ -220,7 +240,7 @@ export class CustomerIdentityService {
 
   private plan(config: CustomerIdentityConfiguration, tenantRef: string, phoneValue: string, now: number) {
     this.scope(tenantRef, config);
-    const result = planTrialPhoneVerification({ policy: config.policy, evidence: config.evidence,
+    const result = planCustomerPhoneVerification({ mode: config.mode, policy: config.policy, evidence: config.evidence,
       request: { tenantRef, phone: phoneValue }, now });
     if (result.kind !== 'reservation_required' || result.accountSid !== config.parentRef) {
       throw new CustomerIdentityError('unavailable');
@@ -229,7 +249,8 @@ export class CustomerIdentityService {
   }
 
   private scope(tenantRef: string, config: CustomerIdentityConfiguration): CustomerScope {
-    if (config.environment !== 'staging' || !/^AC[0-9a-fA-F]{32}$/.test(config.parentRef)) {
+    if (!CustomerVerificationModeSchema.safeParse(config.mode).success
+      || config.environment !== 'staging' || !/^AC[0-9a-fA-F]{32}$/.test(config.parentRef)) {
       throw new CustomerIdentityError('unavailable');
     }
     return { tenantRef, parentRef: config.parentRef };
@@ -238,6 +259,24 @@ export class CustomerIdentityService {
   private challengeView(challenge: PendingChallenge) {
     if (challenge.expiresAt <= this.now()) throw new CustomerIdentityError('unavailable');
     return { challengeId: challenge.challengeId, expiresAt: challenge.expiresAt };
+  }
+
+  private assertFunding(scope: CustomerScope, pending: PendingChallenge, plan: ReservedCustomerVerificationPlan): void {
+    if (plan.accountSid !== scope.parentRef || plan.tenantRef !== scope.tenantRef || pending.serviceSid !== plan.serviceSid) {
+      throw new CustomerIdentityError('unavailable');
+    }
+    const funding = fundingSchema.safeParse(pending.funding);
+    if (!funding.success) throw new CustomerIdentityError('unavailable');
+    const paid = paidBudgetOf(plan);
+    if (!paid) {
+      if (funding.data.mode !== 'trial') throw new CustomerIdentityError('unavailable');
+      return;
+    }
+    if (funding.data.mode !== 'paid' || funding.data.authorizationRef !== paid.authorizationRef
+      || funding.data.currency !== paid.currency || funding.data.expiresAt <= this.now()
+      || funding.data.reservedMicrousd < paid.reservePerSendMicrousd) {
+      throw new CustomerIdentityError('unavailable');
+    }
   }
 
   private assertChallenge(scope: CustomerScope, pending: PendingChallenge,

@@ -349,7 +349,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       ).resolves.toMatchObject({ rows: [{ count: 0 }] });
       await expect(
         runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
-      ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+      ).resolves.toMatchObject({ rows: [{ count: 2 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont

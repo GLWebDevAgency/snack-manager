@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { NodePgDriver } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { migrateCustomer } from './migration';
 
@@ -14,7 +18,7 @@ export function assertCustomerTestTarget(raw: unknown): string {
   return url.toString();
 }
 
-export async function customerTestFixture(raw: unknown) {
+export async function customerTestFixture(raw: unknown, options: { beforeUpgrade?: (admin: Pool) => Promise<void> } = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');
   const database = `snackmanager_customer_test_${suffix}`;
@@ -42,6 +46,15 @@ export async function customerTestFixture(raw: unknown) {
     roleCreated = true;
     base.pathname = `/${database}`;
     admin = new Pool({ connectionString: base.toString(), max: 4, connectionTimeoutMillis: 3000 });
+    if (options.beforeUpgrade) {
+      // Real Drizzle migrator, original SQL/hash unchanged; seed historical rows
+      // before applying the remaining migration through the production entrypoint.
+      const config = { migrationsFolder: resolve(__dirname, '../drizzle'), migrationsTable: '__drizzle_customer_migrations' };
+      const dialect = new PgDialect();
+      const driver = new NodePgDriver(admin, dialect);
+      await dialect.migrate(readMigrationFiles(config).slice(0, 1), driver.createSession(undefined), config);
+      await options.beforeUpgrade(admin);
+    }
     await migrateCustomer(admin);
     await admin.query(`GRANT CONNECT ON DATABASE "${database}" TO "${role}";
       GRANT USAGE ON SCHEMA customer,drizzle TO "${role}";

@@ -60,7 +60,7 @@ function list(raw: string | undefined, valid: (item: string) => boolean): string
 function configuration(slug: string, origin: string) {
   const env = process.env;
   if (env.RAILWAY_ENVIRONMENT_NAME !== 'staging' || (env.SM_ENV !== undefined && env.SM_ENV !== 'staging')
-    || env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_trial'
+    || (env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_trial' && env.SM_CUSTOMER_ACCOUNT_MODE !== 'closed_paid_pilot')
     || !UUID.test(env.RAILWAY_ENVIRONMENT_ID ?? '') || !UUID.test(env.RAILWAY_PROJECT_ID ?? '')
     || env.SM_CUSTOMER_PILOT_ENVIRONMENT_ID !== env.RAILWAY_ENVIRONMENT_ID
     || env.SM_CUSTOMER_PILOT_PROJECT_ID !== env.RAILWAY_PROJECT_ID) return null;

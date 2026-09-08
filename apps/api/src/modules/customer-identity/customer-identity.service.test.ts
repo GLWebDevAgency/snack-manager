@@ -16,6 +16,7 @@ const phoneHash = crypto.hash('phone', TENANT, PHONE);
 const pending = {
   challengeId: randomUUID(), phoneHash, expiresAt: NOW + 600_000,
   serviceSid: SERVICE, verificationSid: SID,
+  funding: { mode: 'trial' as const },
   encryptedPhone: crypto.seal('phone', TENANT, phoneHash, PHONE),
 };
 const privateSession: CustomerSession = {
@@ -25,7 +26,7 @@ const privateSession: CustomerSession = {
 };
 function configuration() {
   return {
-    environment: 'staging', parentRef: PARENT,
+    environment: 'staging', parentRef: PARENT, mode: 'closed_trial' as const,
     policy: { mode: 'closed_trial', environment: 'staging', accountSid: PARENT,
       serviceSid: SERVICE, tenantRef: TENANT, allowedPhones: [PHONE],
       maxSendReservations: 10, expiresAt: NOW + 86_400_000 },
@@ -96,6 +97,7 @@ describe('private customer identity orchestration', () => {
     expect(stored.parentRef).toBe(PARENT);
     expect(stored.tenantRef).toBe(TENANT);
     expect(stored.phoneHash).toBe(phoneHash);
+    expect(stored.limits).not.toHaveProperty('challengeTtlMs');
     expect(stored.browserHash).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify(stored)).not.toContain(PHONE);
     expect(JSON.stringify(stored)).not.toContain(BROWSER);
@@ -115,6 +117,16 @@ describe('private customer identity orchestration', () => {
     const f = fixture(); f.repository.reserve.mockResolvedValue({ kind: 'pending', challenge: pending });
     await expect(f.service.start(f.start)).resolves.toEqual({ challengeId: pending.challengeId, expiresAt: pending.expiresAt });
     expect(f.transport.start).not.toHaveBeenCalled();
+  });
+  it.each(['check', 'start'] as const)('does not reclassify paid funding as trial during %s', async action => {
+    const f = fixture(); const foreign = { ...pending, funding: { mode: 'paid' as const,
+      authorizationRef: 'old-paid', currency: 'USD' as const, reservedMicrousd: 70, expiresAt: NOW + 600_000 } };
+    f.repository.claimCheck.mockResolvedValue(foreign);
+    f.repository.reserve.mockResolvedValue({ kind: 'pending', challenge: foreign });
+    const refused = await (action === 'start' ? f.service.start(f.start) : f.service.check(f.check))
+      .then(() => false, (error: { reason?: string }) => error.reason === 'unavailable');
+    expect(refused).toBe(true);
+    expect(f.transport.start).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
   });
   it.each(['production', 'local', ''])('never spends from runtime %s', async environment => {
     const f = fixture(); f.config.environment = environment;

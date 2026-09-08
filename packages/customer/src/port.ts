@@ -16,7 +16,29 @@ export type CustomerSession = {
   profile: CustomerProfile;
 };
 
-export type VerificationReservation = CustomerScope & {
+export type VerificationLimits = {
+  smsUnitsReservedPerSend: number;
+  cooldownMs: number;
+  windowMs: number;
+  globalSendReservations: number;
+  tenantSendReservations: number;
+  phoneSendReservations: number;
+  ipSendReservations: number;
+  challengeCheckAttempts: number;
+};
+export type TrialVerificationLimits = VerificationLimits & {
+  trialSendReservations: number;
+  freeSmsUnitsRemainingAtObservation: number;
+  freeVerificationUnitsRemainingAtObservation: number;
+};
+export type PaidVerificationLimits = VerificationLimits & {
+  maxSendReservations: number;
+  paidBudget: {
+    mode: 'paid'; authorizationRef: string; costEvidenceReference: string; currency: 'USD';
+    authorizedSpendMicrousd: number; reservePerSendMicrousd: number; expiresAt: number;
+  };
+};
+type ReservationIdentity = CustomerScope & {
   operationId: string;
   requestHash: string;
   challengeId: string;
@@ -30,19 +52,12 @@ export type VerificationReservation = CustomerScope & {
   planExpiresAt: number;
   expiresAt: number;
   now: number;
-  limits: {
-    trialSendReservations: number;
-    smsUnitsReservedPerSend: number;
-    freeSmsUnitsRemainingAtObservation: number;
-    freeVerificationUnitsRemainingAtObservation: number;
-    cooldownMs: number;
-    windowMs: number;
-    globalSendReservations: number;
-    tenantSendReservations: number;
-    phoneSendReservations: number;
-    ipSendReservations: number;
-    challengeCheckAttempts: number;
-  };
+};
+export type TrialVerificationReservation = ReservationIdentity & { limits: TrialVerificationLimits };
+export type PaidVerificationReservation = ReservationIdentity & { limits: PaidVerificationLimits };
+export type VerificationReservation = ReservationIdentity & { limits: TrialVerificationLimits | PaidVerificationLimits };
+export type VerificationFunding = { mode: 'trial' } | {
+  mode: 'paid'; authorizationRef: string; currency: 'USD'; reservedMicrousd: number; expiresAt: number;
 };
 export type PendingChallenge = {
   challengeId: string;
@@ -51,6 +66,8 @@ export type PendingChallenge = {
   verificationSid: string;
   serviceSid: string;
   encryptedPhone: string;
+  /** Immutable original reservation, never inferred from the current mode. */
+  funding: VerificationFunding;
 };
 
 export type ReservationResult =

@@ -14,6 +14,7 @@ export const SUPPLY_INITIAL_MIGRATION = 1_787_074_510_723;
 export const LOYALTY_INITIAL_MIGRATION = 1_788_230_085_055;
 export const LOYALTY_EARN_RECEIPTS_MIGRATION = 1_788_236_557_128;
 export const CUSTOMER_INITIAL_MIGRATION = 1_788_854_400_000;
+export const CUSTOMER_PAID_BUDGET_MIGRATION = 1_788_861_600_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -169,6 +170,10 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   ].map((name) => introduced('table', 'customer', name, 'customer', CUSTOMER_INITIAL_MIGRATION)),
   ...['reject_immutable_record', 'preserve_parent_budget'].map((name) =>
     introduced('function', 'customer', name, 'customer', CUSTOMER_INITIAL_MIGRATION),
+  ),
+  introduced('table', 'customer', 'paid_budgets', 'customer', CUSTOMER_PAID_BUDGET_MIGRATION),
+  ...['seal_paid_parent', 'preserve_paid_budget', 'guard_verification_funding'].map((name) =>
+    introduced('function', 'customer', name, 'customer', CUSTOMER_PAID_BUDGET_MIGRATION),
   ),
 ] as const;
 

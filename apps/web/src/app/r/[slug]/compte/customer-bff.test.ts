@@ -53,6 +53,43 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('customer account BFF — real handlers, isolated upstream', () => {
+  describe('explicit closed paid pilot', () => {
+    beforeEach(() => { vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', 'closed_paid_pilot'); });
+    it('relays capability checks but does not infer spending permission from the mode', async () => {
+      mockFetch.mockResolvedValue(Response.json({ available: false }));
+      const response = await status(req('capacites', 'GET'), context);
+      expect(await response.json()).toEqual({ available: false });
+      privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect((await browser(req('navigateur'), context)).status).toBe(503);
+    });
+    it('allows an existing private session without creating a cookie or sending an OTP', async () => {
+      const current = view(); mockFetch.mockResolvedValue(Response.json(current));
+      const response = await session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+      privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/session`);
+    });
+    it.each(['production', 'development', 'test'])('never permits a paid pilot in %s', async environment => {
+      vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', environment);
+      expect((await browser(req('navigateur'), context)).status).toBe(503);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+    it.each(['SM_CUSTOMER_PILOT_ENVIRONMENT_ID', 'SM_CUSTOMER_PILOT_PROJECT_ID',
+      'SM_CUSTOMER_PILOT_SLUGS', 'SM_CUSTOMER_PILOT_ORIGINS', 'SM_CUSTOMER_RELAY_SIGNING_KEY'])(
+      'keeps the paid pilot closed without %s', async field => {
+        vi.stubEnv(field, '');
+        expect((await browser(req('navigateur'), context)).status).toBe(503);
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+  });
+  it.each(['', 'paid', 'Full', 'active', 'production', 'closed_paid_pilot ', 'closed_trial,closed_paid_pilot'])(
+    'refuses unsupported account mode %j without a fallback', async mode => {
+      vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', mode);
+      expect(await (await status(req('capacites', 'GET'), context)).json()).toEqual({ available: false });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   it.each(['SM_CUSTOMER_RELAY_SIGNING_KEY', 'SM_CUSTOMER_PILOT_ORIGINS', 'SM_CUSTOMER_PILOT_SLUGS'])(
     'stays closed without %s', async field => {
       vi.stubEnv(field, '');

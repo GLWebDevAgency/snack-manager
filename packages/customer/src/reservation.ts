@@ -1,26 +1,18 @@
 import type { PoolClient } from 'pg';
 import type { ReservationResult, VerificationReservation } from './port';
-import { dbTime, pendingView, type ChallengeRow } from './queries';
+import { challenge, dbTime, pendingView } from './queries';
+import { lockVerificationBudget } from './budgets';
 
 export async function reserveVerification(client: PoolClient, input: VerificationReservation): Promise<ReservationResult> {
   const l = input.limits;
-  await client.query(`INSERT INTO customer.parent_budgets(parent_ref,send_limit,sms_limit,verification_limit)
-    VALUES($1,$2,$3,$4) ON CONFLICT(parent_ref) DO NOTHING`,
-  [input.parentRef, l.trialSendReservations, l.freeSmsUnitsRemainingAtObservation, l.freeVerificationUnitsRemainingAtObservation]);
-  const budget = (await client.query<{ send_limit: string; sms_limit: string; verification_limit: string;
-    reserved_sends: string; reserved_sms: string; reserved_verifications: string }>(
-    'SELECT * FROM customer.parent_budgets WHERE parent_ref=$1 FOR UPDATE', [input.parentRef])).rows[0]!;
+  const budget = await lockVerificationBudget(client, input);
+  if (!budget) return { kind: 'denied' };
   // Always read wall-clock AFTER the lock; input.now is not an authority.
   const now = await dbTime(client);
-  if (input.planExpiresAt <= now) return { kind: 'denied' };
-  const caps = [Math.min(Number(budget.send_limit), l.trialSendReservations),
-    Math.min(Number(budget.sms_limit), l.freeSmsUnitsRemainingAtObservation),
-    Math.min(Number(budget.verification_limit), l.freeVerificationUnitsRemainingAtObservation)];
-  // Every live observation lowers the lifetime ceiling, including a replay.
-  await client.query(`UPDATE customer.parent_budgets SET send_limit=$2,sms_limit=$3,verification_limit=$4
-    WHERE parent_ref=$1`, [input.parentRef, ...caps]);
-  const existing = (await client.query<ChallengeRow>(`SELECT * FROM customer.challenges
+  if (budget.planExpiresAt <= now) return { kind: 'denied' };
+  const existingId = (await client.query<{ id: string }>(`SELECT id FROM customer.challenges
     WHERE parent_ref=$1 AND tenant_ref=$2 AND operation_id=$3`, [input.parentRef, input.tenantRef, input.operationId])).rows[0];
+  const existing = existingId ? await challenge(client, input, existingId.id) : null;
   if (existing) {
     if (existing.request_hash !== input.requestHash || existing.browser_hash !== input.browserHash) return { kind: 'denied' };
     if (existing.expires_at.getTime() <= now) return { kind: 'denied' };
@@ -28,9 +20,7 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
     return { kind: ['reserved', 'checking', 'uncertain'].includes(existing.state) ? 'uncertain' : 'denied' };
   }
   if (input.expiresAt <= now) return { kind: 'denied' };
-  if (Number(budget.reserved_sends) + 1 > caps[0]!
-    || Number(budget.reserved_sms) + l.smsUnitsReservedPerSend > caps[1]!
-    || Number(budget.reserved_verifications) + 1 > caps[2]!) return { kind: 'denied' };
+  if (!budget.canReserve) return { kind: 'denied' };
   const counts = (await client.query<{ total: number; tenant: number; phone: number; ip: number; cooldown: boolean }>(`
     SELECT count(*)::int AS total,
       count(*) FILTER (WHERE tenant_ref=$2)::int AS tenant,
@@ -51,11 +41,15 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
     SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,stamp.now,LEAST($11::timestamptz,stamp.now+interval '10 minutes') FROM stamp
     WHERE $11::timestamptz>stamp.now AND $12::timestamptz>stamp.now RETURNING expires_at`,
   [input.challengeId, input.parentRef, input.tenantRef, input.operationId, input.requestHash, input.browserHash,
-    input.phoneHash, input.encryptedPhone, input.serviceSid, l.challengeCheckAttempts, new Date(input.expiresAt), new Date(input.planExpiresAt)]);
+    input.phoneHash, input.encryptedPhone, input.serviceSid, l.challengeCheckAttempts, new Date(input.expiresAt), new Date(budget.planExpiresAt)]);
   if (!inserted.rowCount) return { kind: 'denied' };
-  await client.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,sms_units)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [input.operationId, input.parentRef, input.tenantRef, input.challengeId,
-    input.globalPhoneHash, input.ipHash, input.evidenceReference, l.smsUnitsReservedPerSend]);
+  const funding = budget.funding;
+  await client.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,sms_units,
+    funding_kind,authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [input.operationId, input.parentRef, input.tenantRef, input.challengeId,
+    input.globalPhoneHash, input.ipHash, input.evidenceReference, l.smsUnitsReservedPerSend, funding.mode,
+    funding.mode === 'paid' ? funding.authorizationRef : null, funding.mode === 'paid' ? funding.reservedMicrousd : 0,
+    funding.mode === 'paid' ? new Date(funding.expiresAt) : null, 'paidBudget' in l ? l.paidBudget.costEvidenceReference : null]);
   // Provider exclusion is independent of a shorter application/evidence expiry.
   // Pilot prerequisite: provider validity is attested at 10 min; 5 s covers transport.
   await client.query(`INSERT INTO customer.phone_guards(parent_ref,global_phone_hash,active_until)
@@ -63,6 +57,9 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
     ON CONFLICT(parent_ref,global_phone_hash) DO UPDATE SET active_until=GREATEST(customer.phone_guards.active_until,EXCLUDED.active_until)`,
   [input.parentRef, input.globalPhoneHash]);
   await client.query(`UPDATE customer.parent_budgets SET reserved_sends=reserved_sends+1,
-    reserved_sms=reserved_sms+$2,reserved_verifications=reserved_verifications+1 WHERE parent_ref=$1`, [input.parentRef, l.smsUnitsReservedPerSend]);
+    reserved_sms=reserved_sms+$2,reserved_verifications=reserved_verifications+$3 WHERE parent_ref=$1`,
+  [input.parentRef, funding.mode === 'trial' ? l.smsUnitsReservedPerSend : 0, funding.mode === 'trial' ? 1 : 0]);
+  if (funding.mode === 'paid') await client.query(`UPDATE customer.paid_budgets
+    SET reserved_spend_microusd=reserved_spend_microusd+$2 WHERE parent_ref=$1`, [input.parentRef, funding.reservedMicrousd]);
   return { kind: 'reserved', challengeId: input.challengeId };
 }

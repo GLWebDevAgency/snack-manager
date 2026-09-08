@@ -22,3 +22,25 @@ export function customerTestEnvironment(now = Date.now()): Record<string, string
       maxSmsSegmentsPerSend: 1, freeVerificationUnitsRemaining: 10, observedAt: now, trialExpiresAt: now + 86_400_000 }),
   };
 }
+
+/** Synthetic arithmetic only: neither provider tariffs nor founder approval. */
+export function customerPaidTestEnvironment(now = Date.now()): Record<string, string> {
+  const env = customerTestEnvironment(now);
+  const target = { accountSid: env.SM_CUSTOMER_VERIFY_ACCOUNT_SID!, serviceSid: `VA${'b'.repeat(32)}`,
+    tenantRef: env.SM_CUSTOMER_PILOT_TENANT_ID! };
+  env.SM_CUSTOMER_ACCOUNT_MODE = 'closed_paid_pilot';
+  env.SM_CUSTOMER_VERIFY_POLICY = JSON.stringify({
+    mode: 'closed_paid_pilot', environment: 'staging', ...target, allowedPhones: ['+33612345678'],
+    maxSendReservations: 10, expiresAt: now + 86_400_000, evidenceNotBefore: now - 60_000,
+    costEvidenceReference: 'fixture-cost', authorization: { kind: 'one_off', reference: 'fixture-authorization',
+      authorizedBy: 'fixture-owner', ...target, currency: 'USD', authorizedSpendMicrousd: 1_010,
+      authorizedAt: now - 60_000, expiresAt: now + 86_400_000, recurring: false },
+  });
+  env.SM_CUSTOMER_VERIFY_EVIDENCE = JSON.stringify({ reference: 'fixture-evidence', ...target,
+    accountType: 'Full', accountStatus: 'active', smsEnabled: true, fraudGuardEnabled: true, codeLength: 6,
+    maxTokenValiditySeconds: 600, maxSmsSegmentsPerSend: 2, observedAt: now,
+    costs: { reference: 'fixture-cost', currency: 'USD', smsSegmentUpperBoundMicrousd: 31,
+      successfulVerificationUpperBoundMicrousd: 8, allFeesIncluded: true, observedAt: now, expiresAt: now + 86_400_000 },
+  });
+  return env;
+}

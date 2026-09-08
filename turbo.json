@@ -57,6 +57,8 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/customer-identity.service.ts",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/trial-verification-policy.ts",
+        "$TURBO_ROOT$/apps/api/src/modules/customer-identity/paid-pilot-policy.ts",
+        "$TURBO_ROOT$/apps/api/src/modules/customer-identity/verification-plan.ts",
         "$TURBO_ROOT$/apps/api/src/modules/customer-identity/phone-verification.port.ts",
         "$TURBO_ROOT$/apps/api/package.json",
         "$TURBO_ROOT$/apps/api/tsconfig.json",

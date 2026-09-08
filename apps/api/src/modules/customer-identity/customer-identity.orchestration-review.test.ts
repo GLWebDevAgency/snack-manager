@@ -17,13 +17,14 @@ function fixture() {
   const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 73).toString('base64'));
   const phoneHash = crypto.hash('phone', tenant, phone);
   const pending = { challengeId: randomUUID(), phoneHash, expiresAt: initial + 600_000,
+    funding: { mode: 'trial' as const },
     serviceSid, verificationSid: `VE${'f'.repeat(32)}`,
     encryptedPhone: crypto.seal('phone', tenant, phoneHash, phone) };
   const session: CustomerSession = { sessionId: randomUUID(), expiresAt: initial + 86_400_000,
     profile: { accountId: randomUUID(), phoneHash, encryptedName: null,
       encryptedPhone: pending.encryptedPhone, phoneVerifiedAt: initial, revision: 0 } };
   const config = {
-    environment: 'staging', parentRef: parent,
+    environment: 'staging', parentRef: parent, mode: 'closed_trial' as const,
     policy: { mode: 'closed_trial', environment: 'staging', accountSid: parent,
       serviceSid, tenantRef: tenant, allowedPhones: [phone], maxSendReservations: 10,
       expiresAt: initial + 86_400_000 },

@@ -8,15 +8,25 @@ const time = z.number().int().min(0).max(8_640_000_000_000_000);
 const ciphertext = z.string().min(1).max(4096);
 const bounded = (maximum: number) => z.number().int().min(1).max(maximum);
 export const scopeSchema = z.object({ tenantRef: ref, parentRef: ref, now: time });
+const sharedLimits = {
+  smsUnitsReservedPerSend: bounded(10), cooldownMs: bounded(86_400_000), windowMs: bounded(86_400_000),
+  globalSendReservations: bounded(10), tenantSendReservations: bounded(10),
+  phoneSendReservations: bounded(3), ipSendReservations: bounded(5), challengeCheckAttempts: bounded(5),
+};
+const fundingLimits = z.union([
+  z.strictObject({ ...sharedLimits, trialSendReservations: bounded(50),
+    freeSmsUnitsRemainingAtObservation: bounded(Number.MAX_SAFE_INTEGER),
+    freeVerificationUnitsRemainingAtObservation: bounded(Number.MAX_SAFE_INTEGER) }),
+  z.strictObject({ ...sharedLimits, maxSendReservations: bounded(50), paidBudget: z.strictObject({
+    mode: z.literal('paid'), authorizationRef: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/), currency: z.literal('USD'),
+    costEvidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
+    authorizedSpendMicrousd: bounded(Number.MAX_SAFE_INTEGER), reservePerSendMicrousd: bounded(Number.MAX_SAFE_INTEGER), expiresAt: time,
+  }) }),
+]).refine(limits => limits.cooldownMs >= 60_000 && limits.windowMs >= 86_400_000);
 export const reservationSchema = scopeSchema.extend({ operationId: uuid, requestHash: hash, challengeId: uuid,
   browserHash: hash, phoneHash: hash, globalPhoneHash: hash, ipHash: hash, encryptedPhone: ciphertext,
   serviceSid: z.string().regex(/^VA[0-9a-fA-F]{32}$/), evidenceReference: z.string().regex(/^[a-zA-Z0-9_-]{1,120}$/),
-  planExpiresAt: time, expiresAt: time, limits: z.object({ trialSendReservations: bounded(50),
-    smsUnitsReservedPerSend: bounded(10), freeSmsUnitsRemainingAtObservation: bounded(Number.MAX_SAFE_INTEGER),
-    freeVerificationUnitsRemainingAtObservation: bounded(Number.MAX_SAFE_INTEGER), cooldownMs: bounded(86_400_000),
-    windowMs: bounded(86_400_000), globalSendReservations: bounded(10), tenantSendReservations: bounded(10),
-    phoneSendReservations: bounded(3), ipSendReservations: bounded(5), challengeCheckAttempts: bounded(5) })
-    .refine(limits => limits.cooldownMs >= 60_000 && limits.windowMs >= 86_400_000),
+  planExpiresAt: time, expiresAt: time, limits: fundingLimits,
 });
 export const settlementSchema = scopeSchema.extend({ challengeId: uuid,
   verificationSid: z.string().regex(/^VE[0-9a-fA-F]{32}$/).nullable() });

@@ -12,6 +12,7 @@ import {
 import {
   JOURNALS,
   CUSTOMER_INITIAL_MIGRATION,
+  CUSTOMER_PAID_BUDGET_MIGRATION,
   LOYALTY_EARN_RECEIPTS_MIGRATION,
   LOYALTY_INITIAL_MIGRATION,
   POSTGRES_MANAGED_OBJECTS,
@@ -684,14 +685,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 69 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(69);
+  it('énumère exactement les 73 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(73);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(38);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(39);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(4);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(69);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(7);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(73);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -796,6 +797,8 @@ describe('manifeste PostgreSQL versionné', () => {
     ) as { entries: Array<{ tag: string; when: number }> };
     expect(customer.entries.find((entry) => entry.tag === '0000_customer_identity')?.when)
       .toBe(CUSTOMER_INITIAL_MIGRATION);
+    expect(customer.entries.find((entry) => entry.tag === '0001_customer_paid_budget')?.when)
+      .toBe(CUSTOMER_PAID_BUDGET_MIGRATION);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {

@@ -26,7 +26,7 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     const parentRef = `AC${randomUUID().replaceAll('-', '')}`;
     const serviceSid = `VA${randomUUID().replaceAll('-', '')}`;
     const now = Date.now();
-    const config = { environment: 'staging', parentRef,
+    const config = { environment: 'staging', mode: 'closed_trial' as const, parentRef,
       policy: { mode: 'closed_trial', environment: 'staging', accountSid: parentRef, serviceSid,
         tenantRef, allowedPhones: [PHONE], maxSendReservations: 10, expiresAt: now + 86_400_000 },
       evidence: { reference: 'simulated-provider-allowance', accountSid: parentRef, serviceSid,
