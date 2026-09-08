@@ -17,15 +17,18 @@ const browserToken = randomBytes(32).toString('base64url');
 const sessionToken = randomBytes(32).toString('base64url');
 const browserCookie = '__Host-sm_customer_browser_classfood';
 const sessionCookie = '__Host-sm_customer_session_classfood';
+const browserRef = randomUUID();
+const preparation = (state: 'prepared' | 'issued' | 'confirmed' = 'prepared') => ({ browserRef, state,
+  admissionExpiresAt: Date.now() + 600_000, expiresAt: Date.now() + 604_800_000 });
 const context = { params: Promise.resolve({ slug: 'classfood' }) };
 const mockFetch = vi.fn<typeof fetch>();
 const view = () => ({ expiresAt: Date.now() + 60_000,
   profile: { name: 'Client test', phoneE164: '+33600000000', phoneVerifiedAt: Date.now() - 1_000, revision: 0 } });
 
-function req(path: string, method = 'POST', body: unknown = {}, headers: Record<string, string> = {}) {
+function req(path: string, method = 'POST', body: unknown = path === 'navigateur' ? { step: 'prepare', browserRef } : {}, headers: Record<string, string> = {}) {
   return new NextRequest(`${origin}/r/classfood/compte/${path}`, { method,
     headers: { host: 'staging.snackmanager.fr', origin, 'sec-fetch-site': 'same-origin',
-      'x-real-ip': '192.0.2.10', 'content-type': 'application/json', ...headers },
+      'x-real-ip': '192.0.2.10', 'content-type': 'application/json', 'x-sm-customer-browser-ref': browserRef, ...headers },
     ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) });
 }
 function privateHeaders(response: Response) {
@@ -53,6 +56,48 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('customer account BFF — real handlers, isolated upstream', () => {
+  it('preparation is public metadata only, even when a cookie already exists', async () => {
+    const current = preparation();
+    mockFetch.mockResolvedValue(Response.json({ preparation: current, emitCookie: false }));
+    const response = await browser(req('navigateur', 'POST', { step: 'prepare', browserRef },
+      { cookie: `${browserCookie}=${browserToken}` }), context);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
+      request: { step: 'prepare', browserRef }, browserSecret: null, candidateSecret: null });
+  });
+  it('refuses legacy empty bootstrap and confirmation without proof, with no network or cookie', async () => {
+    expect((await browser(req('navigateur', 'POST', {}), context)).status).toBe(400);
+    expect((await browser(req('navigateur', 'POST', { step: 'confirm', browserRef }), context)).status).toBe(401);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it.each(['', 'not-a-reference', `${browserRef},${browserRef}`])('never adopts a cookie without a canonical journal selector %s', async selected => {
+    const response = await session(req('session', 'GET', {}, { 'x-sm-customer-browser-ref': selected,
+      cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each(['prepare', 'confirm'] as const)('refuses an upstream cookie emission during %s', async step => {
+    mockFetch.mockResolvedValue(Response.json({ preparation: preparation('issued'), emitCookie: true }));
+    const response = await browser(req('navigateur', 'POST', { step, browserRef }, { cookie: `${browserCookie}=${browserToken}` }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it('does not emit on a replayed issue or mismatched reference', async () => {
+    mockFetch.mockResolvedValueOnce(Response.json({ preparation: preparation('issued'), emitCookie: false }))
+      .mockResolvedValueOnce(Response.json({ preparation: { ...preparation('issued'), browserRef: randomUUID() }, emitCookie: true }));
+    const first = await browser(req('navigateur', 'POST', { step: 'issue', browserRef }), context);
+    expect(first.status).toBe(200); expect(first.headers.get('set-cookie')).toBeNull();
+    const second = await browser(req('navigateur', 'POST', { step: 'issue', browserRef }), context);
+    expect(second.status).toBe(503); expect(second.headers.get('set-cookie')).toBeNull();
+  });
+  it('never renews a recovered session cookie through relative Max-Age or browser re-emission', async () => {
+    const current = view(); mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: current }));
+    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
+      { cookie: `${browserCookie}=${browserToken}` }), context);
+    const cookie = response.headers.get('set-cookie')!;
+    expect(cookie).toContain(`Expires=${new Date(current.expiresAt).toUTCString()}`);
+    expect(cookie).not.toContain('Max-Age'); expect(cookie).not.toContain(browserCookie);
+  });
   it.each([
     ['session', session, 'session', 'GET', {}],
     ['name', name, 'profil', 'PATCH', { name: 'Client test', expectedRevision: 0 }],
@@ -89,7 +134,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/session`);
       expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
-        browserSecret: browserToken, sessionToken, request: {} });
+        browserRef, browserSecret: browserToken, sessionToken, request: {} });
     });
     it.each(['production', 'development', 'test'])('never permits a paid pilot in %s', async environment => {
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', environment);
@@ -122,20 +167,25 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     expect((await browser(req('navigateur'), context)).status).toBe(503);
     expect(mockFetch).not.toHaveBeenCalled();
   });
-  it('bootstrap sets a host-only private browser cookie but exposes no secret', async () => {
-    mockFetch.mockResolvedValue(Response.json({ available: true }));
-    const response = await browser(req('navigateur'), context);
-    expect(response.status).toBe(204); expect(await response.text()).toBe('');
+  it('only the admitted issue sets a host-only private browser cookie with absolute expiry', async () => {
+    const current = preparation('issued');
+    mockFetch.mockResolvedValue(Response.json({ preparation: current, emitCookie: true }));
+    const response = await browser(req('navigateur', 'POST', { step: 'issue', browserRef }), context);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
     const cookie = response.headers.get('set-cookie')!;
     expect(cookie).toContain(`${browserCookie}=`); expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('Secure'); expect(cookie).toContain('SameSite=strict');
     expect(cookie).toMatch(/Path=\/;/); expect(cookie).not.toContain('Domain=');
+    expect(cookie).toContain(`Expires=${new Date(current.expiresAt).toUTCString()}`); expect(cookie).not.toContain('Max-Age');
+    const envelope = JSON.parse(String(mockFetch.mock.calls[0]![1]!.body));
+    expect(cookie).toContain(`${browserCookie}=${envelope.candidateSecret}`);
+    expect(envelope).toEqual({ request: { step: 'issue', browserRef }, browserSecret: null, candidateSecret: expect.any(String) });
     privateHeaders(response); expect(mockFetch).toHaveBeenCalledTimes(1);
   });
-  it('does not rotate an established browser secret on a bootstrap retry', async () => {
-    mockFetch.mockResolvedValue(Response.json({ available: true }));
-    const response = await browser(req('navigateur', 'POST', {}, { cookie: `${browserCookie}=${browserToken}` }), context);
-    expect(response.status).toBe(204); expect(response.headers.get('set-cookie')).toBeNull();
+  it('does not rotate an established browser secret on a confirmation retry', async () => {
+    mockFetch.mockResolvedValue(Response.json({ preparation: preparation('confirmed'), emitCookie: false }));
+    const response = await browser(req('navigateur', 'POST', { step: 'confirm', browserRef }, { cookie: `${browserCookie}=${browserToken}` }), context);
+    expect(response.status).toBe(200); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('never sends before a browser cookie was received in a separate request', async () => {
     const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'challenge' }), context);
@@ -202,7 +252,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
     const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(204); expect(response.headers.get('set-cookie')).toBeNull();
-    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserSecret: browserToken, sessionToken, request: { all: false } });
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserRef, browserSecret: browserToken, sessionToken, request: { all: false } });
   });
   it('rejects stale/overbroad upstream profiles without copying secrets or setting a cookie', async () => {
     mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: { ...view(), accountId: randomUUID() } }));
@@ -441,7 +491,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
     expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
-      browserSecret: browserToken, sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
+      browserRef, browserSecret: browserToken, sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 });

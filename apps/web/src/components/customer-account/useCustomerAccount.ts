@@ -37,6 +37,7 @@ function runtime(slug: string) {
     if (users === 1) {
       try { channel = new BroadcastChannel(key); channel.addEventListener("message", incoming); } catch { channel = null; }
       window.addEventListener("storage", storage); window.addEventListener("focus", resume);
+      window.addEventListener(key, incoming);
       window.addEventListener("pageshow", resume); window.addEventListener("pagehide", pause);
       window.addEventListener("online", resume); window.addEventListener("offline", pause);
       document.addEventListener("visibilitychange", visibility);
@@ -47,6 +48,7 @@ function runtime(slug: string) {
       if (users === 0) {
         client.invalidate(); clearTimeout(expiry); unsubscribeExpiry?.(); channel?.close(); channel = null;
         window.removeEventListener("storage", storage); window.removeEventListener("focus", resume);
+        window.removeEventListener(key, incoming);
         window.removeEventListener("pageshow", resume); window.removeEventListener("pagehide", pause);
         window.removeEventListener("online", resume); window.removeEventListener("offline", pause);
         document.removeEventListener("visibilitychange", visibility);

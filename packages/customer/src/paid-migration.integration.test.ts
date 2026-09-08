@@ -5,6 +5,7 @@ import { customerTestFixture } from './test-fixture';
 import { withCustomerScope } from './client';
 import { lockVerificationBudget } from './budgets';
 import { PostgresCustomerIdentityRepository } from './repository';
+import { confirmCustomerTestBrowser } from './browser-test-fixture';
 import { migrateCustomer } from './migration';
 import { assertCustomerMigrationsCurrent } from './migration-state';
 import type { PaidVerificationReservation } from './port';
@@ -12,7 +13,7 @@ import type { PaidVerificationReservation } from './port';
 const integration = process.env.CUSTOMER_TEST_DATABASE_URL ? describe : describe.skip;
 function identity(): PaidVerificationReservation {
   const id = randomUUID().replaceAll('-', ''); const now = Date.now();
-  return { parentRef: `parent_${id}`, tenantRef: `tenant_${id}`, operationId: randomUUID(), challengeId: randomUUID(),
+  return { parentRef: `parent_${id}`, tenantRef: `tenant_${id}`, browserRef: randomUUID(), operationId: randomUUID(), challengeId: randomUUID(),
     requestHash: id.repeat(2), browserHash: id.repeat(2), phoneHash: id.repeat(2), globalPhoneHash: id.repeat(2), ipHash: id.repeat(2),
     encryptedPhone: 'fixture-ciphertext', serviceSid: `VA${id}`, evidenceReference: 'provider_fixture',
     now, expiresAt: now + 600_000, planExpiresAt: now + 60_000,
@@ -54,7 +55,7 @@ integration('paid migration — historical rows and old SQL writer, native Postg
       expect(await repo.settleSend({ ...input, verificationSid: `VE${randomUUID().replaceAll('-', '')}` })).toBeNull();
       expect(await repo.claimCheck({ ...input, checkId: randomUUID() })).toBeNull();
       const history = (await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows;
-      expect(history).toHaveLength(3); expect(history[0].hash).toBe(originalHash);
+      expect(history).toHaveLength(4); expect(history[0].hash).toBe(originalHash);
       await migrateCustomer(fixture.admin);
       expect((await fixture.admin.query('SELECT hash,created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at')).rows).toEqual(history);
     } finally { await fixture.close(); }
@@ -101,7 +102,9 @@ integration('paid migration — historical rows and old SQL writer, native Postg
     try {
       const input = identity(); await seedLegacy(fixture.admin, input, false);
       const foreign = identity(); foreign.limits.paidBudget.authorizationRef = 'foreign_authorization';
-      await new PostgresCustomerIdentityRepository(fixture.app).reserve(foreign);
+      const repo = new PostgresCustomerIdentityRepository(fixture.app);
+      await confirmCustomerTestBrowser(repo, foreign);
+      await repo.reserve(foreign);
       const insert = (funding: string, auth: string | null, money: number, expiry: Date | null, cost: string | null) => fixture.admin.query(`INSERT INTO customer.reservations
         (id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,sms_units,funding_kind,authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)
         VALUES($1,$2,$3,$4,$5,$6,$7,2,$8,$9,$10,$11,$12)`, [input.operationId, input.parentRef, input.tenantRef,

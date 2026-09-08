@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { CustomerAccountBrowserRequests, CustomerAccountResponses } from '@sm/contracts';
 import {
   CustomerIdentityCrypto,
   type CustomerIdentityRepository, type CustomerScope, type CustomerSession,
@@ -14,16 +15,23 @@ const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a
 const token = z.string().regex(/^[A-Za-z0-9_-]{43}$/)
   .refine(value => Buffer.from(value, 'base64url').toString('base64url') === value);
 const phone = z.string().regex(/^\+33[67]\d{8}$/);
+const browserBindingSchema = z.strictObject({ tenantRef: tenant, browserRef: uuid, browserSecret: token });
+type BrowserBinding = z.infer<typeof browserBindingSchema>;
 const startSchema = z.strictObject({
-  tenantRef: tenant, phone, operationId: uuid, browserSecret: token,
+  tenantRef: tenant, phone, operationId: uuid, browserRef: uuid, browserSecret: token,
   clientIp: z.string().min(1).max(160), humanVerified: z.literal(true),
 });
 const checkSchema = z.strictObject({
   tenantRef: tenant, challengeId: uuid, checkId: uuid, code: z.string().regex(/^\d{6}$/),
-  browserSecret: token, existingSessionToken: token.nullable(),
+  browserRef: uuid, browserSecret: token, existingSessionToken: token.nullable(),
 });
 const recoverSchema = checkSchema.omit({ code: true, existingSessionToken: true });
-const sessionSchema = z.strictObject({ tenantRef: tenant, token, browserSecret: token });
+const sessionSchema = browserBindingSchema.extend({ token });
+const browserSchema = z.strictObject({ tenantRef: tenant, request: CustomerAccountBrowserRequests.browser,
+  browserSecret: token.nullable(), candidateSecret: token.nullable() }).refine(value =>
+  value.request.step === 'prepare' ? value.browserSecret === null && value.candidateSecret === null
+    : value.request.step === 'issue' ? value.candidateSecret !== null
+      : value.browserSecret !== null && value.candidateSecret === null);
 const updateSchema = sessionSchema.extend({
   name: z.string().trim().min(1).max(120).refine(value => !/[\p{Cc}\p{Cf}]/u.test(value)).nullable(),
   expectedRevision: z.number().int().min(0).max(2_147_483_646),
@@ -75,9 +83,71 @@ export class CustomerIdentityService {
     private readonly beforeProvider: () => Promise<void> = async () => {},
   ) {}
 
+  /** Preparations do not authorize a send and never consume a provider budget.
+   * Only the repository's one-time issue CAS can authorize a Set-Cookie. */
+  async browser(raw: unknown) {
+    return this.protect(async () => {
+      const input = this.parse(browserSchema, raw);
+      const scope = this.scope(input.tenantRef, this.configuration());
+      const browserRef = input.request.browserRef;
+      let result;
+      switch (input.request.step) {
+        case 'prepare':
+          result = { preparation: await this.repository.prepareBrowser({ ...scope, browserRef }), emitCookie: false };
+          break;
+        case 'issue':
+          result = await this.repository.issueBrowser({ ...scope, browserRef,
+            browserHash: this.crypto.hash('browser', scope.tenantRef, input.candidateSecret!),
+            currentBrowserHash: input.browserSecret === null ? null
+              : this.crypto.hash('browser', scope.tenantRef, input.browserSecret) });
+          break;
+        case 'confirm':
+          result = { preparation: await this.repository.confirmBrowser({ ...scope, browserRef,
+            browserHash: this.crypto.hash('browser', scope.tenantRef, input.browserSecret!) }), emitCookie: false };
+      }
+      const parsed = CustomerAccountResponses.browser.safeParse(result);
+      if (!parsed.success || parsed.data.preparation.browserRef !== browserRef
+        || (parsed.data.emitCookie && input.request.step !== 'issue')) throw new CustomerIdentityError('unauthorized');
+      // Recheck current server configuration after waiting for the durable CAS.
+      if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) {
+        throw new CustomerIdentityError('unavailable');
+      }
+      return parsed.data;
+    });
+  }
+
+  /** The runtime calls this before Turnstile; use cases call it independently.
+   * This is a point-in-time check, not a lock held across a provider request. */
+  async requireBrowser(raw: unknown): Promise<{ expiresAt: number }> {
+    return this.protect(async () => {
+      const input = this.parse(browserBindingSchema, raw);
+      const scope = this.scope(input.tenantRef, this.configuration());
+      const result = await this.repository.validateBrowser({ ...scope, browserRef: input.browserRef,
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret) });
+      if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) {
+        throw new CustomerIdentityError('unavailable');
+      }
+      if (!result || !Number.isSafeInteger(result.expiresAt) || result.expiresAt <= this.now()) {
+        throw new CustomerIdentityError('unauthorized');
+      }
+      return { expiresAt: result.expiresAt };
+    });
+  }
+
+  private binding(input: BrowserBinding): BrowserBinding {
+    return { tenantRef: input.tenantRef, browserRef: input.browserRef, browserSecret: input.browserSecret };
+  }
+
+  private async boundView(input: BrowserBinding, scope: CustomerScope, session: CustomerSession) {
+    const browser = await this.requireBrowser(this.binding(input));
+    if (session.expiresAt > browser.expiresAt) throw new CustomerIdentityError('unauthorized');
+    return this.view(scope, session);
+  }
+
   async start(raw: unknown): Promise<{ challengeId: string; expiresAt: number }> {
     return this.protect(async () => {
       const input = this.parse(startSchema, raw);
+      await this.requireBrowser(this.binding(input));
       const config = this.configuration();
       const scope = this.scope(input.tenantRef, config);
       const now = this.now();
@@ -88,9 +158,9 @@ export class CustomerIdentityService {
       const phoneHash = this.crypto.hash('phone', input.tenantRef, input.phone);
       const browserHash = this.crypto.hash('browser', input.tenantRef, input.browserSecret);
       const reserved = await this.repository.reserve({
-        ...scope, operationId: input.operationId, challengeId: randomUUID(),
+        ...scope, browserRef: input.browserRef, operationId: input.operationId, challengeId: randomUUID(),
         requestHash: this.crypto.hash('request', input.tenantRef,
-          JSON.stringify([input.operationId, phoneHash, browserHash])),
+          JSON.stringify([input.operationId, phoneHash, browserHash, input.browserRef])),
         browserHash, phoneHash,
         globalPhoneHash: this.crypto.hash('global-phone', config.parentRef, input.phone),
         ipHash: this.crypto.hash('ip', config.parentRef, input.clientIp),
@@ -101,6 +171,7 @@ export class CustomerIdentityService {
         now, limits,
       });
       if (reserved.kind === 'pending') {
+        await this.requireBrowser(this.binding(input));
         this.assertChallenge(scope, reserved.challenge, phoneHash, plan.serviceSid);
         this.assertFunding(scope, reserved.challenge, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
         return this.challengeView(reserved.challenge);
@@ -110,6 +181,7 @@ export class CustomerIdentityService {
       let sid: string;
       try {
         await this.beforeProvider();
+        await this.requireBrowser(this.binding(input));
         // Lock waits/configuration refreshes must not turn the old reservation
         // into permission for a different service, segment cost or allowance.
         const current = this.plan(this.configuration(), input.tenantRef, input.phone, this.now());
@@ -129,6 +201,7 @@ export class CustomerIdentityService {
         ...scope, challengeId: reserved.challengeId, verificationSid: sid, now: this.now(),
       });
       if (!pending) throw new CustomerIdentityError('unavailable');
+      await this.requireBrowser(this.binding(input));
       this.assertChallenge(scope, pending, phoneHash, plan.serviceSid, reserved.challengeId);
       this.assertFunding(scope, pending, this.plan(this.configuration(), input.tenantRef, input.phone, this.now()));
       return this.challengeView(pending);
@@ -138,16 +211,17 @@ export class CustomerIdentityService {
   async check(raw: unknown): Promise<{ token: string; view: CustomerSessionView }> {
     return this.protect(async () => {
       const input = this.parse(checkSchema, raw);
+      let browser = await this.requireBrowser(this.binding(input));
       const config = this.configuration();
       const scope = this.scope(input.tenantRef, config);
       const accessToken = this.crypto.tokenForCheck(input.tenantRef, input.browserSecret, input.challengeId, input.checkId);
       const sessionHash = this.crypto.hash('session', input.tenantRef, accessToken);
-      const claim = { ...scope, challengeId: input.challengeId, checkId: input.checkId,
+      const claim = { ...scope, browserRef: input.browserRef, challengeId: input.challengeId, checkId: input.checkId,
         browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret), now: this.now() };
       // This private receipt is valid only for the original consumed challenge,
       // exact browser/check and STILL-LIVE session. No new TTL or provider call.
       const recovered = await this.repository.recoverCheck({ ...claim, sessionHash });
-      if (recovered) return { token: accessToken, view: this.view(scope, recovered) };
+      if (recovered) return { token: accessToken, view: await this.boundView(input, scope, recovered) };
       const pending = await this.repository.claimCheck(claim);
       if (!pending) throw new CustomerIdentityError('unauthorized');
 
@@ -156,6 +230,7 @@ export class CustomerIdentityService {
         this.assertChallenge(scope, pending, pending.phoneHash, pending.serviceSid, input.challengeId);
         const verifiedPhone = this.crypto.open('phone', input.tenantRef, pending.phoneHash, pending.encryptedPhone);
         await this.beforeProvider();
+        browser = await this.requireBrowser(this.binding(input));
         // No await between this fresh funding/policy decision and the provider.
         this.assertChallenge(scope, pending, pending.phoneHash, pending.serviceSid, input.challengeId);
         const plan = this.plan(this.configuration(), input.tenantRef, verifiedPhone, this.now());
@@ -171,25 +246,26 @@ export class CustomerIdentityService {
       }
       const now = this.now();
       const completed = await this.repository.completeCheck({ ...claim, now, result,
-        sessionId: randomUUID(), sessionHash, sessionExpiresAt: now + SESSION_TTL_MS,
+        sessionId: randomUUID(), sessionHash, sessionExpiresAt: Math.min(now + SESSION_TTL_MS, browser.expiresAt),
         accountId: randomUUID(), existingSessionHash: input.existingSessionToken === null ? null
           : this.crypto.hash('session', input.tenantRef, input.existingSessionToken),
       });
       if (result === 'uncertain') throw new CustomerIdentityError('unavailable');
       if (result !== 'approved' || !completed) throw new CustomerIdentityError('unauthorized');
-      return { token: accessToken, view: this.view(scope, completed) };
+      return { token: accessToken, view: await this.boundView(input, scope, completed) };
     });
   }
 
   async session(raw: unknown): Promise<CustomerSessionView> {
     return this.protect(async () => {
       const input = this.parse(sessionSchema, raw);
+      await this.requireBrowser(this.binding(input));
       const scope = this.scope(input.tenantRef, this.configuration());
-      const session = await this.repository.authenticate({ ...scope,
+      const session = await this.repository.authenticate({ ...scope, browserRef: input.browserRef,
         browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
-      return this.view(scope, session);
+      return this.boundView(input, scope, session);
     });
   }
 
@@ -198,42 +274,45 @@ export class CustomerIdentityService {
   async recover(raw: unknown): Promise<{ token: string; view: CustomerSessionView }> {
     return this.protect(async () => {
       const input = this.parse(recoverSchema, raw);
+      await this.requireBrowser(this.binding(input));
       const scope = this.scope(input.tenantRef, this.configuration());
       const accessToken = this.crypto.tokenForCheck(input.tenantRef, input.browserSecret, input.challengeId, input.checkId);
-      const session = await this.repository.recoverCheck({ ...scope,
+      const session = await this.repository.recoverCheck({ ...scope, browserRef: input.browserRef,
         challengeId: input.challengeId, checkId: input.checkId,
         browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
         sessionHash: this.crypto.hash('session', input.tenantRef, accessToken), now: this.now(),
       });
       if (!session) throw new CustomerIdentityError('unauthorized');
-      return { token: accessToken, view: this.view(scope, session) };
+      return { token: accessToken, view: await this.boundView(input, scope, session) };
     });
   }
 
   async updateName(raw: unknown): Promise<CustomerSessionView> {
     return this.protect(async () => {
       const input = this.parse(updateSchema, raw);
+      await this.requireBrowser(this.binding(input));
       const scope = this.scope(input.tenantRef, this.configuration());
       const sessionHash = this.crypto.hash('session', input.tenantRef, input.token);
       const browserHash = this.crypto.hash('browser', input.tenantRef, input.browserSecret);
-      const session = await this.repository.authenticate({ ...scope, sessionHash, browserHash, now: this.now() });
+      const session = await this.repository.authenticate({ ...scope, browserRef: input.browserRef, sessionHash, browserHash, now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
-      const updated = await this.repository.updateName({ ...scope, sessionHash, browserHash,
+      const updated = await this.repository.updateName({ ...scope, browserRef: input.browserRef, sessionHash, browserHash,
         expectedRevision: input.expectedRevision,
         encryptedName: input.name === null ? null
           : this.crypto.seal('name', input.tenantRef, session.profile.accountId, input.name),
         now: this.now(),
       });
       if (!updated) throw new CustomerIdentityError('conflict');
-      return this.view(scope, updated);
+      return this.boundView(input, scope, updated);
     });
   }
 
   async logout(raw: unknown): Promise<void> {
     return this.protect(async () => {
       const input = this.parse(logoutSchema, raw);
+      await this.requireBrowser(this.binding(input));
       const scope = this.scope(input.tenantRef, this.configuration());
-      await this.repository.revoke({ ...scope,
+      await this.repository.revoke({ ...scope, browserRef: input.browserRef,
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token),
         browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
         all: input.all, now: this.now(),

@@ -2,5 +2,5 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "module": "CommonJS", "moduleResolution": "node", "outDir": "dist", "rootDir": "src" },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/run-integration-tests.ts", "src/test-fixture.ts"]
+  "exclude": ["src/**/*.test.ts", "src/run-integration-tests.ts", "src/test-fixture.ts", "src/browser-test-fixture.ts"]
 }

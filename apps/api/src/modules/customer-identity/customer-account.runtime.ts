@@ -59,45 +59,63 @@ export class CustomerAccountRuntime {
             policy: current?.policy ?? null, evidence: current?.evidence ?? null };
         }, Date.now, beforeProvider);
       const tenantRef = access.tenantRef; let result: unknown;
+      let binding: { tenantRef: string; browserRef: string; browserSecret: string } | undefined;
+      if (relay.action !== 'browser') {
+        const input = this.input(relay.action, raw);
+        binding = { tenantRef, browserRef: input.browserRef, browserSecret: input.browserSecret };
+        // No Turnstile call, let alone Verify, before the selected preparation
+        // and the actual HttpOnly cookie have been confirmed by PostgreSQL.
+        await core.requireBrowser(binding);
+      }
       switch (relay.action) {
+        case 'browser': {
+          result = await core.browser({ tenantRef, ...this.input('browser', raw) }); break;
+        }
         case 'start': {
           const input = this.input('start', raw);
           const verified = await this.human.verify({ secret: send!.turnstileSecret, token: input.request.turnstileToken,
             origin: relay.origin, slug: relay.slug, operationId: input.request.operationId });
           if (!verified) throw new CustomerIdentityError('invalid_request');
           this.access(relay, access); await this.tenant(access);
-          result = await core.start({ tenantRef, phone: input.request.phone, operationId: input.request.operationId,
-            browserSecret: input.browserSecret, clientIp: `relay:${relay.client}`, humanVerified: true });
+          result = await core.start({ ...binding!, phone: input.request.phone, operationId: input.request.operationId,
+            clientIp: `relay:${relay.client}`, humanVerified: true });
           break;
         }
         case 'check': {
           const input = this.input('check', raw);
-          const checked = await core.check({ tenantRef, ...input.request, browserSecret: input.browserSecret,
+          const checked = await core.check({ ...binding!, ...input.request,
             existingSessionToken: input.sessionToken });
           result = { token: checked.token, view: view(checked.view) }; break;
         }
         case 'recover': {
           const input = this.input('recover', raw);
-          const recovered = await core.recover({ tenantRef, ...input.request, browserSecret: input.browserSecret });
+          const recovered = await core.recover({ ...binding!, ...input.request });
           result = { token: recovered.token, view: view(recovered.view) }; break;
         }
         case 'session': {
           const input = this.input('session', raw);
-          result = view(await core.session({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret })); break;
+          result = view(await core.session({ ...binding!, token: input.sessionToken })); break;
         }
         case 'name': {
           const input = this.input('name', raw);
-          result = view(await core.updateName({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret, ...input.request })); break;
+          result = view(await core.updateName({ ...binding!, token: input.sessionToken, ...input.request })); break;
         }
         case 'logout': {
           const input = this.input('logout', raw);
-          await core.logout({ tenantRef, token: input.sessionToken, browserSecret: input.browserSecret, ...input.request }); break;
+          await core.logout({ ...binding!, token: input.sessionToken, ...input.request }); break;
         }
       }
       // Mongo lifecycle and PG are distinct stores. A request already in flight
       // may cross a revocation; no private response escapes a newly blocked tenant.
       this.access(relay, access); await this.tenant(access);
-      return CustomerAccountResponses[relay.action].parse(result);
+      if (binding) await core.requireBrowser(binding);
+      const response = CustomerAccountResponses[relay.action].parse(result);
+      if (response && relay.action !== 'browser') {
+        const expiresAt = 'view' in response ? response.view.expiresAt
+          : 'expiresAt' in response ? response.expiresAt : null;
+        if (expiresAt !== null && expiresAt <= Date.now()) throw new CustomerIdentityError('unauthorized');
+      }
+      return response;
     } catch (error) { throw customerSafeError(error); }
   }
 

@@ -20,7 +20,7 @@ export function assertCustomerTestTarget(raw: unknown): string {
 
 export async function customerTestFixture(raw: unknown, options: {
   beforeUpgrade?: (admin: Pool) => Promise<void>;
-  beforeUpgradeMigrations?: 1 | 2;
+  beforeUpgradeMigrations?: 1 | 2 | 3;
 } = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');

@@ -1,7 +1,8 @@
 import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
-  CustomerAccountViewSchema, type CustomerAccountView } from "@sm/contracts";
+  CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, type CustomerAccountView } from "@sm/contracts";
+import { selectedCustomerBrowser } from './browser-journal';
 
-type Action = "status" | "session" | "name" | "logout";
+type Action = "status" | "browser" | "session" | "name" | "logout";
 export type CustomerAccountRequest = (action: Action, body?: unknown) => Promise<unknown>;
 export type CustomerAccountState = Readonly<{
   status: "idle" | "loading" | "guest" | "authenticated" | "unavailable" | "error" | "offline";
@@ -16,23 +17,33 @@ export class CustomerAccountHttpError extends Error {
 
 /** Same-origin BFF only. Cookies stay HttpOnly; neither tokens nor upstream
  * error bodies reach the UI, analytics, browser storage or application logs. */
-export function customerAccountRequest(slug: string): CustomerAccountRequest {
+export function customerAccountRequest(slug: string, selected: () => Promise<string | null> = () => selectedCustomerBrowser(slug)): CustomerAccountRequest {
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
   return async (action, body) => {
     if (!valid) throw new CustomerAccountHttpError(400);
-    const paths = { status: "capacites", session: "session", name: "profil", logout: "session" };
-    const methods = { status: "GET", session: "GET", name: "PATCH", logout: "DELETE" };
+    const paths = { status: "capacites", browser: "navigateur", session: "session", name: "profil", logout: "session" };
+    const methods = { status: "GET", browser: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
+    let browserRef: string | null = null;
+    if (action !== 'status' && action !== 'browser') {
+      try { browserRef = await selected(); } catch { throw new CustomerAccountHttpError(409); }
+      if (browserRef === null) throw new CustomerAccountHttpError(401);
+      if (!CustomerAccountBrowserRefSchema.safeParse(browserRef).success) throw new CustomerAccountHttpError(409);
+    }
     const response = await fetch(`/r/${slug}/compte/${paths[action]}`, {
       method: methods[action], credentials: "same-origin", cache: "no-store", redirect: "error",
       referrerPolicy: "no-referrer", signal: AbortSignal.timeout(12_000),
-      headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(browserRef === null ? {} : { [CUSTOMER_ACCOUNT_BROWSER_REF_HEADER]: browserRef }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok || (action === "logout" ? response.status !== 204 : response.status !== 200)) {
       void response.body?.cancel().catch(() => undefined);
       throw new CustomerAccountHttpError(response.status);
     }
-    if (action === "logout") return undefined;
+    if (action === "logout") {
+      if (browserRef !== null && await selected() !== browserRef) throw new CustomerAccountHttpError(409);
+      return undefined;
+    }
     if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(response.headers.get("content-type") ?? "")) {
       void response.body?.cancel().catch(() => undefined); throw new CustomerAccountHttpError(502);
     }
@@ -45,7 +56,12 @@ export function customerAccountRequest(slug: string): CustomerAccountRequest {
         bytes += next.value.byteLength; if (bytes > 4_096) throw new CustomerAccountHttpError(502);
         text += decoder.decode(next.value, { stream: true });
       }
-      complete = true; return JSON.parse(text + decoder.decode()) as unknown;
+      complete = true;
+      // Clearing storage or selecting B while A was in flight cannot adopt A's
+      // response. The server independently binds ref + cookies; neither side
+      // tries to repair this ambiguity by choosing a different identity.
+      if (browserRef !== null && await selected() !== browserRef) throw new CustomerAccountHttpError(409);
+      return JSON.parse(text + decoder.decode()) as unknown;
     } finally { if (!complete) void reader.cancel().catch(() => undefined); reader.releaseLock(); }
   };
 }

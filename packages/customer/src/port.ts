@@ -2,6 +2,13 @@
  * All dates are server epoch milliseconds. No browser supplies a tenant, parent
  * account, verified phone, quota plan or account identity to this boundary. */
 export type CustomerScope = { tenantRef: string; parentRef: string };
+export type CustomerBrowserPreparation = {
+  browserRef: string;
+  state: 'prepared' | 'issued' | 'confirmed' | 'expired';
+  admissionExpiresAt: number;
+  expiresAt: number;
+};
+export type CustomerBrowserBinding = CustomerScope & { browserRef: string; browserHash: string };
 export type CustomerProfile = {
   accountId: string;
   phoneHash: string;
@@ -39,6 +46,7 @@ export type PaidVerificationLimits = VerificationLimits & {
   };
 };
 type ReservationIdentity = CustomerScope & {
+  browserRef: string;
   operationId: string;
   requestHash: string;
   challengeId: string;
@@ -76,6 +84,7 @@ export type ReservationResult =
   | { kind: 'denied' | 'uncertain' };
 
 export type CheckClaim = CustomerScope & {
+  browserRef: string;
   challengeId: string;
   browserHash: string;
   checkId: string;
@@ -88,6 +97,12 @@ export type CheckResult = 'approved' | 'pending' | 'expired' | 'locked' | 'uncer
  * Check claims must be single-flight: expired leases NEVER re-execute a remote
  * check whose outcome may have been approved. No raw token, OTP or phone here. */
 export interface CustomerIdentityRepository {
+  prepareBrowser(input: CustomerScope & { browserRef: string }): Promise<CustomerBrowserPreparation | null>;
+  issueBrowser(input: CustomerBrowserBinding & { currentBrowserHash: string | null }): Promise<{
+    preparation: CustomerBrowserPreparation; emitCookie: boolean;
+  } | null>;
+  confirmBrowser(input: CustomerBrowserBinding): Promise<CustomerBrowserPreparation | null>;
+  validateBrowser(input: CustomerBrowserBinding): Promise<{ expiresAt: number } | null>;
   reserve(input: VerificationReservation): Promise<ReservationResult>;
   settleSend(input: CustomerScope & {
     challengeId: string;
@@ -106,13 +121,14 @@ export interface CustomerIdentityRepository {
      * matching unverified/recycled phone. Null permits first enrollment only. */
     existingSessionHash: string | null;
   }): Promise<CustomerSession | null>;
-  authenticate(input: CustomerScope & { sessionHash: string; browserHash: string; now: number }): Promise<CustomerSession | null>;
+  authenticate(input: CustomerBrowserBinding & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
   updateName(input: CustomerScope & {
+    browserRef: string;
     sessionHash: string;
     browserHash: string;
     encryptedName: string | null;
     expectedRevision: number;
     now: number;
   }): Promise<CustomerSession | null>;
-  revoke(input: CustomerScope & { sessionHash: string; browserHash: string; all: boolean; now: number }): Promise<void>;
+  revoke(input: CustomerBrowserBinding & { sessionHash: string; all: boolean; now: number }): Promise<void>;
 }

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { customerTestEnvironment } from './customer-account.test-fixture';
 
 function fixture(action = 'session') {
   const env = customerTestEnvironment();
-  const body = { sessionToken: Buffer.alloc(32, 17).toString('base64url'),
+  const body = { browserRef: randomUUID(), sessionToken: Buffer.alloc(32, 17).toString('base64url'),
     browserSecret: Buffer.alloc(32, 20).toString('base64url'), request: {} };
   const request = { method: 'POST', originalUrl: `/public/customer/fixture/${action}`,
     params: { slug: 'fixture', action }, body, rawBody: Buffer.from(JSON.stringify(body)),

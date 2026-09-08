@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture, assertCustomerTestTarget } from './test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
+import { confirmCustomerTestBrowser } from './browser-test-fixture';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import { assertCustomerMigrationsCurrent } from './migration-state';
 import type { CheckClaim, CustomerIdentityRepository, VerificationReservation } from './port';
@@ -13,7 +14,7 @@ const sid = () => `VE${randomUUID().replaceAll('-', '')}`;
 function reservation(patch: Partial<VerificationReservation> = {}): VerificationReservation {
   const now = Date.now();
   return { tenantRef: `tenant_${hash().slice(0, 12)}`, parentRef: `parent_${hash().slice(0, 12)}`,
-    operationId: randomUUID(), requestHash: hash(), challengeId: randomUUID(), browserHash: hash(),
+    browserRef: randomUUID(), operationId: randomUUID(), requestHash: hash(), challengeId: randomUUID(), browserHash: hash(),
     phoneHash: hash(), globalPhoneHash: hash(), ipHash: hash(), encryptedPhone: 'encrypted-fixture-only',
     serviceSid: `VA${'1'.repeat(32)}`, evidenceReference: 'fixture', planExpiresAt: now + 60_000,
     expiresAt: now + 600_000, now, limits: { trialSendReservations: 50, smsUnitsReservedPerSend: 1,
@@ -23,7 +24,7 @@ function reservation(patch: Partial<VerificationReservation> = {}): Verification
 }
 function claim(input: VerificationReservation): CheckClaim {
   return { parentRef: input.parentRef, tenantRef: input.tenantRef, challengeId: input.challengeId,
-    browserHash: input.browserHash, checkId: randomUUID(), now: Date.now() };
+    browserRef: input.browserRef, browserHash: input.browserHash, checkId: randomUUID(), now: Date.now() };
 }
 function completion(input: CheckClaim): Parameters<CustomerIdentityRepository['completeCheck']>[0] {
   return { ...input, result: 'approved', sessionId: randomUUID(), sessionHash: hash(),
@@ -42,8 +43,12 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   let repo: PostgresCustomerIdentityRepository;
   beforeAll(async () => { fixture = await customerTestFixture(process.env.CUSTOMER_TEST_DATABASE_URL); repo = new PostgresCustomerIdentityRepository(fixture.app); }, 20_000);
   afterAll(async () => { await fixture?.close(); });
+  async function reserve(input: VerificationReservation) {
+    await confirmCustomerTestBrowser(repo, input);
+    return repo.reserve(input);
+  }
   async function pending(input: VerificationReservation) {
-    expect(await repo.reserve(input)).toEqual({ kind: 'reserved', challengeId: input.challengeId });
+    expect(await reserve(input)).toEqual({ kind: 'reserved', challengeId: input.challengeId });
     const result = await repo.settleSend({ ...input, verificationSid: sid() });
     expect(result?.challengeId).toBe(input.challengeId);
     return result!;
@@ -63,10 +68,10 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('reserves exactly once under concurrent duplicate operations and never re-sends an unsettled operation', async () => {
     const input = reservation();
-    const results = await Promise.all([repo.reserve(input), repo.reserve(input)]);
+    const results = await Promise.all([reserve(input), reserve(input)]);
     expect(results.filter(value => value.kind === 'reserved')).toHaveLength(1);
     expect(results.filter(value => value.kind === 'uncertain')).toHaveLength(1);
-    expect(await repo.reserve({ ...input, requestHash: hash() })).toEqual({ kind: 'denied' });
+    expect(await reserve({ ...input, requestHash: hash() })).toEqual({ kind: 'denied' });
     expect((await fixture.admin.query('SELECT reserved_sends::int AS count FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0].count).toBe(1);
   });
 
@@ -74,12 +79,12 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const input = reservation();
     input.limits.trialSendReservations = 1;
     const other = reservation({ parentRef: input.parentRef, limits: { ...input.limits } });
-    const results = await Promise.all([repo.reserve(input), repo.reserve(other)]);
+    const results = await Promise.all([reserve(input), reserve(other)]);
     expect(results.filter(value => value.kind === 'reserved')).toHaveLength(1);
     const winner = results[0].kind === 'reserved' ? input : other;
     await repo.settleSend({ ...winner, verificationSid: null });
     const retry = reservation({ parentRef: input.parentRef, serviceSid: `VA${'2'.repeat(32)}`, evidenceReference: 'refreshed' });
-    expect(await repo.reserve(retry)).toEqual({ kind: 'denied' });
+    expect(await reserve(retry)).toEqual({ kind: 'denied' });
     await expect(fixture.admin.query('DELETE FROM customer.reservations WHERE parent_ref=$1', [input.parentRef])).rejects.toMatchObject({ code: '23514' });
     await expect(fixture.admin.query('UPDATE customer.parent_budgets SET reserved_sends=0 WHERE parent_ref=$1', [input.parentRef])).rejects.toMatchObject({ code: '23514' });
   });
@@ -89,7 +94,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     input.limits = { ...input.limits, freeSmsUnitsRemainingAtObservation: 3, smsUnitsReservedPerSend: 2 };
     await pending(input);
     const next = reservation({ parentRef: input.parentRef, limits: { ...input.limits, freeSmsUnitsRemainingAtObservation: 100 } });
-    expect(await repo.reserve(next)).toEqual({ kind: 'denied' });
+    expect(await reserve(next)).toEqual({ kind: 'denied' });
     const row = (await fixture.admin.query('SELECT reserved_sms::int AS sms,sms_limit::int AS cap FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0];
     expect(row).toEqual({ sms: 2, cap: 3 });
   });
@@ -98,13 +103,13 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const input = reservation();
     await pending(input);
     const other = reservation({ parentRef: input.parentRef, globalPhoneHash: input.globalPhoneHash });
-    expect(await repo.reserve(other)).toEqual({ kind: 'denied' });
+    expect(await reserve(other)).toEqual({ kind: 'denied' });
   });
 
   it('never attaches a provider SID to two challenges and retains both reservations', async () => {
     const input = reservation();
     const other = reservation({ parentRef: input.parentRef });
-    await repo.reserve(input); await repo.reserve(other);
+    await reserve(input); await reserve(other);
     const verificationSid = sid();
     expect(await repo.settleSend({ ...input, verificationSid })).not.toBeNull();
     expect(await repo.settleSend({ ...input, verificationSid })).not.toBeNull();
@@ -149,7 +154,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const second = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash });
     await pending(second); const secondClaim = claim(second); await repo.claimCheck(secondClaim);
     expect(await repo.completeCheck(completion(secondClaim))).toBeNull();
-    const third = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash, browserHash: input.browserHash });
+    const third = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash, browserRef: input.browserRef, browserHash: input.browserHash });
     await pending(third); const thirdClaim = claim(third); await repo.claimCheck(thirdClaim);
     const result = await repo.completeCheck({ ...completion(thirdClaim), existingSessionHash: first.sessionHash });
     expect(result?.profile.accountId).toBe(first.accountId);
@@ -169,7 +174,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('uses database time instead of a caller-provided stale timestamp', async () => {
     const input = reservation({ now: 1, planExpiresAt: Date.now() - 1000 });
-    expect(await repo.reserve(input)).toEqual({ kind: 'denied' });
+    expect(await reserve(input)).toEqual({ kind: 'denied' });
     const active = reservation(); await pending(active);
     await fixture.admin.query("UPDATE customer.challenges SET created_at=statement_timestamp()-interval '11 minutes', expires_at=statement_timestamp()-interval '1 minute' WHERE id=$1", [active.challengeId]);
     expect(await repo.claimCheck({ ...claim(active), now: 1 })).toBeNull();
@@ -177,15 +182,15 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
 
   it('returns the original pending challenge when an identical operation supplies a fresh candidate UUID', async () => {
     const input = reservation(); const original = await pending(input);
-    expect(await repo.reserve({ ...input, challengeId: randomUUID() })).toEqual({ kind: 'pending', challenge: original });
-    expect(await repo.reserve({ ...input, browserHash: hash() })).toEqual({ kind: 'denied' });
+    expect(await reserve({ ...input, challengeId: randomUUID() })).toEqual({ kind: 'pending', challenge: original });
+    expect(await reserve({ ...input, browserHash: hash() })).toEqual({ kind: 'denied' });
   });
 
   it('never returns sessions through another tenant/parent and refuses expired or inactive accounts', async () => {
     const input = reservation(); await pending(input);
     const check = claim(input); await repo.claimCheck(check); const done = completion(check); await repo.completeCheck(done);
     for (const scope of [{ tenantRef: 'other', parentRef: input.parentRef }, { tenantRef: input.tenantRef, parentRef: 'other' }]) {
-      expect(await repo.authenticate({ ...scope, browserHash: input.browserHash, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
+      expect(await repo.authenticate({ ...scope, browserRef: input.browserRef, browserHash: input.browserHash, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
       expect(await repo.recoverCheck({ ...check, ...scope, sessionHash: done.sessionHash })).toBeNull();
     }
     await fixture.admin.query('UPDATE customer.accounts SET active=false WHERE id=$1', [done.accountId]);
@@ -274,7 +279,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   });
 
   it('holds the provider phone exclusion beyond a short application challenge and preserves a late SID', async () => {
-    const input = reservation({ expiresAt: Date.now() + 30_000 }); await repo.reserve(input);
+    const input = reservation({ expiresAt: Date.now() + 30_000 }); await reserve(input);
     const guard = (await fixture.admin.query('SELECT active_until FROM customer.phone_guards WHERE parent_ref=$1', [input.parentRef])).rows[0];
     expect(guard.active_until.getTime()).toBeGreaterThan(input.expiresAt + 500_000);
     await fixture.admin.query("UPDATE customer.challenges SET created_at=statement_timestamp()-interval '2 minutes', expires_at=statement_timestamp()-interval '1 minute' WHERE id=$1", [input.challengeId]);
@@ -282,7 +287,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     expect(await repo.settleSend({ ...input, verificationSid })).toBeNull();
     expect((await fixture.admin.query('SELECT challenge_id FROM customer.provider_verifications WHERE parent_ref=$1 AND verification_sid=$2',
       [input.parentRef, verificationSid])).rows[0].challenge_id).toBe(input.challengeId);
-    expect(await repo.reserve(reservation({ parentRef: input.parentRef, globalPhoneHash: input.globalPhoneHash }))).toEqual({ kind: 'denied' });
+    expect(await reserve(reservation({ parentRef: input.parentRef, globalPhoneHash: input.globalPhoneHash }))).toEqual({ kind: 'denied' });
     const after = (await fixture.admin.query('SELECT active_until FROM customer.phone_guards WHERE parent_ref=$1', [input.parentRef])).rows[0];
     expect(after.active_until.getTime()).toBeGreaterThanOrEqual(guard.active_until.getTime());
   });
@@ -290,8 +295,8 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   it('records a lower lifetime observation even when the request only recovers an existing pending challenge', async () => {
     const input = reservation(); const original = await pending(input);
     const replay = { ...input, challengeId: randomUUID(), limits: { ...input.limits, freeSmsUnitsRemainingAtObservation: 1 } };
-    expect(await repo.reserve(replay)).toEqual({ kind: 'pending', challenge: original });
-    expect(await repo.reserve(reservation({ parentRef: input.parentRef }))).toEqual({ kind: 'denied' });
+    expect(await reserve(replay)).toEqual({ kind: 'pending', challenge: original });
+    expect(await reserve(reservation({ parentRef: input.parentRef }))).toEqual({ kind: 'denied' });
     expect((await fixture.admin.query('SELECT sms_limit::int AS cap FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0].cap).toBe(1);
   });
 

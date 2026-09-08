@@ -107,7 +107,7 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
   });
 
   it('passes the original browser-bound recovery proof, without an OTP', async () => {
-    const body = JSON.stringify({ browserSecret: randomBytes(32).toString('base64url'),
+    const body = JSON.stringify({ browserRef: randomUUID(), browserSecret: randomBytes(32).toString('base64url'),
       request: { challengeId: randomUUID(), checkId: randomUUID() } });
     const response = await post('/public/customer/classfood/recover', signed('recover', body));
     expect(response.status).toBe(200);
@@ -115,9 +115,47 @@ describe('customer relay — real Web signer into the Nest HTTP boundary', () =>
     expect(execute.mock.calls[0]![1].request).not.toHaveProperty('code');
   });
 
+  it.each(['prepare', 'issue', 'confirm'] as const)('relays the exact %s phase, with no secret in the preparation response', async step => {
+    const browserRef = randomUUID(); const secret = randomBytes(32).toString('base64url');
+    const envelope = { request: { step, browserRef }, browserSecret: step === 'confirm' ? secret : null,
+      candidateSecret: step === 'issue' ? secret : null };
+    const now = Date.now(); const result = { preparation: { browserRef,
+      state: step === 'prepare' ? 'prepared' : step === 'issue' ? 'issued' : 'confirmed',
+      admissionExpiresAt: now + 600_000, expiresAt: now + 604_800_000 }, emitCookie: step === 'issue' };
+    // Runtime is a port fixture here; the separate runtime/PG suites prove the CAS.
+    execute.mockResolvedValue(result);
+    const response = await post('/public/customer/classfood/browser', signed('browser', JSON.stringify(envelope)));
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(result);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ action: 'browser' }), envelope);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it.each(['start', 'check', 'recover', 'session', 'name', 'logout'] as const)(
+    'requires a signed canonical browserRef for %s; the UUID alone never replaces its cookie', async action => {
+      const secret = randomBytes(32).toString('base64url');
+      const request = action === 'start' ? { phone: '+33612345678', operationId: randomUUID(), turnstileToken: 'fixture-human-token' }
+        : action === 'check' ? { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' }
+          : action === 'recover' ? { challengeId: randomUUID(), checkId: randomUUID() }
+            : action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
+      const envelope = { browserRef: randomUUID(), browserSecret: secret, request,
+        ...(['check', 'session', 'name', 'logout'].includes(action) ? { sessionToken: action === 'check' ? null : secret } : {}) };
+      const body = JSON.stringify(envelope), input = signed(action, body);
+      const tampered = await post(`/public/customer/classfood/${action}`, { ...input,
+        body: JSON.stringify({ ...envelope, browserRef: randomUUID() }) });
+      expect(tampered.status).toBe(403);
+      for (const field of ['browserRef', 'browserSecret'] as const) {
+        const missing: Record<string, unknown> = { ...envelope }; delete missing[field];
+        const refused = await post(`/public/customer/classfood/${action}`, signed(action, JSON.stringify(missing)));
+        expect(refused.status).toBe(400);
+      }
+      expect(execute).not.toHaveBeenCalled();
+    });
+
   it.each(['session', 'name', 'logout'] as const)('signs and requires the exact private browser binding for %s', async action => {
     const request = action === 'name' ? { name: null, expectedRevision: 0 } : action === 'logout' ? { all: false } : {};
-    const envelope = { browserSecret: randomBytes(32).toString('base64url'),
+    const envelope = { browserRef: randomUUID(), browserSecret: randomBytes(32).toString('base64url'),
       sessionToken: randomBytes(32).toString('base64url'), request };
     const body = JSON.stringify(envelope); const input = signed(action, body);
     const accepted = await post(`/public/customer/classfood/${action}`, input);

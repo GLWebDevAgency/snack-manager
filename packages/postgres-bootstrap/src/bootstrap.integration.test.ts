@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
+import { drizzle, NodePgDriver } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { grantCustomerRuntimeRole } from '../../customer/src/migration-role';
@@ -190,10 +192,21 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
         migrationRole, runtimeRole,
       })).resolves.toMatchObject({ issues: [] });
-      await migrate(drizzle(freshMigrationPool), {
+      const customerMigrationConfig = {
         migrationsFolder: resolve(__dirname, '../../customer/drizzle'),
         migrationsTable: '__drizzle_customer_migrations',
-      });
+      };
+      const customerMigrations = readMigrationFiles(customerMigrationConfig);
+      expect(customerMigrations).toHaveLength(4);
+      const customerDialect = new PgDialect();
+      const customerDriver = new NodePgDriver(freshMigrationPool, customerDialect);
+      // Rejoue les trois SQL historiques inchangés avec le vrai migrateur :
+      // la préparation navigateur n'existe pas encore avant l'upgrade 0003.
+      await customerDialect.migrate(
+        customerMigrations.slice(0, 3),
+        customerDriver.createSession(undefined),
+        customerMigrationConfig,
+      );
       await expect(
         checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
           migrationRole,
@@ -212,6 +225,39 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
         migrationRole, runtimeRole,
       })).resolves.toMatchObject({ issues: [] });
+      const beforePreparation = await freshMigrationPool.query<{ hash: string; created_at: string }>(
+        'SELECT hash, created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      );
+      expect(beforePreparation.rows).toHaveLength(3);
+      await expect(freshMigrationPool.query(
+        `SELECT pg_catalog.to_regclass('customer.browser_preparations') AS preparation,
+                pg_catalog.to_regprocedure('customer.preserve_browser_preparation()') AS guard`,
+      )).resolves.toMatchObject({ rows: [{ preparation: null, guard: null }] });
+      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      await grantCustomerRuntimeRole(freshMigrationPool, runtimeRole);
+      await expect(checkPostgresBootstrap(bootstrapPool(freshMigrationPool), {
+        migrationRole, runtimeRole,
+      })).resolves.toMatchObject({ issues: [] });
+      await expect(freshMigrationPool.query(
+        `SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner,
+                c.relrowsecurity AS rls, c.relforcerowsecurity AS forced_rls
+           FROM pg_catalog.pg_class c
+          WHERE c.oid = 'customer.browser_preparations'::regclass`,
+      )).resolves.toMatchObject({ rows: [{ owner: migrationRole, rls: true, forced_rls: true }] });
+      await expect(freshMigrationPool.query(
+        `SELECT pg_catalog.pg_get_userbyid(p.proowner) AS owner
+           FROM pg_catalog.pg_proc p
+          WHERE p.oid = 'customer.preserve_browser_preparation()'::regprocedure`,
+      )).resolves.toMatchObject({ rows: [{ owner: migrationRole }] });
+      const afterPreparation = await freshMigrationPool.query<{ hash: string; created_at: string }>(
+        'SELECT hash, created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      );
+      expect(afterPreparation.rows).toHaveLength(4);
+      expect(afterPreparation.rows.slice(0, 3)).toEqual(beforePreparation.rows);
+      await migrate(drizzle(freshMigrationPool), customerMigrationConfig);
+      expect((await freshMigrationPool.query(
+        'SELECT hash, created_at FROM drizzle.__drizzle_customer_migrations ORDER BY created_at',
+      )).rows).toEqual(afterPreparation.rows);
       const freshPostMigrationRepair = await repairPostgresBootstrap(
         bootstrapPool(freshAdminPool),
         { migrationRole, runtimeRole, expectedDatabase: freshDatabaseName },
@@ -349,7 +395,7 @@ integration('bootstrap PostgreSQL — base réelle', () => {
       ).resolves.toMatchObject({ rows: [{ count: 0 }] });
       await expect(
         runtimePool.query('SELECT count(*)::integer AS count FROM drizzle.__drizzle_customer_migrations'),
-      ).resolves.toMatchObject({ rows: [{ count: 3 }] });
+      ).resolves.toMatchObject({ rows: [{ count: 4 }] });
 
       // C'est bien l'identité de migration qui peut rejouer les migrateurs
       // réels : les journaux les rendent sans effet mais leurs catalogues sont

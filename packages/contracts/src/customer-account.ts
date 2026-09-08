@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
-export const CustomerAccountActionSchema = z.enum(['status', 'start', 'check', 'recover', 'session', 'name', 'logout']);
+export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'start', 'check', 'recover', 'session', 'name', 'logout']);
 export type CustomerAccountAction = z.infer<typeof CustomerAccountActionSchema>;
 export const CUSTOMER_ACCOUNT_TURNSTILE_ACTION = 'customer-account-start';
 export const customerAccountTurnstileData = (slug: string, operationId: string) => `${slug}_${operationId}`;
 export const CustomerAccountSlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(80);
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+export const CustomerAccountBrowserRefSchema = uuid;
+export const CUSTOMER_ACCOUNT_BROWSER_REF_HEADER = 'x-sm-customer-browser-ref';
 // 32 octets canonical base64url : les deux bits terminaux restent nuls.
 const token = z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/);
 const phone = z.string().regex(/^\+33[67]\d{8}$/);
@@ -13,10 +15,18 @@ const name = z.string().trim().min(1).max(120).refine(value => !/[\p{Cc}\p{Cf}]/
 const revision = z.number().int().min(0).max(2_147_483_646);
 const timestamp = z.number().int().positive().max(Number.MAX_SAFE_INTEGER - 604_800_000);
 const empty = z.strictObject({});
+export const CustomerBrowserPreparationSchema = z.strictObject({
+  browserRef: uuid,
+  state: z.enum(['prepared', 'issued', 'confirmed', 'expired']),
+  admissionExpiresAt: timestamp,
+  expiresAt: timestamp,
+}).refine(value => value.admissionExpiresAt <= value.expiresAt);
+export type CustomerBrowserPreparation = z.infer<typeof CustomerBrowserPreparationSchema>;
 
 /** Browser DTOs never carry the HttpOnly identities or server attestations. */
 export const CustomerAccountBrowserRequests = {
   status: empty,
+  browser: z.strictObject({ step: z.enum(['prepare', 'issue', 'confirm']), browserRef: uuid }),
   start: z.strictObject({ phone, operationId: uuid, turnstileToken: z.string().min(1).max(2048) }),
   check: z.strictObject({ challengeId: uuid, checkId: uuid, code: z.string().regex(/^\d{6}$/) }),
   recover: z.strictObject({ challengeId: uuid, checkId: uuid }),
@@ -28,12 +38,17 @@ export const CustomerAccountBrowserRequests = {
 /** Server-to-server only; the relay signature authenticates the entire envelope. */
 export const CustomerAccountEnvelopes = {
   status: z.strictObject({ request: CustomerAccountBrowserRequests.status }),
-  start: z.strictObject({ browserSecret: token, request: CustomerAccountBrowserRequests.start }),
-  check: z.strictObject({ browserSecret: token, sessionToken: token.nullable(), request: CustomerAccountBrowserRequests.check }),
-  recover: z.strictObject({ browserSecret: token, request: CustomerAccountBrowserRequests.recover }),
-  session: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.session }),
-  name: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.name }),
-  logout: z.strictObject({ browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
+  browser: z.strictObject({ request: CustomerAccountBrowserRequests.browser,
+    browserSecret: token.nullable(), candidateSecret: token.nullable() }).refine(value =>
+    value.request.step === 'prepare' ? value.browserSecret === null && value.candidateSecret === null
+      : value.request.step === 'issue' ? value.candidateSecret !== null
+        : value.browserSecret !== null && value.candidateSecret === null),
+  start: z.strictObject({ browserRef: uuid, browserSecret: token, request: CustomerAccountBrowserRequests.start }),
+  check: z.strictObject({ browserRef: uuid, browserSecret: token, sessionToken: token.nullable(), request: CustomerAccountBrowserRequests.check }),
+  recover: z.strictObject({ browserRef: uuid, browserSecret: token, request: CustomerAccountBrowserRequests.recover }),
+  session: z.strictObject({ browserRef: uuid, browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.session }),
+  name: z.strictObject({ browserRef: uuid, browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.name }),
+  logout: z.strictObject({ browserRef: uuid, browserSecret: token, sessionToken: token, request: CustomerAccountBrowserRequests.logout }),
 } as const;
 export type CustomerAccountEnvelope<A extends CustomerAccountAction> = z.infer<(typeof CustomerAccountEnvelopes)[A]>;
 export const CustomerAccountViewSchema = z.strictObject({
@@ -43,6 +58,8 @@ export const CustomerAccountViewSchema = z.strictObject({
 export type CustomerAccountView = z.infer<typeof CustomerAccountViewSchema>;
 export const CustomerAccountResponses = {
   status: z.strictObject({ available: z.boolean() }),
+  browser: z.strictObject({ preparation: CustomerBrowserPreparationSchema, emitCookie: z.boolean() })
+    .refine(value => !value.emitCookie || value.preparation.state === 'issued'),
   start: z.strictObject({ challengeId: uuid, expiresAt: timestamp }),
   check: z.strictObject({ token, view: CustomerAccountViewSchema }),
   recover: z.strictObject({ token, view: CustomerAccountViewSchema }),

@@ -5,13 +5,30 @@ import { lockParent, session } from './queries';
 import { reserveVerification } from './reservation';
 import { claimVerification, completeVerification, recoverVerification, settleVerification } from './checks';
 import { claimSchema, completionSchema, nameSchema, recoverySchema, reservationSchema, revocationSchema,
-  sessionSchema, settlementSchema, validate } from './validation';
+  sessionSchema, settlementSchema, validate, browserPreparationSchema, browserBindingSchema, browserIssueSchema } from './validation';
+import { prepareBrowser, issueBrowser, confirmBrowser, validateBrowser } from './browser-preparation';
 
 type Input<K extends keyof CustomerIdentityRepository> = Parameters<CustomerIdentityRepository[K]>[0];
 
 /** Parent serialization is bounded to local SQL; never held over provider calls. */
 export class PostgresCustomerIdentityRepository implements CustomerIdentityRepository {
   constructor(private readonly pool: Pool) {}
+  prepareBrowser(raw: Input<'prepareBrowser'>) {
+    const input = validate(browserPreparationSchema, raw);
+    return withCustomerScope(this.pool, input, client => prepareBrowser(client, input));
+  }
+  issueBrowser(raw: Input<'issueBrowser'>) {
+    const input = validate(browserIssueSchema, raw);
+    return withCustomerScope(this.pool, input, client => issueBrowser(client, input));
+  }
+  confirmBrowser(raw: Input<'confirmBrowser'>) {
+    const input = validate(browserBindingSchema, raw);
+    return withCustomerScope(this.pool, input, client => confirmBrowser(client, input));
+  }
+  validateBrowser(raw: Input<'validateBrowser'>) {
+    const input = validate(browserBindingSchema, raw);
+    return withCustomerScope(this.pool, input, client => validateBrowser(client, input));
+  }
   private locked<T>(scope: CustomerScope, work: (client: PoolClient) => Promise<T>): Promise<T | null> {
     return withCustomerScope(this.pool, scope, async client => await lockParent(client, scope) ? work(client) : null);
   }
@@ -52,10 +69,13 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
           AND EXISTS (SELECT 1 FROM customer.sessions s WHERE s.parent_ref=a.parent_ref AND s.tenant_ref=a.tenant_ref
             AND s.account_id=a.id AND s.session_hash=$6 AND s.revoked_at IS NULL
             AND s.expires_at>clock_timestamp() AND s.account_version=a.session_version AND s.browser_hash=$7
+            AND s.browser_ref=$8 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
+              WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
+                AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
             AND EXISTS (SELECT 1 FROM customer.browser_contexts b WHERE
               (b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
               =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id)))`,
-      [input.parentRef, input.tenantRef, current.profile.accountId, input.encryptedName, input.expectedRevision, input.sessionHash, input.browserHash]);
+      [input.parentRef, input.tenantRef, current.profile.accountId, input.encryptedName, input.expectedRevision, input.sessionHash, input.browserHash, input.browserRef]);
       return changed.rowCount ? session(client, input, input.sessionHash, input.browserHash) : null;
     });
   }
@@ -74,16 +94,22 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
           AND EXISTS (SELECT 1 FROM customer.sessions s WHERE s.parent_ref=a.parent_ref AND s.tenant_ref=a.tenant_ref
             AND s.account_id=a.id AND s.session_hash=$4 AND s.revoked_at IS NULL
             AND s.expires_at>clock_timestamp() AND s.account_version=a.session_version AND s.browser_hash=$5
+            AND s.browser_ref=$6 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
+              WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
+                AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
             AND EXISTS (SELECT 1 FROM customer.browser_contexts b WHERE
               (b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
               =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id)))`,
-      [input.parentRef, input.tenantRef, current.profile.accountId, input.sessionHash, input.browserHash])
+      [input.parentRef, input.tenantRef, current.profile.accountId, input.sessionHash, input.browserHash, input.browserRef])
         : await client.query(`UPDATE customer.sessions s SET revoked_at=clock_timestamp()
         WHERE parent_ref=$1 AND tenant_ref=$2 AND session_hash=$3 AND revoked_at IS NULL AND expires_at>clock_timestamp()
-          AND browser_hash=$4 AND EXISTS (SELECT 1 FROM customer.browser_contexts b WHERE
+          AND browser_hash=$4 AND browser_ref=$5 AND EXISTS (SELECT 1 FROM customer.browser_preparations p
+            WHERE (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)=(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
+              AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp())
+          AND EXISTS (SELECT 1 FROM customer.browser_contexts b WHERE
             (b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
             =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id))`,
-      [input.parentRef, input.tenantRef, input.sessionHash, input.browserHash]);
+      [input.parentRef, input.tenantRef, input.sessionHash, input.browserHash, input.browserRef]);
       if (!changed.rowCount) return;
       const detached = await client.query(`UPDATE customer.browser_contexts SET generation=generation+1,current_session_id=NULL
         WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_hash=$3 AND current_session_id=$4`,
