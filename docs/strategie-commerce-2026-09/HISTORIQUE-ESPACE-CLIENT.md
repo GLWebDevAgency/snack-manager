@@ -2,6 +2,14 @@
 
 Complément à l'[audit des parcours commerce](PARCOURS-COMMERCE-PRODUCTION.md), demandé le 5 septembre 2026. État du code vérifié sur la branche commerce ; les parcours cibles ci-dessous **ne sont pas encore implémentés**. Ce document ne revendique aucun déploiement.
 
+## Delta de réalisation — 8 septembre 2026, L3a.2
+
+Le [socle privé d'identité](IDENTITE-CLIENT-VERIFY.md) est implémenté : PostgreSQL,
+quotas durables, contacts chiffrés, confirmation atomique, sessions et révocation.
+Il n'est pas exposé en HTTP et ne livre donc pas encore l'inscription, le profil
+prérempli ou l'historique personnel. Un ancien compte ne se récupère pas par le
+téléphone seul ; la reprise sans session existante reste à compléter avant ouverture.
+
 ## Delta de réalisation — 7 septembre 2026, L3a0
 
 Le corps de cet audit reste une photographie datée. Le [registre opérationnel](SUITE-APRES-COMMERCE.md) et les preuves de PR font référence pour les livraisons suivantes.

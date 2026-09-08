@@ -181,10 +181,38 @@ describe("accès livreur mobile réel, BFF et API locale", () => {
   });
 
   it("montre la révocation serveur et ne conserve aucune identité associée", async () => {
-    await openInvitation(); await associate(); upstreamSession = false;
-    await page.getByRole("button", { name: "Vérifier mon accès", exact: true }).click();
+    await openInvitation(); await associate();
+    // The connected heading precedes the missions effect. Let its initial GET
+    // finish before revoking, so this case exercises the explicit access check.
+    await page.getByText("Aucune mission pour le moment", { exact: true }).waitFor();
+    expect(await context.cookies()).toHaveLength(1);
+    upstreamSession = false;
+    const refused = page.waitForResponse(response => response.url() === `${origin}/livreur/acces`
+      && response.request().method() === "GET" && response.status() === 401);
+    await Promise.all([refused, page.getByRole("button", { name: "Vérifier mon accès", exact: true }).click()]);
     await page.getByRole("alert").filter({ hasText: "Votre accès a expiré ou a été retiré" }).waitFor();
     expect(await page.getByText(session.name, { exact: true }).count()).toBe(0);
+    expect(await context.cookies()).toEqual([]);
+  });
+
+  it("retire aussi l’identité quand le premier chargement des missions découvre la révocation", async () => {
+    let release!: () => void;
+    let requested!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const initialMissions = new Promise<void>(resolve => { requested = resolve; });
+    await page.route("**/livreur/missions", async route => { requested(); await gate; await route.continue(); });
+    try {
+      await openInvitation(); await associate(); await initialMissions;
+      expect(await context.cookies()).toHaveLength(1);
+      upstreamSession = false;
+      const refused = page.waitForResponse(response => response.url() === `${origin}/livreur/missions`
+        && response.request().method() === "GET" && response.status() === 401);
+      release();
+      await refused;
+      await page.getByRole("alert").filter({ hasText: "Votre accès a expiré ou a été retiré" }).waitFor();
+    } finally { release(); }
+    expect(await page.getByText(session.name, { exact: true }).count()).toBe(0);
+    expect(await page.getByRole("heading", { name: "Accès associé.", exact: true }).count()).toBe(0);
     expect(await context.cookies()).toEqual([]);
   });
 

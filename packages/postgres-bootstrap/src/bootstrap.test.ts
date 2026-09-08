@@ -11,6 +11,7 @@ import {
 } from './bootstrap';
 import {
   JOURNALS,
+  CUSTOMER_INITIAL_MIGRATION,
   LOYALTY_EARN_RECEIPTS_MIGRATION,
   LOYALTY_INITIAL_MIGRATION,
   POSTGRES_MANAGED_OBJECTS,
@@ -73,6 +74,11 @@ function safeRoleProbe(overrides: Record<string, unknown> = {}) {
     loyalty_create_granted_to_other: false,
     migration_can_use_loyalty_schema: false,
     migration_can_create_loyalty_schema: false,
+    customer_exists: false,
+    customer_create_granted_to_public: false,
+    customer_create_granted_to_other: false,
+    migration_can_use_customer_schema: false,
+    migration_can_create_customer_schema: false,
     runtime_role: roles.runtimeRole,
     runtime_rolcanlogin: true,
     runtime_rolsuper: false,
@@ -89,10 +95,12 @@ function safeRoleProbe(overrides: Record<string, unknown> = {}) {
     runtime_can_use_public_schema: true,
     runtime_can_use_drizzle_schema: false,
     runtime_can_use_loyalty_schema: false,
+    runtime_can_use_customer_schema: false,
     runtime_can_create_database_objects: false,
     runtime_can_create_public_schema: false,
     runtime_can_create_drizzle_schema: false,
     runtime_can_create_loyalty_schema: false,
+    runtime_can_create_customer_schema: false,
     runtime_owns_application_objects: false,
     ...overrides,
   };
@@ -141,10 +149,10 @@ function checkQuery(options: {
   probe?: Record<string, unknown>;
   owners?: Readonly<Record<string, string | null>>;
   unmanaged?: Parameters<typeof catalogRows>[1];
-  journals?: Partial<Record<'supply' | 'loyalty', number[]>>;
+  journals?: Partial<Record<'supply' | 'loyalty' | 'customer', number[]>>;
   journalAcl?: Partial<
     Record<
-      'supply' | 'loyalty',
+      'supply' | 'loyalty' | 'customer',
       Partial<{
         exists: boolean;
         runtimeCanSelect: boolean;
@@ -223,9 +231,17 @@ function checkQuery(options: {
         })),
       );
     }
-    if (sql.includes('AS runtime_has_non_select')) {
+    if (sql.includes('drizzle"."__drizzle_customer_migrations')) {
       return result(
-        (['supply', 'loyalty'] as const).map((journal) => {
+        (options.journals?.customer ?? []).map((createdAt) => ({
+          created_at: String(createdAt),
+        })),
+      );
+    }
+    if (sql.includes('AS runtime_has_non_select')) {
+      // Every migration journal participates in the same read-only ACL gate.
+      return result(
+        (['supply', 'loyalty', 'customer'] as const).map((journal) => {
           const tableName = JOURNALS[journal].table;
           const exists =
             options.journalAcl?.[journal]?.exists ??
@@ -310,7 +326,7 @@ type DiscoveredMigrationObject = {
   schema: string;
   name: string;
   identityArguments: string;
-  journal: 'supply' | 'loyalty';
+  journal: 'supply' | 'loyalty' | 'customer';
   introducedAt: number;
 };
 
@@ -508,7 +524,7 @@ function withoutLeadingComments(statement: string): string {
 
 function discoverCreatedObject(
   statement: string,
-  journal: 'supply' | 'loyalty',
+  journal: 'supply' | 'loyalty' | 'customer',
   introducedAt: number,
   sourceTag = '',
 ): DiscoveredMigrationObject | null {
@@ -623,14 +639,59 @@ function discoverCreatedObject(
 }
 
 describe('manifeste PostgreSQL versionné', () => {
-  it('énumère exactement les 55 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(55);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(2);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(28);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(2);
+  it('relie les trois migrateurs au job privilégié et aux seules vérifications runtime', () => {
+    const root = resolve(__dirname, '../../..');
+    const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    const contexts = ['supply', 'loyalty', 'customer'];
+    expect(manifest.scripts['migrate:postgres']).toBe(
+      contexts.map((context) => `pnpm --filter @sm/${context} migrate`).join(' && '),
+    );
+    expect(manifest.scripts['migrate:postgres:built']).toBe(
+      contexts.map((context) => `node packages/${context}/dist/migrate.js`).join(' && '),
+    );
+    expect(manifest.scripts['verify:postgres:built']).toBe(
+      contexts.map((context) => `node packages/${context}/dist/verify-migrations.js`).join(' && '),
+    );
+    const deploy = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
+    const compiler = deploy.slice(deploy.indexOf('- name: Compiler les migrateurs'));
+    for (const context of contexts) expect(compiler).toContain(`pnpm --filter @sm/${context} build`);
+    expect(deploy).toContain('pnpm migrate:postgres:built');
+    expect(deploy).toContain('pnpm verify:postgres:built');
+    const ci = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8');
+    expect(ci).toMatch(/CUSTOMER_TEST_DATABASE_URL: postgresql:\/\/user:password@127\.0\.0\.1:5432\/snackmanager_loyalty_test_ci/);
+    expect(ci).toContain('run: pnpm --filter @sm/customer test:integration');
+    const api = JSON.parse(readFileSync(resolve(root, 'apps/api/package.json'), 'utf8')) as {
+      dependencies: Record<string, string>;
+    };
+    expect(api.dependencies['@sm/customer']).toBe('workspace:*');
+    const turbo = JSON.parse(readFileSync(resolve(root, 'turbo.json'), 'utf8')) as {
+      tasks: Record<string, { dependsOn: string[]; inputs: string[] }>;
+    };
+    expect(turbo.tasks['@sm/postgres-bootstrap#test']?.inputs).toEqual(expect.arrayContaining([
+      ...contexts.map((context) => `$TURBO_ROOT$/packages/${context}/drizzle/**`),
+      '$TURBO_ROOT$/packages/customer/src/migration-role.ts',
+      '$TURBO_ROOT$/package.json', '$TURBO_ROOT$/apps/api/package.json',
+      '$TURBO_ROOT$/.github/workflows/ci.yml', '$TURBO_ROOT$/.github/workflows/deploy.yml',
+    ]));
+    const customerTask = turbo.tasks['@sm/customer#test'];
+    expect(customerTask?.dependsOn).toEqual(['^build']);
+    expect(customerTask?.inputs).toEqual(expect.arrayContaining([
+      '$TURBO_ROOT$/apps/api/src/modules/customer-identity/customer-identity.service.ts',
+      '$TURBO_ROOT$/apps/api/src/modules/customer-identity/trial-verification-policy.ts',
+      '$TURBO_ROOT$/apps/api/src/modules/customer-identity/phone-verification.port.ts',
+    ]));
+  });
+
+  it('énumère exactement les 69 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(69);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(38);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(2);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(55);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(4);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(69);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -639,8 +700,10 @@ describe('manifeste PostgreSQL versionné', () => {
       'schema:drizzle.drizzle',
       'table:drizzle.__drizzle_migrations',
       'table:drizzle.__drizzle_loyalty_migrations',
+      'table:drizzle.__drizzle_customer_migrations',
       'sequence:drizzle.__drizzle_migrations_id_seq',
       'sequence:drizzle.__drizzle_loyalty_migrations_id_seq',
+      'sequence:drizzle.__drizzle_customer_migrations_id_seq',
     ]);
     expect(JOURNALS).toEqual({
       supply: {
@@ -653,12 +716,17 @@ describe('manifeste PostgreSQL versionné', () => {
         sequence: '__drizzle_loyalty_migrations_id_seq',
         columns: ['id', 'hash', 'created_at'],
       },
+      customer: {
+        table: '__drizzle_customer_migrations',
+        sequence: '__drizzle_customer_migrations_id_seq',
+        columns: ['id', 'hash', 'created_at'],
+      },
     });
   });
 
   it('rattache exhaustivement chaque CREATE autonome à son fichier et journal Drizzle', () => {
     const found = new Map<string, DiscoveredMigrationObject>();
-    for (const context of ['supply', 'loyalty'] as const) {
+    for (const context of ['supply', 'loyalty', 'customer'] as const) {
       const directory = resolve(__dirname, `../../${context}/drizzle`);
       const journal = JSON.parse(
         readFileSync(resolve(directory, 'meta/_journal.json'), 'utf8'),
@@ -723,6 +791,11 @@ describe('manifeste PostgreSQL versionné', () => {
     expect(loyalty.entries.find((entry) => entry.tag.startsWith('0002_'))?.when).toBe(
       LOYALTY_EARN_RECEIPTS_MIGRATION,
     );
+    const customer = JSON.parse(
+      readFileSync(resolve(__dirname, '../../customer/drizzle/meta/_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string; when: number }> };
+    expect(customer.entries.find((entry) => entry.tag === '0000_customer_identity')?.when)
+      .toBe(CUSTOMER_INITIAL_MIGRATION);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -784,7 +857,7 @@ describe('préflight PostgreSQL', () => {
     ).toEqual([]);
   });
 
-  it('accepte les deux schémas gérés fermés sur une base saine', async () => {
+  it('accepte les trois schémas gérés fermés sur une base saine', async () => {
     const query = checkQuery({
       probe: {
         drizzle_exists: true,
@@ -795,6 +868,10 @@ describe('préflight PostgreSQL', () => {
         migration_can_use_loyalty_schema: true,
         migration_can_create_loyalty_schema: true,
         runtime_can_use_loyalty_schema: true,
+        customer_exists: true,
+        migration_can_use_customer_schema: true,
+        migration_can_create_customer_schema: true,
+        runtime_can_use_customer_schema: true,
         drizzle_create_granted_to_public: false,
         drizzle_create_granted_to_other: false,
         loyalty_create_granted_to_public: false,
@@ -803,6 +880,26 @@ describe('préflight PostgreSQL', () => {
     });
     await expect(checkPostgresBootstrap(poolFor(query), roles)).resolves.toMatchObject({
       issues: [],
+    });
+  });
+
+  it.each([
+    ['CREATE runtime', { runtime_can_create_customer_schema: true }, 'runtime_privilege_excessive'],
+    ['CREATE runtime inconnu', { runtime_can_create_customer_schema: null }, 'runtime_privilege_excessive'],
+    ['CREATE PUBLIC', { customer_create_granted_to_public: true }, 'managed_schema_unsafe'],
+    ['CREATE tiers', { customer_create_granted_to_other: true }, 'managed_schema_unsafe'],
+    ['USAGE runtime absent', { runtime_can_use_customer_schema: false }, 'runtime_privilege_missing'],
+    ['CREATE migrateur absent', { migration_can_create_customer_schema: false }, 'migration_privilege_missing'],
+  ])('ferme le schéma customer si %s', async (_label, override, code) => {
+    const query = checkQuery({ probe: {
+      customer_exists: true,
+      migration_can_use_customer_schema: true,
+      migration_can_create_customer_schema: true,
+      runtime_can_use_customer_schema: true,
+      ...override,
+    } });
+    await expect(checkPostgresBootstrap(poolFor(query), roles)).rejects.toMatchObject({
+      report: { issues: expect.arrayContaining([expect.objectContaining({ code })]) },
     });
   });
 
@@ -911,11 +1008,14 @@ describe('préflight PostgreSQL', () => {
     });
   });
 
-  it('refuse un objet déclaré appliqué mais absent', async () => {
+  it.each([
+    ['supply', SUPPLY_INITIAL_MIGRATION, 'public.ingredients'],
+    ['customer', CUSTOMER_INITIAL_MIGRATION, 'customer.accounts'],
+  ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
-      [key('table', 'drizzle', JOURNALS.supply.table)]: roles.migrationRole,
-      [key('sequence', 'drizzle', JOURNALS.supply.sequence)]: roles.migrationRole,
+      [key('table', 'drizzle', JOURNALS[journal].table)]: roles.migrationRole,
+      [key('sequence', 'drizzle', JOURNALS[journal].sequence)]: roles.migrationRole,
     };
     const query = checkQuery({
       probe: {
@@ -924,27 +1024,27 @@ describe('préflight PostgreSQL', () => {
         migration_can_create_drizzle_schema: true,
       },
       owners,
-      journals: { supply: [SUPPLY_INITIAL_MIGRATION] },
+      journals: { [journal]: [timestamp] },
     });
     await expect(checkPostgresBootstrap(poolFor(query), roles)).rejects.toMatchObject({
       report: {
         issues: expect.arrayContaining([
-          expect.objectContaining({ code: 'missing_object', target: 'public.ingredients' }),
+          expect.objectContaining({ code: 'missing_object', target }),
         ]),
       },
     });
   });
 
-  it('refuse un objet inattendu dans un schéma exclusivement géré', async () => {
+  it.each(['loyalty', 'customer'])('refuse un objet inattendu dans le schéma exclusif %s', async (schema) => {
     const query = checkQuery({
       unmanaged: [
-        { kind: 'table', schema: 'loyalty', name: 'rogue', owner: 'postgres' },
+        { kind: 'table', schema, name: 'rogue', owner: 'postgres' },
       ],
     });
     await expect(checkPostgresBootstrap(poolFor(query), roles)).rejects.toMatchObject({
       report: {
         issues: expect.arrayContaining([
-          expect.objectContaining({ code: 'unexpected_object', target: 'loyalty.rogue' }),
+          expect.objectContaining({ code: 'unexpected_object', target: `${schema}.rogue` }),
         ]),
       },
     });
@@ -1114,11 +1214,11 @@ describe('préflight PostgreSQL', () => {
     });
   });
 
-  it('refuse un journal non SELECT-only pour le runtime ou exposé à PUBLIC', async () => {
+  it.each(['supply', 'loyalty', 'customer'] as const)('refuse le journal %s non SELECT-only ou exposé à PUBLIC', async (journal) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
-      [key('table', 'drizzle', JOURNALS.supply.table)]: roles.migrationRole,
-      [key('sequence', 'drizzle', JOURNALS.supply.sequence)]: roles.migrationRole,
+      [key('table', 'drizzle', JOURNALS[journal].table)]: roles.migrationRole,
+      [key('sequence', 'drizzle', JOURNALS[journal].sequence)]: roles.migrationRole,
     };
     const query = checkQuery({
       probe: {
@@ -1128,7 +1228,7 @@ describe('préflight PostgreSQL', () => {
       },
       owners,
       journalAcl: {
-        supply: {
+        [journal]: {
           exists: true,
           runtimeCanSelect: false,
           runtimeHasDirectSelect: false,
@@ -1204,6 +1304,8 @@ describe('réparation PostgreSQL', () => {
       drizzle_create_granted_to_other: false,
       loyalty_create_granted_to_public: false,
       loyalty_create_granted_to_other: false,
+      customer_create_granted_to_public: false,
+      customer_create_granted_to_other: false,
     };
   }
 
@@ -1232,7 +1334,7 @@ describe('réparation PostgreSQL', () => {
       privilege_type: string;
       is_grantable: boolean;
     }>;
-    journalAcl?: Partial<Record<'supply' | 'loyalty', RepairJournalAcl>>;
+    journalAcl?: Partial<Record<'supply' | 'loyalty' | 'customer', RepairJournalAcl>>;
   }) {
     return vi.fn(async (query: unknown, parameters?: unknown[]) => {
       const sql = String(query);
@@ -1284,7 +1386,7 @@ describe('réparation PostgreSQL', () => {
       }
       if (sql.includes('AS runtime_has_non_select')) {
         return result(
-          (['supply', 'loyalty'] as const).map((journal) => {
+          (['supply', 'loyalty', 'customer'] as const).map((journal) => {
             const acl = state.journalAcl?.[journal];
             return {
               table_name: JOURNALS[journal].table,
@@ -1327,10 +1429,10 @@ describe('réparation PostgreSQL', () => {
             (sequence) => ({
               schema_name: sequence.schema,
               sequence_name: sequence.name,
-              relation_exists: ['supply', 'loyalty'].some(
+              relation_exists: ['supply', 'loyalty', 'customer'].some(
                 (journal) =>
-                  state.journalAcl?.[journal as 'supply' | 'loyalty']?.exists &&
-                  JOURNALS[journal as 'supply' | 'loyalty'].sequence === sequence.name,
+                  state.journalAcl?.[journal as 'supply' | 'loyalty' | 'customer']?.exists &&
+                  JOURNALS[journal as 'supply' | 'loyalty' | 'customer'].sequence === sequence.name,
               ),
               runtime_can_usage: false,
               runtime_can_select: false,
@@ -1342,7 +1444,7 @@ describe('réparation PostgreSQL', () => {
           ),
         );
       }
-      for (const journal of ['supply', 'loyalty'] as const) {
+      for (const journal of ['supply', 'loyalty', 'customer'] as const) {
         const acl = state.journalAcl?.[journal];
         if (!acl || !sql.includes(`"${JOURNALS[journal].table}"`)) continue;
         if (sql.startsWith('REVOKE SELECT,') && sql.endsWith('FROM PUBLIC')) {
@@ -1368,7 +1470,7 @@ describe('réparation PostgreSQL', () => {
         const owners: Record<string, string> = {
           [key('schema', 'drizzle', 'drizzle')]: state.drizzleOwner,
         };
-        for (const journal of ['supply', 'loyalty'] as const) {
+        for (const journal of ['supply', 'loyalty', 'customer'] as const) {
           if (!state.journalAcl?.[journal]?.exists) continue;
           owners[key('table', 'drizzle', JOURNALS[journal].table)] = roles.migrationRole;
           owners[key('sequence', 'drizzle', JOURNALS[journal].sequence)] = roles.migrationRole;

@@ -1,7 +1,8 @@
 # L3a — identité client : raccordement Verify
 
 État du 8 septembre 2026. Complète [l'espace client](HISTORIQUE-ESPACE-CLIENT.md).
-**L3a.1 est un sous-lot serveur préparatoire, pas une inscription opérationnelle.**
+**L3a.1 est livré sur staging par #134. L3a.2 prépare la persistance et les
+cas d'usage serveur ; l'inscription publique n'est pas encore opérationnelle.**
 
 ## L3a.1 — code et limites
 
@@ -17,9 +18,11 @@
   observation de moins de 15 minutes, échéance non dépassée et allocations
   gratuites attestées pour SMS **et** Verify. Les segments potentiels par envoi
   doivent aussi être bornés d'après le template/service : un OTP ne vaut pas
-  nécessairement une seule unité SMS. Toute information inconnue ferme le
+  nécessairement une seule unité SMS. La validité fournisseur doit être attestée
+  à 600 secondes maximum (`maxTokenValiditySeconds`). Toute information inconnue ferme le
   préflight ; un solde monétaire n'atteste pas ces allocations.
-- Limites applicatives proposées pour le pilote : renvoi après 60 secondes ;
+- Limites applicatives du pilote : délai minimal de 60 secondes, sans promesse
+  de renvoi tant que la garde inter-challenges reste active ;
   3 réservations d'envoi par téléphone/24 h, 5 par IP/24 h, 10 par restaurant et
   globalement/24 h ; 5 essais par challenge, 10 minutes maximum. Le total de
   recette est explicitement configuré, plafonné à 50 et réduit par les unités
@@ -36,7 +39,7 @@ permission d'envoyer. L'adaptateur HTTP est un port d'infrastructure bas niveau,
 pas un service d'authentification exposable. Il ne sait ni qui est l'utilisateur,
 ni s'il reste du budget : ne pas le brancher directement sur une route.
 
-Le raccordement devra réserver **atomiquement et durablement** toutes les
+Le repository L3a.2 réserve **atomiquement et durablement** toutes les
 bornes, puis persister la tentative avant l'appel fournisseur. Un timeout
 consomme sa réservation conservatoire ; aucun remboursement de quota sur simple
 erreur réseau. Rejouer un préflight, rafraîchir une observation, changer de
@@ -48,32 +51,81 @@ l'anti-abus, pas être seul garant de la dépense.
 L'évidence vient de l'opérateur/serveur de confiance, jamais du navigateur. Sa
 fraîcheur ne garantit pas atomiquement le solde fournisseur : activité extérieure,
 upgrade ou configuration changée exigent vérification et arrêt conservatoire.
-Le futur orchestrateur devra aussi vérifier l'environnement réel du processus,
-pas seulement `policy.environment`. La protection actuelle contre toute dépense
+L'orchestrateur vérifie aussi l'environnement de sa configuration serveur ; sa
+future composition Nest devra le dériver de l'environnement réel du processus,
+pas seulement de `policy.environment`. La protection actuelle contre toute dépense
 reste l'absence de raccordement runtime.
 
-## Vérification fournisseur du 8 septembre — lecture seule
+## Vérification fournisseur du 8 septembre — relevés distincts
 
-CLI 6.2.4, profil `SnackManager` disponible sans changement du profil actif.
-Lecture Account refusée (401) : **Trial, gratuité restante et échéance non attestés**.
-Aucun service Verify listé. Aucun résultat via Verified Caller IDs ; cette
-ancienne API ne prouve pas toute la liste des destinataires de la nouvelle
-Console. Aucun destinataire de recette ni réglage Fraud Guard/TTL attesté.
-Le repli navigateur atteint seulement la page de connexion Twilio : aucune
-Console authentifiée accessible, aucune tentative de connexion automatique.
+Le premier relevé CLI 6.2.4 était incomplet (lecture Account 401 et navigateur
+non connecté). Il a été suivi d'une connexion du fondateur à la Console et de
+son autorisation explicite d'utiliser ses unités gratuites sur son propre numéro.
+
+Un seul SMS **Programmable Messaging**, modèle Trial imposé, a été envoyé à
+09:50:06 GMT+2 : journal fournisseur `Delivered`, quota **99 → 98 / 100**, compte
+toujours `Trial`. Aucun OTP ni donnée de commande dans ce message. Aucun upgrade,
+recharge, achat de numéro ou activation payante. [Preuve distincte du test SMS](https://github.com/GLWebDevAgency/snack-manager/pull/134#issuecomment-5581342726).
+Ce résultat ne prouve ni Verify ni l'inscription à SnackManager ; il ne remplace
+pas une observation fraîche des droits gratuits avant une nouvelle opération.
 
 Avant tout OTP réel : vérifier en Console le compte Trial, les droits gratuits
 **Verify**, leur échéance et les destinataires autorisés. Les unités Messaging
-générales ne constituent pas une allocation Verify. Aucun SMS, achat, upgrade,
-service ou clé créé/modifié lors de ce relevé. Aucun secret à copier dans une PR.
+générales ne constituent pas une allocation Verify. Service, destinataires Verify,
+Fraud Guard, segments et durée de validité restent à attester. Aucun secret à
+copier dans une PR ; aucun autre envoi effectué par les tests logiciels L3a.2.
+
+## L3a.2 — socle durable implémenté, non exposé
+
+- Nouveau package `@sm/customer`, pool PostgreSQL partagé, migration additive et
+  journal propre. Neuf tables, RLS forcée, FK composites et contact unique par
+  restaurant/téléphone, y compris si le parent fournisseur change. Les quatre
+  journaux/gardes opérationnels sont isolés au parent pour les quotas communs ;
+  les projections de comptes et sessions sont isolées au parent **et** restaurant.
+- Réservation avant chaque appel, plafond lifetime jamais remis à zéro ni relevé
+  par une nouvelle observation, essais et SID fournisseur à usage corrélé unique.
+  Incertitude réseau = réservation conservée, aucun retry automatique. La garde
+  téléphone couvre la validité fournisseur même si le challenge applicatif expire
+  plus tôt. Un parent sérialise ses seules transactions SQL, pas ses appels HTTP :
+  choix conservateur de pilote, pas une promesse de débit multi-enseignes.
+- Noms/téléphones chiffrés AES-256-GCM avec contexte lié au tenant/sujet ; HMAC par
+  usage et clés dérivées d'une clé dédiée de 32 octets. Aucun secret brut de session,
+  OTP ou téléphone clair dans les journaux SQL. Aucune clé runtime créée dans ce lot.
+- Service applicatif de réservation/confirmation, profil minimal avec modification
+  explicite et contrôle de version, session absolue de sept jours et révocation
+  serveur. L'approbation et sa session sont atomiques. Une réponse perdue ne peut
+  restituer que la même session encore valide au navigateur d'origine, sans
+  prolonger sa durée ni rappeler le fournisseur.
+- **Téléphone seul ≠ récupération d'un compte existant.** Une nouvelle inscription
+  est possible dans les tests ; un compte existant exige encore une session valide
+  de continuité. La récupération après perte/expiration de cette session et sur
+  un nouvel appareil reste à livrer. Le choix passkey/code de récupération est
+  demandé au fondateur ; aucun rattachement implicite par numéro réattribué.
+- CI et démarrage API vérifient les trois contextes `supply`, `loyalty`, `customer`.
+  Le bootstrap n'adopte que l'inventaire connu et n'autorise pas le rôle runtime
+  à migrer. Les tests réels utilisent une base/role UUID jetables en loopback et
+  le rôle applicatif ordinaire, pas un superuser qui contournerait RLS.
+
+Tests : cryptographie et orchestration unitaire, PostgreSQL réel (concurrence,
+quotas, délais de verrous, rollback, continuité, révocation, rejeu), migration neuve,
+extension de deux à trois contextes et reprise idempotente. Le fournisseur est
+simulé : **aucun OTP réel, aucune route HTTP ou inscription navigateur validée
+par ces tests**. Les résultats de CI et de staging sont consignés dans la PR.
+
+**Non livré dans ce sous-lot :** provider Nest/controller/BFF, cookies personnels,
+anti-robot public, écrans d'inscription et préremplissage du compte, lien sûr vers
+les cartes existantes, propriété des commandes, historique personnel et réachat.
+Conservation/suppression des données, rotation de clé et migration de parent
+nécessitent aussi leurs procédures avant ouverture. Aucun lancement public ni
+déploiement production par cette note.
 
 ## L3a.2 — conditions avant ouverture
 
-1. **Contexte PostgreSQL `customer` distinct** de `User` professionnel et de
+1. **Contexte PostgreSQL `customer` distinct** (socle implémenté) de `User` professionnel et de
    `loyalty.members` : compte opaque, contact vérifié, challenge, sessions et
    journal de quotas. Pool partagé, RLS, FK tenant composites, migrations et
    privilèges testés. Un compte n'impose pas l'achat du module fidélité.
-2. **Challenge lié au navigateur/restaurant** : secrets aléatoires, empreintes
+2. **Challenge lié au navigateur/restaurant** (socle implémenté) : secrets aléatoires, empreintes
    serveur, téléphone chiffré, réservations, renvois/essais bornés et consommation
    conditionnelle. Une référence Verify n'est pas une session. Empêcher qu'une
    vérification réutilisée par le fournisseur pour un service/téléphone valide

@@ -366,6 +366,7 @@ jobs:
           pnpm --filter @sm/postgres-bootstrap build
           pnpm --filter @sm/supply build
           pnpm --filter @sm/loyalty build
+          pnpm --filter @sm/customer build
 
       - name: Préparer la connexion DDL authentifiée
         env:
@@ -478,7 +479,7 @@ jobs:
             || '' }}
         run: pnpm postgres:bootstrap:check:built
 
-      - name: Appliquer supply puis fidélité
+      - name: Appliquer supply, fidélité puis identité client
         env:
           NODE_ENV: production
           DATABASE_RUNTIME_ROLE: >-
@@ -596,7 +597,7 @@ jobs:
             echo "::error title=Schéma PostgreSQL non verrouillé::le preDeployCommand api n'est pas exactement pnpm verify:postgres:built. Rien ne part."
             exit 1
           fi
-          echo '✓ preDeployCommand api vérifié (journaux supply puis fidélité)'
+          echo '✓ preDeployCommand api vérifié (journaux supply, fidélité et identité client)'
 
       # Les clés sont gardées dans GitHub Secrets, séparées par environnement,
       # puis copiées vers Railway juste avant le build. Aucune valeur ni aucune
@@ -997,7 +998,7 @@ jobs:
     # servir — et il faut le SAVOIR, pas le supposer.
     # En revanche, si la vérification a échoué, `deploiement` est « skipped » :
     # on n'a rien touché, il n'y a rien à contrôler.
-    # Une migration peut avoir appliqué supply puis échoué sur fidélité. Même
+    # Une migration peut avoir appliqué supply puis échoué sur fidélité/customer. Même
     # sans nouveau conteneur, on contrôle alors immédiatement l'ancien service.
     # Si le préflight/CI a bloqué avant tout DDL, migrations est skipped et le
     # smoke reste inutile.

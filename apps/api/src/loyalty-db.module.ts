@@ -6,6 +6,7 @@ import {
   loyaltyDb,
 } from '@sm/loyalty';
 import { assertSupplyMigrationsCurrent } from '@sm/supply';
+import { assertCustomerMigrationsCurrent } from '@sm/customer';
 import type { Pool } from 'pg';
 import { isDeployedRuntime } from './common/deployed-runtime';
 import { POSTGRES_POOL, PostgresModule } from './postgres.module';
@@ -24,6 +25,7 @@ type LoyaltyPostgresRole = {
   can_create_database_objects: unknown;
   can_create_public_schema: unknown;
   can_create_loyalty_schema: unknown;
+  can_create_customer_schema: unknown;
   owns_application_objects: unknown;
 };
 
@@ -65,14 +67,18 @@ export async function assertLoyaltyPostgresRoleIsRlsSafe(
         has_schema_privilege(r.oid, to_regnamespace('loyalty'), 'CREATE'),
         false
       ) AS can_create_loyalty_schema,
+      COALESCE(
+        has_schema_privilege(r.oid, to_regnamespace('customer'), 'CREATE'),
+        false
+      ) AS can_create_customer_schema,
       EXISTS (
         SELECT 1
           FROM pg_catalog.pg_class c
           JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-         WHERE c.relowner = r.oid AND n.nspname IN ('public', 'loyalty', 'drizzle')
+         WHERE c.relowner = r.oid AND n.nspname IN ('public', 'loyalty', 'customer', 'drizzle')
       ) OR EXISTS (
         SELECT 1 FROM pg_catalog.pg_namespace n
-         WHERE n.nspowner = r.oid AND n.nspname IN ('public', 'loyalty', 'drizzle')
+         WHERE n.nspowner = r.oid AND n.nspname IN ('public', 'loyalty', 'customer', 'drizzle')
       ) AS owns_application_objects
     FROM pg_catalog.pg_roles r
     WHERE r.rolname = current_user
@@ -93,6 +99,7 @@ export async function assertLoyaltyPostgresRoleIsRlsSafe(
     typeof role.can_create_database_objects !== 'boolean' ||
     typeof role.can_create_public_schema !== 'boolean' ||
     typeof role.can_create_loyalty_schema !== 'boolean' ||
+    typeof role.can_create_customer_schema !== 'boolean' ||
     typeof role.owns_application_objects !== 'boolean'
   ) {
     throw new Error('Impossible de confirmer le rôle PostgreSQL dédié à la fidélité');
@@ -108,6 +115,7 @@ export async function assertLoyaltyPostgresRoleIsRlsSafe(
     role.can_create_database_objects ||
     role.can_create_public_schema ||
     role.can_create_loyalty_schema ||
+    role.can_create_customer_schema ||
     role.owns_application_objects
   ) {
     throw new Error(
@@ -122,6 +130,7 @@ export async function assertLoyaltyPostgresRoleIsRlsSafe(
 type MigrationStateGates = {
   supply: (pool: Pick<Pool, 'query'>) => Promise<void>;
   loyalty: (pool: Pick<Pool, 'query'>) => Promise<void>;
+  customer: (pool: Pick<Pool, 'query'>) => Promise<void>;
 };
 
 /** Vérifie aussi que DATABASE_URL cible exactement la base déjà migrée. */
@@ -131,12 +140,14 @@ export async function assertDeployedPostgresReady(
   gates: MigrationStateGates = {
     supply: assertSupplyMigrationsCurrent,
     loyalty: assertLoyaltyMigrationsCurrent,
+    customer: assertCustomerMigrationsCurrent,
   },
 ): Promise<void> {
   await assertLoyaltyPostgresRoleIsRlsSafe(pool, runtime);
   if (!isDeployedRuntime(runtime)) return;
   await gates.supply(pool);
   await gates.loyalty(pool);
+  await gates.customer(pool);
 }
 
 @Global()

@@ -121,10 +121,22 @@ Points à connaître :
   aux `package.json`, la CI s'arrête là. C'est voulu : sinon la CI résoudrait
   en douce d'autres versions que celles du poste de développement.
 - **Les paquets sans script ne cassent rien.** Turborepo ignore silencieusement
-  les tâches absentes. `@sm/web`, `@sm/kds`, `@sm/db` et `@sm/supply` n'ont pas
-  de script `test` : ces tâches sont simplement sautées, la CI reste verte.
-  Vérifiable localement : `pnpm exec turbo run test --dry=json` liste ces
-  tâches avec `"command": "<NONEXISTENT>"`.
+  les tâches absentes : elles sont simplement sautées, la CI peut rester verte.
+  Vérifier la liste effective pour le commit courant avec
+  `pnpm exec turbo run test --dry=json` ; une tâche portant
+  `"command": "<NONEXISTENT>"` ne constitue pas un test exécuté.
+
+Les contrôles PostgreSQL réels sont des étapes dédiées après la suite générale :
+bootstrap, fidélité, puis identité client. Pour `@sm/customer`,
+`pnpm --filter @sm/customer test:integration` exige
+`CUSTOMER_TEST_DATABASE_URL` et exécute le repository et l'orchestrateur contre
+une base locale temporaire, avec rôles ordinaires et RLS. La connexion initiale
+vise la base déjà créée par le service CI ; la fixture dérive sa propre base
+`snackmanager_customer_test_<uuid>`. Des tests ignorés faute d'environnement
+dans la suite générale ne remplacent pas cette étape. Le fournisseur Verify
+reste simulé : ces tests n'envoient aucun OTP et ne prouvent aucune allocation
+gratuite réelle. Les entrées Turbo explicites couvrent les SQL des trois
+contextes et les sources API importées par les tests inter-paquets.
 
 ### Cache Turborepo
 
@@ -276,8 +288,9 @@ protection côté serveur.
 ### Les reprises de données Mongo, à lancer À LA MAIN après déploiement
 
 Le job GitHub Actions `Migrations PostgreSQL privilégiées` migre les schémas
-**PostgreSQL** (supply puis fidélité), et eux seuls. L'identité DDL reste dans
-GitHub Secrets et n'est jamais injectée au conteneur API. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
+**PostgreSQL** (supply, puis fidélité, puis identité client `customer`), et eux
+seuls. L'identité DDL reste dans GitHub Secrets et n'est jamais injectée au
+conteneur API. Mongoose n'a pas de migration de schéma : un champ ajouté apparaît avec
 son défaut, et les documents existants gardent leur forme d'avant. Ce sont les
 scripts `backfill:*` qui les reprennent, et ils ne partent pas tout seuls —
 délibérément : une reprise de données se relit avant d'être appliquée.
@@ -436,6 +449,11 @@ la CI, avec le même réglage de cache :
 ```
 turbo run typecheck lint test build --cache=local:rw,remote:
 ```
+
+Il ne remplace pas les étapes d'intégration dédiées MongoDB/PostgreSQL de la
+CI. En particulier, la suite réelle `@sm/customer test:integration` exige sa
+cible PostgreSQL locale sûre (§ 2) ; ses cas ignorés dans une suite sans cette
+variable ne prouvent pas les transactions ni les quotas durables.
 
 Tâche par tâche, comme la CI les affiche :
 
@@ -665,7 +683,7 @@ gh pr merge <numero-pr-production> --merge --match-head-commit <sha-valide>
 | 2 | `verification` | **appelle `ci.yml`** : `typecheck`, `lint`, `test`, `build` sur **ce commit** | rien ne part |
 | 3 | `secrets` | **appelle `secrets.yml`** : gitleaks sur le diff puis sur l'arbre qui allait être téléversé | rien ne part |
 | 4 | **Préflight Railway sans mutation** | impose l'environnement explicite, les quatre services et `pnpm verify:postgres:built` sur `api` | aucune migration ne part |
-| 5 | **Migrations PostgreSQL privilégiées** | vérifie le bootstrap en lecture seule, applique supply et fidélité depuis le runner avec un credential DDL injecté uniquement dans ce runner, puis revérifie le bootstrap | aucun conteneur ne part ; une migration déjà commencée peut avoir modifié le schéma ; le smoke contrôle l'ancien service |
+| 5 | **Migrations PostgreSQL privilégiées** | vérifie le bootstrap en lecture seule, applique supply, fidélité puis identité client depuis le runner avec un credential DDL injecté uniquement dans ce runner, puis revérifie le bootstrap | aucun conteneur ne part ; une migration déjà commencée peut avoir modifié le schéma ; le smoke contrôle l'ancien service |
 | 6 | **Mise en ligne** | publie uniquement les secrets runtime, pose `SM_REVISION`, déploie `api`, puis `web`, `pos`, `kds` | les suivants ne partent pas ; l'ancienne version continue de servir |
 | 7 | **Santé après déploiement** | `scripts/smoke.mjs` sur les surfaces publiques, **révision servie comprise** (§ 11) | l'exécution est déclarée **EN ÉCHEC**, mais le code peut être **EN LIGNE** (§ 12) |
 
@@ -721,13 +739,23 @@ pnpm verify:postgres:built
 ```
 
 Le job `Migrations PostgreSQL privilégiées` compile d'abord le bootstrap et les
-deux migrateurs. Il exécute ensuite
+trois migrateurs (`@sm/supply`, `@sm/loyalty`, `@sm/customer`). Il exécute ensuite
 `pnpm postgres:bootstrap:check:built` **avant tout DDL**, puis
 `pnpm migrate:postgres:built` depuis un runner GitHub, et rejoue le contrôle
-bootstrap après les migrations. Le préflight bootstrap
-ouvre une transaction en lecture seule et vérifie l'identité des deux rôles,
+bootstrap après les migrations. La commande source `pnpm migrate:postgres`
+couvre les mêmes trois contextes dans le même ordre ; elle ne doit pas être
+confondue avec la vérification en lecture seule du conteneur.
+Le préflight bootstrap ouvre une transaction en lecture seule et vérifie
+l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
-l'état des deux journaux Drizzle. Toute dérive **couverte par ce manifeste**
+l'état des trois journaux Drizzle : `__drizzle_migrations`,
+`__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
+`drizzle`. Le manifeste L3a.2 énumère **69 objets** : les 55 objets historiques
+et 14 objets `customer` (schéma, neuf tables, deux fonctions, journal et sa
+séquence). Ce nombre décrit le code cible, pas une preuve de migration déjà
+appliquée. Une base saine aux deux anciens contextes passe le préflight avant
+l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
+est refusée. Toute dérive **couverte par ce manifeste**
 bloque le job avant la première migration et avant le déploiement ; elle n'est
 jamais réparée automatiquement.
 Le rôle runtime reste sans DDL **persistant** : PostgreSQL conserve le privilège
@@ -788,14 +816,22 @@ shell immédiatement après l'opération, puis relancer le préflight normal ave
 l'URL migrateur sécurisée avant de livrer.
 
 Railway ne reçoit que `DATABASE_URL` du rôle applicatif. Son preDeploy compare
-alors, avec cette identité limitée, les hash et horodatages attendus des deux
-journaux Drizzle. **Une base absente, en retard ou différente bloque la mise en
+alors, avec cette identité limitée, les hash et horodatages attendus des trois
+journaux Drizzle. Le démarrage API répète les contrôles de rôle puis de readiness
+supply → fidélité → identité client ; un rôle runtime propriétaire d'objets ou
+capable de `CREATE` dans `customer` est aussi refusé.
+**Une base absente, en retard ou différente bloque la mise en
 service.** Une migration future additive reste acceptée afin qu'un rollback de
 code demeure possible. Cette tolérance concerne les journaux : le manifeste
 d'ownership du bootstrap, lui, reste strict. Une migration déjà appliquée et
 son entrée de manifeste ne doivent donc jamais être supprimées de l'historique.
 
-> **Garde de livraison fidélité.** Avant le premier push, configurer sur
+L'ajout du schéma `customer` et de cette readiness n'active aucun contrôleur de
+compte client ni appel Verify. L'ouverture runtime et la recette OTP réelle
+restent soumises aux conditions distinctes de
+[L3a — identité client](strategie-commerce-2026-09/IDENTITE-CLIENT-VERIFY.md).
+
+> **Garde de livraison PostgreSQL.** Avant le premier push, configurer sur
 > **staging uniquement** `pnpm verify:postgres:built`, sans déclencher un ancien
 > déploiement. La production ne doit être armée qu'après un GO écrit : ses
 > secrets DB, clés et variables `SM_DATABASE_MIGRATION_HOST_PRODUCTION` /
@@ -1107,8 +1143,8 @@ plus vite ; il ne défait rien tout seul.
 
 Un retour arrière **remet le code d'avant. Il ne remet pas le schéma
 d'avant.** Le job GitHub `pnpm migrate:postgres:built` applique les migrations
-supply et fidélité en avant ; il n'a pas d'inverse, et Railway ne rejoue rien à
-l'envers. Le preDeploy Railway ne fait qu'en vérifier l'état avec le rôle
+supply, fidélité et identité client en avant ; il n'a pas d'inverse, et Railway
+ne rejoue rien à l'envers. Le preDeploy Railway ne fait qu'en vérifier l'état avec le rôle
 runtime.
 
 Conséquence, en clair : après un retour arrière, **l'ancien code parle à la
@@ -1201,7 +1237,9 @@ ligne le code que vous venez de retirer.
 
 Ni GitHub ni Railway ne restaurent des données. Le nécessaire est dans
 `@sm/db` (outil de sauvegarde/copie/purge). Une migration destructive doit
-être accompagnée de son inverse, écrit **avant** le déploiement.
+être accompagnée d'une procédure manuelle de restauration ou de compensation,
+écrite **avant** le déploiement et distincte du pipeline. Cela n'ajoute aucun
+inverse automatique aux migrateurs PostgreSQL.
 
 ### Après tout retour arrière
 
