@@ -32,6 +32,7 @@ import { CrmModule } from './modules/crm/crm.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { LoyaltyModule } from './modules/loyalty/loyalty.module';
+import { CustomerAccountModule } from './modules/customer-identity/customer-account.module';
 import { trustedClientIp } from './common/trusted-client-ip';
 import { validatePublicRelayEnvironment } from './common/verified-public-relay';
 
@@ -112,6 +113,7 @@ import { validatePublicRelayEnvironment } from './common/verified-public-relay';
     SupplyDbModule,
     LoyaltyDbModule,
     LoyaltyModule,
+    CustomerAccountModule,
     SupplyModule,
     StatsModule,
     StaffModule,

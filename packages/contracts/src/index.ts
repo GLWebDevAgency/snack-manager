@@ -738,6 +738,7 @@ export const WS_EVENTS = {
 } as const;
 export type WsEvent = (typeof WS_EVENTS)[keyof typeof WS_EVENTS];
 export * from './staff-order-attempt';
+export * from './customer-account';
 
 /** Canal Redis pub/sub par tenant. */
 export const ordersChannel = (tenantId: string) => `tenant:${tenantId}:orders`;

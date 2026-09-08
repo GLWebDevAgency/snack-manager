@@ -65,6 +65,26 @@ function fixture() {
 
 describe('private customer identity orchestration', () => {
   beforeEach(() => vi.clearAllMocks());
+  it('recovers only the exact committed receipt, without claiming or checking any OTP', async () => {
+    const f = fixture(); f.repository.recoverCheck.mockResolvedValue(privateSession);
+    f.config.evidence.observedAt = NOW - 86_400_000;
+    const { tenantRef, challengeId, checkId, browserSecret } = f.check;
+    const result = await f.service.recover({ tenantRef, challengeId, checkId, browserSecret });
+    expect(result.view.expiresAt).toBe(privateSession.expiresAt);
+    expect(result.token === crypto.tokenForCheck(TENANT, BROWSER, challengeId, checkId)).toBe(true);
+    expect(f.repository.recoverCheck).toHaveBeenCalledTimes(1);
+    for (const method of ['claimCheck', 'completeCheck', 'reserve', 'settleSend', 'authenticate', 'updateName', 'revoke'] as const) {
+      expect(f.repository[method]).not.toHaveBeenCalled();
+    }
+    expect(f.transport.start).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
+  });
+  it('recovery without a receipt never starts a check or accepts a code field', async () => {
+    const f = fixture(); const { tenantRef, challengeId, checkId, browserSecret } = f.check;
+    await expect(f.service.recover({ tenantRef, challengeId, checkId, browserSecret })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.recover({ tenantRef, challengeId, checkId, browserSecret, code: '123456' })).rejects.toMatchObject({ reason: 'invalid_request' });
+    expect(f.repository.recoverCheck).toHaveBeenCalledTimes(1);
+    expect(f.repository.claimCheck).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
+  });
   it('persists the complete bounded reservation BEFORE the only provider send', async () => {
     const f = fixture();
     await expect(f.service.start(f.start)).resolves.toEqual({

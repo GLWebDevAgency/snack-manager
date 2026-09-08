@@ -1,7 +1,9 @@
-import { Catch, HttpException, type ArgumentsHost } from '@nestjs/common';
+import { Catch, HttpException, Inject, type ArgumentsHost } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
 import type { ErrorReport } from '@sm/contracts';
 import { OpsService } from './ops.service';
+import type { Request, Response } from 'express';
+import { customerBoundaryError } from '../../common/customer-http-error';
 
 /**
  * Le filet sous l'API : toute exception NON MÉTIER entre au journal.
@@ -12,8 +14,9 @@ import { OpsService } from './ops.service';
  * Mongo, la 500. La décision est une fonction pure pour être testée sans
  * monter Nest.
  *
- * Le filtre DÉLÈGUE ensuite à `BaseExceptionFilter` : la forme des réponses
- * d'erreur ne change pas d'un octet — ce filtre observe, il ne répond pas.
+ * Le filtre DÉLÈGUE ensuite à `BaseExceptionFilter`. Seule la frontière des
+ * comptes personnels normalise les erreurs avant réponse ET journalisation :
+ * le parseur JSON peut échouer avant ses guards et refléter le corps reçu.
  */
 
 export function toRecord(exception: unknown): ErrorReport | null {
@@ -26,11 +29,19 @@ export function toRecord(exception: unknown): ErrorReport | null {
 
 @Catch()
 export class OpsExceptionFilter extends BaseExceptionFilter {
-  constructor(private readonly ops: OpsService) {
+  constructor(@Inject(OpsService) private readonly ops: OpsService) {
     super();
   }
 
   catch(exception: unknown, host: ArgumentsHost): void {
+    const request = host.switchToHttp().getRequest<Request>();
+    if (typeof request.originalUrl === 'string' && /^\/public\/customer(?:\/|\?|$)/.test(request.originalUrl)) {
+      const response = host.switchToHttp().getResponse<Response>();
+      response.setHeader('Cache-Control', 'no-store, private');
+      response.setHeader('Referrer-Policy', 'no-referrer');
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+      exception = customerBoundaryError(exception);
+    }
     const record = toRecord(exception);
     // Jamais attendu : la réponse au client ne dépend pas du journal.
     if (record) void this.ops.record(record);
