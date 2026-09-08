@@ -206,6 +206,7 @@ export function Checkout({
   loyalty = null,
   api = networkApi,
   demo = false,
+  customerAccountEnabled = true,
   onClose,
   onBrowse,
   onEditLine,
@@ -256,13 +257,15 @@ export function Checkout({
    * faux.
    */
   demo?: boolean;
+  /** Off for embedded checkout: never read the site's personal account cookie. */
+  customerAccountEnabled?: boolean;
   onClose: () => void;
   /** « Voir la carte » depuis un panier vide. */
   onBrowse: () => void;
   onEditLine: (line: CartLine) => void;
 }) {
   const [step, setStep] = useState<Step>("cart");
-  const customerDetails = useCustomerDetails(slug, demo, open);
+  const customerDetails = useCustomerDetails(slug, demo, open, customerAccountEnabled);
   const customer = customerDetails.customer;
   const [touched, setTouched] = useState(false);
   const [fulfillment, setFulfillment] = useState<Fulfillment>("pickup");
@@ -372,7 +375,7 @@ export function Checkout({
     return () => controller.abort();
   }, [open, step, date, fetchSlots]);
 
-  const nameOk = customer.name.trim().length >= 2;
+  const nameOk = customer.name.trim().length >= 2 && customer.name.trim().length <= 80;
   const contactOk = nameOk && phoneOk(customer.phone) && (!isDelivery || Boolean(deliveryQuote));
   const blockedByPause = paused;
 
@@ -884,6 +887,7 @@ export function Checkout({
           <>
           <CustomerStep
             customer={customer}
+            provenance={customerDetails.provenance}
             onChange={customerDetails.change}
             touched={touched}
             onBlur={() => setTouched(true)}
@@ -1468,18 +1472,21 @@ function CartRow({
 
 function CustomerStep({
   customer,
+  provenance,
   onChange,
   touched,
   onBlur,
   tenantName,
 }: {
   customer: Customer;
+  provenance: ReturnType<typeof useCustomerDetails>["provenance"];
   onChange: (next: Customer) => void;
   touched: boolean;
   onBlur: () => void;
   tenantName: string;
 }) {
-  const nameError = touched && customer.name.trim().length < 2;
+  const nameTooLong = customer.name.trim().length > 80;
+  const nameError = (touched && customer.name.trim().length < 2) || nameTooLong;
   const phoneError = touched && !phoneOk(customer.phone);
   // `focus:border-focus` est DANS la base, pas dans la branche valide : avec
   // `outline-none`, la bordure EST l'indicateur de focus (1.4.11, 2.4.13), et
@@ -1515,14 +1522,15 @@ function CustomerStep({
           enterKeyHint="next"
           placeholder="Camille Durand"
           aria-invalid={nameError || undefined}
-          aria-describedby={nameError ? "sm-name-err" : undefined}
+          aria-describedby={[nameError && "sm-name-err", provenance.name === "account" && "sm-name-account"].filter(Boolean).join(" ") || undefined}
           className={cx(field, nameError ? "border-alert" : "border-linefirm")}
         />
         {nameError && (
           <p id="sm-name-err" role="alert" className="text-[13px] text-alertt">
-            Indiquez au moins deux caractères.
+            {nameTooLong ? "Raccourcissez le nom à 80 caractères maximum pour cette commande." : "Indiquez au moins deux caractères."}
           </p>
         )}
+        {provenance.name === "account" && <p id="sm-name-account" className="text-[13px] text-mut">Prérempli depuis votre compte. Vous pouvez le modifier pour cette commande.</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -1543,9 +1551,10 @@ function CustomerStep({
           enterKeyHint="done"
           placeholder="06 12 34 56 78"
           aria-invalid={phoneError || undefined}
-          aria-describedby={phoneError ? "sm-phone-err" : "sm-phone-hint"}
+          aria-describedby={[phoneError ? "sm-phone-err" : "sm-phone-hint", provenance.phone === "account" && "sm-phone-account"].filter(Boolean).join(" ")}
           className={cx(field, phoneError ? "border-alert" : "border-linefirm")}
         />
+        {provenance.phone === "account" && <p id="sm-phone-account" className="text-[13px] text-mut">Prérempli depuis votre compte. Vous pouvez le modifier pour cette commande.</p>}
         {phoneError ? (
           <p id="sm-phone-err" role="alert" className="text-[13px] text-alertt">
             Un numéro d’au moins 8 chiffres est nécessaire.

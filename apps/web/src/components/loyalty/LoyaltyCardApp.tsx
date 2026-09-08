@@ -73,6 +73,7 @@ import {
 } from "./installation";
 import { VIBRATION_PALIER, VIBRATION_SCAN, vibrer } from "./haptique";
 import { SignatureSnackManager } from "./SignatureSnackManager";
+import { CustomerAccountEntry } from "../customer-account/CustomerAccountEntry";
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -646,6 +647,9 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           La largeur est celle de la vitrine du même restaurant — les deux
           surfaces se répondent. */}
       <main className="mx-auto w-full max-w-[1080px] px-4 pt-6">
+        {slug !== 'demo' && <div className="mb-5 flex justify-end">
+          <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} />
+        </div>}
         {erreur && (
           <div className="mb-6 rounded-card border border-alert/35 bg-alert/10 p-4">
             <p className="text-sm leading-6 text-alertt" role="alert">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCustomerAccount } from "../customer-account/useCustomerAccount";
 import {
   forgetRememberedCustomer, readRememberedCustomer, rememberCustomer, subscribeCustomerMemory,
   type Customer, type RememberedCustomer,
@@ -13,18 +14,41 @@ type Details = {
   remembered: RememberedCustomer | null;
   message: string | null;
   busy: boolean;
+  memoryCycle: object | null;
 };
 function empty(scope: string): Details {
-  return { scope, customer: { name: "", phone: "" }, edited: { name: false, phone: false }, remembered: null, message: null, busy: false };
+  return { scope, customer: { name: "", phone: "" }, edited: { name: false, phone: false }, remembered: null, message: null, busy: false, memoryCycle: null };
 }
+export type CustomerDetailsSource = "input" | "memory" | "account" | null;
+export type CustomerDetailsProvenance = { name: CustomerDetailsSource; phone: CustomerDetailsSource };
 
 /** No automatic writes: only an explicit save can remember these unverified details.
  * Revocation/expiry in another tab cannot be reversed by submit, focus or typing.
  */
-export function useCustomerDetails(tenant: string, demo: boolean, open: boolean) {
+export function useCustomerDetails(tenant: string, demo: boolean, open: boolean, accountEnabled = true) {
   const scope = `${demo ? "demo" : "restaurant"}:${tenant}`;
   const [state, setState] = useState<Details>(() => empty(scope));
   const current = state.scope === scope ? state : empty(scope);
+  const { state: account } = useCustomerAccount(tenant, open && !demo && accountEnabled);
+  // A new opening/scope must finish its own memory read, including when another
+  // account component already has a live profile. Explicit local consent wins.
+  const memoryCycle = useMemo(() => ({ scope, open }), [scope, open]);
+  const profile = open && !demo && accountEnabled && current.memoryCycle === memoryCycle && account.status === "authenticated"
+    ? account.view?.profile : null;
+  // Keep account suggestions derived: no personal field enters draft/storage
+  // merely because a private response arrived. Invalidation removes the overlay.
+  const fromAccount = {
+    name: !current.edited.name && !current.customer.name && !!profile?.name,
+    phone: !current.edited.phone && !current.customer.phone && !!profile?.phoneE164,
+  };
+  const customer = {
+    name: fromAccount.name ? profile!.name! : current.customer.name,
+    phone: fromAccount.phone ? profile!.phoneE164 : current.customer.phone,
+  };
+  const provenance: CustomerDetailsProvenance = {
+    name: current.edited.name ? "input" : fromAccount.name ? "account" : current.customer.name ? "memory" : null,
+    phone: current.edited.phone ? "input" : fromAccount.phone ? "account" : current.customer.phone ? "memory" : null,
+  };
   const operation = useRef(0);
   const changed = useRef<(() => void) | null>(null);
 
@@ -41,7 +65,7 @@ export function useCustomerDetails(tenant: string, demo: boolean, open: boolean)
         if (!alive || expected !== generation) return;
         setState(previous => {
           const base = previous.scope === scope ? previous : empty(scope);
-          return { ...base, remembered, message: null, busy: base.busy && operation.current !== initialOperation,
+          return { ...base, memoryCycle, remembered, message: null, busy: base.busy && operation.current !== initialOperation,
             customer: {
               name: base.edited.name ? base.customer.name : remembered?.customer.name ?? "",
               phone: base.edited.phone ? base.customer.phone : remembered?.customer.phone ?? "",
@@ -52,7 +76,7 @@ export function useCustomerDetails(tenant: string, demo: boolean, open: boolean)
         if (!alive || expected !== generation) return;
         setState(previous => {
           const base = previous.scope === scope ? previous : empty(scope);
-          return { ...base, remembered: null, busy: base.busy && operation.current !== initialOperation,
+          return { ...base, memoryCycle, remembered: null, busy: base.busy && operation.current !== initialOperation,
             customer: { name: base.edited.name ? base.customer.name : "", phone: base.edited.phone ? base.customer.phone : "" },
             message: "La mémorisation est indisponible. Vous pouvez continuer à commander sans enregistrer vos coordonnées." };
         });
@@ -68,21 +92,28 @@ export function useCustomerDetails(tenant: string, demo: boolean, open: boolean)
       operation.current++;
       changed.current = null;
       clearTimeout(timer); unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("pageshow", refresh); };
-  }, [tenant, scope, demo, open]);
+  }, [tenant, scope, demo, open, memoryCycle]);
 
-  function change(customer: Customer) {
+  function change(next: Customer) {
+    // Inputs pass the whole visible form; changing one field must not adopt the
+    // other field's account overlay as voluntary input. A deliberate clear does.
+    const nameChanged = next.name !== customer.name;
+    const phoneChanged = next.phone !== customer.phone;
     setState(previous => {
       const base = previous.scope === scope ? previous : empty(scope);
-      return { ...base, customer, message: null, edited: {
-        name: base.edited.name || customer.name !== base.customer.name,
-        phone: base.edited.phone || customer.phone !== base.customer.phone,
+      return { ...base, customer: {
+        name: nameChanged ? next.name : base.customer.name,
+        phone: phoneChanged ? next.phone : base.customer.phone,
+      }, message: null, edited: {
+        name: base.edited.name || nameChanged,
+        phone: base.edited.phone || phoneChanged,
       } };
     });
   }
   async function save() {
     if (demo || !open || current.busy) return;
     const expected = ++operation.current;
-    const snapshot = { ...current.customer };
+    const snapshot = { ...customer };
     setState(previous => ({ ...(previous.scope === scope ? previous : empty(scope)), busy: true }));
     try {
       await rememberCustomer(tenant, snapshot);
@@ -133,5 +164,5 @@ export function useCustomerDetails(tenant: string, demo: boolean, open: boolean)
         message: "L’effacement n’a pas pu être confirmé. Réessayez ou effacez les données de ce site dans votre navigateur." }));
     }
   }
-  return { customer: current.customer, change, save, forget, remembered: current.remembered, message: current.message, busy: current.busy };
+  return { customer, provenance, change, save, forget, remembered: current.remembered, message: current.message, busy: current.busy };
 }
