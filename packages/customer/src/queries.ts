@@ -80,13 +80,12 @@ export async function session(client: PoolClient, scope: CustomerScope & { brows
       =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id)
     JOIN customer.browser_preparations p ON (p.parent_ref,p.tenant_ref,p.browser_ref,p.browser_hash)
       =(s.parent_ref,s.tenant_ref,s.browser_ref,s.browser_hash)
+    JOIN customer.session_publications u ON (u.parent_ref,u.tenant_ref,u.session_id,u.browser_ref,u.browser_hash,u.browser_generation)
+      =(s.parent_ref,s.tenant_ref,s.id,s.browser_ref,s.browser_hash,s.browser_generation)
     WHERE s.parent_ref=$1 AND s.tenant_ref=$2 AND s.session_hash=$3 AND s.revoked_at IS NULL
       AND s.browser_hash=$4 AND s.browser_ref=$5 AND p.confirmed_at IS NOT NULL AND p.expires_at>clock_timestamp()
       AND s.expires_at>clock_timestamp() AND a.active AND s.account_version=a.session_version
-      AND ($6::uuid IS NULL OR EXISTS (SELECT 1 FROM customer.check_attempts k JOIN customer.challenges v
-        ON (v.parent_ref,v.tenant_ref,v.id)=(k.parent_ref,k.tenant_ref,k.challenge_id)
-        WHERE (k.parent_ref,k.tenant_ref,k.session_id)=(s.parent_ref,s.tenant_ref,s.id)
-          AND k.id=$7 AND k.state='approved' AND k.request_hash IS NOT NULL AND v.intent_operation_id=$6))`,
+      AND ($6::uuid IS NULL OR (u.operation_id=$6 AND u.check_id=$7))`,
   [scope.parentRef, scope.tenantRef, sessionHash, browserHash, scope.browserRef, selection?.expectedOperationId ?? null, selection?.expectedCheckId ?? null]);
   const row = result.rows[0];
   return row ? { sessionId: row.session_id, expiresAt: row.expires_at.getTime(), profile: {

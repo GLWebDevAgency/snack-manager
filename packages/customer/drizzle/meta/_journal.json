@@ -6,6 +6,7 @@
     { "idx": 1, "version": "7", "when": 1788861600000, "tag": "0001_customer_paid_budget", "breakpoints": true },
     { "idx": 2, "version": "7", "when": 1788870000000, "tag": "0002_customer_browser_continuity", "breakpoints": true },
     { "idx": 3, "version": "7", "when": 1788894000000, "tag": "0003_customer_browser_preparation", "breakpoints": true },
-    { "idx": 4, "version": "7", "when": 1788901200000, "tag": "0004_customer_verification_intents", "breakpoints": true }
+    { "idx": 4, "version": "7", "when": 1788901200000, "tag": "0004_customer_verification_intents", "breakpoints": true },
+    { "idx": 5, "version": "7", "when": 1788908400000, "tag": "0005_customer_session_publications", "breakpoints": true }
   ]
 }

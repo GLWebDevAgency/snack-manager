@@ -531,8 +531,10 @@ du résultat OTP, puis le formulaire, la récupération sûre et fidélité/hist
 
 ### L3a.6b.2 — intention privée, clôture et résultat durable
 
-Lot préparé sur `codex/customer-verification-recovery`, non reçu sur staging à
-ce relevé. Le formulaire reste fermé ; aucun appel Twilio ni nouveau compte
+Lot fusionné par #144, staging `a158afee0fac1841e9fd92f5fe837661f59c254e`.
+[Reçu technique et réserves UI](https://github.com/GLWebDevAgency/snack-manager/pull/144#issuecomment-5591706896) :
+déploiement reçu après reprise du téléversement web, migrations et quatre services
+vérifiés. Le formulaire reste fermé ; aucun appel Twilio ni nouveau compte
 public n'est créé par cette livraison technique.
 
 - Une intention reçoit un UUID public persisté **avant** le POST et un secret
@@ -570,7 +572,7 @@ et **128 intentions persistées par parent/restaurant**, distincts des budgets S
 et du nombre de comptes. Pas de purge ou reset automatique. Ces plafonds exigent
 une politique d'exploitation/rétention avant ouverture à grande échelle.
 
-Preuves locales : 245 tests customer sans skip avec PostgreSQL activé ; runner
+Preuves locales finales : 255 tests customer sans skip avec PostgreSQL activé ; runner
 officiel 103 PostgreSQL puis six vrais HTTP Nest→PostgreSQL ; bootstrap 88 tests
 unitaires et un upgrade PostgreSQL réel. Chromium exécute 18 parcours avec
 IndexedDB, Web Locks, cookies, BFF et contrôleur réels, dont deux onglets et une
@@ -583,14 +585,29 @@ Passe consolidée : web **2 026/2 026** (137 fichiers), API identité **562/562*
 avec sa cible PostgreSQL, contrats **493/493**. Types/lint ciblés et compilation
 API verts ; chargement réel de `AppModule` CommonJS sans démarrer Nest réussi.
 La revue A→B est protégée par deux tests Chromium supplémentaires sur nom/logout
-avec projections identiques, Web Locks et journal natifs. La CI du SHA final et
-la réception staging restent requises avant de déclarer ce lot livré.
+avec projections identiques, Web Locks et journal natifs. Un défaut de teardown
+PostgreSQL révélé en CI a été corrigé par dix contre-tests, sans masquer les
+erreurs de socket. CI du SHA final `67113eb` et déploiement du squash `a158afee`
+verts ; smoke 8/8, frontières fermées 10/10, E2E 12 démos / 4 authentifiés ignorés.
+La sonde UI stricte a relevé une annulation `/compte/capacites` ; le diagnostic
+suivant vérifie les panneaux à trois tailles mais retrouve les annulations RSC
+fidélité. Ces causes restent ouvertes, la recette navigateur n'est pas déclarée
+intégralement verte.
 
 Restent distincts : formulaire accessible et clair, récupération sûre d'un
 compte après déconnexion/nouvel appareil, adhésion/rattachement fidélité,
 propriétaire des commandes et historique/réachat. Le QR de présentation ou une
 simple correspondance téléphonique ne donnent accès à aucun de ces historiques.
 La recette Verify réelle reste soumise au plafond de dépense confirmé.
+
+### L3a.6c — choix clé d'accès + code de secours
+
+Choix confirmé par le fondateur. Le [protocole et ses conditions de réception](COMPTE-CLES-ACCES.md)
+prévoient une inscription provisoire, une protection confirmée, puis seulement
+l'activation du compte. Le socle préparé sur `codex/customer-passkeys` ajoute
+le reçu commun `0005`, le vérificateur WebAuthn et les primitives de secours.
+Ce n'est pas encore la consommation unique, le formulaire ou une reconnexion
+publique. Ni téléphone seul ni QR fidélité n'autorisent un ancien historique.
 
 ## Conditions restantes avant ouverture
 

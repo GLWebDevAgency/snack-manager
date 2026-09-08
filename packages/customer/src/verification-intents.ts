@@ -43,12 +43,11 @@ export async function closeIntent(client: PoolClient, input: CloseInput) {
   if (existing.state === 'closed') return intentView(client, existing);
   // Close only this intention's still-current publication, never a later B.
   const detached = await client.query<{ current_session_id: string }>(`WITH target AS MATERIALIZED (
-    SELECT b.current_session_id FROM customer.browser_contexts b JOIN customer.challenges c
-      ON c.parent_ref=b.parent_ref AND c.tenant_ref=b.tenant_ref AND c.browser_hash=b.browser_hash
-    JOIN customer.check_attempts a ON (a.parent_ref,a.tenant_ref,a.challenge_id,a.id)
-      =(c.parent_ref,c.tenant_ref,c.id,c.check_id)
-    WHERE b.parent_ref=$1 AND b.tenant_ref=$2 AND b.browser_hash=$3 AND c.intent_operation_id=$4
-      AND c.browser_ref=$5 AND a.state='approved' AND a.session_id=b.current_session_id
+    SELECT b.current_session_id FROM customer.browser_contexts b JOIN customer.session_publications u
+      ON (u.parent_ref,u.tenant_ref,u.browser_hash,u.browser_generation,u.session_id)
+        =(b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
+    WHERE b.parent_ref=$1 AND b.tenant_ref=$2 AND b.browser_hash=$3 AND u.operation_id=$4
+      AND u.browser_ref=$5
       AND b.generation=$6::bigint+1)
     UPDATE customer.browser_contexts b SET generation=generation+1,current_session_id=NULL FROM target
       WHERE b.parent_ref=$1 AND b.tenant_ref=$2 AND b.browser_hash=$3
@@ -85,10 +84,12 @@ export async function resultIntent(client: PoolClient,
   if (intent.state === 'open' && !await validOpenIntent(client, input)) return { ...base, state: 'failed' };
   if (input.checkId === null) return { ...base, state: row.state === 'pending' ? 'code_required'
     : ['reserved', 'checking'].includes(row.state) ? 'unresolved' : row.state === 'expired' ? 'expired' : 'failed' };
-  const attempt = (await client.query<{ state: string; session_id: string | null; session_hash: string | null }>(`SELECT a.state,a.session_id,s.session_hash
+  const attempt = (await client.query<{ state: string; session_id: string | null; session_hash: string | null }>(`SELECT a.state,a.session_id,
+    CASE WHEN u.method='phone' AND u.operation_id=$5 AND u.check_id=$4 THEN s.session_hash ELSE NULL END AS session_hash
     FROM customer.check_attempts a LEFT JOIN customer.sessions s ON (s.parent_ref,s.tenant_ref,s.id)=(a.parent_ref,a.tenant_ref,a.session_id)
+    LEFT JOIN customer.session_publications u ON (u.parent_ref,u.tenant_ref,u.session_id)=(s.parent_ref,s.tenant_ref,s.id)
     WHERE a.parent_ref=$1 AND a.tenant_ref=$2 AND a.challenge_id=$3 AND a.id=$4 AND a.request_hash IS NOT NULL`,
-  [input.parentRef, input.tenantRef, row.id, input.checkId])).rows[0];
+  [input.parentRef, input.tenantRef, row.id, input.checkId, input.operationId])).rows[0];
   if (!attempt || attempt.state === 'checking') return { ...base, state: 'unresolved' };
   if (attempt.state === 'approved') {
     if (intent.state !== 'consumed' || row.state !== 'consumed' || row.check_id !== input.checkId || !attempt.session_hash) return { ...base, state: 'failed' };

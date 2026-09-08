@@ -21,6 +21,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.0.0",
     "@sentry/node": "^10.70.0",
+    "@simplewebauthn/server": "^14.0.1",
     "@sm/contracts": "workspace:*",
     "@sm/customer": "workspace:*",
     "@sm/db": "workspace:*",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
+    "@simplewebauthn/browser": "^14.0.0",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",

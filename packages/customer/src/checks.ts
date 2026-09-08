@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { recordSessionPublication } from './session-publications';
 import type { CheckClaim, CustomerIdentityRepository, CustomerSession } from './port';
 import { CustomerRepositoryError } from './client';
 import { challenge, currentChallenge, dbTime, fundingAllowsCheck, pendingView, session, type ChallengeRow } from './queries';
@@ -157,6 +158,7 @@ export async function completeVerification(client: PoolClient, input: Completion
   [input.parentRef, input.tenantRef, input.operationId]);
   if (!consumed.rowCount) throw new CustomerRepositoryError('unavailable');
   await finish(client, input, 'approved', 'consumed', input.sessionId);
+  await recordSessionPublication(client, { ...input, method: 'phone' });
   const result = await session(client, input, input.sessionHash, input.browserHash);
   if (!result) throw new CustomerRepositoryError('unavailable');
   return result;
