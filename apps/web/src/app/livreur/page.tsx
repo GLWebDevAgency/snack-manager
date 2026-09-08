@@ -3,8 +3,10 @@ import { DeliveryAccess } from "./delivery-access";
 import { INVITATION_BOOTSTRAP } from "./invitation-bootstrap";
 
 export const metadata: Metadata = {
-  title: "Accès livreur · Snack Manager",
+  title: "SM Livreur",
   description: "Associez votre téléphone à l’accès livreur confié par votre restaurant.",
+  manifest: "/livreur/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "SM Livreur", statusBarStyle: "black-translucent" },
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };
