@@ -9,11 +9,11 @@ import {
 } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
-export type CustomerHashPurpose = 'phone' | 'global-phone' | 'browser' | 'ip' | 'session' | 'request' | 'intent-proof';
+export type CustomerHashPurpose = 'phone' | 'global-phone' | 'browser' | 'ip' | 'session' | 'request' | 'intent-proof' | 'recovery-code';
 export type CustomerSealPurpose = 'phone' | 'name';
 
 const namespace = 'sm.customer-identity.v1';
-const hashPurposes: readonly CustomerHashPurpose[] = ['phone', 'global-phone', 'browser', 'ip', 'session', 'request', 'intent-proof'];
+const hashPurposes: readonly CustomerHashPurpose[] = ['phone', 'global-phone', 'browser', 'ip', 'session', 'request', 'intent-proof', 'recovery-code'];
 const sealPurposes: readonly CustomerSealPurpose[] = ['phone', 'name'];
 const contextBytes = 160;
 const hashValueBytes = 16 * 1024;
