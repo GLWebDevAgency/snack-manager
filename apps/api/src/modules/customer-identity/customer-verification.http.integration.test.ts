@@ -153,6 +153,33 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
       (SELECT count(*)::int FROM customer.check_attempts WHERE tenant_ref=$1) AS checks`, [env.SM_CUSTOMER_PILOT_TENANT_ID])).rows[0];
   }
 
+  it('restores the confirmed selector after response loss without renewing it or creating a private publication', async () => {
+    const binding = await browser();
+    delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const envelope = { request: { step: 'restore' as const }, browserSecret: binding.browserSecret, candidateSecret: null };
+    const first = await ok('browser', envelope);
+    expect(first.preparation.browserRef).toBe(binding.browserRef);
+    expect(first.preparation.state).toBe('confirmed'); expect(first.emitCookie).toBe(false);
+    dropAction = 'browser'; await expect(http('browser', envelope)).rejects.toBeDefined();
+    expect(dropAction).toBeNull(); expect(await ok('browser', envelope)).toEqual(first);
+    expect(Object.keys(first).sort()).toEqual(['emitCookie', 'preparation']);
+    expect(Object.keys(first.preparation).sort()).toEqual(['admissionExpiresAt', 'browserRef', 'expiresAt', 'state']);
+    expect((await http('session', { ...binding, request: {}, sessionToken: binding.browserSecret,
+      expectedOperationId: randomUUID(), expectedCheckId: randomUUID() })).status).toBe(401);
+    expect(human.verify).not.toHaveBeenCalled(); expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled();
+    expect(await counts()).toEqual({ sends: 0, accounts: 0, sessions: 0, checks: 0 });
+  });
+  it('refuses a forged cookie or another tenant during signed HTTP restoration', async () => {
+    const binding = await browser();
+    expect((await http('browser', { request: { step: 'restore' }, browserSecret: randomBytes(32).toString('base64url'),
+      candidateSecret: null })).status).toBe(401);
+    env.SM_CUSTOMER_PILOT_TENANT_ID = randomBytes(12).toString('hex');
+    expect((await http('browser', { request: { step: 'restore' }, browserSecret: binding.browserSecret,
+      candidateSecret: null })).status).toBe(401);
+    expect(human.verify).not.toHaveBeenCalled(); expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled();
+  });
+
   it('requires the issued private proof before Turnstile, spending or any result disclosure', async () => {
     const binding = await browser(), f = await intent(binding);
     const replay = await ok('intent', { ...binding, candidateProof: randomBytes(32).toString('base64url'),

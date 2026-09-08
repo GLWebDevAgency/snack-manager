@@ -37,6 +37,32 @@ virtuel Chromium, secours/crypto 107 inclus dans customer. Ces chiffres se
 recouvrent, ne pas les additionner. Ni téléphone physique ni SMS réel dans ces
 preuves ; aucune authentification publique passkey/secours disponible encore.
 
+## Préparation suivante : journal local perdu
+
+Le lot `customer-browser-restore` ajoute une lecture explicite du seul sélecteur
+de navigateur, à partir du cookie HttpOnly existant. PostgreSQL exige le parent,
+le restaurant, l'empreinte exacte, une préparation déjà confirmée et son
+échéance SQL non dépassée. Aucune ligne n'est créée, confirmée ou prolongée ;
+aucun quota SMS ni reçu de session n'est modifié. Aucune nouvelle migration.
+
+Le BFF ne rend que les quatre champs publics de préparation et ne réémet ni
+ne supprime de cookie. `restoreMissingJournal()` reste une opération explicite,
+non raccordée à un bouton public : verrou natif, journal strictement absent,
+transaction IndexedDB CAS vers `ready` **sans intention ni publication**.
+Un journal corrompu ou apparu entre-temps n'est jamais remplacé. L'expiration
+est recontrôlée après le dernier commit local ; en cas d'incertitude, le
+sélecteur conservé n'est pas annoncé prêt. Les journaux de commande et de
+fidélité sont hors de ce chemin.
+
+Preuves du lot : 118 tests PostgreSQL et 8 HTTP signés réels, sans skip dans
+ces exécutions ; les ports fournisseur y sont simulés. Les 16 tests navigateur
+de préparation utilisent les vrais cookies, IndexedDB, Web Locks et handlers
+BFF, avec un amont API isolé. La contre-revue a identifié puis fait corriger
+le franchissement de l'expiration pendant le commit IndexedDB. Ce socle ne
+rétablit toujours ni profil, ni carte, ni historique et ne remplace pas la
+preuve forte de reconnexion. Un cookie remplacé hors protocole peut rendre un
+sélecteur inutilisable ; les appels suivants le refusent sans adopter un compte.
+
 ## Parcours à livrer ensuite, avant ouverture
 
 1. **Créer mon compte** : téléphone → code SMS → inscription provisoire bornée.

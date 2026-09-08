@@ -9,6 +9,7 @@ export function confirmedCustomerBrowserFixture(browserRef: string, expiresAt: n
     prepareBrowser: vi.fn<CustomerIdentityRepository['prepareBrowser']>().mockResolvedValue(null),
     issueBrowser: vi.fn<CustomerIdentityRepository['issueBrowser']>().mockResolvedValue(null),
     confirmBrowser: vi.fn<CustomerIdentityRepository['confirmBrowser']>().mockResolvedValue(null),
+    restoreBrowser: vi.fn<CustomerIdentityRepository['restoreBrowser']>().mockResolvedValue(null),
     validateBrowser: vi.fn<CustomerIdentityRepository['validateBrowser']>().mockImplementation(async input =>
       input.browserRef === browserRef ? { expiresAt } : null),
   };

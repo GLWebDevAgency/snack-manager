@@ -202,7 +202,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     }) : null;
     if (publication && !publication.success) return failure(409, 'CUSTOMER_CONFLICT', 'La connexion attendue doit être vérifiée.');
     const preparationRequest = action === 'browser' ? CustomerAccountBrowserRequests.browser.parse(parsed.data) : null;
-    if (preparationRequest?.step === 'confirm' && browser.kind !== 'valid') return unauthorized();
+    if ((preparationRequest?.step === 'confirm' || preparationRequest?.step === 'restore')
+      && browser.kind !== 'valid') return unauthorized();
     const candidateSecret = preparationRequest?.step === 'issue' ? randomBytes(32).toString('base64url') : null;
     const intentRequest = action === 'intent' ? CustomerAccountBrowserRequests.intent.parse(parsed.data) : null;
     const candidateProof = intentRequest?.step === 'prepare' ? randomBytes(32).toString('base64url') : null;
@@ -275,8 +276,13 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
     if (action === 'browser') {
       if (!('preparation' in output.data) || !('emitCookie' in output.data)
-        || output.data.preparation.browserRef !== preparationRequest?.browserRef) return unavailable();
+        || !preparationRequest || (preparationRequest.step !== 'restore'
+          && output.data.preparation.browserRef !== preparationRequest.browserRef)) return unavailable();
       const { preparation, emitCookie } = output.data;
+      // Restore has no client selector to compare: the API attests only the
+      // exact received credential's confirmed preparation. It must never issue,
+      // renew or delete any cookie, nor return a session/publication/profile.
+      if (preparationRequest.step === 'restore' && (preparation.state !== 'confirmed' || emitCookie)) return unavailable();
       if (preparation.expiresAt > Date.now() + SESSION_MAX_MS
         || preparation.admissionExpiresAt > Date.now() + 600_000
         || (preparation.state !== 'expired' && preparation.expiresAt <= Date.now())

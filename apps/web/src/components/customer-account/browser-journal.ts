@@ -32,8 +32,10 @@ function decode(value: unknown): CustomerBrowserJournal | null {
 
 /** Separate from checkout, loyalty and device history. Only a public selector
  * and an uncertainty phase are durable; no OTP, phone, token, name or receipt.
- * Transaction completion precedes network. Missing/corrupt storage is NEVER
- * rebuilt from an HttpOnly cookie or an account response. */
+ * Transaction completion precedes mutation network calls. Corrupt storage is
+ * never repaired from cookies or account responses. An explicit restore may
+ * recover only a confirmed browser selector into a strictly absent journal;
+ * it never restores verification, publication or personal-account authority. */
 export function customerBrowserJournal(slug: string): CustomerBrowserJournalStore {
   async function open(create: boolean): Promise<IDBDatabase | null> {
     if (!CustomerAccountSlugSchema.safeParse(slug).success || slug.length > 63

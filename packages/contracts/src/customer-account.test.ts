@@ -7,6 +7,20 @@ const proof = 'A'.repeat(43);
 const selection = { operationId: id, challengeId: id, checkId: id, expiresAt: 1_900_000_000_000 };
 const view = { expiresAt: 1_900_000_000_000, profile: { name: null, phoneE164: '+33600000000', phoneVerifiedAt: 1_800_000_000_000, revision: 0 } };
 
+describe('explicit browser selector restoration contracts', () => {
+  it('requires only the existing HttpOnly browser proof, never a public selector or a candidate', () => {
+    const request = { step: 'restore' };
+    expect(CustomerAccountBrowserRequests.browser.safeParse(request).success).toBe(true);
+    expect(CustomerAccountEnvelopes.browser.safeParse({ request, browserSecret: proof, candidateSecret: null }).success).toBe(true);
+    expect(CustomerAccountEnvelopes.browser.safeParse({ request, browserSecret: null, candidateSecret: null }).success).toBe(false);
+    expect(CustomerAccountEnvelopes.browser.safeParse({ request, browserSecret: proof, candidateSecret: proof }).success).toBe(false);
+  });
+  it.each(['browserRef', 'browserSecret', 'sessionToken', 'candidateSecret', 'operationId', 'accountId', 'phone'])(
+    'rejects %s in the restoration browser body', field => {
+      expect(CustomerAccountBrowserRequests.browser.safeParse({ step: 'restore', [field]: id }).success).toBe(false);
+    });
+});
+
 describe('verification intent contracts', () => {
   it('keeps the candidate proof exclusively on the signed server envelope', () => {
     const request = { step: 'prepare', operationId: id };

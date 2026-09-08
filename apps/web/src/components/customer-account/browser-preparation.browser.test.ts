@@ -14,6 +14,7 @@ declare global {
     preparationFixture: {
       begin(): Promise<CustomerBrowserPreparationResult>;
       resume(): Promise<CustomerBrowserPreparationResult>;
+      restoreMissingJournal(): Promise<CustomerBrowserPreparationResult>;
       journal(): Promise<CustomerBrowserJournal | null>;
       privateRead(): Promise<unknown>;
     };
@@ -28,9 +29,9 @@ type Record = { browserRef: string; secret: string | null; confirmed: boolean; a
 let native: Browser, context: BrowserContext, page: Page, bundle: string;
 let records: Map<string, Record>, calls: string[], faults: string[];
 let dropIssue: 'headers' | 'body' | null;
-let holdRef: string | null, heldResponse: { route: Route; response: Response } | null;
+let holdRef: string | null, holdRestore: boolean, heldResponse: { route: Route; response: Response } | null;
 
-// Browser plugin not available. Real Chromium, IndexedDB strict transactions,
+// Real Chromium, IndexedDB strict transactions,
 // Web Locks, native cookie jar and actual Next BFF handlers. The upstream CAS
 // is an isolated test double; separate PostgreSQL tests prove SQL authority.
 beforeAll(async () => {
@@ -54,7 +55,7 @@ function publicView(record: Record) {
       : record.confirmed ? 'confirmed' : record.secret ? 'issued' : 'prepared' };
 }
 beforeEach(async () => {
-  records = new Map(); calls = []; faults = []; dropIssue = null; holdRef = null; heldResponse = null;
+  records = new Map(); calls = []; faults = []; dropIssue = null; holdRef = null; holdRestore = false; heldResponse = null;
   const config = { RAILWAY_ENVIRONMENT_NAME: 'staging', SM_ENV: 'staging', SM_CUSTOMER_ACCOUNT_MODE: 'closed_trial',
     RAILWAY_ENVIRONMENT_ID: refA, SM_CUSTOMER_PILOT_ENVIRONMENT_ID: refA,
     RAILWAY_PROJECT_ID: refB, SM_CUSTOMER_PILOT_PROJECT_ID: refB,
@@ -71,6 +72,11 @@ beforeEach(async () => {
     }
     if (!url.endsWith('/browser')) throw Error('Unexpected upstream');
     const { step, browserRef } = envelope.request; calls.push(step);
+    if (step === 'restore') {
+      const row = [...records.values()].find(item => item.secret === envelope.browserSecret);
+      if (!row || publicView(row).state !== 'confirmed' || envelope.candidateSecret !== null) return new Response(null, { status: 401 });
+      return Response.json({ preparation: publicView(row), emitCookie: false });
+    }
     if (step === 'prepare' && !records.has(browserRef)) records.set(browserRef, {
       browserRef, secret: null, confirmed: false, admissionExpiresAt: Date.now() + 600_000, expiresAt: Date.now() + 604_800_000,
     });
@@ -103,6 +109,7 @@ beforeEach(async () => {
       : url.pathname.endsWith('/session') ? await sessionHandler(nativeRequest, { params: Promise.resolve({ slug: 'classfood' }) })
         : new Response(null, { status: 404 });
     const input = request.postDataJSON() as { step?: string; browserRef?: string } | null;
+    if (input?.step === 'restore' && holdRestore) { heldResponse = { route, response }; return; }
     if (input?.step === 'issue' && input.browserRef === holdRef) { heldResponse = { route, response }; return; }
     if (input?.step === 'issue' && dropIssue) {
       const mode = dropIssue; dropIssue = null;
@@ -120,7 +127,92 @@ afterEach(async () => {
 });
 afterAll(async () => { await native?.close(); });
 
+async function replaceJournal(tab: Page, value: unknown, slug = 'classfood') {
+  await tab.evaluate(async ({ value, slug }) => {
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('sm-customer-preparation-v1', 1);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('preparations', 'readwrite', { durability: 'strict' });
+        const store = tx.objectStore('preparations');
+        if (value === null) store.delete(slug); else store.put(value, slug);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = tx.onerror = () => { db.close(); reject(Error('Fixture journal write failed')); };
+      };
+      open.onerror = () => reject(Error('Fixture journal open failed'));
+    });
+  }, { value, slug });
+}
+
 describe('Customer preparation — native browser continuity', () => {
+  it('explicitly restores missing IDB from the received cookie, with no session adoption or cookie renewal across reload', async () => {
+    expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
+    const before = await page.evaluate(() => window.preparationFixture.journal());
+    await replaceJournal(page, { ...before, browserRef: refB }, 'other-restaurant');
+    await replaceJournal(page, null);
+    await context.addCookies([{ name: sessionCookie, value: randomBytes(32).toString('base64url'), url: origin,
+      httpOnly: true, secure: true, sameSite: 'Strict', expires: Math.floor(Date.now() / 1_000) + 3_600 }]);
+    const cookies = await context.cookies(); calls.length = 0;
+    await page.reload(); await page.waitForFunction(() => Boolean(window.preparationFixture));
+    expect(calls).toEqual([]); expect(await page.evaluate(() => window.preparationFixture.journal())).toBeNull();
+    expect(await page.evaluate(() => window.preparationFixture.restoreMissingJournal())).toMatchObject({ kind: 'ready' });
+    expect(await page.evaluate(() => window.preparationFixture.journal())).toEqual(before);
+    expect(calls).toEqual(['restore']); expect(await context.cookies()).toEqual(cookies);
+    expect(await page.evaluate(async () => {
+      try { await window.preparationFixture.privateRead(); return 'adopted'; } catch { return 'refused'; }
+    })).toBe('refused');
+    expect(calls).toEqual(['restore']);
+    await page.reload(); await page.waitForFunction(() => Boolean(window.preparationFixture));
+    expect(await page.evaluate(() => window.preparationFixture.journal())).toEqual(before);
+    expect(await context.cookies()).toEqual(cookies);
+    expect(await page.evaluate(() => new Promise(resolve => {
+      const open = indexedDB.open('sm-customer-preparation-v1', 1);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('preparations'), read = tx.objectStore('preparations').get('other-restaurant');
+        tx.oncomplete = () => { db.close(); resolve(read.result); };
+      };
+    }))).toEqual({ ...before, browserRef: refB });
+  });
+  it.each(['present', 'corrupt'])('restore never overwrites a %s native journal', async state => {
+    expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
+    if (state === 'corrupt') await replaceJournal(page, { version: 1, browserRef: 'invalid' });
+    const cookies = await context.cookies(); calls.length = 0;
+    expect(await page.evaluate(() => window.preparationFixture.restoreMissingJournal())).toEqual({ kind: state === 'present' ? 'blocked' : 'uncertain' });
+    expect(calls).toEqual([]); expect(await context.cookies()).toEqual(cookies);
+  });
+  it('two tabs restore under one Web Lock and only one null-to-ready journal commit', async () => {
+    expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
+    await replaceJournal(page, null); calls.length = 0;
+    const second = await context.newPage(); await second.goto(origin); await second.waitForFunction(() => Boolean(window.preparationFixture));
+    const results = await Promise.all([page, second].map(tab => tab.evaluate(() => window.preparationFixture.restoreMissingJournal())));
+    expect(results.map(result => result.kind).sort()).toEqual(['blocked', 'ready']);
+    expect(calls).toEqual(['restore']);
+    expect(await second.evaluate(() => window.preparationFixture.journal())).toEqual(await page.evaluate(() => window.preparationFixture.journal()));
+  });
+  it('a delayed restore response cannot overwrite a selector created outside its lock', async () => {
+    expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
+    await replaceJournal(page, null); calls.length = 0; holdRestore = true;
+    const result = page.evaluate(() => window.preparationFixture.restoreMissingJournal());
+    await expect.poll(() => heldResponse !== null).toBe(true);
+    const other = { version: 1, browserRef: refB, phase: 'preparing' };
+    await replaceJournal(page, other);
+    holdRestore = false; const held = heldResponse!; heldResponse = null; await fulfill(held.route, held.response);
+    expect(await result).toEqual({ kind: 'uncertain' });
+    expect(await page.evaluate(() => window.preparationFixture.journal())).toEqual(other); expect(calls).toEqual(['restore']);
+  });
+  it.each(['cookie absent', 'issued', 'expired'])('restore fails closed when the binding is %s', async failure => {
+    expect(await page.evaluate(() => window.preparationFixture.begin())).toMatchObject({ kind: 'ready' });
+    await replaceJournal(page, null); calls.length = 0;
+    if (failure === 'cookie absent') await context.clearCookies();
+    else {
+      const row = [...records.values()][0]!;
+      if (failure === 'issued') row.confirmed = false;
+      else row.expiresAt = Date.now() - 1_000;
+    }
+    const cookies = await context.cookies();
+    expect(await page.evaluate(() => window.preparationFixture.restoreMissingJournal())).toEqual({ kind: 'uncertain' });
+    expect(await page.evaluate(() => window.preparationFixture.journal())).toBeNull();
+    expect(calls).toEqual(failure === 'cookie absent' ? [] : ['restore']); expect(await context.cookies()).toEqual(cookies);
+  });
   it('persists its selector, receives a protected cookie and confirms after reload without issuing again', async () => {
     expect(await page.title()).toBe('Préparation compte — recette locale');
     expect(await page.getByRole('heading', { name: 'Préparation du compte' }).count()).toBe(1);
