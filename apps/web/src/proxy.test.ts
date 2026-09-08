@@ -35,6 +35,23 @@ function resolvesTo(slug: string) {
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("routes privées compte client sur domaine restaurant", () => {
+  it.each(['capacites', 'navigateur', 'verification', 'confirmation', 'resultat', 'session', 'profil'])(
+    'autorise uniquement le point d’entrée exact %s du restaurant', async action => {
+      resolvesTo('classfood');
+      const response = await proxy(request(`/r/classfood/compte/${action}`, `compte-${action}.example`, { 'sec-fetch-mode': 'cors' }));
+      expect(response.status).toBe(200);
+      expect(isRewrite(response)).toBe(false);
+      expectSameOrigin(response);
+    });
+  it.each(['/r/concurrent/compte/session', '/r/classfood/compte', '/r/classfood/compte/session/nested',
+    '/r/classfood/compte/admin', '/r/classfood/compte/session/', '/r/classfood/compte/SESSION', '/api/customer/session'])(
+    'ne crée aucune exception large : %s', async path => {
+      resolvesTo('classfood');
+      expect((await proxy(request(path, 'compte-denied.example', { 'sec-fetch-mode': 'cors' }))).status).toBe(404);
+    });
+});
+
 describe("politique anti-cadrage", () => {
   it.each(["/admin/menu", "/admin/login", "/sm", "/sm/login"])(
     "protège la surface authentifiée %s",

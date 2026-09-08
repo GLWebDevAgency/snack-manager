@@ -1,8 +1,12 @@
 # L3a — identité client : raccordement Verify
 
 État du 8 septembre 2026. Complète [l'espace client](HISTORIQUE-ESPACE-CLIENT.md).
-**L3a.1 est livré sur staging par #134. L3a.2 prépare la persistance et les
-cas d'usage serveur ; l'inscription publique n'est pas encore opérationnelle.**
+**L3a.1 et L3a.2 sont livrés sur staging par #134 et #135. La persistance et les
+cas d'usage serveur sont vérifiés ; l'inscription publique n'est pas encore opérationnelle.**
+[Preuve de livraison L3a.2](https://github.com/GLWebDevAgency/snack-manager/pull/135#issuecomment-5583195612) :
+révision `d645c9f2ad92bb74ef015231bd81306d11af3c00`, trois migrations,
+quatre services actifs, smoke 8/8 et démos 9/9. Quatre parcours authentifiés
+ignorés faute d'identifiants ne constituent pas une recette réelle.
 
 ## L3a.1 — code et limites
 
@@ -28,7 +32,7 @@ cas d'usage serveur ; l'inscription publique n'est pas encore opérationnelle.**
   recette est explicitement configuré, plafonné à 50 et réduit par les unités
   gratuites observées. Ce ne sont ni des quotas Twilio promis ni un budget payant.
 
-**Aucun contrôleur, provider Nest, worker ou écran n'importe ce code.** Aucune
+**À la livraison de L3a.1, aucun contrôleur, provider Nest, worker ou écran n'importait ce code.** Aucune
 variable d'activation Railway n'est ajoutée. Les tests injectent un transport
 HTTP simulé ; ils ne créent ni SMS, ni compte, ni connexion réelle.
 
@@ -51,10 +55,10 @@ l'anti-abus, pas être seul garant de la dépense.
 L'évidence vient de l'opérateur/serveur de confiance, jamais du navigateur. Sa
 fraîcheur ne garantit pas atomiquement le solde fournisseur : activité extérieure,
 upgrade ou configuration changée exigent vérification et arrêt conservatoire.
-L'orchestrateur vérifie aussi l'environnement de sa configuration serveur ; sa
-future composition Nest devra le dériver de l'environnement réel du processus,
-pas seulement de `policy.environment`. La protection actuelle contre toute dépense
-reste l'absence de raccordement runtime.
+L'orchestrateur vérifie aussi l'environnement de sa configuration serveur.
+L3a.3 ajoute une composition Nest fermée, dérivée de l'identité native Railway
+et de cibles opérateur distinctes, pas seulement de `policy.environment`.
+L'absence de configuration d'activation conserve le déploiement sans envoi.
 
 ## Vérification fournisseur du 8 septembre — relevés distincts
 
@@ -74,6 +78,27 @@ Avant tout OTP réel : vérifier en Console le compte Trial, les droits gratuits
 générales ne constituent pas une allocation Verify. Service, destinataires Verify,
 Fraud Guard, segments et durée de validité restent à attester. Aucun secret à
 copier dans une PR ; aucun autre envoi effectué par les tests logiciels L3a.2.
+
+### Reconnexion et blocage Verify confirmés le 8 septembre
+
+La Console du compte est maintenant accessible. Elle affiche toujours **Trial,
+27 jours restants et 98 SMS gratuits restants**. La page Verify propose une mise à niveau ; le lien
+**Services** redirige vers `/us1/upgrade/v2`, où Twilio demande d'ajouter des fonds
+pour accéder à la plateforme complète. Cette proposition a été fermée sans
+validation. Aucun service Verify, clé, recharge, achat de numéro ni nouvel SMS
+n'a été créé pendant cette vérification.
+
+La contrainte du fondateur reste **essai gratuit uniquement**. L'allocation
+Messaging précédemment observée ne lève pas ce blocage. Ne pas contourner le
+parcours en créant un service par API, ni déduire les droits effectifs du compte
+d'une page de quickstart générique. La [documentation des essais](https://www.twilio.com/docs/usage/trials)
+distingue les unités par produit et impose des contenus prédéfinis : ces SMS ne
+remplacent pas un service OTP applicatif configurable.
+
+Le raccordement logiciel peut être développé et testé avec un fournisseur simulé,
+mais reste fermé en déploiement. Avant une recette Verify réelle, une décision
+distincte du fondateur sur le fournisseur ou le cadre d'accès sera nécessaire ;
+aucun changement payant n'est implicitement autorisé par la reconnexion.
 
 ## L3a.2 — socle durable implémenté, non exposé
 
@@ -119,7 +144,101 @@ Conservation/suppression des données, rotation de clé et migration de parent
 nécessitent aussi leurs procédures avant ouverture. Aucun lancement public ni
 déploiement production par cette note.
 
-## L3a.2 — conditions avant ouverture
+## L3a.3 — frontière API/BFF fermée
+
+Ce lot raccorde les cas d'usage serveur, **sans écran d'inscription et sans
+activation du pilote**. Le parcours invité, le panier et le QR fidélité restent
+inchangés. Il ne livre pas encore le compte complet attendu par le client.
+
+| Entrée same-origin du site sous `/r/:slug/compte/` | Fonction |
+|---|---|
+| `GET capacites` | Disponibilité ; `available:false` si le pilote est fermé |
+| `POST navigateur` | Prépare un secret navigateur HttpOnly avant le challenge |
+| `POST verification` | Téléphone E.164, identifiant de tentative, preuve Turnstile |
+| `POST confirmation` | Contrôle le code à six chiffres et établit la session |
+| `POST resultat` | Reprend seulement le résultat du contrôle initial, sans code ni nouvel appel Verify |
+| `GET / DELETE session` | Lit le profil personnel / révoque la session ou toutes ses sessions |
+| `PATCH profil` | Modifie explicitement le nom avec contrôle de version |
+
+Le BFF appelle uniquement les actions POST signées de `/public/customer/:slug/`.
+Les enveloppes strictes sont partagées dans `@sm/contracts`. Le navigateur ne
+peut pas fournir un tenant, un identifiant de compte, un secret serveur ou une
+preuve humaine supposée. L'API exige une signature dédiée `customer-v1` liée à
+l'action, au chemin exact, à l'origine, au corps, à une source IP pseudonymisée
+et à un horodatage de moins de 60 secondes. Ni JWT professionnel, QR partagé,
+ancien relais public ni appel direct non signé ne valent autorité personnelle.
+
+- Les cookies `__Host-sm_customer_browser_<slug>` et
+  `__Host-sm_customer_session_<slug>` sont Secure, HttpOnly, SameSite Strict,
+  Path `/`, sans Domain. Le préfixe impose cette portée hôte ; le nom et
+  l'autorité serveur restent liés au restaurant. Aucun jeton dans le JSON,
+  l'URL ou localStorage. Pas de SSO implicite entre domaines.
+- Une déconnexion révoque côté serveur ; elle **n'émet pas de suppression de
+  cookie**. Le jeton devenu inerte expire ou sera remplacé. Cela évite qu'une
+  réponse tardive de déconnexion efface une session ouverte entre-temps. Même
+  règle pour un ancien GET 401. Aucune déconnexion optimiste si le serveur
+  n'a pas confirmé. La future UI devra sérialiser les mutations d'identité
+  entre onglets, ignorer les réponses obsolètes et vider ses projections privées.
+- Une réponse de confirmation perdue se récupère avec les mêmes références
+  et le même navigateur, seulement si une session a effectivement été créée
+  et reste valide. Ni le délai ni le quota ne sont prolongés.
+- Origines et domaines personnalisés contrôlés à chaque demande ; pour un
+  domaine restaurant, résolution fraîche du slug côté API. En-têtes privés
+  et no-store, limites de corps et délais complets, réponses d'erreur fixes.
+  Les erreurs JSON avant guard sont également normalisées avant réponse et
+  journal Ops ; les routes non personnelles conservent leur comportement.
+- Quota HTTP Redis partagé ; une panne ferme la route. Le budget SMS reste
+  réservé durablement dans PostgreSQL. Turnstile vérifie côté serveur hostname,
+  action `customer-account-start` et cdata `<slug>_<operationId>` ; clés de test
+  refusées. Le fournisseur est à nouveau précédé d'une lecture tenant primaire
+  et du contrôle inchangé de la configuration et de l'évidence réservées.
+  Mongo, PostgreSQL et Twilio ne forment **pas** une transaction distribuée.
+
+### Configuration requise, non provisionnée
+
+Pour `api` **et** `web` : `SM_CUSTOMER_ACCOUNT_MODE=closed_trial`, environnement
+natif Railway `staging`, `SM_ENV` absent ou `staging`. Les identifiants natifs
+`RAILWAY_PROJECT_ID` et `RAILWAY_ENVIRONMENT_ID` doivent égaler des cibles opérateur
+indépendantes `SM_CUSTOMER_PILOT_PROJECT_ID` et `SM_CUSTOMER_PILOT_ENVIRONMENT_ID`.
+Ajouter les tableaux JSON `SM_CUSTOMER_PILOT_SLUGS` (un seul restaurant pour ce
+pilote) et `SM_CUSTOMER_PILOT_ORIGINS` (origines HTTPS exactes), ainsi qu'une clé
+aléatoire dédiée `SM_CUSTOMER_RELAY_SIGNING_KEY` de 32 octets en base64 canonique.
+Le Web utilise son `NEXT_PUBLIC_API_URL` HTTPS existant.
+
+Pour `api` seul : `SM_CUSTOMER_PILOT_TENANT_ID`,
+`SM_CUSTOMER_IDENTITY_KEY` (32 octets base64, distincte de la clé de relais),
+`SM_CUSTOMER_VERIFY_ACCOUNT_SID`. Les opérations d'envoi/contrôle nécessitent
+aussi `SM_CUSTOMER_VERIFY_API_KEY_SID`, `SM_CUSTOMER_VERIFY_API_KEY_SECRET`,
+`SM_CUSTOMER_TURNSTILE_SECRET_KEY` et les objets JSON
+`SM_CUSTOMER_VERIFY_POLICY` / `SM_CUSTOMER_VERIFY_EVIDENCE` conformes au préflight
+L3a.1. Les sessions existantes, le profil, la révocation et la récupération d'un
+résultat acquis ne dépendent pas du renouvellement de l'évidence SMS.
+
+**Avant toute activation** : attester que l'entrée Railway écrase `x-real-ip`
+avec l'IP réelle (pas celle fournie par le client), contrôler les proxys/domaines,
+les clés et les droits Trial Verify. Le logiciel ne certifie pas l'infrastructure.
+Les variables ne sont ni générées ni ajoutées par ce lot ou par le pipeline.
+Pas de fallback vers une clé fidélité/JWT ou un compte payant. La production
+reste refusée par le runtime, même avec un mode `closed_trial` copié.
+
+Vérification logicielle : gardes, quotas et courses asynchrones, faux fournisseur,
+HMAC du **vrai code Web** vers un serveur Nest en loopback (pas deux signatures
+réécrites dans des fixtures), limites HTTP et sorties privées. Ces preuves ne
+remplacent pas une inscription réelle navigateur → Twilio → compte.
+
+Passe locale du 8 septembre : `pnpm verify` 51/51 tâches réussies (23 reprises
+du cache). L'écriture finale du cache Turbo a signalé un disque saturé ; aucune
+tâche n'a échoué et aucun cache/worktree n'a été supprimé. Après les derniers
+contre-tests : API identité + Ops 280/280, dont 17 HTTP interop ; typage et lint
+ciblés verts. BFF + proxy + relais QR voisin 133/133. Orchestration PostgreSQL
+réelle 10/10, dont quatre nouveaux cas de récupération, sous rôle ordinaire ;
+les bases/rôles UUID de test ont été retirés après vérification. La perte de
+réponse est simulée après commit SQL, pas une coupure réseau réelle. Une
+composition Nest des vrais modules avec connexions remplacées en mémoire a
+aussi vérifié leurs exports DI et le refus fermé sans appel DB. La CI et la
+preuve de staging du SHA fusionné restent consignées dans la PR de ce lot.
+
+## Conditions restantes avant ouverture
 
 1. **Contexte PostgreSQL `customer` distinct** (socle implémenté) de `User` professionnel et de
    `loyalty.members` : compte opaque, contact vérifié, challenge, sessions et

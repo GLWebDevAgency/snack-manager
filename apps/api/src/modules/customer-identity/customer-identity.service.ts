@@ -21,6 +21,7 @@ const checkSchema = z.strictObject({
   tenantRef: tenant, challengeId: uuid, checkId: uuid, code: z.string().regex(/^\d{6}$/),
   browserSecret: token, existingSessionToken: token.nullable(),
 });
+const recoverSchema = checkSchema.omit({ code: true, existingSessionToken: true });
 const sessionSchema = z.strictObject({ tenantRef: tenant, token });
 const updateSchema = sessionSchema.extend({
   name: z.string().trim().min(1).max(120).refine(value => !/[\p{Cc}\p{Cf}]/u.test(value)).nullable(),
@@ -52,7 +53,7 @@ export class CustomerIdentityError extends Error {
   }
 }
 
-/** Application use cases, deliberately NOT an exposed Nest provider/controller.
+/** Application use cases; only the separate signed-relay boundary exposes them.
  * Durable authority lives in the PG repository; this class never substitutes
  * local state for its reservation, one-time check or session revocation.
  * Tests inject the provider and clock; no mock provider exists in runtime. */
@@ -168,6 +169,23 @@ export class CustomerIdentityService {
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
       if (!session) throw new CustomerIdentityError('unauthorized');
       return this.view(scope, session);
+    });
+  }
+
+  /** Read an already committed private receipt. A missing receipt must never
+   * claim a check, consume an attempt, accept an OTP or call the provider. */
+  async recover(raw: unknown): Promise<{ token: string; view: CustomerSessionView }> {
+    return this.protect(async () => {
+      const input = this.parse(recoverSchema, raw);
+      const scope = this.scope(input.tenantRef, this.configuration());
+      const accessToken = this.crypto.tokenForCheck(input.tenantRef, input.browserSecret, input.challengeId, input.checkId);
+      const session = await this.repository.recoverCheck({ ...scope,
+        challengeId: input.challengeId, checkId: input.checkId,
+        browserHash: this.crypto.hash('browser', input.tenantRef, input.browserSecret),
+        sessionHash: this.crypto.hash('session', input.tenantRef, accessToken), now: this.now(),
+      });
+      if (!session) throw new CustomerIdentityError('unauthorized');
+      return { token: accessToken, view: this.view(scope, session) };
     });
   }
 
