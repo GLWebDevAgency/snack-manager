@@ -386,6 +386,11 @@ type Verdict = "réécrire" | "laisser" | "refuser";
 function verdictPourRestaurant(pathname: string, slug: string): Verdict {
   if (pathname === "/") return "réécrire";
 
+  // Account entry points are individually allowed. A future page or nested
+  // endpoint must not inherit permission to serve another tenant's account.
+  if (["capacites", "navigateur", "verification", "confirmation", "resultat", "session", "profil"]
+    .some(action => pathname === `/r/${slug}/compte/${action}`)) return "laisser";
+
   if (
     pathname === `/r/${slug}` ||
     pathname === `/r/${slug}/` ||
