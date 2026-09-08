@@ -1017,6 +1017,8 @@ describe('préflight PostgreSQL', () => {
   it.each([
     ['supply', SUPPLY_INITIAL_MIGRATION, 'public.ingredients'],
     ['customer', CUSTOMER_INITIAL_MIGRATION, 'customer.accounts'],
+    ['customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION, 'customer.browser_contexts'],
+    ['customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION, 'customer.preserve_browser_context()'],
   ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
