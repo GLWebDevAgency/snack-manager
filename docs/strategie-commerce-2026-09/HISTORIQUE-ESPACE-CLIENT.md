@@ -76,7 +76,7 @@ Preuves : `StatsService.revenueMatch`, `sumWindow` et `exportOrdersCsv` dans [`s
 
 Le bouton « Obtenir ma carte » ne doit plus envoyer un nouvel utilisateur directement au scanner. Cible : « Créer mon compte et ma carte » avec numéro vérifié et prénom ; « Me connecter » pour le membre existant ; rattachement d'une carte de caisse comme action secondaire explicite. La déconnexion clôt la session et retire les coordonnées locales ; elle ne supprime ni la carte ni les justificatifs de vente. Prévoir aussi révocation des autres sessions et récupération sûre.
 
-**Constats toujours ouverts** : aucune inscription consommateur publique ni session OTP trouvée ; le cookie actuel conserve une carte de caisse et la suppression locale ne révoque pas les autres appareils. Le préremplissage vient de `sm.customer`, pas d'un profil fidélité authentifié. Le journal C01 conserve la tentative active et le dernier reçu, pas toutes les commandes simultanées. Aucune API d'historique personnel ou de réachat, ni crédit automatique web de fidélité, ne doit être déduit des écrans déjà présents.
+**Constats toujours ouverts, revérifiés le 8 septembre** : aucune inscription consommateur publique ni session OTP ; le cookie actuel conserve une carte de caisse et la suppression locale ne révoque pas les autres appareils. L3a0 a remplacé `sm.customer` par une mémoire locale facultative, cloisonnée et bornée, et conserve plusieurs reçus sur cet appareil. Ce ne sont ni un profil fidélité authentifié ni un historique personnel serveur. Aucune API de réachat ou crédit automatique web de fidélité ne doit être déduit des écrans présents. [Raccordement Verify L3a.1 et suite L3a.2](IDENTITE-CLIENT-VERIFY.md).
 
 Twilio Verify est choisi, **essai gratuit fermé uniquement** : vérifier la liste des destinataires, les quotas et l'échéance avant un envoi. Aucun achat, activation publique ou budget SMS récurrent autorisé. Le futur flux exige plafonds globaux/restaurant/téléphone/IP, délai de renvoi, nombre d'essais borné, réponses sans révéler l'existence d'un compte et arrêt en cas d'incertitude sur le budget. La vérification du téléphone ne doit pas rattacher automatiquement les anciens achats ou cartes créés avec un téléphone non vérifié : possession de carte et rattachement contrôlé restent distincts.
 
@@ -98,7 +98,7 @@ Une session invitée peut préserver la tentative et les commandes de cet appare
 
 Les anciens achats sans preuve de rattachement ne sont pas récupérables automatiquement sur simple correspondance de téléphone. Prévoir une assistance contrôlée ; ne pas promettre une migration magique de tout l'historique.
 
-Sur domaine personnalisé, les nouvelles routes doivent entrer explicitement dans la liste blanche du proxy. Le cookie fidélité actuel est limité au chemin `/fidelite` ; ne pas élargir le secret QR à tout le site pour gagner du temps. Une nouvelle session client sécure est nécessaire. Domaine plateforme et domaine restaurant ne partagent pas spontanément leurs cookies : tout transfert de session éventuel exige une preuve courte, à usage unique, liée à la destination vérifiée.
+Sur domaine personnalisé, les nouvelles routes doivent entrer explicitement dans la liste blanche du proxy. Le cookie fidélité actuel est limité au chemin `/r/${slug}/fidelite` ; ne pas élargir le secret QR à tout le site pour gagner du temps. Une nouvelle session client sécure est nécessaire. Domaine plateforme et domaine restaurant ne partagent pas spontanément leurs cookies : tout transfert de session éventuel exige une preuve courte, à usage unique, liée à la destination vérifiée.
 
 Preuves : [`proxy.ts`](../../apps/web/src/proxy.ts), [`session-cookie.ts`](../../apps/web/src/app/r/[slug]/fidelite/card-session/session-cookie.ts), [`loyalty-member.service.ts`](../../apps/api/src/modules/loyalty/loyalty-member.service.ts).
 
@@ -113,7 +113,7 @@ Preuves : [`proxy.ts`](../../apps/web/src/proxy.ts), [`session-cookie.ts`](../..
 
 La session actuelle n'est pas une session personnelle complète : elle conserve le **QR de caisse**. Sa projection contient `alias` et `balanceUnits`, aucun téléphone, même masqué. Le profil serveur contient un prénom et un téléphone facultatifs, pas un nom de famille distinct. L'alias peut être « Carte abcdefgh » ou « Client · 1234 » : **ne pas l'injecter dans le champ nom**.
 
-Le checkout réutilise actuellement seulement les coordonnées saisies précédemment sur le navigateur (`sm.customer`, clé globale à l'origine, sans durée). Ce n'est pas un rattachement fidélité ; cette mémoire doit aussi être cloisonnée par restaurant, bornée et effaçable, sans être présentée comme une identité vérifiée.
+Depuis L3a0, le checkout réutilise seulement les coordonnées mémorisées explicitement sur ce navigateur, par restaurant pendant sept jours et effaçables. L'ancienne clé globale `sm.customer` a été retirée sans migration implicite. Ce n'est toujours ni un rattachement fidélité ni une identité vérifiée.
 
 Pour le parcours demandé :
 
