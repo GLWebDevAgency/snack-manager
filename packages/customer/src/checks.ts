@@ -1,6 +1,8 @@
 import type { PoolClient } from 'pg';
 import { recordSessionPublication } from './session-publications';
-import type { CheckClaim, CustomerIdentityRepository, CustomerSession } from './port';
+import type { CheckClaim, CustomerIdentityRepository } from './port';
+import type { CustomerCheckCompletion } from './enrollment-port';
+import { readEnrollment } from './enrollment';
 import { CustomerRepositoryError } from './client';
 import { challenge, currentChallenge, dbTime, fundingAllowsCheck, pendingView, session, type ChallengeRow } from './queries';
 import { intentRow, validOpenIntent } from './intent-queries';
@@ -70,16 +72,20 @@ async function finish(client: PoolClient, input: CheckClaim, result: string, sta
     WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3`, [input.parentRef, input.tenantRef, input.challengeId, state]);
 }
 
-export async function recoverVerification(client: PoolClient, input: CheckClaim & { sessionHash: string }): Promise<CustomerSession | null> {
-  const exact = await client.query(`SELECT 1 FROM customer.check_attempts WHERE parent_ref=$1 AND tenant_ref=$2
-    AND challenge_id=$3 AND id=$4 AND request_hash=$5 AND state='approved'`,
+export async function recoverVerification(client: PoolClient, input: CheckClaim & { sessionHash: string }): Promise<CustomerCheckCompletion | null> {
+  const exact = await client.query<{ state: string }>(`SELECT state FROM customer.check_attempts WHERE parent_ref=$1 AND tenant_ref=$2
+    AND challenge_id=$3 AND id=$4 AND request_hash=$5 AND state IN ('approved','verified')`,
   [input.parentRef, input.tenantRef, input.challengeId, input.checkId, input.requestHash]);
   if (!exact.rowCount) return null;
+  if (exact.rows[0]?.state === 'verified') {
+    const enrollment = await readEnrollment(client, input);
+    return enrollment ? { kind: 'enrollment', enrollment } : null;
+  }
   const result = await resultIntent(client, input);
-  return result?.state === 'approved' && result.challengeId === input.challengeId ? result.session : null;
+  return result?.state === 'approved' && result.challengeId === input.challengeId && result.session ? { kind: 'session', session: result.session } : null;
 }
 
-export async function completeVerification(client: PoolClient, input: Completion): Promise<CustomerSession | null> {
+export async function completeVerification(client: PoolClient, input: Completion): Promise<CustomerCheckCompletion | null> {
   const row = await challenge(client, input, input.challengeId);
   if (!row || row.intent_operation_id !== input.operationId || row.browser_ref !== input.browserRef || row.browser_hash !== input.browserHash || row.check_id !== input.checkId) return null;
   if ((await intentRow(client, input))?.proof_hash !== input.proofHash) return null;
@@ -119,18 +125,21 @@ export async function completeVerification(client: PoolClient, input: Completion
   }
   const accountId = existing?.id ?? input.accountId;
   if (!existing) {
-    await client.query('SAVEPOINT new_account');
-    await client.query('INSERT INTO customer.accounts(id,parent_ref,tenant_ref) VALUES($1,$2,$3)',
-      [accountId, input.parentRef, input.tenantRef]);
-    const contact = await client.query(`INSERT INTO customer.verified_contacts(parent_ref,tenant_ref,account_id,phone_hash,encrypted_phone)
-      VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_ref,phone_hash) DO NOTHING`,
-    [input.parentRef, input.tenantRef, accountId, row.phone_hash, row.encrypted_phone]);
-    if (!contact.rowCount) {
-      // A changed provider parent cannot create a second identity or reveal the old one.
-      await client.query('ROLLBACK TO SAVEPOINT new_account');
-      await finish(client, input, 'rejected', 'rejected'); return null;
-    }
-    await client.query('RELEASE SAVEPOINT new_account');
+    const created = await client.query(`INSERT INTO customer.registration_enrollments(parent_ref,tenant_ref,id,operation_id,challenge_id,
+      browser_ref,browser_hash,browser_generation,phone_hash,encrypted_phone,verified_at,expires_at)
+      SELECT $1,$2,$3,$4,$5,$6,$7,i.browser_generation,$8,$9,clock_timestamp(),i.expires_at
+      FROM customer.verification_intents i WHERE i.parent_ref=$1 AND i.tenant_ref=$2 AND i.operation_id=$4
+        AND i.proof_hash=$10 AND i.state='open' AND i.expires_at>clock_timestamp()`,
+    [input.parentRef, input.tenantRef, input.checkId, input.operationId, input.challengeId,
+      input.browserRef, input.browserHash, row.phone_hash, row.encrypted_phone, input.proofHash]);
+    if (created.rowCount !== 1) throw new CustomerRepositoryError('unavailable');
+    await client.query(`UPDATE customer.check_attempts SET state='verified',enrollment_id=id,completed_at=clock_timestamp()
+      WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3 AND state='checking'`, [input.parentRef, input.tenantRef, input.checkId]);
+    await client.query(`UPDATE customer.challenges SET state='consumed' WHERE parent_ref=$1 AND tenant_ref=$2 AND id=$3`,
+      [input.parentRef, input.tenantRef, input.challengeId]);
+    const enrollment = await readEnrollment(client, input);
+    if (!enrollment) throw new CustomerRepositoryError('unavailable');
+    return { kind: 'enrollment', enrollment };
   }
   const created = await client.query(`WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS now)
     INSERT INTO customer.sessions(id,parent_ref,tenant_ref,account_id,session_hash,account_version,created_at,expires_at,browser_hash,browser_generation,browser_ref)
@@ -161,5 +170,5 @@ export async function completeVerification(client: PoolClient, input: Completion
   await recordSessionPublication(client, { ...input, method: 'phone' });
   const result = await session(client, input, input.sessionHash, input.browserHash);
   if (!result) throw new CustomerRepositoryError('unavailable');
-  return result;
+  return { kind: 'session', session: result };
 }

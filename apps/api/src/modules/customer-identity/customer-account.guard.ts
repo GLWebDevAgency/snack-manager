@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CustomerAccountActionSchema, CustomerAccountEnvelopes, CustomerAccountSlugSchema, type CustomerAccountAction } from '@sm/contracts';
+import { CustomerAccountActionSchema, CustomerAccountEnvelopes, CustomerAccountSlugSchema, customerAccountRequestLimit, type CustomerAccountAction } from '@sm/contracts';
 import type { Request, Response } from 'express';
 import { SharedPublicQuota } from '../../common/shared-public-quota';
 import { customerAccessConfiguration } from './customer-account.config';
@@ -43,7 +43,8 @@ export class CustomerAccountGuard implements CanActivate {
     let serialized: string;
     try { serialized = JSON.stringify(request.body); }
     catch { throw customerHttpError('invalid_request'); }
-    if (!serialized || Buffer.byteLength(serialized) > 4096 || (request.rawBody && request.rawBody.byteLength > 4096)) {
+    const limit = customerAccountRequestLimit(action.data);
+    if (!serialized || Buffer.byteLength(serialized) > limit || (request.rawBody && request.rawBody.byteLength > limit)) {
       throw customerHttpError('invalid_request');
     }
     const payload = ['customer-v1', at, slug.data, action.data, 'POST', path, origin, client,

@@ -209,6 +209,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@simplewebauthn/browser':
+        specifier: ^14.0.0
+        version: 14.0.0
       '@sm/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

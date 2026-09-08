@@ -34,7 +34,7 @@ export class CustomerAccountRuntime {
       const access = this.access(relay); await this.tenant(access);
       const send = customerSendConfiguration(this.config, access);
       if (relay.action === 'status') {
-        this.access(relay, access); return { available: send !== null };
+        this.access(relay, access); return { available: send !== null, registrationAvailable: true, accessAvailable: false };
       }
       const spends = relay.action === 'start' || relay.action === 'check';
       if (spends && !send) throw new CustomerIdentityError('unavailable');
@@ -89,11 +89,14 @@ export class CustomerAccountRuntime {
           const input = this.input('check', raw);
           const checked = await core.check({ ...binding!, ...input.request, intentProof: input.intentProof,
             existingSessionToken: input.sessionToken });
-          result = { token: checked.token, view: view(checked.view) }; break;
+          result = checked; break;
         }
         case 'recover': {
           const input = this.input('recover', raw);
           result = await core.recover({ ...binding!, ...input.request, intentProof: input.intentProof }); break;
+        }
+        case 'protection': {
+          result = await core.protection({ tenantRef, ...this.input('protection', raw), origin: relay.origin }); break;
         }
         case 'session': {
           const input = this.input('session', raw);
@@ -120,6 +123,8 @@ export class CustomerAccountRuntime {
         if (verification.state === 'approved' && (verification.view.expiresAt <= Date.now() || verification.expiresAt <= Date.now())) {
           throw new CustomerIdentityError('unauthorized');
         }
+        if (verification.state === 'enrollment' && (verification.enrollment.expiresAt <= Date.now()
+          || verification.expiresAt <= Date.now())) throw new CustomerIdentityError('unauthorized');
         return verification;
       }
       const response = CustomerAccountResponses[relay.action].parse(result);
@@ -131,6 +136,7 @@ export class CustomerAccountRuntime {
       }
       if (response && relay.action !== 'browser' && relay.action !== 'intent') {
         const expiresAt = 'view' in response ? response.view.expiresAt
+          : 'enrollment' in response ? response.enrollment.expiresAt
           : 'expiresAt' in response ? response.expiresAt : null;
         if (expiresAt !== null && expiresAt <= Date.now()) throw new CustomerIdentityError('unauthorized');
       }

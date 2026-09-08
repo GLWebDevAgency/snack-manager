@@ -4,6 +4,7 @@ import { validateBrowser } from './browser-preparation';
 import { intentGeneration, intentRow, intentView, validOpenIntent, type IntentRow } from './intent-queries';
 import { dbTime, session } from './queries';
 import { CustomerRepositoryError } from './client';
+import { readEnrollment } from './enrollment';
 
 type CloseInput = CustomerBrowserBinding & { operationId: string };
 async function insertIntent(client: PoolClient, input: CloseInput, proofHash: string | null) {
@@ -91,6 +92,10 @@ export async function resultIntent(client: PoolClient,
     WHERE a.parent_ref=$1 AND a.tenant_ref=$2 AND a.challenge_id=$3 AND a.id=$4 AND a.request_hash IS NOT NULL`,
   [input.parentRef, input.tenantRef, row.id, input.checkId, input.operationId])).rows[0];
   if (!attempt || attempt.state === 'checking') return { ...base, state: 'unresolved' };
+  if (attempt.state === 'verified') {
+    const enrollment = await readEnrollment(client, { ...input, checkId: input.checkId });
+    return enrollment ? { ...base, state: 'enrollment', enrollment } : { ...base, state: 'failed' };
+  }
   if (attempt.state === 'approved') {
     if (intent.state !== 'consumed' || row.state !== 'consumed' || row.check_id !== input.checkId || !attempt.session_hash) return { ...base, state: 'failed' };
     if (input.sessionHash !== null && input.sessionHash !== attempt.session_hash) return null;

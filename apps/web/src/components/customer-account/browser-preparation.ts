@@ -102,11 +102,11 @@ export function createCustomerBrowserPreparation(port: Port) {
 }
 
 /** Same native lock as profile/logout, independent from checkout's journal. */
-export function customerBrowserPreparation(slug: string) {
+export function customerBrowserPreparation(slug: string, changed = () => notifyCustomerAccountChanged(slug)) {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
   return createCustomerBrowserPreparation({ journal: customerBrowserJournal(slug), request: customerAccountRequest(slug),
     uuid: () => crypto.randomUUID(),
-    changed: () => notifyCustomerAccountChanged(slug),
+    changed,
     lock: locks ? async work => await locks.request(`sm:customer:${slug}`, { mode: 'exclusive', signal: AbortSignal.timeout(15_000) }, work) : undefined,
   });
 }

@@ -51,6 +51,30 @@ async function seed0004(admin: Pool, kind: 'valid' | 'no_intent' | 'no_request' 
 }
 
 integration('0004→0005 publication migration — limited owner, native SQL', () => {
+  it('upgrades 0005 preserving legitimate legacy sessions without inventing enrollment or protection', async () => {
+    let legacy: Awaited<ReturnType<typeof seed0004>>;
+    let previous: unknown;
+    const fixture = await customerTestFixture(process.env.CUSTOMER_TEST_DATABASE_URL, { beforeUpgradeMigrations: 6, beforeUpgrade: async admin => {
+      legacy = await seed0004(admin, 'valid');
+      await admin.query(`INSERT INTO customer.session_publications(parent_ref,tenant_ref,session_id,operation_id,check_id,browser_ref,browser_hash,browser_generation,method)
+        VALUES($1,$2,$3,$4,$5,$6,$7,1,'phone')`, [legacy.parentRef, legacy.tenantRef, legacy.sessionId, legacy.operationId, legacy.checkId, legacy.browserRef, legacy.browserHash]);
+      previous = (await admin.query('SELECT * FROM customer.session_publications')).rows;
+    } });
+    try {
+      const repo = new PostgresCustomerIdentityRepository(fixture.app);
+      expect(await repo.authenticate(legacy!)).not.toBeNull();
+      expect((await fixture.admin.query('SELECT enrollment_id FROM customer.accounts')).rows).toEqual([{ enrollment_id: null }]);
+      for (const table of ['registration_enrollments', 'passkey_credentials', 'recovery_codes']) {
+        expect((await fixture.admin.query(`SELECT 1 FROM customer.${table}`)).rowCount).toBe(0);
+      }
+      expect((await fixture.admin.query('SELECT * FROM customer.session_publications')).rows).toEqual(previous);
+      await expect(fixture.admin.query('INSERT INTO customer.accounts(id,parent_ref,tenant_ref) VALUES($1,$2,$3)',
+        [randomUUID(), legacy!.parentRef, legacy!.tenantRef])).rejects.toMatchObject({ code: '23514' });
+      await migrateCustomer(fixture.admin);
+      expect((await fixture.admin.query('SELECT * FROM customer.session_publications')).rows).toEqual(previous);
+      expect((await fixture.admin.query('SELECT 1 FROM drizzle.__drizzle_customer_migrations')).rowCount).toBe(7);
+    } finally { await fixture.close(); }
+  }, 20_000);
   it('backfills only exact live approvals after intent expiry; restores FORCE on success and failed migration', async () => {
     const raw = assertCustomerTestTarget(process.env.CUSTOMER_TEST_DATABASE_URL);
     const owner = `customer_migrator_test_${randomUUID().replaceAll('-', '')}`;

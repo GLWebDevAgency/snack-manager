@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { prepareCustomerTestIntent } from './browser-test-fixture';
+import { completeCustomerTestAccount } from './enrollment-test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import type { VerificationReservation } from './port';
@@ -42,9 +43,14 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
     await repo.settleSend({ ...request, verificationSid: `VE${hash().slice(0, 32)}` });
     const claim = { ...request, checkId: randomUUID() };
     expect(await repo.claimCheck(claim)).not.toBeNull();
-    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: claim.checkId, result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(),
+    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: randomUUID(), result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(),
       sessionExpiresAt: Date.now() + 604_800_000, accountId: randomUUID(), existingSessionHash: null };
   }
+  const recover = ({ parentRef, tenantRef, browserRef, browserHash, operationId, proofHash, checkId,
+    expectedCheckId, sessionHash }: Awaited<ReturnType<typeof approval>>) => repo.recoverEnrollmentActivation({
+    parentRef, tenantRef, browserRef, browserHash, operationId, proofHash, checkId,
+    activationId: expectedCheckId, sessionHash,
+  });
 
   const restoreInput = (i: ReturnType<typeof input>) => ({ parentRef: i.parentRef, tenantRef: i.tenantRef, browserHash: i.browserHash });
 
@@ -100,9 +106,10 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
 
   it('restores no session, publication or identity and leaves all existing receipts unchanged', async () => {
     const i = input(); await historical(i, 601_000, true);
-    const done = await approval(i); expect(await repo.completeCheck(done)).not.toBeNull();
+    const done = await approval(i); expect(await completeCustomerTestAccount(repo, done)).not.toBeNull();
     const tables = ['browser_preparations', 'browser_contexts', 'accounts', 'verified_contacts', 'sessions',
-      'session_publications', 'verification_intents', 'challenges', 'check_attempts', 'parent_budgets', 'reservations'];
+      'session_publications', 'verification_intents', 'challenges', 'check_attempts', 'parent_budgets', 'reservations',
+      'registration_enrollments', 'passkey_credentials', 'recovery_codes'];
     const snapshot = () => Promise.all(tables.map(async table =>
       (await fixture.admin.query(`SELECT * FROM customer.${table} WHERE parent_ref=$1`, [i.parentRef])).rows));
     const before = await snapshot();
@@ -321,10 +328,12 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
     const active = input(); await historical(active, 86_400_000, true);
     const done = await approval(active);
     expect(await repo.completeCheck({ ...done, browserRef: randomUUID() })).toBeNull();
-    const session = await repo.completeCheck(done);
+    const session = await completeCustomerTestAccount(repo, done);
     expect(session?.expiresAt).toBe((await repo.validateBrowser(active))?.expiresAt);
+    expect((await recover(done))?.sessionId).toBe(done.sessionId);
     const wrong = { ...done, browserRef: randomUUID() };
     expect(await repo.authenticate(wrong)).toBeNull(); expect(await repo.recoverCheck(wrong)).toBeNull();
+    expect(await recover(wrong)).toBeNull();
     expect(await repo.updateName({ ...wrong, encryptedName: 'forbidden', expectedRevision: 0 })).toBeNull();
     await repo.revoke({ ...wrong, all: true });
     expect((await repo.authenticate(done))?.sessionId).toBe(done.sessionId);
@@ -332,7 +341,7 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
 
   it.each(['name', 'revoke-one', 'revoke-all'] as const)('checks browser expiry inside the final %s mutation', async action => {
     const i = input(); await historical(i, 604_798_500, true);
-    const done = await approval(i); expect(await repo.completeCheck(done)).not.toBeNull();
+    const done = await approval(i); expect(await completeCustomerTestAccount(repo, done)).not.toBeNull();
     // Deliberately longer stored session: browser expiry must independently fence
     // the final mutation, rather than merely inheriting the session time check.
     await fixture.admin.query("UPDATE customer.sessions SET expires_at=clock_timestamp()+interval '1 day' WHERE id=$1", [done.sessionId]);
@@ -356,5 +365,6 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
       FROM customer.accounts a JOIN customer.sessions s ON s.account_id=a.id WHERE s.id=$1`, [done.sessionId])).rows[0])
       .toEqual({ encrypted_name: null, revision: '0', session_version: '0', revoked_at: null });
     expect(await repo.authenticate(done)).toBeNull(); expect(await repo.recoverCheck(done)).toBeNull();
+    expect(await recover(done)).toBeNull();
   });
 });

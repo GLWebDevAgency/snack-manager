@@ -364,7 +364,7 @@ export function Storefront({
           fenêtre et la grille de la carte s'y remplit d'elle-même. */}
       <main className="mx-auto w-full max-w-[1080px] px-4">
         {!demo && <nav aria-label="Vos accès personnels" className={cx("gap-2 pt-4 sm:flex sm:justify-end", embed ? "flex justify-end" : "grid grid-cols-2")}>
-          {!embed && <CustomerAccountEntry slug={site.tenant.slug} restaurantName={site.tenant.name}
+          {!embed && <CustomerAccountEntry slug={site.tenant.slug} restaurantName={site.tenant.name} mode={brand.mode}
             loyaltyHref={loyalty?.chemin} onDeviceOrders={() => setDeviceOrdersOpen(true)} />}
           <Tap onClick={() => setDeviceOrdersOpen(true)} className="cf-press flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-pill border border-ink/10 bg-surface px-3 text-left hover:border-ink/25" aria-label="Mes commandes sur cet appareil"><Icon name="ticket" size={18} className="hidden sm:block" /><span><span className="block text-[13px] font-bold">Mes commandes</span><span className="block text-[11px] text-mut">Sur cet appareil</span></span></Tap>
         </nav>}

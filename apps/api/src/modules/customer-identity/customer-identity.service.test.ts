@@ -52,7 +52,7 @@ function fixture() {
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
     recoverCheck: vi.fn<CustomerIdentityRepository['recoverCheck']>().mockResolvedValue(null),
-    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue(privateSession),
+    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue({ kind: 'session', session: privateSession }),
     authenticate: vi.fn<CustomerIdentityRepository['authenticate']>().mockResolvedValue(privateSession),
     updateName: vi.fn<CustomerIdentityRepository['updateName']>().mockResolvedValue(privateSession),
     revoke: vi.fn<CustomerIdentityRepository['revoke']>().mockResolvedValue(undefined),
@@ -204,6 +204,8 @@ describe('private customer identity orchestration', () => {
   it('claims a check before calling Verify and issues only the committed session', async () => {
     const f = fixture();
     const result = await f.service.check(f.check);
+    expect(result.state).toBe('authenticated');
+    if (result.state !== 'authenticated') throw new Error('Expected existing-account continuity');
     expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(result.view.profile).toEqual({ name: null, phoneE164: PHONE, phoneVerifiedAt: NOW, revision: 0 });
     expect(result.view).not.toHaveProperty('accountId');
@@ -216,7 +218,7 @@ describe('private customer identity orchestration', () => {
     expect(JSON.stringify(f.repository.completeCheck.mock.calls)).not.toContain('123456');
   });
   it('replays a committed check with the exact token and no second provider request', async () => {
-    const f = fixture(); f.repository.recoverCheck.mockResolvedValue(privateSession);
+    const f = fixture(); f.repository.recoverCheck.mockResolvedValue({ kind: 'session', session: privateSession });
     const a = await f.service.check(f.check); const b = await f.service.check(f.check);
     expect(a).toEqual(b); expect(f.transport.check).not.toHaveBeenCalled(); expect(f.repository.claimCheck).not.toHaveBeenCalled();
   });

@@ -3,10 +3,11 @@ import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccountResponses,
   CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER,
-  CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER } from '@sm/contracts';
+  CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit,
+  type CustomerEnrollment } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
 
-type Action = 'status' | 'browser' | 'intent' | 'start' | 'check' | 'recover' | 'session' | 'name' | 'logout';
+type Action = 'status' | 'browser' | 'intent' | 'start' | 'check' | 'recover' | 'protection' | 'session' | 'name' | 'logout';
 export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -14,9 +15,9 @@ const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
 const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
-  check: 'confirmation', recover: 'resultat', session: 'session', name: 'profil', logout: 'session' };
+  check: 'confirmation', recover: 'resultat', protection: 'protection', session: 'session', name: 'profil', logout: 'session' };
 const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', intent: 'POST', start: 'POST', check: 'POST',
-  recover: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE' };
+  recover: 'POST', protection: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE' };
 
 function privateResponse(response: NextResponse) {
   response.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -155,6 +156,11 @@ async function boundedJson(message: Request | Response, signal: AbortSignal, lim
   }
 }
 function discard(response: Response) { if (response.body) void response.body.cancel().catch(() => undefined); }
+function validEnrollment(enrollment: CustomerEnrollment, selected: { operationId: string; checkId: string | null }) {
+  const remaining = enrollment.expiresAt - Date.now();
+  return enrollment.operationId === selected.operationId && enrollment.checkId === selected.checkId
+    && remaining > 0 && remaining <= 600_000;
+}
 
 export async function customerAccount(request: NextRequest, context: CustomerContext, action: Action): Promise<NextResponse> {
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(TIMEOUT_MS)]);
@@ -175,7 +181,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (!ip) return action === 'status' ? closed() : unavailable();
     let browserRequest: unknown = {};
     try {
-      if (request.method !== 'GET') browserRequest = await boundedJson(request, signal, 8_192);
+      if (request.method !== 'GET') browserRequest = await boundedJson(request, signal, customerAccountRequestLimit(action));
     } catch { return signal.aborted ? unavailable() : invalid(); }
     const apiAction = action;
     const parsed = CustomerAccountBrowserRequests[apiAction].safeParse(browserRequest);
@@ -185,7 +191,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (browser.kind === 'invalid' || session.kind === 'invalid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Les accès enregistrés sont ambigus. Fermez les autres accès avant de réessayer.');
     }
-    if (['intent', 'start', 'check', 'recover'].includes(action) && browser.kind !== 'valid') {
+    if (['intent', 'start', 'check', 'recover', 'protection'].includes(action) && browser.kind !== 'valid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Le navigateur doit confirmer son accès avant de continuer.');
     }
     if (['session', 'name', 'logout'].includes(action)
@@ -208,7 +214,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     const intentRequest = action === 'intent' ? CustomerAccountBrowserRequests.intent.parse(parsed.data) : null;
     const candidateProof = intentRequest?.step === 'prepare' ? randomBytes(32).toString('base64url') : null;
     const selectedOperation = 'operationId' in parsed.data ? parsed.data.operationId : null;
-    const proof = ['start', 'check', 'recover'].includes(action) && selectedOperation
+    const proof = ['start', 'check', 'recover', 'protection'].includes(action) && selectedOperation
       ? readNamedCookie(request, intentCookieName(slug, selectedOperation)) : null;
     if (proof?.kind === 'absent') return unauthorized();
     if (proof?.kind === 'invalid') return failure(409, 'CUSTOMER_CONFLICT', 'La preuve de cette tentative est ambiguë.');
@@ -234,7 +240,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       ...(intentRequest ? { candidateProof } : {}),
       ...(publication?.success ? publication.data : {}),
       ...(proof?.kind === 'valid' ? { intentProof: proof.value } : {}),
-      ...(['intent', 'start', 'check', 'recover', 'session', 'name', 'logout'].includes(action)
+      ...(['intent', 'start', 'check', 'recover', 'protection', 'session', 'name', 'logout'].includes(action)
         && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
       ...(action === 'check' ? { sessionToken: session.kind === 'valid' ? session.value : null }
         : ['session', 'name', 'logout'].includes(action) && session.kind === 'valid' ? { sessionToken: session.value } : {}),
@@ -271,7 +277,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       return unavailable();
     }
     if (action === 'logout') { discard(response); return unavailable(); }
-    const raw = await boundedJson(response, signal, 16_384);
+    const raw = await boundedJson(response, signal, action === 'protection' ? 65_536 : 16_384);
     const output = CustomerAccountResponses[apiAction].safeParse(raw);
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
     if (action === 'browser') {
@@ -319,6 +325,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       if (recovered.operationId !== selected.operationId || recovered.checkId !== selected.checkId
         || recovered.expiresAt > Date.now() + 600_000
         || (!['expired', 'closed', 'failed'].includes(recovered.state) && recovered.expiresAt <= Date.now())) return unavailable();
+      if (recovered.state === 'enrollment' && !validEnrollment(recovered.enrollment, selected)) return unavailable();
       if (recovered.state !== 'approved') return privateResponse(NextResponse.json(recovered));
       const { token, ...publicResult } = recovered;
       const remaining = recovered.view.expiresAt - Date.now();
@@ -328,13 +335,39 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       return result;
     }
     if (action === 'check') {
-      if (!('token' in output.data) || !('view' in output.data)) return unavailable();
-      const { token, view } = output.data;
+      const checked = CustomerAccountResponses.check.parse(output.data);
+      const selected = CustomerAccountBrowserRequests.check.parse(parsed.data);
+      if (checked.state === 'enrollment') return validEnrollment(checked.enrollment, selected)
+        ? privateResponse(NextResponse.json(checked)) : unavailable();
+      const { token, view } = checked;
       const remaining = view.expiresAt - Date.now();
       if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
-      const result = privateResponse(NextResponse.json(view));
+      const result = privateResponse(NextResponse.json({ state: 'authenticated', view }));
       result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(view.expiresAt) });
       return result;
+    }
+    if (action === 'protection') {
+      const protectedResult = CustomerAccountResponses.protection.parse(output.data);
+      const selected = CustomerAccountBrowserRequests.protection.parse(parsed.data);
+      if (protectedResult.state === 'authenticated') {
+        if ((selected.step !== 'activate' && selected.step !== 'activation-result')
+          || protectedResult.operationId !== selected.operationId || protectedResult.activationId !== selected.activationId) return unavailable();
+        const { token, ...publicResult } = protectedResult;
+        const remaining = publicResult.view.expiresAt - Date.now();
+        if (remaining < 1_000 || remaining > SESSION_MAX_MS) return unavailable();
+        const result = privateResponse(NextResponse.json(publicResult));
+        result.cookies.set(cookieName(slug, 'session'), token, { ...cookieOptions(), expires: new Date(publicResult.view.expiresAt) });
+        return result;
+      }
+      if (!validEnrollment(protectedResult.enrollment, selected)) return unavailable();
+      if (protectedResult.state === 'registration-options' && (selected.step !== 'registration-options'
+        || protectedResult.registrationId !== selected.registrationId)) return unavailable();
+      if (protectedResult.state === 'assertion-options' && (selected.step !== 'assertion-options'
+        || protectedResult.assertionId !== selected.assertionId)) return unavailable();
+      if (protectedResult.state === 'recovery-code' && selected.step !== 'recovery-code') return unavailable();
+      // Provisional enrollment contains no profile or session. Only the exact
+      // activation receipt above may publish a personal credential.
+      return privateResponse(NextResponse.json(protectedResult));
     }
     if ('expiresAt' in output.data && (output.data.expiresAt <= Date.now()
       || output.data.expiresAt - Date.now() > (action === 'start' ? 600_000 : SESSION_MAX_MS))) return unavailable();

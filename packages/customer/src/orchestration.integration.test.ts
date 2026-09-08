@@ -5,6 +5,8 @@ import { PostgresCustomerIdentityRepository } from './repository';
 import { customerTestFixture } from './test-fixture';
 import type { CustomerSession } from './port';
 import type { PhoneVerificationTransport } from '../../../apps/api/src/modules/customer-identity/phone-verification.port';
+import type { CustomerProtectionRequest, CustomerProtectionResponse } from '@sm/contracts';
+import { customerPasskeyFixture } from '../../../apps/api/src/modules/customer-identity/customer-passkey.test-fixture';
 
 // Provider is deliberately simulated; only persistence/transactions are real.
 // These tests neither send an OTP nor establish live Twilio entitlement.
@@ -16,13 +18,17 @@ const crypto = new CustomerIdentityCrypto(Buffer.alloc(32, 22).toString('base64'
 
 integration('customer use cases with real PostgreSQL and simulated Verify', () => {
   let database: Awaited<ReturnType<typeof customerTestFixture>>;
+  let keys: Awaited<ReturnType<typeof customerPasskeyFixture>>;
   let CustomerIdentityService: typeof import('../../../apps/api/src/modules/customer-identity/customer-identity.service').CustomerIdentityService;
   beforeAll(async () => {
     ({ CustomerIdentityService } = await import('../../../apps/api/src/modules/customer-identity/customer-identity.service'));
     database = await customerTestFixture(process.env.CUSTOMER_TEST_DATABASE_URL);
   }, 20_000);
-  afterAll(async () => { await database?.close(); });
+  afterAll(async () => { try { await keys?.close(); } finally { await database?.close(); } });
   async function fixture() {
+    // Each case has an independent native authenticator/document, like a new
+    // device. Never accumulate resident credentials or browser prompt quotas.
+    await keys?.close(); keys = await customerPasskeyFixture('https://customer.fixture');
     const tenantRef = `tenant_${randomUUID()}`;
     const parentRef = `AC${randomUUID().replaceAll('-', '')}`;
     const serviceSid = `VA${randomUUID().replaceAll('-', '')}`;
@@ -54,7 +60,29 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
       clientIp: '127.0.0.1', humanVerified: true };
     const check = (challengeId: string) => ({ tenantRef, operationId, intentProof: INTENT_PROOF, challengeId, checkId: randomUUID(),
       browserRef, browserSecret: BROWSER, code: '123456', existingSessionToken: null });
-    return { tenantRef, parentRef, browserRef, service, repository, transport, start, check, config };
+    async function prepareProtection(checked: ReturnType<typeof check>) {
+      const selected = { operationId, checkId: checked.checkId };
+      const call = (request: CustomerProtectionRequest) => service.protection({ tenantRef, browserRef, browserSecret: BROWSER,
+        intentProof: INTENT_PROOF, origin: 'https://customer.fixture', request });
+      const registrationId = randomUUID(), assertionId = randomUUID(), activationId = randomUUID();
+      const registration = await call({ ...selected, step: 'registration-options', registrationId });
+      if (registration.state !== 'registration-options') throw new Error('Expected registration options');
+      await call({ ...selected, step: 'register', registrationId, response: await keys.register(registration.options) });
+      const assertion = await call({ ...selected, step: 'assertion-options', assertionId });
+      if (assertion.state !== 'assertion-options') throw new Error('Expected assertion options');
+      await call({ ...selected, step: 'assert', assertionId, response: await keys.authenticate(assertion.options) });
+      const recovery = await call({ ...selected, step: 'recovery-code', rotationId: randomUUID(), expectedVersion: 0 });
+      if (recovery.state !== 'recovery-code' || !recovery.code) throw new Error('Expected one-time recovery display');
+      const activate = { ...selected, step: 'activate' as const, activationId, recoveryVersion: recovery.enrollment.recoveryVersion, code: recovery.code };
+      const requireSession = (result: CustomerProtectionResponse) => {
+        if (result.state !== 'authenticated') throw new Error('Expected protected account activation');
+        return result;
+      };
+      return { activationId, activate: async () => requireSession(await call(activate)),
+        recover: async () => requireSession(await call({ ...selected, step: 'activation-result', activationId })),
+        selection: { expectedOperationId: operationId, expectedCheckId: activationId } };
+    }
+    return { tenantRef, parentRef, browserRef, service, repository, transport, start, check, config, prepareProtection };
   }
 
   it('replays an admission after a lost response, despite a fresh server candidate UUID', async () => {
@@ -69,11 +97,13 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     const f = await fixture();
     const pending = await f.service.start(f.start);
     const check = f.check(pending.challengeId);
-    const first = await f.service.check(check);
-    expect(await f.service.check(check)).toEqual(first);
+    const provisional = await f.service.check(check);
+    expect(provisional.state).toBe('enrollment');
+    expect(await f.service.check(check)).toEqual(provisional);
     expect(f.transport.check).toHaveBeenCalledTimes(1);
+    const protection = await f.prepareProtection(check), first = await protection.activate();
     expect(first.view.profile).toMatchObject({ name: null, phoneE164: PHONE, revision: 0 });
-    const selection = { expectedOperationId: check.operationId, expectedCheckId: check.checkId };
+    const selection = protection.selection;
     const updated = await f.service.updateName({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token, name: 'Mina', expectedRevision: 0 });
     expect(updated.profile).toMatchObject({ name: 'Mina', revision: 1 });
     expect((await f.service.session({ ...selection, tenantRef: f.tenantRef, browserRef: f.browserRef, browserSecret: BROWSER, token: first.token })).profile).toEqual(updated.profile);
@@ -88,17 +118,19 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     expect(role.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
     const f = await fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
     const committed: { session: CustomerSession | null } = { session: null };
-    const complete = f.repository.completeCheck.bind(f.repository);
-    vi.spyOn(f.repository, 'completeCheck').mockImplementationOnce(async input => {
+    await f.service.check(check);
+    const protection = await f.prepareProtection(check);
+    const complete = f.repository.activateEnrollment.bind(f.repository);
+    vi.spyOn(f.repository, 'activateEnrollment').mockImplementationOnce(async input => {
       committed.session = await complete(input); // Real PostgreSQL COMMIT finishes before the simulated loss.
       throw new Error('fixture response lost after commit');
     });
-    await expect(f.service.check(check)).rejects.toMatchObject({ reason: 'unavailable' });
+    await expect(protection.activate()).rejects.toMatchObject({ reason: 'unavailable' });
     expect(committed.session !== null).toBe(true);
-    const { tenantRef, challengeId, checkId, browserRef, browserSecret, operationId, intentProof } = check;
+    const { tenantRef, checkId, browserRef, browserSecret, operationId, intentProof } = check;
     const receipt = { tenantRef, operationId, intentProof, checkId, browserRef, browserSecret };
     const claim = vi.spyOn(f.repository, 'claimCheck');
-    const completionCalls = vi.mocked(f.repository.completeCheck).mock.calls.length;
+    const completionCalls = vi.mocked(f.repository.activateEnrollment).mock.calls.length;
     f.transport.start.mockClear(); f.transport.check.mockClear();
     // Credit freshness authorizes a new provider operation, not reading a committed private receipt.
     f.config.evidence.observedAt = Date.now() - 86_400_000;
@@ -110,18 +142,16 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
       expect(denied).toBe(true);
     }
     expect((await f.service.recover({ ...receipt, checkId: randomUUID() })).state).toBe('unresolved');
-    const recovered = await f.service.recover(receipt);
-    if (recovered.state !== 'approved') throw new Error('Approved fixture expected');
-    expect(recovered.token === crypto.tokenForIntentCheck(tenantRef, browserSecret, operationId, intentProof, challengeId, checkId)).toBe(true);
-    expect(recovered.state).toBe('approved');
+    const recovered = await protection.recover();
+    expect(recovered.token === crypto.tokenForProtectedPublication(tenantRef, browserSecret, operationId, intentProof, 'passkey', protection.activationId)).toBe(true);
+    expect(recovered.state).toBe('authenticated');
     expect((await database.admin.query('SELECT id FROM customer.sessions WHERE tenant_ref=$1', [tenantRef])).rows[0].id === committed.session?.sessionId).toBe(true);
     expect(recovered.view.expiresAt).toBe(committed.session?.expiresAt);
-    const repeated = await f.service.recover(receipt);
-    if (repeated.state !== 'approved') throw new Error('Approved fixture expected');
+    const repeated = await protection.recover();
     expect(repeated.token === recovered.token).toBe(true);
     expect(repeated.view.expiresAt).toBe(recovered.view.expiresAt);
     expect(claim.mock.calls.length).toBe(0);
-    expect(vi.mocked(f.repository.completeCheck).mock.calls.length).toBe(completionCalls);
+    expect(vi.mocked(f.repository.activateEnrollment).mock.calls.length).toBe(completionCalls);
     expect(f.transport.start.mock.calls.length + f.transport.check.mock.calls.length).toBe(0);
     const rows = await database.admin.query(`SELECT
       (SELECT count(*)::int FROM customer.accounts WHERE tenant_ref=$1) AS accounts,
@@ -141,18 +171,21 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     const untouched = await database.admin.query('SELECT state,checks_used FROM customer.challenges WHERE tenant_ref=$1 AND id=$2', [tenantRef, challengeId]);
     expect(untouched.rows[0]).toEqual({ state: 'pending', checks_used: 0 });
     const first = await f.service.check(check);
-    expect(first.view.expiresAt > Date.now()).toBe(true);
+    expect(first.state).toBe('enrollment');
+    if (first.state !== 'enrollment') throw new Error('Expected provisional registration');
+    expect(first.enrollment.expiresAt > Date.now()).toBe(true);
     expect(f.transport.check.mock.calls.length).toBe(1);
   });
 
   it.each([false, true])('recover never revives a revoked session (all=%s)', async all => {
     const f = await fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
-    const first = await f.service.check(check);
-    const { tenantRef, checkId, browserRef, browserSecret, operationId, intentProof } = check;
-    await f.service.logout({ expectedOperationId: operationId, expectedCheckId: checkId, tenantRef, browserRef, browserSecret, token: first.token, all });
+    await f.service.check(check);
+    const protection = await f.prepareProtection(check), first = await protection.activate();
+    const { tenantRef, browserRef, browserSecret } = check;
+    await f.service.logout({ ...protection.selection, tenantRef, browserRef, browserSecret, token: first.token, all });
     const claim = vi.spyOn(f.repository, 'claimCheck'); const complete = vi.spyOn(f.repository, 'completeCheck');
     f.transport.start.mockClear(); f.transport.check.mockClear();
-    expect((await f.service.recover({ tenantRef, operationId, intentProof, checkId, browserRef, browserSecret })).state).toBe('failed');
+    await expect(protection.recover()).rejects.toBeDefined();
     expect(claim.mock.calls.length + complete.mock.calls.length).toBe(0);
     expect(f.transport.start.mock.calls.length + f.transport.check.mock.calls.length).toBe(0);
     const rows = await database.admin.query('SELECT count(*)::int AS n FROM customer.sessions WHERE tenant_ref=$1', [tenantRef]);
@@ -165,15 +198,20 @@ integration('customer use cases with real PostgreSQL and simulated Verify', () =
     await expect(f.service.check({ ...check, browserSecret: Buffer.alloc(32, 1).toString('base64url') })).rejects.toMatchObject({ reason: 'unauthorized' });
     await expect(f.service.check({ ...check, tenantRef: 'other-tenant' })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.transport.check).not.toHaveBeenCalled();
-    const access = await f.service.check(check);
-    await expect(f.service.session({ expectedOperationId: check.operationId, expectedCheckId: check.checkId, tenantRef: 'other-tenant', browserRef: f.browserRef, browserSecret: BROWSER, token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await f.service.check(check);
+    const protection = await f.prepareProtection(check), access = await protection.activate();
+    await expect(f.service.session({ ...protection.selection, tenantRef: 'other-tenant', browserRef: f.browserRef, browserSecret: BROWSER, token: access.token })).rejects.toMatchObject({ reason: 'unauthorized' });
   });
 
-  it('single-flights concurrent approval and creates exactly one account/session', async () => {
+  it('single-flights concurrent OTP approval, then activates exactly one account/session', async () => {
     const f = await fixture(); const pending = await f.service.start(f.start); const check = f.check(pending.challengeId);
     const results = await Promise.allSettled([f.service.check(check), f.service.check(check)]);
     expect(results.some(result => result.status === 'fulfilled')).toBe(true);
     expect(f.transport.check).toHaveBeenCalledTimes(1);
+    expect((await database.admin.query('SELECT count(*)::int AS n FROM customer.sessions WHERE tenant_ref=$1', [f.tenantRef])).rows[0].n).toBe(0);
+    const protection = await f.prepareProtection(check);
+    const activations = await Promise.allSettled([protection.activate(), protection.activate()]);
+    expect(activations.some(result => result.status === 'fulfilled')).toBe(true);
     expect((await database.admin.query('SELECT count(*)::int AS n FROM customer.sessions WHERE tenant_ref=$1', [f.tenantRef])).rows[0].n).toBe(1);
     expect((await database.admin.query('SELECT count(*)::int AS n FROM customer.accounts WHERE tenant_ref=$1', [f.tenantRef])).rows[0].n).toBe(1);
   });

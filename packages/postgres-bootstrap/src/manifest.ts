@@ -19,6 +19,7 @@ export const CUSTOMER_BROWSER_CONTINUITY_MIGRATION = 1_788_870_000_000;
 export const CUSTOMER_BROWSER_PREPARATION_MIGRATION = 1_788_894_000_000;
 export const CUSTOMER_VERIFICATION_INTENTS_MIGRATION = 1_788_901_200_000;
 export const CUSTOMER_SESSION_PUBLICATIONS_MIGRATION = 1_788_908_400_000;
+export const CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION = 1_788_915_600_000;
 
 const managed = (
   kind: ManagedObjectKind,
@@ -187,6 +188,18 @@ export const POSTGRES_MANAGED_OBJECTS: readonly ManagedObject[] = [
   introduced('function', 'customer', 'preserve_verification_intent', 'customer', CUSTOMER_VERIFICATION_INTENTS_MIGRATION),
   introduced('table', 'customer', 'session_publications', 'customer', CUSTOMER_SESSION_PUBLICATIONS_MIGRATION),
   introduced('function', 'customer', 'preserve_session_publication', 'customer', CUSTOMER_SESSION_PUBLICATIONS_MIGRATION),
+  ...['registration_enrollments', 'passkey_credentials', 'recovery_codes'].map((name) =>
+    introduced('table', 'customer', name, 'customer', CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION),
+  ),
+  ...[
+    'preserve_registration_enrollment',
+    'guard_account_enrollment',
+    'preserve_passkey_credential',
+    'preserve_recovery_code',
+    'preserve_check_outcome',
+  ].map((name) =>
+    introduced('function', 'customer', name, 'customer', CUSTOMER_PROTECTED_ENROLLMENT_MIGRATION),
+  ),
 ] as const;
 
 export const JOURNALS: Readonly<

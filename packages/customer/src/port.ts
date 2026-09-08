@@ -1,3 +1,4 @@
+import type { CustomerCheckCompletion, CustomerEnrollment, CustomerEnrollmentRepository } from './enrollment-port';
 /** Private consumer identity, independent of staff users and loyalty cards.
  * All dates are server epoch milliseconds. No browser supplies a tenant, parent
  * account, verified phone, quota plan or account identity to this boundary. */
@@ -20,6 +21,7 @@ type IntentResultBase = { operationId: string; checkId: string | null; challenge
 export type CustomerIntentResult = IntentResultBase & (
   | { state: 'unresolved' | 'code_required' | 'incorrect' | 'closed' | 'expired' | 'failed' }
   | { state: 'approved'; session: CustomerSession | null }
+  | { state: 'enrollment'; enrollment: CustomerEnrollment }
 );
 export type CustomerProfile = {
   accountId: string;
@@ -112,7 +114,7 @@ export type CheckResult = 'approved' | 'pending' | 'expired' | 'locked' | 'uncer
  * Every successful reservation remains spent, including a failed/lost send.
  * Check claims must be single-flight: expired leases NEVER re-execute a remote
  * check whose outcome may have been approved. No raw token, OTP or phone here. */
-export interface CustomerIdentityRepository {
+export interface CustomerIdentityRepository extends CustomerEnrollmentRepository {
   prepareBrowser(input: CustomerScope & { browserRef: string }): Promise<CustomerBrowserPreparation | null>;
   issueBrowser(input: CustomerBrowserBinding & { currentBrowserHash: string | null }): Promise<{
     preparation: CustomerBrowserPreparation; emitCookie: boolean;
@@ -132,7 +134,7 @@ export interface CustomerIdentityRepository {
     now: number;
   }): Promise<PendingChallenge | null>;
   claimCheck(input: CheckClaim): Promise<PendingChallenge | null>;
-  recoverCheck(input: CheckClaim & { sessionHash: string }): Promise<CustomerSession | null>;
+  recoverCheck(input: CheckClaim & { sessionHash: string }): Promise<CustomerCheckCompletion | null>;
   completeCheck(input: CheckClaim & {
     result: CheckResult;
     sessionId: string;
@@ -142,7 +144,7 @@ export interface CustomerIdentityRepository {
     /** Existing accounts need continuity proof, never a loyalty QR or just a
      * matching unverified/recycled phone. Null permits first enrollment only. */
     existingSessionHash: string | null;
-  }): Promise<CustomerSession | null>;
+  }): Promise<CustomerCheckCompletion | null>;
   authenticate(input: CustomerBrowserBinding & CustomerSessionSelection & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
   updateName(input: CustomerScope & CustomerSessionSelection & {
     browserRef: string;

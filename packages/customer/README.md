@@ -61,13 +61,16 @@ de test. Aucun renvoi ne libère automatiquement un check resté incertain.
 
 Le SID fournisseur est une preuve immuable `(parent, service, SID)` ; un checkId
 ne s'exécute qu'une fois. Seule une réponse `pending` certaine permet un autre
-checkId. L'approbation consomme atomiquement challenge, contact, compte et session.
+checkId. Depuis `0006`, une première approbation ne crée qu'une inscription
+provisoire, jamais un compte/contact/session. La continuité d'un compte déjà
+authentifié reste distincte et peut produire une session `phone`.
 Une collision téléphone exige une session de continuité valide du même compte ;
 le téléphone seul ne récupère aucun compte. L'unicité tenant/téléphone empêche
 aussi un doublon après changement de parent fournisseur, sans divulguer l'ancien
 compte. Une migration de parent relève d'une procédure explicite non livrée ici.
 
-`recoverCheck` ne restitue qu'une session originale encore valide, corrélée au
+`recoverCheck` distingue une inscription provisoire encore ouverte d'une session
+originale de continuité encore valide, corrélée au
 browserHash, operationId, preuve d'intention, challengeId, checkId, empreinte du
 corps et sessionHash exacts. Aucune extension de TTL.
 Les expirations sont relues après attente des verrous. Un rollback échoué détruit
@@ -93,7 +96,7 @@ validité ne dépend pas de la courte expiration de la preuve de reprise.
 `0005_customer_session_publications` matérialise le reçu commun immuable
 `phone | passkey | recovery`, lié à la session, à son navigateur/génération et à
 l'intention exacte. Ce repository ne vérifie aucune passkey et ne permet encore
-aucune récupération par code secours. L'approbation OTP écrit ce reçu dans la même transaction ;
+aucune récupération par code secours. Toute publication écrit ce reçu dans la même transaction ;
 les lectures privées, les modifications et la clôture ne fabriquent plus de
 challenge Verify pour représenter une publication.
 
@@ -112,9 +115,44 @@ restera inerte pour le nouveau code. Retour au code précédent uniquement pilot
 fermé, sans down migration ni suppression de reçu.
 
 Le helper `recovery-code` génère un code CSPRNG de 128 bits et une empreinte HMAC
-séparée, liée au parent/tenant. Il ne stocke ni n'active aucun code : confirmation
-de sauvegarde, version active, consommation unique et publication atomique
-restent au futur protocole métier. Voir [le parcours clés d'accès](../../docs/strategie-commerce-2026-09/COMPTE-CLES-ACCES.md).
+séparée, liée au parent/tenant. La primitive ne publie rien à elle seule.
+Voir [le parcours clés d'accès](../../docs/strategie-commerce-2026-09/COMPTE-CLES-ACCES.md).
+
+## Inscription protégée — 0006
+
+La preuve privée de l'intention n'autorise que les étapes provisoires. Le reçu
+OTP terminal `verified` pointe vers `registration_enrollments` et ne devient
+jamais `approved`. Il n'occupe pas l'unicité du contact : une inscription
+abandonnée ne crée aucun ancien compte récupérable par téléphone.
+
+Les options registration/assertion sont persistées avant le vérificateur, avec
+origine/RP exacts, challenge unique et userHandle opaque. Les lectures de
+vérification ne créent rien ; le compteur original reste disponible après une
+réponse perdue. Le port reçoit exclusivement les résultats du vérificateur API,
+pas une assertion de confiance fournie directement par le navigateur.
+
+Une vraie assertion après registration est nécessaire avant émission du secours.
+Trois versions au maximum, rotation explicite CAS, empreintes seules ; une
+reprise ne réémet aucun code clair. Le premier essai d'activation fixe un unique
+activationId. Cinq confirmations incorrectes au maximum sont comptées en SQL ;
+une correction explicite conserve cet ID. Aucune rotation après ce premier
+essai, et seul un succès conserve l'empreinte de la confirmation. Tous les
+délais restent ceux de l'intention initiale (dix minutes au total, sans renouvellement).
+
+L'activation crée compte/contact/clé/code confirmé/session/publication dans une
+seule transaction, avance la génération et consomme l'intention. Une contrainte
+différée refuse un compte partiellement activé même au COMMIT. La publication
+est `passkey`, liée à l'activationId, jamais à un faux check Verify. La reprise
+exacte ne renouvelle pas la session ; une publication ultérieure ou déconnexion
+la rend inerte. La session active reste valable après les dix minutes, selon ses
+propres sept jours absolus et la préparation navigateur.
+
+La migration ne réécrit aucun compte historique : son `enrollment_id` reste NULL.
+Un nouvel INSERT sans cette référence échoue, y compris celui du writer 0005.
+Déployer pilote fermé et remplacer toutes les instances avant réouverture ; un
+rollback applicatif reste fermé, sans down migration ni suppression des preuves.
+Reconnexion par clé et consommation du secours ne sont pas encore implémentées
+par ce lot PostgreSQL ; il ne constitue pas un parcours public complet.
 
 Plafonds conservateurs du pilote : 128 préparations et 128 intentions persistées
 par parent/restaurant ; trois preuves d'intention non expirées par navigateur,

@@ -137,7 +137,9 @@ async function upstream(url: string, init: RequestInit) {
     intent.result = 'approved'; intent.token = randomBytes(32).toString('base64url');
     intent.view = { expiresAt: Date.now() + 604_800_000,
       profile: { name: 'Fixture profile', phoneE164: '+33600000000', phoneVerifiedAt: Date.now() - 1_000, revision: 0 } };
-    return Response.json({ token: intent.token, view: intent.view });
+    // Wire fixture for permitted legacy continuity, not proof of its account
+    // authorization. New enrollment is covered separately and emits no token.
+    return Response.json({ state: 'authenticated', token: intent.token, view: intent.view });
   }
   const recover = CustomerAccountEnvelopes.recover.parse(input).request;
   const result = { operationId: intent.operationId, checkId: recover.checkId, challengeId: intent.challengeId, expiresAt: intent.expiresAt };

@@ -36,7 +36,7 @@ function resolvesTo(slug: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("routes privées compte client sur domaine restaurant", () => {
-  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'session', 'profil'])(
+  it.each(['capacites', 'navigateur', 'intention', 'verification', 'confirmation', 'resultat', 'protection', 'session', 'profil'])(
     'autorise uniquement le point d’entrée exact %s du restaurant', async action => {
       resolvesTo('classfood');
       const response = await proxy(request(`/r/classfood/compte/${action}`, `compte-${action}.example`, { 'sec-fetch-mode': 'cors' }));

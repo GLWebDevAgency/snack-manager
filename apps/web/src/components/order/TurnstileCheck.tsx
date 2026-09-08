@@ -2,7 +2,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BrandMode } from "@sm/contracts";
+import { CUSTOMER_ACCOUNT_TURNSTILE_ACTION, customerAccountTurnstileData, type BrandMode } from "@sm/contracts";
 import { cx } from "@/lib/cx";
 import { Icon } from "@/components/ui";
 import { Spinner } from "./primitives";
@@ -61,6 +61,7 @@ export function TurnstileCheck({
   mode,
   resetKey,
   onToken,
+  customerOperationId,
 }: {
   siteKey: string;
   tenantSlug: string;
@@ -69,6 +70,8 @@ export function TurnstileCheck({
   /** Change après chaque tentative : un jeton Turnstile est à usage unique. */
   resetKey: number;
   onToken: (token: string | null) => void;
+  /** Separate account action and operation binding; never reuse an order token. */
+  customerOperationId?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
@@ -95,8 +98,8 @@ export function TurnstileCheck({
     try {
       widget.current = window.turnstile.render(container.current, {
         sitekey: siteKey,
-        action: "public-order",
-        cData: tenantSlug,
+        action: customerOperationId ? CUSTOMER_ACCOUNT_TURNSTILE_ACTION : "public-order",
+        cData: customerOperationId ? customerAccountTurnstileData(tenantSlug, customerOperationId) : tenantSlug,
         theme: mode === "dark" ? "dark" : "light",
         language: "fr",
         size: "flexible",
@@ -106,22 +109,27 @@ export function TurnstileCheck({
         "refresh-timeout": "auto",
         "response-field": false,
         callback: (token) => {
+          if (!active) return;
           onToken(token);
           setState("verified");
         },
         "expired-callback": () => {
+          if (!active) return;
           onToken(null);
           setState("ready");
         },
         "timeout-callback": () => {
+          if (!active) return;
           onToken(null);
           setState("ready");
         },
         "error-callback": () => {
+          if (!active) return;
           onToken(null);
           setState("error");
         },
         "unsupported-callback": () => {
+          if (!active) return;
           onToken(null);
           setState("unsupported");
         },
@@ -139,7 +147,7 @@ export function TurnstileCheck({
       active = false;
       removeWidget();
     };
-  }, [mode, onToken, removeWidget, resetKey, scriptReady, siteKey, tenantSlug]);
+  }, [mode, onToken, removeWidget, resetKey, scriptReady, siteKey, tenantSlug, customerOperationId]);
 
   const verified = state === "verified";
   const failed = state === "error" || state === "unsupported";
@@ -147,14 +155,14 @@ export function TurnstileCheck({
     ? "Vérification réussie"
     : failed
       ? "Vérification indisponible"
-      : "Sécurisation de la commande…";
+      : customerOperationId ? "Sécurisation de votre inscription…" : "Sécurisation de la commande…";
   const detail = verified
-    ? "Vous pouvez maintenant confirmer votre commande."
+    ? customerOperationId ? "Vous pouvez demander votre code SMS." : "Vous pouvez maintenant confirmer votre commande."
     : state === "unsupported"
-      ? "Ce navigateur ne permet pas la vérification. Appelez le restaurant pour commander."
+      ? customerOperationId ? "Ce navigateur ne permet pas la vérification. La commande en invité reste disponible." : "Ce navigateur ne permet pas la vérification. Appelez le restaurant pour commander."
       : state === "error"
         ? "La protection anti-robot ne répond pas. Vérifiez votre réseau puis réessayez."
-        : "Un contrôle anti-robot discret protège le restaurant des faux tickets.";
+        : customerOperationId ? "Un contrôle anti-robot protège l’envoi de votre code." : "Un contrôle anti-robot discret protège le restaurant des faux tickets.";
 
   return (
     <section

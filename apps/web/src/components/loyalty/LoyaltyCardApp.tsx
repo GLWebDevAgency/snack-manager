@@ -648,7 +648,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           surfaces se répondent. */}
       <main className="mx-auto w-full max-w-[1080px] px-4 pt-6">
         {slug !== 'demo' && <div className="mb-5 flex justify-end">
-          <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} returnLabel="Revenir à la fidélité" />
+          <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} mode={catalog.restaurant.brand.mode} returnLabel="Revenir à la fidélité" />
         </div>}
         {erreur && (
           <div className="mb-6 rounded-card border border-alert/35 bg-alert/10 p-4">

@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { confirmCustomerTestBrowser, prepareCustomerTestIntent } from './browser-test-fixture';
+import { completeCustomerTestAccount } from './enrollment-test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
 import type { VerificationReservation } from './port';
 import { CustomerRepositoryError, withCustomerScope } from './client';
@@ -31,22 +32,27 @@ integration('shared session publication — real PostgreSQL', () => {
     expect((await repo.reserve(r)).kind).toBe('reserved');
     await repo.settleSend({ ...r, verificationSid: `VE${hash().slice(0, 32)}` });
     const claim = { ...r, requestHash: hash(), checkId: randomUUID() }; await repo.claimCheck(claim);
-    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: claim.checkId,
+    return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: randomUUID(),
       result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(), accountId: randomUUID(),
       existingSessionHash: null, sessionExpiresAt: Date.now() + 604_800_000 };
   }
 
-  it('records one immutable phone publication in the same approval transaction and replays only that session', async () => {
-    const input = await approval(); const result = await repo.completeCheck(input); expect(result).not.toBeNull();
-    expect(await repo.completeCheck(input)).toEqual(result);
+  it('records one immutable protected publication in the activation transaction and replays only that session', async () => {
+    const input = await approval(); const result = await completeCustomerTestAccount(repo, input); expect(result).not.toBeNull();
+    expect(await completeCustomerTestAccount(repo, input)).toEqual(result);
+    expect(input.expectedCheckId).not.toBe(input.checkId);
     expect((await f.admin.query(`SELECT session_id,operation_id,check_id,browser_ref,browser_hash,browser_generation,method
       FROM customer.session_publications WHERE parent_ref=$1`, [input.parentRef])).rows).toEqual([{
-      session_id: input.sessionId, operation_id: input.operationId, check_id: input.checkId, browser_ref: input.browserRef,
-      browser_hash: input.browserHash, browser_generation: '1', method: 'phone',
+      session_id: input.sessionId, operation_id: input.operationId, check_id: input.expectedCheckId, browser_ref: input.browserRef,
+      browser_hash: input.browserHash, browser_generation: '1', method: 'passkey',
     }]);
+    expect((await f.admin.query('SELECT state,enrollment_id,session_id FROM customer.check_attempts WHERE id=$1', [input.checkId])).rows)
+      .toEqual([{ state: 'verified', enrollment_id: input.checkId, session_id: null }]);
+    expect(await repo.authenticate({ ...input, expectedCheckId: input.checkId })).toBeNull();
+    expect((await repo.authenticate(input))?.sessionId).toBe(input.sessionId);
   });
 
-  it('rolls back approval, account and session if writing the publication receipt fails', async () => {
+  it('rolls back protected activation, account and session if writing the publication receipt fails', async () => {
     const input = await approval();
     const interposed = { connect: async () => {
       const client = await f.app.connect();
@@ -55,18 +61,22 @@ integration('shared session publication — real PostgreSQL', () => {
         return client.query(sql, params);
       }, release: client.release.bind(client) };
     } } as unknown as Pool;
-    await expect(new PostgresCustomerIdentityRepository(interposed).completeCheck(input)).rejects.toBeInstanceOf(CustomerRepositoryError);
-    for (const table of ['accounts', 'sessions', 'session_publications']) {
+    await expect(completeCustomerTestAccount(new PostgresCustomerIdentityRepository(interposed), input)).rejects.toBeInstanceOf(CustomerRepositoryError);
+    for (const table of ['accounts', 'sessions', 'session_publications', 'passkey_credentials', 'recovery_codes']) {
       expect((await f.admin.query(`SELECT 1 FROM customer.${table} WHERE parent_ref=$1`, [input.parentRef])).rowCount).toBe(0);
     }
-    expect((await f.admin.query('SELECT state FROM customer.check_attempts WHERE id=$1', [input.checkId])).rows[0].state).toBe('checking');
+    expect((await f.admin.query('SELECT state,enrollment_id,session_id FROM customer.check_attempts WHERE id=$1', [input.checkId])).rows[0])
+      .toEqual({ state: 'verified', enrollment_id: input.checkId, session_id: null });
+    expect((await f.admin.query('SELECT activated_at,activation_id,activation_intent_id,failed_confirmations,session_id,activation_attempts FROM customer.registration_enrollments WHERE id=$1', [input.checkId])).rows[0])
+      .toEqual({ activated_at: null, activation_id: null, activation_intent_id: null, failed_confirmations: 0, session_id: null, activation_attempts: [] });
+    expect((await f.admin.query('SELECT state FROM customer.verification_intents WHERE operation_id=$1', [input.operationId])).rows[0].state).toBe('open');
     expect((await f.admin.query('SELECT generation,current_session_id FROM customer.browser_contexts WHERE parent_ref=$1', [input.parentRef])).rows[0])
       .toEqual({ generation: '0', current_session_id: null });
     expect((await f.admin.query('SELECT reserved_sends FROM customer.parent_budgets WHERE parent_ref=$1', [input.parentRef])).rows[0].reserved_sends).toBe('1');
   });
 
   it('enforces both scopes, immutable fields and exact session/browser/intention foreign keys', async () => {
-    const input = await approval(); await repo.completeCheck(input);
+    const input = await approval(); expect(await completeCustomerTestAccount(repo, input)).not.toBeNull();
     expect((await f.app.query('SELECT 1 FROM customer.session_publications')).rowCount).toBe(0);
     for (const scope of [{ ...input, parentRef: 'foreign' }, { ...input, tenantRef: 'foreign' }]) {
       expect(await withCustomerScope(f.app, scope, async client => (await client.query('SELECT 1 FROM customer.session_publications')).rowCount)).toBe(0);
@@ -95,17 +105,19 @@ integration('shared session publication — real PostgreSQL', () => {
       .rejects.toBeInstanceOf(CustomerRepositoryError);
   });
 
-  it.each(['passkey', 'recovery'] as const)('uses a %s fixture publication without any fake Verify challenge', async method => {
+  it.each(['passkey', 'recovery'] as const)('uses a %s fixture publication for a protected account without adding a Verify challenge', async method => {
     // This fixture proves the shared publication boundary, NOT a passkey/code verifier.
-    const browser = { parentRef: `p_${hash()}`, tenantRef: `t_${hash()}`, browserRef: randomUUID(), browserHash: hash() };
+    const enrolled = await approval();
+    const account = await completeCustomerTestAccount(repo, enrolled); expect(account).not.toBeNull();
+    const unchangedTables = ['challenges', 'check_attempts', 'parent_budgets', 'reservations',
+      'registration_enrollments', 'passkey_credentials', 'recovery_codes'];
+    const snapshot = () => Promise.all(unchangedTables.map(async table =>
+      (await f.admin.query(`SELECT * FROM customer.${table} WHERE parent_ref=$1`, [enrolled.parentRef])).rows));
+    const before = await snapshot();
+    const browser = { parentRef: enrolled.parentRef, tenantRef: enrolled.tenantRef, browserRef: randomUUID(), browserHash: hash() };
     const a = { ...browser, operationId: randomUUID(), proofHash: hash() };
     await confirmCustomerTestBrowser(repo, a); await prepareCustomerTestIntent(repo, a);
-    await f.admin.query(`INSERT INTO customer.parent_budgets(parent_ref,send_limit,sms_limit,verification_limit)
-      VALUES($1,50,100,100)`, [a.parentRef]);
-    const accountId = randomUUID();
-    await f.admin.query('INSERT INTO customer.accounts(id,parent_ref,tenant_ref) VALUES($1,$2,$3)', [accountId, a.parentRef, a.tenantRef]);
-    await f.admin.query(`INSERT INTO customer.verified_contacts(parent_ref,tenant_ref,account_id,phone_hash,encrypted_phone)
-      VALUES($1,$2,$3,$4,'fixture')`, [a.parentRef, a.tenantRef, accountId, hash()]);
+    const accountId = account!.profile.accountId;
     await f.admin.query('INSERT INTO customer.browser_contexts(parent_ref,tenant_ref,browser_hash) VALUES($1,$2,$3)', [a.parentRef, a.tenantRef, a.browserHash]);
     async function publish(i: typeof a, generation: number) {
       const p: SessionPublication = { ...i, sessionId: randomUUID(), checkId: randomUUID(), method };
@@ -131,7 +143,8 @@ integration('shared session publication — real PostgreSQL', () => {
     await repo.revoke({ ...wrong, all: true }); expect(await repo.authenticate(second)).toEqual(current);
     expect((await repo.updateName({ ...second, encryptedName: 'fixture-name', expectedRevision: 0 }))?.profile.revision).toBe(1);
     await close(b); expect(await repo.authenticate(second)).toBeNull();
-    expect((await f.admin.query('SELECT 1 FROM customer.challenges WHERE parent_ref=$1', [a.parentRef])).rowCount).toBe(0);
-    expect((await f.admin.query('SELECT 1 FROM customer.check_attempts WHERE parent_ref=$1', [a.parentRef])).rowCount).toBe(0);
+    expect((await f.admin.query('SELECT 1 FROM customer.challenges WHERE parent_ref=$1', [a.parentRef])).rowCount).toBe(1);
+    expect((await f.admin.query('SELECT 1 FROM customer.check_attempts WHERE parent_ref=$1', [a.parentRef])).rowCount).toBe(1);
+    expect(await snapshot()).toEqual(before);
   });
 });

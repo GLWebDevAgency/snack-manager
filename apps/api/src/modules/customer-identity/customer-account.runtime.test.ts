@@ -31,7 +31,7 @@ function fixture(paid = false) {
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
     recoverCheck: vi.fn<CustomerIdentityRepository['recoverCheck']>().mockResolvedValue(null),
-    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue(session),
+    completeCheck: vi.fn<CustomerIdentityRepository['completeCheck']>().mockResolvedValue({ kind: 'session', session }),
     authenticate: vi.fn<CustomerIdentityRepository['authenticate']>().mockResolvedValue(session),
     updateName: vi.fn<CustomerIdentityRepository['updateName']>().mockResolvedValue(session),
     revoke: vi.fn<CustomerIdentityRepository['revoke']>().mockResolvedValue(undefined),
@@ -139,7 +139,7 @@ describe('customer runtime tenant and purpose boundary', () => {
   });
   it('does not begin registration when evidence is unavailable, even with active tenant', async () => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}';
-    await expect(f.runtime.execute({ ...f.relay, action: 'status' }, { request: {} })).resolves.toEqual({ available: false });
+    await expect(f.runtime.execute({ ...f.relay, action: 'status' }, { request: {} })).resolves.toEqual({ available: false, registrationAvailable: true, accessAvailable: false });
     await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 503 });
     expect(f.human.verify).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
   });
@@ -157,6 +157,28 @@ describe('customer runtime tenant and purpose boundary', () => {
     expect(f.repository.resultIntent).toHaveBeenCalledTimes(2); expect(f.repository.recoverCheck).not.toHaveBeenCalled(); expect(f.repository.claimCheck).not.toHaveBeenCalled();
     expect(f.repository.completeCheck).not.toHaveBeenCalled(); expect(f.transportFactory).not.toHaveBeenCalled();
     expect(f.human.verify).not.toHaveBeenCalled();
+  });
+  it.each(['protection', 'recover'] as const)('resumes provisional %s without SMS funding, but rejects expiry during the final tenant wait', async action => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const { operationId, checkId } = f.check.request;
+    const initial = Date.now(); let now = initial;
+    const enrollment = { operationId, checkId, expiresAt: initial + 1000,
+      stage: 'registration_required' as const, recoveryVersion: 0 };
+    f.repository.readEnrollment.mockResolvedValue(enrollment);
+    f.repository.resultIntent.mockResolvedValue({ state: 'enrollment', operationId, checkId,
+      challengeId: f.pending.challengeId, expiresAt: enrollment.expiresAt, enrollment });
+    const envelope = { browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, intentProof: f.start.intentProof,
+      request: action === 'protection' ? { step: 'state', operationId, checkId } : { operationId, checkId } };
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      await expect(f.runtime.execute({ ...f.relay, action }, envelope)).resolves.toMatchObject({ state: 'enrollment', enrollment });
+      let reads = 0;
+      f.query.exec.mockImplementation(async () => { if (++reads === 2) now += 1001; return f.row; });
+      await expect(f.runtime.execute({ ...f.relay, action }, envelope)).rejects.toMatchObject({ status: 401 });
+      expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
+      expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.repository.activateEnrollment).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
   });
   it.each(['session', 'name', 'logout'] as const)('keeps %s independent from expiring send evidence', async action => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}'; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
