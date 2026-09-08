@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
 import { createDeliveryAccessClient, type AccessState } from "./access-client";
 import { DeliveryMissions } from "./delivery-missions";
+import { DeliveryInstall } from "./DeliveryInstall";
+import { DeliveryInvitation } from "./DeliveryInvitation";
 
 const MESSAGES: Record<NonNullable<AccessState["reason"]>, string> = {
   invalid: "Ce lien d’invitation est incomplet. Demandez au restaurant de vous le renvoyer.",
@@ -62,7 +64,7 @@ export function DeliveryAccess() {
         <header className="flex items-center justify-between gap-4 border-b border-line pb-5">
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-card border border-accent/25 bg-accentwash text-accentink"><Icon name="truck" size={21} /></span>
-            <div><p className="text-[14px] font-bold tracking-[-0.025em]">Snack Manager</p><p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-mut">Accès livreur</p></div>
+            <div><p className="text-[14px] font-bold tracking-[-0.025em]">SM Livreur</p><p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-mut">Accès restaurant</p></div>
           </div>
           <span className="flex items-center gap-1.5 text-xs text-mut"><span aria-hidden className={`size-1.5 rounded-full ${state.online ? "bg-accent" : "bg-prep"}`} />{state.online ? "Vérification en ligne" : "Hors connexion"}</span>
         </header>
@@ -109,9 +111,11 @@ export function DeliveryAccess() {
             </>}
           </div>
 
+          <DeliveryInvitation state={state} canImport={access.canImportInvitation()} onImport={access.importInvitation} />
           {!state.session && !busy && <div className="mt-7 flex items-start gap-2.5 text-xs leading-5 text-mut"><Icon name="clock" size={16} className="mt-0.5 shrink-0" /><p>{state.hasInvitation ? "Le lien est valable 10 minutes. Gardez cette page ouverte jusqu’à la confirmation." : "Une invitation est personnelle et valable 10 minutes. Votre restaurant peut vous en fournir une nouvelle."}</p></div>}
         </section>
 
+        <DeliveryInstall associated={hasSession} />
         <footer className="mt-auto border-t border-line pt-5 text-[11px] leading-5 text-mut">Un téléphone personnel. Un accès confié par votre restaurant.</footer>
       </div>
     </main>

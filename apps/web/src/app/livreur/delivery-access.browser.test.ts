@@ -13,7 +13,10 @@ import { DELETE, GET, POST } from "./acces/route";
 import { GET as GET_MISSIONS } from "./missions/route";
 import { INVITATION_BOOTSTRAP } from "./invitation-bootstrap";
 
-/** Real component, DS CSS and Next route handlers; only the upstream API is a local fixture. */
+/** Real component, DS CSS and Next route handlers; only the upstream API is a
+ * local fixture. Playwright bridges the browser's HTTPS test origin to loopback
+ * (no DNS/TLS service). This exercises strict invitation URLs without relaxing
+ * the production parser or copying cookies between browser contexts. */
 const invitation = "i".repeat(43);
 const credential = "s".repeat(43);
 const session = { operatorId: "a".repeat(24), name: "Camille Martin", restaurantName: "Restaurant de recette",
@@ -23,6 +26,7 @@ let browser: Browser;
 let context: BrowserContext;
 let page: Page;
 let origin: string;
+let localOrigin: string;
 let exchanges: unknown[];
 let upstreamSession: boolean;
 let firstExchangeUnavailable: boolean;
@@ -81,6 +85,7 @@ beforeAll(async () => {
       if (req.url === "/livreur/acces" || req.url === "/livreur/missions") {
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) if (value) headers.set(key, Array.isArray(value) ? value.join(",") : value);
+        headers.set("host", new URL(origin).host);
         const request = new NextRequest(`${origin}${req.url}`, { method: req.method, headers,
           ...(body ? { body } : {}) });
         const handler = req.url === "/livreur/missions" ? GET_MISSIONS : req.method === "POST" ? POST : req.method === "DELETE" ? DELETE : GET;
@@ -98,9 +103,10 @@ beforeAll(async () => {
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Missing local port");
-  origin = `http://127.0.0.1:${address.port}`;
+  localOrigin = `http://127.0.0.1:${address.port}`;
+  origin = "https://sm-livreur.test";
   vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("NEXT_PUBLIC_API_URL", `${origin}/api`);
+  vi.stubEnv("NEXT_PUBLIC_API_URL", `${localOrigin}/api`);
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", origin);
   browser = await chromium.launch({ headless: true });
   if (process.env.QA_DELIVERY_ACCESS_CAPTURE === "1") evidenceDir = await mkdtemp(join(tmpdir(), "sm-delivery-access-"));
@@ -111,7 +117,18 @@ beforeEach(async () => {
   firstLogoutUnavailable = false; logoutRequests = 0; errors = []; responses = [];
   context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true,
     hasTouch: true, reducedMotion: "reduce", serviceWorkers: "block" });
-  await context.route("**/*", route => route.request().url().startsWith(`${origin}/`) ? route.continue() : route.abort());
+  await context.route("**/*", async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.origin !== origin) return route.abort();
+    // Node fetch has no shared browser cookie jar: only the original request's
+    // Cookie and the real handler's Set-Cookie cross this local transport bridge.
+    const response = await fetch(`${localOrigin}${url.pathname}${url.search}`, {
+      method: request.method(), headers: await request.allHeaders(),
+      body: request.postData() ?? undefined, redirect: "error",
+    });
+    await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) });
+  });
   page = await context.newPage();
   page.setDefaultTimeout(2_500);
   page.on("pageerror", error => errors.push(error.message));
@@ -141,10 +158,35 @@ async function associate() {
 }
 
 describe("accès livreur mobile réel, BFF et API locale", () => {
+  it("importe un lien HTTPS manuellement sans envoyer, puis associe sur un geste distinct et retrouve la session", async () => {
+    await page.goto(`${origin}/livreur`);
+    await page.getByRole("heading", { name: "Votre accès livreur.", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Coller mon invitation", exact: true }).click();
+    const input = page.getByRole("textbox", { name: "Lien d’invitation", exact: true });
+    await input.waitFor();
+    if (evidenceDir) await page.screenshot({ path: join(evidenceDir, "mobile-import-empty.png"), fullPage: true });
+    await input.fill(`${origin}/livreur#invitation=${invitation}`);
+    await page.getByRole("button", { name: "Préparer cette invitation", exact: true }).click();
+    await page.getByRole("heading", { name: "Associez ce téléphone.", exact: true }).waitFor();
+    expect(exchanges).toHaveLength(0);
+    expect(await input.count()).toBe(0);
+    expect(page.url()).toBe(`${origin}/livreur`);
+    expect(await page.locator("body").innerText()).not.toContain(invitation);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length, document.cookie])).toEqual([0, 0, ""]);
+    await associate();
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0]).toMatchObject({ token: invitation });
+    const cookies = await context.cookies(); expect(cookies).toHaveLength(1); expect(cookies[0].httpOnly).toBe(true);
+    if (evidenceDir) await page.screenshot({ path: join(evidenceDir, "mobile-import-associated.png"), fullPage: true });
+    await page.reload();
+    await page.getByRole("heading", { name: "Accès associé.", exact: true }).waitFor();
+    expect(exchanges).toHaveLength(1); expect(await page.evaluate(() => document.cookie)).toBe("");
+  });
+
   it("retire le fragment avant le bundle client et attend une association explicite", async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
-    await page.route("**/delivery.js", async route => { await gate; await route.continue(); });
+    await page.route("**/delivery.js", async route => { await gate; await route.fallback(); });
     const navigating = page.goto(`${origin}/livreur#invitation=${invitation}`);
     try {
       await page.waitForFunction(() => typeof window.__smTakeDeliveryInvitation === "function");
@@ -200,7 +242,7 @@ describe("accès livreur mobile réel, BFF et API locale", () => {
     let requested!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const initialMissions = new Promise<void>(resolve => { requested = resolve; });
-    await page.route("**/livreur/missions", async route => { requested(); await gate; await route.continue(); });
+    await page.route("**/livreur/missions", async route => { requested(); await gate; await route.fallback(); });
     try {
       await openInvitation(); await associate(); await initialMissions;
       expect(await context.cookies()).toHaveLength(1);

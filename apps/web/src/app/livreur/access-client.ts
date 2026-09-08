@@ -9,6 +9,7 @@ const INITIAL: AccessState = { phase: "checking", reason: null, session: null,
   hasInvitation: false, online: true, exchangePending: false, logoutPending: false, signedOut: false };
 
 export type AccessBrowser = {
+  origin: () => string;
   fragment: () => string;
   removeFragment: () => void;
   online: () => boolean;
@@ -31,6 +32,7 @@ export function secureNonce(crypto: Pick<Crypto, "getRandomValues">): string {
 }
 
 const browserPort: AccessBrowser = {
+  origin: () => window.location.origin,
   fragment: capturedInvitation,
   removeFragment: () => window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search),
   online: () => navigator.onLine !== false,
@@ -50,6 +52,7 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
   let captured = false;
   let captureFailure: Reason = null;
   let busy = false;
+  let sessionKnownAbsent = false;
   let revocation = 0;
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<AccessState>) => {
@@ -77,16 +80,17 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
     if (captureFailure) { fail(captureFailure); return; }
     if (!browser.online()) { fail("offline"); return; }
     busy = true;
+    sessionKnownAbsent = false;
     const observedRevocation = revocation;
     publish({ phase: "checking", reason: null, online: true });
     try {
       const session = await readSession();
       if (observedRevocation !== revocation) return;
       if (session && session !== "revoked") connected(session);
-      else if (session === "revoked") { publish({ session: null }); fail("revoked"); }
-      else ready();
+      else if (session === "revoked") { sessionKnownAbsent = true; publish({ session: null }); fail("revoked"); }
+      else { sessionKnownAbsent = true; ready(); }
     } catch { if (observedRevocation === revocation) fail(browser.online() ? "network" : "offline"); }
-    finally { busy = false; }
+    finally { busy = false; publish({}); }
   }
 
   async function start() {
@@ -102,7 +106,7 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
   }
 
   async function associate() {
-    if (busy || !invitation || state.session) return;
+    if (busy || !invitation || state.session || state.logoutPending) return;
     if (!browser.online()) { fail("offline"); return; }
     try {
       nonce ??= browser.nonce();
@@ -127,7 +131,7 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
       publish({ exchangePending: false });
       connected(session);
     } catch { fail(browser.online() ? "exchange" : "offline"); }
-    finally { busy = false; }
+    finally { busy = false; publish({}); }
   }
 
   async function logout() {
@@ -139,13 +143,14 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
       const response = await browser.request("DELETE");
       if (response.status !== 204) { fail("logout"); return; }
       publish({ session: null, signedOut: true, logoutPending: false });
+      sessionKnownAbsent = true;
       ready();
     } catch { fail(browser.online() ? "logout" : "offline"); }
-    finally { busy = false; }
+    finally { busy = false; publish({}); }
   }
 
   function connectivityChanged() {
-    if (!browser.online()) fail("offline");
+    if (!browser.online()) { sessionKnownAbsent = false; fail("offline"); }
     else {
       publish({ online: true });
       if (state.exchangePending) fail("exchange");
@@ -154,8 +159,33 @@ export function createDeliveryAccessClient(browser: AccessBrowser = browserPort)
     }
   }
 
-  return { start, refresh, associate, logout, connectivityChanged,
-    accessRejected: () => { revocation++; publish({ session: null }); fail("revoked"); },
+  /** One guard for both the action and its UI; a missing visible identity is not proof of absence. */
+  function canImportInvitation(): boolean {
+    if (!captured || busy || state.session || state.exchangePending || state.logoutPending
+      || !sessionKnownAbsent || captureFailure) return false;
+    try { return browser.online(); } catch { return false; }
+  }
+
+  /** Manual import never navigates, contacts the server, or replaces an uncertain attempt. */
+  function importInvitation(rawLink: string): boolean {
+    if (!canImportInvitation()) return false;
+    try {
+      const value = rawLink.trim();
+      if (!value || value.length > 2_048 || /[\u0000-\u0020\u007f]/.test(value)) return false;
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.origin !== browser.origin() || url.username || url.password
+        || !["/livreur", "/livreur/"].includes(url.pathname) || url.search
+        || value !== `${url.origin}${url.pathname}${url.hash}`) return false;
+      const parsed = takeInvitation({ fragment: () => url.hash, removeFragment: () => {} });
+      if (!parsed.token || parsed.invalid || !DeliveryAccessSecretSchema.safeParse(parsed.token).success) return false;
+      if (invitation !== parsed.token) { invitation = parsed.token; nonce = null; }
+      ready();
+      return true;
+    } catch { return false; }
+  }
+
+  return { start, refresh, associate, logout, connectivityChanged, canImportInvitation, importInvitation,
+    accessRejected: () => { revocation++; sessionKnownAbsent = false; publish({ session: null }); fail("revoked"); },
     getSnapshot: () => state, getServerSnapshot: () => INITIAL,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
