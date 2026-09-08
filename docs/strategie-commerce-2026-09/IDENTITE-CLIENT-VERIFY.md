@@ -385,7 +385,48 @@ se recouvrent : ne pas les additionner. Compilation monorepo laissée à la CI
 faute d'espace disque local ; une suite locale ne prouve pas la recette Twilio.
 PR, CI du SHA final et déploiement seront consignés à la réception du lot.
 
-## Prochain lot — inscription fermée et reprise navigateur, non implémenté
+## L3a.6a — continuité serveur des sessions, préparation du formulaire
+
+Le correctif lie chaque session personnelle à son navigateur côté PostgreSQL.
+Il conserve deux secrets distincts, tous deux HttpOnly : le cookie navigateur
+ne devient jamais, à lui seul, un accès au compte. Les enveloppes signées
+`session`, `name` et `logout` transportent désormais les deux credentials ;
+seules leurs empreintes tenant-scopées atteignent le repository.
+
+La migration additive `0002_customer_browser_continuity` introduit une
+génération monotone par parent/restaurant/navigateur et un pointeur vers la
+session courante. Une réservation capture cette génération ; une confirmation
+valide crée la session, avance la génération et remplace le pointeur dans la
+même transaction. Deux confirmations admises dans la même génération ne
+peuvent donc pas publier deux sessions. Les anciennes lignes non liées restent
+inertes, sans suppression ni rattachement déduit.
+
+Authentification, profil et reprise exigent la session **encore courante**.
+Un ancien `Set-Cookie(A)` reçu après la publication de B peut toujours écraser
+le cookie dans le navigateur ; en revanche son jeton A est refusé au prochain
+accès privé, jamais réactivé. La reprise exacte ne republie pas le pointeur et
+ne prolonge aucune durée. La déconnexion valide la session courante, révoque et
+avance la génération atomiquement ; une déconnexion A tardive ne révoque pas B,
+y compris avec `all`. Un contrôle déjà admis avant cette clôture ne peut plus
+publier ensuite. Les réservations SMS restent consommées même après refus.
+
+Cette garantie concerne l'autorité serveur, pas encore l'ordre d'affichage des
+réponses du futur formulaire. Le pilote reste fermé, sans SMS ni dépense.
+Déploiement uniquement comptes fermés ; ne pas revenir à l'ancienne API en
+rouvrant le pilote après cette migration. Le bootstrap versionne ses nouveaux
+objets et la CI exécute les scénarios PostgreSQL réels.
+
+Recette locale du lot : 69 intégrations PostgreSQL (dont 11 de continuité),
+135 tests unitaires customer, 456 tests identité API, 98 tests BFF et 1 836
+tests web. Bootstrap : 79 tests dont PostgreSQL réel ; contrats : 489.
+La passe API générale comporte 3 116 tests passés et 574 ignorés sans leurs
+variables de bases dédiées ; elle ne remplace pas les gates DB de CI.
+Types/lint ciblés, compilation API et chargement CommonJS sans démarrer les
+services passent. Revue indépendante du relais et des jointures/révocations.
+Ces ensembles se recouvrent ; aucun total agrégé ni recette Twilio réelle
+n'en est déduit. CI et staging de la PR restent à recevoir.
+
+## Suite L3a.6 — inscription fermée et reprise navigateur, non implémentée
 
 La revue du 8 septembre identifie trois préalables au formulaire OTP : deux
 préparations sans cookie peuvent installer des secrets navigateur différents ;
@@ -402,8 +443,14 @@ nouvel identifiant tant que l'ancien appel peut encore agir. Préparation
 navigateur concurrente, cookies tardifs, rechargement, révocation et stockage
 refusé doivent être couverts par de vrais contre-tests avant ouverture de l'UI.
 
-Ce périmètre reste à concevoir et tester ; il ne revendique ni correction déjà
-livrée ni récupération sûre d'un ancien compte sur un nouvel appareil. La
+L3a.6a couvre le refus serveur des sessions remplacées et des confirmations
+déjà admises avant déconnexion. Restent à concevoir et tester : préparation
+concurrente sans cookie, clôture d'une intention invitée avant admission,
+journal durable et lecture des résultats incertains, preuve de reprise privée
+distincte des UUID non secrets. Il ne faut ni exposer le contrôle courant au
+seul cookie navigateur ni permettre à ce cookie de récupérer arbitrairement
+une nouvelle session. Ces limites interdisent encore l'ouverture du formulaire.
+La récupération sûre d'un ancien compte sur un nouvel appareil reste à livrer. La
 prochaine étape compte → adhésion fidélité explicite, puis propriétaire privé
 des nouvelles commandes → historique/réachat, reste distincte. Aucune ancienne
 carte ou commande n'est réattribuée par simple correspondance de téléphone.

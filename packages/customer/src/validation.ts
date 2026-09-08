@@ -31,7 +31,7 @@ export const reservationSchema = scopeSchema.extend({ operationId: uuid, request
 export const settlementSchema = scopeSchema.extend({ challengeId: uuid,
   verificationSid: z.string().regex(/^VE[0-9a-fA-F]{32}$/).nullable() });
 export const claimSchema = scopeSchema.extend({ challengeId: uuid, browserHash: hash, checkId: uuid });
-export const sessionSchema = scopeSchema.extend({ sessionHash: hash });
+export const sessionSchema = scopeSchema.extend({ sessionHash: hash, browserHash: hash });
 export const recoverySchema = claimSchema.extend({ sessionHash: hash });
 export const completionSchema = claimSchema.extend({ result: z.enum(['approved', 'pending', 'expired', 'locked', 'uncertain']),
   sessionId: uuid, sessionHash: hash, sessionExpiresAt: time, accountId: uuid, existingSessionHash: hash.nullable() });

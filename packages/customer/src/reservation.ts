@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { ReservationResult, VerificationReservation } from './port';
-import { challenge, dbTime, pendingView } from './queries';
+import { challenge, currentChallenge, currentBrowserGeneration, dbTime, pendingView } from './queries';
 import { lockVerificationBudget } from './budgets';
 
 export async function reserveVerification(client: PoolClient, input: VerificationReservation): Promise<ReservationResult> {
@@ -15,6 +15,7 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
   const existing = existingId ? await challenge(client, input, existingId.id) : null;
   if (existing) {
     if (existing.request_hash !== input.requestHash || existing.browser_hash !== input.browserHash) return { kind: 'denied' };
+    if (!await currentChallenge(client, existing)) return { kind: 'denied' };
     if (existing.expires_at.getTime() <= now) return { kind: 'denied' };
     if (existing.state === 'pending') return { kind: 'pending', challenge: pendingView(existing) };
     return { kind: ['reserved', 'checking', 'uncertain'].includes(existing.state) ? 'uncertain' : 'denied' };
@@ -34,15 +35,31 @@ export async function reserveVerification(client: PoolClient, input: Verificatio
   const active = await client.query(`SELECT 1 FROM customer.phone_guards
     WHERE parent_ref=$1 AND global_phone_hash=$2 AND active_until>clock_timestamp()`, [input.parentRef, input.globalPhoneHash]);
   if (active.rowCount) return { kind: 'denied' };
+  // A rejected final time predicate must not leave an unreserved context behind.
+  await client.query('SAVEPOINT browser_reservation');
+  await client.query(`INSERT INTO customer.browser_contexts(parent_ref,tenant_ref,browser_hash)
+    VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [input.parentRef, input.tenantRef, input.browserHash]);
+  const generation = await currentBrowserGeneration(client, input, input.browserHash);
+  // Keep one final generation available for logout after publication.
+  if (generation === null || BigInt(generation) >= BigInt(Number.MAX_SAFE_INTEGER) - 1n) {
+    await client.query('ROLLBACK TO SAVEPOINT browser_reservation');
+    await client.query('RELEASE SAVEPOINT browser_reservation');
+    return { kind: 'denied' };
+  }
   // A final SQL time predicate closes an expired plan after any lock/query delay.
   const inserted = await client.query<{ expires_at: Date }>(`WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS now)
     INSERT INTO customer.challenges
-    (id,parent_ref,tenant_ref,operation_id,request_hash,browser_hash,phone_hash,encrypted_phone,service_sid,max_checks,created_at,expires_at)
-    SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,stamp.now,LEAST($11::timestamptz,stamp.now+interval '10 minutes') FROM stamp
+    (id,parent_ref,tenant_ref,operation_id,request_hash,browser_hash,phone_hash,encrypted_phone,service_sid,max_checks,created_at,expires_at,browser_generation)
+    SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,stamp.now,LEAST($11::timestamptz,stamp.now+interval '10 minutes'),$13 FROM stamp
     WHERE $11::timestamptz>stamp.now AND $12::timestamptz>stamp.now RETURNING expires_at`,
   [input.challengeId, input.parentRef, input.tenantRef, input.operationId, input.requestHash, input.browserHash,
-    input.phoneHash, input.encryptedPhone, input.serviceSid, l.challengeCheckAttempts, new Date(input.expiresAt), new Date(budget.planExpiresAt)]);
-  if (!inserted.rowCount) return { kind: 'denied' };
+    input.phoneHash, input.encryptedPhone, input.serviceSid, l.challengeCheckAttempts, new Date(input.expiresAt), new Date(budget.planExpiresAt), generation]);
+  if (!inserted.rowCount) {
+    await client.query('ROLLBACK TO SAVEPOINT browser_reservation');
+    await client.query('RELEASE SAVEPOINT browser_reservation');
+    return { kind: 'denied' };
+  }
+  await client.query('RELEASE SAVEPOINT browser_reservation');
   const funding = budget.funding;
   await client.query(`INSERT INTO customer.reservations(id,parent_ref,tenant_ref,challenge_id,global_phone_hash,ip_hash,evidence_reference,sms_units,
     funding_kind,authorization_ref,reserved_microusd,funding_expires_at,cost_evidence_reference)

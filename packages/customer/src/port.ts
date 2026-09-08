@@ -106,12 +106,13 @@ export interface CustomerIdentityRepository {
      * matching unverified/recycled phone. Null permits first enrollment only. */
     existingSessionHash: string | null;
   }): Promise<CustomerSession | null>;
-  authenticate(input: CustomerScope & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
+  authenticate(input: CustomerScope & { sessionHash: string; browserHash: string; now: number }): Promise<CustomerSession | null>;
   updateName(input: CustomerScope & {
     sessionHash: string;
+    browserHash: string;
     encryptedName: string | null;
     expectedRevision: number;
     now: number;
   }): Promise<CustomerSession | null>;
-  revoke(input: CustomerScope & { sessionHash: string; all: boolean; now: number }): Promise<void>;
+  revoke(input: CustomerScope & { sessionHash: string; browserHash: string; all: boolean; now: number }): Promise<void>;
 }

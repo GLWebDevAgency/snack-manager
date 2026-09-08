@@ -8,7 +8,8 @@ import { customerTestEnvironment } from './customer-account.test-fixture';
 
 function fixture(action = 'session') {
   const env = customerTestEnvironment();
-  const body = { sessionToken: Buffer.alloc(32, 17).toString('base64url'), request: {} };
+  const body = { sessionToken: Buffer.alloc(32, 17).toString('base64url'),
+    browserSecret: Buffer.alloc(32, 20).toString('base64url'), request: {} };
   const request = { method: 'POST', originalUrl: `/public/customer/fixture/${action}`,
     params: { slug: 'fixture', action }, body, rawBody: Buffer.from(JSON.stringify(body)),
     headers: { 'content-type': 'application/json', 'x-sm-customer-client': Buffer.alloc(32, 18).toString('base64url'),

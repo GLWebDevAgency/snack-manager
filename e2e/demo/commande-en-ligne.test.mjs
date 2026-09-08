@@ -37,6 +37,7 @@ import assert from 'node:assert/strict';
 import { cibles } from '../socle/cibles.mjs';
 import { attendreTexte, cliquerJusqua, deborde, entierAffiche } from '../socle/attentes.mjs';
 import { FORMATS, scenario } from '../socle/navigateur.mjs';
+import { choisirCreneau } from '../socle/choisir-creneau.mjs';
 
 const { web } = cibles();
 
@@ -129,14 +130,17 @@ scenario(
       await libre.first().waitFor({ state: 'visible' });
     }
 
-    const heure = (await libre.first().textContent())?.trim();
+    // La première borne peut expirer pendant le rechargement de la grille.
+    // On choisit une heure plus éloignée, puis on garde cette identité exacte :
+    // une disponibilité retirée ne doit jamais sélectionner sa voisine.
+    const heure = (await libre.last().textContent())?.trim();
     assert.ok(/^\d{2}:\d{2}$/.test(heure ?? ''), `créneau illisible : ${JSON.stringify(heure)}`);
-    await libre.first().click();
-    await retrait.getByRole('button', { name: /^Continuer · retrait/ }).click();
+    await choisirCreneau(retrait, heure);
 
     // ── Le paiement ──
     const paiement = page.getByRole('dialog', { name: 'Paiement' });
     await paiement.waitFor({ state: 'visible' });
+    await attendreTexte(paiement, heure);
 
     // ── Total nº 3 : le récapitulatif, dernier écran avant l'engagement ──
     const recapitulatif = (await paiement.textContent()) ?? '';

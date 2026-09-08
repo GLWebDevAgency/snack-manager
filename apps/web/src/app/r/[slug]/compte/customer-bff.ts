@@ -179,7 +179,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (['start', 'check', 'recover'].includes(action) && browser.kind !== 'valid') {
       return failure(409, 'CUSTOMER_CONFLICT', 'Le navigateur doit confirmer son accès avant de continuer.');
     }
-    if (['session', 'name', 'logout'].includes(action) && session.kind !== 'valid') return unauthorized();
+    if (['session', 'name', 'logout'].includes(action)
+      && (session.kind !== 'valid' || browser.kind !== 'valid')) return unauthorized();
 
     // Platform paths may serve any pilot tenant; a custom domain must resolve
     // freshly to this exact tenant. Never adopt the proxy's stale cache or a
@@ -196,7 +197,8 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       }
     }
     const envelope = { request: parsed.data,
-      ...(['start', 'check', 'recover'].includes(action) && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
+      ...(['start', 'check', 'recover', 'session', 'name', 'logout'].includes(action)
+        && browser.kind === 'valid' ? { browserSecret: browser.value } : {}),
       ...(action === 'check' ? { sessionToken: session.kind === 'valid' ? session.value : null }
         : ['session', 'name', 'logout'].includes(action) && session.kind === 'valid' ? { sessionToken: session.value } : {}),
     };

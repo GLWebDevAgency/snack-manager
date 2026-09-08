@@ -149,7 +149,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const second = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash });
     await pending(second); const secondClaim = claim(second); await repo.claimCheck(secondClaim);
     expect(await repo.completeCheck(completion(secondClaim))).toBeNull();
-    const third = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash });
+    const third = reservation({ tenantRef: input.tenantRef, parentRef: input.parentRef, phoneHash: input.phoneHash, browserHash: input.browserHash });
     await pending(third); const thirdClaim = claim(third); await repo.claimCheck(thirdClaim);
     const result = await repo.completeCheck({ ...completion(thirdClaim), existingSessionHash: first.sessionHash });
     expect(result?.profile.accountId).toBe(first.accountId);
@@ -185,7 +185,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const input = reservation(); await pending(input);
     const check = claim(input); await repo.claimCheck(check); const done = completion(check); await repo.completeCheck(done);
     for (const scope of [{ tenantRef: 'other', parentRef: input.parentRef }, { tenantRef: input.tenantRef, parentRef: 'other' }]) {
-      expect(await repo.authenticate({ ...scope, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
+      expect(await repo.authenticate({ ...scope, browserHash: input.browserHash, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
       expect(await repo.recoverCheck({ ...check, ...scope, sessionHash: done.sessionHash })).toBeNull();
     }
     await fixture.admin.query('UPDATE customer.accounts SET active=false WHERE id=$1', [done.accountId]);

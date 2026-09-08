@@ -3,7 +3,7 @@ import type { CustomerScope, CustomerSession, PendingChallenge } from './port';
 
 export type ChallengeRow = {
   id: string; parent_ref: string; tenant_ref: string; operation_id: string; request_hash: string;
-  browser_hash: string; phone_hash: string; encrypted_phone: string; service_sid: string;
+  browser_hash: string; browser_generation: string | null; phone_hash: string; encrypted_phone: string; service_sid: string;
   verification_sid: string | null; state: string; max_checks: number; checks_used: number;
   check_id: string | null; expires_at: Date;
   funding_kind: string | null; authorization_ref: string | null; reserved_microusd: string | null; funding_expires_at: Date | null;
@@ -46,7 +46,17 @@ export function fundingAllowsCheck(row: ChallengeRow, now: number): boolean {
   const funding = pendingView(row).funding;
   return funding.mode === 'paid' ? funding.expiresAt > now : row.paid_parent_ref === null;
 }
-export async function session(client: PoolClient, scope: CustomerScope, sessionHash: string): Promise<CustomerSession | null> {
+/** All callers hold the shared parent lock, including publication and logout. */
+export async function currentBrowserGeneration(client: PoolClient, scope: CustomerScope, browserHash: string): Promise<string | null> {
+  return (await client.query<{ generation: string }>(`SELECT generation FROM customer.browser_contexts
+    WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_hash=$3 FOR UPDATE`,
+  [scope.parentRef, scope.tenantRef, browserHash])).rows[0]?.generation ?? null;
+}
+export async function currentChallenge(client: PoolClient, row: ChallengeRow): Promise<boolean> {
+  return row.browser_generation !== null && row.browser_generation === await currentBrowserGeneration(client,
+    { parentRef: row.parent_ref, tenantRef: row.tenant_ref }, row.browser_hash);
+}
+export async function session(client: PoolClient, scope: CustomerScope, sessionHash: string, browserHash: string): Promise<CustomerSession | null> {
   const result = await client.query<{ session_id: string; expires_at: Date; account_id: string;
     encrypted_name: string | null; encrypted_phone: string; phone_hash: string; verified_at: Date; revision: string }>(`
     SELECT s.id AS session_id,s.expires_at,a.id AS account_id,a.encrypted_name,a.revision,
@@ -54,9 +64,12 @@ export async function session(client: PoolClient, scope: CustomerScope, sessionH
     FROM customer.sessions s JOIN customer.accounts a
       ON (a.parent_ref,a.tenant_ref,a.id)=(s.parent_ref,s.tenant_ref,s.account_id)
     JOIN customer.verified_contacts c ON (c.parent_ref,c.tenant_ref,c.account_id)=(a.parent_ref,a.tenant_ref,a.id)
+    JOIN customer.browser_contexts b ON (b.parent_ref,b.tenant_ref,b.browser_hash,b.generation,b.current_session_id)
+      =(s.parent_ref,s.tenant_ref,s.browser_hash,s.browser_generation,s.id)
     WHERE s.parent_ref=$1 AND s.tenant_ref=$2 AND s.session_hash=$3 AND s.revoked_at IS NULL
+      AND s.browser_hash=$4
       AND s.expires_at>clock_timestamp() AND a.active AND s.account_version=a.session_version`,
-  [scope.parentRef, scope.tenantRef, sessionHash]);
+  [scope.parentRef, scope.tenantRef, sessionHash, browserHash]);
   const row = result.rows[0];
   return row ? { sessionId: row.session_id, expiresAt: row.expires_at.getTime(), profile: {
     accountId: row.account_id, phoneHash: row.phone_hash, encryptedName: row.encrypted_name,

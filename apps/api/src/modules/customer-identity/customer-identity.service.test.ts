@@ -66,6 +66,41 @@ function fixture() {
 
 describe('private customer identity orchestration', () => {
   beforeEach(() => vi.clearAllMocks());
+  it.each(['session', 'updateName', 'logout'] as const)('requires a canonical browser secret before %s reaches storage', async action => {
+    const f = fixture();
+    const input = { tenantRef: TENANT, token: BROWSER,
+      ...(action === 'updateName' ? { name: 'Mina', expectedRevision: 0 } : action === 'logout' ? { all: false } : {}) };
+    for (const patch of [{}, { browserSecret: null }, { browserSecret: 'loyalty-qr' }, { browserSecret: `${'A'.repeat(42)}B` }]) {
+      await expect(f.service[action]({ ...input, ...patch })).rejects.toMatchObject({ reason: 'invalid_request' });
+    }
+    expect(f.repository.authenticate).not.toHaveBeenCalled();
+    expect(f.repository.updateName).not.toHaveBeenCalled(); expect(f.repository.revoke).not.toHaveBeenCalled();
+    expect(f.transport.start).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
+  });
+  it.each(['session', 'updateName'] as const)('does not authorize %s with another browser even when the session token matches', async action => {
+    const f = fixture(); const expectedHash = crypto.hash('browser', TENANT, BROWSER);
+    f.repository.authenticate.mockImplementation(async input => Reflect.get(input, 'browserHash') === expectedHash ? privateSession : null);
+    await expect(f.service[action]({ tenantRef: TENANT, token: BROWSER,
+      browserSecret: Buffer.alloc(32, 34).toString('base64url'),
+      ...(action === 'updateName' ? { name: 'Mina', expectedRevision: 0 } : {}) })).rejects.toMatchObject({ reason: 'unauthorized' });
+    expect(f.repository.authenticate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      sessionHash: crypto.hash('session', TENANT, BROWSER),
+      browserHash: crypto.hash('browser', TENANT, Buffer.alloc(32, 34).toString('base64url')),
+    }));
+    expect(f.repository.updateName).not.toHaveBeenCalled();
+  });
+  it('binds logout to the browser without authorizing a token-only or foreign-browser revocation', async () => {
+    const f = fixture(); let revoked = false;
+    const browserHash = crypto.hash('browser', TENANT, BROWSER);
+    f.repository.revoke.mockImplementation(async input => { if (Reflect.get(input, 'browserHash') === browserHash) revoked = true; });
+    await f.service.logout({ tenantRef: TENANT, token: BROWSER, browserSecret: Buffer.alloc(32, 34).toString('base64url'), all: true });
+    expect(revoked).toBe(false);
+    await f.service.logout({ tenantRef: TENANT, token: BROWSER, browserSecret: BROWSER, all: true });
+    expect(revoked).toBe(true);
+    expect(f.repository.revoke).toHaveBeenLastCalledWith({ tenantRef: TENANT, parentRef: PARENT,
+      sessionHash: crypto.hash('session', TENANT, BROWSER), browserHash, all: true, now: NOW });
+    expect(JSON.stringify(f.repository.revoke.mock.calls)).not.toContain(BROWSER);
+  });
   it('recovers only the exact committed receipt, without claiming or checking any OTP', async () => {
     const f = fixture(); f.repository.recoverCheck.mockResolvedValue(privateSession);
     f.config.evidence.observedAt = NOW - 86_400_000;
@@ -204,26 +239,29 @@ describe('private customer identity orchestration', () => {
   });
   it('returns only a protected minimal profile, never a QR identity', async () => {
     const f = fixture(); const token = Buffer.alloc(32, 5).toString('base64url');
-    const view = await f.service.session({ tenantRef: TENANT, token });
+    const view = await f.service.session({ tenantRef: TENANT, token, browserSecret: BROWSER });
     expect(view.profile.phoneE164).toBe(PHONE);
-    expect(f.repository.authenticate).toHaveBeenCalledWith({ tenantRef: TENANT, parentRef: PARENT, sessionHash: crypto.hash('session', TENANT, token), now: NOW });
-    await expect(f.service.session({ tenantRef: TENANT, token: 'loyalty-qr' })).rejects.toMatchObject({ reason: 'invalid_request' });
+    expect(f.repository.authenticate).toHaveBeenCalledWith({ tenantRef: TENANT, parentRef: PARENT,
+      sessionHash: crypto.hash('session', TENANT, token), browserHash: crypto.hash('browser', TENANT, BROWSER), now: NOW });
+    await expect(f.service.session({ tenantRef: TENANT, token: 'loyalty-qr', browserSecret: BROWSER })).rejects.toMatchObject({ reason: 'invalid_request' });
   });
   it('does not treat a storage failure as a confirmed logout', async () => {
     const f = fixture(); f.repository.revoke.mockRejectedValue(new Error('offline'));
-    await expect(f.service.logout({ tenantRef: TENANT, token: BROWSER, all: false })).rejects.toMatchObject({ reason: 'unavailable' });
+    await expect(f.service.logout({ tenantRef: TENANT, token: BROWSER, browserSecret: BROWSER, all: false })).rejects.toMatchObject({ reason: 'unavailable' });
   });
   it('encrypts explicit name changes and sends the expected revision', async () => {
     const f = fixture();
-    await f.service.updateName({ tenantRef: TENANT, token: BROWSER, name: '  Mina  ', expectedRevision: 0 });
+    await f.service.updateName({ tenantRef: TENANT, token: BROWSER, browserSecret: BROWSER, name: '  Mina  ', expectedRevision: 0 });
     const stored = f.repository.updateName.mock.calls[0]![0];
     expect(stored.expectedRevision).toBe(0);
+    expect(Reflect.get(stored, 'browserHash')).toBe(crypto.hash('browser', TENANT, BROWSER));
+    expect(f.repository.authenticate.mock.invocationCallOrder[0]).toBeLessThan(f.repository.updateName.mock.invocationCallOrder[0]!);
     expect(stored.encryptedName).not.toContain('Mina');
     expect(crypto.open('name', TENANT, privateSession.profile.accountId, stored.encryptedName!)).toBe('Mina');
   });
   it('never writes a profile from an invalid session', async () => {
     const f = fixture(); f.repository.authenticate.mockResolvedValue(null);
-    await expect(f.service.updateName({ tenantRef: TENANT, token: BROWSER, name: 'Mina', expectedRevision: 0 })).rejects.toMatchObject({ reason: 'unauthorized' });
+    await expect(f.service.updateName({ tenantRef: TENANT, token: BROWSER, browserSecret: BROWSER, name: 'Mina', expectedRevision: 0 })).rejects.toMatchObject({ reason: 'unauthorized' });
     expect(f.repository.updateName).not.toHaveBeenCalled();
   });
 });

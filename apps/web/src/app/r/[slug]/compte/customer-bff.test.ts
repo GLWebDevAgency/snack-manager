@@ -53,6 +53,24 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('customer account BFF — real handlers, isolated upstream', () => {
+  it.each([
+    ['session', session, 'session', 'GET', {}],
+    ['name', name, 'profil', 'PATCH', { name: 'Client test', expectedRevision: 0 }],
+    ['logout', logout, 'session', 'DELETE', { all: true }],
+  ] as const)('requires the browser credential as well as the session for %s', async (_action, handler, path, method, body) => {
+    mockFetch.mockResolvedValue(Response.json(view()));
+    const response = await handler(req(path, method, body, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    expect(response.status).toBe(401);
+    privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it.each(['sm_loyalty_classfood', '__Host-sm_customer_browser_other', '__Secure-sm_customer_browser_classfood'])(
+    'does not bind a personal session to the unrelated %s cookie', async foreignCookie => {
+      const response = await session(req('session', 'GET', {},
+        { cookie: `${foreignCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      expect(response.status).toBe(401); expect(mockFetch).not.toHaveBeenCalled();
+      expect(response.headers.get('set-cookie')).toBeNull();
+    });
   describe('explicit closed paid pilot', () => {
     beforeEach(() => { vi.stubEnv('SM_CUSTOMER_ACCOUNT_MODE', 'closed_paid_pilot'); });
     it('relays capability checks but does not infer spending permission from the mode', async () => {
@@ -65,11 +83,13 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     });
     it('allows an existing private session without creating a cookie or sending an OTP', async () => {
       const current = view(); mockFetch.mockResolvedValue(Response.json(current));
-      const response = await session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
       expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
       privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/session`);
+      expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
+        browserSecret: browserToken, sessionToken, request: {} });
     });
     it.each(['production', 'development', 'test'])('never permits a paid pilot in %s', async environment => {
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', environment);
@@ -169,20 +189,20 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   });
   it('a session 401 does not mutate cookies from a potentially newer confirmation', async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 401 }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(401); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('an uncertain logout preserves the cookie until server revocation is known', async () => {
     mockFetch.mockRejectedValue(new Error('provider detail must not leak'));
-    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
     expect(await response.text()).not.toContain('provider detail');
   });
   it('confirmed logout acknowledges server revocation without mutating newer browser cookies', async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
-    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(204); expect(response.headers.get('set-cookie')).toBeNull();
-    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ sessionToken, request: { all: false } });
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserSecret: browserToken, sessionToken, request: { all: false } });
   });
   it('rejects stale/overbroad upstream profiles without copying secrets or setting a cookie', async () => {
     mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: { ...view(), accountId: randomUUID() } }));
@@ -192,7 +212,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   });
   it('strictly refuses client-controlled envelope identity fields', async () => {
     const response = await name(req('profil', 'PATCH', { name: 'Test', expectedRevision: 0, sessionToken },
-      { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(400); expect(mockFetch).not.toHaveBeenCalled();
   });
   it.each(['SM_CUSTOMER_ACCOUNT_MODE', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID',
@@ -301,7 +321,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('a late old-session 401 cannot erase a concurrently confirmed session', async () => {
     let answer!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
-    const old = session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const old = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     const fresh = randomBytes(32).toString('base64url');
     mockFetch.mockResolvedValueOnce(Response.json({ token: fresh, view: view() }));
@@ -314,7 +334,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('a late old-session logout cannot erase a concurrently confirmed session', async () => {
     let answer!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
-    const old = logout(req('session', 'DELETE', { all: false }, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const old = logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     const fresh = randomBytes(32).toString('base64url');
     mockFetch.mockResolvedValueOnce(Response.json({ token: fresh, view: view() }));
@@ -330,7 +350,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const cancelled = vi.fn();
     mockFetch.mockResolvedValue(new Response(new ReadableStream({ cancel: cancelled }), { headers: { 'Content-Type': 'application/json' } }));
     try {
-      const pending = session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      const pending = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
       await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
       deadline.abort();
       const response = await pending;
@@ -358,7 +378,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
     mockFetch.mockImplementation(() => new Promise(() => undefined));
     try {
-      const pending = session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      const pending = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
       await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
       deadline.abort();
       const response = await pending;
@@ -369,7 +389,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('a disconnected browser cancels the whole operation without creating a retry', async () => {
     const disconnect = new AbortController();
     mockFetch.mockImplementation(() => new Promise(() => undefined));
-    const request = new NextRequest(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), { signal: disconnect.signal });
+    const request = new NextRequest(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), { signal: disconnect.signal });
     const pending = session(request, context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     disconnect.abort();
@@ -394,14 +414,14 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('never accepts an oversized upstream response even if its prefix resembles a session', async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ ...view(), private: 'x'.repeat(17_000) }),
       { headers: { 'Content-Type': 'application/json' } }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
     expect((await response.text()).length).toBeLessThan(250);
   });
   it.each([400, 401, 403, 409, 429, 500, 503])('projects upstream %d into bounded fixed errors without private details', async upstreamStatus => {
     mockFetch.mockResolvedValue(Response.json({ message: 'private diagnostic', token: sessionToken, phone: '+33600000000' },
       { status: upstreamStatus, headers: { 'Retry-After': '999', 'Set-Cookie': 'upstream=secret' } }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     privateHeaders(response);
     expect(CustomerAccountErrorSchema.safeParse(await response.clone().json()).success).toBe(true);
     const body = await response.text();
@@ -418,10 +438,10 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const current = view(); current.profile.name = 'Nom choisi'; current.profile.revision = 2;
     mockFetch.mockResolvedValue(Response.json(current));
     const response = await name(req('profil', 'PATCH', { name: 'Nom choisi', expectedRevision: 1 },
-      { cookie: `${sessionCookie}=${sessionToken}` }), context);
+      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
     expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
-      sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
+      browserSecret: browserToken, sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 });
