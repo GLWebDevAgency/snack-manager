@@ -63,6 +63,13 @@
         "$TURBO_ROOT$/tsconfig.base.json"
       ]
     },
+    "@sm/api#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/web/src/app/r/*/compte/customer-relay.ts"
+      ]
+    },
     "dev": {
       "cache": false,
       "persistent": true
