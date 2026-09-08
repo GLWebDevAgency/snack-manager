@@ -80,6 +80,9 @@ async function upstream(url: string, init: RequestInit) {
   if (action === 'browser') {
     const input = CustomerAccountEnvelopes.browser.parse(envelope);
     calls.push(`browser:${input.request.step}`);
+    // This fixture covers OTP/intention selection, not restoration. The
+    // dedicated preparation browser suite exercises that read-only boundary.
+    if (input.request.step === 'restore') return fail(400);
     const { browserRef, step } = input.request;
     if (step === 'prepare' && !browsers.has(browserRef)) browsers.set(browserRef, { browserRef,
       secret: null, confirmed: false, admissionExpiresAt: Date.now() + 600_000, expiresAt: Date.now() + 604_800_000 });

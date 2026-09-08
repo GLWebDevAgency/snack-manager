@@ -123,6 +123,12 @@ export class CustomerAccountRuntime {
         return verification;
       }
       const response = CustomerAccountResponses[relay.action].parse(result);
+      if (relay.action === 'browser' && this.input('browser', raw).request.step === 'restore') {
+        const restored = CustomerAccountResponses.browser.parse(response);
+        if (restored.preparation.state !== 'confirmed' || restored.emitCookie || restored.preparation.expiresAt <= Date.now()) {
+          throw new CustomerIdentityError('unauthorized');
+        }
+      }
       if (response && relay.action !== 'browser' && relay.action !== 'intent') {
         const expiresAt = 'view' in response ? response.view.expiresAt
           : 'expiresAt' in response ? response.expiresAt : null;

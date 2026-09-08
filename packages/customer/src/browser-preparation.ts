@@ -72,3 +72,15 @@ export async function validateBrowser(client: PoolClient, input: CustomerBrowser
   [input.parentRef, input.tenantRef, input.browserRef, input.browserHash])).rows[0];
   return row ? { expiresAt: row.expires_at.getTime() } : null;
 }
+
+/** A cookie can restore its own public reference, never confirm a preparation,
+ * renew a deadline, select a session or consume a preparation/provider quota. */
+export async function restoreBrowser(client: PoolClient, input: CustomerScope & { browserHash: string }): Promise<CustomerBrowserPreparation | null> {
+  const row = (await client.query<Pick<PreparationRow, 'browser_ref' | 'admission_expires_at' | 'expires_at'>>(`
+    SELECT browser_ref,admission_expires_at,expires_at FROM customer.browser_preparations
+    WHERE parent_ref=$1 AND tenant_ref=$2 AND browser_hash=$3
+      AND confirmed_at IS NOT NULL AND expires_at>clock_timestamp()`,
+  [input.parentRef, input.tenantRef, input.browserHash])).rows[0];
+  return row ? { browserRef: row.browser_ref, state: 'confirmed',
+    admissionExpiresAt: row.admission_expires_at.getTime(), expiresAt: row.expires_at.getTime() } : null;
+}

@@ -64,6 +64,76 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('customer account BFF — real handlers, isolated upstream', () => {
+  it('restore uses only the exact browser cookie and returns a confirmed selector without any Set-Cookie', async () => {
+    const current = { ...preparation('confirmed'), admissionExpiresAt: Date.now() - 60_000 };
+    mockFetch.mockResolvedValue(Response.json({ preparation: current, emitCookie: false }));
+    const request = req('navigateur', 'POST', { step: 'restore' },
+      { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` });
+    for (const header of ['x-sm-customer-browser-ref', 'x-sm-customer-operation-id', 'x-sm-customer-check-id']) request.headers.delete(header);
+    const response = await browser(request, context);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(current); privateHeaders(response);
+    expect(response.headers.get('set-cookie')).toBeNull(); expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/browser`);
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
+      request: { step: 'restore' }, browserSecret: browserToken, candidateSecret: null });
+  });
+  it.each(['', `sm_loyalty_classfood=${browserToken}`, `__Host-sm_customer_browser_other=${browserToken}`])(
+    'restore refuses missing or unrelated browser credentials (%#)', async cookie => {
+      const response = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie }), context);
+      expect(response.status).toBe(401); expect(mockFetch).not.toHaveBeenCalled();
+      expect(response.headers.get('set-cookie')).toBeNull(); privateHeaders(response);
+    });
+  it.each([`${browserCookie}=${browserToken}; ${browserCookie}=${browserToken}`, `${browserCookie}=invalid`])(
+    'restore refuses ambiguous or malformed browser cookies (%#)', async cookie => {
+      const response = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie }), context);
+      expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
+      expect(response.headers.get('set-cookie')).toBeNull();
+    });
+  it.each([
+    { step: 'restore', browserRef }, { step: 'restore', candidateSecret: browserToken },
+    { step: 'restore', browserSecret: browserToken },
+  ])('restore refuses caller-supplied selector or secret (%#)', async body => {
+    const response = await browser(req('navigateur', 'POST', body, { cookie: boundCookies }), context);
+    expect(response.status).toBe(400); expect(mockFetch).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each(['prepared', 'issued', 'expired'])('restore never accepts upstream state %s', async state => {
+    mockFetch.mockResolvedValue(Response.json({ preparation: { ...preparation('confirmed'), state }, emitCookie: false }));
+    const response = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each([
+    ['cookie emission', () => ({ preparation: preparation('issued'), emitCookie: true })],
+    ['confirmed cookie emission', () => ({ preparation: preparation('confirmed'), emitCookie: true })],
+    ['expired preparation', () => ({ preparation: { ...preparation('confirmed'), admissionExpiresAt: Date.now() - 1_000, expiresAt: Date.now() }, emitCookie: false })],
+    ['overlong lifetime', () => ({ preparation: { ...preparation('confirmed'), expiresAt: Date.now() + 604_801_000 }, emitCookie: false })],
+    ['overlong admission', () => ({ preparation: { ...preparation('confirmed'), admissionExpiresAt: Date.now() + 601_000 }, emitCookie: false })],
+    ['private projection', () => ({ preparation: preparation('confirmed'), emitCookie: false, view: view() })],
+  ] as const)('restore refuses %s without cookie mutation', async (_label, output) => {
+    mockFetch.mockResolvedValue(Response.json(output()));
+    const response = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull(); privateHeaders(response);
+  });
+  it.each([401, 409, 503])('restore preserves every cookie on upstream %s and never retries', async statusCode => {
+    mockFetch.mockResolvedValue(new Response(null, { status: statusCode }));
+    const response = await browser(req('navigateur', 'POST', { step: 'restore' }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(statusCode); expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+  it('restore retains same-origin and custom-domain tenant isolation without selecting a journal', async () => {
+    const crossSite = req('navigateur', 'POST', { step: 'restore' }, { cookie: boundCookies, origin: 'https://other.example.test' });
+    expect((await browser(crossSite, context)).status).toBe(403); expect(mockFetch).not.toHaveBeenCalled();
+    const custom = 'https://classfood.example.test';
+    vi.stubEnv('SM_CUSTOMER_PILOT_ORIGINS', JSON.stringify([custom]));
+    mockFetch.mockResolvedValue(Response.json({ slug: 'other-restaurant' }));
+    const request = new NextRequest(`${custom}/r/classfood/compte/navigateur`, { method: 'POST',
+      headers: { host: new URL(custom).host, origin: custom, 'sec-fetch-site': 'same-origin', 'x-real-ip': '192.0.2.10',
+        'content-type': 'application/json', cookie: boundCookies }, body: JSON.stringify({ step: 'restore' }) });
+    const response = await browser(request, context);
+    expect(response.status).toBe(403); expect(response.headers.get('set-cookie')).toBeNull(); privateHeaders(response);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/resolve?host=classfood.example.test`);
+  });
   it('emits one short-lived proof cookie per admitted intention, never in JSON', async () => {
     const current = { operationId, state: 'open', expiresAt: Date.now() + 600_000 };
     mockFetch.mockResolvedValueOnce(Response.json({ intent: current, emitCookie: true }))

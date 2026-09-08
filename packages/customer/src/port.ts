@@ -119,6 +119,8 @@ export interface CustomerIdentityRepository {
   } | null>;
   confirmBrowser(input: CustomerBrowserBinding): Promise<CustomerBrowserPreparation | null>;
   validateBrowser(input: CustomerBrowserBinding): Promise<{ expiresAt: number } | null>;
+  /** Read the confirmed browser selected by its cookie; no session authority or TTL renewal. */
+  restoreBrowser(input: CustomerScope & { browserHash: string }): Promise<CustomerBrowserPreparation | null>;
   prepareIntent(input: CustomerIntentBinding): Promise<{ intent: CustomerVerificationIntent; emitCookie: boolean } | null>;
   closeIntent(input: CustomerBrowserBinding & { operationId: string }): Promise<CustomerVerificationIntent | null>;
   validateIntent(input: CustomerIntentBinding): Promise<{ expiresAt: number } | null>;

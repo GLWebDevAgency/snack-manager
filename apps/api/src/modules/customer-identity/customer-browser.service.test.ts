@@ -28,6 +28,7 @@ function fixture() {
     prepareBrowser: vi.fn().mockResolvedValue(preparation),
     issueBrowser: vi.fn().mockResolvedValue({ preparation: { ...preparation, state: 'issued' }, emitCookie: true }),
     confirmBrowser: vi.fn().mockResolvedValue({ ...preparation, state: 'confirmed' }),
+    restoreBrowser: vi.fn().mockResolvedValue({ ...preparation, state: 'confirmed' }),
     validateBrowser: vi.fn().mockImplementation(async input => input.browserRef === browserRef
       && input.browserHash === crypto.hash('browser', tenantRef, browserSecret) ? { expiresAt } : null),
     reserve: vi.fn().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
@@ -50,6 +51,47 @@ function fixture() {
 }
 
 describe('browser preparation — service binding, no provider authorization', () => {
+  it('restores only a confirmed public preparation from the existing cookie hash, without selecting a private session', async () => {
+    const f = fixture(), { tenantRef, browserSecret } = f.binding;
+    const result = await f.service.browser({ tenantRef, request: { step: 'restore' }, browserSecret, candidateSecret: null });
+    expect(result).toEqual({ preparation: { ...f.preparation, state: 'confirmed' }, emitCookie: false });
+    expect(f.repository.restoreBrowser).toHaveBeenCalledExactlyOnceWith({ parentRef: f.parentRef, tenantRef,
+      browserHash: f.crypto.hash('browser', tenantRef, browserSecret) });
+    expect(f.repository.validateBrowser).toHaveBeenCalledWith({ parentRef: f.parentRef, tenantRef,
+      browserRef: f.binding.browserRef, browserHash: f.crypto.hash('browser', tenantRef, browserSecret) });
+    for (const key of ['prepareBrowser', 'issueBrowser', 'confirmBrowser', 'reserve', 'authenticate', 'resultIntent', 'completeCheck'] as const) {
+      expect(f.repository[key]).not.toHaveBeenCalled();
+    }
+    expect(f.transport.start).not.toHaveBeenCalled(); expect(f.transport.check).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(browserSecret);
+  });
+  it.each([null, 'prepared', 'issued', 'expired'] as const)('does not turn %s into a restored preparation', async state => {
+    const f = fixture(); f.repository.restoreBrowser.mockResolvedValue(state === null ? null : { ...f.preparation, state });
+    await expect(f.service.browser({ tenantRef: f.binding.tenantRef, request: { step: 'restore' },
+      browserSecret: f.binding.browserSecret, candidateSecret: null })).rejects.toMatchObject({ reason: 'unauthorized' });
+  });
+  it.each(['expired', 'outlived', 'invalidated', 'changed-expiry', 'private-field'] as const)(
+    'refuses a restored preparation that is %s after the read', async failure => {
+      const f = fixture();
+      if (failure === 'expired') f.advance(7 * 86_400_000);
+      if (failure === 'outlived') f.repository.restoreBrowser.mockResolvedValue({ ...f.preparation, state: 'confirmed', expiresAt: f.expiresAt + 7 * 86_400_000 });
+      if (failure === 'invalidated') f.repository.validateBrowser.mockResolvedValue(null);
+      if (failure === 'changed-expiry') f.repository.validateBrowser.mockResolvedValue({ expiresAt: f.expiresAt - 1 });
+      if (failure === 'private-field') f.repository.restoreBrowser.mockResolvedValue({ ...f.preparation, state: 'confirmed', sessionToken: f.binding.browserSecret });
+      await expect(f.service.browser({ tenantRef: f.binding.tenantRef, request: { step: 'restore' },
+        browserSecret: f.binding.browserSecret, candidateSecret: null })).rejects.toBeDefined();
+    });
+  it.each([
+    { request: { step: 'restore', browserRef: randomUUID() }, current: true, candidate: false },
+    { request: { step: 'restore' }, current: false, candidate: false },
+    { request: { step: 'restore' }, current: true, candidate: true },
+  ])('rejects an inconsistent restoration envelope before storage', async value => {
+    const f = fixture();
+    await expect(f.service.browser({ tenantRef: f.binding.tenantRef, request: value.request,
+      browserSecret: value.current ? f.binding.browserSecret : null,
+      candidateSecret: value.candidate ? f.candidateSecret : null })).rejects.toMatchObject({ reason: 'invalid_request' });
+    expect(f.repository.restoreBrowser).not.toHaveBeenCalled();
+  });
   it('prepares, issues and confirms through distinct strict ports, exposing no raw secret', async () => {
     const f = fixture(); const { tenantRef, browserRef, browserSecret } = f.binding;
     const prepared = await f.service.browser({ tenantRef, request: { step: 'prepare', browserRef }, browserSecret: null, candidateSecret: null });

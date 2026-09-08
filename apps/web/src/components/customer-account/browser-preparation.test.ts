@@ -30,6 +30,92 @@ function fixture() {
 }
 
 describe('Customer browser preparation — explicit, journaled, no provider', () => {
+  it('restores only a missing public browser selector, without issuing or selecting a private publication', async () => {
+    const f = fixture(); const current = { ...f.view(), state: 'confirmed' as const, admissionExpiresAt: Date.now() - 1_000 };
+    f.request.mockResolvedValue(current);
+    expect(f.request).not.toHaveBeenCalled();
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'ready', preparation: current });
+    expect(f.request).toHaveBeenCalledExactlyOnceWith('browser', { step: 'restore' });
+    expect(f.journal.write).toHaveBeenCalledExactlyOnceWith({ version: 1, browserRef: ref, phase: 'ready' }, null);
+    expect(f.record).toEqual({ version: 1, browserRef: ref, phase: 'ready' });
+    expect(f.uuid).not.toHaveBeenCalled();
+  });
+  it.each(['preparing', 'issuing', 'confirming', 'ready'] as const)('restore refuses an existing %s journal before HTTP', async phase => {
+    const f = fixture(); f.record = { version: 1, browserRef: other, phase };
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'blocked' });
+    expect(f.request).not.toHaveBeenCalled(); expect(f.journal.write).not.toHaveBeenCalled();
+    expect(f.record).toEqual({ version: 1, browserRef: other, phase });
+  });
+  it('restore fails closed on corrupt storage or missing native exclusion', async () => {
+    const f = fixture(); f.journal.read.mockRejectedValue(new Error('Invalid journal'));
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.request).not.toHaveBeenCalled(); expect(f.journal.write).not.toHaveBeenCalled();
+    const unlocked = createCustomerBrowserPreparation({ ...f.port, lock: undefined });
+    expect(await unlocked.restoreMissingJournal()).toEqual({ kind: 'blocked' });
+  });
+  it.each(['prepared', 'issued', 'expired'] as const)('restore refuses the non-confirmed %s response', async state => {
+    const f = fixture(); f.request.mockResolvedValue({ ...f.view(), state });
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.journal.write).not.toHaveBeenCalled(); expect(f.uuid).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['expired', () => ({ expiresAt: Date.now() })],
+    ['overlong lifetime', () => ({ expiresAt: Date.now() + 604_801_000 })],
+    ['overlong admission', () => ({ admissionExpiresAt: Date.now() + 601_000 })],
+    ['unknown private field', () => ({ token: 'not-a-browser-result' })],
+    ['unexpected cookie instruction', () => ({ emitCookie: false })],
+    ['invalid reference', () => ({ browserRef: 'invalid' })],
+  ] as const)('restore refuses %s without any journal write', async (_label, patch) => {
+    const f = fixture(); f.request.mockResolvedValue({ ...f.view(), state: 'confirmed', ...patch() });
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.journal.write).not.toHaveBeenCalled();
+  });
+  it('restore preserves a journal created while its response was pending', async () => {
+    const f = fixture(); f.request.mockImplementationOnce(async () => {
+      f.record = { version: 1, browserRef: other, phase: 'ready' }; return { ...f.view(), state: 'confirmed' };
+    });
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.record).toEqual({ version: 1, browserRef: other, phase: 'ready' });
+    expect(f.journal.write).not.toHaveBeenCalled();
+  });
+  it('restore requires the final null-to-ready CAS to commit before success', async () => {
+    const f = fixture(); f.request.mockResolvedValue({ ...f.view(), state: 'confirmed' });
+    f.journal.write.mockImplementationOnce(async () => {
+      f.record = { version: 1, browserRef: other, phase: 'preparing' }; throw Error('CAS lost');
+    });
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.record?.browserRef).toBe(other); expect(f.request).toHaveBeenCalledTimes(1);
+  });
+  it('restore rechecks absolute expiry after the last asynchronous journal read', async () => {
+    const f = fixture(); let now = Date.now(); const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      f.request.mockResolvedValue({ ...f.view(), state: 'confirmed', admissionExpiresAt: now - 1_000, expiresAt: now + 1_000 });
+      f.journal.read.mockResolvedValueOnce(null).mockImplementationOnce(async () => { now += 1_000; return null; });
+      expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+      expect(f.journal.write).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
+  it('does not announce readiness if the durable journal commit crosses expiration', async () => {
+    const f = fixture(); let now = Date.now(); const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      f.request.mockResolvedValue({ ...f.view(), state: 'confirmed', admissionExpiresAt: now - 1_000, expiresAt: now + 1_000 });
+      const commit = f.journal.write.getMockImplementation()!;
+      f.journal.write.mockImplementationOnce(async (value, expected) => { await commit(value, expected); now += 1_000; });
+      expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+      // Keep the committed selector: no destructive repair, new UUID or retry.
+      expect(f.record).toEqual({ version: 1, browserRef: ref, phase: 'ready' });
+      expect(f.journal.write).toHaveBeenCalledTimes(1); expect(f.request).toHaveBeenCalledTimes(1);
+      expect(f.uuid).not.toHaveBeenCalled();
+    } finally { clock.mockRestore(); }
+  });
+  it('a failed restore never retries, issues a cookie or invents a replacement selector', async () => {
+    const f = fixture(); f.request.mockRejectedValue(new Error('Response lost'));
+    expect(await f.client.restoreMissingJournal()).toEqual({ kind: 'uncertain' });
+    expect(f.request).toHaveBeenCalledExactlyOnceWith('browser', { step: 'restore' });
+    expect(f.record).toBeNull(); expect(f.uuid).not.toHaveBeenCalled();
+    expect(await f.client.resume()).toEqual({ kind: 'absent' });
+    expect(f.request).toHaveBeenCalledTimes(1);
+  });
   it('commits each uncertainty phase before network and keeps only a public selector', async () => {
     const f = fixture(); expect(await f.client.begin()).toMatchObject({ kind: 'ready' });
     expect(f.events).toEqual(['saved:preparing', 'prepare', 'saved:issuing', 'issue', 'saved:confirming', 'confirm', 'saved:ready']);

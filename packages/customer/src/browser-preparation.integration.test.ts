@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { prepareCustomerTestIntent } from './browser-test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
-import { withCustomerScope } from './client';
+import { CustomerRepositoryError, withCustomerScope } from './client';
 import type { VerificationReservation } from './port';
 
 const integration = process.env.CUSTOMER_TEST_DATABASE_URL ? describe : describe.skip;
@@ -45,6 +45,104 @@ integration('browser preparation — PostgreSQL authority without any SMS budget
     return { ...claim, expectedOperationId: claim.operationId, expectedCheckId: claim.checkId, result: 'approved' as const, sessionId: randomUUID(), sessionHash: hash(),
       sessionExpiresAt: Date.now() + 604_800_000, accountId: randomUUID(), existingSessionHash: null };
   }
+
+  const restoreInput = (i: ReturnType<typeof input>) => ({ parentRef: i.parentRef, tenantRef: i.tenantRef, browserHash: i.browserHash });
+
+  it('restores only the confirmed preparation selected by parent, tenant and cookie hash', async () => {
+    const i = input(); await historical(i, 601_000, true);
+    const before = (await fixture.admin.query('SELECT * FROM customer.browser_preparations WHERE parent_ref=$1', [i.parentRef])).rows;
+    const expected = { browserRef: i.browserRef, state: 'confirmed',
+      admissionExpiresAt: before[0].admission_expires_at.getTime(), expiresAt: before[0].expires_at.getTime() };
+    expect(await repo.restoreBrowser(restoreInput(i))).toEqual(expected);
+    expect(await Promise.all([repo.restoreBrowser(restoreInput(i)), repo.restoreBrowser(restoreInput(i))]))
+      .toEqual([expected, expected]);
+    for (const patch of [{ tenantRef: 'foreign' }, { parentRef: 'foreign' }, { browserHash: hash() }]) {
+      expect(await repo.restoreBrowser({ ...restoreInput(i), ...patch })).toBeNull();
+    }
+    expect((await fixture.admin.query('SELECT * FROM customer.browser_preparations WHERE parent_ref=$1', [i.parentRef])).rows).toEqual(before);
+    for (const table of ['parent_budgets', 'browser_contexts', 'accounts', 'sessions', 'session_publications']) {
+      expect((await fixture.admin.query(`SELECT 1 FROM customer.${table} WHERE parent_ref=$1`, [i.parentRef])).rowCount).toBe(0);
+    }
+  });
+
+  it.each(['absent', 'prepared', 'issued', 'expired'] as const)('does not restore a preparation in state %s or change it', async state => {
+    const i = input();
+    if (state === 'expired') await historical(i, 604_801_000, true);
+    else if (state !== 'absent') {
+      await repo.prepareBrowser(scope(i));
+      if (state === 'issued') await repo.issueBrowser({ ...i, currentBrowserHash: null });
+    }
+    const before = (await fixture.admin.query('SELECT * FROM customer.browser_preparations WHERE parent_ref=$1', [i.parentRef])).rows;
+    expect(await repo.restoreBrowser(restoreInput(i))).toBeNull();
+    expect((await fixture.admin.query('SELECT * FROM customer.browser_preparations WHERE parent_ref=$1', [i.parentRef])).rows).toEqual(before);
+  });
+
+  it('restores at preparation and SMS quota saturation without waiting for their write locks', async () => {
+    const i = input(); await historical(i, 601_000, true);
+    await fixture.admin.query(`WITH stamp AS (SELECT clock_timestamp() AS at)
+      INSERT INTO customer.browser_preparations(parent_ref,tenant_ref,browser_ref,created_at,admission_expires_at,expires_at)
+      SELECT $1,$2,ref,at,at+interval '10 minutes',at+interval '168 hours' FROM unnest($3::uuid[]) ref CROSS JOIN stamp`,
+    [i.parentRef, i.tenantRef, Array.from({ length: 127 }, () => randomUUID())]);
+    await fixture.admin.query(`INSERT INTO customer.parent_budgets(parent_ref,send_limit,sms_limit,verification_limit,
+      reserved_sends,reserved_sms,reserved_verifications) VALUES($1,50,50,50,50,50,50)`, [i.parentRef]);
+    expect(await repo.prepareBrowser({ ...scope(i), browserRef: randomUUID() })).toBeNull();
+    const budget = (await fixture.admin.query('SELECT * FROM customer.parent_budgets WHERE parent_ref=$1', [i.parentRef])).rows;
+    const blocker = await fixture.admin.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT parent_ref FROM customer.parent_budgets WHERE parent_ref=$1 FOR UPDATE', [i.parentRef]);
+      await blocker.query('SELECT browser_ref FROM customer.browser_preparations WHERE parent_ref=$1 FOR UPDATE', [i.parentRef]);
+      expect(await repo.restoreBrowser(restoreInput(i))).toMatchObject({ browserRef: i.browserRef, state: 'confirmed' });
+    } finally { await blocker.query('ROLLBACK'); blocker.release(); }
+    expect((await fixture.admin.query('SELECT * FROM customer.parent_budgets WHERE parent_ref=$1', [i.parentRef])).rows).toEqual(budget);
+    expect((await fixture.admin.query('SELECT 1 FROM customer.browser_preparations WHERE parent_ref=$1', [i.parentRef])).rowCount).toBe(128);
+  });
+
+  it('restores no session, publication or identity and leaves all existing receipts unchanged', async () => {
+    const i = input(); await historical(i, 601_000, true);
+    const done = await approval(i); expect(await repo.completeCheck(done)).not.toBeNull();
+    const tables = ['browser_preparations', 'browser_contexts', 'accounts', 'verified_contacts', 'sessions',
+      'session_publications', 'verification_intents', 'challenges', 'check_attempts', 'parent_budgets', 'reservations'];
+    const snapshot = () => Promise.all(tables.map(async table =>
+      (await fixture.admin.query(`SELECT * FROM customer.${table} WHERE parent_ref=$1`, [i.parentRef])).rows));
+    const before = await snapshot();
+    const result = await repo.restoreBrowser(restoreInput(i));
+    expect(Object.keys(result!).sort()).toEqual(['admissionExpiresAt', 'browserRef', 'expiresAt', 'state']);
+    expect(result).toMatchObject({ browserRef: i.browserRef, state: 'confirmed' });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('uses SQL expiry at restore time, not an earlier application observation', async () => {
+    const i = input(); await historical(i, 604_799_000, true);
+    expect(await repo.validateBrowser(i)).not.toBeNull();
+    let intercepted = 0;
+    const pool = { connect: async () => {
+      const client = await fixture.app.connect();
+      return { query: async (sql: string, params?: unknown[]) => {
+        if (sql.includes('FROM customer.browser_preparations')) {
+          intercepted++;
+          await fixture.admin.query(`SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM expires_at-clock_timestamp()))+0.02)
+            FROM customer.browser_preparations WHERE parent_ref=$1`, [i.parentRef]);
+        }
+        return client.query(sql, params);
+      }, release: client.release.bind(client) };
+    } } as unknown as Pool;
+    expect(await new PostgresCustomerIdentityRepository(pool).restoreBrowser(restoreInput(i))).toBeNull();
+    expect(intercepted).toBe(1);
+  });
+
+  it('rejects malformed restore inputs and public-reference fallback before any database access', () => {
+    const i = restoreInput(input()); let connects = 0;
+    const guarded = new PostgresCustomerIdentityRepository({ connect: async () => {
+      connects++; throw new Error('Unexpected fixture connection');
+    } } as unknown as Pool);
+    for (const raw of [null, {}, { ...i, browserHash: 'not-a-cookie-hash' },
+      { ...i, browserHash: 'A'.repeat(64) }, { ...i, parentRef: '' }, { ...i, tenantRef: 'bad scope' },
+      { ...i, browserRef: randomUUID() }, { ...i, now: Date.now() }]) {
+      expect(() => guarded.restoreBrowser(raw as Parameters<typeof guarded.restoreBrowser>[0])).toThrowError(CustomerRepositoryError);
+    }
+    expect(connects).toBe(0);
+  });
 
   it('replays the public preparation with immutable SQL deadlines and no budget, identity or secret', async () => {
     const i = input();

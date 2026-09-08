@@ -18,6 +18,32 @@ type Port = {
  * received; it NEVER repeats issue, invents a new reference or infers absence
  * from an HTTP error. Guest-intent closure is a separate, still closed flow. */
 export function createCustomerBrowserPreparation(port: Port) {
+  async function restoreMissingJournal(): Promise<CustomerBrowserPreparationResult> {
+    if (!port.lock) return { kind: 'blocked' };
+    try {
+      return await port.lock(async () => {
+        // Never replace an existing selector or repair corrupt storage. This
+        // explicit operation restores only browser metadata, not a publication.
+        if (await port.journal.read() !== null) return { kind: 'blocked' };
+        const request = CustomerAccountBrowserRequests.browser.parse({ step: 'restore' });
+        const preparation = CustomerBrowserPreparationSchema.parse(await port.request('browser', request));
+        if (await port.journal.read() !== null) return { kind: 'uncertain' };
+        const now = Date.now();
+        if (preparation.state !== 'confirmed' || preparation.expiresAt <= now
+          || preparation.expiresAt > now + 604_800_000 || preparation.admissionExpiresAt > now + 600_000) {
+          return { kind: 'uncertain' };
+        }
+        // The strict transaction checks null again, including uncoordinated
+        // writes made after the last read. No verification/session is adopted.
+        await port.journal.write({ version: 1, browserRef: preparation.browserRef, phase: 'ready' }, null);
+        port.changed?.();
+        // Committing IndexedDB may itself cross expiry. Keep the committed
+        // selector for explicit resumption, but never advertise it as usable.
+        if (preparation.expiresAt <= Date.now()) return { kind: 'uncertain' };
+        return { kind: 'ready', preparation };
+      });
+    } catch { return { kind: 'uncertain' }; }
+  }
   async function readServer(record: CustomerBrowserJournal, step: 'prepare' | 'issue' | 'confirm') {
     const input = CustomerAccountBrowserRequests.browser.parse({ step, browserRef: record.browserRef });
     const view = CustomerBrowserPreparationSchema.parse(await port.request('browser', input));
@@ -72,7 +98,7 @@ export function createCustomerBrowserPreparation(port: Port) {
       });
     } catch { return { kind: 'uncertain' }; }
   }
-  return { begin: () => run('begin'), resume: () => run('resume'), restartExpired: () => run('restart') };
+  return { begin: () => run('begin'), resume: () => run('resume'), restartExpired: () => run('restart'), restoreMissingJournal };
 }
 
 /** Same native lock as profile/logout, independent from checkout's journal. */

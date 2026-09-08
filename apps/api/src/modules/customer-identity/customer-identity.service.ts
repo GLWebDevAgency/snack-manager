@@ -93,25 +93,42 @@ export class CustomerIdentityService {
     return this.protect(async () => {
       const input = this.parse(browserSchema, raw);
       const scope = this.scope(input.tenantRef, this.configuration());
-      const browserRef = input.request.browserRef;
+      const browserRef = input.request.step === 'restore' ? null : input.request.browserRef;
       let result;
       switch (input.request.step) {
         case 'prepare':
-          result = { preparation: await this.repository.prepareBrowser({ ...scope, browserRef }), emitCookie: false };
+          result = { preparation: await this.repository.prepareBrowser({ ...scope, browserRef: input.request.browserRef }), emitCookie: false };
           break;
         case 'issue':
-          result = await this.repository.issueBrowser({ ...scope, browserRef,
+          result = await this.repository.issueBrowser({ ...scope, browserRef: input.request.browserRef,
             browserHash: this.crypto.hash('browser', scope.tenantRef, input.candidateSecret!),
             currentBrowserHash: input.browserSecret === null ? null
               : this.crypto.hash('browser', scope.tenantRef, input.browserSecret) });
           break;
         case 'confirm':
-          result = { preparation: await this.repository.confirmBrowser({ ...scope, browserRef,
+          result = { preparation: await this.repository.confirmBrowser({ ...scope, browserRef: input.request.browserRef,
+            browserHash: this.crypto.hash('browser', scope.tenantRef, input.browserSecret!) }), emitCookie: false };
+          break;
+        case 'restore':
+          result = { preparation: await this.repository.restoreBrowser({ ...scope,
             browserHash: this.crypto.hash('browser', scope.tenantRef, input.browserSecret!) }), emitCookie: false };
       }
       const parsed = CustomerAccountResponses.browser.safeParse(result);
-      if (!parsed.success || parsed.data.preparation.browserRef !== browserRef
+      if (!parsed.success || (browserRef !== null && parsed.data.preparation.browserRef !== browserRef)
         || (parsed.data.emitCookie && input.request.step !== 'issue')) throw new CustomerIdentityError('unauthorized');
+      if (input.request.step === 'restore') {
+        // Returning the public selector does not select an intention or private
+        // publication. Revalidate the actual cookie at the final async boundary;
+        // never confirm an issued preparation or extend its original lifetime.
+        if (parsed.data.preparation.state !== 'confirmed' || parsed.data.preparation.expiresAt > this.now() + SESSION_TTL_MS) {
+          throw new CustomerIdentityError('unauthorized');
+        }
+        const current = await this.requireBrowser({ tenantRef: input.tenantRef,
+          browserRef: parsed.data.preparation.browserRef, browserSecret: input.browserSecret! });
+        if (parsed.data.preparation.expiresAt !== current.expiresAt || current.expiresAt <= this.now()) {
+          throw new CustomerIdentityError('unauthorized');
+        }
+      }
       // Recheck current server configuration after waiting for the durable CAS.
       if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) {
         throw new CustomerIdentityError('unavailable');

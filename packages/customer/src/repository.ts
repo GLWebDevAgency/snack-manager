@@ -7,11 +7,12 @@ import { claimVerification, completeVerification, recoverVerification, settleVer
 import { claimSchema, completionSchema, nameSchema, recoverySchema, reservationSchema, revocationSchema,
   sessionSchema, settlementSchema, validate, browserPreparationSchema, browserBindingSchema, browserIssueSchema,
   intentBindingSchema, intentCloseSchema, intentResultSchema } from './validation';
-import { prepareBrowser, issueBrowser, confirmBrowser, validateBrowser } from './browser-preparation';
+import { prepareBrowser, issueBrowser, confirmBrowser, validateBrowser, restoreBrowser } from './browser-preparation';
 import { lockIntentParent } from './intent-queries';
 import { prepareIntent, closeIntent, validateIntent, resultIntent } from './verification-intents';
 
 type Input<K extends keyof CustomerIdentityRepository> = Parameters<CustomerIdentityRepository[K]>[0];
+const browserRestoreSchema = browserBindingSchema.omit({ browserRef: true });
 
 /** Parent serialization is bounded to local SQL; never held over provider calls. */
 export class PostgresCustomerIdentityRepository implements CustomerIdentityRepository {
@@ -31,6 +32,10 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
   validateBrowser(raw: Input<'validateBrowser'>) {
     const input = validate(browserBindingSchema, raw);
     return withCustomerScope(this.pool, input, client => validateBrowser(client, input));
+  }
+  restoreBrowser(raw: Input<'restoreBrowser'>) {
+    const input = validate(browserRestoreSchema, raw);
+    return withCustomerScope(this.pool, input, client => restoreBrowser(client, input));
   }
   private intentLocked<T>(scope: CustomerScope, work: (client: PoolClient) => Promise<T>) {
     return withCustomerScope(this.pool, scope, async client => {

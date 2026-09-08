@@ -34,7 +34,11 @@ export type CustomerVerificationIntent = z.infer<typeof CustomerVerificationInte
 /** Browser DTOs never carry the HttpOnly identities or server attestations. */
 export const CustomerAccountBrowserRequests = {
   status: empty,
-  browser: z.strictObject({ step: z.enum(['prepare', 'issue', 'confirm']), browserRef: uuid }),
+  browser: z.discriminatedUnion('step', [
+    z.strictObject({ step: z.enum(['prepare', 'issue', 'confirm']), browserRef: uuid }),
+    // Explicit public-selector restoration, not session/account recovery.
+    z.strictObject({ step: z.literal('restore') }),
+  ]),
   intent: z.strictObject({ step: z.enum(['prepare', 'close']), operationId: uuid }),
   start: z.strictObject({ phone, operationId: uuid, turnstileToken: z.string().min(1).max(2048) }),
   check: z.strictObject({ operationId: uuid, challengeId: uuid, checkId: uuid, code: z.string().regex(/^\d{6}$/) }),

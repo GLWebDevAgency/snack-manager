@@ -184,6 +184,41 @@ describe('customer runtime tenant and purpose boundary', () => {
 });
 
 describe('browser preparation runtime boundary', () => {
+  it('restores a confirmed selector without sending configuration, provider, or private profile access', async () => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    const preparation = { browserRef: f.start.browserRef, state: 'confirmed' as const,
+      admissionExpiresAt: f.session.expiresAt - 604_200_000, expiresAt: f.session.expiresAt };
+    f.repository.restoreBrowser.mockResolvedValue(preparation);
+    await expect(f.runtime.execute({ ...f.relay, action: 'browser' }, { request: { step: 'restore' },
+      browserSecret: f.start.browserSecret, candidateSecret: null })).resolves.toEqual({ preparation, emitCookie: false });
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
+    expect(f.repository.authenticate).not.toHaveBeenCalled(); expect(f.repository.resultIntent).not.toHaveBeenCalled();
+    expect(f.repository.prepareBrowser).not.toHaveBeenCalled(); expect(f.repository.confirmBrowser).not.toHaveBeenCalled();
+  });
+  it('refuses restoration when tenant authorization changes during the public selector read', async () => {
+    const f = fixture();
+    f.repository.restoreBrowser.mockImplementation(async () => {
+      f.row.account.status = 'suspended';
+      return { browserRef: f.start.browserRef, state: 'confirmed', admissionExpiresAt: f.session.expiresAt - 604_200_000,
+        expiresAt: f.session.expiresAt };
+    });
+    await expect(f.runtime.execute({ ...f.relay, action: 'browser' }, { request: { step: 'restore' },
+      browserSecret: f.start.browserSecret, candidateSecret: null })).rejects.toMatchObject({ status: 503 });
+  });
+  it('rechecks restored preparation expiry after the final tenant read', async () => {
+    const f = fixture(); const now = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(now);
+    try {
+      const expiresAt = now + 1_000;
+      f.repository.restoreBrowser.mockResolvedValue({ browserRef: f.start.browserRef, state: 'confirmed',
+        admissionExpiresAt: now - 1_000, expiresAt });
+      f.repository.validateBrowser.mockResolvedValue({ expiresAt });
+      let reads = 0;
+      f.query.exec.mockImplementation(async () => { if (++reads === 2) vi.setSystemTime(expiresAt); return f.row; });
+      await expect(f.runtime.execute({ ...f.relay, action: 'browser' }, { request: { step: 'restore' },
+        browserSecret: f.start.browserSecret, candidateSecret: null })).rejects.toMatchObject({ status: 401 });
+    } finally { vi.useRealTimers(); }
+  });
   it.each(['prepare', 'issue', 'confirm'] as const)('runs %s without a send policy, Turnstile or a provider', async step => {
     const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
     delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
