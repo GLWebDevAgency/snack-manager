@@ -321,6 +321,14 @@ d'authentification qui remplacerait les cookies en dehors de ce protocole.
 
 ## L3a.5 — pilote Verify payant fermé, préparation non activée
 
+**Déployé sans activation via #138**, staging
+`0cf121249a0bebb8e2bfd00922f9bf2015296f96`.
+[Preuve de réception](https://github.com/GLWebDevAgency/snack-manager/pull/138#issuecomment-5587139392) :
+7/7 jobs, quatre services, trois familles de migrations, smoke 8/8 et frontière
+fermée 8/8 ; E2E démos 9/9, quatre parcours avec identifiants ignorés. Le nombre
+73 des logs bootstrap est celui du manifeste géré, pas un comptage physique
+observé 69 → 73. Aucun SMS, compte ou paiement créé ; production inchangée.
+
 Le compte fournisseur devenu `Full` n'est pas accepté comme un compte `Trial`.
 Le nouveau mode explicite `closed_paid_pilot` reste limité au runtime Railway
 staging épinglé, à un seul restaurant et à cinq mobiles français autorisés au
