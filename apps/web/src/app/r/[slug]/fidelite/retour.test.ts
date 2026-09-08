@@ -8,7 +8,7 @@ describe("où renvoyer quand le programme fidélité n'existe pas", () => {
     // prestataire.
     expect(retourDepuisCheminFidelite("/r/classfood/fidelite")).toEqual({
       href: "/r/classfood",
-      libelle: "Voir la carte du restaurant",
+      libelle: "Voir le menu du restaurant",
     });
   });
 

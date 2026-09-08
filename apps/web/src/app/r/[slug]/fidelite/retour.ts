@@ -30,6 +30,6 @@ export function retourDepuisCheminFidelite(
   }
   return {
     href: `/r/${encodeURIComponent(slug)}`,
-    libelle: "Voir la carte du restaurant",
+    libelle: "Voir le menu du restaurant",
   };
 }
