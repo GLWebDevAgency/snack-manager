@@ -9,6 +9,7 @@ import { customerTestEnvironment } from './customer-account.test-fixture';
 function fixture(action = 'session') {
   const env = customerTestEnvironment();
   const body = { browserRef: randomUUID(), sessionToken: Buffer.alloc(32, 17).toString('base64url'),
+    expectedOperationId: randomUUID(), expectedCheckId: randomUUID(),
     browserSecret: Buffer.alloc(32, 20).toString('base64url'), request: {} };
   const request = { method: 'POST', originalUrl: `/public/customer/fixture/${action}`,
     params: { slug: 'fixture', action }, body, rawBody: Buffer.from(JSON.stringify(body)),

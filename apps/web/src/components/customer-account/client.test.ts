@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { CustomerAccountHttpError, createCustomerAccountClient } from "./client";
+import { randomUUID } from 'node:crypto';
+import { CustomerAccountHttpError, createCustomerAccountClient, customerAccountRequest, type CustomerAccountSelection } from "./client";
 
 const now = 1_800_000_000_000;
 const view = (name = "Camille", revision = 0, phoneE164 = "+33600000001") => ({
@@ -9,20 +10,68 @@ const deferred = <T>() => { let resolve!: (value: T) => void;
   const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
 function setup() {
   let current = view(); let active = true;
-  const request = vi.fn(async (action: string, body?: unknown): Promise<unknown> => {
+  let selected = { browserRef: randomUUID(), publication: { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } };
+  const selection = vi.fn(async () => structuredClone(selected));
+  const request = Object.assign(vi.fn<(action: string, body?: unknown, selection?: CustomerAccountSelection) => Promise<unknown>>(async (action, body) => {
     if (action === "status") return { available: false };
     if (action === "session") return current;
     if (action === "logout") return undefined;
     if (action === "name") { current = view((body as { name: string }).name, 1); return current; }
     throw Error("Unexpected endpoint");
-  });
+  }), { selection });
   const announce = vi.fn();
   const lock = vi.fn(async (job: () => Promise<void>) => job());
   const client = createCustomerAccountClient({ request, lock, announce, now: () => now, active: () => active });
-  return { client, request, announce, lock, change: (next: ReturnType<typeof view>) => { current = next; }, hide: () => { active = false; client.invalidate("idle"); } };
+  return { client, request, announce, lock, selection,
+    changePublication: () => { selected = { ...selected, publication: { expectedOperationId: randomUUID(), expectedCheckId: randomUUID() } }; },
+    change: (next: ReturnType<typeof view>) => { current = next; }, hide: () => { active = false; client.invalidate("idle"); } };
 }
 
 describe("Compte client — vues privées et mutations sérialisées", () => {
+  it.each(['name', 'logout'] as const)('refuse %s préparé sur A si la publication devient B pendant le verrou, même avec une vue identique', async action => {
+    const f = setup(); await f.client.refresh(); const displayed = f.client.getSnapshot().view;
+    const release = deferred<void>();
+    f.lock.mockImplementation(async job => { await release.promise; return job(); });
+    const pending = action === 'name' ? f.client.saveName('Brouillon de A') : f.client.logout();
+    f.changePublication(); // Cross-tab notification has not arrived; PII, revision and expiry are unchanged.
+    release.resolve(); expect(await pending).toBe(false);
+    expect(displayed).toEqual(view());
+    expect(f.request.mock.calls.filter(([called]) => called === action)).toHaveLength(0);
+    expect(f.client.getSnapshot().view).toBeNull();
+  });
+  it.each(['name', 'logout'] as const)('refuse %s si la publication change pendant la relecture préalable, sans changement de profil', async action => {
+    const f = setup(); await f.client.refresh();
+    f.request.mockImplementation(async called => {
+      if (called === 'session') { f.changePublication(); return view(); }
+      return undefined;
+    });
+    expect(await (action === 'name' ? f.client.saveName('Ancien brouillon') : f.client.logout())).toBe(false);
+    expect(f.request.mock.calls.filter(([called]) => called === action)).toHaveLength(0);
+    expect(f.client.getSnapshot().view).toBeNull();
+  });
+  it('ne publie pas une vue dont la sélection a changé pendant la lecture de disponibilité', async () => {
+    const f = setup(), availability = deferred<unknown>();
+    f.request.mockImplementation(async action => action === 'status' ? availability.promise : view());
+    const pending = f.client.refresh(); await vi.waitFor(() => expect(f.request).toHaveBeenCalledTimes(2));
+    f.changePublication(); availability.resolve({ available: false }); await pending;
+    expect(f.client.getSnapshot().view).toBeNull(); expect(await f.client.logout()).toBe(false);
+  });
+  it('ne déduit aucune sélection personnelle d’un simple profil retourné par un port incomplet', async () => {
+    const request = vi.fn(async () => view());
+    const client = createCustomerAccountClient({ request, lock: async job => job(), now: () => now });
+    await client.refresh(); expect(client.getSnapshot().view).toBeNull(); expect(await client.logout()).toBe(false);
+    expect(request.mock.calls).toHaveLength(1); // Status only, never a private call.
+  });
+  it.each(['name', 'logout'] as const)('le transport %s conserve la publication A attendue plutôt que signer B au dernier instant', async action => {
+    const f = setup(), expected = await f.selection(); f.changePublication();
+    const request = customerAccountRequest('fixture', async () => expected.browserRef, async () => (await f.selection()).publication);
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    try {
+      await expect(request(action, action === 'name' ? { name: 'A', expectedRevision: 0 } : { all: false }, expected))
+        .rejects.toMatchObject({ status: 409 });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("ne confond pas disponibilité SMS et session personnelle valide", async () => {
     const { client, request } = setup(); await client.refresh();
     expect(client.getSnapshot()).toMatchObject({ status: "authenticated", available: false, view: view() });
@@ -54,7 +103,7 @@ describe("Compte client — vues privées et mutations sérialisées", () => {
     const { client, request, announce } = setup(); await client.refresh();
     expect(await client.saveName("Nouveau nom")).toBe(true);
     expect(request.mock.calls.map(([action]) => action)).toEqual(["status", "session", "session", "name"]);
-    expect(request).toHaveBeenLastCalledWith("name", { name: "Nouveau nom", expectedRevision: 0 });
+    expect(request).toHaveBeenLastCalledWith("name", { name: "Nouveau nom", expectedRevision: 0 }, await request.selection());
     expect(announce).toHaveBeenCalledTimes(2);
     expect(client.getSnapshot()).toMatchObject({ busy: false, view: view("Nouveau nom", 1) });
   });
@@ -88,7 +137,7 @@ describe("Compte client — vues privées et mutations sérialisées", () => {
     const { client, request } = setup(); await client.refresh(); const late = deferred<unknown>();
     request.mockImplementation(async action => action === "session" ? view() : late.promise);
     const first = client.logout(true); expect(await client.logout(true)).toBe(false);
-    await vi.waitFor(() => expect(request).toHaveBeenCalledWith("logout", { all: true }));
+    await vi.waitFor(() => expect(request).toHaveBeenCalledWith("logout", { all: true }, expect.any(Object)));
     expect(client.getSnapshot()).toMatchObject({ view: null, busy: true });
     late.resolve(undefined); expect(await first).toBe(true);
     expect(client.getSnapshot()).toMatchObject({ view: null, busy: false, status: "guest" });
@@ -106,7 +155,7 @@ describe("Compte client — vues privées et mutations sérialisées", () => {
       if (action === "session") { if (loggedOut) throw new CustomerAccountHttpError(401); return view(); }
       const result = await late.promise; loggedOut = true; return result;
     });
-    const write = client.logout(); await vi.waitFor(() => expect(request).toHaveBeenCalledWith("logout", { all: false }));
+    const write = client.logout(); await vi.waitFor(() => expect(request).toHaveBeenCalledWith("logout", { all: false }, expect.any(Object)));
     client.invalidate(); await client.refresh(); late.resolve(undefined); await write;
     await vi.waitFor(() => expect(client.getSnapshot()).toMatchObject({ status: "guest", view: null, busy: false }));
     expect(request.mock.calls.filter(([action]) => action === "logout")).toHaveLength(1);

@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { CustomerAccountErrorSchema } from '@sm/contracts';
 import { GET as status } from './capacites/route';
 import { POST as browser } from './navigateur/route';
+import { POST as intent } from './intention/route';
 import { POST as start } from './verification/route';
 import { POST as check } from './confirmation/route';
 import { POST as recover } from './resultat/route';
@@ -18,6 +19,12 @@ const sessionToken = randomBytes(32).toString('base64url');
 const browserCookie = '__Host-sm_customer_browser_classfood';
 const sessionCookie = '__Host-sm_customer_session_classfood';
 const browserRef = randomUUID();
+const operationId = randomUUID(), challengeId = randomUUID(), checkId = randomUUID();
+const intentProof = randomBytes(32).toString('base64url');
+const intentCookie = `__Host-sm_customer_intent_classfood_${operationId}`;
+const boundCookies = `${browserCookie}=${browserToken}; ${intentCookie}=${intentProof}`;
+const selection = () => ({ operationId, challengeId, checkId, expiresAt: Date.now() + 60_000 });
+const approved = (current = view(), token = sessionToken) => ({ ...selection(), state: 'approved', token, view: current });
 const preparation = (state: 'prepared' | 'issued' | 'confirmed' = 'prepared') => ({ browserRef, state,
   admissionExpiresAt: Date.now() + 600_000, expiresAt: Date.now() + 604_800_000 });
 const context = { params: Promise.resolve({ slug: 'classfood' }) };
@@ -28,7 +35,8 @@ const view = () => ({ expiresAt: Date.now() + 60_000,
 function req(path: string, method = 'POST', body: unknown = path === 'navigateur' ? { step: 'prepare', browserRef } : {}, headers: Record<string, string> = {}) {
   return new NextRequest(`${origin}/r/classfood/compte/${path}`, { method,
     headers: { host: 'staging.snackmanager.fr', origin, 'sec-fetch-site': 'same-origin',
-      'x-real-ip': '192.0.2.10', 'content-type': 'application/json', 'x-sm-customer-browser-ref': browserRef, ...headers },
+      'x-real-ip': '192.0.2.10', 'content-type': 'application/json', 'x-sm-customer-browser-ref': browserRef,
+      'x-sm-customer-operation-id': operationId, 'x-sm-customer-check-id': checkId, ...headers },
     ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) });
 }
 function privateHeaders(response: Response) {
@@ -56,11 +64,64 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('customer account BFF — real handlers, isolated upstream', () => {
+  it('emits one short-lived proof cookie per admitted intention, never in JSON', async () => {
+    const current = { operationId, state: 'open', expiresAt: Date.now() + 600_000 };
+    mockFetch.mockResolvedValueOnce(Response.json({ intent: current, emitCookie: true }))
+      .mockResolvedValueOnce(Response.json({ intent: current, emitCookie: false }));
+    const first = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(first.status).toBe(200); expect(await first.json()).toEqual(current);
+    const envelope = JSON.parse(String(mockFetch.mock.calls[0]![1]!.body));
+    expect(envelope).toEqual({ browserRef, browserSecret: browserToken, candidateProof: expect.any(String), request: { step: 'prepare', operationId } });
+    const cookie = first.headers.get('set-cookie')!;
+    expect(cookie).toContain(`${intentCookie}=${envelope.candidateProof}`);
+    for (const flag of ['HttpOnly', 'Secure', 'SameSite=strict', `Expires=${new Date(current.expiresAt).toUTCString()}`]) expect(cookie).toContain(flag);
+    expect(cookie).not.toContain('Max-Age'); expect(cookie).not.toContain('Domain=');
+    const replay = await intent(req('intention', 'POST', { step: 'prepare', operationId }, { cookie: boundCookies }), context);
+    expect(replay.status).toBe(200); expect(replay.headers.get('set-cookie')).toBeNull();
+  });
+  it('close uses only the browser binding and expires its own proof, never a newer session', async () => {
+    const current = { operationId, state: 'closed', expiresAt: Date.now() + 600_000 };
+    mockFetch.mockResolvedValue(Response.json({ intent: current, emitCookie: false }));
+    const response = await intent(req('intention', 'POST', { step: 'close', operationId },
+      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserRef, browserSecret: browserToken,
+      candidateProof: null, request: { step: 'close', operationId } });
+    expect(response.headers.get('set-cookie')).toContain(`${intentCookie}=`);
+    expect(response.headers.get('set-cookie')).not.toContain(sessionCookie);
+    expect(response.headers.get('set-cookie')).not.toContain(browserCookie);
+  });
+  it.each(['unresolved', 'code_required', 'incorrect', 'closed', 'expired', 'failed'])(
+    'returns %s as an exact non-private result without setting a cookie', async state => {
+      const selectedCheck = state === 'code_required' ? null : checkId;
+      const current = { ...selection(), state, checkId: selectedCheck };
+      mockFetch.mockResolvedValue(Response.json(current));
+      const response = await recover(req('resultat', 'POST', { operationId, checkId: selectedCheck }, { cookie: boundCookies }), context);
+      expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+      expect(response.headers.get('set-cookie')).toBeNull(); privateHeaders(response);
+      expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserRef, browserSecret: browserToken,
+        intentProof, request: { operationId, checkId: selectedCheck } });
+    });
+  it('an operation UUID and browser cookie cannot read a result without the private intent proof', async () => {
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${browserCookie}=${browserToken}` }), context);
+    expect(response.status).toBe(401); expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it('refuses duplicated intent proof cookies before any upstream request', async () => {
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}; ${intentCookie}=${intentProof}` }), context);
+    expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it.each([{ operationId: randomUUID() }, { checkId: randomUUID() }])('rejects a differently correlated result %j', async patch => {
+    mockFetch.mockResolvedValue(Response.json({ ...approved(), ...patch }));
+    const response = await recover(req('resultat', 'POST', { operationId, checkId }, { cookie: boundCookies }), context);
+    expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
+  });
   it('preparation is public metadata only, even when a cookie already exists', async () => {
     const current = preparation();
     mockFetch.mockResolvedValue(Response.json({ preparation: current, emitCookie: false }));
     const response = await browser(req('navigateur', 'POST', { step: 'prepare', browserRef },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+      { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
     expect(response.headers.get('set-cookie')).toBeNull();
     expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
@@ -73,13 +134,13 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   });
   it.each(['', 'not-a-reference', `${browserRef},${browserRef}`])('never adopts a cookie without a canonical journal selector %s', async selected => {
     const response = await session(req('session', 'GET', {}, { 'x-sm-customer-browser-ref': selected,
-      cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
     expect(response.headers.get('set-cookie')).toBeNull();
   });
   it.each(['prepare', 'confirm'] as const)('refuses an upstream cookie emission during %s', async step => {
     mockFetch.mockResolvedValue(Response.json({ preparation: preparation('issued'), emitCookie: true }));
-    const response = await browser(req('navigateur', 'POST', { step, browserRef }, { cookie: `${browserCookie}=${browserToken}` }), context);
+    const response = await browser(req('navigateur', 'POST', { step, browserRef }, { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('does not emit on a replayed issue or mismatched reference', async () => {
@@ -91,9 +152,9 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     expect(second.status).toBe(503); expect(second.headers.get('set-cookie')).toBeNull();
   });
   it('never renews a recovered session cookie through relative Max-Age or browser re-emission', async () => {
-    const current = view(); mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: current }));
-    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    const current = view(); mockFetch.mockResolvedValue(Response.json(approved(current)));
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}` }), context);
     const cookie = response.headers.get('set-cookie')!;
     expect(cookie).toContain(`Expires=${new Date(current.expiresAt).toUTCString()}`);
     expect(cookie).not.toContain('Max-Age'); expect(cookie).not.toContain(browserCookie);
@@ -107,6 +168,17 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const response = await handler(req(path, method, body, { cookie: `${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(401);
     privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+  it.each([
+    [session, 'session', 'GET', {}], [name, 'profil', 'PATCH', { name: 'Test', expectedRevision: 0 }],
+    [logout, 'session', 'DELETE', { all: false }],
+  ] as const)('requires the selected publication before %s', async (handler, path, method, body) => {
+    for (const field of ['x-sm-customer-operation-id', 'x-sm-customer-check-id']) {
+      const response = await handler(req(path, method, body,
+        { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}`, [field]: '' }), context);
+      expect(response.status).toBe(409); expect(response.headers.get('set-cookie')).toBeNull();
+    }
     expect(mockFetch).not.toHaveBeenCalled();
   });
   it.each(['sm_loyalty_classfood', '__Host-sm_customer_browser_other', '__Secure-sm_customer_browser_classfood'])(
@@ -128,13 +200,13 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     });
     it('allows an existing private session without creating a cookie or sending an OTP', async () => {
       const current = view(); mockFetch.mockResolvedValue(Response.json(current));
-      const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      const response = await session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
       expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
       privateHeaders(response); expect(response.headers.get('set-cookie')).toBeNull();
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch.mock.calls[0]![0]).toBe(`${apiOrigin}/public/customer/classfood/session`);
       expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
-        browserRef, browserSecret: browserToken, sessionToken, request: {} });
+        browserRef, browserSecret: browserToken, expectedOperationId: operationId, expectedCheckId: checkId, sessionToken, request: {} });
     });
     it.each(['production', 'development', 'test'])('never permits a paid pilot in %s', async environment => {
       vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', environment);
@@ -184,11 +256,11 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   });
   it('does not rotate an established browser secret on a confirmation retry', async () => {
     mockFetch.mockResolvedValue(Response.json({ preparation: preparation('confirmed'), emitCookie: false }));
-    const response = await browser(req('navigateur', 'POST', { step: 'confirm', browserRef }, { cookie: `${browserCookie}=${browserToken}` }), context);
+    const response = await browser(req('navigateur', 'POST', { step: 'confirm', browserRef }, { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(200); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('never sends before a browser cookie was received in a separate request', async () => {
-    const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'challenge' }), context);
+    const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'challenge' }), context);
     expect(response.status).toBe(409); expect(response.headers.get('set-cookie')).toBeNull();
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -199,8 +271,8 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
   it('refuses duplicate cookies rather than choosing an identity', async () => {
-    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}; ${browserCookie}=${browserToken}` }), context);
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}; ${browserCookie}=${browserToken}` }), context);
     expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
   });
   it('ignores attacker-supplied forwarded-for when edge identity is missing', async () => {
@@ -221,11 +293,12 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     expect(source).not.toContain('192.0.2.10'); expect(headers.get('cookie')).toBeNull();
   });
   it('check and recover keep their token only in the HttpOnly cookie', async () => {
-    for (const [handler, path, body] of [[check, 'confirmation', { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' }],
-      [recover, 'resultat', { challengeId: randomUUID(), checkId: randomUUID() }]] as const) {
-      const current = view(); mockFetch.mockResolvedValueOnce(Response.json({ token: sessionToken, view: current }));
-      const response = await handler(req(path, 'POST', body, { cookie: `${browserCookie}=${browserToken}` }), context);
-      expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
+    for (const [handler, path, body] of [[check, 'confirmation', { operationId, challengeId, checkId, code: '123456' }],
+      [recover, 'resultat', { operationId, checkId }]] as const) {
+      const current = view(); const receipt = approved(current);
+      mockFetch.mockResolvedValueOnce(Response.json(path === 'confirmation' ? { token: sessionToken, view: current } : receipt));
+      const response = await handler(req(path, 'POST', body, { cookie: `${boundCookies}` }), context);
+      expect(response.status).toBe(200); expect(await response.json()).toEqual(path === 'confirmation' ? current : { ...selection(), state: 'approved', view: current, expiresAt: receipt.expiresAt });
       expect(response.headers.get('set-cookie')).toContain(`${sessionCookie}=${sessionToken}`);
       privateHeaders(response);
     }
@@ -233,36 +306,37 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   });
   it('a failed confirmation never removes an existing session', async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 401 }));
-    const response = await check(req('confirmation', 'POST', { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' },
-      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await check(req('confirmation', 'POST', { operationId, challengeId, checkId, code: '123456' },
+      { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(401); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('a session 401 does not mutate cookies from a potentially newer confirmation', async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 401 }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(401); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('an uncertain logout preserves the cookie until server revocation is known', async () => {
     mockFetch.mockRejectedValue(new Error('provider detail must not leak'));
-    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
     expect(await response.text()).not.toContain('provider detail');
   });
   it('confirmed logout acknowledges server revocation without mutating newer browser cookies', async () => {
     mockFetch.mockResolvedValue(new Response(null, { status: 204 }));
-    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await logout(req('session', 'DELETE', { all: false }, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(204); expect(response.headers.get('set-cookie')).toBeNull();
-    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserRef, browserSecret: browserToken, sessionToken, request: { all: false } });
+    expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({ browserRef, browserSecret: browserToken,
+      expectedOperationId: operationId, expectedCheckId: checkId, sessionToken, request: { all: false } });
   });
   it('rejects stale/overbroad upstream profiles without copying secrets or setting a cookie', async () => {
-    mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: { ...view(), accountId: randomUUID() } }));
-    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    mockFetch.mockResolvedValue(Response.json({ ...approved(), view: { ...view(), accountId: randomUUID() } }));
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('strictly refuses client-controlled envelope identity fields', async () => {
     const response = await name(req('profil', 'PATCH', { name: 'Test', expectedRevision: 0, sessionToken },
-      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(400); expect(mockFetch).not.toHaveBeenCalled();
   });
   it.each(['SM_CUSTOMER_ACCOUNT_MODE', 'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID',
@@ -342,41 +416,41 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     });
   it.each(['sm_loyalty_classfood', '__Secure-sm_customer_browser_classfood', '__Host-sm_customer_browser_other'])(
     'does not adopt the %s cookie as browser identity', async otherCookie => {
-      const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
+      const response = await recover(req('resultat', 'POST', { operationId, checkId },
         { cookie: `${otherCookie}=${browserToken}` }), context);
       expect(response.status).toBe(409); expect(mockFetch).not.toHaveBeenCalled();
     });
   it('recover rejects an OTP or other extra input rather than forwarding it', async () => {
-    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID(), code: '123456' },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    const response = await recover(req('resultat', 'POST', { operationId, challengeId, checkId, code: '123456' },
+      { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(400); expect(mockFetch).not.toHaveBeenCalled();
   });
   it('rejects both declared and streamed oversized bodies before upstream', async () => {
     const variants: Record<string, string>[] = [{ 'content-length': '9000' }, {}];
     for (const headers of variants) {
-      const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'x'.repeat(9_000) },
-        { ...headers, cookie: `${browserCookie}=${browserToken}` }), context);
+      const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'x'.repeat(9_000) },
+        { ...headers, cookie: `${boundCookies}` }), context);
       expect(response.status).toBe(400);
     }
     expect(mockFetch).not.toHaveBeenCalled();
   });
   it('does not retry a lost start response or change the operation/body on explicit retry', async () => {
-    const body = { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'challenge' };
+    const body = { phone: '+33600000000', operationId, turnstileToken: 'challenge' };
     mockFetch.mockRejectedValueOnce(new Error('answer lost')).mockResolvedValueOnce(Response.json({ challengeId: randomUUID(), expiresAt: Date.now() + 60_000 }));
-    expect((await start(req('verification', 'POST', body, { cookie: `${browserCookie}=${browserToken}` }), context)).status).toBe(503);
+    expect((await start(req('verification', 'POST', body, { cookie: `${boundCookies}` }), context)).status).toBe(503);
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect((await start(req('verification', 'POST', body, { cookie: `${browserCookie}=${browserToken}` }), context)).status).toBe(200);
+    expect((await start(req('verification', 'POST', body, { cookie: `${boundCookies}` }), context)).status).toBe(200);
     expect(mockFetch.mock.calls[0]![1]!.body).toBe(mockFetch.mock.calls[1]![1]!.body);
   });
   it('a late old-session 401 cannot erase a concurrently confirmed session', async () => {
     let answer!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
-    const old = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const old = session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     const fresh = randomBytes(32).toString('base64url');
-    mockFetch.mockResolvedValueOnce(Response.json({ token: fresh, view: view() }));
-    const newer = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    mockFetch.mockResolvedValueOnce(Response.json(approved(view(), fresh)));
+    const newer = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}` }), context);
     expect(newer.headers.get('set-cookie')).toContain(fresh);
     answer(new Response(null, { status: 401 }));
     expect((await old).headers.get('set-cookie')).toBeNull();
@@ -384,12 +458,12 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('a late old-session logout cannot erase a concurrently confirmed session', async () => {
     let answer!: (response: Response) => void;
     mockFetch.mockImplementationOnce(() => new Promise(resolve => { answer = resolve; }));
-    const old = logout(req('session', 'DELETE', { all: false }, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const old = logout(req('session', 'DELETE', { all: false }, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     const fresh = randomBytes(32).toString('base64url');
-    mockFetch.mockResolvedValueOnce(Response.json({ token: fresh, view: view() }));
-    const newer = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    mockFetch.mockResolvedValueOnce(Response.json(approved(view(), fresh)));
+    const newer = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}` }), context);
     expect(newer.headers.get('set-cookie')).toContain(fresh);
     answer(new Response(null, { status: 204 }));
     expect((await old).headers.get('set-cookie')).toBeNull();
@@ -400,7 +474,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const cancelled = vi.fn();
     mockFetch.mockResolvedValue(new Response(new ReadableStream({ cancel: cancelled }), { headers: { 'Content-Type': 'application/json' } }));
     try {
-      const pending = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      const pending = session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
       await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
       deadline.abort();
       const response = await pending;
@@ -412,15 +486,15 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it.each([0, 999, 604_800_001])('refuses an unusable or excessive session lifetime %d ms', async remaining => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     const current = view(); current.expiresAt = Date.now() + remaining;
-    mockFetch.mockResolvedValue(Response.json({ token: sessionToken, view: current }));
-    const response = await recover(req('resultat', 'POST', { challengeId: randomUUID(), checkId: randomUUID() },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    mockFetch.mockResolvedValue(Response.json(approved(current)));
+    const response = await recover(req('resultat', 'POST', { operationId, checkId },
+      { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
   });
   it('refuses a challenge beyond the ten-minute policy instead of extending it', async () => {
     mockFetch.mockResolvedValue(Response.json({ challengeId: randomUUID(), expiresAt: Date.now() + 601_000 }));
-    const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId: randomUUID(), turnstileToken: 'challenge' },
-      { cookie: `${browserCookie}=${browserToken}` }), context);
+    const response = await start(req('verification', 'POST', { phone: '+33600000000', operationId, turnstileToken: 'challenge' },
+      { cookie: `${boundCookies}` }), context);
     expect(response.status).toBe(503);
   });
   it('also bounds a silent upstream that never sends HTTP headers', async () => {
@@ -428,7 +502,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
     mockFetch.mockImplementation(() => new Promise(() => undefined));
     try {
-      const pending = session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      const pending = session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
       await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
       deadline.abort();
       const response = await pending;
@@ -439,7 +513,7 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('a disconnected browser cancels the whole operation without creating a retry', async () => {
     const disconnect = new AbortController();
     mockFetch.mockImplementation(() => new Promise(() => undefined));
-    const request = new NextRequest(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), { signal: disconnect.signal });
+    const request = new NextRequest(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), { signal: disconnect.signal });
     const pending = session(request, context);
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
     disconnect.abort();
@@ -464,14 +538,14 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
   it('never accepts an oversized upstream response even if its prefix resembles a session', async () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify({ ...view(), private: 'x'.repeat(17_000) }),
       { headers: { 'Content-Type': 'application/json' } }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(503); expect(response.headers.get('set-cookie')).toBeNull();
     expect((await response.text()).length).toBeLessThan(250);
   });
   it.each([400, 401, 403, 409, 429, 500, 503])('projects upstream %d into bounded fixed errors without private details', async upstreamStatus => {
     mockFetch.mockResolvedValue(Response.json({ message: 'private diagnostic', token: sessionToken, phone: '+33600000000' },
       { status: upstreamStatus, headers: { 'Retry-After': '999', 'Set-Cookie': 'upstream=secret' } }));
-    const response = await session(req('session', 'GET', {}, { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+    const response = await session(req('session', 'GET', {}, { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     privateHeaders(response);
     expect(CustomerAccountErrorSchema.safeParse(await response.clone().json()).success).toBe(true);
     const body = await response.text();
@@ -488,10 +562,11 @@ describe('customer account BFF — real handlers, isolated upstream', () => {
     const current = view(); current.profile.name = 'Nom choisi'; current.profile.revision = 2;
     mockFetch.mockResolvedValue(Response.json(current));
     const response = await name(req('profil', 'PATCH', { name: 'Nom choisi', expectedRevision: 1 },
-      { cookie: `${browserCookie}=${browserToken}; ${sessionCookie}=${sessionToken}` }), context);
+      { cookie: `${boundCookies}; ${sessionCookie}=${sessionToken}` }), context);
     expect(response.status).toBe(200); expect(await response.json()).toEqual(current);
     expect(JSON.parse(String(mockFetch.mock.calls[0]![1]!.body))).toEqual({
-      browserRef, browserSecret: browserToken, sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
+      browserRef, browserSecret: browserToken, expectedOperationId: operationId, expectedCheckId: checkId,
+      sessionToken, request: { name: 'Nom choisi', expectedRevision: 1 } });
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 });

@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture } from './test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
-import { confirmCustomerTestBrowser } from './browser-test-fixture';
+import { confirmCustomerTestBrowser, prepareCustomerTestIntent } from './browser-test-fixture';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import type { PaidVerificationReservation, TrialVerificationReservation } from './port';
 
@@ -12,7 +12,7 @@ const hash = () => randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-
 function paid(patch: Partial<PaidVerificationReservation> = {}): PaidVerificationReservation {
   const now = Date.now();
   return { parentRef: `parent_${hash().slice(0, 12)}`, tenantRef: `tenant_${hash().slice(0, 12)}`,
-    browserRef: randomUUID(), operationId: randomUUID(), challengeId: randomUUID(), requestHash: hash(), browserHash: hash(),
+    browserRef: randomUUID(), operationId: randomUUID(), proofHash: hash(), challengeId: randomUUID(), requestHash: hash(), browserHash: hash(),
     phoneHash: hash(), globalPhoneHash: hash(), ipHash: hash(), encryptedPhone: 'fixture-ciphertext',
     serviceSid: `VA${'1'.repeat(32)}`, evidenceReference: 'fixture', now,
     planExpiresAt: now + 60_000, expiresAt: now + 600_000,
@@ -38,6 +38,7 @@ integration('paid reservations — native PostgreSQL, no provider', () => {
   afterAll(async () => { await fixture?.close(); });
   async function reserve(input: PaidVerificationReservation | TrialVerificationReservation) {
     await confirmCustomerTestBrowser(repo, input);
+    await prepareCustomerTestIntent(repo, input);
     return repo.reserve(input);
   }
 
@@ -157,6 +158,7 @@ integration('paid reservations — native PostgreSQL, no provider', () => {
   it('retains spending after the real COMMIT succeeds but its response is lost', async () => {
     const input = paid(); let commits = 0;
     await confirmCustomerTestBrowser(repo, input);
+    await prepareCustomerTestIntent(repo, input);
     const pool = { connect: async () => {
       const connection = await fixture.app.connect();
       return new Proxy(connection, { get(target, property) {

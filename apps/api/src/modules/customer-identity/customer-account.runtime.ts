@@ -71,46 +71,59 @@ export class CustomerAccountRuntime {
         case 'browser': {
           result = await core.browser({ tenantRef, ...this.input('browser', raw) }); break;
         }
+        case 'intent': {
+          result = await core.intent({ tenantRef, ...this.input('intent', raw) }); break;
+        }
         case 'start': {
           const input = this.input('start', raw);
+          await core.requireIntent({ ...binding!, operationId: input.request.operationId, intentProof: input.intentProof });
           const verified = await this.human.verify({ secret: send!.turnstileSecret, token: input.request.turnstileToken,
             origin: relay.origin, slug: relay.slug, operationId: input.request.operationId });
           if (!verified) throw new CustomerIdentityError('invalid_request');
           this.access(relay, access); await this.tenant(access);
-          result = await core.start({ ...binding!, phone: input.request.phone, operationId: input.request.operationId,
+          result = await core.start({ ...binding!, intentProof: input.intentProof, phone: input.request.phone, operationId: input.request.operationId,
             clientIp: `relay:${relay.client}`, humanVerified: true });
           break;
         }
         case 'check': {
           const input = this.input('check', raw);
-          const checked = await core.check({ ...binding!, ...input.request,
+          const checked = await core.check({ ...binding!, ...input.request, intentProof: input.intentProof,
             existingSessionToken: input.sessionToken });
           result = { token: checked.token, view: view(checked.view) }; break;
         }
         case 'recover': {
           const input = this.input('recover', raw);
-          const recovered = await core.recover({ ...binding!, ...input.request });
-          result = { token: recovered.token, view: view(recovered.view) }; break;
+          result = await core.recover({ ...binding!, ...input.request, intentProof: input.intentProof }); break;
         }
         case 'session': {
           const input = this.input('session', raw);
-          result = view(await core.session({ ...binding!, token: input.sessionToken })); break;
+          result = view(await core.session({ ...binding!, token: input.sessionToken,
+            expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId })); break;
         }
         case 'name': {
           const input = this.input('name', raw);
-          result = view(await core.updateName({ ...binding!, token: input.sessionToken, ...input.request })); break;
+          result = view(await core.updateName({ ...binding!, token: input.sessionToken, ...input.request,
+            expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId })); break;
         }
         case 'logout': {
           const input = this.input('logout', raw);
-          await core.logout({ ...binding!, token: input.sessionToken, ...input.request }); break;
+          await core.logout({ ...binding!, token: input.sessionToken, ...input.request,
+            expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId }); break;
         }
       }
       // Mongo lifecycle and PG are distinct stores. A request already in flight
       // may cross a revocation; no private response escapes a newly blocked tenant.
       this.access(relay, access); await this.tenant(access);
       if (binding) await core.requireBrowser(binding);
+      if (relay.action === 'recover') {
+        const verification = CustomerAccountResponses.recover.parse(result);
+        if (verification.state === 'approved' && (verification.view.expiresAt <= Date.now() || verification.expiresAt <= Date.now())) {
+          throw new CustomerIdentityError('unauthorized');
+        }
+        return verification;
+      }
       const response = CustomerAccountResponses[relay.action].parse(result);
-      if (response && relay.action !== 'browser') {
+      if (response && relay.action !== 'browser' && relay.action !== 'intent') {
         const expiresAt = 'view' in response ? response.view.expiresAt
           : 'expiresAt' in response ? response.expiresAt : null;
         if (expiresAt !== null && expiresAt <= Date.now()) throw new CustomerIdentityError('unauthorized');

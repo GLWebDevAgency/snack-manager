@@ -1,9 +1,17 @@
 import { z } from 'zod';
-import { CustomerAccountBrowserRefSchema, CustomerAccountSlugSchema } from '@sm/contracts';
+import { CustomerAccountBrowserRefSchema, CustomerAccountSlugSchema, type CustomerAccountPublication } from '@sm/contracts';
 
+export const CustomerVerificationJournalSchema = z.strictObject({
+  operationId: CustomerAccountBrowserRefSchema,
+  phase: z.enum(['preparing', 'prepared', 'starting', 'code', 'checking', 'incorrect', 'completed', 'closing', 'closed', 'expired', 'failed']),
+  challengeId: CustomerAccountBrowserRefSchema.nullable(), checkId: CustomerAccountBrowserRefSchema.nullable(),
+  expiresAt: z.number().int().positive().nullable(),
+});
+export type CustomerVerificationJournal = z.infer<typeof CustomerVerificationJournalSchema>;
 export const CustomerBrowserJournalSchema = z.strictObject({
   version: z.literal(1), browserRef: CustomerAccountBrowserRefSchema,
   phase: z.enum(['preparing', 'issuing', 'confirming', 'ready']),
+  verification: CustomerVerificationJournalSchema.optional(),
 });
 export type CustomerBrowserJournal = z.infer<typeof CustomerBrowserJournalSchema>;
 export type CustomerBrowserJournalStore = {
@@ -88,4 +96,11 @@ export function customerBrowserJournal(slug: string): CustomerBrowserJournalStor
 export async function selectedCustomerBrowser(slug: string): Promise<string | null> {
   const record = await customerBrowserJournal(slug).read();
   return record?.phase === 'ready' ? record.browserRef : null;
+}
+
+export async function selectedCustomerPublication(slug: string): Promise<CustomerAccountPublication | null> {
+  const record = await customerBrowserJournal(slug).read();
+  const verification = record?.verification;
+  return record?.phase === 'ready' && verification?.phase === 'completed' && verification.checkId
+    ? { expectedOperationId: verification.operationId, expectedCheckId: verification.checkId } : null;
 }

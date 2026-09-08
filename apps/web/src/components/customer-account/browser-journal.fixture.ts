@@ -13,7 +13,10 @@ export async function seedCustomerBrowserFixture(page: Page, slug: string) {
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction('preparations', 'readwrite', { durability: 'strict' });
-        tx.objectStore('preparations').put({ version: 1, browserRef, phase: 'ready' }, slug);
+        tx.objectStore('preparations').put({ version: 1, browserRef, phase: 'ready', verification: {
+          operationId: '20000000-0000-4000-8000-000000000002', checkId: '30000000-0000-4000-8000-000000000003',
+          challengeId: '40000000-0000-4000-8000-000000000004', expiresAt: Date.now() + 60_000, phase: 'completed',
+        } }, slug);
         tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(new Error('Fixture journal unavailable'));
       });
     } finally { db.close(); }

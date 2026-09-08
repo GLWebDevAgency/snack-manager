@@ -9,11 +9,11 @@ import {
 } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
-export type CustomerHashPurpose = 'phone' | 'global-phone' | 'browser' | 'ip' | 'session' | 'request';
+export type CustomerHashPurpose = 'phone' | 'global-phone' | 'browser' | 'ip' | 'session' | 'request' | 'intent-proof';
 export type CustomerSealPurpose = 'phone' | 'name';
 
 const namespace = 'sm.customer-identity.v1';
-const hashPurposes: readonly CustomerHashPurpose[] = ['phone', 'global-phone', 'browser', 'ip', 'session', 'request'];
+const hashPurposes: readonly CustomerHashPurpose[] = ['phone', 'global-phone', 'browser', 'ip', 'session', 'request', 'intent-proof'];
 const sealPurposes: readonly CustomerSealPurpose[] = ['phone', 'name'];
 const contextBytes = 160;
 const hashValueBytes = 16 * 1024;
@@ -81,6 +81,7 @@ export class CustomerIdentityCrypto {
   readonly #hashKeys: ReadonlyMap<CustomerHashPurpose, KeyObject>;
   readonly #sealKeys: ReadonlyMap<CustomerSealPurpose, KeyObject>;
   readonly #checkTokenKey: KeyObject;
+  readonly #intentCheckTokenKey: KeyObject;
 
   constructor(masterKeyBase64: string) {
     let master: Buffer | undefined;
@@ -95,6 +96,7 @@ export class CustomerIdentityCrypto {
       this.#hashKeys = new Map(hashPurposes.map(purpose => [purpose, derive('hash', purpose)]));
       this.#sealKeys = new Map(sealPurposes.map(purpose => [purpose, derive('seal', purpose)]));
       this.#checkTokenKey = derive('derive', 'check-session-token');
+      this.#intentCheckTokenKey = derive('derive', 'intent-check-session-token');
     } catch { throw invalid(); }
     finally { master?.fill(0); }
   }
@@ -174,5 +176,23 @@ export class CustomerIdentityCrypto {
         .digest('base64url');
     } catch { throw invalid(); }
     finally { browserBytes?.fill(0); }
+  }
+
+  /** The intent's separate private proof is required even with the browser cookie.
+   * Only an exact durable approved receipt authorizes returning this token. */
+  tokenForIntentCheck(tenantRef: string, browserSecret: string, operationId: string, intentProof: string,
+    challengeId: string, checkId: string): string {
+    let browserBytes: Buffer | undefined;
+    let proofBytes: Buffer | undefined;
+    try {
+      text(tenantRef, contextBytes);
+      browserBytes = decode(browserSecret, 32, 32);
+      proofBytes = decode(intentProof, 32, 32);
+      if (![operationId, challengeId, checkId].every(value => typeof value === 'string' && canonicalUuid.test(value))) throw invalid();
+      return createHmac('sha256', this.#intentCheckTokenKey)
+        .update(JSON.stringify([namespace, 'intent-check-session-token', tenantRef, browserSecret, operationId, intentProof, challengeId, checkId]), 'utf8')
+        .digest('base64url');
+    } catch { throw invalid(); }
+    finally { browserBytes?.fill(0); proofBytes?.fill(0); }
   }
 }

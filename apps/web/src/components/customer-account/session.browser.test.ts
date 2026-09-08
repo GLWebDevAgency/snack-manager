@@ -57,6 +57,48 @@ const value = (p = page) => p.locator("output").textContent();
 const authenticated = (p = page) => expect.poll(() => value(p)).toContain('"status":"authenticated"');
 
 describe("Session personnelle — navigateur natif et plusieurs onglets", () => {
+  it.each(['Nom', 'Quitter'] as const)('ne laisse pas %s préparé sur A viser B après le verrou natif, malgré des projections identiques', async button => {
+    await authenticated(); const displayed = await value();
+    const second = await context.newPage(); await second.goto(origin + '/fixture-empty');
+    await second.evaluate(() => {
+      const state = { held: false, release: () => {}, work: Promise.resolve() };
+      const gate = new Promise<void>(resolve => { state.release = resolve; });
+      state.work = navigator.locks.request('sm:customer:recette', async () => { state.held = true; await gate; }).then(() => undefined);
+      Object.assign(window, { customerFixtureLock: state });
+    });
+    try {
+      await expect.poll(() => second.evaluate(() => (window as unknown as { customerFixtureLock: { held: boolean } }).customerFixtureLock.held)).toBe(true);
+      await page.getByRole('button', { name: button, exact: true }).click();
+      await expect.poll(() => value()).toContain('"busy":true');
+      // Real shared IDB changes before the queued mutation runs. Deliberately
+      // no invalidation event: its delivery can lag behind lock acquisition.
+      await second.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open('sm-customer-preparation-v1', 1);
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Fixture IDB unavailable'));
+        });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('preparations', 'readwrite', { durability: 'strict' }), store = tx.objectStore('preparations');
+            const read = store.get('recette');
+            read.onsuccess = () => store.put({ ...read.result, verification: { ...read.result.verification,
+              operationId: crypto.randomUUID(), checkId: crypto.randomUUID(), challengeId: crypto.randomUUID() } }, 'recette');
+            tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(new Error('Fixture IDB failed'));
+          });
+        } finally { db.close(); }
+      });
+    } finally {
+      await second.evaluate(async () => {
+        const lock = (window as unknown as { customerFixtureLock: { release(): void; work: Promise<void> } }).customerFixtureLock;
+        lock.release(); await lock.work;
+      });
+    }
+    await expect.poll(() => value()).toContain('"busy":false');
+    await expect.poll(() => value()).toContain('"status":"error"');
+    expect(await value()).not.toContain('33600000001');
+    expect(requests.some(request => request.startsWith('PATCH') || request.startsWith('DELETE'))).toBe(false);
+    expect(JSON.parse(displayed!).view).toEqual(session); // Same PII, revision and expiry throughout.
+  });
   it("un PATCH invalide l’autre onglet, attend le verrou puis publie le profil à jour", async () => {
     await authenticated(); const second = await context.newPage(); await second.goto(origin); await authenticated(second);
     holdPatch = true; await second.getByRole("button", { name: "Nom", exact: true }).click(); await expect.poll(() => paused !== null).toBe(true);

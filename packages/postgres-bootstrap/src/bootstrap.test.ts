@@ -28,6 +28,7 @@ const roles = {
   runtimeRole: 'snackmanager_staging_app',
 };
 const browserPreparationMigration = 1_788_894_000_000;
+const verificationIntentsMigration = 1_788_901_200_000;
 
 function result<T extends Record<string, unknown>>(rows: T[]): QueryResult<T> {
   return {
@@ -687,14 +688,14 @@ describe('manifeste PostgreSQL versionné', () => {
     ]));
   });
 
-  it('énumère exactement les 77 objets propriétaires attendus', () => {
-    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(77);
+  it('énumère exactement les 79 objets propriétaires attendus', () => {
+    expect(POSTGRES_MANAGED_OBJECTS).toHaveLength(79);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'schema')).toHaveLength(3);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(41);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'table')).toHaveLength(42);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'sequence')).toHaveLength(3);
     expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'type')).toHaveLength(21);
-    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(9);
-    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(77);
+    expect(POSTGRES_MANAGED_OBJECTS.filter((object) => object.kind === 'function')).toHaveLength(10);
+    expect(new Set(POSTGRES_MANAGED_OBJECTS.map(managedObjectKey)).size).toBe(79);
     expect(
       POSTGRES_MANAGED_OBJECTS.filter((object) => object.introducedAt === undefined).map(
         managedObjectKey,
@@ -737,6 +738,17 @@ describe('manifeste PostgreSQL versionné', () => {
       expect(object).toMatchObject({ journal: 'customer', introducedAt: browserPreparationMigration });
     }
     expect(new Set(preparation.map((object) => object.introducedAt)).size).toBe(1);
+  });
+
+  it('inventorie séparément le journal des intentions de vérification et sa fonction de garde', () => {
+    const intentions = POSTGRES_MANAGED_OBJECTS.filter((object) =>
+      ['table:customer.verification_intents', 'function:customer.preserve_verification_intent()']
+        .includes(managedObjectKey(object)),
+    );
+    expect(intentions).toHaveLength(2);
+    for (const object of intentions) {
+      expect(object).toMatchObject({ journal: 'customer', introducedAt: verificationIntentsMigration });
+    }
   });
 
   it('rattache exhaustivement chaque CREATE autonome à son fichier et journal Drizzle', () => {
@@ -817,6 +829,8 @@ describe('manifeste PostgreSQL versionné', () => {
       .toBe(CUSTOMER_BROWSER_CONTINUITY_MIGRATION);
     expect(customer.entries.find((entry) => entry.tag === '0003_customer_browser_preparation')?.when)
       .toBe(browserPreparationMigration);
+    expect(customer.entries.find((entry) => entry.tag === '0004_customer_verification_intents')?.when)
+      .toBe(verificationIntentsMigration);
   });
 
   it('lexe les CREATE top-level sans interpréter commentaires, chaînes ou corps dollar', () => {
@@ -1036,6 +1050,8 @@ describe('préflight PostgreSQL', () => {
     ['customer', CUSTOMER_BROWSER_CONTINUITY_MIGRATION, 'customer.preserve_browser_context()'],
     ['customer', browserPreparationMigration, 'customer.browser_preparations'],
     ['customer', browserPreparationMigration, 'customer.preserve_browser_preparation()'],
+    ['customer', verificationIntentsMigration, 'customer.verification_intents'],
+    ['customer', verificationIntentsMigration, 'customer.preserve_verification_intent()'],
   ] as const)('refuse un objet %s déclaré appliqué mais absent', async (journal, timestamp, target) => {
     const owners = {
       [key('schema', 'drizzle', 'drizzle')]: roles.migrationRole,
@@ -1064,7 +1080,9 @@ describe('préflight PostgreSQL', () => {
   it.each([
     ['table', 'browser_preparations', 'customer.browser_preparations'],
     ['function', 'preserve_browser_preparation', 'customer.preserve_browser_preparation()'],
-  ] as const)('refuse la préparation %s présente avant sa migration', async (kind, name, target) => {
+    ['table', 'verification_intents', 'customer.verification_intents'],
+    ['function', 'preserve_verification_intent', 'customer.preserve_verification_intent()'],
+  ] as const)('refuse le journal navigateur %s présent avant sa migration', async (kind, name, target) => {
     const query = checkQuery({
       probe: {
         drizzle_exists: true,

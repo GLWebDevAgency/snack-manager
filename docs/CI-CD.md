@@ -750,13 +750,14 @@ l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
 l'état des trois journaux Drizzle : `__drizzle_migrations`,
 `__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
-`drizzle`. Le manifeste L3a.6b.1 énumère **77 objets** : les 55 objets historiques,
+`drizzle`. Le manifeste L3a.6b.2 énumère **79 objets** : les 55 objets historiques,
 les 14 objets `customer` initiaux (schéma, neuf tables, deux fonctions, journal
 et sa séquence), puis la table de budget payant et trois fonctions de garde
 de la migration additive `0001`, et la table de continuité navigateur avec sa
 fonction de garde `0002`, puis la table de préparation navigateur et sa fonction
-de garde `0003`. Chaque ajout est lié à sa migration : une
-base à 75 objets reste recevable avant `0003`, pas après son journal
+de garde `0003`, puis la table d'intentions et sa fonction de garde `0004`.
+Chaque ajout est lié à sa migration : une
+base à 77 objets reste recevable avant `0004`, pas après son journal
 d'application. Ce nombre décrit le code cible, pas une preuve de migration déjà
 appliquée. Une base saine aux deux anciens contextes passe le préflight avant
 l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
@@ -792,6 +793,19 @@ du contrôle de migrations du conteneur API ; le seul message « 77 objets » du
 bootstrap décrit le manifeste cible, pas l'application de `0003`. Pas de down
 migration, purge de préparations ni remise à zéro des budgets en cas de retour
 applicatif. L'inscription OTP reste un lot distinct non ouvert.
+
+**Intentions de vérification L3a.6b.2 :** `0004_customer_verification_intents`
+ajoute une preuve privée par intention, les liens des challenges et l'empreinte
+immuable de chaque requête de confirmation. Aucune liaison n'est inventée pour
+les anciens reçus : les sessions sans cette publication restent inertes.
+Garder le pilote fermé pendant la migration et le remplacement de toutes les
+instances API/Web ; vérifier les cinq entrées attendues du journal customer et
+`pnpm verify:postgres:built` dans la nouvelle API. Les **79 objets** du bootstrap
+ne prouvent pas seuls que `0004` est appliquée. Ne pas purger les intentions ou
+remettre les plafonds à zéro ; retour applicatif fermé, migration additive conservée.
+Le test d'upgrade réel 0003→0004 conserve les historiques et vérifie leur refus
+privé. Les tests HTTP Nest→PostgreSQL et navigateur utilisent un fournisseur
+simulé : ils ne sont pas une recette SMS ni une autorisation d'ouverture.
 
 L'étape de préparation reçoit `SM_DATABASE_MIGRATION_URL_STAGING` ou
 `..._PRODUCTION` et la CA épinglée `SM_DATABASE_ROOT_CA_*`. Les variables

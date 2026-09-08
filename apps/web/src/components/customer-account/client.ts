@@ -1,9 +1,14 @@
 import { CustomerAccountBrowserRequests, CustomerAccountResponses, CustomerAccountSlugSchema,
-  CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, type CustomerAccountView } from "@sm/contracts";
-import { selectedCustomerBrowser } from './browser-journal';
+  CustomerAccountViewSchema, CustomerAccountBrowserRefSchema, CustomerAccountPublicationSchema,
+  CUSTOMER_ACCOUNT_BROWSER_REF_HEADER, CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER,
+  type CustomerAccountView, type CustomerAccountPublication } from "@sm/contracts";
+import { selectedCustomerBrowser, selectedCustomerPublication } from './browser-journal';
 
-type Action = "status" | "browser" | "session" | "name" | "logout";
-export type CustomerAccountRequest = (action: Action, body?: unknown) => Promise<unknown>;
+type Action = "status" | "browser" | "intent" | "start" | "check" | "recover" | "session" | "name" | "logout";
+export type CustomerAccountSelection = { browserRef: string; publication: CustomerAccountPublication };
+export type CustomerAccountRequest = ((action: Action, body?: unknown, expectedSelection?: CustomerAccountSelection) => Promise<unknown>) & {
+  selection?: () => Promise<CustomerAccountSelection | null>;
+};
 export type CustomerAccountState = Readonly<{
   status: "idle" | "loading" | "guest" | "authenticated" | "unavailable" | "error" | "offline";
   view: CustomerAccountView | null; available: boolean; busy: boolean; message: string | null;
@@ -17,23 +22,39 @@ export class CustomerAccountHttpError extends Error {
 
 /** Same-origin BFF only. Cookies stay HttpOnly; neither tokens nor upstream
  * error bodies reach the UI, analytics, browser storage or application logs. */
-export function customerAccountRequest(slug: string, selected: () => Promise<string | null> = () => selectedCustomerBrowser(slug)): CustomerAccountRequest {
+export function customerAccountRequest(slug: string, selected: () => Promise<string | null> = () => selectedCustomerBrowser(slug),
+  publication: () => Promise<CustomerAccountPublication | null> = () => selectedCustomerPublication(slug)): CustomerAccountRequest {
   const valid = CustomerAccountSlugSchema.safeParse(slug).success && slug.length <= 63;
-  return async (action, body) => {
+  const request: CustomerAccountRequest = async (action, body, expectedSelection) => {
     if (!valid) throw new CustomerAccountHttpError(400);
-    const paths = { status: "capacites", browser: "navigateur", session: "session", name: "profil", logout: "session" };
-    const methods = { status: "GET", browser: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
+    const paths = { status: "capacites", browser: "navigateur", intent: "intention", start: "verification", check: "confirmation", recover: "resultat", session: "session", name: "profil", logout: "session" };
+    const methods = { status: "GET", browser: "POST", intent: "POST", start: "POST", check: "POST", recover: "POST", session: "GET", name: "PATCH", logout: "DELETE" };
     let browserRef: string | null = null;
+    let expected: CustomerAccountPublication | null = null;
     if (action !== 'status' && action !== 'browser') {
       try { browserRef = await selected(); } catch { throw new CustomerAccountHttpError(409); }
       if (browserRef === null) throw new CustomerAccountHttpError(401);
       if (!CustomerAccountBrowserRefSchema.safeParse(browserRef).success) throw new CustomerAccountHttpError(409);
     }
+    if (['session', 'name', 'logout'].includes(action)) {
+      try { expected = await publication(); } catch { throw new CustomerAccountHttpError(409); }
+      if (expected === null) throw new CustomerAccountHttpError(401);
+      if (!CustomerAccountPublicationSchema.safeParse(expected).success) throw new CustomerAccountHttpError(409);
+    }
+    // Pin the publication which produced the displayed view, rather than
+    // silently adopting whichever journal is selected after an async wait.
+    if (expectedSelection && (browserRef !== expectedSelection.browserRef
+      || !expected || !sameSelection({ browserRef, publication: expected }, expectedSelection))) throw new CustomerAccountHttpError(409);
+    const unchanged = async () => {
+      if ((browserRef !== null && await selected() !== browserRef)
+        || (expected !== null && JSON.stringify(await publication()) !== JSON.stringify(expected))) throw new CustomerAccountHttpError(409);
+    };
     const response = await fetch(`/r/${slug}/compte/${paths[action]}`, {
       method: methods[action], credentials: "same-origin", cache: "no-store", redirect: "error",
       referrerPolicy: "no-referrer", signal: AbortSignal.timeout(12_000),
       headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(browserRef === null ? {} : { [CUSTOMER_ACCOUNT_BROWSER_REF_HEADER]: browserRef }) },
+        ...(browserRef === null ? {} : { [CUSTOMER_ACCOUNT_BROWSER_REF_HEADER]: browserRef }),
+        ...(expected === null ? {} : { [CUSTOMER_ACCOUNT_OPERATION_HEADER]: expected.expectedOperationId, [CUSTOMER_ACCOUNT_CHECK_HEADER]: expected.expectedCheckId }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok || (action === "logout" ? response.status !== 204 : response.status !== 200)) {
@@ -41,7 +62,7 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
       throw new CustomerAccountHttpError(response.status);
     }
     if (action === "logout") {
-      if (browserRef !== null && await selected() !== browserRef) throw new CustomerAccountHttpError(409);
+      await unchanged();
       return undefined;
     }
     if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(response.headers.get("content-type") ?? "")) {
@@ -60,10 +81,21 @@ export function customerAccountRequest(slug: string, selected: () => Promise<str
       // Clearing storage or selecting B while A was in flight cannot adopt A's
       // response. The server independently binds ref + cookies; neither side
       // tries to repair this ambiguity by choosing a different identity.
-      if (browserRef !== null && await selected() !== browserRef) throw new CustomerAccountHttpError(409);
+      await unchanged();
       return JSON.parse(text + decoder.decode()) as unknown;
     } finally { if (!complete) void reader.cancel().catch(() => undefined); reader.releaseLock(); }
   };
+  request.selection = async () => {
+    const browserRef = await selected(), expected = await publication();
+    if (browserRef === null || expected === null) return null;
+    return { browserRef: CustomerAccountBrowserRefSchema.parse(browserRef), publication: CustomerAccountPublicationSchema.parse(expected) };
+  };
+  return request;
+}
+
+function sameSelection(a: CustomerAccountSelection, b: CustomerAccountSelection) {
+  return a.browserRef === b.browserRef && a.publication.expectedOperationId === b.publication.expectedOperationId
+    && a.publication.expectedCheckId === b.publication.expectedCheckId;
 }
 
 type Port = {
@@ -82,12 +114,20 @@ export function sameCustomerSession(a: CustomerAccountView, b: CustomerAccountVi
  * browser/challenge receipt protocol; do not add cookie-writing OTP calls here. */
 export function createCustomerAccountClient(port: Port) {
   let state = EMPTY_ACCOUNT; let generation = 0; let reading: Promise<void> | null = null;
+  let viewedSelection: CustomerAccountSelection | null = null;
   let mutating = false; let reloadRequested = false;
   const listeners = new Set<() => void>();
   const now = port.now ?? Date.now;
   const active = port.active ?? (() => true);
   const publish = (patch: Partial<CustomerAccountState>) => { state = { ...state, ...patch }; listeners.forEach(listener => listener()); };
   const current = (run: number) => run === generation && active();
+  async function selection() {
+    if (!port.request.selection) throw new CustomerAccountHttpError(409);
+    const selected = await port.request.selection();
+    if (!selected) throw new CustomerAccountHttpError(401);
+    return { browserRef: CustomerAccountBrowserRefSchema.parse(selected.browserRef),
+      publication: CustomerAccountPublicationSchema.parse(selected.publication) };
+  }
   const parse = (raw: unknown) => {
     const result = CustomerAccountViewSchema.parse(raw);
     if (result.expiresAt <= now() || result.expiresAt > now() + 7 * 86_400_000
@@ -95,10 +135,11 @@ export function createCustomerAccountClient(port: Port) {
     return result;
   };
   function invalidate(status: "idle" | "offline" | "guest" = "idle") {
-    generation++; reloadRequested = false;
+    generation++; reloadRequested = false; viewedSelection = null;
     publish({ status, view: null, available: false, message: status === "offline" ? "Connectez-vous au réseau pour consulter votre compte." : null });
   }
   function fail(error: unknown, mutation = false) {
+    viewedSelection = null;
     const status = error instanceof CustomerAccountHttpError ? error.status : 0;
     publish({ view: null, status: status === 401 ? "guest" : status === 503 ? "unavailable" : "error",
       message: mutation ? UNCONFIRMED : status === 401 ? null : status === 429 ? "Trop de demandes. Patientez avant de réessayer."
@@ -107,15 +148,21 @@ export function createCustomerAccountClient(port: Port) {
   async function refresh() {
     if (!active()) return;
     if (mutating || reading) { reloadRequested = true; return reading ?? undefined; }
-    const run = ++generation; publish({ status: "loading", view: null, message: null });
+    const run = ++generation; viewedSelection = null; publish({ status: "loading", view: null, message: null });
     const work = async () => {
       if (!current(run)) return;
       // Status is an SMS admission signal, never a session/revocation oracle.
       const availability = port.request("status").then(raw => CustomerAccountResponses.status.parse(raw).available, () => false).catch(() => false);
       try {
-        const raw = await port.request("session");
+        const selected = await selection();
+        if (!current(run)) return;
+        const raw = await port.request("session", undefined, selected);
         const available = await availability;
-        if (current(run)) publish({ status: "authenticated", view: parse(raw), available, message: null });
+        if (!sameSelection(selected, await selection())) throw new CustomerAccountHttpError(409);
+        if (current(run)) {
+          const view = parse(raw); viewedSelection = selected;
+          publish({ status: "authenticated", view, available, message: null });
+        }
       } catch (error) {
         const available = await availability;
         if (current(run)) { publish({ available }); fail(error); }
@@ -129,21 +176,25 @@ export function createCustomerAccountClient(port: Port) {
     }
   }
   async function mutate(action: "name" | "logout", input: unknown) {
-    const viewed = state.view;
-    if (!active() || mutating || reading || !viewed || state.status !== "authenticated") return false;
+    const viewed = state.view, selected = viewedSelection;
+    if (!active() || mutating || reading || !viewed || !selected || state.status !== "authenticated") return false;
     if (!port.lock) { publish({ message: "Ce navigateur ne permet pas de sécuriser les modifications entre onglets. Utilisez un navigateur à jour." }); return false; }
     const body = CustomerAccountBrowserRequests[action].safeParse(input);
     if (!body.success) { publish({ message: "Vérifiez le nom renseigné (120 caractères maximum)." }); return false; }
-    mutating = true; const run = ++generation; publish({ status: "loading", view: null, busy: true, message: null });
+    mutating = true; const run = ++generation; viewedSelection = null; publish({ status: "loading", view: null, busy: true, message: null });
     let confirmed = false; let result: CustomerAccountView | null = null; let conflict = false;
     try {
       await port.lock(async () => {
         if (!current(run)) return;
+        if (!sameSelection(selected, await selection())) { conflict = true; return; }
+        if (!current(run)) return;
         port.announce?.();
-        const fresh = parse(await port.request("session"));
+        const fresh = parse(await port.request("session", undefined, selected));
+        if (!sameSelection(selected, await selection())) { conflict = true; return; }
         if (!current(run)) return;
         if (!sameCustomerSession(viewed, fresh) || viewed.profile.revision !== fresh.profile.revision) { conflict = true; return; }
-        const raw = await port.request(action, body.data);
+        const raw = await port.request(action, body.data, selected);
+        if (!sameSelection(selected, await selection())) throw new CustomerAccountHttpError(409);
         if (action === "name") {
           result = parse(raw);
           if (!sameCustomerSession(fresh, result) || result.profile.revision <= fresh.profile.revision) throw new CustomerAccountHttpError(502);
@@ -152,7 +203,10 @@ export function createCustomerAccountClient(port: Port) {
       });
       if (current(run)) {
         if (conflict) publish({ status: "error", view: null, message: CHANGED });
-        else if (confirmed) publish({ status: result ? "authenticated" : "guest", view: result, message: result ? "Votre nom a été mis à jour." : "Déconnexion confirmée." });
+        else if (confirmed) {
+          viewedSelection = result ? selected : null;
+          publish({ status: result ? "authenticated" : "guest", view: result, message: result ? "Votre nom a été mis à jour." : "Déconnexion confirmée." });
+        }
       }
     } catch (error) { if (current(run)) fail(error, true); }
     finally {

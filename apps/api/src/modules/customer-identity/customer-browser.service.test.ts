@@ -1,3 +1,4 @@
+import { approvedCustomerIntentResult, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository } from '@sm/customer';
@@ -8,6 +9,7 @@ import { customerTestEnvironment } from './customer-account.test-fixture';
 function fixture() {
   let now = Date.parse('2026-09-08T10:00:00Z');
   const env = customerTestEnvironment(now), tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!;
+  const operationId = randomUUID(), intentProof = Buffer.alloc(32, 45).toString('base64url');
   const browserRef = randomUUID(), browserSecret = Buffer.alloc(32, 43).toString('base64url');
   const candidateSecret = Buffer.alloc(32, 44).toString('base64url');
   const crypto = new CustomerIdentityCrypto(env.SM_CUSTOMER_IDENTITY_KEY!);
@@ -22,6 +24,7 @@ function fixture() {
     profile: { accountId: randomUUID(), phoneHash, encryptedName: null, encryptedPhone: pending.encryptedPhone,
       phoneVerifiedAt: now, revision: 0 } };
   const repository = {
+    ...confirmedCustomerIntentFixture(operationId, now + 600_000),
     prepareBrowser: vi.fn().mockResolvedValue(preparation),
     issueBrowser: vi.fn().mockResolvedValue({ preparation: { ...preparation, state: 'issued' }, emitCookie: true }),
     confirmBrowser: vi.fn().mockResolvedValue({ ...preparation, state: 'confirmed' }),
@@ -39,9 +42,9 @@ function fixture() {
     environment: 'staging', mode: 'closed_trial', policy: JSON.parse(env.SM_CUSTOMER_VERIFY_POLICY!),
     evidence: JSON.parse(env.SM_CUSTOMER_VERIFY_EVIDENCE!) }), () => now, beforeProvider);
   const binding = { tenantRef, browserRef, browserSecret };
-  const start = { ...binding, phone, operationId: randomUUID(), clientIp: 'fixture-client', humanVerified: true };
-  const check = { ...binding, challengeId: pending.challengeId, checkId: randomUUID(), code: '123456', existingSessionToken: null };
-  const recover = { ...binding, challengeId: pending.challengeId, checkId: check.checkId };
+  const start = { ...binding, phone, operationId, intentProof, clientIp: 'fixture-client', humanVerified: true };
+  const check = { ...binding, operationId, intentProof, challengeId: pending.challengeId, checkId: randomUUID(), code: '123456', existingSessionToken: null };
+  const recover = { ...binding, operationId, intentProof, checkId: check.checkId };
   return { service, repository, transport, beforeProvider, preparation, parentRef, candidateSecret, crypto,
     binding, start, check, recover, session, expiresAt, advance: (ms: number) => { now += ms; } };
 }
@@ -84,7 +87,8 @@ describe('browser preparation — service binding, no provider authorization', (
   it.each(['start', 'check', 'recover', 'session', 'updateName', 'logout'] as const)('requires the confirmed ref AND cookie before %s', async method => {
     const f = fixture();
     const input = method === 'start' ? f.start : method === 'check' ? f.check : method === 'recover' ? f.recover
-      : { ...f.binding, token: f.binding.browserSecret, ...(method === 'updateName' ? { name: null, expectedRevision: 0 } : method === 'logout' ? { all: false } : {}) };
+      : { ...f.binding, expectedOperationId: f.start.operationId, expectedCheckId: f.check.checkId,
+        token: f.binding.browserSecret, ...(method === 'updateName' ? { name: null, expectedRevision: 0 } : method === 'logout' ? { all: false } : {}) };
     const { browserRef: _reference, ...missing } = input;
     await expect(f.service[method](missing)).rejects.toMatchObject({ reason: 'invalid_request' });
     await expect(f.service[method]({ ...input, browserRef: randomUUID() })).rejects.toMatchObject({ reason: 'unauthorized' });
@@ -104,9 +108,11 @@ describe('browser preparation — service binding, no provider authorization', (
   });
   it('rejects recovered or authenticated sessions beyond browser expiry instead of extending it', async () => {
     const f = fixture(); f.session.expiresAt = f.expiresAt + 1000;
-    f.repository.recoverCheck.mockResolvedValue(f.session);
+    f.repository.resultIntent.mockImplementation(approvedCustomerIntentResult({ operationId: f.start.operationId,
+      challengeId: f.check.challengeId, checkId: f.check.checkId, expiresAt: f.preparation.admissionExpiresAt }, f.session));
     await expect(f.service.recover(f.recover)).rejects.toBeDefined();
-    await expect(f.service.session({ ...f.binding, token: f.binding.browserSecret })).rejects.toBeDefined();
+    await expect(f.service.session({ ...f.binding, expectedOperationId: f.start.operationId, expectedCheckId: f.check.checkId,
+      token: f.binding.browserSecret })).rejects.toBeDefined();
     expect(f.transport.check).not.toHaveBeenCalled();
   });
   it.each([

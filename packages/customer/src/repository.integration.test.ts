@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { customerTestFixture, assertCustomerTestTarget } from './test-fixture';
 import { PostgresCustomerIdentityRepository } from './repository';
-import { confirmCustomerTestBrowser } from './browser-test-fixture';
+import { confirmCustomerTestBrowser, prepareCustomerTestIntent } from './browser-test-fixture';
 import { CustomerRepositoryError, withCustomerScope } from './client';
 import { assertCustomerMigrationsCurrent } from './migration-state';
 import type { CheckClaim, CustomerIdentityRepository, VerificationReservation } from './port';
@@ -14,7 +14,7 @@ const sid = () => `VE${randomUUID().replaceAll('-', '')}`;
 function reservation(patch: Partial<VerificationReservation> = {}): VerificationReservation {
   const now = Date.now();
   return { tenantRef: `tenant_${hash().slice(0, 12)}`, parentRef: `parent_${hash().slice(0, 12)}`,
-    browserRef: randomUUID(), operationId: randomUUID(), requestHash: hash(), challengeId: randomUUID(), browserHash: hash(),
+    browserRef: randomUUID(), operationId: randomUUID(), proofHash: hash(), requestHash: hash(), challengeId: randomUUID(), browserHash: hash(),
     phoneHash: hash(), globalPhoneHash: hash(), ipHash: hash(), encryptedPhone: 'encrypted-fixture-only',
     serviceSid: `VA${'1'.repeat(32)}`, evidenceReference: 'fixture', planExpiresAt: now + 60_000,
     expiresAt: now + 600_000, now, limits: { trialSendReservations: 50, smsUnitsReservedPerSend: 1,
@@ -24,10 +24,11 @@ function reservation(patch: Partial<VerificationReservation> = {}): Verification
 }
 function claim(input: VerificationReservation): CheckClaim {
   return { parentRef: input.parentRef, tenantRef: input.tenantRef, challengeId: input.challengeId,
+    operationId: input.operationId, proofHash: input.proofHash, requestHash: hash(),
     browserRef: input.browserRef, browserHash: input.browserHash, checkId: randomUUID(), now: Date.now() };
 }
-function completion(input: CheckClaim): Parameters<CustomerIdentityRepository['completeCheck']>[0] {
-  return { ...input, result: 'approved', sessionId: randomUUID(), sessionHash: hash(),
+function completion(input: CheckClaim): Parameters<CustomerIdentityRepository['completeCheck']>[0] & { expectedOperationId: string; expectedCheckId: string } {
+  return { ...input, expectedOperationId: input.operationId, expectedCheckId: input.checkId, result: 'approved', sessionId: randomUUID(), sessionHash: hash(),
     accountId: randomUUID(), sessionExpiresAt: Date.now() + 604_800_000, existingSessionHash: null };
 }
 
@@ -45,6 +46,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   afterAll(async () => { await fixture?.close(); });
   async function reserve(input: VerificationReservation) {
     await confirmCustomerTestBrowser(repo, input);
+    await prepareCustomerTestIntent(repo, input);
     return repo.reserve(input);
   }
   async function pending(input: VerificationReservation) {
@@ -137,13 +139,13 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const result = await repo.completeCheck(complete);
     expect(result?.profile.accountId).toBe(complete.accountId);
     expect(result?.profile.phoneHash).toBe(input.phoneHash);
-    expect(await repo.recoverCheck({ ...check, sessionHash: complete.sessionHash })).toEqual(result);
+    expect(await repo.recoverCheck({ ...check, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toEqual(result);
     expect(await repo.recoverCheck({ ...check, sessionHash: hash() })).toBeNull();
-    expect(await repo.recoverCheck({ ...check, browserHash: hash(), sessionHash: complete.sessionHash })).toBeNull();
+    expect(await repo.recoverCheck({ ...check, browserHash: hash(), expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toBeNull();
     expect(await repo.claimCheck(check)).toBeNull();
-    await repo.revoke({ ...input, sessionHash: complete.sessionHash, all: false });
-    expect(await repo.authenticate({ ...input, sessionHash: complete.sessionHash })).toBeNull();
-    expect(await repo.recoverCheck({ ...check, sessionHash: complete.sessionHash })).toBeNull();
+    await repo.revoke({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, all: false });
+    expect(await repo.authenticate({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toBeNull();
+    expect(await repo.recoverCheck({ ...check, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toBeNull();
     expect(await repo.completeCheck(complete)).toBeNull();
   });
 
@@ -164,11 +166,11 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
   it('CAS-updates name and invalidates every session through account version without deleting proofs', async () => {
     const input = reservation(); await pending(input);
     const check = claim(input); await repo.claimCheck(check); const complete = completion(check); await repo.completeCheck(complete);
-    const updated = await repo.updateName({ ...input, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'ciphertext-name' });
+    const updated = await repo.updateName({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'ciphertext-name' });
     expect(updated?.profile.revision).toBe(1);
-    expect(await repo.updateName({ ...input, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'stale' })).toBeNull();
-    await repo.revoke({ ...input, sessionHash: complete.sessionHash, all: true });
-    expect(await repo.authenticate({ ...input, sessionHash: complete.sessionHash })).toBeNull();
+    expect(await repo.updateName({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, expectedRevision: 0, encryptedName: 'stale' })).toBeNull();
+    await repo.revoke({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash, all: true });
+    expect(await repo.authenticate({ ...input, expectedOperationId: complete.operationId, expectedCheckId: complete.checkId, sessionHash: complete.sessionHash })).toBeNull();
     expect((await fixture.admin.query('SELECT count(*)::int AS count FROM customer.check_attempts WHERE challenge_id=$1', [input.challengeId])).rows[0].count).toBe(1);
   });
 
@@ -190,14 +192,14 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const input = reservation(); await pending(input);
     const check = claim(input); await repo.claimCheck(check); const done = completion(check); await repo.completeCheck(done);
     for (const scope of [{ tenantRef: 'other', parentRef: input.parentRef }, { tenantRef: input.tenantRef, parentRef: 'other' }]) {
-      expect(await repo.authenticate({ ...scope, browserRef: input.browserRef, browserHash: input.browserHash, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
-      expect(await repo.recoverCheck({ ...check, ...scope, sessionHash: done.sessionHash })).toBeNull();
+      expect(await repo.authenticate({ ...scope, browserRef: input.browserRef, browserHash: input.browserHash, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash, now: Date.now() })).toBeNull();
+      expect(await repo.recoverCheck({ ...check, ...scope, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
     }
     await fixture.admin.query('UPDATE customer.accounts SET active=false WHERE id=$1', [done.accountId]);
-    expect(await repo.authenticate({ ...input, sessionHash: done.sessionHash })).toBeNull();
+    expect(await repo.authenticate({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
     await fixture.admin.query("UPDATE customer.sessions SET created_at=clock_timestamp()-interval '8 days',expires_at=clock_timestamp()-interval '2 days' WHERE id=$1", [done.sessionId]);
     await fixture.admin.query('UPDATE customer.accounts SET active=true WHERE id=$1', [done.accountId]);
-    expect(await repo.authenticate({ ...input, sessionHash: done.sessionHash })).toBeNull();
+    expect(await repo.authenticate({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
   });
 
   it('permanently locks after five known pending checks and rejects a delayed old approval', async () => {
@@ -223,7 +225,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     expect((await fixture.admin.query('SELECT account_id FROM customer.verified_contacts WHERE account_id=$1', [done.accountId])).rowCount).toBe(0);
     expect((await fixture.admin.query('SELECT state FROM customer.challenges WHERE id=$1', [input.challengeId])).rows[0].state).toBe('checking');
     expect(await repo.claimCheck(claim(input))).toBeNull();
-    expect(await repo.recoverCheck({ ...check, sessionHash: done.sessionHash })).toBeNull();
+    expect(await repo.recoverCheck({ ...check, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
   });
 
   it('bounds challenge and session lifetimes using one SQL timestamp without extending replay', async () => {
@@ -233,7 +235,7 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const done = { ...completion(check), sessionExpiresAt: Date.now() + 30 * 86_400_000 };
     const current = await repo.completeCheck(done);
     expect(current?.expiresAt).toBeLessThanOrEqual(Date.now() + 604_800_000);
-    expect(await repo.recoverCheck({ ...check, sessionHash: done.sessionHash })).toEqual(current);
+    expect(await repo.recoverCheck({ ...check, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toEqual(current);
     const lifetime = (await fixture.admin.query('SELECT EXTRACT(EPOCH FROM (expires_at-created_at))::int AS seconds FROM customer.sessions WHERE id=$1', [done.sessionId])).rows[0];
     expect(lifetime.seconds).toBe(604800);
   });
@@ -257,14 +259,14 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
     const input = reservation(); await pending(input); const initial = claim(input); await repo.claimCheck(initial);
     const first = completion(initial); await repo.completeCheck(first);
     const names = await Promise.all(['one', 'two'].map(encryptedName => repo.updateName({ ...input,
-      sessionHash: first.sessionHash, expectedRevision: 0, encryptedName })));
+      expectedOperationId: first.operationId, expectedCheckId: first.checkId, sessionHash: first.sessionHash, expectedRevision: 0, encryptedName })));
     expect(names.filter(Boolean)).toHaveLength(1);
     const next = reservation({ parentRef: input.parentRef, tenantRef: input.tenantRef, phoneHash: input.phoneHash });
     await pending(next); const check = claim(next); await repo.claimCheck(check);
     const done = { ...completion(check), existingSessionHash: first.sessionHash };
-    await Promise.all([repo.revoke({ ...input, sessionHash: first.sessionHash, all: true }), repo.completeCheck(done)]);
-    expect(await repo.authenticate({ ...input, sessionHash: first.sessionHash })).toBeNull();
-    expect(await repo.authenticate({ ...input, sessionHash: done.sessionHash })).toBeNull();
+    await Promise.all([repo.revoke({ ...input, expectedOperationId: first.operationId, expectedCheckId: first.checkId, sessionHash: first.sessionHash, all: true }), repo.completeCheck(done)]);
+    expect(await repo.authenticate({ ...input, expectedOperationId: first.operationId, expectedCheckId: first.checkId, sessionHash: first.sessionHash })).toBeNull();
+    expect(await repo.authenticate({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash })).toBeNull();
   });
 
   it('does not duplicate or disclose a tenant phone when the configured provider parent changes', async () => {
@@ -309,8 +311,8 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
       await blocker.query('SELECT id FROM customer.accounts WHERE id=$1 FOR UPDATE', [done.accountId]);
       await blocker.query("UPDATE customer.sessions SET expires_at=clock_timestamp()+interval '150 milliseconds' WHERE id=$1", [done.sessionId]);
       const waiting = action === 'name'
-        ? repo.updateName({ ...input, sessionHash: done.sessionHash, encryptedName: 'expired-change', expectedRevision: 0 })
-        : repo.revoke({ ...input, sessionHash: done.sessionHash, all: true });
+        ? repo.updateName({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash, encryptedName: 'expired-change', expectedRevision: 0 })
+        : repo.revoke({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash, all: true });
       await blocker.query('SELECT pg_sleep(0.2)');
       await blocker.query('COMMIT');
       await waiting;
@@ -341,9 +343,9 @@ integration('customer repository — real PostgreSQL with ordinary RLS role', ()
       };
     } } as unknown as Pool;
     const guarded = new PostgresCustomerIdentityRepository(interposed);
-    if (action === 'name') await guarded.updateName({ ...input, sessionHash: done.sessionHash,
+    if (action === 'name') await guarded.updateName({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash,
       encryptedName: 'expired-change', expectedRevision: 0 });
-    else await guarded.revoke({ ...input, sessionHash: done.sessionHash, all: action === 'revoke-all' });
+    else await guarded.revoke({ ...input, expectedOperationId: done.operationId, expectedCheckId: done.checkId, sessionHash: done.sessionHash, all: action === 'revoke-all' });
     expect(intercepted).toBe(1);
     expect((await fixture.admin.query(`SELECT a.encrypted_name,a.revision::int AS revision,a.session_version::int AS version,s.revoked_at
       FROM customer.accounts a JOIN customer.sessions s ON s.account_id=a.id WHERE s.id=$1`, [done.sessionId])).rows[0])

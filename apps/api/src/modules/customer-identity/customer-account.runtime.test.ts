@@ -1,4 +1,4 @@
-import { confirmedCustomerBrowserFixture } from './customer-browser.test-fixture';
+import { approvedCustomerIntentResult, confirmedCustomerBrowserFixture, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import type { Model } from 'mongoose';
@@ -11,7 +11,7 @@ import type { CustomerRelay } from './customer-account.guard';
 import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
 
 function fixture(paid = false) {
-  const browserRef = randomUUID();
+  const browserRef = randomUUID(), operationId = randomUUID();
   const now = Date.now(); const env = paid ? customerPaidTestEnvironment(now) : customerTestEnvironment(now);
   const crypto = new CustomerIdentityCrypto(env.SM_CUSTOMER_IDENTITY_KEY!);
   const tenantRef = env.SM_CUSTOMER_PILOT_TENANT_ID!; const phone = '+33612345678';
@@ -26,6 +26,7 @@ function fixture(paid = false) {
       encryptedName: null, phoneVerifiedAt: now, revision: 0 } };
   const repository = {
     ...confirmedCustomerBrowserFixture(browserRef, now + 604_800_000),
+    ...confirmedCustomerIntentFixture(operationId, now + 600_000),
     reserve: vi.fn<CustomerIdentityRepository['reserve']>().mockResolvedValue({ kind: 'reserved', challengeId: pending.challengeId }),
     settleSend: vi.fn<CustomerIdentityRepository['settleSend']>().mockResolvedValue(pending),
     claimCheck: vi.fn<CustomerIdentityRepository['claimCheck']>().mockResolvedValue(pending),
@@ -49,15 +50,17 @@ function fixture(paid = false) {
     human as unknown as CustomerAccountHumanVerifier, transportFactory);
   const relay: CustomerRelay = { slug: 'fixture', action: 'start', origin: 'https://fixture.example', client: Buffer.alloc(32, 41).toString('base64url') };
   const browserSecret = Buffer.alloc(32, 42).toString('base64url');
-  const start = { browserRef, browserSecret, request: { phone, operationId: randomUUID(), turnstileToken: 'fixture-human-token' } };
-  const check = { browserRef, browserSecret, sessionToken: null, request: { challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
-  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending };
+  const intentProof = Buffer.alloc(32, 46).toString('base64url');
+  const start = { browserRef, browserSecret, intentProof, request: { phone, operationId, turnstileToken: 'fixture-human-token' } };
+  const check = { browserRef, browserSecret, intentProof, sessionToken: null, request: { operationId, challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
+  const publication = { expectedOperationId: operationId, expectedCheckId: check.request.checkId };
+  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending, publication };
 }
 describe('customer runtime tenant and purpose boundary', () => {
   it.each(['session', 'name', 'logout'] as const)('requires and forwards the browser binding on %s without constructing a provider', async action => {
     const f = fixture();
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
-    const envelope = { sessionToken: Buffer.alloc(32, 11).toString('base64url'), request };
+    const envelope = { ...f.publication, sessionToken: Buffer.alloc(32, 11).toString('base64url'), request };
     await expect(f.runtime.execute({ ...f.relay, action }, envelope)).rejects.toMatchObject({ status: 400 });
     expect(f.repository.authenticate).not.toHaveBeenCalled();
     expect(f.repository.updateName).not.toHaveBeenCalled(); expect(f.repository.revoke).not.toHaveBeenCalled();
@@ -142,37 +145,38 @@ describe('customer runtime tenant and purpose boundary', () => {
   });
   it('recovers only a private committed receipt despite stale credit, without provider construction', async () => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}'; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
-    f.repository.recoverCheck.mockResolvedValue(f.session);
-    const { challengeId, checkId } = f.check.request;
+    f.repository.resultIntent.mockImplementation(approvedCustomerIntentResult({ operationId: f.start.request.operationId,
+      challengeId: f.pending.challengeId, checkId: f.check.request.checkId, expiresAt: f.pending.expiresAt }, f.session));
+    const { checkId } = f.check.request;
     const result = await f.runtime.execute({ ...f.relay, action: 'recover' }, {
-      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: { challengeId, checkId },
+      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, intentProof: f.start.intentProof, request: { operationId: f.start.request.operationId, checkId },
     });
     expect(result).toMatchObject({ view: { profile: { name: null, revision: 0 } } });
     const serialized = JSON.stringify(result);
     expect(serialized.includes(f.session.sessionId) || serialized.includes(f.session.profile.accountId)).toBe(false);
-    expect(f.repository.recoverCheck).toHaveBeenCalledTimes(1); expect(f.repository.claimCheck).not.toHaveBeenCalled();
+    expect(f.repository.resultIntent).toHaveBeenCalledTimes(2); expect(f.repository.recoverCheck).not.toHaveBeenCalled(); expect(f.repository.claimCheck).not.toHaveBeenCalled();
     expect(f.repository.completeCheck).not.toHaveBeenCalled(); expect(f.transportFactory).not.toHaveBeenCalled();
     expect(f.human.verify).not.toHaveBeenCalled();
   });
   it.each(['session', 'name', 'logout'] as const)('keeps %s independent from expiring send evidence', async action => {
     const f = fixture(); f.env.SM_CUSTOMER_VERIFY_EVIDENCE = '{}'; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
-    const result = await f.runtime.execute({ ...f.relay, action }, { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request });
+    const result = await f.runtime.execute({ ...f.relay, action }, { ...f.publication, sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request });
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(result).toMatchObject({ profile: { revision: 0 } });
     expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
   });
   it('does not return private data when tenant revocation occurs during the session read', async () => {
     const f = fixture(); f.repository.authenticate.mockImplementation(async () => { f.row.account.status = 'suspended'; return f.session; });
-    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: {} }))
+    await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { ...f.publication, sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: {} }))
       .rejects.toMatchObject({ status: 503 });
   });
   it('sanitizes arbitrary storage or adapter exceptions before Ops can see them', async () => {
     const f = fixture(); const marker = 'fixture-private-connection-string';
-    f.repository.recoverCheck.mockRejectedValue(new Error(marker));
-    const { challengeId, checkId } = f.check.request;
+    f.repository.resultIntent.mockRejectedValue(new Error(marker));
+    const { checkId } = f.check.request;
     const error = await f.runtime.execute({ ...f.relay, action: 'recover' }, {
-      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request: { challengeId, checkId },
+      browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, intentProof: f.start.intentProof, request: { operationId: f.start.request.operationId, checkId },
     }).catch((value: Error) => value);
     expect(error).toMatchObject({ status: 503 });
     expect(JSON.stringify(error).includes(marker) || String((error as Error).stack).includes(marker)).toBe(false);
@@ -213,11 +217,11 @@ describe('browser preparation runtime boundary', () => {
     expect(f.human.verify).toHaveBeenCalledTimes(1); expect(f.repository.reserve).not.toHaveBeenCalled();
     expect(f.provider.start).not.toHaveBeenCalled();
   });
-  it('revalidates fresh funding after the final asynchronous browser validation', async () => {
+  it('revalidates fresh funding after the final asynchronous intent validation', async () => {
     const f = fixture(true); let reads = 0;
-    f.repository.validateBrowser.mockImplementation(async () => {
-      if (++reads === 3) reviseCosts(f, 32);
-      return { expiresAt: f.session.expiresAt };
+    f.repository.validateIntent.mockImplementation(async () => {
+      if (++reads === 2) reviseCosts(f, 32);
+      return { expiresAt: f.pending.expiresAt };
     });
     await expect(f.runtime.execute({ ...f.relay, action: 'check' }, f.check)).rejects.toMatchObject({ status: 503 });
     expect(f.provider.check).not.toHaveBeenCalled();
@@ -227,7 +231,7 @@ describe('browser preparation runtime boundary', () => {
     const f = fixture(); let reads = 0;
     f.query.exec.mockImplementation(async () => { if (++reads === 2) f.repository.validateBrowser.mockResolvedValue(null); return f.row; });
     await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { browserRef: f.start.browserRef,
-      browserSecret: f.start.browserSecret, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
+      browserSecret: f.start.browserSecret, ...f.publication, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
     expect(f.repository.authenticate).toHaveBeenCalledTimes(1); expect(f.transportFactory).not.toHaveBeenCalled();
   });
   it('rechecks session expiry after the last tenant wait, even while the browser remains valid', async () => {
@@ -237,9 +241,49 @@ describe('browser preparation runtime boundary', () => {
     try {
       f.query.exec.mockImplementation(async () => { if (++reads === 2) now = initial + 2000; return f.row; });
       await expect(f.runtime.execute({ ...f.relay, action: 'session' }, { browserRef: f.start.browserRef,
-        browserSecret: f.start.browserSecret, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
+        browserSecret: f.start.browserSecret, ...f.publication, sessionToken: f.start.browserSecret, request: {} })).rejects.toMatchObject({ status: 401 });
       expect(f.repository.authenticate).toHaveBeenCalledTimes(1);
     } finally { clock.mockRestore(); }
+  });
+});
+
+describe('verification intent runtime boundary', () => {
+  it.each(['prepare', 'close'] as const)('runs intent %s without Turnstile, sending configuration or a session token', async step => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const intent = { operationId: f.start.request.operationId, state: 'open' as const, expiresAt: f.pending.expiresAt };
+    f.repository.prepareIntent.mockResolvedValue({ intent, emitCookie: true });
+    f.repository.closeIntent.mockResolvedValue({ ...intent, state: 'closed' });
+    const result = await f.runtime.execute({ ...f.relay, action: 'intent' }, { browserRef: f.start.browserRef,
+      browserSecret: f.start.browserSecret, candidateProof: step === 'prepare' ? f.start.intentProof : null,
+      request: { step, operationId: intent.operationId } });
+    expect(result).toEqual({ intent: { ...intent, state: step === 'prepare' ? 'open' : 'closed' }, emitCookie: step === 'prepare' });
+    expect(f.human.verify).not.toHaveBeenCalled(); expect(f.transportFactory).not.toHaveBeenCalled();
+    expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.repository.revoke).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'closed'] as const)('rejects a %s intent before Turnstile and before a send reservation', async kind => {
+    const f = fixture(); const body: Record<string, unknown> = { ...f.start };
+    if (kind === 'missing') delete body.intentProof;
+    else f.repository.validateIntent.mockResolvedValue(null);
+    await expect(f.runtime.execute(f.relay, body)).rejects.toMatchObject({ status: kind === 'missing' ? 400 : 401 });
+    expect(f.human.verify).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
+  });
+  it('revalidates closure after the human verifier returns before admitting a delayed start', async () => {
+    const f = fixture(); f.human.verify.mockImplementation(async () => { f.repository.validateIntent.mockResolvedValue(null); return true; });
+    await expect(f.runtime.execute(f.relay, f.start)).rejects.toMatchObject({ status: 401 });
+    expect(f.repository.reserve).not.toHaveBeenCalled(); expect(f.provider.start).not.toHaveBeenCalled();
+  });
+  it.each(['unresolved', 'code_required', 'closed', 'expired', 'failed'] as const)('reads a %s result without current sending policy or a provider', async state => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    const result = { operationId: f.start.request.operationId, state, checkId: null,
+      challengeId: state === 'code_required' ? f.pending.challengeId : null,
+      expiresAt: state === 'expired' ? Date.now() - 1 : f.pending.expiresAt };
+    f.repository.resultIntent.mockResolvedValue(result);
+    await expect(f.runtime.execute({ ...f.relay, action: 'recover' }, { browserRef: f.start.browserRef,
+      browserSecret: f.start.browserSecret, intentProof: f.start.intentProof,
+      request: { operationId: f.start.request.operationId, checkId: null } })).resolves.toEqual(result);
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.human.verify).not.toHaveBeenCalled();
+    expect(f.repository.validateIntent).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
   });
 });
 
@@ -359,12 +403,14 @@ describe('closed paid pilot runtime funding', () => {
   }
   it.each(['recover', 'session', 'name', 'logout'] as const)('keeps paid %s available without spending evidence or provider credentials', async action => {
     const f = fixture(true); delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_POLICY;
-    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET; f.repository.recoverCheck.mockResolvedValue(f.session);
-    const { challengeId, checkId } = f.check.request;
+    delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    f.repository.resultIntent.mockImplementation(approvedCustomerIntentResult({ operationId: f.start.request.operationId,
+      challengeId: f.pending.challengeId, checkId: f.check.request.checkId, expiresAt: f.pending.expiresAt }, f.session));
+    const { checkId } = f.check.request;
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 }
-      : action === 'logout' ? { all: true } : action === 'recover' ? { challengeId, checkId } : {};
-    const envelope = action === 'recover' ? { browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request }
-      : { sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request };
+      : action === 'logout' ? { all: true } : action === 'recover' ? { operationId: f.start.request.operationId, checkId } : {};
+    const envelope = action === 'recover' ? { intentProof: f.start.intentProof, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request }
+      : { ...f.publication, sessionToken: f.start.browserSecret, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret, request };
     const result = await f.runtime.execute({ ...f.relay, action }, envelope);
     if (action === 'logout') expect(result).toBeUndefined();
     else expect(typeof result).toBe('object');

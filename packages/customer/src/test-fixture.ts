@@ -3,8 +3,40 @@ import { resolve } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { NodePgDriver } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { migrateCustomer } from './migration';
+
+export function trackCustomerTestPool(pool: Pool): () => Promise<void> {
+  // Attach immediately after construction, before any connect/query. pg-pool
+  // may resolve end() after removing a client from its inventory but BEFORE
+  // that client's end callback/event. Even pool.remove is not a client end.
+  const clients = new Set<PoolClient>();
+  let changed: (() => void) | undefined;
+  let closing: Promise<void> | undefined;
+  const connected = (client: PoolClient) => {
+    clients.add(client);
+    client.once('end', () => { clients.delete(client); changed?.(); });
+  };
+  pool.on('connect', connected);
+  return () => closing ??= (async () => {
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          await pool.end();
+          while (clients.size) await new Promise<void>(resolve => { changed = resolve; });
+        })(),
+        new Promise<never>((_resolve, reject) => {
+          // A failure deadline, never a delay that permits destructive cleanup.
+          deadline = setTimeout(() => reject(new Error('Fermeture PostgreSQL de test non confirmée')), 5000);
+        }),
+      ]);
+      pool.removeListener('connect', connected);
+    } finally {
+      clearTimeout(deadline);
+    }
+  })();
+}
 
 export function assertCustomerTestTarget(raw: unknown): string {
   let url: URL;
@@ -20,7 +52,7 @@ export function assertCustomerTestTarget(raw: unknown): string {
 
 export async function customerTestFixture(raw: unknown, options: {
   beforeUpgrade?: (admin: Pool) => Promise<void>;
-  beforeUpgradeMigrations?: 1 | 2 | 3;
+  beforeUpgradeMigrations?: 1 | 2 | 3 | 4;
 } = {}) {
   const base = new URL(assertCustomerTestTarget(raw));
   const suffix = randomUUID().replaceAll('-', '');
@@ -28,20 +60,26 @@ export async function customerTestFixture(raw: unknown, options: {
   const role = `customer_test_${suffix}`;
   const password = randomUUID();
   const root = new Pool({ connectionString: base.toString(), max: 1, connectionTimeoutMillis: 3000 });
+  const closeRoot = trackCustomerTestPool(root);
   let admin: Pool | undefined;
   let app: Pool | undefined;
+  let closeAdmin: (() => Promise<void>) | undefined;
+  let closeApp: (() => Promise<void>) | undefined;
   let databaseCreated = false;
   let roleCreated = false;
-  const close = async () => {
-    await app?.end();
-    await admin?.end();
-    if (databaseCreated) {
-      await root.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()', [database]);
-      await root.query(`DROP DATABASE "${database}"`);
+  let closing: Promise<void> | undefined;
+  const close = () => closing ??= (async () => {
+    try {
+      await Promise.all([closeApp?.(), closeAdmin?.()]);
+      if (databaseCreated) {
+        await root.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=$1 AND pid<>pg_backend_pid()', [database]);
+        await root.query(`DROP DATABASE "${database}"`);
+      }
+      if (roleCreated) await root.query(`DROP ROLE "${role}"`);
+    } finally {
+      await closeRoot();
     }
-    if (roleCreated) await root.query(`DROP ROLE "${role}"`);
-    await root.end();
-  };
+  })();
   try {
     await root.query(`CREATE DATABASE "${database}"`);
     databaseCreated = true;
@@ -49,6 +87,7 @@ export async function customerTestFixture(raw: unknown, options: {
     roleCreated = true;
     base.pathname = `/${database}`;
     admin = new Pool({ connectionString: base.toString(), max: 4, connectionTimeoutMillis: 3000 });
+    closeAdmin = trackCustomerTestPool(admin);
     if (options.beforeUpgrade) {
       // Real Drizzle migrator, original SQL/hash unchanged; seed historical rows
       // before applying the remaining migration through the production entrypoint.
@@ -66,6 +105,7 @@ export async function customerTestFixture(raw: unknown, options: {
     base.username = role;
     base.password = password;
     app = new Pool({ connectionString: base.toString(), max: 8, connectionTimeoutMillis: 3000 });
+    closeApp = trackCustomerTestPool(app);
     return { app, admin, close, database, role };
   } catch (error) { await close(); throw error; }
 }

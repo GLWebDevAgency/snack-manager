@@ -9,6 +9,18 @@ export type CustomerBrowserPreparation = {
   expiresAt: number;
 };
 export type CustomerBrowserBinding = CustomerScope & { browserRef: string; browserHash: string };
+export type CustomerSessionSelection = { expectedOperationId: string; expectedCheckId: string };
+export type CustomerVerificationIntent = {
+  operationId: string;
+  state: 'open' | 'closed' | 'consumed' | 'expired';
+  expiresAt: number;
+};
+export type CustomerIntentBinding = CustomerBrowserBinding & { operationId: string; proofHash: string };
+type IntentResultBase = { operationId: string; checkId: string | null; challengeId: string | null; expiresAt: number };
+export type CustomerIntentResult = IntentResultBase & (
+  | { state: 'unresolved' | 'code_required' | 'incorrect' | 'closed' | 'expired' | 'failed' }
+  | { state: 'approved'; session: CustomerSession | null }
+);
 export type CustomerProfile = {
   accountId: string;
   phoneHash: string;
@@ -46,6 +58,7 @@ export type PaidVerificationLimits = VerificationLimits & {
   };
 };
 type ReservationIdentity = CustomerScope & {
+  proofHash: string;
   browserRef: string;
   operationId: string;
   requestHash: string;
@@ -84,6 +97,9 @@ export type ReservationResult =
   | { kind: 'denied' | 'uncertain' };
 
 export type CheckClaim = CustomerScope & {
+  operationId: string;
+  proofHash: string;
+  requestHash: string;
   browserRef: string;
   challengeId: string;
   browserHash: string;
@@ -103,6 +119,10 @@ export interface CustomerIdentityRepository {
   } | null>;
   confirmBrowser(input: CustomerBrowserBinding): Promise<CustomerBrowserPreparation | null>;
   validateBrowser(input: CustomerBrowserBinding): Promise<{ expiresAt: number } | null>;
+  prepareIntent(input: CustomerIntentBinding): Promise<{ intent: CustomerVerificationIntent; emitCookie: boolean } | null>;
+  closeIntent(input: CustomerBrowserBinding & { operationId: string }): Promise<CustomerVerificationIntent | null>;
+  validateIntent(input: CustomerIntentBinding): Promise<{ expiresAt: number } | null>;
+  resultIntent(input: CustomerIntentBinding & { checkId: string | null; sessionHash: string | null }): Promise<CustomerIntentResult | null>;
   reserve(input: VerificationReservation): Promise<ReservationResult>;
   settleSend(input: CustomerScope & {
     challengeId: string;
@@ -121,8 +141,8 @@ export interface CustomerIdentityRepository {
      * matching unverified/recycled phone. Null permits first enrollment only. */
     existingSessionHash: string | null;
   }): Promise<CustomerSession | null>;
-  authenticate(input: CustomerBrowserBinding & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
-  updateName(input: CustomerScope & {
+  authenticate(input: CustomerBrowserBinding & CustomerSessionSelection & { sessionHash: string; now: number }): Promise<CustomerSession | null>;
+  updateName(input: CustomerScope & CustomerSessionSelection & {
     browserRef: string;
     sessionHash: string;
     browserHash: string;
@@ -130,5 +150,5 @@ export interface CustomerIdentityRepository {
     expectedRevision: number;
     now: number;
   }): Promise<CustomerSession | null>;
-  revoke(input: CustomerBrowserBinding & { sessionHash: string; all: boolean; now: number }): Promise<void>;
+  revoke(input: CustomerBrowserBinding & CustomerSessionSelection & { sessionHash: string; all: boolean; now: number }): Promise<void>;
 }
