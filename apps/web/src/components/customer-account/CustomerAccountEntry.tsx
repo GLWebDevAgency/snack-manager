@@ -11,11 +11,12 @@ export type CustomerAccountEntryProps = {
   restaurantName: string;
   loyaltyHref?: string;
   onDeviceOrders?: () => void;
+  returnLabel?: 'Revenir au menu' | 'Revenir à la fidélité';
 };
 
 /** Existing-session entry, not a signup button. The first private read happens
  * only after opening; no profile is injected into the public restaurant HTML. */
-export function CustomerAccountEntry({ slug, restaurantName, loyaltyHref, onDeviceOrders }: CustomerAccountEntryProps) {
+export function CustomerAccountEntry({ slug, restaurantName, loyaltyHref, onDeviceOrders, returnLabel }: CustomerAccountEntryProps) {
   const [open, setOpen] = useState(false);
   const account = useCustomerAccount(slug, open);
   return <>
@@ -25,6 +26,6 @@ export function CustomerAccountEntry({ slug, restaurantName, loyaltyHref, onDevi
       <span className="text-[13px] font-bold">Mon compte</span>
     </Tap>
     <CustomerAccountPanel open={open} onClose={() => setOpen(false)} restaurantName={restaurantName}
-      loyaltyHref={loyaltyHref} onDeviceOrders={onDeviceOrders} account={account} />
+      loyaltyHref={loyaltyHref} onDeviceOrders={onDeviceOrders} account={account} returnLabel={returnLabel} />
   </>;
 }

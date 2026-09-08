@@ -1,8 +1,24 @@
 # Historique des commandes et espace client
 
-Complément à l'[audit des parcours commerce](PARCOURS-COMMERCE-PRODUCTION.md), demandé le 5 septembre 2026. État du code vérifié sur la branche commerce ; les parcours cibles ci-dessous **ne sont pas encore implémentés**. Ce document ne revendique aucun déploiement.
+Complément à l'[audit des parcours commerce](PARCOURS-COMMERCE-PRODUCTION.md), demandé le 5 septembre 2026. Le corps numéroté conserve la photographie initiale et les parcours cibles ; les deltas datés et le [registre opérationnel](SUITE-APRES-COMMERCE.md) font référence pour les livraisons suivantes.
 
-## Delta de réalisation — 8 septembre 2026, L3a.2
+## Delta de réalisation — 8 septembre 2026, L3a.3–5
+
+#136 expose une frontière API/BFF privée fermée ; #137 livre Mon compte,
+profil/déconnexion et préremplissage respectant la saisie. [Recette staging #137](https://github.com/GLWebDevAgency/snack-manager/pull/137#issuecomment-5586645517),
+SHA `d99f44f763e71598eb7a5c09b2e07c6b8940f6ed` : navigation Classfood vérifiée,
+mais session authentifiée et préremplissage testés sur fixtures seulement.
+#138 ajoute le registre durable d'un pilote Verify payant explicitement financé ;
+sa fusion ne constitue ni activation SMS ni inscription publique.
+
+Compte, carte et commandes ne sont pas encore reliés : pas de rattachement par
+téléphone/QR, pas de propriétaire privé figé dans les nouvelles commandes, pas
+d'historique personnel serveur ni de réachat. Avant le formulaire OTP, il reste
+à sérialiser durablement les intentions de connexion et la publication des
+cookies, ainsi que les reprises après réponse perdue. Le téléphone seul ne
+doit pas réouvrir un compte existant après perte de toute continuité.
+
+## Delta historique — 8 septembre 2026, L3a.2
 
 Le [socle privé d'identité](IDENTITE-CLIENT-VERIFY.md) est implémenté : PostgreSQL,
 quotas durables, contacts chiffrés, confirmation atomique, sessions et révocation.
@@ -84,9 +100,9 @@ Preuves : `StatsService.revenueMatch`, `sumWindow` et `exportOrdersCsv` dans [`s
 
 Le bouton « Obtenir ma carte » ne doit plus envoyer un nouvel utilisateur directement au scanner. Cible : « Créer mon compte et ma carte » avec numéro vérifié et prénom ; « Me connecter » pour le membre existant ; rattachement d'une carte de caisse comme action secondaire explicite. La déconnexion clôt la session et retire les coordonnées locales ; elle ne supprime ni la carte ni les justificatifs de vente. Prévoir aussi révocation des autres sessions et récupération sûre.
 
-**Constats toujours ouverts, revérifiés le 8 septembre** : aucune inscription consommateur publique ni session OTP ; le cookie actuel conserve une carte de caisse et la suppression locale ne révoque pas les autres appareils. L3a0 a remplacé `sm.customer` par une mémoire locale facultative, cloisonnée et bornée, et conserve plusieurs reçus sur cet appareil. Ce ne sont ni un profil fidélité authentifié ni un historique personnel serveur. Aucune API de réachat ou crédit automatique web de fidélité ne doit être déduit des écrans présents. [Raccordement Verify L3a.1 et suite L3a.2](IDENTITE-CLIENT-VERIFY.md).
+**Constats toujours ouverts, revérifiés le 8 septembre** : aucune inscription consommateur publique ni recette de session OTP réelle. Le cookie QR conserve une carte de caisse ; sa suppression locale ne révoque pas les autres appareils. Il reste distinct de la nouvelle session personnelle révocable de #135–137. L3a0 a remplacé `sm.customer` par une mémoire locale facultative, cloisonnée et bornée, et conserve plusieurs reçus sur cet appareil. Ce ne sont ni un profil fidélité authentifié ni un historique personnel serveur. Aucune API de réachat ou crédit automatique web de fidélité ne doit être déduite des écrans présents. [Raccordement Verify et état des lots L3a](IDENTITE-CLIENT-VERIFY.md).
 
-Twilio Verify est choisi, **essai gratuit fermé uniquement** : vérifier la liste des destinataires, les quotas et l'échéance avant un envoi. Aucun achat, activation publique ou budget SMS récurrent autorisé. Le futur flux exige plafonds globaux/restaurant/téléphone/IP, délai de renvoi, nombre d'essais borné, réponses sans révéler l'existence d'un compte et arrêt en cas d'incertitude sur le budget. La vérification du téléphone ne doit pas rattacher automatiquement les anciens achats ou cartes créés avec un téléphone non vérifié : possession de carte et rattachement contrôlé restent distincts.
+**Décision Twilio actualisée le 8 septembre :** le fondateur a autorisé Verify et finalisé lui-même l'upgrade et l'attestation du nom. Le compte est `Full` ; aucune allocation Verify gratuite n'est confirmée. Le plafond ponctuel de recette proposé reste à confirmer, sans SMS envoyé ni budget récurrent autorisé. #138 distingue explicitement Trial et pilote payant fermé ; le solde du fournisseur n'autorise aucune consommation implicite. Le flux exige plafonds globaux/restaurant/téléphone/IP, délai de renvoi, nombre d'essais borné, réponses sans révéler l'existence d'un compte et arrêt en cas d'incertitude sur le budget. La vérification du téléphone ne doit pas rattacher automatiquement les anciens achats ou cartes créés avec un téléphone non vérifié : possession de carte et rattachement contrôlé restent distincts.
 
 **Plusieurs commandes en cours** : remplacer le raccourci unique vers « la dernière commande » par « Mes commandes » et un nombre de commandes actives. Chaque commande conserve son numéro, mode, créneau, statut opérationnel et financier, et son propre accès au suivi. Une deuxième commande ne remplace pas le premier suivi ; minuit, rafraîchissement et reconnexion ne retirent aucune commande non terminée. Les historiques sont paginés et protégés par propriétaire serveur, jamais regroupés par téléphone déclaré. Le réachat prépare un panier aux conditions actuelles, sans débiter ou recréer immédiatement la vente.
 
@@ -119,9 +135,9 @@ Preuves : [`proxy.ts`](../../apps/web/src/proxy.ts), [`session-cookie.ts`](../..
 
 ### Préremplissage demandé depuis la carte installée
 
-La session actuelle n'est pas une session personnelle complète : elle conserve le **QR de caisse**. Sa projection contient `alias` et `balanceUnits`, aucun téléphone, même masqué. Le profil serveur contient un prénom et un téléphone facultatifs, pas un nom de famille distinct. L'alias peut être « Carte abcdefgh » ou « Client · 1234 » : **ne pas l'injecter dans le champ nom**.
+La session **QR de caisse** n'est pas la session personnelle introduite par L3a : sa projection contient `alias` et `balanceUnits`, aucun téléphone, même masqué. Le profil fidélité serveur contient un prénom et un téléphone facultatifs, pas un nom de famille distinct. L'alias peut être « Carte abcdefgh » ou « Client · 1234 » : **ne pas l'injecter dans le champ nom**.
 
-Depuis L3a0, le checkout réutilise seulement les coordonnées mémorisées explicitement sur ce navigateur, par restaurant pendant sept jours et effaçables. L'ancienne clé globale `sm.customer` a été retirée sans migration implicite. Ce n'est toujours ni un rattachement fidélité ni une identité vérifiée.
+L3a0 réutilise les coordonnées mémorisées explicitement sur ce navigateur, par restaurant pendant sept jours et effaçables. #137 complète les champs vierges non édités depuis un profil personnel confirmé, après lecture bornée de cette mémoire et sans écraser une saisie. Ce raccordement est testé sur fixtures authentifiées ; le compte réel reste fermé en staging. L'ancienne clé globale `sm.customer` a été retirée sans migration implicite. Le profil personnel n'est pas encore relié au membre fidélité, et une mémoire locale ne devient pas une identité vérifiée.
 
 Pour le parcours demandé :
 

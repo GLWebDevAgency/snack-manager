@@ -77,42 +77,54 @@ function Profile({ account, view }: { account: Account; view: CustomerAccountVie
   </div>;
 }
 
-export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, account }: {
+export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHref, onDeviceOrders, account, returnLabel = 'Revenir au menu' }: {
   open: boolean; onClose: () => void; restaurantName: string; loyaltyHref?: string | undefined;
   onDeviceOrders?: (() => void) | undefined; account: Account;
+  returnLabel?: 'Revenir au menu' | 'Revenir à la fidélité' | undefined;
 }) {
   const { state, refresh } = account;
   const loading = state.status === 'loading';
   const needsRetry = ['idle', 'error', 'offline', 'unavailable'].includes(state.status);
   const view = open ? state.view : null;
+  const title = state.status === 'offline' ? 'Vous êtes hors connexion'
+    : state.status === 'unavailable' ? 'Compte indisponible pour le moment'
+      : state.status === 'error' ? 'Vérification interrompue'
+        : state.status === 'idle' ? 'Compte à actualiser' : 'Vous naviguez en invité';
+  // Keep the exact authoritative action/quota message. Only its presentation
+  // changes; availability is never used to infer a missing or invalid session.
+  const message = state.message ?? (state.status === 'guest'
+    ? 'La création et la connexion au compte ne sont pas encore ouvertes.'
+    : state.status === 'offline' ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
+      : 'Actualisez votre compte pour consulter votre session. La commande en invité reste disponible.');
   return <Sheet open={open} onClose={onClose} title="Mon compte" navigationLocked={state.busy}
     headerExtra={<p className="mt-1 truncate text-xs text-mut">{restaurantName}</p>}
-    footer={<Tap className={secondary + ' w-full'} disabled={state.busy} onClick={onClose}>
-      {view ? 'Retour au restaurant' : 'Continuer en invité'}
+    footer={<Tap className={view ? secondary + ' w-full' : primary} disabled={state.busy} onClick={onClose}>
+      {returnLabel}
     </Tap>}>
-    <div className="space-y-5 p-4 pb-6 sm:p-5">
-      {state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
+    <div className="space-y-4 p-4 pb-5 sm:p-5">
+      {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
       {view ? <Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} />
         : loading ? <div role="status" className="min-h-40 rounded-panel border border-ink/10 bg-surface2 p-5">
           <p className="text-sm font-semibold">Vérification de votre session…</p>
+          {state.message && <p className="mt-3 text-sm leading-6 text-mut">{state.message}</p>}
           <div aria-hidden className="mt-5 space-y-3"><div className="h-4 w-1/2 rounded bg-ink/10" /><div className="h-11 rounded-ctrl bg-ink/5" /><div className="h-4 w-3/4 rounded bg-ink/10" /></div>
-        </div> : <section className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-5">
-          <span aria-hidden className="mb-3 grid size-11 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
-          <h3 className="font-display text-xl font-extrabold tracking-tight">{needsRetry ? 'Votre compte reste à vérifier' : 'Vous pouvez commander en invité'}</h3>
-          <p className="mt-3 text-sm leading-6 text-mut">{state.status === 'offline'
-            ? 'Reconnectez-vous au réseau pour consulter votre profil personnel.'
-            : needsRetry ? 'Nous ne pouvons pas confirmer votre session pour le moment. Votre commande reste accessible en invité.'
-              : 'La création et la connexion au compte ne sont pas encore ouvertes.'}</p>
-          <p className="mt-3 text-xs leading-5 text-mut">Votre carte fidélité est une carte de présentation, pas une clé de connexion à votre compte.</p>
+        </div> : <section role="status" aria-live="polite" aria-atomic="true" className="rounded-panel border border-accent/20 bg-[image:var(--cf-card-gradient)] p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-card bg-accentwash text-accentink"><Icon name="user" size={21} /></span>
+            <h3 className="self-center font-display text-lg font-extrabold leading-tight tracking-tight">{title}</h3>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-mut">{message}</p>
         </section>}
-      {!loading && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
+      {!loading && state.status !== 'offline' && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
+      {!view && !loading && <p className="text-xs leading-5 text-mut">La carte fidélité ne donne pas accès à ce compte.</p>}
       {(onDeviceOrders || loyaltyHref) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
+        <h3 className="mb-3 text-sm font-bold">Autres accès</h3>
         {onDeviceOrders && <Tap disabled={state.busy} onClick={() => { onClose(); onDeviceOrders(); }}
           aria-label="Mes commandes sur cet appareil" className={secondary + ' w-full justify-start text-left'}>
           <Icon name="ticket" size={18} /><span className="min-w-0 flex-1"><span className="block font-bold">Mes commandes</span><span className="block text-xs font-normal text-mut">Sur cet appareil uniquement</span></span><Icon name="arrow" size={15} />
         </Tap>}
-        {loyaltyHref && (state.busy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Ma carte fidélité</span>
-          : <Link href={loyaltyHref} prefetch={false} onClick={onClose} className={secondary + ' w-full justify-start'}><Icon name="gift" size={18} /><span className="flex-1">Ma carte fidélité</span><Icon name="arrow" size={15} /></Link>)}
+        {loyaltyHref && (state.busy ? <span aria-disabled="true" className={secondary + ' w-full justify-start opacity-40'}><Icon name="gift" size={18} />Fidélité du restaurant</span>
+          : <Link href={loyaltyHref} prefetch={false} onClick={onClose} className={secondary + ' w-full justify-start'}><Icon name="gift" size={18} /><span className="flex-1">Fidélité du restaurant</span><Icon name="arrow" size={15} /></Link>)}
       </nav>}
     </div>
   </Sheet>;

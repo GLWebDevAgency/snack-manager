@@ -321,6 +321,14 @@ d'authentification qui remplacerait les cookies en dehors de ce protocole.
 
 ## L3a.5 — pilote Verify payant fermé, préparation non activée
 
+**Déployé sans activation via #138**, staging
+`0cf121249a0bebb8e2bfd00922f9bf2015296f96`.
+[Preuve de réception](https://github.com/GLWebDevAgency/snack-manager/pull/138#issuecomment-5587139392) :
+7/7 jobs, quatre services, trois familles de migrations, smoke 8/8 et frontière
+fermée 8/8 ; E2E démos 9/9, quatre parcours avec identifiants ignorés. Le nombre
+73 des logs bootstrap est celui du manifeste géré, pas un comptage physique
+observé 69 → 73. Aucun SMS, compte ou paiement créé ; production inchangée.
+
 Le compte fournisseur devenu `Full` n'est pas accepté comme un compte `Trial`.
 Le nouveau mode explicite `closed_paid_pilot` reste limité au runtime Railway
 staging épinglé, à un seul restaurant et à cinq mobiles français autorisés au
@@ -376,6 +384,29 @@ lint, builds ciblés customer/bootstrap et revue croisée verts. Ces décomptes
 se recouvrent : ne pas les additionner. Compilation monorepo laissée à la CI
 faute d'espace disque local ; une suite locale ne prouve pas la recette Twilio.
 PR, CI du SHA final et déploiement seront consignés à la réception du lot.
+
+## Prochain lot — inscription fermée et reprise navigateur, non implémenté
+
+La revue du 8 septembre identifie trois préalables au formulaire OTP : deux
+préparations sans cookie peuvent installer des secrets navigateur différents ;
+une ancienne confirmation peut remplacer un cookie de session plus récent ;
+la lecture d'un reçu de confirmation absent ne prouve pas qu'un appel encore
+en vol est terminé. Ignorer une réponse dans React n'empêche pas son `Set-Cookie`.
+
+Réutiliser les reçus `challenges`/`check_attempts` et le verrou interonglets de
+Mon compte. Compléter l'autorité serveur pour intentions/version de connexion,
+publication de session et clôture conditionnelle ; journal navigateur minimal
+durable avant réseau, sans téléphone/OTP/jeton/profil. Une réponse perdue doit
+déclencher une lecture de résultat, jamais un nouvel envoi automatique ou un
+nouvel identifiant tant que l'ancien appel peut encore agir. Préparation
+navigateur concurrente, cookies tardifs, rechargement, révocation et stockage
+refusé doivent être couverts par de vrais contre-tests avant ouverture de l'UI.
+
+Ce périmètre reste à concevoir et tester ; il ne revendique ni correction déjà
+livrée ni récupération sûre d'un ancien compte sur un nouvel appareil. La
+prochaine étape compte → adhésion fidélité explicite, puis propriétaire privé
+des nouvelles commandes → historique/réachat, reste distincte. Aucune ancienne
+carte ou commande n'est réattribuée par simple correspondance de téléphone.
 
 ## Conditions restantes avant ouverture
 

@@ -383,7 +383,7 @@ function controlePwaFidelite(cible) {
       if (/programme fidélité indisponible/i.test(titre)) {
         return 'la page de repli « Programme fidélité indisponible » est servie';
       }
-      if (!/Chargement de votre carte fidélité|Afficher ma carte/i.test(corps)) {
+      if (!/Chargement de votre carte fidélité|Afficher ma carte|Scanner mon QR/i.test(corps)) {
         return 'page servie sans marqueur de la carte fidélité';
       }
       detail.push(`${ms} ms · empreinte ${empreinte(corps)}`);

@@ -750,9 +750,12 @@ l'identité des deux rôles,
 leurs privilèges, le `search_path`, les propriétaires exacts des objets gérés et
 l'état des trois journaux Drizzle : `__drizzle_migrations`,
 `__drizzle_loyalty_migrations` et `__drizzle_customer_migrations`, tous dans
-`drizzle`. Le manifeste L3a.2 énumère **69 objets** : les 55 objets historiques
-et 14 objets `customer` (schéma, neuf tables, deux fonctions, journal et sa
-séquence). Ce nombre décrit le code cible, pas une preuve de migration déjà
+`drizzle`. Le manifeste L3a.5 énumère **73 objets** : les 55 objets historiques,
+les 14 objets `customer` initiaux (schéma, neuf tables, deux fonctions, journal
+et sa séquence), puis la table de budget payant et trois fonctions de garde
+de la migration additive `0001`. Chaque ajout est lié à sa migration : une
+base à 69 objets reste recevable avant cette migration, pas après son journal
+d'application. Ce nombre décrit le code cible, pas une preuve de migration déjà
 appliquée. Une base saine aux deux anciens contextes passe le préflight avant
 l'ajout de `customer` ; une migration déclarée appliquée avec un objet manquant
 est refusée. Toute dérive **couverte par ce manifeste**

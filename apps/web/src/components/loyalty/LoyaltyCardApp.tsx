@@ -648,7 +648,7 @@ export function LoyaltyCardApp({ catalog }: { catalog: LoyaltyPublicProgram }) {
           surfaces se répondent. */}
       <main className="mx-auto w-full max-w-[1080px] px-4 pt-6">
         {slug !== 'demo' && <div className="mb-5 flex justify-end">
-          <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} />
+          <CustomerAccountEntry slug={slug} restaurantName={catalog.restaurant.name} returnLabel="Revenir à la fidélité" />
         </div>}
         {erreur && (
           <div className="mb-6 rounded-card border border-alert/35 bg-alert/10 p-4">
@@ -1126,7 +1126,7 @@ function EtatSansCarte({
               barres d'outils denses de l'admin, à la souris. */}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Btn icon="grid" disabled={scannerDesactive} onClick={onScanner}>
-              {scannerDesactive ? "Retrait en cours…" : "Afficher ma carte"}
+              {scannerDesactive ? "Retrait en cours…" : "Scanner mon QR"}
             </Btn>
             {/* Le lien vers la vitrine existe AUSSI sans carte : quelqu'un qui
                 découvre le programme doit pouvoir aller commander, c'est même
@@ -1135,7 +1135,7 @@ function EtatSansCarte({
               href={cheminVitrine}
               className="cf-press inline-flex min-h-11 items-center justify-center gap-2 rounded-pill border border-ink/12 px-5 text-sm font-bold text-ink hover:bg-ink/5"
             >
-              Voir la carte du restaurant
+              Voir le menu du restaurant
               <Icon name="arrow" size={16} stroke={2.4} />
             </Link>
           </div>

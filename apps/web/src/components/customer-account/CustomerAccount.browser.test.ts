@@ -87,6 +87,13 @@ beforeEach(async () => {
     faults.push('External request refused'); return route.abort();
   });
   page = await context.newPage(); page.setDefaultTimeout(5_000); page.on('pageerror', error => faults.push(error.message));
+  page.on('console', message => {
+    if (!['warning', 'error'].includes(message.type())) return;
+    if (/Service Worker registration blocked by Playwright/.test(message.text())) return; // Deliberate isolated-context boundary.
+    if (message.location().url.startsWith(`${origin}/r/recette/compte/`)
+      && /Failed to load resource:.*(?:401|409|429|503)/.test(message.text())) return; // Explicit HTTP refusal fixtures below.
+    faults.push(`Unexpected browser ${message.type()}: ${message.text()}`);
+  });
   await page.goto(origin); await page.waitForFunction(() => Boolean(window.customerAccountUiFixture));
   await page.getByRole('button', { name: 'Mon compte', exact: true }).waitFor();
 });
@@ -156,19 +163,79 @@ describe('customer entry placement — real Storefront and loyalty components', 
       expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).count()).toBe(1);
       expect(await page.getByRole('link', { name: /Commander/ }).count()).toBe(1);
       expect(await page.getByRole('link', { name: /Commander/ }).getAttribute('href')).toBe('/r/recette');
+      expect(await page.getByRole('button', { name: 'Scanner mon QR', exact: true }).count()).toBe(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       if (evidence) await page.screenshot({ path: join(evidence, `loyalty-${width}.png`) });
     }
     await open(); await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').waitFor();
-    expect(await page.getByRole('dialog').getByRole('link', { name: 'Ma carte fidélité', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('dialog').getByRole('link', { name: 'Fidélité du restaurant', exact: true }).count()).toBe(0);
     expect(await page.getByRole('dialog').getByText('+33600000000', { exact: true }).count()).toBe(0);
     expect(requests.mutations).toEqual([]);
+  });
+  it.each([['storefront', 'Revenir au menu'], ['loyalty', 'Revenir à la fidélité']])('names the actual return destination on %s', async (path, label) => {
+    const requests = await navigationFixture(false); await page.goto(`${origin}/${path}`); await open();
+    const back = page.getByRole('button', { name: label, exact: true });
+    await back.waitFor(); await back.click();
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
+    expect(page.url()).toBe(`${origin}/${path}`);
+    expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).evaluate(node => document.activeElement === node)).toBe(true);
+    expect(requests.mutations).toEqual([]);
+  });
+  it('describes the scanner before opening it, without inventing a saved card or an account', async () => {
+    const requests = await navigationFixture(false); await page.goto(`${origin}/loyalty`);
+    const scan = page.getByRole('button', { name: 'Scanner mon QR', exact: true }); await scan.waitFor();
+    expect(await page.getByRole('button', { name: 'Afficher ma carte', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('link', { name: 'Voir le menu du restaurant', exact: true }).getAttribute('href')).toBe('/r/recette');
+    await page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Fixture camera disabled', 'NotAllowedError'); }; });
+    await scan.click(); await page.getByRole('dialog', { name: 'Scanner ma carte fidélité', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Fermer le scanner', exact: true }).click();
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
+    expect(requests.reads()).toBe(0); expect(requests.mutations).toEqual([]);
   });
 });
 
 describe('customer account entry — real hook and client, isolated HTTP boundary', () => {
   const fixtureView = () => ({ expiresAt: Date.now() + 600_000,
     profile: { name: 'Camille Test', phoneE164: '+33600000000', phoneVerifiedAt: 1_700_000_000_000, revision: 0 } });
+  it('shows real offline state without a no-op retry and reads authority only after reconnecting', async () => {
+    const requests: string[] = []; let sessionReads = 0; let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await context.route(`${origin}/r/recette/compte/**`, async route => {
+      const request = route.request(); const path = new URL(request.url()).pathname;
+      requests.push(`${request.method()} ${path.split('/').at(-1)}`);
+      if (request.method() !== 'GET') { faults.push('Unexpected mutation'); return route.abort(); }
+      if (path.endsWith('/capacites')) return route.fulfill({ json: { available: false } });
+      if (++sessionReads === 1) return route.fulfill({ json: fixtureView() });
+      await held;
+      return route.fulfill({ status: 401 });
+    });
+    await page.goto(`${origin}/real`); await page.getByRole('button', { name: 'Mon compte', exact: true }).waitFor();
+    try {
+      await context.setOffline(true); expect(await page.evaluate(() => navigator.onLine)).toBe(false);
+      await open(); await page.getByRole('heading', { name: 'Vous êtes hors connexion', exact: true }).waitFor();
+      expect(await page.getByRole('button', { name: 'Réessayer', exact: true }).count()).toBe(0);
+      expect(await page.getByRole('status').count()).toBe(1); expect(requests).toEqual([]);
+      expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
+      if (evidence) await page.screenshot({ path: join(evidence, 'offline-real-320.png') });
+      await context.setOffline(false);
+      await page.getByLabel('Votre prénom ou nom').waitFor();
+      expect(requests.slice().sort()).toEqual(['GET capacites', 'GET session']);
+      await page.getByLabel('Votre prénom ou nom').fill('Brouillon à effacer');
+      await context.setOffline(true);
+      await page.getByRole('heading', { name: 'Vous êtes hors connexion', exact: true }).waitFor();
+      expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
+      expect(await page.getByText('+33600000000', { exact: true }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'Réessayer', exact: true }).count()).toBe(0);
+      expect(requests).toHaveLength(2);
+      await context.setOffline(false);
+      await page.getByText('Vérification de votre session…', { exact: true }).waitFor();
+      await expect.poll(() => requests.length).toBe(4);
+      expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
+      release(); await page.getByRole('heading', { name: 'Vous naviguez en invité', exact: true }).waitFor();
+      expect(requests.slice().sort()).toEqual(['GET capacites', 'GET capacites', 'GET session', 'GET session']);
+      expect(await page.getByRole('button', { name: /inscrire|connecter|envoyer.*code/i }).count()).toBe(0);
+    } finally { release(); await context.setOffline(false); }
+  });
   it('loads only on opening, saves through fresh session checks and confirms server logout', async () => {
     let view = fixtureView(); const requests: { method: string; path: string; body: unknown }[] = [];
     await context.route(`${origin}/r/recette/compte/**`, async route => {
@@ -296,6 +363,64 @@ function assertAccountNavigationAligned(geometry: Awaited<ReturnType<typeof acco
 }
 
 describe('customer account panel — rendered boundaries', () => {
+  it.each([
+    ['guest', 'Vous naviguez en invité'],
+    ['unavailable', 'Compte indisponible pour le moment'],
+    ['offline', 'Vous êtes hors connexion'],
+    ['error', 'Vérification interrompue'],
+  ])('presents one factual %s state without duplicate advice', async (status, title) => {
+    const message = 'Votre compte ne peut pas être vérifié pour le moment. La commande en invité reste disponible.';
+    await page.evaluate(({ status, message }) => window.customerAccountUiFixture.patch({ status, message, view: null }), { status, message });
+    await open(); await page.getByRole('heading', { name: title, exact: true }).waitFor();
+    const statusBox = page.getByRole('status'); expect(await statusBox.count()).toBe(1);
+    expect(await statusBox.getByText(message, { exact: true }).count()).toBe(1);
+    expect(await page.getByText('Nous ne pouvons pas confirmer votre session pour le moment. Votre commande reste accessible en invité.', { exact: true }).count()).toBe(0);
+    expect(await page.getByRole('heading', { name: 'Autres accès', exact: true }).count()).toBe(1);
+    expect(await page.getByRole('link', { name: 'Fidélité du restaurant', exact: true }).getAttribute('href')).toBe('/r/recette/fidelite');
+  });
+  it.each([
+    'L’action n’est pas confirmée. Actualisez votre compte avant de recommencer.',
+    'Votre accès ou votre profil a changé. Actualisez votre compte avant de continuer.',
+    'Trop de demandes. Patientez avant de réessayer.',
+  ])('preserves the exact action or quota message: %s', async message => {
+    await page.evaluate(message => window.customerAccountUiFixture.patch({ status: 'error', message, view: null }), message);
+    await open(); const status = page.getByRole('status');
+    expect(await status.getByRole('heading', { name: 'Vérification interrompue', exact: true }).count()).toBe(1);
+    expect(await status.getByText(message, { exact: true }).count()).toBe(1);
+    expect(await page.getByText(message, { exact: true }).count()).toBe(1);
+    expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
+  });
+  it.each([320, 390, 1440])('keeps the concise closed panel operable at %ipx including short mobile height', async width => {
+    const height = width === 320 ? 568 : width === 390 ? 700 : 900;
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => window.customerAccountUiFixture.patch({ status: 'unavailable', view: null,
+      message: 'Votre compte ne peut pas être vérifié pour le moment. La commande en invité reste disponible.' }));
+    await open(); await page.getByRole('heading', { name: 'Compte indisponible pour le moment', exact: true }).waitFor();
+    const dialog = page.getByRole('dialog', { name: 'Mon compte', exact: true });
+    await page.evaluate(async () => { await document.fonts.ready; await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))); });
+    expect(await dialog.evaluate(node => {
+      const box = node.getBoundingClientRect(); const footer = node.querySelector('[data-dialog-footer]')!.getBoundingClientRect();
+      const content = node.querySelector('[data-dialog-content]')!.getBoundingClientRect();
+      return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight + 1
+        && footer.top >= box.top && footer.bottom <= innerHeight + 1 && content.bottom <= footer.top + 1
+        && document.documentElement.scrollWidth <= innerWidth;
+    })).toBe(true);
+    expect(await page.title()).toBe('Customer account UI fixture'); expect(page.url()).toBe(`${origin}/`);
+    expect(await page.locator('nextjs-portal, vite-error-overlay').count()).toBe(0);
+    if (evidence) await page.screenshot({ path: join(evidence, `closed-${width}.png`) });
+    for (const control of [...await dialog.getByRole('button').all(), ...await dialog.getByRole('link').all()]) {
+      await control.scrollIntoViewIfNeeded(); expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      expect(await control.evaluate(node => {
+        const rect = node.getBoundingClientRect(); const x = rect.left + rect.width / 2; const y = rect.top + rect.height / 2;
+        return x >= 0 && x <= innerWidth && y >= 0 && y <= innerHeight && node.contains(document.elementFromPoint(x, y));
+      })).toBe(true);
+    }
+    if (evidence && width === 320) await page.screenshot({ path: join(evidence, 'closed-320-scrolled.png') });
+    for (let n = 0; n < 8; n++) { await page.keyboard.press('Tab'); expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')))).toBe(true); }
+    await page.getByRole('button', { name: 'Revenir au menu', exact: true }).click();
+    await expect.poll(() => dialog.count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Mon compte', exact: true }).evaluate(node => document.activeElement === node)).toBe(true);
+  });
   it('opens only on demand and preserves the honest guest journey without an OTP CTA', async () => {
     expect((await calls()).filter(call => call[0] === 'enabled').every(call => call[1] === false)).toBe(true);
     expect(await page.getByRole('dialog').count()).toBe(0); await open();
@@ -303,7 +428,7 @@ describe('customer account panel — rendered boundaries', () => {
     expect(await page.getByText('La création et la connexion au compte ne sont pas encore ouvertes.').count()).toBe(1);
     expect(await page.getByRole('button', { name: /inscrire|connecter|envoyer.*code/i }).count()).toBe(0);
     if (evidence) await page.screenshot({ path: join(evidence, 'guest-320.png') });
-    await page.getByRole('button', { name: 'Continuer en invité', exact: true }).click();
+    await page.getByRole('button', { name: 'Revenir au menu', exact: true }).click();
     await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
     if (evidence) await page.screenshot({ path: join(evidence, 'entry-320.png') });
   });
@@ -316,7 +441,7 @@ describe('customer account panel — rendered boundaries', () => {
   });
   it('keeps device orders explicitly local and the loyalty link free of identity secrets', async () => {
     await open();
-    expect(await page.getByRole('link', { name: /Ma carte fidélité/ }).getAttribute('href')).toBe('/r/recette/fidelite');
+    expect(await page.getByRole('link', { name: 'Fidélité du restaurant', exact: true }).getAttribute('href')).toBe('/r/recette/fidelite');
     await page.getByRole('button', { name: /Mes commandes.*cet appareil/ }).click();
     expect(await calls()).toContainEqual(['orders']); await expect.poll(() => page.getByRole('dialog').count()).toBe(0);
   });
@@ -396,10 +521,15 @@ describe('customer account panel — rendered boundaries', () => {
     await page.getByText('Profil mis à jour.', { exact: true }).waitFor();
     expect((await calls()).filter(call => call[0] === 'save')).toHaveLength(1);
   });
-  it.each(['unavailable', 'offline', 'error'])('shows an honest %s state with a retry, not an invented profile', async status => {
+  it.each(['unavailable', 'offline', 'error'])('shows an honest %s state with appropriate recovery, not an invented profile', async status => {
     await page.evaluate(status => window.customerAccountUiFixture.patch({ status, view: null, message: 'Accès à vérifier.' }), status);
     await open(); expect(await page.getByLabel('Votre prénom ou nom').count()).toBe(0);
-    await page.getByRole('button', { name: 'Réessayer', exact: true }).click(); expect(await calls()).toContainEqual(['refresh']);
+    if (status === 'offline') {
+      expect(await page.getByRole('button', { name: 'Réessayer', exact: true }).count()).toBe(0);
+      expect(await calls()).not.toContainEqual(['refresh']);
+    } else {
+      await page.getByRole('button', { name: 'Réessayer', exact: true }).click(); expect(await calls()).toContainEqual(['refresh']);
+    }
   });
   it('allows explicit refresh from an invalidated idle state without claiming an ongoing read', async () => {
     await page.evaluate(() => window.customerAccountUiFixture.patch({ status: 'idle', view: null, busy: false }));
