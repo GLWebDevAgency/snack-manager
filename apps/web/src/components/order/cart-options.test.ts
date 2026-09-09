@@ -172,3 +172,123 @@ describe("choix inclus et suppléments distincts dans le panier web", () => {
     expect(draftUnitPrice(complet)).toBe(draftUnitPrice(sansCrudites));
   });
 });
+
+describe("réconciliation sans substitution des choix enregistrés", () => {
+  const selectedProduct: MenuProduct = { ...product,
+    variants: [{ key: "petit", name: "Petit", price: 850 }, { key: "grand", name: "Grand", price: 1000 }],
+    supplements: [...product.supplements, { key: "oeuf", label: "Œuf", priceCents: 150 }],
+  };
+  function selectedLine() {
+    const draft = setVariant(configured(selectedProduct), "grand");
+    return draftToLine({ ...draft, qty: 2, note: "Bien cuit",
+      picked: { ...draft.picked, "supp-1-00": ["cheddar"], supplements: ["bacon"] }, removed: ["oignons"] });
+  }
+  const changes: [string, (next: MenuProduct) => void][] = [
+    ["variante choisie supprimée alors qu’une autre existe", next => { next.variants = next.variants.slice(0, 1); }],
+    ["toutes les variantes supprimées", next => { next.variants = []; }],
+    ["groupe facultatif choisi supprimé", next => { next.groups = next.groups.filter(group => group.key !== "supp-1-00"); }],
+    ["choix facultatif supprimé", next => { next.groups[2].choices = []; }],
+    ["groupe obligatoire choisi supprimé", next => { next.groups = next.groups.filter(group => group.key !== "fromage"); }],
+    ["choix obligatoire supprimé", next => { next.groups[0].choices = next.groups[0].choices.filter(choice => choice.key !== "raclette"); }],
+    ["supplément dédié choisi supprimé parmi plusieurs", next => { next.supplements = next.supplements.filter(supplement => supplement.key !== "bacon"); }],
+    ["derniers suppléments dédiés supprimés", next => { next.supplements = []; }],
+    ["exclusion supprimée de la recette", next => { next.removables = next.removables.filter(removable => removable.key !== "oignons"); }],
+    ["minimum de groupe augmenté", next => { next.groups[0].min = 2; next.groups[0].max = 2; }],
+    ["maximum de groupe diminué", next => { next.groups[2].max = 0; }],
+    ["règle de la variante choisie devenue incompatible", next => { next.groups[0].perVariant = { grand: { min: 2, max: 2 } }; }],
+    ["nouveau choix obligatoire unique non consenti", next => { next.groups.push({ key: "cuisson", name: "Cuisson", type: "single", min: 1, max: 1,
+      perVariant: null, choices: [{ key: "grille", name: "Grillé", priceDelta: 100 }] }); }],
+  ];
+  it.each(changes)("refuse la ligne entière : %s", (_label, change) => {
+    const line = selectedLine();
+    const before = structuredClone(line);
+    const next = structuredClone(selectedProduct);
+    change(next);
+    expect(reconcile([line], new Map([[next.id, next]]))).toEqual({ lines: [], dropped: [line.name] });
+    expect(line).toEqual(before);
+  });
+
+  it("ne choisit pas une première variante pour une ancienne ligne sans variante", () => {
+    const line = draftToLine(configured());
+    expect(line.variantKey).toBeNull();
+    expect(reconcile([line], new Map([[selectedProduct.id, selectedProduct]]))).toEqual({ lines: [], dropped: [line.name] });
+  });
+
+  it("actualise prix et libellés sans changer les clés, quantités, note ou identifiant local", () => {
+    const line = selectedLine();
+    const before = structuredClone(line);
+    const next = structuredClone(selectedProduct);
+    next.name = "Nouveau nom";
+    next.photoUrl = "/nouvelle-photo.webp";
+    next.variants[1] = { key: "grand", name: "Grand format", price: 1200 };
+    next.groups[0].perVariant = { grand: { priceDelta: 50 } };
+    next.groups[0].name = "Fromage inclus";
+    next.groups[0].choices.find(choice => choice.key === "raclette")!.name = "Raclette affinée";
+    next.supplements[0].priceCents = 200;
+    next.supplements[0].label = "Bacon grillé";
+    const result = reconcile([line], new Map([[next.id, next]]));
+    expect(result.dropped).toEqual([]);
+    expect(toOrderLines(result.lines)).toEqual(toOrderLines([line]));
+    expect(result.lines[0]).toMatchObject({ lineId: line.lineId, name: "Nouveau nom", photoUrl: "/nouvelle-photo.webp",
+      variantKey: "grand", variantName: "Grand format", unitPrice: 1550, qty: 2, note: "Bien cuit", removed: ["oignons"] });
+    expect(result.lines[0].options).toContainEqual({ groupKey: "fromage", groupName: "Fromage inclus", choiceKey: "raclette", name: "Raclette affinée", priceDelta: 50 });
+    expect(result.lines[0].options).toContainEqual({ groupKey: "supplements", groupName: "Suppléments", choiceKey: "bacon", name: "Bacon grillé", priceDelta: 200 });
+    expect(line).toEqual(before);
+  });
+
+  it("ne confond pas réordonnancement du catalogue et changement de sélection", () => {
+    const line = selectedLine();
+    const next = structuredClone(selectedProduct);
+    next.groups.reverse();
+    next.groups.forEach(group => group.choices.reverse());
+    next.variants.reverse();
+    next.supplements.reverse();
+    next.removables.reverse();
+    const result = reconcile([line], new Map([[next.id, next]]));
+    expect(result.dropped).toEqual([]);
+    expect(result.lines[0]).toEqual({ ...line, options: expect.arrayContaining(line.options) });
+    expect(result.lines[0].options).toHaveLength(line.options.length);
+  });
+
+  it.each(["supp-1-00", "supplements"])("refuse la déduplication silencieuse d’un choix enregistré dans %s", groupKey => {
+    const line = selectedLine();
+    line.options.push({ ...line.options.find(option => option.groupKey === groupKey)! });
+    expect(reconcile([line], new Map([[selectedProduct.id, selectedProduct]]))).toEqual({ lines: [], dropped: [line.name] });
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])("refuse une quantité invalide sans la corriger : %s", qty => {
+    const line = { ...selectedLine(), qty };
+    expect(reconcile([line], new Map([[selectedProduct.id, selectedProduct]]))).toEqual({ lines: [], dropped: [line.name] });
+    expect(line.qty).toBe(qty);
+  });
+
+  it("conserve une ligne sans variante et les choix valides quand seuls des choix non sélectionnés disparaissent", () => {
+    const line = draftToLine(configured());
+    const next = structuredClone(product);
+    next.groups[0].choices = next.groups[0].choices.filter(choice => choice.key === "raclette");
+    next.supplements = [];
+    next.removables = [];
+    const result = reconcile([line], new Map([[next.id, next]]));
+    expect(result).toEqual({ lines: [line], dropped: [] });
+  });
+
+  it("garde les autres lignes valides sans appliquer de substitution à la ligne refusée", () => {
+    const invalid = selectedLine();
+    const valid = draftToLine(setVariant(configured(selectedProduct), "petit"));
+    const next = { ...selectedProduct, variants: selectedProduct.variants.slice(0, 1) };
+    expect(reconcile([invalid, valid], new Map([[next.id, next]]))).toEqual({ lines: [valid], dropped: [invalid.name] });
+  });
+
+  it("conserve le changement explicite de variante et ses plafonds sans le confondre avec une restauration", () => {
+    const next = structuredClone(selectedProduct);
+    next.groups[0] = { ...next.groups[0], type: "multi", max: 2,
+      perVariant: { petit: { min: 1, max: 1 }, grand: { min: 2, max: 2 } } };
+    const draft = { ...configured(next), variantKey: "grand", picked: { fromage: ["raclette", "chevre"], pain: ["pain"], supplements: ["bacon"] } };
+    const changed = setVariant(draft, "petit");
+    expect(changed.picked.fromage).toEqual(["raclette"]);
+    expect(changed.picked.supplements).toEqual(["bacon"]);
+    expect(draftBlocker(changed)).toBeNull();
+    const line = draftToLine(changed);
+    expect(reconcile([line], new Map([[next.id, next]]))).toEqual({ lines: [line], dropped: [] });
+  });
+});
