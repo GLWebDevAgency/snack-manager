@@ -7,3 +7,4 @@ export * from './migration-state';
 export * from './repository';
 export * from './crypto';
 export * from './recovery-code';
+export { withProtectedCustomerSession, type ProtectedCustomerSession } from './protected-session';

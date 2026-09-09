@@ -17,6 +17,7 @@ import * as login from './passkey-login';
 import * as recovery from './recovery-grant';
 import * as protection from './recovery-protection';
 import * as activation from './recovery-activation';
+import { readProtectedCustomerSession } from './protected-session';
 
 type Input<K extends keyof CustomerIdentityRepository> = Parameters<CustomerIdentityRepository[K]>[0];
 const browserRestoreSchema = browserBindingSchema.omit({ browserRef: true });
@@ -203,20 +204,9 @@ export class PostgresCustomerIdentityRepository implements CustomerIdentityRepos
   authenticateProtected(raw: Input<'authenticateProtected'>) {
     const input = validate(sessionSchema, raw);
     return this.intentLocked(input, async client => {
-      const current = await session(client, input, input.sessionHash, input.browserHash, input);
-      if (!current) return null;
-      const proof = await client.query(`SELECT 1 FROM customer.accounts a JOIN customer.registration_enrollments e
-        ON (e.parent_ref,e.tenant_ref,e.id)=(a.parent_ref,a.tenant_ref,a.enrollment_id)
-        WHERE a.parent_ref=$1 AND a.tenant_ref=$2 AND a.id=$3 AND a.active AND e.activated_at IS NOT NULL
-          AND EXISTS (SELECT 1 FROM customer.passkey_credentials k WHERE (k.parent_ref,k.tenant_ref,k.account_id)
-            =(a.parent_ref,a.tenant_ref,a.id) AND k.revoked_at IS NULL)
-          AND EXISTS (SELECT 1 FROM customer.recovery_codes c WHERE (c.parent_ref,c.tenant_ref,c.account_id)
-            =(a.parent_ref,a.tenant_ref,a.id) AND c.consumed_at IS NULL AND c.revoked_at IS NULL)`,
-      [input.parentRef, input.tenantRef, current.profile.accountId]);
-      if (proof.rowCount !== 1) return null;
-      const final = await session(client, input, input.sessionHash, input.browserHash, input);
-      return final?.sessionId === current.sessionId ? { accountId: current.profile.accountId,
-        sessionId: final.sessionId, expiresAt: final.expiresAt } : null;
+      const current = await readProtectedCustomerSession(client, input);
+      return current ? { accountId: current.profile.accountId,
+        sessionId: current.sessionId, expiresAt: current.expiresAt } : null;
     });
   }
   updateName(raw: Input<'updateName'>) {
