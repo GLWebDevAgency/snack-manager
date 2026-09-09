@@ -16,8 +16,9 @@ const item = () => ({ _id: 'a'.repeat(24), number: 42, createdAt: '2026-09-09T12
 const detail = () => ({ ...item(), totals: { subtotal: 1250, deliveryFee: 0, discount: null, total: 1250 },
   lines: [{ name: 'Menu recette', variantName: null, qty: 1, unitPrice: 1250, lineTotal: 1250, options: [], removed: [], note: null }],
   note: null, statusHistory: [], delivery: null });
-function req(action: 'orders' | 'order-detail' | 'order-create', body: unknown, headers: Record<string, string> = {}) {
-  return new NextRequest(`${origin}/r/classfood/compte/commandes${action === 'orders' ? '/recherche' : action === 'order-detail' ? '/detail' : ''}`, { method: 'POST',
+const reorder = () => ({ orderId: item()._id, number: 42, lines: [{ productId: 'b'.repeat(24), name: 'Menu recette', variantKey: null, variantName: null, qty: 1, unitPrice: 1250, options: [], removed: [] }] });
+function req(action: 'orders' | 'order-detail' | 'order-create' | 'order-reorder', body: unknown, headers: Record<string, string> = {}) {
+  return new NextRequest(`${origin}/r/classfood/compte/commandes${action === 'orders' ? '/recherche' : action === 'order-detail' ? '/detail' : action === 'order-reorder' ? '/recommander' : ''}`, { method: 'POST',
     headers: { origin, host: new URL(origin).host, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json',
       'x-real-ip': '192.0.2.10', 'x-sm-customer-browser-ref': browserRef, 'x-sm-customer-operation-id': expectedOperationId,
       'x-sm-customer-check-id': expectedCheckId, cookie: cookies, ...headers }, body: JSON.stringify(body) });
@@ -32,9 +33,9 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 describe('private orders BFF — real handler, isolated upstream', () => {
-  it.each(['orders', 'order-detail'] as const)('%s signs exact publication and cookies, never needs SMS or an intention', async action => {
+  it.each(['orders', 'order-detail', 'order-reorder'] as const)('%s signs exact publication and cookies, never needs SMS or an intention', async action => {
     const body = action === 'orders' ? query : { orderId: item()._id };
-    const output = { expiresAt: Date.now() + 60_000, ...(action === 'orders' ? { orders: [item()], nextCursor: null } : { order: detail() }) };
+    const output = { expiresAt: Date.now() + 60_000, ...(action === 'orders' ? { orders: [item()], nextCursor: null } : action === 'order-reorder' ? reorder() : { order: detail() }) };
     upstream.mockResolvedValue(Response.json(output));
     const response = await customerAccount(req(action, body), context, action);
     expect(response.status).toBe(200); expect(await response.json()).toEqual(output);
@@ -42,7 +43,7 @@ describe('private orders BFF — real handler, isolated upstream', () => {
     expect(JSON.parse(String(upstream.mock.calls[0]![1]!.body))).toEqual({ request: body, browserRef, browserSecret, sessionToken, expectedOperationId, expectedCheckId });
     expect(upstream.mock.calls[0]![0]).toBe(`${api}/public/customer/classfood/${action}`);
   });
-  it.each(['orders', 'order-detail'] as const)('%s refuses absent/ambiguous authority, CSRF, query extras and guessed identifiers', async action => {
+  it.each(['orders', 'order-detail', 'order-reorder'] as const)('%s refuses absent/ambiguous authority, CSRF, query extras and guessed identifiers', async action => {
     const body = action === 'orders' ? query : { orderId: item()._id };
     const variants: Record<string, string>[] = [{ cookie: '' }, { cookie: `${cookies}; __Host-sm_customer_session_classfood=${sessionToken}` },
       { 'x-sm-customer-operation-id': '' }, { 'x-sm-customer-check-id': '' }, { origin: 'https://other.example.test' }];
@@ -57,6 +58,16 @@ describe('private orders BFF — real handler, isolated upstream', () => {
       order: { ...detail(), ...(fault === 'secret' ? { trackingToken: sessionToken } : {}), ...(fault === 'wrong-order' ? { _id: 'b'.repeat(24) } : {}) } }));
     const response = await customerAccount(req('order-detail', { orderId: item()._id }), context, 'order-detail');
     expect(response.status).toBe(503); expect(await response.text()).not.toContain(sessionToken); expect(response.headers.get('set-cookie')).toBeNull();
+  });
+  it.each(['expired', 'secret', 'wrong-order', 'line-secret'] as const)('rejects %s reorder without projecting private upstream data', async fault => {
+    const output = { ...reorder(), expiresAt: Date.now() + (fault === 'expired' ? -1 : 60_000) };
+    if (fault === 'wrong-order') output.orderId = 'c'.repeat(24);
+    if (fault === 'secret') Object.assign(output, { trackingToken: sessionToken });
+    if (fault === 'line-secret') Object.assign(output.lines[0], { note: sessionToken });
+    upstream.mockResolvedValue(Response.json(output));
+    const response = await customerAccount(req('order-reorder', { orderId: item()._id }), context, 'order-reorder');
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain(sessionToken);
+    expect(response.headers.get('set-cookie')).toBeNull(); expect(upstream).toHaveBeenCalledTimes(1);
   });
   it.each([401, 404, 409, 429, 503])('preserves the HTTP %s distinction and cookies, without retry', async status => {
     upstream.mockResolvedValue(new Response(null, { status }));
@@ -73,7 +84,7 @@ describe('private orders BFF — real handler, isolated upstream', () => {
       expect((await customerAccount(req('orders', query), context, 'orders')).status).toBe(503);
     }
   });
-  it.each(['orders', 'order-detail'] as const)('bounds the entire %s response before projecting anything', async action => {
+  it.each(['orders', 'order-detail', 'order-reorder'] as const)('bounds the entire %s response before projecting anything', async action => {
     const body = action === 'orders' ? query : { orderId: item()._id };
     upstream.mockResolvedValue(new Response(' '.repeat(customerAccountResponseLimit(action) + 1), { headers: { 'content-type': 'application/json' } }));
     expect((await customerAccount(req(action, body), context, action)).status).toBe(503);

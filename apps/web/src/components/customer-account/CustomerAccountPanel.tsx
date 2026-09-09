@@ -114,7 +114,7 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
       {returnLabel}
     </Tap>}>
     <div className="space-y-4 p-4 pb-5 sm:p-5">
-      {readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} /> : <>
+      {readingOrders && ordersAccess && slug ? <CustomerOrders slug={slug} access={ordersAccess} onBack={leaveOrders} currentAccess={account.currentAccess} onClose={closePanel} /> : <>
       {view && state.message && <p role="status" aria-live="polite" className="rounded-card border border-ink/10 bg-surface2 p-3 text-sm leading-6 text-ink">{state.message}</p>}
       {view ? <>{slug && <Tap ref={ordersTrigger} className={secondary + ' w-full justify-start'} disabled={state.busy} onClick={() => { const access = account.currentAccess?.(); if (access) setOrdersAccess(access); }}><Icon name="ticket" size={18} /><span className="flex-1 text-left">Commandes de mon compte</span><Icon name="arrow" size={14} /></Tap>}
         <Profile key={`${view.profile.phoneE164}:${view.profile.phoneVerifiedAt}`} account={account} view={view} /></>

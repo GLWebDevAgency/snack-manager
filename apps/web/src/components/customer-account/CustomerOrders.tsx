@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CustomerOrderDetail, CustomerOrderSummary } from '@sm/contracts';
 import { Icon } from '../ui/icons';
 import { Surface, Tap } from '../order/primitives';
 import { euros } from '../order/helpers';
 import { customerAccountRequest, type CustomerAccountAccess } from './client';
 import { createCustomerOrdersClient } from './orders';
+import { ReorderFlow } from './ReorderFlow';
 
 const action = 'cf-press flex min-h-11 items-center justify-center gap-2 rounded-ctrl border border-ink/15 bg-surface px-4 py-2 text-sm font-semibold hover:border-ink/30 disabled:cursor-wait disabled:opacity-40';
 const date = (value: string) => new Date(value).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
@@ -38,8 +39,10 @@ function ordersRuntime(slug: string, access: CustomerAccountAccess) {
 
 /** Mounted by an explicit account action. The parent drops this component as
  * soon as its displayed publication is invalidated, even for identical profiles. */
-export function CustomerOrders({ slug, access, onBack }: { slug: string; access: CustomerAccountAccess; onBack: () => void }) {
+export function CustomerOrders({ slug, access, onBack, currentAccess, onClose }: { slug: string; access: CustomerAccountAccess; onBack: () => void;
+  currentAccess?: () => CustomerAccountAccess | null; onClose?: () => void }) {
   const heading = useRef<HTMLHeadingElement>(null);
+  const [reorderId, setReorderId] = useState<string | null>(null);
   const runtime = useMemo(() => ordersRuntime(slug, access), [slug, access]);
   const { client } = runtime;
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getServerSnapshot);
@@ -61,6 +64,8 @@ export function CustomerOrders({ slug, access, onBack }: { slug: string; access:
   const busy = state.status === 'loading';
   const backToList = () => { client.back(); if (!client.getSnapshot().orders.length) void client.load(); };
   const retry = () => { if (state.orderId) void client.open(state.orderId); else void client.load(); };
+  if (reorderId && currentAccess && onClose) return <ReorderFlow slug={slug} orderId={reorderId} access={access} currentAccess={currentAccess}
+    onBack={() => { setReorderId(null); void client.open(reorderId); }} onClose={onClose} />;
   return <section aria-label="Commandes de votre compte" className="space-y-4">
     <Tap className={action + ' w-full justify-start'} onClick={state.orderId ? backToList : onBack}><Icon name="arrow" size={14} className="rotate-180" />{state.orderId ? 'Revenir à mes commandes' : 'Revenir à mon compte'}</Tap>
     <div><p className="text-xs font-bold uppercase tracking-[0.12em] text-mut">Compte personnel</p><h3 ref={heading} tabIndex={-1} className="mt-1 font-display text-xl font-extrabold tracking-tight outline-none">{state.orderId ? state.detail ? `Commande n° ${state.detail.number}` : 'Détail de la commande' : 'Mes commandes'}</h3>
@@ -72,6 +77,8 @@ export function CustomerOrders({ slug, access, onBack }: { slug: string; access:
     {!state.orderId && <ul className="space-y-3">{state.orders.map(order => <li key={order._id}><Surface className="p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h4 className="font-bold">Commande n° {order.number}</h4><p className="mt-1 text-xs leading-5 text-mut">{date(order.createdAt)} · {order.type === 'delivery' ? 'Livraison' : 'Retrait'}</p></div><span className="shrink-0 font-bold tabular-nums">{euros(order.totalCents)}</span></div><p className="mt-3 text-sm font-semibold">{customerOrderStatus(order)}</p><Payment order={order} />
       {order.pickupSlot && <p className="mt-2 text-xs leading-5 text-mut">Créneau : {date(order.pickupSlot)}</p>}<Tap className={action + ' mt-4 w-full border-accent/25 bg-accentwash text-accentink'} disabled={busy} onClick={() => void client.open(order._id)} aria-label={`Voir la commande n° ${order.number}`}>Voir le détail <Icon name="arrow" size={14} /></Tap></Surface></li>)}</ul>}
     {state.detail && <OrderDetail order={state.detail} />}
+    {state.detail && currentAccess && onClose && <Tap className={action + ' w-full border-accent/25 bg-accentwash text-accentink'} disabled={busy}
+      onClick={() => { if (state.detail) { setReorderId(state.detail._id); client.invalidate(); } }}>Préparer à nouveau ce panier <Icon name="arrow" size={14} /></Tap>}
     {!state.orderId && state.nextCursor && <Tap className={action + ' w-full'} disabled={busy} onClick={() => void client.more()}>Afficher les commandes précédentes</Tap>}
     <Tap className={action + ' w-full'} disabled={busy} onClick={retry}>{state.status === 'error' || state.status === 'idle' ? 'Réessayer la lecture' : 'Actualiser les états'}</Tap>
     <p className="text-xs leading-5 text-mut">Ces informations ne sont pas conservées hors connexion. Pour une modification ou une question sur le paiement, contactez le restaurant.</p>

@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OrderLineInputSchema } from '@sm/contracts';
 import type {
   MenuCategory,
   MenuGroup,
@@ -22,6 +23,13 @@ import { uid } from "./helpers";
 
 /** Même clé que le groupe tarifé et validé par l'API. */
 export const SUPPLEMENT_GROUP = "supplements";
+export const CHECKOUT_MAX_LINES = 50;
+const checkoutLinesSchema = OrderLineInputSchema.strict().array().min(1).max(CHECKOUT_MAX_LINES);
+
+/** Validate the actual outgoing selection before confirming a basket import. */
+export function canSubmitCartLines(lines: CartLine[]): boolean {
+  return checkoutLinesSchema.safeParse(toOrderLines(lines)).success;
+}
 
 /**
  * La projection dédiée remplace entièrement l'ancien groupe réservé : ses
@@ -466,6 +474,9 @@ export type CartApi = {
   /** Receipt cleanup only. Recheck access inside the write lock; false keeps the
    * draft, including a newer cart from another tab. The guard must be synchronous. */
   clearIfUnchanged: (canClear?: () => boolean) => Promise<boolean>;
+  /** Explicit historical selection import only. No replacement or partial
+   * addition; authority is rechecked INSIDE the native cross-tab cart lock. */
+  appendIfUnchanged: (lines: CartLine[], canAppend: () => Promise<boolean>) => Promise<boolean>;
   persistenceError: string | null;
 };
 
@@ -602,6 +613,31 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
 
   const clear = useCallback(() => { void clearIfUnchanged(); }, [clearIfUnchanged]);
 
+  const appendIfUnchanged = useCallback(async (additions: CartLine[], canAppend: () => Promise<boolean>): Promise<boolean> => {
+    const expected = { lines, note }, requested = structuredClone(additions);
+    try {
+      return await withCartLock(slug, async () => {
+        if (current.current.slug !== slug || !await canAppend() || current.current.slug !== slug) return false;
+        const latest = readCurrent();
+        if (!sameCart(expected, latest.snapshot) || !sameCart(expected, current.current.snapshot)) {
+          publish(latest.snapshot, latest.dropped); return false;
+        }
+        if (!requested.length || latest.dropped.length
+          || !canSubmitCartLines([...latest.snapshot.lines, ...requested])) return false;
+        const checked = reconcile(requested, index);
+        // A menu refresh must never silently change the confirmed selection or
+        // price. New ids belong only to this new basket, never the source order.
+        if (checked.dropped.length || JSON.stringify(checked.lines) !== JSON.stringify(requested)) return false;
+        const next = { ...latest.snapshot, lines: [...latest.snapshot.lines, ...checked.lines.map(line => ({ ...line, lineId: uid() }))] };
+        if (!Number.isSafeInteger(cartSubtotal(next.lines))) return false;
+        writeCart(slug, next.lines, next.note);
+        publish(next); setPersistenceError(null);
+        window.dispatchEvent(new CustomEvent(CART_EVENT, { detail: slug }));
+        return true;
+      });
+    } catch { setPersistenceError(CART_STORAGE_ERROR); return false; }
+  }, [slug, lines, note, readCurrent, index, publish]);
+
   return useMemo(
     () => ({
       lines,
@@ -617,8 +653,9 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
       setNote,
       clear,
       clearIfUnchanged,
+      appendIfUnchanged,
       persistenceError,
     }),
-    [lines, note, hydrated, dropped, upsert, setQty, remove, setNote, clear, clearIfUnchanged, persistenceError],
+    [lines, note, hydrated, dropped, upsert, setQty, remove, setNote, clear, clearIfUnchanged, appendIfUnchanged, persistenceError],
   );
 }

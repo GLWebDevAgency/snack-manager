@@ -12,6 +12,7 @@ declare global {
     releaseCartLock: () => void;
     holdingCartLock: boolean;
     checkoutCanClear: boolean;
+    savedAppend: CartApi['appendIfUnchanged'];
   }
 }
 
@@ -87,6 +88,59 @@ async function addBurger(target = page) {
 }
 
 describe("panier réel React et verrou inter-onglets", () => {
+  it('ajoute une reprise explicitement confirmée sans écraser le panier ni réutiliser les identifiants de prévisualisation', async () => {
+    await addBurger();
+    const result = await page.evaluate(() => window.testCart.appendIfUnchanged([{ ...window.testCart.lines[0], qty: 2 }], async () => true));
+    expect(result).toBe(true);
+    expect(await page.evaluate(() => window.testCart.count)).toBe(3);
+    expect(await page.evaluate(() => new Set(window.testCart.lines.map(line => line.lineId)).size)).toBe(2);
+    await page.reload(); await page.waitForFunction(() => window.testCart?.hydrated);
+    expect(await page.evaluate(() => window.testCart.count)).toBe(3);
+  });
+  it('refuse la reprise si le panier a changé depuis la confirmation affichée', async () => {
+    await addBurger();
+    await page.evaluate(() => { window.savedAppend = window.testCart.appendIfUnchanged; });
+    const second = await secondTab();
+    await second.getByRole('button', { name: 'Deux', exact: true }).click();
+    await second.waitForFunction(() => window.testCart.count === 2);
+    expect(await page.evaluate(() => window.savedAppend([window.testCart.lines[0]], async () => true))).toBe(false);
+    expect(await page.evaluate(() => window.testCart.count)).toBe(2);
+  });
+  it('réévalue l’accès après attente du verrou panier avant tout ajout privé', async () => {
+    await addBurger();
+    const second = await secondTab();
+    await second.evaluate(() => { void navigator.locks.request('sm.cart.write.classfood', () => new Promise<void>(resolve => {
+      window.holdingCartLock = true; window.releaseCartLock = resolve;
+    })); });
+    await second.waitForFunction(() => window.holdingCartLock);
+    await page.evaluate(() => { window.checkoutCanClear = true; });
+    const adding = page.evaluate(() => window.testCart.appendIfUnchanged([window.testCart.lines[0]], async () => window.checkoutCanClear));
+    await page.waitForFunction(async () => (await navigator.locks.query()).pending!.length >= 1);
+    await page.evaluate(() => { window.checkoutCanClear = false; });
+    await second.evaluate(() => window.releaseCartLock());
+    expect(await adding).toBe(false);
+    expect(await page.evaluate(() => window.testCart.count)).toBe(1);
+  });
+  it('refuse un ajout partiel ou retarifé en silence', async () => {
+    await addBurger();
+    for (const change of [{ productId: 'absent' }, { unitPrice: 1 }, { variantKey: 'absent' }, { qty: 51 }]) {
+      expect(await page.evaluate(delta => window.testCart.appendIfUnchanged([{ ...window.testCart.lines[0], ...delta }], async () => true), change)).toBe(false);
+    }
+    expect(await page.evaluate(() => window.testCart.count)).toBe(1);
+  });
+  it('ne confirme jamais une reprise qui dépasserait les 50 lignes acceptées au checkout', async () => {
+    await addBurger();
+    await page.evaluate(() => {
+      const stored = JSON.parse(localStorage.getItem('sm.cart.classfood')!);
+      stored.lines = Array.from({ length: 49 }, (_, i) => ({ ...stored.lines[0], lineId: `existing-${i}` }));
+      localStorage.setItem('sm.cart.classfood', JSON.stringify(stored));
+    });
+    await page.reload(); await page.waitForFunction(() => window.testCart?.hydrated && window.testCart.lines.length === 49);
+    expect(await page.evaluate(() => window.testCart.appendIfUnchanged([window.testCart.lines[0], window.testCart.lines[0]], async () => true))).toBe(false);
+    expect(await page.evaluate(() => window.testCart.lines.length)).toBe(49);
+    expect(await page.evaluate(() => window.testCart.appendIfUnchanged([window.testCart.lines[0]], async () => true))).toBe(true);
+    await page.waitForFunction(() => window.testCart.lines.length === 50);
+  });
   it("signale une sélection disparue après relecture sans réécrire le stockage ni perdre la ligne valide", async () => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));

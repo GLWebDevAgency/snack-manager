@@ -1,4 +1,4 @@
-import { CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema, type CustomerOrdersQuery } from '@sm/contracts';
+import { CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema, CustomerOrderReorderResponseSchema, type CustomerOrdersQuery } from '@sm/contracts';
 
 function expiry(expiresAt: number, now: number, maximum: number) {
   if (expiresAt <= now || expiresAt > Math.min(maximum, now + 7 * 86_400_000)) throw new Error('Invalid private order response');
@@ -29,5 +29,12 @@ export function parseCustomerOrderDetail(raw: unknown, orderId: string, now = Da
   const response = CustomerOrderDetailResponseSchema.parse(raw);
   expiry(response.expiresAt, now, maximum);
   if (response.order._id !== orderId) throw new Error('Invalid private order response');
+  return response;
+}
+
+export function parseCustomerOrderReorder(raw: unknown, orderId: string, now = Date.now(), maximum = now + 7 * 86_400_000) {
+  const response = CustomerOrderReorderResponseSchema.parse(raw);
+  expiry(response.expiresAt, now, maximum);
+  if (response.orderId !== orderId) throw new Error('Invalid private order response');
   return response;
 }
