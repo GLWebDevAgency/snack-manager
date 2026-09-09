@@ -15,6 +15,19 @@ export const CustomerOrdersQuerySchema = z.strictObject({ filter: z.enum(['all',
   cursor: CustomerOrdersCursorSchema.nullable() });
 export type CustomerOrdersQuery = z.infer<typeof CustomerOrdersQuerySchema>;
 export const CustomerOrderDetailRequestSchema = z.strictObject({ orderId: id });
+export const CustomerOrderReorderRequestSchema = z.strictObject({ orderId: id });
+export type CustomerOrderReorderRequest = z.infer<typeof CustomerOrderReorderRequestSchema>;
+// Historical references are identifiers, never inferred from display names.
+// Null keeps incomplete legacy lines visible but unavailable for automatic reuse.
+const historicalKey = z.string().min(1).max(300).nullable();
+export const CustomerOrderReorderLineSchema = z.strictObject({ productId: id.nullable(), name: z.string().min(1).max(300),
+  variantKey: historicalKey, variantName: z.string().max(300).nullable(), qty: z.number().int().min(1).max(999), unitPrice: money,
+  options: z.array(z.strictObject({ groupKey: historicalKey, choiceKey: historicalKey })).max(100),
+  removed: z.array(z.string().max(300)).max(100) });
+export type CustomerOrderReorderLine = z.infer<typeof CustomerOrderReorderLineSchema>;
+export const CustomerOrderReorderResponseSchema = z.strictObject({ expiresAt: z.number().int().positive(), orderId: id,
+  number: z.number().int().nonnegative(), lines: z.array(CustomerOrderReorderLineSchema).max(100) });
+export type CustomerOrderReorderResponse = z.infer<typeof CustomerOrderReorderResponseSchema>;
 // Same public DTO; only the durable recovery proof becomes mandatory.
 export const CustomerCreateOrderRequestSchema = CreatePublicOrderSchema
   .refine(value => typeof value.recoveryProof === 'string', 'Une preuve de reprise est requise.');

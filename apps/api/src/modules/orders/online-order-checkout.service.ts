@@ -235,6 +235,10 @@ export class OnlineOrderCheckoutService {
     if (!this.history) throw new ServiceUnavailableException('La commande est indisponible.');
     return this.history.detailForCustomer(owner, orderId);
   }
+  reorderForCustomer(owner: CustomerOrderOwner, orderId: string) {
+    if (!this.history) throw new ServiceUnavailableException('La commande est indisponible.');
+    return this.history.reorderForCustomer(owner, orderId);
+  }
   createPublic(slug: string, body: CreatePublicOrder, request?: Request) {
     return executeOnlineCheckout(this.dependencies(), slug, body, request);
   }

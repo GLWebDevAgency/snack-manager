@@ -1,5 +1,6 @@
-import { CustomerOrderCreatedSchema, CustomerOrderDetailSchema, CustomerOrderSummarySchema } from '@sm/contracts';
+import { CustomerOrderCreatedSchema, CustomerOrderDetailSchema, CustomerOrderSummarySchema, CustomerOrderReorderResponseSchema } from '@sm/contracts';
 import type { Order } from '@sm/db';
+import { Types } from 'mongoose';
 
 type Row = Order & { _id: unknown; createdAt: Date };
 const iso = (value: Date | null | undefined) => value ? new Date(value).toISOString() : null;
@@ -23,6 +24,27 @@ export function customerOrderDetail(row: Row) {
     statusHistory: row.statusHistory.map(step => ({ status: step.status, at: iso(step.at) })),
     delivery: row.delivery ? { dispatchedAt: iso(row.delivery.dispatchedAt), deliveredAt: iso(row.delivery.deliveredAt),
       estimatedMinutes: row.delivery.estimatedMinutes } : null });
+}
+const reorderSource = CustomerOrderReorderResponseSchema.omit({ expiresAt: true });
+const historicalKey = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 300 ? value : null;
+function historicalProductId(value: unknown): string | null {
+  if (value instanceof Types.ObjectId) return value.toHexString();
+  return typeof value === 'string' && /^[a-f0-9]{24}$/.test(value) ? value : null;
+}
+/** A source for a new review, not a priced cart or authority to create an order.
+ * Never infer missing legacy identifiers from names, or copy private capabilities. */
+export function customerOrderReorder(row: Pick<Row, '_id' | 'number' | 'lines'>) {
+  return reorderSource.parse({ orderId: String(row._id), number: row.number,
+    lines: row.lines.map(line => {
+      const variantKey = historicalKey(line.variantKey);
+      // Null is also the legitimate base-product selection. Do not erase a
+      // malformed historical key into that meaning, or lose a named variant.
+      const ambiguousVariant = variantKey === null && (line.variantKey != null || line.variantName != null);
+      return { productId: ambiguousVariant ? null : historicalProductId(line.productId), name: line.name,
+        variantKey, variantName: line.variantName ?? null, qty: line.qty, unitPrice: line.unitPrice,
+        options: (line.options ?? []).map(option => ({ groupKey: historicalKey(option.groupKey), choiceKey: historicalKey(option.choiceKey) })),
+        removed: [...(line.removed ?? [])] };
+    }) });
 }
 /** Creation retains the existing one-order tracking capability; history never emits it. */
 export function customerOrderCreated(row: Row) {

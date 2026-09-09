@@ -425,7 +425,10 @@ export class CustomerIdentityService {
         sessionHash: this.crypto.hash('session', input.tenantRef, input.token), now: this.now() });
       if (!principal || principal.expiresAt <= this.now()) throw new CustomerIdentityError('unauthorized');
       if (this.scope(input.tenantRef, this.configuration()).parentRef !== scope.parentRef) throw new CustomerIdentityError('unavailable');
-      await this.requireBrowser(this.binding(input));
+      // authenticateProtected atomically checks the confirmed, unexpired
+      // preparation, exact browser secret and current publication/session.
+      // Keep that authority sample last; a later browser-only await could let
+      // a concurrent session revocation pass while the preparation stays live.
       return { ...scope, ...principal };
     });
   }

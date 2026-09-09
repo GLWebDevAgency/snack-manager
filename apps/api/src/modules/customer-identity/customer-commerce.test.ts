@@ -3,19 +3,68 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { customerCommerce } from './customer-commerce';
 import { customerSafeError } from './customer-account.error';
+import { CustomerIdentityError } from './customer-identity.service';
 function fixture() {
   const principal = { parentRef: `AC${'a'.repeat(32)}`, tenantRef: 'a'.repeat(24), accountId: randomUUID(), sessionId: randomUUID(), expiresAt: Date.now() + 60_000 };
   const checkout = { listForCustomer: vi.fn().mockResolvedValue({ orders: [], nextCursor: null }),
-    detailForCustomer: vi.fn(), createForCustomer: vi.fn() };
+    detailForCustomer: vi.fn(), reorderForCustomer: vi.fn(), createForCustomer: vi.fn() };
   const port = { principal, authorize: vi.fn().mockImplementation(async () => ({ ...principal })), checkout,
     slug: 'fixture', client: 'relay-source', now: Date.now };
   return port;
 }
 const list = { action: 'orders' as const, request: { filter: 'all' as const, limit: 20, cursor: null } };
+const reorder = { action: 'order-reorder' as const, request: { orderId: 'a'.repeat(24) } };
+const source = { orderId: reorder.request.orderId, number: 42, lines: [{ productId: 'b'.repeat(24), name: 'Private source',
+  variantKey: null, variantName: null, qty: 1, unitPrice: 1250, options: [], removed: [] }] };
 function failure(promise: Promise<unknown>) {
   return promise.then(() => { throw new Error('Expected a refusal'); }, customerSafeError);
 }
 describe('customer commerce account fence, no distributed-transaction claim', () => {
+  it('reads a reorder source for the authenticated owner without entering checkout', async () => {
+    const f = fixture(); f.checkout.reorderForCustomer.mockResolvedValue(source);
+    expect(await customerCommerce(f, reorder)).toEqual({ expiresAt: f.principal.expiresAt, ...source });
+    expect(f.checkout.reorderForCustomer).toHaveBeenCalledWith({ parentRef: f.principal.parentRef,
+      tenantRef: f.principal.tenantRef, accountId: f.principal.accountId }, reorder.request.orderId);
+    expect(f.authorize).toHaveBeenCalledTimes(2); expect(f.checkout.createForCustomer).not.toHaveBeenCalled();
+  });
+  it('does not read a reorder source after a revoked session', async () => {
+    const f = fixture(); f.authorize.mockRejectedValue(new Error('revoked'));
+    await expect(customerCommerce(f, reorder)).rejects.toThrow();
+    expect(f.checkout.reorderForCustomer).not.toHaveBeenCalled(); expect(f.checkout.createForCustomer).not.toHaveBeenCalled();
+  });
+  it.each(['accountId', 'tenantRef', 'parentRef', 'sessionId', 'expiresAt', 'revoked'] as const)('discards late reorder contents after %s changed', async field => {
+    const f = fixture(); f.checkout.reorderForCustomer.mockImplementation(async () => {
+      if (field === 'revoked') f.authorize.mockRejectedValue(new CustomerIdentityError('unauthorized'));
+      else if (field === 'expiresAt') f.principal.expiresAt -= 1;
+      else if (field === 'accountId' || field === 'sessionId') f.principal[field] = randomUUID();
+      else f.principal[field] = 'changed';
+      return source;
+    });
+    const error = await failure(customerCommerce(f, reorder));
+    // An impossible changed principal is a closed runtime failure, not the
+    // normal stable-owner missing-order response (404).
+    expect(error.getStatus()).toBe(['accountId', 'tenantRef', 'parentRef'].includes(field) ? 503 : 401);
+    expect(JSON.stringify(error.getResponse())).not.toContain('Private source');
+    expect(f.checkout.createForCustomer).not.toHaveBeenCalled();
+  });
+  it('uses the same nonexistence refusal for reorder and rechecks a delayed denial', async () => {
+    const f = fixture(); f.checkout.reorderForCustomer.mockRejectedValue(new NotFoundException({ code: 'ORDER_RECOVERY_NOT_FOUND' }));
+    expect((await failure(customerCommerce(f, reorder))).getStatus()).toBe(404);
+    expect(f.authorize).toHaveBeenCalledTimes(2);
+    f.checkout.reorderForCustomer.mockImplementation(async () => { f.principal.sessionId = randomUUID(); throw new NotFoundException({ code: 'ORDER_RECOVERY_NOT_FOUND' }); });
+    expect((await failure(customerCommerce(f, reorder))).getStatus()).toBe(401);
+  });
+  it.each(['accountId', 'tenantRef', 'parentRef', 'sessionId', 'expiresAt'] as const)('the final runtime publication fence retains the original %s', async field => {
+    const f = fixture(); f.checkout.reorderForCustomer.mockResolvedValue(source);
+    let fence: (() => Promise<unknown>) | undefined;
+    await customerCommerce({ ...f, publicationFence: check => { fence = check; } }, reorder);
+    if (field === 'expiresAt') f.principal.expiresAt -= 1;
+    else if (field === 'accountId' || field === 'sessionId') f.principal[field] = randomUUID();
+    else f.principal[field] = 'changed';
+    if (!fence) throw new Error('Expected the private publication fence');
+    await expect(fence()).rejects.toThrow();
+    expect(f.checkout.reorderForCustomer).toHaveBeenCalledTimes(1);
+  });
   it('resolves ownership only from the private principal, never a browser selector', async () => {
     const f = fixture(); expect(await customerCommerce(f, list)).toEqual({ expiresAt: f.principal.expiresAt, orders: [], nextCursor: null });
     expect(f.checkout.listForCustomer).toHaveBeenCalledWith({ parentRef: f.principal.parentRef, tenantRef: f.principal.tenantRef, accountId: f.principal.accountId }, list.request);

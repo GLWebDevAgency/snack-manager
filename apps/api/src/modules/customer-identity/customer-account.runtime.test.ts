@@ -1,6 +1,7 @@
 import { approvedCustomerIntentResult, confirmedCustomerBrowserFixture, confirmedCustomerIntentFixture } from './customer-browser.test-fixture';
 import { randomUUID } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
+import { ConflictException } from '@nestjs/common';
 import type { Model } from 'mongoose';
 import type { Tenant } from '@sm/db';
 import { CustomerIdentityCrypto, type CustomerIdentityRepository, type CustomerSession } from '@sm/customer';
@@ -9,6 +10,7 @@ import { CustomerAccountRuntime } from './customer-account.runtime';
 import type { CustomerAccountHumanVerifier } from './customer-account.human';
 import type { CustomerRelay } from './customer-account.guard';
 import { customerPaidTestEnvironment, customerTestEnvironment } from './customer-account.test-fixture';
+import type { OnlineOrderCheckoutService } from '../orders/online-order-checkout.service';
 
 function fixture(paid = false) {
   const browserRef = randomUUID(), operationId = randomUUID();
@@ -46,17 +48,55 @@ function fixture(paid = false) {
   const transportFactory = vi.fn().mockReturnValue(provider);
   const config = new ConfigService(env);
   vi.spyOn(config, 'get').mockImplementation(name => env[String(name)]);
+  const reorderSource = { orderId: 'a'.repeat(24), number: 9, lines: [{ productId: 'b'.repeat(24), name: 'PRIVATE_REORDER_NAME',
+    variantKey: null, variantName: null, qty: 1, unitPrice: 1250, options: [], removed: [] }] };
+  const checkout = { reorderForCustomer: vi.fn().mockResolvedValue(reorderSource),
+    listForCustomer: vi.fn().mockResolvedValue({ orders: [], nextCursor: null }),
+    detailForCustomer: vi.fn().mockResolvedValue({ _id: reorderSource.orderId, number: 9, createdAt: '2026-09-09T12:00:00.000Z',
+      status: 'ready', type: 'pickup', pickupSlot: null, totalCents: 1250,
+      payment: { method: 'counter', status: 'pending', refundedCents: 0, pendingRefundCents: 0 },
+      totals: { subtotal: 1250, deliveryFee: 0, discount: null, total: 1250 }, lines: [], note: null, statusHistory: [], delivery: null }),
+    createForCustomer: vi.fn().mockRejectedValue(new ConflictException({ code: 'ORDER_ATTEMPT_REJECTED', reason: 'slot_unavailable' })) };
   const runtime = new CustomerAccountRuntime(config, tenants as unknown as Model<Tenant>, repository,
-    human as unknown as CustomerAccountHumanVerifier, transportFactory);
+    human as unknown as CustomerAccountHumanVerifier, transportFactory, checkout as unknown as OnlineOrderCheckoutService);
   const relay: CustomerRelay = { slug: 'fixture', action: 'start', origin: 'https://fixture.example', client: Buffer.alloc(32, 41).toString('base64url') };
   const browserSecret = Buffer.alloc(32, 42).toString('base64url');
   const intentProof = Buffer.alloc(32, 46).toString('base64url');
   const start = { browserRef, browserSecret, intentProof, request: { phone, operationId, turnstileToken: 'fixture-human-token' } };
   const check = { browserRef, browserSecret, intentProof, sessionToken: null, request: { operationId, challengeId: pending.challengeId, checkId: randomUUID(), code: '123456' } };
   const publication = { expectedOperationId: operationId, expectedCheckId: check.request.checkId };
-  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending, publication };
+  return { env, row, query, tenants, human, provider, transportFactory, runtime, repository, relay, start, check, session, pending, publication, checkout, reorderSource };
 }
 describe('customer runtime tenant and purpose boundary', () => {
+  it('reads reorder through the exact protected principal without requiring or constructing an SMS provider', async () => {
+    const f = fixture(); delete f.env.SM_CUSTOMER_VERIFY_POLICY; delete f.env.SM_CUSTOMER_VERIFY_EVIDENCE; delete f.env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+    f.repository.authenticateProtected.mockResolvedValue({ accountId: f.session.profile.accountId, sessionId: f.session.sessionId, expiresAt: f.session.expiresAt });
+    const envelope = { ...f.publication, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret,
+      sessionToken: Buffer.alloc(32, 11).toString('base64url'), request: { orderId: f.reorderSource.orderId } };
+    expect(await f.runtime.execute({ ...f.relay, action: 'order-reorder' }, envelope)).toEqual({ expiresAt: f.session.expiresAt, ...f.reorderSource });
+    expect(f.checkout.reorderForCustomer).toHaveBeenCalledExactlyOnceWith({ parentRef: f.env.SM_CUSTOMER_VERIFY_ACCOUNT_SID,
+      tenantRef: f.env.SM_CUSTOMER_PILOT_TENANT_ID, accountId: f.session.profile.accountId }, envelope.request.orderId);
+    expect(f.repository.authenticateProtected).toHaveBeenCalledWith(expect.objectContaining(f.publication));
+    expect(f.transportFactory).not.toHaveBeenCalled(); expect(f.repository.reserve).not.toHaveBeenCalled();
+  });
+  it.each(['order-reorder', 'orders', 'order-detail', 'order-create'] as const)('does not release %s contents when a session is revoked during the final tenant read', async action => {
+    const f = fixture();
+    f.repository.authenticateProtected.mockResolvedValue({ accountId: f.session.profile.accountId, sessionId: f.session.sessionId, expiresAt: f.session.expiresAt });
+    f.query.exec.mockImplementation(async () => {
+      if (f.repository.authenticateProtected.mock.calls.length >= 2) f.repository.authenticateProtected.mockResolvedValue(null);
+      return f.row;
+    });
+    const request = action === 'orders' ? { filter: 'all', limit: 20, cursor: null }
+      : action === 'order-create' ? { clientId: randomUUID(), recoveryProof: 'a'.repeat(64), turnstileToken: 'fixture',
+        lines: [{ productId: 'a'.repeat(24), qty: 1 }], payment: { method: 'counter' },
+        pickup: { slot: '2030-05-02T09:00:00.000Z', customerName: 'Fixture', customerPhone: '0612345678' } }
+        : { orderId: f.reorderSource.orderId };
+    const envelope = { ...f.publication, browserRef: f.start.browserRef, browserSecret: f.start.browserSecret,
+      sessionToken: Buffer.alloc(32, 11).toString('base64url'), request };
+    await expect(f.runtime.execute({ ...f.relay, action }, envelope)).rejects.toMatchObject({ status: 401 });
+    expect(f.repository.authenticateProtected).toHaveBeenCalledTimes(3);
+    expect(f.transportFactory).not.toHaveBeenCalled();
+  });
   it.each(['session', 'name', 'logout'] as const)('requires and forwards the browser binding on %s without constructing a provider', async action => {
     const f = fixture();
     const request = action === 'name' ? { name: 'Fixture', expectedRevision: 0 } : action === 'logout' ? { all: true } : {};
