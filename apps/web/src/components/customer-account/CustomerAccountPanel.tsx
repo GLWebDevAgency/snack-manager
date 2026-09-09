@@ -122,7 +122,9 @@ export function CustomerAccountPanel({ open, onClose, restaurantName, loyaltyHre
           <p className="mt-3 text-sm leading-6 text-mut">{message}</p>
         </section>}
       {!enrollmentActive && !loading && state.status !== 'offline' && !(state.status === 'guest' && (state.registrationAvailable || state.accessAvailable)) && <Tap className={secondary + ' w-full'} disabled={state.busy} onClick={() => void refresh()}>{needsRetry ? 'Réessayer' : 'Actualiser mon compte'}</Tap>}
-      {open && !view && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
+      {/* A mutation clears the private view before releasing its Web Lock and
+          notifying other forms. Do not mount a new credential flow in that gap. */}
+      {open && !view && !state.busy && slug && <CustomerEnrollment slug={slug} mode={mode} registrationAvailable={state.registrationAvailable === true}
         smsAvailable={state.available} accessAvailable={state.accessAvailable === true} onAuthenticated={refresh} onActivity={activity} />}
       {!view && !loading && <p className="text-xs leading-5 text-mut">La carte fidélité ne donne pas accès à ce compte.</p>}
       {(onDeviceOrders || loyaltyHref) && <nav aria-label="Vos accès au restaurant" className="space-y-2 border-t border-ink/10 pt-4">
