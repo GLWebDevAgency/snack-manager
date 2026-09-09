@@ -44,5 +44,11 @@ describe("fragment privé de remise, distinct du suivi et du QR scanné", () => 
     expect(customerTrackingHref(orderId, "tracking", attempt, now)).toBe(`/t/${orderId}?t=tracking${fragment}`);
     expect(customerTrackingHref(orderId, "different", attempt, now)).toBe(`/t/${orderId}?t=different`);
     expect(customerTrackingHref(orderId, "tracking", attempt, now + 7 * 86_400_000)).toBe(`/t/${orderId}?t=tracking`);
+    const owned: ReceivedCheckoutAttempt = { ...attempt, v: 2, provenance: { kind: 'account', privacyEpoch: 0, expiresAt: now + 60_000,
+      selection: { browserRef: access.clientId, publication: { expectedOperationId: access.clientId, expectedCheckId: access.clientId } } } };
+    // The filtered journal may supply the proof while connected, but a normal
+    // link must not export it as a new independent fragment capability.
+    expect(deliveryProofAccessForReceipt(owned, orderId, now)).toEqual(access);
+    expect(customerTrackingHref(orderId, 'tracking', owned, now)).toBe(`/t/${orderId}?t=tracking`);
   });
 });

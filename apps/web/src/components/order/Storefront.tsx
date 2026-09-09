@@ -212,7 +212,7 @@ export function Storefront({
   );
   const index = useMemo(() => indexMenu(site.categories), [site.categories]);
   const cart = useCart(site.tenant.slug, index);
-  const recovery = useCheckoutRecovery(site.tenant.slug, demo);
+  const recovery = useCheckoutRecovery(site.tenant.slug, demo, !embed);
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [tunnel, setTunnel] = useState(false);

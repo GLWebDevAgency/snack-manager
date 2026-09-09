@@ -463,8 +463,9 @@ export type CartApi = {
   remove: (lineId: string) => void;
   setNote: (note: string) => void;
   clear: () => void;
-  /** Receipt cleanup only: false preserves and reloads a newer cart from another tab. */
-  clearIfUnchanged: () => Promise<boolean>;
+  /** Receipt cleanup only. Recheck access inside the write lock; false keeps the
+   * draft, including a newer cart from another tab. The guard must be synchronous. */
+  clearIfUnchanged: (canClear?: () => boolean) => Promise<boolean>;
   persistenceError: string | null;
 };
 
@@ -577,11 +578,11 @@ export function useCart(slug: string, index: MenuIndex): CartApi {
 
   const setNote = useCallback((value: string) => { mutate((snapshot) => ({ ...snapshot, note: value })); }, [mutate]);
 
-  const clearIfUnchanged = useCallback(async (): Promise<boolean> => {
+  const clearIfUnchanged = useCallback(async (canClear?: () => boolean): Promise<boolean> => {
     const expected = { lines, note };
     try {
       return await withCartLock(slug, () => {
-        if (current.current.slug !== slug) return false;
+        if (current.current.slug !== slug || (canClear && !canClear())) return false;
         const latest = readCurrent();
         if (!sameCart(expected, latest.snapshot) || !sameCart(expected, current.current.snapshot)) {
           publish(latest.snapshot, latest.dropped);

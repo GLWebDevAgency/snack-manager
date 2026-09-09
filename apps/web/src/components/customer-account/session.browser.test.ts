@@ -57,6 +57,22 @@ const value = (p = page) => p.locator("output").textContent();
 const authenticated = (p = page) => expect.poll(() => value(p)).toContain('"status":"authenticated"');
 
 describe("Session personnelle — navigateur natif et plusieurs onglets", () => {
+  it("refuse le DELETE et masque le profil si la barrière privée du checkout ne peut pas être persistée", async () => {
+    await authenticated();
+    await page.evaluate(() => {
+      const open = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function(name, version) {
+        if (name === 'sm.checkout-attempts') throw new DOMException('Fixture storage denied', 'SecurityError');
+        return open.call(this, name, version);
+      };
+    });
+    await page.getByRole('button', { name: 'Quitter', exact: true }).click();
+    await expect.poll(() => value()).toContain('"busy":false');
+    expect(requests.filter(request => request.startsWith('DELETE'))).toEqual([]);
+    expect(await value()).not.toContain('Avant modification');
+    expect(await value()).toContain('La protection locale de vos commandes');
+    expect(await value()).not.toContain('Déconnexion confirmée');
+  });
   it.each(['Nom', 'Quitter'] as const)('ne laisse pas %s préparé sur A viser B après le verrou natif, malgré des projections identiques', async button => {
     await authenticated(); const displayed = await value();
     const second = await context.newPage(); await second.goto(origin + '/fixture-empty');
