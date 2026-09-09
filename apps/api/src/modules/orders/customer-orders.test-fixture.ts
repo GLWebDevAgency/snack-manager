@@ -27,7 +27,7 @@ export async function customerOrdersMongoFixture(raw: string, scope: { tenantId:
   const uri = customerOrdersTestDatabase(raw);
   if (!/^[a-f0-9]{24}$/.test(scope.tenantId) || !Number.isFinite(Date.parse(scope.slot))) throw new Error('Invalid fixture scope.');
   const runId = randomUUID(); const productId = new Types.ObjectId().toHexString();
-  const db = await mongoose.createConnection(uri, { autoCreate: false, autoIndex: false }).asPromise();
+  const db = await mongoose.createConnection(uri, { autoCreate: false, autoIndex: false, directConnection: true }).asPromise();
   let owned = false; let closing: Promise<void> | undefined;
   async function assertOwned() {
     if (!owned || db.name !== new URL(uri).pathname.slice(1)

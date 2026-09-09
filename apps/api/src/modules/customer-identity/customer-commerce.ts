@@ -5,11 +5,13 @@ import { assertCustomerOrderOwner, type CustomerOrderOwner } from '../orders/cus
 import { CustomerIdentityError } from './customer-identity.service';
 
 export type CustomerCommercePrincipal = CustomerOrderOwner & { sessionId: string; expiresAt: number };
-type Port = { checkout: Pick<OnlineOrderCheckoutService, 'createForCustomer' | 'listForCustomer' | 'detailForCustomer'>;
-  authorize: () => Promise<CustomerCommercePrincipal>; slug: string; client: string; now: () => number };
+type Port = { checkout: Pick<OnlineOrderCheckoutService, 'createForCustomer' | 'listForCustomer' | 'detailForCustomer' | 'reorderForCustomer'>;
+  authorize: () => Promise<CustomerCommercePrincipal>; slug: string; client: string; now: () => number;
+  publicationFence?: (recheck: () => Promise<CustomerOrderOwner>) => void };
 type Request = { action: 'order-create'; request: CustomerAccountEnvelope<'order-create'>['request'] }
   | { action: 'orders'; request: CustomerAccountEnvelope<'orders'>['request'] }
-  | { action: 'order-detail'; request: CustomerAccountEnvelope<'order-detail'>['request'] };
+  | { action: 'order-detail'; request: CustomerAccountEnvelope<'order-detail'>['request'] }
+  | { action: 'order-reorder'; request: CustomerAccountEnvelope<'order-reorder'>['request'] };
 const rejectionMessages = {
   unavailable: 'Le restaurant ne peut pas accepter cette nouvelle commande pour le moment.',
   slot_unavailable: 'Ce créneau ne peut plus être réservé. Choisissez un autre créneau.',
@@ -30,6 +32,9 @@ export async function customerCommerce(port: Port, input: Request) {
       || latest.expiresAt !== principal.expiresAt) throw new CustomerIdentityError('unauthorized');
     return owner;
   }
+  // Runtime may still await tenant/browser checks after this use case returns.
+  // Its last private-publication check must compare the SAME original owner.
+  port.publicationFence?.(recheck);
   async function query<T>(work: () => Promise<T>): Promise<T> {
     try { return await work(); }
     catch (error) {
@@ -46,6 +51,7 @@ export async function customerCommerce(port: Port, input: Request) {
   let result: unknown;
   if (input.action === 'orders') result = { expiresAt: principal.expiresAt, ...await query(() => port.checkout.listForCustomer(owner, input.request)) };
   else if (input.action === 'order-detail') result = { expiresAt: principal.expiresAt, order: await query(() => port.checkout.detailForCustomer(owner, input.request.orderId)) };
+  else if (input.action === 'order-reorder') result = { expiresAt: principal.expiresAt, ...await query(() => port.checkout.reorderForCustomer(owner, input.request.orderId)) };
   else {
     try {
       result = { state: 'created', expiresAt: principal.expiresAt,

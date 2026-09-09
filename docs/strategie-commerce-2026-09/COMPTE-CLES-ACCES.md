@@ -251,8 +251,8 @@ import durable indépendant du compte n’est pas confirmé. Les anciens reçus 
 provenance restent invités, sans adoption implicite par téléphone.
 
 Le préremplissage existant respecte les champs déjà saisis et retire les valeurs
-du compte lorsque son accès change. Le lien fidélité unifié et « recommander »
-restent à recevoir ensuite. Ce raccord est en réception : aucun pilote public,
+du compte lorsque son accès change. Le lien fidélité unifié reste à livrer ;
+la reprise de panier est décrite dans le lot suivant. Aucun pilote public,
 SMS payant ou déploiement production n’est ouvert. Les recettes Chromium locales
 utilisent de vrais verrous et IndexedDB mais une autorité HTTP simulée ; elles
 ne remplacent pas une recette authentifiée complète sur staging. La réception
@@ -264,6 +264,75 @@ sans réécriture des tentatives v1. Un retour arrière doit **conserver le lect
 v4 et la confidentialité** : l’ancien code v3 ne sait pas ouvrir une base déjà
 mise à niveau. Effacer cette base pour contourner le problème ferait perdre la
 réconciliation des demandes incertaines et n’est pas une procédure de rollback.
+
+## Lot reprise de panier — implémentation du 9 septembre 2026
+
+Depuis le détail d'une commande du compte, **Préparer à nouveau ce panier**
+ouvre un aperçu privé explicite. La nouvelle lecture `order-reorder` exige la
+même session protégée, publication, parent et restaurant que l'historique.
+Elle ne renvoie que les références des sélections, noms, quantités et anciens
+prix. Ni note, coordonnées, jeton de suivi, preuve de remise, paiement,
+promotion ni créneau ne sont repris. Aucun schéma de base ne change.
+
+Le catalogue courant donne les prix, suppléments et ruptures. Une référence
+disparue ou ambiguë est signalée ; une variante historique sans clé fiable
+n'est jamais transformée en produit de base. Il n'y a ni choix par défaut,
+ni substitution silencieuse. Un nouveau tarif exige une nouvelle confirmation.
+Les quantités et sélections doivent respecter le contrat de commande courant,
+notamment 50 unités par ligne et 50 lignes au total avec le panier existant.
+
+Confirmer relit le propriétaire et le catalogue puis ajoute les lignes aux
+conditions affichées, sans remplacer le panier courant. Les verrous suivent
+l'ordre compte → panier et la publication est vérifiée après chaque attente.
+Un changement concurrent du panier ou une tentative C01 encore incertaine
+bloque l'import. Chaque ligne ajoutée reçoit un nouvel identifiant local.
+L'aperçu privé reste volatil et disparaît à la déconnexion, à l'expiration ou
+au hors-ligne. Après confirmation, les articles constituent volontairement
+un nouveau panier local ; ce n'est pas une copie de l'historique du compte.
+Une nouvelle lecture du journal après l'adaptateur panier empêche également
+de republier l'aperçu si cet adaptateur a absorbé un refus d'accès pendant
+que React affichait encore l'ancienne session.
+
+La contre-revue a aussi reproduit une révocation de session durant l'ultime
+lecture du restaurant côté serveur. Les quatre actions commerce relisent
+désormais la session protégée et son propriétaire après les attentes finales
+avant publication. Cela ne constitue toujours pas une transaction distribuée
+PostgreSQL/Mongo ni une révocation instantanée d'une réponse déjà émise.
+
+La confirmation n'appelle aucun writer de commande ou de paiement. Le client
+revient au tunnel normal pour choisir coordonnées, mode, créneau et règlement ;
+le serveur recalcule encore les prix lors de la création effective. Le compte
+reste derrière le pilote fermé. La réception CI/staging de ce lot est distincte
+de son implémentation ; le rattachement fidélité et les gains restent à livrer.
+
+Preuves locales du lot : **2437 tests web** sur 156 fichiers ; **195 tests API
+ciblés** sur cinq fichiers, sans skip, comprenant 30 scénarios Mongo et 15 HTTP
+Nest→PostgreSQL dont quatre avec Mongo. Contrats : 557 tests. La passe API
+générale compte 3355 succès et 614 skips faute de services dédiés ; ceux-ci ne
+sont pas des intégrations exécutées. Build/typage/lint : 38 tâches réussies.
+Ces chiffres se recouvrent et ne s'additionnent pas.
+
+La recette Chromium de reprise joue douze scénarios avec HTTP local explicite,
+vrais composants, IndexedDB et Web Locks : prix/options, panier conservé,
+identité changée, déconnexion pendant HTTP, expiration, hors-ligne et demande
+C01 non résolue. Captures 320/390/1440 inspectées, montant non coupé et clavier
+vérifiés. Ce harnais n'exécute pas Next→BFF→base ni Stripe. Les notifications
+Chromium `ERR_ABORTED` ne sont acceptées qu'avec preuve de cette réponse exacte
+entièrement lue et validée, ou de l'acquittement 204 de la déconnexion confirmée ;
+aucune exception générale d'URL ou de statut n'a été ajoutée.
+
+La première CI #154 a échoué sur le contrôle réseau du scénario d'expiration :
+un signal d'abandon tardif remettait en échec une réponse dont les 342 octets,
+l'EOF et le contrat étaient déjà validés. Le défaut du harnais a été reproduit
+avant correction avec un vrai `fetch` puis un abandon explicite après lecture.
+Deux contre-tests natifs distinguent désormais ce cas d'un abandon avant EOF,
+qui doit toujours rejeter la lecture. Aucun timeout ni garde produit n'a été
+relâché. La réception CI/staging doit encore valider le commit corrigé.
+
+Incidents de validation conservés : un ancien test HTTP a dépassé 5 secondes,
+puis passe inchangé isolé et dans les 195 tests ; une fermeture Chromium de la
+suite API a dépassé 10 secondes, puis passe inchangée isolée et dans la passe
+générale à trois workers. Aucun délai n'a été augmenté pour masquer ces échecs.
 
 ## Parcours complet à recevoir avant ouverture
 

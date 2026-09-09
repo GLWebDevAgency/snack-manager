@@ -34,6 +34,22 @@ function fixture(action = 'session') {
   return { env, request, sign, quota, guard, context, setHeader };
 }
 describe('customer dedicated signed boundary', () => {
+  it('admits reorder only with its exact signed private envelope and unchanged HTTP quotas', async () => {
+    const f = fixture('order-reorder'); f.request.body.request = { orderId: 'a'.repeat(24) }; f.sign();
+    await expect(f.guard.canActivate(f.context)).resolves.toBe(true);
+    expect(f.request.customerRelay).toMatchObject({ action: 'order-reorder' });
+    expect(f.quota.reserve).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ scope: 'customer-account-http', clientLimit: 60, globalLimit: 300 }));
+    expect(f.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, private');
+    f.request.body.request.orderId = 'b'.repeat(24);
+    await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 403 });
+    expect(f.quota.reserve).toHaveBeenCalledTimes(1);
+  });
+  it.each(['browserSecret', 'browserRef', 'sessionToken', 'expectedOperationId', 'expectedCheckId'])('rejects reorder without signed %s', async key => {
+    const f = fixture('order-reorder'); f.request.body.request = { orderId: 'a'.repeat(24) };
+    delete f.request.body[key]; f.sign();
+    await expect(f.guard.canActivate(f.context)).rejects.toMatchObject({ status: 400 });
+    expect(f.quota.reserve).not.toHaveBeenCalled();
+  });
   it('accepts the exact signed envelope and reserves source plus global HTTP quota', async () => {
     const f = fixture(); await expect(f.guard.canActivate(f.context)).resolves.toBe(true);
     expect(f.request.customerRelay).toMatchObject({ action: 'session', slug: 'fixture', origin: 'https://fixture.example' });

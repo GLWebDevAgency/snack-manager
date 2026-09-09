@@ -62,6 +62,7 @@ export class CustomerAccountRuntime {
             policy: current?.policy ?? null, evidence: current?.evidence ?? null };
         }, Date.now, beforeProvider);
       const tenantRef = access.tenantRef; let result: unknown;
+      let commerceFence: (() => Promise<unknown>) | undefined;
       let binding: { tenantRef: string; browserRef: string; browserSecret: string } | undefined;
       if (relay.action !== 'browser') {
         const input = this.input(relay.action, raw);
@@ -112,7 +113,7 @@ export class CustomerAccountRuntime {
           result = view(await core.session({ ...binding!, token: input.sessionToken,
             expectedOperationId: input.expectedOperationId, expectedCheckId: input.expectedCheckId })); break;
         }
-        case 'order-create': case 'orders': case 'order-detail': {
+        case 'order-create': case 'orders': case 'order-detail': case 'order-reorder': {
           if (!this.checkout) throw new CustomerIdentityError('unavailable');
           const input = this.input(relay.action, raw);
           const authorize = async () => {
@@ -122,8 +123,10 @@ export class CustomerAccountRuntime {
           };
           const command = relay.action === 'order-create' ? { action: relay.action, request: this.input('order-create', raw).request }
             : relay.action === 'orders' ? { action: relay.action, request: this.input('orders', raw).request }
-              : { action: relay.action, request: this.input('order-detail', raw).request };
-          result = await customerCommerce({ checkout: this.checkout, authorize, slug: relay.slug, client: relay.client, now: Date.now }, command);
+              : relay.action === 'order-detail' ? { action: relay.action, request: this.input('order-detail', raw).request }
+                : { action: relay.action, request: this.input('order-reorder', raw).request };
+          result = await customerCommerce({ checkout: this.checkout, authorize, slug: relay.slug, client: relay.client, now: Date.now,
+            publicationFence: recheck => { commerceFence = recheck; } }, command);
           break;
         }
         case 'name': {
@@ -141,6 +144,9 @@ export class CustomerAccountRuntime {
       // may cross a revocation; no private response escapes a newly blocked tenant.
       this.access(relay, access); await this.tenant(access);
       if (binding) await core.requireBrowser(binding);
+      // Final protected-session sample after every unrelated async wait. This
+      // fences delayed private responses; it is not a PG/Mongo transaction.
+      if (commerceFence) await commerceFence();
       if (relay.action === 'recover') {
         const verification = CustomerAccountResponses.recover.parse(result);
         if (verification.state === 'approved' && (verification.view.expiresAt <= Date.now() || verification.expiresAt <= Date.now())) {

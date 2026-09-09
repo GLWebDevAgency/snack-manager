@@ -53,7 +53,7 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2030-05-02T07:00:00.000Z'));
     f = await customerOrdersMongoFixture(raw!, { tenantId: TENANT, slot: SLOT });
-    secondConnection = await mongoose.createConnection(f.uri, { autoCreate: false, autoIndex: false }).asPromise();
+    secondConnection = await mongoose.createConnection(f.uri, { autoCreate: false, autoIndex: false, directConnection: true }).asPromise();
   }, 20_000);
   beforeEach(async () => {
     await f.reset(); a = f.replica(); b = f.replica({
@@ -66,6 +66,75 @@ integration('customer checkout: real Mongo admission, immutable ownership and hi
   function create(actor = a, body = f.request(), owner = OWNER, beforeCommit = vi.fn(async () => owner)) {
     return actor.checkout.createForCustomer({ slug: 'isolated-capacity', body, owner, beforeCommit, sourceKey: SOURCE });
   }
+
+  it('reads the exact minimal reorder snapshot without writing orders, admissions or publishing events', async () => {
+    const created = await create();
+    const productId = new Types.ObjectId();
+    const line = { productId, name: 'Burger historique', variantKey: 'large', variantName: 'Grand', qty: 2, unitPrice: 1250,
+      lineTotal: 2500, options: [{ groupKey: 'sauce', choiceKey: 'mustard', name: 'Moutarde', priceDelta: 50 }],
+      removed: ['Oignon'], note: 'PRIVATE_LINE_NOTE' };
+    await f.models.orders.collection.updateOne({ _id: new Types.ObjectId(created._id) }, { $set: { lines: [line], note: 'PRIVATE_ORDER_NOTE' } });
+    const before = await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) });
+    const admissions = await f.models.admissions.collection.find({}).toArray();
+    a.redis.publish.mockClear();
+    const source = await a.checkout.reorderForCustomer(OWNER, created._id);
+    expect(source).toEqual({ orderId: created._id, number: created.number, lines: [{ productId: productId.toHexString(),
+      name: line.name, variantKey: 'large', variantName: 'Grand', qty: 2, unitPrice: 1250,
+      options: [{ groupKey: 'sauce', choiceKey: 'mustard' }], removed: ['Oignon'] }] });
+    expect(JSON.stringify(source)).not.toMatch(/PRIVATE_|trackingToken|recoveryProof|publicRecovery|customerOwner|payment|pickup|image|priceDelta|lineTotal/);
+    expect(await b.checkout.reorderForCustomer(OWNER, created._id)).toEqual(source);
+    expect(await f.models.orders.collection.findOne({ _id: new Types.ObjectId(created._id) })).toEqual(before);
+    expect(await f.models.admissions.collection.find({}).toArray()).toEqual(admissions);
+    expect(a.redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('keeps incomplete legacy reorder references null, without resolving names against today catalog', async () => {
+    const created = await create();
+    await f.models.orders.collection.updateOne({ _id: new Types.ObjectId(created._id) }, { $set: { lines: [
+      { name: 'Produit identique au catalogue', qty: 1, unitPrice: 100, options: [{ name: 'Sauce existante' }], removed: [] },
+      { productId: 'invalid', name: 'Autre', variantKey: '', variantName: 'Grand', qty: 1, unitPrice: 200,
+        options: [{ groupKey: '', choiceKey: 'choice' }, { groupKey: 'group', choiceKey: null }], removed: [] },
+    ] } });
+    expect((await a.checkout.reorderForCustomer(OWNER, created._id)).lines).toEqual([
+      { productId: null, name: 'Produit identique au catalogue', variantKey: null, variantName: null, qty: 1,
+        unitPrice: 100, options: [{ groupKey: null, choiceKey: null }], removed: [] },
+      { productId: null, name: 'Autre', variantKey: null, variantName: 'Grand', qty: 1, unitPrice: 200,
+        options: [{ groupKey: null, choiceKey: 'choice' }, { groupKey: 'group', choiceKey: null }], removed: [] },
+    ]);
+  });
+
+  it.each([
+    { variantKey: '', variantName: null },
+    { variantKey: 'v'.repeat(301), variantName: null },
+    { variantKey: 17, variantName: null },
+    { variantKey: null, variantName: 'Ancienne variante' },
+    { variantName: 'Ancienne variante sans clé' },
+  ])('marks ambiguous legacy variants unavailable instead of converting them to the base product (%#)', async variant => {
+    const created = await create(); const productId = new Types.ObjectId();
+    const base = { productId, name: 'Article historique', qty: 1, unitPrice: 1250, options: [], removed: [] };
+    await f.models.orders.collection.updateOne({ _id: new Types.ObjectId(created._id) }, { $set: { lines: [
+      { ...base, ...variant }, { ...base, variantKey: null, variantName: null },
+      { ...base, variantKey: 'known-key', variantName: null },
+    ] } });
+    const source = await a.checkout.reorderForCustomer(OWNER, created._id);
+    expect(source.lines[0]).toMatchObject({ productId: null, variantKey: null, name: base.name, qty: 1 });
+    expect(source.lines[1]).toMatchObject({ productId: productId.toHexString(), variantKey: null, variantName: null });
+    expect(source.lines[2]).toMatchObject({ productId: productId.toHexString(), variantKey: 'known-key' });
+  });
+
+  it('hides reorder sources for another account, tenant, parent, guest or non-online order', async () => {
+    const created = await create();
+    for (const owner of [OTHER, { ...OWNER, tenantRef: 'a'.repeat(24) }, { ...OWNER, parentRef: `AC${'a'.repeat(32)}` }]) {
+      await expect(a.checkout.reorderForCustomer(owner, created._id)).rejects.toMatchObject({ status: 404 });
+    }
+    await expect(a.checkout.reorderForCustomer(OWNER, new Types.ObjectId().toHexString())).rejects.toMatchObject({ status: 404 });
+    await expect(a.checkout.reorderForCustomer(OWNER, 'invalid')).rejects.toMatchObject({ status: 404 });
+    const guest = await a.checkout.createPublic('isolated-capacity', f.request());
+    if ('paused' in guest) throw new Error('Fixture unexpectedly paused');
+    await expect(a.checkout.reorderForCustomer(OWNER, String(guest._id))).rejects.toMatchObject({ status: 404 });
+    await f.models.orders.collection.updateOne({ _id: new Types.ObjectId(created._id) }, { $set: { channel: 'pos' } });
+    await expect(a.checkout.reorderForCustomer(OWNER, created._id)).rejects.toMatchObject({ status: 404 });
+  });
 
   it('creates with server prices and hidden owner; exact replay does not repeat gates or capacity', async () => {
     const body = f.request(); const beforeCommit = vi.fn(async () => OWNER);

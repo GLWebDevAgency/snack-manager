@@ -58,6 +58,7 @@ const query = { read: () => query, readConcern: () => query, maxTimeMS: () => qu
     createForCustomer: (...args: Parameters<OnlineOrderCheckoutService['createForCustomer']>) => commerceCheckout!.createForCustomer(...args),
     listForCustomer: (...args: Parameters<OnlineOrderCheckoutService['listForCustomer']>) => commerceCheckout!.listForCustomer(...args),
     detailForCustomer: (...args: Parameters<OnlineOrderCheckoutService['detailForCustomer']>) => commerceCheckout!.detailForCustomer(...args),
+    reorderForCustomer: (...args: Parameters<OnlineOrderCheckoutService['reorderForCustomer']>) => commerceCheckout!.reorderForCustomer(...args),
   } },
 ] })
 class VerificationHttpModule {}
@@ -234,18 +235,57 @@ integration('customer verification — real Nest HTTP and PostgreSQL, simulated 
       expect(list.orders.map(row => row._id)).toEqual([created.order._id]);
       const detail = await ok('order-detail', { ...access(a), request: { orderId: created.order._id } });
       expect(detail.order).toMatchObject({ totals: { total: 1250 }, lines: [{ name: 'Article de recette', qty: 1, unitPrice: 1250 }] });
-      const privateJson = JSON.stringify({ list, detail });
+      const reorder = await ok('order-reorder', { ...access(a), request: { orderId: created.order._id } });
+      expect(reorder).toEqual({ expiresAt: a.activated.view.expiresAt, orderId: created.order._id, number: created.order.number,
+        lines: [{ productId: request.lines[0]!.productId, name: 'Article de recette', variantKey: null, variantName: null,
+          qty: 1, unitPrice: 1250, options: [], removed: [] }] });
+      expect(JSON.stringify(reorder)).not.toMatch(/note|payment|pickup|delivery|image|lineTotal/);
+      const privateJson = JSON.stringify({ list, detail, reorder });
       for (const forbidden of ['customerOwner', 'accountId', 'trackingToken', 'customerPhone', 'customerName', 'address', 'sessionToken']) {
         expect(privateJson).not.toContain(`"${forbidden}"`);
       }
       expect(privateJson).not.toContain(created.order.trackingToken);
+      for (const field of ['browserRef', 'browserSecret', 'sessionToken', 'expectedOperationId', 'expectedCheckId'] as const) {
+        const value = field.endsWith('Id') || field === 'browserRef' ? randomUUID() : randomBytes(32).toString('base64url');
+        const denied = await http('order-reorder', { ...access(a), [field]: value, request: { orderId: created.order._id } });
+        expect(denied.status).toBe(401); expect(await denied.text()).not.toContain('Article de recette');
+      }
       expect((await ok('orders', { ...access(b), request: { filter: 'all', limit: 20, cursor: null } })).orders).toEqual([]);
       expect((await http('order-detail', { ...access(b), request: { orderId: created.order._id } })).status).toBe(404);
+      expect((await http('order-reorder', { ...access(b), request: { orderId: created.order._id } })).status).toBe(404);
       expect((await http('order-create', { ...access(b), request })).status).toBe(404);
       expect(await mongo.models.orders.countDocuments()).toBe(1);
       await ok('logout', { ...access(a), request: { all: true } });
       expect((await http('orders', { ...access(a), request: { filter: 'all', limit: 20, cursor: null } })).status).toBe(401);
       expect((await http('order-detail', { ...access(a), request: { orderId: created.order._id } })).status).toBe(401);
+      expect((await http('order-reorder', { ...access(a), request: { orderId: created.order._id } })).status).toBe(401);
+      expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
+    } finally { commerceCheckout = undefined; await mongo.close(); }
+  }, 30_000);
+
+  it.skipIf(!process.env.CUSTOMER_ORDERS_TEST_MONGO_URL)('drops a real Mongo reorder response after a real PG logout, without another order or provider call', async () => {
+    const a = await protectedAccount(); const mongo = await commerceFixture();
+    try {
+      const created = await ok('order-create', { ...access(a), request: mongo.request() });
+      if (created.state !== 'created') throw new Error('Expected real creation');
+      provider.start.mockClear(); provider.check.mockClear(); human.verify.mockClear();
+      delete env.SM_CUSTOMER_VERIFY_POLICY; delete env.SM_CUSTOMER_VERIFY_EVIDENCE; delete env.SM_CUSTOMER_VERIFY_API_KEY_SECRET;
+      const read = mongo.replica.checkout.reorderForCustomer.bind(mongo.replica.checkout);
+      const selected = vi.spyOn(mongo.replica.checkout, 'reorderForCustomer').mockImplementationOnce(async (...args) => {
+        const result = await read(...args);
+        expect(result.lines).toHaveLength(1);
+        await ok('logout', { ...access(a), request: { all: true } });
+        return result;
+      });
+      const response = await http('order-reorder', { ...access(a), request: { orderId: created.order._id } });
+      expect(response.status).toBe(401);
+      expect(response.headers.get('cache-control')).toBe('no-store, private');
+      expect(response.headers.get('set-cookie')).toBeNull();
+      const body = await response.text();
+      expect(body).not.toMatch(/Article de recette|productId|lines|trackingToken/); expect(body).not.toContain(created.order._id);
+      expect(selected).toHaveBeenCalledTimes(1);
+      expect(await mongo.models.orders.countDocuments()).toBe(1);
+      expect(await mongo.models.admissions.countDocuments({ 'capacity.kitchenSeat': { $type: 'number' } })).toBe(1);
       expect(provider.start).not.toHaveBeenCalled(); expect(provider.check).not.toHaveBeenCalled(); expect(human.verify).not.toHaveBeenCalled();
     } finally { commerceCheckout = undefined; await mongo.close(); }
   }, 30_000);

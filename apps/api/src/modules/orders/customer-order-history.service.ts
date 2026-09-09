@@ -4,11 +4,12 @@ import { Types, type Model } from 'mongoose';
 import type { Order } from '@sm/db';
 import { CustomerOrdersQuerySchema, type CustomerOrdersQuery } from '@sm/contracts';
 import { customerOrderOwnerFilter, validCustomerOrderOwner, type CustomerOrderOwner } from './customer-order-owner';
-import { customerOrderDetail, customerOrderSummary } from './customer-order-projection';
+import { customerOrderDetail, customerOrderSummary, customerOrderReorder } from './customer-order-projection';
 import { recoveryNotFound } from './order-recovery';
 
 const SUMMARY = '_id number createdAt status type pickup.slot totals payment.method payment.status payment.refundedCents payment.pendingRefundCents';
 const DETAIL = `${SUMMARY} lines note statusHistory.status statusHistory.at delivery.dispatchedAt delivery.deliveredAt delivery.estimatedMinutes`;
+const REORDER = '_id number lines.productId lines.name lines.variantKey lines.variantName lines.qty lines.unitPrice lines.options.groupKey lines.options.choiceKey lines.removed';
 
 /** Caller has authenticated the current protected principal. No lookup by phone, QR or clientId. */
 @Injectable()
@@ -39,5 +40,12 @@ export class CustomerOrderHistoryService {
       .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
     if (!row) throw recoveryNotFound();
     return customerOrderDetail(row);
+  }
+  async reorderForCustomer(owner: CustomerOrderOwner, orderId: string) {
+    if (!/^[a-f0-9]{24}$/.test(orderId)) throw recoveryNotFound();
+    const row = await this.orders.findOne({ ...this.filter(owner), _id: new Types.ObjectId(orderId) }).select(REORDER)
+      .read('primary').readConcern('majority').maxTimeMS(10_000).lean();
+    if (!row) throw recoveryNotFound();
+    return customerOrderReorder(row);
   }
 }

@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { CustomerCreateOrderRequestSchema, CustomerOrdersQuerySchema, CustomerOrderDetailRequestSchema,
-  CustomerOrderCreateResponseSchema, CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema } from './customer-orders';
+  CustomerOrderCreateResponseSchema, CustomerOrdersPageSchema, CustomerOrderDetailResponseSchema,
+  CustomerOrderReorderRequestSchema, CustomerOrderReorderResponseSchema } from './customer-orders';
 
-export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout', 'order-create', 'orders', 'order-detail']);
+export const CustomerAccountActionSchema = z.enum(['status', 'browser', 'intent', 'start', 'check', 'recover', 'protection', 'passkey', 'recovery', 'session', 'name', 'logout', 'order-create', 'orders', 'order-detail', 'order-reorder']);
 export type CustomerAccountAction = z.infer<typeof CustomerAccountActionSchema>;
 export const CUSTOMER_ACCOUNT_TURNSTILE_ACTION = 'customer-account-start';
 export const customerAccountTurnstileData = (slug: string, operationId: string) => `${slug}_${operationId}`;
@@ -109,7 +110,7 @@ export const CustomerRecoveryRequestSchema = z.discriminatedUnion('step', [
 ]);
 export type CustomerRecoveryRequest = z.infer<typeof CustomerRecoveryRequestSchema>;
 export const customerAccountRequestLimit = (action: CustomerAccountAction) => ['protection', 'passkey', 'recovery', 'order-create'].includes(action) ? 65_536 : 4096;
-export const customerAccountResponseLimit = (action: CustomerAccountAction) => action === 'order-detail' ? 1_048_576
+export const customerAccountResponseLimit = (action: CustomerAccountAction) => ['order-detail', 'order-reorder'].includes(action) ? 1_048_576
   : ['protection', 'passkey', 'recovery', 'order-create', 'orders'].includes(action) ? 65_536 : 16_384;
 
 /** Browser DTOs never carry the HttpOnly identities or server attestations. */
@@ -133,6 +134,7 @@ export const CustomerAccountBrowserRequests = {
   'order-create': CustomerCreateOrderRequestSchema,
   orders: CustomerOrdersQuerySchema,
   'order-detail': CustomerOrderDetailRequestSchema,
+  'order-reorder': CustomerOrderReorderRequestSchema,
 } as const;
 
 /** Server-to-server only; the relay signature authenticates the entire envelope. */
@@ -158,6 +160,7 @@ export const CustomerAccountEnvelopes = {
   'order-create': z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests['order-create'] }),
   orders: z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests.orders }),
   'order-detail': z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests['order-detail'] }),
+  'order-reorder': z.strictObject({ browserRef: uuid, browserSecret: token, ...CustomerAccountPublicationSchema.shape, sessionToken: token, request: CustomerAccountBrowserRequests['order-reorder'] }),
 } as const;
 export type CustomerAccountEnvelope<A extends CustomerAccountAction> = z.infer<(typeof CustomerAccountEnvelopes)[A]>;
 export const CustomerAccountViewSchema = z.strictObject({
@@ -249,6 +252,7 @@ export const CustomerAccountResponses = {
   'order-create': CustomerOrderCreateResponseSchema,
   orders: CustomerOrdersPageSchema,
   'order-detail': CustomerOrderDetailResponseSchema,
+  'order-reorder': CustomerOrderReorderResponseSchema,
 } as const;
 export const CustomerAccountErrorSchema = z.strictObject({
   code: z.enum(['CUSTOMER_UNAVAILABLE', 'CUSTOMER_INVALID_REQUEST', 'CUSTOMER_UNAUTHORIZED',

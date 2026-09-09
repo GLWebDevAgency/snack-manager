@@ -6,10 +6,10 @@ import { CustomerAccountBrowserRequests, CustomerAccountEnvelopes, CustomerAccou
   CUSTOMER_ACCOUNT_OPERATION_HEADER, CUSTOMER_ACCOUNT_CHECK_HEADER, customerAccountRequestLimit, customerAccountResponseLimit,
   type CustomerEnrollment, type CustomerAccountAction } from '@sm/contracts';
 import { customerRelayHeaders } from './customer-relay';
-import { parseCustomerOrdersPage, parseCustomerOrderDetail } from '../../../../components/customer-account/orders-response';
+import { parseCustomerOrdersPage, parseCustomerOrderDetail, parseCustomerOrderReorder } from '../../../../components/customer-account/orders-response';
 
 type Action = CustomerAccountAction;
-const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create'];
+const PRIVATE_ACTIONS: readonly Action[] = ['session', 'name', 'logout', 'orders', 'order-detail', 'order-create', 'order-reorder'];
 export type CustomerContext = { params: Promise<{ slug: string }> };
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,10 +18,10 @@ const TIMEOUT_MS = 10_000;
 const SESSION_MAX_MS = 7 * 86_400_000;
 const PATHS: Record<Action, string> = { status: 'capacites', browser: 'navigateur', intent: 'intention', start: 'verification',
   check: 'confirmation', recover: 'resultat', protection: 'protection', passkey: 'cle-acces', recovery: 'secours', session: 'session', name: 'profil', logout: 'session',
-  orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes' };
+  orders: 'commandes/recherche', 'order-detail': 'commandes/detail', 'order-create': 'commandes', 'order-reorder': 'commandes/recommander' };
 const METHODS: Record<Action, string> = { status: 'GET', browser: 'POST', intent: 'POST', start: 'POST', check: 'POST',
   recover: 'POST', protection: 'POST', passkey: 'POST', recovery: 'POST', session: 'GET', name: 'PATCH', logout: 'DELETE',
-  orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST' };
+  orders: 'POST', 'order-detail': 'POST', 'order-create': 'POST', 'order-reorder': 'POST' };
 
 function privateResponse(response: NextResponse) {
   response.headers.set('Cache-Control', 'private, no-store, max-age=0');
@@ -270,7 +270,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
       // A late GET 401 can describe a token replaced by a concurrent successful
       // confirmation. It must not erase the browser's newer session cookie.
       if (response.status === 401) return unauthorized();
-      if (response.status === 404 && (action === 'orders' || action === 'order-detail')) return failure(404, 'CUSTOMER_ORDER_UNAVAILABLE', 'Cette commande ne peut pas être consultée depuis ce compte.');
+      if (response.status === 404 && ['orders', 'order-detail', 'order-reorder'].includes(action)) return failure(404, 'CUSTOMER_ORDER_UNAVAILABLE', 'Cette commande ne peut pas être consultée depuis ce compte.');
       if (response.status === 400) return invalid();
       if (response.status === 409) return failure(409, 'CUSTOMER_CONFLICT', 'Le compte a changé. Actualisez avant de réessayer.');
       if (response.status === 429) {
@@ -287,6 +287,7 @@ export async function customerAccount(request: NextRequest, context: CustomerCon
     if (!output.success || output.data === undefined) return action === 'status' ? closed() : unavailable();
     if (action === 'orders') return privateResponse(NextResponse.json(parseCustomerOrdersPage(output.data, CustomerAccountBrowserRequests.orders.parse(parsed.data))));
     if (action === 'order-detail') return privateResponse(NextResponse.json(parseCustomerOrderDetail(output.data, CustomerAccountBrowserRequests['order-detail'].parse(parsed.data).orderId)));
+    if (action === 'order-reorder') return privateResponse(NextResponse.json(parseCustomerOrderReorder(output.data, CustomerAccountBrowserRequests['order-reorder'].parse(parsed.data).orderId)));
     if (action === 'browser') {
       if (!('preparation' in output.data) || !('emitCookie' in output.data)
         || !preparationRequest || (preparationRequest.step !== 'restore'
