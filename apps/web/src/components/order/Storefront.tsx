@@ -249,8 +249,8 @@ export function Storefront({
     cart.dropped.length === 0
       ? null
       : cart.dropped.length === 1
-        ? `« ${cart.dropped[0]} » n’est plus disponible et a été retiré de votre panier.`
-        : `${cart.dropped.length} articles ne sont plus disponibles et ont été retirés de votre panier.`;
+        ? `« ${cart.dropped[0]} » n’est plus disponible avec ces choix et a été retiré de votre panier.`
+        : `${cart.dropped.length} articles ne sont plus disponibles avec ces choix et ont été retirés de votre panier.`;
 
   // ── Embed : hauteur remontée à l’hôte, fermeture déléguée au chargeur ──
   useEffect(() => {

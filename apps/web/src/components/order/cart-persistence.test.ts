@@ -36,6 +36,7 @@ beforeAll(async () => {
           return React.createElement('main',null,
             React.createElement('p',{'data-testid':'count'},String(cart.count)),
             React.createElement('p',{'data-testid':'error'},cart.persistenceError||''),
+            React.createElement('p',{'data-testid':'dropped',role:'status'},cart.dropped.join(', ')),
             React.createElement('button',{onClick:()=>cart.upsert(line),disabled:!cart.hydrated},'Ajouter'),
             React.createElement('button',{onClick:()=>cart.setQty('line-burger',2)},'Deux'),
             React.createElement('button',{onClick:()=>cart.remove('line-burger')},'Retirer'),
@@ -85,6 +86,33 @@ async function addBurger(target = page) {
 }
 
 describe("panier réel React et verrou inter-onglets", () => {
+  it("signale une sélection disparue après relecture sans réécrire le stockage ni perdre la ligne valide", async () => {
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await addBurger();
+    const raw = await page.evaluate(() => {
+      const stored = JSON.parse(localStorage.getItem("sm.cart.classfood")!);
+      const line = stored.lines[0];
+      stored.lines = [{ ...line, variantKey: "grand", variantName: "Grand", removed: ["oignons"] },
+        { ...line, lineId: "line-valid", qty: 2 }];
+      const value = JSON.stringify(stored);
+      localStorage.setItem("sm.cart.classfood", value);
+      return value;
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.testCart?.hydrated);
+    expect(await page.getByTestId("count").textContent()).toBe("2");
+    expect(await page.getByTestId("dropped").textContent()).toBe("Burger");
+    expect(await page.evaluate(() => localStorage.getItem("sm.cart.classfood"))).toBe(raw);
+    const second = await secondTab();
+    expect(await second.getByTestId("dropped").textContent()).toBe("Burger");
+    await page.evaluate(() => { window.dispatchEvent(new Event("focus")); window.dispatchEvent(new Event("pageshow")); });
+    await page.evaluate(async () => { await navigator.locks.request("sm.cart.write.classfood", () => undefined); });
+    expect(await page.getByTestId("count").textContent()).toBe("2");
+    expect(await page.evaluate(() => localStorage.getItem("sm.cart.classfood"))).toBe(raw);
+    expect(errors).toEqual([]);
+  });
+
   it("écrit les actions avant publication et conserve quantité/note après recharge", async () => {
     await addBurger();
     await page.getByRole("button", { name: "Deux", exact: true }).click();

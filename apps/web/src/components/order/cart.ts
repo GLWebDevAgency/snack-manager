@@ -350,9 +350,20 @@ export function indexMenu(categories: MenuCategory[]): MenuIndex {
   return index;
 }
 
+/** Ignore catalogue ordering, labels and prices, but never lost/added choices
+ * or deduplicated stored options. A different selection needs a new user action. */
+function selectionKey(line: CartLine): string {
+  return JSON.stringify([
+    line.variantKey,
+    line.options.map(option => JSON.stringify([option.groupKey, option.choiceKey])).sort(),
+    [...line.removed].sort(),
+  ]);
+}
+
 /**
  * Réaligne un panier restauré sur le menu courant : produits disparus ou en
- * rupture écartés, prix et libellés rafraîchis, options obsolètes purgées.
+ * rupture et configurations invalides écartés. Les prix et libellés ne sont
+ * rafraîchis que lorsque tous les choix enregistrés restent identiques.
  */
 export function reconcile(
   lines: CartLine[],
@@ -363,17 +374,19 @@ export function reconcile(
 
   for (const line of lines) {
     const product = index.get(line.productId);
-    if (!product || product.outOfStock) {
+    if (!product || product.outOfStock || !Number.isSafeInteger(line.qty) || line.qty <= 0) {
       dropped.push(line.name);
       continue;
     }
     const draft = draftFromLine(line, product);
-    if (draftBlocker(draft)) {
-      // La configuration enregistrée ne satisfait plus la carte (option retirée).
+    const updated = draftToLine(draft);
+    if (draftBlocker(draft) || selectionKey(line) !== selectionKey(updated)) {
+      // draftFromLine is also used for explicit editing. Its fallbacks must
+      // never silently substitute a variant or remove a choice during restore.
       dropped.push(line.name);
       continue;
     }
-    kept.push({ ...draftToLine(draft), lineId: line.lineId, qty: line.qty });
+    kept.push(updated);
   }
   return { lines: kept, dropped };
 }
